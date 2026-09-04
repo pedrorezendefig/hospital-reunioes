@@ -13,15 +13,11 @@ Cofre compartilhado do 1Password: **VITTA TECH**. Quem clona precisa de acesso a
 | `ANA_API_KEY` | opcional | compartilhada | 1Password, VITTA TECH, item "Ana API key" (criar). É a mesma chave de produção. Só para smoke test. |
 | `GITHUB_PERSONAL_ACCESS_TOKEN` | opcional | por pessoa | Conta GitHub própria, PAT clássico com escopo `repo`. Só para rodar Actions localmente; o `gh` das skills usa o `gh auth login`. |
 
-## hospital-reunioes/.env (nível 2: só o mínimo para o snapshot)
+## hospital-reunioes/.env (nível 2: três valores fictícios)
 
-| Chave | Valor | Motivo |
-|---|---|---|
-| `ENVIRONMENT` | `development` | O default é `production` e recusa subir sem tudo (o CI usa `ci`). |
-| `SUPABASE_URL` | `http://127.0.0.1:54351` | O valor do `.env.example` (porta do Supabase local do projeto). Fictício aqui: só precisa existir. |
-| `SUPABASE_SERVICE_ROLE_KEY` | `dummy-local` | Fictício (o CI usa `dummy-key-for-ci`). São as 2 únicas chaves sem default. |
+Só para o snapshot do `/deploy ship` conseguir importar o app. O script do `/setup-maquina` cria o arquivo com `ENVIRONMENT=development`, `SUPABASE_URL=http://127.0.0.1:54351` e `SUPABASE_SERVICE_ROLE_KEY=dummy-local` (o mesmo endereço do `.env.example`; o valor só precisa existir). Nada real, nada do 1Password. Chave vazia liga o mock de LLM e de email.
 
-Todo o resto copia do `.env.example` como está. Chave vazia liga o mock de LLM e de email. ClickSign vazia não tem mock: o sandbox responde 401 (só importa no nível 3).
+Chaves de produção: só no Coolify. A lista e o "quem mexe" estão no `README.md` da raiz, seção "Variáveis de ambiente".
 
 ## hospital-reunioes/.env (nível 3: rodar o app local, opcional)
 
@@ -40,9 +36,9 @@ Todo o resto copia do `.env.example` como está. Chave vazia liga o mock de LLM 
 | Arquivo | Quem lê | O que vai nele |
 |---|---|---|
 | `tokens/.env` | `/deploy`, `/ship`, `/onda` (CLI do Coolify) | `COOLIFY_ACCESS_TOKEN` (seu), `COOLIFY_BASE_URL`, `ANA_API_KEY` (opcional) |
-| `hospital-reunioes/.env` | backend local e o snapshot do `/deploy ship` | O mínimo do nível 2 acima; o resto só no nível 3 |
+| `hospital-reunioes/.env` | backend local e o snapshot do `/deploy ship` | Os três valores fictícios do nível 2; o resto só no nível 3 |
 | `hospital-reunioes/frontend/.env.local` | `pnpm dev` (opcional) | `NEXT_PUBLIC_*` do Supabase local |
-| Coolify (produção) | os containers | Todas as chaves reais. Só o Pedro. Nunca no clone |
+| Coolify (produção) | os containers | Todas as chaves reais (`env_keys` em `docs/spec/deploy/project.json`; `/deploy setup` confere). Nunca no clone |
 | GitHub Actions | CI | Nenhum secret: valores fictícios no próprio `ci.yml` |
 
 ## Serviços: o que o sócio precisa e como conseguir

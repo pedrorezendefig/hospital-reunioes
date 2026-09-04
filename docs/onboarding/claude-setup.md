@@ -66,6 +66,8 @@ gh repo clone pedrorezendefig/hospital-reunioes   # ou: git clone https://github
 cd hospital-reunioes
 ```
 
+Já tinha o clone? Traga a `main` para o dia: `git checkout main && git pull --ff-only origin main`. O `/setup-maquina` acusa quando a `main` local está atrás da `origin/main`. O mapa de cada pasta do repo é o `README.md` da raiz.
+
 Você precisa ter sido adicionado como **collaborator** no repo (peça pro Pedro). Verifique:
 ```bash
 gh repo view --json viewerPermission --jq .viewerPermission

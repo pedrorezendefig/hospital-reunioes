@@ -35,7 +35,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 
 ## Máquina nova
 
-- `/setup-maquina [--nivel N] [--env] [--mapa]`: diagnóstico de quem clonou (binários, gh, plugins, Coolify, tokens, `.env`) com o conserto ao lado e o item do 1Password de cada chave; `--mapa` explica cada pasta do repo e como se conectar a cada serviço. O app não roda local: nível 2 (deploy) é o alvo.
+- `/setup-maquina [--nivel N] [--env] [--mapa]`: diagnóstico de quem clonou (clone atualizado, binários, gh, plugins, Coolify, tokens) com o conserto ao lado e o item do 1Password de cada chave; `--mapa` explica cada pasta do repo pelo `README.md` da raiz e como se conectar a cada serviço. O app não roda local: nível 2 (deploy) é o alvo.
 
 ## Travessia de sessões
 

@@ -71,6 +71,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0026](0026-percepcao-de-valor-em-video-hyperframes.md) | accepted | Percepção de Valor passa a ser vídeo renderizado (HyperFrames); o HTML interativo com stepper é aposentado |
 | [0044](0044-layout-do-repositorio.md) | accepted | Layout do repositório: o que fica no git, onde fica, e o que vive fora |
 | [0045](0045-video-e-pagina-de-divulgacao-sao-uma-entrega-so.md) | accepted | Vídeo de percepção e página de divulgação são uma entrega só, numa pasta só por PRD |
+| [0046](0046-readme-e-o-mapa-do-repositorio.md) | accepted | O `README.md` da raiz é o mapa do repositório |
 
 ## Infra e deploy
 

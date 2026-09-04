@@ -1,6 +1,6 @@
 ---
 status: accepted
-amended_by: 0045
+amended_by: 0045, 0046
 ---
 
 # Layout do repositório: o que fica no git, onde fica, e o que vive fora

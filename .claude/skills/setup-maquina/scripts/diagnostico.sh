@@ -46,13 +46,19 @@ bin_ok() { # nome conserto -> OK se está no PATH do shell; AVISO se só existe 
 chave_preenchida() { # arquivo chave -> 0 se existe, não está vazia e não é o placeholder do exemplo
   [ -f "$1" ] && grep -Eq "^$2=[^[:space:]]" "$1" && ! grep -Eq "^$2=(<PREENCHER>|\"\"|'')[[:space:]]*$" "$1"
 }
-chaves_faltando() { # example real -> nomes que existem no example e não no real
-  comm -23 <(grep -oE '^[A-Z_]+' "$1" | sort -u) <(grep -oE '^[A-Z_]+' "$2" | sort -u) | tr '\n' ' '
-}
-
 # ---------------------------------------------------------------- Nível 1
 titulo "Nível 1: pipeline (issues, tdd, PR)"
 bin_ok git "xcode-select --install"
+# Clone atrasado: compara a main local com a origin/main. Só avisa; quem puxa é a skill, com confirmação.
+if ! git show-ref --verify --quiet refs/heads/main; then
+  aviso "clone atualizado" "não existe branch main local; crie com git checkout -b main origin/main"
+elif git fetch -q origin main 2>/dev/null; then
+  atras="$(git rev-list --count main..origin/main)"
+  [ "$atras" -eq 0 ] && ok "clone atualizado (main = origin/main)" \
+    || falta "clone atualizado" "main está $atras commit(s) atrás: git checkout main && git pull --ff-only origin main"
+else
+  aviso "clone atualizado" "sem acesso ao origin agora; rode git pull --ff-only origin main quando tiver rede"
+fi
 bin_ok jq "brew install jq"
 bin_ok claude "curl -fsSL https://claude.ai/install.sh | bash"
 
@@ -132,14 +138,16 @@ bin_ok uv "curl -LsSf https://astral.sh/uv/install.sh | sh"
 [ -f /opt/homebrew/lib/libpango-1.0.dylib ] || [ -f /usr/local/lib/libpango-1.0.dylib ] \
   && ok "pango (WeasyPrint)" || falta "pango (WeasyPrint)" "brew install pango cairo gdk-pixbuf libffi"
 
+# Só três valores, todos fictícios (os mesmos do CI): bastam para o snapshot importar o app.
 ENVF="$APP/.env"
+ENV_MIN="ENVIRONMENT=development SUPABASE_URL=http://127.0.0.1:54351 SUPABASE_SERVICE_ROLE_KEY=dummy-local"
 if [ -f "$ENVF" ]; then
   ok "hospital-reunioes/.env existe"
-  for k in ENVIRONMENT SUPABASE_URL SUPABASE_SERVICE_ROLE_KEY; do
-    chave_preenchida "$ENVF" "$k" && ok ".env: $k" "preenchida" || falta ".env: $k" "valor fictício basta (references/chaves.md)"
+  for par in $ENV_MIN; do
+    k="${par%%=*}"
+    chave_preenchida "$ENVF" "$k" && ok ".env: $k" "preenchida" \
+      || falta ".env: $k" "valor fictício basta: echo '$par' >> hospital-reunioes/.env"
   done
-  f="$(chaves_faltando "$APP/.env.example" "$ENVF")"
-  [ -z "$f" ] && ok ".env: chaves do .env.example" "todas presentes" || aviso ".env: chaves ausentes" "$f"
   if [ -x "$APP/backend/.venv/bin/python" ]; then
     # Mesmo comando e mesmo ambiente do snapshot do /deploy ship (no macOS ele injeta este DYLD no filho).
     if erro="$(cd "$APP/backend" && DYLD_FALLBACK_LIBRARY_PATH="${DYLD_FALLBACK_LIBRARY_PATH:-/opt/homebrew/lib}" .venv/bin/python -c "import app.main" 2>&1 >/dev/null)"; then
@@ -151,7 +159,7 @@ if [ -f "$ENVF" ]; then
     fi
   fi
 else
-  falta "hospital-reunioes/.env existe" "cp hospital-reunioes/.env.example hospital-reunioes/.env (mínimo em references/chaves.md)"
+  falta "hospital-reunioes/.env existe" "printf '%s\\n' $ENV_MIN > hospital-reunioes/.env (três valores fictícios; nada real)"
 fi
 
 fi
@@ -175,8 +183,8 @@ no_path_do_shell ffmpeg && ok "ffmpeg" || opc "ffmpeg" "brew install ffmpeg (se 
 fi
 
 # ---------------------------------------------------------------- Mapa do repo
-titulo "Mapa do repositório (references/mapa-do-repo.md)"
-MAPA="$REPO_ROOT/.claude/skills/setup-maquina/references/mapa-do-repo.md"
+titulo "Mapa do repositório (README.md)"
+MAPA="$REPO_ROOT/README.md"
 desconhecidas=""
 # Pastas de nível 1 e 2 que o git conhece (honra o .gitignore: sem node_modules, caches, local/, worktrees)
 # contra a lista de cobertura do mapa, por caminho exato.
@@ -184,7 +192,7 @@ cobertas="$(sed -n '/cobertura:start/,/cobertura:end/p' "$MAPA" 2>/dev/null | gr
 for d in $(git ls-files -co --exclude-standard | awk -F/ 'NF>1{print $1} NF>2{print $1"/"$2}' | sort -u | grep -vE '^(\.claude/skills|docs/adr|docs/comunicacao|docs/manual)/'); do
   printf '%s\n' "$cobertas" | grep -qxF "$d" || desconhecidas="$desconhecidas $d"
 done
-[ -z "$desconhecidas" ] && ok "toda pasta de nível 1 e 2 está no mapa" || aviso "pastas fora do mapa" "atualize references/mapa-do-repo.md:$desconhecidas"
+[ -z "$desconhecidas" ] && ok "toda pasta de nível 1 e 2 está no mapa" || aviso "pastas fora do mapa" "atualize README.md:$desconhecidas"
 
 printf '\n'
 if [ "$FALHAS" -eq 0 ]; then

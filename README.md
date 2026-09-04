@@ -1,6 +1,18 @@
-# Mapa do repositório: o que é cada pasta, por quê, e como se conectar a cada serviço
+# Hospital Reuniões: mapa do repositório
 
-Este mapa explica o **porquê** e o **para quê**. A árvore de verdade é o disco: antes de responder sobre uma pasta, rode `ls` nela e confira. Pasta no disco que não está na lista de cobertura no fim deste arquivo é sinal de que o mapa envelheceu: o `/setup-maquina` avisa, e a correção é editar aqui. A regra do layout é o ADR 0044 (e a emenda 0045). O detalhe do app (rotas, tabelas, integrações) é gerado a cada deploy em `docs/spec/snapshots/` e não se repete aqui.
+Este é o app de Atas, POPs e Ouvidoria do Hospital São Matheus, com o pipeline de agentes que o desenvolve e sobe para produção. Este arquivo é o mapa: o que é cada pasta, por que existe, o que tem dentro e para que serve. Quem clona lê isto primeiro.
+
+## Primeiro dia
+
+1. Clone: `gh repo clone pedrorezendefig/hospital-reunioes`. Já tem o clone? `git pull --ff-only origin main`.
+2. Abra o Claude Code dentro da pasta e rode `/setup-maquina`. Ele confere a máquina (binários, `gh`, plugins, Coolify, tokens), avisa se o clone está atrás da `main` e diz o conserto de cada item.
+3. Rode `/ask-pedro` para saber qual skill usar em cada momento. O passo a passo humano do setup está em `docs/onboarding/claude-setup.md`; o dia a dia em `docs/onboarding/dev.md`.
+
+O app não roda na sua máquina: sobe para produção e se testa lá.
+
+## Como ler este mapa
+
+A árvore de verdade é o disco: antes de responder sobre uma pasta, rode `ls` nela e confira. Pasta no disco que não está na lista de cobertura no fim deste arquivo é sinal de que o mapa envelheceu: o `/setup-maquina` avisa, e a correção é editar aqui. A regra do layout é o ADR 0044 (e as emendas 0045 e 0046). O detalhe do app (rotas, tabelas, integrações) é gerado a cada deploy em `docs/spec/snapshots/` e não se repete aqui.
 
 ## A regra de uma frase
 
@@ -10,6 +22,7 @@ Tudo que está na árvore é código, doc viva, decisão ou material de comunica
 
 | Pasta ou arquivo | O que é | Por que existe | O que você acha dentro | Para que serve no dia a dia |
 |---|---|---|---|---|
+| `README.md` | Este mapa | Quem clona precisa saber o que é cada pasta sem perguntar | O que você está lendo | Primeiro dia; o `/setup-maquina --mapa` lê daqui |
 | `CLAUDE.md` | Regras do repo para o agente | Mínimo que toda sessão precisa saber | Idioma, tipografia, pipeline, o que é proibido criar | Leia uma vez. O roteamento fino está no `/ask-pedro` |
 | `CONTEXT.md` | Glossário do contexto Reuniões (e, por ora, da Ouvidoria) | O agente e o time falam a mesma língua | Termos com definição e "evitar" | Consultar antes de nomear qualquer coisa nova |
 | `CONTEXT-MAP.md` | Mapa dos contextos de domínio | Termos homônimos (Setor, Versão) mudam de sentido entre contextos | Tabela contexto x glossário | Saber qual glossário abrir |
@@ -46,11 +59,15 @@ A árvore do app (routers, services, componentes, migrations) é gerada a cada d
 | `backend/` | FastAPI em subpacotes por área (`routers/pops/` é o modelo); regra de negócio em `services/`; scripts de operação fora da imagem (`scripts/`, e `scripts/oneshot/` para o que já rodou) | Toda issue de API, prazo, email, PDF ou IA |
 | `frontend/` | Next.js com rota por domínio e `layout.tsx` aplicando o gate no servidor; regra sem React em `lib/<dominio>/` com teste ao lado | Toda issue de tela |
 | `supabase/` | Migrations numeradas, RLS ligado na criação da tabela; produção aplica à mão no Studio. `templates/` são os emails do Auth, `snippets/` é SQL de diagnóstico só-leitura para rodar no Studio | Issue que muda tabela |
-| `.env.example` | Uma cópia só para docker-compose e uvicorn; o backend lê `hospital-reunioes/.env` | `/setup-maquina --env` |
+| `.env.example` | Molde do docker-compose local; o backend lê `hospital-reunioes/.env`. Para o pipeline bastam três valores fictícios nesse `.env` (o snapshot importa o app); o `/setup-maquina` cria | Só no nível 3 (app local) |
 
 ## Variáveis de ambiente e como se conectar a cada serviço
 
-Tudo em `references/chaves.md`: onde cada variável mora (máquina, app local, Coolify de produção, CI), de onde vem cada valor, e a tabela "Serviços" com o que o sócio precisa para GitHub, Coolify, Supabase, app em produção, Resend, ClickSign, OpenRouter, Global Health, Ana, Vercel e 1Password.
+As chaves de produção vivem **só no Coolify** (`https://coolify.hospitalsaomatheus.cloud`), uma lista por serviço: backend, frontend e supabase. Nenhuma está no git nem na máquina de quem desenvolve. A lista do que cada serviço exige, com o propósito de cada chave, é o campo `env_keys` de cada serviço em `docs/spec/deploy/project.json`. Quem confere essa lista contra o Coolify é o `/deploy setup`; o `/deploy ship` só injeta `APP_VERSION`.
+
+No dia a dia ninguém toca nisso. Chave de produção muda em dois casos: uma issue cria chave nova (cadastrar no Coolify antes do merge) ou uma chave externa expira (Resend, ClickSign, OpenRouter). Quem mexe é humano, pela tela do Coolify ou por `coolify app env update <uuid> <CHAVE> --value "<valor>"`; ver sem o valor: `coolify app env list <uuid>`. Mudou chave, reinicie o serviço; chave `build_time` do frontend (as `NEXT_PUBLIC_*`) só entra em build novo.
+
+Na sua máquina só existem tokens da máquina (`tokens/.env`: Coolify) e três valores fictícios em `hospital-reunioes/.env` para o snapshot importar o app. De onde vem cada chave e como se conectar a cada serviço (GitHub, Coolify, Supabase, Resend, ClickSign, OpenRouter, Global Health, Ana, Vercel, 1Password): `.claude/skills/setup-maquina/references/chaves.md`.
 
 ## O fluxo, em uma linha por etapa
 
@@ -58,7 +75,7 @@ Tudo em `references/chaves.md`: onde cada variável mora (máquina, app local, C
 
 ## Cobertura (o `/setup-maquina` confere esta lista)
 
-Toda pasta de nível 1 e 2 que o git conhece precisa estar aqui. O script compara linha a linha e avisa o que falta. Pasta nova no repo: acrescente a linha e explique acima, no mesmo commit. Ficam fora da conferência, por serem descritas por padrão e não uma a uma, o conteúdo de `.claude/skills/`, `docs/adr/`, `docs/comunicacao/` e `docs/manual/`.
+Toda pasta de nível 1 e 2 que o git conhece precisa estar aqui. O script do `/setup-maquina` compara linha a linha e avisa o que falta. Pasta nova no repo: acrescente a linha e explique acima, no mesmo commit. Ficam fora da conferência, por serem descritas por padrão e não uma a uma, o conteúdo de `.claude/skills/`, `docs/adr/`, `docs/comunicacao/` e `docs/manual/`.
 
 <!-- cobertura:start -->
 ```
