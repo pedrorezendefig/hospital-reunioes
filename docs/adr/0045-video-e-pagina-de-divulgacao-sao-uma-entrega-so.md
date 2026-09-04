@@ -1,6 +1,6 @@
 ---
 status: accepted
-amends: 0044
+amends: 0044, 0026
 ---
 
 # Vídeo de percepção e página de divulgação são uma entrega só, numa pasta só por PRD

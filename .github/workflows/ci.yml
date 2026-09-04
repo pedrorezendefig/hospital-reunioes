@@ -6,18 +6,12 @@ on:
     paths-ignore:
       - 'docs/**'
       - '.claude/**'
-      - '.superpowers/**'
-      - 'atas-migracao/**'
-      - 'blueprint/**'
       - '**/*.md'
   pull_request:
     branches: [main]
     paths-ignore:
       - 'docs/**'
       - '.claude/**'
-      - '.superpowers/**'
-      - 'atas-migracao/**'
-      - 'blueprint/**'
       - '**/*.md'
 
 jobs:

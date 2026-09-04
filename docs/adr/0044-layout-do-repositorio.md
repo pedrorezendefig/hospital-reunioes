@@ -28,4 +28,4 @@ Em 5 meses de pipeline com agentes o repositório acumulou 74 GB de worktrees mo
 - Uma faxina futura tem régua: se algo na árvore não é código, doc viva, decisão ou material de comunicação, ou está em `local/` ou sai.
 - O sócio clona e roda: os quatro `.env.example` dizem o que preencher, e nenhuma skill depende de pasta global (ADR 0043).
 - O custo por sessão cai: descrições curtas de skill e memória do agente podada; o custo por `/ship` cai porque o `SKILL.md` do `/deploy` deixa de carregar os modos que quase nunca rodam.
-- O ADR 0026 cita `docs/percepcao/`; o caminho vigente é `docs/comunicacao/percepcao/`. A decisão dele (vídeo como percepção, composição versionada) não muda.
+- O ADR 0026 cita `docs/percepcao/`; o endereço final é o do ADR 0045 (`docs/comunicacao/<contexto>/<PRD>-<slug>/video/`). A decisão dele (vídeo como percepção, composição versionada) não muda.

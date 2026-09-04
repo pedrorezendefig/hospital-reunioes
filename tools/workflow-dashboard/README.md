@@ -43,6 +43,8 @@ Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta s
 - `serve.py` — servidor HTTP (stdlib), só leitura, bind 127.0.0.1.
 - `collect.py` — agrega `gh` + arquivos de `docs/spec` + `git` num único `/api/data`.
 - `plano.py` — módulo puro do Plano: ondas, caminho crítico, tempo típico e copiáveis por fatia (o front não calcula nada).
+- `areas.py` — parse dos snapshots de área para as capas interativas (degrada para `None`, nunca quebra).
+- `diagramas.py` — parse do subset Mermaid dos snapshots (ADR 0025).
 - `tests/` — pytest do módulo plano e da estrutura do shell (`python3 -m pytest tests/`).
 - `static/` — front vanilla em ES modules (sem build):
   - `app.js` — SPA, render de cada aba.

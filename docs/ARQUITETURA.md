@@ -7,9 +7,13 @@ Um único documento pra entender a aplicação inteira. Feito pra qualquer pesso
 
 ## 1. O que é
 
-Hospital Reuniões automatiza o ciclo de vida de reuniões corporativas de um hospital: **gravação → transcrição por IA → geração da Ata → assinatura digital → acompanhamento de Pendências**.
+Hospital Reuniões é um app com três contextos de domínio (mapa em [`CONTEXT-MAP.md`](../CONTEXT-MAP.md)):
 
-- **Quem usa:** 5 facilitadores (1 diretor + 4 diretoras). Colaboradores **não logam** — recebem e-mails da ClickSign e links diretos para suas pendências.
+- **Reuniões e Atas:** gravação → transcrição por IA → geração da Ata → assinatura digital → acompanhamento de Pendências. Glossário em [`CONTEXT.md`](../CONTEXT.md).
+- **POPs:** elaboração assistida, revisão, validação, assinatura e biblioteca de Procedimentos Operacionais Padrão, com fluxograma desenhado pelo sistema. Glossário em [`docs/pops/CONTEXT.md`](pops/CONTEXT.md).
+- **Ouvidoria:** manifestação (formulário público e QR por ponto de escuta), tramitação com prazos, portal do setor, relatórios; a agente Ana consome a API. Manual em [`docs/manual/ouvidoria/`](manual/ouvidoria/).
+
+- **Quem usa:** facilitadores e diretoria nas Reuniões; setores e ouvidor na Ouvidoria; elaboradores e validadores nos POPs. Colaboradores das Reuniões **não logam**: recebem e-mails da ClickSign e links diretos para suas pendências.
 - **Stack:** backend FastAPI (Python 3.12), frontend Next.js 15, banco Supabase self-hosted, deploy via Coolify (VPS Hostinger), PDF via WeasyPrint.
 - **Glossário do domínio:** veja [`CONTEXT.md`](../CONTEXT.md) (Reunião, Ata, Pendência, Facilitador, Colaborador, Envelope…).
 
@@ -118,8 +122,9 @@ hospital-reunioes/
 ├── backend/   FastAPI — app/{routers,services,models,pipeline,middleware,cron}
 ├── frontend/  Next.js 15 — src/{app,components,hooks,lib,types}
 └── supabase/  migrations/ (schema) · templates/ (e-mails) · functions/
-docs/          CONTEXT.md · ARQUITETURA.md · adr/ · agents/ · spec/ · onboarding/
-.claude/skills/ skills do time (workflow)
+docs/          ARQUITETURA.md · adr/ · agents/ · spec/ · onboarding/ · pops/ · comunicacao/ · manual/
+CONTEXT.md · CONTEXT-MAP.md   glossário e mapa dos contextos (raiz)
+.claude/skills/ skills do time (workflow) · local/ insumo humano fora do git · tools/ lint de ADR e painel local
 ```
 
 - **`backend/pipeline/`** é o coração: transcrição → LLM (extração → resumo → estrutura → ata PT) → PDF.

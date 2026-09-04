@@ -32,4 +32,5 @@ Várias sessões Claude Code rodam issues `ready-for-agent` distintas ao mesmo t
 - `docs/spec/deploy/` — contrato e estado de deploy (`project.json` · `state.json` · `history.json`).
 - `docs/spec/CHANGELOG.md` — timeline de deploys · `docs/spec/VERSIONING.md` — versão semântica.
 - Layout do repo (o que fica no git, `local/` fora, `docs/comunicacao/`, `references/` nas skills): ADR 0044.
+- `docs/ARQUITETURA.md` — visão de arquitetura com blocos auto-gerados pelo `/snapshot` · `docs/onboarding/` — setup de máquina e fluxo do dia a dia (`/setup-maquina` confere).
 - `docs/manual/` — manuais completos por módulo para o time interno (telas reais, integrações, mapa dos PRDs), publicados na Vercel. Não é doc de estado: quem diz o estado das issues é o GitHub.
