@@ -19,6 +19,8 @@ const S = {
   rotasQ: '',
   entTab: null,
   erFull: false,
+  /* aba Repositório (#596): pasta e arquivo escolhidos, conteúdo lazy, último diagnóstico */
+  rep: { pasta: null, arq: null, conteudo: null, diag: null, rodando: false },
 };
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -193,7 +195,7 @@ function tick() {
   if (el && S.data) el.textContent = `coletado ${ago(S.data.generated_at)}`;
 }
 
-const TABS = ['plano', 'issues', 'producao', 'pendencias', 'mapa', 'dominio', 'guia'];
+const TABS = ['plano', 'issues', 'producao', 'pendencias', 'mapa', 'dominio', 'guia', 'repositorio'];
 /* hashes da navegação antiga (bookmarks) caem na aba que herdou o conteúdo */
 const TAB_ALIAS = {
   setup: 'guia', workflow: 'guia', fluxo: 'guia', bastidores: 'guia',
@@ -216,6 +218,7 @@ function render() {
   const fn = {
     plano: renderPlano, issues: renderIssues, producao: renderProducao,
     pendencias: renderPendencias, mapa: renderMapa, dominio: renderDominio, guia: renderGuia,
+    repositorio: renderRepositorio,
   }[S.tab];
   view.innerHTML = fn ? fn() : '';
   if (S.tab === 'issues') wireIssues();
@@ -970,6 +973,137 @@ function renderGuia() {
   </div>`;
 }
 
+/* ---------- REPOSITÓRIO (árvore do git + resumos lidos da fonte + máquina) ---------- */
+
+const repGh = rel => `${S.data.repo_url}/blob/main/${rel}`;
+
+/* "ADR 0046" vira link para a aba Domínio (a ADR abre lá); ".claude/skills/x/" vira
+   link para o SKILL.md na própria aba. O texto já chega escapado. */
+function adrLinks(html) {
+  return html
+    .replace(/ADR\s?(\d{4})/g, (m, n) =>
+      `<a href="#dominio" data-act="gotab" data-go="dominio" data-adr="${n}">${m}</a>`)
+    .replace(/\.claude\/skills\/([\w-]+)\/?/g, (m, s) =>
+      `<a href="#repositorio" data-act="rarq" data-pasta=".claude/skills" data-path=".claude/skills/${s}/SKILL.md">${m}</a>`);
+}
+
+function repResumoHtml(r) {
+  const linha = (rot, v) => v ? `<div class="rep-kv"><span class="k-label">${rot}</span><span>${adrLinks(esc(v))}</span></div>` : '';
+  return `<p class="rep-oque">${adrLinks(esc(r.o_que_e))}</p>
+    ${linha('por que existe', r.por_que)}${linha('o que tem', r.o_que_tem)}${linha('para que serve', r.para_que)}`;
+}
+
+function arqLinksHtml(a) {
+  return `<span class="rep-links">
+    <a class="badge b-ghost" href="${esc(repGh(a.path))}" target="_blank" rel="noopener">GitHub ↗</a>
+    ${a.vercel ? `<a class="badge b-blue" href="${esc(a.vercel)}" target="_blank" rel="noopener">Vercel ↗</a>` : ''}
+  </span>`;
+}
+
+function pastaDetalheHtml(p) {
+  return `
+  <div class="rep-head"><span class="eyebrow">pasta</span><h3 class="mono">${esc(p.path || '(raiz)')}/</h3></div>
+  ${repResumoHtml(p.resumo)}
+  <div class="k-label" style="margin-top:16px">${p.arquivos.length} arquivo(s)</div>
+  <ul class="rep-lista">
+    ${p.arquivos.map(a => `<li>
+      <button class="rep-arq" data-act="rarq" data-pasta="${esc(p.path)}" data-path="${esc(a.path)}">
+        <span class="mono">${esc(a.path.slice(p.path ? p.path.length + 1 : 0))}</span>
+        <span class="rep-arq-resumo">${adrLinks(esc(a.resumo))}</span>
+      </button>${arqLinksHtml(a)}</li>`).join('')}
+  </ul>`;
+}
+
+/* "Abrir aqui": o conteúdo vem de /api/arquivo (só o que o git conhece) e é
+   desenhado pelo tipo: markdown pelo marked (HTML cru escapado, como nas
+   issues), texto em <pre>, HTML num iframe sandbox. Teto e binário só avisam. */
+function arqConteudoHtml(a, c) {
+  if (!c) return '<div class="empty">carregando…</div>';
+  if (c.tipo === 'erro') return '<div class="empty">o painel não abre este arquivo (só o que o git conhece)</div>';
+  if (c.tipo === 'grande') return `<div class="empty">arquivo grande demais para abrir aqui (${Math.round(c.bytes / 1024)} KB): veja no GitHub</div>`;
+  if (c.tipo === 'binario') return '<div class="empty">arquivo binário: veja no GitHub</div>';
+  if (c.tipo === 'markdown') return `<div class="md rep-md">${md(c.conteudo)}</div>`;
+  if (c.tipo === 'html') return `<iframe class="rep-frame" sandbox="" srcdoc="${esc(c.conteudo)}" title="${esc(a.path)}"></iframe>`;
+  return `<pre class="rep-pre"><code>${esc(c.conteudo)}</code></pre>`;
+}
+
+function arqDetalheHtml(p, a) {
+  const c = S.rep.conteudo && S.rep.conteudo.path === a.path ? S.rep.conteudo : null;
+  return `
+  <div class="rep-head">
+    <button class="fchip" data-act="rpasta" data-path="${esc(p.path)}">← ${esc(p.path || '(raiz)')}/</button>
+    <h3 class="mono">${esc(a.path)}</h3>
+  </div>
+  <p class="rep-oque">${adrLinks(esc(a.resumo))}</p>
+  <div class="rep-links-row">${arqLinksHtml(a)}</div>
+  ${arqConteudoHtml(a, c)}`;
+}
+
+function diagHtml() {
+  const d = S.rep.diag;
+  const btn = `<button class="fchip rep-run" data-act="diag" ${S.rep.rodando ? 'disabled' : ''}>
+    ${S.rep.rodando ? 'rodando… (10 a 20 s)' : d ? 'rodar de novo' : 'Rodar diagnóstico'}</button>`;
+  if (!d) return `<div class="rep-diag-head">${btn}<span class="hint">confere clone, binários, gh, plugins, Coolify e tokens; só roda quando você clica</span></div>`;
+  if (d.erro) return `<div class="rep-diag-head">${btn}<span class="hint">${esc(d.erro)}</span></div>`;
+  const cls = c => c === 'OK' ? 'diag-ok' : c === 'FALTA' ? 'diag-falta' : 'diag-aviso';
+  const secoes = [...new Set(d.itens.map(i => i.secao))];
+  return `
+  <div class="rep-diag-head">${btn}<span class="docmeta">última rodada ${esc(fmtDT(d.quando))} · ${d.faltas} obrigatório(s) faltando</span></div>
+  ${secoes.map(s => `
+    <div class="k-label" style="margin-top:14px">${esc(s)}</div>
+    <div class="rep-diag-grid">${d.itens.filter(i => i.secao === s).map(i => `
+      <div class="rep-diag ${cls(i.classe)}">
+        <div class="rep-diag-top"><span class="badge">${esc(i.classe)}</span><strong>${esc(i.nome)}</strong></div>
+        ${!i.conserto ? '' : i.classe === 'FALTA'
+          ? copyBlock(i.conserto, { lang: 'bash' })
+          : `<span class="rep-diag-nota">${esc(i.conserto)}</span>`}
+      </div>`).join('')}</div>`).join('')}`;
+}
+
+function renderRepositorio() {
+  const pastas = (S.data.repositorio && S.data.repositorio.pastas) || [];
+  const sel = S.rep.pasta != null ? pastas.find(p => p.path === S.rep.pasta) : null;
+  const arq = sel && S.rep.arq ? sel.arquivos.find(a => a.path === S.rep.arq) : null;
+  return `
+  ${cabecalho('conhecer', 'Repositório', 'git ls-files · resumos lidos da fonte, nada escrito à mão')}
+  <div class="rep-grid rv">
+    <nav class="card rep-tree" aria-label="Pastas">
+      ${pastas.map(p => `
+        <button class="rep-pasta nivel-${p.path.split('/').length} ${p.path === S.rep.pasta ? 'on' : ''}" data-act="rpasta" data-path="${esc(p.path)}">
+          <span class="mono">${esc(p.path ? p.path.split('/').pop() : '(raiz)')}/</span><span class="rep-n">${p.arquivos.length}</span>
+        </button>`).join('')}
+    </nav>
+    <section class="card rep-detalhe">
+      ${!sel ? '<div class="empty">escolha uma pasta à esquerda</div>' : arq ? arqDetalheHtml(sel, arq) : pastaDetalheHtml(sel)}
+    </section>
+  </div>
+  ${cabecalho('conferir', 'Máquina', '/setup-maquina · o que esta máquina tem para trabalhar no pipeline')}
+  <div class="card rv">${diagHtml()}</div>`;
+}
+
+function abrirArquivo(pasta, path) {
+  S.rep.pasta = pasta; S.rep.arq = path; S.rep.conteudo = null;
+  render();
+  fetch(`/api/arquivo?path=${encodeURIComponent(path)}`)
+    .then(r => r.ok ? r.json() : { tipo: 'erro' })
+    .catch(() => ({ tipo: 'erro' }))
+    .then(c => {
+      if (S.rep.arq !== path) return;   // o usuário já clicou em outro
+      S.rep.conteudo = { path, ...c };
+      if (S.tab === 'repositorio') render();
+    });
+}
+
+function rodarDiagnostico() {
+  if (S.rep.rodando) return;
+  S.rep.rodando = true;
+  render();
+  fetch('/api/diagnostico', { method: 'POST' })
+    .then(r => r.json())
+    .catch(e => ({ erro: String(e), itens: [], faltas: 0 }))
+    .then(d => { S.rep.diag = d; S.rep.rodando = false; if (S.tab === 'repositorio') render(); });
+}
+
 /* ---------- eventos ---------- */
 
 function writeClipboard(text, done) {
@@ -1055,7 +1189,19 @@ view.addEventListener('click', e => {
     render();
   } else if (act === 'gotab') {
     S.fIssues = { state: 'all', label: t.dataset.label || '', q: '' };
+    if (t.dataset.adr) {   // vindo do Repositório: a ADR citada já abre no Domínio
+      const i = (S.data.adrs || []).findIndex(a => String(a.number).padStart(4, '0') === t.dataset.adr);
+      if (i >= 0) S.expAdr.add(i);
+    }
     setTab(t.dataset.go);
+  } else if (act === 'rpasta') {
+    S.rep.pasta = t.dataset.path; S.rep.arq = null; S.rep.conteudo = null;
+    render();
+  } else if (act === 'rarq') {
+    e.preventDefault();
+    abrirArquivo(t.dataset.pasta, t.dataset.path);
+  } else if (act === 'diag') {
+    rodarDiagnostico();
   }
 });
 

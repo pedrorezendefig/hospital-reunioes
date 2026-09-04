@@ -22,10 +22,14 @@ from urllib.parse import parse_qs, urlparse
 HERE = Path(__file__).resolve().parent
 sys.path.insert(0, str(HERE))
 import collect as collector  # noqa: E402
+import repositorio  # noqa: E402
 
 STATIC = HERE / "static"
 ROOT = HERE.parents[1]
 TTL_SECONDS = 60
+
+# último diagnóstico da máquina (aba Repositório): só roda no POST /api/diagnostico
+_diag: dict = {"resultado": None}
 
 MIME = {
     ".html": "text/html; charset=utf-8",
@@ -80,6 +84,14 @@ class Handler(BaseHTTPRequestHandler):
             if m:
                 self._send(200, collector.issue_detail(ROOT, int(m.group(1))))
                 return
+            if path == "/api/arquivo":
+                rel = (parse_qs(url.query).get("path") or [""])[0]
+                r = repositorio.ler_arquivo(ROOT, rel)
+                self._send(200, r) if r else self._send(404, {"error": "não encontrado"})
+                return
+            if path == "/api/diagnostico":  # GET = último resultado, sem rodar
+                self._send(200, _diag["resultado"] or {"itens": [], "faltas": 0, "quando": None})
+                return
             if path == "/":
                 path = "/index.html"
             static_root = STATIC.resolve()
@@ -93,6 +105,23 @@ class Handler(BaseHTTPRequestHandler):
                 self._send(404, {"error": "não encontrado"})
                 return
             self._send(200, f.read_bytes(), MIME.get(f.suffix, "application/octet-stream"))
+        except BrokenPipeError:
+            pass
+        except Exception as e:
+            try:
+                self._send(500, {"error": str(e)})
+            except Exception:
+                pass
+
+    def do_POST(self):
+        path = urlparse(self.path).path
+        try:
+            if path == "/api/diagnostico":  # roda o diagnostico.sh (só lê a máquina) e guarda o resultado
+                with _lock:
+                    _diag["resultado"] = repositorio.rodar_diagnostico(ROOT)
+                self._send(200, _diag["resultado"])
+                return
+            self._send(404, {"error": "não encontrado"})
         except BrokenPipeError:
             pass
         except Exception as e:
