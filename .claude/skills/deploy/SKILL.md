@@ -605,7 +605,7 @@ if [ ! -f "$CHANGELOG" ]; then
   printf '# Changelog Hospital Reuniões\n\nCronologia de deploys em ordem reversa (mais recente no topo).\nPrepended pelo /deploy ship ao final do ciclo.\n\n---\n\n' > "$CHANGELOG"
 fi
 
-python3 .claude/skills/deploy/scripts/changelog_prepend.py
+python3 "$REPO_ROOT/.claude/skills/deploy/scripts/changelog_prepend.py"
 ```
 
 Ver `scripts/changelog_prepend.py` na própria skill — gera entrada com autor (git config), SHA, serviços tocados, resultado e link para a issue/PR.

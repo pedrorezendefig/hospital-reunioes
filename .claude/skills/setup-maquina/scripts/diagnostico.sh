@@ -15,6 +15,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --nivel) [ $# -ge 2 ] || { echo "uso: --nivel 1..4" >&2; exit 2; }; NIVEL="$2"; shift 2 ;;
     --nivel=*) NIVEL="${1#--nivel=}"; shift ;;
+    --env|--mapa) shift ;;   # modos da skill (SKILL.md); o script só diagnostica
     *) echo "argumento desconhecido: $1 (uso: --nivel 1..4)" >&2; exit 2 ;;
   esac
 done
@@ -177,8 +178,11 @@ fi
 titulo "Mapa do repositório (references/mapa-do-repo.md)"
 MAPA="$REPO_ROOT/.claude/skills/setup-maquina/references/mapa-do-repo.md"
 desconhecidas=""
-for d in $(find . -maxdepth 2 -type d -not -path './.git*' -not -path '*/node_modules*' -not -path '*/.venv*' -not -path '*/.next*' -not -path '*/__pycache__*' -not -path '*/.*cache*' -not -path './.claude/worktrees*' -not -path './.vscode' -not -path './local/*' -not -path './docs/comunicacao/*' -not -path './docs/adr' -not -path './docs/manual/*' -not -path './.claude/skills/*' | sed 's|^\./||' | grep -v '^\.$'); do
-  grep -q "\`$(basename "$d")/\`\|\`$d/\`\|\`$d\`" "$MAPA" || desconhecidas="$desconhecidas $d"
+# Pastas de nível 1 e 2 que o git conhece (honra o .gitignore: sem node_modules, caches, local/, worktrees)
+# contra a lista de cobertura do mapa, por caminho exato.
+cobertas="$(sed -n '/cobertura:start/,/cobertura:end/p' "$MAPA" 2>/dev/null | grep -E '^[a-zA-Z.]')"
+for d in $(git ls-files -co --exclude-standard | awk -F/ 'NF>1{print $1} NF>2{print $1"/"$2}' | sort -u | grep -vE '^(\.claude/skills|docs/adr|docs/comunicacao|docs/manual)/'); do
+  printf '%s\n' "$cobertas" | grep -qxF "$d" || desconhecidas="$desconhecidas $d"
 done
 [ -z "$desconhecidas" ] && ok "toda pasta de nível 1 e 2 está no mapa" || aviso "pastas fora do mapa" "atualize references/mapa-do-repo.md:$desconhecidas"
 

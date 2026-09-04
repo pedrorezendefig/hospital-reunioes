@@ -45,13 +45,18 @@ def num4(v: str) -> str:
     return v.strip().zfill(4)
 
 
+def nums(v: str) -> list[str]:
+    """Lista de números num campo de ponteiro: `amends: 0044, 0026`."""
+    return [num4(t) for t in v.split(",") if t.strip()]
+
+
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--dir", default="docs/adr")
     args = ap.parse_args()
 
     adr_dir = Path(args.dir)
-    adrs = {parse(f)["num"]: parse(f) for f in sorted(adr_dir.glob("[0-9]*.md"))}  # README.md é índice, não ADR
+    adrs = {a["num"]: a for a in map(parse, sorted(adr_dir.glob("[0-9]*.md")))}  # README.md é índice, não ADR
     errors: list[str] = []
 
     for num, adr in adrs.items():
@@ -71,16 +76,25 @@ def main() -> int:
             if field not in meta:
                 continue
             # aceita lista: `amends: 0044, 0026`
-            for target in [num4(t) for t in meta[field].split(",") if t.strip()]:
+            for target in nums(meta[field]):
                 if target not in adrs:
                     errors.append(f"{name}: {field} aponta para ADR {target}, que não existe.")
                     continue
                 back = adrs[target]["meta"].get(inverse)
-                pares = [num4(b) for b in back.split(",")] if back else []
-                if num4(num) not in pares:
+                if num4(num) not in (nums(back) if back else []):
                     errors.append(
                         f"{name}: {field}: {target} sem o par `{inverse}: {num}` na ADR {target}."
                     )
+
+    # README.md é o índice por tema: toda ADR numerada precisa estar linkada nele.
+    indice = adr_dir / "README.md"
+    if indice.exists():
+        texto = indice.read_text()
+        for num, adr in adrs.items():
+            if adr["path"].name not in texto:
+                errors.append(f"README.md: falta a linha da ADR {num} ({adr['path'].name}) no índice por tema.")
+    else:
+        errors.append("README.md: índice por tema ausente em docs/adr/.")
 
     if errors:
         print("Lint de ADR falhou:\n" + "\n".join(f"  - {e}" for e in errors), file=sys.stderr)

@@ -8,7 +8,8 @@ tela e do PDF); o SVG persistido com a Versão não muda um byte.
 
 Idempotente: numa segunda execução tudo é pulado e nada é escrito.
 
-Uso (no container do backend; sem flag é DRY-RUN, nada é gravado):
+Uso (do host, de dentro de backend/; a pasta scripts/ não entra na imagem.
+Sem flag é DRY-RUN, nada é gravado):
 
     python -m scripts.oneshot.migrar_fluxogramas_mermaid
     python -m scripts.oneshot.migrar_fluxogramas_mermaid --aplicar

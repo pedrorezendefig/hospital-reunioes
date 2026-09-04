@@ -25,7 +25,8 @@ app/
 ├── limiter.py       # rate limiting (slowapi)
 └── main.py          # FastAPI app entry point + CORS + middleware setup
 tests/               # pytest (test_admin_usuarios, test_pipeline, etc)
-scripts/             # scripts de operação (imports, backfills, seeds, smoke); fora da imagem Docker; `uv run python -m scripts.<nome>`
+scripts/             # scripts de operação (seeds, smoke, geradores); fora da imagem Docker; `uv run python -m scripts.<nome>`
+scripts/oneshot/     # execução única já rodada (imports da virada, backfills); `uv run python -m scripts.oneshot.<nome>`
 ```
 
 <!-- curated:start -->

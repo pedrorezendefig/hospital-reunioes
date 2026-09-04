@@ -324,7 +324,7 @@ def _parse_changelog(text: str | None) -> list[dict]:
 
 def _parse_adrs(root: Path) -> list[dict]:
     out = []
-    for f in sorted((root / "docs" / "adr").glob("*.md")):
+    for f in sorted((root / "docs" / "adr").glob("[0-9]*.md")):  # README.md é o índice, não uma ADR
         text = _read_text(f) or ""
         meta, body = {}, text
         m = re.match(r"^---\n(.*?)\n---\n", text, re.S)

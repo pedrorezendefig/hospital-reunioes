@@ -35,12 +35,30 @@ Todo o resto copia do `.env.example` como está. Chave vazia liga o mock de LLM 
 | `GH_TOKEN_HOMOLOG` | só produção | 1Password, HOSPITAL SÃO MATHEUS, item "Global Health". É a agenda de homologação, não é GitHub. Não entra no local. |
 | `FIREFLIES_*`, `DIRETOR_EMAIL`, `DEFAULT_USER_PASSWORD` | só produção | Vivem no Coolify. |
 
-## Fora de arquivo
+## Onde cada variável mora
 
-| O quê | Quem faz |
-|---|---|
-| Conta no Coolify do hospital | Pedro cria; o token cada um gera o seu. |
-| `REVIEWER_LOGINS` | Não entra. É o papel de revisor humano (hoje o Pedro), não a lista de devs: dev ali faria o próprio agente disparar o loop `revisor-comentou`. |
-| Acesso ao cofre VITTA TECH | Pedro compartilha no 1Password. |
-| Migration em produção | Humano, no SQL Editor do Supabase Studio de produção. Só o Pedro tem acesso hoje. |
-| Vercel (`/divulgar`) | Membro do time na Vercel. Fora disso a CLI recusa com `TEAM_ACCESS_REQUIRED`. |
+| Arquivo | Quem lê | O que vai nele |
+|---|---|---|
+| `tokens/.env` | `/deploy`, `/ship`, `/onda` (CLI do Coolify) | `COOLIFY_ACCESS_TOKEN` (seu), `COOLIFY_BASE_URL`, `ANA_API_KEY` (opcional) |
+| `hospital-reunioes/.env` | backend local e o snapshot do `/deploy ship` | O mínimo do nível 2 acima; o resto só no nível 3 |
+| `hospital-reunioes/frontend/.env.local` | `pnpm dev` (opcional) | `NEXT_PUBLIC_*` do Supabase local |
+| Coolify (produção) | os containers | Todas as chaves reais. Só o Pedro. Nunca no clone |
+| GitHub Actions | CI | Nenhum secret: valores fictícios no próprio `ci.yml` |
+
+## Serviços: o que o sócio precisa e como conseguir
+
+| Serviço | Para quê | O que você precisa | Como conseguir |
+|---|---|---|---|
+| **GitHub** (`pedrorezendefig/hospital-reunioes`) | Issues, PRs, CI, merge | Permissão WRITE e `gh auth login` | O Pedro adiciona você como colaborador; depois `gh auth login` |
+| **Coolify** (`https://coolify.hospitalsaomatheus.cloud`) | Deploy, status, rollback, env de produção | Conta na instância e um token seu | O Pedro cria a conta. Você gera o token em Keys & Tokens, grava em `tokens/.env` e cria o contexto `hsm` (`claude-setup.md` seção 4.1) |
+| **Supabase de produção** (`https://studio.hospitalsaomatheus.cloud`) | Aplicar migration, conferir tabela | Acesso ao Studio | Hoje só o Pedro. O `/ship` entrega o SQL e espera o humano aplicar |
+| **App em produção** (`https://app.hospitalsaomatheus.cloud`; API em `api.hospitalsaomatheus.cloud/api/health`) | Testar o que subiu | Um usuário no app | O Pedro cria pelo admin |
+| **Resend** | Email transacional | Nada na sua máquina | Chave só no Coolify (1Password, VITTA TECH, item "Resend"). Logs de envio: peça acesso ao painel |
+| **ClickSign** | Assinatura de Ata e POP | Nada para o fluxo normal | Produção no Coolify; sandbox só no nível 3 |
+| **OpenRouter** | LLM das Atas, POPs e Ouvidoria | Nada para o fluxo normal | Chave só no Coolify; local usa mock com chave vazia |
+| **Global Health** | Espelho da agenda | Nada | Token de homologação só no Coolify (1Password, HOSPITAL SÃO MATHEUS, item "Global Health") |
+| **Ana** (agente de IA externa) | Consome a API da Ouvidoria | `ANA_API_KEY` só para smoke test | 1Password, VITTA TECH, item "Ana API key" (criar) |
+| **Vercel** | Publicar divulgação e manual | Membro do time | O Pedro convida. Sem isso a CLI recusa com `TEAM_ACCESS_REQUIRED` |
+| **1Password** (cofre VITTA TECH) | Onde as chaves compartilhadas moram | Acesso ao cofre | O Pedro compartilha. Você copia à mão; nenhuma skill acessa o cofre |
+| `REVIEWER_LOGINS` (variável do repo) | Papel de revisor humano (hoje o Pedro) | Nada | Dev não entra: faria o próprio agente disparar o loop `revisor-comentou` |
+| Migration em produção | Schema | Acesso ao Studio | Humano, no SQL Editor. Só o Pedro hoje |
