@@ -27,13 +27,17 @@ Tudo que está na árvore é código, doc viva, decisão ou material de comunica
 | `CONTEXT.md` | Glossário do contexto Reuniões (e, por ora, da Ouvidoria) | O agente e o time falam a mesma língua | Termos com definição e "evitar" | Consultar antes de nomear qualquer coisa nova |
 | `CONTEXT-MAP.md` | Mapa dos contextos de domínio | Termos homônimos (Setor, Versão) mudam de sentido entre contextos | Tabela contexto x glossário | Saber qual glossário abrir |
 | `skills-lock.json` | Origem e hash das skills importadas do Matt Pocock | Rastreabilidade, não instalação | Repo de origem e caminho de cada uma | Nada a rodar; as skills já vêm no clone |
+| `.claude/` | Configuração do Claude Code para este repo | O workflow viaja com o clone | `skills/` (versionado) e `worktrees/` (fora do git) | Nada a rodar |
 | `.claude/skills/` | As skills do time, versionadas | Quem clona recebe o workflow inteiro (ADR 0043) | Uma pasta por skill, com `SKILL.md` e, quando precisa, `references/` e `scripts/` | `/ask-pedro` diz qual usar |
 | `.github/` | CI e templates | Gates automáticos do `/ship` | `ci.yml` (ruff, pytest, lint, tsc, build), `lint-adr.yml`, `higiene-issues.yml`, templates de issue e PR | Não se edita no dia a dia |
+| `.github/workflows/` | As Actions | Gate 3 do `/ship` e higiene das issues | `ci.yml`, `lint-adr.yml`, `higiene-issues.yml` | Quando o CI falha |
+| `.github/ISSUE_TEMPLATE/` | Moldes de issue | O `/to-issues` e o humano escrevem no mesmo formato | Um `.md` por tipo | Ao abrir issue à mão |
 | `docs/` | Documentação viva | Ver seção abaixo | | |
 | `hospital-reunioes/` | O app | Ver seção abaixo | `backend/`, `frontend/`, `supabase/` | Onde o código mora |
 | `local/` | **Fora do git.** Insumo humano | PDFs, transcrições e dumps não podem ir para o GitHub | `insumos/<assunto>/` que cada máquina cria | Colocar aqui o que o hospital manda |
 | `tokens/` | Tokens da **máquina**, não do app | O `/deploy` e o `/ship` falam com o Coolify | `.env.example` (versionado) e `.env` (fora do git, permissão 600) | Preencher uma vez por máquina |
 | `tools/` | Ferramentas de repo | Gate de ADR no CI e painel local | `lint_adr.py`; `workflow-dashboard/` (painel read-only das issues e do deploy) | `python3 tools/workflow-dashboard/serve.py` |
+| `tools/workflow-dashboard/` | O painel local Aplicativo Hospital | Ver o fluxo, a produção, o mapa e o repositório num lugar só, sem escrever nada | `serve.py`, `collect.py`, `repositorio.py`, `static/` (a SPA), `tests/` | `python3 tools/workflow-dashboard/serve.py` |
 
 ## `docs/`
 
@@ -42,6 +46,7 @@ Tudo que está na árvore é código, doc viva, decisão ou material de comunica
 | `adr/` | Decisões de arquitetura e domínio | Decisão sem registro é re-litigada | `README.md` (índice por tema) e um `.md` por decisão, com `status` no frontmatter | Antes de propor mudança de regra. Só `accepted` vale |
 | `agents/` | Protocolo do agente | Sessões paralelas precisam do mesmo contrato | `issue-tracker.md` (claim, labels, revisor), `triage-labels.md`, `domain.md` | Ao pegar issue ou triar |
 | `onboarding/` | Setup humano | Máquina nova | `claude-setup.md` (setup), `dev.md` (dia a dia) | Primeiro dia. `/setup-maquina` confere o mesmo conteúdo |
+| `spec/` | Estado e contrato gerados ou mantidos por skill | O `/deploy` e o `/snapshot` escrevem aqui, o humano lê | `deploy/`, `snapshots/`, `CHANGELOG.md`, `VERSIONING.md` | `/deploy status` e o mapa do app |
 | `spec/deploy/` | Contrato e estado do deploy | O `/deploy` lê daqui, nunca de memória | `project.json` (contrato: serviços, chaves, gates), `state.json` (versão em prod agora), `history.json` (todos os deploys, com notas) | `/deploy status`; ler as notas antes de planejar |
 | `spec/snapshots/` | Mapa factual do app, gerado | O código muda, o mapa acompanha sozinho | `ROTAS.md`, `ENTIDADES.md`, `SCHEMA.md`, `MIGRATIONS.md`, `INTEGRACOES.md`, `ESTRUTURA.md` | Para saber o que existe hoje sem abrir o código |
 | `spec/CHANGELOG.md`, `spec/VERSIONING.md` | Linha do tempo dos deploys e regra de versão | Cada ship tem entrada | Versão, data, PR, ADRs | Ver o que subiu quando |

@@ -1,4 +1,4 @@
-# Hospital Reuniões — painel do fluxo
+# Aplicativo Hospital — painel do fluxo
 
 Painel local e **somente leitura** do projeto. Abre direto no **Plano**: o mapa vivo do trabalho pendente, na ordem certa, com o comando de cada passo pronto para copiar.
 
@@ -21,7 +21,7 @@ Porta fixa `8799` (a 8765 fica livre pra rodadas manuais), logs em `~/Library/Lo
 
 ## Abas
 
-**Plano** (home) — a leva atual: as fatias do PRD ativo em **ondas** de execução, com tamanho, tempo típico, estado e o comando copiável para pegar cada uma; issues **avulsas** abertas (fora de PRD) fecham a aba em seção própria, com os mesmos estados · **Issues** — tudo que aconteceu (PRD → fatias → PR → deploy); as fatias de cada PRD nascem **colapsadas** atrás de um toggle `▸ N fatias · M fechadas` (filtro/busca ativos forçam a exibição do que bate) · **Produção** — estado de produção + timeline de deploys e releases · **Pendências**, a fila humana: issues abertas com o label `ready-for-human` (ações que só o Pedro pode fazer, criadas no fim de um ciclo pelo `/ship` Passo 10.5), cada card com o rastro do PRD pai e o corpo com o passo a passo; fecha a issue, some do painel · **Mapa** — snapshots factuais da app · **Domínio** — ADRs + glossário · **Guia** — o método em 6 passos, o setup de máquina nova e os bastidores do painel.
+**Plano** (home) — a leva atual: as fatias do PRD ativo em **ondas** de execução, com tamanho, tempo típico, estado e o comando copiável para pegar cada uma; issues **avulsas** abertas (fora de PRD) fecham a aba em seção própria, com os mesmos estados · **Issues** — tudo que aconteceu (PRD → fatias → PR → deploy); as fatias de cada PRD nascem **colapsadas** atrás de um toggle `▸ N fatias · M fechadas` (filtro/busca ativos forçam a exibição do que bate) · **Produção** — estado de produção + timeline de deploys e releases · **Pendências**, a fila humana: issues abertas com o label `ready-for-human` (ações que só o Pedro pode fazer, criadas no fim de um ciclo pelo `/ship` Passo 10.5), cada card com o rastro do PRD pai e o corpo com o passo a passo; fecha a issue, some do painel · **Mapa** — snapshots factuais da app · **Domínio** — ADRs + glossário · **Guia** — o método em 6 passos, num desenho · **Repositório** — cada pasta e arquivo que o git conhece, com o resumo lido da fonte (tabela do `README.md` da raiz, frontmatter, docstring, `<title>`, título do markdown), a lista de arquivos de cada pasta pedida ao clicar (`/api/pasta`, fora da coleta), o conteúdo aberto na própria aba (markdown, texto, HTML em quadro isolado) e os links GitHub e Vercel (este só quando a URL está na fonte); embaixo, o botão **Rodar diagnóstico** roda o `/setup-maquina` sob demanda e mostra os cartões OK, AVISO e FALTA com o conserto copiável. Só o que está no `git ls-files` aparece: `.env`, `tokens/.env` e `local/` nunca entram.
 
 ## Vocabulário do Plano
 

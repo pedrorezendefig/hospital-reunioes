@@ -1051,3 +1051,47 @@ body.er-lock main{z-index:130}
 .pend-prd:hover{border-color:var(--coral); color:var(--coral)}
 .pend-body{margin-top:12px; padding-top:12px; border-top:1px dashed var(--line)}
 .pend-avisos{margin-top:26px; display:flex; flex-direction:column; gap:8px}
+
+/* ---------- Repositório (issue 596): árvore à esquerda, detalhe à direita, máquina embaixo ---------- */
+.rep-grid{display:grid; grid-template-columns:260px minmax(0,1fr); gap:16px; align-items:start; margin-bottom:28px}
+@media (max-width:768px){.rep-grid{grid-template-columns:1fr}}
+.rep-tree{padding:10px; display:flex; flex-direction:column; gap:2px; position:sticky; top:12px; max-height:calc(100vh - 24px); overflow:auto}
+.rep-pasta{appearance:none; border:0; background:none; cursor:pointer; text-align:left; display:flex; justify-content:space-between;
+  align-items:center; gap:8px; padding:7px 10px; border-radius:var(--r-inner); font-size:13px; color:var(--ink)}
+.rep-pasta.nivel-2{padding-left:26px; color:var(--ink-soft)}
+.rep-pasta:hover{background:var(--surface)}
+.rep-pasta.on{background:var(--indigo-wash); color:var(--indigo)}
+.rep-n{font-family:var(--mono); font-size:11px; color:var(--ink-soft)}
+.rep-detalhe{min-width:0}
+.rep-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:10px}
+.rep-head h3{margin:0; font-size:15px; font-weight:500; word-break:break-all}
+.rep-oque{margin:0 0 10px; font-size:15px; line-height:1.5}
+.rep-kv{display:grid; grid-template-columns:120px 1fr; gap:10px; font-size:13.5px; padding:6px 0; border-top:1px dashed var(--line)}
+.rep-lista{list-style:none; margin:8px 0 0; padding:0; display:flex; flex-direction:column; gap:4px}
+.rep-lista li{display:flex; align-items:center; gap:10px}
+.rep-arq{appearance:none; border:0; background:none; cursor:pointer; text-align:left; flex:1; min-width:0; display:flex;
+  gap:12px; align-items:baseline; padding:6px 8px; border-radius:var(--r-inner); font-size:13px; color:var(--ink)}
+.rep-arq:hover{background:var(--surface)}
+.rep-arq .mono{flex:none; color:var(--indigo)}
+.rep-arq-resumo{color:var(--ink-soft); overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.rep-links{display:inline-flex; gap:6px; flex:none}
+.rep-links a{text-decoration:none}
+.rep-links-row{margin:0 0 14px}
+.rep-md{padding-top:12px; border-top:1px dashed var(--line)}
+.rep-pre{background:var(--code-bg); color:var(--code-ink); border:1px solid var(--code-line); border-radius:var(--r-inner);
+  padding:14px 16px; font-size:12.5px; line-height:1.55; overflow:auto; max-height:70vh; white-space:pre}
+.rep-frame{width:100%; height:70vh; border:1px solid var(--line-2); border-radius:var(--r-inner); background:var(--card)}
+.rep-diag-head{display:flex; align-items:center; gap:14px; flex-wrap:wrap}
+.rep-run{padding:8px 16px; font-size:12.5px}
+.rep-diag-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:10px; margin-top:8px}
+.rep-diag{border:1px solid var(--line); border-left:4px solid var(--line-2); border-radius:var(--r-inner); padding:10px 12px; min-width:0}
+.rep-diag-top{display:flex; align-items:center; gap:8px; font-size:13px}
+.rep-diag-top strong{font-weight:500; word-break:break-word}
+.rep-diag-nota{display:block; margin-top:6px; font-size:12.5px; color:var(--ink-soft)}
+.rep-diag .cmd{margin:8px 0 0}
+.diag-ok{border-left-color:var(--green)}
+.diag-ok .badge{background:var(--green-wash); color:var(--green); border-color:transparent}
+.diag-aviso{border-left-color:var(--amber)}
+.diag-aviso .badge{background:var(--amber-wash); color:var(--amber); border-color:transparent}
+.diag-falta{border-left-color:var(--red)}
+.diag-falta .badge{background:var(--red-wash); color:var(--red); border-color:transparent}

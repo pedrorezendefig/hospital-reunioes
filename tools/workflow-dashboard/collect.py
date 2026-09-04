@@ -17,6 +17,7 @@ from pathlib import Path
 from areas import fundir_colunas_no_er, parse_area
 from diagramas import extrair_diagramas
 from plano import bloqueios_do_corpo, montar_plano
+from repositorio import arvore as arvore_do_repositorio
 
 GH_TIMEOUT = 20
 
@@ -507,6 +508,7 @@ def collect(root: Path) -> dict:
         "context_md": _read_text(root / "CONTEXT.md"),
         "snapshots": _snapshots(root),
         "git": _git_info(root),
+        "repositorio": arvore_do_repositorio(root),  # aba Repositório (#596); o diagnóstico NÃO roda aqui
     }
 
 
