@@ -2,6 +2,9 @@ name: Lint ADR
 
 # O ci.yml ignora docs/** no trigger, então o lint das ADRs vive em workflow próprio,
 # disparado só quando uma ADR muda. Garante status verdadeiro e supersessão bidirecional.
+permissions:
+  contents: read
+
 on:
   push:
     branches: [main]

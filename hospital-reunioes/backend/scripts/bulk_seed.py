@@ -1,15 +1,33 @@
 """
-Bulk seed: provisiona 43 contas (40 reais + 3 diretores teste) no Supabase.
+Bulk seed: provisiona contas de participantes no Supabase.
 
-Senhas: <primeironome_lowercase_sem_acentos>hospital2026
-Sem envio de email. Idempotente (skip se email já existe).
+A LISTA DE PESSOAS NAO VIVE NO GIT. Ela e um insumo humano e fica em
+`local/bulk_seed_participantes.json` (pasta `local/`, ADR 0044). Nome, cargo e
+e-mail de pessoa real sao dado pessoal: publicar isso no repositorio expoe o
+time sem base legal.
 
-Executar (do host, de dentro de backend/; a pasta scripts/ não entra na imagem): uv run python -m scripts.bulk_seed
+A SENHA E ALEATORIA POR PESSOA. Nao existe regra derivavel do nome. Uma regra
+escrita no repositorio vira a chave junto com a fechadura: quem le o arquivo
+calcula a senha de qualquer conta e entra pela tela de login publica.
+
+As credenciais geradas saem em `local/bulk_seed_credenciais.csv` (modo 600) e
+nunca no log, porque o log do backend e lido por gente que nao precisa dela.
+
+Formato do JSON de entrada (lista de objetos):
+    [{"nome_completo": "...", "cargo": "...", "email": "...",
+      "area": "...", "setor": "...", "role": "diretor"}]
+
+Executar (do host, de dentro de backend/; a pasta scripts/ nao entra na imagem):
+    uv run python -m scripts.bulk_seed
 """
 
+import csv
+import json
 import logging
+import os
+import secrets
 import sys
-import unicodedata
+from pathlib import Path
 
 from supabase import create_client
 
@@ -19,359 +37,50 @@ from app.services.auth_provisioning import provision_auth_user
 logging.basicConfig(level=logging.INFO, format="[bulk_seed] %(message)s")
 logger = logging.getLogger(__name__)
 
-# ─── Lista dos 40 participantes reais + 3 diretores teste ────────────────────
+# backend/scripts/bulk_seed.py -> sobe 4 niveis ate a raiz do repositorio.
+RAIZ = Path(__file__).resolve().parents[3]
+ENTRADA = RAIZ / "local" / "bulk_seed_participantes.json"
+SAIDA_CREDENCIAIS = RAIZ / "local" / "bulk_seed_credenciais.csv"
 
-PARTICIPANTES = [
-    # (nome_completo, cargo, email, area, setor, role)
-    # ── PRESIDENTE ──
-    ("Lauro Menezes", "Presidente", "lauromenezes@hospitalsaomatheus.com.br", "Diretoria", "Presidência", "presidente"),
-    # ── DIRETORES ──
-    (
-        "Caroline Izidorio Drumond da Silva",
-        "Diretora Médica Geral",
-        "carolizidorio@hospitalsaomatheus.com.br",
-        "Assistencial",
-        "Diretoria Clínica",
-        "diretor",
-    ),
-    (
-        "Caroline Lima",
-        "Diretora de Infraestrutura",
-        "engenheira.carolinelima@gmail.com",
-        "Administrativa",
-        "Engenharia Clínica",
-        "diretor",
-    ),
-    (
-        "Felipe Malafaia",
-        "Diretor Executivo",
-        "felipemalafaia@yahoo.com.br",
-        "Diretoria",
-        "Diretoria Administrativa",
-        "diretor",
-    ),
-    (
-        "Jorge Porto Marassi",
-        "Diretor Técnico HSM",
-        "diretoriamedica@hospitalsaomatheus.com.br",
-        "Assistencial",
-        "Diretoria Clínica",
-        "diretor",
-    ),
-    (
-        "Josiane Alves",
-        "Diretora Financeira/ADM",
-        "josiane@hospitalsaomatheus.com.br",
-        "Administrativa",
-        "Diretoria Administrativa",
-        "diretor",
-    ),
-    # ── GERENTES ──
-    (
-        "Denize dos Anjos da Silva Antunes de Souza",
-        "Gerente Financeiro",
-        "denize_antunes@hotmail.com",
-        "Administrativa",
-        "Financeiro",
-        "gerente",
-    ),
-    (
-        "Fernando da Silva Carvalho",
-        "TST/Gerente de Manutenção",
-        "supervisao.manutencao@hospitalsaomatheus.com.br",
-        "Administrativa",
-        "Engenharia Clínica",
-        "gerente",
-    ),
-    ("José Blanco Landeira", "Gestor de Auditoria", "blandeira@icloud.com", "Administrativa", "Auditoria", "gerente"),
-    (
-        "Lucas Louro de Souza dos Reis",
-        "Gerente de Desenvolvimento de Sistemas",
-        "lucaslouro2009@gmail.com",
-        "Administrativa",
-        "Tecnologia da Informação",
-        "gerente",
-    ),
-    (
-        "Rosiane Gomes dos Santos",
-        "Gestão Centro Médico",
-        "gestal.adm@gmail.com",
-        "Assistencial",
-        "Centro Médico",
-        "gerente",
-    ),
-    (
-        "Simone Cristina Santos de Lira",
-        "Gerente de Enfermagem",
-        "simoneliraenfa@gmail.com",
-        "Assistencial",
-        "Enfermagem",
-        "gerente",
-    ),
-    (
-        "Thaíssa Penha Silva dos Santos",
-        "Gestora de Auditoria",
-        "rtandeiraconsultoria@gmail.com",
-        "Administrativa",
-        "Auditoria",
-        "gerente",
-    ),
-    # ── COORDENADORES / MÉDICOS / OUTROS ──
-    (
-        "Adriana Araújo Alberto Gonçalves",
-        "Coordenador(a) de Faturamento",
-        "drika-araujo0223@outlook.com",
-        "Administrativa",
-        "Faturamento",
-        "coordenador",
-    ),
-    (
-        "Camila Vasconcellos Martins",
-        "Coordenador de Credenciamento",
-        "milamartins@outlook.com",
-        "Administrativa",
-        "Credenciamento",
-        "coordenador",
-    ),
-    (
-        "Carolina Cavalcanti Freire de Souza Maciel",
-        "Coordenador(a) de Enfermagem",
-        "enfcarolinamaciel@gmail.com",
-        "Assistencial",
-        "Enfermagem",
-        "coordenador",
-    ),
-    (
-        "Cesar Augusto Toigo",
-        "Fisioterapeuta coordenador de equipe",
-        "catoigo@gmail.com",
-        "Assistencial",
-        "Fisioterapia",
-        "coordenador",
-    ),
-    (
-        "Cristiane Ferreira Xavier",
-        "Coordenador(a) de Atendimento",
-        "recep_coordenacao@hospitalsaomatheus.com.br",
-        "Administrativa",
-        "Atendimento",
-        "coordenador",
-    ),
-    (
-        "Danielly Alves de Oliveira André",
-        "Coordenador(a) de Enfermagem",
-        "jdl.monteiroandre@gmail.com",
-        "Assistencial",
-        "Enfermagem",
-        "coordenador",
-    ),
-    (
-        "Dorelene Alves da Cunha",
-        "Coordenador(a) de Enfermagem",
-        "dore.alves2012@gmail.com",
-        "Assistencial",
-        "Enfermagem",
-        "coordenador",
-    ),
-    (
-        "Eduardo Biosca",
-        "Advogado",
-        "eduardo.biosca@hospitalsaomatheus.com.br",
-        "Administrativa",
-        "Jurídico",
-        "coordenador",
-    ),
-    (
-        "Evelyn de Souza Santos Teixeira",
-        "Coordenador(a) de CCIH",
-        "evelyn_souza27@hotmail.com",
-        "Assistencial",
-        "CCIH",
-        "coordenador",
-    ),
-    (
-        "Fabricio Fraklin Costa da Silveira",
-        "Coordenador Médico CTI",
-        "fabricionash@hotmail.com",
-        "Assistencial",
-        "CTI",
-        "coordenador",
-    ),
-    (
-        "Felipe de Carvalho",
-        "Coordenador de Apoio",
-        "carvalhofelipe87@gmail.com",
-        "Administrativa",
-        "Apoio Institucional",
-        "coordenador",
-    ),
-    (
-        "Flavia Rodrigues Peixoto de Souza",
-        "Coordenador(a) de Recursos de Glosa",
-        "flaviarps26@gmail.com",
-        "Administrativa",
-        "Recursos de Glosa",
-        "coordenador",
-    ),
-    (
-        "Giselle Nunes de Vasconcellos",
-        "Coordenador(a) de Atendimento",
-        "callcenter_adm@hospitalsaomatheus.com.br",
-        "Administrativa",
-        "Atendimento",
-        "coordenador",
-    ),
-    (
-        "Janaina Ferreira",
-        "Coordenador(a) de Suprimentos",
-        "jlferreira36@hotmail.com",
-        "Administrativa",
-        "Suprimentos e Compras",
-        "coordenador",
-    ),
-    (
-        "Laryssa Silva de Oliveira",
-        "Coordenador(a) de Repasse",
-        "laryssa.soliveira@hotmail.com",
-        "Administrativa",
-        "Repasse",
-        "coordenador",
-    ),
-    (
-        "Levi dos Santos",
-        "Coordenador(a) de DP/RH",
-        "coordenacao.dp@hospitalsaomatheus.com.br",
-        "Administrativa",
-        "Recursos Humanos",
-        "coordenador",
-    ),
-    (
-        "Luciana de Souza Moreira",
-        "Coordenador(a) de Compras",
-        "lumoreira1@yahoo.com.br",
-        "Administrativa",
-        "Suprimentos e Compras",
-        "coordenador",
-    ),
-    (
-        "Maria da Penha Smith",
-        "Coordenador de Enfermagem",
-        "penhasmithvida@gmail.com",
-        "Assistencial",
-        "Enfermagem",
-        "coordenador",
-    ),
-    (
-        "Milton Fernandes dos Santos Filho",
-        "Suporte T.I.",
-        "miltonsan@gmail.com",
-        "Administrativa",
-        "Tecnologia da Informação",
-        "coordenador",
-    ),
-    (
-        "Nayani Alves Baptista Lima",
-        "Coordenadora Operacional",
-        "nayaninllima@gmail.com",
-        "Administrativa",
-        "Operacional",
-        "coordenador",
-    ),
-    (
-        "Oto Xavier de Oliveira Filho",
-        "Coordenador(a) de Suprimentos",
-        "oxofgp@gmail.com",
-        "Administrativa",
-        "Suprimentos e Compras",
-        "coordenador",
-    ),
-    (
-        "Patrick Brian Candido",
-        "Coordenador médico UTI",
-        "patrick_candido@yahoo.com.br",
-        "Assistencial",
-        "UTI",
-        "coordenador",
-    ),
-    (
-        "Raphael Zehetmeyer",
-        "Anestesiologista",
-        "zehetmeyer_rap@hotmail.com",
-        "Assistencial",
-        "Anestesiologia",
-        "coordenador",
-    ),
-    (
-        "Thétis Helena Quirino Jesus de Sousa",
-        "Coordenador(a) de Nutrição",
-        "thetis_nut@hotmail.com",
-        "Assistencial",
-        "Nutrição Clínica",
-        "coordenador",
-    ),
-    ("Thiago Moreira Peixoto", "Médico", "tm.peixoto@hotmail.com", "Assistencial", "Corpo Clínico", "coordenador"),
-    (
-        "Tiago Barbuio Careno",
-        "Ortopedista e Trauma",
-        "tiagobarbuio@gmail.com",
-        "Assistencial",
-        "Ortopedia",
-        "coordenador",
-    ),
-    (
-        "Zilanda do Vale Cruz",
-        "Farmacêutico Responsável Técnico",
-        "tavinhasousa37@gmail.com",
-        "Assistencial",
-        "Farmácia Hospitalar",
-        "coordenador",
-    ),
-    # ── DIRETORES DE TESTE ──
-    (
-        "Ricardo Diretor Geral",
-        "Diretor Geral (teste)",
-        "pmrdef+ricardo@gmail.com",
-        "Diretoria",
-        "Diretoria Administrativa",
-        "diretor",
-    ),
-    (
-        "Ana Diretora Clínica",
-        "Diretora Clínica (teste)",
-        "pmrdef+ana@gmail.com",
-        "Assistencial",
-        "Diretoria Clínica",
-        "diretor",
-    ),
-    (
-        "Joao Diretor Administrativo",
-        "Diretor Administrativo (teste)",
-        "pmrdef+joao@gmail.com",
-        "Administrativa",
-        "Diretoria Administrativa",
-        "diretor",
-    ),
-]
+CAMPOS = ("nome_completo", "cargo", "email", "area", "setor", "role")
 
 
-def _slugify_primeiro_nome(nome_completo: str) -> str:
-    """Extrai primeiro nome, remove acentos, converte pra lowercase."""
-    primeiro = nome_completo.strip().split()[0]
-    # Remove acentos via NFD decomposition
-    nfkd = unicodedata.normalize("NFKD", primeiro)
-    sem_acento = "".join(c for c in nfkd if not unicodedata.combining(c))
-    return sem_acento.lower()
+def carregar_participantes() -> list[dict]:
+    """Le a lista de fora do git e falha alto se ela nao estiver la."""
+    if not ENTRADA.exists():
+        logger.error(f"lista nao encontrada: {ENTRADA}")
+        logger.error("Crie o arquivo com a lista de participantes antes de rodar.")
+        sys.exit(1)
+
+    dados = json.loads(ENTRADA.read_text(encoding="utf-8"))
+
+    for i, p in enumerate(dados, 1):
+        faltando = [c for c in CAMPOS if not p.get(c)]
+        if faltando:
+            logger.error(f"registro {i} sem os campos: {', '.join(faltando)}")
+            sys.exit(1)
+
+    return dados
+
+
+def gerar_senha() -> str:
+    """Senha aleatoria. Nao ha relacao alguma com o nome da pessoa."""
+    return secrets.token_urlsafe(18)
 
 
 def main():
+    participantes = carregar_participantes()
     supabase = create_client(settings.supabase_url, settings.supabase_service_role_key)
-    total = len(PARTICIPANTES)
+    total = len(participantes)
     ok = 0
     skip = 0
     erros = 0
+    credenciais: list[tuple[str, str, str]] = []
 
-    for i, (nome, cargo, email, area, setor, role) in enumerate(PARTICIPANTES, 1):
-        email = email.strip().lower()
+    for i, p in enumerate(participantes, 1):
+        nome = p["nome_completo"]
+        email = p["email"].strip().lower()
+        role = p["role"]
 
         # Idempotência: skip se já existe
         existing = supabase.table("participantes").select("id").eq("email", email).execute()
@@ -380,8 +89,7 @@ def main():
             skip += 1
             continue
 
-        # Gerar senha: <primeironome>hospital2026
-        senha = _slugify_primeiro_nome(nome) + "hospital2026"
+        senha = gerar_senha()
 
         # Criar auth user
         auth_uid = provision_auth_user(supabase, nome, email, role, password=senha)
@@ -397,10 +105,10 @@ def main():
                 .insert(
                     {
                         "nome_completo": nome,
-                        "cargo": cargo,
+                        "cargo": p["cargo"],
                         "email": email,
-                        "area": area,
-                        "setor": setor,
+                        "area": p["area"],
+                        "setor": p["setor"],
                         "role": role,
                         "ativo": True,
                         "is_externo": False,
@@ -411,11 +119,22 @@ def main():
             )
 
             pid = result.data[0]["id"] if result.data else "?"
-            logger.info(f"[{i}/{total}] OK: {email} → {pid} (role={role}, senha={senha})")
+            # A senha NAO entra no log. Ela vai so para o CSV local.
+            logger.info(f"[{i}/{total}] OK: {email} → {pid} (role={role})")
+            credenciais.append((nome, email, senha))
             ok += 1
         except Exception as e:
             logger.error(f"[{i}/{total}] ERRO insert: {email} — {e}")
             erros += 1
+
+    if credenciais:
+        SAIDA_CREDENCIAIS.parent.mkdir(parents=True, exist_ok=True)
+        with SAIDA_CREDENCIAIS.open("w", encoding="utf-8", newline="") as fh:
+            escritor = csv.writer(fh)
+            escritor.writerow(["nome_completo", "email", "senha_inicial"])
+            escritor.writerows(credenciais)
+        os.chmod(SAIDA_CREDENCIAIS, 0o600)
+        logger.info(f"credenciais gravadas em {SAIDA_CREDENCIAIS} (modo 600)")
 
     logger.info(f"\n{'=' * 60}")
     logger.info(f"RESULTADO: {ok} criados, {skip} já existiam, {erros} erros (total: {total})")
