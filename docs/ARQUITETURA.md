@@ -121,7 +121,7 @@ _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 hospital-reunioes/
 ├── backend/   FastAPI — app/{routers,services,models,pipeline,middleware,cron}
 ├── frontend/  Next.js 15 — src/{app,components,hooks,lib,types}
-└── supabase/  migrations/ (schema) · templates/ (e-mails) · functions/
+└── supabase/  migrations/ (schema) · templates/ (e-mails do Auth) · snippets/ (SQL de diagnóstico) · seed.sql
 docs/          ARQUITETURA.md · adr/ · agents/ · spec/ · onboarding/ · pops/ · comunicacao/ · manual/
 CONTEXT.md · CONTEXT-MAP.md   glossário e mapa dos contextos (raiz)
 .claude/skills/ skills do time (workflow) · local/ insumo humano fora do git · tools/ lint de ADR e painel local
