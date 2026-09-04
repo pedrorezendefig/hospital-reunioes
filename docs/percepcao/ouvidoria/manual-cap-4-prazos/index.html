@@ -1,0 +1,839 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual da Ouvidoria · Capítulo 4 · Prazos e cobrança</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="percepcao-meta">
+{
+ "prd": null,
+ "issues": [
+  574
+ ],
+ "contexto": "ouvidoria",
+ "titulo": "Capítulo 4: Prazos e cobrança",
+ "capitulo": 4,
+ "manual": "docs/manual/ouvidoria/index.html",
+ "app_version": "0.109.0",
+ "gerado_em": "2026-09-03T21:00:00-03:00"
+}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+    --g-critico: #B3261E; --g-alto: #C77700; --g-medio: #1F3864; --g-baixo: #5F5E5A;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* réplica do app desenhada em 960x540 e ampliada 2x */
+  .screen { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #F8FAFC; }
+
+  /* ===== slides ===== */
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 84px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
+  .frase { font-size: 52px; line-height: 1.35; color: var(--navy); font-weight: 700; max-width: 1500px; }
+  .frase small { display: block; font-size: 32px; font-weight: 400; color: var(--app-sec); margin-top: 26px; line-height: 1.45; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  .cartoes { display: grid; grid-template-columns: repeat(3, 1fr); gap: 44px; width: 1620px; }
+  .cartao { background: #fff; border: 2px solid var(--app-border); border-radius: 18px; padding: 38px 34px; display: flex; flex-direction: column; gap: 18px; box-shadow: 0 16px 40px -22px rgba(0,0,0,.2); text-align: left; }
+  .cartao .ci { width: 62px; height: 62px; border-radius: 16px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .cartao h4 { font-size: 32px; font-weight: 700; color: var(--navy); line-height: 1.2; }
+  .cartao p { font-size: 24px; color: var(--app-sec); line-height: 1.5; }
+
+  /* ===== casca do app (sidebar + topo) ===== */
+  .app { position: absolute; inset: 0; display: flex; background: #F8FAFC; }
+  .side { width: 148px; flex-shrink: 0; background: #fff; border-right: 1px solid #EEF2F7; padding: 12px 0 0; }
+  .side .marca { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 0 14px; border-bottom: 1px solid #EEF2F7; }
+  .side .marca .arcos { width: 46px; height: 20px; }
+  .side .marca .nm { font-size: 8.4px; font-weight: 700; color: var(--navy); letter-spacing: .01em; line-height: 1.15; text-align: center; }
+  .side nav { padding: 10px 8px; display: flex; flex-direction: column; gap: 2px; }
+  .side a { display: flex; align-items: center; gap: 7px; padding: 6px 8px; border-radius: 7px; font-size: 8.8px; color: #334155; }
+  .side a.sub { padding-left: 22px; font-size: 8.4px; color: #64748B; }
+  .side a.on { background: #EEF0FB; color: var(--navy); font-weight: 700; }
+  .side a .bdg { margin-left: auto; background: var(--navy); color: #fff; font-size: 7px; font-weight: 700; border-radius: 999px; min-width: 12px; height: 12px; display: flex; align-items: center; justify-content: center; padding: 0 3px; }
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .top { height: 34px; border-bottom: 1px solid #EEF2F7; background: #fff; display: flex; align-items: center; gap: 10px; padding: 0 16px; flex-shrink: 0; }
+  .top .busca { width: 148px; height: 18px; border: 1px solid var(--app-border); border-radius: 6px; display: flex; align-items: center; gap: 5px; padding: 0 7px; font-size: 7.6px; color: #667083; }
+  .top .quem { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .top .quem .tx { text-align: right; }
+  .top .quem .tx b { display: block; font-size: 8px; color: var(--app-text); }
+  .top .quem .tx span { font-size: 7px; color: var(--app-sec); }
+  .top .quem .av { width: 18px; height: 18px; border-radius: 50%; background: var(--navy-dark); color: #fff; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .conteudo { flex: 1; padding: 16px 26px; overflow: hidden; position: relative; }
+  .volta { font-size: 8.4px; color: var(--app-sec); display: flex; align-items: center; gap: 4px; margin-bottom: 6px; }
+  .conteudo h1 { font-size: 16px; font-weight: 700; color: var(--app-text); }
+  .conteudo .dek { font-size: 8.6px; color: var(--app-sec); margin-top: 3px; max-width: 560px; line-height: 1.5; }
+  .atalhos { display: flex; gap: 6px; margin: 9px 0 11px; }
+  .atalho { display: inline-flex; align-items: center; gap: 4px; border: 1px solid var(--app-border); background: #fff; border-radius: 999px; padding: 3.5px 9px; font-size: 7.8px; color: #334155; }
+  .atalho.azul { background: #EFF6FF; border-color: #DBEAFE; color: #2563EB; }
+  .atalho.cheio { background: var(--navy-dark); border-color: var(--navy-dark); color: #fff; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; font-size: 7.4px; }
+  .rodape-v { position: absolute; right: 26px; bottom: 10px; font-size: 7.2px; color: #667083; }
+
+  /* ===== fila ===== */
+  .fila { border: 1px solid var(--app-border); border-radius: 9px; background: #fff; overflow: hidden; box-shadow: 0 8px 20px -12px rgba(0,0,0,.14); }
+  .faixa-g { display: flex; align-items: center; justify-content: space-between; padding: 5px 11px; font-size: 7.4px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; }
+  .faixa-g .qt { font-size: 7.2px; font-weight: 400; letter-spacing: 0; text-transform: none; }
+  .fg-enc { background: #F5F3FF; color: var(--navy); }
+  .fg-cla { background: #EFF6FF; color: #2563EB; }
+  .fg-area { background: #FEF6E7; color: #B45309; }
+  .fg-resp { background: #ECFDF3; color: #15803D; }
+  .fg-fech { background: #F8FAFC; color: #64748B; }
+  .linha { display: flex; align-items: center; gap: 8px; padding: 7px 11px; border-bottom: 1px solid #F1F5F9; }
+  .linha:last-child { border-bottom: 0; }
+  .linha .col { flex: 1; min-width: 0; }
+  .linha .l1 { display: flex; align-items: center; gap: 6px; }
+  .linha .pt { width: 4px; height: 4px; border-radius: 50%; background: var(--navy); flex-shrink: 0; }
+  .linha .pt.off { background: transparent; }
+  .linha .prot { font-family: ui-monospace, Menlo, monospace; font-size: 8.6px; font-weight: 700; color: var(--app-text); letter-spacing: -.01em; }
+  .linha .res { font-size: 8.4px; color: #334155; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .linha .l2 { font-size: 7.4px; color: var(--app-sec); margin-top: 2px; display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .linha .l2 .venc { color: #667083; }
+  .linha .l2 .venc.ambar { color: #B45309; font-weight: 700; }
+  .linha .l2 .venc.vermelho { color: #B91C1C; font-weight: 700; }
+  .sep { color: #CBD5E1; }
+
+  .pill { display: inline-flex; align-items: center; gap: 3px; padding: 1.5px 6px; border-radius: 999px; font-size: 7px; font-weight: 700; letter-spacing: .04em; }
+  .pill.critico { background: #FEE2E2; color: #B3261E; }
+  .pill.alto { background: #FFEDD5; color: #C2410C; }
+  .pill.medio { background: #FEF3C7; color: #92400E; }
+  .pill.baixo { background: #F1F5F9; color: #475569; }
+  .pill.sigilo { background: #1E293B; color: #fff; }
+  .pill.estado { background: #FEF6E7; color: #B45309; }
+  .pill.classificar { background: #E0E7FF; color: #3730A3; }
+  .pill.semtit { background: #FEF3C7; color: #92400E; }
+
+  .btn { display: inline-flex; align-items: center; gap: 4px; padding: 4px 9px; border-radius: 6px; font-size: 7.4px; font-weight: 700; letter-spacing: .05em; text-transform: uppercase; white-space: nowrap; flex-shrink: 0; }
+  .btn.navy { background: var(--navy); color: #fff; }
+  .btn.verde { background: #16A34A; color: #fff; }
+  .btn.ambar { background: #D97706; color: #fff; }
+  .btn.branco { background: #fff; border: 1px solid var(--app-border); color: #475569; }
+  .btn.lilas { background: #EEF0FB; color: var(--navy); }
+  .btn.cinza { background: #E9EAF5; color: #8286BC; }
+  .btn.min { text-transform: none; letter-spacing: 0; font-weight: 400; color: #667083; padding: 4px 3px; }
+
+  /* ===== modal ===== */
+  .veu { position: absolute; inset: 0; background: rgba(15,23,42,.34); }
+  .modal { position: absolute; left: 50%; margin-left: -238px; top: 22px; width: 476px; background: #fff; border-radius: 10px; box-shadow: 0 26px 60px -18px rgba(0,0,0,.42); overflow: hidden; }
+  .modal-h { display: flex; align-items: flex-start; gap: 8px; padding: 11px 16px; border-bottom: 1px solid #F1F5F9; background: #fff; position: relative; z-index: 2; }
+  .modal-h .ii { color: var(--navy); flex-shrink: 0; margin-top: 1px; }
+  .modal-h h3 { font-size: 12px; font-weight: 700; color: #0F172A; }
+  .modal-h p { font-size: 8.2px; color: var(--app-sec); margin-top: 2px; }
+  .modal-b { padding: 12px 16px 14px; display: flex; flex-direction: column; gap: 10px; }
+  .rot { font-size: 7.2px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--app-sec); margin-bottom: 3px; }
+  .campo { display: flex; align-items: center; justify-content: space-between; width: 100%; min-height: 21px; padding: 5px 8px; border-radius: 6px; border: 1px solid var(--app-border); font-size: 8.4px; color: #334155; background: #fff; line-height: 1.45; }
+  .campo.area { align-items: flex-start; min-height: 38px; }
+  .campo.fantasma { color: #667083; }
+  .campo.foco { border-color: var(--navy); box-shadow: 0 0 0 2px rgba(43,46,126,.15); }
+  .opc { text-transform: none; letter-spacing: 0; font-weight: 400; }
+  .ajuda { font-size: 7.2px; color: #667083; margin-top: 4px; line-height: 1.5; }
+  .cxsel { display: flex; gap: 6px; align-items: flex-start; background: #F8FAFC; border: 1px solid var(--app-border); border-radius: 7px; padding: 8px 10px; }
+  .cxsel .qd { width: 8px; height: 8px; border-radius: 2px; border: 1.4px solid #94A3B8; flex-shrink: 0; margin-top: 1px; }
+  .cxsel .qd.on { background: var(--navy); border-color: var(--navy); }
+  .cxsel b { font-size: 8.4px; color: #0F172A; }
+  .cxsel p { font-size: 7.2px; color: var(--app-sec); margin-top: 2px; line-height: 1.5; }
+  .grav-g { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+  .grav-op { border: 1px solid var(--app-border); border-radius: 7px; padding: 7px 9px; background: #fff; }
+  .grav-op b { font-size: 8.6px; color: #0F172A; }
+  .grav-op p { font-size: 7.2px; color: var(--app-sec); margin-top: 2px; line-height: 1.45; }
+  .grav-op.on { border-color: var(--navy); background: #F5F6FE; box-shadow: 0 0 0 1.5px rgba(43,46,126,.25); }
+
+  /* ===== dossiê ===== */
+  .dos { border: 1px solid var(--app-border); border-radius: 9px; background: #fff; padding: 12px 14px; box-shadow: 0 8px 20px -12px rgba(0,0,0,.14); }
+  .dos-h { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; }
+  .dos-h .ic { width: 20px; height: 20px; border-radius: 6px; background: #EEF0FB; color: var(--navy); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .dos-h h2 { font-size: 11.5px; font-weight: 700; color: #0F172A; }
+  .dos-h .st { font-size: 7.6px; color: var(--app-sec); margin-top: 1px; }
+  .dos-av { display: flex; gap: 6px; align-items: flex-start; border: 1px solid var(--app-border); background: #F8FAFC; border-radius: 7px; padding: 7px 10px; margin-bottom: 6px; }
+  .dos-av .ii { color: var(--navy); flex-shrink: 0; margin-top: 1px; }
+  .dos-av b { font-size: 8.4px; color: #0F172A; font-weight: 700; }
+  .dos-av p { font-size: 7.2px; color: var(--app-sec); margin-top: 2px; line-height: 1.45; }
+  .dos-av.aceso { border-color: var(--navy); background: #F5F6FE; box-shadow: 0 0 0 2px rgba(43,46,126,.16); }
+  .dos-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px 18px; margin: 9px 0; }
+  .dos-grid dt { font-size: 7.2px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #667083; }
+  .dos-grid dd { font-size: 8.6px; color: #334155; margin-top: 1px; }
+  .bloco { border: 1px solid var(--app-border); border-radius: 7px; background: #F8FAFC; padding: 8px 10px; margin-top: 7px; }
+  .bloco .k { font-size: 7px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #667083; margin-bottom: 3px; }
+  .bloco .v { font-size: 8.2px; color: #334155; line-height: 1.5; }
+  .marco { display: flex; justify-content: space-between; gap: 12px; font-size: 8px; padding: 4px 0; border-bottom: 1px solid #F1F5F9; }
+  .marco:last-child { border-bottom: 0; }
+  .marco .n b { display: block; color: #0F172A; font-weight: 700; }
+  .marco .n span { color: var(--app-sec); font-size: 7.4px; }
+  .marco .d { color: var(--app-sec); font-size: 7.4px; text-align: right; }
+
+  /* ===== celular ===== */
+  .fone { position: absolute; width: 244px; height: 496px; border-radius: 26px; background: #fff; border: 5px solid #12141d; box-shadow: 0 26px 60px -20px rgba(0,0,0,.5); overflow: hidden; }
+  .fone .tela { position: absolute; inset: 0; overflow: hidden; background: #fff; }
+  .fone .rolo { position: absolute; left: 0; top: 0; width: 100%; }
+
+  /* formulário público */
+  .pub { padding: 12px 13px 16px; background: #fff; }
+  .pub .marca { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-bottom: 9px; }
+  .pub h1 { font-size: 13px; font-weight: 700; color: #0F172A; text-align: center; }
+  .pub .dek { font-size: 7.8px; color: var(--app-sec); text-align: center; line-height: 1.5; margin: 4px 0 10px; }
+  .pub .cartao { border: 1px solid var(--app-border); border-radius: 9px; padding: 10px 11px; }
+  .pub .origem { display: flex; gap: 5px; align-items: flex-start; border: 1px solid #DDE3F0; background: #F8FAFC; border-radius: 7px; padding: 6px 8px; margin-bottom: 10px; }
+  .pub .origem b { font-size: 7.8px; color: #0F172A; }
+  .pub .origem p { font-size: 6.8px; color: var(--app-sec); margin-top: 2px; line-height: 1.45; }
+  .pub .lb { font-size: 8px; font-weight: 700; color: #334155; margin: 9px 0 4px; }
+  .pub .lb span { font-weight: 400; color: #667083; }
+  .nat { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+  .nat div { border: 1px solid var(--app-border); border-radius: 7px; padding: 7px 4px; text-align: center; font-size: 8.4px; font-weight: 700; color: #334155; background: #fff; }
+  .nat div.on { border-color: var(--navy); background: #F5F6FE; color: var(--navy); box-shadow: 0 0 0 1.5px rgba(43,46,126,.25); }
+  .pub .nota { font-size: 6.6px; color: #667083; margin-top: 4px; line-height: 1.45; }
+  .pub .ta { min-height: 66px; border: 1.5px solid var(--navy); border-radius: 7px; padding: 7px 8px; font-size: 8px; line-height: 1.55; color: #334155; }
+  .pub .ta.vazio { color: #667083; }
+  .pub .cont { font-size: 6.6px; color: #667083; text-align: right; margin-top: 3px; }
+  .pub .anon { display: flex; gap: 5px; align-items: flex-start; margin: 9px 0; }
+  .pub .anon .qd { width: 8px; height: 8px; border-radius: 2px; border: 1.3px solid #94A3B8; flex-shrink: 0; margin-top: 1px; }
+  .pub .anon b { font-size: 7.6px; color: #334155; }
+  .pub .anon p { font-size: 6.6px; color: #667083; margin-top: 1px; line-height: 1.4; }
+  .pub .inp { height: 20px; border: 1px solid var(--app-border); border-radius: 7px; }
+  .pub .enviar { margin-top: 11px; height: 24px; border-radius: 7px; background: #8286BC; color: #fff; font-size: 8.6px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 5px; }
+  .pub .enviar.ativo { background: var(--navy); }
+  .pub .rod { font-size: 6.4px; color: #667083; text-align: center; margin-top: 6px; line-height: 1.45; }
+
+  /* recibo do protocolo */
+  .recibo { padding: 26px 16px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+  .recibo .ok { width: 40px; height: 40px; border-radius: 50%; background: #ECFDF3; color: #15803D; display: flex; align-items: center; justify-content: center; }
+  .recibo h2 { font-size: 12px; font-weight: 700; color: #0F172A; }
+  .recibo p { font-size: 8px; color: var(--app-sec); line-height: 1.55; }
+  .recibo .cx { border: 1px solid var(--app-border); background: #F8FAFC; border-radius: 9px; padding: 10px 20px; width: 100%; }
+  .recibo .cx .k { font-size: 6.8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #667083; }
+  .recibo .cx .p { font-family: ui-monospace, Menlo, monospace; font-size: 19px; font-weight: 700; color: #0F172A; margin-top: 3px; }
+
+  /* portal do setor */
+  .prt { background: #F8FAFC; }
+  .prt .grav { padding: 5px 11px; font-size: 6.8px; font-weight: 700; letter-spacing: .12em; text-transform: uppercase; }
+  .prt .gv-medio { background: #FEF3C7; color: #92400E; }
+  .prt .gv-alto { background: #FFEDD5; color: #9A3412; }
+  .prt .corpo { padding: 10px 11px 14px; display: flex; flex-direction: column; gap: 8px; }
+  .prt .cx { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; padding: 9px 10px; }
+  .prt .cab { display: flex; align-items: flex-start; justify-content: space-between; gap: 8px; }
+  .prt .cab .dm { font-size: 7.4px; color: var(--app-sec); text-align: right; line-height: 1.35; }
+  .prt .prazo { display: flex; gap: 5px; align-items: center; border: 1px solid #E2E8F0; background: #F8FAFC; border-radius: 7px; padding: 6px 8px; font-size: 7.8px; font-weight: 700; color: #334155; margin-top: 8px; }
+  .prt .lin2 { display: flex; align-items: center; gap: 5px; font-size: 7.8px; margin-top: 8px; }
+  .prt .lin2 .p { font-family: ui-monospace, Menlo, monospace; font-weight: 700; color: #0F172A; }
+  .prt .lin2 .s { background: #F1F5F9; color: #475569; border-radius: 999px; padding: 1.5px 6px; font-size: 6.8px; font-weight: 700; }
+  .prt .lin2 .c { color: var(--app-sec); font-size: 7.2px; }
+  .prt .quem { display: flex; justify-content: space-between; font-size: 7.4px; color: var(--app-sec); margin-top: 7px; }
+  .prt .quem b { color: #0F172A; }
+  .prt .k { font-size: 6.6px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #667083; margin-bottom: 3px; }
+  .prt .b-res { font-size: 8.4px; font-weight: 700; color: #0F172A; line-height: 1.5; }
+  .prt .b-rel { font-size: 7.6px; color: #475569; line-height: 1.55; background: #F8FAFC; border-radius: 7px; padding: 7px 8px; }
+  .prt .b-nota { font-size: 7.6px; color: #334155; line-height: 1.55; background: #F5F6FE; border: 1px solid #DDE0F7; border-radius: 7px; padding: 7px 8px; }
+  .prt .ta { min-height: 52px; border: 1px solid var(--app-border); border-radius: 7px; padding: 7px 8px; font-size: 7.6px; line-height: 1.55; color: #334155; background: #fff; }
+  .prt .ta.vazio { color: #667083; }
+  .prt .ta.foco { border-color: var(--navy); box-shadow: 0 0 0 2px rgba(43,46,126,.14); }
+  .prt .anexo { border: 1px dashed #CBD5E1; border-radius: 7px; padding: 7px; text-align: center; font-size: 7.2px; font-weight: 700; color: #64748B; letter-spacing: .05em; text-transform: uppercase; }
+  .prt .env { height: 24px; border-radius: 7px; background: #8286BC; color: #fff; font-size: 8.4px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; display: flex; align-items: center; justify-content: center; }
+  .prt .env.ativo { background: var(--navy); }
+  .prt .erro { border: 1px solid #FECACA; background: #FEF2F2; color: #991B1B; border-radius: 7px; padding: 6px 8px; font-size: 7.4px; line-height: 1.5; display: flex; gap: 5px; align-items: flex-start; }
+  .prt .fim { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 7px; padding: 22px 14px; }
+  .prt .fim .ok { width: 34px; height: 34px; border-radius: 50%; background: #ECFDF3; color: #15803D; display: flex; align-items: center; justify-content: center; }
+  .prt .fim h2 { font-size: 10.5px; font-weight: 700; color: #0F172A; }
+  .prt .fim p { font-size: 7.6px; color: var(--app-sec); line-height: 1.55; }
+
+  /* ===== email ===== */
+  .email { background: #fff; border-radius: 10px; box-shadow: 0 24px 54px -18px rgba(0,0,0,.36); overflow: hidden; }
+  .email .barra { height: 3px; background: linear-gradient(90deg, var(--navy), var(--navy-light)); }
+  .email .cab { display: flex; align-items: flex-start; gap: 7px; padding: 8px 12px; border-bottom: 1px solid #F1F5F9; background: #FAFBFC; }
+  .email .cab .et { font-size: 7.2px; color: var(--app-sec); line-height: 1.45; }
+  .email .cab .et b { display: block; font-size: 8.6px; color: #1E293B; margin-bottom: 1px; }
+  .email .marca { display: flex; flex-direction: column; align-items: center; gap: 2px; padding: 12px 0 10px; border-bottom: 1px solid #F1F5F9; }
+  .email .marca .sm { font-size: 6.6px; letter-spacing: .16em; color: var(--app-sec); font-weight: 700; }
+  .email .corpo { padding: 11px 13px 13px; display: flex; flex-direction: column; gap: 8px; }
+  .email .faixa { border-radius: 6px 6px 0 0; padding: 4px 11px; font-size: 6.8px; font-weight: 700; letter-spacing: .12em; color: #fff; }
+  .email .fx-cx { border: 1px solid var(--app-border); border-top: 0; border-radius: 0 0 6px 6px; background: #F8FAFC; padding: 8px 11px; }
+  .email .fx-cx .k { font-size: 6.2px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #667083; }
+  .email .fx-cx .prot { font-family: ui-monospace, Menlo, monospace; font-size: 12.5px; font-weight: 700; color: #1E293B; margin: 2px 0 5px; }
+  .email .fx-cx .lin { font-size: 7.6px; color: #334155; margin-top: 2px; }
+  .email .fx-cx .lin b { color: #1E293B; }
+  .email p.tx { font-size: 8px; color: #475569; line-height: 1.55; }
+  .email p.tx b { color: #1E293B; }
+  .email .bl { border: 1px solid var(--app-border); border-radius: 7px; padding: 8px 10px; }
+  .email .bl.cinza { background: #F8FAFC; }
+  .email .bl.lilas { background: #F5F6FE; border-color: #DDE0F7; }
+  .email .bl .k { font-size: 6.2px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #667083; margin-bottom: 3px; }
+  .email .bl .v { font-size: 7.8px; color: #334155; line-height: 1.55; }
+  .email .bl .v.forte { font-size: 8.6px; font-weight: 700; color: #0F172A; }
+  .email .cta { align-self: center; padding: 6px 18px; border-radius: 7px; background: var(--navy-dark); color: #fff; font-size: 8px; font-weight: 700; }
+  .email .pe { font-size: 6.8px; color: #667083; text-align: center; line-height: 1.5; }
+  .email .rod { border-top: 1px solid #F1F5F9; background: #FAFBFC; padding: 8px; font-size: 6.6px; color: #667083; text-align: center; line-height: 1.5; }
+
+  /* ===== caixa de entrada ===== */
+  .inbox { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; overflow: hidden; box-shadow: 0 18px 40px -18px rgba(0,0,0,.28); }
+  .inbox .cab { padding: 7px 11px; border-bottom: 1px solid #F1F5F9; font-size: 8px; font-weight: 700; color: #334155; background: #FAFBFC; display: flex; align-items: center; gap: 5px; }
+  .inbox .msg { display: flex; gap: 8px; padding: 8px 11px; border-bottom: 1px solid #F1F5F9; }
+  .inbox .msg:last-child { border-bottom: 0; }
+  .inbox .msg .av { width: 17px; height: 17px; border-radius: 50%; background: #EEF0FB; color: var(--navy); font-size: 7.4px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .inbox .msg .as { font-size: 8.2px; font-weight: 700; color: #0F172A; }
+  .inbox .msg .pv { font-size: 7.4px; color: var(--app-sec); margin-top: 2px; line-height: 1.45; }
+  .inbox .msg .qd { font-size: 7px; color: #667083; margin-left: auto; flex-shrink: 0; }
+  .inbox .msg.nova { background: #F5F6FE; }
+
+  /* ===== tabelas ===== */
+  .tbl { border: 1px solid var(--app-border); border-radius: 9px; background: #fff; overflow: hidden; box-shadow: 0 8px 20px -12px rgba(0,0,0,.14); }
+  .tbl table { width: 100%; border-collapse: collapse; }
+  .tbl th { background: #F8FAFC; text-align: left; font-size: 6.8px; font-weight: 700; letter-spacing: .09em; text-transform: uppercase; color: var(--app-sec); padding: 6px 9px; border-bottom: 1px solid var(--app-border); }
+  .tbl td { padding: 6px 9px; border-bottom: 1px solid #F1F5F9; font-size: 8px; color: #334155; vertical-align: top; }
+  .tbl tr:last-child td { border-bottom: 0; }
+  .tbl td.k { font-weight: 700; color: #0F172A; white-space: nowrap; }
+  .tbl td.k span { display: block; font-weight: 400; font-size: 6.8px; color: #667083; margin-top: 1px; max-width: 96px; line-height: 1.4; }
+  .tbl .celula { display: inline-flex; align-items: center; gap: 4px; }
+  .tbl .cx-n { border: 1px solid var(--app-border); border-radius: 5px; padding: 3px 7px; font-size: 8px; color: #334155; background: #fff; min-width: 30px; text-align: center; }
+  .tbl .un { font-size: 7px; color: #667083; }
+  .tbl tr.aceso td { background: #F5F6FE; }
+  .tbl tr.aceso .cx-n { border-color: var(--navy); box-shadow: 0 0 0 1.5px rgba(43,46,126,.2); font-weight: 700; color: var(--navy); }
+
+  /* ===== calendário ===== */
+  .cal { background: #fff; border: 1px solid var(--app-border); border-radius: 12px; padding: 14px 16px; box-shadow: 0 16px 38px -18px rgba(0,0,0,.26); }
+  .cal h4 { font-size: 12px; font-weight: 700; color: #0F172A; margin-bottom: 10px; }
+  .cal .semana { display: grid; grid-template-columns: repeat(5, 1fr); gap: 7px; }
+  .cal .dia { border: 1px solid var(--app-border); border-radius: 8px; padding: 8px 7px; text-align: center; background: #fff; }
+  .cal .dia .dn { font-size: 6.8px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #667083; }
+  .cal .dia .dd { font-size: 13px; font-weight: 700; color: #0F172A; margin-top: 2px; }
+  .cal .dia .dt { font-size: 6.6px; color: #667083; margin-top: 3px; line-height: 1.35; min-height: 16px; }
+  .cal .dia.fds { background: #F1F5F9; border-style: dashed; opacity: .55; }
+  .cal .dia.inicio { border-color: var(--navy); background: #F5F6FE; }
+  .cal .dia.inicio .dt { color: var(--navy); font-weight: 700; }
+  .cal .dia.vence { border-color: #C77700; background: #FFF8EC; }
+  .cal .dia.vence .dt { color: #9A3412; font-weight: 700; }
+  .cal .fim-semana { grid-column: span 2; }
+
+  /* ===== escada ===== */
+  .degrau { display: flex; align-items: stretch; gap: 9px; margin-bottom: 7px; opacity: 0; }
+  .deg-q { width: 152px; flex-shrink: 0; background: #fff; border: 1px solid var(--app-border); border-radius: 8px; padding: 7px 10px; display: flex; align-items: center; gap: 8px; }
+  .deg-n { width: 19px; height: 19px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 8.4px; font-weight: 700; color: #fff; flex-shrink: 0; }
+  .deg-q .dn { font-size: 8.2px; font-weight: 700; color: #334155; line-height: 1.3; }
+  .deg-q .dq { font-size: 6.8px; color: #667083; margin-top: 1px; }
+  .deg-e { flex: 1; background: #fff; border: 1px solid var(--app-border); border-radius: 8px; overflow: hidden; display: flex; }
+  .deg-f { width: 4px; flex-shrink: 0; }
+  .deg-c { flex: 1; padding: 7px 10px; }
+  .deg-c .as { font-size: 8.2px; font-weight: 700; color: #1E293B; line-height: 1.3; }
+  .deg-c .pa { font-size: 7px; color: #667083; margin-top: 2px; }
+
+  /* ===== painel ===== */
+  .kpis { display: grid; grid-template-columns: repeat(6, 1fr); gap: 7px; margin-bottom: 9px; }
+  .kpi { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; padding: 8px 9px; }
+  .kpi b { display: block; font-size: 16px; font-weight: 700; color: #0F172A; line-height: 1; }
+  .kpi span { font-size: 7px; color: var(--app-sec); display: block; margin-top: 4px; line-height: 1.3; }
+  .cx-crit { border: 1px solid #FECACA; background: #FEF2F2; border-radius: 8px; padding: 8px 11px; margin-bottom: 9px; }
+  .cx-crit .ch { display: flex; align-items: center; gap: 5px; font-size: 8.4px; font-weight: 700; color: #B3261E; }
+  .cx-crit .cs { font-size: 7.2px; color: #B4443E; margin-top: 2px; line-height: 1.45; }
+  .cx-crit .li { display: flex; align-items: center; gap: 6px; margin-top: 7px; padding-top: 7px; border-top: 1px solid #FBD5D5; }
+  .cx-crit .li .prot { font-family: ui-monospace, Menlo, monospace; font-size: 8.6px; font-weight: 700; color: #0F172A; }
+  .cx-crit .li .vc { margin-left: auto; font-size: 7.4px; color: #B4443E; font-weight: 700; }
+  .cx-crit .li .rs { font-size: 7.4px; color: #475569; margin-top: 3px; }
+  .colunas { display: grid; grid-template-columns: 1fr 1fr 1.25fr; gap: 8px; }
+  .coluna { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; padding: 9px 10px; min-height: 132px; }
+  .coluna .ch { display: flex; align-items: center; gap: 5px; font-size: 8.2px; font-weight: 700; color: #0F172A; }
+  .coluna .cs { font-size: 6.8px; color: #667083; margin-top: 3px; line-height: 1.45; }
+  .coluna .vaz { font-size: 7.6px; color: #667083; margin-top: 14px; }
+  .coluna .item { border-top: 1px solid #F1F5F9; padding-top: 6px; margin-top: 6px; }
+  .coluna .item .l1 { display: flex; align-items: center; gap: 5px; flex-wrap: wrap; }
+  .coluna .item .prot { font-family: ui-monospace, Menlo, monospace; font-size: 8px; font-weight: 700; color: #0F172A; }
+  .coluna .item .l2 { font-size: 7px; color: var(--app-sec); margin-top: 3px; }
+  .coluna .item .l3 { font-size: 7px; color: #475569; margin-top: 3px; line-height: 1.45; }
+
+  /* ===== PDF do relatório ===== */
+  .pdf { background: #fff; border: 1px solid var(--app-border); border-radius: 6px; box-shadow: 0 22px 50px -18px rgba(0,0,0,.36); padding: 16px 18px; }
+  .pdf .cab { display: flex; align-items: flex-start; justify-content: space-between; border-bottom: 2px solid var(--navy); padding-bottom: 8px; margin-bottom: 10px; }
+  .pdf .cab h3 { font-size: 11px; font-weight: 700; color: var(--navy); }
+  .pdf .cab p { font-size: 7.2px; color: var(--app-sec); margin-top: 2px; }
+  .pdf .st { font-size: 7px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #667083; margin: 9px 0 5px; }
+  .pdf .barras { display: flex; flex-direction: column; gap: 5px; }
+  .pdf .barra { display: flex; align-items: center; gap: 7px; font-size: 7.4px; }
+  .pdf .barra .nm { width: 70px; color: #334155; flex-shrink: 0; }
+  .pdf .barra .tr { flex: 1; height: 8px; background: #F1F5F9; border-radius: 999px; overflow: hidden; }
+  .pdf .barra .tr i { display: block; height: 100%; background: var(--navy-light); border-radius: 999px; }
+  .pdf .barra .vl { width: 20px; text-align: right; color: #0F172A; font-weight: 700; }
+  .pdf .retrato { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; margin-top: 5px; }
+  .pdf .retrato div { border: 1px solid var(--app-border); border-radius: 7px; padding: 8px 10px; background: #F8FAFC; }
+  .pdf .retrato .f { font-size: 7px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: #667083; }
+  .pdf .retrato .n { font-size: 14px; font-weight: 700; color: #0F172A; margin-top: 2px; }
+  .pdf .retrato .q { font-size: 6.8px; color: #667083; margin-top: 2px; }
+
+  /* ===== nota externa ===== */
+  .nota-cards { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; max-width: 400px; }
+  .nota-card { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; padding: 11px 12px; box-shadow: 0 8px 20px -12px rgba(0,0,0,.14); }
+  .nota-card .h { display: flex; align-items: center; gap: 5px; font-size: 8.6px; font-weight: 700; color: #0F172A; }
+  .nota-card .h .es { color: #F59E0B; }
+  .nota-card .n { font-size: 17px; font-weight: 700; color: #0F172A; margin-top: 7px; }
+  .nota-card .q { font-size: 6.8px; color: #667083; margin-top: 2px; }
+  .nota-card .lin { display: flex; gap: 5px; margin-top: 8px; }
+  .nota-card .lin .inp { flex: 1; border: 1px solid var(--app-border); border-radius: 6px; padding: 4px 7px; font-size: 8px; color: #667083; }
+  .nota-card .lin .inp.cheio { color: #0F172A; font-weight: 700; }
+  .nota-card .lin .inp.foco { border-color: var(--navy); box-shadow: 0 0 0 2px rgba(43,46,126,.14); }
+
+  /* ===== pontos de escuta ===== */
+  .ponto { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; padding: 9px 11px; display: flex; align-items: center; gap: 10px; margin-top: 6px; }
+  .ponto .qr { width: 42px; height: 42px; flex-shrink: 0; }
+  .ponto .nm { font-size: 9px; font-weight: 700; color: #0F172A; }
+  .ponto .cd { font-size: 7.4px; color: var(--app-sec); margin-top: 2px; }
+  .ponto .cd b { font-family: ui-monospace, Menlo, monospace; color: #334155; }
+  .ponto .acoes { margin-left: auto; display: flex; gap: 5px; }
+  .setor-t { font-size: 8.4px; font-weight: 700; color: #0F172A; margin-top: 10px; }
+
+  /* cartaz A5 */
+  .cartaz { background: #fff; border-radius: 4px; box-shadow: 0 26px 60px -18px rgba(0,0,0,.42); padding: 20px 18px; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+  .cartaz h3 { font-size: 15px; font-weight: 700; color: #0F172A; line-height: 1.2; }
+  .cartaz .sb { font-size: 8.6px; color: #475569; line-height: 1.45; }
+  .cartaz .qr { width: 96px; height: 96px; margin: 4px 0; }
+  .cartaz .ap { font-size: 7.4px; color: var(--app-sec); }
+  .cartaz .url { font-family: ui-monospace, Menlo, monospace; font-size: 8.6px; font-weight: 700; color: #0F172A; }
+  .cartaz .div { width: 100%; height: 1px; background: var(--app-border); margin: 4px 0; }
+  .cartaz .lo { font-size: 10px; font-weight: 700; color: var(--navy); }
+  .cartaz .pn { font-size: 7.4px; color: var(--app-sec); }
+
+  /* ===== parede com cartaz ===== */
+  .parede { position: absolute; inset: 0; background: linear-gradient(170deg, #E8EBF2 0%, #D5DAE6 100%); }
+  .parede::after { content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 210px; background: linear-gradient(180deg, #C3C9D8, #AEB5C6); }
+  .moldura { position: absolute; background: #fff; border-radius: 6px; box-shadow: 0 30px 70px -22px rgba(0,0,0,.45); }
+
+  /* ===== JSON ===== */
+  .json { background: #0F172A; border-radius: 9px; padding: 13px 15px; font-family: ui-monospace, Menlo, monospace; font-size: 9.4px; line-height: 1.62; color: #E2E8F0; box-shadow: 0 22px 50px -18px rgba(0,0,0,.5); overflow: hidden; }
+  .json .cab { display: flex; align-items: center; gap: 6px; padding-bottom: 8px; margin-bottom: 8px; border-bottom: 1px solid #1E293B; font-size: 8.6px; color: #667083; }
+  .json .cab b { color: #A5B4FC; font-weight: 700; }
+  .json .ch { color: #7DD3FC; }
+  .json .vl { color: #BBF7D0; }
+  .json .nb { color: #FDBA74; }
+  .json .pt { color: #64748B; }
+  .json .ok { color: #86EFAC; font-weight: 700; }
+  .json .err { color: #FCA5A5; font-weight: 700; }
+  .json .destaque { background: rgba(163,180,252,.14); border-radius: 3px; }
+
+  /* ===== whatsapp ===== */
+  .wa { background: #E9E3DB; height: 100%; padding: 10px 9px; display: flex; flex-direction: column; gap: 6px; }
+  .wa .topo { position: absolute; left: 0; right: 0; top: 0; height: 30px; background: #075E54; color: #fff; display: flex; align-items: center; gap: 7px; padding: 0 10px; font-size: 8.6px; font-weight: 700; }
+  .wa .balao { max-width: 76%; border-radius: 8px; padding: 6px 8px; font-size: 7.8px; line-height: 1.5; color: #1E293B; box-shadow: 0 1px 2px rgba(0,0,0,.12); }
+  .wa .balao.dele { background: #fff; align-self: flex-start; }
+  .wa .balao.dela { background: #DCF8C6; align-self: flex-end; }
+  .wa .hora { font-size: 6.2px; color: #8A9099; text-align: right; margin-top: 2px; }
+
+  /* ===== anotações e cursor ===== */
+  .chip-tempo { position: absolute; background: #16181d; color: #f4f2ec; font-size: 10.5px; font-weight: 600; border-radius: 999px; padding: 6px 16px; box-shadow: 0 10px 26px -8px rgba(0,0,0,.45); z-index: 35; opacity: 0; white-space: nowrap; }
+  .anot { position: absolute; background: #16181d; color: #f4f2ec; font-size: 12px; font-weight: 600; border-radius: 9px; padding: 7px 12px; max-width: 250px; line-height: 1.4; box-shadow: 0 10px 26px -8px rgba(0,0,0,.45); z-index: 30; opacity: 0; }
+  .anot::after { content: ""; position: absolute; left: 20px; top: -5px; width: 10px; height: 10px; background: #16181d; transform: rotate(45deg); }
+  .anot.baixo::after { top: auto; bottom: -5px; }
+  .anot.semseta::after { display: none; }
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+  .fx { opacity: 0; }
+  .marcador { position: absolute; border: 2.5px solid var(--navy); border-radius: 8px; box-shadow: 0 0 0 4px rgba(43,46,126,.14); z-index: 28; opacity: 0; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="62" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Manual da Ouvidoria · Capítulo 4</div>
+    <h1 class="titulo" id="ab-titulo">Prazos e cobrança</h1>
+    <p class="sub" id="ab-sub">O prazo vem da gravidade. A cobrança não espera ninguém abrir tela.</p>
+  </section>
+
+  <!-- 2 · A tabela de prazos da Diretoria -->
+  <section id="c-tabela" class="clip scene" data-start="4" data-duration="8" data-track-index="2">
+    <div class="screen" id="scr-tabela"></div>
+  </section>
+
+  <!-- 3 · O calendário útil -->
+  <section id="c-calendario" class="clip scene" data-start="12" data-duration="12" data-track-index="3">
+    <div class="screen" id="scr-calendario"></div>
+  </section>
+
+  <!-- 4 · Quem precisa de mais tempo pede -->
+  <section id="c-prorroga" class="clip scene" data-start="24" data-duration="14" data-track-index="4">
+    <div class="screen" id="scr-prorroga"></div>
+  </section>
+
+  <!-- 5 · A escada de cobrança -->
+  <section id="c-escada" class="clip scene" data-start="38" data-duration="14" data-track-index="5">
+    <div class="screen" id="scr-escada"></div>
+  </section>
+
+  <!-- 6 · A regra, em uma frase -->
+  <section id="c-regra" class="clip scene slide" data-start="52" data-duration="6" data-track-index="6">
+    <p class="frase" id="rg-frase">A varredura roda a cada 10 minutos.<small>Cobrança gerada fora do expediente espera a próxima abertura. Caso crítico sai na hora.</small></p>
+  </section>
+
+  <!-- 7 · Fecho -->
+  <section id="c-fecho" class="clip scene slide" data-start="58" data-duration="4" data-track-index="7">
+    <div class="fecho-titulo" id="fc-titulo">Prazos e cobrança</div>
+    <div class="carimbo" id="fc-carimbo">Capítulo 4 · retrata o app em v0.109.0 · gerado em 03/09/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da Ouvidoria</div>
+  </section>
+
+</div>
+
+<script>
+/* ============================================================
+   Ícones de traço, no mesmo desenho dos ícones do app
+   ============================================================ */
+function ic(nome, s, cls) {
+  const P = {
+    checkc: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    check: '<path d="M20 6 9 17l-5-5"/>',
+    relogio: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    calendario: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
+    calrelogio: '<path d="M21 7.5V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3.5"/><path d="M16 2v4"/><path d="M8 2v4"/><path d="M3 10h5"/><circle cx="16.5" cy="16.5" r="5.5"/><path d="M16.5 14.5v2.2l1.5 1"/>',
+    megafone: '<path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/>',
+    alerta: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    alertac: '<circle cx="12" cy="12" r="10"/><path d="M12 8v4"/><path d="M12 16h.01"/>',
+    email: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+    caixa: '<path d="M22 12h-6l-2 3h-4l-2-3H2"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/>',
+    girar: '<path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/>',
+    pessoa: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+    pessoas: '<path d="M18 21a8 8 0 0 0-16 0"/><circle cx="10" cy="8" r="5"/><path d="M22 20c0-3.37-2-6.5-4-8a5 5 0 0 0-.45-8.3"/>',
+    pessoax: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="m17 8 5 5"/><path d="m22 8-5 5"/>',
+    pausa: '<circle cx="12" cy="12" r="10"/><line x1="10" x2="10" y1="15" y2="9"/><line x1="14" x2="14" y1="15" y2="9"/>',
+    telefone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.13.96.36 1.9.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.9.34 1.85.57 2.81.7A2 2 0 0 1 22 16.92"/>',
+    predio: '<rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/>',
+    escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+    cadeado: '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    seta: '<path d="M5 12h14"/><path d="m12 5 7 7-7 7"/>',
+    setaesq: '<path d="M19 12H5"/><path d="m12 19-7-7 7-7"/>',
+    doc: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>',
+    proibido: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+    aviao: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+    lupa: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    sino: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/>',
+    pin: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+    grade: '<rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/>',
+    estrela: '<path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.12 2.12 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.12 2.12 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.12 2.12 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.12 2.12 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.12 2.12 0 0 0 1.597-1.16z"/>',
+    baixar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="M7 10l5 5 5-5"/><path d="M12 15V3"/>',
+    desligar: '<path d="M12 2v10"/><path d="M18.4 6.6a9 9 0 1 1-12.77.04"/>',
+    mais: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    fechar: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    qrcode: '<rect width="5" height="5" x="3" y="3" rx="1"/><rect width="5" height="5" x="16" y="3" rx="1"/><rect width="5" height="5" x="3" y="16" rx="1"/><path d="M21 16h-3a2 2 0 0 0-2 2v3"/><path d="M21 21v.01"/><path d="M12 7v3a2 2 0 0 1-2 2H7"/><path d="M3 12h.01"/><path d="M12 3h.01"/><path d="M12 16v.01"/><path d="M16 12h1"/><path d="M21 12v.01"/><path d="M12 21v-1"/>',
+    clipe: '<path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l8.57-8.57A4 4 0 1 1 18 8.84l-8.59 8.57a2 2 0 0 1-2.83-2.83l8.49-8.48"/>',
+    escada: '<path d="M3 21h4v-5h5v-5h5V6h4"/>',
+    chave: '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>'
+  };
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls || ""}" style="flex-shrink:0">${P[nome]}</svg>`;
+}
+
+/* Logo do hospital: os dois arcos, no desenho do sistema */
+function logo(w) {
+  const h = Math.round(w * 0.42);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 100 42" fill="none" style="flex-shrink:0">
+    <path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/>
+    <path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/>
+  </svg>`;
+}
+
+/* QR desenhado, determinístico: mesma fonte, mesmo desenho em todo render */
+function qr(px, semente) {
+  const N = 25, s = px / N;
+  let d = "", x = semente || 7;
+  const rnd = () => { x = (x * 1103515245 + 12345) % 2147483648; return x / 2147483648; };
+  const canto = (cx, cy) =>
+    `<rect x="${cx*s}" y="${cy*s}" width="${7*s}" height="${7*s}" fill="#000"/>` +
+    `<rect x="${(cx+1)*s}" y="${(cy+1)*s}" width="${5*s}" height="${5*s}" fill="#fff"/>` +
+    `<rect x="${(cx+2)*s}" y="${(cy+2)*s}" width="${3*s}" height="${3*s}" fill="#000"/>`;
+  const dentroCanto = (i, j) =>
+    (i < 8 && j < 8) || (i > N - 9 && j < 8) || (i < 8 && j > N - 9);
+  for (let i = 0; i < N; i++) for (let j = 0; j < N; j++) {
+    if (dentroCanto(i, j)) continue;
+    if (rnd() > 0.5) d += `<rect x="${i*s}" y="${j*s}" width="${s}" height="${s}" fill="#000"/>`;
+  }
+  return `<svg width="${px}" height="${px}" viewBox="0 0 ${px} ${px}" style="flex-shrink:0"><rect width="${px}" height="${px}" fill="#fff"/>${d}${canto(0,0)}${canto(N-7,0)}${canto(0,N-7)}</svg>`;
+}
+
+/* Marca do hospital empilhada, como no topo das telas */
+function marca(w, cor) {
+  return `${logo(w)}<div style="font-size:${Math.round(w*0.115)}px;font-weight:700;color:${cor || "#1E3A8A"};line-height:1.12;text-align:center;letter-spacing:.01em">HOSPITAL<br>SÃO MATHEUS</div>`;
+}
+
+/* Casca do app: barra lateral e topo, iguais em toda tela interna */
+function casca(ativo, badge, quem, email, dentro) {
+  const item = (nome, icone, on, sub) =>
+    `<a class="${sub ? "sub" : ""}${on ? " on" : ""}">${sub ? "" : ic(icone, 11)}<span>${nome}</span>${on && badge ? `<span class="bdg">${badge}</span>` : ""}</a>`;
+  return `<div class="side">
+      <div class="marca">${marca(46)}</div>
+      <nav>
+        ${item("Reuniões e metas", "grade", false)}
+        ${item("Dashboard", "", false, true)}
+        ${item("Calendário", "", false, true)}
+        ${item("Pendências", "", false, true)}
+        ${item("Ouvidoria", "megafone", ativo === "ouvidoria")}
+        ${item("Admin", "escudo", ativo === "admin")}
+      </nav>
+    </div>
+    <div class="main">
+      <div class="top">
+        <div class="busca">${ic("lupa", 9)}<span>Buscar...</span></div>
+        <div class="quem">${ic("sino", 11, "")}<div class="tx"><b>${quem || "Administrador"}</b><span>${email || "admin@hospital.com"}</span></div><div class="av">${(quem || "A")[0]}</div></div>
+      </div>
+      <div class="conteudo" data-layout-allow-overflow data-layout-allow-occlusion data-layout-allow-overlap>${dentro || ""}</div>
+    </div>`;
+}
+
+/* Uma linha da fila, nos dois niveis da tela real */
+const linhaFila = (o) =>
+  `<div class="linha" data-layout-allow-overflow data-layout-allow-occlusion data-layout-allow-overlap ${o.id ? `id="${o.id}"` : ""}>
+    <div class="col">
+      <div class="l1"><span class="pt ${o.novo ? "" : "off"}"></span><span class="prot">${o.prot}</span>${o.grav ? `<span class="pill ${o.grav}">${o.grav.toUpperCase()}</span>` : ""}<span class="res">${o.res}</span></div>
+      <div class="l2"><span>${o.setor}</span><span class="sep">·</span><span>${o.resp}</span><span class="sep">·</span><span class="venc ${o.cor || ""}">${o.venc}</span></div>
+    </div>
+    <span class="btn ${o.btnCor}">${o.btn}</span><span class="btn min">···</span>
+  </div>`;
+
+/* Tela interna do app, com a casca em volta */
+function tela(op) {
+  return `<div class="app">${casca(op.ativo, op.badge, op.quem, op.email, op.dentro)}</div>
+    <div class="rodape-v">v0.109.0</div>`;
+}
+/* ============================================================
+   Cena 2 · A tabela de prazos, editada pela Diretoria
+   ============================================================ */
+const cel = (v, un, id) =>
+  `<td><span class="celula"><span class="cx-n"${id ? ` id="${id}"` : ""}>${v}</span><span class="un">${un}</span></span></td>`;
+
+document.getElementById("scr-tabela").innerHTML = tela({
+  ativo: "ouvidoria", badge: 3, quem: "Pedro Rezende", email: "pmrdef@gmail.com",
+  dentro: `<div class="volta">${ic("setaesq", 9)} Painel da Ouvidoria</div>
+    <h1>Tabela de prazos</h1>
+    <div class="dek" data-layout-allow-overflow data-layout-allow-occlusion data-layout-allow-overlap style="max-width:640px">Prazos por gravidade, contados em calendário útil (segunda a sexta, 08h às 17h, sem feriados). A exceção é o acuse de recebimento, que corre em horas corridas, no relógio de parede. Alterar aqui vale para as validações novas: caso já despachado mantém o prazo que o setor recebeu.</div>
+    <div class="tbl" style="margin-top:12px">
+      <table>
+        <thead><tr><th>Marco</th><th>Crítico</th><th>Alto</th><th>Médio</th><th>Baixo</th></tr></thead>
+        <tbody>
+          <tr><td class="k">Acuse de recebimento<span>Da entrada até o manifestante saber que a manifestação chegou.</span></td>
+            ${cel("0", "horas corridas")}${cel("24", "horas corridas")}${cel("24", "horas corridas")}${cel("24", "horas corridas")}</tr>
+          <tr><td class="k">Triagem da ouvidoria<span>Da entrada até o ouvidor validar e acionar a área.</span></td>
+            ${cel("0", "horas úteis")}${cel("4", "horas úteis")}${cel("1", "dia útil")}${cel("1", "dia útil")}</tr>
+          <tr id="tb-linha-area" class=""><td class="k">Resposta da área<span>Do acionamento até a área responder.</span></td>
+            ${cel("4", "horas úteis")}${cel("2", "dias úteis", "tb-alvo")}${cel("4", "dias úteis")}${cel("sem prazo", "")}</tr>
+          <tr><td class="k">Resposta conclusiva<span>Da entrada até a resposta final ao manifestante.</span></td>
+            ${cel("sem prazo", "")}${cel("5", "dias úteis")}${cel("7", "dias úteis")}${cel("2", "dias úteis")}</tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ajuda" style="margin-top:8px">Campo em branco significa sem prazo para essa combinação (crítico não tem prazo conclusivo fixo; baixo não passa pela área). Zero significa imediato.</div>`
+});
+document.getElementById("scr-tabela").insertAdjacentHTML("beforeend",
+  `<div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="tb-n1" style="left:200px;top:340px;max-width:430px">Só a diretoria executiva edita. Cada mudança guarda quem mudou, quando e de quanto para quanto</div>
+   <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="tb-n2" style="left:200px;top:340px;max-width:450px">Gravidade alto: a área tem 2 dias úteis para responder. É daqui que sai o prazo do caso</div>`);
+
+/* ============================================================
+   Cena 3 · O calendário útil não conta o dia do fato
+   ============================================================ */
+const dia = (n, d, txt, cls, id) =>
+  `<div class="dia ${cls || ""}"${id ? ` id="${id}"` : ""}><div class="dn">${n}</div><div class="dd">${d}</div><div class="dt">${txt || ""}</div></div>`;
+
+document.getElementById("scr-calendario").innerHTML =
+  `<div style="position:absolute;inset:0;background:#EEF1F6"></div>
+  <div class="cal" id="cl-cal" style="position:absolute;left:60px;top:150px;width:600px">
+    <h4>Setembro de 2026</h4>
+    <div class="semana">
+      ${dia("Sex", "04", "", "", "cl-sex")}
+      ${dia("Sáb", "05", "", "fds", "cl-sab")}
+      ${dia("Dom", "06", "", "fds", "cl-dom")}
+      ${dia("Seg", "07", "", "", "cl-seg")}
+      ${dia("Ter", "08", "", "", "cl-ter")}
+    </div>
+  </div>
+  <div class="cal" id="cl-caso" style="position:absolute;left:700px;top:150px;width:200px;padding:12px 13px">
+    <div style="font-family:ui-monospace,Menlo,monospace;font-size:12px;font-weight:700;color:#0F172A">2026-0009</div>
+    <div style="font-size:8px;color:#667083;margin-top:3px">Pronto Atendimento</div>
+    <div style="margin-top:9px;display:flex;flex-direction:column;gap:6px">
+      <div style="display:flex;justify-content:space-between;font-size:8.4px"><span style="color:#667083">Gravidade</span><span class="pill alto">ALTO</span></div>
+      <div style="display:flex;justify-content:space-between;font-size:8.4px"><span style="color:#667083">Prazo da área</span><b style="color:#334155">2 dias úteis</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:8.4px"><span style="color:#667083">Acionado</span><b style="color:#334155">sex, 16h50</b></div>
+      <div style="display:flex;justify-content:space-between;font-size:8.4px;border-top:1px solid #F1F5F9;padding-top:6px"><span style="color:#667083">Vence</span><b id="cl-venc" style="color:#667083">a calcular</b></div>
+    </div>
+  </div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="cl-n1" style="left:60px;top:96px;max-width:420px">Validado na sexta às 16h50, com 10 minutos de expediente restando</div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="cl-n2" style="left:60px;top:376px;max-width:420px">O fim de semana não conta. Nem o próprio dia do fato conta</div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="cl-n3" style="left:60px;top:376px;max-width:440px">A contagem abre na segunda às 08h e o vencimento crava na terça às 17h</div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="cl-n4" style="left:60px;top:376px;max-width:460px">Painel, fila, email e relatório mostram o mesmo prazo, porque saem do mesmo cálculo</div>`;
+
+/* ============================================================
+   Cena 4 · Quem precisa de mais tempo pede pelo próprio link
+   ============================================================ */
+document.getElementById("scr-prorroga").innerHTML =
+  `<div style="position:absolute;inset:0;background:#EEF1F6"></div>
+  <div class="fone" data-layout-allow-overflow data-layout-allow-occlusion id="pr-fone" style="left:56px;top:22px;width:220px;height:440px">
+    <div class="tela" data-layout-allow-overflow data-layout-allow-occlusion>
+      <div class="prt" data-layout-allow-overflow data-layout-allow-occlusion style="min-height:100%">
+        <div class="grav gv-alto">Gravidade alto</div>
+        <div class="corpo" style="padding:9px 10px">
+          <div class="cx">
+            <div class="k" style="font-size:8px;color:#334155;text-transform:none;letter-spacing:0">Precisa de mais prazo?</div>
+            <div style="font-size:6.6px;color:#667083;line-height:1.55;margin-top:5px">A prorrogação pode ser pedida uma única vez por manifestação.<br>O pedido precisa ser feito antes do vencimento do prazo.<br>A justificativa é obrigatória e vai para a Ouvidoria decidir.<br>O prazo novo nunca passa de 30 dias úteis da entrada.</div>
+            <div style="margin-top:8px"><div style="font-size:7.6px;font-weight:700;color:#475569;margin-bottom:3px">Dias úteis a mais</div>
+              <div class="ta" id="pr-dias" style="min-height:0;width:52px;padding:4px 7px;position:relative"><span id="pr-dias-0" style="color:#94A3B8">0</span><span id="pr-dias-1" style="position:absolute;left:7px;top:4px;opacity:0;color:#334155;font-weight:700">2</span></div>
+            </div>
+            <div style="margin-top:8px"><div style="font-size:7.6px;font-weight:700;color:#475569;margin-bottom:3px">Justificativa</div>
+              <div class="ta" id="pr-just" style="position:relative;min-height:44px"><span id="pr-just-0" style="color:#94A3B8">Explique o que impede a resposta dentro do prazo atual.</span><span id="pr-just-1" style="position:absolute;left:8px;right:8px;top:7px;opacity:0;color:#334155">A escala do fim de semana não tem a coordenadora do setor, que é quem tem acesso ao registro de internação do dia 02/09.</span></div>
+            </div>
+            <div class="env" id="pr-env" style="margin-top:8px">Solicitar prorrogação de prazo</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="dos" id="pr-decisao" style="position:absolute;left:326px;top:96px;width:340px;opacity:0">
+    <div class="dos-h"><div class="ic">${ic("relogio", 11)}</div><div><h2 style="font-size:10.5px">Pedido de prorrogação</h2><div class="st">2026-0009 · Pronto Atendimento</div></div></div>
+    <div class="bloco" style="margin-top:0"><div class="k">Quem pediu</div><div class="v">Carla Mendes, titular, em 07/09/2026 às 10h12</div></div>
+    <div class="bloco"><div class="k">Justificativa</div><div class="v">A escala do fim de semana não tem a coordenadora do setor, que é quem tem acesso ao registro de internação do dia 02/09.</div></div>
+    <div class="dos-grid" style="margin:9px 0 6px">
+      <div><dt>Dias úteis pedidos</dt><dd>2</dd></div>
+      <div><dt>Vencimento hoje</dt><dd>08/09/2026, 17:00</dd></div>
+      <div><dt>Vencimento se aprovar</dt><dd id="pr-novo">10/09/2026, 17:00</dd></div>
+      <div><dt>Teto de 30 dias úteis</dt><dd>dentro do limite</dd></div>
+    </div>
+    <div style="display:flex;gap:6px;justify-content:flex-end">
+      <span class="btn branco">Negar</span>
+      <span class="btn verde" id="pr-aprovar">${ic("checkc", 9)} Aprovar</span>
+    </div>
+  </div>
+  <div class="ghost" data-layout-allow-overlap data-layout-allow-occlusion id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="pr-n1" style="left:326px;top:36px;max-width:340px">Uma vez só por manifestação, e sempre antes de vencer</div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="pr-n2" style="left:700px;top:150px;max-width:220px">O pedido vai para quem tem perfil de Ouvidoria. Quem decide é o ouvidor</div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="pr-n3" style="left:700px;top:280px;max-width:220px">Quem pediu recebe a decisão por email, mesmo que já tenha respondido</div>`;
+
+/* ============================================================
+   Cena 5 · A escada de cobrança
+   ============================================================ */
+const degrau = (n, cor, quando, prazo, assunto, para, id) =>
+  `<div class="degrau" id="${id}">
+    <div class="deg-q"><div class="deg-n" style="background:${cor}">${n}</div><div><div class="dn">${quando}</div><div class="dq">${prazo}</div></div></div>
+    <div class="deg-e"><div class="deg-f" style="background:${cor}"></div><div class="deg-c"><div class="as">${assunto}</div><div class="pa">Para: ${para}</div></div></div>
+  </div>`;
+
+document.getElementById("scr-escada").innerHTML =
+  `<div style="position:absolute;inset:0;background:#EEF1F6"></div>
+  <div style="position:absolute;left:60px;top:52px;right:60px">
+    <div style="display:flex;align-items:center;gap:9px;padding:8px 13px;border-radius:8px;background:#fff;border:1px solid var(--app-border);margin-bottom:10px">
+      <span style="font-family:ui-monospace,Menlo,monospace;font-size:10px;font-weight:700;color:#334155">2026-0006</span>
+      <span class="pill medio">MÉDIO</span>
+      <span style="font-size:8.4px;color:#667083">Recepção, Juliana Prado</span>
+      <span style="margin-left:auto;font-size:8.4px;color:#B91C1C;font-weight:700">venceu 10/09/2026 às 17h00, sem resposta</span>
+    </div>
+    ${degrau(1, "#3B6FB6", "Véspera", "1 dia útil antes do vencimento", "Ouvidoria 2026-0006: o prazo vence amanhã", "Juliana Prado, titular", "d1")}
+    ${degrau(2, "#C77700", "Vencimento", "no vencimento, sem resposta", "Ouvidoria 2026-0006: prazo vencido sem resposta", "Juliana Prado, titular, e o substituto", "d2")}
+    ${degrau(3, "#B3261E", "Gestor da área", "24 horas úteis depois", "Ouvidoria 2026-0006: caso vencido na sua área", "Gestor da Recepção", "d3")}
+    ${degrau(4, "#1A1C4E", "Diretoria", "48 horas úteis depois", "Ouvidoria 2026-0006: caso vencido chegou à Diretoria", "Diretoria Executiva", "d4")}
+  </div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="es-n1" style="left:236px;top:150px;max-width:420px">A véspera é lembrete. Ainda dá tempo de responder antes de estourar</div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="es-n2" style="left:236px;top:206px;max-width:440px">No vencimento o substituto entra junto: ausência do titular não trava o caso</div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="es-n3" style="left:236px;top:262px;max-width:440px">Um dia útil depois, deixa de ser assunto do setor e vira assunto da gestão</div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="es-n4" style="left:236px;top:318px;max-width:460px">No segundo dia útil chega à Diretoria. Nenhum caso morre ignorado</div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="es-n5" style="left:236px;top:378px;max-width:480px">Se não houver a quem escalar, o caso sai da varredura com o carimbo de escalonamento impossível e a Diretoria recebe um alerta de cadastro</div>`;
+
+/* ============================================================
+   Timeline: uma só, pausada, com tempos absolutos
+   ============================================================ */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const entra = (sel, t, x) => tl.fromTo(sel, { opacity: 0, x: x === undefined ? -18 : x }, { opacity: 1, x: 0, duration: 0.5, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const nota = (sel, t, ate) => { surge(sel, t); some(sel, ate); };
+const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
+const move = (g, t, x, y, dx, dy) => {
+  tl.set(g, { x: x, y: y, opacity: 1 }, t);
+  tl.to(g, { x: dx, y: dy, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+};
+const aperta = (sel, t) => tl.to(sel, { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, t);
+const troca = (a, b, t) => { tl.set(a, { display: "none" }, t); tl.set(b, { display: "block", opacity: 1 }, t); };
+const digita = (vazio, cheio, campo, t) => {
+  tl.to(vazio, { opacity: 0, duration: 0.15 }, t);
+  tl.to(cheio, { opacity: 1, duration: 0.22 }, t + 0.15);
+  if (campo) tl.to(campo, { borderColor: "#2B2E7E", duration: 0.2 }, t);
+};
+/* 1 · Abertura (0 a 4) */
+surge("#ab-eyebrow", 0.25, 22);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.5);
+surge("#ab-sub", 1.0, 22);
+
+/* 2 · A tabela de prazos (4 a 12) */
+nota("#tb-n1", 4.6, 7.4);
+tl.fromTo("#tb-linha-area", { backgroundColor: "rgba(245,246,254,0)" }, { backgroundColor: "rgba(245,246,254,1)", duration: 0.5, ...IR }, 7.6);
+tl.fromTo("#tb-alvo", { borderColor: "#E2E8F0", color: "#334155" }, { borderColor: "#2B2E7E", color: "#2B2E7E", fontWeight: 700, duration: 0.5, ...IR }, 7.8);
+nota("#tb-n2", 8.0, 11.6);
+
+/* 3 · O calendário útil (12 a 24) */
+tl.fromTo("#cl-cal", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 12.2);
+tl.fromTo("#cl-caso", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 12.5);
+nota("#cl-n1", 12.9, 15.2);
+tl.to("#cl-sex", { borderColor: "#2B2E7E", backgroundColor: "#F5F6FE", duration: 0.4 }, 13.2);
+tl.set("#cl-sex .dt", { innerHTML: "validado 16h50" }, 13.4);
+nota("#cl-n2", 15.4, 18.0);
+tl.fromTo(["#cl-sab", "#cl-dom"], { opacity: 1 }, { opacity: 0.32, duration: 0.5, ...IR }, 15.6);
+tl.to("#cl-sex", { borderColor: "#E2E8F0", backgroundColor: "#fff", duration: 0.4 }, 17.8);
+tl.to("#cl-seg", { borderColor: "#2B2E7E", backgroundColor: "#F5F6FE", duration: 0.4 }, 18.2);
+tl.set("#cl-seg .dt", { innerHTML: "a contagem abre 08h" }, 18.4);
+nota("#cl-n3", 18.4, 21.0);
+tl.to("#cl-ter", { borderColor: "#C77700", backgroundColor: "#FFF8EC", duration: 0.4 }, 19.6);
+tl.set("#cl-ter .dt", { innerHTML: "vence 17h" }, 19.8);
+tl.to("#cl-venc", { color: "#9A3412", duration: 0.3 }, 20.0);
+tl.set("#cl-venc", { innerHTML: "08/09, 17:00" }, 20.0);
+nota("#cl-n4", 21.2, 23.6);
+
+/* 4 · A prorrogação (24 a 38) */
+tl.fromTo("#pr-fone", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 24.2);
+nota("#pr-n1", 24.8, 27.0);
+digita("#pr-dias-0", "#pr-dias-1", "#pr-dias", 25.6);
+digita("#pr-just-0", "#pr-just-1", "#pr-just", 26.4);
+tl.to("#pr-env", { backgroundColor: "#2B2E7E", duration: 0.4 }, 27.4);
+move("#g1", 27.6, 166, 400, 166, 366);
+clique("#g1", 28.5);
+aperta("#pr-env", 28.5);
+tl.to("#g1", { opacity: 0, duration: 0.25 }, 28.9);
+tl.fromTo("#pr-decisao", { opacity: 0, x: 40 }, { opacity: 1, x: 0, duration: 0.6, ease: "power2.out", ...IR }, 29.2);
+nota("#pr-n2", 29.9, 32.6);
+move("#g1", 32.6, 560, 380, 622, 336);
+clique("#g1", 33.5);
+aperta("#pr-aprovar", 33.5);
+tl.to("#g1", { opacity: 0, duration: 0.25 }, 33.9);
+tl.to("#pr-novo", { color: "#1D7A45", fontWeight: 700, duration: 0.4 }, 34.0);
+nota("#pr-n3", 34.4, 37.6);
+
+/* 5 · A escada de cobrança (38 a 52) */
+entra("#d1", 38.4);
+nota("#es-n1", 38.9, 40.8);
+entra("#d2", 41.0);
+nota("#es-n2", 41.5, 43.4);
+entra("#d3", 43.6);
+nota("#es-n3", 44.1, 46.0);
+entra("#d4", 46.2);
+nota("#es-n4", 46.7, 48.6);
+nota("#es-n5", 48.8, 51.6);
+
+/* 6 · A regra (52 a 58) */
+surge("#rg-frase", 52.4, 22);
+
+/* 7 · Fecho (58 a 62) */
+surge("#fc-titulo", 58.3, 18);
+tl.fromTo("#fc-carimbo", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 58.8);
+tl.fromTo("#fc-org", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 59.1);
+
+
+window.__timelines["main"] = tl;
+</script>
+</body>
+</html>

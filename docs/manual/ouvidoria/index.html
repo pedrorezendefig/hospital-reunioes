@@ -169,7 +169,7 @@
   footer{border-top:1px solid var(--color-border);margin-top:60px;padding:22px 0 0;font-size:13px;color:var(--color-text-secondary)}
 
   @media (max-width:1040px){
-    .shell{grid-template-columns:1fr}
+    .shell{grid-template-columns:minmax(0,1fr)}
     .toc{position:fixed;left:0;top:59px;width:min(320px,86vw);z-index:60;transform:translateX(-105%);transition:transform .25s ease;box-shadow:var(--shadow-premium-strong)}
     .toc.open{transform:none}
     .menu-btn{display:inline-block}
@@ -324,6 +324,9 @@
   <h3 id="manual">Registro manual do ouvidor</h3>
   <p>O botão "Nova manifestação" da fila abre o formulário do ouvidor: canal (telefone, presencial, e-mail), data e hora reais do contato, tipo, categoria, setor, resumo, relato integral, identificação, vínculo, anônimo e sigilo reforçado. O que o manifestante disse entra <b>íntegro, sem edição</b>. Anexos (imagem, PDF, áudio, documento, até 20 MB) ficam em bucket privado e só abrem por URL assinada emitida depois de conferir o perfil.</p>
   <figure><img src="img/nova-manifestacao-modal.png" alt="Modal de nova manifestação"><figcaption><b>Nova manifestação.</b> O T0 é a hora do contato, não a hora do clique: o ouvidor pode digitar hoje um telefonema de ontem.</figcaption></figure>
+
+  <h3>Veja acontecendo</h3>
+  <div class="video-box"><video controls preload="metadata" src="video-cap1.mp4"></video><div class="video-meta"><b>Capítulo 1</b> · Entrada: por onde o caso chega · 0:55 · retrata o app em <b>v0.109.0</b> · gerado em 03/09/2026</div></div>
 </section>
 
 <!-- ===================== 2. VALIDAÇÃO ===================== -->
@@ -381,6 +384,9 @@
     <div class="card"><h4>Encerrar</h4><p>Só com desfecho (procedente, improcedente, parcialmente procedente, sem condições de apuração, sem retorno do manifestante) e descrição. O encerramento dispara o aviso ao manifestante.</p><div class="src"><span class="b b-prd">PRD #317</span><span class="b b-prd">PRD #471</span><span class="b b-prod">em produção</span></div></div>
   </div>
   <figure class="tall"><img src="img/caso-critico-prorrogacao.png" alt="Caso crítico com prorrogação pendente"><figcaption><b>Caso crítico vindo da Ana, com pedido de prorrogação pendente.</b> A Ana sugeriu "alto"; o ouvidor validou como crítico e a sugestão ficou guardada à parte, sem virar classificação. O caso segue com sigilo reforçado porque a validação não desce sigilo sozinha. O contato é um telefone, então o acuse de recebimento consta como "não enviado, sem canal". O bloco de prorrogação pede a decisão do ouvidor.</figcaption></figure>
+
+  <h3>Veja acontecendo</h3>
+  <div class="video-box"><video controls preload="metadata" src="video-cap2.mp4"></video><div class="video-meta"><b>Capítulo 2</b> · Validação, classificação e sigilo · 0:58 · retrata o app em <b>v0.109.0</b> · gerado em 03/09/2026</div></div>
 </section>
 
 <!-- ===================== 3. PORTAL ===================== -->
@@ -408,6 +414,9 @@
     <li>Se a resposta for fraca, o ouvidor <b>devolve por insuficiência</b> com motivo obrigatório. A área recebe e-mail com link novo e volta a ter prazo, mas só <b>metade</b> do prazo da gravidade, somado ao tempo já corrido. Responder mal não ganha relógio novo.</li>
     <li>Se estiver boa, o ouvidor encerra com desfecho. O manifestante recebe o aviso.</li>
   </ol>
+
+  <h3>Veja acontecendo</h3>
+  <div class="video-box"><video controls preload="metadata" src="video-cap3.mp4"></video><div class="video-meta"><b>Capítulo 3</b> · Portal do setor · 1:00 · retrata o app em <b>v0.109.0</b> · gerado em 03/09/2026</div></div>
 </section>
 
 <!-- ===================== 4. PRAZOS ===================== -->
@@ -476,6 +485,9 @@
     <div class="card"><h4>A pessoa volta a reclamar</h4><p>Reabertura em até <b>30 dias</b> marca o caso original como reincidência. Não nasce protocolo novo. A reabertura só <b>eleva</b> o sigilo, nunca desce. A área recebe e-mail com link novo.</p><div class="src"><span class="b b-prd">PRD #318 G4</span></div></div>
     <div class="card"><h4>Memória dos ciclos</h4><p>Cada devolução e resposta vira um ciclo com histórico. O indicador de cumprimento é honesto: a coluna guarda o vencimento rompido, não a hora da resposta.</p><div class="src"><span class="b b-prd">#374</span></div></div>
   </div>
+
+  <h3>Veja acontecendo</h3>
+  <div class="video-box"><video controls preload="metadata" src="video-cap4.mp4"></video><div class="video-meta"><b>Capítulo 4</b> · Prazos e cobrança · 1:02 · retrata o app em <b>v0.109.0</b> · gerado em 03/09/2026</div></div>
 </section>
 
 <!-- ===================== 5. RETORNOS ===================== -->
@@ -490,6 +502,9 @@
   <div class="note"><p><b>Por que tão pouco conteúdo?</b> Todo e-mail do app sai por um processador externo (Resend, fora do Brasil, ADR 0039). O ADR fecha campo a campo o que pode viajar. Para o manifestante, viaja o protocolo e o desfecho. O relato nunca viaja de volta.</p></div>
   <div class="src"><span class="b b-adr">ADR 0042</span><span class="b b-prd">PRD #471 #493 #494</span><span class="b b-prod">em produção</span></div>
   <p style="margin-top:14px"><span class="b b-dev">em desenvolvimento</span> Issue <b>#547</b>: quem recebe e-mail do manifestante não pode depender de lista escrita à mão (endurecimento de teste).</p>
+
+  <h3>Veja acontecendo</h3>
+  <div class="video-box"><video controls preload="metadata" src="video-cap5.mp4"></video><div class="video-meta"><b>Capítulo 5</b> · Retornos ao manifestante · 0:56 · retrata o app em <b>v0.109.0</b> · gerado em 03/09/2026</div></div>
 </section>
 
 <!-- ===================== 6. CADASTROS E PERFIS ===================== -->
@@ -512,6 +527,9 @@
   <p>Cadastro sobre a taxonomia de Setores da casa, sem lista paralela. Cada responsável tem papel e <b>vigência</b> (o fim é inclusivo: quem sai no dia 31 ainda responde no dia 31). Para tirar alguém do papel o caminho é <b>encerrar a vigência</b>, não apagar.</p>
   <figure class="tall"><img src="img/responsaveis.png" alt="Tela de responsáveis por setor"><figcaption><b>Responsáveis por setor.</b> O Centro Cirúrgico está marcado "sem titular vigente": tem só gestor. Um caso validado ali sobe direto ao gestor com alerta à Diretoria.</figcaption></figure>
   <div class="src"><span class="b b-prd">PRD #317 F4</span><span class="b b-prd">PRD #318</span><span class="b b-prod">em produção</span></div>
+
+  <h3>Veja acontecendo</h3>
+  <div class="video-box"><video controls preload="metadata" src="video-cap6.mp4"></video><div class="video-meta"><b>Capítulo 6</b> · Cadastros e perfis · 0:58 · retrata o app em <b>v0.109.0</b> · gerado em 03/09/2026</div></div>
 </section>
 
 <!-- ===================== 7. INTELIGÊNCIA ===================== -->
@@ -553,6 +571,9 @@
     <div class="card"><h4>Retenção após 5 anos</h4><p>Roda sozinha, de madrugada, e apaga o dossiê do caso encerrado há mais de cinco anos, contados do T3. Varre os cinco lugares onde o relato mora: a manifestação, os anexos (metadados e binário), a observação dos movimentos, o texto das tentativas de contato e das prorrogações, e o detalhe das notificações. Preserva o que os relatórios contam. Freio: <code>OUVIDORIA_RETENCAO_ATIVA=false</code>.</p><div class="src"><span class="b b-prd">PRD #319 I7</span><span class="b b-prod">em produção</span></div></div>
     <div class="card"><h4>Pseudonimização</h4><p>Função pura que tira identificadores do texto antes de qualquer uso agregado. Endurecida com fuzz diferencial e mutação: nomes completos, identificadores fora do padrão e traços CJK.</p><div class="src"><span class="b b-prd">PRD #319 I4</span><span class="b b-prd">#398 #412 #441 #460</span><span class="b b-prod">em produção</span></div></div>
   </div>
+
+  <h3>Veja acontecendo</h3>
+  <div class="video-box"><video controls preload="metadata" src="video-cap7.mp4"></video><div class="video-meta"><b>Capítulo 7</b> · Painel, relatórios e nota externa · 1:03 · retrata o app em <b>v0.109.0</b> · gerado em 03/09/2026</div></div>
 </section>
 
 <!-- ===================== 8. INTEGRAÇÕES ===================== -->
@@ -738,6 +759,9 @@ X-API-Key: &lt;chave de serviço&gt;
     <tr><td class="mono">NEXT_PUBLIC_API_URL</td><td>frontend</td><td>Base da API que o formulário público e o portal chamam. O Next faz proxy e repassa o IP em <code>X-Forwarded-For</code>.</td></tr>
   </table></div>
   <div class="note risk"><p><b>Migrations de banco</b> são aplicadas por humano no Studio de produção. As tabelas do módulo começam em <code>ouvidoria_</code> (protocolos, movimentos, notificacoes, setor_responsaveis, setor_tokens, prorrogacoes, tentativas_contato, anexos, acessos, pontos, prazos, prazos_historico, feriados, relatorios, nota_externa). Toda tabela nasce com RLS ligado e as RPCs de ouvidoria têm <code>REVOKE</code> para a conta anônima (issues #520 e #541).</p></div>
+
+  <h3>Veja acontecendo</h3>
+  <div class="video-box"><video controls preload="metadata" src="video-cap8.mp4"></video><div class="video-meta"><b>Capítulo 8</b> · Integrações técnicas · 1:02 · retrata o app em <b>v0.109.0</b> · gerado em 03/09/2026</div></div>
 </section>
 
 <!-- ===================== 9. MAPA DOS PRDS ===================== -->
@@ -880,21 +904,25 @@ X-API-Key: &lt;chave de serviço&gt;
 <!-- ===================== VÍDEOS ===================== -->
 <section class="ch" id="videos">
   <div class="mark">Complemento</div>
-  <h2>Vídeos de percepção de valor</h2>
-  <p class="lede">Dois vídeos existem, atuados de ponta a ponta nas telas do app, sem voz. Os demais PRDs ainda não têm vídeo; a lista de sugestões abaixo é o roteiro para gerar com <code>/perceber</code> quando fizer sentido.</p>
+  <h2>Vídeos</h2>
+  <p class="lede">Cada capítulo de 1 a 8 termina com um vídeo curto, atuado de ponta a ponta nas telas do app, sem voz. Use a lista abaixo para ir direto ao que você quer ver. O capítulo 9 é o mapa dos PRDs e não tem vídeo.</p>
+  <div class="tbl"><table>
+    <tr><th>Capítulo</th><th>Duração</th><th>O que o vídeo mostra</th></tr>
+    <tr><td class="k"><a href="#entrada">1</a></td><td>0:55</td><td>Entrada: por onde o caso chega: um elogio entra pelo QR do cartaz e o dossiê mostra de onde veio.</td></tr>
+    <tr><td class="k"><a href="#validacao">2</a></td><td>0:58</td><td>Validação, classificação e sigilo: o ponto de novidade, o formulário de validação e o caso mudando de faixa.</td></tr>
+    <tr><td class="k"><a href="#portal">3</a></td><td>1:00</td><td>Portal do setor: o e-mail de acionamento, a tela na ordem da RN-59 e a resposta aceita.</td></tr>
+    <tr><td class="k"><a href="#prazos">4</a></td><td>1:02</td><td>Prazos e cobrança: a tabela de prazos, o calendário útil, a prorrogação e a escada de cobrança.</td></tr>
+    <tr><td class="k"><a href="#retornos">5</a></td><td>0:56</td><td>Retornos ao manifestante: o acuse de recebimento e o aviso de encerramento, os dois únicos e-mails que saem.</td></tr>
+    <tr><td class="k"><a href="#cadastros">6</a></td><td>0:58</td><td>Cadastros e perfis: a concessão do acesso, a vigência do responsável e o setor sem titular.</td></tr>
+    <tr><td class="k"><a href="#inteligencia">7</a></td><td>1:03</td><td>Painel, relatórios e nota externa: o painel se atualizando, a nota do Google lançada e o PDF quinzenal.</td></tr>
+    <tr><td class="k"><a href="#integracoes">8</a></td><td>1:02</td><td>Integrações técnicas: a porta da Ana registrando e recusando, e o cartaz A5 saindo pronto.</td></tr>
+  </table></div>
+  <h3>Percepção de valor por PRD</h3>
+  <p class="lede">Estes dois vídeos são anteriores e contam a história de um PRD inteiro, não de um capítulo.</p>
   <div class="grid2">
     <div class="video-box"><video controls preload="metadata" src="video-317.mp4"></video><div class="video-meta"><b>PRD #317</b> · A reclamação chega ao setor com prazo · fila, tabela de prazos e o caminho do caso até o setor</div></div>
     <div class="video-box"><video controls preload="metadata" src="video-318.mp4"></video><div class="video-meta"><b>PRD #318</b> · O prazo agora tem consequência · a demanda no responsável e o pedido de prorrogação</div></div>
   </div>
-  <h3>Vídeos sugeridos</h3>
-  <div class="tbl"><table>
-    <tr><th>PRD</th><th>Título sugerido</th><th>Roteiro em três linhas</th></tr>
-    <tr><td class="k">#319</td><td>A Diretoria enxerga</td><td>1. Painel em tempo real com um crítico aberto e uma área vencida. 2. O PDF quinzenal chegando por e-mail com o Retrato externo. 3. A nota do Google sendo lançada e aparecendo no relatório do mês.</td></tr>
-    <tr><td class="k">#467 + #378</td><td>O cartaz que escuta</td><td>1. Cadastro do Ponto de escuta e o cartaz A5 saindo pronto. 2. Celular lendo o QR, escolhendo "Elogio" e recebendo o protocolo. 3. O dossiê mostrando "Chegou pelo QR" e "O manifestante informou: Elogio".</td></tr>
-    <tr><td class="k">#468 + #470</td><td>Onde o caso emperrou</td><td>1. E-mail para o ouvidor abrindo direto a página do caso após o login. 2. Os quatro marcos com o tempo de expediente entre eles. 3. O ponto de novidade apagando quando o ouvidor abre, e o contador do menu caindo.</td></tr>
-    <tr><td class="k">#469</td><td>Responder em um minuto</td><td>1. E-mail de acionamento no celular do responsável, com os três blocos. 2. A tela na ordem da RN-59, com o prazo na primeira dobra. 3. Resposta curta recusada pelo servidor, resposta boa aceita, caso aparecendo em "Aguardando seu encerramento".</td></tr>
-    <tr><td class="k">#471</td><td>A fila e o retorno ao paciente</td><td>1. A fila em dois níveis com as faixas de status e o semáforo do prazo. 2. Acuse de recebimento chegando no e-mail do manifestante logo após abrir. 3. Encerramento com desfecho e o aviso chegando com o canal para voltar.</td></tr>
-  </table></div>
 </section>
 
 <footer>
