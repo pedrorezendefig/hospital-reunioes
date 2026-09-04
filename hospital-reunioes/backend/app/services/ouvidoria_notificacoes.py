@@ -25,7 +25,7 @@ import datetime as dt
 import logging
 
 from app.config import settings
-from app.services.email_service import _enviar_email, jinja_env
+from app.services.email_service import ENDERECO_OMITIDO, _enviar_email, jinja_env
 from app.services.ouvidoria_blocos import (
     SEM_EXTRATO,
     aviso_do_caso,
@@ -1249,7 +1249,22 @@ def avisar_admins_tecnicos(supabase, assunto: str, texto: str) -> int:
 def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
     """Terceira falha seguida: o problema deixou de ser instabilidade e virou
     infraestrutura. Quem conserta é o admin técnico do app (super admin), e o
-    alerta sai por fora da fila para não cair no mesmo buraco."""
+    alerta sai por fora da fila para não cair no mesmo buraco.
+
+    O alerta vai a todos os super admins do app, que não têm necessariamente
+    perfil na Ouvidoria. Quando a notificação que falhou fala para FORA do
+    hospital (acuse de recebimento, aviso de encerramento), o destinatário é o
+    email pessoal do manifestante, e o último erro é a segunda cópia dele: a
+    recusa do provedor carrega o endereço dentro. Os dois saem do corpo pela
+    mesma pergunta única que decide o log (issue #572, a partir da #547). O
+    alerta continua acionável sem eles: quem conserta precisa saber que o
+    provedor caiu e qual manifestação travou, não para quem o email ia."""
+    if destinatario_e_o_manifestante(notificacao.get("papel_destinatario")):
+        destinatario = ENDERECO_OMITIDO
+        ultimo_erro = "(omitido: a mensagem do provedor carrega o endereco)"
+    else:
+        destinatario = notificacao.get("destinatario_email")
+        ultimo_erro = notificacao.get("ultimo_erro")
     avisar_admins_tecnicos(
         supabase,
         f"Ouvidoria: falha no envio da notificação {notificacao.get('gatilho')}",
@@ -1257,8 +1272,8 @@ def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
             "A notificacao abaixo falhou nas tres tentativas e nao foi entregue:\n\n"
             f"- Manifestacao: {notificacao.get('manifestacao_id')}\n"
             f"- Gatilho: {notificacao.get('gatilho')}\n"
-            f"- Destinatario: {notificacao.get('destinatario_email')}\n"
-            f"- Ultimo erro: {notificacao.get('ultimo_erro')}\n\n"
+            f"- Destinatario: {destinatario}\n"
+            f"- Ultimo erro: {ultimo_erro}\n\n"
             "Reenvie pelo painel da Ouvidoria depois de resolver o provedor de email.\n"
         ),
     )

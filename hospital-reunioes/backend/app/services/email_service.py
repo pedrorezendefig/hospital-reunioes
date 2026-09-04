@@ -56,6 +56,12 @@ def _tipo_do_anexo(nome: str) -> tuple[str, str]:
     return principal, secundario or "octet-stream"
 
 
+# O que entra no lugar do endereço de gente de fora, no log e no corpo do alerta
+# ao admin técnico (issue #572). Uma constante só: os dois lugares dizem que
+# omitiram, e dizem do mesmo jeito.
+ENDERECO_OMITIDO = "(endereco omitido)"
+
+
 def _alvo_no_log(destinatario: str, endereco_fora_do_log: bool) -> str:
     """Como o destinatário aparece no log da aplicação.
 
@@ -70,7 +76,7 @@ def _alvo_no_log(destinatario: str, endereco_fora_do_log: bool) -> str:
     O rastro de "o email deste caso saiu?" continua existindo em dois lugares
     melhores: o assunto, que fica, e a linha em `ouvidoria_notificacoes`, que
     guarda o destinatário atrás do gate de acesso do Dossiê."""
-    return "(endereco omitido)" if endereco_fora_do_log else destinatario
+    return ENDERECO_OMITIDO if endereco_fora_do_log else destinatario
 
 
 def _falha_no_log(erro: Exception, endereco_fora_do_log: bool) -> str:
