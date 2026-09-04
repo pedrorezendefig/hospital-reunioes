@@ -145,6 +145,10 @@ def _chamador_notificacao_falhou(supabase) -> None:
             "manifestacao_id": MANIFESTACAO_ID,
             "gatilho": "prazo_area_rompido",
             "destinatario_email": EMAIL_DO_CASO,
+            # Notificação INTERNA: com o papel do hospital o alerta segue com
+            # destinatário e erro no corpo. Sem papel a linha é tratada como
+            # do manifestante e os dois saem (issue #572).
+            "papel_destinatario": "titular",
             "ultimo_erro": ERRO_DO_PROVEDOR,
         },
     )
