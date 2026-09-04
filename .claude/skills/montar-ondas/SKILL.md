@@ -1,6 +1,6 @@
 ---
 name: montar-ondas
-description: Monta o plano de sessões /onda paralelas sem conflito entre elas, presta contas de toda issue aberta e entrega um prompt pronto por sessão. Não executa nada. Sintaxe `/montar-ondas [--exceto #PRD] [--max-sessoes N]`.
+description: Planeja sessões /onda paralelas sem conflito, presta contas de toda issue aberta e entrega um prompt por sessão. Não executa. Sintaxe `/montar-ondas [--exceto #PRD] [--max-sessoes N]`.
 ---
 
 # Montar ondas: plano de sessões paralelas

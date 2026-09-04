@@ -173,6 +173,15 @@ no_path_do_shell ffmpeg && ok "ffmpeg" || opc "ffmpeg" "brew install ffmpeg (se 
 [ -d "$HOME/.claude/skills/hyperframes" ] && ok "skills globais hyperframes" || opc "skills globais hyperframes" "npx skills add heygen-com/hyperframes --all (skills globais, fora do repo; ver /divulgar)"
 fi
 
+# ---------------------------------------------------------------- Mapa do repo
+titulo "Mapa do repositório (references/mapa-do-repo.md)"
+MAPA="$REPO_ROOT/.claude/skills/setup-maquina/references/mapa-do-repo.md"
+desconhecidas=""
+for d in $(find . -maxdepth 2 -type d -not -path './.git*' -not -path '*/node_modules*' -not -path '*/.venv*' -not -path '*/.next*' -not -path '*/__pycache__*' -not -path '*/.*cache*' -not -path './.claude/worktrees*' -not -path './.vscode' -not -path './local/*' -not -path './docs/comunicacao/*' -not -path './docs/adr' -not -path './docs/manual/*' -not -path './.claude/skills/*' | sed 's|^\./||' | grep -v '^\.$'); do
+  grep -q "\`$(basename "$d")/\`\|\`$d/\`\|\`$d\`" "$MAPA" || desconhecidas="$desconhecidas $d"
+done
+[ -z "$desconhecidas" ] && ok "toda pasta de nível 1 e 2 está no mapa" || aviso "pastas fora do mapa" "atualize references/mapa-do-repo.md:$desconhecidas"
+
 printf '\n'
 if [ "$FALHAS" -eq 0 ]; then
   echo "Tudo obrigatório está OK."

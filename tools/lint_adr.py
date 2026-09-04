@@ -51,7 +51,7 @@ def main() -> int:
     args = ap.parse_args()
 
     adr_dir = Path(args.dir)
-    adrs = {parse(f)["num"]: parse(f) for f in sorted(adr_dir.glob("*.md"))}
+    adrs = {parse(f)["num"]: parse(f) for f in sorted(adr_dir.glob("[0-9]*.md"))}  # README.md é índice, não ADR
     errors: list[str] = []
 
     for num, adr in adrs.items():
@@ -70,15 +70,17 @@ def main() -> int:
         for field, inverse in INVERSE.items():
             if field not in meta:
                 continue
-            target = num4(meta[field])
-            if target not in adrs:
-                errors.append(f"{name}: {field} aponta para ADR {target}, que não existe.")
-                continue
-            back = adrs[target]["meta"].get(inverse)
-            if back is None or num4(back) != num4(num):
-                errors.append(
-                    f"{name}: {field}: {target} sem o par `{inverse}: {num}` na ADR {target}."
-                )
+            # aceita lista: `amends: 0044, 0026`
+            for target in [num4(t) for t in meta[field].split(",") if t.strip()]:
+                if target not in adrs:
+                    errors.append(f"{name}: {field} aponta para ADR {target}, que não existe.")
+                    continue
+                back = adrs[target]["meta"].get(inverse)
+                pares = [num4(b) for b in back.split(",")] if back else []
+                if num4(num) not in pares:
+                    errors.append(
+                        f"{name}: {field}: {target} sem o par `{inverse}: {num}` na ADR {target}."
+                    )
 
     if errors:
         print("Lint de ADR falhou:\n" + "\n".join(f"  - {e}" for e in errors), file=sys.stderr)
