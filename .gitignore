@@ -53,3 +53,13 @@ docs/comunicacao/**/.vercel/
 
 # Bytecode Python (dashboard local roda direto do fonte)
 __pycache__/
+
+# Artefatos de build do Serwist (regravados em todo `next build`) e estado do CLI Supabase
+hospital-reunioes/frontend/public/sw.js
+hospital-reunioes/frontend/public/swe-worker-*.js
+hospital-reunioes/supabase/.branches/
+
+# Caches de ferramenta (elas mesmas se ignoram, mas a regra do projeto não deve depender disso)
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
