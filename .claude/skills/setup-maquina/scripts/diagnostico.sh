@@ -65,14 +65,6 @@ checa_gh() {
     WRITE|ADMIN|MAINTAIN) ok "permissão no repo" "$perm" ;;
     *) falta "permissão no repo" "tem $perm; peça WRITE ao Pedro" ;;
   esac
-  login="$(gh api user --jq .login 2>/dev/null || echo "")"
-  if ! revs="$(gh variable get REVIEWER_LOGINS 2>/dev/null)" || [ -z "$login" ]; then
-    aviso "login em REVIEWER_LOGINS" "não deu para ler a variável (permissão?); peça ao Pedro para conferir"
-  elif printf '%s' "$revs" | tr ',' '\n' | tr -d ' ' | tr '[:upper:]' '[:lower:]' | grep -qx "$(printf '%s' "$login" | tr '[:upper:]' '[:lower:]')"; then
-    ok "login em REVIEWER_LOGINS" "$login"
-  else
-    aviso "login em REVIEWER_LOGINS" "peça ao Pedro: gh variable set REVIEWER_LOGINS --body \"${revs:+$revs,}$login\""
-  fi
 }
 checa_gh
 
@@ -80,19 +72,22 @@ checa_gh
   && ok "git config user.name e user.email" || falta "git config user.name e user.email" "git config --global user.name \"Nome\"; git config --global user.email \"email\""
 
 PLUG="$HOME/.claude/plugins/installed_plugins.json"
-SETT="$HOME/.claude/settings.json"
-for p in code-review security-guidance context7 skill-creator; do
-  id="$p@claude-plugins-official"
+LISTA="$REPO_ROOT/.claude/skills/setup-maquina/references/plugins.txt"   # fonte única (o onboarding aponta para cá)
+plugin_habilitado() { # id -> 0 se enabledPlugins[id] == true em algum settings (usuário ou projeto)
+  for f in "$HOME/.claude/settings.json" "$REPO_ROOT/.claude/settings.json" "$REPO_ROOT/.claude/settings.local.json"; do
+    [ -f "$f" ] && jq -e --arg p "$1" '.enabledPlugins[$p] == true' "$f" >/dev/null 2>&1 && return 0
+  done
+  return 1
+}
+while read -r id; do
+  [ -n "$id" ] || continue
+  nome="${id%%@*}"
   if [ -f "$PLUG" ] && jq -e --arg p "$id" '(.plugins[$p] // []) | length > 0' "$PLUG" >/dev/null 2>&1; then
-    if [ -f "$SETT" ] && jq -e --arg p "$id" '.enabledPlugins[$p] == true' "$SETT" >/dev/null 2>&1; then
-      ok "plugin $p"
-    else
-      falta "plugin $p" "instalado mas desabilitado: claude plugin enable $id"
-    fi
+    plugin_habilitado "$id" && ok "plugin $nome" || falta "plugin $nome" "instalado mas desabilitado: claude plugin enable $id"
   else
-    falta "plugin $p" "claude plugin install $id"
+    falta "plugin $nome" "claude plugin install $id"
   fi
-done
+done < "$LISTA"
 
 # ---------------------------------------------------------------- Nível 2
 if [ "$NIVEL" -ge 2 ]; then

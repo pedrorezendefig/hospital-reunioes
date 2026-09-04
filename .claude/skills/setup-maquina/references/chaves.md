@@ -40,7 +40,7 @@ Todo o resto copia do `.env.example` como está. Chave vazia liga o mock de LLM 
 | O quê | Quem faz |
 |---|---|
 | Conta no Coolify do hospital | Pedro cria; o token cada um gera o seu. |
-| Login em `REVIEWER_LOGINS` | `gh variable set REVIEWER_LOGINS --body "pedrorezendefig,<login>"`. Sem isso o comentário da pessoa não dispara o loop do revisor. |
+| `REVIEWER_LOGINS` | Não entra. É o papel de revisor humano (hoje o Pedro), não a lista de devs: dev ali faria o próprio agente disparar o loop `revisor-comentou`. |
 | Acesso ao cofre VITTA TECH | Pedro compartilha no 1Password. |
 | Migration em produção | Humano, no SQL Editor do Supabase Studio de produção. Só o Pedro tem acesso hoje. |
 | Vercel (`/divulgar`) | Membro do time na Vercel. Fora disso a CLI recusa com `TEAM_ACCESS_REQUIRED`. |

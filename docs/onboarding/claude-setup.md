@@ -78,7 +78,7 @@ gh repo view --json viewerPermission --jq .viewerPermission
 
 Plugins do Claude Code são instalados via `/plugin` dentro de uma sessão. Eles vivem em `~/.claude/plugins/cache/` e são habilitados em `~/.claude/settings.json`.
 
-**Plugins obrigatórios pro fluxo do time:**
+**Plugins obrigatórios pro fluxo do time** (fonte única: `.claude/skills/setup-maquina/references/plugins.txt`, que o `/setup-maquina` lê):
 
 | Plugin | Pra que serve | Quem usa |
 |---|---|---|

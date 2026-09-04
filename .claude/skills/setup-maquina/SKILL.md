@@ -11,7 +11,7 @@ Quem clona o repositório precisa de pouca coisa para trabalhar no pipeline (pla
 
 | Nível | Para quê | O que exige |
 |---|---|---|
-| 1 Pipeline | `/grill-with-docs`, `/to-prd`, `/to-issues`, `/pegar-issue`, `/ship` até o PR | git, gh autenticado com WRITE, jq, Claude Code, 4 plugins, `git config user.*` |
+| 1 Pipeline | `/grill-with-docs`, `/to-prd`, `/to-issues`, `/pegar-issue`, `/ship` até o PR | git, gh autenticado com WRITE, jq, Claude Code, os plugins de `references/plugins.txt`, `git config user.*` |
 | 2 Deploy e testes | `/tdd` (pytest e ruff do backend), `/ship` com merge e deploy, `/deploy`, `/onda` | CLI do Coolify com contexto `hsm`, `tokens/.env`, python3 3.9+, uv + `.venv` do backend, Pango, `hospital-reunioes/.env` mínimo (o snapshot importa o app) |
 | 3 App local | `/atualizar-app`, `vitest` e `tsc` do frontend na máquina | Docker, Supabase CLI, Node, corepack com pnpm 9, chaves de sandbox. **Opcional: hoje ninguém usa; teste de frontend confia no CI.** |
 | 4 Divulgar | `/divulgar` | ffmpeg, Chrome, skills globais de HyperFrames, time da Vercel. **Opcional.** |
@@ -38,7 +38,7 @@ Saída: uma linha por checagem, com `OK`, `FALTA` (conta e dá exit 1), `AVISO` 
    - O humano abre o 1Password e copia o valor à mão. A skill diz só o item e o campo. Nunca use a CLI do 1Password nem peça o valor no chat.
    - Nunca sobrescreva um `.env` existente: escreva `.env.novo` ao lado e mostre a diferença de chaves.
    - Depois de gravar, rode `git check-ignore -q <arquivo>` em cada um. Se algum não estiver ignorado, pare e avise.
-5. Feche com a lista do que ficou pendente de humano (conta no Coolify, login em `REVIEWER_LOGINS`, acesso ao cofre).
+5. Feche com a lista do que ficou pendente de humano (conta no Coolify, acesso ao cofre).
 
 ## O que esta skill nunca faz
 
