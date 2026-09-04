@@ -114,7 +114,7 @@ docs/agents/                  # protocolo do agente (issue tracker, labels, dom�
 docs/onboarding/              # setup de máquina e fluxo do dia a dia
 docs/spec/                    # deploy/*.json, snapshots/, CHANGELOG, VERSIONING
 docs/pops/                    # glossário POPs + materiais reais de referência
-docs/comunicacao/             # material do diretor: percepcao/ (vídeos), divulgacao/ (Vercel), _assets/ (fonte + logo únicos)
+docs/comunicacao/             # material do diretor: <contexto>/<PRD>-<slug>/ com video/ + index.html (ADR 0045); _assets/ (fonte + logo únicos)
 docs/manual/                  # manual do usuário (Vercel)
 local/                        # FORA DO GIT: PDFs, transcrições, rascunhos, dumps (cada máquina cria a sua)
 tokens/.env                   # FORA DO GIT: chaves da máquina (molde em tokens/.env.example)

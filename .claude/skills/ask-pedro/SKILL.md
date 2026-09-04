@@ -27,8 +27,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 
 ## Pós-entrega
 
-- `/perceber <N>`: vídeo de percepção de valor pro diretor.
-- `/divulgar <PRD>`: documentação de divulgação da seção (HTML enxuto com abas Funcionalidade + Demonstração por Vídeo, embute o MP4 da /perceber; o agente publica na Vercel pela CLI e entrega o link).
+- `/divulgar <PRD> [--so-video | --so-pagina]`: a entrega pro diretor em dois passos, um comando: vídeo de percepção de valor (MP4, gate humano no draft) e página de divulgação publicada na Vercel com o vídeo embutido. Uma pasta por PRD em `docs/comunicacao/<contexto>/` (ADR 0045).
 - `/snapshot`: mapa factual da app (roda sozinho no fim do `/deploy`).
 - `/atualizar-app`: rebuild local docker-compose (não toca produção).
 - **Pendência humana pós-ciclo** (import na virada, credencial, ato externo): vira issue `ready-for-human` ligada ao PRD (`/ship` Passo 10.5); o Pedro acompanha na aba **Pendências** do painel (`python3 tools/workflow-dashboard/serve.py`) e fecha a issue ao concluir.
