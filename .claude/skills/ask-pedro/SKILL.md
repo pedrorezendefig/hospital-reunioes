@@ -33,6 +33,10 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 - `/atualizar-app`: rebuild local docker-compose (não toca produção).
 - **Pendência humana pós-ciclo** (import na virada, credencial, ato externo): vira issue `ready-for-human` ligada ao PRD (`/ship` Passo 10.5); o Pedro acompanha na aba **Pendências** do painel (`python3 tools/workflow-dashboard/serve.py`) e fecha a issue ao concluir.
 
+## Máquina nova
+
+- `/setup-maquina [--nivel N] [--env]`: diagnóstico de quem clonou (binários, gh, plugins, Coolify, tokens, `.env`) com o conserto ao lado e o item do 1Password de cada chave. O app não roda local: nível 2 (deploy) é o alvo.
+
 ## Travessia de sessões
 
 - `/passagem [--bg]`: documento de handoff pra outra janela; `--bg` dispara a continuação em background.

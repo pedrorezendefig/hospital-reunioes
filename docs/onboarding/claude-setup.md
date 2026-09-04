@@ -10,6 +10,8 @@ Depois de seguir este guia, leia [`dev.md`](./dev.md) pra entender o fluxo dia-a
 
 Se você já conhece Claude Code, é só seguir esta lista. Detalhes nas seções abaixo.
 
+> Atalho: depois do clone, rode `/setup-maquina` no Claude Code. Ele confere tudo desta lista e diz o que falta e onde pegar cada chave (`.claude/skills/setup-maquina/references/chaves.md`). O app não precisa rodar na sua máquina: sobe para produção e se testa lá.
+
 - [ ] [1.](#1-pré-requisitos) Pré-requisitos instalados (Claude Code CLI, gh, jq, python3, docker, node)
 - [ ] [2.](#2-clone-do-repo) Repo clonado + `gh auth login` feito
 - [ ] [3.](#3-plugins-essenciais) 5 plugins habilitados (`code-review`, `security-guidance`, `github`, `context7`, `skill-creator`)

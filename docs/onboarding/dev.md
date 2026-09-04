@@ -131,6 +131,8 @@ Sem Discord, sem Slack.
 
 | Comando | Pra que |
 |---|---|
+| `/setup-maquina` | Máquina nova: confere binários, acessos e chaves; diz onde pegar cada uma |
+| `/ask-pedro` | Router: qual skill usar agora |
 | `/grill-with-docs` | Lapida uma ideia nova contra o domínio (entry de ideação) |
 | `/to-prd` | Vira a conversa num PRD = 1 Issue `ready-for-agent` |
 | `/to-issues` | Quebra o PRD em fatias verticais (1 issue cada) |
