@@ -69,3 +69,26 @@ def observacao_da_devolucao(setor: str | None, motivo: str) -> str:
     meses adiante, o `setor` corrente do caso já não diria de onde a volta
     veio."""
     return f"{_PREFIXO} {setor or 'sem setor'}{_SEPARADOR}{motivo}"
+
+
+def setor_e_motivo(observacao: str | None) -> tuple[str | None, str]:
+    """A frase acima de volta em duas partes, para o email do aviso à Ouvidoria
+    mostrar o setor e o motivo em campos próprios (issue #599).
+
+    A mesma frase serve à trilha e ao `detalhe` da notificação de propósito: o
+    setor fica CONGELADO no ato, e o reacionamento para outra área logo depois
+    não reescreve quem devolveu.
+
+    O corte é no PRIMEIRO separador depois do prefixo, e não no último: dois
+    pontos aparecem dentro do próprio motivo o tempo todo ("Não é nosso: quem
+    agenda é o Centro Médico"), e partir no último entregaria meia frase. Texto
+    que não começa pelo prefixo volta inteiro como motivo, sem setor inventado:
+    linha antiga ou `detalhe` escrito por outro caminho não pode virar um nome
+    de área no email de quem despacha o caso."""
+    texto = (observacao or "").strip()
+    if not texto.startswith(f"{_PREFIXO} "):
+        return None, texto
+    setor, separador, motivo = texto[len(_PREFIXO) + 1 :].partition(_SEPARADOR)
+    if not separador:
+        return None, texto
+    return setor.strip() or None, motivo.strip()

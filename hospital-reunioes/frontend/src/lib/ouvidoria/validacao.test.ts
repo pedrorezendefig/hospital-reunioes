@@ -6,6 +6,7 @@ import {
   DESFECHOS,
   estaVigente,
   LABEL_DESFECHO,
+  LABEL_GATILHO,
   podeEncerrar,
   podeGerirResponsaveis,
   podePausar,
@@ -219,5 +220,18 @@ describe("responsavelDoSetor", () => {
 
   it("setor sem ninguém cadastrado devolve nulo, e a fila diz isso", () => {
     expect(responsavelDoSetor([], "Recepção", "2026-08-25")).toBeNull();
+  });
+});
+
+describe("LABEL_GATILHO", () => {
+  it("o aviso da devolução à Ouvidoria tem rótulo próprio no Dossiê", () => {
+    // Carimbo do backend sem par na tela some em silêncio: sem esta entrada, a
+    // linha do registro sai com a chave crua `devolvido_a_ouvidoria` para o
+    // ouvidor (issue #599).
+    expect(LABEL_GATILHO.devolvido_a_ouvidoria).toBe("Devolução à Ouvidoria pela área");
+  });
+
+  it("não se confunde com a devolução por insuficiência, que vai no sentido contrário", () => {
+    expect(LABEL_GATILHO.devolvido_a_ouvidoria).not.toBe(LABEL_GATILHO.resposta_devolvida);
   });
 });

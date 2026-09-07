@@ -298,6 +298,11 @@ export const LABEL_GATILHO: Record<string, string> = {
   // O segundo e último que sai do hospital (issue #494, ADR 0042): o desfecho
   // em linguagem simples e o caminho para voltar.
   encerramento_manifestante: "Aviso de encerramento ao manifestante",
+  // A Devolução à Ouvidoria (issue #599, ADR 0048): a área devolveu o caso e a
+  // Ouvidoria foi avisada. O rótulo diz "à Ouvidoria" porque o vizinho
+  // `resposta_devolvida` é a devolução no sentido contrário, da Ouvidoria para
+  // a área, e as duas linhas são lidas em sequência no mesmo Dossiê.
+  devolvido_a_ouvidoria: "Devolução à Ouvidoria pela área",
 };
 
 export interface Notificacao {

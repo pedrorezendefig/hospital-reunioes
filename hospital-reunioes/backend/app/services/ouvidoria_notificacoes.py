@@ -86,6 +86,15 @@ GATILHO_ACUSAR_RECEBIMENTO = "acusar_recebimento"
 # reabertura por reincidência, e o reenvio meses depois mandaria o desfecho da
 # tramitação seguinte, ou nada.
 GATILHO_ENCERRAMENTO_MANIFESTANTE = "encerramento_manifestante"
+# Devolução à Ouvidoria (issue #599, PRD #598, ADR 0048): a área devolveu um
+# caso que não é dela e quem despacha precisa agir no mesmo dia. Vai só a quem
+# tem Perfil da Ouvidoria: a área que devolveu já sabe que devolveu, e a troca
+# de área é ajuste interno que não gera aviso ao manifestante. O setor que
+# devolveu e o motivo viajam no `detalhe`, na MESMA frase que a trilha guarda
+# (`ouvidoria_devolucao_a_ouvidoria.observacao_da_devolucao`), congelada no
+# ato: o reacionamento troca `setor` no caso logo depois, e ler a coluna na
+# hora do envio faria o reenvio culpar a área errada.
+GATILHO_DEVOLVIDO_A_OUVIDORIA = "devolvido_a_ouvidoria"
 GATILHOS = (
     GATILHO_NOVA_DEMANDA,
     GATILHO_ALERTA_SEM_TITULAR,
@@ -101,6 +110,7 @@ GATILHOS = (
     GATILHO_CASO_REABERTO,
     GATILHO_ACUSAR_RECEBIMENTO,
     GATILHO_ENCERRAMENTO_MANIFESTANTE,
+    GATILHO_DEVOLVIDO_A_OUVIDORIA,
 )
 
 # O que vai na coluna `destinatario_nome` (NOT NULL) quando quem manifestou não
@@ -841,6 +851,51 @@ def montar_prorrogacao_decidida(
     return (f"Ouvidoria {protocolo}: prorrogacao {decisao}", html, texto)
 
 
+def montar_devolvido_a_ouvidoria(
+    manifestacao: dict, destinatario_nome: str, detalhe: str | None
+) -> tuple[str, str, str]:
+    """Assunto, HTML e texto do aviso de que a área devolveu o caso (issue
+    #599). Quem recebe tem login, então o botão abre o Dossiê (como o aviso de
+    prorrogação solicitada) e não um link tokenizado do portal do setor.
+
+    Não estende `email_ouvidoria_caso_base.html`, que é a única exceção do
+    módulo entre os emails internos: aquele cabeçalho afirma o prazo DA ÁREA, e
+    a devolução acabou de zerá-lo. Ele sairia dizendo "Prazo: sem prazo
+    definido (sem prazo definido)" num aviso cuja mensagem é justamente que
+    ninguém mais está com o relógio na mão.
+
+    O setor e o motivo vêm do `detalhe`, e não das colunas do caso: ver
+    `GATILHO_DEVOLVIDO_A_OUVIDORIA`. Nada do que quem manifestou escreveu entra
+    aqui, e por isso o email não muda no caso sigiloso nem no anônimo: quem o
+    recebe abre o caso inteiro pelo Dossiê, e repetir o relato numa caixa de
+    entrada espalharia o que a RN-79 existe para não espalhar."""
+    from app.services.email_constants import get_logo_data_uri
+    from app.services.ouvidoria_devolucao_a_ouvidoria import setor_e_motivo
+
+    protocolo = manifestacao.get("protocolo") or ""
+    setor, motivo = setor_e_motivo(detalhe)
+    setor_lido = setor or "a área acionada"
+    link = _link_do_caso(manifestacao)
+
+    html = jinja_env.get_template("email_ouvidoria_devolvido.html").render(
+        destinatario_nome=destinatario_nome,
+        protocolo=protocolo,
+        setor=setor_lido,
+        motivo=motivo,
+        faixa=faixa_da_gravidade(manifestacao.get("gravidade")),
+        link=link,
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        f"Ola {destinatario_nome},\n\n"
+        f"O setor {setor_lido} devolveu a manifestacao {protocolo} a Ouvidoria: o caso nao e da area dele.\n\n"
+        f"Motivo da area: {motivo}\n\n"
+        f"O caso voltou para a fila de classificacao e o prazo da area parou. "
+        f"Encaminhe para a area certa no Dossie: {link}\n"
+    )
+    return (f"Ouvidoria {protocolo}: o setor {setor_lido} devolveu o caso", html, texto)
+
+
 def montar_acuse_recebimento(protocolo: str) -> tuple[str, str, str]:
     """Assunto, HTML e texto do acuse ao manifestante (issue #493, ADR 0042).
 
@@ -1086,6 +1141,10 @@ def _montar(
         # tramitação seguinte, ou um email mudo. A linha guarda o que foi dito
         # naquele ato, como a trilha imutável guarda (RN-64).
         return montar_encerramento_manifestante(manifestacao.get("protocolo") or "", notificacao.get("detalhe") or "")
+    if notificacao["gatilho"] == GATILHO_DEVOLVIDO_A_OUVIDORIA:
+        # Sem prazo e sem calendário: o vencimento da área foi zerado pela
+        # própria devolução, e o que este aviso pede é despacho, não resposta.
+        return montar_devolvido_a_ouvidoria(manifestacao, notificacao["destinatario_nome"], notificacao.get("detalhe"))
     if notificacao["gatilho"] == GATILHO_PRAZO_ROMPIDO:
         return montar_prazo_rompido(manifestacao, notificacao["destinatario_nome"], agora, feriados, link=link)
     if notificacao["gatilho"] == GATILHO_NOVA_DEMANDA:
