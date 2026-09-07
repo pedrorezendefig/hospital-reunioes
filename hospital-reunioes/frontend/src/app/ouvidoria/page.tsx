@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 import { AlertCircle, Archive, CheckCircle2, Loader2, Lock, Megaphone, Plus } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
@@ -56,6 +56,17 @@ export default function OuvidoriaPage() {
   // recarrega pedindo um dos dois, em vez de peneirar em memória uma resposta
   // que traria os dois juntos.
   const [arquivados, setArquivados] = useState(false);
+  // A recusa do servidor ao arquivar ou desarquivar, na frase dele. Sem isto, o
+  // carimbo que o backend não gravou some em silêncio: a linha fica idêntica e
+  // o ouvidor clica de novo sem saber por quê.
+  const [erroDoArquivo, setErroDoArquivo] = useState<string | null>(null);
+  // A manifestação com uma chamada de arquivo em voo. Trava o duplo clique, que
+  // dispararia dois POST e duas recargas sobre a mesma linha.
+  const [noArquivo, setNoArquivo] = useState<string | null>(null);
+  // A carga mais recente. Ligar e desligar o filtro depressa deixa dois `fetch`
+  // no ar, e sem este número quem responde por último pinta a lista, mesmo
+  // sendo a resposta que o ouvidor já abandonou.
+  const cargaMaisRecente = useRef(0);
 
   const { participante } = useCurrentParticipante();
   const podeAbrirDossie = Boolean(participante?.perfil_ouvidoria);
@@ -63,19 +74,26 @@ export default function OuvidoriaPage() {
   // Recarrega a fila depois de registrar: o caso novo precisa aparecer sem o
   // ouvidor ter que atualizar a página na mão.
   async function recarregar(sessionToken: string, mostrarArquivados: boolean) {
+    const minhaCarga = ++cargaMaisRecente.current;
+    const venceu = () => minhaCarga !== cargaMaisRecente.current;
     try {
       // O parâmetro só entra quando o filtro está ligado: a lista de trabalho
       // continua sendo a mesma URL de sempre.
       const res = await fetch(
-        `/api/ouvidoria/protocolos${mostrarArquivados ? "?arquivados=true" : ""}`,
+        `/api/ouvidoria/protocolos${mostrarArquivados ? "?arquivados=sim" : ""}`,
         {
           headers: { Authorization: `Bearer ${sessionToken}` },
         }
       );
+      // Todos os `await` acontecem ANTES da guarda, e a guarda antes de toda
+      // escrita de estado: é isso que a torna um ponto só. Resposta vencida
+      // não pinta nada, nem a lista nem o erro, porque ela é a foto de um
+      // filtro que o ouvidor já trocou.
+      const corpo = res.ok ? await res.json() : null;
+      if (venceu()) return;
       if (res.status === 403) {
         setSemAcesso(true);
       } else if (res.ok) {
-        const corpo = await res.json();
         // O dia é relido a cada carga, como no painel: fila aberta na virada da
         // meia-noite continuaria chamando de "vence hoje" o que venceu ontem, e
         // deixando em âmbar o que passou a vencer hoje (issue #488).
@@ -89,6 +107,7 @@ export default function OuvidoriaPage() {
       }
     } catch (e) {
       console.error("Erro ao carregar manifestações:", e);
+      if (venceu()) return;
       setErroCarga(true);
     }
   }
@@ -225,19 +244,35 @@ export default function OuvidoriaPage() {
    * a de antes do clique, que é o estado verdadeiro do servidor.
    */
   async function mudarOArquivo(m: ManifestacaoIndice, metodo: "POST" | "DELETE") {
-    if (!token) return;
+    // Uma chamada por vez: dois cliques rápidos disparariam dois POST e duas
+    // recargas sobre a mesma linha.
+    if (!token || noArquivo) return;
+    setNoArquivo(m.id);
+    setErroDoArquivo(null);
     try {
       const res = await fetch(`/api/ouvidoria/manifestacoes/${m.id}/arquivo`, {
         method: metodo,
         headers: { Authorization: `Bearer ${token}` },
       });
       if (!res.ok) {
-        console.error("O servidor recusou a mudança no arquivo:", res.status);
+        const corpo = await res.json().catch(() => null);
+        // Só os status com que ESTAS rotas explicam uma recusa chegam ao
+        // ouvidor com a frase do servidor, como na cobrança ao lado. Repassar
+        // qualquer `detail` poria um "Internal Server Error" na tela.
+        const explicada = res.status === 403 || res.status === 409 || res.status === 503;
+        setErroDoArquivo(
+          explicada && typeof corpo?.detail === "string"
+            ? corpo.detail
+            : "Não foi possível mudar o arquivo desta manifestação. Tente de novo em instantes."
+        );
         return;
       }
       await recarregar(token, arquivados);
     } catch (e) {
       console.error("Erro ao mudar o arquivo da manifestação:", e);
+      setErroDoArquivo("Não foi possível falar com o servidor. Tente de novo em instantes.");
+    } finally {
+      setNoArquivo(null);
     }
   }
 
@@ -245,6 +280,9 @@ export default function OuvidoriaPage() {
   function alternarOFiltro() {
     const proximo = !arquivados;
     setArquivados(proximo);
+    // O aviso do ato anterior não sobrevive à troca de lista: ele fala de uma
+    // linha que talvez nem esteja mais na tela.
+    setErroDoArquivo(null);
     if (token) recarregar(token, proximo);
   }
 
@@ -344,6 +382,21 @@ export default function OuvidoriaPage() {
             <span>{aviso.texto}</span>
           </div>
         ))}
+
+      {/* A recusa do servidor ao arquivar ou desarquivar, na frase dele (issue
+          #592). `role="status"` porque é resposta a um clique do ouvidor, e ele
+          precisa ouvi-la sem procurar. Some no próximo ato e na troca de
+          filtro: aviso velho sobre linha que já saiu da tela é pior que
+          nenhum. */}
+      {erroDoArquivo && (
+        <div
+          role="status"
+          className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{erroDoArquivo}</span>
+        </div>
+      )}
 
       {!loading && !semAcesso && !erroCarga && !podeAbrirDossie && manifestacoes.length > 0 && (
         <div className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-sm">

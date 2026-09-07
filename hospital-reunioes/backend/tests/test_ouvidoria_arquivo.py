@@ -53,9 +53,11 @@ DIRETORIA = {
     "perfil_ouvidoria": "diretoria_executiva",
 }
 # Papel nas Reuniões não concede nada na Ouvidoria (RN-40): o super admin
-# administra o sistema, e não toca no caso.
+# administra o sistema, e não toca no caso. Os dois têm `access_profile` de
+# verdade porque passam no gate LARGO da lista (`require_acesso_painel`): é
+# justamente por isso que o recorte do arquivo precisa do gate próprio.
 SUPER_ADMIN = {"id": "P99", "nome_completo": "Root", "access_profile": "super_admin", "perfil_ouvidoria": None}
-SECRETARIA = {"id": "P12", "nome_completo": "Ana Secretaria", "access_profile": None, "perfil_ouvidoria": None}
+SECRETARIA = {"id": "P12", "nome_completo": "Ana Secretaria", "access_profile": "secretaria", "perfil_ouvidoria": None}
 
 # Terça-feira, 14h de Brasília: dentro do expediente e longe de feriado.
 INICIO = dt.datetime(2026, 8, 25, 17, 0, tzinfo=dt.UTC)
@@ -161,9 +163,13 @@ class _TabelaFake:
     A negação existe porque é o filtro do modo "arquivados": sem ela o fake
     devolveria a lista inteira e o teste do filtro ficaria verde sobre nada."""
 
-    def __init__(self, nome: str, rows: list[dict]):
+    def __init__(self, nome: str, rows: list[dict], ao_ler=None):
         self.nome = nome
         self.rows = rows
+        # O que acontece DEPOIS de um select casar e ANTES de a rota voltar a
+        # falar com o banco. É assim que a corrida da reabertura entra no
+        # teste, sem thread nenhuma.
+        self.ao_ler = ao_ler
         self._filtros: list = []
         self._insert: dict | list | None = None
         self._update: dict | None = None
@@ -197,6 +203,9 @@ class _TabelaFake:
 
     def eq(self, col, value):
         return self._guardar(lambda row: row.get(col) == value)
+
+    def in_(self, col, values):
+        return self._guardar(lambda row: row.get(col) in list(values))
 
     def is_(self, col, value):
         alvo = None if value in ("null", None) else value
@@ -242,7 +251,10 @@ class _TabelaFake:
         if self._janela is not None:
             inicio, fim = self._janela
             casadas = casadas[inicio : fim + 1]
-        return type("R", (), {"data": [self._projetar(r) for r in casadas]})()
+        projetadas = [self._projetar(r) for r in casadas]
+        if self.ao_ler is not None and casadas:
+            self.ao_ler(casadas)
+        return type("R", (), {"data": projetadas})()
 
 
 class _AgregadoFake:
@@ -264,6 +276,9 @@ class _AgregadoFake:
 
 class _SupabaseFake:
     def __init__(self, casos: list[dict], movimentos: list[dict] | None = None):
+        # Quando preenchido, roda uma vez logo depois do primeiro select em
+        # `ouvidoria_protocolos` e some. Simula a reabertura concorrente.
+        self.reabre_no_meio_da_leitura = False
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos,
             "ouvidoria_movimentos": movimentos or [],
@@ -281,8 +296,16 @@ class _SupabaseFake:
             "participantes": [],
         }
 
+    def _reabrir_agora(self, casadas: list[dict]) -> None:
+        self.reabre_no_meio_da_leitura = False
+        for row in casadas:
+            row["status"] = "aguardando_area"
+
     def table(self, nome: str):
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []))
+        ao_ler = None
+        if nome == "ouvidoria_protocolos" and self.reabre_no_meio_da_leitura:
+            ao_ler = self._reabrir_agora
+        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), ao_ler)
 
     def rpc(self, nome: str, params: dict | None = None):
         if nome == "ouvidoria_ultimo_movimento":
@@ -505,12 +528,12 @@ class TestAListaFiltraPorArquivo:
     def test_com_o_filtro_devolve_so_os_arquivados(self, monkeypatch):
         client, _ = self._base(monkeypatch)
 
-        assert _listar(client, arquivados="true") == ["2026-0008"]
+        assert _listar(client, arquivados="sim") == ["2026-0008"]
 
     def test_o_filtro_desligado_explicitamente_e_o_mesmo_que_sem_ele(self, monkeypatch):
         client, _ = self._base(monkeypatch)
 
-        assert _listar(client, arquivados="false") == ["2026-0007"]
+        assert _listar(client, arquivados="nao") == ["2026-0007"]
 
     def test_arquivar_tira_o_caso_da_lista_na_mesma_carga(self, monkeypatch):
         """O caminho inteiro, pelo lado de fora: o ouvidor arquiva pela lista e a
@@ -521,7 +544,7 @@ class TestAListaFiltraPorArquivo:
         assert _arquivar(client, numero=7).status_code == 200
 
         assert _listar(client) == []
-        assert sorted(_listar(client, arquivados="true")) == ["2026-0007", "2026-0008"]
+        assert sorted(_listar(client, arquivados="sim")) == ["2026-0007", "2026-0008"]
 
     def test_desarquivar_devolve_o_caso_a_lista(self, monkeypatch):
         client, _ = self._base(monkeypatch)
@@ -529,7 +552,171 @@ class TestAListaFiltraPorArquivo:
         assert _desarquivar(client, numero=8).status_code == 200
 
         assert sorted(_listar(client)) == ["2026-0007", "2026-0008"]
-        assert _listar(client, arquivados="true") == []
+        assert _listar(client, arquivados="sim") == []
+
+
+class TestACorridaComAReabertura:
+    """TOCTOU: a pré-condição "só encerrado arquiva" é checada na leitura, e o
+    update precisa repeti-la para valer.
+
+    Sem a condição no próprio update, uma reabertura que caísse entre as duas
+    idas ao banco deixaria um caso `aguardando_area` arquivado: prazo correndo,
+    setor notificado, e fora da lista de trabalho. Nenhuma linha de código
+    estaria errada, e é por isso que o teste precisa forçar a corrida.
+    """
+
+    def test_reabertura_no_meio_do_caminho_vira_409_e_nao_arquiva(self, monkeypatch):
+        client, supabase = _client(monkeypatch)
+        # O caso está encerrado quando a rota lê, e `aguardando_area` quando ela
+        # grava. É exatamente a janela do TOCTOU.
+        supabase.reabre_no_meio_da_leitura = True
+
+        r = _arquivar(client)
+
+        assert r.status_code == 409, r.text
+        caso = _gravado(supabase)
+        assert caso["status"] == "aguardando_area", "o gatilho da corrida precisa ter disparado"
+        assert caso["arquivada_em"] is None, "o caso reaberto não pode terminar arquivado"
+
+    def test_sem_a_corrida_o_mesmo_caminho_arquiva(self, monkeypatch):
+        """A contraprova do teste acima: sem o gatilho, tudo igual, o 200 sai e
+        o carimbo entra. Sem ela, um 409 vindo de qualquer outro motivo passaria
+        por prova da corrida."""
+        client, supabase = _client(monkeypatch)
+
+        assert _arquivar(client).status_code == 200
+        assert _gravado(supabase)["arquivada_em"]
+
+
+class TestORastroDoArquivo:
+    """Arquivar não entra na trilha (por desenho) e desarquivar apaga os dois
+    carimbos. Sem o log de acesso, o par arquivar + desarquivar não deixaria
+    vestígio nenhum de que o caso esteve escondido, por quanto tempo e por
+    quem."""
+
+    def _acessos(self, supabase) -> list[dict]:
+        return supabase.tabelas["ouvidoria_acessos"]
+
+    def test_arquivar_registra_o_acesso_com_autor_e_acao(self, monkeypatch):
+        client, supabase = _client(monkeypatch)
+
+        assert _arquivar(client).status_code == 200
+
+        acessos = self._acessos(supabase)
+        assert len(acessos) == 1
+        assert acessos[0]["acao"] == "arquivar"
+        assert acessos[0]["ator_id"] == OUVIDOR["id"]
+        assert acessos[0]["manifestacao_id"] == "uuid-7"
+
+    def test_desarquivar_registra_o_acesso(self, monkeypatch):
+        client, supabase = _client(
+            monkeypatch,
+            casos=[_caso(arquivada_em="2026-08-25T17:00:01+00:00", arquivada_por="P10")],
+        )
+
+        assert _desarquivar(client).status_code == 200
+
+        acessos = self._acessos(supabase)
+        assert len(acessos) == 1
+        assert acessos[0]["acao"] == "desarquivar"
+
+    def test_o_par_arquivar_desarquivar_deixa_os_dois_registros(self, monkeypatch):
+        """O caso volta a NULL nas duas colunas, e o rastro é o que sobra."""
+        client, supabase = _client(monkeypatch)
+
+        assert _arquivar(client).status_code == 200
+        assert _desarquivar(client).status_code == 200
+
+        assert _gravado(supabase)["arquivada_em"] is None
+        assert [a["acao"] for a in self._acessos(supabase)] == ["arquivar", "desarquivar"]
+
+    def test_recusa_nao_registra_acesso(self, monkeypatch):
+        """O log é de ato, e ato recusado não aconteceu."""
+        client, supabase = _client(monkeypatch, casos=[_caso(status="aguardando_area")])
+
+        assert _arquivar(client).status_code == 409
+
+        assert self._acessos(supabase) == []
+
+
+class TestORecorteTodos:
+    """O terceiro recorte existe para quem CONTA em vez de trabalhar (o painel
+    em tempo real). Arquivar é organização da lista e não fato do caso, então o
+    card de cada estado tem de somar o mesmo que as métricas do bloco ao lado.
+    """
+
+    def _base(self, monkeypatch, participante=None):
+        return _client(
+            monkeypatch,
+            casos=[
+                _caso(7),
+                _caso(8, arquivada_em="2026-08-25T17:00:01+00:00", arquivada_por="P10"),
+            ],
+            participante=participante,
+        )
+
+    def test_todos_devolve_os_dois_mundos(self, monkeypatch):
+        client, _ = self._base(monkeypatch)
+
+        assert sorted(_listar(client, arquivados="todos")) == ["2026-0007", "2026-0008"]
+
+    def test_o_total_de_todos_nao_muda_ao_arquivar(self, monkeypatch):
+        """O que o painel precisa: a soma das colunas continua fechando com o
+        hospital inteiro depois de arquivar."""
+        client, _ = self._base(monkeypatch)
+        antes = len(_listar(client, arquivados="todos"))
+
+        assert _arquivar(client, numero=7).status_code == 200
+
+        assert len(_listar(client, arquivados="todos")) == antes
+        # A contraprova, no mesmo teste: a lista de TRABALHO encolheu de verdade.
+        assert _listar(client) == []
+
+    def test_valor_fora_dos_tres_e_recusado(self, monkeypatch):
+        client, _ = self._base(monkeypatch)
+
+        r = client.get("/api/ouvidoria/protocolos", params={"arquivados": "talvez"})
+
+        assert r.status_code == 422
+
+
+class TestOGateDoArquivoNaLista:
+    """A vista do arquivo é da Ouvidoria também no servidor, e não só na tela.
+    O gate da lista é o largo (a equipe de Reuniões inteira lê o índice), então
+    o recorte precisa do seu próprio."""
+
+    def _base(self, monkeypatch, participante):
+        return _client(
+            monkeypatch,
+            casos=[_caso(7), _caso(8, arquivada_em="2026-08-25T17:00:01+00:00", arquivada_por="P10")],
+            participante=participante,
+        )
+
+    @pytest.mark.parametrize("quem", [SUPER_ADMIN, SECRETARIA])
+    @pytest.mark.parametrize("recorte", ["sim", "todos"])
+    def test_sem_perfil_da_ouvidoria_nao_le_o_arquivo(self, monkeypatch, quem, recorte):
+        client, _ = self._base(monkeypatch, quem)
+
+        r = client.get("/api/ouvidoria/protocolos", params={"arquivados": recorte})
+
+        assert r.status_code == 403, r.text
+
+    @pytest.mark.parametrize("quem", [SUPER_ADMIN, SECRETARIA])
+    def test_a_lista_de_trabalho_continua_aberta_a_quem_ja_a_lia(self, monkeypatch, quem):
+        """A contraprova do gate: o índice é da equipe de Reuniões, e esta fatia
+        não podia fechá-lo. Sem este teste, o 403 acima passaria por prova mesmo
+        se a rota inteira tivesse virado exclusiva da Ouvidoria."""
+        client, _ = self._base(monkeypatch, quem)
+
+        assert _listar(client) == ["2026-0007"]
+
+    @pytest.mark.parametrize("recorte", ["sim", "todos"])
+    def test_a_diretoria_executiva_le_o_arquivo(self, monkeypatch, recorte):
+        client, _ = self._base(monkeypatch, DIRETORIA)
+
+        r = client.get("/api/ouvidoria/protocolos", params={"arquivados": recorte})
+
+        assert r.status_code == 200, r.text
 
 
 class TestNovidadeIgnoraOArquivado:
@@ -571,7 +758,7 @@ class TestNovidadeIgnoraOArquivado:
         client, _ = self._base(monkeypatch)
 
         assert _ponto_aceso(client, numero=7) is True
-        assert _ponto_aceso(client, numero=8, arquivados="true") is False
+        assert _ponto_aceso(client, numero=8, arquivados="sim") is False
 
 
 class TestODossieAbreOArquivado:
