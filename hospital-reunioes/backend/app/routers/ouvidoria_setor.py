@@ -32,7 +32,11 @@ from app.services import (
     storage,
 )
 from app.services.ouvidoria_anexos import AnexoRecusadoError, validar_anexo
-from app.services.ouvidoria_prazos import TETO_PRORROGACAO_DIAS_UTEIS, vencimento_prorrogado
+from app.services.ouvidoria_prazos import (
+    TETO_PRORROGACAO_DIAS_UTEIS,
+    estouro_consumado,
+    vencimento_prorrogado,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -80,6 +84,11 @@ def _indisponivel() -> HTTPException:
 def agora_utc() -> dt.datetime:
     """O relógio do módulo, num ponto só (mesmo padrão do painel)."""
     return dt.datetime.now(dt.UTC)
+
+
+def _instante(bruto) -> dt.datetime | None:
+    """O timestamp que o PostgREST devolve como texto, ou None quando vazio."""
+    return dt.datetime.fromisoformat(str(bruto)) if bruto else None
 
 
 def _carregar_caso(supabase, token: str, agora: dt.datetime) -> tuple[dict, dict]:
@@ -519,10 +528,28 @@ async def devolver_a_ouvidoria(
     # logo depois: lido do caso na hora do envio, o aviso (e o reenvio dele
     # meses adiante) culparia a área errada pela devolução.
     observacao = ouvidoria_devolucao_a_ouvidoria.observacao_da_devolucao(caso.get("setor"), motivo)
+    # O estouro consumado é carimbado ANTES de o relógio parar, pelo mesmo
+    # motivo e com a mesma função da devolução por insuficiência (issue #374):
+    # zerar `prazo_area_em` tira do indicador de cumprimento a única régua que
+    # ele tinha, e o atraso do ciclo que acabou sumiria junto. Aqui pesa mais,
+    # porque quem apaga é a própria área interessada, por um caminho sem login
+    # e sem o ouvidor no meio (issue #607).
+    #
+    # Ciclo cumprido não carimba nada, e estouro já gravado não é reescrito:
+    # as duas regras moram em `estouro_consumado`, não aqui.
+    estourou = estouro_consumado(
+        _instante(caso.get("prazo_area_em")),
+        _instante(caso.get("respondida_em")),
+        agora,
+        _instante(caso.get("area_estourou_em")),
+    )
     try:
         (
             supabase.table("ouvidoria_protocolos")
-            .update({"prazo_area_em": None} | ouvidoria_prorrogacao.carimbos_a_zerar())
+            .update(
+                {"prazo_area_em": None, "area_estourou_em": estourou.isoformat() if estourou else None}
+                | ouvidoria_prorrogacao.carimbos_a_zerar()
+            )
             .eq("id", vinculo["manifestacao_id"])
             .eq("status", "aguardando_area")
             .execute()
