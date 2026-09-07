@@ -154,11 +154,17 @@ def _avisar(banco, caso, agora=ENCERRADO_EM, *, desfecho=DESFECHO_EM_LINGUAGEM_S
 class TestGatilhoNoCatalogo:
     def test_o_gatilho_entra_no_check_vigente(self):
         """A migration mais nova é a que vale, e ela recria a lista INTEIRA:
-        esquecer um gatilho antigo ali derruba o registro dele em produção."""
-        assert _migration_vigente_do_check_de_gatilhos() == MIGRATION_AVISO
-        ddl = _ddl()
+        esquecer um gatilho antigo ali derruba o registro dele em produção.
+
+        Quem é a vigente muda a cada fatia que acrescenta gatilho (a issue #600
+        pôs a 098 na frente), então o teste lê a mais nova em vez de fixar um
+        número: o que ele cobra é a lista completa, não o arquivo."""
+        ddl = _ddl(_migration_vigente_do_check_de_gatilhos())
         for gatilho in ouvidoria_notificacoes.GATILHOS:
             assert f"'{gatilho}'" in ddl, f"O CHECK vigente não cobre o gatilho {gatilho}"
+        assert f"'{ouvidoria_notificacoes.GATILHO_ENCERRAMENTO_MANIFESTANTE}'" in _ddl(), (
+            "A migration desta fatia deixou de trazer o gatilho que ela criou"
+        )
 
     def test_a_troca_do_check_vai_numa_transacao(self):
         """Roda à mão em produção: a tabela não pode ficar sem constraint se a
