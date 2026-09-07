@@ -7,6 +7,7 @@
  * a tela não pode oferecer um caminho que termina em 403.
  */
 
+import { estaApagado } from "./apagamento";
 import type { StatusManifestacao } from "./prazo";
 
 export type Gravidade = "critico" | "alto" | "medio" | "baixo";
@@ -103,12 +104,19 @@ export const JANELA_REINCIDENCIA_DIAS = 30;
  * Reabrir o caso original por reincidência (issue #335). Fora da janela o
  * retorno é problema novo, e a tela não pode oferecer um caminho que termina
  * em 409: o certo ali é registrar manifestação nova.
+ *
+ * Caso apagado também termina em 409 desde a issue #593, e por isso o carimbo
+ * entra aqui, e não numa condição solta no JSX: é a mesma pergunta ("o servidor
+ * aceitaria?") e ela mora num lugar só. O parâmetro é obrigatório de propósito:
+ * opcional, quem esquecesse de passá-lo voltaria a oferecer o botão em silêncio.
  */
 export function podeReabrir(
   status: StatusManifestacao,
   encerradaEm: string | null | undefined,
   agora: string,
+  anonimizadaEm: string | null | undefined,
 ): boolean {
+  if (estaApagado(anonimizadaEm)) return false;
   if (status !== "encerrado" || !encerradaEm) return false;
   const decorridos = (Date.parse(agora) - Date.parse(encerradaEm)) / (1000 * 60 * 60 * 24);
   return decorridos >= 0 && decorridos <= JANELA_REINCIDENCIA_DIAS;

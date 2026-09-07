@@ -441,3 +441,54 @@ class TestSigiloReforcado:
         assert existente.json() == inexistente.json()
         assert supabase.tabelas["ouvidoria_acessos"] == []
         assert supabase.consultas == []
+
+
+# O carimbo que a Retenção grava no fim da anonimização (migration 079).
+APAGADO_EM = "2031-09-01T12:00:00+00:00"
+
+
+class TestCarimboDoApagamento:
+    """Issue #593: o Dossiê passa a devolver `anonimizada_em`.
+
+    A coluna existe desde a migration 079 e nenhuma tupla de leitura a trazia:
+    o dado era gravado e ninguém via. É por ele que a página do caso troca o
+    relato pelo aviso de caso apagado, e carimbo do servidor sem par na tela é
+    carimbo que some em silêncio.
+
+    As duas portas do Dossiê respondem igual: quem chega pela fila usa o id e
+    quem chega pelo link do email usa o protocolo, e o mesmo caso não pode se
+    apresentar apagado numa e vivo na outra.
+    """
+
+    def _por_id(self, client, manifestacao_id: str = "uuid-7"):
+        return client.get(f"/api/ouvidoria/manifestacoes/{manifestacao_id}")
+
+    def test_o_dossie_por_protocolo_devolve_o_carimbo(self, monkeypatch):
+        apagado = _manifestacao(anonimizada_em=APAGADO_EM)
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([apagado]))
+
+        r = _abrir(client, "2026-0007")
+
+        assert r.status_code == 200, r.text
+        assert r.json()["anonimizada_em"] == APAGADO_EM
+
+    def test_o_dossie_por_id_devolve_o_carimbo(self, monkeypatch):
+        apagado = _manifestacao(anonimizada_em=APAGADO_EM)
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([apagado]))
+
+        r = self._por_id(client)
+
+        assert r.status_code == 200, r.text
+        assert r.json()["anonimizada_em"] == APAGADO_EM
+
+    def test_o_caso_vivo_devolve_o_campo_nulo_pelas_duas_portas(self, monkeypatch):
+        """O campo AUSENTE e o campo nulo não são a mesma coisa para a tela: o
+        primeiro some no `undefined` e leva o aviso junto no dia em que o
+        carimbo passar a existir."""
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([_manifestacao()]))
+
+        por_protocolo = _abrir(client, "2026-0007").json()
+        por_id = self._por_id(client).json()
+
+        assert por_protocolo["anonimizada_em"] is None
+        assert por_id["anonimizada_em"] is None

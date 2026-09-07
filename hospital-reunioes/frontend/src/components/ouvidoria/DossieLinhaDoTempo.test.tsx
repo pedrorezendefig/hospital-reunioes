@@ -209,6 +209,7 @@ describe("a linha do tempo do caso (issue #485)", () => {
       ocorrido_em: "2026-08-27T13:00:00+00:00",
       autor: "Marta Ouvidora",
       sistema: false,
+      apagamento: false,
       marco: null,
       marco_rotulo: null,
       descricao: "Resposta devolvida à área por insuficiência",

@@ -1193,3 +1193,75 @@ class TestReaberturaPreservaAProvaDaResposta:
         # novo. O texto fica, porque não existe outra cópia dele.
         assert caso["respondida_em"] is None
         assert caso["respondida_por_nome"] is None
+
+
+# O carimbo que a Retenção grava no fim da anonimização (migration 079). Ele
+# nasce aqui DENTRO da janela da reincidência de propósito: sem a guarda desta
+# fatia o caso reabriria normalmente, e é isso que separa o teste do 409 que a
+# janela de 30 dias já dava por conta própria.
+APAGADO_EM = "2026-09-20T12:00:00+00:00"
+
+
+class TestCasoApagadoNaoReabre:
+    """Issue #593: caso cujo relato foi apagado não volta à tramitação.
+
+    Reabrir devolveria à área um caso sem relato, sem identificação e sem
+    anexos: a área receberia um protocolo vazio para apurar e a trilha ganharia
+    um ciclo novo sobre um Dossiê que não existe mais. Quem volta a reclamar
+    vira manifestação nova."""
+
+    def _apagado(self, monkeypatch, anonimizada_em: str | None = APAGADO_EM):
+        sb = _SupabaseFake(
+            [
+                _manifestacao(
+                    status="encerrado",
+                    tipo_manifestacao="reclamacao",
+                    categoria="Demora no atendimento",
+                    setor="Recepcao",
+                    gravidade="medio",
+                    prazo_area_em=PRAZO_ORIGINAL,
+                    validada_em=VALIDACAO_EM.isoformat(),
+                    encerrada_em=ENCERRAMENTO_EM.isoformat(),
+                    desfecho="procedente",
+                    anonimizada_em=anonimizada_em,
+                )
+            ]
+        )
+        client, _ = _client(monkeypatch, supabase=sb, agora=REABERTURA_EM)
+        return client, sb
+
+    def test_reabrir_caso_apagado_e_recusado_e_aponta_a_manifestacao_nova(self, monkeypatch):
+        client, _ = self._apagado(monkeypatch)
+
+        resposta = _reabrir(client)
+
+        assert resposta.status_code == 409, resposta.text
+        detalhe = resposta.json()["detail"]
+        assert "apagado" in detalhe.lower()
+        # A recusa precisa dizer para onde ir. Sem isso o ouvidor fica com um
+        # caso que não abre e nenhum caminho, e quem voltou a reclamar não vira
+        # caso nenhum.
+        assert "manifestação nova" in detalhe
+
+    def test_a_guarda_vem_antes_de_qualquer_gravacao(self, monkeypatch):
+        """A guarda depois da transição deixaria o caso fora do encerramento,
+        com movimento novo na trilha e o setor avisado, e só então recusaria."""
+        client, sb = self._apagado(monkeypatch)
+
+        assert _reabrir(client).status_code == 409
+
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "encerrado"
+        assert caso["reincidencia"] is False
+        assert caso["reaberta_em"] is None
+        assert caso["anonimizada_em"] == APAGADO_EM
+        assert sb.tabelas["ouvidoria_movimentos"] == []
+
+    def test_caso_encerrado_sem_o_carimbo_continua_reabrindo(self, monkeypatch):
+        """O contraste que prova que a guarda lê o carimbo, e não o
+        encerramento: o mesmo caso, sem `anonimizada_em`, reabre."""
+        client, sb = self._apagado(monkeypatch, anonimizada_em=None)
+
+        assert _reabrir(client).status_code == 201
+
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"

@@ -25,6 +25,12 @@ export interface EventoDaTrilha {
   autor: string;
   /** Ato de job, da Retenção ou do canal aberto: ninguém logado por trás. */
   sistema: boolean;
+  /**
+   * Este é o movimento que apagou o caso (issue #593). É dele que sai o nome
+   * de quem apagou, no aviso que substitui o relato: procurar esse movimento
+   * pelo texto da descrição seria procurar uma frase que o servidor reescreve.
+   */
+  apagamento: boolean;
   /** T0 a T3 quando o evento fecha um dos quatro marcos do caso. */
   marco: string | null;
   marco_rotulo: string | null;

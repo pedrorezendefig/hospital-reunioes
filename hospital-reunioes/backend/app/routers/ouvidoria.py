@@ -516,6 +516,12 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # havia para onde mandar o desfecho, ou não havia.
     "encerramento_avisado_em",
     "encerramento_sem_contato_em",
+    # O carimbo do apagamento, gravado pela Retenção no fim da anonimização
+    # (migration 079) e até aqui lido por ninguém (issue #593). Ele entra no
+    # Dossiê por dois consumidores: a página do caso, que troca o relato pelo
+    # aviso de caso apagado, e a reabertura por reincidência, que carrega o
+    # caso por esta mesma tupla e recusa quem tem o carimbo.
+    "anonimizada_em",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -1225,6 +1231,26 @@ async def reabrir_por_reincidencia(
     if not atual.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
     caso = atual.data[0]
+
+    # Caso apagado não volta à tramitação (issue #593). A guarda é a PRIMEIRA
+    # de todas e vem antes de qualquer gravação: reabrir devolveria à área um
+    # protocolo sem relato, sem identificação e sem anexos para apurar, e a
+    # trilha ganharia um ciclo novo sobre um Dossiê que não existe mais.
+    #
+    # Ela precede a janela da reincidência de propósito. O caso alcançado pela
+    # retenção de cinco anos também está fora da janela, e a recusa dali diria
+    # "encerrado há mais de 30 dias", mandando o ouvidor esperar por um caso
+    # que nunca mais abre. A frase não nomeia a causa do apagamento: o carimbo
+    # é um só e ainda vai ser gravado por outra porta (a Diretoria, issue
+    # #595), e culpar a retenção seria a tela afirmar o que o código não
+    # distingue.
+    if caso.get("anonimizada_em"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Este caso foi apagado e não pode ser reaberto. Registre uma manifestação nova em vez de reabrir esta."
+            ),
+        )
 
     if caso.get("status") != "encerrado":
         raise HTTPException(

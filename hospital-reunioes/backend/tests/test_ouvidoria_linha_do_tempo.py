@@ -33,6 +33,7 @@ from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.services import ouvidoria_respostas  # noqa: E402
+from app.services.ouvidoria_retencao import AUTOR_DA_RETENCAO  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 DIRETORIA = {
@@ -744,6 +745,55 @@ class TestCasoAnonimizado:
         devolucao = [e for e in eventos if e["ocorrido_em"] == DEVOLUCAO_EM][0]
         assert "devolv" in devolucao["descricao"].lower(), devolucao["descricao"]
         assert devolucao["texto"] is None
+
+
+APAGAMENTO_EM = "2031-09-01T12:00:00+00:00"
+
+
+class TestOMovimentoDoApagamento:
+    """Issue #593: o movimento que apagou o caso se identifica na trilha.
+
+    A página do caso troca o relato pelo aviso de caso apagado, e o aviso diz
+    QUEM apagou. Esse nome só existe na trilha, e achá-lo pelo texto da
+    descrição seria procurar uma frase que a própria Retenção pode reescrever.
+    O evento chega marcado, e a tela pergunta pela marca."""
+
+    def _com_apagamento(self) -> list[dict]:
+        return _tramitacao_completa() + [
+            _movimento(
+                APAGAMENTO_EM,
+                "encerrado",
+                "encerrado",
+                AUTOR_DA_RETENCAO,
+                None,
+                "Caso alcançado pela política de retenção de 5 anos.",
+            )
+        ]
+
+    def test_o_movimento_da_retencao_chega_marcado(self, monkeypatch):
+        supabase = _SupabaseFake(
+            manifestacoes=[_manifestacao(anonimizada_em=APAGAMENTO_EM)],
+            movimentos=self._com_apagamento(),
+        )
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        eventos = _linha_do_tempo(client).json()["movimentos"]
+
+        marcados = [e for e in eventos if e["apagamento"]]
+        assert len(marcados) == 1, "o apagamento não se identifica na trilha"
+        assert marcados[0]["ocorrido_em"] == APAGAMENTO_EM
+        assert marcados[0]["autor"] == AUTOR_DA_RETENCAO
+
+    def test_nenhum_outro_movimento_se_diz_apagamento(self, monkeypatch):
+        """O contraste: sem ele, marcar tudo passaria igual. O lembrete
+        automático também é ato de sistema sem mudança de estado, e é ele que
+        um marcador frouxo confundiria com o apagamento."""
+        supabase = _SupabaseFake(manifestacoes=[_manifestacao()], movimentos=_tramitacao_completa())
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        eventos = _linha_do_tempo(client).json()["movimentos"]
+
+        assert [e["apagamento"] for e in eventos] == [False] * len(eventos)
 
 
 class TestGateDaTrilha:

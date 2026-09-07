@@ -11,6 +11,7 @@ function evento(overrides: Partial<EventoDaTrilha> = {}): EventoDaTrilha {
     ocorrido_em: "2026-08-26T17:00:00+00:00",
     autor: "Carlos Titular",
     sistema: false,
+    apagamento: false,
     marco: "T2",
     marco_rotulo: "Resposta da área",
     descricao: "Resposta da área recebida",

@@ -108,21 +108,30 @@ describe("pausa aguardando o manifestante (issue #335)", () => {
 
 describe("reabertura por reincidência (issue #335)", () => {
   it("reabre caso encerrado dentro de trinta dias corridos", () => {
-    expect(podeReabrir("encerrado", "2026-09-02T17:00:00+00:00", "2026-09-21T17:00:00+00:00")).toBe(true);
+    expect(podeReabrir("encerrado", "2026-09-02T17:00:00+00:00", "2026-09-21T17:00:00+00:00", null)).toBe(true);
   });
 
   it("não reabre depois de trinta dias corridos", () => {
     // Fora da janela o caminho é manifestação nova, não reabrir a antiga.
-    expect(podeReabrir("encerrado", "2026-09-02T17:00:00+00:00", "2026-10-05T17:00:00+00:00")).toBe(false);
+    expect(podeReabrir("encerrado", "2026-09-02T17:00:00+00:00", "2026-10-05T17:00:00+00:00", null)).toBe(false);
   });
 
   it("não reabre caso que ainda está aberto", () => {
-    expect(podeReabrir("aguardando_area", "2026-09-02T17:00:00+00:00", "2026-09-21T17:00:00+00:00")).toBe(false);
+    expect(podeReabrir("aguardando_area", "2026-09-02T17:00:00+00:00", "2026-09-21T17:00:00+00:00", null)).toBe(false);
   });
 
   it("não reabre caso encerrado sem data de encerramento", () => {
     // Sem o marco T3 não há janela para medir, e o servidor recusaria.
-    expect(podeReabrir("encerrado", null, "2026-09-21T17:00:00+00:00")).toBe(false);
+    expect(podeReabrir("encerrado", null, "2026-09-21T17:00:00+00:00", null)).toBe(false);
+  });
+
+  it("não reabre caso apagado, ainda que dentro da janela (issue #593)", () => {
+    // O mesmo caso da primeira asserção deste bloco, só que com o carimbo do
+    // apagamento: reabrir devolveria à área um protocolo sem relato, sem
+    // identificação e sem anexos, e o servidor recusa com 409.
+    expect(
+      podeReabrir("encerrado", "2026-09-02T17:00:00+00:00", "2026-09-21T17:00:00+00:00", "2026-09-20T12:00:00+00:00")
+    ).toBe(false);
   });
 });
 
