@@ -24,6 +24,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 
 - `/triage`: criar/triar issues pelos papéis canônicos de label (`docs/agents/triage-labels.md`).
 - Bug difícil ou regressão de performance → `/diagnose`.
+- Esforço grande demais para caber num grilling de uma sessão (névoa multi-sessão) → `/wayfinder`: mapa de tickets de decisão no GitHub (label `wayfinder:map`), um ticket por sessão, até a rota clarear; o handoff no fim é `/to-prd` + `/to-issues`. A porta da frente do planejamento continua sendo `/grill-with-docs` (ADRs 0027 e 0049).
 - Melhorar arquitetura → `/improve-codebase-architecture` (relatório HTML); sanity-check de design → `/prototype`. Vocabulário de módulos em `codebase-design`; glossário e ADRs em `domain-modeling`.
 
 ## Pós-entrega

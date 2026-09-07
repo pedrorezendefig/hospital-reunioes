@@ -148,7 +148,7 @@ O desenvolvimento é **GitHub-issue-centric** (modelo Matt Pocock). O guia visua
 
 **Skills globais** (no seu Claude Code, valem em todos os projetos — não precisam de instalação por repo): `passagem` (handoff pt-BR), e os plugins `code-review`, `security-review`, `frontend-design`, `context7`, `github`.
 
-> Nada mais a instalar para o workflow — tudo acima já está no lugar. Para atualizar as skills do Pocock: `npx skills add mattpocock/skills --copy`.
+> Nada mais a instalar para o workflow — tudo acima já está no lugar. Atualizar uma skill do Pocock é manual: o upstream renomeou pastas (`diagnose` virou `diagnosing-bugs`; `to-prd` e `to-issues` viraram `to-spec` e `to-tickets`), então `npx skills add mattpocock/skills --copy` cria pastas paralelas em vez de atualizar as nossas. Compare com o `ref` gravado no `skills-lock.json`, traga o que interessa, mantenha a adaptação em pt-BR e regrave `ref` e `computedHash` (ADR 0049).
 
 ---
 

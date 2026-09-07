@@ -19,7 +19,7 @@ Se você já conhece Claude Code, é só seguir esta lista. Detalhes nas seçõe
 - [ ] [5.](#5-permissions-opcional-mas-recomendado) Permissions allow-list mínima (reduz prompts)
 - [ ] [6.](#6-verificação-end-to-end) `/pegar-issue` e `/deploy status` funcionando
 
-> Todas as skills do time **já vêm versionadas no repo** em `.claude/skills/` (lista e roteamento: `/ask-pedro`). Nada a instalar por máquina. Pra atualizar as do Pocock: `npx skills add mattpocock/skills --copy`.
+> Todas as skills do time **já vêm versionadas no repo** em `.claude/skills/` (lista e roteamento: `/ask-pedro`). Nada a instalar por máquina. Pra atualizar as do Pocock: é manual, porque o upstream renomeou pastas e as nossas são adaptadas em pt-BR (ADR 0049).
 
 ---
 
