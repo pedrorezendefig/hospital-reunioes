@@ -19,6 +19,7 @@ import {
   RotateCw,
   Send,
   ShieldAlert,
+  Undo2,
   UserRound,
 } from "lucide-react";
 import { EncerrarModal } from "@/components/ouvidoria/EncerrarModal";
@@ -48,6 +49,7 @@ import { descreverOrigem } from "@/lib/ouvidoria/origem";
 import { descreverTempoDesdeOMarco, type EventoDaTrilha } from "@/lib/ouvidoria/trilha";
 import { avisosDeDegradacao, calendarioUtilFoiLido } from "@/lib/ouvidoria/painel";
 import { descreverNaturezaInformada } from "@/lib/ouvidoria/natureza-informada";
+import { devolucaoAOuvidoria } from "@/lib/ouvidoria/devolucao-a-ouvidoria";
 import { formatarEsperaUtil, type StatusManifestacao } from "@/lib/ouvidoria/prazo";
 import type { PedidoDeProrrogacao } from "@/lib/ouvidoria/setor";
 import {
@@ -93,6 +95,11 @@ export interface Dossie {
   desfecho: string | null;
   desfecho_descricao: string | null;
   gravidade: string | null;
+  // O extrato que o ouvidor escreveu no acionamento (issue #601). É ele que
+  // volta preenchido quando o caso devolvido é encaminhado a outra área.
+  // Opcional pelo mesmo motivo dos marcos: um frontend servido enquanto o
+  // backend ainda é o da versão anterior apenas abre o campo em branco.
+  extrato_para_o_setor?: string | null;
   prazo_area_em: string | null;
   validada_em: string | null;
   respondida_em: string | null;
@@ -221,6 +228,10 @@ export function Dossie({ protocolo, token }: DossieProps) {
   // responde por uma leitura que aconteceu em outra requisição.
   const [movimentos, setMovimentos] = useState<EventoDaTrilha[]>([]);
   const [degradadoDaTrilha, setDegradadoDaTrilha] = useState<string[] | null>(null);
+  // A trilha não pôde ser lida (503 ou rede). Separado da lista vazia porque
+  // "não há histórico" e "não deu para olhar" pedem telas diferentes desde que
+  // a devolução passou a morar lá (issue #601).
+  const [trilhaIlegivel, setTrilhaIlegivel] = useState(false);
   const [reenviando, setReenviando] = useState<string | null>(null);
   const [avisoReenvio, setAvisoReenvio] = useState<string | null>(null);
   // Prorrogação de prazo (issue #333): o pedido da área espera a decisão da
@@ -303,6 +314,13 @@ export function Dossie({ protocolo, token }: DossieProps) {
    * página que pode chegar VAZIA por falha: o servidor responde 503 quando não
    * conseguiu lê-la, e é por isso que a falha zera a lista em vez de deixar na
    * tela os eventos do caso anterior.
+   *
+   * A falha também é GRAVADA (issue #601), e não só absorvida. Desde que a
+   * Devolução à Ouvidoria passou a viver na trilha, lista vazia deixou de ser
+   * só "sem histórico": ela esconde o aviso que decide a próxima ação do
+   * ouvidor, e o Dossiê do caso devolvido fica igual ao de um caso nunca
+   * despachado. Sem esta marca, ele despacharia às cegas para a mesma área que
+   * devolveu.
    */
   const carregarMovimentos = useCallback(async () => {
     if (!manifestacaoId || !token) return;
@@ -313,20 +331,24 @@ export function Dossie({ protocolo, token }: DossieProps) {
       if (!res.ok) {
         setMovimentos([]);
         setDegradadoDaTrilha(null);
+        setTrilhaIlegivel(true);
         return;
       }
       const corpo = await res.json();
       setMovimentos(corpo.movimentos ?? []);
       setDegradadoDaTrilha(corpo.degradado ?? null);
+      setTrilhaIlegivel(false);
     } catch {
       setMovimentos([]);
       setDegradadoDaTrilha(null);
+      setTrilhaIlegivel(true);
     }
   }, [manifestacaoId, token]);
 
   useEffect(() => {
     setMovimentos([]);
     setDegradadoDaTrilha(null);
+    setTrilhaIlegivel(false);
     carregarMovimentos();
   }, [carregarMovimentos]);
 
@@ -763,6 +785,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
 
   const origem = dossie ? descreverOrigem(dossie) : null;
   const naturezaInformada = dossie ? descreverNaturezaInformada(dossie) : null;
+  // A Devolução à Ouvidoria (issue #601). Vem da TRILHA, e não de coluna
+  // nenhuma: o motivo que a área escreveu vive no movimento, onde a Retenção já
+  // o alcança. Nulo no caso que ninguém devolveu, e é o mesmo nulo que decide o
+  // nome do botão do despacho.
+  const devolucao = dossie ? devolucaoAOuvidoria(movimentos, dossie.status) : null;
   // Sem o calendário confirmado, nenhum número em dias úteis deste caso vale, e
   // ele sai da tela em vez de sair errado (issue #449, a mesma régua do
   // painel). `null` é a resposta que nem declarou o `degradado`: não saber não
@@ -800,7 +827,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 transition-colors"
               >
                 <Send className="w-3.5 h-3.5" />
-                Validar e acionar
+                {/* A porta é a mesma, o ato é outro (issue #601): o caso
+                    devolvido já foi validado uma vez, e "Validar e acionar"
+                    faria o ouvidor procurar um botão de encaminhar que não
+                    existe. */}
+                {devolucao ? "Encaminhar para outra área" : "Validar e acionar"}
               </button>
             )}
             {podeEncerrar(dossie.status) && (
@@ -819,6 +850,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
       <ValidarModal
         manifestacao={validando ? dossie : null}
         token={token}
+        devolvidaPelaArea={devolucao?.setor ?? null}
         onClose={() => setValidando(false)}
         onAcionada={recarregarCaso}
       />
@@ -858,6 +890,67 @@ export function Dossie({ protocolo, token }: DossieProps) {
               <span>
                 Cadastro incompleto: o caso chegou resumido e precisa ser completado na
                 validação.
+              </span>
+            </div>
+          )}
+
+          {/* A Devolução à Ouvidoria (issue #601, ADR 0048). Fica no topo dos
+              blocos porque é o que o ouvidor tem a FAZER agora: o caso voltou
+              para a fila dele esperando um despacho novo, e o motivo é o que
+              decide para onde. A contagem só aparece a partir da segunda volta,
+              que é quando ela informa alguma coisa (o pingue-pongue). */}
+          {devolucao && (
+            <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              <Undo2 className="w-4 h-4 shrink-0 mt-0.5" />
+              {/* `min-w-0` porque este é o filho do flex: sem ele a coluna se
+                  recusa a encolher abaixo do conteúdo, e a quebra de palavra lá
+                  dentro não adianta nada. Mesmo remédio que a linha da resposta
+                  corrente já usa neste arquivo. */}
+              <div className="min-w-0">
+                <h3 className="font-medium">
+                  {`Devolvido pela área ${devolucao.setor}`}
+                  {devolucao.vezes > 1 && (
+                    <span className="font-normal">{` (devolvido ${devolucao.vezes} vezes)`}</span>
+                  )}
+                </h3>
+                {/* O motivo é texto livre de quem tem o link do setor, com
+                    teto de 10.000 caracteres e quebras de linha à vontade
+                    (`ouvidoria_devolucao_a_ouvidoria.MAXIMO_DE_CARACTERES`).
+                    Solto, ele empurraria o resto do Dossiê para muito abaixo
+                    da dobra, e este bloco abre a página. A altura é limitada e
+                    o texto rola por dentro: nada é escondido, e nada empurra.
+                    `break-words` é o mesmo cuidado na outra direção: o
+                    `whitespace-pre-wrap` quebra em espaço, e a peneira do
+                    servidor não insere nenhum, então 10.000 caracteres colados
+                    poriam barra horizontal na página. `tabIndex` porque área
+                    rolável precisa ser alcançável por teclado, senão quem não
+                    usa mouse não chega ao fim do texto. */}
+                <div
+                  role="region"
+                  aria-label="Motivo da devolução"
+                  tabIndex={0}
+                  className="block mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words"
+                >
+                  {devolucao.motivo}
+                </div>
+                <span className="block text-xs mt-1 opacity-80">
+                  {devolucao.autor} em {formatarDataHora(devolucao.ocorrido_em)}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* A trilha carrega a devolução, então trilha ilegível é informação
+              FALTANDO na decisão de despachar, e não silêncio (issue #601). O
+              aviso só aparece onde a decisão acontece: no caso que espera o
+              ouvidor. Nos outros estados a trilha continua sendo histórico, e
+              a linha do tempo ausente já se explica sozinha. */}
+          {trilhaIlegivel && podeValidar(dossie.status) && (
+            <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                Não foi possível ler a trilha deste caso agora. Se alguma área o devolveu, o aviso da
+                devolução não aparece nesta tela: recarregue a página antes de despachar.
               </span>
             </div>
           )}
