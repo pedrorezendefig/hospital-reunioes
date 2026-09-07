@@ -1152,7 +1152,15 @@ export function Dossie({ protocolo, token }: DossieProps) {
           {/* Classificação e sigilo (issue #372). É a única porta que sobe e
               desce o sigilo fora da validação: o caso que chegou pelo canal
               aberto ou pela Ana nasce sem tipo, logo sigiloso, e é aqui que ele
-              volta ao painel de todos. */}
+              volta ao painel de todos.
+
+              Fora do caso apagado (issue #593): o campo "Rótulo do caso" grava
+              texto livre em `categoria`, que a Retenção preserva de propósito, e
+              o caso carimbado já saiu da varredura dela. Escrever ali seria
+              reintroduzir dado pessoal permanente pela própria tela que anuncia
+              o apagamento. Quem recusa é o servidor; aqui a tela só deixa de
+              oferecer o caminho. */}
+          {!apagado && (
           <div className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
               Classificação e sigilo
@@ -1202,6 +1210,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
             </button>
             {avisoClassificacao && <p className="text-xs text-slate-500">{avisoClassificacao}</p>}
           </div>
+          )}
 
           {/* O caso apagado (issue #593). O aviso ocupa o lugar do resumo e do
               relato, e não se soma a eles: o Dossiê do caso apagado é o aviso,
@@ -1286,7 +1295,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
             </div>
           )}
 
-          {prorrogacoes.map((pedido) => (
+          {/* A justificativa do pedido é texto livre sobre o caso, e a Retenção
+              não a zera: ela troca o conteúdo pelo marcador interno da
+              anonimização (migration 073). Sem esta porta, o caso apagado
+              mostraria o aviso e, logo abaixo, esse marcador. */}
+          {!apagado && prorrogacoes.map((pedido) => (
             <div key={pedido.id}>
               <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
                 <CalendarClock className="w-3.5 h-3.5" />

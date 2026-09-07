@@ -1265,3 +1265,68 @@ class TestCasoApagadoNaoReabre:
         assert _reabrir(client).status_code == 201
 
         assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
+
+    def test_a_transicao_generica_nao_e_a_porta_dos_fundos_da_reabertura(self, monkeypatch):
+        """A guarda mora onde a transição acontece, e não numa rota só.
+
+        `POST /transicoes` chama a MESMA RPC `ouvidoria_transicionar` com o
+        mesmo par `encerrado -> aguardando_area` que a reabertura usa, e o par é
+        permitido tanto no motor de estados quanto na RPC do banco. Hoje o que
+        segura esta porta é outra coisa: a rota nunca passa `motivo_reabertura`
+        ao validador, então o par sempre cai num 422 de dado faltando. Isso é
+        acidente de fiação, não guarda: no dia em que a rota passar o motivo (ou
+        o carimbo alcançar caso fora do encerramento, issue #595), a porta abre
+        e o caso apagado sai do encerramento, para nunca mais ser revisitado
+        pela retenção, que só varre `anonimizada_em IS NULL`.
+
+        O que este teste trava é a RECUSA CERTA. Um 422 "exige o motivo" manda o
+        ouvidor escrever a justificativa de um caso que não anda por outro
+        motivo; o 409 diz o que houve. O motivo vai no corpo de propósito, para
+        o teste medir a guarda desta fatia e não a fiação que já existia."""
+        client, sb = self._apagado(monkeypatch)
+
+        resposta = _transicionar(client, estado="aguardando_area", observacao=MOTIVO_DA_REABERTURA)
+
+        assert resposta.status_code == 409, resposta.text
+        assert "apagado" in resposta.json()["detail"].lower()
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "encerrado"
+        assert sb.tabelas["ouvidoria_movimentos"] == []
+
+    def test_a_transicao_de_um_caso_vivo_continua_passando(self, monkeypatch):
+        """O contraste da guarda nova: sem ele, barrar tudo passaria igual."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _acionado(monkeypatch, relogio=relogio)
+
+        assert _transicionar(client, estado="aguardando_manifestante", observacao=MOTIVO_DA_PAUSA).status_code == 200
+
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_manifestante"
+
+    def test_classificar_caso_apagado_e_recusado(self, monkeypatch):
+        """O "Rótulo do caso" grava texto livre em `categoria`, que a retenção
+        preserva de propósito. Sem guarda, esta rota reintroduz dado pessoal
+        permanente num caso que a tela anuncia como apagado."""
+        client, sb = self._apagado(monkeypatch)
+        categoria_antes = sb.tabelas["ouvidoria_protocolos"][0]["categoria"]
+
+        resposta = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/classificacao",
+            json={"tipo_manifestacao": "denuncia", "categoria": "Joana da Silva, quarto 302"},
+        )
+
+        assert resposta.status_code == 409, resposta.text
+        assert "apagado" in resposta.json()["detail"].lower()
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["categoria"] == categoria_antes
+        assert caso["tipo_manifestacao"] == "reclamacao"
+
+    def test_classificar_caso_vivo_continua_passando(self, monkeypatch):
+        """O contraste: a porta do sigilo não pode fechar para todo mundo."""
+        client, sb = self._apagado(monkeypatch, anonimizada_em=None)
+
+        resposta = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/classificacao",
+            json={"tipo_manifestacao": "denuncia", "categoria": "Conduta da equipe noturna"},
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert sb.tabelas["ouvidoria_protocolos"][0]["categoria"] == "Conduta da equipe noturna"

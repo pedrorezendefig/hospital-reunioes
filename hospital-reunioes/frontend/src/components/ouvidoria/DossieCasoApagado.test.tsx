@@ -21,7 +21,7 @@
  * prorrogações, respostas, tentativas e a trilha junto do Dossiê.
  */
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TITULO_DO_CASO_APAGADO } from "@/lib/ouvidoria/apagamento";
@@ -35,6 +35,29 @@ const RESUMO = "Paciente relata espera acima de duas horas na recepção.";
 const RELATO = "Cheguei as 8h com minha mãe e só fomos atendidos as 10h30.";
 const RESPOSTA_DA_AREA = "Refizemos a escala do plantão noturno e abrimos mais um guichê.";
 const ANEXO = "foto-da-fila.jpg";
+
+/**
+ * O texto que a Retenção deixa na justificativa da prorrogação. Ela não zera a
+ * coluna (a migration 073 a fez NOT NULL): troca o conteúdo por este marcador
+ * INTERNO, que não é frase para ninguém ler na tela.
+ */
+const MARCADOR_INTERNO = "[anonimizado pela retenção]";
+
+function prorrogacao() {
+  return {
+    id: "prorrogacao-1",
+    justificativa: MARCADOR_INTERNO,
+    dias_uteis_pedidos: 3,
+    prazo_anterior: "2026-08-31T20:00:00+00:00",
+    prazo_novo: "2026-09-03T20:00:00+00:00",
+    status: "aprovada",
+    solicitada_em: "2026-08-28T17:00:00+00:00",
+    solicitante_nome: "Carlos Titular",
+    decidida_em: "2026-08-28T18:00:00+00:00",
+    decidida_por_nome: "Marta Ouvidora",
+    decisao_justificativa: null,
+  };
+}
 
 /** Dois dias atrás: caso encerrado dentro da janela da reincidência. */
 function encerradoAgoraHaPouco(): string {
@@ -104,7 +127,26 @@ function respostaJson(body: unknown) {
   return { ok: true, json: async () => body } as Response;
 }
 
-function montar(caso: Record<string, unknown>, trilha: unknown = { movimentos: [], degradado: [] }) {
+/**
+ * Deixa TODAS as leituras da página assentarem antes de afirmar ausência.
+ *
+ * A página dispara seis requisições, e o aviso de caso apagado vem da primeira
+ * delas. Afirmar "o bloco X não está na tela" logo depois do aviso mediria a
+ * requisição que ainda não voltou, não a porta que se quer provar: o teste
+ * ficaria verde com a porta removida. Uma volta de macrotarefa esvazia as
+ * promessas dos stubs, e o React processa as atualizações dentro do `act`.
+ */
+async function assentar() {
+  await act(async () => {
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  });
+}
+
+function montar(
+  caso: Record<string, unknown>,
+  trilha: unknown = { movimentos: [], degradado: [] },
+  prorrogacoes: unknown[] = []
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -122,7 +164,7 @@ function montar(caso: Record<string, unknown>, trilha: unknown = { movimentos: [
         });
       }
       if (url.endsWith("/notificacoes")) return respostaJson({ notificacoes: [] });
-      if (url.endsWith("/prorrogacoes")) return respostaJson({ prorrogacoes: [] });
+      if (url.endsWith("/prorrogacoes")) return respostaJson({ prorrogacoes });
       if (url.endsWith("/respostas")) return respostaJson({ respostas: [] });
       if (url.endsWith("/tentativas-contato")) return respostaJson({ tentativas: [] });
       if (url.endsWith("/movimentos")) {
@@ -180,6 +222,7 @@ describe("o Dossiê do caso apagado (issue #593)", () => {
       degradado: [],
     });
     await screen.findByRole("note", { name: TITULO_DO_CASO_APAGADO });
+    await assentar();
 
     expect(screen.queryByText("Resumo")).toBeNull();
     expect(screen.queryByText("Relato integral")).toBeNull();
@@ -201,8 +244,55 @@ describe("o Dossiê do caso apagado (issue #593)", () => {
       degradado: [],
     });
     await screen.findByRole("note", { name: TITULO_DO_CASO_APAGADO });
+    await assentar();
 
     expect(screen.queryByRole("button", { name: /Reabrir por reincidência/ })).toBeNull();
+  });
+
+  it("no caso apagado a prorrogação não desenha o marcador interno da anonimização", async () => {
+    // A Retenção não zera `justificativa` (a coluna é NOT NULL desde a
+    // migration 073): ela troca o texto pelo marcador interno. Sem a porta, a
+    // tela mostraria o aviso de caso apagado e, logo abaixo, esse marcador.
+    montar(
+      dossie({ anonimizada_em: APAGADO_EM }),
+      { movimentos: [movimentoDoApagamento()], degradado: [] },
+      [prorrogacao()]
+    );
+    await screen.findByRole("note", { name: TITULO_DO_CASO_APAGADO });
+    await assentar();
+
+    expect(screen.queryByText("Prorrogação de prazo")).toBeNull();
+    expect(screen.queryByText(MARCADOR_INTERNO)).toBeNull();
+  });
+
+  it("o caso vivo continua mostrando a prorrogação", async () => {
+    // O contraste da porta nova: barrar o bloco para todo mundo passaria igual.
+    montar(dossie(), { movimentos: [], degradado: [] }, [prorrogacao()]);
+
+    expect(await screen.findByText("Prorrogação de prazo")).toBeTruthy();
+  });
+
+  it("no caso apagado a tela não oferece a classificação, que grava texto livre", async () => {
+    // O campo "Rótulo do caso" grava em `categoria`, que a Retenção preserva de
+    // propósito, e o caso carimbado já saiu da varredura dela: escrever ali
+    // reintroduziria dado pessoal permanente pela tela que anuncia o
+    // apagamento. Quem recusa de verdade é o servidor.
+    montar(dossie({ anonimizada_em: APAGADO_EM }), {
+      movimentos: [movimentoDoApagamento()],
+      degradado: [],
+    });
+    await screen.findByRole("note", { name: TITULO_DO_CASO_APAGADO });
+    await assentar();
+
+    expect(screen.queryByText("Classificação e sigilo")).toBeNull();
+    expect(screen.queryByPlaceholderText(/Rótulo do caso/)).toBeNull();
+  });
+
+  it("o caso vivo continua oferecendo a classificação", async () => {
+    montar(dossie());
+
+    expect(await screen.findByText("Classificação e sigilo")).toBeTruthy();
+    expect(screen.getByPlaceholderText(/Rótulo do caso/)).toBeTruthy();
   });
 
   it("trilha ilegível não apaga o aviso: só o crédito fica de fora", async () => {
