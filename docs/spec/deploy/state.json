@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-04T12:15:07-03:00",
+  "updated_at": "2026-09-07T15:05:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.109.2",
+  "last_app_version": "0.110.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "e56c7ad",
-      "last_deploy_at": "2026-09-04T12:15:07-03:00",
+      "last_deploy_sha": "80fb433",
+      "last_deploy_at": "2026-09-07T14:57:42-03:00",
       "last_health_check": {
-        "at": "2026-09-04T12:15:07-03:00",
-        "latency_ms": 321,
+        "at": "2026-09-07T15:05:00-03:00",
+        "latency_ms": 231,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 113,
+      "build_duration_seconds": 157,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "e56c7ad",
-      "last_deploy_at": "2026-09-04T12:15:07-03:00",
+      "last_deploy_sha": "80fb433",
+      "last_deploy_at": "2026-09-07T14:59:45-03:00",
       "last_health_check": {
-        "at": "2026-09-04T12:15:07-03:00",
-        "latency_ms": 199,
+        "at": "2026-09-07T15:05:00-03:00",
+        "latency_ms": 131,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 410,
+      "build_duration_seconds": 280,
       "env_count": 5
     },
     {
@@ -152,38 +152,66 @@
     }
   ],
   "migrations": {
-    "total_applied": 87,
-    "last_applied": "097_revoke_rpc_anon_fora_da_ouvidoria.sql",
+    "total_applied": 88,
+    "last_applied": "098_ouvidoria_devolucao_a_ouvidoria.sql",
     "pending_local": [],
-    "nota": "A 097_revoke_rpc_anon_fora_da_ouvidoria.sql (issue #541, v0.109.1) foi aplicada a mao no Studio de producao pelo humano. Conferida em 04/09/2026 com has_function_privilege: as 5 funcoes (generate_participant_id, incrementar/decrementar_acoes_concluidas, confirmar_importacao_atomico, merge_participante_externo) com EXECUTE false para anon e authenticated e true para service_role. A 096_ouvidoria_aviso_encerramento.sql entrou com a v0.106.0 (issue #494, PRD #471, RN-80, RN-81, ADR 0042). Ela acrescenta `encerramento_manifestante` ao CHECK de gatilho de ouvidoria_notificacoes, em BEGIN/COMMIT explicito, e da a ouvidoria_protocolos duas colunas anulaveis: encerramento_avisado_em e encerramento_sem_contato_em. Sem UPDATE, sem RLS a ligar, sem policy tocada. Foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do #545, e a ordem importa mais do que parecia: as colunas novas entram em _CAMPOS_INDICE_TUPLA e _CAMPOS_DOSSIE_TUPLA, entao sem a migration o PostgREST responde 42703 e o painel INTEIRO cai (fila vazia com aviso degradado, Dossie em 404, por-protocolo em 503), nao apenas o registro do aviso. A nota original do PR dizia so 'falha no log' e foi corrigida na revisao. As notas das migrations anteriores continuam valendo."
+    "nota": "A 098_ouvidoria_devolucao_a_ouvidoria.sql (issue #600, PRD #598, ADR 0048, v0.110.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #602, e a ordem importa: sem ela a RPC recusa a transicao com check_violation e o botao de devolver quebra na primeira tentativa. Ela nao cria tabela nem coluna: faz CREATE OR REPLACE da ouvidoria_transicionar acrescentando a aresta aguardando_area -> em_classificacao (a lista precisa carregar TODAS as arestas anteriores, porque o ultimo corpo criado e o que vale) e derruba e recria o CHECK de gatilho de ouvidoria_notificacoes com a lista inteira mais devolvido_a_ouvidoria, dentro de BEGIN/COMMIT. O REVOKE inclui PUBLIC alem de anon e authenticated, como a 095 e a 097: sem PUBLIC, num banco onde a funcao NASCA nesta migration, anon herdaria EXECUTE por PUBLIC mesmo com o revoke nominal. A 097 e as anteriores continuam valendo com as notas ja registradas."
   },
   "gates": [
     {
-      "name": "Onda 3 de 3 desta sessao: issues #549 e #542, as duas fora do codigo da app",
+      "name": "Onda 1 de 2 do PRD #598: issue #600 (fatia G). As #599 e #601 estavam bloqueadas por ela e destravam agora",
       "status": "ok"
     },
     {
-      "name": "CI: #558 verde nos 3 jobs; #557 sem check por desenho (o ci.yml tem **/*.md em paths-ignore e o diff e so CONTEXT.md), com o PR em MERGEABLE e CLEAN, que e o que distingue do sintoma de conflito",
+      "name": "CI do PR #602 verde nos 3 jobs nas duas rodadas (backend, frontend, docker build)",
       "status": "ok"
     },
     {
-      "name": "Revisor independente (ADR 0035): #557 limpo de primeira; #558 precisou de 3 rodadas, uma a mais que o teto da skill, por duas correcoes de duas linhas",
+      "name": "Revisor independente (ADR 0035), 2 lentes por rodada: rodada 1 seguranca LIMPO e codigo MUST-FIX 2; rodada 2 as duas LIMPO",
       "status": "ok"
     },
     {
-      "name": "Sem bump: nenhum dos dois toca codigo da app, entao a versao segue 0.107.2. O merge disparou rebuild pelo webhook mesmo assim, porque o Coolify rebuilda tudo a cada push",
+      "name": "Prova por mutacao: 6 mutantes na entrega mais 8 na rodada de fix, incluindo mutante no proprio detector",
       "status": "ok"
     },
     {
-      "name": "Prova independente do orquestrador na main ja mergeada: o helper novo devolve 192 rotas, 192 com module e 134 com gate require_, e o snapshot --check nao muda um byte do ROTAS.md",
+      "name": "Migration 098 aplicada a mao no Studio de producao pelo humano antes do merge",
       "status": "ok"
     },
     {
-      "name": "Smoke da rota publica do portal com token invalido: 404",
+      "name": "Version match: /api/health devolveu 0.110.0, igual ao APP_VERSION setado no Coolify antes do merge",
+      "status": "ok"
+    },
+    {
+      "name": "Prova de que o codigo novo esta no ar: POST /api/ouvidoria-setor/<token invalido>/devolver responde 404 com 'Link invalido' (logica da rota), enquanto uma rota inexistente no mesmo prefixo responde 404 com 'Not Found'",
+      "status": "ok"
+    },
+    {
+      "name": "Backend e frontend buildaram concorrentes sem OOM (157s e 280s)",
       "status": "ok"
     }
   ],
   "next_actions": [
+    {
+      "kind": "warn",
+      "title": "A peneira de invisiveis so cobre a categoria Cf",
+      "text": "Achado das duas rodadas de review do PR #602. text_sanitizer.sem_invisiveis varre Cf nos dois lados (unicodedata.category no Python, \\p{Cf} no setor.ts), mas U+3164 HANGUL FILLER e U+2800 BRAILLE BLANK nao sao Cf e ainda passam: um motivo feito so deles vira devolucao sem explicacao na trilha imutavel. O buraco e herdado da resposta da area, entao vale para os dois textos livres. Junto vai o efeito colateral inverso: a peneira come o ZWJ, entao emoji composto quebra em partes."
+    },
+    {
+      "kind": "info",
+      "title": "O teto do motivo e medido no cru, entao grava ate o dobro",
+      "text": "Mesmo precedente ja registrado para a resposta da area e para a issue #482: o sanitizador de travessao troca um caractere por ', ', entao 10.000 medidos antes dele podem virar 20.000 gravados. Conhecido e aceito, nao e regressao do #602."
+    },
+    {
+      "kind": "info",
+      "title": "Nenhum teste distingue qual das duas recusas o 422 carrega",
+      "text": "Achado da rodada 2 do revisor de codigo do #602. Motivo vazio e motivo acima do teto respondem 422, e o teste nao prende qual mensagem sai. Trocar as duas por engano passaria verde."
+    },
+    {
+      "kind": "info",
+      "title": "area_estourou_em herdado pode marcar a area certa como atrasada",
+      "text": "Achado do revisor do #602, deixado de proposito para a fatia do reacionamento e ja comentado na issue #601: o caso devolvido leva o carimbo de estouro da area errada, e a area nova pode nascer atrasada."
+    },
     {
       "kind": "warn",
       "title": "O caso ANONIMO nao recebe aviso em dois emails da ouvidoria",
@@ -211,11 +239,6 @@
     },
     {
       "kind": "info",
-      "title": "O teto de 10.000 vale antes do sanitizador",
-      "text": "O sanitizador de travessao pode dobrar o texto, entao o teto efetivo do que fica gravado e 20.000. Igual ao precedente da issue #482; quem promete demais e o docstring."
-    },
-    {
-      "kind": "info",
       "title": "O anexo saiu da lista da RN-59 e nao esta documentado",
       "text": "Achado da rodada 2 do revisor do #556. Tirar o anexo da enumeracao fechou a contagem em dez, mas ele continua na tela entre o elemento 8 e o 9, e agora nao tem nota em lugar nenhum. O projeto ja usa a convencao da nota em page.tsx:287."
     },
@@ -227,8 +250,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "e56c7ad",
+    "sha": "80fb433",
     "result": "healthy",
-    "duration_seconds": 900
+    "duration_seconds": 660
   }
 }

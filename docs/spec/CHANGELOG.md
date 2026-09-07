@@ -7,6 +7,23 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.110.0 - 2026-09-07 15:05 - A area devolve pelo link do portal o caso que nao e dela, e o caso volta para a fila de classificacao
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `80fb433`
+- Servicos: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.110.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200), backend 157s e frontend 280s, concorrentes e sem OOM
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/80fb433
+- Issues: [#600](https://github.com/pedrorezendefig/hospital-reunioes/issues/600) (PRD [#598](https://github.com/pedrorezendefig/hospital-reunioes/issues/598), ADR 0048) · PR [#602](https://github.com/pedrorezendefig/hospital-reunioes/pull/602)
+- Migration `098_ouvidoria_devolucao_a_ouvidoria.sql`, aplicada a mao no Studio antes do merge · minor, feat
+
+Onda 1 de 2 do PRD #598, fatia G. Ate aqui, a area que recebia um caso que nao era dela nao tinha saida pelo proprio link do email: precisava responder qualquer coisa, ou avisar a Ouvidoria por fora do sistema. A **#600** abre a saida. O link do portal ganha o botao "Devolver a Ouvidoria" com motivo obrigatorio; o caso volta de `aguardando_area` para `em_classificacao`, o relogio da area para e o link de uso unico deixa de valer. Nenhum estado novo: caso devolvido e caso a despachar de novo, entao a fila, o Dossie e a validacao ja sabem lidar com ele. O motivo escrito pela area nao ganha coluna, vive no movimento da trilha, como a 074 estabeleceu para a devolucao por insuficiencia, e por isso a Retencao ja o alcanca.
+
+A migration 098 nao cria tabela nem coluna: faz `CREATE OR REPLACE` da `ouvidoria_transicionar` acrescentando a aresta `aguardando_area -> em_classificacao`, e recria o CHECK de gatilho com `devolvido_a_ouvidoria` ja dentro, para a fatia do aviso (#599) nao precisar de migration so para acrescentar uma palavra a uma lista.
+
+Review em duas rodadas, duas lentes cada (ADR 0035). Seguranca limpa nas duas. Codigo achou dois bloqueantes na primeira: um motivo feito so de caractere invisivel passava como valido, porque `strip` e `trim` nao enxergam a categoria Cf, e o resultado era queimar o link de uso unico e gravar uma devolucao sem explicacao na trilha imutavel; e o teto de 10.000 caracteres deixava o botao cinza sem aviso, contador ou `maxLength`. O fix tirou a peneira `_sem_invisiveis` de dentro de `ouvidoria_respostas` e a promoveu a `text_sanitizer.sem_invisiveis`, uma implementacao so para os dois textos livres, com a mesma defesa na tela; e trouxe `avisoDoTetoDoMotivo` com a frase identica a do servidor, presa dos dois lados por teste, com a regua unificada em `motivoQueVaiNoFio`. Prova por mutacao: 6 mutantes na entrega e 8 na rodada de fix, mais um mutante no proprio detector, que falhou como devia.
+
+Uma nota que sobrevive ao deploy: a peneira cobre a categoria Cf inteira, mas U+3164 e U+2800 nao sao Cf e ainda passam. O buraco e herdado da resposta da area e vale para os dois textos livres.
+
 ## v0.109.2 - 2026-09-04 12:15 - O alerta ao admin tecnico omite o email do manifestante, e o modo AFK ganha o planejador de ondas
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `e56c7ad`

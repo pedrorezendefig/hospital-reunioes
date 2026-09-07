@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-07T15:05:00-03:00",
+      "sha": "80fb433",
+      "app_version": "0.110.0",
+      "subject": "a area devolve pelo link do portal o caso que nao e dela, e o caso volta para a fila de classificacao",
+      "raw_subject": "feat(ouvidoria): a área devolve o caso que não é dela pelo link do portal (#602)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 660,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "098_ouvidoria_devolucao_a_ouvidoria.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 de 2 do PRD #598 (issue #600, fatia G). Review em 2 rodadas: seguranca limpa nas duas, codigo com 2 must-fix na primeira (motivo de largura zero passava porque strip nao enxerga Cf, e o teto de 10.000 nao tinha par na tela). O fix extraiu a peneira de invisiveis para text_sanitizer, uma implementacao para os dois textos livres. Migration 098 aplicada a mao antes do merge."
+    },
+    {
       "at": "2026-09-04T12:15:07-03:00",
       "sha": "e56c7ad",
       "app_version": "0.109.2",
@@ -1389,38 +1420,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Fatia G3 do PRD #318. O code-review independente achou 5 bugs antes do merge, um high: a rota aceitava caso em em_classificacao (o acionamento) e devolver por ali pulava a validacao inteira. Tambem: devolver duas vezes esticava o prazo, contornando o teto da prorrogacao. Os dois "
-    },
-    {
-      "at": "2026-08-25T17:26:53+00:00",
-      "sha": "fe3ca91",
-      "app_version": "0.67.0",
-      "subject": "Ouvidoria: escada de escalonamento e prorrogação de prazo ponta a ponta",
-      "raw_subject": "feat(ouvidoria): prorrogação de prazo ponta a ponta (#363)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1260,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "072_ouvidoria_escalonamento.sql",
-        "073_ouvidoria_prorrogacao.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda do PRD #318: issues #336 (PR #362) e #333 (PR #363). Merge sequencial com commit de integração no #363 (bug de integração achado na rodada 2: aprovar prorrogação precisava zerar os carimbos da escada da #336). Revisor independente do orquestrador, ADR 0035: 4 must-fix achados e corrigidos. Follow-ups #364 #365 #366 #367."
     }
   ]
 }
