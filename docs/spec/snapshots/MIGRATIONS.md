@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-03T18:57-0300 -->
+<!-- last_update: 2026-09-07T15:04-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -22,7 +22,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 14 | `014_add_externo_co_responsavel.sql` | Flag is_externo em participantes + | 0 | 3 | 1 | 0 |
 | 15 | `015_remove_email_triggers.sql` | remove infraestrutura dos triggers de email 4-8 | 0 | 0 | 0 | 2 |
 | 16 | `016_importacao_ata_legada.sql` | Importação de ATAs antigas (migradas do sistema antigo) | 0 | 1 | 2 | 0 |
-| 17 | `017_add_super_admin.sql` | Super admin layer: flag + seed 6 pessoas + cargo Pedro = Engenheiro de IA | 0 | 1 | 1 | 0 |
+| 17 | `017_add_super_admin.sql` | Super admin layer: a coluna, o indice parcial e o cargo do responsavel tecnico. | 0 | 1 | 1 | 0 |
 | 18 | `018_create_audit_log.sql` | Audit log de acoes destrutivas / administrativas | 1 | 0 | 4 | 0 |
 | 19 | `019_create_bulk_jobs.sql` | Bulk jobs: tracking de acoes em massa administrativas executadas em background. | 1 | 0 | 3 | 0 |
 | 20 | `020_historico_importacao.sql` | Histórico de importação de ATAs migradas | 0 | 1 | 1 | 0 |
@@ -99,6 +99,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 95 | `095_ouvidoria_revoke_rpc_anon.sql` | fechar de verdade o EXECUTE das RPCs da Ouvidoria | 0 | 0 | 0 | 0 |
 | 96 | `096_ouvidoria_aviso_encerramento.sql` | aviso de encerramento ao manifestante (issue #494, ADR 0042) | 0 | 1 | 0 | 0 |
 | 97 | `097_revoke_rpc_anon_fora_da_ouvidoria.sql` | fechar o EXECUTE das cinco RPCs de fora da Ouvidoria | 0 | 0 | 0 | 0 |
+| 98 | `098_ouvidoria_devolucao_a_ouvidoria.sql` | Devolucao a Ouvidoria | 0 | 0 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 93 migrations.
+**Total:** 94 migrations.
