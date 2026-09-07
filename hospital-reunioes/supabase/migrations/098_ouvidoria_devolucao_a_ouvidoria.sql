@@ -83,8 +83,14 @@ $$ LANGUAGE plpgsql;
 
 -- `CREATE OR REPLACE` nao mexe nos GRANTs, mas a 095 deixou a regra escrita e
 -- repeti-la e barato: esta RPC e do backend, nunca da anon_key do bundle.
+--
+-- `PUBLIC` na frente, como a 095 e a 097 escrevem, e nao e enfeite: no dia em
+-- que a funcao NASCER nesta migration (banco novo montado so com as recentes,
+-- ou ordem trocada), o Postgres concede EXECUTE a PUBLIC no nascimento, e
+-- `anon` (a chave que vive no bundle do frontend) herda por PUBLIC mesmo com o
+-- revoke nominal logo abaixo.
 REVOKE EXECUTE ON FUNCTION ouvidoria_transicionar(UUID, TEXT, VARCHAR, TEXT, TEXT, TEXT, TEXT)
-  FROM anon, authenticated;
+  FROM PUBLIC, anon, authenticated;
 GRANT EXECUTE ON FUNCTION ouvidoria_transicionar(UUID, TEXT, VARCHAR, TEXT, TEXT, TEXT, TEXT) TO service_role;
 
 -- 2. O gatilho novo no CHECK. CHECK nao tem IF NOT EXISTS: derruba e recria

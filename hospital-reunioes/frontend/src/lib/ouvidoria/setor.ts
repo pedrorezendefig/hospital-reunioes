@@ -386,14 +386,58 @@ export function pedidoDeProrrogacaoValido(
 export const MAXIMO_DO_MOTIVO_DA_DEVOLUCAO = 10_000;
 
 /**
+ * O motivo exatamente como ele vai no corpo do POST.
+ *
+ * Uma função só para o envio, a validação e o contador, para as três medirem
+ * a mesma string: enquanto eram três expressões parecidas, nada impedia uma
+ * delas de medir a caixa e outra o que sai dela, e a divergência só aparecia
+ * como um 422 com o campo cheio.
+ */
+export function motivoQueVaiNoFio(texto: string): string {
+  return texto.trim();
+}
+
+/**
+ * Quantos caracteres este motivo tem PARA O SERVIDOR.
+ *
+ * Ele mede o comprimento do que recebe, em code points
+ * (`ouvidoria_devolucao_a_ouvidoria.motivo_de_recusa`), e o que ele recebe é o
+ * texto aparado. `texto.length` seria contagem UTF-16 e divergiria em emoji.
+ */
+export function tamanhoDoMotivo(texto: string): number {
+  return [...motivoQueVaiNoFio(texto)].length;
+}
+
+/**
  * O motivo precisa existir e caber na trilha.
  *
- * A contagem é em code points, como a do servidor, e sobre o texto COMO ELE
- * SERÁ ENVIADO: o corpo é JSON, então a quebra de linha viaja como um
- * caractere só e não vira CRLF como no multipart da resposta.
+ * "Existir" é ter conteúdo VISÍVEL: o `trim` do JS não come os caracteres de
+ * largura zero (categoria Cf), e um campo cheio deles chega ao ouvidor como
+ * caso devolvido sem explicação. A peneira é a mesma do servidor
+ * (`text_sanitizer.sem_invisiveis`) e a mesma que a resposta da área já usa
+ * aqui do lado, em `tamanhoDaResposta`.
  */
 export function motivoDaDevolucaoValido(texto: string): boolean {
-  return texto.trim().length > 0 && [...texto.trim()].length <= MAXIMO_DO_MOTIVO_DA_DEVOLUCAO;
+  const visivel = motivoQueVaiNoFio(texto).replace(INVISIVEIS, "").trim();
+  return visivel.length > 0 && tamanhoDoMotivo(texto) <= MAXIMO_DO_MOTIVO_DA_DEVOLUCAO;
+}
+
+/**
+ * O que a tela diz sobre o teto do motivo, ou nada quando ainda não há o que
+ * dizer. Irmão de `avisoDoTetoDaResposta`, com a mesma régua de quando
+ * aparecer e a MESMA frase que o servidor devolveria
+ * (`ouvidoria_devolucao_a_ouvidoria.RECUSA_LONGA`): botão cinza e mudo faz o
+ * responsável apagar texto no escuro.
+ */
+export function avisoDoTetoDoMotivo(texto: string): string | null {
+  const tamanho = tamanhoDoMotivo(texto);
+  if (tamanho > MAXIMO_DO_MOTIVO_DA_DEVOLUCAO) {
+    return `O motivo passou de ${MAXIMO_ESCRITO} caracteres. Resuma por que o caso não é da sua área.`;
+  }
+  if (tamanho > MAXIMO_DO_MOTIVO_DA_DEVOLUCAO - MARGEM_DO_AVISO) {
+    return `Restam ${MAXIMO_DO_MOTIVO_DA_DEVOLUCAO - tamanho} caracteres do limite de ${MAXIMO_ESCRITO}.`;
+  }
+  return null;
 }
 
 /** O que o titular lê sobre o pedido que já existe no caso. */

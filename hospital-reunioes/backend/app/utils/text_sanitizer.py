@@ -15,6 +15,7 @@ Regra (deliberadamente estreita, nao generica):
 from __future__ import annotations
 
 import re
+import unicodedata
 
 # Travessao (em dash) e meia-risca (en dash). O hifen comum fica de fora de
 # proposito: a string abaixo contem so os dois sinais longos que devem sumir.
@@ -41,6 +42,21 @@ def sanitizar_travessao(texto):
     texto = _FAIXA_NUMERICA.sub("-", texto)
     texto = _DASH_TEXTO.sub(", ", texto)
     return texto
+
+
+def sem_invisiveis(texto: str) -> str:
+    """Tira os caracteres de formatacao do Unicode (categoria Cf).
+
+    Sao os de largura zero, e o `strip` nao os enxerga: `"​".isspace()` e
+    False. Vinte espacos de largura zero passam por qualquer piso e chegam ao
+    leitor como texto visualmente vazio.
+
+    Mora aqui, e nao no modulo de quem valida, porque todo texto livre que a
+    area escreve por link publico precisa da mesma peneira: a resposta da area
+    (issue #482) e o motivo da devolucao a Ouvidoria (issue #600). Duas copias
+    divergiriam no dia em que uma delas aprendesse um caractere novo.
+    """
+    return "".join(c for c in texto if unicodedata.category(c) != "Cf")
 
 
 def sanitizar_estrutura(obj):

@@ -14,7 +14,7 @@ para o ouvidor saber para onde mandar.
 
 from __future__ import annotations
 
-from app.utils.text_sanitizer import sanitizar_travessao
+from app.utils.text_sanitizer import sanitizar_travessao, sem_invisiveis
 
 # O rótulo que abre a observação do movimento, e o que a fatia do Dossiê vai
 # reconhecer para separar esta volta de qualquer outra transição para
@@ -40,9 +40,11 @@ def texto_do_motivo(texto: str) -> str:
     """O motivo como ele fica gravado na trilha.
 
     Uma normalização só, usada pela validação e pela escrita, para o que foi
-    medido ser exatamente o que fica gravado: sem travessão (ADR 0013, mesmo
-    tratamento da resposta da área) e aparado."""
-    return sanitizar_travessao(texto).strip()
+    medido ser exatamente o que fica gravado: sem invisível, sem travessão
+    (ADR 0013) e aparado, na MESMA ordem e pela MESMA peneira da resposta da
+    área. O invisível vem primeiro porque o `strip` não o enxerga, e um deles
+    na ponta impediria o aparo de chegar ao espaço."""
+    return sanitizar_travessao(sem_invisiveis(texto)).strip()
 
 
 def motivo_de_recusa(texto: str) -> str | None:

@@ -37,6 +37,7 @@ import {
 import { Logo } from "@/components/ui/Logo";
 import {
   avisoDoTetoDaResposta,
+  avisoDoTetoDoMotivo,
   blocosDoCaso,
   cartaoDeProrrogacaoTemConteudo,
   classeDoBloco,
@@ -45,7 +46,10 @@ import {
   MINIMO_DA_RESPOSTA,
   montarFormularioDeResposta,
   motivoDaDevolucaoValido,
+  motivoQueVaiNoFio,
   pedidoDeProrrogacaoValido,
+  tamanhoDoMotivo,
+  MAXIMO_DO_MOTIVO_DA_DEVOLUCAO,
   respostaDoSetorValida,
   fraseDePrazoDoPortal,
   situacaoDoPedido,
@@ -118,8 +122,10 @@ export default function PortalDoSetorPage() {
   const [devolvido, setDevolvido] = useState(false);
 
   // O que a tela diz sobre o teto agora: nada na resposta de tamanho normal
-  // (issue #512).
+  // (issue #512). O motivo da devolução tem o irmão, pelo mesmo motivo: botão
+  // travado sem explicação faz apagar texto no escuro (issue #600).
   const avisoDoTeto = avisoDoTetoDaResposta(resposta);
+  const avisoDoTetoDaDevolucao = avisoDoTetoDoMotivo(motivoDaDevolucao);
 
   const carregar = useCallback(async () => {
     setLoading(true);
@@ -221,7 +227,7 @@ export default function PortalDoSetorPage() {
       const res = await fetch(`/api/ouvidoria-setor/${encodeURIComponent(token)}/devolver`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ motivo: motivoDaDevolucao.trim() }),
+        body: JSON.stringify({ motivo: motivoQueVaiNoFio(motivoDaDevolucao) }),
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
@@ -731,8 +737,29 @@ export default function PortalDoSetorPage() {
                     rows={4}
                     required
                     placeholder="Ex.: agendamento de especialidade é do Centro Médico, a recepção não tem acesso à agenda."
+                    // Mesmo padrão do campo da resposta: quem usa leitor de
+                    // tela precisa ouvir por que o botão travou, e o contador é
+                    // a única explicação que existe.
+                    aria-describedby={avisoDoTetoDaDevolucao ? "aviso-do-teto-do-motivo" : undefined}
                     className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y"
                   />
+                  {/* O teto só aparece quando está perto de importar. Nada de
+                      `maxLength` no campo: ele conta unidades UTF-16 e o
+                      servidor conta code points, então o corte cairia no lugar
+                      errado e ainda comeria texto já digitado sem avisar. */}
+                  {avisoDoTetoDaDevolucao && (
+                    <p
+                      id="aviso-do-teto-do-motivo"
+                      data-testid="aviso-do-teto-do-motivo"
+                      className={`text-xs ${
+                        tamanhoDoMotivo(motivoDaDevolucao) > MAXIMO_DO_MOTIVO_DA_DEVOLUCAO
+                          ? "text-red-600 font-semibold"
+                          : "text-slate-500"
+                      }`}
+                    >
+                      {avisoDoTetoDaDevolucao}
+                    </p>
+                  )}
                   <p className="text-xs text-slate-400 leading-relaxed">
                     A Ouvidoria recebe o caso de volta e encaminha para a área certa. Este link deixa de
                     valer.

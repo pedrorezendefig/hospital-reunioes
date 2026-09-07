@@ -513,6 +513,66 @@ describe("a Devolução à Ouvidoria (issue #600)", () => {
     expect(chamadas.some((c) => c.url.endsWith("/devolver"))).toBe(false);
   });
 
+  it("motivo só de caracteres invisíveis não é enviado", async () => {
+    // O `trim` do JS não come U+200B, então o campo "cheio" de largura zero
+    // habilitava o botão e o servidor recusava com 422 (ou pior, antes da
+    // peneira: aceitava, queimava o link e gravava um motivo ilegível na
+    // trilha imutável). As duas pontas usam a mesma peneira de invisíveis.
+    const chamadas = comDevolucao({ ok: true, corpo: { protocolo: "2026-0007" } });
+    await abrirTela();
+    fireEvent.click(screen.getByTestId("abrir-devolucao"));
+
+    fireEvent.change(screen.getByLabelText(/por que este caso não é da sua área/i), {
+      target: { value: "​​​" },
+    });
+
+    const botao = screen.getByRole("button", { name: /devolver à ouvidoria/i }) as HTMLButtonElement;
+    expect(botao.disabled).toBe(true);
+    expect(chamadas.some((c) => c.url.endsWith("/devolver"))).toBe(false);
+  });
+
+  it("acima do teto o botão explica por que travou, com a frase do servidor", async () => {
+    // O par simétrico do aviso da resposta da área (issue #512): botão cinza e
+    // mudo faz o responsável apagar texto no escuro ou desistir.
+    comDevolucao({ ok: true, corpo: { protocolo: "2026-0007" } });
+    await abrirTela();
+    fireEvent.click(screen.getByTestId("abrir-devolucao"));
+    const campo = screen.getByLabelText(/por que este caso não é da sua área/i);
+    const botao = screen.getByRole("button", { name: /devolver à ouvidoria/i }) as HTMLButtonElement;
+
+    // Motivo de tamanho normal não ganha contador: a tela já é longa.
+    fireEvent.change(campo, { target: { value: "É do Centro Médico." } });
+    expect(screen.queryByTestId("aviso-do-teto-do-motivo")).toBeNull();
+
+    fireEvent.change(campo, { target: { value: "a".repeat(10_001) } });
+    await waitFor(() => expect(botao.disabled).toBe(true));
+    expect(screen.getByTestId("aviso-do-teto-do-motivo").textContent ?? "").toBe(
+      "O motivo passou de 10.000 caracteres. Resuma por que o caso não é da sua área."
+    );
+    expect(campo.getAttribute("aria-describedby")).toBe("aviso-do-teto-do-motivo");
+  });
+
+  it("a tela mede exatamente o texto que vai no fio, não o que está na caixa", async () => {
+    // A régua do servidor é o comprimento do que ele recebe. A tela envia o
+    // motivo aparado, então é o aparado que ela tem que medir: medir a caixa
+    // travaria o botão de um envio que o servidor aceita, e medir menos do que
+    // vai no fio liberaria um envio que volta 422. Este texto cai no vão entre
+    // as duas réguas: 10.000 caracteres com espaços em volta.
+    const chamadas = comDevolucao({ ok: true, corpo: { protocolo: "2026-0007" } });
+    await abrirTela();
+    fireEvent.click(screen.getByTestId("abrir-devolucao"));
+    const campo = screen.getByLabelText(/por que este caso não é da sua área/i);
+    const botao = screen.getByRole("button", { name: /devolver à ouvidoria/i }) as HTMLButtonElement;
+
+    fireEvent.change(campo, { target: { value: `   ${"a".repeat(10_000)}   ` } });
+
+    await waitFor(() => expect(botao.disabled).toBe(false));
+    fireEvent.click(botao);
+    await waitFor(() => expect(screen.queryByTestId("devolucao-confirmada")).toBeTruthy());
+    const enviado = JSON.parse(String(chamadas.find((c) => c.url.endsWith("/devolver"))?.init?.body)).motivo;
+    expect([...enviado].length).toBe(10_000);
+  });
+
   it("com motivo, devolve e mostra a confirmação de que não há mais nada a fazer", async () => {
     const chamadas = comDevolucao({ ok: true, corpo: { protocolo: "2026-0007" } });
     await abrirTela();

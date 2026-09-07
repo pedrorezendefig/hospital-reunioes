@@ -22,7 +22,12 @@ from postgrest.exceptions import APIError
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.limiter import limiter  # noqa: E402
-from app.services import ouvidoria_estados, ouvidoria_notificacoes  # noqa: E402
+from app.routers import ouvidoria_setor as ouvidoria_setor_router  # noqa: E402
+from app.services import (  # noqa: E402
+    ouvidoria_devolucao_a_ouvidoria,
+    ouvidoria_estados,
+    ouvidoria_notificacoes,
+)
 from app.services.ouvidoria_prorrogacao import CARIMBOS_DEPENDENTES_DO_PRAZO  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -192,6 +197,21 @@ class TestDevolverPeloLinkDoEmail:
         assert movimento["autor_nome"] == "Carlos Titular"
         assert movimento["autor_id"] is None
 
+    def test_a_devolucao_deixa_registro_de_acesso_com_o_nome_do_ato(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Todo acesso ao caso deixa registro (LGPD, ADR 0034), e o ato precisa
+        ser distinguível dos irmãos. O `_registrar_acesso` engole toda exceção,
+        então sem este teste uma troca de string ali sumiria sem barulho."""
+        client, sb, token = _portal_com_caso_na_area(monkeypatch, _nunca_envia_email_de_verdade)
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/devolver", json={"motivo": MOTIVO})
+
+        assert resposta.status_code == 200, resposta.text
+        acessos = sb.tabelas["ouvidoria_acessos"]
+        registro = next(a for a in acessos if a["acao"] == "portal_setor_devolver")
+        assert registro["manifestacao_id"] == "uuid-7"
+        assert registro["ator_id"] is None, "o responsável do setor não tem login"
+        assert registro["ator_nome"] == "Carlos Titular (portal do setor)"
+
     def test_o_compromisso_com_o_manifestante_nao_e_tocado(self, monkeypatch, _nunca_envia_email_de_verdade):
         """Critério: `prazo_conclusivo_em` fica intocado. Ele é o T0 até T3, o
         que foi prometido a quem reclamou, e não depende de qual área está com
@@ -227,12 +247,26 @@ class TestAMigration:
     def test_o_gatilho_do_aviso_entra_no_check_vigente(self):
         """Critério: o gatilho entra agora para a fatia do aviso não precisar
         de outra migration. O CHECK é recriado inteiro, então a lista precisa
-        carregar também os gatilhos que já existem."""
-        assert _migration_vigente_do_check_de_gatilhos() == MIGRATION
-        ddl = _ddl()
-        assert "'devolvido_a_ouvidoria'" in ddl
+        carregar também os gatilhos que já existem.
+
+        A lista completa é cobrada na migration VIGENTE, não na 098: fixar o
+        número aqui seria a mesma trava que este PR tirou do teste do aviso de
+        encerramento, e a próxima fatia que mexer no CHECK derrubaria isto sem
+        ter quebrado nada. O que é da 098 é o gatilho que ela criou, e esse sim
+        é cobrado nela."""
+        ddl_vigente = _ddl(_migration_vigente_do_check_de_gatilhos())
         for gatilho in ouvidoria_notificacoes.GATILHOS:
-            assert f"'{gatilho}'" in ddl, f"O CHECK vigente não cobre o gatilho {gatilho}"
+            assert f"'{gatilho}'" in ddl_vigente, f"O CHECK vigente não cobre o gatilho {gatilho}"
+        assert "'devolvido_a_ouvidoria'" in ddl_vigente
+        assert "'devolvido_a_ouvidoria'" in _ddl(), "a migration desta fatia deixou de trazer o gatilho que ela criou"
+
+    def test_a_rpc_nao_fica_ao_alcance_da_chave_do_bundle(self):
+        """O `PUBLIC` no REVOKE não é enfeite: no banco em que a função nascer
+        nesta migration, o Postgres concede EXECUTE a PUBLIC no nascimento, e
+        `anon` (a chave do bundle do frontend) herda por ali mesmo com o revoke
+        nominal. Mesma forma da 095 e da 097."""
+        revoke = next(linha for linha in _ddl().splitlines() if linha.startswith("  FROM "))
+        assert revoke.strip() == "FROM PUBLIC, anon, authenticated;"
 
     def test_a_troca_do_check_vai_numa_transacao(self):
         """Roda à mão em produção: a tabela não pode ficar sem constraint se a
@@ -252,7 +286,21 @@ class TestAMigration:
 class TestOMotivoEObrigatorio:
     """Nenhum caso volta ao ouvidor sem explicação (PRD #598, história 4)."""
 
-    @pytest.mark.parametrize("motivo", ["", "   ", "\n\t "], ids=["vazio", "so-espaco", "so-branco"])
+    @pytest.mark.parametrize(
+        "motivo",
+        [
+            "",
+            "   ",
+            "\n\t ",
+            # Os de largura zero, que o `strip` NÃO enxerga: `"​".isspace()`
+            # é False. Sem a peneira de invisíveis, este corpo devolvia 200,
+            # queimava o link de uso único e gravava na trilha imutável um
+            # motivo que o ouvidor não consegue ler nem pedir de novo.
+            "​​​",
+            "﻿ ‍",
+        ],
+        ids=["vazio", "so-espaco", "so-branco", "largura-zero", "invisivel-com-espaco"],
+    )
     def test_motivo_em_branco_e_recusado_e_o_link_continua_valendo(
         self, monkeypatch, _nunca_envia_email_de_verdade, motivo
     ):
@@ -277,6 +325,16 @@ class TestOMotivoEObrigatorio:
 
         assert passou.status_code == 422, passou.text
         assert _caso_no_banco(sb)["status"] == "aguardando_area"
+
+    def test_a_recusa_do_teto_e_a_frase_que_a_tela_repete(self):
+        """A tela espelha esta frase (`avisoDoTetoDoMotivo` em `setor.ts`) para
+        não ensinar uma saída diferente da que o servidor ensinaria. As duas
+        pontas são presas aqui: trocar o texto de um lado só derruba este teste
+        ou o irmão do vitest, nunca passa em silêncio."""
+        assert ouvidoria_devolucao_a_ouvidoria.RECUSA_LONGA == (
+            "O motivo passou de 10.000 caracteres. Resuma por que o caso não é da sua área."
+        )
+        assert ouvidoria_devolucao_a_ouvidoria.MAXIMO_DE_CARACTERES == 10_000
 
     def test_travessao_do_motivo_e_sanitizado_antes_de_entrar_na_trilha(
         self, monkeypatch, _nunca_envia_email_de_verdade
@@ -353,6 +411,38 @@ class TestFalhaEntreOClaimEATransicao:
         de_novo = client.post(f"/api/ouvidoria-setor/{token}/devolver", json={"motivo": MOTIVO})
         assert de_novo.status_code == 200, de_novo.text
         assert _caso_no_banco(sb)["status"] == "em_classificacao"
+
+    def test_caso_que_sai_da_area_entre_a_leitura_e_o_update_nao_perde_o_vencimento(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """A janela entre `_carregar_caso` (que leu `aguardando_area`) e o
+        update que para o relógio são duas idas ao PostgREST. Se a Ouvidoria
+        pausar o caso no meio, zerar o prazo às cegas o deixaria sem vencimento
+        para sempre: a restauração depois filtra por `aguardando_area` e não
+        casa, e os dois jobs de prazo filtram por `.lte("prazo_area_em", ...)`,
+        que descarta NULL. O caso sairia da cobrança e do escalonamento em
+        silêncio. Mesma prova do `_restaurar_prazo`, três linhas acima."""
+        client, sb, token = _portal_com_caso_na_area(monkeypatch, _nunca_envia_email_de_verdade)
+        prazo = _caso_no_banco(sb)["prazo_area_em"]
+        consumir_de_verdade = ouvidoria_setor_router.ouvidoria_setor_tokens.consumir
+
+        def _pausa_no_meio(supabase, vinculo, agora):
+            claim = consumir_de_verdade(supabase, vinculo, agora)
+            # A Ouvidoria pausou o caso agora mesmo, por outra requisição.
+            _caso_no_banco(sb)["status"] = "aguardando_manifestante"
+            return claim
+
+        monkeypatch.setattr(ouvidoria_setor_router.ouvidoria_setor_tokens, "consumir", _pausa_no_meio)
+        # E o banco recusa a transição, como recusaria de verdade: o grafo não
+        # tem `aguardando_manifestante -> em_classificacao`.
+        sb.rpc_recusa = APIError({"message": "Transicao invalida", "code": "23514"})
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/devolver", json={"motivo": MOTIVO})
+
+        assert resposta.status_code == 409, resposta.text
+        depois = _caso_no_banco(sb)
+        assert depois["status"] == "aguardando_manifestante"
+        assert depois["prazo_area_em"] == prazo, "o caso pausado perdeu o vencimento e sumiu da cobrança"
 
     def test_timeout_depois_da_transicao_nao_reabre_o_link_nem_o_prazo(
         self, monkeypatch, _nunca_envia_email_de_verdade

@@ -502,12 +502,22 @@ async def devolver_a_ouvidoria(
     # prazo saem junto: sem eles, o caso reacionado depois ficaria fora da
     # véspera, da cobrança e da escada para sempre (issue #373). O prazo
     # anterior fica guardado porque é ele que volta se a transição não entrar.
+    #
+    # O filtro por `aguardando_area` é o mesmo do `_restaurar_prazo`, e pelo
+    # mesmo motivo: entre a leitura do caso e esta escrita há duas idas ao
+    # PostgREST, e a Ouvidoria pode ter pausado ou movido o caso no meio.
+    # Zerar às cegas tiraria o vencimento de um caso que já não é da área, a
+    # restauração depois não casaria linha (ela filtra pelo mesmo estado) e o
+    # caso voltaria para a fila com `prazo_area_em` NULL. A cobrança e o
+    # escalonamento filtram por `.lte("prazo_area_em", ...)`, que descarta
+    # NULL: o caso sairia das duas em silêncio.
     prazo_anterior = caso.get("prazo_area_em")
     try:
         (
             supabase.table("ouvidoria_protocolos")
             .update({"prazo_area_em": None} | ouvidoria_prorrogacao.carimbos_a_zerar())
             .eq("id", vinculo["manifestacao_id"])
+            .eq("status", "aguardando_area")
             .execute()
         )
     except FALHAS_DO_POSTGREST as exc:

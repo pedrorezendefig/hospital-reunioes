@@ -15,9 +15,8 @@ sai do movimento: quem escreve chama `observacao_da_resposta`, quem lê chama
 from __future__ import annotations
 
 import logging
-import unicodedata
 
-from app.utils.text_sanitizer import sanitizar_travessao
+from app.utils.text_sanitizer import sanitizar_travessao, sem_invisiveis
 
 logger = logging.getLogger(__name__)
 
@@ -63,22 +62,13 @@ RECUSA_LONGA = (
 )
 
 
-def _sem_invisiveis(texto: str) -> str:
-    """Tira os caracteres de formatação (categoria Cf do Unicode).
-
-    São os de largura zero, e o `strip` não os enxerga: vinte espaços de
-    largura zero passariam no piso e chegariam ao ouvidor como resposta
-    visualmente vazia."""
-    return "".join(c for c in texto if unicodedata.category(c) != "Cf")
-
-
 def texto_da_resposta(texto: str) -> str:
     """O texto que vai para o Dossiê e para a trilha.
 
     Uma normalização só, usada pela validação e pela escrita, para o que foi
     medido ser exatamente o que fica gravado: sem invisível, sem travessão
     (mesmo tratamento da justificativa da prorrogação) e aparado."""
-    return sanitizar_travessao(_sem_invisiveis(texto)).strip()
+    return sanitizar_travessao(sem_invisiveis(texto)).strip()
 
 
 def motivo_de_recusa(texto: str) -> str | None:
