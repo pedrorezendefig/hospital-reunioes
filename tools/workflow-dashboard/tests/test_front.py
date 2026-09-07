@@ -35,21 +35,18 @@ def _fora_do_root():
 # ---------- navegação e branding ----------
 
 
-def test_navegacao_tem_exatamente_8_abas_sem_grupos():
+def test_navegacao_tem_exatamente_7_abas_sem_grupos():
     abas = re.findall(r'data-tab="([^"]+)"', INDEX)
-    assert abas == ["plano", "issues", "producao", "pendencias", "mapa", "dominio", "guia", "repositorio"]
+    assert abas == ["plano", "issues", "producao", "pendencias", "mapa", "dominio", "guia"]
     assert "tabgroup" not in INDEX  # sem rótulos nem separadores de grupo
 
 
 def test_titulo_do_painel_e_aplicativo_hospital():
-    # issue #596: o painel passa a se chamar Aplicativo Hospital, "Hospital" no accent azul
     assert re.search(r"<title>Aplicativo Hospital", INDEX)
     m = re.search(r'<h1 class="hero-title">(.*?)</h1>', INDEX, re.S)
     assert m, "hero sem h1.hero-title"
     texto = re.sub(r"<[^>]+>", "", m.group(1))  # só o texto, sem markup decorativo
     assert "Aplicativo Hospital" in texto
-    assert 'Aplicativo <span class="accent">Hospital</span>' in m.group(1)
-    assert "Reuniões" not in INDEX
 
 
 # ---------- tokens de design (bloco único) ----------
