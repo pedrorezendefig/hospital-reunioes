@@ -44,6 +44,7 @@ import {
   mensagemDoPortal,
   MINIMO_DA_RESPOSTA,
   montarFormularioDeResposta,
+  motivoDaDevolucaoValido,
   pedidoDeProrrogacaoValido,
   respostaDoSetorValida,
   fraseDePrazoDoPortal,
@@ -66,6 +67,21 @@ const ORIENTACAO_DA_RESPOSTA =
 const EXEMPLO_DA_RESPOSTA =
   "Ex.: Conversamos com a equipe da recepção em 02/09 e passamos a abrir o segundo guichê " +
   "às 7h. A coordenadora Ana Paula acompanha a fila diariamente.";
+
+/**
+ * A Devolução à Ouvidoria (issue #600, ADR 0048). O rótulo é uma pergunta e
+ * não um comando: quem clica ainda não decidiu nada, só reconheceu a própria
+ * dúvida. A orientação diz que apontar a área certa ajuda sem obrigar, porque
+ * quem escolhe o destino é o ouvidor (decisão 3).
+ */
+const CHAMADA_DA_DEVOLUCAO = "Este caso não é do meu setor?";
+
+const ORIENTACAO_DA_DEVOLUCAO =
+  "Diga por que este caso não é da sua área. Se souber de quem é, escreva também.";
+
+const CONFIRMACAO_DA_DEVOLUCAO =
+  "Caso devolvido à Ouvidoria. O ouvidor vai encaminhar para a área certa. " +
+  "Você não precisa fazer mais nada.";
 
 export default function PortalDoSetorPage() {
   const params = useParams();
@@ -93,6 +109,13 @@ export default function PortalDoSetorPage() {
   const [diasPedidos, setDiasPedidos] = useState(5);
   const [enviandoPedido, setEnviandoPedido] = useState(false);
   const [erroDoPedido, setErroDoPedido] = useState<string | null>(null);
+  // Devolução à Ouvidoria (issue #600): mesmo desenho do pedido de prazo, o
+  // campo só aparece quando o responsável decide devolver.
+  const [devolvendo, setDevolvendo] = useState(false);
+  const [motivoDaDevolucao, setMotivoDaDevolucao] = useState("");
+  const [enviandoDevolucao, setEnviandoDevolucao] = useState(false);
+  const [erroDaDevolucao, setErroDaDevolucao] = useState<string | null>(null);
+  const [devolvido, setDevolvido] = useState(false);
 
   // O que a tela diz sobre o teto agora: nada na resposta de tamanho normal
   // (issue #512).
@@ -184,6 +207,35 @@ export default function PortalDoSetorPage() {
     }
   }
 
+  /**
+   * A devolução do caso que não é do setor. O link deixa de valer no envio,
+   * então a tela não recarrega o caso depois: ela troca de assunto, e a
+   * confirmação é a última coisa que este responsável vê deste caso.
+   */
+  async function handleDevolver(e: React.FormEvent) {
+    e.preventDefault();
+    if (!caso || !motivoDaDevolucaoValido(motivoDaDevolucao)) return;
+    setEnviandoDevolucao(true);
+    setErroDaDevolucao(null);
+    try {
+      const res = await fetch(`/api/ouvidoria-setor/${encodeURIComponent(token)}/devolver`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo: motivoDaDevolucao.trim() }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        setErroDaDevolucao(mensagemDoPortal(res.status, body.detail));
+        return;
+      }
+      setDevolvido(true);
+    } catch {
+      setErroDaDevolucao("Não foi possível devolver o caso agora. Tente novamente.");
+    } finally {
+      setEnviandoDevolucao(false);
+    }
+  }
+
   if (loading) {
     return (
       <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
@@ -230,6 +282,28 @@ export default function PortalDoSetorPage() {
   const motivoDaProrrogacaoAVista = Boolean(
     prorrogacao && !prorrogacao.permitida && !prorrogacao.pedido && prorrogacao.motivo
   );
+
+  if (devolvido) {
+    return (
+      <main className="min-h-screen bg-slate-50 flex items-center justify-center p-4">
+        <div className="w-full max-w-lg bg-white rounded-2xl border border-emerald-200 shadow-premium p-8 text-center space-y-4">
+          <div className="flex justify-center">
+            <Logo />
+          </div>
+          <CheckCircle2 className="w-12 h-12 text-emerald-500 mx-auto" />
+          <div className="space-y-1">
+            <p className="text-slate-600 text-sm">Caso devolvido na manifestação</p>
+            <p className="text-2xl font-bold tracking-tight text-slate-900 tabular-nums">
+              {caso.protocolo}
+            </p>
+          </div>
+          <p data-testid="devolucao-confirmada" className="text-sm text-slate-500 leading-relaxed">
+            {CONFIRMACAO_DA_DEVOLUCAO}
+          </p>
+        </div>
+      </main>
+    );
+  }
 
   if (recibo) {
     return (
@@ -622,6 +696,79 @@ export default function PortalDoSetorPage() {
             </form>
           )}
         </div>
+        )}
+
+        {/* 11 da RN-59: a Devolução à Ouvidoria (issue #600, ADR 0048). Link
+            discreto, por último e depois dos dois botões: um terceiro botão de
+            mesmo peso ficaria ao lado de RESPONDER no celular e convidaria a
+            devolver por preguiça. Só aparece enquanto o caso está com a área,
+            que é a única janela em que o servidor aceita a devolução. */}
+        {caso.aceita_resposta && (
+          <div className="pt-1 pb-2">
+            {!devolvendo ? (
+              <button
+                type="button"
+                data-testid="abrir-devolucao"
+                onClick={() => setDevolvendo(true)}
+                className="text-sm text-slate-500 underline underline-offset-4 hover:text-slate-700 transition-colors"
+              >
+                {CHAMADA_DA_DEVOLUCAO}
+              </button>
+            ) : (
+              <form
+                onSubmit={handleDevolver}
+                className="bg-white rounded-2xl border border-slate-200 shadow-premium p-6 space-y-3"
+              >
+                <div className="space-y-1.5">
+                  <label htmlFor="motivo-da-devolucao" className="block text-sm font-semibold text-slate-700">
+                    Por que este caso não é da sua área?
+                  </label>
+                  <p className="text-xs text-slate-500 leading-relaxed">{ORIENTACAO_DA_DEVOLUCAO}</p>
+                  <textarea
+                    id="motivo-da-devolucao"
+                    value={motivoDaDevolucao}
+                    onChange={(e) => setMotivoDaDevolucao(e.target.value)}
+                    rows={4}
+                    required
+                    placeholder="Ex.: agendamento de especialidade é do Centro Médico, a recepção não tem acesso à agenda."
+                    className="w-full rounded-xl border border-slate-200 px-3 py-2.5 text-base text-slate-800 placeholder:text-slate-400 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary resize-y"
+                  />
+                  <p className="text-xs text-slate-400 leading-relaxed">
+                    A Ouvidoria recebe o caso de volta e encaminha para a área certa. Este link deixa de
+                    valer.
+                  </p>
+                </div>
+
+                {erroDaDevolucao && (
+                  <p className="flex items-start gap-2 text-sm text-red-600">
+                    <AlertCircle className="w-4 h-4 mt-0.5 shrink-0" />
+                    {erroDaDevolucao}
+                  </p>
+                )}
+
+                <div className="flex gap-2">
+                  <button
+                    type="submit"
+                    disabled={enviandoDevolucao || !motivoDaDevolucaoValido(motivoDaDevolucao)}
+                    className="inline-flex items-center justify-center gap-2 px-4 py-2.5 rounded-xl text-sm font-semibold uppercase tracking-wide bg-slate-700 text-white hover:bg-slate-800 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+                  >
+                    {enviandoDevolucao && <Loader2 className="w-4 h-4 animate-spin" />}
+                    Devolver à Ouvidoria
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setDevolvendo(false);
+                      setErroDaDevolucao(null);
+                    }}
+                    className="px-4 py-2.5 rounded-xl text-sm font-semibold uppercase tracking-wide text-slate-600 hover:bg-slate-100 transition-colors"
+                  >
+                    Cancelar
+                  </button>
+                </div>
+              </form>
+            )}
+          </div>
         )}
       </div>
     </main>

@@ -153,6 +153,10 @@ describe("a ordem da RN-59 (issue #483)", () => {
       screen.getByRole("button", { name: /anexar/i }),
       screen.getByRole("button", { name: /^responder/i }),
       screen.getByRole("button", { name: /solicitar prorrogação/i }),
+      // 11 da RN-59, o elemento que a issue #600 acrescentou: a Devolução à
+      // Ouvidoria fica por último, depois dos dois botões, para não competir
+      // com RESPONDER (ADR 0048, decisão 5).
+      screen.getByTestId("abrir-devolucao"),
     ];
 
     for (let i = 0; i < sequencia.length - 1; i++) {
@@ -364,7 +368,7 @@ describe("o campo único de resposta (RN-61)", () => {
   });
 });
 
-describe("apenas os dois botões da RN-62", () => {
+describe("os dois botões e o link discreto da RN-62", () => {
   it("a tela não oferece encerrar, reclassificar nem reatribuir", async () => {
     await abrirTela();
 
@@ -375,6 +379,22 @@ describe("apenas os dois botões da RN-62", () => {
     expect(rotulos.some((r) => /encerrar/.test(r))).toBe(false);
     expect(rotulos.some((r) => /reclassificar/.test(r))).toBe(false);
     expect(rotulos.some((r) => /reatribuir/.test(r))).toBe(false);
+  });
+
+  it("os dois botões continuam sendo dois, e a devolução entra como link depois deles", async () => {
+    // A RN-62 passou a valer com o link discreto da Devolução à Ouvidoria
+    // (issue #600, ADR 0048, decisão 5). O que ela proíbe é um TERCEIRO botão
+    // de mesmo peso, que num celular fica ao lado de RESPONDER e convida a
+    // devolver por preguiça.
+    await abrirTela();
+
+    const responder = screen.getByRole("button", { name: /^responder/i });
+    const prorrogacao = screen.getByRole("button", { name: /solicitar prorrogação/i });
+    const devolver = screen.getByTestId("abrir-devolucao");
+
+    expect(vemAntes(responder, prorrogacao)).toBe(true);
+    expect(vemAntes(prorrogacao, devolver)).toBe(true);
+    expect(devolver.textContent).toContain("Este caso não é do meu setor?");
   });
 
   it("nada do que a Ouvidoria preencheu é editável: só a resposta e o anexo entram", async () => {
@@ -437,6 +457,104 @@ describe("a prorrogação depois do vencimento (RN-62)", () => {
 
     const botao = screen.getByRole("button", { name: /^responder/i }) as HTMLButtonElement;
     await waitFor(() => expect(botao.disabled).toBe(false));
+  });
+});
+
+describe("a Devolução à Ouvidoria (issue #600)", () => {
+  /**
+   * O `fetch` da tela, com o POST da devolução separado do GET do caso: o
+   * stub único de `responderComCaso` devolveria o caso também para o envio, e
+   * o teste ficaria verde sem nunca ter chamado a rota certa.
+   */
+  function comDevolucao(resultado: { ok: boolean; status?: number; corpo?: unknown }) {
+    const chamadas: { url: string; init?: RequestInit }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, init?: RequestInit) => {
+        chamadas.push({ url, init });
+        if (url.endsWith("/devolver")) {
+          return {
+            ok: resultado.ok,
+            status: resultado.status ?? (resultado.ok ? 200 : 410),
+            json: async () => resultado.corpo ?? {},
+          } as unknown as Response;
+        }
+        return { ok: true, status: 200, json: async () => caso() } as unknown as Response;
+      })
+    );
+    return chamadas;
+  }
+
+  it("o link abre o campo do motivo e o botão de devolver, que não estavam na tela", async () => {
+    comDevolucao({ ok: true, corpo: { protocolo: "2026-0007" } });
+    await abrirTela();
+
+    expect(screen.queryByLabelText(/por que este caso não é da sua área/i)).toBeNull();
+    fireEvent.click(screen.getByTestId("abrir-devolucao"));
+
+    expect(screen.getByLabelText(/por que este caso não é da sua área/i)).toBeTruthy();
+    expect(screen.getByRole("button", { name: /devolver à ouvidoria/i })).toBeTruthy();
+  });
+
+  it("sem motivo, nada é enviado", async () => {
+    // A regra de verdade é do servidor, que devolve 422. A tela só não oferece
+    // um envio que termina em recusa previsível.
+    const chamadas = comDevolucao({ ok: true, corpo: { protocolo: "2026-0007" } });
+    await abrirTela();
+    fireEvent.click(screen.getByTestId("abrir-devolucao"));
+
+    const botao = screen.getByRole("button", { name: /devolver à ouvidoria/i }) as HTMLButtonElement;
+    expect(botao.disabled).toBe(true);
+
+    fireEvent.change(screen.getByLabelText(/por que este caso não é da sua área/i), {
+      target: { value: "   " },
+    });
+    expect(botao.disabled).toBe(true);
+    expect(chamadas.some((c) => c.url.endsWith("/devolver"))).toBe(false);
+  });
+
+  it("com motivo, devolve e mostra a confirmação de que não há mais nada a fazer", async () => {
+    const chamadas = comDevolucao({ ok: true, corpo: { protocolo: "2026-0007" } });
+    await abrirTela();
+    fireEvent.click(screen.getByTestId("abrir-devolucao"));
+    fireEvent.change(screen.getByLabelText(/por que este caso não é da sua área/i), {
+      target: { value: "É do Centro Médico: a recepção não agenda especialidade." },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /devolver à ouvidoria/i }));
+
+    await waitFor(() =>
+      expect(screen.getByTestId("devolucao-confirmada").textContent ?? "").toContain(
+        "Caso devolvido à Ouvidoria."
+      )
+    );
+    const envio = chamadas.find((c) => c.url.endsWith("/devolver"));
+    expect(envio?.init?.method).toBe("POST");
+    expect(JSON.parse(String(envio?.init?.body)).motivo).toContain("Centro Médico");
+    // A tela do envio sai de cena: o link já não vale, e oferecer responder
+    // ali mandaria o titular escrever para um 410.
+    expect(screen.queryByLabelText(/o que foi feito/i)).toBeNull();
+  });
+
+  it("a recusa do servidor fica à vista e o campo continua preenchido", async () => {
+    comDevolucao({
+      ok: false,
+      status: 410,
+      corpo: { detail: "A Ouvidoria já movimentou este caso e ele não pode mais ser devolvido por este link" },
+    });
+    await abrirTela();
+    fireEvent.click(screen.getByTestId("abrir-devolucao"));
+    fireEvent.change(screen.getByLabelText(/por que este caso não é da sua área/i), {
+      target: { value: "É do Centro Médico." },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /devolver à ouvidoria/i }));
+
+    await waitFor(() => expect(screen.getByText(/já movimentou este caso/i)).toBeTruthy());
+    expect(screen.queryByTestId("devolucao-confirmada")).toBeNull();
+    expect((screen.getByLabelText(/por que este caso não é da sua área/i) as HTMLTextAreaElement).value).toContain(
+      "Centro Médico"
+    );
   });
 });
 

@@ -375,6 +375,27 @@ export function pedidoDeProrrogacaoValido(
   return justificativa.trim().length > 0 && Number.isInteger(dias) && dias >= 1 && dias <= maxDias;
 }
 
+/**
+ * O teto do motivo da Devolução à Ouvidoria (issue #600, ADR 0048, decisão 6).
+ *
+ * O mesmo número do servidor (`ouvidoria_devolucao_a_ouvidoria`), que é quem
+ * recusa de verdade. Sem piso, ao contrário da resposta: "não é meu, é do
+ * Centro Médico" é curto por natureza, e exigir tamanho empurraria o
+ * responsável a encher linguiça.
+ */
+export const MAXIMO_DO_MOTIVO_DA_DEVOLUCAO = 10_000;
+
+/**
+ * O motivo precisa existir e caber na trilha.
+ *
+ * A contagem é em code points, como a do servidor, e sobre o texto COMO ELE
+ * SERÁ ENVIADO: o corpo é JSON, então a quebra de linha viaja como um
+ * caractere só e não vira CRLF como no multipart da resposta.
+ */
+export function motivoDaDevolucaoValido(texto: string): boolean {
+  return texto.trim().length > 0 && [...texto.trim()].length <= MAXIMO_DO_MOTIVO_DA_DEVOLUCAO;
+}
+
 /** O que o titular lê sobre o pedido que já existe no caso. */
 export function situacaoDoPedido(pedido: PedidoDeProrrogacao): string {
   if (pedido.status === "pendente") {
