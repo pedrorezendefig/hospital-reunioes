@@ -772,3 +772,57 @@ class TestGateDaTrilha:
         assert len(acessos) == 1
         assert acessos[0]["ator_id"] == "P10"
         assert acessos[0]["acao"] == "listar_movimentos"
+
+
+class TestContratoDaDevolucaoAOuvidoria:
+    """O que o Dossiê usa para reconhecer a Devolução à Ouvidoria na trilha
+    (issue #601, PRD #598, ADR 0048).
+
+    O motivo da devolução não tem coluna: ele vive no movimento, e a tela o lê
+    de lá (`lib/ouvidoria/devolucao-a-ouvidoria.ts`). O que a tela olha em cada
+    evento são três coisas, e as três nascem AQUI: a descrição da transição, o
+    `sistema` e o prefixo do texto. Mudar qualquer uma delas neste lado sem
+    mudar o outro faz o bloco sumir da tela ou a contagem de voltas mentir, sem
+    erro nenhum. Estes testes são o par que trava o contrato.
+    """
+
+    DEVOLVIDA_EM = "2026-08-26T17:00:00+00:00"
+    MOTIVO = "Este caso é do Centro Médico, não nosso."
+
+    def _com_devolucao(self) -> list[dict]:
+        return _tramitacao_completa() + [
+            _movimento(
+                self.DEVOLVIDA_EM,
+                "aguardando_area",
+                "em_classificacao",
+                "Carlos Titular",
+                # `autor_id` nulo: a devolução entra pelo link do email, sem
+                # ninguém logado por trás. É o que vira `sistema` no evento.
+                None,
+                f"Devolvido pela área Recepcao: {self.MOTIVO}",
+            )
+        ]
+
+    def test_a_devolucao_chega_a_tela_com_a_descricao_o_sistema_e_o_texto_inteiro(self, monkeypatch):
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake(movimentos=self._com_devolucao()))
+
+        eventos = _linha_do_tempo(client).json()["movimentos"]
+        devolucao = next(e for e in eventos if e["ocorrido_em"] == self.DEVOLVIDA_EM)
+
+        assert devolucao["descricao"] == "Caso em classificação"
+        assert devolucao["sistema"] is True
+        assert devolucao["texto"] == f"Devolvido pela área Recepcao: {self.MOTIVO}", (
+            "O prefixo é o que a tela desmonta para dizer quem devolveu e por quê"
+        )
+
+    def test_a_resposta_da_area_nao_se_parece_com_uma_devolucao(self, monkeypatch):
+        """O par: a resposta da área é o outro movimento de quem não tem login
+        e com texto livre. Se as duas chegassem com a mesma descrição, uma
+        resposta que imitasse o prefixo inflaria a contagem de voltas."""
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake(movimentos=self._com_devolucao()))
+
+        eventos = _linha_do_tempo(client).json()["movimentos"]
+        resposta = _por_descricao(eventos, "Resposta da área recebida")
+
+        assert resposta["sistema"] is True, "A resposta também vem de quem não tem login: não é isso que separa"
+        assert resposta["descricao"] != "Caso em classificação"

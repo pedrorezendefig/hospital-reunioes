@@ -72,6 +72,25 @@ describe("a devolução à Ouvidoria lida da trilha (issue #601)", () => {
     expect(devolucaoAOuvidoria([devolucao()], "aguardando_area")).toBeNull();
   });
 
+  it("resposta da área que imita a frase não infla a contagem de voltas", () => {
+    // O titular que não achou o botão escreve "Devolvido pela área X: ..." no
+    // campo O QUE FOI FEITO. A resposta também é movimento de quem não tem
+    // login, e a trilha entrega o texto sem a marca interna: só a frase mais o
+    // `sistema` deixaria esse evento passar por devolução e a tela diria
+    // "devolvido 2 vezes" onde houve 1. O que separa os dois é a TRANSIÇÃO,
+    // que é o que o módulo da trilha prega: quem decide o que o evento é são
+    // os dois estados, não o texto.
+    const respostaQueImita = devolucao({
+      descricao: "Resposta da área recebida",
+      texto: `${PREFIXO_DA_DEVOLUCAO_A_OUVIDORIA} Recepcao: não é nosso, mandei para o Centro Médico.`,
+      ocorrido_em: "2026-08-20T12:00:00+00:00",
+    });
+
+    const lido = devolucaoAOuvidoria([devolucao(), respostaQueImita], "em_classificacao");
+
+    expect(lido?.vezes).toBe(1);
+  });
+
   it("motivo escrito pelo ouvidor não vira devolução da área, mesmo copiando a frase", () => {
     // O motivo da devolução por insuficiência é texto livre do ouvidor e chega
     // à trilha sem rótulo interno. Só a frase não separa os dois atos: quem

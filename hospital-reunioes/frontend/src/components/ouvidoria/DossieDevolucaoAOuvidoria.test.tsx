@@ -80,7 +80,11 @@ function respostaJson(body: unknown) {
   return { ok: true, json: async () => body } as Response;
 }
 
-function montar(dossie: Record<string, unknown>, movimentos: unknown[] = []) {
+function montar(
+  dossie: Record<string, unknown>,
+  movimentos: unknown[] = [],
+  { trilhaForaDoAr = false }: { trilhaForaDoAr?: boolean } = {}
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
@@ -89,7 +93,11 @@ function montar(dossie: Record<string, unknown>, movimentos: unknown[] = []) {
       if (url.endsWith("/prorrogacoes")) return respostaJson({ prorrogacoes: [] });
       if (url.endsWith("/respostas")) return respostaJson({ respostas: [] });
       if (url.endsWith("/tentativas-contato")) return respostaJson({ tentativas: [] });
-      if (url.endsWith("/movimentos")) return respostaJson({ movimentos });
+      if (url.endsWith("/movimentos")) {
+        return trilhaForaDoAr
+          ? ({ ok: false, status: 503, json: async () => ({}) } as Response)
+          : respostaJson({ movimentos });
+      }
       if (url.includes("/setores")) return respostaJson(["Recepcao", "Centro Medico"]);
       return respostaJson(dossie);
     })
@@ -164,5 +172,43 @@ describe("o Dossiê do caso devolvido à Ouvidoria (issue #601)", () => {
       expect(screen.getByRole("button", { name: /Validar e acionar/ })).toBeTruthy();
     });
     expect(screen.queryByRole("button", { name: /Encaminhar para outra área/ })).toBeNull();
+  });
+
+  it("motivo enorme fica dentro de uma área rolável, sem empurrar o resto do Dossiê", async () => {
+    // O motivo é texto livre de quem tem o link do setor, com teto de 10.000
+    // caracteres e quebras de linha à vontade. Sem limite de altura, o bloco
+    // que abre o Dossiê empurra tudo o mais para muito abaixo da dobra.
+    // A asserção é na classe porque o jsdom não calcula layout, mesmo molde do
+    // teste do semáforo da fila.
+    const enorme = Array.from({ length: 400 }, (_, i) => `linha ${i} do motivo`).join("\n");
+    montar(caso(), [
+      movimentoDeDevolucao("Recepcao", enorme, "2026-08-26T17:00:00+00:00", "Carlos Titular"),
+    ]);
+
+    const area = await screen.findByRole("region", { name: /Motivo da devolução/ });
+
+    expect(area.textContent).toContain("linha 399 do motivo");
+    expect(area.className).toContain("max-h-");
+    expect(area.className).toContain("overflow-y-auto");
+    // Área rolável tem que ser alcançável por teclado, senão quem não usa mouse
+    // não chega ao resto do texto.
+    expect(area.getAttribute("tabindex")).toBe("0");
+  });
+
+  it("trilha fora do ar avisa, em vez de fazer o caso devolvido parecer um caso comum", async () => {
+    // Com o 503, a lista de movimentos volta vazia e o bloco some. O Dossiê do
+    // caso devolvido fica IDÊNTICO ao de um caso nunca despachado, e o ouvidor
+    // despacha às cegas, podendo reenviar para a mesma área que devolveu.
+    montar(caso(), [], { trilhaForaDoAr: true });
+
+    expect(await screen.findByText(/não foi possível ler a trilha deste caso/i)).toBeTruthy();
+    expect(screen.queryByRole("heading", { name: /Devolvido pela área/ })).toBeNull();
+  });
+
+  it("trilha lida sem devolução nenhuma não inventa aviso de falha", async () => {
+    montar(caso());
+
+    expect(await screen.findByText(/Cheguei as 8h com minha mae/)).toBeTruthy();
+    expect(screen.queryByText(/não foi possível ler a trilha deste caso/i)).toBeNull();
   });
 });

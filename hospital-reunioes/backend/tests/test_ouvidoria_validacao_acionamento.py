@@ -2131,7 +2131,7 @@ class TestReacionamentoDoCasoDevolvido:
     def test_reacionamento_nao_cobra_da_area_certa_o_atraso_da_area_errada(self, monkeypatch):
         """O achado da review do PR #602: `area_estourou_em` é a memória do
         estouro consumado, e o indicador de cumprimento a lê ANTES do
-        vencimento vigente. Sobrevivendo ao reacionamento, ela faria o
+        vencimento vigente. Sobrevivendo à TROCA de área, ela faria o
         relatório mostrar a área certa atrasada por culpa de quem despachou
         errado, que é justamente o que a decisão 2 da ADR 0048 quis evitar."""
         client, supabase = self._com_duas_areas(monkeypatch)
@@ -2140,6 +2140,45 @@ class TestReacionamentoDoCasoDevolvido:
 
         assert r.status_code == 200, r.text
         assert supabase.tabelas["ouvidoria_protocolos"][0]["area_estourou_em"] is None
+
+    def test_confirmar_a_mesma_area_nao_apaga_o_atraso_que_ela_consumou(self, monkeypatch):
+        """O par do teste acima, e o limite da regra: devolver não pode virar
+        um jeito de a área limpar a própria ficha.
+
+        A área que estourou o prazo devolve o caso pelo link do email (sem
+        login, sem piso de texto) e o ouvidor confirma a MESMA área, que a tela
+        permite de propósito. Zerar o carimbo aqui apagaria do indicador de
+        cumprimento um atraso que aconteceu de verdade, que é o oposto do que a
+        migration 076 e a história 5 do PRD #318 pediram: o número tem que
+        refletir comportamento."""
+        client, supabase = self._com_duas_areas(monkeypatch)
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "setor": "Recepcao"})
+
+        assert r.status_code == 200, r.text
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["setor"] == "Recepcao"
+        assert caso["area_estourou_em"] == "2026-08-20T20:00:00+00:00", (
+            "O estouro consumado pela área que continua com o caso é fato, e fato não se apaga"
+        )
+        assert caso["prazo_area_em"], "O prazo novo sai do mesmo jeito: quem decide o despacho é o ouvidor"
+
+    def test_reacionamento_zera_o_credito_de_pausa_do_ciclo_anterior(self, monkeypatch):
+        """`minutos_pausados` é crédito de tempo que a retomada já somou ao
+        vencimento ANTIGO, e o reacionamento acabou de jogar esse vencimento
+        fora. Sobrevivendo, ele mente duas vezes: o Dossiê diz à área nova que
+        "esse tempo saiu do seu prazo" sobre um prazo que nasceu agora, e
+        `_minutos_de_resposta` desconta o tempo dela no ranking da Diretoria.
+
+        É a mesma limpeza que a reabertura por reincidência já faz, pelo motivo
+        escrito lá: ciclo com prazo INTEIRO novo não carrega crédito de pausa
+        de ciclo nenhum."""
+        client, supabase = self._com_duas_areas(monkeypatch, self._devolvido(minutos_pausados=1620))
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "setor": "Centro Medico"})
+
+        assert r.status_code == 200, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["minutos_pausados"] == 0
 
     def test_reacionamento_nao_move_o_prazo_conclusivo_ja_congelado(self, monkeypatch):
         """Critério de aceite: `prazo_conclusivo_em` não é recalculado no

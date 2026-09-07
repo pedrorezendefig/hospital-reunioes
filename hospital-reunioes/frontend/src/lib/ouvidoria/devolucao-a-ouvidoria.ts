@@ -28,6 +28,17 @@ export const PREFIXO_DA_DEVOLUCAO_A_OUVIDORIA = "Devolvido pela área";
 
 const SEPARADOR = ": ";
 
+/**
+ * A descrição que o servidor dá à transição `aguardando_area -> em_classificacao`,
+ * palavra por palavra o `ROTULO_DO_ESTADO["em_classificacao"]` de
+ * `app/services/ouvidoria_trilha.py`.
+ *
+ * É ela, e não o texto, que diz qual foi o CAMINHO no grafo, e é o caminho que
+ * separa a devolução da resposta da área: as duas são movimento de quem não tem
+ * login e as duas carregam texto livre.
+ */
+const DESCRICAO_DA_VOLTA_A_CLASSIFICACAO = "Caso em classificação";
+
 /** A devolução como o Dossiê a mostra. */
 export interface DevolucaoLida {
   /** A área que devolveu, do jeito que ela estava gravada no caso naquele dia. */
@@ -41,17 +52,27 @@ export interface DevolucaoLida {
 }
 
 /**
- * Um evento é uma Devolução à Ouvidoria quando traz a frase da devolução E
- * ninguém logado a escreveu.
+ * Um evento é uma Devolução à Ouvidoria quando percorreu o CAMINHO dela no
+ * grafo, ninguém logado o escreveu e ele traz a frase da devolução.
  *
- * As duas condições, e não só a primeira: o motivo da devolução por
- * insuficiência é texto livre do OUVIDOR e chega à trilha sem o rótulo interno
- * (o servidor o retira), então nada impede que ele comece com a mesma frase. O
- * que separa os dois atos é quem agiu: a Devolução à Ouvidoria entra pelo link
- * do email, sem `autor_id`, e é isso que o `sistema` diz.
+ * As três condições, porque nenhuma sozinha basta:
+ *
+ * - só a frase não basta: o motivo da devolução por insuficiência é texto livre
+ *   do OUVIDOR e chega à trilha sem o rótulo interno (o servidor o retira),
+ *   então nada impede que ele comece igualzinho;
+ * - frase mais `sistema` também não bastam: a RESPOSTA da área é movimento de
+ *   quem também não tem login e também carrega texto livre. O titular que não
+ *   achou o botão escreve "Devolvido pela área X: ..." no campo do que foi
+ *   feito, e a contagem de voltas passaria a mentir;
+ * - o que fecha é a descrição, que nomeia a transição. É a régua do próprio
+ *   módulo da trilha: quem decide o que cada evento É são os dois estados.
+ *
+ * Sobra a devolução por insuficiência escrita pelo ouvidor, que o `sistema`
+ * elimina, e é por isso que ele fica.
  */
 function ehDevolucao(evento: EventoDaTrilha): boolean {
   return (
+    evento.descricao === DESCRICAO_DA_VOLTA_A_CLASSIFICACAO &&
     evento.sistema &&
     typeof evento.texto === "string" &&
     evento.texto.startsWith(`${PREFIXO_DA_DEVOLUCAO_A_OUVIDORIA} `) &&

@@ -2748,10 +2748,14 @@ async def validar_e_acionar(
             supabase.table("ouvidoria_protocolos")
             # `contato_em` e `data_abertura` entram pelo prazo conclusivo: ele
             # é contado do T0, e sem essas duas colunas aqui o cálculo não teria
-            # de onde partir (issue #479). `prazo_conclusivo_em` entra porque o
-            # reacionamento do caso devolvido precisa saber que ele JÁ existe
-            # para não movê-lo (issue #601).
-            .select("id, status, sigilo_reforcado, tipo_manifestacao, contato_em, data_abertura, prazo_conclusivo_em")
+            # de onde partir (issue #479). `prazo_conclusivo_em` e `setor`
+            # entram pelo reacionamento do caso devolvido (issue #601): o
+            # primeiro para o compromisso com o manifestante não ser movido, o
+            # segundo para saber se a área MUDOU, que é o que decide o destino
+            # do carimbo do estouro consumado.
+            .select(
+                "id, status, sigilo_reforcado, tipo_manifestacao, contato_em, data_abertura, prazo_conclusivo_em, setor"
+            )
             .eq("id", manifestacao_id)
             .execute()
         )
@@ -2837,12 +2841,25 @@ async def validar_e_acionar(
     # T0 sempre existe. Se um dia não existir, a coluna fica vazia em vez de
     # receber um prazo chutado do relógio de parede.
     #
-    # O caso que JÁ tem prazo conclusivo não recalcula: ele foi congelado no
-    # primeiro despacho, e o reacionamento do caso devolvido à Ouvidoria
-    # (issue #601) chega por esta mesma rota, com a gravidade eventualmente
-    # corrigida. Recalcular ali moveria o compromisso feito ao manifestante por
-    # causa de um ajuste INTERNO de área, que é exatamente o que a RN-21
-    # proíbe. É a mesma régua do congelamento: quem já tem data, mantém.
+    # O caso que JÁ tem prazo conclusivo não recalcula (issue #601). Esta é uma
+    # regra NOVA, e ela merece ser lida como tal: a migration 091 diz que o
+    # prazo conclusivo é "calculado e CONGELADO na validação", o que até aqui
+    # queria dizer "recalculado a cada passagem por esta rota", como o
+    # `prazo_area_em` continua sendo.
+    #
+    # O reacionamento do caso devolvido à Ouvidoria chega por esta mesma porta,
+    # e com a gravidade eventualmente corrigida. Recalcular ali moveria o
+    # compromisso feito ao MANIFESTANTE (T0 até T3) por causa de um ajuste
+    # interno de área, que ele não pediu e nem fica sabendo. Então o
+    # congelamento passa a valer a partir do PRIMEIRO despacho: quem já tem
+    # data, mantém.
+    #
+    # O prazo da área é o avesso e continua sendo: ele descreve o compromisso da
+    # área que está com o caso agora, e a área mudou.
+    #
+    # Pendência conhecida, registrada na issue #601: o caso despachado como
+    # `medio` e reacionado como `critico` mantém a data do médio, e `critico`
+    # não tem célula conclusiva na tabela. É caso de borda maior que esta fatia.
     entrada = ouvidoria_prorrogacao.entrada_da_manifestacao(caso)
     conclusivo_congelado = caso.get("prazo_conclusivo_em")
     vencimento_conclusivo = (
@@ -2908,20 +2925,39 @@ async def validar_e_acionar(
     #
     # O reacionamento do caso devolvido à Ouvidoria (issue #601) passa por
     # aqui: ele vem de `em_classificacao` como qualquer acionamento, e é este
-    # bloco que apaga o que sobrou do despacho anterior. Duas coisas saem:
+    # bloco que apaga o que sobrou do despacho anterior.
     #
-    # - os carimbos dos jobs de prazo, senão o prazo INTEIRO que a área certa
-    #   acabou de receber não vira véspera, nem cobrança, nem escada: cada job
-    #   pula o degrau que já tem carimbo, e alguns tiram o caso da varredura
-    #   inteira (issue #373). No primeiro acionamento eles já são nulos, então
-    #   zerá-los sempre não tem caso especial nenhum;
-    # - `area_estourou_em`, a memória do estouro consumado pela área ANTERIOR.
-    #   O indicador de cumprimento a lê antes do vencimento vigente
-    #   (issue #374), e mantê-la faria a área certa nascer ESTOURADA por culpa
-    #   de quem despachou errado, que é o que a ADR 0048, decisão 2, quis
-    #   evitar. É a mesma limpeza da reabertura por reincidência, pelo mesmo
-    #   motivo: ciclo novo com prazo novo não deve nada ainda.
-    fechamento_do_despacho_anterior = {"area_estourou_em": None} | ouvidoria_prorrogacao.carimbos_a_zerar()
+    # Sempre saem:
+    #
+    # - os carimbos dos jobs de prazo, senão o prazo INTEIRO que a área acabou
+    #   de receber não vira véspera, nem cobrança, nem escada: cada job pula o
+    #   degrau que já tem carimbo, e alguns tiram o caso da varredura inteira
+    #   (issue #373);
+    # - `minutos_pausados`, o crédito de tempo que a retomada já somou ao
+    #   vencimento ANTIGO. O vencimento acabou de ser jogado fora e o novo
+    #   nasce inteiro: mantido, o Dossiê diria à área que "esse tempo saiu do
+    #   seu prazo" sobre um prazo que nasceu agora, e `_minutos_de_resposta`
+    #   descontaria do tempo dela no ranking da Diretoria. É a mesma limpeza da
+    #   reabertura por reincidência, pelo motivo escrito lá.
+    #
+    # No primeiro acionamento os dois já são nulos ou zero (pausa só existe
+    # depois de o caso ter ido à área), então zerá-los sempre não cria caso
+    # especial nenhum.
+    #
+    # `area_estourou_em` sai SÓ QUANDO A ÁREA MUDA, e a diferença é a regra
+    # inteira. Ele é a memória do estouro que uma área consumou, e o indicador
+    # de cumprimento o lê antes do vencimento vigente (issue #374):
+    #
+    # - área trocada: mantê-lo faria a área CERTA nascer estourada por culpa de
+    #   quem despachou errado, que é o que a ADR 0048, decisão 2, quis evitar;
+    # - mesma área reconfirmada (a tela permite, e é caso previsto): zerá-lo
+    #   transformaria a devolução num jeito de a área limpar a própria ficha,
+    #   que é justamente o que a migration 076 existe para impedir. O atraso
+    #   aconteceu, e o número tem que refletir comportamento (PRD #318,
+    #   história 5).
+    fechamento_do_despacho_anterior = {"minutos_pausados": 0} | ouvidoria_prorrogacao.carimbos_a_zerar()
+    if setor != caso.get("setor"):
+        fechamento_do_despacho_anterior["area_estourou_em"] = None
     marcos_do_despacho = {
         "prazo_area_em": vencimento.isoformat() if vencimento else None,
         "validada_em": agora.isoformat(),

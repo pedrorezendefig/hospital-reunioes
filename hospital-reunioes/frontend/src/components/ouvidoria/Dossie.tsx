@@ -228,6 +228,10 @@ export function Dossie({ protocolo, token }: DossieProps) {
   // responde por uma leitura que aconteceu em outra requisição.
   const [movimentos, setMovimentos] = useState<EventoDaTrilha[]>([]);
   const [degradadoDaTrilha, setDegradadoDaTrilha] = useState<string[] | null>(null);
+  // A trilha não pôde ser lida (503 ou rede). Separado da lista vazia porque
+  // "não há histórico" e "não deu para olhar" pedem telas diferentes desde que
+  // a devolução passou a morar lá (issue #601).
+  const [trilhaIlegivel, setTrilhaIlegivel] = useState(false);
   const [reenviando, setReenviando] = useState<string | null>(null);
   const [avisoReenvio, setAvisoReenvio] = useState<string | null>(null);
   // Prorrogação de prazo (issue #333): o pedido da área espera a decisão da
@@ -310,6 +314,13 @@ export function Dossie({ protocolo, token }: DossieProps) {
    * página que pode chegar VAZIA por falha: o servidor responde 503 quando não
    * conseguiu lê-la, e é por isso que a falha zera a lista em vez de deixar na
    * tela os eventos do caso anterior.
+   *
+   * A falha também é GRAVADA (issue #601), e não só absorvida. Desde que a
+   * Devolução à Ouvidoria passou a viver na trilha, lista vazia deixou de ser
+   * só "sem histórico": ela esconde o aviso que decide a próxima ação do
+   * ouvidor, e o Dossiê do caso devolvido fica igual ao de um caso nunca
+   * despachado. Sem esta marca, ele despacharia às cegas para a mesma área que
+   * devolveu.
    */
   const carregarMovimentos = useCallback(async () => {
     if (!manifestacaoId || !token) return;
@@ -320,20 +331,24 @@ export function Dossie({ protocolo, token }: DossieProps) {
       if (!res.ok) {
         setMovimentos([]);
         setDegradadoDaTrilha(null);
+        setTrilhaIlegivel(true);
         return;
       }
       const corpo = await res.json();
       setMovimentos(corpo.movimentos ?? []);
       setDegradadoDaTrilha(corpo.degradado ?? null);
+      setTrilhaIlegivel(false);
     } catch {
       setMovimentos([]);
       setDegradadoDaTrilha(null);
+      setTrilhaIlegivel(true);
     }
   }, [manifestacaoId, token]);
 
   useEffect(() => {
     setMovimentos([]);
     setDegradadoDaTrilha(null);
+    setTrilhaIlegivel(false);
     carregarMovimentos();
   }, [carregarMovimentos]);
 
@@ -894,11 +909,42 @@ export function Dossie({ protocolo, token }: DossieProps) {
                     <span className="font-normal">{` (devolvido ${devolucao.vezes} vezes)`}</span>
                   )}
                 </h3>
-                <span className="block mt-1 whitespace-pre-wrap">{devolucao.motivo}</span>
+                {/* O motivo é texto livre de quem tem o link do setor, com
+                    teto de 10.000 caracteres e quebras de linha à vontade
+                    (`ouvidoria_devolucao_a_ouvidoria.MAXIMO_DE_CARACTERES`).
+                    Solto, ele empurraria o resto do Dossiê para muito abaixo
+                    da dobra, e este bloco abre a página. A altura é limitada e
+                    o texto rola por dentro: nada é escondido, e nada empurra.
+                    `tabIndex` porque área rolável precisa ser alcançável por
+                    teclado, senão quem não usa mouse não chega ao fim do
+                    texto. */}
+                <div
+                  role="region"
+                  aria-label="Motivo da devolução"
+                  tabIndex={0}
+                  className="block mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap"
+                >
+                  {devolucao.motivo}
+                </div>
                 <span className="block text-xs mt-1 opacity-80">
                   {devolucao.autor} em {formatarDataHora(devolucao.ocorrido_em)}
                 </span>
               </div>
+            </div>
+          )}
+
+          {/* A trilha carrega a devolução, então trilha ilegível é informação
+              FALTANDO na decisão de despachar, e não silêncio (issue #601). O
+              aviso só aparece onde a decisão acontece: no caso que espera o
+              ouvidor. Nos outros estados a trilha continua sendo histórico, e
+              a linha do tempo ausente já se explica sozinha. */}
+          {trilhaIlegivel && podeValidar(dossie.status) && (
+            <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                Não foi possível ler a trilha deste caso agora. Se alguma área o devolveu, o aviso da
+                devolução não aparece nesta tela: recarregue a página antes de despachar.
+              </span>
             </div>
           )}
 
