@@ -19,6 +19,7 @@ import {
   RotateCw,
   Send,
   ShieldAlert,
+  Undo2,
   UserRound,
 } from "lucide-react";
 import { EncerrarModal } from "@/components/ouvidoria/EncerrarModal";
@@ -48,6 +49,7 @@ import { descreverOrigem } from "@/lib/ouvidoria/origem";
 import { descreverTempoDesdeOMarco, type EventoDaTrilha } from "@/lib/ouvidoria/trilha";
 import { avisosDeDegradacao, calendarioUtilFoiLido } from "@/lib/ouvidoria/painel";
 import { descreverNaturezaInformada } from "@/lib/ouvidoria/natureza-informada";
+import { devolucaoAOuvidoria } from "@/lib/ouvidoria/devolucao-a-ouvidoria";
 import { formatarEsperaUtil, type StatusManifestacao } from "@/lib/ouvidoria/prazo";
 import type { PedidoDeProrrogacao } from "@/lib/ouvidoria/setor";
 import {
@@ -93,6 +95,11 @@ export interface Dossie {
   desfecho: string | null;
   desfecho_descricao: string | null;
   gravidade: string | null;
+  // O extrato que o ouvidor escreveu no acionamento (issue #601). É ele que
+  // volta preenchido quando o caso devolvido é encaminhado a outra área.
+  // Opcional pelo mesmo motivo dos marcos: um frontend servido enquanto o
+  // backend ainda é o da versão anterior apenas abre o campo em branco.
+  extrato_para_o_setor?: string | null;
   prazo_area_em: string | null;
   validada_em: string | null;
   respondida_em: string | null;
@@ -763,6 +770,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
 
   const origem = dossie ? descreverOrigem(dossie) : null;
   const naturezaInformada = dossie ? descreverNaturezaInformada(dossie) : null;
+  // A Devolução à Ouvidoria (issue #601). Vem da TRILHA, e não de coluna
+  // nenhuma: o motivo que a área escreveu vive no movimento, onde a Retenção já
+  // o alcança. Nulo no caso que ninguém devolveu, e é o mesmo nulo que decide o
+  // nome do botão do despacho.
+  const devolucao = dossie ? devolucaoAOuvidoria(movimentos, dossie.status) : null;
   // Sem o calendário confirmado, nenhum número em dias úteis deste caso vale, e
   // ele sai da tela em vez de sair errado (issue #449, a mesma régua do
   // painel). `null` é a resposta que nem declarou o `degradado`: não saber não
@@ -800,7 +812,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 transition-colors"
               >
                 <Send className="w-3.5 h-3.5" />
-                Validar e acionar
+                {/* A porta é a mesma, o ato é outro (issue #601): o caso
+                    devolvido já foi validado uma vez, e "Validar e acionar"
+                    faria o ouvidor procurar um botão de encaminhar que não
+                    existe. */}
+                {devolucao ? "Encaminhar para outra área" : "Validar e acionar"}
               </button>
             )}
             {podeEncerrar(dossie.status) && (
@@ -819,6 +835,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
       <ValidarModal
         manifestacao={validando ? dossie : null}
         token={token}
+        devolvidaPelaArea={devolucao?.setor ?? null}
         onClose={() => setValidando(false)}
         onAcionada={recarregarCaso}
       />
@@ -859,6 +876,29 @@ export function Dossie({ protocolo, token }: DossieProps) {
                 Cadastro incompleto: o caso chegou resumido e precisa ser completado na
                 validação.
               </span>
+            </div>
+          )}
+
+          {/* A Devolução à Ouvidoria (issue #601, ADR 0048). Fica no topo dos
+              blocos porque é o que o ouvidor tem a FAZER agora: o caso voltou
+              para a fila dele esperando um despacho novo, e o motivo é o que
+              decide para onde. A contagem só aparece a partir da segunda volta,
+              que é quando ela informa alguma coisa (o pingue-pongue). */}
+          {devolucao && (
+            <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              <Undo2 className="w-4 h-4 shrink-0 mt-0.5" />
+              <div>
+                <h3 className="font-medium">
+                  {`Devolvido pela área ${devolucao.setor}`}
+                  {devolucao.vezes > 1 && (
+                    <span className="font-normal">{` (devolvido ${devolucao.vezes} vezes)`}</span>
+                  )}
+                </h3>
+                <span className="block mt-1 whitespace-pre-wrap">{devolucao.motivo}</span>
+                <span className="block text-xs mt-1 opacity-80">
+                  {devolucao.autor} em {formatarDataHora(devolucao.ocorrido_em)}
+                </span>
+              </div>
             </div>
           )}
 

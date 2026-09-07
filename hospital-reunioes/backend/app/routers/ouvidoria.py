@@ -480,6 +480,13 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "canal_ponto",
     "contato_em",
     "gravidade",
+    # O extrato que o ouvidor escreveu no acionamento. Entra no Dossiê pelo
+    # reacionamento do caso devolvido à Ouvidoria (issue #601): o botão
+    # "Encaminhar para outra área" abre a validação preenchida, e o campo só
+    # pode nascer preenchido com o que a resposta entrega. É texto ESCRITO PELO
+    # OUVIDOR, e não palavra de quem manifestou, então ele não muda quem pode
+    # ler o quê: quem chega ao Dossiê já lê o relato integral.
+    "extrato_para_o_setor",
     "prazo_area_em",
     "prazo_rompido_em",
     "validada_em",
@@ -2741,8 +2748,10 @@ async def validar_e_acionar(
             supabase.table("ouvidoria_protocolos")
             # `contato_em` e `data_abertura` entram pelo prazo conclusivo: ele
             # é contado do T0, e sem essas duas colunas aqui o cálculo não teria
-            # de onde partir (issue #479).
-            .select("id, status, sigilo_reforcado, tipo_manifestacao, contato_em, data_abertura")
+            # de onde partir (issue #479). `prazo_conclusivo_em` entra porque o
+            # reacionamento do caso devolvido precisa saber que ele JÁ existe
+            # para não movê-lo (issue #601).
+            .select("id, status, sigilo_reforcado, tipo_manifestacao, contato_em, data_abertura, prazo_conclusivo_em")
             .eq("id", manifestacao_id)
             .execute()
         )
@@ -2827,10 +2836,18 @@ async def validar_e_acionar(
     # coluna: `contato_em` é NOT NULL desde a migration 066, então na prática o
     # T0 sempre existe. Se um dia não existir, a coluna fica vazia em vez de
     # receber um prazo chutado do relógio de parede.
+    #
+    # O caso que JÁ tem prazo conclusivo não recalcula: ele foi congelado no
+    # primeiro despacho, e o reacionamento do caso devolvido à Ouvidoria
+    # (issue #601) chega por esta mesma rota, com a gravidade eventualmente
+    # corrigida. Recalcular ali moveria o compromisso feito ao manifestante por
+    # causa de um ajuste INTERNO de área, que é exatamente o que a RN-21
+    # proíbe. É a mesma régua do congelamento: quem já tem data, mantém.
     entrada = ouvidoria_prorrogacao.entrada_da_manifestacao(caso)
+    conclusivo_congelado = caso.get("prazo_conclusivo_em")
     vencimento_conclusivo = (
         calcular_vencimento(entrada, carregar_prazo_conclusivo(supabase, pedido.gravidade), feriados)
-        if entrada is not None
+        if entrada is not None and not conclusivo_congelado
         else None
     )
 
@@ -2888,15 +2905,35 @@ async def validar_e_acionar(
     # (nome sem contato, migration 064), e a validação classifica tipo, área e
     # gravidade sem pedir nem completar dado de quem manifestou. Zerar aqui
     # apagaria a sinalização do caso pela metade sem ninguém ter completado nada.
+    #
+    # O reacionamento do caso devolvido à Ouvidoria (issue #601) passa por
+    # aqui: ele vem de `em_classificacao` como qualquer acionamento, e é este
+    # bloco que apaga o que sobrou do despacho anterior. Duas coisas saem:
+    #
+    # - os carimbos dos jobs de prazo, senão o prazo INTEIRO que a área certa
+    #   acabou de receber não vira véspera, nem cobrança, nem escada: cada job
+    #   pula o degrau que já tem carimbo, e alguns tiram o caso da varredura
+    #   inteira (issue #373). No primeiro acionamento eles já são nulos, então
+    #   zerá-los sempre não tem caso especial nenhum;
+    # - `area_estourou_em`, a memória do estouro consumado pela área ANTERIOR.
+    #   O indicador de cumprimento a lê antes do vencimento vigente
+    #   (issue #374), e mantê-la faria a área certa nascer ESTOURADA por culpa
+    #   de quem despachou errado, que é o que a ADR 0048, decisão 2, quis
+    #   evitar. É a mesma limpeza da reabertura por reincidência, pelo mesmo
+    #   motivo: ciclo novo com prazo novo não deve nada ainda.
+    fechamento_do_despacho_anterior = {"area_estourou_em": None} | ouvidoria_prorrogacao.carimbos_a_zerar()
+    marcos_do_despacho = {
+        "prazo_area_em": vencimento.isoformat() if vencimento else None,
+        "validada_em": agora.isoformat(),
+        "validada_por": me["id"],
+    } | fechamento_do_despacho_anterior
+    # A coluna fica FORA do update quando já tem data, em vez de ser reescrita
+    # com o mesmo valor: reescrever obrigaria a ler e devolver o instante
+    # exato, e um arredondamento de leitura moveria o compromisso em silêncio.
+    if not conclusivo_congelado:
+        marcos_do_despacho["prazo_conclusivo_em"] = vencimento_conclusivo.isoformat() if vencimento_conclusivo else None
     try:
-        supabase.table("ouvidoria_protocolos").update(
-            {
-                "prazo_area_em": vencimento.isoformat() if vencimento else None,
-                "prazo_conclusivo_em": vencimento_conclusivo.isoformat() if vencimento_conclusivo else None,
-                "validada_em": agora.isoformat(),
-                "validada_por": me["id"],
-            }
-        ).eq("id", manifestacao_id).execute()
+        supabase.table("ouvidoria_protocolos").update(marcos_do_despacho).eq("id", manifestacao_id).execute()
     except APIError as exc:
         logger.error("Falha ao gravar o marco T1 da manifestação %s (código %s)", manifestacao_id, exc.code)
         raise HTTPException(

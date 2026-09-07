@@ -32,8 +32,23 @@ interface ValidarModalProps {
     // mandaria `sigilo_reforcado: false`, retirando o sigilo sem ninguém
     // desmarcar nada (issue #372).
     sigilo_reforcado: boolean;
+    // O que sobrou do acionamento anterior no caso (issue #601). Opcionais
+    // porque a linha da fila abre esta mesma tela e não carrega o extrato: o
+    // campo simplesmente nasce em branco, como sempre nasceu.
+    gravidade?: string | null;
+    extrato_para_o_setor?: string | null;
   } | null;
   token: string | null;
+  /**
+   * A área que devolveu o caso à Ouvidoria, quando foi isso que aconteceu
+   * (issue #601). Nulo no acionamento comum.
+   *
+   * Vem de fora, e não do `setor` do caso, porque as duas coisas são
+   * diferentes: `setor` é a área gravada agora (e continua sendo a errada até o
+   * ouvidor trocar), enquanto esta é a área que DEVOLVEU, lida da trilha. Num
+   * pingue-pongue elas divergem.
+   */
+  devolvidaPelaArea?: string | null;
   onClose: () => void;
   onAcionada: () => void;
 }
@@ -41,6 +56,17 @@ interface ValidarModalProps {
 const CAMPO =
   "w-full px-3 py-2 rounded-lg border border-slate-200 text-sm text-slate-700 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary/40";
 const ROTULO = "block text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1";
+
+/**
+ * A gravidade gravada no caso, quando ela é uma das quatro que a tela oferece.
+ *
+ * A poda existe pelo mesmo motivo da poda do setor: valor que a lista não tem
+ * deixaria o campo aparentemente vazio com um valor por dentro, e o ouvidor
+ * levaria um erro num campo que a tela mostra em branco.
+ */
+function gravidadeConhecida(gravidade: string | null | undefined): Gravidade | "" {
+  return GRAVIDADES.includes(gravidade as Gravidade) ? (gravidade as Gravidade) : "";
+}
 
 function hojeLocal(): string {
   const agora = new Date();
@@ -58,7 +84,13 @@ function hojeLocal(): string {
  * porque aí a demanda sobe ao gestor e a Diretoria recebe alerta: melhor o
  * ouvidor saber disso antes de clicar.
  */
-export function ValidarModal({ manifestacao, token, onClose, onAcionada }: ValidarModalProps) {
+export function ValidarModal({
+  manifestacao,
+  token,
+  devolvidaPelaArea = null,
+  onClose,
+  onAcionada,
+}: ValidarModalProps) {
   const [tipo, setTipo] = useState<TipoManifestacao | "">("");
   const [categoria, setCategoria] = useState("");
   const [sigilo, setSigilo] = useState(false);
@@ -77,10 +109,14 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
     setCategoria(manifestacao.categoria || "");
     setSigilo(Boolean(manifestacao.sigilo_reforcado));
     setSetor(manifestacao.setor || "");
-    setGravidade("");
-    // O extrato nasce em branco de propósito: preencher com o resumo levaria o
-    // ouvidor a mandar ao setor a palavra crua de quem manifestou.
-    setExtrato("");
+    // Gravidade e extrato vêm do que JÁ está gravado no caso (issue #601). No
+    // primeiro despacho as duas colunas são nulas e os campos nascem em branco,
+    // como sempre nasceram: o extrato não é preenchido com o resumo, porque
+    // isso levaria o ouvidor a mandar ao setor a palavra crua de quem
+    // manifestou. No reacionamento do caso devolvido à Ouvidoria elas trazem a
+    // decisão anterior, e o ouvidor só troca a área e confirma.
+    setGravidade(gravidadeConhecida(manifestacao.gravidade));
+    setExtrato(manifestacao.extrato_para_o_setor || "");
     setObservacao("");
     setErro(null);
   }, [manifestacao]);
@@ -123,6 +159,15 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
   const sigiloTravado = tipo !== "" && ehSigilosoPorNatureza(tipo);
   const sigiloFinal = sigiloTravado || sigilo;
   const pronto = Boolean(tipo && setor.trim() && gravidade && extrato.trim()) && !salvando;
+  // A tela se apresenta pelo ato que o ouvidor clicou (issue #601): quem veio
+  // do botão "Encaminhar para outra área" precisa reconhecer onde chegou.
+  const titulo = manifestacao
+    ? devolvidaPelaArea
+      ? `Encaminhar ${manifestacao.protocolo} para outra área`
+      : `Validar e acionar ${manifestacao.protocolo}`
+    : devolvidaPelaArea
+      ? "Encaminhar para outra área"
+      : "Validar e acionar";
 
   async function acionar() {
     if (!manifestacao || !token || !gravidade || !tipo) return;
@@ -160,7 +205,7 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
     <AdminModal
       open={Boolean(manifestacao)}
       onClose={onClose}
-      title={manifestacao ? `Validar e acionar ${manifestacao.protocolo}` : "Validar e acionar"}
+      title={titulo}
       description="O setor recebe o email de acionamento com o prazo assim que você confirmar."
       icon={<Send className="w-5 h-5" />}
       size="lg"
@@ -247,6 +292,12 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
                 que não existe, e esta opção some. */}
             {setores.length === 0 && setor && <option value={setor}>{setor}</option>}
           </select>
+          {devolvidaPelaArea && (
+            <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
+              {devolvidaPelaArea} devolveu este caso à Ouvidoria. Escolha a área certa. Confirmar sem
+              trocar também vale, se você tem certeza de que a área estava certa.
+            </p>
+          )}
         </div>
 
         {semNinguem ? (
@@ -274,6 +325,9 @@ export function ValidarModal({ manifestacao, token, onClose, onAcionada }: Valid
               <button
                 key={nivel}
                 type="button"
+                // O botão é um seletor, e o estado precisa chegar a quem lê a
+                // tela por leitor de tela: sem isto, a escolha vive só na cor.
+                aria-pressed={gravidade === nivel}
                 onClick={() => setGravidade(nivel)}
                 className={`text-left px-3 py-2.5 rounded-xl border transition-colors ${
                   gravidade === nivel

@@ -30,7 +30,7 @@ from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
-from app.services import ouvidoria_notificacoes  # noqa: E402
+from app.services import ouvidoria_notificacoes, ouvidoria_prorrogacao  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 DIRETORIA = {
@@ -2069,3 +2069,152 @@ class TestCobrancaDoSetorPelaFila:
         de_fora, _ = _client(monkeypatch, participante, supabase)
 
         assert de_fora.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor").status_code == 403
+
+
+class TestReacionamentoDoCasoDevolvido:
+    """A área devolveu o caso que não era dela e o ouvidor despacha de novo
+    (issue #601, PRD #598, ADR 0048, decisões 2 e 4).
+
+    O reacionamento chega pela MESMA porta do acionamento: o caso devolvido
+    voltou a `em_classificacao`, e é de lá que a validação parte. O que muda é
+    o que sobrou do despacho anterior no caso, e é isso que estes testes
+    cobram.
+    """
+
+    def _devolvido(self, **overrides) -> dict:
+        """O caso como a Devolução à Ouvidoria (issue #600) o deixa: de volta à
+        fila do ouvidor, com o vencimento da área já zerado pela rota da
+        devolução, mas com a memória do despacho anterior ainda no caso."""
+        caso = _manifestacao(
+            status="em_classificacao",
+            setor="Recepcao",
+            gravidade="medio",
+            validada_em="2026-08-18T13:00:00+00:00",
+            validada_por="P10",
+            prazo_conclusivo_em=TestPrazoConclusivoCongelado.CONCLUSIVO_MEDIO,
+            extrato_para_o_setor=EXTRATO,
+            # A área errada estourou o prazo antes de devolver: é este carimbo
+            # que o indicador de cumprimento lê antes de tudo.
+            area_estourou_em="2026-08-20T20:00:00+00:00",
+        )
+        for carimbo in ouvidoria_prorrogacao.CARIMBOS_DEPENDENTES_DO_PRAZO:
+            caso[carimbo] = "2026-08-21T12:00:00+00:00"
+        caso.update(overrides)
+        return caso
+
+    def _com_duas_areas(self, monkeypatch, caso: dict | None = None):
+        supabase = _SupabaseFake(
+            [caso if caso is not None else self._devolvido()],
+            [
+                _responsavel(),
+                _responsavel(setor="Centro Medico", nome="Dra. Bianca", email="bianca@hsm.br", id="resp-cm"),
+            ],
+        )
+        supabase.tabelas["setores"].append({"id": "s2", "nome": "Centro Medico", "ativo": True})
+        return _client(monkeypatch, OUVIDOR, supabase)
+
+    def test_reacionamento_devolve_o_caso_a_varredura_dos_jobs_de_prazo(self, monkeypatch):
+        """Critério de aceite: a área certa recebe prazo INTEIRO novo, e o
+        prazo novo só vira véspera, cobrança e escada se os carimbos de
+        idempotência saírem junto (issue #373)."""
+        client, supabase = self._com_duas_areas(monkeypatch)
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "setor": "Centro Medico"})
+
+        assert r.status_code == 200, r.text
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["setor"] == "Centro Medico"
+        assert caso["prazo_area_em"], "A área certa recebe vencimento novo"
+        for carimbo in ouvidoria_prorrogacao.CARIMBOS_DEPENDENTES_DO_PRAZO:
+            assert caso[carimbo] is None, f"{carimbo} sobreviveu ao reacionamento e tira o caso da fila do job"
+
+    def test_reacionamento_nao_cobra_da_area_certa_o_atraso_da_area_errada(self, monkeypatch):
+        """O achado da review do PR #602: `area_estourou_em` é a memória do
+        estouro consumado, e o indicador de cumprimento a lê ANTES do
+        vencimento vigente. Sobrevivendo ao reacionamento, ela faria o
+        relatório mostrar a área certa atrasada por culpa de quem despachou
+        errado, que é justamente o que a decisão 2 da ADR 0048 quis evitar."""
+        client, supabase = self._com_duas_areas(monkeypatch)
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "setor": "Centro Medico"})
+
+        assert r.status_code == 200, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["area_estourou_em"] is None
+
+    def test_reacionamento_nao_move_o_prazo_conclusivo_ja_congelado(self, monkeypatch):
+        """Critério de aceite: `prazo_conclusivo_em` não é recalculado no
+        reacionamento. Ele é o compromisso com o MANIFESTANTE (T0 até T3), foi
+        congelado no primeiro despacho (RN-21, RN-55) e não depende de qual
+        área está com o caso.
+
+        A gravidade muda no pedido de propósito: é ela que escolhe a célula
+        conclusiva da tabela, e é por ela que um recálculo apareceria. O teste
+        irmão abaixo prova que a data do 'alto' é mesmo outra, senão esta
+        asserção passaria por coincidência."""
+        client, supabase = self._com_duas_areas(monkeypatch)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/validar",
+            json={**VALIDACAO, "setor": "Centro Medico", "gravidade": "alto"},
+        )
+
+        assert r.status_code == 200, r.text
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert dt.datetime.fromisoformat(str(caso["prazo_conclusivo_em"])) == dt.datetime.fromisoformat(
+            TestPrazoConclusivoCongelado.CONCLUSIVO_MEDIO
+        )
+        assert caso["prazo_area_em"], "O prazo da ÁREA, esse sim, nasce do zero na gravidade nova"
+
+    def test_o_primeiro_despacho_com_a_gravidade_nova_daria_outra_data(self, monkeypatch):
+        """O par do teste acima, e a razão de ele não ser vácuo: com a mesma
+        entrada e a gravidade 'alto', o cálculo do zero dá 21/08, não 25/08.
+        Sem esta prova, congelar e recalcular seriam indistinguíveis ali."""
+        client, supabase = self._com_duas_areas(monkeypatch, self._devolvido(prazo_conclusivo_em=None))
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/validar",
+            json={**VALIDACAO, "setor": "Centro Medico", "gravidade": "alto"},
+        )
+
+        assert r.status_code == 200, r.text
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert dt.datetime.fromisoformat(str(caso["prazo_conclusivo_em"])) == dt.datetime.fromisoformat(
+            "2026-08-21T20:00:00+00:00"
+        )
+
+    def test_a_primeira_validacao_continua_na_trilha_depois_do_reacionamento(self, monkeypatch):
+        """Critério de aceite: o T1 é carimbado de novo na COLUNA, e o caminho
+        do caso não se perde por isso. A trilha é imutável e é ela que conta a
+        história do despacho errado (histórias 21 e 27 do PRD #598).
+
+        O caso passa pelos dois acionamentos de verdade, com a volta à fila do
+        ouvidor no meio, que é o que a Devolução à Ouvidoria faz."""
+        client, supabase = self._com_duas_areas(monkeypatch, _manifestacao(status="em_classificacao"))
+
+        assert client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO).status_code == 200
+        # A volta pela Devolução à Ouvidoria, que tem porta própria no portal
+        # do setor (issue #600) e não passa por este router.
+        supabase.tabelas["ouvidoria_protocolos"][0]["status"] = "em_classificacao"
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "setor": "Centro Medico"})
+
+        assert r.status_code == 200, r.text
+        acionamentos = [
+            m
+            for m in supabase.tabelas["ouvidoria_movimentos"]
+            if (m["estado_anterior"], m["estado_novo"]) == ("em_classificacao", "aguardando_area")
+        ]
+        assert len(acionamentos) == 2, "Os dois despachos são fatos datados, e nenhum apaga o outro"
+        assert "setor Recepcao" in acionamentos[0]["observacao"]
+        assert "setor Centro Medico" in acionamentos[1]["observacao"]
+
+    def test_o_dossie_devolve_o_extrato_do_acionamento_anterior(self, monkeypatch):
+        """Critério de aceite: o botão "Encaminhar para outra área" abre a
+        validação com o extrato preenchido, e a tela só consegue preencher o
+        que o Dossiê entrega. Sem esta coluna na resposta, o campo abriria
+        vazio e o ouvidor reescreveria do zero a nota que já existe."""
+        client, _ = self._com_duas_areas(monkeypatch)
+
+        r = client.get("/api/ouvidoria/manifestacoes/uuid-7")
+
+        assert r.status_code == 200, r.text
+        assert r.json()["extrato_para_o_setor"] == EXTRATO
