@@ -7,6 +7,27 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.112.0 - 2026-09-07 16:55 - A Ouvidoria e avisada por email da devolucao, e o Dossie mostra o caso devolvido com o reacionamento pre-preenchido
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `40a8585`
+- Servicos: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.112.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200 com 0.112.0 embutido no HTML servido), backend 19s e frontend 186s
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/40a8585
+- Issues: [#599](https://github.com/pedrorezendefig/hospital-reunioes/issues/599) · PR [#605](https://github.com/pedrorezendefig/hospital-reunioes/pull/605) · [#601](https://github.com/pedrorezendefig/hospital-reunioes/issues/601) · PR [#606](https://github.com/pedrorezendefig/hospital-reunioes/pull/606) (PRD [#598](https://github.com/pedrorezendefig/hospital-reunioes/issues/598), ADR 0048)
+- Sem migration · minor, feat
+
+Onda 2 de 2 do PRD #598, que fecha o PRD. A fatia #600 ja tinha aberto a porta na v0.110.0; estas duas dizem o que acontece depois que a area passa por ela.
+
+A **#599** avisa. Quando a area devolve pelo link do portal, a Ouvidoria e a Diretoria recebem um email com o setor e o motivo. Sem migration: o gatilho `devolvido_a_ouvidoria` ja tinha entrado no CHECK na 098, de proposito, para esta fatia nao precisar de uma migration so para acrescentar uma palavra a uma lista. Nada do manifestante entra no email, entao o caso sigiloso e o anonimo nao precisam de ramo proprio, e ha teste que planta relato e nome e cobra o marcador do que o email promete mostrar. O setor viaja congelado no `detalhe`, porque o reacionamento troca o setor no caso e um reenvio acusaria a area errada. Limpo nas duas lentes de review na primeira rodada.
+
+A **#601** mostra e reaciona. O Dossie ganha o bloco da devolucao com setor, motivo, autor, data e a contagem a partir da segunda volta; o botao vira "Encaminhar para outra area" e o modal abre com gravidade, extrato e area anterior preenchidos.
+
+As tres rodadas de review do #606 giraram em torno da mesma coisa: **apagar evidencia de atraso**. A rodada 1 achou que `area_estourou_em` era zerado incondicionalmente, entao a area que estourou o prazo podia devolver e ter a ficha limpa quando o ouvidor reconfirmasse a mesma area, que e o que a migration 076 existe para impedir; e que `minutos_pausados` sobrevivia ao prazo novo, mentindo na tela e descontando tempo da area nova no ranking da Diretoria. A rodada 2 achou a regressao do proprio fix: o `setor` novo era gravado ANTES da RPC de transicao, entao uma tentativa recusada sujava a coluna e o retry concluia que nada mudou, fazendo a area CERTA nascer carregando o estouro da area ERRADA. O setor passou para o update pos-transicao e dois testes provam o caminho de erro. A rodada 3, uma acima do teto da skill e autorizada no checkpoint, voltou limpa. Prova por mutacao: 11 mutantes no #605 e 29 no #606.
+
+Os dois PRs pediam a mesma versao 0.111.0. O #605 mergeou primeiro e ficou com ela; no #606 o rebase descartou o commit de bump por conteudo identico, o classico bump fantasma, e ele foi refeito a mao como 0.112.0 antes do merge.
+
+Duas notas que sobrevivem ao deploy. O buraco irmao continua aberto em producao desde a v0.110.0: `ouvidoria_setor.devolver_a_ouvidoria` zera `prazo_area_em` sem carimbar `area_estourou_em`, entao a area apaga sozinha o proprio estouro com um clique no link do email, sem login e sem o ouvidor; virou a issue #607. E a regra de prazo nova (o `prazo_conclusivo_em` congela no primeiro despacho, enquanto o `prazo_area_em` segue recalculado) ainda nao esta em doc vivo, por decisao de nao mexer em `CONTEXT.md` e ADR com trabalho nao commitado na arvore principal.
+
 ## v0.110.0 - 2026-09-07 15:05 - A area devolve pelo link do portal o caso que nao e dela, e o caso volta para a fila de classificacao
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `80fb433`

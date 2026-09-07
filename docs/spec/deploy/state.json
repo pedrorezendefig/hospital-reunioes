@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-07T15:05:00-03:00",
+  "updated_at": "2026-09-07T16:55:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.110.0",
+  "last_app_version": "0.112.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "80fb433",
-      "last_deploy_at": "2026-09-07T14:57:42-03:00",
+      "last_deploy_sha": "40a8585",
+      "last_deploy_at": "2026-09-07T16:49:43-03:00",
       "last_health_check": {
-        "at": "2026-09-07T15:05:00-03:00",
-        "latency_ms": 231,
+        "at": "2026-09-07T16:55:00-03:00",
+        "latency_ms": 104,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 157,
+      "build_duration_seconds": 19,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "80fb433",
-      "last_deploy_at": "2026-09-07T14:59:45-03:00",
+      "last_deploy_sha": "40a8585",
+      "last_deploy_at": "2026-09-07T16:52:30-03:00",
       "last_health_check": {
-        "at": "2026-09-07T15:05:00-03:00",
-        "latency_ms": 131,
+        "at": "2026-09-07T16:55:00-03:00",
+        "latency_ms": 214,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 280,
+      "build_duration_seconds": 186,
       "env_count": 5
     },
     {
@@ -159,39 +159,68 @@
   },
   "gates": [
     {
-      "name": "Onda 1 de 2 do PRD #598: issue #600 (fatia G). As #599 e #601 estavam bloqueadas por ela e destravam agora",
+      "name": "Onda 2 de 2 do PRD #598: issues #599 (fatia P) e #601 (fatia M), rodadas em paralelo. PRD completo",
       "status": "ok"
     },
     {
-      "name": "CI do PR #602 verde nos 3 jobs nas duas rodadas (backend, frontend, docker build)",
+      "name": "CI verde nos 3 jobs em todas as rodadas dos dois PRs, inclusive apos o rebase e o rebump do #606",
       "status": "ok"
     },
     {
-      "name": "Revisor independente (ADR 0035), 2 lentes por rodada: rodada 1 seguranca LIMPO e codigo MUST-FIX 2; rodada 2 as duas LIMPO",
+      "name": "Revisor independente (ADR 0035): #605 limpo de primeira nas duas lentes; #606 precisou de 3 rodadas, uma a mais que o teto da skill, autorizada pelo humano no checkpoint",
       "status": "ok"
     },
     {
-      "name": "Prova por mutacao: 6 mutantes na entrega mais 8 na rodada de fix, incluindo mutante no proprio detector",
+      "name": "Achados do #606: rodada 1 pegou area_estourou_em zerado sem a area mudar (evidencia de atraso apagavel) e minutos_pausados nao zerado; rodada 2 pegou o setor gravado antes da RPC, regressao do proprio fix, que fazia a area certa herdar o estouro da errada no retry; rodada 3 limpa",
       "status": "ok"
     },
     {
-      "name": "Migration 098 aplicada a mao no Studio de producao pelo humano antes do merge",
+      "name": "Prova por mutacao: 11 mutantes no #605 e 29 no #606, todos mortos, com mutantes plantados no proprio detector",
       "status": "ok"
     },
     {
-      "name": "Version match: /api/health devolveu 0.110.0, igual ao APP_VERSION setado no Coolify antes do merge",
+      "name": "Sem migration nas duas fatias: a 098 da fatia #600 ja tinha deixado o gatilho devolvido_a_ouvidoria no CHECK, de proposito",
       "status": "ok"
     },
     {
-      "name": "Prova de que o codigo novo esta no ar: POST /api/ouvidoria-setor/<token invalido>/devolver responde 404 com 'Link invalido' (logica da rota), enquanto uma rota inexistente no mesmo prefixo responde 404 com 'Not Found'",
+      "name": "Colisao de bump resolvida no merge: os dois PRs pediam 0.111.0. O #605 mergeou primeiro e ficou com ela; o rebase do #606 descartou o bump por conteudo identico (bump fantasma) e ele foi refeito a mao como 0.112.0",
       "status": "ok"
     },
     {
-      "name": "Backend e frontend buildaram concorrentes sem OOM (157s e 280s)",
+      "name": "Version match: /api/health devolveu 0.112.0 e o HTML servido do frontend traz 0.112.0 embutido, o que prova os dois lados construidos do codigo novo",
       "status": "ok"
+    },
+    {
+      "name": "Dois deploys nesta onda, nao um: o merge do #605 disparou o webhook na hora. Inerente ao auto-deploy por push, nao contornavel pelo orquestrador",
+      "status": "warn"
     }
   ],
   "next_actions": [
+    {
+      "kind": "warn",
+      "title": "A area apaga o proprio estouro de prazo ao devolver pelo link do portal",
+      "text": "Achado do revisor de seguranca do #606, mas o defeito e do codigo do #600 (v0.110.0, ja em producao). ouvidoria_setor.devolver_a_ouvidoria zera prazo_area_em sem carimbar area_estourou_em, entao a area atrasada limpa a propria ficha com um clique, sem login e sem o ouvidor. Virou a issue #607, com needs-triage. O #606 fechou so a metade do lado do ouvidor."
+    },
+    {
+      "kind": "warn",
+      "title": "Regra de prazo nova sem doc viva",
+      "text": "O #606 estabelece que prazo_conclusivo_em congela no PRIMEIRO despacho, enquanto prazo_area_em segue recalculado a cada um. E regra de negocio nova e nao esta no CONTEXT.md nem em ADR. O sub-agente foi proibido de tocar nesses arquivos porque ha trabalho nao commitado do Pedro na arvore principal, inclusive o proprio ADR 0048. Registrado em comentario na issue #601."
+    },
+    {
+      "kind": "info",
+      "title": "Duas voltas ainda limpam o carimbo da area culpada",
+      "text": "Achado aceito nas rodadas 2 e 3 do #606. area_estourou_em e coluna unica, entao area A para B e de volta para A limpa o carimbo mesmo com o fix. Setores irmaos que so diferem por acento na taxonomia tambem contornam a comparacao. Resolver isso e modelagem (historico de estouros por ciclo) e merece ADR proprio."
+    },
+    {
+      "kind": "info",
+      "title": "O changelog_prepend.py gera travessao no titulo de toda entrada",
+      "text": "O script da skill /deploy monta o cabecalho com travessao (U+2014), o que viola a regra de tipografia do projeto. A entrada da v0.110.0 foi corrigida a mao nesta sessao e a da v0.112.0 ja nasceu certa, mas o defeito continua no script e volta no proximo deploy."
+    },
+    {
+      "kind": "info",
+      "title": "O caso reacionado sai do relatorio de espera pelo manifestante",
+      "text": "Achado da rodada 2 do #606 em _tempo_pausado. Buraco pre-existente que a reabertura por reincidencia ja tem: a coluna guarda acumulado corrente, nao historico por ciclo, entao nao ha correcao de uma linha. Registrado na issue #601."
+    },
     {
       "kind": "warn",
       "title": "A peneira de invisiveis so cobre a categoria Cf",
@@ -206,11 +235,6 @@
       "kind": "info",
       "title": "Nenhum teste distingue qual das duas recusas o 422 carrega",
       "text": "Achado da rodada 2 do revisor de codigo do #602. Motivo vazio e motivo acima do teto respondem 422, e o teste nao prende qual mensagem sai. Trocar as duas por engano passaria verde."
-    },
-    {
-      "kind": "info",
-      "title": "area_estourou_em herdado pode marcar a area certa como atrasada",
-      "text": "Achado do revisor do #602, deixado de proposito para a fatia do reacionamento e ja comentado na issue #601: o caso devolvido leva o carimbo de estouro da area errada, e a area nova pode nascer atrasada."
     },
     {
       "kind": "warn",
@@ -250,8 +274,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "80fb433",
+    "sha": "40a8585",
     "result": "healthy",
-    "duration_seconds": 660
+    "duration_seconds": 720
   }
 }

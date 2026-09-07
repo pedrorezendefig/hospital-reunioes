@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-07T16:55:00-03:00",
+      "sha": "40a8585",
+      "app_version": "0.112.0",
+      "subject": "a Ouvidoria e avisada por email da devolucao, e o Dossie mostra o caso devolvido com o reacionamento pre-preenchido",
+      "raw_subject": "feat(ouvidoria): Dossiê mostra a devolução e o ouvidor reaciona a área certa (#601) (#606)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 720,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 de 2 do PRD #598, que fecha o PRD: #599 (PR #605) e #601 (PR #606). Sem migration, porque a 098 ja tinha deixado o gatilho no CHECK. O #605 saiu limpo de primeira; o #606 precisou de 3 rodadas de review, uma acima do teto e autorizada pelo humano, e as tres giraram em torno de apagar evidencia de atraso. A colisao de bump (os dois pediam 0.111.0) foi resolvida no merge, com o #606 refeito a mao como 0.112.0 depois que o rebase descartou o bump por conteudo identico. Um buraco irmao, ainda aberto em producao desde a v0.110.0, virou a issue #607."
+    },
+    {
       "at": "2026-09-07T15:05:00-03:00",
       "sha": "80fb433",
       "app_version": "0.110.0",
@@ -1389,37 +1418,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Fecha o PRD #318 (6/6 fatias). As duas revisões independentes reprovaram o gate e renderam 10 achados reais em 3 commits de correção: a pausa não parava os indicadores (só a escada de cobrança, que filtra status); a pausa aberta não era liquidada no encerramento por sem retorno, que é justamente de onde ele sai; pausar depois do estouro apagava prazo_rompido_em; a reabertura herdava as tentativas do ciclo anterior, deixava o desfecho velho e (regressão da própria correção) apagava resposta_da_area, a única cópia do texto do setor. Decisão registrada: encerrada_em NÃO é zerado na reabertura (é o T3 do ciclo anterior); a regra dos 2 contatos exige 5 dias úteis desde a PRIMEIRA tentativa, não só as duas tentativas. Webhook do Coolify segue quebrado: deploy disparado à mão, backend e frontend em sequência."
-    },
-    {
-      "at": "2026-08-25T15:43:58-03:00",
-      "sha": "bbf1a6b",
-      "app_version": "0.68.0",
-      "subject": "Ouvidoria: devolução por insuficiência com meio prazo",
-      "raw_subject": "feat(ouvidoria): devolução por insuficiência com meio prazo (#334) (#368)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1020,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "074_ouvidoria_devolucao.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Fatia G3 do PRD #318. O code-review independente achou 5 bugs antes do merge, um high: a rota aceitava caso em em_classificacao (o acionamento) e devolver por ali pulava a validacao inteira. Tambem: devolver duas vezes esticava o prazo, contornando o teto da prorrogacao. Os dois "
     }
   ]
 }
