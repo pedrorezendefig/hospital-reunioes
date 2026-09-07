@@ -89,6 +89,12 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         "registrado_por": "P10",
         "validada_por": "P10",
         "respondida_por_nome": "Carlos Titular",
+        # O Arquivo (issue #592, ADR 0047): quem guardou o caso e quando. Gente
+        # do hospital e relógio do hospital, como `validada_por` logo acima, e
+        # por isso preservados. Preenchidos aqui pela mesma regra do bloco: com
+        # nulo dos dois lados a afirmação de preservação ficaria sem dentes.
+        "arquivada_em": "2020-08-15T10:00:00+00:00",
+        "arquivada_por": "P10",
         # O Dossiê que a retenção apaga.
         "relato_integral": "Joana da Silva, RG 12.345.678, esperou tres horas na recepcao do dia 1.",
         "manifestante_nome": "Joana da Silva",

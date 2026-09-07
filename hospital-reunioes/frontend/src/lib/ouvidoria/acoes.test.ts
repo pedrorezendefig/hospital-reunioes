@@ -37,9 +37,27 @@ describe("a ação primária de cada estado (RN-74)", () => {
     expect(acaoPrimariaDoStatus("aguardando_manifestante")).toBe("abrir");
   });
 
-  it("caso encerrado abre, e mais nada", () => {
-    expect(acaoPrimariaDoStatus("encerrado")).toBe("abrir");
-    expect(acoesSecundariasDoStatus("encerrado")).toEqual([]);
+  it("caso encerrado é arquivado, e o Dossiê fica no menu", () => {
+    // Era "abrir, e mais nada" até a issue #592: o caso que já acabou passou a
+    // ter um próximo passo de verdade, que é sair da vista da lista.
+    expect(acaoPrimariaDoStatus("encerrado")).toBe("arquivar");
+    expect(acoesSecundariasDoStatus("encerrado")).toEqual(["abrir"]);
+  });
+
+  it("arquivar não aparece em nenhum caso que ainda está andando", () => {
+    // A tela não decide nada (quem recusa é o servidor, com 409), mas oferecer
+    // o botão num caso com prazo correndo ensinaria o ouvidor a tentar.
+    const andando = [
+      "novo",
+      "em_classificacao",
+      "aguardando_area",
+      "aguardando_manifestante",
+      "respondido",
+    ] as const;
+    for (const status of andando) {
+      expect(acaoPrimariaDoStatus(status)).not.toBe("arquivar");
+      expect(acoesSecundariasDoStatus(status)).not.toContain("arquivar");
+    }
   });
 
   it("estado que a tela não conhece cai em abrir, e não em botão nenhum", () => {
@@ -96,11 +114,61 @@ describe("o que sobra vai para o menu (issue #495)", () => {
   });
 });
 
+describe("a lista dos arquivados oferece a volta (issue #592, ADR 0047)", () => {
+  it("no modo arquivados a ação da linha é desarquivar, em qualquer estado", () => {
+    // Desarquivar não tem pré-condição: o caso que chegou ao arquivo por
+    // qualquer caminho precisa poder voltar à lista.
+    const estados = [
+      "novo",
+      "em_classificacao",
+      "aguardando_area",
+      "aguardando_manifestante",
+      "respondido",
+      "encerrado",
+    ] as const;
+    for (const status of estados) {
+      expect(acaoPrimariaDoStatus(status, true)).toBe("desarquivar");
+      expect(acoesSecundariasDoStatus(status, true)).toEqual(["abrir"]);
+    }
+  });
+
+  it("fora do modo arquivados, desarquivar não existe em lugar nenhum", () => {
+    const estados = [
+      "novo",
+      "em_classificacao",
+      "aguardando_area",
+      "aguardando_manifestante",
+      "respondido",
+      "encerrado",
+    ] as const;
+    for (const status of estados) {
+      expect(acaoPrimariaDoStatus(status)).not.toBe("desarquivar");
+      expect(acoesSecundariasDoStatus(status)).not.toContain("desarquivar");
+    }
+  });
+
+  it("no modo arquivados ninguém arquiva de novo", () => {
+    expect(acaoPrimariaDoStatus("encerrado", true)).not.toBe("arquivar");
+    expect(acoesSecundariasDoStatus("encerrado", true)).not.toContain("arquivar");
+  });
+});
+
 describe("os rótulos da fila", () => {
   it("toda ação tem nome escrito, para o botão nunca sair em branco", () => {
-    const chaves: ChaveDeAcao[] = ["validar", "cobrar", "encerrar", "abrir"];
+    const chaves: ChaveDeAcao[] = ["validar", "cobrar", "encerrar", "arquivar", "desarquivar", "abrir"];
     for (const chave of chaves) {
       expect(ROTULO_ACAO[chave].length).toBeGreaterThan(0);
+    }
+  });
+
+  it("os verbos do arquivo são Arquivar e Desarquivar, nunca excluir", () => {
+    // Vocabulário do CONTEXT.md (verbete Arquivo): arquivar esconde e tem
+    // volta; "excluir" e "deletar" prometem o que esta ação não faz.
+    expect(ROTULO_ACAO.arquivar).toBe("Arquivar");
+    expect(ROTULO_ACAO.desarquivar).toBe("Desarquivar");
+    for (const rotulo of Object.values(ROTULO_ACAO)) {
+      expect(rotulo.toLowerCase()).not.toContain("exclu");
+      expect(rotulo.toLowerCase()).not.toContain("delet");
     }
   });
 });

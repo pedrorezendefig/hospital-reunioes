@@ -1,6 +1,6 @@
 ---
 status: accepted
-amended_by: 0036
+amended_by: 0036, 0047
 ---
 
 > Emenda em prosa ao ADR 0031 (decisão 3, "índice, não dossiê"). Sem ponteiro `amends` no frontmatter: o 0031 já está emendado pelo 0032 e o lint de ADR aceita um único ponteiro por campo.

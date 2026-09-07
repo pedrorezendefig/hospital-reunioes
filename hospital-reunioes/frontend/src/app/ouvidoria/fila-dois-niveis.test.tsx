@@ -302,12 +302,19 @@ describe("a ação primária de cada estado, sempre visível (RN-74, D-06)", () 
     expect(within(linha).getByRole("button", { name: "Encerrar" })).toBeTruthy();
   });
 
-  it("caso encerrado oferece só o caminho do Dossiê, sem menu nenhum", async () => {
+  it("caso encerrado é arquivado, e o Dossiê fica no menu", async () => {
+    // Era "só o caminho do Dossiê, sem menu nenhum" até a issue #592. O caso
+    // que já acabou ganhou próximo passo (sair da vista da lista), e o Dossiê
+    // desceu para o menu, como acontece em todo estado que tem ação própria.
     montar([caso(7, "encerrado")]);
     const linha = await linhaDe("2026-0007");
 
+    expect(within(linha).getByRole("button", { name: "Arquivar" })).toBeTruthy();
+    expect(within(linha).queryByRole("link", { name: "Abrir manifestação" })).toBeNull();
+
+    fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
+
     expect(within(linha).getByRole("link", { name: "Abrir manifestação" })).toBeTruthy();
-    expect(within(linha).queryByRole("button", { name: /Mais ações/ })).toBeNull();
   });
 
   it("o que sobra fica no menu, e não na linha", async () => {

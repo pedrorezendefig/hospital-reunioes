@@ -15,14 +15,30 @@
 import type { StatusManifestacao } from "./prazo";
 import { podeEncerrar, podeValidar } from "./validacao";
 
-export type ChaveDeAcao = "validar" | "cobrar" | "encerrar" | "abrir";
+export type ChaveDeAcao = "validar" | "cobrar" | "encerrar" | "arquivar" | "desarquivar" | "abrir";
 
 export const ROTULO_ACAO: Record<ChaveDeAcao, string> = {
   validar: "Validar e acionar",
   cobrar: "Cobrar",
   encerrar: "Encerrar",
+  // O vocabulário do Arquivo (issue #592, ADR 0047, verbete do CONTEXT.md).
+  // Nunca "excluir" nem "deletar": arquivar esconde da lista e tem volta, e um
+  // verbo que promete sumiço faria o ouvidor hesitar no clique certo.
+  arquivar: "Arquivar",
+  desarquivar: "Desarquivar",
   abrir: "Abrir manifestação",
 };
+
+/**
+ * Só caso encerrado arquiva (ADR 0047, decisão 2). Caso em andamento tem prazo
+ * correndo e setor esperando, e escondê-lo da lista é esconder atraso.
+ *
+ * Quem recusa de verdade é o servidor, com 409. Aqui só não se oferece o
+ * caminho que terminaria em recusa, como no resto desta tela.
+ */
+export function podeArquivar(status: StatusManifestacao): boolean {
+  return status === "encerrado";
+}
 
 /**
  * Cobrar é reenviar o acionamento (ADR 0034, decisão 7). Só o caso que está
@@ -42,8 +58,20 @@ const CABIMENTO: { chave: ChaveDeAcao; cabe: (status: StatusManifestacao) => boo
   { chave: "validar", cabe: podeValidar },
   { chave: "cobrar", cabe: podeCobrar },
   { chave: "encerrar", cabe: podeEncerrar },
+  { chave: "arquivar", cabe: podeArquivar },
   { chave: "abrir", cabe: () => true },
 ];
+
+/**
+ * O que a lista dos arquivados oferece, na ordem em que ela oferece: a
+ * PRIMEIRA é a ação da linha e o resto vai para o menu (issue #592).
+ *
+ * Não depende do estado do caso: desarquivar não tem pré-condição nenhuma, e
+ * nenhuma das outras ações faz sentido sobre um caso que o ouvidor guardou.
+ * Uma lista só, e não uma lista mais uma primária escrita à parte: com as
+ * duas, mudar a ordem aqui deixaria de mudar o botão da linha.
+ */
+const ACOES_NO_ARQUIVO: readonly [ChaveDeAcao, ...ChaveDeAcao[]] = ["desarquivar", "abrir"];
 
 /**
  * O próximo passo de cada estado, escrito estado a estado (RN-74). É mapa, e
@@ -60,19 +88,32 @@ const PRIMARIA_POR_STATUS: Partial<Record<StatusManifestacao, ChaveDeAcao>> = {
   em_classificacao: "validar",
   aguardando_area: "cobrar",
   respondido: "encerrar",
+  // Desde a issue #592: o próximo passo do caso que já acabou é sair da vista.
+  // Antes ele caía em "abrir", que não é passo nenhum, e era isso que fazia o
+  // grupo Encerrado crescer sem parar.
+  encerrado: "arquivar",
 };
 
-function acoesPossiveis(status: StatusManifestacao): ChaveDeAcao[] {
+function acoesPossiveis(status: StatusManifestacao, arquivados: boolean): ChaveDeAcao[] {
+  if (arquivados) return [...ACOES_NO_ARQUIVO];
   return CABIMENTO.filter(({ cabe }) => cabe(status)).map(({ chave }) => chave);
 }
 
-/** A ação que fica à direita da linha, sempre visível. */
-export function acaoPrimariaDoStatus(status: StatusManifestacao): ChaveDeAcao {
+/**
+ * A ação que fica à direita da linha, sempre visível.
+ *
+ * `arquivados` é o modo da lista, e não um estado do caso (issue #592): a
+ * mesma linha oferece Arquivar na lista de trabalho e Desarquivar na lista do
+ * arquivo. Ele entra por parâmetro, e não por um campo do caso, porque quem
+ * sabe qual das duas listas está na tela é a tela que ligou o filtro.
+ */
+export function acaoPrimariaDoStatus(status: StatusManifestacao, arquivados = false): ChaveDeAcao {
+  if (arquivados) return ACOES_NO_ARQUIVO[0];
   return PRIMARIA_POR_STATUS[status] ?? "abrir";
 }
 
 /** O que sobra, na mesma ordem, dentro do menu de ações secundárias. */
-export function acoesSecundariasDoStatus(status: StatusManifestacao): ChaveDeAcao[] {
-  const primaria = acaoPrimariaDoStatus(status);
-  return acoesPossiveis(status).filter((chave) => chave !== primaria);
+export function acoesSecundariasDoStatus(status: StatusManifestacao, arquivados = false): ChaveDeAcao[] {
+  const primaria = acaoPrimariaDoStatus(status, arquivados);
+  return acoesPossiveis(status, arquivados).filter((chave) => chave !== primaria);
 }

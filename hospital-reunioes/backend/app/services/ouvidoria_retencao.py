@@ -172,6 +172,12 @@ CAMPOS_ESTATISTICOS: tuple[str, ...] = (
     "validada_por",
     "respondida_por_nome",
     "prazo_resposta",
+    # O Arquivo (issue #592, ADR 0047). Ficam, e a decisão é consciente: são
+    # gente do HOSPITAL e relógio do hospital, como `validada_por`, e não dizem
+    # nada sobre quem manifestou. Apagá-los devolveria à lista, cinco anos
+    # depois, um caso que a Ouvidoria já tinha guardado.
+    "arquivada_em",
+    "arquivada_por",
 )
 
 # O que o job precisa do caso para decidir e anonimizar.
