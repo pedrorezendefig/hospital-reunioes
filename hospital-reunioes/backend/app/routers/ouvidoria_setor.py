@@ -471,6 +471,8 @@ async def devolver_a_ouvidoria(
 
     `prazo_conclusivo_em` não é tocado: ele é o compromisso com o manifestante
     (T0 até T3) e não depende de qual área está com o caso."""
+    from app.routers.ouvidoria import carregar_feriados
+
     agora = agora_utc()
     vinculo, caso = _carregar_caso(supabase, token, agora)
 
@@ -512,6 +514,11 @@ async def devolver_a_ouvidoria(
     # escalonamento filtram por `.lte("prazo_area_em", ...)`, que descarta
     # NULL: o caso sairia das duas em silêncio.
     prazo_anterior = caso.get("prazo_area_em")
+    # A MESMA frase vai para a trilha e para o `detalhe` da notificação. O
+    # setor viaja congelado nela porque o reacionamento troca `setor` no caso
+    # logo depois: lido do caso na hora do envio, o aviso (e o reenvio dele
+    # meses adiante) culparia a área errada pela devolução.
+    observacao = ouvidoria_devolucao_a_ouvidoria.observacao_da_devolucao(caso.get("setor"), motivo)
     try:
         (
             supabase.table("ouvidoria_protocolos")
@@ -533,7 +540,7 @@ async def devolver_a_ouvidoria(
                 "p_estado_novo": "em_classificacao",
                 "p_autor_id": None,
                 "p_autor_nome": vinculo["destinatario_nome"],
-                "p_observacao": ouvidoria_devolucao_a_ouvidoria.observacao_da_devolucao(caso.get("setor"), motivo),
+                "p_observacao": observacao,
             },
         ).execute()
     except FALHAS_DO_POSTGREST as exc:
@@ -567,6 +574,19 @@ async def devolver_a_ouvidoria(
         logger.error("Erro na RPC ouvidoria_transicionar pela devolução à Ouvidoria (código %s)", codigo)
         raise _indisponivel() from exc
 
+    # O aviso vem DEPOIS da transição, e é melhor esforço: o caso já voltou
+    # para a fila do ouvidor e o link já foi consumido, então derrubar a
+    # resposta aqui não daria segunda tentativa a ninguém, e deixaria a área
+    # presa a um caso que não é dela (issue #599).
+    _avisar_a_ouvidoria(
+        supabase,
+        vinculo["manifestacao_id"],
+        caso.get("gravidade"),
+        agora,
+        carregar_feriados(supabase),
+        gatilho=ouvidoria_notificacoes.GATILHO_DEVOLVIDO_A_OUVIDORIA,
+        detalhe=observacao,
+    )
     _registrar_acesso(supabase, vinculo, "portal_setor_devolver")
     return {"protocolo": caso.get("protocolo"), "devolvida_em": agora.isoformat()}
 
@@ -583,15 +603,28 @@ class PedidoDeProrrogacao(BaseModel):
     dias_uteis: int = Field(ge=1, le=ouvidoria_prorrogacao.MAX_DIAS_UTEIS_PEDIDOS)
 
 
-def _avisar_a_ouvidoria(supabase, manifestacao_id: str, gravidade: str | None, agora, feriados) -> None:
-    """O pedido chega a quem decide. Melhor esforço no envio, nunca no
+def _avisar_a_ouvidoria(
+    supabase,
+    manifestacao_id: str,
+    gravidade: str | None,
+    agora,
+    feriados,
+    *,
+    gatilho: str,
+    detalhe: str | None = None,
+) -> None:
+    """O que a área fez chega a quem decide. Melhor esforço no envio, nunca no
     registro: a notificação nasce como linha (é o que prova o aviso e é o que
     o ouvidor reenvia), e o email pode sair depois pelo job da fila.
 
-    Só quem está ATIVO, pelo mesmo motivo de `ler_diretoria_executiva`
-    (issue #403): o assunto deste email leva o número do protocolo e o corpo
-    leva o setor, e o desligamento do hospital é soft delete que não limpa
-    `perfil_ouvidoria`."""
+    Uma pessoa por linha, e sempre só quem está ATIVO, pelo mesmo motivo de
+    `ler_diretoria_executiva` (issue #403): o assunto destes emails leva o
+    número do protocolo e o corpo leva o setor, e o desligamento do hospital é
+    soft delete que não limpa `perfil_ouvidoria`.
+
+    Serve ao pedido de prorrogação (issue #333) e à Devolução à Ouvidoria
+    (issue #599). Os dois avisam as mesmas pessoas pelo mesmo caminho, e a
+    única diferença é o gatilho e o que viaja no `detalhe`."""
     from app.routers.ouvidoria import PERFIS_OUVIDORIA
 
     try:
@@ -604,21 +637,22 @@ def _avisar_a_ouvidoria(supabase, manifestacao_id: str, gravidade: str | None, a
         )
         destinos = [d for d in (result.data or []) if (d.get("email") or "").strip()]
     except Exception:
-        logger.error("Falha ao buscar a Ouvidoria para avisar do pedido de prorrogação de %s", manifestacao_id)
+        logger.error("Falha ao buscar a Ouvidoria para avisar de %s em %s", gatilho, manifestacao_id)
         return
     if not destinos:
-        logger.error("Pedido de prorrogação em %s sem ninguém da Ouvidoria com email", manifestacao_id)
+        logger.error("Aviso %s em %s sem ninguém da Ouvidoria com email", gatilho, manifestacao_id)
         return
 
     for pessoa in destinos:
         aviso = ouvidoria_notificacoes.registrar(
             supabase,
             manifestacao_id=manifestacao_id,
-            gatilho=ouvidoria_notificacoes.GATILHO_PRORROGACAO_SOLICITADA,
+            gatilho=gatilho,
             destinatario_nome=pessoa.get("nome_completo") or pessoa["email"],
             destinatario_email=pessoa["email"],
             papel_destinatario=pessoa.get("perfil_ouvidoria"),
             enviar_a_partir_de=ouvidoria_notificacoes.quando_enviar(agora, gravidade, feriados),
+            detalhe=detalhe,
         )
         ouvidoria_notificacoes.despachar_agora_se_puder(supabase, aviso, agora, feriados)
 
@@ -724,7 +758,14 @@ async def pedir_prorrogacao(
             f"Prorrogação solicitada pelo setor: {pedido.dias_uteis} dia(s) útil(eis). Justificativa: {justificativa}"
         ),
     )
-    _avisar_a_ouvidoria(supabase, vinculo["manifestacao_id"], caso.get("gravidade"), agora, feriados)
+    _avisar_a_ouvidoria(
+        supabase,
+        vinculo["manifestacao_id"],
+        caso.get("gravidade"),
+        agora,
+        feriados,
+        gatilho=ouvidoria_notificacoes.GATILHO_PRORROGACAO_SOLICITADA,
+    )
     _registrar_acesso(supabase, vinculo, "portal_setor_pedir_prorrogacao")
 
     linha = criado.data[0]

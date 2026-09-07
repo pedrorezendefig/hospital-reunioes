@@ -1,0 +1,97 @@
+{% extends "email_base.html" %}
+
+{# O aviso de que a área devolveu o caso (issue #599, PRD #598, ADR 0048).
+
+   Vai só a quem tem Perfil da Ouvidoria, e por isso o botão abre o Dossiê no
+   app, como o aviso de prorrogação solicitada.
+
+   Não estende `email_ouvidoria_caso_base.html`, que é a exceção entre os
+   emails internos do módulo: o cabeçalho de lá afirma o prazo DA ÁREA, e a
+   devolução acabou de zerá-lo. Ele sairia com "Prazo: sem prazo definido" num
+   aviso cuja mensagem é justamente que ninguém mais está com o relógio da área
+   na mão. A faixa da gravidade fica, porque ela diz com que pressa despachar.
+
+   Nada do que quem manifestou escreveu entra aqui: quem recebe abre o caso
+   inteiro pelo Dossiê, e repetir o relato numa caixa de entrada espalharia o
+   que a RN-79 existe para não espalhar no caso sigiloso e no anônimo. #}
+
+{% block header_subtitle %}Ouvidoria{% endblock %}
+
+{% block title %}Ouvidoria {{ protocolo }}: o setor {{ setor }} devolveu o caso - Hospital São Matheus{% endblock %}
+
+{% block body %}
+  {# Estratificação visual (RN-34) e o essencial acima da dobra (RN-35). #}
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    {% if faixa %}
+      <tr>
+        <td style="background:{{ faixa.cor }};border-radius:10px 10px 0 0;padding:9px 24px;">
+          <span style="color:#ffffff;font-size:12px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;">
+            {{ faixa.rotulo }}
+          </span>
+        </td>
+      </tr>
+    {% endif %}
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;{% if faixa %}border-top:0;border-radius:0 0 10px 10px;{% else %}border-radius:10px;{% endif %}padding:16px 24px;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 4px;">
+          Protocolo
+        </p>
+        <p style="font-size:20px;font-weight:700;color:#1e293b;line-height:1.3;margin:0 0 10px;">
+          {{ protocolo }}
+        </p>
+        <p style="font-size:13px;color:#334155;margin:0;">
+          Devolvido pelo setor: <strong>{{ setor }}</strong>
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá, <strong style="color:#1e293b;">{{ destinatario_nome }}</strong>!
+  </p>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td style="background:#fffbeb;border:1px solid #fde68a;border-radius:10px;padding:16px 24px;">
+        <p style="font-size:14px;color:#92400e;line-height:1.6;margin:0;">
+          O setor <strong>{{ setor }}</strong> devolveu esta manifestação à Ouvidoria: o caso não é da área dele.
+          O caso voltou para a fila de classificação e o prazo da área parou de correr.
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  {# O motivo, com as palavras de quem devolveu. #}
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:20px 24px;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 6px;">
+          Motivo da área
+        </p>
+        <p style="font-size:14px;color:#334155;line-height:1.6;margin:0;">
+          {{ motivo }}
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+    O prazo de resposta ao manifestante continua correndo. Encaminhe o caso para a área certa pelo Dossiê.
+  </p>
+
+  {# CTA: botão único de ação (RN-35) #}
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:16px;">
+    <tr>
+      <td align="center">
+        <a href="{{ link }}"
+           style="display:inline-block;background:linear-gradient(135deg,#2B2E7E,#2558A0);color:#ffffff;font-size:14px;font-weight:700;text-decoration:none;padding:13px 36px;border-radius:10px;">
+          Abrir o caso na Ouvidoria
+        </a>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0;text-align:center;">
+    Não responda a este email. A devolução fica registrada na manifestação.
+  </p>
+{% endblock %}

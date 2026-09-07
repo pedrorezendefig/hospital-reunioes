@@ -213,6 +213,7 @@ class _TabelaFake:
         # derrubar a tabela inteira não distingue o ponto que se quer provar.
         self.falhas_por_operacao = falhas_por_operacao or {}
         self._filters: dict = {}
+        self._em: dict = {}
         self._ate: dict = {}
         self._insert: dict | list | None = None
         self._update: dict | None = None
@@ -238,6 +239,12 @@ class _TabelaFake:
 
     def eq(self, col, value):
         self._filters[col] = value
+        return self
+
+    def in_(self, col, valores):
+        """O `IN` do PostgREST, que é como a leitura da Ouvidoria escolhe os
+        dois perfis do módulo (`_avisar_a_ouvidoria`)."""
+        self._em[col] = list(valores)
         return self
 
     def is_(self, col, value):
@@ -302,6 +309,7 @@ class _TabelaFake:
             r
             for r in self.rows
             if all(r.get(c) == v for c, v in self._filters.items())
+            and all(r.get(c) in v for c, v in self._em.items())
             and all(str(r.get(c) or "") <= v for c, v in self._ate.items())
         ]
         if self._update is not None:
