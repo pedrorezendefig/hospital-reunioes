@@ -2874,14 +2874,25 @@ async def validar_e_acionar(
     # junto pelo mesmo motivo, e porque o email é montado a partir do caso: o
     # que o setor lê tem que estar gravado antes de o email sair.
     #
-    # O marco T1 e o prazo da área NÃO entram aqui: eles descrevem um
+    # O `setor` NÃO entra aqui, e a exceção é a regra da issue #601. Ele deixou
+    # de ser só classificação: é ele que responde "a área mudou?", e essa
+    # resposta decide se o carimbo do estouro consumado pela área anterior sai
+    # ou fica. Gravado numa tentativa que FALHOU, ele responderia a pergunta na
+    # tentativa seguinte: o ouvidor repete o despacho com a mesma área nova, a
+    # comparação diz que nada mudou, e a área CERTA nasce carregando o atraso da
+    # área ERRADA. `cumprimento_da_area` lê o estouro consumado antes de tudo, e
+    # nada limpa esse carimbo depois. É o dano da ADR 0048, decisão 2, entrando
+    # pelo caminho de erro. Ele vai com o marco T1, logo depois da transição, e
+    # continua chegando antes do email: quem despacha o email é o
+    # `despachar_agora_se_puder`, mais abaixo.
+    #
+    # O marco T1 e o prazo da área também NÃO entram aqui: eles descrevem um
     # acionamento que aconteceu, e carimbá-los antes da RPC deixaria um caso
     # recusado com hora de validação e vencimento de um despacho que nunca
     # existiu. Vão logo depois da transição valer.
     classificacao = {
         "tipo_manifestacao": pedido.tipo_manifestacao,
         "sigilo_reforcado": sigiloso,
-        "setor": setor,
         "gravidade": pedido.gravidade,
         "extrato_para_o_setor": extrato,
     }
@@ -2955,10 +2966,16 @@ async def validar_e_acionar(
     #   que é justamente o que a migration 076 existe para impedir. O atraso
     #   aconteceu, e o número tem que refletir comportamento (PRD #318,
     #   história 5).
+    #
+    # A comparação é contra o `setor` LIDO no começo desta requisição, e é por
+    # isso que a coluna só passa a valer o setor novo aqui embaixo: uma
+    # tentativa que falhou antes da transição não pode responder por "a área
+    # mudou?" na tentativa seguinte.
     fechamento_do_despacho_anterior = {"minutos_pausados": 0} | ouvidoria_prorrogacao.carimbos_a_zerar()
     if setor != caso.get("setor"):
         fechamento_do_despacho_anterior["area_estourou_em"] = None
     marcos_do_despacho = {
+        "setor": setor,
         "prazo_area_em": vencimento.isoformat() if vencimento else None,
         "validada_em": agora.isoformat(),
         "validada_por": me["id"],
@@ -2975,8 +2992,11 @@ async def validar_e_acionar(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=(
-                "O caso mudou de estado, mas o prazo não foi gravado e o setor não foi notificado. "
-                "Confira a manifestação no painel."
+                # A área entrou nesta escrita junto com o marco (issue #601),
+                # então ela também não ficou gravada: o caso continua mostrando
+                # a área anterior, e a frase precisa dizer isso.
+                "O caso mudou de estado, mas a área, o prazo e o marco da validação não foram gravados, "
+                "e o setor não foi notificado. Confira a manifestação no painel."
             ),
         ) from exc
 

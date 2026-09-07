@@ -902,7 +902,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
           {devolucao && (
             <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
               <Undo2 className="w-4 h-4 shrink-0 mt-0.5" />
-              <div>
+              {/* `min-w-0` porque este é o filho do flex: sem ele a coluna se
+                  recusa a encolher abaixo do conteúdo, e a quebra de palavra lá
+                  dentro não adianta nada. Mesmo remédio que a linha da resposta
+                  corrente já usa neste arquivo. */}
+              <div className="min-w-0">
                 <h3 className="font-medium">
                   {`Devolvido pela área ${devolucao.setor}`}
                   {devolucao.vezes > 1 && (
@@ -915,14 +919,17 @@ export function Dossie({ protocolo, token }: DossieProps) {
                     Solto, ele empurraria o resto do Dossiê para muito abaixo
                     da dobra, e este bloco abre a página. A altura é limitada e
                     o texto rola por dentro: nada é escondido, e nada empurra.
-                    `tabIndex` porque área rolável precisa ser alcançável por
-                    teclado, senão quem não usa mouse não chega ao fim do
-                    texto. */}
+                    `break-words` é o mesmo cuidado na outra direção: o
+                    `whitespace-pre-wrap` quebra em espaço, e a peneira do
+                    servidor não insere nenhum, então 10.000 caracteres colados
+                    poriam barra horizontal na página. `tabIndex` porque área
+                    rolável precisa ser alcançável por teclado, senão quem não
+                    usa mouse não chega ao fim do texto. */}
                 <div
                   role="region"
                   aria-label="Motivo da devolução"
                   tabIndex={0}
-                  className="block mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap"
+                  className="block mt-1 max-h-40 overflow-y-auto whitespace-pre-wrap break-words"
                 >
                   {devolucao.motivo}
                 </div>

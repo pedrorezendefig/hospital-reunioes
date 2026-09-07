@@ -195,6 +195,25 @@ describe("o Dossiê do caso devolvido à Ouvidoria (issue #601)", () => {
     expect(area.getAttribute("tabindex")).toBe("0");
   });
 
+  it("motivo de uma palavra só e enorme não alarga o Dossiê na horizontal", async () => {
+    // O irmão do teto vertical. `whitespace-pre-wrap` quebra em espaço, e a
+    // peneira `sem_invisiveis` do servidor não insere nenhum: 10.000 caracteres
+    // colados alargam o cartão e põem barra horizontal na página inteira. A
+    // casa já usa `min-w-0` no filho do flex pelo mesmo motivo.
+    const semEspaco = "a".repeat(4000);
+    montar(caso(), [
+      movimentoDeDevolucao("Recepcao", semEspaco, "2026-08-26T17:00:00+00:00", "Carlos Titular"),
+    ]);
+
+    const area = await screen.findByRole("region", { name: /Motivo da devolução/ });
+
+    expect(area.className).toContain("break-words");
+    // O `min-w-0` vai no filho do flex, que é quem se recusa a encolher abaixo
+    // do conteúdo: sem ele, a quebra dentro do bloco não adianta.
+    const colunaDoFlex = area.parentElement as HTMLElement;
+    expect(colunaDoFlex.className).toContain("min-w-0");
+  });
+
   it("trilha fora do ar avisa, em vez de fazer o caso devolvido parecer um caso comum", async () => {
     // Com o 503, a lista de movimentos volta vazia e o bloco some. O Dossiê do
     // caso devolvido fica IDÊNTICO ao de um caso nunca despachado, e o ouvidor

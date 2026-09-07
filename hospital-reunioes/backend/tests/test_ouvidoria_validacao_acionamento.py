@@ -2163,6 +2163,63 @@ class TestReacionamentoDoCasoDevolvido:
         )
         assert caso["prazo_area_em"], "O prazo novo sai do mesmo jeito: quem decide o despacho é o ouvidor"
 
+    def test_despacho_que_falhou_nao_deixa_a_area_nova_gravada_no_caso(self, monkeypatch):
+        """A área só passa a ser do caso quando o despacho ACONTECE.
+
+        Gravá-la antes da transição era inofensivo enquanto ela era só
+        classificação. Deixou de ser: desde a issue #601 é ela que responde "a
+        área mudou?", e a resposta decide o destino do carimbo do estouro
+        consumado. Uma tentativa que falhou não pode responder por essa
+        pergunta na tentativa seguinte."""
+        client, supabase = self._com_duas_areas(monkeypatch)
+
+        def _rpc_recusa(_nome, _params):
+            raise APIError({"code": "23514", "message": "Transicao invalida"})
+
+        monkeypatch.setattr(supabase, "rpc", _rpc_recusa)
+
+        r = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "setor": "Centro Medico"})
+
+        assert r.status_code == 409, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["setor"] == "Recepcao"
+
+    def test_retry_do_despacho_recusado_ainda_tira_o_atraso_da_area_errada(self, monkeypatch):
+        """O caminho de ERRO do critério de aceite, e o motivo do teste acima.
+
+        A RPC recusa (corrida com outra transição, ou PostgREST fora), o ouvidor
+        vê o erro e tenta de novo com a MESMA área nova, que é a escolha óbvia.
+        Se a primeira tentativa tivesse gravado o setor, a segunda concluiria
+        que a área não mudou e a área CERTA nasceria carregando o estouro da
+        área ERRADA, para sempre: `cumprimento_da_area` lê o estouro consumado
+        antes de tudo, e nada limpa esse carimbo depois. É o dano da decisão 2
+        da ADR 0048 entrando pela porta dos fundos."""
+        client, supabase = self._com_duas_areas(monkeypatch)
+        rpc_de_verdade = supabase.rpc
+        tentativas = {"n": 0}
+
+        def _rpc_recusa_a_primeira(nome, params):
+            tentativas["n"] += 1
+            if tentativas["n"] == 1:
+                raise APIError({"code": "23514", "message": "Transicao invalida"})
+            return rpc_de_verdade(nome, params)
+
+        monkeypatch.setattr(supabase, "rpc", _rpc_recusa_a_primeira)
+
+        primeira = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "setor": "Centro Medico"}
+        )
+        segunda = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "setor": "Centro Medico"}
+        )
+
+        assert primeira.status_code == 409, primeira.text
+        assert segunda.status_code == 200, segunda.text
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["setor"] == "Centro Medico"
+        assert caso["area_estourou_em"] is None, (
+            "A área certa não pode nascer estourada por causa de uma tentativa que falhou"
+        )
+
     def test_reacionamento_zera_o_credito_de_pausa_do_ciclo_anterior(self, monkeypatch):
         """`minutos_pausados` é crédito de tempo que a retomada já somou ao
         vencimento ANTIGO, e o reacionamento acabou de jogar esse vencimento
