@@ -436,7 +436,7 @@ class DevolucaoAOuvidoria(BaseModel):
     motivo: str
 
 
-def _restaurar_prazo(supabase, vinculo: dict, prazo_anterior) -> bool:
+def _restaurar_prazo(supabase, vinculo: dict, prazo_anterior, estouro_anterior) -> bool:
     """Devolve o vencimento da área quando a transição NÃO entrou, e só nesse
     caso. Devolve se restaurou de fato.
 
@@ -449,11 +449,17 @@ def _restaurar_prazo(supabase, vinculo: dict, prazo_anterior) -> bool:
     Os carimbos dos jobs de prazo ficam zerados de propósito: a linha casada
     prova que o caso continua com a área, e um carimbo zerado a mais custa um
     aviso repetido, enquanto restaurá-lo errado custa a cobrança que não sai.
+
+    O estouro consumado volta JUNTO com o vencimento porque os dois saíram
+    juntos, e desfazer meio par é pior que não desfazer nada: o caso ficaria
+    com o prazo de volta e o carimbo do estouro gravado, e
+    `cumprimento_da_area` lê o carimbo antes de tudo. Uma prorrogação aprovada
+    depois nunca mais conseguiria levar aquele caso a `cumprido` (issue #607).
     """
     try:
         result = (
             supabase.table("ouvidoria_protocolos")
-            .update({"prazo_area_em": prazo_anterior})
+            .update({"prazo_area_em": prazo_anterior, "area_estourou_em": estouro_anterior})
             .eq("id", vinculo["manifestacao_id"])
             .eq("status", "aguardando_area")
             .execute()
@@ -495,6 +501,27 @@ async def devolver_a_ouvidoria(
             detail="A Ouvidoria já movimentou este caso e ele não pode mais ser devolvido por este link",
         )
 
+    # O estouro consumado é decidido ANTES de o relógio parar, pelo mesmo
+    # motivo e com a mesma função da devolução por insuficiência (issue #374):
+    # zerar `prazo_area_em` tira do indicador de cumprimento a única régua que
+    # ele tinha, e o atraso do ciclo que acabou sumiria junto. Aqui pesa mais,
+    # porque quem apaga é a própria área interessada, por um caminho sem login
+    # e sem o ouvidor no meio (issue #607).
+    #
+    # E é decidido antes do CLAIM do token, na doutrina do `responder`: ler
+    # timestamp levanta `ValueError` cru, e uma coluna com formato inesperado
+    # viraria 500 depois do link de uso único já queimado, deixando o
+    # responsável sem devolução e sem link para tentar de novo.
+    #
+    # Ciclo cumprido não carimba nada, e estouro já gravado não é reescrito:
+    # as duas regras moram em `estouro_consumado`, não aqui.
+    estourou = estouro_consumado(
+        _instante(caso.get("prazo_area_em")),
+        _instante(caso.get("respondida_em")),
+        agora,
+        _instante(caso.get("area_estourou_em")),
+    )
+
     try:
         claim = ouvidoria_setor_tokens.consumir(supabase, vinculo, agora)
     except FALHAS_DO_POSTGREST as exc:
@@ -523,33 +550,21 @@ async def devolver_a_ouvidoria(
     # escalonamento filtram por `.lte("prazo_area_em", ...)`, que descarta
     # NULL: o caso sairia das duas em silêncio.
     prazo_anterior = caso.get("prazo_area_em")
+    estouro_anterior = caso.get("area_estourou_em")
     # A MESMA frase vai para a trilha e para o `detalhe` da notificação. O
     # setor viaja congelado nela porque o reacionamento troca `setor` no caso
     # logo depois: lido do caso na hora do envio, o aviso (e o reenvio dele
     # meses adiante) culparia a área errada pela devolução.
     observacao = ouvidoria_devolucao_a_ouvidoria.observacao_da_devolucao(caso.get("setor"), motivo)
-    # O estouro consumado é carimbado ANTES de o relógio parar, pelo mesmo
-    # motivo e com a mesma função da devolução por insuficiência (issue #374):
-    # zerar `prazo_area_em` tira do indicador de cumprimento a única régua que
-    # ele tinha, e o atraso do ciclo que acabou sumiria junto. Aqui pesa mais,
-    # porque quem apaga é a própria área interessada, por um caminho sem login
-    # e sem o ouvidor no meio (issue #607).
-    #
-    # Ciclo cumprido não carimba nada, e estouro já gravado não é reescrito:
-    # as duas regras moram em `estouro_consumado`, não aqui.
-    estourou = estouro_consumado(
-        _instante(caso.get("prazo_area_em")),
-        _instante(caso.get("respondida_em")),
-        agora,
-        _instante(caso.get("area_estourou_em")),
-    )
+    # A coluna só entra no update quando há estouro a gravar. Escrever
+    # `None` nela seria escrita cega sobre um carimbo que esta requisição não
+    # decidiu apagar: a devolução por insuficiência grava o mesmo campo sem
+    # filtro de status, e o `None` daqui apagaria o carimbo dela na corrida.
+    carimbo_do_estouro = {"area_estourou_em": estourou.isoformat()} if estourou else {}
     try:
         (
             supabase.table("ouvidoria_protocolos")
-            .update(
-                {"prazo_area_em": None, "area_estourou_em": estourou.isoformat() if estourou else None}
-                | ouvidoria_prorrogacao.carimbos_a_zerar()
-            )
+            .update({"prazo_area_em": None} | carimbo_do_estouro | ouvidoria_prorrogacao.carimbos_a_zerar())
             .eq("id", vinculo["manifestacao_id"])
             .eq("status", "aguardando_area")
             .execute()
@@ -574,7 +589,7 @@ async def devolver_a_ouvidoria(
         # Mesmo desenho do `responder`: a restauração do prazo é quem diz onde
         # o caso está, porque ela só casa linha enquanto ele continua com a
         # área.
-        restaurou = _restaurar_prazo(supabase, vinculo, prazo_anterior)
+        restaurou = _restaurar_prazo(supabase, vinculo, prazo_anterior, estouro_anterior)
         if not restaurou:
             # O caso saiu de `aguardando_area`, ou não foi possível saber. Nos
             # dois, o link não volta, pelo mesmo motivo do `responder`: o `GET`

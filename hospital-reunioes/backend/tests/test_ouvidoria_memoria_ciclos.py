@@ -793,3 +793,33 @@ class TestDevolucaoPeloPortalNaoApagaOEstouro:
         assert _cumprimento(client) == "estourado", (
             "o prazo novo apagou do indicador um atraso que aconteceu de verdade"
         )
+
+    def test_transicao_recusada_devolve_o_prazo_e_o_carimbo_juntos(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O par sai junto, então o par volta junto.
+
+        O update que para o relógio grava dois campos, e a restauração só
+        desfazia um. O caso voltava para a área com o vencimento de volta E o
+        estouro carimbado, e `cumprimento_da_area` lê o carimbo antes de tudo:
+        uma prorrogação aprovada depois nunca mais levaria aquele caso a
+        `cumprido`, por causa de uma transição que nem chegou a acontecer."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _acionar(monkeypatch, relogio)
+        rpc_de_verdade = sb.rpc
+
+        def _recusa_a_transicao(nome, params):
+            if nome == "ouvidoria_transicionar":
+                raise APIError({"message": "Transicao invalida", "code": "23514"})
+            return rpc_de_verdade(nome, params)
+
+        monkeypatch.setattr(sb, "rpc", _recusa_a_transicao)
+
+        relogio["agora"] = FORA_DO_PRAZO_EM
+        resposta = _devolver_pelo_portal(client, _nunca_envia_email_de_verdade)
+
+        assert resposta.status_code == 409, resposta.text
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area", "o caso continua com a área: a transição não entrou"
+        assert caso["prazo_area_em"] == PRAZO_ORIGINAL
+        assert caso["area_estourou_em"] is None, (
+            "o rollback devolveu o vencimento e deixou o carimbo do estouro para trás"
+        )
