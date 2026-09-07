@@ -117,6 +117,7 @@ ROTAS_COM_SEGREDO_NO_PATH = {
     "/api/aceite/{token}",
     "/api/aceite/{token}/aceitar",
     "/api/ouvidoria-setor/{token}",
+    "/api/ouvidoria-setor/{token}/devolver",
     "/api/ouvidoria-setor/{token}/prorrogacao",
     "/api/ouvidoria-setor/{token}/responder",
 }

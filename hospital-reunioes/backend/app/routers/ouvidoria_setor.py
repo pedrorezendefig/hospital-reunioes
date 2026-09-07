@@ -24,6 +24,7 @@ from app.dependencies import get_supabase_client
 from app.limiter import limiter
 from app.services import (
     ouvidoria_blocos,
+    ouvidoria_devolucao_a_ouvidoria,
     ouvidoria_notificacoes,
     ouvidoria_prorrogacao,
     ouvidoria_respostas,
@@ -413,6 +414,151 @@ async def responder(
         "respondida_em": agora.isoformat(),
         "anexos_gravados": anexos_gravados,
     }
+
+
+class DevolucaoAOuvidoria(BaseModel):
+    """O que a área manda para devolver um caso que não é dela.
+
+    O modelo só recebe: quem decide o que vale como motivo é
+    `ouvidoria_devolucao_a_ouvidoria`, no mesmo desenho da resposta e da
+    justificativa da prorrogação. O texto chega CRU até lá, e por isso teto,
+    vazio e travessão são decididos num lugar só."""
+
+    motivo: str
+
+
+def _restaurar_prazo(supabase, vinculo: dict, prazo_anterior) -> bool:
+    """Devolve o vencimento da área quando a transição NÃO entrou, e só nesse
+    caso. Devolve se restaurou de fato.
+
+    Mesma prova do `_limpar_t2`, pela mesma razão: o `ReadTimeout` não diz que
+    o Postgres deixou de executar, e o filtro por `aguardando_area` é o que
+    separa os dois mundos, porque ele só casa enquanto a transição não passou.
+    Restaurar às cegas devolveria prazo a um caso que já voltou à Ouvidoria, e
+    a cobrança passaria a caçar uma área que não tem mais nada a fazer.
+
+    Os carimbos dos jobs de prazo ficam zerados de propósito: a linha casada
+    prova que o caso continua com a área, e um carimbo zerado a mais custa um
+    aviso repetido, enquanto restaurá-lo errado custa a cobrança que não sai.
+    """
+    try:
+        result = (
+            supabase.table("ouvidoria_protocolos")
+            .update({"prazo_area_em": prazo_anterior})
+            .eq("id", vinculo["manifestacao_id"])
+            .eq("status", "aguardando_area")
+            .execute()
+        )
+    except FALHAS_DO_POSTGREST:
+        logger.warning("Falha ao restaurar o prazo da área da manifestação %s", vinculo["manifestacao_id"])
+        return False
+    return bool(result.data)
+
+
+@router.post("/{token}/devolver")
+@limiter.limit("10/minute")
+async def devolver_a_ouvidoria(
+    request: Request,
+    token: str,
+    devolucao: DevolucaoAOuvidoria,
+    supabase=Depends(get_supabase_client),
+):
+    """A Devolução à Ouvidoria: este caso não é do meu setor (issue #600).
+
+    O caso volta para a fila do ouvidor (`em_classificacao`), o relógio da área
+    para e o link deixa de valer. A área não escolhe destino: quem despacha é
+    a Ouvidoria (ADR 0048, decisão 3).
+
+    `prazo_conclusivo_em` não é tocado: ele é o compromisso com o manifestante
+    (T0 até T3) e não depende de qual área está com o caso."""
+    agora = agora_utc()
+    vinculo, caso = _carregar_caso(supabase, token, agora)
+
+    recusa = ouvidoria_devolucao_a_ouvidoria.motivo_de_recusa(devolucao.motivo)
+    if recusa:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=recusa)
+    motivo = ouvidoria_devolucao_a_ouvidoria.texto_do_motivo(devolucao.motivo)
+    if caso.get("status") != "aguardando_area":
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail="A Ouvidoria já movimentou este caso e ele não pode mais ser devolvido por este link",
+        )
+
+    try:
+        claim = ouvidoria_setor_tokens.consumir(supabase, vinculo, agora)
+    except FALHAS_DO_POSTGREST as exc:
+        # Mesmo desenho do `responder`: o claim pode ter commitado antes de o
+        # read estourar, e a devolução pelo carimbo deste request resolve os
+        # dois ramos sem corrida.
+        _devolver_o_link(supabase, vinculo, agora.isoformat())
+        logger.error("Falha ao consumir o link do portal do setor da manifestação %s", vinculo["manifestacao_id"])
+        raise _indisponivel() from exc
+    if not claim:
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE, detail="Este link já foi usado: a resposta do setor já entrou"
+        )
+
+    # O relógio da área para ANTES da transição, e os carimbos dos jobs de
+    # prazo saem junto: sem eles, o caso reacionado depois ficaria fora da
+    # véspera, da cobrança e da escada para sempre (issue #373). O prazo
+    # anterior fica guardado porque é ele que volta se a transição não entrar.
+    prazo_anterior = caso.get("prazo_area_em")
+    try:
+        (
+            supabase.table("ouvidoria_protocolos")
+            .update({"prazo_area_em": None} | ouvidoria_prorrogacao.carimbos_a_zerar())
+            .eq("id", vinculo["manifestacao_id"])
+            .execute()
+        )
+    except FALHAS_DO_POSTGREST as exc:
+        _devolver_o_link(supabase, vinculo, agora.isoformat())
+        logger.error("Falha ao parar o relógio da área da manifestação %s", vinculo["manifestacao_id"])
+        raise _indisponivel() from exc
+
+    try:
+        supabase.rpc(
+            "ouvidoria_transicionar",
+            {
+                "p_manifestacao_id": vinculo["manifestacao_id"],
+                "p_estado_novo": "em_classificacao",
+                "p_autor_id": None,
+                "p_autor_nome": vinculo["destinatario_nome"],
+                "p_observacao": ouvidoria_devolucao_a_ouvidoria.observacao_da_devolucao(caso.get("setor"), motivo),
+            },
+        ).execute()
+    except FALHAS_DO_POSTGREST as exc:
+        # Mesmo desenho do `responder`: a restauração do prazo é quem diz onde
+        # o caso está, porque ela só casa linha enquanto ele continua com a
+        # área.
+        restaurou = _restaurar_prazo(supabase, vinculo, prazo_anterior)
+        if not restaurou:
+            # O caso saiu de `aguardando_area`, ou não foi possível saber. Nos
+            # dois, o link não volta, pelo mesmo motivo do `responder`: o `GET`
+            # do portal não olha status nenhum, e um claim devolvido aqui
+            # reabriria a leitura do relato integral e da identificação de quem
+            # manifestou pelo resto dos 30 dias do token.
+            logger.error(
+                "Devolução à Ouvidoria falhou com o caso %s fora de aguardando_area", vinculo["manifestacao_id"]
+            )
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "Este caso saiu da fila da área durante o envio, então este link não responde mais por ele. "
+                    "A devolução pode já ter sido registrada: confirme com a Ouvidoria antes de enviar de novo."
+                ),
+            ) from exc
+        _devolver_o_link(supabase, vinculo, agora.isoformat())
+        codigo = getattr(exc, "code", None)
+        if codigo == "23514":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="A Ouvidoria movimentou o caso agora mesmo: recarregue a página",
+            ) from exc
+        logger.error("Erro na RPC ouvidoria_transicionar pela devolução à Ouvidoria (código %s)", codigo)
+        raise _indisponivel() from exc
+
+    _registrar_acesso(supabase, vinculo, "portal_setor_devolver")
+    return {"protocolo": caso.get("protocolo"), "devolvida_em": agora.isoformat()}
 
 
 class PedidoDeProrrogacao(BaseModel):

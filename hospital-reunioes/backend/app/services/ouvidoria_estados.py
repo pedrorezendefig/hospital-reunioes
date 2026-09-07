@@ -24,10 +24,19 @@ from datetime import datetime, timedelta
 # mais o encerramento por abandono a partir dela) e tira de `encerrado` o
 # caráter terminal: a reabertura por reincidência sai dali de volta para a
 # área. `encerrado` continua sem saída nenhuma além dessa.
+#
+# A issue #600 acrescenta `aguardando_area -> em_classificacao`: a Devolução à
+# Ouvidoria (ADR 0048, decisão 1). A área que recebeu um caso que não é dela o
+# devolve ao ouvidor, e o caso devolvido é um caso a despachar de novo. Sem
+# estado próprio de propósito: a fila, o Dossiê e a validação já sabem lidar
+# com quem espera o ouvidor, e um estado novo obrigaria todo relatório,
+# semáforo e contador a aprendê-lo.
 TRANSICOES: dict[str, frozenset[str]] = {
     "novo": frozenset({"em_classificacao"}),
     "em_classificacao": frozenset({"aguardando_area", "encerrado"}),
-    "aguardando_area": frozenset({"respondido", "encerrado", "aguardando_area", "aguardando_manifestante"}),
+    "aguardando_area": frozenset(
+        {"respondido", "encerrado", "aguardando_area", "aguardando_manifestante", "em_classificacao"}
+    ),
     "aguardando_manifestante": frozenset({"aguardando_area", "encerrado"}),
     "respondido": frozenset({"encerrado", "aguardando_area"}),
     "encerrado": frozenset({"aguardando_area"}),
