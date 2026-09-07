@@ -1,5 +1,6 @@
 ---
 status: accepted
+amended_by: 0049
 ---
 
 # Skills locais são o kit completo do workflow, duplicata com as globais é intencional

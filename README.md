@@ -26,7 +26,7 @@ Tudo que está na árvore é código, doc viva, decisão ou material de comunica
 | `CLAUDE.md` | Regras do repo para o agente | Mínimo que toda sessão precisa saber | Idioma, tipografia, pipeline, o que é proibido criar | Leia uma vez. O roteamento fino está no `/ask-pedro` |
 | `CONTEXT.md` | Glossário do contexto Reuniões (e, por ora, da Ouvidoria) | O agente e o time falam a mesma língua | Termos com definição e "evitar" | Consultar antes de nomear qualquer coisa nova |
 | `CONTEXT-MAP.md` | Mapa dos contextos de domínio | Termos homônimos (Setor, Versão) mudam de sentido entre contextos | Tabela contexto x glossário | Saber qual glossário abrir |
-| `skills-lock.json` | Origem e hash das skills importadas do Matt Pocock | Rastreabilidade, não instalação | Repo de origem e caminho de cada uma | Nada a rodar; as skills já vêm no clone |
+| `skills-lock.json` | Origem, commit (`ref`) e hash das skills importadas do Matt Pocock | Rastreabilidade, não instalação | Repo, commit e caminho de origem de cada uma | Nada a rodar; as skills já vêm no clone |
 | `.claude/skills/` | As skills do time, versionadas | Quem clona recebe o workflow inteiro (ADR 0043) | Uma pasta por skill, com `SKILL.md` e, quando precisa, `references/` e `scripts/` | `/ask-pedro` diz qual usar |
 | `.github/` | CI e templates | Gates automáticos do `/ship` | `ci.yml` (ruff, pytest, lint, tsc, build), `lint-adr.yml`, `higiene-issues.yml`, templates de issue e PR | Não se edita no dia a dia |
 | `docs/` | Documentação viva | Ver seção abaixo | | |

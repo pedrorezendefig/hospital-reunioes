@@ -1,5 +1,6 @@
 ---
 status: accepted
+amended_by: 0049
 ---
 
 # Wayfinder: on-ramp situacional para planejamento multi-sessão, sob demanda
