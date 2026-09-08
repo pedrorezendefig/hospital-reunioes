@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-07T16:55:00-03:00",
+  "updated_at": "2026-09-08T14:12:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.112.0",
+  "last_app_version": "0.113.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "40a8585",
-      "last_deploy_at": "2026-09-07T16:49:43-03:00",
+      "last_deploy_sha": "9025aa5",
+      "last_deploy_at": "2026-09-08T14:12:00-03:00",
       "last_health_check": {
-        "at": "2026-09-07T16:55:00-03:00",
-        "latency_ms": 104,
+        "at": "2026-09-08T14:12:00-03:00",
+        "latency_ms": 196,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 19,
+      "build_duration_seconds": null,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "40a8585",
-      "last_deploy_at": "2026-09-07T16:52:30-03:00",
+      "last_deploy_sha": "9025aa5",
+      "last_deploy_at": "2026-09-08T14:12:00-03:00",
       "last_health_check": {
-        "at": "2026-09-07T16:55:00-03:00",
-        "latency_ms": 214,
+        "at": "2026-09-08T14:12:00-03:00",
+        "latency_ms": 452,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 186,
+      "build_duration_seconds": null,
       "env_count": 5
     },
     {
@@ -159,123 +159,77 @@
   },
   "gates": [
     {
-      "name": "Onda 2 de 2 do PRD #598: issues #599 (fatia P) e #601 (fatia M), rodadas em paralelo. PRD completo",
+      "name": "Onda 1 desta sessao: issues #607 (fatia P, PRD #598) e #593 (fatia M, PRD #591), rodadas em paralelo. As duas fecharam em 1 tentativa de desenvolvimento",
       "status": "ok"
     },
     {
-      "name": "CI verde nos 3 jobs em todas as rodadas dos dois PRs, inclusive apos o rebase e o rebump do #606",
+      "name": "Revisor independente (ADR 0035), 2 lentes por PR mais rodada de verificacao: #619 teve 1 must-fix (rollback assimetrico) e fechou limpo na rodada 2; #620 teve 3 must-fix (marcador interno vazando na Prorrogacao, guarda de reabertura so numa porta, tela aceitando escrita de texto livre em caso apagado) e fechou limpo na rodada 2",
       "status": "ok"
     },
     {
-      "name": "Revisor independente (ADR 0035): #605 limpo de primeira nas duas lentes; #606 precisou de 3 rodadas, uma a mais que o teto da skill, autorizada pelo humano no checkpoint",
+      "name": "Prova por mutacao: 5 mutantes no #619 e 7 mais os de gate no #620, todos mortos, com mutantes plantados no proprio detector",
       "status": "ok"
     },
     {
-      "name": "Achados do #606: rodada 1 pegou area_estourou_em zerado sem a area mudar (evidencia de atraso apagavel) e minutos_pausados nao zerado; rodada 2 pegou o setor gravado antes da RPC, regressao do proprio fix, que fazia a area certa herdar o estouro da errada no retry; rodada 3 limpa",
+      "name": "Vacuidade achada e corrigida pelo proprio autor do #620: as assercoes de ausencia rodavam antes das seis leituras da pagina voltarem, e o mutante da prorrogacao sobrevivia. O revisor da rodada 2 confirmou por experimento em copia isolada, 8 execucoes sem oscilacao",
       "status": "ok"
     },
     {
-      "name": "Prova por mutacao: 11 mutantes no #605 e 29 no #606, todos mortos, com mutantes plantados no proprio detector",
+      "name": "Revisor da rodada 1 do #620 supos errado que /transicoes fazia encerrado -> aguardando_area em caso vivo. O autor contestou com evidencia (a rota nunca passa motivo_reabertura, entao o par cai em 422) e o revisor da rodada 2 deu razao ao autor. A guarda nova vale como defesa em profundidade e faz a recusa dizer a causa certa",
       "status": "ok"
     },
     {
-      "name": "Sem migration nas duas fatias: a 098 da fatia #600 ja tinha deixado o gatilho devolvido_a_ouvidoria no CHECK, de proposito",
+      "name": "Sem migration nas duas fatias, por decisao do humano: a #593 apenas le o carimbo anonimizada_em que a migration 079 ja criou",
       "status": "ok"
     },
     {
-      "name": "Colisao de bump resolvida no merge: os dois PRs pediam 0.111.0. O #605 mergeou primeiro e ficou com ela; o rebase do #606 descartou o bump por conteudo identico (bump fantasma) e ele foi refeito a mao como 0.112.0",
+      "name": "WeasyPrint 70.0 saiu no meio da onda e quebrou a main sozinha, sem mudanca de codigo: removeu default_url_fetcher, que a guarda _pdf_url_fetcher usa para recusar file:// e host privado no PDF do POP. Nem o CI nem o Dockerfile instalam pelo uv.lock, entao o proximo build de producao levaria o 70.0 e o PDF do POP quebraria em prod. Resolvido com o PR #624 (teto <70), aprovado pelo humano no checkpoint",
+      "status": "warn"
+    },
+    {
+      "name": "Corrida de bump a tres: #619 pediu 0.112.1, #620 e #621 (outra sessao) pediram 0.113.0, todos saindo de 0.112.0. Resolvida pelo semaforo de deploy: esta sessao pegou a trava, ficou com 0.113.0 no #620, e a outra sessao re-bumpou o #621 para 0.114.0",
       "status": "ok"
     },
     {
-      "name": "Version match: /api/health devolveu 0.112.0 e o HTML servido do frontend traz 0.112.0 embutido, o que prova os dois lados construidos do codigo novo",
+      "name": "Version match: /api/health devolveu 0.113.0 e o HTML servido do frontend traz 0.113.0 embutido, o que prova os dois lados construidos do codigo novo",
       "status": "ok"
     },
     {
-      "name": "Dois deploys nesta onda, nao um: o merge do #605 disparou o webhook na hora. Inerente ao auto-deploy por push, nao contornavel pelo orquestrador",
+      "name": "Tres deploys na main nesta onda, nao um: os merges do #619, do #624 e do #620 dispararam o webhook cada um na hora. Inerente ao auto-deploy por push, nao contornavel pelo orquestrador",
       "status": "warn"
     }
   ],
   "next_actions": [
     {
-      "kind": "warn",
-      "title": "A area apaga o proprio estouro de prazo ao devolver pelo link do portal",
-      "text": "Achado do revisor de seguranca do #606, mas o defeito e do codigo do #600 (v0.110.0, ja em producao). ouvidoria_setor.devolver_a_ouvidoria zera prazo_area_em sem carimbar area_estourou_em, entao a area atrasada limpa a propria ficha com um clique, sem login e sem o ouvidor. Virou a issue #607, com needs-triage. O #606 fechou so a metade do lado do ouvidor."
+      "kind": "ok",
+      "title": "Tudo verde",
+      "text": "Deploy 9025aa5 saudavel na v0.113.0. Backend e frontend construidos do commit certo, /api/health com db healthy."
     },
     {
       "kind": "warn",
-      "title": "Regra de prazo nova sem doc viva",
-      "text": "O #606 estabelece que prazo_conclusivo_em congela no PRIMEIRO despacho, enquanto prazo_area_em segue recalculado a cada um. E regra de negocio nova e nao esta no CONTEXT.md nem em ADR. O sub-agente foi proibido de tocar nesses arquivos porque ha trabalho nao commitado do Pedro na arvore principal, inclusive o proprio ADR 0048. Registrado em comentario na issue #601."
-    },
-    {
-      "kind": "info",
-      "title": "Duas voltas ainda limpam o carimbo da area culpada",
-      "text": "Achado aceito nas rodadas 2 e 3 do #606. area_estourou_em e coluna unica, entao area A para B e de volta para A limpa o carimbo mesmo com o fix. Setores irmaos que so diferem por acento na taxonomia tambem contornam a comparacao. Resolver isso e modelagem (historico de estouros por ciclo) e merece ADR proprio."
-    },
-    {
-      "kind": "info",
-      "title": "O changelog_prepend.py gera travessao no titulo de toda entrada",
-      "text": "O script da skill /deploy monta o cabecalho com travessao (U+2014), o que viola a regra de tipografia do projeto. A entrada da v0.110.0 foi corrigida a mao nesta sessao e a da v0.112.0 ja nasceu certa, mas o defeito continua no script e volta no proximo deploy."
-    },
-    {
-      "kind": "info",
-      "title": "O caso reacionado sai do relatorio de espera pelo manifestante",
-      "text": "Achado da rodada 2 do #606 em _tempo_pausado. Buraco pre-existente que a reabertura por reincidencia ja tem: a coluna guarda acumulado corrente, nao historico por ciclo, entao nao ha correcao de uma linha. Registrado na issue #601."
+      "title": "Teto no WeasyPrint e remendo",
+      "text": "A issue #625 tira o teto <70: porta _pdf_url_fetcher para a API nova (classe URLFetcher) e regenera o lock. E guarda de seguranca (SSRF e file://), entao pede prova por mutacao nas duas recusas."
     },
     {
       "kind": "warn",
-      "title": "A peneira de invisiveis so cobre a categoria Cf",
-      "text": "Achado das duas rodadas de review do PR #602. text_sanitizer.sem_invisiveis varre Cf nos dois lados (unicodedata.category no Python, \\p{Cf} no setor.ts), mas U+3164 HANGUL FILLER e U+2800 BRAILLE BLANK nao sao Cf e ainda passam: um motivo feito so deles vira devolucao sem explicacao na trilha imutavel. O buraco e herdado da resposta da area, entao vale para os dois textos livres. Junto vai o efeito colateral inverso: a peneira come o ZWJ, entao emoji composto quebra em partes."
+      "title": "Duas portas ainda escrevem em caso apagado",
+      "text": "Issue #622: POST /manifestacoes/{id}/anexos e POST /manifestacoes/{id}/tentativas-contato nao olham anonimizada_em. So por chamada direta a API, nao por clique, mas o job de retencao nunca revisita caso ja carimbado. O revisor considera /anexos a mais urgente."
     },
     {
       "kind": "info",
-      "title": "O teto do motivo e medido no cru, entao grava ate o dobro",
-      "text": "Mesmo precedente ja registrado para a resposta da area e para a issue #482: o sanitizador de travessao troca um caractere por ', ', entao 10.000 medidos antes dele podem virar 20.000 gravados. Conhecido e aceito, nao e regressao do #602."
+      "title": "Sobras do #607",
+      "text": "Issue #623: o rollback de _restaurar_prazo grava area_estourou_em sempre, e _instante esta duplicado em dois routers."
     },
     {
       "kind": "info",
-      "title": "Nenhum teste distingue qual das duas recusas o 422 carrega",
-      "text": "Achado da rodada 2 do revisor de codigo do #602. Motivo vazio e motivo acima do teto respondem 422, e o teste nao prende qual mensagem sai. Trocar as duas por engano passaria verde."
-    },
-    {
-      "kind": "warn",
-      "title": "O caso ANONIMO nao recebe aviso em dois emails da ouvidoria",
-      "text": "Achado do revisor do PR #556. email_ouvidoria_degrau.html:65 e email_ouvidoria_prazo_rompido.html:43 trazem a frase de orientacao escrita a mao no HTML, dentro de um {% if sigiloso %} que olha SO sigilo_reforcado. No caso anonimo esses dois emails nao mandam aviso nenhum, e as versoes texto de montar_degrau e montar_prazo_rompido nao carregam aviso em caso nenhum. E o mesmo defeito que o #556 fechou no email de acionamento. Merece issue propria."
-    },
-    {
-      "kind": "warn",
-      "title": "O ci.yml ignora .claude/**, entao mexer so no snapshot nao roda teste",
-      "text": "Achado do revisor do PR #558. Um PR futuro que toque so o introspect_routes.py ou o snapshot.py da 'no checks reported' sem erro. O #558 so disparou CI porque cria arquivo em backend/tests/. Ficou registrado no SKILL.md do snapshot, mas a causa raiz e o paths-ignore."
-    },
-    {
-      "kind": "info",
-      "title": "A rota publica do portal faz spread cego",
-      "text": "ouvidoria_setor.py faz **prazo e derrama o dicionario inteiro de _projetar_prazo numa resposta sem login. Correto hoje, fragil amanha. Um teste de contrato travando as chaves da resposta publica resolveria."
-    },
-    {
-      "kind": "info",
-      "title": "O piso do snapshot pega o zero, nao a erosao",
-      "text": "PISO_ROTAS = 150 com 192 rotas hoje. Apagar um router de 40 a 50 rotas nao dispara o piso, e a doc encolhe em silencio. Aceito conscientemente no PR #558."
-    },
-    {
-      "kind": "info",
-      "title": "O teste do sanitizador quebra no Python 3.14",
-      "text": "O revisor do #558 viu test_ouvidoria_pseudonimizacao falhar no Python 3.14 por causa do U+10D6E GARAY HYPHEN, codepoint novo do Unicode 16. Nao afeta nada hoje porque o CI fixa 3.12, mas vai quebrar quando o projeto subir de Python."
-    },
-    {
-      "kind": "info",
-      "title": "O anexo saiu da lista da RN-59 e nao esta documentado",
-      "text": "Achado da rodada 2 do revisor do #556. Tirar o anexo da enumeracao fechou a contagem em dez, mas ele continua na tela entre o elemento 8 e o 9, e agora nao tem nota em lugar nenhum. O projeto ja usa a convencao da nota em page.tsx:287."
-    },
-    {
-      "kind": "info",
-      "title": "O comentario da coluna no banco de producao segue com o texto antigo",
-      "text": "O PR #550 corrigiu o texto do COMMENT ON COLUMN de extrato_para_o_setor no arquivo da migration 068, mas migration ja aplicada nao reexecuta. Divergencia inofensiva, registrada para nao virar susto numa auditoria de schema."
+      "title": "Fila desta sessao",
+      "text": "A issue #595 (apagar pela Diretoria, com migration 100) e bloqueada pela #593, ja fechada, e pela #592, que roda em outra sessao no PR #621. So entra quando a #592 fechar em origin/main."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "40a8585",
+    "sha": "9025aa5",
     "result": "healthy",
-    "duration_seconds": 720
+    "duration_seconds": null
   }
 }

@@ -7,6 +7,33 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.113.0 - 2026-09-08 14:12 - A area nao apaga o proprio estouro ao devolver, e o caso apagado nao reabre nem mostra o relato
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `9025aa5`
+- Servicos: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.113.0, `db: healthy`; `app.hospitalsaomatheus.cloud` em 200 com 0.113.0 embutido no HTML servido)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/9025aa5
+- Issues: [#607](https://github.com/pedrorezendefig/hospital-reunioes/issues/607) · PR [#619](https://github.com/pedrorezendefig/hospital-reunioes/pull/619) (PRD [#598](https://github.com/pedrorezendefig/hospital-reunioes/issues/598), ADR 0048) · [#593](https://github.com/pedrorezendefig/hospital-reunioes/issues/593) · PR [#620](https://github.com/pedrorezendefig/hospital-reunioes/pull/620) (PRD [#591](https://github.com/pedrorezendefig/hospital-reunioes/issues/591), ADR 0047) · PR [#624](https://github.com/pedrorezendefig/hospital-reunioes/pull/624) (teto de dependencia, fora de fila)
+- Sem migration · minor, feat
+
+Onda 1 de 2 desta sessao. Duas fatias de PRDs diferentes que se encostam no mesmo lugar: o que o sistema lembra depois que alguem sai da jogada.
+
+A **#607** fecha o buraco irmao que a v0.110.0 deixou aberto e que a entrada anterior ja tinha anotado. Ao devolver o caso pelo link do portal, sem login e sem o ouvidor, a area zerava `prazo_area_em` e apagava sozinha o proprio estouro de prazo. Agora o carimbo `area_estourou_em` sai no mesmo write que para o relogio, seguindo o precedente da devolucao por insuficiencia linha a linha. O revisor achou uma assimetria que o fix original nao viu: o rollback restaurava o prazo e deixava o carimbo, entao uma prorrogacao aprovada depois nunca mais conseguiria marcar o ciclo como cumprido. Os dois campos passaram a voltar juntos. Fica registrado, porque nao e obvio na tela: no caminho canonico da devolucao, quando o ouvidor despacha para OUTRA area, o carimbo e apagado pela regra do #606 ja na primeira troca de setor. Os limites inerentes a coluna unica merecem ADR proprio.
+
+A **#593** da consumidor ao carimbo `anonimizada_em`, que a migration 079 criava e ninguem lia. Duas pontas. O caso apagado nao reabre: a recusa e a primeira guarda de todas, antes de qualquer gravacao, e vem antes da janela de 30 dias de proposito, porque a recusa da janela mandaria o ouvidor esperar por um caso que nunca mais abre. E o Dossie troca o resumo e o relato por um bloco de aviso com a data do carimbo e o autor do movimento da trilha. A frase nao nomeia a retencao: o carimbo e um so e a Diretoria vai grava-lo por outra porta na #595, entao culpar a retencao seria afirmar o que o codigo nao distingue.
+
+Os revisores independentes acharam no #620 tres buracos da mesma familia, todos corrigidos antes do merge: o bloco de Prorrogacao mostrava o marcador interno `[anonimizado pela retencao]` logo abaixo do aviso, que e o sintoma que a issue existe para matar; a guarda de reabertura morava numa porta so, enquanto a mesma transicao passava por outra; e a tela que anuncia o apagamento ainda deixava digitar texto livre em `categoria`, campo que a retencao preserva de proposito e que fica fora da varredura depois do carimbo. A guarda virou um helper unico usado nas tres portas.
+
+Duas coisas boas vieram do proprio autor. Ele achou os testes dele passando em vacuo: as assercoes de ausencia rodavam antes das seis leituras da pagina voltarem, e o mutante da prorrogacao sobrevivia. E contestou com evidencia uma suposicao errada da review, mostrando que `/transicoes` nao faz `encerrado -> aguardando_area` nem em caso vivo, porque a rota nunca passa `motivo_reabertura`. O revisor da rodada 2 conferiu os dois pontos, um deles rodando a suite numa copia isolada, e deu razao ao autor.
+
+**O WeasyPrint 70.0 saiu no meio da onda e quebrou a `main` sozinha, sem ninguem mudar codigo.** Ele removeu `default_url_fetcher`, que `_pdf_url_fetcher` usa para recusar `file://` fora dos assets do template e host privado no PDF do POP: a segunda camada contra SSRF e leitura de arquivo local. Nao foi renomeacao, o contrato do fetcher virou uma classe. E nao era so o CI: nem ele nem o Dockerfile instalam pelo `uv.lock`, entao o proximo build de producao levaria o 70.0 e a geracao de PDF do POP quebraria em prod. O PR #624 pos o teto `weasyprint>=62.0,<70`, com a resolucao conferida pelos dois lados (com teto resolve 69.0, sem teto resolve 70.0). Portar para a API nova ficou na issue #625.
+
+Corrida de bump a tres, com o #621 de outra sessao no meio, todos saindo de 0.112.0. Resolvida pelo semaforo de deploy sem intervencao humana: esta sessao pegou a trava e ficou com 0.113.0, a outra re-bumpou para 0.114.0.
+
+Tres merges na `main` viraram tres builds, nao um. Inerente ao auto-deploy por push.
+
+O que ficou aberto virou issue em vez de ficar no PR: [#622](https://github.com/pedrorezendefig/hospital-reunioes/issues/622) (as rotas `/anexos` e `/tentativas-contato` ainda gravam em caso apagado, so por chamada direta a API), [#623](https://github.com/pedrorezendefig/hospital-reunioes/issues/623) (o rollback grava o carimbo sempre, e `_instante` esta duplicado em dois routers) e [#625](https://github.com/pedrorezendefig/hospital-reunioes/issues/625) (o port do WeasyPrint, que tira o teto).
+
 ## v0.112.0 - 2026-09-07 16:55 - A Ouvidoria e avisada por email da devolucao, e o Dossie mostra o caso devolvido com o reacionamento pre-preenchido
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `40a8585`

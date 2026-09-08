@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-08T14:12:00-03:00",
+      "sha": "9025aa5",
+      "app_version": "0.113.0",
+      "subject": "a area nao apaga o proprio estouro de prazo ao devolver pelo portal, e o caso apagado nao reabre e mostra aviso no lugar do relato",
+      "raw_subject": "feat(ouvidoria): caso apagado nao reabre e o Dossie avisa no lugar do relato (#620)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 de 2 desta sessao: #607 (PR #619, fatia P do PRD #598) e #593 (PR #620, fatia M do PRD #591), em paralelo. Sem migration por decisao do humano: a #593 so le o carimbo anonimizada_em que a 079 ja criou. Tres merges na main, tres builds: #619, depois o #624, depois o #620. O #624 nao estava na fila: o WeasyPrint 70.0 saiu no meio da onda e removeu default_url_fetcher, quebrando a guarda _pdf_url_fetcher (recusa de file:// e host privado no PDF do POP). A main ficou vermelha sozinha, sem mudanca de codigo. Nem o CI (uv pip install -e .[dev]) nem o Dockerfile (uv pip install -r pyproject.toml) usam o uv.lock, entao o proximo build de producao teria levado o 70.0 e o PDF do POP quebraria em prod. Teto weasyprint>=62.0,<70 aprovado pelo humano; resolucao conferida com uv pip compile: com teto resolve 69.0, sem teto resolve 70.0. Portar para a API nova (classe URLFetcher) ficou na issue #625. Achados dos revisores que viraram conserto antes do merge: no #619, o rollback de _restaurar_prazo restaurava o prazo e deixava o carimbo, o que travaria uma prorrogacao aprovada depois; no #620, o bloco de Prorrogacao mostrava o marcador interno [anonimizado pela retencao] na tela do caso apagado, a guarda de reabertura morava numa porta so, e a tela ainda aceitava escrita de texto livre em categoria, campo que a retencao preserva de proposito e que fica fora da varredura depois do carimbo. O autor do #620 achou os proprios testes passando em vacuo (assercoes de ausencia antes das leituras da pagina voltarem) e corrigiu; o revisor confirmou por experimento em copia isolada. O autor tambem contestou com evidencia uma suposicao errada da rodada 1 sobre /transicoes, e o revisor da rodada 2 lhe deu razao. Corrida de bump a tres (#619, #620 e o #621 de outra sessao, todos saindo de 0.112.0), resolvida pelo semaforo: esta sessao ficou com 0.113.0 e a outra re-bumpou para 0.114.0. Sobras viraram issue, nao ficaram no PR: #622 (portas /anexos e /tentativas-contato ainda escrevem em caso apagado), #623 (rollback grava carimbo sempre, _instante duplicado) e #625 (port do WeasyPrint)."
+    },
+    {
       "at": "2026-09-07T16:55:00-03:00",
       "sha": "40a8585",
       "app_version": "0.112.0",
@@ -1387,37 +1416,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Fecha os dois buracos que a devolucao (#334) abriu. O texto da resposta do setor passa a viver no movimento da trilha, um por ciclo, e a coluna area_estourou_em guarda o VENCIMENTO rompido (nao a hora da resposta atrasada: o code-review pegou essa troca, que daria numero negativo no PRD 3). Reincidencia apaga o carimbo, devolucao carrega: la comeca tramitacao nova, aqui o mesmo ciclo continua. Movimento anterior a esta fatia conta como ciclo com texto ausente declarado, senao o backlog ja devolvido em producao comecaria o historico do zero. Deploy manual (webhook quebrado desde 30/07), backend e frontend um de cada vez."
-    },
-    {
-      "at": "2026-08-25T16:52:00-03:00",
-      "sha": "7efdcd4",
-      "app_version": "0.69.0",
-      "subject": "Ouvidoria: aguardando manifestante, sem retorno e reincidência",
-      "raw_subject": "feat(ouvidoria): aguardando manifestante, sem retorno e reincidência (#335) (#371)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 900,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "075_ouvidoria_aguardando_manifestante.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Fecha o PRD #318 (6/6 fatias). As duas revisões independentes reprovaram o gate e renderam 10 achados reais em 3 commits de correção: a pausa não parava os indicadores (só a escada de cobrança, que filtra status); a pausa aberta não era liquidada no encerramento por sem retorno, que é justamente de onde ele sai; pausar depois do estouro apagava prazo_rompido_em; a reabertura herdava as tentativas do ciclo anterior, deixava o desfecho velho e (regressão da própria correção) apagava resposta_da_area, a única cópia do texto do setor. Decisão registrada: encerrada_em NÃO é zerado na reabertura (é o T3 do ciclo anterior); a regra dos 2 contatos exige 5 dias úteis desde a PRIMEIRA tentativa, não só as duas tentativas. Webhook do Coolify segue quebrado: deploy disparado à mão, backend e frontend em sequência."
     }
   ]
 }
