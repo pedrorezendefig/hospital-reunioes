@@ -208,33 +208,59 @@ def _host_e_privado(host: str) -> bool:
     return False
 
 
-def _pdf_url_fetcher(url: str, allowed_file_uris: frozenset[str] = frozenset()):
+def _criar_pdf_url_fetcher(allowed_file_uris: frozenset[str] = frozenset()):
     """url_fetcher do WeasyPrint para o PDF do POP. Recusa todo `file://` que
     não seja um asset legítimo do template (logo/fonte do próprio app) e todo
     host privado/loopback/link-local, fechando o vetor de leitura de arquivo
     local / SSRF. O conteúdo já é higienizado pelo bleach; isto é a segunda
     camada. Levanta `ValueError` no que recusa; delega o resto ao fetcher
     padrão do WeasyPrint.
+
+    A partir do WeasyPrint 70 o fetcher é uma classe (`weasyprint.urls.URLFetcher`),
+    não mais a função `default_url_fetcher`: quem recusa precisa herdar dela, porque
+    o `weasyprint.urls.fetch` lê `url_fetcher._fail_on_errors` ao tratar a exceção.
+    Herdar faz a guarda valer também no redirect, que o WeasyPrint reentrega ao
+    próprio fetcher (um 302 para `127.0.0.1` volta a passar pela recusa de host).
+    Isso não sai de graça: o fetcher herdado tem estado, e a recusa precisa
+    limpá-lo. Ver a invariante no `fetch`.
+
+    A classe nasce aqui dentro porque o import do WeasyPrint é lazy no módulo: ele
+    exige libs nativas (glib/pango) que não existem em todo ambiente de teste.
     """
-    from weasyprint import default_url_fetcher
+    from weasyprint.urls import URLFetcher
 
-    partes = urlsplit(url)
-    esquema = partes.scheme.lower()
+    class _PdfUrlFetcher(URLFetcher):
+        def fetch(self, url, headers=None):
+            # INVARIANTE: toda recusa limpa `self._request` antes de levantar.
+            # Do WeasyPrint 69 em diante o `URLFetcher` guarda o `Request` do
+            # redirect nesse campo e só o limpa dentro do `fetch` do pai, depois
+            # do ponto onde a guarda recusa. Sem limpar, a requisição recusada
+            # fica pendurada e a busca SEGUINTE do mesmo PDF a reexecuta,
+            # devolvendo aqueles bytes como se fossem o recurso legítimo: pedir
+            # o logo passava a devolver o alvo recusado. Recusa nova entra com
+            # a limpeza junto.
+            partes = urlsplit(url)
+            esquema = partes.scheme.lower()
 
-    if esquema == "file":
-        if url in allowed_file_uris:
-            return default_url_fetcher(url)
-        raise ValueError(f"file:// não permitido no PDF do POP: {url}")
+            if esquema == "file":
+                if url in allowed_file_uris:
+                    return super().fetch(url, headers)
+                self._request = None
+                raise ValueError(f"file:// não permitido no PDF do POP: {url}")
 
-    if esquema in ("http", "https"):
-        if _host_e_privado(partes.hostname or ""):
-            raise ValueError(f"host privado/loopback recusado no PDF do POP: {url}")
-        return default_url_fetcher(url)
+            if esquema in ("http", "https"):
+                if _host_e_privado(partes.hostname or ""):
+                    self._request = None
+                    raise ValueError(f"host privado/loopback recusado no PDF do POP: {url}")
+                return super().fetch(url, headers)
 
-    if esquema == "data":
-        return default_url_fetcher(url)
+            if esquema == "data":
+                return super().fetch(url, headers)
 
-    raise ValueError(f"esquema de URL não permitido no PDF do POP: {esquema or url}")
+            self._request = None
+            raise ValueError(f"esquema de URL não permitido no PDF do POP: {esquema or url}")
+
+    return _PdfUrlFetcher()
 
 
 # ─── Geração do PDF ──────────────────────────────────────────────────────────
@@ -319,11 +345,12 @@ def gerar_pdf_pop(*, pop: dict, setor: dict, versao: dict, nomes_designados: dic
 
     # Defesa em profundidade: além do bleach no conteúdo, o fetcher recusa
     # qualquer file:// fora dos assets do template e qualquer host privado.
-    def _fetcher(url: str):
-        return _pdf_url_fetcher(url, assets_permitidos)
-
+    # O fetcher vai no construtor do `HTML`, que é quem busca os recursos: o
+    # `write_pdf` do WeasyPrint 70 descarta opção que não conhece (só loga
+    # "Unknown rendering option"), então passá-lo ali desligaria a guarda em
+    # silêncio.
     pdf_file = io.BytesIO()
-    HTML(string=html_content).write_pdf(target=pdf_file, url_fetcher=_fetcher)
+    HTML(string=html_content, url_fetcher=_criar_pdf_url_fetcher(assets_permitidos)).write_pdf(target=pdf_file)
     pdf_bytes = pdf_file.getvalue()
     logger.info(f"PDF do POP {pop.get('codigo')} v{versao.get('numero_versao')} gerado ({len(pdf_bytes)} bytes)")
     return pdf_bytes

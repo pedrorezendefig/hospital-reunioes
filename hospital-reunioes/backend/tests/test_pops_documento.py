@@ -396,12 +396,14 @@ class TestFluxogramaSvgNoPdf:
         captura: dict = {}
 
         class _FakeHTML:
-            def __init__(self, *, string: str):
+            def __init__(self, *, string: str, url_fetcher=None):
+                # O url_fetcher (defesa em profundidade do #152) vem no construtor,
+                # que é onde o WeasyPrint 70 o aceita; aqui só capturamos o HTML,
+                # sem exercer o fetcher.
                 captura["html"] = string
+                captura["url_fetcher"] = url_fetcher
 
             def write_pdf(self, target=None, **kwargs):
-                # Aceita url_fetcher (defesa em profundidade do #152) sem exercê-lo:
-                # aqui só capturamos o HTML que vai ao WeasyPrint.
                 target.write(b"%PDF-fake")
 
         import weasyprint
@@ -788,26 +790,166 @@ class TestSanitizacaoMarkdown:
 # ═══════════════════════════════════════════════════════════════════════════
 
 
-class TestUrlFetcherDoPdf:
-    def test_recusa_file_uri_arbitrario(self):
-        from app.services.pops_pdf_service import _pdf_url_fetcher
+def _asset_uri(*partes: str) -> str:
+    """URI `file://` de um asset estático do app, no formato que o template usa."""
+    caminho = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app", "static", *partes))
+    return f"file://{caminho}"
 
-        with pytest.raises(ValueError):
-            _pdf_url_fetcher("file:///etc/passwd")
+
+LOGO_URI = _asset_uri("images", "logo_hospital.png")
+FONTE_URI = _asset_uri("fonts", "HPSimplified_Rg.ttf")
+
+
+class TestUrlFetcherDoPdf:
+    """As recusas são asseridas pelo MARCADOR da mensagem, não só pelo tipo da
+    exceção: as três recusas do fetcher levantam `ValueError`, então checar só o
+    tipo deixa passar mutante que troca uma recusa por outra.
+    """
+
+    def _fetcher(self, permitidos: frozenset[str] = frozenset()):
+        from app.services.pops_pdf_service import _criar_pdf_url_fetcher
+
+        return _criar_pdf_url_fetcher(permitidos)
+
+    def test_recusa_file_uri_arbitrario(self):
+        with pytest.raises(ValueError, match="file:// não permitido"):
+            self._fetcher().fetch("file:///etc/passwd")
+
+    def test_recusa_file_uri_que_apenas_estende_asset_permitido(self):
+        """A allowlist é casamento exato: URI que começa com um asset permitido e
+        segue para outro arquivo é recusada (mata o afrouxamento para prefixo)."""
+        with pytest.raises(ValueError, match="file:// não permitido"):
+            self._fetcher(frozenset({LOGO_URI})).fetch(f"{LOGO_URI}/../../../../etc/passwd")
+
+    def test_recusa_file_uri_que_difere_so_no_caixa(self):
+        """Casamento exato também no caixa: em filesystem case-insensitive (macOS),
+        afrouxar para `.lower()` abriria leitura de arquivo por variação de caixa."""
+        with pytest.raises(ValueError, match="file:// não permitido"):
+            self._fetcher(frozenset({LOGO_URI})).fetch(LOGO_URI.upper())
 
     def test_recusa_host_privado_e_loopback(self):
-        from app.services.pops_pdf_service import _pdf_url_fetcher
+        """Cobre as categorias da guarda (privado, loopback, link-local, reservado,
+        unspecified) em IPv4 e IPv6.
 
+        `64:ff9b::` está aqui porque é o único endereço da lista em que
+        `is_reserved` decide sozinho: `is_private` do Python já engloba
+        loopback, link-local e unspecified, então só ele prova que a parcela
+        `is_reserved` da guarda está viva.
+        """
         for url in (
             "http://127.0.0.1/admin",
             "http://localhost/admin",
             "http://10.0.0.1/",
-            "http://169.254.169.254/latest/meta-data/",
+            "http://172.16.0.1/",
             "http://192.168.1.1/",
+            "http://169.254.169.254/latest/meta-data/",
+            "http://240.0.0.1/",
+            "http://0.0.0.0/",
             "http://[::1]/",
+            "http://[64:ff9b::]/",
+            "https://127.0.0.1/admin",
         ):
-            with pytest.raises(ValueError):
-                _pdf_url_fetcher(url)
+            with pytest.raises(ValueError, match="host privado/loopback recusado"):
+                self._fetcher().fetch(url)
+
+    def test_recusa_host_que_nao_resolve(self, monkeypatch):
+        """Fail-closed: host que o DNS não resolve é tratado como não confiável.
+        O DNS é simulado porque o conftest proíbe rede no teste; a guarda em si
+        roda inteira.
+        """
+        import socket
+
+        def _sem_dns(*args, **kwargs):
+            raise OSError("DNS indisponível")
+
+        monkeypatch.setattr(socket, "getaddrinfo", _sem_dns)
+
+        with pytest.raises(ValueError, match="host privado/loopback recusado"):
+            self._fetcher().fetch("http://hospital-nao-existe.test/x")
+
+    def test_guarda_vale_no_caminho_de_redirect(self):
+        """O WeasyPrint reentrega o destino de um redirect ao próprio fetcher, pelo
+        `open` do `URLFetcher`. Herdar da classe faz a recusa valer também ali: um
+        302 para a rede interna não escapa da guarda.
+        """
+        from urllib import request
+
+        with pytest.raises(ValueError, match="host privado/loopback recusado"):
+            self._fetcher().open(request.Request("http://127.0.0.1/interno"))
+
+    def test_recusa_no_redirect_nao_envenena_a_busca_seguinte(self):
+        """A recusa que chega pelo `open` não pode deixar a requisição recusada
+        pendurada no fetcher.
+
+        Do WeasyPrint 69 em diante o `URLFetcher` guarda o `Request` do redirect
+        em `self._request` e só o limpa dentro do `fetch` do pai, depois do ponto
+        onde a guarda recusa. Sem limpar na recusa, a busca seguinte do mesmo PDF
+        reexecuta a URL recusada e devolve aqueles bytes como se fossem o recurso
+        legítimo. O fetcher é um só para o documento inteiro, então a janela é o
+        render todo.
+
+        As três sequências fazem a mesma pergunta, uma por recusa do `fetch`:
+        depois da recusa, o logo pedido volta sendo o logo. Tudo local, sem rede.
+        A primeira é a mais eloquente: sem a limpeza, pedir o logo devolve o
+        conteúdo de `/etc/passwd`.
+        """
+        from urllib import request
+
+        fetcher = self._fetcher(frozenset({LOGO_URI}))
+
+        with pytest.raises(ValueError, match="file:// não permitido"):
+            fetcher.open(request.Request("file:///etc/passwd"))
+        assert fetcher.fetch(LOGO_URI).read().startswith(b"\x89PNG")
+
+        with pytest.raises(ValueError, match="host privado/loopback recusado"):
+            fetcher.open(request.Request("http://127.0.0.1:9/interno"))
+        assert fetcher.fetch(LOGO_URI).read().startswith(b"\x89PNG")
+
+        with pytest.raises(ValueError, match="esquema de URL não permitido"):
+            fetcher.open(request.Request("ftp://127.0.0.1/x"))
+        assert fetcher.fetch(LOGO_URI).read().startswith(b"\x89PNG")
+
+    def test_recusa_esquema_fora_de_file_http_data(self):
+        with pytest.raises(ValueError, match="esquema de URL não permitido"):
+            self._fetcher().fetch("ftp://exemplo.test/x")
+
+    def test_asset_permitido_carrega_de_verdade(self):
+        """Contraste positivo: o logo e a fonte do template entram pelo fetcher e
+        voltam com os bytes do arquivo (assinatura PNG e TTF)."""
+        fetcher = self._fetcher(frozenset({LOGO_URI, FONTE_URI}))
+
+        assert fetcher.fetch(LOGO_URI).read().startswith(b"\x89PNG")
+        assert fetcher.fetch(FONTE_URI).read().startswith(b"\x00\x01\x00\x00")
+
+    def test_guarda_esta_ligada_no_render_do_pop(self, monkeypatch):
+        """O fetcher precisa ir no construtor do `HTML`, que é quem busca os
+        recursos. O `write_pdf` do WeasyPrint 70 descarta opção que não conhece:
+        passar a guarda ali a desliga em silêncio, e o PDF sai igual. Este teste
+        prova que o logo do template foi buscado PELA guarda durante o render.
+        """
+        from app.services import pops_pdf_service
+
+        buscados: list[str] = []
+        criar_original = pops_pdf_service._criar_pdf_url_fetcher
+
+        def _criar_espiao(permitidos=frozenset()):
+            fetcher = criar_original(permitidos)
+            fetch_original = fetcher.fetch
+
+            def _fetch(url, headers=None):
+                resposta = fetch_original(url, headers)
+                buscados.append(url)
+                return resposta
+
+            fetcher.fetch = _fetch
+            return fetcher
+
+        monkeypatch.setattr(pops_pdf_service, "_criar_pdf_url_fetcher", _criar_espiao)
+
+        pdf = pops_pdf_service.gerar_pdf_pop(**_pdf_args(versao=_versao(estado="EM_REVISAO")))
+
+        assert pdf.startswith(b"%PDF")
+        assert LOGO_URI in buscados
 
     def test_libera_assets_legitimos_do_template(self):
         """O logo e a fonte do template (file:// para os arquivos estáticos do
