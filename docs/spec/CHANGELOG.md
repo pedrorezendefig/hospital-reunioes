@@ -7,6 +7,46 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.115.3 - 2026-09-08 20:52 - a guarda anti-SSRF do PDF do POP volta a existir de fato, agora na API nova do WeasyPrint
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `387af87`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.115.3, `db: healthy` em 134 ms; `app.hospitalsaomatheus.cloud` em 200 com 0.115.3 embutido no HTML servido)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/387af87
+- Issues: [#625](https://github.com/pedrorezendefig/hospital-reunioes/issues/625) · PR [#630](https://github.com/pedrorezendefig/hospital-reunioes/pull/630) (nasceu do PR [#624](https://github.com/pedrorezendefig/hospital-reunioes/pull/624), o teto de emergência)
+- Sem migration · patch, refactor
+
+A issue pedia uma coisa pequena: portar `_pdf_url_fetcher` para o contrato novo do WeasyPrint, onde o fetcher deixou de ser função e virou a classe `URLFetcher`, e tirar o teto `<70` que o #624 tinha posto às pressas quando o 70.0 saiu removendo `default_url_fetcher`. O que apareceu ao portar foi maior.
+
+**A guarda estava inerte em produção desde a issue #152.** O `url_fetcher` era passado ao `write_pdf`, mas quem busca os recursos é o objeto `HTML`. O WeasyPrint descartava a opção em silêncio (a partir do 70 ele ao menos loga `Unknown rendering option`; no 62.3 nem isso). Medido com um fetcher que recusa tudo: pelo `write_pdf` o PDF sai com 143049 bytes e o logo embutido, pelo construtor sai com 2326 bytes e sem logo. Ou seja, `file://` arbitrário e host privado nunca foram barrados ali. O fetcher passou para o construtor do `HTML` e o teste `test_guarda_esta_ligada_no_render_do_pop` trava isso. Atenuantes que valem registrar: a rota é autenticada (`app/routers/pops/documento.py:33`), não é o canal público, e o `bleach` mais o `sanitizar_svg` seguravam como primeira camada.
+
+Área sensível, então rodaram dois revisores dedicados em paralelo, um de código e um de segurança. Os dois acharam, por caminhos independentes e cada um reproduzindo por execução, **um bug novo que o próprio port criou**. O `URLFetcher` do 70 guarda estado em `self._request`, e a guarda levantava `ValueError` antes do `super().fetch()`, então uma recusa vinda do `open` (o caminho do redirect) deixava a requisição recusada pendurada e a busca seguinte do mesmo PDF a reexecutava, enfiando os bytes no PDF. Um revisor pediu o `file://` do logo e recebeu o corpo do servidor em `127.0.0.1`; o outro montou um 302 real e recebeu o conteúdo interno no lugar do PNG. Consertado com `self._request = None` antes dos três `raise`, não só o do host, e travado por um teste que cria o fetcher uma vez e reusa o mesmo objeto nas três sequências, que é justamente a propriedade de estado em jogo.
+
+O segundo must-fix foi de honestidade do texto. O autor propôs piso `>=70` justificando que a classe só existiria a partir do 70. O revisor baixou oito wheels do PyPI e leu `urls.py` em cada um: `URLFetcher` existe desde o **68.0**, já com as assinaturas usadas. O piso virou `>=68`, e o revisor validou rodando a guarda real em venvs 68.0, 68.1 e 69.0. Achado de versão que ninguém tinha fixado: `self._request` não existe no 68.0 nem no 68.1 (o pai sempre monta um `Request` novo) e existe do 69.0 em diante, e o `open` sobrescrito que protege o redirect já existe no 68.0. O piso `>=68` pega a proteção sem pegar o bug.
+
+Prova por mutação: 14 plantados, 13 mortos, com afrouxamentos (allowlist por prefixo, allowlist sem caixa, `is_reserved` removido, DNS fail-open) e três mutantes no próprio detector. O único sobrevivente é equivalente de verdade, confirmado de forma independente pelos dois revisores: `is_private` do Python já engloba loopback, link-local e unspecified. Essa mesma varredura achou um buraco real, porque `is_reserved` é o único predicado que decide sozinho (em `64:ff9b::`), e o mutante correspondente sobrevivia com a lista de IPs original. As recusas são asseridas pelo marcador da mensagem e não por `raises(ValueError)`, porque as três levantam o mesmo tipo.
+
+Ficou registrado e não tocado: `pdf_generator.py` (Ata), `ouvidoria_relatorio.py` e `ouvidoria_pontos.py` chamam `write_pdf()` sem `url_fetcher` nenhum, sem guarda alguma. Era estado pré-existente e ganhou outro peso agora que se sabe que a do POP também estava morta. A guarda também não recusa multicast. E sobrou uma imprecisão conhecida, aceita pelo humano no checkpoint: o docstring da fábrica ainda diz que a classe vale a partir do 70, quando o piso é 68.
+
+## v0.115.2 - 2026-09-08 20:48 - o rollback do prazo da área só toca o carimbo que a própria ida escreveu
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `d7c7996`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/d7c7996
+- Issues: [#623](https://github.com/pedrorezendefig/hospital-reunioes/issues/623) · PR [#629](https://github.com/pedrorezendefig/hospital-reunioes/pull/629) (sobras do [#607](https://github.com/pedrorezendefig/hospital-reunioes/issues/607) / PR [#619](https://github.com/pedrorezendefig/hospital-reunioes/pull/619))
+- Sem migration · patch, refactor
+
+Onda 1 desta sessão, duas fatias em paralelo. As duas sobras que os revisores do #619 marcaram como menores e não bloqueantes. Nenhum comportamento observável de rota muda.
+
+O rollback de `_restaurar_prazo` gravava `area_estourou_em` sempre, inclusive quando a ida não tinha tocado a coluna. A coluna não tem dono exclusivo naquela rota: a devolução por insuficiência grava o mesmo campo sem filtro de status, então o `None` do rollback apagava numa corrida um carimbo que aquela requisição nunca decidiu apagar. A função passou a receber `carimbo_a_restaurar` como dict, montado sob a mesma condicional da ida. E `_instante`, que estava duplicado em dois routers, virou `ler_instante` em `ouvidoria_prazos.py` (o nome ganhou prefixo porque o módulo já usa `instante` como variável local em três funções).
+
+O contrato da triagem tinha duas frases que divergiam num caso, e o autor achou isso sozinho antes de implementar. Como `estouro_consumado` devolve `ja_consumado` quando já há carimbo, `estourou` e `estouro_anterior` não são mutuamente exclusivos. A leitura literal ("só quando havia carimbo anterior") deixaria o caso que fura o prazo *nesta* devolução voltar com o prazo restaurado e o carimbo de estouro gravado, que é exatamente o estado que o #607 consertou. Ele implementou o espelho da ida e deixou a prova executável num mutante.
+
+Cinco mutantes, todos mortos, dois deles plantados no próprio detector (updates em ordem invertida e espião cego). Os testes asserem o payload do update e não a linha no banco, porque o banco não distingue coluna nunca escrita de coluna escrita com `None`. O revisor voltou limpo na rodada 1, zero must-fix, e confirmou por leitura do código, não pela tabela do autor: `ler_instante` é idêntica às duas cópias removidas, não há órfão nem import circular, os dois `.eq` de guarda continuam de pé. Ele plantou dois mutantes próprios, que também morreram.
+
+O maior dos cinco achados menores que ficaram registrados no PR: existe um quarto caso (carimbo antigo mais prazo furado agora) que o código acerta, mas nenhum teste da suíte segura. Fica também o registro de que `_instante` ainda existe copiado em cinco services, fora do escopo desta issue.
+
 ## v0.115.1 - 2026-09-08 20:09 - caso apagado deixa de aceitar anexo e registro de tentativa de contato
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `a4f4d44`
