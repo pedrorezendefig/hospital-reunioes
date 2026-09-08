@@ -261,7 +261,9 @@ class _TabelaFake:
 TRANSICOES_DO_BANCO = {
     "novo": {"em_classificacao"},
     "em_classificacao": {"aguardando_area", "encerrado"},
-    "aguardando_area": {"respondido", "encerrado", "aguardando_area", "aguardando_manifestante"},
+    # `em_classificacao` entrou com a Devolução à Ouvidoria (migration 098,
+    # issue #600): é por essa aresta que a área devolve o caso que não é dela.
+    "aguardando_area": {"respondido", "encerrado", "aguardando_area", "aguardando_manifestante", "em_classificacao"},
     "aguardando_manifestante": {"aguardando_area", "encerrado"},
     "respondido": {"encerrado", "aguardando_area"},
     "encerrado": {"aguardando_area"},
@@ -710,3 +712,114 @@ class TestPortalDoSetorLeOMesmoIndicador:
 
         assert portal.status_code == 200, portal.text
         assert portal.json()["cumprimento"] == _cumprimento(client) == "estourado"
+
+
+MOTIVO_DA_AREA = "Este caso e do Centro Medico: a recepcao nao agenda consulta de especialidade."
+
+
+def _devolver_pelo_portal(client, enviados: list[dict], motivo: str = MOTIVO_DA_AREA):
+    """A Devolução à Ouvidoria pelo link do email (issue #600), que é a rota
+    sem login por onde a área devolve o caso que não é dela."""
+    return client.post(f"/api/ouvidoria-setor/{_token_do_email(enviados)}/devolver", json={"motivo": motivo})
+
+
+class TestDevolucaoPeloPortalNaoApagaOEstouro:
+    """Issue #607: a área não limpa a própria ficha ao devolver pelo portal.
+
+    A devolução pelo link do email para o relógio da área (`prazo_area_em` vira
+    NULL). Sem carimbar o estouro ANTES de zerar, o atraso do ciclo que acabou
+    some do indicador, e quem o apaga é a própria área interessada, por um
+    caminho sem login e sem o ouvidor no meio. É o mesmo dano que a devolução
+    por insuficiência já evita (issue #374), entrando pela outra porta.
+    """
+
+    def test_area_que_devolve_com_o_prazo_estourado_deixa_o_atraso_carimbado(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """Critério 1: o estouro é carimbado antes de o prazo ser zerado.
+
+        O instante é o VENCIMENTO que a área furou, o mesmo que a devolução por
+        insuficiência guarda: é o que o nome da coluna promete, e o que os
+        relatórios do PRD 3 leem como o momento do estouro."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _acionar(monkeypatch, relogio)
+        assert sb.tabelas["ouvidoria_protocolos"][0]["prazo_area_em"] == PRAZO_ORIGINAL
+
+        relogio["agora"] = FORA_DO_PRAZO_EM
+        resposta = _devolver_pelo_portal(client, _nunca_envia_email_de_verdade)
+
+        assert resposta.status_code == 200, resposta.text
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "em_classificacao"
+        assert caso["prazo_area_em"] is None, "a devolução continua parando o relógio da área"
+        assert caso["area_estourou_em"] == PRAZO_ORIGINAL, (
+            "o prazo foi zerado sem carimbar o estouro: a área apagou o próprio atraso pelo link do portal"
+        )
+
+    def test_area_que_devolve_dentro_do_prazo_nao_ganha_carimbo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Critério 2: o par do teste acima. Devolver não pode virar acusação
+        contra quem estava em dia."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _acionar(monkeypatch, relogio)
+
+        relogio["agora"] = DENTRO_DO_PRAZO_EM
+        resposta = _devolver_pelo_portal(client, _nunca_envia_email_de_verdade)
+
+        assert resposta.status_code == 200, resposta.text
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["prazo_area_em"] is None
+        assert caso["area_estourou_em"] is None, "quem devolveu dentro do prazo não estourou nada"
+
+    def test_o_indicador_da_area_conta_o_atraso_depois_do_reacionamento(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """Critério 3: o carimbo chega ao indicador de cumprimento da área.
+
+        O indicador só volta a ter régua quando o caso ganha vencimento de
+        novo, e é aí que o carimbo prova que serve para alguma coisa: o ouvidor
+        lê a devolução, conclui que o caso é da Recepção mesmo e a reaciona. A
+        mesma área continua com o caso, então o estouro que ela consumou
+        continua contra ela (issue #601)."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _acionar(monkeypatch, relogio)
+
+        relogio["agora"] = FORA_DO_PRAZO_EM
+        assert _devolver_pelo_portal(client, _nunca_envia_email_de_verdade).status_code == 200
+
+        reacionamento = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        assert reacionamento.status_code == 200, reacionamento.text
+        assert sb.tabelas["ouvidoria_protocolos"][0]["setor"] == "Recepcao"
+        assert _cumprimento(client) == "estourado", (
+            "o prazo novo apagou do indicador um atraso que aconteceu de verdade"
+        )
+
+    def test_transicao_recusada_devolve_o_prazo_e_o_carimbo_juntos(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O par sai junto, então o par volta junto.
+
+        O update que para o relógio grava dois campos, e a restauração só
+        desfazia um. O caso voltava para a área com o vencimento de volta E o
+        estouro carimbado, e `cumprimento_da_area` lê o carimbo antes de tudo:
+        uma prorrogação aprovada depois nunca mais levaria aquele caso a
+        `cumprido`, por causa de uma transição que nem chegou a acontecer."""
+        relogio = {"agora": VALIDACAO_EM}
+        client, sb = _acionar(monkeypatch, relogio)
+        rpc_de_verdade = sb.rpc
+
+        def _recusa_a_transicao(nome, params):
+            if nome == "ouvidoria_transicionar":
+                raise APIError({"message": "Transicao invalida", "code": "23514"})
+            return rpc_de_verdade(nome, params)
+
+        monkeypatch.setattr(sb, "rpc", _recusa_a_transicao)
+
+        relogio["agora"] = FORA_DO_PRAZO_EM
+        resposta = _devolver_pelo_portal(client, _nunca_envia_email_de_verdade)
+
+        assert resposta.status_code == 409, resposta.text
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area", "o caso continua com a área: a transição não entrou"
+        assert caso["prazo_area_em"] == PRAZO_ORIGINAL
+        assert caso["area_estourou_em"] is None, (
+            "o rollback devolveu o vencimento e deixou o carimbo do estouro para trás"
+        )
