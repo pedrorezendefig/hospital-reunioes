@@ -1330,3 +1330,39 @@ class TestCasoApagadoNaoReabre:
 
         assert resposta.status_code == 200, resposta.text
         assert sb.tabelas["ouvidoria_protocolos"][0]["categoria"] == "Conduta da equipe noturna"
+
+
+class TestTentativaDeContatoEmCasoApagado:
+    """Issue #622: o caso apagado não recebe tentativa de contato nova.
+
+    A observação da tentativa é texto livre, e o caso carimbado já saiu da
+    varredura da retenção (que só volta em `anonimizada_em IS NULL`): o que
+    fosse escrito aqui ficaria para sempre num caso que a tela anuncia como
+    apagado. E tentar falar com quem manifestou num caso sem relato e sem
+    contato é tentar falar com ninguém."""
+
+    def _caso(self, monkeypatch, anonimizada_em: str | None):
+        sb = _SupabaseFake([_manifestacao(status="encerrado", anonimizada_em=anonimizada_em)])
+        client, _ = _client(monkeypatch, supabase=sb)
+        return client, sb
+
+    def test_tentativa_em_caso_apagado_e_recusada_antes_de_qualquer_gravacao(self, monkeypatch):
+        client, sb = self._caso(monkeypatch, APAGADO_EM)
+
+        resposta = _tentativa(client, observacao="Liguei para o telefone da manifestante Joana.")
+
+        assert resposta.status_code == 409, resposta.text
+        detalhe = resposta.json()["detail"]
+        assert "não pode mais ser acrescido de tentativa de contato" in detalhe
+        assert "manifestação nova" in detalhe
+        assert sb.tabelas["ouvidoria_tentativas_contato"] == []
+
+    def test_caso_vivo_continua_registrando_tentativa(self, monkeypatch):
+        """O contraste que prova que a guarda lê o carimbo, e não o
+        encerramento: o mesmo caso, sem `anonimizada_em`, registra."""
+        client, sb = self._caso(monkeypatch, None)
+
+        resposta = _tentativa(client, observacao="Liguei e ninguem atendeu.")
+
+        assert resposta.status_code == 201, resposta.text
+        assert [t["canal"] for t in sb.tabelas["ouvidoria_tentativas_contato"]] == ["telefone"]

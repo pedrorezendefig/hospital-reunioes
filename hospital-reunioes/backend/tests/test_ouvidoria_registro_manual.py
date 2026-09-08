@@ -589,6 +589,58 @@ class TestAnexos:
         assert [a["acao"] for a in supabase.tabelas["ouvidoria_acessos"]] == ["listar_anexos"]
 
 
+# O carimbo que a Retenção grava no fim da anonimização (migration 079). Um
+# caso com ele está FORA da varredura da retenção, que só volta em
+# `anonimizada_em IS NULL`: o que entrar por esta porta depois do carimbo fica
+# no bucket privado para sempre (issue #622).
+APAGADO_EM = "2026-09-01T03:00:00+00:00"
+
+_MANIFESTACAO_APAGADA = {**_MANIFESTACAO, "status": "encerrado", "anonimizada_em": APAGADO_EM}
+
+
+class TestAnexoEmCasoApagado:
+    """Issue #622: o caso apagado não recebe evidência nova.
+
+    A porta não é alcançável por clique (a tela do caso apagado não oferece o
+    envio), mas ela aceita chamada direta com perfil de Ouvidoria, e o binário
+    que subisse aqui seria PII permanente num caso que a tela anuncia como
+    apagado."""
+
+    def test_anexo_em_caso_apagado_e_recusado_antes_de_o_binario_subir(self, monkeypatch):
+        client, supabase = _client(monkeypatch, OUVIDOR, [dict(_MANIFESTACAO_APAGADA)])
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/anexos",
+            files={"file": ("conta-do-quarto.pdf", b"%PDF-1.4 conteudo", "application/pdf")},
+        )
+
+        assert r.status_code == 409, r.text
+        detalhe = r.json()["detail"]
+        assert "não pode mais ser acrescido de anexo" in detalhe
+        # A recusa precisa dizer para onde ir: quem volta a reclamar vira caso
+        # novo, e não anexo neste.
+        assert "manifestação nova" in detalhe
+        # A guarda vem antes do upload, e não depois: binário no bucket privado
+        # é o dano que esta fatia existe para impedir.
+        assert supabase.storage.arquivos == {}, "O binário subiu ao bucket do caso apagado"
+        assert supabase.tabelas["ouvidoria_anexos"] == []
+
+    def test_caso_vivo_continua_recebendo_anexo(self, monkeypatch):
+        """O contraste que prova que a guarda lê o carimbo, e não o
+        encerramento nem o envio de anexo em si."""
+        vivo = {**_MANIFESTACAO_APAGADA, "anonimizada_em": None}
+        client, supabase = _client(monkeypatch, OUVIDOR, [vivo])
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/anexos",
+            files={"file": ("conta-do-quarto.pdf", b"%PDF-1.4 conteudo", "application/pdf")},
+        )
+
+        assert r.status_code == 201, r.text
+        assert len(supabase.storage.arquivos) == 1
+        assert [a["filename"] for a in supabase.tabelas["ouvidoria_anexos"]] == ["conta-do-quarto.pdf"]
+
+
 class TestRegraDoAnexo:
     """A regra de tipo e tamanho como função pura: a borda exata do limite não
     precisa de 20 MB trafegando por HTTP para ser verificada."""
