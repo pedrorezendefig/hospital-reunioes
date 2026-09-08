@@ -526,6 +526,18 @@ def rotular_vencimento(vencimento: datetime | None, agora: datetime, feriados: f
     return f"vence em {_quantia_por_extenso(minutos_uteis_entre(agora, vencimento, feriados))}"
 
 
+def ler_instante(bruto) -> datetime | None:
+    """O timestamp que chega como texto virado `datetime`, ou None quando a
+    coluna veio vazia.
+
+    Mora aqui porque é a porta de entrada do motor: quase toda função deste
+    módulo pede `datetime`, e quem chama tem na mão o texto que o banco
+    devolveu. Ponto único de propósito (issue #623): a conversão existia
+    copiada em dois routers, e duas cópias da mesma leitura são duas chances de
+    o dia em que uma delas passar a tolerar formato diferente da outra."""
+    return datetime.fromisoformat(str(bruto)) if bruto else None
+
+
 def formatar_vencimento(vencimento: datetime | str | None) -> str:
     """A data e a hora do vencimento no fuso de quem lê, do jeito que o
     responsável de setor as lê.
