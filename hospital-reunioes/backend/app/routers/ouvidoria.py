@@ -710,7 +710,15 @@ def registrar_acessos_em_lote(supabase, me: dict, manifestacao_ids: list[str], a
 
     Falha aqui também não derruba nada, pela razão de sempre: o arquivamento já
     valeu no banco, e um 500 depois dele mandaria o ouvidor repetir um lote que
-    já aconteceu."""
+    já aconteceu.
+
+    Mas o silêncio do fail-open muda de peso com o volume, e por isso o warning
+    carrega o ATOR e os IDS, e não só a contagem. O insert é um só: uma recusa
+    apaga de uma vez o rastro de todos os casos do lote, e arquivar não entra na
+    trilha (desarquivar ainda apaga os dois carimbos). Sem estes dois dados, o
+    log de aplicação, que é a última rede, não diria quem escondeu o quê. A
+    lista sai inteira de propósito: cortá-la perderia exatamente o rastro que
+    esta linha existe para guardar."""
     if not manifestacao_ids:
         return
     try:
@@ -718,7 +726,13 @@ def registrar_acessos_em_lote(supabase, me: dict, manifestacao_ids: list[str], a
             [_linha_de_acesso(me, manifestacao_id, acao) for manifestacao_id in manifestacao_ids]
         ).execute()
     except Exception:
-        logger.warning("Falha ao registrar o acesso do lote de %d manifestações", len(manifestacao_ids))
+        logger.warning(
+            "Falha ao registrar o acesso '%s' do lote de %d manifestações pedido por %s. Casos atingidos: %s",
+            acao,
+            len(manifestacao_ids),
+            me["id"],
+            ", ".join(manifestacao_ids),
+        )
 
 
 def carimbar_visto_da_ouvidoria(supabase, manifestacao_id: str, agora: dt.datetime) -> None:
@@ -1698,6 +1712,27 @@ async def desarquivar_manifestacao(
     return gravado
 
 
+def _so_o_id_de_volta(escrita):
+    """Faz a escrita devolver só a coluna `id`, e não a linha inteira.
+
+    O PostgREST aceita `?select=id` também no PATCH. Quem não expõe isso é o
+    cliente Python: `update()` devolve um builder de filtros, sem `.select()`.
+    O parâmetro entra pela MESMA porta por onde `.eq()` e `.is_()` entram
+    (`request.params`), que é o caminho que a própria biblioteca usa para
+    montar a query.
+
+    Sem isto, o lote traz `relato_integral`, `manifestante_nome` e
+    `manifestante_contato` de todo caso arquivado só para a rota ler
+    `row["id"]`: seria o maior volume de dado sensível do módulo trafegando
+    sem uso nenhum.
+
+    `test_o_update_do_lote_pede_so_o_id_ao_cliente_de_verdade` prende esta
+    linha ao cliente REAL, e não ao Supabase falso: é atributo de biblioteca, e
+    um fake ficaria verde na versão em que ele mudasse de nome."""
+    escrita.request.params = escrita.request.params.set("select", "id")
+    return escrita
+
+
 @router.post("/manifestacoes/arquivo-dos-encerrados")
 @limiter.limit("10/minute")
 async def arquivar_os_encerrados(
@@ -1738,20 +1773,26 @@ async def arquivar_os_encerrados(
     conferido antes: é a trava contra a reabertura que caia no meio (a mesma
     janela TOCTOU que `_gravar_o_arquivo` fecha para um caso).
 
-    A resposta do update vem inteira (o PostgREST não deixa escolher colunas
-    ao gravar) e é reduzida aos ids na linha seguinte: é deles que sai a
+    A resposta pede só o `id` de volta (`_so_o_id_de_volta`): é dele que saem a
     contagem e o log de acesso, um por caso guardado, que é o único vestígio
-    que este ato deixa."""
+    que este ato deixa.
+
+    As DUAS falhas entram na captura, e não só o `APIError`. Esta é a escrita
+    mais pesada do módulo, e é justamente ela que estoura o timeout do cliente:
+    timeout e conexão recusada sobem como `HTTPError`, que `APIError` não pega
+    (é a mesma dupla que as outras chamadas pesadas deste arquivo capturam).
+    Escapando daqui, a exceção vira 500 genérico DEPOIS de o update poder ter
+    commitado, e a linha seguinte, que é o log, nunca roda: N casos sairiam da
+    lista sem uma linha de rastro em lugar nenhum."""
     try:
-        atualizadas = (
+        atualizadas = _so_o_id_de_volta(
             supabase.table("ouvidoria_protocolos")
             .update({"arquivada_em": agora_utc().isoformat(), "arquivada_por": me["id"]})
             .eq("status", "encerrado")
             .is_("arquivada_em", "null")
-            .execute()
-        )
-    except APIError as exc:
-        logger.error("Falha ao arquivar o lote dos encerrados (código %s)", exc.code)
+        ).execute()
+    except (APIError, HTTPError) as exc:
+        logger.error("Falha ao arquivar o lote dos encerrados: %s", exc.__class__.__name__)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Não foi possível arquivar agora. Tente de novo em instantes.",

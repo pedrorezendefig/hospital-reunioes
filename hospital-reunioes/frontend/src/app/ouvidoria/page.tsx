@@ -264,6 +264,11 @@ export default function OuvidoriaPage() {
     if (!token || noArquivo) return;
     setNoArquivo(m.id);
     setErroDoArquivo(null);
+    // O aviso do lote não sobrevive ao ato seguinte: depois de "12
+    // manifestações arquivadas", arquivar UMA linha deixaria o verde na tela
+    // dizendo 12 sobre um clique que guardou um caso. E numa recusa os dois
+    // avisos apareceriam juntos, um verde e um vermelho, sobre o mesmo ato.
+    setResumoDoLote(null);
     try {
       const res = await fetch(`/api/ouvidoria/manifestacoes/${m.id}/arquivo`, {
         method: metodo,
@@ -363,6 +368,11 @@ export default function OuvidoriaPage() {
     setResumoDoLote(null);
     if (token) recarregar(token, proximo);
   }
+
+  // O lote em voo (issue #594). Um lote de centenas de casos demora, e sem
+  // isto o botão fica idêntico e a trava só devolve silêncio: o ouvidor clica
+  // de novo achando que o primeiro clique não pegou.
+  const loteEmVoo = noArquivo === O_LOTE;
 
   const grupos = agruparPorStatus(manifestacoes).filter((g) => g.itens.length > 0);
   // O trabalho do dia do ouvidor, em cima de tudo (issue #486, RN-67): o caso
@@ -613,11 +623,16 @@ export default function OuvidoriaPage() {
                     {!arquivados && podeAbrirDossie && grupo.status === "encerrado" && (
                       <button
                         type="button"
+                        // Desabilitado por QUALQUER ato do arquivo em voo, e
+                        // não só pelo lote: os dois mexem na mesma lista, e a
+                        // trava do `mudarOArquivo` já os serializa. Sem o
+                        // `disabled`, ela recusaria o clique sem dizer nada.
+                        disabled={Boolean(noArquivo)}
                         onClick={() => arquivarOsEncerrados(grupo.itens.length)}
-                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold uppercase tracking-wide whitespace-nowrap bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 transition-colors ${ALTURA_DE_TOQUE}`}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold uppercase tracking-wide whitespace-nowrap bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 transition-colors disabled:opacity-60 ${ALTURA_DE_TOQUE}`}
                       >
                         <Archive className="w-3.5 h-3.5 shrink-0" />
-                        Arquivar todos os encerrados
+                        {loteEmVoo ? "Arquivando os encerrados" : "Arquivar todos os encerrados"}
                       </button>
                     )}
                     <span className="text-xs font-semibold">

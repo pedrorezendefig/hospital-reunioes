@@ -102,6 +102,13 @@ function montar(
     // A contagem que o SERVIDOR devolve, quando ela não é a da tela. É a
     // corrida: entre a carga e o clique, outra pessoa encerrou mais um caso.
     contagemDoLote?: number;
+    // Segura a resposta do lote. É a janela em que o ouvidor olha a tela
+    // esperando o lote de centenas de casos terminar.
+    segurarLote?: boolean;
+    // Um caso que OUTRA pessoa encerrou enquanto o lote rodava: ele não estava
+    // no grupo quando o botão foi clicado, o lote não o leva, e ele aparece na
+    // recarga logo abaixo do aviso do lote.
+    encerradoDuranteOLote?: ReturnType<typeof caso>;
   } = {}
 ) {
   chamadas = [];
@@ -131,11 +138,14 @@ function montar(
           vivos.splice(vivos.indexOf(c), 1);
           arquivados.push(c);
         }
-        return {
+        if (opcoes.encerradoDuranteOLote) vivos.push(opcoes.encerradoDuranteOLote);
+        const feito = {
           ok: true,
           status: 200,
           json: async () => ({ arquivadas: opcoes.contagemDoLote ?? encerrados.length }),
         } as Response;
+        if (!opcoes.segurarLote) return feito;
+        return new Promise<Response>((soltar) => presos.push(() => soltar(feito)));
       }
       if (endereco.includes("/arquivo")) {
         if (opcoes.recusaDoArquivo) {
@@ -650,5 +660,79 @@ describe("a tipografia do lote", () => {
     const texto = loteNaTela()!.textContent ?? "";
     expect(texto).not.toMatch(/[—–]/);
     expect(texto).not.toMatch(/[→←↑↓»«›‹>]/);
+  });
+});
+
+
+describe("o aviso do lote não sobrevive ao ato seguinte", () => {
+  /**
+   * O caminho é a corrida, e não o filtro: ligar o filtro JÁ limpa o aviso por
+   * conta própria (`alternarOFiltro`), e um teste que passasse por lá ficaria
+   * verde mesmo com a limpeza do ato de linha removida. Aqui o ouvidor nunca
+   * sai da lista de trabalho.
+   */
+  const casoRetardatario = caso(11, "encerrado");
+
+  it("arquivar uma linha depois do lote apaga o resumo do lote", async () => {
+    // Sem isto, o banner verde "2 manifestações arquivadas" fica na tela
+    // depois de um clique que guardou UM caso, dizendo dois.
+    confirmando(true);
+    montar([caso(7, "encerrado"), caso(9, "encerrado")], [], {
+      encerradoDuranteOLote: casoRetardatario,
+    });
+    await linhaDe("2026-0007");
+
+    fireEvent.click(loteNaTela()!);
+    expect((await screen.findByRole("status")).textContent).toContain("2 manifestações arquivadas");
+
+    // O retardatário chegou na recarga, na mesma lista de trabalho.
+    const linha = await linhaDe("2026-0011");
+    fireEvent.click(within(linha).getByRole("button", { name: "Arquivar" }));
+
+    await waitFor(() => expect(screen.queryByText("2026-0011")).toBeNull());
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("a recusa de um ato de linha não convive com o verde do lote", async () => {
+    // A variante pior: dois `role="status"` na tela ao mesmo tempo, um dizendo
+    // que deu certo e outro que deu errado, sobre atos diferentes.
+    confirmando(true);
+    montar([caso(7, "encerrado"), caso(9, "encerrado")], [], {
+      encerradoDuranteOLote: casoRetardatario,
+      recusaDoArquivo: { status: 409, detail: "O caso mudou de estado agora mesmo" },
+    });
+    await linhaDe("2026-0007");
+
+    fireEvent.click(loteNaTela()!);
+    expect((await screen.findByRole("status")).textContent).toContain("2 manifestações arquivadas");
+
+    const linha = await linhaDe("2026-0011");
+    fireEvent.click(within(linha).getByRole("button", { name: "Arquivar" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain("mudou de estado agora mesmo")
+    );
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+  });
+});
+
+describe("o lote diz que está trabalhando", () => {
+  it("o botão muda de texto e desabilita enquanto o lote está em voo", async () => {
+    // A resposta do lote fica presa: é a janela do lote de centenas de casos,
+    // em que a tela ficava idêntica e a trava só devolvia silêncio.
+    confirmando(true);
+    montar([caso(7, "encerrado")], [], { segurarLote: true });
+    await linhaDe("2026-0007");
+    presos = [];
+
+    fireEvent.click(loteNaTela()!);
+
+    const trabalhando = await screen.findByRole("button", { name: "Arquivando os encerrados" });
+    expect(trabalhando.hasAttribute("disabled")).toBe(true);
+    // A contraprova: com a resposta solta, o botão volta ao que era. Sem ela,
+    // um botão desabilitado para sempre passaria por este teste.
+    presos[0]!();
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeNull());
+    expect(screen.queryByRole("button", { name: "Arquivando os encerrados" })).toBeNull();
   });
 });
