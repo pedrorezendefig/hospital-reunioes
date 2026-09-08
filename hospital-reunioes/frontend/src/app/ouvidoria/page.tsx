@@ -23,6 +23,13 @@ import { ALTURA_DE_TOQUE } from "@/lib/toque";
 import { EncerrarModal } from "@/components/ouvidoria/EncerrarModal";
 import { type Responsavel } from "@/lib/ouvidoria/validacao";
 
+/**
+ * A marca do lote na trava de "uma chamada de arquivo por vez" (issue #594).
+ * Não é id de manifestação nenhuma, e não precisa ser: o que a trava guarda é
+ * o que está em voo, e o lote está em voo sobre a lista inteira.
+ */
+const O_LOTE = "todos-os-encerrados";
+
 export default function OuvidoriaPage() {
   const [manifestacoes, setManifestacoes] = useState<ManifestacaoIndice[]>([]);
   const [loading, setLoading] = useState(true);
@@ -62,7 +69,15 @@ export default function OuvidoriaPage() {
   const [erroDoArquivo, setErroDoArquivo] = useState<string | null>(null);
   // A manifestação com uma chamada de arquivo em voo. Trava o duplo clique, que
   // dispararia dois POST e duas recargas sobre a mesma linha.
+  //
+  // O lote entra na MESMA trava, com a marca abaixo no lugar de um id: os dois
+  // mexem na mesma lista, e travas separadas deixariam o lote e o botão de uma
+  // linha correrem juntos sobre ela (issue #594).
   const [noArquivo, setNoArquivo] = useState<string | null>(null);
+  // O que o lote fez, na contagem que o SERVIDOR devolveu, e não na que a tela
+  // supôs ao clicar: entre a carga e o clique, outra pessoa pode ter encerrado
+  // ou arquivado um caso, e o número da tela mentiria (issue #594).
+  const [resumoDoLote, setResumoDoLote] = useState<string | null>(null);
   // A carga mais recente. Ligar e desligar o filtro depressa deixa dois `fetch`
   // no ar, e sem este número quem responde por último pinta a lista, mesmo
   // sendo a resposta que o ouvidor já abandonou.
@@ -249,6 +264,11 @@ export default function OuvidoriaPage() {
     if (!token || noArquivo) return;
     setNoArquivo(m.id);
     setErroDoArquivo(null);
+    // O aviso do lote não sobrevive ao ato seguinte: depois de "12
+    // manifestações arquivadas", arquivar UMA linha deixaria o verde na tela
+    // dizendo 12 sobre um clique que guardou um caso. E numa recusa os dois
+    // avisos apareceriam juntos, um verde e um vermelho, sobre o mesmo ato.
+    setResumoDoLote(null);
     try {
       const res = await fetch(`/api/ouvidoria/manifestacoes/${m.id}/arquivo`, {
         method: metodo,
@@ -276,6 +296,68 @@ export default function OuvidoriaPage() {
     }
   }
 
+  /**
+   * Arquivar todos os encerrados de uma vez (issue #594, PRD #591).
+   *
+   * A tela não peneira nada: ela pede o lote e adota a contagem do servidor. O
+   * recorte é o mesmo dos dois lados, porque esta lista não tem filtro nenhum
+   * além do próprio Arquivo, e o grupo Encerrado que oferece o botão é
+   * exatamente "todo encerrado fora do arquivo".
+   *
+   * A confirmação é do navegador, como nas outras ações de volume da casa. Ela
+   * pergunta com o número que está NA TELA, e a mensagem depois traz o número
+   * que o SERVIDOR arquivou: os dois podem divergir, e quem manda é o segundo.
+   *
+   * `quantos` é o tamanho do grupo, e serve só à pergunta.
+   */
+  async function arquivarOsEncerrados(quantos: number) {
+    if (!token || noArquivo) return;
+    const pergunta =
+      quantos === 1
+        ? "Arquivar o caso encerrado? Ele sai da lista, continua contando nos relatórios e volta pelo filtro Arquivados."
+        : `Arquivar os ${quantos} casos encerrados? Eles saem da lista, continuam contando nos relatórios e voltam pelo filtro Arquivados.`;
+    if (!window.confirm(pergunta)) return;
+    setNoArquivo(O_LOTE);
+    setErroDoArquivo(null);
+    setResumoDoLote(null);
+    try {
+      const res = await fetch("/api/ouvidoria/manifestacoes/arquivo-dos-encerrados", {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      const corpo = await res.json().catch(() => null);
+      if (!res.ok) {
+        // Os mesmos status com que ESTA rota explica uma recusa, como no ato de
+        // um caso ao lado. Repassar qualquer `detail` poria um "Internal Server
+        // Error" na tela do ouvidor.
+        const explicada = res.status === 403 || res.status === 503;
+        setErroDoArquivo(
+          explicada && typeof corpo?.detail === "string"
+            ? corpo.detail
+            : "Não foi possível arquivar os encerrados. Tente de novo em instantes."
+        );
+        return;
+      }
+      // Contagem ausente ou de outro tipo vira zero, e o zero tem frase
+      // própria: um "0 manifestações arquivadas" seco leria como defeito, e o
+      // que aconteceu é que não havia o que guardar.
+      const arquivadas = typeof corpo?.arquivadas === "number" ? corpo.arquivadas : 0;
+      setResumoDoLote(
+        arquivadas === 0
+          ? "Nenhuma manifestação foi arquivada: não havia caso encerrado fora do arquivo quando o pedido chegou."
+          : arquivadas === 1
+            ? "1 manifestação arquivada."
+            : `${arquivadas} manifestações arquivadas.`
+      );
+      await recarregar(token, arquivados);
+    } catch (e) {
+      console.error("Erro ao arquivar os encerrados:", e);
+      setErroDoArquivo("Não foi possível falar com o servidor. Tente de novo em instantes.");
+    } finally {
+      setNoArquivo(null);
+    }
+  }
+
   /** Liga e desliga o filtro, recarregando a lista que ele passou a pedir. */
   function alternarOFiltro() {
     const proximo = !arquivados;
@@ -283,8 +365,14 @@ export default function OuvidoriaPage() {
     // O aviso do ato anterior não sobrevive à troca de lista: ele fala de uma
     // linha que talvez nem esteja mais na tela.
     setErroDoArquivo(null);
+    setResumoDoLote(null);
     if (token) recarregar(token, proximo);
   }
+
+  // O lote em voo (issue #594). Um lote de centenas de casos demora, e sem
+  // isto o botão fica idêntico e a trava só devolve silêncio: o ouvidor clica
+  // de novo achando que o primeiro clique não pegou.
+  const loteEmVoo = noArquivo === O_LOTE;
 
   const grupos = agruparPorStatus(manifestacoes).filter((g) => g.itens.length > 0);
   // O trabalho do dia do ouvidor, em cima de tudo (issue #486, RN-67): o caso
@@ -398,6 +486,19 @@ export default function OuvidoriaPage() {
         </div>
       )}
 
+      {/* O que o lote fez (issue #594). `role="status"` pela mesma razão do
+          aviso acima: é resposta a um clique, e o ouvidor precisa lê-la sem
+          procurar. Some no próximo ato do arquivo e na troca de filtro. */}
+      {resumoDoLote && (
+        <div
+          role="status"
+          className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm"
+        >
+          <Archive className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{resumoDoLote}</span>
+        </div>
+      )}
+
       {!loading && !semAcesso && !erroCarga && !podeAbrirDossie && manifestacoes.length > 0 && (
         <div className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-sm">
           <Lock className="w-4 h-4 shrink-0 mt-0.5" />
@@ -508,10 +609,37 @@ export default function OuvidoriaPage() {
                   <span className="text-xs font-bold uppercase tracking-wide">
                     {rotuloDoStatus(grupo.status)}
                   </span>
-                  <span className="text-xs font-semibold">
-                    {grupo.itens.length}{" "}
-                    {grupo.itens.length === 1 ? "manifestação" : "manifestações"}
-                  </span>
+                  <div className="flex items-center gap-3">
+                    {/* O lote (issue #594). Mora no cabeçalho do grupo porque
+                        é sobre o grupo inteiro que ele age, e não sobre uma
+                        linha. Só na lista de TRABALHO: com o filtro ligado, o
+                        grupo Encerrado é o que já está guardado, e o botão ali
+                        ofereceria arquivar o arquivo. O grupo vazio nem chega
+                        aqui (a lista já o descarta), então o botão nunca
+                        aparece prometendo um lote de zero.
+
+                        Gate de perfil como no resto da tela: quem recusa de
+                        verdade é o servidor, com 403. */}
+                    {!arquivados && podeAbrirDossie && grupo.status === "encerrado" && (
+                      <button
+                        type="button"
+                        // Desabilitado por QUALQUER ato do arquivo em voo, e
+                        // não só pelo lote: os dois mexem na mesma lista, e a
+                        // trava do `mudarOArquivo` já os serializa. Sem o
+                        // `disabled`, ela recusaria o clique sem dizer nada.
+                        disabled={Boolean(noArquivo)}
+                        onClick={() => arquivarOsEncerrados(grupo.itens.length)}
+                        className={`inline-flex items-center gap-1.5 px-3 py-1 rounded-lg text-xs font-semibold uppercase tracking-wide whitespace-nowrap bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 transition-colors disabled:opacity-60 ${ALTURA_DE_TOQUE}`}
+                      >
+                        <Archive className="w-3.5 h-3.5 shrink-0" />
+                        {loteEmVoo ? "Arquivando os encerrados" : "Arquivar todos os encerrados"}
+                      </button>
+                    )}
+                    <span className="text-xs font-semibold">
+                      {grupo.itens.length}{" "}
+                      {grupo.itens.length === 1 ? "manifestação" : "manifestações"}
+                    </span>
+                  </div>
                 </header>
                 <ListaDaFila
                   itens={grupo.itens}

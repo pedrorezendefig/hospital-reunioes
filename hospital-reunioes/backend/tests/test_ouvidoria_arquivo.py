@@ -28,12 +28,16 @@ Duas armadilhas de teste vazio moram aqui:
 from __future__ import annotations
 
 import datetime as dt
+import logging
 import os
 import sys
+from types import SimpleNamespace
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -166,6 +170,12 @@ class _TabelaFake:
     def __init__(self, nome: str, rows: list[dict], ao_ler=None):
         self.nome = nome
         self.rows = rows
+        # A query do pedido, no MESMO lugar em que o cliente de verdade a
+        # guarda (`request.params`, um `httpx.QueryParams` imutável). É por
+        # ela que o lote pede `select=id` no update, e é por ela que os
+        # filtros do postgrest entram. Sem isto aqui o fake não conheceria o
+        # recorte, e o teste ficaria verde sobre a linha inteira.
+        self.request = SimpleNamespace(params=httpx.QueryParams())
         # O que acontece DEPOIS de um select casar e ANTES de a rota voltar a
         # falar com o banco. É assim que a corrida da reabertura entra no
         # teste, sem thread nenhuma.
@@ -176,6 +186,11 @@ class _TabelaFake:
         self._colunas: tuple[str, ...] | None = None
         self._janela: tuple[int, int] | None = None
         self._negar = False
+        # A contagem que o PostgREST devolve no `Content-Range` quando alguém
+        # pede `count=exact`. Ela conta as linhas AFETADAS, e não as que
+        # couberam no corpo: é justamente por serem coisas diferentes que o
+        # lote passou a ler daqui.
+        self._contagem_pedida: str | None = None
 
     @property
     def not_(self):
@@ -191,8 +206,9 @@ class _TabelaFake:
         self._insert = payload
         return self
 
-    def update(self, payload: dict):
+    def update(self, payload: dict, count: str | None = None, **_kw):
         self._update = payload
+        self._contagem_pedida = count
         return self
 
     def _guardar(self, teste):
@@ -242,19 +258,27 @@ class _TabelaFake:
                 linha.setdefault("id", f"{self.nome}-{len(self.rows) + 1}")
                 self.rows.append(linha)
                 gravados.append(dict(linha))
-            return type("R", (), {"data": gravados})()
+            return type("R", (), {"data": gravados, "count": None})()
         casadas = [r for r in self.rows if all(teste(r) for teste in self._filtros)]
         if self._update is not None:
             for r in casadas:
                 r.update(self._update)
-            return type("R", (), {"data": [dict(r) for r in casadas]})()
+            # O `select` da query recorta o RETORNO do update, como no
+            # PostgREST. Quem pediu só o id recebe só o id: se a rota tentasse
+            # ler outra coluna do que voltou, ela quebraria aqui em vez de
+            # passar despercebida.
+            recorte = self.request.params.get("select")
+            colunas = tuple(c.strip() for c in recorte.split(",")) if recorte else None
+            gravadas = [{c: r.get(c) for c in colunas} if colunas else dict(r) for r in casadas]
+            contagem = len(casadas) if self._contagem_pedida else None
+            return type("R", (), {"data": gravadas, "count": contagem})()
         if self._janela is not None:
             inicio, fim = self._janela
             casadas = casadas[inicio : fim + 1]
         projetadas = [self._projetar(r) for r in casadas]
         if self.ao_ler is not None and casadas:
             self.ao_ler(casadas)
-        return type("R", (), {"data": projetadas})()
+        return type("R", (), {"data": projetadas, "count": None})()
 
 
 class _AgregadoFake:
@@ -279,6 +303,11 @@ class _SupabaseFake:
         # Quando preenchido, roda uma vez logo depois do primeiro select em
         # `ouvidoria_protocolos` e some. Simula a reabertura concorrente.
         self.reabre_no_meio_da_leitura = False
+        # Todo pedido montado nesta sessão, na ordem. É por aqui que o teste
+        # olha a QUERY que a rota montou, e não só o efeito dela no banco:
+        # `select=id` no update não muda o que fica gravado, então sem isto
+        # nada reprovaria a rota que voltasse a pedir a linha inteira.
+        self.pedidos: list[_TabelaFake] = []
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos,
             "ouvidoria_movimentos": movimentos or [],
@@ -305,7 +334,9 @@ class _SupabaseFake:
         ao_ler = None
         if nome == "ouvidoria_protocolos" and self.reabre_no_meio_da_leitura:
             ao_ler = self._reabrir_agora
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), ao_ler)
+        pedido = _TabelaFake(nome, self.tabelas.setdefault(nome, []), ao_ler)
+        self.pedidos.append(pedido)
+        return pedido
 
     def rpc(self, nome: str, params: dict | None = None):
         if nome == "ouvidoria_ultimo_movimento":
@@ -800,3 +831,497 @@ class TestArquivarNaoMexeEmNumero:
         depois = client.get("/api/ouvidoria/metricas", params={"inicio": "2026-08-01", "fim": "2026-08-25"})
         assert depois.status_code == 200, depois.text
         assert depois.json()["volume"]["total"] == total_antes
+
+
+# ---------------------------------------------------------------------------
+# O lote (issue #594)
+# ---------------------------------------------------------------------------
+
+
+def _arquivar_o_lote(client):
+    return client.post("/api/ouvidoria/manifestacoes/arquivo-dos-encerrados")
+
+
+def _com_carimbo(supabase) -> list[str]:
+    """Os ids que estão com o carimbo do arquivo, na ordem da base."""
+    return [c["id"] for c in supabase.tabelas["ouvidoria_protocolos"] if c["arquivada_em"]]
+
+
+# Um caso que já estava no arquivo antes do lote, com carimbo de OUTRO autor e
+# de OUTRO instante. Os dois são o detector de regravação: um lote que perdesse
+# o filtro de "sem arquivo" reescreveria os dois valores e o teste veria.
+ARQUIVADO_ANTES = {"arquivada_em": "2026-08-01T10:00:00+00:00", "arquivada_por": "P11"}
+
+
+class TestOLoteDosEncerrados:
+    """Arquivar todos os encerrados de uma vez (issue #594, PRD #591).
+
+    O lote é o MESMO ato do arquivo de um caso, repetido: mesmas duas colunas,
+    mesma pré-condição de estado, nenhum movimento na trilha. Duas coisas só
+    ele pode errar, e são as que os testes daqui cercam: pegar caso que não
+    devia (o em andamento, o que já estava guardado) e mentir na contagem.
+
+    Toda base de teste tem os TRÊS mundos ao mesmo tempo (encerrado livre, em
+    andamento, já arquivado). Com um mundo só, um lote sem filtro nenhum
+    passaria por lote certo.
+    """
+
+    def _base(self, monkeypatch, quantos_encerrados: int = 1, participante=None, movimentos=None):
+        casos = [_caso(n) for n in range(1, quantos_encerrados + 1)]
+        casos.append(_caso(8, status="aguardando_area", encerrada_em=None))
+        casos.append(_caso(9, **ARQUIVADO_ANTES))
+        return _client(monkeypatch, casos=casos, participante=participante, movimentos=movimentos)
+
+    def test_arquiva_o_encerrado_livre_e_devolve_a_contagem(self, monkeypatch):
+        client, supabase = self._base(monkeypatch)
+
+        r = _arquivar_o_lote(client)
+
+        assert r.status_code == 200, r.text
+        assert r.json() == {"arquivadas": 1}
+        assert _gravado(supabase, 1)["arquivada_em"], "o encerrado livre precisa sair carimbado"
+        assert _gravado(supabase, 1)["arquivada_por"] == OUVIDOR["id"]
+
+    def test_o_caso_em_andamento_fica_intocado(self, monkeypatch):
+        """Caso em andamento tem prazo correndo: escondê-lo é esconder atraso."""
+        client, supabase = self._base(monkeypatch)
+
+        assert _arquivar_o_lote(client).status_code == 200
+
+        em_andamento = _gravado(supabase, 8)
+        assert em_andamento["arquivada_em"] is None
+        assert em_andamento["arquivada_por"] is None
+        assert em_andamento["status"] == "aguardando_area"
+
+    def test_o_ja_arquivado_nao_e_regravado(self, monkeypatch):
+        """Quem e quando da primeira leva são a memória do ato: um lote que os
+        reescrevesse trocaria o autor de um arquivamento que não foi dele."""
+        client, supabase = self._base(monkeypatch)
+
+        assert _arquivar_o_lote(client).status_code == 200
+
+        antigo = _gravado(supabase, 9)
+        assert antigo["arquivada_em"] == ARQUIVADO_ANTES["arquivada_em"]
+        assert antigo["arquivada_por"] == ARQUIVADO_ANTES["arquivada_por"]
+
+    @pytest.mark.parametrize("quantos", [0, 1, 3])
+    def test_a_contagem_e_a_das_linhas_que_o_lote_carimbou(self, monkeypatch, quantos):
+        """Três tamanhos, porque contagem fixa acerta um deles por acaso. E a
+        contagem é conferida contra o BANCO, não contra si mesma: devolver o
+        total da tabela também morre aqui, já que o em andamento e o já
+        arquivado nunca entram."""
+        client, supabase = self._base(monkeypatch, quantos_encerrados=quantos)
+
+        r = _arquivar_o_lote(client)
+
+        assert r.status_code == 200, r.text
+        assert r.json()["arquivadas"] == quantos
+        novos = [i for i in _com_carimbo(supabase) if i != "uuid-9"]
+        assert len(novos) == quantos
+
+    def test_a_segunda_rodada_devolve_zero_e_nao_regrava_a_primeira_leva(self, monkeypatch):
+        """O relógio dos testes anda a cada leitura, então um segundo carimbo
+        sobre o mesmo caso teria valor diferente do primeiro."""
+        client, supabase = self._base(monkeypatch)
+
+        primeira = _arquivar_o_lote(client)
+        assert primeira.status_code == 200, primeira.text
+        assert primeira.json()["arquivadas"] == 1, "a contraprova: sem a primeira leva, o zero abaixo é vazio"
+        carimbo_da_primeira = _gravado(supabase, 1)["arquivada_em"]
+
+        segunda = _arquivar_o_lote(client)
+
+        assert segunda.status_code == 200, segunda.text
+        assert segunda.json()["arquivadas"] == 0
+        assert _gravado(supabase, 1)["arquivada_em"] == carimbo_da_primeira
+
+    def test_o_lote_nao_grava_movimento_nem_muda_status(self, monkeypatch):
+        """Movimento acenderia o ponto de novidade num caso em que ninguém
+        mexeu, e o arquivo viraria trabalho pendente."""
+        client, supabase = self._base(monkeypatch, quantos_encerrados=2)
+
+        assert _arquivar_o_lote(client).status_code == 200
+
+        assert supabase.tabelas["ouvidoria_movimentos"] == []
+        assert _gravado(supabase, 1)["status"] == "encerrado"
+        assert _gravado(supabase, 2)["status"] == "encerrado"
+
+    def test_a_diretoria_executiva_tambem_roda_o_lote(self, monkeypatch):
+        """Os dois papéis do Perfil da Ouvidoria arquivam (ADR 0047)."""
+        client, supabase = self._base(monkeypatch, participante=DIRETORIA)
+
+        r = _arquivar_o_lote(client)
+
+        assert r.status_code == 200, r.text
+        assert _gravado(supabase, 1)["arquivada_por"] == DIRETORIA["id"]
+
+    @pytest.mark.parametrize("quem", [SUPER_ADMIN, SECRETARIA], ids=["super_admin", "secretaria"])
+    def test_sem_perfil_da_ouvidoria_recebe_403_e_nada_e_arquivado(self, monkeypatch, quem):
+        client, supabase = self._base(monkeypatch, participante=quem)
+
+        assert _arquivar_o_lote(client).status_code == 403
+
+        assert _com_carimbo(supabase) == ["uuid-9"], "só o que já estava guardado antes do pedido"
+
+    @pytest.mark.parametrize(
+        "falha",
+        [
+            APIError({"message": "canceling statement due to statement timeout", "code": "57014"}),
+            # O timeout do transporte NÃO é `APIError`: ele nasce antes de haver
+            # resposta HTTP para virar erro do PostgREST. É a falha típica desta
+            # rota, que é a escrita mais pesada do módulo, e um `except APIError`
+            # sozinho a deixaria escapar como 500 depois de o update poder ter
+            # commitado, com o log de acesso nunca rodando.
+            httpx.ReadTimeout("timed out"),
+            httpx.ConnectError("connection refused"),
+        ],
+        ids=["postgrest_recusou", "timeout_de_leitura", "conexao_recusada"],
+    )
+    def test_a_falha_do_banco_vira_503_e_nao_lote_vazio(self, monkeypatch, falha, caplog):
+        """Zero arquivadas com 200 diria ao ouvidor que não havia nada a fazer,
+        e o acúmulo continuaria na tela sem explicação.
+
+        A falha é levantada DENTRO do `execute`, e não antes: é lá que ela cai
+        na vida real, e é o único ponto em que o update pode já ter chegado ao
+        banco."""
+        client, supabase = self._base(monkeypatch)
+        de_verdade = supabase.table
+
+        def _table_que_recusa(nome: str):
+            tabela = de_verdade(nome)
+            if nome == "ouvidoria_protocolos":
+
+                def _explodir():
+                    raise falha
+
+                tabela.execute = _explodir
+            return tabela
+
+        monkeypatch.setattr(supabase, "table", _table_que_recusa)
+
+        with caplog.at_level(logging.ERROR):
+            assert _arquivar_o_lote(client).status_code == 503
+
+        # O 503 da coluna que não existe (migration 099 pendente) e o 503 do
+        # timeout são o mesmo status e a mesma frase na tela: o que os separa
+        # em produção é esta linha. O nome da exceção distingue as famílias, e
+        # o código distingue as recusas do PostgREST entre si.
+        registrado = "\n".join(caplog.messages)
+        assert falha.__class__.__name__ in registrado
+        assert getattr(falha, "code", None) is None or str(falha.code) in registrado
+
+    def test_a_contagem_vem_das_linhas_afetadas_e_nao_das_devolvidas(self, monkeypatch):
+        """O servidor afetou sete linhas e devolveu uma. A resposta ao ouvidor
+        é SETE.
+
+        É este o cenário que tira o número da dependência de quanto o servidor
+        decidiu devolver: se a contagem saísse do corpo, um lote de sete
+        apareceria como um, com HTTP 200 e sem erro nenhum. O log fica com o
+        que veio, que é tudo o que ele pode saber; o número, não."""
+        client, supabase = self._base(monkeypatch)
+        de_verdade = supabase.table
+
+        def _table_que_corta_o_corpo(nome: str):
+            tabela = de_verdade(nome)
+            if nome == "ouvidoria_protocolos":
+                resposta_inteira = tabela.execute
+
+                def _cortada():
+                    r = resposta_inteira()
+                    if tabela._update is None:
+                        return r
+                    return type("R", (), {"data": r.data[:1], "count": 7})()
+
+                tabela.execute = _cortada
+            return tabela
+
+        monkeypatch.setattr(supabase, "table", _table_que_corta_o_corpo)
+
+        r = _arquivar_o_lote(client)
+
+        assert r.status_code == 200, r.text
+        assert r.json() == {"arquivadas": 7}
+
+    def test_a_rota_pede_a_contagem_exata_ao_banco(self, monkeypatch):
+        """O irmão do teste acima: aquele prova de ONDE o número sai, este
+        prova que a rota pediu o cabeçalho de onde ele sai. Sem o pedido, o
+        PostgREST não manda o `Content-Range` e a rota cairia para sempre no
+        fallback, sem nada reprovar."""
+        client, supabase = self._base(monkeypatch)
+
+        assert _arquivar_o_lote(client).status_code == 200
+
+        escritas = [
+            pedido
+            for pedido in supabase.pedidos
+            if pedido.nome == "ouvidoria_protocolos" and pedido._update is not None
+        ]
+        assert len(escritas) == 1, "o lote é um update só"
+        assert escritas[0]._contagem_pedida == "exact"
+
+    def test_sem_o_cabecalho_a_contagem_cai_para_o_que_veio_no_corpo(self, monkeypatch):
+        """O servidor que não devolve o cabeçalho não pode zerar um lote que
+        aconteceu: aí o corpo é a melhor verdade disponível."""
+        client, supabase = self._base(monkeypatch, quantos_encerrados=2)
+        de_verdade = supabase.table
+
+        def _table_sem_cabecalho(nome: str):
+            tabela = de_verdade(nome)
+            if nome == "ouvidoria_protocolos":
+                com_contagem = tabela.execute
+
+                def _sem_contagem():
+                    r = com_contagem()
+                    return type("R", (), {"data": r.data, "count": None})()
+
+                tabela.execute = _sem_contagem
+            return tabela
+
+        monkeypatch.setattr(supabase, "table", _table_sem_cabecalho)
+
+        assert _arquivar_o_lote(client).json()["arquivadas"] == 2
+
+    def test_a_rota_pede_so_o_id_no_update_que_ela_monta(self, monkeypatch):
+        """O irmão do teste de contrato abaixo, e o que fecha o vácuo dele:
+        aquele prova que a função monta o recorte, este prova que a ROTA a
+        usa. Sem os dois, um lote que voltasse a pedir a linha inteira ficaria
+        verde, porque `select` não muda nada do que fica gravado."""
+        client, supabase = self._base(monkeypatch)
+
+        assert _arquivar_o_lote(client).status_code == 200
+
+        escritas = [
+            pedido
+            for pedido in supabase.pedidos
+            if pedido.nome == "ouvidoria_protocolos" and pedido._update is not None
+        ]
+        assert len(escritas) == 1, "o lote é um update só"
+        assert escritas[0].request.params.get("select") == "id"
+
+    def test_o_fake_recorta_o_retorno_do_update_como_o_postgrest_faz(self):
+        """O detector dos dois testes acima, exercitado nos dois sentidos.
+
+        Sem esta projeção, o Supabase falso devolveria a linha inteira mesmo
+        com o recorte pedido, e a rota poderia passar a ler do retorno uma
+        coluna que o PostgREST de verdade não vai mandar, sem nada reprovar."""
+        com_recorte = _TabelaFake("ouvidoria_protocolos", [_caso(1)])
+        com_recorte.request.params = com_recorte.request.params.set("select", "id")
+
+        gravadas = (
+            com_recorte.update({"arquivada_em": "2026-09-08T00:00:00+00:00"}).eq("status", "encerrado").execute().data
+        )
+
+        assert gravadas == [{"id": "uuid-1"}]
+        # O outro sentido: sem recorte, o retorno é a linha toda, com o relato.
+        sem_recorte = _TabelaFake("ouvidoria_protocolos", [_caso(1)])
+        inteiras = (
+            sem_recorte.update({"arquivada_em": "2026-09-08T00:00:00+00:00"}).eq("status", "encerrado").execute().data
+        )
+        assert "relato_integral" in inteiras[0]
+
+    def test_o_fake_so_devolve_contagem_a_quem_pediu_e_conta_o_que_foi_afetado(self):
+        """O detector dos dois testes da contagem, exercitado nos dois sentidos.
+
+        Os testes acima só valem enquanto o Supabase falso for fiel em duas
+        coisas: guardar o `count` que recebeu (senão o teste do pedido fica
+        verde sobre qualquer rota) e contar as linhas AFETADAS, e não as que
+        couberam no corpo (que é a distinção inteira)."""
+        pedindo = _TabelaFake("ouvidoria_protocolos", [_caso(1), _caso(2)])
+
+        com_contagem = (
+            pedindo.update({"arquivada_em": "2026-09-08T00:00:00+00:00"}, count="exact")
+            .eq("status", "encerrado")
+            .execute()
+        )
+
+        assert pedindo._contagem_pedida == "exact"
+        assert com_contagem.count == 2
+        # O outro sentido: quem não pede não recebe cabeçalho nenhum, que é o
+        # que faz a rota cair no fallback do corpo.
+        calado = _TabelaFake("ouvidoria_protocolos", [_caso(1), _caso(2)])
+        sem_contagem = calado.update({"arquivada_em": "2026-09-08T00:00:00+00:00"}).eq("status", "encerrado").execute()
+        assert calado._contagem_pedida is None
+        assert sem_contagem.count is None
+
+    def test_o_update_do_lote_pede_so_o_id_ao_cliente_de_verdade(self):
+        """O lote lê `row["id"]` e nada mais, e por isso pede `select=id`: sem
+        ele o PostgREST devolve a linha inteira, com relato, nome e contato de
+        cada caso arquivado, para nada.
+
+        Este teste fala com o cliente REAL, sem rede: o parâmetro entra por um
+        atributo da biblioteca (`request.params`), e o Supabase falso ficaria
+        verde na versão em que esse atributo mudasse de nome."""
+        from postgrest import SyncPostgrestClient
+
+        cliente = SyncPostgrestClient("http://postgrest.invalido/rest/v1")
+        try:
+            escrita = ouvidoria_router._so_o_id_de_volta(
+                cliente.table("ouvidoria_protocolos")
+                .update({"arquivada_em": "2026-09-08T00:00:00+00:00"}, count="exact")
+                .eq("status", "encerrado")
+                .is_("arquivada_em", "null")
+            )
+
+            assert escrita.request.params.get("select") == "id"
+            # E o recorte não atropelou os filtros, que entram pela mesma query.
+            assert escrita.request.params.get("status") == "eq.encerrado"
+            assert escrita.request.params.get("arquivada_em") == "is.null"
+            # A contagem exata é pedida por cabeçalho, e é ela que faz o
+            # PostgREST mandar o `Content-Range` de onde sai o número.
+            assert "count=exact" in escrita.request.headers.get("Prefer", "")
+        finally:
+            cliente.session.close()
+
+
+class TestORastroDoLote:
+    """Arquivar não entra na trilha, então o log de acesso é o único vestígio
+    de que o caso saiu da vista, por quem e quando. Um lote sem ele apagaria de
+    uma vez o rastro de dezenas de casos."""
+
+    def _acessos(self, supabase) -> list[dict]:
+        return supabase.tabelas["ouvidoria_acessos"]
+
+    def test_um_registro_por_caso_arquivado_e_so_por_eles(self, monkeypatch):
+        client, supabase = _client(
+            monkeypatch,
+            casos=[
+                _caso(1),
+                _caso(2),
+                _caso(8, status="aguardando_area", encerrada_em=None),
+                _caso(9, **ARQUIVADO_ANTES),
+            ],
+        )
+
+        assert _arquivar_o_lote(client).status_code == 200
+
+        acessos = self._acessos(supabase)
+        assert sorted(a["manifestacao_id"] for a in acessos) == ["uuid-1", "uuid-2"]
+        assert {a["acao"] for a in acessos} == {"arquivar"}
+        assert {a["ator_id"] for a in acessos} == {OUVIDOR["id"]}
+
+    def test_a_falha_do_log_deixa_no_servidor_quem_clicou_e_quais_casos(self, monkeypatch, caplog):
+        """O insert do lote é UM só: uma recusa apaga de uma vez o rastro de
+        todos os casos. Como arquivar não entra na trilha, o warning é a última
+        rede, e uma linha que só diz "falhou em 2" não permite reconstruir nada.
+
+        O ato continua valendo (fail-open): o arquivamento já foi gravado, e um
+        500 aqui mandaria o ouvidor repetir um lote que já aconteceu."""
+        client, supabase = _client(monkeypatch, casos=[_caso(1), _caso(2)])
+        de_verdade = supabase.table
+
+        def _table_que_recusa_o_log(nome: str):
+            tabela = de_verdade(nome)
+            if nome == "ouvidoria_acessos":
+
+                def _explodir():
+                    raise APIError({"message": "insert or update violates foreign key", "code": "23503"})
+
+                tabela.execute = _explodir
+            return tabela
+
+        monkeypatch.setattr(supabase, "table", _table_que_recusa_o_log)
+
+        with caplog.at_level(logging.WARNING):
+            r = _arquivar_o_lote(client)
+
+        assert r.status_code == 200, r.text
+        assert r.json()["arquivadas"] == 2, "o ato vale mesmo com o log recusado"
+        registrado = "\n".join(caplog.messages)
+        assert OUVIDOR["id"] in registrado, "sem o ator, ninguém reconstrói quem escondeu a fila"
+        assert "uuid-1" in registrado and "uuid-2" in registrado, "os casos atingidos precisam estar nomeados"
+
+    def test_lote_sem_nada_para_arquivar_nao_registra_acesso(self, monkeypatch):
+        """O outro sentido do mesmo detector: log de ATO, e ato que não
+        aconteceu não se registra."""
+        client, supabase = _client(monkeypatch, casos=[_caso(8, status="aguardando_area", encerrada_em=None)])
+
+        assert _arquivar_o_lote(client).json()["arquivadas"] == 0
+
+        assert self._acessos(supabase) == []
+
+
+class TestOLoteNaListaEnoContador:
+    """O lote é a limpeza da lista: o que ele carimba sai do grupo Encerrado e
+    aparece atrás do filtro, na mesma carga."""
+
+    def _base(self, monkeypatch):
+        # Os dois encerrados têm movimento na trilha e nunca foram vistos: os
+        # dois estão com o ponto de novidade aceso antes do lote, que é o caso
+        # que a issue manda entrar no lote como qualquer outro.
+        movimentos = [
+            {
+                "id": f"mov-{n}",
+                "manifestacao_id": f"uuid-{n}",
+                "estado_anterior": "respondido",
+                "estado_novo": "encerrado",
+                "autor_id": "P10",
+                "autor_nome": "Marta Ouvidora",
+                "observacao": None,
+                "ocorrido_em": "2026-08-24T12:00:00+00:00",
+            }
+            for n in (1, 2)
+        ]
+        return _client(
+            monkeypatch,
+            casos=[_caso(1), _caso(2), _caso(8, status="aguardando_area", encerrada_em=None)],
+            movimentos=movimentos,
+        )
+
+    def test_o_lote_esvazia_o_grupo_encerrado_e_enche_o_arquivo(self, monkeypatch):
+        client, _ = self._base(monkeypatch)
+        assert _listar(client) == ["2026-0008", "2026-0002", "2026-0001"], "a contraprova do estado inicial"
+
+        assert _arquivar_o_lote(client).json()["arquivadas"] == 2
+
+        assert _listar(client) == ["2026-0008"]
+        assert _listar(client, arquivados="sim") == ["2026-0002", "2026-0001"]
+
+    def test_o_caso_com_o_ponto_aceso_entra_no_lote_e_sai_do_contador(self, monkeypatch):
+        client, _ = self._base(monkeypatch)
+        # Os três casos da base acendem o ponto: os dois encerrados por causa
+        # do movimento nunca visto, e o em andamento por ser caso novo que a
+        # Ouvidoria ainda não abriu. Sem esta contraprova, o número de baixo
+        # passaria por "o lote apagou a novidade" mesmo sobre uma fila apagada.
+        assert _contador(client) == 3
+
+        assert _arquivar_o_lote(client).json()["arquivadas"] == 2
+
+        # Sobra o em andamento, e só ele: o contador do menu perde exatamente
+        # os dois casos que foram para o arquivo.
+        assert _contador(client) == 1
+
+
+class TestOAcordoEntreOLoteEAListaDaTela:
+    """O lote arquiva TODO encerrado sem arquivo, e o botão que o dispara mora
+    no cabeçalho do grupo Encerrado. Os dois conjuntos são o mesmo HOJE por uma
+    razão só: a lista não tem nenhum outro recorte. Nada no código amarra isso,
+    e é o que esta classe existe para amarrar.
+
+    No dia em que a lista ganhar filtro de setor, período ou busca, o botão
+    passa a arquivar além do que o ouvidor está vendo, sem nada mais quebrar. O
+    teste abaixo quebra, e quem estiver mexendo decide: ou o lote passa a
+    respeitar o recorte novo, ou o botão sai do cabeçalho do grupo.
+    """
+
+    def test_a_lista_nao_ganhou_recorte_novo_sem_o_lote_saber(self):
+        from inspect import signature
+
+        parametros = set(signature(ouvidoria_router.listar_protocolos).parameters)
+
+        assert parametros == {"request", "arquivados", "me", "supabase"}, (
+            "A lista da Ouvidoria ganhou (ou perdeu) um parâmetro. Se ele recorta a fila, "
+            "o botão 'Arquivar todos os encerrados' passou a prometer o grupo da tela e a "
+            "arquivar o banco inteiro: acerte o lote ou tire o botão do cabeçalho."
+        )
+
+    def test_o_unico_recorte_extra_da_lista_nao_alcanca_quem_roda_o_lote(self, monkeypatch):
+        """A contraprova do teste acima: o sigilo reforçado É um recorte da
+        lista, e ele não conta aqui porque só se aplica a quem está FORA da
+        Ouvidoria, e quem roda o lote tem o perfil. Com dois casos sigilosos e
+        encerrados, o ouvidor vê os dois e o lote leva os dois."""
+        client, _ = _client(monkeypatch, casos=[_caso(1, sigilo_reforcado=True), _caso(2, sigilo_reforcado=True)])
+        assert _listar(client) == ["2026-0002", "2026-0001"], "o ouvidor enxerga o caso sigiloso"
+
+        assert _arquivar_o_lote(client).json()["arquivadas"] == 2
+
+        assert _listar(client) == []

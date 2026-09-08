@@ -97,6 +97,18 @@ function montar(
     // Segura a resposta de arquivar. É a janela em que o dedo bate duas vezes
     // no mesmo botão.
     segurarArquivo?: boolean;
+    // A recusa que o SERVIDOR devolve ao lote, com o status e a frase dele.
+    recusaDoLote?: { status: number; detail?: string };
+    // A contagem que o SERVIDOR devolve, quando ela não é a da tela. É a
+    // corrida: entre a carga e o clique, outra pessoa encerrou mais um caso.
+    contagemDoLote?: number;
+    // Segura a resposta do lote. É a janela em que o ouvidor olha a tela
+    // esperando o lote de centenas de casos terminar.
+    segurarLote?: boolean;
+    // Um caso que OUTRA pessoa encerrou enquanto o lote rodava: ele não estava
+    // no grupo quando o botão foi clicado, o lote não o leva, e ele aparece na
+    // recarga logo abaixo do aviso do lote.
+    encerradoDuranteOLote?: ReturnType<typeof caso>;
   } = {}
 ) {
   chamadas = [];
@@ -109,6 +121,32 @@ function montar(
       const endereco = String(url);
       const metodo = init?.method ?? "GET";
       chamadas.push({ url: endereco, metodo });
+      if (endereco.includes("/arquivo-dos-encerrados")) {
+        if (opcoes.recusaDoLote) {
+          return {
+            ok: false,
+            status: opcoes.recusaDoLote.status,
+            json: async () => ({ detail: opcoes.recusaDoLote!.detail }),
+          } as Response;
+        }
+        // O servidor de verdade só pega o encerrado que ainda não está no
+        // arquivo. O fake pega o mesmo: se ele levasse a lista inteira, o
+        // teste do grupo Encerrado ficaria verde sobre um lote que arrastou o
+        // caso em andamento junto.
+        const encerrados = vivos.filter((c) => c.status === "encerrado");
+        for (const c of encerrados) {
+          vivos.splice(vivos.indexOf(c), 1);
+          arquivados.push(c);
+        }
+        if (opcoes.encerradoDuranteOLote) vivos.push(opcoes.encerradoDuranteOLote);
+        const feito = {
+          ok: true,
+          status: 200,
+          json: async () => ({ arquivadas: opcoes.contagemDoLote ?? encerrados.length }),
+        } as Response;
+        if (!opcoes.segurarLote) return feito;
+        return new Promise<Response>((soltar) => presos.push(() => soltar(feito)));
+      }
       if (endereco.includes("/arquivo")) {
         if (opcoes.recusaDoArquivo) {
           return {
@@ -427,5 +465,274 @@ describe("a tipografia e os sinais da casa", () => {
     fireEvent.click(await filtro());
 
     expect(await screen.findByText(/nenhuma manifestação arquivada/i)).toBeTruthy();
+  });
+});
+
+/**
+ * O lote do Arquivo (issue #594): "Arquivar todos os encerrados" no cabeçalho
+ * do grupo Encerrado.
+ *
+ * O que a tela decide aqui é pequeno e erra fácil: ONDE o botão aparece (só no
+ * grupo Encerrado, só na lista de trabalho, só para a Ouvidoria), que ele
+ * pergunta antes, e que depois ele diz quantos casos saíram. Quem faz a
+ * peneira de verdade é o servidor, e por isso o fake dele só arquiva encerrado.
+ *
+ * A armadilha de vácuo desta suíte é a de sempre com botão: "não aparece"
+ * passa quando o botão nunca existiu. Todo teste de ausência aqui tem irmão de
+ * presença, na mesma base e mudando UMA coisa.
+ */
+
+const NOME_DO_LOTE = "Arquivar todos os encerrados";
+
+/** O botão do lote, ou `null`. Nunca `getBy`: metade dos testes espera ausência. */
+function loteNaTela(): HTMLElement | null {
+  return screen.queryByRole("button", { name: NOME_DO_LOTE });
+}
+
+/** Confirma tudo, e conta o que foi perguntado. */
+function confirmando(resposta: boolean) {
+  const perguntas: string[] = [];
+  vi.stubGlobal(
+    "confirm",
+    vi.fn((texto: string) => {
+      perguntas.push(texto);
+      return resposta;
+    })
+  );
+  return perguntas;
+}
+
+/** As chamadas do lote, na ordem. */
+function chamadasDoLote() {
+  return chamadas.filter((c) => c.url.includes("/arquivo-dos-encerrados"));
+}
+
+describe("onde o botão do lote aparece", () => {
+  it("fica no cabeçalho do grupo Encerrado, e não no grupo de outro estado", async () => {
+    montar([caso(7, "encerrado"), caso(8, "aguardando_area")]);
+    await linhaDe("2026-0007");
+
+    const encerrado = screen.getByLabelText("Encerrada");
+    const emAndamento = screen.getByLabelText("Aguardando área");
+    expect(within(encerrado).getByRole("button", { name: NOME_DO_LOTE })).toBeTruthy();
+    expect(within(emAndamento).queryByRole("button", { name: NOME_DO_LOTE })).toBeNull();
+  });
+
+  it("some quando não há nenhum caso encerrado na lista", async () => {
+    // O irmão de presença é o teste acima: mesma tela, e o que muda é só o
+    // estado do caso.
+    montar([caso(8, "aguardando_area")]);
+    await linhaDe("2026-0008");
+
+    expect(loteNaTela()).toBeNull();
+  });
+
+  it("some com o filtro Arquivados ligado", async () => {
+    // Lá o grupo Encerrado também existe, com os casos já guardados: oferecer
+    // o lote ali seria oferecer arquivar o que já está arquivado.
+    montar([caso(7, "encerrado")], [caso(8, "encerrado")]);
+    await linhaDe("2026-0007");
+    expect(loteNaTela()).not.toBeNull();
+
+    fireEvent.click(await filtro());
+
+    await linhaDe("2026-0008");
+    expect(loteNaTela()).toBeNull();
+  });
+
+  it("não aparece para quem está fora da Ouvidoria", async () => {
+    // Quem não tem o perfil vê o índice, mas não age sobre o caso (RN-40). O
+    // gate de verdade é o 403 do servidor; a tela só não oferece o caminho.
+    sessao.perfilOuvidoria = null;
+    montar([caso(7, "encerrado")]);
+    await linhaDe("2026-0007");
+
+    expect(loteNaTela()).toBeNull();
+  });
+});
+
+describe("o lote pergunta antes de rodar", () => {
+  it("cancelar não chama o servidor", async () => {
+    const perguntas = confirmando(false);
+    montar([caso(7, "encerrado")]);
+    await linhaDe("2026-0007");
+
+    fireEvent.click(loteNaTela()!);
+
+    expect(perguntas).toHaveLength(1);
+    expect(chamadasDoLote()).toHaveLength(0);
+    // E o caso continua na tela: cancelar não é arquivar em silêncio.
+    expect(screen.queryByText("2026-0007")).not.toBeNull();
+  });
+
+  it("a pergunta diz quantos casos vão sair e que dá para trazer de volta", async () => {
+    const perguntas = confirmando(false);
+    montar([caso(7, "encerrado"), caso(9, "encerrado"), caso(8, "aguardando_area")]);
+    await linhaDe("2026-0007");
+
+    fireEvent.click(loteNaTela()!);
+
+    // O número é o do grupo Encerrado, e não o da lista inteira: com o caso em
+    // andamento contado junto, a pergunta prometeria arquivar um prazo que
+    // ainda corre.
+    expect(perguntas[0]).toContain("2");
+    expect(perguntas[0]).toMatch(/arquivados/i);
+  });
+});
+
+describe("o que acontece depois do lote", () => {
+  it("uma chamada só, e a lista recarrega sem os encerrados", async () => {
+    confirmando(true);
+    montar([caso(7, "encerrado"), caso(9, "encerrado"), caso(8, "aguardando_area")]);
+    await linhaDe("2026-0007");
+
+    fireEvent.click(loteNaTela()!);
+
+    await waitFor(() => expect(screen.queryByText("2026-0007")).toBeNull());
+    expect(chamadasDoLote()).toEqual([
+      { url: "/api/ouvidoria/manifestacoes/arquivo-dos-encerrados", metodo: "POST" },
+    ]);
+    // O caso em andamento fica: o lote é dos encerrados, e a recarga é da
+    // MESMA lista que estava na tela.
+    expect(screen.queryByText("2026-0008")).not.toBeNull();
+    expect(screen.queryByText("2026-0009")).toBeNull();
+  });
+
+  it("a tela diz quantas manifestações foram arquivadas", async () => {
+    confirmando(true);
+    montar([caso(7, "encerrado"), caso(9, "encerrado")]);
+    await linhaDe("2026-0007");
+
+    fireEvent.click(loteNaTela()!);
+
+    const aviso = await screen.findByRole("status");
+    expect(aviso.textContent).toContain("2");
+    expect(aviso.textContent).toMatch(/arquivadas/i);
+  });
+
+  it("um caso só é anunciado no singular", async () => {
+    // O outro sentido do mesmo detector: um texto fixo no plural erraria aqui,
+    // e um fixo no singular erraria no teste de cima.
+    confirmando(true);
+    montar([caso(7, "encerrado")]);
+    await linhaDe("2026-0007");
+
+    fireEvent.click(loteNaTela()!);
+
+    const aviso = await screen.findByRole("status");
+    expect(aviso.textContent).toContain("1 manifestação arquivada");
+  });
+
+  it("a contagem anunciada é a do servidor, e não a que estava na tela", async () => {
+    // A corrida: entre a carga e o clique, outra pessoa encerrou mais um caso,
+    // e o lote guardou três onde a tela mostrava dois. Sem isto, a tela podia
+    // anunciar o tamanho do próprio grupo e ninguém notaria.
+    confirmando(true);
+    montar([caso(7, "encerrado"), caso(9, "encerrado")], [], { contagemDoLote: 3 });
+    await linhaDe("2026-0007");
+
+    fireEvent.click(loteNaTela()!);
+
+    const aviso = await screen.findByRole("status");
+    expect(aviso.textContent).toContain("3 manifestações arquivadas");
+  });
+
+  it("a recusa do servidor aparece na tela, e a lista não muda", async () => {
+    confirmando(true);
+    montar([caso(7, "encerrado")], [], {
+      recusaDoLote: { status: 503, detail: "Não foi possível arquivar agora. Tente de novo em instantes." },
+    });
+    await linhaDe("2026-0007");
+
+    fireEvent.click(loteNaTela()!);
+
+    const aviso = await screen.findByRole("status");
+    expect(aviso.textContent).toContain("Tente de novo em instantes");
+    expect(screen.queryByText("2026-0007")).not.toBeNull();
+  });
+});
+
+describe("a tipografia do lote", () => {
+  it("o rótulo não traz seta, chevron nem travessão", async () => {
+    montar([caso(7, "encerrado")]);
+    await linhaDe("2026-0007");
+
+    const texto = loteNaTela()!.textContent ?? "";
+    expect(texto).not.toMatch(/[—–]/);
+    expect(texto).not.toMatch(/[→←↑↓»«›‹>]/);
+  });
+});
+
+
+describe("o aviso do lote não sobrevive ao ato seguinte", () => {
+  /**
+   * O caminho é a corrida, e não o filtro: ligar o filtro JÁ limpa o aviso por
+   * conta própria (`alternarOFiltro`), e um teste que passasse por lá ficaria
+   * verde mesmo com a limpeza do ato de linha removida. Aqui o ouvidor nunca
+   * sai da lista de trabalho.
+   */
+  const casoRetardatario = caso(11, "encerrado");
+
+  it("arquivar uma linha depois do lote apaga o resumo do lote", async () => {
+    // Sem isto, o banner verde "2 manifestações arquivadas" fica na tela
+    // depois de um clique que guardou UM caso, dizendo dois.
+    confirmando(true);
+    montar([caso(7, "encerrado"), caso(9, "encerrado")], [], {
+      encerradoDuranteOLote: casoRetardatario,
+    });
+    await linhaDe("2026-0007");
+
+    fireEvent.click(loteNaTela()!);
+    expect((await screen.findByRole("status")).textContent).toContain("2 manifestações arquivadas");
+
+    // O retardatário chegou na recarga, na mesma lista de trabalho.
+    const linha = await linhaDe("2026-0011");
+    fireEvent.click(within(linha).getByRole("button", { name: "Arquivar" }));
+
+    await waitFor(() => expect(screen.queryByText("2026-0011")).toBeNull());
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("a recusa de um ato de linha não convive com o verde do lote", async () => {
+    // A variante pior: dois `role="status"` na tela ao mesmo tempo, um dizendo
+    // que deu certo e outro que deu errado, sobre atos diferentes.
+    confirmando(true);
+    montar([caso(7, "encerrado"), caso(9, "encerrado")], [], {
+      encerradoDuranteOLote: casoRetardatario,
+      recusaDoArquivo: { status: 409, detail: "O caso mudou de estado agora mesmo" },
+    });
+    await linhaDe("2026-0007");
+
+    fireEvent.click(loteNaTela()!);
+    expect((await screen.findByRole("status")).textContent).toContain("2 manifestações arquivadas");
+
+    const linha = await linhaDe("2026-0011");
+    fireEvent.click(within(linha).getByRole("button", { name: "Arquivar" }));
+
+    await waitFor(() =>
+      expect(screen.getByRole("status").textContent).toContain("mudou de estado agora mesmo")
+    );
+    expect(screen.getAllByRole("status")).toHaveLength(1);
+  });
+});
+
+describe("o lote diz que está trabalhando", () => {
+  it("o botão muda de texto e desabilita enquanto o lote está em voo", async () => {
+    // A resposta do lote fica presa: é a janela do lote de centenas de casos,
+    // em que a tela ficava idêntica e a trava só devolvia silêncio.
+    confirmando(true);
+    montar([caso(7, "encerrado")], [], { segurarLote: true });
+    await linhaDe("2026-0007");
+    presos = [];
+
+    fireEvent.click(loteNaTela()!);
+
+    const trabalhando = await screen.findByRole("button", { name: "Arquivando os encerrados" });
+    expect(trabalhando.hasAttribute("disabled")).toBe(true);
+    // A contraprova: com a resposta solta, o botão volta ao que era. Sem ela,
+    // um botão desabilitado para sempre passaria por este teste.
+    presos[0]!();
+    await waitFor(() => expect(screen.queryByRole("status")).not.toBeNull());
+    expect(screen.queryByRole("button", { name: "Arquivando os encerrados" })).toBeNull();
   });
 });
