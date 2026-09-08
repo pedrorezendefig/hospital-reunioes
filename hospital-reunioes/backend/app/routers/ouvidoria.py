@@ -1089,6 +1089,14 @@ def barrar_caso_apagado(caso: dict, acao: str) -> None:
         )
 
 
+# O mínimo que uma porta de escrita precisa carregar do caso para a guarda
+# acima ter o que ler (issue #622). O carimbo entra na MESMA tupla da conferência
+# de existência de propósito: guarda que lê coluna não selecionada lê None e
+# deixa passar em silêncio, e a porta continuaria aberta com a chamada no lugar
+# certo.
+_CAMPOS_COM_O_CARIMBO = "id, protocolo, anonimizada_em"
+
+
 def efeito_da_pausa(caso: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> dict:
     """O que muda no caso quando o relógio da área para (PRD #318, história 8).
 
@@ -1897,7 +1905,8 @@ async def registrar_tentativa_de_contato(
 
     É esta lista que libera (ou não) o encerramento por sem retorno, e é ela
     que o ouvidor lê para saber o que já tentou antes de decidir."""
-    carregar_manifestacao(supabase, manifestacao_id)
+    caso = carregar_manifestacao(supabase, manifestacao_id, _CAMPOS_COM_O_CARIMBO)
+    barrar_caso_apagado(caso, "acrescido de tentativa de contato")
     linha = {
         "manifestacao_id": manifestacao_id,
         "tentada_em": agora_utc().isoformat(),
@@ -3992,7 +4001,11 @@ async def anexar_arquivo(
 
     O binário vai ao storage privado e só os metadados ficam no banco. Arquivo
     recusado não deixa rastro: a validação vem antes do upload."""
-    manifestacao = carregar_manifestacao(supabase, manifestacao_id)
+    manifestacao = carregar_manifestacao(supabase, manifestacao_id, _CAMPOS_COM_O_CARIMBO)
+    # Antes de ler o arquivo e antes do upload: binário de caso apagado no
+    # bucket privado é PII permanente, porque a retenção só revisita caso com
+    # `anonimizada_em IS NULL` e nunca mais volta a este.
+    barrar_caso_apagado(manifestacao, "acrescido de anexo")
 
     # `file.size` vem do Content-Length da parte multipart: recusar por ele
     # evita puxar 200 MB para a memória só para depois dizer não.
