@@ -676,21 +676,49 @@ async def require_diretoria_executiva(
     return me
 
 
+def _linha_de_acesso(me: dict, manifestacao_id: str, acao: str) -> dict:
+    """A linha do log de acesso. Um formato só para o ato de um caso e para o
+    lote: separados, o segundo nasceria sem `ator_nome` no dia em que alguém
+    mexesse só no primeiro."""
+    return {
+        "manifestacao_id": manifestacao_id,
+        "ator_id": me["id"],
+        "ator_nome": me.get("nome_completo") or me["id"],
+        "acao": acao,
+    }
+
+
 def registrar_acesso(supabase, me: dict, manifestacao_id: str, acao: str) -> None:
     """Grava o log de acesso. Falha aqui não derruba a leitura: a trilha é
     importante, mas deixar o ouvidor sem o Dossiê por causa dela seria pior.
     O timestamp é do banco (`ocorrido_em` tem default now())."""
     try:
-        supabase.table("ouvidoria_acessos").insert(
-            {
-                "manifestacao_id": manifestacao_id,
-                "ator_id": me["id"],
-                "ator_nome": me.get("nome_completo") or me["id"],
-                "acao": acao,
-            }
-        ).execute()
+        supabase.table("ouvidoria_acessos").insert(_linha_de_acesso(me, manifestacao_id, acao)).execute()
     except Exception:
         logger.warning("Falha ao registrar acesso à manifestação %s", manifestacao_id)
+
+
+def registrar_acessos_em_lote(supabase, me: dict, manifestacao_ids: list[str], acao: str) -> None:
+    """O mesmo registro, um por caso, num insert só (issue #594).
+
+    Existe porque o lote do Arquivo age sobre a fila inteira: com uma chamada
+    por caso, arquivar duzentos encerrados seriam duzentas idas ao PostgREST
+    depois de o ato já estar gravado, e o ouvidor esperaria por um log.
+
+    A linha sai da MESMA função que a do ato de um caso: o dia em que o log
+    ganhar uma coluna, os dois caminhos a ganham juntos.
+
+    Falha aqui também não derruba nada, pela razão de sempre: o arquivamento já
+    valeu no banco, e um 500 depois dele mandaria o ouvidor repetir um lote que
+    já aconteceu."""
+    if not manifestacao_ids:
+        return
+    try:
+        supabase.table("ouvidoria_acessos").insert(
+            [_linha_de_acesso(me, manifestacao_id, acao) for manifestacao_id in manifestacao_ids]
+        ).execute()
+    except Exception:
+        logger.warning("Falha ao registrar o acesso do lote de %d manifestações", len(manifestacao_ids))
 
 
 def carimbar_visto_da_ouvidoria(supabase, manifestacao_id: str, agora: dt.datetime) -> None:
@@ -1668,6 +1696,69 @@ async def desarquivar_manifestacao(
     gravado = _gravar_o_arquivo(supabase, manifestacao_id, {"arquivada_em": None, "arquivada_por": None})
     registrar_acesso(supabase, me, manifestacao_id, "desarquivar")
     return gravado
+
+
+@router.post("/manifestacoes/arquivo-dos-encerrados")
+@limiter.limit("10/minute")
+async def arquivar_os_encerrados(
+    request: Request,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Guarda de uma vez todo caso encerrado que ainda não está no arquivo
+    (issue #594, PRD #591, ADR 0047).
+
+    É o ato da rota de cima, repetido: as mesmas duas colunas, a mesma
+    pré-condição de estado, nenhum movimento na trilha e nenhuma passagem pela
+    RPC de transição. O que muda é o alcance, e são três as decisões que ele
+    obriga a tomar.
+
+    **Sem teto, e por isso sem lote pela metade.** É UM update filtrado, e não
+    um laço de N chamadas: o banco arquiva o conjunto inteiro ou não arquiva
+    nada, e "3 de 40 falharam" não é um estado que esta rota possa produzir.
+    Um teto (arquivar 100 por vez) só existiria para proteger de um custo que
+    não existe, e cobraria caro: a tela teria de explicar um resto que o
+    ouvidor não pediu, e ele clicaria de novo até acabar. A falha do banco vira
+    503, e não um 200 com zero: zero com sucesso diria "não havia nada a
+    fazer" para uma fila que continua cheia na tela.
+
+    **O recorte é o do banco, e ele coincide com o da tela.** A lista da
+    Ouvidoria não tem filtro nenhum além do próprio Arquivo (ela lê tudo,
+    paginado até esgotar, e agrupa por estado), então "todo encerrado sem
+    arquivo" é exatamente o que o ouvidor está vendo no grupo Encerrado quando
+    o botão aparece. A única divergência possível é um caso encerrado por
+    outra pessoa entre a carga da tela e o clique, e aí quem diz a verdade é a
+    contagem devolvida, sobre a qual a tela recarrega.
+
+    **O filtro do arquivo vive no UPDATE, e não numa leitura anterior.** É ele
+    que faz a segunda rodada devolver zero, e é ele que impede o lote de
+    reescrever quem e quando de uma leva antiga: sem ele, um lote rodado hoje
+    carimbaria com o nome de quem clicou agora um caso que outra pessoa
+    guardou em julho. Pela mesma razão o `status` é filtrado no update e não só
+    conferido antes: é a trava contra a reabertura que caia no meio (a mesma
+    janela TOCTOU que `_gravar_o_arquivo` fecha para um caso).
+
+    A resposta do update vem inteira (o PostgREST não deixa escolher colunas
+    ao gravar) e é reduzida aos ids na linha seguinte: é deles que sai a
+    contagem e o log de acesso, um por caso guardado, que é o único vestígio
+    que este ato deixa."""
+    try:
+        atualizadas = (
+            supabase.table("ouvidoria_protocolos")
+            .update({"arquivada_em": agora_utc().isoformat(), "arquivada_por": me["id"]})
+            .eq("status", "encerrado")
+            .is_("arquivada_em", "null")
+            .execute()
+        )
+    except APIError as exc:
+        logger.error("Falha ao arquivar o lote dos encerrados (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível arquivar agora. Tente de novo em instantes.",
+        ) from exc
+    arquivadas = [row["id"] for row in (atualizadas.data or []) if row.get("id")]
+    registrar_acessos_em_lote(supabase, me, arquivadas, "arquivar")
+    return {"arquivadas": len(arquivadas)}
 
 
 # =====================================================================

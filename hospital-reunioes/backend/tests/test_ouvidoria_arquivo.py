@@ -34,6 +34,7 @@ import sys
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -800,3 +801,241 @@ class TestArquivarNaoMexeEmNumero:
         depois = client.get("/api/ouvidoria/metricas", params={"inicio": "2026-08-01", "fim": "2026-08-25"})
         assert depois.status_code == 200, depois.text
         assert depois.json()["volume"]["total"] == total_antes
+
+
+# ---------------------------------------------------------------------------
+# O lote (issue #594)
+# ---------------------------------------------------------------------------
+
+
+def _arquivar_o_lote(client):
+    return client.post("/api/ouvidoria/manifestacoes/arquivo-dos-encerrados")
+
+
+def _com_carimbo(supabase) -> list[str]:
+    """Os ids que estão com o carimbo do arquivo, na ordem da base."""
+    return [c["id"] for c in supabase.tabelas["ouvidoria_protocolos"] if c["arquivada_em"]]
+
+
+# Um caso que já estava no arquivo antes do lote, com carimbo de OUTRO autor e
+# de OUTRO instante. Os dois são o detector de regravação: um lote que perdesse
+# o filtro de "sem arquivo" reescreveria os dois valores e o teste veria.
+ARQUIVADO_ANTES = {"arquivada_em": "2026-08-01T10:00:00+00:00", "arquivada_por": "P11"}
+
+
+class TestOLoteDosEncerrados:
+    """Arquivar todos os encerrados de uma vez (issue #594, PRD #591).
+
+    O lote é o MESMO ato do arquivo de um caso, repetido: mesmas duas colunas,
+    mesma pré-condição de estado, nenhum movimento na trilha. Duas coisas só
+    ele pode errar, e são as que os testes daqui cercam: pegar caso que não
+    devia (o em andamento, o que já estava guardado) e mentir na contagem.
+
+    Toda base de teste tem os TRÊS mundos ao mesmo tempo (encerrado livre, em
+    andamento, já arquivado). Com um mundo só, um lote sem filtro nenhum
+    passaria por lote certo.
+    """
+
+    def _base(self, monkeypatch, quantos_encerrados: int = 1, participante=None, movimentos=None):
+        casos = [_caso(n) for n in range(1, quantos_encerrados + 1)]
+        casos.append(_caso(8, status="aguardando_area", encerrada_em=None))
+        casos.append(_caso(9, **ARQUIVADO_ANTES))
+        return _client(monkeypatch, casos=casos, participante=participante, movimentos=movimentos)
+
+    def test_arquiva_o_encerrado_livre_e_devolve_a_contagem(self, monkeypatch):
+        client, supabase = self._base(monkeypatch)
+
+        r = _arquivar_o_lote(client)
+
+        assert r.status_code == 200, r.text
+        assert r.json() == {"arquivadas": 1}
+        assert _gravado(supabase, 1)["arquivada_em"], "o encerrado livre precisa sair carimbado"
+        assert _gravado(supabase, 1)["arquivada_por"] == OUVIDOR["id"]
+
+    def test_o_caso_em_andamento_fica_intocado(self, monkeypatch):
+        """Caso em andamento tem prazo correndo: escondê-lo é esconder atraso."""
+        client, supabase = self._base(monkeypatch)
+
+        assert _arquivar_o_lote(client).status_code == 200
+
+        em_andamento = _gravado(supabase, 8)
+        assert em_andamento["arquivada_em"] is None
+        assert em_andamento["arquivada_por"] is None
+        assert em_andamento["status"] == "aguardando_area"
+
+    def test_o_ja_arquivado_nao_e_regravado(self, monkeypatch):
+        """Quem e quando da primeira leva são a memória do ato: um lote que os
+        reescrevesse trocaria o autor de um arquivamento que não foi dele."""
+        client, supabase = self._base(monkeypatch)
+
+        assert _arquivar_o_lote(client).status_code == 200
+
+        antigo = _gravado(supabase, 9)
+        assert antigo["arquivada_em"] == ARQUIVADO_ANTES["arquivada_em"]
+        assert antigo["arquivada_por"] == ARQUIVADO_ANTES["arquivada_por"]
+
+    @pytest.mark.parametrize("quantos", [0, 1, 3])
+    def test_a_contagem_e_a_das_linhas_que_o_lote_carimbou(self, monkeypatch, quantos):
+        """Três tamanhos, porque contagem fixa acerta um deles por acaso. E a
+        contagem é conferida contra o BANCO, não contra si mesma: devolver o
+        total da tabela também morre aqui, já que o em andamento e o já
+        arquivado nunca entram."""
+        client, supabase = self._base(monkeypatch, quantos_encerrados=quantos)
+
+        r = _arquivar_o_lote(client)
+
+        assert r.status_code == 200, r.text
+        assert r.json()["arquivadas"] == quantos
+        novos = [i for i in _com_carimbo(supabase) if i != "uuid-9"]
+        assert len(novos) == quantos
+
+    def test_a_segunda_rodada_devolve_zero_e_nao_regrava_a_primeira_leva(self, monkeypatch):
+        """O relógio dos testes anda a cada leitura, então um segundo carimbo
+        sobre o mesmo caso teria valor diferente do primeiro."""
+        client, supabase = self._base(monkeypatch)
+
+        primeira = _arquivar_o_lote(client)
+        assert primeira.status_code == 200, primeira.text
+        assert primeira.json()["arquivadas"] == 1, "a contraprova: sem a primeira leva, o zero abaixo é vazio"
+        carimbo_da_primeira = _gravado(supabase, 1)["arquivada_em"]
+
+        segunda = _arquivar_o_lote(client)
+
+        assert segunda.status_code == 200, segunda.text
+        assert segunda.json()["arquivadas"] == 0
+        assert _gravado(supabase, 1)["arquivada_em"] == carimbo_da_primeira
+
+    def test_o_lote_nao_grava_movimento_nem_muda_status(self, monkeypatch):
+        """Movimento acenderia o ponto de novidade num caso em que ninguém
+        mexeu, e o arquivo viraria trabalho pendente."""
+        client, supabase = self._base(monkeypatch, quantos_encerrados=2)
+
+        assert _arquivar_o_lote(client).status_code == 200
+
+        assert supabase.tabelas["ouvidoria_movimentos"] == []
+        assert _gravado(supabase, 1)["status"] == "encerrado"
+        assert _gravado(supabase, 2)["status"] == "encerrado"
+
+    def test_a_diretoria_executiva_tambem_roda_o_lote(self, monkeypatch):
+        """Os dois papéis do Perfil da Ouvidoria arquivam (ADR 0047)."""
+        client, supabase = self._base(monkeypatch, participante=DIRETORIA)
+
+        r = _arquivar_o_lote(client)
+
+        assert r.status_code == 200, r.text
+        assert _gravado(supabase, 1)["arquivada_por"] == DIRETORIA["id"]
+
+    @pytest.mark.parametrize("quem", [SUPER_ADMIN, SECRETARIA], ids=["super_admin", "secretaria"])
+    def test_sem_perfil_da_ouvidoria_recebe_403_e_nada_e_arquivado(self, monkeypatch, quem):
+        client, supabase = self._base(monkeypatch, participante=quem)
+
+        assert _arquivar_o_lote(client).status_code == 403
+
+        assert _com_carimbo(supabase) == ["uuid-9"], "só o que já estava guardado antes do pedido"
+
+    def test_a_falha_do_banco_vira_503_e_nao_lote_vazio(self, monkeypatch):
+        """Zero arquivadas com 200 diria ao ouvidor que não havia nada a fazer,
+        e o acúmulo continuaria na tela sem explicação."""
+        client, supabase = self._base(monkeypatch)
+        de_verdade = supabase.table
+
+        def _table_que_recusa(nome: str):
+            tabela = de_verdade(nome)
+            if nome == "ouvidoria_protocolos":
+
+                def _explodir():
+                    raise APIError({"message": "canceling statement due to statement timeout", "code": "57014"})
+
+                tabela.execute = _explodir
+            return tabela
+
+        monkeypatch.setattr(supabase, "table", _table_que_recusa)
+
+        assert _arquivar_o_lote(client).status_code == 503
+
+
+class TestORastroDoLote:
+    """Arquivar não entra na trilha, então o log de acesso é o único vestígio
+    de que o caso saiu da vista, por quem e quando. Um lote sem ele apagaria de
+    uma vez o rastro de dezenas de casos."""
+
+    def _acessos(self, supabase) -> list[dict]:
+        return supabase.tabelas["ouvidoria_acessos"]
+
+    def test_um_registro_por_caso_arquivado_e_so_por_eles(self, monkeypatch):
+        client, supabase = _client(
+            monkeypatch,
+            casos=[
+                _caso(1),
+                _caso(2),
+                _caso(8, status="aguardando_area", encerrada_em=None),
+                _caso(9, **ARQUIVADO_ANTES),
+            ],
+        )
+
+        assert _arquivar_o_lote(client).status_code == 200
+
+        acessos = self._acessos(supabase)
+        assert sorted(a["manifestacao_id"] for a in acessos) == ["uuid-1", "uuid-2"]
+        assert {a["acao"] for a in acessos} == {"arquivar"}
+        assert {a["ator_id"] for a in acessos} == {OUVIDOR["id"]}
+
+    def test_lote_sem_nada_para_arquivar_nao_registra_acesso(self, monkeypatch):
+        """O outro sentido do mesmo detector: log de ATO, e ato que não
+        aconteceu não se registra."""
+        client, supabase = _client(monkeypatch, casos=[_caso(8, status="aguardando_area", encerrada_em=None)])
+
+        assert _arquivar_o_lote(client).json()["arquivadas"] == 0
+
+        assert self._acessos(supabase) == []
+
+
+class TestOLoteNaListaEnoContador:
+    """O lote é a limpeza da lista: o que ele carimba sai do grupo Encerrado e
+    aparece atrás do filtro, na mesma carga."""
+
+    def _base(self, monkeypatch):
+        # Os dois encerrados têm movimento na trilha e nunca foram vistos: os
+        # dois estão com o ponto de novidade aceso antes do lote, que é o caso
+        # que a issue manda entrar no lote como qualquer outro.
+        movimentos = [
+            {
+                "id": f"mov-{n}",
+                "manifestacao_id": f"uuid-{n}",
+                "estado_anterior": "respondido",
+                "estado_novo": "encerrado",
+                "autor_id": "P10",
+                "autor_nome": "Marta Ouvidora",
+                "observacao": None,
+                "ocorrido_em": "2026-08-24T12:00:00+00:00",
+            }
+            for n in (1, 2)
+        ]
+        return _client(
+            monkeypatch,
+            casos=[_caso(1), _caso(2), _caso(8, status="aguardando_area", encerrada_em=None)],
+            movimentos=movimentos,
+        )
+
+    def test_o_lote_esvazia_o_grupo_encerrado_e_enche_o_arquivo(self, monkeypatch):
+        client, _ = self._base(monkeypatch)
+        assert _listar(client) == ["2026-0008", "2026-0002", "2026-0001"], "a contraprova do estado inicial"
+
+        assert _arquivar_o_lote(client).json()["arquivadas"] == 2
+
+        assert _listar(client) == ["2026-0008"]
+        assert _listar(client, arquivados="sim") == ["2026-0002", "2026-0001"]
+
+    def test_o_caso_com_o_ponto_aceso_entra_no_lote_e_sai_do_contador(self, monkeypatch):
+        client, _ = self._base(monkeypatch)
+        # Os três casos da base acendem o ponto: os dois encerrados por causa
+        # do movimento nunca visto, e o em andamento por ser caso novo que a
+        # Ouvidoria ainda não abriu. Sem esta contraprova, o número de baixo
+        # passaria por "o lote apagou a novidade" mesmo sobre uma fila apagada.
+        assert _contador(client) == 3
+
+        assert _arquivar_o_lote(client).json()["arquivadas"] == 2
+
+        # Sobra o em andamento, e só ele: o contador do menu perde exatamente
+        # os dois casos que foram para o arquivo.
+        assert _contador(client) == 1
