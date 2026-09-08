@@ -2,6 +2,55 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-08T20:09:06-03:00",
+      "sha": "a4f4d44",
+      "app_version": "0.115.1",
+      "subject": "caso apagado deixa de aceitar anexo e registro de tentativa de contato",
+      "raw_subject": "fix(ouvidoria): caso apagado não recebe anexo nem tentativa de contato (#628)",
+      "scope": [
+        "backend"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 396,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 desta sessao: issue #622 sozinha, com --paralelo 1. Duas rotas ainda gravavam em caso apagado (POST /manifestacoes/{id}/anexos e POST /manifestacoes/{id}/tentativas-contato), alcancaveis por chamada direta a API e nao por clique. As duas passaram a usar o helper barrar_caso_apagado que o #620 criou, que agora segura cinco portas; nenhuma guarda nova foi escrita, por decisao da triagem de 08/09/2026. A guarda entra antes de qualquer efeito colateral: no anexo, antes de validar_anexo, antes do file.read(), antes do upload_private e antes do insert. A tupla de carregar_manifestacao das duas rotas passou a pedir anonimizada_em, e esse foi o mutante obrigatorio: tirar a coluna do select faz a guarda ler None e mata os dois testes novos, porque os fakes de PostgREST projetam de verdade so as colunas pedidas. Sete mutantes ao todo, todos mortos, dois deles plantados no proprio detector para provar que o teste nao passa no vacuo; os testes batem na rota HTTP real, nao na funcao. Rotas de email ficaram fora do escopo. Sem migration: o carimbo anonimizada_em existe desde a 079. Os dois revisores do orquestrador voltaram limpos na rodada 1, zero must-fix, o que nao tinha acontecido nas ondas anteriores desta serie. O revisor de codigo varreu as 22 rotas de escrita de ouvidoria.py e nao achou terceira porta analoga no painel, mas achou uma FORA do painel: POST /api/ouvidoria-setor/{token}/responder sobe binario para o mesmo bucket sem a guarda, segura hoje so porque exige status aguardando_area enquanto a retencao so carimba caso encerrado. Como a #595 mexe justamente no apagamento, isso virou a issue #631 em needs-triage em vez de entrar neste PR. Segundo nice-to-have nao aplicado: a tupla pede protocolo, que nenhuma das duas rotas le. A trava do semaforo estava presa ha 250 minutos na sessao do PR #626; sem build rodando no Coolify, foi solta com --forcar. A entrada da v0.115.0 logo abaixo foi reconstruida por esta sessao pelo mesmo motivo."
+    },
+    {
+      "at": "2026-09-08T16:01:28-03:00",
+      "sha": "ad0b956",
+      "app_version": "0.115.0",
+      "subject": "o ouvidor arquiva todos os casos encerrados de uma vez pela lista",
+      "raw_subject": "feat(ouvidoria): arquivar todos os encerrados de uma vez pela lista (#626)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "ENTRADA RECONSTRUIDA. A sessao que fez este ship (chave de semaforo 2efc47ae, onda 2, PR #626, issue #594, fatia do PRD #591) deployou as 19:01 UTC e nao escreveu o bookkeeping: morreu segurando a trava, que ficou presa 250 minutos ate a sessao seguinte solta-la com --forcar. Os dados aqui vieram so de fatos verificaveis (git log, package.json do commit, lista de deploys do Coolify), sem narrativa inventada: 5 arquivos tocados, +1136/-17, nenhuma migration, backend e frontend construidos do commit ad0b956d. O resultado healthy e inferido do estado observado depois: o /api/health respondia 0.115.0 saudavel quando a onda seguinte comecou, e os dois builds constam finished no Coolify. O que se perdeu e o registro dos gates, dos achados de revisao e das decisoes daquela fatia: isso vive na issue #594 e no PR #626."
+    },
+    {
       "at": "2026-09-08T14:15:00-03:00",
       "sha": "f0bc530",
       "app_version": "0.114.0",
@@ -1354,68 +1403,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Deploy unico cobrindo quatro PRs de duas sessoes paralelas. Da onda do PRD #319: #396 (issue #341, modulo de metricas do periodo, fonte unica dos numeros que o painel #344 e o PDF #345 vao consumir) e #394 (issue #343, retencao com anonimizacao apos cinco anos, migration 079 aplicada no Studio antes do merge). De outra sessao: #393 (Espelho da Global Health elo 1, PRD #385) e #392 (poda dos convenios por especialidade). Corrida de bump entre sessoes: o bump 0.72.0 desta onda foi superado pelo 0.74.0 da outra sessao antes do deploy, e o deploy pegou o topo da main com tudo junto. As duas fatias da onda passaram por duas rodadas de review independente cada, com 11 achados no #396 e 5 no #394. A fatia #342 (pseudonimizacao) NAO entrou: parou em ready-for-human apos duas rodadas sem veredito limpo."
-    },
-    {
-      "at": "2026-08-26T20:05:00-03:00",
-      "sha": "ab4fa5c",
-      "app_version": "0.71.1",
-      "subject": "A escada de prazo da Ouvidoria para de mentir e de entupir",
-      "raw_subject": "fix(ouvidoria): escada de prazo para de mentir e de entupir (#384)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "078_ouvidoria_escada_de_prazo.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Issue #373, PRD #318, ADR 0034. Tres defeitos da cobranca automatica de prazo, agrupados por raiz (origem: #366, #364, #365). (1) Aprovacao de prorrogacao tomada muito depois do vencimento nascia com prazo ja vencido: o motor soma dias uteis sobre o prazo VIGENTE, nunca sobre agora, porque o teto de 30 dias uteis e medido da entrada. O setor recebia 'aprovada' e minutos depois 'prazo rompido', com gestor e Diretoria subindo na mesma rodada. Recusa com 409, e o painel avisa antes de o ouvidor confirmar, com o MESMO texto. (2) Caso sem responsavel no setor E com a Diretoria Executiva vazia nunca carimbava degrau: voltava em toda rodada, vinha primeiro na ordenacao e, passando de 200, o job parava de escalonar o hospital inteiro. Carimbo proprio `escalonamento_impossivel_em`, que tira o caso da varredura SEM queimar degrau. (3) O alerta de 'setor sem gestor' usava o gatilho do degrau de 48h e era descartado pela guarda de retencao justamente quando a area respondia a tempo: o buraco de cadastro ficava invisivel. Gatilho proprio `alerta_cadastro_setor`, fora de GATILHOS_QUE_COBRAM_A_AREA. QUATRO rodadas de gates, 32 achados corrigidos, 5 deles testes que passavam por vacuo. Os tres bloqueadores, todos introduzidos pela primeira versao: (a) na vespera o caso era carimbado e saia da varredura mesmo com a Diretoria cheia, matando o escalonamento que subiria pelo fallback do gestor no dia seguinte (a pergunta certa e sobre os degraus VIAVEIS, nao sobre o devido agora); (b) o email mandava o admin cadastrar responsavel de setor, rota que exige perfil de Diretoria Executiva, e o caso SO trava quando ninguem tem esse perfil, entao quem recebia levava 403; (c) o caso era carimbado mesmo quando o alerta ao admin nao era entregue, e saia da varredura para sempre sem cobranca e sem sinal. TRADE-OFF CONSCIENTE: com o provedor de email fora, nenhum caso e carimbado e o entupimento volta enquanto durar a queda. E auto-curavel na rodada seguinte, e melhor que caso sem cobranca e sem sinal para sempre. O auto-deploy por webhook continua quebrado (o repo nao tem webhook nenhum; o GitHub App aponta para o FQDN antigo do Coolify): os dois deploys foram manuais."
-    },
-    {
-      "at": "2026-08-26T17:20:00-03:00",
-      "sha": "a0ff925",
-      "app_version": "0.71.0",
-      "subject": "A porta do sigilo da Ouvidoria: tipo em lista fechada, elevar, abaixar e o contrato da Ana",
-      "raw_subject": "feat(ouvidoria): a porta do sigilo (taxonomia fechada, elevar, abaixar e a Ana) (#379)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1080,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "077_ouvidoria_tipo_manifestacao.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Issue #372, PRD #317. O sigilo deixou de ser decidido por texto livre: 'Assedio moral' nao casava com termo nenhum e o email ia ao setor acusado com o nome de quem manifestou. Sem tipo = nao classificado = sigiloso, e isso passou a valer TAMBEM para o canal da Ana, que antes entrava aberto. Decisoes da execucao: `categoria` NAO foi renomeada (renomear exigiria app e banco subindo no mesmo instante) e a Ana NAO manda o tipo (seria a IA decidindo quem enxerga o caso). O ADR desta fatia virou 0037, com emenda em prosa: uma sessao paralela pegou o numero 0036 e o lint so aceita um `amended_by`. O code-review independente achou 6 bugs, 2 graves, ambos da mesma raiz (coluna nova faltando numa lista fechada de campos): a reabertura escondia QUALQUER caso reaberto, e a validacao apagava o sigilo sozinha. Os dois corrigidos antes do merge."
     }
   ]
 }

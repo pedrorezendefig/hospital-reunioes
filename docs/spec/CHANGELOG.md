@@ -7,6 +7,38 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.115.1 - 2026-09-08 20:09 - caso apagado deixa de aceitar anexo e registro de tentativa de contato
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `a4f4d44`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.115.1, `db: healthy`; frontend em 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/a4f4d44
+- Issues: [#622](https://github.com/pedrorezendefig/hospital-reunioes/issues/622) · PR [#628](https://github.com/pedrorezendefig/hospital-reunioes/pull/628) · desdobramento: [#631](https://github.com/pedrorezendefig/hospital-reunioes/issues/631) em needs-triage
+- Sem migration · patch, fix
+
+Onda 1 desta sessão, uma issue só. Duas rotas ainda gravavam em caso apagado: o `POST` de anexo e o registro de tentativa de contato. Não dava para chegar nelas por clique, só por chamada direta à API, mas o job de retenção nunca revisita caso já carimbado, então o que entrasse ali ficaria.
+
+As duas passaram a chamar o helper `barrar_caso_apagado` que o #620 criou, que agora segura cinco portas. Nenhuma guarda nova foi escrita, por decisão da triagem. A guarda entra antes de qualquer efeito colateral: no anexo, antes de validar o arquivo, antes do `file.read()`, antes do upload ao bucket e antes do insert. A tupla de `carregar_manifestacao` das duas rotas passou a pedir `anonimizada_em`, e esse foi o mutante obrigatório: tirar a coluna do `select` faz a guarda ler `None` e mata os dois testes novos, porque os fakes de PostgREST projetam de verdade só as colunas pedidas.
+
+Sete mutantes, todos mortos, dois deles plantados no próprio detector. Os dois revisores voltaram limpos na rodada 1, zero must-fix, o que não tinha acontecido nas ondas anteriores desta série.
+
+O achado que sobrou não entrou neste PR. Varrendo as 22 rotas de escrita do `ouvidoria.py`, o revisor não encontrou terceira porta análoga no painel, mas encontrou uma fora dele: `POST /api/ouvidoria-setor/{token}/responder` sobe binário para o mesmo bucket sem a guarda. Hoje está segura por consequência, não por guarda: exige status `aguardando_area` e a retenção só carimba caso `encerrado`. Como a #595 mexe justamente no apagamento, virou a issue #631 em vez de escopo novo aqui.
+
+## v0.115.0 - 2026-09-08 16:01 - o ouvidor arquiva todos os casos encerrados de uma vez pela lista
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `ad0b956`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/ad0b956
+- Issues: [#594](https://github.com/pedrorezendefig/hospital-reunioes/issues/594) · PR [#626](https://github.com/pedrorezendefig/hospital-reunioes/pull/626) (PRD [#591](https://github.com/pedrorezendefig/hospital-reunioes/issues/591), ADR 0047)
+- Sem migration · minor, feat
+
+Entrada reconstruída. A sessão que fez este ship deployou às 19:01 UTC e não escreveu o bookkeeping: morreu segurando a trava do semáforo, que ficou presa 250 minutos até a sessão seguinte soltá-la com `--forcar`.
+
+Os dados aqui vieram só de fato verificável (git log, `package.json` do commit, lista de deploys do Coolify): 5 arquivos tocados, +1136/-17, nenhuma migration, backend e frontend construídos de `ad0b956d`. O `healthy` é inferido do estado observado depois, com os dois builds em `finished` no Coolify e o `/api/health` respondendo 0.115.0 saudável quando a onda seguinte começou.
+
+O que se perdeu foi o registro dos gates, dos achados de revisão e das decisões daquela fatia. Isso vive na issue #594 e no PR #626.
+
 ## v0.114.0 - 2026-09-08 14:15 - o ouvidor arquiva e desarquiva o caso encerrado, e a lista nasce sem os arquivados, com filtro proprio
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `f0bc530`
