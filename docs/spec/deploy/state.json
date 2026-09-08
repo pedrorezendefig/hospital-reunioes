@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-08T14:12:00-03:00",
+  "updated_at": "2026-09-08T14:15:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.113.0",
+  "last_app_version": "0.114.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,8 +21,8 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "9025aa5",
-      "last_deploy_at": "2026-09-08T14:12:00-03:00",
+      "last_deploy_sha": "f0bc530",
+      "last_deploy_at": "2026-09-08T14:15:00-03:00",
       "last_health_check": {
         "at": "2026-09-08T14:12:00-03:00",
         "latency_ms": 196,
@@ -39,8 +39,8 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "9025aa5",
-      "last_deploy_at": "2026-09-08T14:12:00-03:00",
+      "last_deploy_sha": "f0bc530",
+      "last_deploy_at": "2026-09-08T14:15:00-03:00",
       "last_health_check": {
         "at": "2026-09-08T14:12:00-03:00",
         "latency_ms": 452,
@@ -152,10 +152,10 @@
     }
   ],
   "migrations": {
-    "total_applied": 88,
-    "last_applied": "098_ouvidoria_devolucao_a_ouvidoria.sql",
+    "total_applied": 89,
+    "last_applied": "099_ouvidoria_arquivo_da_manifestacao.sql",
     "pending_local": [],
-    "nota": "A 098_ouvidoria_devolucao_a_ouvidoria.sql (issue #600, PRD #598, ADR 0048, v0.110.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #602, e a ordem importa: sem ela a RPC recusa a transicao com check_violation e o botao de devolver quebra na primeira tentativa. Ela nao cria tabela nem coluna: faz CREATE OR REPLACE da ouvidoria_transicionar acrescentando a aresta aguardando_area -> em_classificacao (a lista precisa carregar TODAS as arestas anteriores, porque o ultimo corpo criado e o que vale) e derruba e recria o CHECK de gatilho de ouvidoria_notificacoes com a lista inteira mais devolvido_a_ouvidoria, dentro de BEGIN/COMMIT. O REVOKE inclui PUBLIC alem de anon e authenticated, como a 095 e a 097: sem PUBLIC, num banco onde a funcao NASCA nesta migration, anon herdaria EXECUTE por PUBLIC mesmo com o revoke nominal. A 097 e as anteriores continuam valendo com as notas ja registradas."
+    "nota": "A 099_ouvidoria_arquivo_da_manifestacao.sql (issue #592, PRD #591, ADR 0047, v0.114.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #621, e a ordem importa por um motivo concreto: a rota da lista chama ler_paginado fora de try, entao sem as colunas o GET /ouvidoria/manifestacoes devolveria 500 e derrubaria as duas telas que consomem a rota, /ouvidoria e /ouvidoria/painel. Ela nao cria tabela: faz ALTER TABLE ouvidoria_protocolos com ADD COLUMN IF NOT EXISTS de arquivada_em (TIMESTAMPTZ) e arquivada_por (VARCHAR(10) REFERENCES participantes ON DELETE SET NULL), mais os dois COMMENT ON COLUMN. Sem backfill de proposito: NULL e o valor com que todo caso existente entra, e carimbar data agora esconderia da fila casos que o ouvidor nunca escolheu esconder. Sem RLS a ligar, porque nenhuma tabela nasce aqui e as policies da 064 cobrem a linha inteira, colunas novas inclusas. Sem indice, por decisao registrada no cabecalho do arquivo. A 098 e as anteriores continuam valendo com as notas ja registradas."
   },
   "gates": [
     {
@@ -228,7 +228,7 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "9025aa5",
+    "sha": "f0bc530",
     "result": "healthy",
     "duration_seconds": null
   }

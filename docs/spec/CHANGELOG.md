@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.114.0 - 2026-09-08 14:15 - o ouvidor arquiva e desarquiva o caso encerrado, e a lista nasce sem os arquivados, com filtro proprio
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `f0bc530`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f0bc530
+
 ## v0.113.0 - 2026-09-08 14:12 - A area nao apaga o proprio estouro ao devolver, e o caso apagado nao reabre nem mostra o relato
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `9025aa5`
