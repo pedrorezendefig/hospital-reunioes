@@ -213,9 +213,11 @@ describe("a ação primária vira botão de largura total com 44px de toque (RN-
   });
 
   it("abrir o Dossiê é link, e o link também é botão de largura total", async () => {
-    // Caso encerrado não tem botão nenhum: a ação primária dele é o link do
+    // Caso novo não tem ato próprio na fila: a ação primária dele é o link do
     // Dossiê, e um link de 20px de altura no celular não se acerta com o dedo.
-    montar([caso(7, "encerrado")]);
+    // Era o caso encerrado que servia de exemplo aqui; desde a issue #592 ele
+    // tem botão próprio (Arquivar), e quem sobrou com o link na frente é o novo.
+    montar([caso(7, "novo")]);
     const linha = await linhaDe("2026-0007");
 
     const link = within(linha).getByRole("link", { name: "Abrir manifestação" });

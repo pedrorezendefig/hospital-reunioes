@@ -372,7 +372,17 @@ export default function PainelEmTempoRealPage() {
 
     const [lidoMetricas, lidoCasos] = await Promise.all([
       ler<Metricas>("/api/ouvidoria/metricas", token),
-      ler<{ protocolos: CasoDaListagem[]; degradado?: string[] }>("/api/ouvidoria/protocolos", token),
+      // `arquivados=todos` e não a lista de trabalho (issue #592, ADR 0047): o
+      // painel CONTA em vez de trabalhar. Arquivar é organização da lista e não
+      // fato do caso, então o card de cada estado tem de somar o mesmo que o
+      // bloco de métricas ao lado, que não filtra por arquivo. Sem isso,
+      // arquivar 30 de 40 encerrados derrubaria o card para 10 enquanto o
+      // volume do período seguia em 40, e a soma das colunas deixaria de fechar
+      // com o hospital, que é o que `contarPorStatus` existe para garantir.
+      ler<{ protocolos: CasoDaListagem[]; degradado?: string[] }>(
+        "/api/ouvidoria/protocolos?arquivados=todos",
+        token
+      ),
     ]);
 
     // Perder o perfil com a tela aberta apaga a tela. O que está nela é

@@ -141,6 +141,11 @@ def contar_novidades(supabase) -> tuple[int | None, list[str]]:
     Ouvidoria e enxerga a fila inteira. Uma segunda definição de novidade aqui
     faria o menu anunciar um número que a fila não consegue explicar.
 
+    O único recorte é o Arquivo (issue #592, ADR 0047): caso que a Ouvidoria
+    guardou não sobe o contador, porque o distintivo do menu é chamado de
+    trabalho pendente e o arquivo é o oposto disso. O universo continua o mesmo
+    dos dois lados: a fila também apaga o ponto do caso arquivado.
+
     O total é `None` quando alguma das duas leituras falhou, e nunca zero:
     contador que não carregou não é contador zerado. Zero manda o distintivo
     sumir, e sumir é exatamente a tela de "nada novo" que a fatia existe para
@@ -158,7 +163,12 @@ def contar_novidades(supabase) -> tuple[int | None, list[str]]:
         # fila curta se nota na tela, um total menor não se nota em lugar
         # nenhum, e o menu passaria a esconder casos com cara de contado.
         linhas, completa = ler_paginado(
-            lambda: supabase.table("ouvidoria_protocolos").select(CAMPOS_DO_CONTADOR).order(ORDEM_DOS_CASOS),
+            lambda: (
+                supabase.table("ouvidoria_protocolos")
+                .select(CAMPOS_DO_CONTADOR)
+                .is_("arquivada_em", "null")
+                .order(ORDEM_DOS_CASOS)
+            ),
             rotulo=LEITURA_DOS_CASOS,
         )
     except FALHAS_DE_LEITURA_DOS_CASOS:

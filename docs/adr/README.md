@@ -16,6 +16,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0040](0040-informacao-entra-na-lista-de-tipos.md) | accepted | `informacao` entra na lista de tipos; os nomes atuais ficam |
 | [0041](0041-acionamento-leva-resumo-relato-integral-e-nota.md) | accepted | O acionamento leva resumo, relato integral e nota da ouvidoria |
 | [0042](0042-retornos-ao-manifestante-acuse-e-encerramento.md) | accepted | Retornos ao manifestante: acuse em horas corridas e aviso de encerramento |
+| [0047](0047-apagar-manifestacao-e-retencao-antecipada-nao-delete.md) | accepted | Apagar manifestação é retenção antecipada, não DELETE |
 
 ## Reuniões e Atas
 

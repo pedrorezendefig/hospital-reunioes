@@ -1,8 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { AlertCircle, CheckCircle2, Loader2, Lock, Megaphone, Plus } from "lucide-react";
+import { AlertCircle, Archive, CheckCircle2, Loader2, Lock, Megaphone, Plus } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { AtalhosDaOuvidoria } from "@/components/ouvidoria/AtalhosDaOuvidoria";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
@@ -48,21 +48,52 @@ export default function OuvidoriaPage() {
   // não na linha, porque o clique dispara duas chamadas e a resposta precisa
   // sobreviver a um rerender da lista.
   const [cobrancas, setCobrancas] = useState<Record<string, ResultadoDaCobranca>>({});
+  // O filtro do Arquivo (issue #592, ADR 0047). Desligado é a lista de
+  // trabalho, e é assim que a tela nasce: o arquivo existe para desafogar a
+  // fila, e abrir nele seria abrir no que já acabou.
+  //
+  // A lista NUNCA mistura os dois mundos, e quem separa é o servidor: a tela
+  // recarrega pedindo um dos dois, em vez de peneirar em memória uma resposta
+  // que traria os dois juntos.
+  const [arquivados, setArquivados] = useState(false);
+  // A recusa do servidor ao arquivar ou desarquivar, na frase dele. Sem isto, o
+  // carimbo que o backend não gravou some em silêncio: a linha fica idêntica e
+  // o ouvidor clica de novo sem saber por quê.
+  const [erroDoArquivo, setErroDoArquivo] = useState<string | null>(null);
+  // A manifestação com uma chamada de arquivo em voo. Trava o duplo clique, que
+  // dispararia dois POST e duas recargas sobre a mesma linha.
+  const [noArquivo, setNoArquivo] = useState<string | null>(null);
+  // A carga mais recente. Ligar e desligar o filtro depressa deixa dois `fetch`
+  // no ar, e sem este número quem responde por último pinta a lista, mesmo
+  // sendo a resposta que o ouvidor já abandonou.
+  const cargaMaisRecente = useRef(0);
 
   const { participante } = useCurrentParticipante();
   const podeAbrirDossie = Boolean(participante?.perfil_ouvidoria);
 
   // Recarrega a fila depois de registrar: o caso novo precisa aparecer sem o
   // ouvidor ter que atualizar a página na mão.
-  async function recarregar(sessionToken: string) {
+  async function recarregar(sessionToken: string, mostrarArquivados: boolean) {
+    const minhaCarga = ++cargaMaisRecente.current;
+    const venceu = () => minhaCarga !== cargaMaisRecente.current;
     try {
-      const res = await fetch("/api/ouvidoria/protocolos", {
-        headers: { Authorization: `Bearer ${sessionToken}` },
-      });
+      // O parâmetro só entra quando o filtro está ligado: a lista de trabalho
+      // continua sendo a mesma URL de sempre.
+      const res = await fetch(
+        `/api/ouvidoria/protocolos${mostrarArquivados ? "?arquivados=sim" : ""}`,
+        {
+          headers: { Authorization: `Bearer ${sessionToken}` },
+        }
+      );
+      // Todos os `await` acontecem ANTES da guarda, e a guarda antes de toda
+      // escrita de estado: é isso que a torna um ponto só. Resposta vencida
+      // não pinta nada, nem a lista nem o erro, porque ela é a foto de um
+      // filtro que o ouvidor já trocou.
+      const corpo = res.ok ? await res.json() : null;
+      if (venceu()) return;
       if (res.status === 403) {
         setSemAcesso(true);
       } else if (res.ok) {
-        const corpo = await res.json();
         // O dia é relido a cada carga, como no painel: fila aberta na virada da
         // meia-noite continuaria chamando de "vence hoje" o que venceu ontem, e
         // deixando em âmbar o que passou a vencer hoje (issue #488).
@@ -76,6 +107,7 @@ export default function OuvidoriaPage() {
       }
     } catch (e) {
       console.error("Erro ao carregar manifestações:", e);
+      if (venceu()) return;
       setErroCarga(true);
     }
   }
@@ -101,7 +133,9 @@ export default function OuvidoriaPage() {
         setLoading(false);
         return;
       }
-      await recarregar(sessionToken);
+      // A tela abre na lista de trabalho, sempre: o arquivo existe para
+      // desafogar a fila, e abrir nele seria abrir no que já acabou.
+      await recarregar(sessionToken, false);
       setLoading(false);
     }
     init();
@@ -198,6 +232,60 @@ export default function OuvidoriaPage() {
     }
   }
 
+  /**
+   * Arquivar e desarquivar pela própria lista (issue #592, ADR 0047).
+   *
+   * Uma chamada e uma recarga. A recarga é o que faz o caso sumir da vista (ou
+   * voltar a ela) sem o ouvidor atualizar a página, e ela pede a MESMA lista
+   * que está na tela: recarregar a outra trocaria o conteúdo debaixo do cursor
+   * de quem só quis guardar um caso.
+   *
+   * Falha não some com nada e não mente: sem a recarga, a lista continua sendo
+   * a de antes do clique, que é o estado verdadeiro do servidor.
+   */
+  async function mudarOArquivo(m: ManifestacaoIndice, metodo: "POST" | "DELETE") {
+    // Uma chamada por vez: dois cliques rápidos disparariam dois POST e duas
+    // recargas sobre a mesma linha.
+    if (!token || noArquivo) return;
+    setNoArquivo(m.id);
+    setErroDoArquivo(null);
+    try {
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${m.id}/arquivo`, {
+        method: metodo,
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        const corpo = await res.json().catch(() => null);
+        // Só os status com que ESTAS rotas explicam uma recusa chegam ao
+        // ouvidor com a frase do servidor, como na cobrança ao lado. Repassar
+        // qualquer `detail` poria um "Internal Server Error" na tela.
+        const explicada = res.status === 403 || res.status === 409 || res.status === 503;
+        setErroDoArquivo(
+          explicada && typeof corpo?.detail === "string"
+            ? corpo.detail
+            : "Não foi possível mudar o arquivo desta manifestação. Tente de novo em instantes."
+        );
+        return;
+      }
+      await recarregar(token, arquivados);
+    } catch (e) {
+      console.error("Erro ao mudar o arquivo da manifestação:", e);
+      setErroDoArquivo("Não foi possível falar com o servidor. Tente de novo em instantes.");
+    } finally {
+      setNoArquivo(null);
+    }
+  }
+
+  /** Liga e desliga o filtro, recarregando a lista que ele passou a pedir. */
+  function alternarOFiltro() {
+    const proximo = !arquivados;
+    setArquivados(proximo);
+    // O aviso do ato anterior não sobrevive à troca de lista: ele fala de uma
+    // linha que talvez nem esteja mais na tela.
+    setErroDoArquivo(null);
+    if (token) recarregar(token, proximo);
+  }
+
   const grupos = agruparPorStatus(manifestacoes).filter((g) => g.itens.length > 0);
   // O trabalho do dia do ouvidor, em cima de tudo (issue #486, RN-67): o caso
   // que a área respondeu e que ele ainda não abriu. Sai da mesma lista que os
@@ -228,17 +316,42 @@ export default function OuvidoriaPage() {
                 lia como mais uma porta, num topo que já quebrava em três
                 linhas (issue #496, D-16). Informação e navegação são coisas
                 diferentes, e agora moram em caixas diferentes. */}
-            <div className="flex items-center gap-2">
-              <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap bg-sky-100 text-sky-700">
-                {emAndamento} em andamento
-              </span>
-              {estourados > 0 && (
-                <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap bg-red-100 text-red-700">
-                  <AlertCircle className="w-4 h-4 shrink-0" />
-                  {estourados} com prazo estourado
+            {/* Os contadores falam da lista de TRABALHO. Sobre o arquivo eles
+                diriam "0 em andamento", que é verdade sobre o que está na tela
+                e mentira sobre o hospital. */}
+            {!arquivados && (
+              <div className="flex items-center gap-2">
+                <span className="inline-flex items-center px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap bg-sky-100 text-sky-700">
+                  {emAndamento} em andamento
                 </span>
-              )}
-            </div>
+                {estourados > 0 && (
+                  <span className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap bg-red-100 text-red-700">
+                    <AlertCircle className="w-4 h-4 shrink-0" />
+                    {estourados} com prazo estourado
+                  </span>
+                )}
+              </div>
+            )}
+            {/* O filtro do Arquivo (issue #592, ADR 0047). Só para quem tem o
+                Perfil da Ouvidoria: o arquivo é ato dela, e a lista do arquivo
+                é a outra metade do mesmo ato. `aria-pressed` porque isto é um
+                interruptor, e não uma porta: quem usa leitor de tela precisa
+                ouvir se ele está ligado. */}
+            {podeAbrirDossie && (
+              <button
+                type="button"
+                aria-pressed={arquivados}
+                onClick={alternarOFiltro}
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-semibold uppercase tracking-wide whitespace-nowrap transition-colors ${ALTURA_DE_TOQUE} ${
+                  arquivados
+                    ? "bg-slate-700 text-white hover:bg-slate-800"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                <Archive className="w-4 h-4 shrink-0" />
+                Arquivados
+              </button>
+            )}
             {/* Registrar é ato da Ouvidoria: o gate de verdade é o backend
                 (403), a tela só não oferece o caminho a quem não pode. */}
             {podeAbrirDossie && (
@@ -270,6 +383,21 @@ export default function OuvidoriaPage() {
           </div>
         ))}
 
+      {/* A recusa do servidor ao arquivar ou desarquivar, na frase dele (issue
+          #592). `role="status"` porque é resposta a um clique do ouvidor, e ele
+          precisa ouvi-la sem procurar. Some no próximo ato e na troca de
+          filtro: aviso velho sobre linha que já saiu da tela é pior que
+          nenhum. */}
+      {erroDoArquivo && (
+        <div
+          role="status"
+          className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-800 text-sm"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{erroDoArquivo}</span>
+        </div>
+      )}
+
       {!loading && !semAcesso && !erroCarga && !podeAbrirDossie && manifestacoes.length > 0 && (
         <div className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-sm">
           <Lock className="w-4 h-4 shrink-0 mt-0.5" />
@@ -291,7 +419,9 @@ export default function OuvidoriaPage() {
           acabou de fazer, e o topo seguiria oferecendo o botão Encerrar sobre
           um estado que não vale mais, enquanto o card logo abaixo já diz que
           não conseguiu carregar. */}
-      {!erroCarga && aguardandoEncerramento.length > 0 && (
+      {/* O bloco do trabalho do dia não tem o que dizer sobre o arquivo: lá
+          não há caso esperando encerramento de ninguém. */}
+      {!erroCarga && !arquivados && aguardandoEncerramento.length > 0 && (
         <section
           aria-label={TITULO_AGUARDANDO_ENCERRAMENTO}
           className="bg-white rounded-2xl border border-primary/30 shadow-premium overflow-hidden mb-4"
@@ -315,6 +445,8 @@ export default function OuvidoriaPage() {
             onValidar={setValidando}
             onEncerrar={setEncerrando}
             onCobrar={cobrar}
+            onArquivar={(m) => mudarOArquivo(m, "POST")}
+            onDesarquivar={(m) => mudarOArquivo(m, "DELETE")}
           />
         </section>
       )}
@@ -342,10 +474,21 @@ export default function OuvidoriaPage() {
             <div className="w-14 h-14 rounded-2xl bg-slate-100 flex items-center justify-center mx-auto mb-3">
               <Megaphone className="w-7 h-7 text-slate-300" strokeWidth={1.5} />
             </div>
-            <p className="text-slate-500 font-medium">Nenhuma manifestação registrada</p>
-            <p className="text-slate-400 text-sm mt-1">
-              As manifestações chegam pelo atendimento da Ana e pelo registro da ouvidoria.
-            </p>
+            {arquivados ? (
+              <>
+                <p className="text-slate-500 font-medium">Nenhuma manifestação arquivada</p>
+                <p className="text-slate-400 text-sm mt-1">
+                  Os casos encerrados que a ouvidoria guardar aparecem aqui.
+                </p>
+              </>
+            ) : (
+              <>
+                <p className="text-slate-500 font-medium">Nenhuma manifestação registrada</p>
+                <p className="text-slate-400 text-sm mt-1">
+                  As manifestações chegam pelo atendimento da Ana e pelo registro da ouvidoria.
+                </p>
+              </>
+            )}
           </div>
         ) : (
           <div className="divide-y divide-slate-100">
@@ -375,10 +518,13 @@ export default function OuvidoriaPage() {
                   hoje={hoje}
                   responsaveis={responsaveis}
                   podeAbrirDossie={podeAbrirDossie}
+                  arquivados={arquivados}
                   cobrancas={cobrancas}
                   onValidar={setValidando}
                   onEncerrar={setEncerrando}
                   onCobrar={cobrar}
+                  onArquivar={(m) => mudarOArquivo(m, "POST")}
+                  onDesarquivar={(m) => mudarOArquivo(m, "DELETE")}
                 />
               </section>
             ))}
@@ -391,7 +537,7 @@ export default function OuvidoriaPage() {
         token={token}
         onClose={() => setValidando(null)}
         onAcionada={() => {
-          if (token) recarregar(token);
+          if (token) recarregar(token, arquivados);
         }}
       />
 
@@ -400,7 +546,7 @@ export default function OuvidoriaPage() {
         token={token}
         onClose={() => setEncerrando(null)}
         onEncerrada={() => {
-          if (token) recarregar(token);
+          if (token) recarregar(token, arquivados);
         }}
       />
 
@@ -409,7 +555,7 @@ export default function OuvidoriaPage() {
         token={token}
         onClose={() => setRegistrando(false)}
         onRegistrada={() => {
-          if (token) recarregar(token);
+          if (token) recarregar(token, arquivados);
         }}
       />
     </div>

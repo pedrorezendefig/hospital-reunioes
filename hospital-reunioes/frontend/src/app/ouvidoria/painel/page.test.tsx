@@ -104,22 +104,34 @@ interface Roteiro {
 /** O que cada uma das duas portas responde. Trocável no meio do teste. */
 let roteiro: Roteiro;
 
+/** As URLs que o painel pediu, na ordem. */
+let urls: string[] = [];
+
 beforeEach(() => {
   polling.intervalos = [];
   polling.ativos = [];
   polling.carga = null;
+  urls = [];
   roteiro = {
     metricas: resposta(METRICAS_VAZIAS),
     protocolos: resposta({ protocolos: [] }),
   };
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string) =>
-      String(url).includes("/metricas") ? roteiro.metricas : roteiro.protocolos
-    )
+    vi.fn(async (url: string) => {
+      urls.push(String(url));
+      return String(url).includes("/metricas") ? roteiro.metricas : roteiro.protocolos;
+    })
   );
   visibilidade("visible");
 });
+
+/** A URL da listagem que o painel pediu na carga mais recente. */
+function ultimaListagem(): string {
+  const listagens = urls.filter((url) => url.includes("/protocolos"));
+  if (listagens.length === 0) throw new Error("o painel não pediu a listagem");
+  return listagens[listagens.length - 1];
+}
 
 afterEach(() => {
   cleanup();
@@ -139,6 +151,83 @@ async function abrirOPainel() {
   render(<PainelEmTempoRealPage />);
   await screen.findByText("Painel em tempo real");
 }
+
+/**
+ * O card de um estado, pelo rótulo que ele desenha embaixo do número.
+ * Devolve o número como texto, que é o que o olho de quem está na sala lê.
+ */
+function cardDoEstado(rotulo: string): string {
+  const legenda = screen.getByText(rotulo);
+  const card = legenda.parentElement;
+  if (!card) throw new Error(`o card de ${rotulo} não tem número`);
+  return card.querySelector("p")?.textContent ?? "";
+}
+
+describe("o painel conta o hospital inteiro, arquivados inclusive (issue #592, ADR 0047)", () => {
+  /**
+   * O servidor falso se comporta como o de verdade: a lista de TRABALHO
+   * (`arquivados=nao`, ou sem parâmetro) esconde o arquivado, e só
+   * `arquivados=todos` devolve os dois. É isso que faz o teste morrer se o
+   * painel esquecer o parâmetro, em vez de passar sobre um fake complacente.
+   */
+  function servidorComUmArquivado() {
+    const vivo = casoVencido({ id: "id-1", protocolo: "OUV-2026-0001", status: "encerrado" });
+    const arquivado = casoVencido({ id: "id-2", protocolo: "OUV-2026-0002", status: "encerrado" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const endereco = String(url);
+        urls.push(endereco);
+        if (endereco.includes("/metricas")) return resposta(METRICAS_VAZIAS);
+        const todos = endereco.includes("arquivados=todos");
+        return resposta({ protocolos: todos ? [vivo, arquivado] : [vivo] });
+      })
+    );
+  }
+
+  it("pede a listagem com o recorte que inclui o arquivo", async () => {
+    servidorComUmArquivado();
+
+    await abrirOPainel();
+
+    expect(ultimaListagem()).toContain("arquivados=todos");
+  });
+
+  it("o card Encerrada conta os dois, e não só o que está na lista de trabalho", async () => {
+    // O cenário do defeito: 2 casos encerrados, 1 deles arquivado pelo ouvidor.
+    // O card tem de dizer 2, porque as métricas do bloco ao lado contam 2.
+    servidorComUmArquivado();
+
+    await abrirOPainel();
+
+    expect(cardDoEstado("Encerrada")).toBe("2");
+  });
+
+  it("o painel some da corrida do arquivamento: o número não muda quando o ouvidor arquiva", async () => {
+    // A contraprova em forma de simulação: o MESMO par de casos, agora com o
+    // servidor devolvendo os dois em qualquer recorte (nada arquivado ainda).
+    // O card diz 2 antes e depois, o que prova que o número do painel não é
+    // função do que a Ouvidoria escondeu.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        const endereco = String(url);
+        urls.push(endereco);
+        if (endereco.includes("/metricas")) return resposta(METRICAS_VAZIAS);
+        return resposta({
+          protocolos: [
+            casoVencido({ id: "id-1", protocolo: "OUV-2026-0001", status: "encerrado" }),
+            casoVencido({ id: "id-2", protocolo: "OUV-2026-0002", status: "encerrado" }),
+          ],
+        });
+      })
+    );
+
+    await abrirOPainel();
+
+    expect(cardDoEstado("Encerrada")).toBe("2");
+  });
+});
 
 describe("a marca de sigilo na linha do painel", () => {
   it("marca a linha do caso sigiloso, e só ela", async () => {

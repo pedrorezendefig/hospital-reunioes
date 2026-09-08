@@ -18,6 +18,8 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
+  Archive,
+  ArchiveRestore,
   CalendarDays,
   CheckCircle2,
   FileText,
@@ -112,6 +114,8 @@ const ICONE_DA_ACAO: Record<ChaveDeAcao, typeof Send> = {
   validar: Send,
   cobrar: Send,
   encerrar: CheckCircle2,
+  arquivar: Archive,
+  desarquivar: ArchiveRestore,
   abrir: FileText,
 };
 
@@ -120,6 +124,10 @@ const CLASSE_DA_ACAO: Record<ChaveDeAcao, string> = {
   validar: "bg-primary text-white hover:bg-primary/90",
   cobrar: "bg-amber-500 text-white hover:bg-amber-600",
   encerrar: "bg-emerald-600 text-white hover:bg-emerald-700",
+  // O arquivo é organização da lista, e não ato sobre o caso: fica no tom
+  // neutro do "abrir", e não numa cor de estado, que o olho lê como desfecho.
+  arquivar: "bg-slate-100 text-slate-700 hover:bg-slate-200",
+  desarquivar: "bg-slate-100 text-slate-700 hover:bg-slate-200",
   abrir: "bg-slate-100 text-slate-700 hover:bg-slate-200",
 };
 
@@ -135,6 +143,8 @@ function Acao({
   onValidar,
   onEncerrar,
   onCobrar,
+  onArquivar,
+  onDesarquivar,
   onEscolher,
   cobrando,
 }: {
@@ -144,6 +154,8 @@ function Acao({
   onValidar: (m: ManifestacaoIndice) => void;
   onEncerrar: (m: ManifestacaoIndice) => void;
   onCobrar: (m: ManifestacaoIndice) => void;
+  onArquivar: (m: ManifestacaoIndice) => void;
+  onDesarquivar: (m: ManifestacaoIndice) => void;
   onEscolher?: () => void;
   cobrando?: boolean;
 }) {
@@ -162,7 +174,13 @@ function Acao({
       </Link>
     );
   }
-  const acionar = { validar: onValidar, cobrar: onCobrar, encerrar: onEncerrar }[chave];
+  const acionar = {
+    validar: onValidar,
+    cobrar: onCobrar,
+    encerrar: onEncerrar,
+    arquivar: onArquivar,
+    desarquivar: onDesarquivar,
+  }[chave];
   return (
     <button
       type="button"
@@ -189,12 +207,16 @@ function MenuDeAcoes({
   onValidar,
   onEncerrar,
   onCobrar,
+  onArquivar,
+  onDesarquivar,
 }: {
   m: ManifestacaoIndice;
   acoes: ChaveDeAcao[];
   onValidar: (m: ManifestacaoIndice) => void;
   onEncerrar: (m: ManifestacaoIndice) => void;
   onCobrar: (m: ManifestacaoIndice) => void;
+  onArquivar: (m: ManifestacaoIndice) => void;
+  onDesarquivar: (m: ManifestacaoIndice) => void;
 }) {
   const [aberto, setAberto] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
@@ -228,6 +250,8 @@ function MenuDeAcoes({
               onValidar={onValidar}
               onEncerrar={onEncerrar}
               onCobrar={onCobrar}
+              onArquivar={onArquivar}
+              onDesarquivar={onDesarquivar}
               onEscolher={() => setAberto(false)}
               className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 ${ALTURA_DE_TOQUE}`}
             />
@@ -243,19 +267,25 @@ function LinhaDaFila({
   hoje,
   responsaveis,
   podeAbrirDossie,
+  arquivados,
   cobranca,
   onValidar,
   onEncerrar,
   onCobrar,
+  onArquivar,
+  onDesarquivar,
 }: {
   m: ManifestacaoIndice;
   hoje: string | null;
   responsaveis: Responsavel[] | null;
   podeAbrirDossie: boolean;
+  arquivados: boolean;
   cobranca: ResultadoDaCobranca | undefined;
   onValidar: (m: ManifestacaoIndice) => void;
   onEncerrar: (m: ManifestacaoIndice) => void;
   onCobrar: (m: ManifestacaoIndice) => void;
+  onArquivar: (m: ManifestacaoIndice) => void;
+  onDesarquivar: (m: ManifestacaoIndice) => void;
 }) {
   const classe = hoje ? classificarPrazoDaManifestacao(m, hoje) : "normal";
   const gravidade = rotuloDaGravidade(m.gravidade);
@@ -263,8 +293,10 @@ function LinhaDaFila({
   // setor. A linha só fala de responsável quando ela leu o cadastro.
   const cadastroLido = responsaveis !== null && hoje !== null;
   const responsavel = cadastroLido ? responsavelDoSetor(responsaveis!, m.setor, hoje!) : null;
-  const primaria = acaoPrimariaDoStatus(m.status);
-  const secundarias = acoesSecundariasDoStatus(m.status);
+  // O modo da lista entra na régua junto com o estado (issue #592): a mesma
+  // linha oferece Arquivar na lista de trabalho e Desarquivar na do arquivo.
+  const primaria = acaoPrimariaDoStatus(m.status, arquivados);
+  const secundarias = acoesSecundariasDoStatus(m.status, arquivados);
 
   return (
     <li
@@ -379,6 +411,8 @@ function LinhaDaFila({
               onValidar={onValidar}
               onEncerrar={onEncerrar}
               onCobrar={onCobrar}
+              onArquivar={onArquivar}
+              onDesarquivar={onDesarquivar}
               cobrando={cobranca?.fase === "enviando" || cobranca?.fase === "reenviada"}
               className={`inline-flex flex-1 md:flex-none items-center justify-center md:justify-start gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold transition-colors ${ALTURA_DE_TOQUE} ${CLASSE_DA_ACAO[primaria]}`}
             />
@@ -389,6 +423,8 @@ function LinhaDaFila({
                 onValidar={onValidar}
                 onEncerrar={onEncerrar}
                 onCobrar={onCobrar}
+                onArquivar={onArquivar}
+                onDesarquivar={onDesarquivar}
               />
             )}
           </div>
@@ -408,19 +444,27 @@ export function ListaDaFila({
   hoje,
   responsaveis,
   podeAbrirDossie,
+  arquivados = false,
   cobrancas,
   onValidar,
   onEncerrar,
   onCobrar,
+  onArquivar,
+  onDesarquivar,
 }: {
   itens: ManifestacaoIndice[];
   hoje: string | null;
   responsaveis: Responsavel[] | null;
   podeAbrirDossie: boolean;
+  // O modo da lista (issue #592). Nasce desligado, que é o da lista de
+  // trabalho: quem desenha o arquivo é quem liga o filtro, e não o caso.
+  arquivados?: boolean;
   cobrancas: Record<string, ResultadoDaCobranca>;
   onValidar: (m: ManifestacaoIndice) => void;
   onEncerrar: (m: ManifestacaoIndice) => void;
   onCobrar: (m: ManifestacaoIndice) => void;
+  onArquivar: (m: ManifestacaoIndice) => void;
+  onDesarquivar: (m: ManifestacaoIndice) => void;
 }) {
   return (
     <ul className="divide-y divide-slate-50">
@@ -431,10 +475,13 @@ export function ListaDaFila({
           hoje={hoje}
           responsaveis={responsaveis}
           podeAbrirDossie={podeAbrirDossie}
+          arquivados={arquivados}
           cobranca={cobrancas[m.id]}
           onValidar={onValidar}
           onEncerrar={onEncerrar}
           onCobrar={onCobrar}
+          onArquivar={onArquivar}
+          onDesarquivar={onDesarquivar}
         />
       ))}
     </ul>

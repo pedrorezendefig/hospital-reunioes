@@ -166,6 +166,13 @@ class _TabelaFake:
         self._filters[col] = value
         return self
 
+    def is_(self, col, value):
+        """O `is null` do PostgREST, que a lista da Ouvidoria usa para filtrar o
+        Arquivo (issue #592). Vira igualdade a `None`, que é como estes fakes
+        casam linha."""
+        self._filters[col] = None if value in ("null", None) else value
+        return self
+
     def order(self, col, desc=False):
         self._ordem = (col, desc)
         self.ordens.append(col)

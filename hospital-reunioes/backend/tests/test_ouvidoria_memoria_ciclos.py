@@ -654,6 +654,82 @@ class TestReaberturaComecaFichaLimpa:
         assert _cumprimento(client) == "em_prazo"
 
 
+class TestReaberturaTiraOCasoDoArquivo:
+    """Reabrir é a ÚNICA saída de `encerrado`, e portanto o único jeito de um
+    caso ARQUIVADO voltar a ter prazo correndo (issue #592, ADR 0047).
+
+    Sem esta limpeza, o caso volta para `aguardando_area` com o setor
+    notificado e o relógio andando, mas fora da lista de trabalho: ação
+    invisível com prazo correndo, que é o oposto do que a regra "só caso
+    encerrado arquiva" existe para garantir.
+
+    O detector é a PRÓPRIA lista de trabalho, e não só a coluna: é ela que o
+    ouvidor abre, e é nela que a ausência machucaria.
+    """
+
+    ENCERRADA_EM = FORA_DO_PRAZO_EM + dt.timedelta(days=2)
+    REABERTURA_EM = FORA_DO_PRAZO_EM + dt.timedelta(days=5)
+
+    def _encerrado_e_arquivado(self) -> _SupabaseFake:
+        return _SupabaseFake(
+            [
+                _manifestacao(
+                    status="encerrado",
+                    setor="Recepcao",
+                    gravidade="medio",
+                    prazo_area_em=PRAZO_ORIGINAL,
+                    validada_em=VALIDACAO_EM.isoformat(),
+                    validada_por="P10",
+                    encerrada_em=self.ENCERRADA_EM.isoformat(),
+                    desfecho="procedente",
+                    desfecho_descricao="Escala do plantao noturno revista.",
+                    arquivada_em=self.ENCERRADA_EM.isoformat(),
+                    arquivada_por="P10",
+                )
+            ]
+        )
+
+    def _reabrir(self, client):
+        return client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/reaberturas",
+            json={"motivo": "A espera na recepcao voltou ao que era."},
+        )
+
+    def _protocolos_da_lista_de_trabalho(self, client) -> list[int]:
+        indice = client.get("/api/ouvidoria/protocolos")
+        assert indice.status_code == 200, indice.text
+        return [p["numero"] for p in indice.json()["protocolos"]]
+
+    def test_o_caso_arquivado_some_da_lista_antes_de_reabrir(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A contraprova. Sem ela, o teste abaixo passaria mesmo se a lista
+        nunca tivesse escondido nada."""
+        sb = self._encerrado_e_arquivado()
+        client, _ = _client(monkeypatch, supabase=sb, agora=self.REABERTURA_EM)
+
+        assert self._protocolos_da_lista_de_trabalho(client) == []
+
+    def test_reabrir_limpa_os_dois_carimbos_do_arquivo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        sb = self._encerrado_e_arquivado()
+        client, _ = _client(monkeypatch, supabase=sb, agora=self.REABERTURA_EM)
+
+        assert self._reabrir(client).status_code == 201
+
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["arquivada_em"] is None
+        assert caso["arquivada_por"] is None
+
+    def test_o_caso_reaberto_volta_a_aparecer_na_lista_de_trabalho(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O que de fato importa: o ouvidor abre a fila e o caso com prazo
+        correndo está lá."""
+        sb = self._encerrado_e_arquivado()
+        client, _ = _client(monkeypatch, supabase=sb, agora=self.REABERTURA_EM)
+
+        assert self._reabrir(client).status_code == 201
+
+        assert self._protocolos_da_lista_de_trabalho(client) == [7]
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
+
+
 class TestCicloAnteriorAoDeploy:
     """O caso que JÁ foi devolvido em produção é o motivo desta fatia (#370), e
     o movimento dele não tem o texto: quando ele foi gravado, a observação era

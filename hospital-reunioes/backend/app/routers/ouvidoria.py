@@ -195,7 +195,12 @@ _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
 # dele com a trilha, e fica FORA da projeção da resposta porque é dado de
 # controle da fila, não do caso: a tela precisa do ponto aceso ou apagado, e
 # nunca da hora em que a Ouvidoria abriu o caso.
-_CAMPOS_INDICE_LEITURA = ", ".join(_CAMPOS_INDICE_TUPLA + ("vista_pela_ouvidoria_em",))
+#
+# O carimbo do Arquivo (issue #592, migration 099) entra pelo mesmo motivo e
+# fica fora da resposta pela mesma razão: a lista devolve UM dos dois mundos de
+# cada vez, e quem sabe qual deles pediu é a tela que ligou o filtro. O que ela
+# precisa do carimbo é só o que a rota já resolveu ao filtrar.
+_CAMPOS_INDICE_LEITURA = ", ".join(_CAMPOS_INDICE_TUPLA + ("vista_pela_ouvidoria_em", "arquivada_em"))
 
 
 # O nome da leitura que falhou, do jeito que a resposta diz isso. É o mesmo
@@ -366,6 +371,7 @@ def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date])
 @limiter.limit("60/minute")
 async def listar_protocolos(
     request: Request,
+    arquivados: Literal["nao", "sim", "todos"] = "nao",
     me: dict = Depends(require_acesso_painel),
     supabase=Depends(get_supabase_client),
 ):
@@ -373,13 +379,42 @@ async def listar_protocolos(
 
     Índice, não Dossiê: agora que a tabela guarda relato e identificação
     (ADR 0034), a resposta é fechada no índice campo a campo, e não no que o
-    select devolveu."""
+    select devolveu.
+
+    `arquivados` decide qual recorte do Arquivo sai (issue #592, ADR 0047):
+
+    * `nao` (o padrão) é a lista de TRABALHO, sem o que a Ouvidoria já guardou.
+      Ela nunca mistura os dois mundos: misturar seria devolver o arquivo à fila
+      que ele saiu para desafogar;
+    * `sim` é a lista do arquivo, atrás do filtro da tela;
+    * `todos` é o hospital inteiro, e existe para quem CONTA em vez de
+      trabalhar. O painel em tempo real é esse consumidor: arquivar é
+      organização da lista e não fato do caso, então o card de cada estado
+      precisa somar o mesmo que as métricas do bloco ao lado. Sem este terceiro
+      valor, arquivar 30 de 40 encerrados derrubaria o card para 10 enquanto o
+      volume do período seguia em 40, e a soma das colunas deixaria de fechar.
+
+    Pedir qualquer recorte que não seja `nao` exige o Perfil da Ouvidoria. O
+    gate desta rota é o largo (a equipe de Reuniões inteira lê o índice), mas o
+    arquivo é ato da Ouvidoria, e ler o que ela guardou é a outra metade dele."""
+    if arquivados != "nao" and not tem_perfil_ouvidoria(me):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Só a Ouvidoria lê o arquivo das manifestações",
+        )
 
     def consulta():
         # A resposta segue fechada em _CAMPOS_INDICE, campo a campo, e o select
         # pede um pouco mais do que ela devolve: o carimbo do visto (issue #484)
         # é lido para derivar a novidade e não sai no corpo.
         query = supabase.table("ouvidoria_protocolos").select(_CAMPOS_INDICE_LEITURA).order("numero", desc=True)
+        # O filtro do Arquivo vive na query, como o do sigilo logo abaixo: a
+        # linha que a lista não vai mostrar nem sai do banco. `todos` não
+        # filtra nada, de propósito: é quem conta o hospital inteiro.
+        if arquivados == "sim":
+            query = query.not_.is_("arquivada_em", "null")
+        elif arquivados == "nao":
+            query = query.is_("arquivada_em", "null")
         # Sigilo reforçado (RN-40): o resumo de uma denúncia já identifica quem
         # relatou, então a sigilosa não entra nem no índice de quem está fora da
         # Ouvidoria, super admin incluído. O filtro vive na query (a linha nem sai
@@ -434,7 +469,13 @@ async def listar_protocolos(
             {campo: row.get(campo) for campo in _CAMPOS_INDICE_TUPLA}
             | _projetar_prazo(row, agora, feriados)
             | {
+                # Caso arquivado nunca acende o ponto (issue #592, ADR 0047):
+                # o arquivo não pode parecer trabalho pendente. Na lista sem o
+                # filtro isto não muda nada (ali não há arquivado nenhum); é a
+                # lista COM o filtro que precisa da guarda, e é ela que fica
+                # igual ao contador do menu, que também os ignora.
                 "tem_novidade": da_ouvidoria
+                and not row.get("arquivada_em")
                 and ouvidoria_novidade.tem_novidade(row.get("vista_pela_ouvidoria_em"), ultimos.get(str(row.get("id"))))
             }
             for row in linhas
@@ -1417,6 +1458,16 @@ async def reabrir_por_reincidencia(
                 "area_estourou_em": None,
                 "pausada_em": None,
                 "minutos_pausados": 0,
+                # O Arquivo sai junto (issue #592, ADR 0047). Reabrir é a ÚNICA
+                # saída de `encerrado`, e portanto o único jeito de um caso
+                # arquivado voltar a ter prazo correndo. Sem esta limpeza o caso
+                # volta para `aguardando_area`, com o setor notificado e o
+                # relógio andando, mas fora da lista de trabalho, fora do
+                # contador do menu e com o ponto de novidade apagado à força:
+                # ação invisível com prazo correndo, que é exatamente o que a
+                # regra "só caso encerrado arquiva" existe para impedir.
+                "arquivada_em": None,
+                "arquivada_por": None,
             }
             | ouvidoria_prorrogacao.carimbos_a_zerar()
         ).eq("id", manifestacao_id).execute()
@@ -1463,6 +1514,160 @@ async def reabrir_por_reincidencia(
     completo = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
     row = completo.data[0] if completo.data else caso
     return dossie_completo(supabase, row, agora)
+
+
+# =====================================================================
+# O Arquivo da Manifestação (issue #592, PRD #591, ADR 0047)
+# =====================================================================
+# Arquivar é organização da lista, e não fato do caso: o `status` não muda,
+# nenhum movimento entra na trilha e nada passa pela RPC de transição. Por isso
+# as duas rotas abaixo são um update de duas colunas, e não mais uma porta da
+# máquina de estados.
+#
+# São duas rotas no MESMO recurso, e não uma com bandeira: arquivar tem
+# pré-condição (só caso encerrado) e desarquivar não tem nenhuma, e uma rota só
+# teria de carregar as duas regras num `if` sobre o corpo do pedido.
+
+# As colunas do Arquivo, num lugar só: as duas são gravadas no mesmo ato e as
+# duas voltam a nulo juntas. Separadas, o dia em que alguém limpasse só uma
+# deixaria um caso "arquivado por ninguém" ou "arquivado em lugar nenhum".
+_CAMPOS_DO_ARQUIVO = ("arquivada_em", "arquivada_por")
+
+
+def _carregar_para_o_arquivo(supabase, manifestacao_id: str) -> dict:
+    """O caso, com o mínimo que as duas rotas do Arquivo leem.
+
+    Só duas coisas viram 404: id malformado (que não é manifestação nenhuma) e
+    linha ausente. Qualquer OUTRA recusa do PostgREST vira 503, e não 404: o
+    banco fora do ar não é "este caso não existe", e esta é justamente a rota
+    que depende de duas colunas recém-criadas. Com a migration 099 pendente, o
+    404 mandaria o ouvidor procurar na tela um caso que está bem na frente
+    dele."""
+    try:
+        atual = (
+            supabase.table("ouvidoria_protocolos")
+            .select("id, status, " + ", ".join(_CAMPOS_DO_ARQUIVO))
+            .eq("id", manifestacao_id)
+            .execute()
+        )
+    except APIError as exc:
+        if _e_id_malformado(exc):
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
+        logger.error("Falha ao ler a manifestação %s para o arquivo (código %s)", manifestacao_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível ler a manifestação agora. Tente de novo em instantes.",
+        ) from exc
+    if not atual.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+    return atual.data[0]
+
+
+def _gravar_o_arquivo(supabase, manifestacao_id: str, carimbos: dict, exigindo_status: str | None = None) -> dict:
+    """Grava o par de colunas e devolve o que ficou gravado.
+
+    A resposta sai do que o banco devolveu, e não do que a rota tentou
+    escrever: a tela adota este corpo, e um update que não achou a linha
+    deixaria a lista mostrando um arquivamento que não aconteceu.
+
+    `exigindo_status` repete no PRÓPRIO update a pré-condição que a rota já
+    checou na leitura, e é o que fecha a janela entre as duas (TOCTOU): sem
+    ela, uma reabertura que caísse no meio deixaria um caso `aguardando_area`
+    arquivado, com prazo correndo e fora da lista de trabalho, sem que nenhuma
+    linha de código estivesse errada. O update filtrado não casa nada, e é isso
+    que vira o 409 abaixo. Quem não tem pré-condição (desarquivar) passa `None`
+    e continua casando pelo id."""
+    escrita = supabase.table("ouvidoria_protocolos").update(carimbos).eq("id", manifestacao_id)
+    if exigindo_status is not None:
+        escrita = escrita.eq("status", exigindo_status)
+    try:
+        atualizada = escrita.execute()
+    except APIError as exc:
+        logger.error("Falha ao gravar o arquivo da manifestação %s (código %s)", manifestacao_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível gravar agora. Tente de novo em instantes.",
+        ) from exc
+    if not atualizada.data:
+        if exigindo_status is not None:
+            # A linha existia na leitura e não casa mais: alguém mexeu no
+            # estado agora mesmo. Mesma frase da concorrência da reabertura.
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="O caso mudou de estado agora mesmo: recarregue o painel antes de arquivar.",
+            )
+        logger.error("O update do arquivo não encontrou a manifestação %s", manifestacao_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível gravar o arquivamento",
+        )
+    row = atualizada.data[0]
+    return {campo: row.get(campo) for campo in _CAMPOS_DO_ARQUIVO}
+
+
+@router.post("/manifestacoes/{manifestacao_id}/arquivo")
+@limiter.limit("30/minute")
+async def arquivar_manifestacao(
+    request: Request,
+    manifestacao_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Tira da vista da lista um caso que já acabou (ADR 0047, decisão 3).
+
+    Só caso `encerrado` arquiva: caso em andamento tem prazo correndo e setor
+    esperando, e escondê-lo da lista é esconder atraso. O 409 é a mesma régua
+    da reabertura, que também só age sobre caso encerrado.
+
+    `carimbar_visto_da_acao` NÃO entra aqui: o visto é o ouvidor dizendo "vi e
+    resolvi" (RN-66), e arquivar não grava movimento nenhum para o ponto
+    acender. Carimbar aqui apagaria uma novidade legítima que o caso tivesse
+    acumulado antes de ir para o arquivo.
+
+    `registrar_acesso` entra, como em toda escrita sobre a manifestação neste
+    router. `ouvidoria_acessos` é o log de ATO, e não o log de leitura (nem
+    `transicionar`, nem `cobrar_setor`, nem `validar_e_acionar` abrem o
+    Dossiê, e as três registram). Aqui ele vale mais do que no resto: arquivar
+    não entra na trilha, e desarquivar apaga os dois carimbos, então sem este
+    registro o par arquivar + desarquivar não deixaria vestígio em lugar
+    nenhum de que o caso esteve escondido, por quanto tempo e por quem."""
+    caso = _carregar_para_o_arquivo(supabase, manifestacao_id)
+    if caso.get("status") != "encerrado":
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Só uma manifestação encerrada pode ser arquivada.",
+        )
+    gravado = _gravar_o_arquivo(
+        supabase,
+        manifestacao_id,
+        {"arquivada_em": agora_utc().isoformat(), "arquivada_por": me["id"]},
+        exigindo_status="encerrado",
+    )
+    registrar_acesso(supabase, me, manifestacao_id, "arquivar")
+    return gravado
+
+
+@router.delete("/manifestacoes/{manifestacao_id}/arquivo")
+@limiter.limit("30/minute")
+async def desarquivar_manifestacao(
+    request: Request,
+    manifestacao_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Devolve o caso à lista, limpando os dois carimbos.
+
+    Sem pré-condição nenhuma, de propósito (ADR 0047, decisão 3): o arquivo é
+    uma porta com volta, e um caso que chegou lá por qualquer caminho precisa
+    poder voltar. Desarquivar o que não estava arquivado é inofensivo, e é o
+    que faz o segundo clique não virar erro na tela.
+
+    O registro de acesso é o que sobra: como este ato apaga os dois carimbos,
+    ele é a única memória de que o caso esteve arquivado."""
+    _carregar_para_o_arquivo(supabase, manifestacao_id)
+    gravado = _gravar_o_arquivo(supabase, manifestacao_id, {"arquivada_em": None, "arquivada_por": None})
+    registrar_acesso(supabase, me, manifestacao_id, "desarquivar")
+    return gravado
 
 
 # =====================================================================
