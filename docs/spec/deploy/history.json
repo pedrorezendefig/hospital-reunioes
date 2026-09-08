@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-08T20:52:33-03:00",
+      "sha": "387af87",
+      "app_version": "0.115.3",
+      "subject": "a guarda anti-SSRF do PDF do POP volta a existir de fato, agora na API nova do WeasyPrint, e o teto de emergencia sai",
+      "raw_subject": "refactor(pops): portar a guarda do PDF do POP para a API nova do WeasyPrint (#630)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Segunda fatia da onda 1, e a que mudou de peso durante a execucao. A issue pedia so portar _pdf_url_fetcher para a API nova do WeasyPrint (a classe URLFetcher, que substituiu default_url_fetcher no 70.0) e tirar o teto <70 que o PR #624 tinha posto de emergencia. Ao portar, o autor descobriu que a guarda anti-SSRF do PDF do POP estava INERTE em producao desde a issue #152: o url_fetcher era passado ao write_pdf, e quem busca recursos e o objeto HTML, entao o WeasyPrint descartava a opcao em silencio (no 70 ele ao menos loga Unknown rendering option, no 62.3 nem isso). Medido com um fetcher que recusa tudo: pelo write_pdf o PDF sai com 143049 bytes e o logo embutido, pelo construtor sai com 2326 bytes e sem logo. Ou seja, file:// arbitrario e SSRF nunca foram barrados ali. O fetcher passou para o construtor do HTML e o teste test_guarda_esta_ligada_no_render_do_pop trava isso. Area sensivel, entao o orquestrador rodou 2 revisores dedicados em paralelo, um de codigo e um de seguranca. Eles acharam, por caminhos independentes e os dois reproduzindo por execucao, um bug NOVO que o proprio port criou: o URLFetcher do 70 guarda estado em self._request, e a guarda levantava ValueError antes do super().fetch(), entao uma recusa vinda do open (o caminho do redirect) deixava a requisicao recusada pendurada e a busca SEGUINTE do mesmo PDF a reexecutava, enfiando os bytes no PDF. Um revisor pediu o file:// do logo e recebeu o corpo do servidor em 127.0.0.1; o outro montou um 302 real e recebeu SEGREDO-DA-REDE-INTERNA no lugar do PNG. Consertado com self._request = None antes dos tres raise (nao so o do host) e travado pelo teste test_recusa_no_redirect_nao_envenena_a_busca_seguinte, que cria o fetcher uma vez e reusa o mesmo objeto nas tres sequencias, que e justamente a propriedade de estado em jogo. Segundo must-fix: a justificativa do piso >=70 era falsa. O revisor de codigo baixou os wheels 62.3, 65.1, 66.0, 67.0, 68.0, 68.1, 69.0 e 70.0 do PyPI e leu urls.py em cada um: URLFetcher existe desde o 68.0, ja com as assinaturas usadas. O orquestrador decidiu por >=68, que e o piso verdadeiro e a menor mudanca que respeita o pedido da triagem; o revisor depois montou venvs com 68.0, 68.1 e 69.0 e rodou a guarda real nas quatro versoes. Achado de versao que ninguem tinha fixado: self._request nao existe no 68.0 nem no 68.1 (o pai sempre monta um Request novo) e existe do 69.0 em diante, e o open sobrescrito que protege o redirect ja existe no 68.0, entao o piso >=68 pega a protecao sem pegar o bug. Prova por mutacao: 14 plantados, 13 mortos, incluindo afrouxamentos (allowlist por prefixo, allowlist sem caixa, is_reserved removido, DNS fail-open) e tres mutantes no proprio detector. O unico sobrevivente, B2 (remocao de is_link_local), e equivalente de verdade, confirmado de forma independente pelos dois revisores: is_private do Python ja engloba loopback, link-local e unspecified. Essa mesma varredura achou um buraco real, porque is_reserved e o unico predicado que decide sozinho (em 64:ff9b::), e o mutante B3 sobrevivia com a lista de IPs original. As recusas sao asseridas pelo marcador da mensagem e nao por raises(ValueError), porque as tres levantam o mesmo tipo. Atenuante da vulnerabilidade que estava viva: a rota do PDF do POP e autenticada (app/routers/pops/documento.py:33), nao e o canal publico, e o bleach mais o sanitizar_svg seguravam como primeira camada. CI e Dockerfile instalam do pyproject.toml e nao do lock, entao o Docker Build verde e a prova real do piso; uv pip compile sai 70.0 antes e depois. Ficou registrado e nao tocado: pdf_generator.py (Ata), ouvidoria_relatorio.py e ouvidoria_pontos.py chamam write_pdf sem url_fetcher nenhum, sem guarda alguma, e a guarda nao recusa multicast. Sobrou uma imprecisao conhecida: o docstring da fabrica ainda diz que a classe vale a partir do 70, quando o piso e 68."
+    },
+    {
+      "at": "2026-09-08T20:48:21-03:00",
+      "sha": "d7c7996",
+      "app_version": "0.115.2",
+      "subject": "o rollback do prazo da area so toca o carimbo que a propria ida escreveu, e a leitura do instante vira ponto unico",
+      "raw_subject": "refactor(ouvidoria): rollback so toca o carimbo que a ida escreveu, e _instante vira ponto unico (#629)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 de 1 desta sessao, duas fatias em paralelo: #623 (fatia P) e #625 (fatia M), as duas fechando o desenvolvimento em 1 tentativa. Sao as sobras que os revisores do PR #619 (issue #607) marcaram como menores. Duas coisas: o rollback de _restaurar_prazo passou a receber carimbo_a_restaurar como dict e so inclui area_estourou_em sob a mesma condicional da ida, e _instante virou ler_instante em ouvidoria_prazos.py, consumido pelos dois routers (o nome ganhou prefixo porque o modulo ja usa instante como variavel local em tres funcoes). O contrato da triagem tinha duas frases que divergiam num caso e o autor achou isso sozinho: como estouro_consumado devolve ja_consumado quando ha carimbo, estourou e estouro_anterior nao sao mutuamente exclusivos, entao a leitura literal (so quando havia carimbo anterior) deixaria o caso que fura o prazo NESTA devolucao voltar com prazo restaurado e carimbo gravado, reabrindo exatamente o #607. Ele implementou o espelho da ida e deixou a prova executavel no mutante M3. Prova por mutacao: 5 plantados, 5 mortos, dois deles no proprio detector (updates em ordem invertida e espiao cego). Os testes asserem o payload do update e nao a linha no banco, porque o banco nao distingue coluna nunca escrita de coluna escrita com None. Revisor independente de 2 lentes voltou limpo na rodada 1: 0 must-fix e 5 nice-to-have, todos registrados no PR. Ele confirmou por leitura do codigo, nao pela tabela do autor, que ler_instante e identica as duas copias removidas, que nao ha orfao nem import circular, que os dois .eq de guarda continuam de pe, e plantou 2 mutantes proprios que tambem morreram. O maior dos nice-to-have: existe um quarto caso (carimbo antigo mais prazo furado agora) que o codigo acerta mas nenhum teste segura. Rebase sobre a main que ja trazia o PR #628 da sessao paralela, no mesmo ouvidoria.py, sem conflito nenhum; suite pos-rebase com 3667 passed. Registrado que _instante ainda existe copiado em cinco services, fora do escopo desta issue."
+    },
+    {
       "at": "2026-09-08T20:09:06-03:00",
       "sha": "a4f4d44",
       "app_version": "0.115.1",
@@ -1344,65 +1392,6 @@
       ],
       "rollback_target_sha": "adcd408",
       "notes": "PR #417, issue #346 (I5 do PRD #319, que FECHA o PRD: 7 de 7 fatias). Migration 083 aplicada pelo Pedro no Studio ANTES do merge (duas colunas aditivas, ADD COLUMN IF NOT EXISTS, sem CREATE TABLE, logo sem RLS nova: a tabela ja e default-deny desde a 080). DECISAO DE DESENHO, que se desvia da letra da issue: a IA recebe o AGREGADO, nunca o relato nem resumo de caso. A issue pedia 'resumos dos casos do periodo'. Tres motivos: o furo de NOME da #342 (#412) multiplicaria a exposicao por N e e justamente o canal do QR; ouvidoria_metricas.CAMPOS_TUPLA nem le relato_integral e o docstring do relatorio ja declarava 'nenhum caso e identificado' (RN-40, ADR 0034 decisao 8); e o CONTEXT.md, verbete 'Texto do acionamento', ja dizia que nem relato nem resumo saem da Ouvidoria porque os dois carregam a palavra de quem manifestou. Custo: ~US$ 0,0014 por mes (1 chamada, ~2.200 tokens, gemini-3.7-flash a 0,375/M in e 1,875/M out); mandar 40 relatos custaria 20x mais. Trade-off escrito: as sugestoes sao de gestao, nao de caso. PORTAO EM 3 CAMADAS: (1) nao mandar texto livre (categoria fica de fora; o tema vem de tipo_manifestacao, lista fechada do ADR 0037); (2) poda mecanica de FORA_DO_PROMPT sobre responsavel e registrada_por_nome, os dois unicos nomes de funcionario do agregado; (3) _rotulo_seguro colapsa whitespace, corta em 200 e pseudonimiza. Job novo relatorio_mensal_ouvidoria as 07h30, todo dia (nao so no dia 1: jobstore do APScheduler e em memoria e um deploy na hora do disparo DESCARTA a execucao). A varredura de atrasados nao se repete no job novo: a do quinzenal nao filtra tipo. LIMITE CONSCIENTE registrado no docstring: celula pequena de caso sigiloso sai no agregado ('Denuncia: 1'), aceito porque o agregado nao e cruzado (tipo e area sao contagens separadas, a tupla identificante nunca sai); mudar isso e decisao de dominio. Gates: 2 revisores independentes com o diff apontado a mao (o /security-review le o diff da arvore principal e a branch vivia em worktree). Seguranca LIBEROU; code review BLOQUEOU com 1 MUST-FIX: falha ao ler a nota externa virava 'ninguem digitou nota' no PDF assinado, por causa de um timeout, sem aviso e permanentemente (numeros congelados). Corrigido para os 3 estados que _retrato_externo ja exigia. Outros corrigidos: janela da serie de notas sem teto (nota de setembro entrava no relatorio de agosto e invertia a tendencia), registrada_por_nome fora da poda, degradado 'tendencia' com frase generica FALSA, logger.warning sem traceback, duplicacao da formatacao de nota, e _normalizar_sugestoes cortando antes de filtrar. CINCO testes eram vacuo. Achados que viraram issue: #418 (ready-for-human, retencao/treinamento no OpenRouter, vale para o app todo porque process_transcricao ja manda transcricao inteira de reuniao) e #419 (setor da manifestacao e texto livre sem taxonomia nem max_length, embora exigir_setor_da_taxonomia ja exista). PROVA DO CODIGO NOVO: coolify deploy list mostrou o build do commit 089d7e3, o merge do PR; /health sozinho so provaria restart. ADRs 0034, 0036, 0037, 0013."
-    },
-    {
-      "at": "2026-08-27T22:17:00-03:00",
-      "sha": "adcd408",
-      "app_version": "0.79.0",
-      "subject": "Pseudonimizacao da Ouvidoria como funcao pura, mergeada com a lacuna de NOME escrita e travada por teste",
-      "raw_subject": "feat(ouvidoria): pseudonimizacao como funcao pura",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 185,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": "80e551f",
-      "notes": "PR #395, issue #342 (I4 do PRD #319). DECISAO HUMANA (opcao A, Pedro, 27/08): mergear o que existe sendo honesto sobre o que ele nao faz, em vez de gastar uma terceira rodada em regex de nome. CPF, telefone, email e Protocolo sao solidos (dois ataques independentes nao acharam saida). A regra de NOME nao cumpre o criterio de aceite: quatro vazamentos medidos e reproduzidos, todos escritos na secao 'Limites conhecidos' do docstring e travados por teste em TestLimitesConhecidosDoNome, que asserta o nome SOBREVIVENDO (sem xfail: xfail some do relatorio e ninguem le). Quem consertar a regra ve os quatro ficarem vermelhos e le o comentario. Os quatro: (1) nome completo em minusculas sem pista vaza 20 de 20, e e o canal do QR do cartaz (ADR 0036); (2) o teto de palavras da pista conta conectivo, entao 'maria da conceicao ferreira' sai '[NOME] ferreira'; (3) a guarda de caixa alta roda DEPOIS das substituicoes e os marcadores sao maiusculos, entao quanto mais dado pessoal o relato tem, maior a chance de o nome ficar; (4) sobrenome com cara de verbo ('Clemente') escapa das duas regras. Follow-up da lacuna de NOME: #412. Outros identificadores: #398. Verificacao: /health deu 0.79.0, mas so prova restart (APP_VERSION setado pre-merge) e a fatia nao tem rota nova; a prova do codigo veio no deploy seguinte. ADR 0034."
-    },
-    {
-      "at": "2026-08-27T00:55:00-03:00",
-      "sha": "0b89cfe",
-      "app_version": "0.74.0",
-      "subject": "Ouvidoria ganha os numeros do periodo e a retencao de cinco anos; convenios por especialidade sao podados",
-      "raw_subject": "feat(dados-atendimento): poda dos convenios por especialidade (tela, rotas admin e endpoint da Ana) (#392)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "079_ouvidoria_retencao_anonimizacao.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Deploy unico cobrindo quatro PRs de duas sessoes paralelas. Da onda do PRD #319: #396 (issue #341, modulo de metricas do periodo, fonte unica dos numeros que o painel #344 e o PDF #345 vao consumir) e #394 (issue #343, retencao com anonimizacao apos cinco anos, migration 079 aplicada no Studio antes do merge). De outra sessao: #393 (Espelho da Global Health elo 1, PRD #385) e #392 (poda dos convenios por especialidade). Corrida de bump entre sessoes: o bump 0.72.0 desta onda foi superado pelo 0.74.0 da outra sessao antes do deploy, e o deploy pegou o topo da main com tudo junto. As duas fatias da onda passaram por duas rodadas de review independente cada, com 11 achados no #396 e 5 no #394. A fatia #342 (pseudonimizacao) NAO entrou: parou em ready-for-human apos duas rodadas sem veredito limpo."
     }
   ]
 }

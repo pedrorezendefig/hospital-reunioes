@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-08T20:13:00-03:00",
+  "updated_at": "2026-09-08T20:55:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.115.1",
+  "last_app_version": "0.115.3",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "a4f4d44",
-      "last_deploy_at": "2026-09-08T20:09:06-03:00",
+      "last_deploy_sha": "387af87",
+      "last_deploy_at": "2026-09-08T20:48:21-03:00",
       "last_health_check": {
-        "at": "2026-09-08T20:12:40-03:00",
-        "latency_ms": 1434,
+        "at": "2026-09-08T20:54:00-03:00",
+        "latency_ms": 134,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 103,
+      "build_duration_seconds": null,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "a4f4d44",
-      "last_deploy_at": "2026-09-08T20:11:57-03:00",
+      "last_deploy_sha": "387af87",
+      "last_deploy_at": "2026-09-08T20:52:33-03:00",
       "last_health_check": {
-        "at": "2026-09-08T20:12:41-03:00",
-        "latency_ms": 311,
+        "at": "2026-09-08T20:54:00-03:00",
+        "latency_ms": 83,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 274,
+      "build_duration_seconds": null,
       "env_count": 5
     },
     {
@@ -159,39 +159,47 @@
   },
   "gates": [
     {
-      "name": "Onda 1 desta sessao: issue #622 (fatia P, sem PRD pai), sozinha, com --paralelo 1. Fechou em 1 tentativa de desenvolvimento",
+      "name": "Onda 1 desta sessao: issues #625 (fatia M) e #623 (fatia P), rodadas em paralelo. As duas fecharam o desenvolvimento em 1 tentativa, com CI verde de primeira",
       "status": "ok"
     },
     {
-      "name": "Revisor independente (ADR 0035), 2 lentes em agentes separados (codigo e seguranca, porque o diff encosta em guarda de autorizacao): as duas voltaram LIMPAS na rodada 1, zero must-fix. Nenhuma rodada de correcao foi necessaria",
+      "name": "Revisor independente (ADR 0035): o #629 levou 1 revisor de 2 lentes e voltou LIMPO na rodada 1 (0 must-fix, 5 nice-to-have). O #630 foi classificado area sensivel e levou 2 revisores dedicados em paralelo, que acharam 3 must-fix na rodada 1 e confirmaram tudo limpo na rodada 2",
       "status": "ok"
     },
     {
-      "name": "Prova por mutacao: 7 mutantes, todos mortos, sendo 2 plantados no proprio detector. O obrigatorio (tirar anonimizada_em da tupla de carregar_manifestacao) matou os dois testes novos",
-      "status": "ok"
-    },
-    {
-      "name": "Reuso em vez de guarda nova: as duas rotas chamam o helper barrar_caso_apagado criado no #620, que passa a segurar cinco portas. Rotas de email ficaram fora por decisao de escopo na triagem de 08/09/2026",
-      "status": "ok"
-    },
-    {
-      "name": "Varredura das 22 rotas de escrita de ouvidoria.py pelo revisor: nao sobrou terceira porta analoga no painel. As outras que escrevem no caso ja sao barradas pela pre-condicao de estado, porque caso apagado e sempre encerrado",
-      "status": "ok"
-    },
-    {
-      "name": "Sem migration nesta fatia: o carimbo anonimizada_em ja existe desde a migration 079. Nada para o humano aplicar no Studio",
-      "status": "ok"
-    },
-    {
-      "name": "Version match: /api/health devolveu 0.115.1, igual ao APP_VERSION setado no Coolify antes do merge",
-      "status": "ok"
-    },
-    {
-      "name": "Trava do semaforo estava presa ha 250 min na chave 2efc47ae, apontando para o PR #626 ja mergeado. Sem build rodando no Coolify, foi solta com --forcar antes desta onda pegar a sua",
+      "name": "A guarda anti-SSRF do PDF do POP estava INERTE em producao desde a issue #152: o url_fetcher ia no write_pdf, e quem busca recursos e o objeto HTML. Nao e regressao do #630, e o #630 e que fecha o buraco. Atenuantes: rota autenticada e bleach como primeira camada",
       "status": "warn"
     },
     {
-      "name": "O deploy da v0.115.0 (ad0b956, PR #626, issue #594) subiu as 19:01 e ficou SEM bookkeeping: a sessao dona morreu segurando a trava. Esta sessao reconstruiu a entrada de history.json a partir de git e Coolify, sem inventar narrativa",
+      "name": "O proprio port do #630 criou um bug novo (o self._request preso na recusa envenenava a busca seguinte), e os DOIS revisores o acharam por caminhos independentes, cada um reproduzindo por execucao. Conserto de tres linhas, travado por teste que reusa o mesmo fetcher nas tres sequencias",
+      "status": "ok"
+    },
+    {
+      "name": "O autor do #630 propos piso >=70 com justificativa falsa. O revisor baixou oito wheels do PyPI e provou que URLFetcher existe desde o 68.0; o orquestrador decidiu por >=68, e o revisor validou rodando a guarda real em venvs 68.0, 68.1 e 69.0",
+      "status": "ok"
+    },
+    {
+      "name": "Prova por mutacao: 5 mutantes no #629 e 14 no #630, com mutantes plantados no proprio detector nos dois PRs. Unico sobrevivente e o B2 do #630, equivalente de verdade, confirmado de forma independente pelos dois revisores",
+      "status": "ok"
+    },
+    {
+      "name": "Sem migration nas duas fatias. Nenhum comportamento observavel de rota muda no #629, e o #630 nao mexe em rota, entidade nem schema",
+      "status": "ok"
+    },
+    {
+      "name": "Version match: /api/health devolveu 0.115.3 e o HTML servido do frontend traz 0.115.3 embutido, o que prova os dois lados construidos do codigo novo",
+      "status": "ok"
+    },
+    {
+      "name": "Nenhuma das duas mudancas e observavel de fora sem login: sao refactor interno e guarda de PDF em rota autenticada. Nao existe prova externa de codigo novo em prod alem do version match e do build do frontend, e isso fica dito em vez de maquiado",
+      "status": "warn"
+    },
+    {
+      "name": "Dois merges na main nesta onda, dois builds pelo webhook. Inerente ao auto-deploy por push, nao contornavel pelo orquestrador. O APP_VERSION foi sincronizado com a versao FINAL (0.115.3) antes do ultimo merge, entao o backend nunca ficou mentindo a versao",
+      "status": "warn"
+    },
+    {
+      "name": "O coolify deploy list quebrou com erro de unmarshal do JSON (CLI 1.7.x com 1.8.0 disponivel). Nao bloqueou nada: o monitoramento foi feito por /api/health e pelo HTML servido",
       "status": "warn"
     }
   ],
@@ -199,28 +207,28 @@
     {
       "kind": "ok",
       "title": "Tudo verde",
-      "text": "Deploy a4f4d44 saudavel na v0.115.1. Backend e frontend construidos do commit certo, /api/health com db healthy."
+      "text": "Deploy 387af87 saudavel na v0.115.3. Backend e frontend construidos do commit certo, /api/health com db healthy em 134 ms e o frontend respondendo em 83 ms."
     },
     {
       "kind": "warn",
-      "title": "Terceira porta de upload sem guarda",
-      "text": "Issue #631 (needs-triage), achado do revisor do PR #628: POST /api/ouvidoria-setor/{token}/responder sobe binario para o mesmo bucket sem passar por barrar_caso_apagado. Hoje esta segura so por consequencia (exige status aguardando_area e a retencao so carimba caso encerrado). A #595 mexe justamente no apagamento, entao decidir antes dela subir."
+      "title": "Tres geradores de PDF sem guarda nenhuma",
+      "text": "pdf_generator.py (Ata), ouvidoria_relatorio.py e ouvidoria_pontos.py chamam HTML(...).write_pdf() sem url_fetcher, ou seja, com o fetcher padrao e sem recusa de file:// nem de host privado. E estado pre-existente, mas ganhou outro peso agora que se sabe que a guarda do POP tambem estava morta desde o #152. Merece issue propria."
     },
     {
       "kind": "info",
-      "title": "Fila desta sessao",
-      "text": "Faltam a #595 (apagar pela Diretoria, migration 100) e a #627 (arquivar em lote com RPC, migration 101). Nessa ordem: as duas mexem em ouvidoria.py e a 101 nasce depois da 100."
+      "title": "Imprecisao conhecida no #630",
+      "text": "O docstring de _criar_pdf_url_fetcher ainda diz que a partir do 70 o fetcher e uma classe, mas o piso agora e 68, onde as duas formas coexistem. Nao bloqueou o merge por decisao do humano no checkpoint. A guarda tambem nao recusa multicast (224.0.0.0/4), pre-existente."
     },
     {
       "kind": "info",
-      "title": "Auditoria pendente",
-      "text": "Quando a #595 e a #627 fecharem, auditar o PRD #591 contra producao (ADR 0029). As filhas #592, #593 e #594 ja fecharam."
+      "title": "Nice-to-have registrados nos PRs",
+      "text": "Do #629: falta teste para o quarto caso (carimbo antigo mais prazo furado agora), ler_instante virou ponto unico sem teste proprio, e o merge de dicts deixa o chamador sobrescrever prazo_area_em. Do #630: o teste de regressao do _request passa em vacuo em quem instalar 68.x (cabe marcar por versao) e a invariante das tres linhas de limpeza depende de disciplina."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "a4f4d44",
+    "sha": "387af87",
     "result": "healthy",
-    "duration_seconds": 396
+    "duration_seconds": null
   }
 }
