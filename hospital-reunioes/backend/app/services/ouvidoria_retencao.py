@@ -1,4 +1,5 @@
-"""Retenção da Ouvidoria: anonimização após cinco anos (issue #343, ADR 0034).
+"""Retenção da Ouvidoria: anonimização após cinco anos (issue #343, ADR 0034) e
+a porta antecipada da Diretoria (issue #595, ADR 0047).
 
 A manifestação encerrada há mais de cinco anos perde o Dossiê e vira estatística.
 O que sai é o que identifica ou narra o caso; o que fica é o que os relatórios
@@ -37,12 +38,26 @@ aparece em lugar nenhum, e o silêncio lê igual a "preservar de propósito" e a
     o histórico de prestação de contas da Ouvidoria sem devolver privacidade a
     ninguém.
 
-Quem chama é o scheduler (app/cron/scheduler.py), que carrega o relógio; aqui
-vive a lógica, testável com um Supabase falso.
+**Duas portas, uma política.** O cron dos cinco anos (`anonimizar_encerradas
+_antigas`) e o ato da Diretoria (`apagar_caso`, chamado pela rota de
+apagamento) terminam no mesmo estado, porque são o mesmo serviço: o que muda
+entre eles é a CHAVE que abre a política sobre aquele caso, e ela é o
+`Apagamento` que o chamador monta. Ali estão também quem assina o movimento da
+trilha e o motivo escrito, que só a porta da Diretoria tem.
+
+A chave não é decoração: ela é a mesma régua que a guarda de UPDATE da trilha
+confere no banco (migrations 079 e 100), e é reconferida por leitura antes de
+cada passo destrutivo. Serviço e banco dizendo coisas diferentes aqui seria a
+varredura destruindo os registros filhos para só então esbarrar no gatilho.
+
+Quem chama é o scheduler (app/cron/scheduler.py), que carrega o relógio, e a
+rota `POST /manifestacoes/{id}/apagamento`; aqui vive a lógica, testável com um
+Supabase falso.
 """
 
 from __future__ import annotations
 
+import dataclasses
 import datetime as dt
 import logging
 
@@ -64,9 +79,95 @@ ANOS_DE_RETENCAO = 5
 # uma varredura infinita segurando o scheduler.
 LOTE_POR_RODADA = 100
 
-# Quem assina o movimento da retenção. É por este nome que a rodada seguinte
-# reconhece um movimento já gravado e não grava outro.
+# Quem assina o movimento quando quem apaga é o cron dos cinco anos. A porta
+# antecipada assina com o nome de quem pediu, que é gente do hospital.
 AUTOR_DA_RETENCAO = "Sistema (retenção)"
+
+# A marca que abre a observação do movimento do apagamento, nas DUAS portas.
+#
+# É por ela que a rodada seguinte reconhece um movimento já gravado (e não grava
+# outro), e é por ela que a linha do tempo sabe qual movimento apagou o caso
+# para creditar o autor no aviso (issue #593). Era o `autor_nome` que fazia os
+# dois papéis, e ele deixou de servir no dia em que a Diretoria passou a assinar
+# com nome de pessoa: a marca no texto reconhece as duas portas, o nome de quem
+# assinou continua onde sempre esteve, no `autor_nome`.
+#
+# Quem escreve e quem lê usam esta mesma constante: em palavras separadas, mudar
+# a frase de um lado faria o outro parar de reconhecer o ato, em silêncio.
+MARCA_DO_APAGAMENTO = "Apagamento do Dossiê"
+_SEPARADOR = ": "
+
+# O que a observação diz, e por que ela descreve o ato EM CURSO e não um serviço
+# já feito: o movimento é gravado antes de qualquer coisa ser apagada, e a
+# trilha é append-only. Uma frase no pretérito viraria afirmação falsa e
+# permanente sobre um Dossiê ainda inteiro, se a rodada morresse logo depois
+# daqui. Quem atesta a conclusão é o carimbo `anonimizada_em`.
+_O_QUE_SAI = (
+    "A anonimização começa aqui e retira do caso o relato, a identificação do manifestante, "
+    "os anexos e o conteúdo dos demais registros, preservando os campos estatísticos. "
+    "O carimbo `anonimizada_em` na manifestação é o que atesta a conclusão."
+)
+
+
+def observacao_do_apagamento(motivo: str | None) -> str:
+    """O texto do movimento que entra na trilha, nas duas portas.
+
+    Este é o único movimento do caso que sobrevive à limpeza de observações,
+    então o que se escreve aqui fica para sempre. Pela porta dos cinco anos ele
+    não cita nada do Dossiê, de propósito: um nome escrito ali seria dado
+    pessoal que a retenção nunca mais apagaria.
+
+    Pela porta da Diretoria o motivo entra, e essa é uma escolha consciente da
+    ADR 0047: sem ele, o caso apagado não teria como explicar o próprio buraco.
+    Quem escreve o motivo é a Diretoria, avisada na tela de que ele fica."""
+    if motivo is None:
+        abertura = f"caso alcançado pela política de retenção de {ANOS_DE_RETENCAO} anos. {_O_QUE_SAI}"
+        return f"{MARCA_DO_APAGAMENTO}{_SEPARADOR}{abertura}"
+    return f"{MARCA_DO_APAGAMENTO}{_SEPARADOR}pedido pela Diretoria Executiva. {_O_QUE_SAI} Motivo: {motivo}"
+
+
+def e_movimento_de_apagamento(observacao: str | None) -> bool:
+    """O movimento é o do apagamento do caso?
+
+    A resposta sai da marca, e não do autor nem do par de estados: a Diretoria
+    assina com nome de pessoa, e o par `encerrado` para `encerrado` também serve
+    a atos de job que não apagaram nada."""
+    return str(observacao or "").startswith(MARCA_DO_APAGAMENTO)
+
+
+@dataclasses.dataclass(frozen=True)
+class Apagamento:
+    """Quem apaga, por quê, e por qual das duas chaves da política.
+
+    `corte` é a chave dos cinco anos (o instante a partir do qual o
+    encerramento ainda está dentro do prazo); `pedido_em` é a chave da porta
+    antecipada (o carimbo do pedido que a rota gravou). Exatamente uma delas
+    vem preenchida, e é ela que filtra a reconferência de cada passo
+    destrutivo. As construtoras abaixo são as duas únicas formas legítimas de
+    montar isto, e existem para que a exclusividade não dependa de quem chama
+    lembrar dela."""
+
+    autor: str
+    autor_id: str | None = None
+    motivo: str | None = None
+    corte: dt.datetime | None = None
+    pedido_em: str | None = None
+
+
+def pelos_cinco_anos(agora: dt.datetime) -> Apagamento:
+    """A porta do cron: autor de sistema, sem motivo, chave do prazo."""
+    return Apagamento(autor=AUTOR_DA_RETENCAO, corte=data_de_corte(agora))
+
+
+def pela_diretoria(autor: str, autor_id: str, motivo: str, pedido_em: str) -> Apagamento:
+    """A porta antecipada (ADR 0047): quem assinou, o motivo escrito, e o
+    carimbo do pedido como chave.
+
+    A chave é o carimbo DESTE pedido, e não "existe algum pedido": assim a
+    reconferência de cada passo destrutivo recusa também o caso cujo pedido foi
+    reescrito no meio da rodada."""
+    return Apagamento(autor=autor, autor_id=autor_id, motivo=motivo, pedido_em=pedido_em)
+
 
 # O Dossiê na manifestação: o que a retenção apaga. Cada campo é texto livre
 # sobre o caso ou identificação de quem manifestou.
@@ -178,6 +279,19 @@ CAMPOS_ESTATISTICOS: tuple[str, ...] = (
     # depois, um caso que a Ouvidoria já tinha guardado.
     "arquivada_em",
     "arquivada_por",
+    # O pedido de apagamento (issue #595, ADR 0047). Ficam, e é o ponto da
+    # decisão: eles são o REGISTRO DO ATO, e sobrevivem junto do protocolo e da
+    # trilha. Apagados com o Dossiê, o caso apagado pela Diretoria não saberia
+    # dizer quem mandou apagar nem por quê, e o aviso na tela do caso ficaria
+    # sem a metade que explica o buraco.
+    #
+    # `apagamento_motivo` é o único texto livre que a política preserva, e isso
+    # é consciente: quem o escreve é a Diretoria, na tela que avisa que ele
+    # fica. No caso apagado pelos cinco anos os três continuam nulos, porque ali
+    # ninguém pediu nada, o prazo venceu.
+    "apagamento_pedido_em",
+    "apagamento_pedido_por",
+    "apagamento_motivo",
 )
 
 # O que o job precisa do caso para decidir e anonimizar.
@@ -225,13 +339,14 @@ def anonimizar_encerradas_antigas(supabase, agora: dt.datetime) -> int:
         return 0
 
     anonimizadas = 0
+    apagamento = pelos_cinco_anos(agora)
     for caso in result.data or []:
-        if _anonimizar_caso(supabase, caso, agora):
+        if apagar_caso(supabase, caso, agora, apagamento):
             anonimizadas += 1
     return anonimizadas
 
 
-def _anonimizar_caso(supabase, caso: dict, agora: dt.datetime) -> bool:
+def apagar_caso(supabase, caso: dict, agora: dt.datetime, apagamento: Apagamento) -> bool:
     """Anonimiza um caso inteiro, na ordem que sobrevive a uma falha no meio.
 
     O movimento da trilha vem PRIMEIRO: ele é o registro que prova a
@@ -255,57 +370,63 @@ def _anonimizar_caso(supabase, caso: dict, agora: dt.datetime) -> bool:
     reconfere antes de agir que a política ainda cobre o caso
     (`_caso_ainda_anonimizavel`), para que um caso reaberto (ou reaberto e
     reencerrado dentro do prazo) no meio da rodada não perca os registros
-    filhos e só então esbarre na guarda do `_apagar_dossie`."""
-    # O mesmo corte da varredura: `data_de_corte` é determinística e `agora` é
-    # o relógio da rodada inteira.
-    corte = data_de_corte(agora)
-    movimento_id = _garantir_movimento(supabase, caso["id"])
+    filhos e só então esbarre na guarda do `_apagar_dossie`.
+
+    É a entrada pública, e é por ela que as duas portas passam: o cron, um caso
+    por vez dentro da varredura, e a rota da Diretoria, no caso que ela pediu.
+    O `apagamento` diz quem assina, o motivo e por qual chave da política aquele
+    caso é alcançado."""
+    movimento_id = _garantir_movimento(supabase, caso["id"], apagamento)
     if movimento_id is None:
         return False
     if not _limpar_observacoes_da_trilha(supabase, caso["id"], exceto=movimento_id):
         return False
-    if not _limpar_tentativas_de_contato(supabase, caso["id"], corte):
+    if not _limpar_tentativas_de_contato(supabase, caso["id"], apagamento):
         return False
-    if not _limpar_prorrogacoes(supabase, caso["id"], corte):
+    if not _limpar_prorrogacoes(supabase, caso["id"], apagamento):
         return False
-    if not _limpar_notificacoes(supabase, caso["id"], corte):
+    if not _limpar_notificacoes(supabase, caso["id"], apagamento):
         return False
-    if not _apagar_anexos(supabase, caso["id"], corte):
+    if not _apagar_anexos(supabase, caso["id"], apagamento):
         return False
     return _apagar_dossie(supabase, caso["id"], agora)
 
 
-def _garantir_movimento(supabase, manifestacao_id: str) -> str | None:
+def _garantir_movimento(supabase, manifestacao_id: str, apagamento: Apagamento) -> str | None:
     """O ato entra na trilha do caso, uma vez só. Devolve o id do movimento, ou
     None quando não foi possível garantir que ele existe.
 
     Não é transição de estado (o caso segue encerrado), então o insert é
     direto, no molde do movimento de prazo rompido. A idempotência não vem do
-    carimbo da manifestação (que ainda não existe neste ponto) e sim da
-    assinatura: um movimento da retenção já gravado é reaproveitado.
+    carimbo da manifestação (que ainda não existe neste ponto) e sim da MARCA
+    da observação: um movimento de apagamento já gravado é reaproveitado.
 
-    A observação não cita nada do Dossiê: este é o único movimento do caso que
-    sobrevive à limpeza de observações, e um nome escrito aqui seria dado
-    pessoal que a retenção nunca mais apagaria.
+    A marca substituiu a assinatura desde a issue #595. Reconhecer o movimento
+    pelo `autor_nome` funcionava enquanto só o cron apagava; com a Diretoria
+    assinando com nome de pessoa, a régua por autor deixaria de casar e a
+    segunda chamada gravaria um movimento novo (e o aviso da tela perderia o
+    crédito de quem apagou, issue #593).
 
-    E ela descreve o ato EM CURSO, não um serviço já feito. O movimento é
-    gravado antes de qualquer coisa ser apagada, e a trilha é append-only: uma
-    frase no pretérito viraria afirmação falsa e permanente sobre um Dossiê
-    ainda inteiro, se a rodada morresse logo depois daqui. Quem atesta a
-    conclusão é o carimbo `anonimizada_em`, que só existe no fim."""
+    O filtro é feito aqui, e não no PostgREST, de propósito: um `like` com
+    curinga é mais uma sintaxe para errar em silêncio, e a trilha de um caso
+    cabe folgadamente na memória. Quem decide o que é movimento de apagamento é
+    `e_movimento_de_apagamento`, a mesma função que a linha do tempo usa.
+
+    A observação vem de `observacao_do_apagamento`, que explica o que fica
+    escrito ali para sempre."""
     try:
         existentes = (
             supabase.table("ouvidoria_movimentos")
-            .select("id")
+            .select("id, observacao")
             .eq("manifestacao_id", manifestacao_id)
-            .eq("autor_nome", AUTOR_DA_RETENCAO)
             .execute()
         )
     except Exception:
         logger.error("[Ouvidoria] Falha ao conferir o movimento de anonimização do caso %s", manifestacao_id)
         return None
-    if existentes.data:
-        return str(existentes.data[0]["id"])
+    for movimento in existentes.data or []:
+        if e_movimento_de_apagamento(movimento.get("observacao")):
+            return str(movimento["id"])
 
     try:
         gravado = (
@@ -315,15 +436,9 @@ def _garantir_movimento(supabase, manifestacao_id: str) -> str | None:
                     "manifestacao_id": manifestacao_id,
                     "estado_anterior": ENCERRADO,
                     "estado_novo": ENCERRADO,
-                    "autor_id": None,
-                    "autor_nome": AUTOR_DA_RETENCAO,
-                    "observacao": (
-                        f"Caso alcançado pela política de retenção de {ANOS_DE_RETENCAO} anos: "
-                        "a anonimização começa aqui e retira do caso o relato, a identificação "
-                        "do manifestante, os anexos e o conteúdo dos demais registros, "
-                        "preservando os campos estatísticos. O carimbo `anonimizada_em` na "
-                        "manifestação é o que atesta a conclusão."
-                    ),
+                    "autor_id": apagamento.autor_id,
+                    "autor_nome": apagamento.autor,
+                    "observacao": observacao_do_apagamento(apagamento.motivo),
                 }
             )
             .execute()
@@ -373,9 +488,10 @@ def _limpar_observacoes_da_trilha(supabase, manifestacao_id: str, exceto: str) -
     return True
 
 
-def _caso_ainda_anonimizavel(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:
+def _caso_ainda_anonimizavel(supabase, manifestacao_id: str, apagamento: Apagamento) -> bool:
     """Confere na linha do caso que a política de retenção ainda o cobre:
-    encerrado, sem carimbo e encerrado antes do corte dos cinco anos.
+    encerrado, sem carimbo, e alcançado pela chave daquele apagamento (o corte
+    dos cinco anos, ou o pedido que a Diretoria gravou).
 
     As tabelas filhas não têm `status` nem `anonimizada_em`, e o PostgREST não
     filtra UPDATE por coluna de outra tabela: a guarda que o `_apagar_dossie`
@@ -388,23 +504,31 @@ def _caso_ainda_anonimizavel(supabase, manifestacao_id: str, corte: dt.datetime)
     perdia tentativas, prorrogações, notificações e anexos e ainda assim via o
     `_apagar_dossie` recusar, ficando meio triturado com o Dossiê em pé.
 
-    O prazo entra junto com o estado, e não só o estado: um caso que reabriu e
+    A chave entra junto com o estado, e não só o estado: um caso que reabriu e
     foi reencerrado no meio da rodada volta a ter `status = encerrado` e
     passaria por uma guarda que só olhasse isso, e aí o Dossiê de um caso
     encerrado ontem seria triturado dentro do prazo. É a mesma condição que a
-    varredura usa e que o gatilho da migration 079 confere no banco.
+    varredura usa e que o gatilho das migrations 079 e 100 confere no banco.
+
+    Pela porta antecipada a chave é o carimbo daquele pedido, e não o prazo:
+    exigir os cinco anos aqui faria o serviço recusar tudo o que a Diretoria
+    apagasse, e exigir só "algum pedido gravado" deixaria passar o caso cujo
+    pedido foi reescrito no meio da rodada.
 
     Falha ao ler também é não: sem confirmação, nada é destruído."""
+    consulta = (
+        supabase.table("ouvidoria_protocolos")
+        .select("id")
+        .eq("id", manifestacao_id)
+        .eq("status", ENCERRADO)
+        .is_("anonimizada_em", "null")
+    )
+    if apagamento.pedido_em is not None:
+        consulta = consulta.eq("apagamento_pedido_em", apagamento.pedido_em)
+    else:
+        consulta = consulta.lte("encerrada_em", apagamento.corte.isoformat())
     try:
-        atual = (
-            supabase.table("ouvidoria_protocolos")
-            .select("id")
-            .eq("id", manifestacao_id)
-            .eq("status", ENCERRADO)
-            .is_("anonimizada_em", "null")
-            .lte("encerrada_em", corte.isoformat())
-            .execute()
-        )
+        atual = consulta.execute()
     except Exception:
         logger.error("[Ouvidoria] Falha ao reconferir o estado do caso %s antes de anonimizar", manifestacao_id)
         return False
@@ -417,14 +541,14 @@ def _caso_ainda_anonimizavel(supabase, manifestacao_id: str, corte: dt.datetime)
     return True
 
 
-def _limpar_tentativas_de_contato(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:
+def _limpar_tentativas_de_contato(supabase, manifestacao_id: str, apagamento: Apagamento) -> bool:
     """Zera a `observacao` das tentativas de contato do caso.
 
     É o que o ouvidor escreveu ao tentar falar com quem manifestou, tipicamente
     o telefone discado e o que foi dito. As linhas ficam, e com elas `canal` e
     `tentada_em`: quantas vezes e por onde a Ouvidoria tentou é estatística do
     encerramento por sem retorno, não relato de ninguém."""
-    if not _caso_ainda_anonimizavel(supabase, manifestacao_id, corte):
+    if not _caso_ainda_anonimizavel(supabase, manifestacao_id, apagamento):
         return False
     try:
         (
@@ -439,13 +563,13 @@ def _limpar_tentativas_de_contato(supabase, manifestacao_id: str, corte: dt.date
     return True
 
 
-def _limpar_prorrogacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:
+def _limpar_prorrogacoes(supabase, manifestacao_id: str, apagamento: Apagamento) -> bool:
     """Zera as duas justificativas da prorrogação do caso.
 
     `justificativa` é NOT NULL com CHECK anti-vazio (migration 073), então vira
     marcador. Dias pedidos, prazos e o status da decisão ficam: é deles que sai
     a taxa de prorrogação por área do PRD #319."""
-    if not _caso_ainda_anonimizavel(supabase, manifestacao_id, corte):
+    if not _caso_ainda_anonimizavel(supabase, manifestacao_id, apagamento):
         return False
     try:
         (
@@ -460,7 +584,7 @@ def _limpar_prorrogacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> 
     return True
 
 
-def _limpar_notificacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:
+def _limpar_notificacoes(supabase, manifestacao_id: str, apagamento: Apagamento) -> bool:
     """Zera o `detalhe` de todas as notificações do caso, e a identificação das
     que foram para o MANIFESTANTE.
 
@@ -495,7 +619,7 @@ def _limpar_notificacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> 
 
     O resto da linha fica: `gatilho`, `status` e as datas são o rastro de
     entrega, e `ultimo_erro` é mensagem do provedor de email."""
-    if not _caso_ainda_anonimizavel(supabase, manifestacao_id, corte):
+    if not _caso_ainda_anonimizavel(supabase, manifestacao_id, apagamento):
         return False
     try:
         (
@@ -536,7 +660,7 @@ def _limpar_notificacoes(supabase, manifestacao_id: str, corte: dt.datetime) -> 
     return True
 
 
-def _apagar_anexos(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:
+def _apagar_anexos(supabase, manifestacao_id: str, apagamento: Apagamento) -> bool:
     """Apaga os anexos do caso um a um: o binário primeiro, a linha dele em
     seguida, e só então o próximo anexo.
 
@@ -560,7 +684,7 @@ def _apagar_anexos(supabase, manifestacao_id: str, corte: dt.datetime) -> bool:
     linha dele falhar logo depois, aquele anexo trava o caso e precisa de
     humano. É um passo do tamanho de uma linha, contra os dois passos e todos
     os anexos de antes."""
-    if not _caso_ainda_anonimizavel(supabase, manifestacao_id, corte):
+    if not _caso_ainda_anonimizavel(supabase, manifestacao_id, apagamento):
         return False
     try:
         result = (

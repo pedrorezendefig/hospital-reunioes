@@ -9,6 +9,13 @@ interface Props {
   description: string;
   confirmLabel: string;
   confirmVariant?: "danger" | "warning" | "primary";
+  /**
+   * O exemplo dentro do campo. Opcional, e o padrao e o do cadastro de
+   * usuarios, de onde este modal nasceu: quem o reusa em outro assunto (a
+   * Ouvidoria, issue #595) passa um exemplo do proprio assunto, senao o campo
+   * sugere um motivo que nao tem nada a ver com o ato que esta sendo pedido.
+   */
+  placeholder?: string;
   onClose: () => void;
   onConfirm: (reason: string) => Promise<boolean | void>;
 }
@@ -24,6 +31,7 @@ export function ReasonModal({
   description,
   confirmLabel,
   confirmVariant = "danger",
+  placeholder = "Ex: usuário desligado, erro de cadastro…",
   onClose,
   onConfirm,
 }: Props) {
@@ -107,7 +115,7 @@ export function ReasonModal({
             required
             minLength={1}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
-            placeholder="Ex: usuário desligado, erro de cadastro…"
+            placeholder={placeholder}
           />
         </label>
       </form>

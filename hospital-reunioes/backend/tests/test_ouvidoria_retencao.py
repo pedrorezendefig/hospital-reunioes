@@ -95,6 +95,14 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         # nulo dos dois lados a afirmação de preservação ficaria sem dentes.
         "arquivada_em": "2020-08-15T10:00:00+00:00",
         "arquivada_por": "P10",
+        # O pedido de apagamento (issue #595, ADR 0047). Num caso alcançado
+        # pelos cinco anos os três seriam nulos na produção, porque ali ninguém
+        # pediu nada: preenchidos aqui pela mesma regra do bloco acima, já que
+        # com nulo dos dois lados a afirmação de preservação ficaria sem
+        # dentes. Eles são o registro do ato e a política não os apaga.
+        "apagamento_pedido_em": "2020-08-16T10:00:00+00:00",
+        "apagamento_pedido_por": "P11",
+        "apagamento_motivo": "Pedido da Diretoria em 16/08/2020.",
         # O Dossiê que a retenção apaga.
         "relato_integral": "Joana da Silva, RG 12.345.678, esperou tres horas na recepcao do dia 1.",
         "manifestante_nome": "Joana da Silva",
