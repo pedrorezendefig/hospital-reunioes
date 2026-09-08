@@ -877,6 +877,38 @@ class TestUrlFetcherDoPdf:
         with pytest.raises(ValueError, match="host privado/loopback recusado"):
             self._fetcher().open(request.Request("http://127.0.0.1/interno"))
 
+    def test_recusa_no_redirect_nao_envenena_a_busca_seguinte(self):
+        """A recusa que chega pelo `open` não pode deixar a requisição recusada
+        pendurada no fetcher.
+
+        Do WeasyPrint 69 em diante o `URLFetcher` guarda o `Request` do redirect
+        em `self._request` e só o limpa dentro do `fetch` do pai, depois do ponto
+        onde a guarda recusa. Sem limpar na recusa, a busca seguinte do mesmo PDF
+        reexecuta a URL recusada e devolve aqueles bytes como se fossem o recurso
+        legítimo. O fetcher é um só para o documento inteiro, então a janela é o
+        render todo.
+
+        As três sequências fazem a mesma pergunta, uma por recusa do `fetch`:
+        depois da recusa, o logo pedido volta sendo o logo. Tudo local, sem rede.
+        A primeira é a mais eloquente: sem a limpeza, pedir o logo devolve o
+        conteúdo de `/etc/passwd`.
+        """
+        from urllib import request
+
+        fetcher = self._fetcher(frozenset({LOGO_URI}))
+
+        with pytest.raises(ValueError, match="file:// não permitido"):
+            fetcher.open(request.Request("file:///etc/passwd"))
+        assert fetcher.fetch(LOGO_URI).read().startswith(b"\x89PNG")
+
+        with pytest.raises(ValueError, match="host privado/loopback recusado"):
+            fetcher.open(request.Request("http://127.0.0.1:9/interno"))
+        assert fetcher.fetch(LOGO_URI).read().startswith(b"\x89PNG")
+
+        with pytest.raises(ValueError, match="esquema de URL não permitido"):
+            fetcher.open(request.Request("ftp://127.0.0.1/x"))
+        assert fetcher.fetch(LOGO_URI).read().startswith(b"\x89PNG")
+
     def test_recusa_esquema_fora_de_file_http_data(self):
         with pytest.raises(ValueError, match="esquema de URL não permitido"):
             self._fetcher().fetch("ftp://exemplo.test/x")

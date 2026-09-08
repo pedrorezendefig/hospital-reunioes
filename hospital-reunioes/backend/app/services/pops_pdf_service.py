@@ -219,8 +219,10 @@ def _criar_pdf_url_fetcher(allowed_file_uris: frozenset[str] = frozenset()):
     A partir do WeasyPrint 70 o fetcher é uma classe (`weasyprint.urls.URLFetcher`),
     não mais a função `default_url_fetcher`: quem recusa precisa herdar dela, porque
     o `weasyprint.urls.fetch` lê `url_fetcher._fail_on_errors` ao tratar a exceção.
-    Herdar também faz a guarda valer no redirect, que o WeasyPrint reentrega ao
+    Herdar faz a guarda valer também no redirect, que o WeasyPrint reentrega ao
     próprio fetcher (um 302 para `127.0.0.1` volta a passar pela recusa de host).
+    Isso não sai de graça: o fetcher herdado tem estado, e a recusa precisa
+    limpá-lo. Ver a invariante no `fetch`.
 
     A classe nasce aqui dentro porque o import do WeasyPrint é lazy no módulo: ele
     exige libs nativas (glib/pango) que não existem em todo ambiente de teste.
@@ -229,22 +231,33 @@ def _criar_pdf_url_fetcher(allowed_file_uris: frozenset[str] = frozenset()):
 
     class _PdfUrlFetcher(URLFetcher):
         def fetch(self, url, headers=None):
+            # INVARIANTE: toda recusa limpa `self._request` antes de levantar.
+            # Do WeasyPrint 69 em diante o `URLFetcher` guarda o `Request` do
+            # redirect nesse campo e só o limpa dentro do `fetch` do pai, depois
+            # do ponto onde a guarda recusa. Sem limpar, a requisição recusada
+            # fica pendurada e a busca SEGUINTE do mesmo PDF a reexecuta,
+            # devolvendo aqueles bytes como se fossem o recurso legítimo: pedir
+            # o logo passava a devolver o alvo recusado. Recusa nova entra com
+            # a limpeza junto.
             partes = urlsplit(url)
             esquema = partes.scheme.lower()
 
             if esquema == "file":
                 if url in allowed_file_uris:
                     return super().fetch(url, headers)
+                self._request = None
                 raise ValueError(f"file:// não permitido no PDF do POP: {url}")
 
             if esquema in ("http", "https"):
                 if _host_e_privado(partes.hostname or ""):
+                    self._request = None
                     raise ValueError(f"host privado/loopback recusado no PDF do POP: {url}")
                 return super().fetch(url, headers)
 
             if esquema == "data":
                 return super().fetch(url, headers)
 
+            self._request = None
             raise ValueError(f"esquema de URL não permitido no PDF do POP: {esquema or url}")
 
     return _PdfUrlFetcher()

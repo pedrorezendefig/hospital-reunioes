@@ -919,7 +919,7 @@ requires-dist = [
     { name = "slowapi", specifier = ">=0.1.9" },
     { name = "supabase", specifier = ">=2.10.0" },
     { name = "uvicorn", extras = ["standard"], specifier = ">=0.44.0" },
-    { name = "weasyprint", specifier = ">=70" },
+    { name = "weasyprint", specifier = ">=68" },
 ]
 provides-extras = ["dev"]
 
