@@ -35,10 +35,17 @@ sys.path.insert(0, os.path.dirname(__file__))
 from test_ouvidoria_portal_setor import (  # noqa: E402
     _acionar,
     _client,
+    _TabelaFake,
     _token_do_email,
 )
 
 MOTIVO = "Este caso é do Centro Médico: a recepção não agenda consulta de especialidade."
+
+# Dois instantes anteriores ao relógio dos testes do portal (25/08/2026 17:00
+# UTC): um é o estouro que o caso já carregava de um ciclo fechado antes, o
+# outro é o vencimento que a área fura durante a própria devolução.
+ESTOURO_DE_UM_CICLO_ANTERIOR = "2026-08-18T20:00:00+00:00"
+PRAZO_QUE_A_AREA_FUROU = "2026-08-21T20:00:00+00:00"
 
 MIGRATIONS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "supabase", "migrations")
 MIGRATION = "098_ouvidoria_devolucao_a_ouvidoria.sql"
@@ -462,3 +469,109 @@ class TestFalhaEntreOClaimEATransicao:
         depois = _caso_no_banco(sb)
         assert depois["status"] == "em_classificacao"
         assert depois["prazo_area_em"] is None
+
+
+def _payloads_de_update(monkeypatch) -> list[tuple[str, dict]]:
+    """Cada update que a rota manda ao PostgREST daqui em diante, com o payload
+    exatamente como ele saiu.
+
+    O banco não responde a pergunta desta seção: coluna nunca escrita e coluna
+    escrita com `None` deixam a MESMA linha. Quem separa as duas é o payload, e
+    é nele que a chave precisa faltar."""
+    gravados: list[tuple[str, dict]] = []
+    update_de_verdade = _TabelaFake.update
+
+    def _espiar(self, payload: dict):
+        gravados.append((self.nome, dict(payload)))
+        return update_de_verdade(self, payload)
+
+    monkeypatch.setattr(_TabelaFake, "update", _espiar)
+    return gravados
+
+
+def _updates_do_caso(gravados: list[tuple[str, dict]]) -> list[dict]:
+    """Só os updates da manifestação, na ordem: a devolução do link mexe na
+    tabela dos tokens e não conta aqui."""
+    return [payload for nome, payload in gravados if nome == "ouvidoria_protocolos"]
+
+
+class TestOCarimboDoEstouroNoRollback:
+    """O rollback do prazo desfaz o que a ida escreveu, e nada além (issue #623).
+
+    `area_estourou_em` não tem dono exclusivo nesta rota: a devolução por
+    insuficiência grava a mesma coluna sem filtrar status. Por isso o que se
+    prova aqui é a AUSÊNCIA da chave no payload, e não o valor no banco:
+    mandar a chave com `None` é escrita cega sobre um carimbo que esta
+    requisição não decidiu apagar, o mesmo apagão que a ida já evita e que o
+    `except` repetia."""
+
+    def test_rollback_de_caso_que_nao_estourou_nao_toca_o_carimbo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Critério 1: sem carimbo a restaurar, a chave não entra no update."""
+        client, sb, token = _portal_com_caso_na_area(monkeypatch, _nunca_envia_email_de_verdade)
+        gravados = _payloads_de_update(monkeypatch)
+        sb.rpc_recusa = APIError({"message": "Transicao invalida", "code": "23514"})
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/devolver", json={"motivo": MOTIVO})
+
+        assert resposta.status_code == 409, resposta.text
+        ida, rollback = _updates_do_caso(gravados)
+        assert "area_estourou_em" not in ida, "a ida carimbou estouro num caso dentro do prazo"
+        assert "area_estourou_em" not in rollback, "o rollback apagou às cegas um carimbo que não era dele"
+
+    def test_rollback_de_caso_ja_estourado_devolve_o_carimbo_de_antes(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """Critério 1, o outro lado: quando a ida reescreveu o carimbo que já
+        estava lá, o rollback devolve aquele mesmo instante. O primeiro estouro
+        do caso é o que `cumprimento_da_area` lê, e ele não pode andar."""
+        client, sb, token = _portal_com_caso_na_area(monkeypatch, _nunca_envia_email_de_verdade)
+        _caso_no_banco(sb)["area_estourou_em"] = ESTOURO_DE_UM_CICLO_ANTERIOR
+        gravados = _payloads_de_update(monkeypatch)
+        sb.rpc_recusa = APIError({"message": "Transicao invalida", "code": "23514"})
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/devolver", json={"motivo": MOTIVO})
+
+        assert resposta.status_code == 409, resposta.text
+        ida, rollback = _updates_do_caso(gravados)
+        assert ida["area_estourou_em"] == ESTOURO_DE_UM_CICLO_ANTERIOR
+        assert rollback["area_estourou_em"] == ESTOURO_DE_UM_CICLO_ANTERIOR
+        assert _caso_no_banco(sb)["area_estourou_em"] == ESTOURO_DE_UM_CICLO_ANTERIOR
+
+    def test_rollback_apaga_o_carimbo_que_a_propria_ida_acabou_de_gravar(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """A guarda do #607, no caso em que a condicional mais aperta: a área
+        furou o prazo NESTA devolução, a ida carimbou o estouro e a transição
+        não entrou. Como o prazo volta, o carimbo tem que voltar junto: prazo
+        restaurado com estouro gravado deixa o caso `estourado` para sempre,
+        fora do alcance de qualquer prorrogação aprovada depois."""
+        client, sb, token = _portal_com_caso_na_area(monkeypatch, _nunca_envia_email_de_verdade)
+        _caso_no_banco(sb)["prazo_area_em"] = PRAZO_QUE_A_AREA_FUROU
+        gravados = _payloads_de_update(monkeypatch)
+        sb.rpc_recusa = APIError({"message": "Transicao invalida", "code": "23514"})
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/devolver", json={"motivo": MOTIVO})
+
+        assert resposta.status_code == 409, resposta.text
+        ida, rollback = _updates_do_caso(gravados)
+        assert ida["area_estourou_em"] == PRAZO_QUE_A_AREA_FUROU, "a ida não carimbou o prazo furado"
+        assert rollback["area_estourou_em"] is None
+        depois = _caso_no_banco(sb)
+        assert depois["prazo_area_em"] == PRAZO_QUE_A_AREA_FUROU
+        assert depois["area_estourou_em"] is None, "o caso ficou estourado por uma devolução que nunca entrou"
+
+    def test_devolucao_que_entra_deixa_o_carimbo_do_estouro_de_pe(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O contraste: sem falha na RPC não há rollback nenhum, e o estouro
+        consumado do ciclo que acabou fica gravado, que é o que a memória de
+        ciclos do #374 promete."""
+        client, sb, token = _portal_com_caso_na_area(monkeypatch, _nunca_envia_email_de_verdade)
+        _caso_no_banco(sb)["prazo_area_em"] = PRAZO_QUE_A_AREA_FUROU
+        gravados = _payloads_de_update(monkeypatch)
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/devolver", json={"motivo": MOTIVO})
+
+        assert resposta.status_code == 200, resposta.text
+        (ida,) = _updates_do_caso(gravados)
+        assert ida["prazo_area_em"] is None
+        assert ida["area_estourou_em"] == PRAZO_QUE_A_AREA_FUROU
+        depois = _caso_no_banco(sb)
+        assert depois["status"] == "em_classificacao"
+        assert depois["area_estourou_em"] == PRAZO_QUE_A_AREA_FUROU

@@ -35,6 +35,7 @@ from app.services.ouvidoria_anexos import AnexoRecusadoError, validar_anexo
 from app.services.ouvidoria_prazos import (
     TETO_PRORROGACAO_DIAS_UTEIS,
     estouro_consumado,
+    ler_instante,
     vencimento_prorrogado,
 )
 
@@ -84,11 +85,6 @@ def _indisponivel() -> HTTPException:
 def agora_utc() -> dt.datetime:
     """O relógio do módulo, num ponto só (mesmo padrão do painel)."""
     return dt.datetime.now(dt.UTC)
-
-
-def _instante(bruto) -> dt.datetime | None:
-    """O timestamp que o PostgREST devolve como texto, ou None quando vazio."""
-    return dt.datetime.fromisoformat(str(bruto)) if bruto else None
 
 
 def _carregar_caso(supabase, token: str, agora: dt.datetime) -> tuple[dict, dict]:
@@ -436,7 +432,7 @@ class DevolucaoAOuvidoria(BaseModel):
     motivo: str
 
 
-def _restaurar_prazo(supabase, vinculo: dict, prazo_anterior, estouro_anterior) -> bool:
+def _restaurar_prazo(supabase, vinculo: dict, prazo_anterior, carimbo_a_restaurar: dict) -> bool:
     """Devolve o vencimento da área quando a transição NÃO entrou, e só nesse
     caso. Devolve se restaurou de fato.
 
@@ -455,11 +451,16 @@ def _restaurar_prazo(supabase, vinculo: dict, prazo_anterior, estouro_anterior) 
     com o prazo de volta e o carimbo do estouro gravado, e
     `cumprimento_da_area` lê o carimbo antes de tudo. Uma prorrogação aprovada
     depois nunca mais conseguiria levar aquele caso a `cumprido` (issue #607).
+
+    Ele volta pelo `carimbo_a_restaurar`, e não como valor solto, para que a
+    coluna entre no update sob a MESMA condicional da ida: quem não escreveu
+    não desescreve. Incluir a chave quando a ida não a tocou é a escrita cega
+    que a ida já evita, só que pela porta do `except` (issue #623).
     """
     try:
         result = (
             supabase.table("ouvidoria_protocolos")
-            .update({"prazo_area_em": prazo_anterior, "area_estourou_em": estouro_anterior})
+            .update({"prazo_area_em": prazo_anterior} | carimbo_a_restaurar)
             .eq("id", vinculo["manifestacao_id"])
             .eq("status", "aguardando_area")
             .execute()
@@ -516,10 +517,10 @@ async def devolver_a_ouvidoria(
     # Ciclo cumprido não carimba nada, e estouro já gravado não é reescrito:
     # as duas regras moram em `estouro_consumado`, não aqui.
     estourou = estouro_consumado(
-        _instante(caso.get("prazo_area_em")),
-        _instante(caso.get("respondida_em")),
+        ler_instante(caso.get("prazo_area_em")),
+        ler_instante(caso.get("respondida_em")),
         agora,
-        _instante(caso.get("area_estourou_em")),
+        ler_instante(caso.get("area_estourou_em")),
     )
 
     try:
@@ -561,6 +562,11 @@ async def devolver_a_ouvidoria(
     # decidiu apagar: a devolução por insuficiência grava o mesmo campo sem
     # filtro de status, e o `None` daqui apagaria o carimbo dela na corrida.
     carimbo_do_estouro = {"area_estourou_em": estourou.isoformat()} if estourou else {}
+    # E o desfazer nasce colado no fazer: o rollback devolve a coluna ao valor
+    # que ela tinha, mas só quando a ida a escreveu. Sem esse par, o `except`
+    # mandaria `None` para um caso cujo carimbo esta requisição nunca tocou
+    # (issue #623).
+    carimbo_a_restaurar = {"area_estourou_em": estouro_anterior} if carimbo_do_estouro else {}
     try:
         (
             supabase.table("ouvidoria_protocolos")
@@ -589,7 +595,7 @@ async def devolver_a_ouvidoria(
         # Mesmo desenho do `responder`: a restauração do prazo é quem diz onde
         # o caso está, porque ela só casa linha enquanto ele continua com a
         # área.
-        restaurou = _restaurar_prazo(supabase, vinculo, prazo_anterior, estouro_anterior)
+        restaurou = _restaurar_prazo(supabase, vinculo, prazo_anterior, carimbo_a_restaurar)
         if not restaurou:
             # O caso saiu de `aguardando_area`, ou não foi possível saber. Nos
             # dois, o link não volta, pelo mesmo motivo do `responder`: o `GET`

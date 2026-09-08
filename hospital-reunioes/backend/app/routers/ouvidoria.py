@@ -88,6 +88,7 @@ from app.services.ouvidoria_prazos import (
     esta_vencido,
     estouro_consumado,
     formatar_vencimento,
+    ler_instante,
     minutos_uteis_entre,
     minutos_uteis_pausados,
     rotular_vencimento,
@@ -304,11 +305,6 @@ def carregar_feriados(supabase) -> frozenset[dt.date]:
     return feriados
 
 
-def _instante(bruto) -> dt.datetime | None:
-    """O timestamp que o PostgREST devolve como texto, ou None quando vazio."""
-    return dt.datetime.fromisoformat(str(bruto)) if bruto else None
-
-
 def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> dict:
     """Traduz o que está persistido no caso nos números que a tela mostra: o
     prazo e os dois indicadores que saem dele. O prazo é lido, nunca
@@ -324,8 +320,8 @@ def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date])
     vencimento e aparecer estourado, com `cumprimento` carimbando falha contra
     a área por uma espera que não é dela. A escada de cobrança escapa disso
     porque filtra o status; esta projeção precisa da guarda própria."""
-    vencimento = _instante(row.get("prazo_area_em"))
-    medido_em = _instante(row.get("pausada_em")) or agora
+    vencimento = ler_instante(row.get("prazo_area_em"))
+    medido_em = ler_instante(row.get("pausada_em")) or agora
     estourado = esta_vencido(vencimento, medido_em)
     if vencimento is None or estourado:
         restantes = None if vencimento is None else 0
@@ -351,9 +347,9 @@ def _projetar_prazo(row: dict, agora: dt.datetime, feriados: frozenset[dt.date])
         # fazia quem respondeu ATRASADO voltar a ler `em_prazo` (issue #374).
         "cumprimento": cumprimento_da_area(
             vencimento,
-            _instante(row.get("respondida_em")),
+            ler_instante(row.get("respondida_em")),
             medido_em,
-            estouro_consumado_em=_instante(row.get("area_estourou_em")),
+            estouro_consumado_em=ler_instante(row.get("area_estourou_em")),
         ),
         # O indicador de resolução (PRD #318, história 12). Caso encerrado por
         # "sem retorno do manifestante" fica de fora: ninguém apurou, e contá-lo
@@ -2208,10 +2204,10 @@ async def devolver_por_insuficiencia(
     # prorrogação: prazo novo sem carimbo zerado é prazo que nenhum degrau
     # cobra. A função mora lá porque nasceu lá; a regra é a mesma.
     estourou = estouro_consumado(
-        _instante(caso.get("prazo_area_em")),
-        _instante(caso.get("respondida_em")),
+        ler_instante(caso.get("prazo_area_em")),
+        ler_instante(caso.get("respondida_em")),
         agora,
-        _instante(caso.get("area_estourou_em")),
+        ler_instante(caso.get("area_estourou_em")),
     )
     try:
         supabase.table("ouvidoria_protocolos").update(
