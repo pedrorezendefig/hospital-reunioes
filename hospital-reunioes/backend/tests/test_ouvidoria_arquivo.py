@@ -186,6 +186,11 @@ class _TabelaFake:
         self._colunas: tuple[str, ...] | None = None
         self._janela: tuple[int, int] | None = None
         self._negar = False
+        # A contagem que o PostgREST devolve no `Content-Range` quando alguém
+        # pede `count=exact`. Ela conta as linhas AFETADAS, e não as que
+        # couberam no corpo: é justamente por serem coisas diferentes que o
+        # lote passou a ler daqui.
+        self._contagem_pedida: str | None = None
 
     @property
     def not_(self):
@@ -201,8 +206,9 @@ class _TabelaFake:
         self._insert = payload
         return self
 
-    def update(self, payload: dict):
+    def update(self, payload: dict, count: str | None = None, **_kw):
         self._update = payload
+        self._contagem_pedida = count
         return self
 
     def _guardar(self, teste):
@@ -252,7 +258,7 @@ class _TabelaFake:
                 linha.setdefault("id", f"{self.nome}-{len(self.rows) + 1}")
                 self.rows.append(linha)
                 gravados.append(dict(linha))
-            return type("R", (), {"data": gravados})()
+            return type("R", (), {"data": gravados, "count": None})()
         casadas = [r for r in self.rows if all(teste(r) for teste in self._filtros)]
         if self._update is not None:
             for r in casadas:
@@ -264,14 +270,15 @@ class _TabelaFake:
             recorte = self.request.params.get("select")
             colunas = tuple(c.strip() for c in recorte.split(",")) if recorte else None
             gravadas = [{c: r.get(c) for c in colunas} if colunas else dict(r) for r in casadas]
-            return type("R", (), {"data": gravadas})()
+            contagem = len(casadas) if self._contagem_pedida else None
+            return type("R", (), {"data": gravadas, "count": contagem})()
         if self._janela is not None:
             inicio, fim = self._janela
             casadas = casadas[inicio : fim + 1]
         projetadas = [self._projetar(r) for r in casadas]
         if self.ao_ler is not None and casadas:
             self.ao_ler(casadas)
-        return type("R", (), {"data": projetadas})()
+        return type("R", (), {"data": projetadas, "count": None})()
 
 
 class _AgregadoFake:
@@ -970,7 +977,7 @@ class TestOLoteDosEncerrados:
         ],
         ids=["postgrest_recusou", "timeout_de_leitura", "conexao_recusada"],
     )
-    def test_a_falha_do_banco_vira_503_e_nao_lote_vazio(self, monkeypatch, falha):
+    def test_a_falha_do_banco_vira_503_e_nao_lote_vazio(self, monkeypatch, falha, caplog):
         """Zero arquivadas com 200 diria ao ouvidor que não havia nada a fazer,
         e o acúmulo continuaria na tela sem explicação.
 
@@ -992,7 +999,87 @@ class TestOLoteDosEncerrados:
 
         monkeypatch.setattr(supabase, "table", _table_que_recusa)
 
-        assert _arquivar_o_lote(client).status_code == 503
+        with caplog.at_level(logging.ERROR):
+            assert _arquivar_o_lote(client).status_code == 503
+
+        # O 503 da coluna que não existe (migration 099 pendente) e o 503 do
+        # timeout são o mesmo status e a mesma frase na tela: o que os separa
+        # em produção é esta linha. O nome da exceção distingue as famílias, e
+        # o código distingue as recusas do PostgREST entre si.
+        registrado = "\n".join(caplog.messages)
+        assert falha.__class__.__name__ in registrado
+        assert getattr(falha, "code", None) is None or str(falha.code) in registrado
+
+    def test_a_contagem_vem_das_linhas_afetadas_e_nao_das_devolvidas(self, monkeypatch):
+        """O servidor afetou sete linhas e devolveu uma. A resposta ao ouvidor
+        é SETE.
+
+        É este o cenário que tira o número da dependência de quanto o servidor
+        decidiu devolver: se a contagem saísse do corpo, um lote de sete
+        apareceria como um, com HTTP 200 e sem erro nenhum. O log fica com o
+        que veio, que é tudo o que ele pode saber; o número, não."""
+        client, supabase = self._base(monkeypatch)
+        de_verdade = supabase.table
+
+        def _table_que_corta_o_corpo(nome: str):
+            tabela = de_verdade(nome)
+            if nome == "ouvidoria_protocolos":
+                resposta_inteira = tabela.execute
+
+                def _cortada():
+                    r = resposta_inteira()
+                    if tabela._update is None:
+                        return r
+                    return type("R", (), {"data": r.data[:1], "count": 7})()
+
+                tabela.execute = _cortada
+            return tabela
+
+        monkeypatch.setattr(supabase, "table", _table_que_corta_o_corpo)
+
+        r = _arquivar_o_lote(client)
+
+        assert r.status_code == 200, r.text
+        assert r.json() == {"arquivadas": 7}
+
+    def test_a_rota_pede_a_contagem_exata_ao_banco(self, monkeypatch):
+        """O irmão do teste acima: aquele prova de ONDE o número sai, este
+        prova que a rota pediu o cabeçalho de onde ele sai. Sem o pedido, o
+        PostgREST não manda o `Content-Range` e a rota cairia para sempre no
+        fallback, sem nada reprovar."""
+        client, supabase = self._base(monkeypatch)
+
+        assert _arquivar_o_lote(client).status_code == 200
+
+        escritas = [
+            pedido
+            for pedido in supabase.pedidos
+            if pedido.nome == "ouvidoria_protocolos" and pedido._update is not None
+        ]
+        assert len(escritas) == 1, "o lote é um update só"
+        assert escritas[0]._contagem_pedida == "exact"
+
+    def test_sem_o_cabecalho_a_contagem_cai_para_o_que_veio_no_corpo(self, monkeypatch):
+        """O servidor que não devolve o cabeçalho não pode zerar um lote que
+        aconteceu: aí o corpo é a melhor verdade disponível."""
+        client, supabase = self._base(monkeypatch, quantos_encerrados=2)
+        de_verdade = supabase.table
+
+        def _table_sem_cabecalho(nome: str):
+            tabela = de_verdade(nome)
+            if nome == "ouvidoria_protocolos":
+                com_contagem = tabela.execute
+
+                def _sem_contagem():
+                    r = com_contagem()
+                    return type("R", (), {"data": r.data, "count": None})()
+
+                tabela.execute = _sem_contagem
+            return tabela
+
+        monkeypatch.setattr(supabase, "table", _table_sem_cabecalho)
+
+        assert _arquivar_o_lote(client).json()["arquivadas"] == 2
 
     def test_a_rota_pede_so_o_id_no_update_que_ela_monta(self, monkeypatch):
         """O irmão do teste de contrato abaixo, e o que fecha o vácuo dele:
@@ -1032,6 +1119,30 @@ class TestOLoteDosEncerrados:
         )
         assert "relato_integral" in inteiras[0]
 
+    def test_o_fake_so_devolve_contagem_a_quem_pediu_e_conta_o_que_foi_afetado(self):
+        """O detector dos dois testes da contagem, exercitado nos dois sentidos.
+
+        Os testes acima só valem enquanto o Supabase falso for fiel em duas
+        coisas: guardar o `count` que recebeu (senão o teste do pedido fica
+        verde sobre qualquer rota) e contar as linhas AFETADAS, e não as que
+        couberam no corpo (que é a distinção inteira)."""
+        pedindo = _TabelaFake("ouvidoria_protocolos", [_caso(1), _caso(2)])
+
+        com_contagem = (
+            pedindo.update({"arquivada_em": "2026-09-08T00:00:00+00:00"}, count="exact")
+            .eq("status", "encerrado")
+            .execute()
+        )
+
+        assert pedindo._contagem_pedida == "exact"
+        assert com_contagem.count == 2
+        # O outro sentido: quem não pede não recebe cabeçalho nenhum, que é o
+        # que faz a rota cair no fallback do corpo.
+        calado = _TabelaFake("ouvidoria_protocolos", [_caso(1), _caso(2)])
+        sem_contagem = calado.update({"arquivada_em": "2026-09-08T00:00:00+00:00"}).eq("status", "encerrado").execute()
+        assert calado._contagem_pedida is None
+        assert sem_contagem.count is None
+
     def test_o_update_do_lote_pede_so_o_id_ao_cliente_de_verdade(self):
         """O lote lê `row["id"]` e nada mais, e por isso pede `select=id`: sem
         ele o PostgREST devolve a linha inteira, com relato, nome e contato de
@@ -1046,7 +1157,7 @@ class TestOLoteDosEncerrados:
         try:
             escrita = ouvidoria_router._so_o_id_de_volta(
                 cliente.table("ouvidoria_protocolos")
-                .update({"arquivada_em": "2026-09-08T00:00:00+00:00"})
+                .update({"arquivada_em": "2026-09-08T00:00:00+00:00"}, count="exact")
                 .eq("status", "encerrado")
                 .is_("arquivada_em", "null")
             )
@@ -1055,6 +1166,9 @@ class TestOLoteDosEncerrados:
             # E o recorte não atropelou os filtros, que entram pela mesma query.
             assert escrita.request.params.get("status") == "eq.encerrado"
             assert escrita.request.params.get("arquivada_em") == "is.null"
+            # A contagem exata é pedida por cabeçalho, e é ela que faz o
+            # PostgREST mandar o `Content-Range` de onde sai o número.
+            assert "count=exact" in escrita.request.headers.get("Prefer", "")
         finally:
             cliente.session.close()
 

@@ -1773,33 +1773,60 @@ async def arquivar_os_encerrados(
     conferido antes: é a trava contra a reabertura que caia no meio (a mesma
     janela TOCTOU que `_gravar_o_arquivo` fecha para um caso).
 
-    A resposta pede só o `id` de volta (`_so_o_id_de_volta`): é dele que saem a
-    contagem e o log de acesso, um por caso guardado, que é o único vestígio
-    que este ato deixa.
+    **A contagem vem do `Content-Range`, e não das linhas devolvidas.** É a
+    contagem das linhas AFETADAS pelo update, que é a pergunta que o ouvidor
+    faz ("quantas foram?"). Contar o corpo da resposta amarraria o número a
+    quanto o servidor decidiu devolver, e o módulo já foi mordido por corte
+    silencioso de resposta (issue #430): o sintoma sai no número, nunca no
+    erro. Assim o número não depende de versão nem de configuração de
+    servidor. O corpo continua vindo, reduzido ao `id` (`_so_o_id_de_volta`),
+    porque o log de acesso precisa saber QUAIS casos foram guardados; se ele
+    vier mais curto que a contagem, quem perde linha é o log, e não o número
+    que a tela mostra.
 
-    As DUAS falhas entram na captura, e não só o `APIError`. Esta é a escrita
-    mais pesada do módulo, e é justamente ela que estoura o timeout do cliente:
-    timeout e conexão recusada sobem como `HTTPError`, que `APIError` não pega
-    (é a mesma dupla que as outras chamadas pesadas deste arquivo capturam).
-    Escapando daqui, a exceção vira 500 genérico DEPOIS de o update poder ter
-    commitado, e a linha seguinte, que é o log, nunca roda: N casos sairiam da
-    lista sem uma linha de rastro em lugar nenhum."""
+    **As duas falhas entram na captura, e o que ela resolve é o código, não a
+    janela.** Timeout e conexão recusada sobem como `HTTPError`, que
+    `APIError` não pega, e esta é a escrita mais pesada do módulo, ou seja, a
+    que estoura o timeout do cliente. Capturando, o ouvidor recebe 503 com
+    frase própria em vez de 500 genérico, e a tela não some com nada.
+
+    O que a captura NÃO faz, e nenhum `except` faria: fechar a janela entre o
+    update e o log. Num timeout, o cliente desiste de esperar, mas o UPDATE
+    pode ter COMMITADO no banco, e a linha do log nunca roda. Nesse caso os
+    casos ficam arquivados sem rastro nenhum (arquivar não entra na trilha, e
+    desarquivar apaga os dois carimbos), enquanto a tela diz que falhou. O
+    conserto de verdade é o update e o log na MESMA transação, por RPC, e está
+    fora desta fatia: issue #627."""
     try:
         atualizadas = _so_o_id_de_volta(
             supabase.table("ouvidoria_protocolos")
-            .update({"arquivada_em": agora_utc().isoformat(), "arquivada_por": me["id"]})
+            .update(
+                {"arquivada_em": agora_utc().isoformat(), "arquivada_por": me["id"]},
+                count="exact",
+            )
             .eq("status", "encerrado")
             .is_("arquivada_em", "null")
         ).execute()
     except (APIError, HTTPError) as exc:
-        logger.error("Falha ao arquivar o lote dos encerrados: %s", exc.__class__.__name__)
+        # O código entra na linha: sem ele, o 503 da coluna que não existe (a
+        # migration 099 ainda não aplicada) e o 503 do timeout viram a mesma
+        # frase no log, e quem depura em produção não distingue as duas.
+        # `HTTPError` não tem `code`, e é por isso que o acesso é tolerante.
+        logger.error(
+            "Falha ao arquivar o lote dos encerrados: %s (código %s)",
+            exc.__class__.__name__,
+            getattr(exc, "code", "sem código"),
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Não foi possível arquivar agora. Tente de novo em instantes.",
         ) from exc
-    arquivadas = [row["id"] for row in (atualizadas.data or []) if row.get("id")]
-    registrar_acessos_em_lote(supabase, me, arquivadas, "arquivar")
-    return {"arquivadas": len(arquivadas)}
+    guardadas = [row["id"] for row in (atualizadas.data or []) if row.get("id")]
+    registrar_acessos_em_lote(supabase, me, guardadas, "arquivar")
+    # O fallback existe para o servidor que não devolveu o cabeçalho: aí o que
+    # veio no corpo é a melhor verdade disponível, e é melhor que um zero sobre
+    # um lote que aconteceu.
+    return {"arquivadas": atualizadas.count if atualizadas.count is not None else len(guardadas)}
 
 
 # =====================================================================
