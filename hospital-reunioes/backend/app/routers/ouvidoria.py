@@ -516,6 +516,12 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # havia para onde mandar o desfecho, ou não havia.
     "encerramento_avisado_em",
     "encerramento_sem_contato_em",
+    # O carimbo do apagamento, gravado pela Retenção no fim da anonimização
+    # (migration 079) e até aqui lido por ninguém (issue #593). Ele entra no
+    # Dossiê por dois consumidores: a página do caso, que troca o relato pelo
+    # aviso de caso apagado, e a reabertura por reincidência, que carrega o
+    # caso por esta mesma tupla e recusa quem tem o carimbo.
+    "anonimizada_em",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -959,8 +965,45 @@ class PedidoTransicao(BaseModel):
 
 
 # O que a pausa precisa saber do caso: o vencimento que ela congela e o
-# acumulado que ela alimenta (issue #335).
-_CAMPOS_DA_PAUSA = "id, status, prazo_area_em, pausada_em, minutos_pausados, reaberta_em"
+# acumulado que ela alimenta (issue #335). `anonimizada_em` entra por causa da
+# guarda do caso apagado logo abaixo: guarda que lê coluna não selecionada lê
+# None e passa em silêncio.
+_CAMPOS_DA_PAUSA = "id, status, prazo_area_em, pausada_em, minutos_pausados, reaberta_em, anonimizada_em"
+
+
+# A frase única das portas que o caso apagado não atravessa (issue #593). Ela
+# não nomeia a causa do apagamento de propósito: o carimbo é um só e ainda vai
+# ser gravado por outra porta (a Diretoria, issue #595), e culpar a retenção
+# seria a API afirmar o que o código não distingue. O fecho é o mesmo em todas:
+# depois do apagamento, o que voltar é caso novo.
+_CASO_APAGADO = (
+    "Este caso foi apagado e não pode mais ser {acao}. O que voltar a ser trazido entra como manifestação nova."
+)
+
+
+def barrar_caso_apagado(caso: dict, acao: str) -> None:
+    """Recusa qualquer mudança num caso cujo relato já foi apagado.
+
+    A regra mora aqui, e não dentro de uma rota, porque ela vale para toda
+    porta que escreve no caso, e a primeira versão dela (só na reabertura) era
+    contornável: `POST /transicoes` chama a MESMA RPC `ouvidoria_transicionar`
+    com o mesmo par `encerrado -> aguardando_area`, e a classificação grava
+    texto livre em `categoria` em qualquer estado. Pior: caso que sai do
+    encerramento por essas portas nunca mais é revisitado pela retenção, que só
+    varre `anonimizada_em IS NULL`.
+
+    O caso apagado não perde nada de legítimo com isso. Do encerramento a única
+    saída é a reabertura, e classificar um caso sem relato é classificar o quê.
+
+    `acao` completa a frase com o que aquela porta faria ("reaberto", "movido de
+    estado", "classificado"): a recusa precisa dizer o que foi recusado, e as
+    três dizem a mesma coisa no resto.
+    """
+    if caso.get("anonimizada_em"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_CASO_APAGADO.format(acao=acao),
+        )
 
 
 def efeito_da_pausa(caso: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> dict:
@@ -1056,6 +1099,10 @@ async def transicionar_manifestacao(
     if not atual.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
     caso = atual.data[0]
+    # Antes da máquina de estados e antes de qualquer gravação: esta rota chega
+    # à mesma RPC da reabertura, pelo mesmo par `encerrado -> aguardando_area`
+    # (issue #593).
+    barrar_caso_apagado(caso, "movido de estado")
     estado_atual = caso["status"]
 
     try:
@@ -1225,6 +1272,17 @@ async def reabrir_por_reincidencia(
     if not atual.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
     caso = atual.data[0]
+
+    # Caso apagado não volta à tramitação (issue #593). A guarda é a PRIMEIRA
+    # de todas e vem antes de qualquer gravação: reabrir devolveria à área um
+    # protocolo sem relato, sem identificação e sem anexos para apurar, e a
+    # trilha ganharia um ciclo novo sobre um Dossiê que não existe mais.
+    #
+    # Ela precede a janela da reincidência de propósito. O caso alcançado pela
+    # retenção de cinco anos também está fora da janela, e a recusa dali diria
+    # "encerrado há mais de 30 dias", mandando o ouvidor esperar por um caso
+    # que nunca mais abre.
+    barrar_caso_apagado(caso, "reaberto")
 
     if caso.get("status") != "encerrado":
         raise HTTPException(
@@ -2669,7 +2727,12 @@ async def classificar_manifestacao(
     try:
         atual = (
             supabase.table("ouvidoria_protocolos")
-            .select("id, status, sigilo_reforcado, tipo_manifestacao, categoria")
+            # `anonimizada_em` entra pela guarda do caso apagado (issue #593):
+            # o "Rótulo do caso" grava texto livre em `categoria`, que a
+            # retenção preserva de propósito, e o caso carimbado já saiu da
+            # varredura dela. Sem a guarda, esta rota reintroduz dado pessoal
+            # permanente num caso que a tela anuncia como apagado.
+            .select("id, status, sigilo_reforcado, tipo_manifestacao, categoria, anonimizada_em")
             .eq("id", manifestacao_id)
             .execute()
         )
@@ -2679,6 +2742,7 @@ async def classificar_manifestacao(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
 
     caso = atual.data[0]
+    barrar_caso_apagado(caso, "classificado")
     try:
         sigiloso = resolver_sigilo(
             pedido.tipo_manifestacao,

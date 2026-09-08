@@ -45,6 +45,11 @@ import {
   type MarcoDoCaso,
   type PrazoDoCaso,
 } from "@/lib/ouvidoria/marcos";
+import {
+  autorDoApagamento,
+  estaApagado,
+  TITULO_DO_CASO_APAGADO,
+} from "@/lib/ouvidoria/apagamento";
 import { descreverOrigem } from "@/lib/ouvidoria/origem";
 import { descreverTempoDesdeOMarco, type EventoDaTrilha } from "@/lib/ouvidoria/trilha";
 import { avisosDeDegradacao, calendarioUtilFoiLido } from "@/lib/ouvidoria/painel";
@@ -130,6 +135,11 @@ export interface Dossie {
   // mesmo motivo dos marcos, e ao lado deles: é a promessa feita a quem
   // manifestou, e o ouvidor precisa saber se ela foi cumprida sem abrir o
   // registro de notificações.
+  // O carimbo do apagamento (issue #593, migration 079). Preenchido, o Dossiê
+  // troca o relato pelo aviso de caso apagado. Opcional pelo mesmo motivo dos
+  // marcos: um frontend servido enquanto o backend ainda é o da versão anterior
+  // não pode acusar de apagado um caso inteiro.
+  anonimizada_em?: string | null;
   acuse?: AcuseDoCaso;
   // O aviso de encerramento ao manifestante (issue #494, RN-80). O par do
   // acuse: um diz que a manifestação chegou, o outro diz no que deu. Opcional
@@ -785,6 +795,12 @@ export function Dossie({ protocolo, token }: DossieProps) {
 
   const origem = dossie ? descreverOrigem(dossie) : null;
   const naturezaInformada = dossie ? descreverNaturezaInformada(dossie) : null;
+  // O caso apagado (issue #593). O carimbo decide, e o crédito vem da trilha,
+  // que é onde mora o nome de quem apagou. Trilha que não voltou dá crédito
+  // nulo, e o aviso continua sendo dito com a data do próprio caso: o
+  // apagamento é fato do caso, não da leitura da trilha.
+  const apagado = estaApagado(dossie?.anonimizada_em);
+  const autorDoApagamentoDoCaso = autorDoApagamento(movimentos);
   // A Devolução à Ouvidoria (issue #601). Vem da TRILHA, e não de coluna
   // nenhuma: o motivo que a área escreveu vive no movimento, onde a Retenção já
   // o alcança. Nulo no caso que ninguém devolveu, e é o mesmo nulo que decide o
@@ -1136,7 +1152,15 @@ export function Dossie({ protocolo, token }: DossieProps) {
           {/* Classificação e sigilo (issue #372). É a única porta que sobe e
               desce o sigilo fora da validação: o caso que chegou pelo canal
               aberto ou pela Ana nasce sem tipo, logo sigiloso, e é aqui que ele
-              volta ao painel de todos. */}
+              volta ao painel de todos.
+
+              Fora do caso apagado (issue #593): o campo "Rótulo do caso" grava
+              texto livre em `categoria`, que a Retenção preserva de propósito, e
+              o caso carimbado já saiu da varredura dela. Escrever ali seria
+              reintroduzir dado pessoal permanente pela própria tela que anuncia
+              o apagamento. Quem recusa é o servidor; aqui a tela só deixa de
+              oferecer o caminho. */}
+          {!apagado && (
           <div className="px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 space-y-2.5">
             <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide">
               Classificação e sigilo
@@ -1186,24 +1210,57 @@ export function Dossie({ protocolo, token }: DossieProps) {
             </button>
             {avisoClassificacao && <p className="text-xs text-slate-500">{avisoClassificacao}</p>}
           </div>
+          )}
 
-          <div>
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
-              Resumo
-            </h3>
-            <p className="text-sm text-slate-700 whitespace-pre-line">{dossie.resumo}</p>
-          </div>
+          {/* O caso apagado (issue #593). O aviso ocupa o lugar do resumo e do
+              relato, e não se soma a eles: o Dossiê do caso apagado é o aviso,
+              e um relato em branco ao lado dele leria como caso que ninguém
+              preencheu. O que sobra na página são os fatos que a Retenção
+              preserva de propósito, a ficha do caso e a linha do tempo.
 
-          <div>
-            <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
-              Relato integral
-            </h3>
-            <p className="text-sm text-slate-700 whitespace-pre-line">
-              {dossie.relato_integral || "O relato integral ainda não foi registrado."}
-            </p>
-          </div>
+              Quem recusa a reabertura é o servidor; aqui a tela só deixa de
+              oferecer um caminho que termina em 409. */}
+          {apagado ? (
+            <div
+              role="note"
+              aria-label={TITULO_DO_CASO_APAGADO}
+              className="px-4 py-3 rounded-xl bg-slate-100 border border-slate-300 text-slate-700"
+            >
+              <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-500 uppercase tracking-wide mb-1">
+                <Lock className="w-3.5 h-3.5" />
+                {TITULO_DO_CASO_APAGADO}
+              </h3>
+              <p className="text-sm">
+                Este caso foi apagado em {formatarDataHora(dossie.anonimizada_em as string)}
+                {autorDoApagamentoDoCaso ? ` por ${autorDoApagamentoDoCaso}` : ""}.
+              </p>
+              <p className="text-xs text-slate-500 mt-1 leading-relaxed">
+                O relato, a identificação de quem manifestou, os anexos e a resposta da área não estão
+                mais disponíveis. A ficha do caso e a linha do tempo continuam aqui, e o caso não pode
+                ser reaberto: quem voltar a reclamar registra manifestação nova.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                  Resumo
+                </h3>
+                <p className="text-sm text-slate-700 whitespace-pre-line">{dossie.resumo}</p>
+              </div>
 
-          {anexos.length > 0 && (
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
+                  Relato integral
+                </h3>
+                <p className="text-sm text-slate-700 whitespace-pre-line">
+                  {dossie.relato_integral || "O relato integral ainda não foi registrado."}
+                </p>
+              </div>
+            </>
+          )}
+
+          {!apagado && anexos.length > 0 && (
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
                 Anexos
@@ -1238,7 +1295,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
             </div>
           )}
 
-          {prorrogacoes.map((pedido) => (
+          {/* A justificativa do pedido é texto livre sobre o caso, e a Retenção
+              não a zera: ela troca o conteúdo pelo marcador interno da
+              anonimização (migration 073). Sem esta porta, o caso apagado
+              mostraria o aviso e, logo abaixo, esse marcador. */}
+          {!apagado && prorrogacoes.map((pedido) => (
             <div key={pedido.id}>
               <h3 className="flex items-center gap-1.5 text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
                 <CalendarClock className="w-3.5 h-3.5" />
@@ -1350,7 +1411,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
               bloco da área de propósito: são duas conversas diferentes. */}
           {(podePausar(dossie.status) ||
             podeRetomar(dossie.status) ||
-            podeReabrir(dossie.status, dossie.encerrada_em, new Date().toISOString()) ||
+            podeReabrir(dossie.status, dossie.encerrada_em, new Date().toISOString(), dossie.anonimizada_em) ||
             dossie.minutos_pausados > 0) && (
             <div className="rounded-xl border border-slate-200 bg-slate-50/60 p-3.5">
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-2 flex items-center gap-1.5">
@@ -1459,7 +1520,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
                 </div>
               )}
 
-              {podeReabrir(dossie.status, dossie.encerrada_em, new Date().toISOString()) && (
+              {podeReabrir(dossie.status, dossie.encerrada_em, new Date().toISOString(), dossie.anonimizada_em) && (
                 <div className="space-y-2">
                   <textarea
                     value={motivoDoManifestante}
@@ -1491,7 +1552,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
             </div>
           )}
 
-          {dossie.resposta_da_area && (
+          {!apagado && dossie.resposta_da_area && (
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">
                 Resposta da área

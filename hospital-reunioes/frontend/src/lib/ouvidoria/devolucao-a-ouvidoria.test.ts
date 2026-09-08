@@ -10,6 +10,7 @@ function devolucao(overrides: Partial<EventoDaTrilha> = {}): EventoDaTrilha {
     autor: "Carlos Titular",
     // A devolução chega pelo link do email: ninguém logado por trás.
     sistema: true,
+    apagamento: false,
     marco: null,
     marco_rotulo: null,
     descricao: "Caso em classificação",

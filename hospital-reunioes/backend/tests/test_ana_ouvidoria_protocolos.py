@@ -746,6 +746,33 @@ class TestConsultaDeProtocolo:
 
         assert r.status_code == 404
 
+    def test_o_caso_apagado_devolve_o_mesmo_andamento_de_antes(self, monkeypatch):
+        """Issue #593: a consulta pública NÃO muda com o carimbo do apagamento.
+
+        O Dossiê passou a devolver `anonimizada_em` para a página do caso, e a
+        tupla desta rota é outra, fechada de propósito. Este teste é a trava:
+        se alguém um dia trouxer o carimbo para cá, quem tem só o número do
+        protocolo passaria a saber que aquele caso foi apagado, e esta rota é
+        enumerável.
+        """
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake(proximo_numero=7)
+        client = _make_app(banco)
+        client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_payload_valido(),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+        _classificado_pelo_ouvidor(banco)
+        vivo = client.get("/api/ana/ouvidoria/protocolos/2026-0007", headers={"X-API-Key": CHAVE_CORRETA}).json()
+
+        banco.rows[0]["anonimizada_em"] = "2031-09-01T12:00:00+00:00"
+        apagado = client.get("/api/ana/ouvidoria/protocolos/2026-0007", headers={"X-API-Key": CHAVE_CORRETA})
+
+        assert apagado.status_code == 200
+        assert apagado.json() == vivo
+        assert "anonimizada_em" not in apagado.json()
+
 
 class TestAuthPorApiKey:
     @pytest.mark.parametrize("headers", [{}, {"X-API-Key": "chave-errada"}])

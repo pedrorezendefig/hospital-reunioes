@@ -34,6 +34,7 @@ import datetime as dt
 from app.services import ouvidoria_respostas
 from app.services.ouvidoria_estados import e_devolucao, e_pausa, e_reabertura, e_retomada
 from app.services.ouvidoria_prazos import FUSO, minutos_uteis_entre
+from app.services.ouvidoria_retencao import AUTOR_DA_RETENCAO
 
 CAMPOS_MOVIMENTO = "ocorrido_em, estado_anterior, estado_novo, autor_id, autor_nome, observacao"
 
@@ -193,6 +194,17 @@ def _evento(movimento: dict) -> dict:
         # Quem agiu sem estar logado: os jobs, a Retenção e o canal aberto. É o
         # `autor_id` nulo que os separa, e não o nome, que é texto livre.
         "sistema": movimento.get("autor_id") is None,
+        # O movimento que apagou o caso (issue #593). A página do caso troca o
+        # relato pelo aviso de caso apagado, e o aviso diz quem apagou: esse
+        # nome só existe aqui.
+        #
+        # A marca sai da assinatura, e não do texto da observação nem do par de
+        # estados. É a mesma assinatura que a Retenção usa para reconhecer o
+        # movimento que ela já gravou, então quem escreve e quem lê olham a
+        # mesma coisa; a observação, ao contrário, é frase, e o par
+        # `encerrado` para `encerrado` também serve a atos de job que não
+        # apagaram nada.
+        "apagamento": movimento.get("autor_nome") == AUTOR_DA_RETENCAO,
         "marco": marco,
         "marco_rotulo": ROTULO_DO_MARCO.get(marco) if marco else None,
         "descricao": descricao,
