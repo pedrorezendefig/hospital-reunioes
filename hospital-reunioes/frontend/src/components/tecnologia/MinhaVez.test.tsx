@@ -480,38 +480,44 @@ describe("Duas leituras no ar ao mesmo tempo", () => {
   });
 
   it("o CORPO atrasado do pedido antigo não repinta a lista", async () => {
-    // A resposta e o corpo dela chegam em dois tempos. Uma guarda conferida só
-    // quando os cabeçalhos chegam deixa o pedido velho passar e escrever
-    // depois, quando o `json()` dele finalmente resolve: entre uma coisa e
-    // outra o JS cedeu o controle, e o pedido novo pode ter começado E
-    // terminado. Não é hipótese remota aqui, porque o Histórico não pagina e a
-    // busca varre a Conversa: os corpos têm tamanhos bem diferentes.
+    // A resposta e o corpo dela chegam em dois tempos, e é entre os dois que
+    // mora esta corrida. A ORDEM dos eventos aqui é o teste inteiro:
+    //
+    // 1. os cabeçalhos do primeiro pedido chegam enquanto ele AINDA É O
+    //    ÚLTIMO. Ele passa pela primeira conferência do selo, a da chegada, e
+    //    fica pendurado no `json()`;
+    // 2. só ENTÃO nasce o segundo pedido, que chega inteiro e pinta a tela;
+    // 3. e só depois o corpo do primeiro resolve.
+    //
+    // Se o segundo pedido nascesse antes do passo 1 (que é o que acontece
+    // quando se troca o filtro duas vezes seguidas), o primeiro pararia logo na
+    // conferência da chegada, o `json()` dele nunca seria chamado e a segunda
+    // conferência não rodaria: o teste passaria provando a PRIMEIRA guarda duas
+    // vezes e a segunda nenhuma. Foi assim que este teste nasceu, em vácuo, e
+    // foi assim que o gate final o pegou.
+    //
+    // Não é hipótese remota nesta aba: o Histórico não pagina e a busca varre a
+    // Conversa, então os corpos têm tamanhos bem diferentes e o corpo grande de
+    // um pedido velho chega depois da resposta inteira de um pedido novo.
     const pendentes = filaDeCorposLentos();
     render(<Anfitriao />);
 
     await waitFor(() => expect(pendentes).toHaveLength(1));
     pendentes[0].responder();
-    pendentes[0].entregarCorpo([DECISAO, DEFEITO]);
-    await screen.findByText("Decidir o encerramento");
-
-    escolherTipo("Decisão");
-    await waitFor(() => expect(pendentes).toHaveLength(2));
-    escolherTipo("Defeito");
-    await waitFor(() => expect(pendentes).toHaveLength(3));
-
-    // O VELHO passa pelos cabeçalhos primeiro, e fica esperando o corpo.
-    pendentes[1].responder();
     await deixarOReactProcessar();
 
-    // O NOVO chega inteiro e pinta a tela.
-    pendentes[2].responder();
-    pendentes[2].entregarCorpo([DEFEITO]);
+    escolherTipo("Defeito");
+    await waitFor(() => expect(pendentes).toHaveLength(2));
+    pendentes[1].responder();
+    pendentes[1].entregarCorpo([DEFEITO]);
     expect(await screen.findByText("Consertar o POP")).toBeTruthy();
 
-    // E só então o corpo do velho aparece.
-    pendentes[1].entregarCorpo([DECISAO]);
+    pendentes[0].entregarCorpo([DECISAO, DEFEITO]);
     await deixarOReactProcessar();
 
+    // A irmã de presença no mesmo render: a lista certa continua desenhada, e
+    // é por isso que a ausência abaixo quer dizer "o corpo velho não entrou", e
+    // não "a tela está vazia".
     expect(screen.getByText("Consertar o POP")).toBeTruthy();
     expect(screen.queryByText("Decidir o encerramento")).toBeNull();
   });

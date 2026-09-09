@@ -1078,3 +1078,68 @@ class TestAsColunasDoFio:
         # A irma de presenca: com termo, ela le.
         client.get(f"{BASE}/historico", params={"busca": "régua"})
         assert sb.selects_de("tecnologia_conversas") != []
+
+
+class TestMinhaVezEAutorizacaoNaoFiltro:
+    """ "Minha vez" e a caixa de entrada de QUEM ESTA LOGADO, e nao uma consulta
+    parametrizavel por pessoa.
+
+    Os tres filtros da aba (`tipo`, `produto_id`, `responsavel_id`) so
+    ESTREITAM a lista, e o `responsavel_id` e o unico deles que fala de gente:
+    ele e a porta por onde um "me mostre a vez de outra pessoa" entraria. Nao
+    entra, e e isto que fica preso aqui.
+
+    Nao e sigilo: dentro da aba todo mundo ve tudo (ADR 0050, decisao 11), e
+    quem quiser as Demandas de outra pessoa pede `/demandas?responsavel_id=`,
+    que e o Quadro e existe para isso. E que "Minha vez" tem que continuar
+    querendo dizer MINHA vez: uma aba cujo dono muda conforme o parametro nao
+    responde mais a pergunta que ela promete responder, e o e-mail e as
+    contagens que vierem depois passariam a falar da caixa de outra pessoa.
+    """
+
+    def _cenario(self, logado: dict) -> TestClient:
+        return _montar(
+            logado=logado,
+            demandas=[
+                _demanda("do_pedro", responsavel_id="P1"),
+                _demanda("da_socia", responsavel_id="P2"),
+                _demanda("chamou_o_pedro", responsavel_id="P2"),
+            ],
+            conversas=[
+                _linha("chamou_o_pedro", autor_id="P2", texto="@Pedro Vitta o que acha?", mencoes=["P1"]),
+            ],
+        )
+
+    def test_pedir_com_o_id_de_outra_pessoa_nao_devolve_a_vez_dela(self):
+        """O caso que prende a propriedade. Pedro pede `?responsavel_id=P2`: o
+        que volta e a INTERSECAO com a vez dele (a Demanda em que a Sócia o
+        chamou), e nunca `da_socia`, que e a vez da Sócia e de mais ninguem."""
+        corpo = self._cenario(PEDRO).get(f"{BASE}/minha-vez", params={"responsavel_id": "P2"}).json()
+
+        assert [d["id"] for d in corpo] == ["chamou_o_pedro"]
+        assert "da_socia" not in {d["id"] for d in corpo}
+
+    def test_o_par_de_presenca_o_filtro_com_o_proprio_id_funciona(self):
+        """Sem esta, uma rota que devolvesse lista vazia para qualquer
+        `responsavel_id` passaria na de cima, e o teste estaria provando que o
+        filtro nao funciona, e nao que a autorizacao vale."""
+        corpo = self._cenario(PEDRO).get(f"{BASE}/minha-vez", params={"responsavel_id": "P1"}).json()
+
+        assert [d["id"] for d in corpo] == ["do_pedro"]
+
+    def test_sem_parametro_nenhum_cada_um_ve_a_propria_vez(self):
+        """O terceiro lado: as duas listas inteiras, para o filtro acima nao ser
+        a unica coisa medida."""
+        do_pedro = self._cenario(PEDRO).get(f"{BASE}/minha-vez").json()
+        da_socia = self._cenario(SOCIA).get(f"{BASE}/minha-vez").json()
+
+        assert {d["id"] for d in do_pedro} == {"do_pedro", "chamou_o_pedro"}
+        assert {d["id"] for d in da_socia} == {"da_socia", "chamou_o_pedro"}
+
+    def test_o_id_de_outra_pessoa_nao_troca_o_dono_do_motivo(self):
+        """O `motivo` continua respondendo "por que isto esta na MINHA aba", e
+        nao "quem e o responsavel": pedindo com o id da Sócia, a Demanda em que
+        ela chamou o Pedro continua marcada como mencao PARA ELE."""
+        corpo = self._cenario(PEDRO).get(f"{BASE}/minha-vez", params={"responsavel_id": "P2"}).json()
+
+        assert corpo[0]["motivo"] == "mencao"

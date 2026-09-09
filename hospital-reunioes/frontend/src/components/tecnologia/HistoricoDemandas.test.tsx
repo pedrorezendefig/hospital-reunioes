@@ -71,6 +71,10 @@ function montar(
     // lista de antes está na tela e a leitura nova falha.
     recusaNaBusca?: number;
     redeFora?: boolean;
+    // A rede CAI só na busca: o `fetch` rejeita, em vez de responder com
+    // status de erro. É outro caminho no hook (o `catch`), e o desfecho na
+    // tela tem que ser o mesmo.
+    redeForaNaBusca?: boolean;
     token?: string | null;
     carregandoAuth?: boolean;
     filtrosIniciais?: FiltrosDoQuadro;
@@ -86,6 +90,7 @@ function montar(
       if (url.includes("/conversa")) {
         return { ok: true, status: 200, json: async () => [] } as unknown as Response;
       }
+      if (opcoes.redeForaNaBusca && url.includes("busca=")) throw new TypeError("Failed to fetch");
       if (opcoes.recusaNaBusca && url.includes("busca=")) {
         return {
           ok: false,
@@ -396,6 +401,24 @@ describe("Quando não dá para ler", () => {
     // E nenhuma frase de vazio ocupa o lugar: sob erro o código não sabe se o
     // Histórico está vazio.
     expect(screen.queryByText(/Nenhuma Demanda/)).toBeNull();
+  });
+
+  it("a REDE fora também leva a lista de ANTES junto", async () => {
+    // O irmão do teste acima, pelo outro caminho do hook: aqui o `fetch`
+    // rejeita, em vez de responder com status de erro. São dois `catch`
+    // diferentes no código, e o desfecho na tela tem que ser o mesmo: quem
+    // levasse só um dos dois deixaria a lista velha embaixo do alerta na
+    // metade dos casos.
+    montar([demanda("d1", "Encerrar conversas")], { redeForaNaBusca: true });
+
+    expect(await screen.findByText("Encerrar conversas")).toBeTruthy();
+    expect(screen.getByText("1 Demanda fechada")).toBeTruthy();
+
+    digitarNaBusca("xyz");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Verifique a conexão");
+    await waitFor(() => expect(screen.queryByText("Encerrar conversas")).toBeNull());
+    expect(screen.queryByText("1 Demanda fechada")).toBeNull();
   });
 
   it("a leitura seguinte que dá certo apaga o aviso e traz a lista de volta", async () => {
