@@ -43,5 +43,30 @@ def e_pessoa_da_aba(participante: dict[str, Any] | None) -> bool:
 
 
 def produto_ativo_sem_dono(*, ativo: bool, dono_id: str | None) -> bool:
-    """True quando o Produto ficaria ativo e sem ninguem respondendo por ele."""
+    """True quando o Produto fica ativo e sem ninguem respondendo por ele."""
     return bool(ativo) and not dono_id
+
+
+def edicao_deixa_produto_ativo_sem_dono(
+    *,
+    antes_ativo: bool,
+    antes_dono: str | None,
+    depois_ativo: bool,
+    depois_dono: str | None,
+) -> bool:
+    """True quando a edicao CRIA o estado ruim, e nao quando ela o herda.
+
+    O criterio da issue #636 e "recusa DEIXAR um Produto ativo sem dono". Isso
+    e diferente de "recusa qualquer edicao em Produto ativo sem dono", e a
+    diferenca nao e teorica: os sete Produtos do seed nascem ativos e SEM dono,
+    porque e a propria migration que manda cria-los assim. Uma guarda que
+    olhasse so o estado final devolveria 422 ao renomear "Ana" na primeira
+    abertura, culpando o Super admin por uma falta de dono que ele nao causou,
+    e travaria o criterio "cria, renomeia e desativa um Produto pela tela"
+    justo no estado inicial do sistema.
+
+    Quem cobra o dono desses sete e a tela, que marca o Produto ativo sem dono.
+    """
+    if not produto_ativo_sem_dono(ativo=depois_ativo, dono_id=depois_dono):
+        return False
+    return not produto_ativo_sem_dono(ativo=antes_ativo, dono_id=antes_dono)

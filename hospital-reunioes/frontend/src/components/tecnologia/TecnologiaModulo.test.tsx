@@ -157,6 +157,32 @@ describe("A lista de Produtos", () => {
     expect(within(viva).getByText("Ativo")).toBeTruthy();
   });
 
+  it("o Produto ativo sem dono aparece marcado, e o que tem dono não", async () => {
+    // Os sete do seed nascem ativos e sem dono, e a API não recusa renomear um
+    // deles. Quem cobra o dono é esta marca, então ela é o marcador positivo do
+    // critério "a tela avisa".
+    montar([
+      produto("p1", "Ana", 1),
+      produto("p2", "Site", 2, { dono_id: "P1", dono_nome: "Pedro Vitta" }),
+    ]);
+
+    const orfa = (await screen.findByText("Ana")).closest("li")!;
+    expect(within(orfa).getByText("Falta dono")).toBeTruthy();
+
+    const cuidada = screen.getByText("Site").closest("li")!;
+    expect(within(cuidada).queryByText("Falta dono")).toBeNull();
+  });
+
+  it("o Produto inativo sem dono não é cobrado", async () => {
+    // Sem dono só é problema enquanto o Produto está ativo: inativo não recebe
+    // Demanda nova.
+    montar([produto("p1", "Ana", 1, { ativo: false })]);
+
+    const linha = (await screen.findByText("Ana")).closest("li")!;
+    expect(within(linha).getByText("Inativo")).toBeTruthy();
+    expect(within(linha).queryByText("Falta dono")).toBeNull();
+  });
+
   it("o dono só pode ser escolhido entre as pessoas com acesso à aba", async () => {
     montar([produto("p1", "Ana", 1, { dono_id: "P1", dono_nome: "Pedro Vitta" })]);
 

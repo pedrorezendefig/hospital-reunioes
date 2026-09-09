@@ -18,6 +18,7 @@ no banco e volta na lista marcada como inativa.
 from __future__ import annotations
 
 import logging
+from typing import NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from supabase import Client
@@ -33,6 +34,7 @@ from app.services.tecnologia import (
     MOTIVO_DONO_SEM_ACESSO,
     MOTIVO_PRODUTO_ATIVO_SEM_DONO,
     e_pessoa_da_aba,
+    edicao_deixa_produto_ativo_sem_dono,
     produto_ativo_sem_dono,
 )
 
@@ -55,6 +57,10 @@ def _pessoas_da_aba(supabase: Client) -> list[dict]:
     """Participantes ativos com Super admin, em ordem de nome."""
     result = supabase.table("participantes").select(_CAMPOS_PESSOA).order("nome_completo").execute()
     return [linha for linha in (result.data or []) if e_pessoa_da_aba(linha)]
+
+
+def _recusar(motivo: str) -> NoReturn:
+    raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=motivo)
 
 
 def _normalizar_nome(nome: str) -> str:
@@ -85,18 +91,24 @@ def _exigir_nome_livre(supabase: Client, nome: str, *, exceto_id: str | None = N
 def _exigir_dono_com_acesso(supabase: Client, dono_id: str) -> None:
     """422 se o dono escolhido nao esta na lista de pessoas da aba."""
     if dono_id not in {p["id"] for p in _pessoas_da_aba(supabase)}:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=MOTIVO_DONO_SEM_ACESSO,
-        )
+        _recusar(MOTIVO_DONO_SEM_ACESSO)
 
 
-def _exigir_dono_no_produto_ativo(*, ativo: bool, dono_id: str | None) -> None:
-    if produto_ativo_sem_dono(ativo=ativo, dono_id=dono_id):
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail=MOTIVO_PRODUTO_ATIVO_SEM_DONO,
-        )
+def _exigir_dono_no_produto_novo(dono_id: str | None) -> None:
+    """Produto nasce ativo, e ativo exige dono."""
+    if produto_ativo_sem_dono(ativo=True, dono_id=dono_id):
+        _recusar(MOTIVO_PRODUTO_ATIVO_SEM_DONO)
+
+
+def _proxima_ordem(supabase: Client) -> int:
+    """O Produto novo entra no fim da lista.
+
+    Sem isto o novo nasceria com ordem 0 e apareceria na frente dos sete do
+    seed (ordem 1 a 7), que e o contrario do que quem acabou de criar espera.
+    """
+    result = supabase.table(TABELA_PRODUTOS).select("ordem").execute()
+    ordens = [linha.get("ordem") or 0 for linha in (result.data or [])]
+    return (max(ordens) + 1) if ordens else 1
 
 
 def _com_nome_do_dono(supabase: Client, produtos: list[dict]) -> list[dict]:
@@ -149,11 +161,8 @@ async def criar_produto(
     """Cria Produto. Nasce ativo, e ativo exige dono."""
     nome = _normalizar_nome(payload.nome)
     if not nome:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Nome do Produto nao pode ser vazio.",
-        )
-    _exigir_dono_no_produto_ativo(ativo=True, dono_id=payload.dono_id)
+        _recusar("Nome do Produto nao pode ser vazio.")
+    _exigir_dono_no_produto_novo(payload.dono_id)
     if payload.dono_id:
         _exigir_dono_com_acesso(supabase, payload.dono_id)
     _exigir_nome_livre(supabase, nome)
@@ -162,7 +171,7 @@ async def criar_produto(
         "nome": nome,
         "ativo": True,
         "dono_id": payload.dono_id,
-        "ordem": payload.ordem if payload.ordem is not None else 0,
+        "ordem": payload.ordem if payload.ordem is not None else _proxima_ordem(supabase),
     }
     result = supabase.table(TABELA_PRODUTOS).insert(novo).execute()
     if not result.data:
@@ -182,9 +191,10 @@ async def atualizar_produto(
 ):
     """Renomeia, ativa, desativa, troca o dono e a ordem.
 
-    A regra do dono vale sobre o RESULTADO da edicao, nao sobre o campo que
-    veio no corpo: desativar o dono e manter o Produto ativo e a mesma recusa
-    que criar ativo sem dono.
+    A regra do dono olha o antes e o depois: recusa a edicao que DEIXA o
+    Produto ativo sem dono, e nao a que apenas o encontra assim. Os sete
+    Produtos do seed nascem ativos e sem dono, e renomear um deles nao e o
+    ato que os deixou sem ninguem.
     """
     atual = _buscar_produto(supabase, produto_id)
     informados = payload.model_fields_set
@@ -193,10 +203,7 @@ async def atualizar_produto(
     if "nome" in informados and payload.nome is not None:
         nome = _normalizar_nome(payload.nome)
         if not nome:
-            raise HTTPException(
-                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-                detail="Nome do Produto nao pode ser vazio.",
-            )
+            _recusar("Nome do Produto nao pode ser vazio.")
         if nome.lower() != str(atual.get("nome", "")).strip().lower():
             _exigir_nome_livre(supabase, nome, exceto_id=produto_id)
         mudancas["nome"] = nome
@@ -204,7 +211,13 @@ async def atualizar_produto(
     ativo = payload.ativo if ("ativo" in informados and payload.ativo is not None) else bool(atual.get("ativo"))
     dono_id = payload.dono_id if "dono_id" in informados else atual.get("dono_id")
 
-    _exigir_dono_no_produto_ativo(ativo=ativo, dono_id=dono_id)
+    if edicao_deixa_produto_ativo_sem_dono(
+        antes_ativo=bool(atual.get("ativo")),
+        antes_dono=atual.get("dono_id"),
+        depois_ativo=ativo,
+        depois_dono=dono_id,
+    ):
+        _recusar(MOTIVO_PRODUTO_ATIVO_SEM_DONO)
     if "dono_id" in informados and payload.dono_id:
         _exigir_dono_com_acesso(supabase, payload.dono_id)
 

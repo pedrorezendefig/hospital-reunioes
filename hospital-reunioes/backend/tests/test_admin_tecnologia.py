@@ -29,7 +29,11 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
-from app.services.tecnologia import e_pessoa_da_aba, produto_ativo_sem_dono  # noqa: E402
+from app.services.tecnologia import (  # noqa: E402
+    e_pessoa_da_aba,
+    edicao_deixa_produto_ativo_sem_dono,
+    produto_ativo_sem_dono,
+)
 
 # ─── Supabase dublê ──────────────────────────────────────────────────────────
 
@@ -363,6 +367,43 @@ class TestRegraDoDono:
     def test_inativo_pode_ficar_sem_dono(self):
         assert produto_ativo_sem_dono(ativo=False, dono_id=None) is False
 
+    def test_a_edicao_que_tira_o_dono_do_ativo_e_recusada(self):
+        assert (
+            edicao_deixa_produto_ativo_sem_dono(
+                antes_ativo=True,
+                antes_dono="P1",
+                depois_ativo=True,
+                depois_dono=None,
+            )
+            is True
+        )
+
+    def test_a_edicao_que_reativa_sem_dono_e_recusada(self):
+        assert (
+            edicao_deixa_produto_ativo_sem_dono(
+                antes_ativo=False,
+                antes_dono=None,
+                depois_ativo=True,
+                depois_dono=None,
+            )
+            is True
+        )
+
+    def test_a_edicao_que_apenas_herda_o_estado_ruim_passa(self):
+        """O estado dos sete Produtos do seed: ativos e sem dono, porque foi a
+        migration que mandou cria-los assim. Renomear um deles nao e o ato que
+        os deixou sem ninguem, e recusar culparia o Super admin por uma falta
+        que ele nao provocou."""
+        assert (
+            edicao_deixa_produto_ativo_sem_dono(
+                antes_ativo=True,
+                antes_dono=None,
+                depois_ativo=True,
+                depois_dono=None,
+            )
+            is False
+        )
+
 
 # ─── 5. Produtos pela tela ───────────────────────────────────────────────────
 
@@ -512,6 +553,47 @@ class TestProdutos:
         client, _ = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1)])
 
         assert client.patch("/api/admin/tecnologia/produtos/prod-1", json={"ativo": False}).status_code == 200
+
+    def test_renomear_produto_do_seed_passa(self):
+        """Os sete do seed nascem ativos e SEM dono. Se a guarda do dono olhasse
+        so o estado final, a primeira abertura do sistema devolveria 422 em todo
+        renomear, e o criterio "cria, renomeia e desativa pela tela" morreria no
+        estado que a propria issue manda criar."""
+        dono = _pessoa("P1", "Dona Vitta")
+        client, sb = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1)])
+
+        resposta = client.patch("/api/admin/tecnologia/produtos/prod-1", json={"nome": "Ana WhatsApp"})
+
+        assert resposta.status_code == 200
+        assert sb.tabelas["tecnologia_produtos"][0]["nome"] == "Ana WhatsApp"
+
+    def test_definir_o_dono_de_produto_do_seed_passa(self):
+        dono = _pessoa("P1", "Dona Vitta")
+        client, sb = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1)])
+
+        resposta = client.patch("/api/admin/tecnologia/produtos/prod-1", json={"dono_id": "P1"})
+
+        assert resposta.status_code == 200
+        assert sb.tabelas["tecnologia_produtos"][0]["dono_id"] == "P1"
+
+    def test_produto_novo_entra_no_fim_da_lista(self):
+        """Sem ordem no corpo, o novo nasce depois dos sete do seed, e nao na
+        frente deles."""
+        dono = _pessoa("P1", "Dona Vitta")
+        client, sb = _montar(
+            logado=dono,
+            produtos=[_produto("prod-1", "Ana", ordem=1), _produto("prod-7", "Infra", ordem=7)],
+        )
+
+        resposta = client.post("/api/admin/tecnologia/produtos", json={"nome": "Portal", "dono_id": "P1"})
+
+        assert resposta.status_code == 201
+        assert resposta.json()["ordem"] == 8
+        assert [p["nome"] for p in client.get("/api/admin/tecnologia/produtos").json()] == [
+            "Ana",
+            "Infra",
+            "Portal",
+        ]
 
     def test_produto_inexistente_da_404(self):
         dono = _pessoa("P1", "Dona Vitta")

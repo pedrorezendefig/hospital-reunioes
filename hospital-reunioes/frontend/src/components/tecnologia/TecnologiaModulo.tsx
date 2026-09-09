@@ -226,6 +226,16 @@ export function TecnologiaModulo() {
                   {produto.ativo ? "Ativo" : "Inativo"}
                 </span>
 
+                {/* Os sete Produtos do seed nascem ativos e sem dono. A API não
+                    recusa renomear um deles (não foi essa edição que os deixou
+                    assim), então quem cobra o dono é esta marca. */}
+                {produto.ativo && !produto.dono_id && (
+                  <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded text-xs font-medium bg-amber-50 text-amber-700">
+                    <AlertCircle className="w-3 h-3" />
+                    Falta dono
+                  </span>
+                )}
+
                 <div className="w-[220px]">
                   <Select
                     label={`Dono de ${produto.nome}`}
