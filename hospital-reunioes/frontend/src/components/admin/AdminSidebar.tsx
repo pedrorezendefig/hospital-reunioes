@@ -11,6 +11,7 @@ import {
   Building2,
   BadgeCheck,
   CalendarRange,
+  Cpu,
   HeartPulse,
   LucideIcon,
   Wrench,
@@ -49,6 +50,11 @@ const SECTIONS: Section[] = [
         icon: HeartPulse,
       },
     ],
+  },
+  {
+    label: "Tecnologia",
+    somenteSuperAdmin: true,
+    items: [{ href: "/admin/tecnologia", label: "Tecnologia", icon: Cpu }],
   },
   {
     label: "Ferramentas",

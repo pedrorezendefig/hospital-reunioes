@@ -102,6 +102,7 @@ PARAMS_SEM_SEGREDO = {
     "plano_id",
     "ponto_id",
     "pop_id",
+    "produto_id",
     "participante_id",
     "prorrogacao_id",
     "protocolo",
