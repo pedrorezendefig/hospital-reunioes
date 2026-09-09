@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-31T11:13-0300 -->
+<!-- last_update: 2026-09-09T01:55-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -798,6 +798,72 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_ouvidoria_pontos_codigo` em `(codigo)` (de `085_ouvidoria_pontos_de_escuta.sql`)
 - `idx_ouvidoria_pontos_setor` em `(setor, ponto)` (de `085_ouvidoria_pontos_de_escuta.sql`)
 
+## tecnologia_produtos
+
+> Origem: `102_tecnologia_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `nome` | `TEXT` | NOT NULL | — | — |
+| `ativo` | `BOOLEAN` | NOT NULL | `true` | — |
+| `dono_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `ordem` | `INTEGER` | NOT NULL | `0` | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `atualizado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
+**Indexes:**
+- `tecnologia_produtos_nome_lower_idx` em `((lower(nome)` (de `102_tecnologia_fundacao.sql`)
+
+## tecnologia_demandas
+
+> Origem: `102_tecnologia_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `titulo` | `TEXT` | NOT NULL | — | — |
+| `descricao` | `TEXT` | — | — | — |
+| `tipo` | `TEXT` | NOT NULL | — | — |
+| `produto_id` | `UUID` | NOT NULL | — | `tecnologia_produtos.id` |
+| `estado` | `TEXT` | NOT NULL | `'nova'` | — |
+| `responsavel_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `autor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `prioridade` | `TEXT` | NOT NULL | `'normal'` | — |
+| `prazo` | `DATE` | — | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `atualizado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `concluida_em` | `TIMESTAMPTZ` | — | — | — |
+| `concluida_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `cancelada_em` | `TIMESTAMPTZ` | — | — | — |
+| `cancelada_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+
+**Indexes:**
+- `idx_tecnologia_demandas_estado` em `(estado)` (de `102_tecnologia_fundacao.sql`)
+- `idx_tecnologia_demandas_responsavel` em `(responsavel_id)` (de `102_tecnologia_fundacao.sql`)
+- `idx_tecnologia_demandas_produto` em `(produto_id)` (de `102_tecnologia_fundacao.sql`)
+
+## tecnologia_conversas
+
+> Origem: `102_tecnologia_fundacao.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `demanda_id` | `UUID` | NOT NULL | — | `tecnologia_demandas.id` |
+| `autor_id` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `linha` | `TEXT` | NOT NULL | `'resposta'` | — |
+| `texto` | `TEXT` | NOT NULL | — | — |
+| `mencoes` | `VARCHAR(10)[]` | NOT NULL | `'{}'` | — |
+| `movimento_campo` | `TEXT` | — | — | — |
+| `movimento_de` | `TEXT` | — | — | — |
+| `movimento_para` | `TEXT` | — | — | — |
+| `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `editado_em` | `TIMESTAMPTZ` | — | — | — |
+
+**Indexes:**
+- `idx_tecnologia_conversas_demanda` em `(demanda_id, criado_em)` (de `102_tecnologia_fundacao.sql`)
+
 ---
 
-**Resumo:** 38 tabelas vivas.
+**Resumo:** 41 tabelas vivas.

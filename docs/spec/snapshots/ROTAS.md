@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-08T22:47-0300 -->
+<!-- last_update: 2026-09-09T01:55-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -314,6 +314,15 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | DELETE | `/admin/tipos-reuniao/{item_id}` | Archive tipos reuniao | ✅ |
 | PATCH | `/admin/tipos-reuniao/{item_id}` | Update tipos reuniao | ✅ |
 
+## admin (`app/routers/admin/tecnologia.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/admin/tecnologia/pessoas` | Quem tem acesso a aba: participante ativo com Super admin. | ✅ |
+| GET | `/admin/tecnologia/produtos` | Todos os Produtos, ativos e inativos, na ordem de exibicao. | ✅ |
+| POST | `/admin/tecnologia/produtos` | Cria Produto. Nasce ativo, e ativo exige dono. | ✅ |
+| PATCH | `/admin/tecnologia/produtos/{produto_id}` | Renomeia, ativa, desativa, troca o dono e a ordem. | ✅ |
+
 ## transcricao (`app/routers/transcricao.py`)
 
 | Método | Rota | O que faz | Auth |
@@ -354,4 +363,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 198 endpoints em 30 routers · 94% exigem auth.
+**Totais:** 202 endpoints em 31 routers · 94% exigem auth.

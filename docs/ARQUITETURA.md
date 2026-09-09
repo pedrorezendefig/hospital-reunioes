@@ -68,12 +68,12 @@ sequenceDiagram
 ## 3. Rotas (API) (auto)
 
 <!-- AUTO:rotas:start -->
-**198 endpoints** em 18 áreas:
+**202 endpoints** em 18 áreas:
 
 | Área | Endpoints |
 |---|---|
 | `aceite` | 3 |
-| `admin` | 49 |
+| `admin` | 53 |
 | `ana` | 5 |
 | `auth` | 2 |
 | `comentarios` | 4 |
@@ -97,7 +97,7 @@ _Lista completa: `docs/spec/snapshots/ROTAS.md`._
 ## 4. Dados (auto)
 
 <!-- AUTO:dados:start -->
-**38 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens` · `consultas_particulares` · `exames` · `cirurgias_estimativas` · `ouvidoria_movimentos` · `ouvidoria_acessos` · `ouvidoria_prazos` · `ouvidoria_prazos_historico` · `ouvidoria_feriados` · `ouvidoria_anexos` · `ouvidoria_setor_responsaveis` · `ouvidoria_notificacoes` · `ouvidoria_setor_tokens` · `ouvidoria_prorrogacoes` · `ouvidoria_tentativas_contato` · `ouvidoria_relatorios` · `ouvidoria_nota_externa` · `ouvidoria_pontos`
+**41 tabelas:** `participantes` · `reunioes` · `reuniao_participantes` · `pendencias` · `agendamentos_email` · `tokens_validacao` · `comentarios_pendencias` · `notificacoes` · `user_preferences` · `audit_log` · `bulk_jobs` · `cargos` · `tipos_reuniao` · `pops_setores` · `pops_setores_participantes` · `pops` · `pops_versoes` · `pops_devolucoes` · `pops_materiais_referencia` · `reuniao_aceites` · `reuniao_aceite_tokens` · `consultas_particulares` · `exames` · `cirurgias_estimativas` · `ouvidoria_movimentos` · `ouvidoria_acessos` · `ouvidoria_prazos` · `ouvidoria_prazos_historico` · `ouvidoria_feriados` · `ouvidoria_anexos` · `ouvidoria_setor_responsaveis` · `ouvidoria_notificacoes` · `ouvidoria_setor_tokens` · `ouvidoria_prorrogacoes` · `ouvidoria_tentativas_contato` · `ouvidoria_relatorios` · `ouvidoria_nota_externa` · `ouvidoria_pontos` · `tecnologia_produtos` · `tecnologia_demandas` · `tecnologia_conversas`
 
 _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 <!-- AUTO:dados:end -->

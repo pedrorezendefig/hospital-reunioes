@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-08-31T11:13-0300 -->
+<!-- last_update: 2026-09-09T01:55-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -34,6 +34,12 @@ erDiagram
     participantes ||--o{ reunioes : "criada_por"
     participantes ||--o{ reunioes : "facilitador_id"
     participantes ||--o{ reunioes : "nome_arquivo_original"
+    participantes ||--o{ tecnologia_conversas : "autor_id"
+    participantes ||--o{ tecnologia_demandas : "autor_id"
+    participantes ||--o{ tecnologia_demandas : "cancelada_por"
+    participantes ||--o{ tecnologia_demandas : "concluida_por"
+    participantes ||--o{ tecnologia_demandas : "responsavel_id"
+    participantes ||--o{ tecnologia_produtos : "dono_id"
     participantes ||--o{ user_preferences : "participante_id"
     pendencias ||--o{ agendamentos_email : "id_acao"
     pendencias ||--o{ comentarios_pendencias : "id_acao"
@@ -45,6 +51,8 @@ erDiagram
     reunioes ||--o{ pendencias : "id_reuniao"
     reunioes ||--o{ reuniao_participantes : "id_reuniao"
     reunioes ||--o{ tokens_validacao : "id_reuniao"
+    tecnologia_demandas ||--o{ tecnologia_conversas : "demanda_id"
+    tecnologia_produtos ||--o{ tecnologia_demandas : "produto_id"
     tipos_reuniao ||--o{ reunioes : "tipo_id"
 
     participantes {
@@ -404,6 +412,37 @@ erDiagram
         nao e
         o e
     }
+    tecnologia_produtos {
+        UUID id PK
+        TEXT nome
+        BOOLEAN ativo
+        VARCHAR dono_id FK
+        INTEGER ordem
+        TIMESTAMPTZ criado_em
+        TIMESTAMPTZ atualizado_em
+    }
+    tecnologia_demandas {
+        UUID id PK
+        TEXT titulo
+        TEXT descricao
+        TEXT tipo
+        UUID produto_id FK
+        TEXT estado
+        VARCHAR responsavel_id FK
+        VARCHAR autor_id FK
+        _ mais_colunas "+8"
+    }
+    tecnologia_conversas {
+        UUID id PK
+        UUID demanda_id FK
+        VARCHAR autor_id FK
+        TEXT linha
+        TEXT texto
+        VARCHAR mencoes
+        TEXT movimento_campo
+        TEXT movimento_de
+        _ mais_colunas "+3"
+    }
 ```
 
 ## Indexes principais
@@ -499,6 +538,11 @@ erDiagram
 | `ouvidoria_nota_externa` | `idx_ouvidoria_nota_externa_fonte` | `fonte, registrada_em DESC` | `082_ouvidoria_nota_externa.sql` |
 | `ouvidoria_pontos` | `idx_ouvidoria_pontos_codigo` | `codigo` | `085_ouvidoria_pontos_de_escuta.sql` |
 | `ouvidoria_pontos` | `idx_ouvidoria_pontos_setor` | `setor, ponto` | `085_ouvidoria_pontos_de_escuta.sql` |
+| `tecnologia_produtos` | `tecnologia_produtos_nome_lower_idx` | `(lower(nome` | `102_tecnologia_fundacao.sql` |
+| `tecnologia_demandas` | `idx_tecnologia_demandas_estado` | `estado` | `102_tecnologia_fundacao.sql` |
+| `tecnologia_demandas` | `idx_tecnologia_demandas_responsavel` | `responsavel_id` | `102_tecnologia_fundacao.sql` |
+| `tecnologia_demandas` | `idx_tecnologia_demandas_produto` | `produto_id` | `102_tecnologia_fundacao.sql` |
+| `tecnologia_conversas` | `idx_tecnologia_conversas_demanda` | `demanda_id, criado_em` | `102_tecnologia_fundacao.sql` |
 
 ---
-**Resumo:** 38 tabelas · 38 relacionamentos FK detectados.
+**Resumo:** 41 tabelas · 46 relacionamentos FK detectados.
