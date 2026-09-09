@@ -7,6 +7,18 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.121.0 - 2026-09-09 16:05 - o card se arrasta entre as colunas, o Quadro lembra o filtro, e a Demanda vira link e texto para IA
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e7d75fe`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.121.0, `db: healthy`; a rota nova provada em produção pelo par 401 contra 404)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e7d75fe
+- Issues: [#639](https://github.com/pedrorezendefig/hospital-reunioes/issues/639) · PR [#657](https://github.com/pedrorezendefig/hospital-reunioes/pull/657) e [#640](https://github.com/pedrorezendefig/hospital-reunioes/issues/640) · PR [#658](https://github.com/pedrorezendefig/hospital-reunioes/pull/658) (PRD [#634](https://github.com/pedrorezendefig/hospital-reunioes/issues/634), ADR 0050)
+- Migration: nenhuma. Quinta fatia seguida sem migration nova · minor, feat
+- Nota: primeira onda em paralelo desta sessão. As duas fatias tocavam os mesmos quatro arquivos do módulo; a #640 rebaseou sobre a #639 sem perder uma linha dela (provado por diff)
+- Nota: a segurança achou injeção de prompt pela Conversa. Sem delimitador e com linha de continuação derramando no nível de cima, uma resposta multilinha plantava ordem para a IA de quem colasse o texto. Corrigido com cerca, explicação da cerca no cabeçalho e recuo da continuação
+- Nota: a afirmação "15 mutantes, todos mortos" da #639 não se sustentou. O revisor rodou outros 14 e dois sobreviveram, na guarda que o autor tinha acabado de justificar em prosa. Contagem honesta final: 21
+
 ## v0.119.0 - 2026-09-09 05:05 - a Conversa da Demanda aceita resposta, menção e correção pelos primeiros dez minutos
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `d0da302`

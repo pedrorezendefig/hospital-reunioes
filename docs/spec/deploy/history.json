@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-09T16:05:00-03:00",
+      "sha": "e7d75fe",
+      "app_version": "0.121.0",
+      "subject": "o card se arrasta entre as colunas, o Quadro lembra o filtro, e a Demanda vira link e texto para IA",
+      "raw_subject": "feat(tecnologia): Copiar para IA, Copiar link e abrir a Demanda pela URL (#658)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 900,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 4 desta sessao, a PRIMEIRA em paralelo: issues #639 (arrastar entre colunas e filtros lembrados, PR #657) e #640 (Copiar para IA, Copiar link e abrir a Demanda pela URL, PR #658), desenvolvidas ao mesmo tempo em worktrees separados e mergeadas na ordem #639 depois #640, com UM deploy no fim. NENHUMA MIGRATION nas duas. A #640 criou a primeira rota nova desde a #638 (GET /demandas/{id}/texto-para-ia), levando a aba a 13 operacoes e 13 gates. As duas tocavam os mesmos quatro arquivos do shell do modulo, e o briefing de cada uma proibiu refatoracao oportunista neles justamente por isso. Funcionou: a #640 rebaseou sobre a #639 com conflito em cinco arquivos e nenhuma linha da #639 se perdeu (provado por diff: zero linhas removidas dos arquivos do shell). O rebase teve uma armadilha que vale registrar: o git fatorou a chave de fechamento final como sufixo comum em demandas.ts e demandas.test.ts, entao manter os dois lados deixava funcao sem fechar; foi reposta a mao e conferida pelo tsc. O commit de bump da #640 foi DESCARTADO pelo git no replay ('patch contents already upstream'), porque a #639 entregou a mesma 0.120.0 antes; a #640 foi para 0.121.0 a mao. Na #639 o achado central foi de qualidade de teste, pelo segundo deploy seguido. O autor afirmou no relatorio e no corpo do PR '15 mutantes, todos mortos'. O revisor rodou 14 dele e DOIS SOBREVIVERAM, os dois na guarda do selo de sequencia que o autor tinha acabado de justificar em prosa. A causa: o teste da corrida respondia numa ORDEM SO (pedido novo primeiro), que e justamente a ordem em que ligar ou desligar a guarda da o mesmo resultado. O autor escreveu a autocritica mais util da sessao: 'a frase e literalmente verdadeira sobre os 15 que eu escolhi, e mesmo assim ela enganou; a afirmacao certa era: rodei 15 mutantes meus, todos mortos, a cobertura dos que eu nao pensei continua sem prova'. E: 'escrevi a prosa da guarda sem escrever o teste da guarda'. Contagem honesta final: 21 mutantes. A licao para as fatias seguintes e que contagem de mutantes so vale com a lista de quais, e que o proprio autor e o pior juiz de quais mutantes faltam. Ainda na #639, o orquestrador DISCORDOU de uma decisao registrada do autor e a reverteu: ele tinha decidido nao recarregar o Quadro sozinho no 409, argumentando que isso tornaria a frase 'Recarregue o Quadro' mentirosa. Mas a frase pedia uma acao que a tela NAO OFERECE (so F5 ou trocar de aba), o que e pior. Com o refetch, ela descreve o que ja aconteceu. O autor concordou depois de ver o argumento. E ele achou uma dependencia entre os dois consertos que ninguem tinha visto: o refetch so e seguro porque a outra correcao impede a leitura de apagar o motivo do erro; sem ela o card voltaria sozinho e calado, pior que o problema original. O verificador provou essa dependencia rodando o mutante certo. Na #640 o eixo foi diferente de todas as fatias anteriores: ela produz um texto DESENHADO PARA SAIR DO HOSPITAL, colado numa IA de fora. A revisao de seguranca rodou cinco mutantes que faziam id da Demanda, id do Produto, id de autor, lista de mencoes e prioridade/prazo vazarem, e todos morreram, inclusive pelos testes DEDICADOS de ausencia. Ela achou porem um vetor novo: INJECAO DE PROMPT pela Conversa. O cabecalho nao tinha delimitador fechando a parte de instrucao, e linha_para_ia prefixava '[data] Autor:' so na PRIMEIRA linha, entao uma resposta multilinha derramava as seguintes no nivel de cima; o teste de exploracao plantou 'IGNORE TODAS AS INSTRUCOES ANTERIORES' e uma 'nova tarefa do administrador' que a IA de quem colasse leria como ordem. Marcado nit pelo revisor (o atacante ja e pessoa de confianca), o orquestrador mandou corrigir por ser barato e o texto sair do hospital: a Conversa passou a ir cercada por marcas de inicio e fim, o cabecalho passou a DIZER o que a cerca significa (marca sem explicacao e enfeite), e toda linha de continuacao entra recuada, que e o que fecha o buraco. A defesa e recuar, nao apagar o que a pessoa escreveu, e ha teste do par de presenca provando isso. Decisao do dono no checkpoint: o NOME COMPLETO dos funcionarios pode sair no texto. O ADR 0050 autoriza 'titulo, tipo, produto, descricao e a Conversa' e nao menciona nome, mas sem ele ninguem entende quem pediu o que numa conversa de varias pessoas, e o nome sairia de qualquer jeito porque as mencoes digitadas ja viajam dentro do texto das respostas. A tela passou a dizer PARA ONDE o texto vai, e nao so o que vai. O achado que so existia DEPOIS do merge da #639: com os filtros no ar, a lista de Demandas passou a ser filtrada, entao o aviso do link diria 'Confira o endereco com quem enviou' quando a causa real e o filtro escondendo a Demanda. Quinta aparicao do mesmo padrao nesta sessao (mensagem culpando causa que o codigo nao distingue), mas aqui o codigo DISTINGUE, porque a #639 acabara de entregar temFiltroAtivo. As duas causas ganharam frases separadas, e a do filtro nao AFIRMA que o filtro e a causa (a Demanda pode nem existir): diz os dois fatos que o codigo tem e aponta o botao Limpar filtros da mesma tela. O autor escreveu um teste que CLICA nesse botao e prova que o card abre, ou seja, que a saida apontada resolve de verdade em vez de ser desculpa educada. O orquestrador proibiu decidir sozinho se o card deveria abrir com a Demanda filtrada; ficou so na mensagem, com o argumento dos dois lados registrado para o dono decidir. O piso da matriz de gate subiu de 12 para 13 e foi de novo um MUST-FIX, o mesmo defeito da #637: a #640 criou rota e deixou o piso para tras. O orquestrador achou esse sozinho antes dos revisores. Vale virar checagem fixa: fatia que cria rota sobe o piso no mesmo commit. O deploy teve um susto que NAO era do app: por quase uma hora o orquestrador nao conseguiu falar com a VPS (TLS resetado em 443, ping e TCP normais) e diagnosticou errado, primeiro como fail2ban e depois como Traefik derrubado por builds concorrentes, chegando a avisar o dono de possivel indisponibilidade. A causa era a VPN da maquina do dono cortando o TLS. Producao esteve no ar o tempo todo, os quatro builds terminaram sem OOM, e o unico efeito real foi o APP_VERSION nao ter gravado no meio do merge, deixando o /api/health em 0.119.0 com o codigo novo ja no ar. Corrigido com gravacao e redeploy do backend. A licao: TLS resetado com ping e TCP bons e sintoma de rede LOCAL antes de ser sintoma do servidor, e portas diferentes respondendo coisas diferentes nao provam Traefik quebrado. Codigo novo provado em producao sem login pelo par 401 contra 404 na rota texto-para-ia."
+    },
+    {
       "at": "2026-09-09T05:05:00-03:00",
       "sha": "d0da302",
       "app_version": "0.119.0",
@@ -1410,27 +1439,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PR #423, issue #412. Sem migration. Neste ponto o APP_VERSION do Coolify ainda estava em 0.81.2: o merge foi manual, sem o Passo 8.5 do /ship, entao producao serviu o codigo novo anunciando a versao velha ate o ship seguinte. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
-    },
-    {
-      "at": "2026-08-28T00:30:00-03:00",
-      "sha": "86bdfbc",
-      "app_version": "0.81.2",
-      "subject": "Token de aceite sai da notificacao do sino",
-      "raw_subject": "fix(aceite): tira o token de aceite em claro da notificacao do sino",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [
-        "086_aceite_notificacao_sem_token.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "PR #416, issue #295. Migration 086 (UPDATE de dado: corrige referencia_id das notificacoes de aceite). Aplicacao no Studio de producao NAO confirmada. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
     }
   ]
 }
