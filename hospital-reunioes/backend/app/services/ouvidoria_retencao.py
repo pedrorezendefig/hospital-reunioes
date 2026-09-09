@@ -94,6 +94,14 @@ AUTOR_DA_RETENCAO = "Sistema (retenção)"
 #
 # Quem escreve e quem lê usam esta mesma constante: em palavras separadas, mudar
 # a frase de um lado faria o outro parar de reconhecer o ato, em silêncio.
+#
+# Não há movimento antigo a converter: até esta fatia, o único que gravava o
+# movimento do apagamento era o cron dos cinco anos, e nenhum caso chegou lá (o
+# módulo é de 2026, e o próprio ADR 0047 conta com isso). Movimento gravado com
+# a frase anterior, se um dia existir, deixa de ser reconhecido: a rodada
+# seguinte gravaria um segundo movimento e o aviso da tela perderia o autor. É
+# por isso que a marca é PREFIXO, e não a frase inteira: o texto depois dela
+# pode mudar sem quebrar quem lê.
 MARCA_DO_APAGAMENTO = "Apagamento do Dossiê"
 _SEPARADOR = ": "
 

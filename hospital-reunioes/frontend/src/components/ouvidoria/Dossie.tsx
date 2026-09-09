@@ -1777,8 +1777,16 @@ export function Dossie({ protocolo, token }: DossieProps) {
                 da área. Ficam o protocolo, a linha do tempo e os números dos relatórios. Não tem volta, e
                 o caso apagado não pode ser reaberto.
               </p>
-              {avisoApagamento && <p className="mt-2 text-xs text-slate-500">{avisoApagamento}</p>}
             </div>
+          )}
+
+          {/* O aviso do ato fica FORA do bloco do botão de propósito. Dentro
+              dele, a mensagem de sucesso nunca chegaria a ser lida: no sucesso
+              a tela adota o caso já carimbado, o `podeApagar` vira falso no
+              mesmo render, e o bloco inteiro sai da tela levando a frase
+              junto. Carimbo no servidor sem par na tela some em silêncio. */}
+          {avisoApagamento && (
+            <p className="pt-2 text-xs text-slate-500">{avisoApagamento}</p>
           )}
 
           {confirmandoApagamento && (

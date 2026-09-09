@@ -260,6 +260,53 @@ describe("a confirmação com motivo obrigatório (issue #595)", () => {
     expect(chamadas[0].body).toEqual({ motivo: MOTIVO });
   });
 
+  it("o aviso do ato continua legível depois de o botão sair da tela", async () => {
+    // O carimbo do servidor precisa de par na tela. Como a tela adota o caso
+    // já apagado no mesmo render, o bloco do botão sai junto: um aviso escrito
+    // DENTRO dele nunca chegaria a ser lido, e o ato ficaria sem confirmação
+    // nenhuma para quem clicou.
+    montar(dossie(), { trilha: { movimentos: [movimentoDoApagamento("Dr. Diretor")], degradado: [] } });
+    await abrirAConfirmacao();
+
+    fireEvent.change(screen.getByRole("textbox", { name: /Motivo/ }), { target: { value: MOTIVO } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Apagar agora/ }));
+    });
+
+    expect(await screen.findByText(/Caso apagado\./)).toBeTruthy();
+    // E o botão realmente saiu: sem isto, o aviso poderia estar aparecendo
+    // por o bloco inteiro ter continuado na tela.
+    expect(screen.queryByRole("button", BOTAO_APAGAR)).toBeNull();
+  });
+
+  it("a recusa do servidor chega à tela com a frase que ele mandou", async () => {
+    const recusa = "Só um caso encerrado pode ser apagado.";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.endsWith("/apagamento")) {
+          return { ok: false, status: 409, json: async () => ({ detail: recusa }) } as Response;
+        }
+        if (url.endsWith("/anexos")) return respostaJson({ anexos: [] });
+        if (url.endsWith("/notificacoes")) return respostaJson({ notificacoes: [] });
+        if (url.endsWith("/prorrogacoes")) return respostaJson({ prorrogacoes: [] });
+        if (url.endsWith("/respostas")) return respostaJson({ respostas: [] });
+        if (url.endsWith("/tentativas-contato")) return respostaJson({ tentativas: [] });
+        if (url.endsWith("/movimentos")) return respostaJson({ movimentos: [], degradado: [] });
+        return respostaJson(dossie());
+      })
+    );
+    render(<Dossie protocolo="2026-0012" token="token-de-teste" />);
+    await abrirAConfirmacao();
+
+    fireEvent.change(screen.getByRole("textbox", { name: /Motivo/ }), { target: { value: MOTIVO } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Apagar agora/ }));
+    });
+
+    expect(await screen.findByText(recusa)).toBeTruthy();
+  });
+
   it("a tela adota o caso que a rota devolve, sem recarregar nada", async () => {
     // Sem isso, a Diretoria continuaria lendo o relato de um caso que o banco
     // já apagou, até alguém apertar F5.

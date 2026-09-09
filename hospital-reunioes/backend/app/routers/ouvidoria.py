@@ -1907,7 +1907,11 @@ async def apagar_manifestacao(
     que o caso foi apagado outra vez.
 
     Apagar não tem lote, de propósito: um ato sem volta, um caso por vez."""
-    caso = carregar_manifestacao(supabase, manifestacao_id, _CAMPOS_DOSSIE)
+    # A tupla do Dossiê mais o carimbo do Arquivo, que não faz parte dela: é ele
+    # que diz se o caso JÁ estava guardado, e uma leitura sem ele voltaria None
+    # e faria a rota rearquivar por cima do ouvidor, em silêncio. O campo a mais
+    # é ignorado por `dossie_completo`, que projeta só a tupla.
+    caso = carregar_manifestacao(supabase, manifestacao_id, f"{_CAMPOS_DOSSIE}, arquivada_em")
     agora = agora_utc()
 
     # Já apagado (por aqui ou pelos cinco anos): nada a fazer, e nada a gravar.
@@ -1928,7 +1932,9 @@ async def apagar_manifestacao(
     pedido_em = caso.get("apagamento_pedido_em")
     if pedido_em is None:
         pedido_em = agora.isoformat()
-        _gravar_o_pedido_de_apagamento(supabase, manifestacao_id, me, pedido_em, pedido.motivo)
+        _gravar_o_pedido_de_apagamento(
+            supabase, manifestacao_id, me, pedido_em, pedido.motivo, ja_arquivado=bool(caso.get("arquivada_em"))
+        )
 
     apagou = ouvidoria_retencao.apagar_caso(
         supabase,
@@ -1953,33 +1959,41 @@ async def apagar_manifestacao(
     return dossie_completo(supabase, carregar_manifestacao(supabase, manifestacao_id, _CAMPOS_DOSSIE), agora)
 
 
-def _gravar_o_pedido_de_apagamento(supabase, manifestacao_id: str, me: dict, pedido_em: str, motivo: str) -> None:
-    """Grava os três campos do pedido e manda o caso para o Arquivo, no mesmo
-    update.
+def _gravar_o_pedido_de_apagamento(
+    supabase, manifestacao_id: str, me: dict, pedido_em: str, motivo: str, ja_arquivado: bool
+) -> None:
+    """Grava os três campos do pedido e, se preciso, manda o caso para o
+    Arquivo, no mesmo update.
 
     O Arquivo entra junto porque o caso apagado sai da lista sozinho (ADR 0047,
     decisão 4): ele não tem mais o que a lista mostra, e deixá-lo na fila de
     trabalho seria oferecer ao ouvidor um caso sem relato para trabalhar.
 
-    O update repete no PRÓPRIO filtro as duas pré-condições que a rota acabou
+    Mas só entra no caso que AINDA NÃO está arquivado. O par do Arquivo é o
+    registro de quem tirou o caso da lista e quando, e regravá-lo aqui trocaria
+    o ouvidor que guardou o caso semana passada pelo diretor que o apagou hoje,
+    em silêncio. Arquivar de novo o que já está arquivado não é o ato desta
+    rota, e o efeito visível seria o mesmo.
+
+    O update repete no PRÓPRIO filtro as três pré-condições que a rota acabou
     de conferir na leitura, e é isso que fecha a janela entre as duas (TOCTOU):
     uma reabertura que caísse no meio faria o filtro não casar linha nenhuma, e
     o caso volta como 409 em vez de nascer com um pedido de apagamento pendente
     que o serviço nunca vai concluir."""
+    carimbos = {
+        "apagamento_pedido_em": pedido_em,
+        "apagamento_pedido_por": me["id"],
+        "apagamento_motivo": motivo,
+    }
+    if not ja_arquivado:
+        carimbos |= {"arquivada_em": pedido_em, "arquivada_por": me["id"]}
     try:
         gravado = (
             supabase.table("ouvidoria_protocolos")
-            .update(
-                {
-                    "apagamento_pedido_em": pedido_em,
-                    "apagamento_pedido_por": me["id"],
-                    "apagamento_motivo": motivo,
-                    "arquivada_em": pedido_em,
-                    "arquivada_por": me["id"],
-                }
-            )
+            .update(carimbos)
             .eq("id", manifestacao_id)
             .eq("status", "encerrado")
+            .not_.is_("encerrada_em", "null")
             .is_("anonimizada_em", "null")
             .execute()
         )

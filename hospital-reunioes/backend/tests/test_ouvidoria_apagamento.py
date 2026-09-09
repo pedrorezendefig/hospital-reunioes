@@ -728,6 +728,73 @@ class TestOQueSobrevive:
         assert MOTIVO in _movimento_do_apagamento(supabase)["observacao"]
 
 
+class TestOArquivoDeQuemJaEstavaGuardado:
+    """O caso apagado entra no Arquivo sozinho, mas o que já estava arquivado
+    guarda o registro de quem o guardou."""
+
+    def test_caso_ja_arquivado_mantem_quem_arquivou_e_quando(self, monkeypatch):
+        antes = "2026-09-02T12:00:00+00:00"
+        supabase = _caso_com_todos_os_registros(arquivada_em=antes, arquivada_por="P10")
+        client, _ = _client(monkeypatch, supabase)
+
+        r = _apagar(client)
+
+        assert r.status_code == 200, r.text
+        # O ato do ouvidor continua de pé: regravar aqui trocaria quem guardou
+        # o caso semana passada pelo diretor que o apagou hoje, em silêncio.
+        assert supabase.caso()["arquivada_em"] == antes
+        assert supabase.caso()["arquivada_por"] == "P10"
+        # E o apagamento aconteceu de verdade (senão o teste passaria por ter
+        # morrido antes de tocar no banco).
+        assert supabase.caso()["anonimizada_em"]
+        assert supabase.caso()["apagamento_motivo"] == MOTIVO
+
+
+class TestAChaveDaPortaAntecipada:
+    """A régua do serviço é o carimbo DESTE pedido, e não "existe algum
+    pedido": um pedido reescrito no meio da rodada não é o ato que começou."""
+
+    def test_pedido_reescrito_no_meio_da_rodada_nao_destroi_nada(self):
+        supabase = _caso_com_todos_os_registros(
+            apagamento_pedido_em="2026-09-08T17:00:00+00:00",
+            apagamento_pedido_por="P11",
+            apagamento_motivo=MOTIVO,
+        )
+        # O serviço trabalha com o carimbo que a rota gravou; o banco, nesse
+        # meio tempo, já guarda outro.
+        apagamento = ouvidoria_retencao.pela_diretoria(
+            autor="Dr. Diretor",
+            autor_id="P11",
+            motivo=MOTIVO,
+            pedido_em="2026-09-08T16:00:00+00:00",
+        )
+
+        apagou = ouvidoria_retencao.apagar_caso(supabase, supabase.caso(), INICIO, apagamento)
+
+        assert apagou is False
+        assert supabase.caso()["relato_integral"] == RELATO
+        assert supabase.caso()["anonimizada_em"] is None
+        assert supabase.tabelas["ouvidoria_tentativas_contato"][0]["observacao"] is not None
+        assert supabase.tabelas["ouvidoria_anexos"] != []
+
+    def test_a_mesma_chave_destroi(self):
+        """O par: sem ele, um serviço que recusasse SEMPRE passaria no teste
+        acima."""
+        pedido_em = "2026-09-08T17:00:00+00:00"
+        supabase = _caso_com_todos_os_registros(
+            apagamento_pedido_em=pedido_em, apagamento_pedido_por="P11", apagamento_motivo=MOTIVO
+        )
+        apagamento = ouvidoria_retencao.pela_diretoria(
+            autor="Dr. Diretor", autor_id="P11", motivo=MOTIVO, pedido_em=pedido_em
+        )
+
+        apagou = ouvidoria_retencao.apagar_caso(supabase, supabase.caso(), INICIO, apagamento)
+
+        assert apagou is True
+        assert supabase.caso()["relato_integral"] is None
+        assert supabase.caso()["anonimizada_em"]
+
+
 class TestSegundaChamada:
     def test_segunda_chamada_devolve_sucesso_e_nao_grava_segundo_movimento(self, monkeypatch):
         client, supabase = _client(monkeypatch, _caso_com_todos_os_registros())
