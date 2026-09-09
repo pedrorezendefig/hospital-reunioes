@@ -316,7 +316,11 @@ describe("Quando não dá para ler", () => {
 });
 
 describe("Duas leituras no ar ao mesmo tempo", () => {
-  type Pendente = { url: string; responder: (dados: DemandaDaMinhaVez[]) => void };
+  type Pendente = {
+    url: string;
+    responder: (dados: DemandaDaMinhaVez[]) => void;
+    recusar: (status: number) => void;
+  };
 
   /**
    * O `fetch` que NÃO responde sozinho.
@@ -337,6 +341,47 @@ describe("Duas leituras no ar ao mesmo tempo", () => {
               url,
               responder: (dados) =>
                 resolve({ ok: true, status: 200, json: async () => dados } as unknown as Response),
+              recusar: (status) =>
+                resolve({ ok: false, status, json: async () => ({ detail: "não deu" }) } as unknown as Response),
+            });
+          }),
+      ),
+    );
+    return pendentes;
+  }
+
+  /** Uma chamada cujos CABEÇALHOS e cujo CORPO chegam em dois tempos. */
+  type PendenteComCorpo = {
+    url: string;
+    /** Resolve o `Response`: daqui em diante o `json()` fica pendurado. */
+    responder: () => void;
+    /** Resolve o `json()`. */
+    entregarCorpo: (dados: DemandaDaMinhaVez[]) => void;
+  };
+
+  /**
+   * O `fetch` cujo corpo só resolve quando o teste manda.
+   *
+   * A fila de cima entrega resposta e corpo de uma vez, e por isso não sabe
+   * dizer nada sobre o que acontece ENTRE os dois. É nessa fresta que mora a
+   * corrida que a segunda conferência do selo fecha.
+   */
+  function filaDeCorposLentos(): PendenteComCorpo[] {
+    const pendentes: PendenteComCorpo[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (url: string) =>
+          new Promise((resolverResposta) => {
+            let entregar: (dados: DemandaDaMinhaVez[]) => void = () => {};
+            const corpo = new Promise<DemandaDaMinhaVez[]>((r) => {
+              entregar = r;
+            });
+            pendentes.push({
+              url,
+              responder: () =>
+                resolverResposta({ ok: true, status: 200, json: () => corpo } as unknown as Response),
+              entregarCorpo: (dados) => entregar(dados),
             });
           }),
       ),
@@ -398,6 +443,73 @@ describe("Duas leituras no ar ao mesmo tempo", () => {
     pendentes[2].responder([DEFEITO]);
     await screen.findByText("Consertar o POP");
     pendentes[1].responder([DECISAO]);
+    await deixarOReactProcessar();
+
+    expect(screen.getByText("Consertar o POP")).toBeTruthy();
+    expect(screen.queryByText("Decidir o encerramento")).toBeNull();
+  });
+
+  it("a falha do pedido antigo não apaga a lista certa do pedido novo", async () => {
+    // Desde que a leitura que falha passou a LIMPAR a lista, uma recusa velha
+    // que escapasse do selo faria pior do que escrever um aviso: apagaria o
+    // resultado do filtro que a pessoa está vendo. É a guarda conferida logo na
+    // chegada da resposta, antes do corpo, que segura este caso.
+    const pendentes = await comDoisPedidosNoAr();
+
+    pendentes[2].responder([DEFEITO]);
+    await screen.findByText("Consertar o POP");
+    pendentes[1].recusar(500);
+    await deixarOReactProcessar();
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("Consertar o POP")).toBeTruthy();
+  });
+
+  it("a falha do pedido mais NOVO, essa sim, vira aviso e leva a lista", async () => {
+    // O par de presença do teste acima: sem ele, uma tela que engolisse TODA
+    // falha de leitura passaria naquele.
+    const pendentes = await comDoisPedidosNoAr();
+
+    pendentes[1].responder([DECISAO]);
+    pendentes[2].recusar(500);
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Não foi possível carregar o que espera por você.",
+    );
+    expect(screen.queryByText("Decidir o encerramento")).toBeNull();
+  });
+
+  it("o CORPO atrasado do pedido antigo não repinta a lista", async () => {
+    // A resposta e o corpo dela chegam em dois tempos. Uma guarda conferida só
+    // quando os cabeçalhos chegam deixa o pedido velho passar e escrever
+    // depois, quando o `json()` dele finalmente resolve: entre uma coisa e
+    // outra o JS cedeu o controle, e o pedido novo pode ter começado E
+    // terminado. Não é hipótese remota aqui, porque o Histórico não pagina e a
+    // busca varre a Conversa: os corpos têm tamanhos bem diferentes.
+    const pendentes = filaDeCorposLentos();
+    render(<Anfitriao />);
+
+    await waitFor(() => expect(pendentes).toHaveLength(1));
+    pendentes[0].responder();
+    pendentes[0].entregarCorpo([DECISAO, DEFEITO]);
+    await screen.findByText("Decidir o encerramento");
+
+    escolherTipo("Decisão");
+    await waitFor(() => expect(pendentes).toHaveLength(2));
+    escolherTipo("Defeito");
+    await waitFor(() => expect(pendentes).toHaveLength(3));
+
+    // O VELHO passa pelos cabeçalhos primeiro, e fica esperando o corpo.
+    pendentes[1].responder();
+    await deixarOReactProcessar();
+
+    // O NOVO chega inteiro e pinta a tela.
+    pendentes[2].responder();
+    pendentes[2].entregarCorpo([DEFEITO]);
+    expect(await screen.findByText("Consertar o POP")).toBeTruthy();
+
+    // E só então o corpo do velho aparece.
+    pendentes[1].entregarCorpo([DECISAO]);
     await deixarOReactProcessar();
 
     expect(screen.getByText("Consertar o POP")).toBeTruthy();

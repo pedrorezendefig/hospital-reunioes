@@ -11,15 +11,19 @@
  *    `{ token: null, loading: true }` e só entrega o token depois de duas idas
  *    à rede. Tratar o token nulo do primeiro render como sessão ausente pisca
  *    o alerta vermelho em toda abertura da aba, com a sessão válida.
- * 2. **A falha de rede vira aviso, e não lista vazia.** Sem o `catch`, o
+ * 2. **A falha vira aviso, e a lista de antes sai da tela.** Sem o `catch`, o
  *    backend fora do ar desenharia uma lista zerada, indistinguível de "nada
- *    esperando por você", que é justamente a frase de boa notícia da aba.
- * 3. **O selo de sequência.** Trocar o filtro ou digitar na busca deixa mais de
- *    um GET no ar, e a rede não devolve na ordem em que foi chamada. Cada
- *    leitura leva o seu número e só escreve na tela se ainda for a última:
- *    isso vale para a lista, para o aviso e para desligar a espera. Desligar a
- *    espera na resposta velha diria "pronto" com a leitura de verdade ainda
- *    vindo.
+ *    esperando por você", que é justamente a frase de boa notícia da aba. E a
+ *    lista ANTERIOR também não pode ficar: embaixo do alerta vermelho, com a
+ *    caixa de busca já mostrando o termo novo, ela e o contador afirmariam um
+ *    resultado que esta leitura não obteve.
+ * 3. **O selo de sequência, conferido DUAS vezes.** Trocar o filtro ou digitar
+ *    na busca deixa mais de um GET no ar, e a rede não devolve na ordem em que
+ *    foi chamada. Cada leitura leva o seu número e só escreve na tela se ainda
+ *    for a última: isso vale para a lista, para o aviso e para desligar a
+ *    espera. A segunda conferência, depois de ler o CORPO, é o que fecha a
+ *    corrida de verdade: o corpo é outra espera, e um pedido novo pode começar
+ *    e terminar enquanto o corpo do velho ainda está chegando.
  * 4. **A espera começa ligada**, para a primeira pintura não ser uma lista
  *    vazia que ninguém pediu.
  *
@@ -76,14 +80,28 @@ export function useListaDeDemandas<T>({
       // conta não é mais o que a tela está pedindo.
       if (meuPedido !== ultimoPedido.current) return;
       if (!resposta.ok) {
+        // A lista de ANTES sai da tela junto. Deixá-la desenhada embaixo do
+        // alerta vermelho faria a tela afirmar um fato que esta leitura não
+        // verificou, e com mais força do que uma frase: o Histórico ainda
+        // contaria "3 Demandas fechadas" para uma busca que o servidor recusou.
+        setItens([]);
         setErro(falhaAoCarregar);
         return;
       }
-      setItens(await resposta.json());
+      const dados = await resposta.json();
+      // A segunda conferência do selo, e é ela que fecha a corrida. Ler o corpo
+      // é outra espera: entre a guarda de cima e esta linha o JS cedeu o
+      // controle, e um pedido mais novo pode ter começado E terminado nesse
+      // meio tempo. Sem esta linha, o corpo GRANDE de um pedido velho (o
+      // Histórico não pagina, e a busca varre a Conversa) chega depois e
+      // repinta a lista por cima da resposta certa.
+      if (meuPedido !== ultimoPedido.current) return;
+      setItens(dados);
       setErro(null);
     } catch (e) {
       console.error("[admin/tecnologia] falha ao carregar a lista", e);
       if (meuPedido !== ultimoPedido.current) return;
+      setItens([]);
       setErro(FALHA_DE_CONEXAO);
     } finally {
       if (meuPedido === ultimoPedido.current) setCarregando(false);

@@ -185,9 +185,14 @@ class TestMotivoDaMinhaVez:
     def test_fui_mencionada(self):
         assert motivo_da_minha_vez(responsavel_id="P1", pessoa_id="P2") == "mencao"
 
-    def test_responsavel_nulo_nao_vira_responsavel(self):
-        """`.eq`/`==` em coluna anulavel: uma Demanda sem responsavel nao e de
-        ninguem, e um `pessoa_id` nulo nao pode casar com ela."""
+    def test_demanda_sem_responsavel_cai_como_mencao(self):
+        """Demanda sem responsavel nao e de ninguem.
+
+        Isto NAO e uma guarda: `pessoa_id` vem do `ator["id"]` da sessao e nunca
+        e nulo, entao `None == "P2"` ja e False. O caso esta escrito porque a
+        coluna e anulavel e a linha existe no banco, e nao porque haja codigo
+        defendendo dela.
+        """
         assert motivo_da_minha_vez(responsavel_id=None, pessoa_id="P2") == "mencao"
 
 
@@ -372,20 +377,49 @@ class _Result:
 
 
 class _TableQuery:
-    """PostgREST minimo: select/eq/in_/order, e nada mais. Estas duas rotas so
-    LEEM: nem insert nem update, e por isso o dublê nao os tem."""
+    """PostgREST minimo: select/eq/in_/order/range, e nada mais. Estas duas
+    rotas so LEEM: nem insert nem update, e por isso o dublê nao os tem.
 
-    def __init__(self, rows: list[dict]):
+    `teto` imita o `PGRST_DB_MAX_ROWS` do `supabase/config.toml`: o servidor
+    corta a resposta nesse numero de linhas, com HTTP 200 e sem aviso nenhum. E
+    o modo de falha que a paginacao da issue #430 veio consertar, e a unica
+    forma de prova-lo aqui e ter um dublê que corte de verdade.
+
+    `order` guarda a LISTA de colunas, e nao uma so: o desempate por `id` e o
+    que faz o recorte em paginas ser estavel, e um dublê que guardasse apenas a
+    ultima chamada nao veria diferenca entre ter e nao ter desempate.
+    """
+
+    def __init__(self, rows: list[dict], teto: int | None = None, selects: list[str] | None = None):
         self._rows = rows
+        self._teto = teto
+        self._selects = selects
+        self._colunas = "*"
         self._eq: dict[str, Any] = {}
         self._in: dict[str, list] = {}
-        self._order: str | None = None
+        self._order: list[str] = []
+        self._range: tuple[int, int] | None = None
 
-    def select(self, *_a, **_kw):
+    def select(self, *a, **_kw):
+        self._colunas = str(a[0]) if a else "*"
+        if self._selects is not None:
+            self._selects.append(self._colunas)
         return self
 
+    def _projetado(self, linha: dict) -> dict:
+        """A linha com as colunas que a consulta PEDIU, e so elas.
+
+        E o que o PostgREST faz, e sem isso a lista de colunas de cada aba nao
+        seria testavel: com o dublê devolvendo tudo de qualquer jeito, tirar
+        `mencoes` do `select` da "Minha vez" nao mudaria resposta nenhuma.
+        """
+        if self._colunas == "*":
+            return dict(linha)
+        pedidas = [c.strip() for c in self._colunas.split(",")]
+        return {c: linha.get(c) for c in pedidas}
+
     def order(self, coluna, **_kw):
-        self._order = coluna
+        self._order.append(coluna)
         return self
 
     def eq(self, coluna, valor):
@@ -396,6 +430,10 @@ class _TableQuery:
         self._in[coluna] = list(valores)
         return self
 
+    def range(self, inicio, fim):
+        self._range = (inicio, fim)
+        return self
+
     def _casa(self, linha: dict) -> bool:
         if not all(linha.get(c) == v for c, v in self._eq.items()):
             return False
@@ -403,17 +441,40 @@ class _TableQuery:
 
     def execute(self):
         casadas = [linha for linha in self._rows if self._casa(linha)]
-        if self._order:
-            casadas.sort(key=lambda linha: (linha.get(self._order) is None, linha.get(self._order)))
-        return _Result(data=[dict(linha) for linha in casadas])
+        # Da ultima chave para a primeira, que e como se compoe ordenacao
+        # estavel: o `sort` do Python preserva empates.
+        for coluna in reversed(self._order):
+            casadas.sort(key=lambda linha, c=coluna: (linha.get(c) is None, linha.get(c)))
+        if self._range is not None:
+            inicio, fim = self._range
+            casadas = casadas[inicio : fim + 1]
+        # O corte do servidor vem DEPOIS da janela pedida, como no PostgREST de
+        # verdade: quem pede mil linhas com teto de duas recebe duas, e nada na
+        # resposta diz que faltou.
+        if self._teto is not None:
+            casadas = casadas[: self._teto]
+        return _Result(data=[self._projetado(linha) for linha in casadas])
 
 
 class _SupabaseMock:
-    def __init__(self, tabelas: dict[str, list[dict]]):
+    """O Supabase dublado, com o registro do que cada consulta PEDIU.
+
+    `selects_de` guarda a lista de colunas de cada leitura por tabela: e o que
+    permite cobrar que "Minha vez" nao peca o `texto` da Conversa, que e um
+    contrato com o SERVIDOR (o dado que atravessa a rede), e nao um detalhe
+    interno.
+    """
+
+    def __init__(self, tabelas: dict[str, list[dict]], teto: int | None = None):
         self.tabelas = tabelas
+        self.teto = teto
+        self.selects: dict[str, list[str]] = {}
+
+    def selects_de(self, tabela: str) -> list[str]:
+        return self.selects.get(tabela, [])
 
     def table(self, nome: str):
-        return _TableQuery(self.tabelas.setdefault(nome, []))
+        return _TableQuery(self.tabelas.setdefault(nome, []), self.teto, self.selects.setdefault(nome, []))
 
 
 def _pessoa(pid: str, nome: str, *, access_profile: str | None = "super_admin") -> dict:
@@ -481,7 +542,21 @@ def _montar(
     demandas: list[dict] | None = None,
     conversas: list[dict] | None = None,
     produtos: list[dict] | None = None,
+    teto: int | None = None,
 ) -> TestClient:
+    """A tela pronta. Quem precisa olhar o que as consultas PEDIRAM usa o
+    `_montar_com_duble`, que devolve o dublê junto."""
+    return _montar_com_duble(logado=logado, demandas=demandas, conversas=conversas, produtos=produtos, teto=teto)[0]
+
+
+def _montar_com_duble(
+    *,
+    logado: dict = PEDRO,
+    demandas: list[dict] | None = None,
+    conversas: list[dict] | None = None,
+    produtos: list[dict] | None = None,
+    teto: int | None = None,
+) -> tuple[TestClient, _SupabaseMock]:
     app = FastAPI()
     app.include_router(tecnologia_router.router, prefix="/api")
 
@@ -491,7 +566,8 @@ def _montar(
             "tecnologia_produtos": [dict(p) for p in (produtos or [{"id": "prod-1", "nome": "Ana"}])],
             "tecnologia_demandas": [dict(d) for d in (demandas or [])],
             "tecnologia_conversas": [dict(c) for c in (conversas or [])],
-        }
+        },
+        teto=teto,
     )
 
     async def _usuario() -> dict[str, Any]:
@@ -499,7 +575,7 @@ def _montar(
 
     app.dependency_overrides[get_current_user] = _usuario
     app.dependency_overrides[get_supabase_client] = lambda: sb
-    return TestClient(app)
+    return TestClient(app), sb
 
 
 # ─── 3. Minha vez, pela rota ─────────────────────────────────────────────────
@@ -760,3 +836,245 @@ class TestHistoricoPelaRota:
 
         assert [d["id"] for d in corpo] == ["d1"]
         assert corpo[0]["fechada_por_nome"] is None
+
+
+# ─── 5. A ordem do fio e o teto do PostgREST (rodada 1 de fix) ───────────────
+
+
+class TestAOrdemDoFio:
+    """A regra da mencao conta a POSICAO das linhas, entao a leitura do fio
+    precisa PEDIR ordem.
+
+    Sem `ORDER BY`, o PostgREST devolve na ordem fisica do heap, que muda depois
+    de um `UPDATE`, e a Conversa tem porta de `UPDATE` (a correcao de 10 minutos
+    da issue #638): corrigir uma resposta pode empurrar a linha para o fim, e a
+    mencao ja respondida voltaria a prender a Demanda em "Minha vez".
+
+    Nos dois testes abaixo as linhas entram na lista na ordem ERRADA, com o
+    `criado_em` dizendo o contrario. Todo cenario dos outros testes monta o fio
+    ja em ordem cronologica, e com a entrada ja ordenada o `.order` fica
+    invisivel: apagar da consulta nao muda resposta nenhuma.
+
+    Os `id` sao escolhidos de proposito para DISCORDAR do relogio nos dois
+    casos: assim, uma consulta que ordenasse so pelo `id` (o que sobra se o
+    `criado_em` sair do `_fio_ordenado`) responde errado, em vez de acertar por
+    acaso.
+    """
+
+    MENCAO = dict(autor_id="P1", texto="@Sócia Vitta o que acha?", mencoes=["P2"])
+    RESPOSTA = dict(autor_id="P2", texto="acho que sim")
+
+    def test_a_resposta_depois_da_mencao_encerra_a_vez_mesmo_chegando_primeiro(self):
+        client = _montar(
+            logado=SOCIA,
+            demandas=[_demanda("d1", responsavel_id="P1")],
+            conversas=[
+                # Na entrada, a resposta vem antes; no relogio, ela vem depois.
+                # E o `id` dela e MENOR, para a ordem por id tambem errar.
+                _linha("d1", id="c1", **self.RESPOSTA, criado_em="2026-09-03T09:00:00Z"),
+                _linha("d1", id="c2", **self.MENCAO, criado_em="2026-09-02T09:00:00Z"),
+            ],
+        )
+
+        assert client.get(f"{BASE}/minha-vez").json() == []
+
+    def test_a_resposta_antes_da_mencao_mantem_a_vez_mesmo_chegando_por_ultimo(self):
+        """A irma de presenca da de cima, com o MESMO desalinho entre a ordem da
+        entrada e a do relogio. Sem ela, uma consulta que devolvesse o fio ao
+        contrario passaria naquela por acaso, e as duas juntas so passam quando
+        a ordem vem do `criado_em`."""
+        client = _montar(
+            logado=SOCIA,
+            demandas=[_demanda("d1", responsavel_id="P1")],
+            conversas=[
+                # Na entrada, a mencao vem antes; no relogio, ela vem depois. O
+                # `id` dela e MENOR, entao a ordem por id tambem erra.
+                _linha("d1", id="c1", **self.MENCAO, criado_em="2026-09-03T09:00:00Z"),
+                _linha("d1", id="c2", **self.RESPOSTA, criado_em="2026-09-02T09:00:00Z"),
+            ],
+        )
+
+        assert [d["id"] for d in client.get(f"{BASE}/minha-vez").json()] == ["d1"]
+
+    def test_duas_linhas_no_mesmo_instante_sao_desempatadas_pelo_id(self):
+        """`criado_em` sozinho nao e chave unica. Duas linhas gravadas no mesmo
+        instante deixariam a regra entregue ao acaso do plano do Postgres, e o
+        recorte em paginas do `ler_tudo` exige ordem por chave unica, senao a
+        pagina seguinte repete ou pula linha.
+
+        Aqui a resposta tem `id` MAIOR que o da mencao, entao com o desempate
+        ela fica depois: a vez esta encerrada."""
+        client = _montar(
+            logado=SOCIA,
+            demandas=[_demanda("d1", responsavel_id="P1")],
+            conversas=[
+                _linha("d1", id="c2-resposta", autor_id="P2", texto="acho que sim", criado_em="2026-09-02T09:00:00Z"),
+                _linha(
+                    "d1",
+                    id="c1-mencao",
+                    autor_id="P1",
+                    texto="@Sócia Vitta o que acha?",
+                    mencoes=["P2"],
+                    criado_em="2026-09-02T09:00:00Z",
+                ),
+            ],
+        )
+
+        assert client.get(f"{BASE}/minha-vez").json() == []
+
+
+class TestOTetoDoPostgrest:
+    """O `PGRST_DB_MAX_ROWS` corta a resposta com HTTP 200 e sem aviso nenhum
+    (issue #430, `app/services/paginacao.py`).
+
+    Aqui a leitura NAO falha: ela volta menor. Uma aba que afirmasse "nada
+    esperando por você" ou "a busca não achou" em cima de uma resposta cortada
+    estaria dizendo um fato que o backend nao verificou, que e a mesma familia
+    das frases de vazio que esta fatia ja segura quando ha erro.
+
+    O teto e de 2 linhas em vez das 1000 de producao porque o modo de falha e o
+    mesmo e o cenario cabe na cabeca: o que se prova e que a leitura continua
+    inteira com o servidor cortando, e nao um numero especifico.
+    """
+
+    def test_o_duble_corta_de_verdade(self):
+        """O controle das tres abaixo: se o dublê nao cortasse, elas passariam
+        sem exercitar nada, e a paginacao ficaria "provada" sobre um servidor
+        que devolve tudo de qualquer jeito."""
+        sb = _SupabaseMock({"t": [{"id": f"x{i}"} for i in range(5)]}, teto=2)
+
+        assert len(sb.table("t").select("*").execute().data) == 2
+        # Sem teto, as cinco voltam: o corte e do dublê configurado, e nao da
+        # tabela ter menos linhas.
+        assert len(_SupabaseMock({"t": [{"id": f"x{i}"} for i in range(5)]}).table("t").select("*").execute().data) == 5
+
+    def test_minha_vez_nao_perde_a_mencao_que_ficou_alem_do_teto(self):
+        """A ordem do fio e global e CRESCENTE, entao o corte come as linhas
+        mais NOVAS de todas as Demandas juntas: exatamente as mencoes recentes,
+        que sao as que criam a vez. Cada arrastar no Quadro escreve uma linha de
+        movimento, entao mil linhas nao e um numero distante."""
+        client = _montar(
+            logado=SOCIA,
+            teto=2,
+            demandas=[_demanda(f"d{i}", responsavel_id="P1") for i in range(3)],
+            conversas=[
+                _linha("d0", id="c0", linha="movimento", autor_id=None, criado_em="2026-09-01T09:00:00Z"),
+                _linha("d1", id="c1", linha="movimento", autor_id=None, criado_em="2026-09-02T09:00:00Z"),
+                # A mencao e a linha mais NOVA de todas: e a primeira a cair no
+                # corte.
+                _linha(
+                    "d2",
+                    id="c2",
+                    autor_id="P1",
+                    texto="@Sócia Vitta o que acha?",
+                    mencoes=["P2"],
+                    criado_em="2026-09-03T09:00:00Z",
+                ),
+            ],
+        )
+
+        assert [d["id"] for d in client.get(f"{BASE}/minha-vez").json()] == ["d2"]
+
+    def test_o_historico_nao_perde_as_demandas_alem_do_teto(self):
+        client = _montar(
+            teto=2,
+            demandas=[
+                _demanda(f"d{i}", estado="concluida", concluida_em=f"2026-09-0{i + 1}T10:00:00Z") for i in range(3)
+            ],
+        )
+
+        corpo = client.get(f"{BASE}/historico").json()
+
+        assert {d["id"] for d in corpo} == {"d0", "d1", "d2"}
+
+    def test_a_busca_acha_o_que_ficou_alem_do_teto(self):
+        """O mesmo corte pelo outro lado: sem paginacao, a busca diria "não
+        achei" sobre uma Conversa que ela nem chegou a ler inteira."""
+        client = _montar(
+            teto=2,
+            demandas=[
+                _demanda(f"d{i}", titulo=f"Demanda {i}", estado="concluida", concluida_em=f"2026-09-0{i + 1}T10:00:00Z")
+                for i in range(3)
+            ],
+            conversas=[
+                _linha("d0", id="c0", texto="conversa antiga", criado_em="2026-09-01T09:00:00Z"),
+                _linha("d1", id="c1", texto="outra conversa", criado_em="2026-09-02T09:00:00Z"),
+                _linha("d2", id="c2", texto="combinamos a régua de 24 horas", criado_em="2026-09-03T09:00:00Z"),
+            ],
+        )
+
+        corpo = client.get(f"{BASE}/historico", params={"busca": "régua"}).json()
+
+        assert [d["id"] for d in corpo] == ["d2"]
+
+
+class TestAsColunasDoFio:
+    """Cada aba pede do fio so o que ela le.
+
+    `select("*")` traria o `texto` (ate 5000 caracteres por resposta) de toda
+    Demanda aberta em TODA abertura de "Minha vez", que nao le o texto de nada.
+    Na conta do revisor de seguranca, 300 Demandas com 20 respostas cada dao 30
+    MB pela rede a cada carregamento, por pessoa. Menos dado tambem e menos
+    chance de bater no teto de linhas do PostgREST.
+
+    Sao duas provas diferentes, e as duas fazem falta: que a consulta PEDE as
+    colunas certas (contrato com o servidor, o que atravessa a rede) e que a
+    regra continua funcionando SO com elas (o dublê projeta, entao coluna que
+    faltasse na lista sumiria da linha).
+    """
+
+    def _cenario_da_mencao(self) -> tuple[TestClient, _SupabaseMock]:
+        return _montar_com_duble(
+            logado=SOCIA,
+            demandas=[_demanda("d1", responsavel_id="P1")],
+            conversas=[_linha("d1", autor_id="P1", texto="@Sócia Vitta o que acha?", mencoes=["P2"])],
+        )
+
+    def test_minha_vez_nao_pede_o_texto_da_conversa(self):
+        client, sb = self._cenario_da_mencao()
+
+        client.get(f"{BASE}/minha-vez")
+        pedidos = sb.selects_de("tecnologia_conversas")
+
+        assert pedidos, "a rota nem leu a Conversa: a asserção abaixo passaria sobre nada"
+        for pedido in pedidos:
+            assert "texto" not in pedido
+            # A irma de presenca: ela pede o que a regra usa, entao "sem texto"
+            # nao e "sem coluna nenhuma".
+            assert "mencoes" in pedido
+
+    def test_a_regra_da_mencao_funciona_so_com_as_colunas_pedidas(self):
+        """O dublê projeta como o PostgREST: se `mencoes` ou `autor_id` saissem
+        da lista, a linha chegaria sem eles e a mencao sumiria."""
+        client, _ = self._cenario_da_mencao()
+
+        assert [d["id"] for d in client.get(f"{BASE}/minha-vez").json()] == ["d1"]
+
+    def test_a_busca_do_historico_pede_o_texto(self):
+        """O par do primeiro: a busca varre o texto das respostas, entao aqui a
+        coluna TEM que vir. Uma lista de colunas cravada sem `texto` nas duas
+        abas passaria naquele teste e quebraria a busca."""
+        client, sb = _montar_com_duble(
+            demandas=[_demanda("d1", estado="concluida", concluida_em="2026-09-08T10:00:00Z")],
+            conversas=[_linha("d1", texto="combinamos a régua de 24 horas")],
+        )
+
+        corpo = client.get(f"{BASE}/historico", params={"busca": "régua"}).json()
+
+        assert [d["id"] for d in corpo] == ["d1"]
+        assert all("texto" in pedido for pedido in sb.selects_de("tecnologia_conversas"))
+
+    def test_sem_termo_de_busca_o_historico_nem_le_a_conversa(self):
+        """A leitura do fio so acontece quando ha o que procurar nele: abrir a
+        aba sem buscar nada nao paga a Conversa inteira do Historico."""
+        client, sb = _montar_com_duble(
+            demandas=[_demanda("d1", estado="concluida", concluida_em="2026-09-08T10:00:00Z")],
+            conversas=[_linha("d1", texto="combinamos a régua de 24 horas")],
+        )
+
+        client.get(f"{BASE}/historico")
+
+        assert sb.selects_de("tecnologia_conversas") == []
+        # A irma de presenca: com termo, ela le.
+        client.get(f"{BASE}/historico", params={"busca": "régua"})
+        assert sb.selects_de("tecnologia_conversas") != []

@@ -86,6 +86,7 @@ from app.models.tecnologia_schemas import (
     RespostaPayload,
     TextoParaIaResponse,
 )
+from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
     ESTADOS_ABERTOS,
     ESTADOS_FECHADOS,
@@ -732,14 +733,36 @@ def _com_janela(linha: dict, *, ator_id: str, autor_nome: str | None) -> dict:
     return {**linha, "autor_nome": autor_nome, "editavel_ate": editavel_ate}
 
 
+def _fio_ordenado(consulta):
+    """A ordem do fio, decidida num lugar so (issue #641).
+
+    Toda leitura da Conversa passa por aqui. Duas leituras que decidissem a
+    ordem por conta propria divergiriam na primeira mudanca, e a divergencia
+    seria MUDA: nada erra, as linhas so aparecem noutra sequencia. E a ordem nao
+    e enfeite, e regra: "fui mencionado e ainda nao respondi"
+    (`esperando_resposta_da_pessoa`) conta a POSICAO das linhas, e o texto do
+    "Copiar para IA" sai na sequencia em que a conversa aconteceu.
+
+    O desempate por `id` fecha duas frestas: duas linhas gravadas no mesmo
+    instante deixariam a regra da mencao entregue ao acaso do plano do Postgres,
+    e o recorte em paginas do `ler_tudo` exige ordenacao por chave UNICA, senao
+    a pagina seguinte repete ou pula linha.
+    """
+    return consulta.order("criado_em").order("id")
+
+
 def _fio_da_demanda(supabase: Client, demanda_id: str) -> list[dict]:
     """As linhas do fio em ordem cronologica, com o `autor_nome` resolvido.
 
-    Um lugar so para ler o fio: a Conversa do modal e o texto do "Copiar para
-    IA" precisam ver a MESMA coisa, na mesma ordem. Duas leituras separadas
-    divergiriam na primeira mudanca de ordem, e a divergencia seria muda.
+    Um lugar so para ler o fio DE UMA Demanda: a Conversa do modal e o texto do
+    "Copiar para IA" precisam ver a MESMA coisa, na mesma ordem.
+
+    A leitura de VARIAS Demandas de uma vez ("Minha vez" e a busca do Historico)
+    mora no `_fios_por_demanda`, e nao aqui, porque tem outra forma: outro
+    filtro, outras colunas e paginacao. O que as duas nao podem decidir
+    separado, a ordem, sai do `_fio_ordenado`, que e o mesmo para as duas.
     """
-    result = supabase.table(TABELA_CONVERSAS).select("*").eq("demanda_id", demanda_id).order("criado_em").execute()
+    result = _fio_ordenado(supabase.table(TABELA_CONVERSAS).select("*").eq("demanda_id", demanda_id)).execute()
     linhas = list(result.data or [])
     nomes = _nomes_de_participantes(supabase, {linha["autor_id"] for linha in linhas if linha.get("autor_id")})
     return [{**linha, "autor_nome": nomes.get(linha.get("autor_id"))} for linha in linhas]
@@ -948,34 +971,63 @@ def _demandas_filtradas(
     campos preenchidos logo acima dela.
 
     A ordem sai do banco por `criado_em` crescente, e e ela que sustenta o "mais
-    velha primeiro" das duas abas.
+    velha primeiro" das duas abas. O desempate por `id` e o que o recorte em
+    paginas exige (ver `_fio_ordenado`).
+
+    A leitura e PAGINADA (`ler_tudo`, issue #430). O `PGRST_DB_MAX_ROWS` do
+    `supabase/config.toml` corta em 1000 linhas com HTTP 200 e sem aviso
+    nenhum, e o Historico so cresce, porque Demanda fechada nunca sai de la:
+    sem paginacao, passado o teto, a aba passaria a esconder Demandas dizendo
+    "nao ha nada aqui", que e afirmar um fato que a leitura nao verificou.
     """
-    consulta = supabase.table(TABELA_DEMANDAS).select("*").in_("estado", list(estados))
-    for coluna, valor in (("tipo", tipo), ("produto_id", produto_id), ("responsavel_id", responsavel_id)):
-        if valor:
-            consulta = consulta.eq(coluna, valor)
-    return list(consulta.order("criado_em").execute().data or [])
+
+    def consulta():
+        query = supabase.table(TABELA_DEMANDAS).select("*").in_("estado", list(estados))
+        for coluna, valor in (("tipo", tipo), ("produto_id", produto_id), ("responsavel_id", responsavel_id)):
+            if valor:
+                query = query.eq(coluna, valor)
+        return query.order("criado_em").order("id")
+
+    return ler_tudo(consulta, rotulo="as Demandas da aba Tecnologia")
 
 
-def _fios_por_demanda(supabase: Client, demanda_ids: list[str]) -> dict[str, list[dict]]:
+# O que cada aba precisa LER do fio.
+#
+# `select("*")` traria o `texto` (ate 5000 caracteres por resposta) de toda
+# Demanda aberta em TODA abertura de "Minha vez", que nao le o texto de nada:
+# a regra da mencao olha `autor_id`, `linha` e `mencoes`. Menos dado tambem e
+# menos chance de bater no teto de linhas do PostgREST.
+#
+# `criado_em` e `id` nao entram na lista: o PostgREST ordena por coluna que nao
+# foi selecionada, e nenhuma das duas abas le esses campos do fio.
+COLUNAS_DO_FIO_PARA_MENCAO = "demanda_id, autor_id, linha, mencoes"
+COLUNAS_DO_FIO_PARA_BUSCA = "demanda_id, linha, texto"
+
+
+def _fios_por_demanda(supabase: Client, demanda_ids: list[str], *, colunas: str) -> dict[str, list[dict]]:
     """O fio de varias Demandas de uma vez, cada um em ordem cronologica.
 
     Uma leitura so, e nao uma por Demanda: as duas abas precisam do fio de uma
     LISTA inteira (as mencoes em "Minha vez", o texto das respostas na busca do
     Historico), e um `for` chamando o PostgREST por card faria a aba custar
     tantas idas quantas Demandas houvesse.
+
+    A leitura e PAGINADA pelo mesmo motivo da de Demandas, e aqui o corte seria
+    ainda mais traicoeiro: a ordem e global e CRESCENTE, entao o teto come as
+    linhas mais NOVAS de todas as Demandas juntas, que sao exatamente as mencoes
+    recentes, as que criam a vez. Cada arrastar no Quadro escreve uma linha de
+    movimento, entao mil linhas nao e um numero distante.
     """
     if not demanda_ids:
         return {}
-    result = (
-        supabase.table(TABELA_CONVERSAS)
-        .select("*")
-        .in_("demanda_id", sorted(set(demanda_ids)))
-        .order("criado_em")
-        .execute()
-    )
+
+    def consulta():
+        return _fio_ordenado(
+            supabase.table(TABELA_CONVERSAS).select(colunas).in_("demanda_id", sorted(set(demanda_ids)))
+        )
+
     fios: dict[str, list[dict]] = {}
-    for linha in result.data or []:
+    for linha in ler_tudo(consulta, rotulo="as Conversas da aba Tecnologia"):
         fios.setdefault(str(linha.get("demanda_id")), []).append(linha)
     return fios
 
@@ -1015,7 +1067,11 @@ async def listar_minha_vez(
         produto_id=produto_id,
         responsavel_id=responsavel_id,
     )
-    fios = _fios_por_demanda(supabase, [d["id"] for d in abertas if d.get("responsavel_id") != eu])
+    fios = _fios_por_demanda(
+        supabase,
+        [d["id"] for d in abertas if d.get("responsavel_id") != eu],
+        colunas=COLUNAS_DO_FIO_PARA_MENCAO,
+    )
 
     minhas = [
         d
@@ -1063,7 +1119,7 @@ async def listar_historico(
     )
 
     if normalizar_para_busca(busca).strip():
-        fios = _fios_por_demanda(supabase, [d["id"] for d in fechadas])
+        fios = _fios_por_demanda(supabase, [d["id"] for d in fechadas], colunas=COLUNAS_DO_FIO_PARA_BUSCA)
         fechadas = [
             d
             for d in fechadas

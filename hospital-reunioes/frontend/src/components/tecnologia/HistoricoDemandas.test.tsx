@@ -67,6 +67,9 @@ function montar(
   demandas: DemandaDoHistorico[],
   opcoes: {
     recusa?: number;
+    // O servidor recusa SÓ quando há termo de busca. É o cenário em que a
+    // lista de antes está na tela e a leitura nova falha.
+    recusaNaBusca?: number;
     redeFora?: boolean;
     token?: string | null;
     carregandoAuth?: boolean;
@@ -82,6 +85,13 @@ function montar(
       if (opcoes.redeFora) throw new TypeError("Failed to fetch");
       if (url.includes("/conversa")) {
         return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+      }
+      if (opcoes.recusaNaBusca && url.includes("busca=")) {
+        return {
+          ok: false,
+          status: opcoes.recusaNaBusca,
+          json: async () => ({ detail: "não deu" }),
+        } as unknown as Response;
       }
       if (opcoes.recusa) {
         return { ok: false, status: opcoes.recusa, json: async () => ({ detail: "não deu" }) } as unknown as Response;
@@ -365,6 +375,43 @@ describe("Quando não dá para ler", () => {
 
     expect((await screen.findByRole("alert")).textContent).toContain("Não foi possível carregar o Histórico.");
     expect(screen.queryByText(/Nenhuma Demanda foi concluída ou cancelada ainda/)).toBeNull();
+  });
+
+  it("a leitura que falha leva a lista de ANTES junto, com o contador", async () => {
+    // O que não pode acontecer: alerta vermelho, a caixa de busca escrita com o
+    // termo novo, e embaixo a lista da busca anterior com "1 Demanda fechada".
+    // O contador é mais forte que uma frase de vazio: ele diz um NÚMERO para uma
+    // busca que o servidor recusou.
+    montar([demanda("d1", "Encerrar conversas")], { recusaNaBusca: 500 });
+
+    // O marcador positivo: a lista e o contador ESTAVAM na tela.
+    expect(await screen.findByText("Encerrar conversas")).toBeTruthy();
+    expect(screen.getByText("1 Demanda fechada")).toBeTruthy();
+
+    digitarNaBusca("xyz");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Não foi possível carregar o Histórico.");
+    await waitFor(() => expect(screen.queryByText("Encerrar conversas")).toBeNull());
+    expect(screen.queryByText("1 Demanda fechada")).toBeNull();
+    // E nenhuma frase de vazio ocupa o lugar: sob erro o código não sabe se o
+    // Histórico está vazio.
+    expect(screen.queryByText(/Nenhuma Demanda/)).toBeNull();
+  });
+
+  it("a leitura seguinte que dá certo apaga o aviso e traz a lista de volta", async () => {
+    // A irmã de presença da de cima, e a prova de que a leitura boa LIMPA o
+    // alerta da leitura anterior.
+    montar([demanda("d1", "Encerrar conversas")], { recusaNaBusca: 500 });
+    await screen.findByText("Encerrar conversas");
+
+    digitarNaBusca("xyz");
+    await screen.findByRole("alert");
+
+    digitarNaBusca("");
+
+    expect(await screen.findByText("Encerrar conversas")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("1 Demanda fechada")).toBeTruthy();
   });
 });
 

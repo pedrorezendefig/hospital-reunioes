@@ -45,7 +45,13 @@ class _Result:
 
 
 class _TableQuery:
-    """PostgREST minimo: select/eq/in_/order/insert/update, e nada mais."""
+    """PostgREST minimo: select/eq/in_/order/range/insert/update, e nada mais.
+
+    `range` entrou com a issue #641: as duas rotas de recorte da lista leem
+    paginado (`ler_tudo`), e sem ele a matriz de gate morreria de
+    `AttributeError` em vez de medir o 403. `order` acumula as colunas, porque
+    essas leituras ordenam por duas.
+    """
 
     def __init__(self, rows: list[dict]):
         self._rows = rows
@@ -53,13 +59,18 @@ class _TableQuery:
         self._in: dict[str, list] = {}
         self._insert: list[dict] | None = None
         self._update: dict | None = None
-        self._order: str | None = None
+        self._order: list[str] = []
+        self._range: tuple[int, int] | None = None
 
     def select(self, *_a, **_kw):
         return self
 
     def order(self, coluna, **_kw):
-        self._order = coluna
+        self._order.append(coluna)
+        return self
+
+    def range(self, inicio, fim):
+        self._range = (inicio, fim)
         return self
 
     def eq(self, coluna, valor):
@@ -101,8 +112,11 @@ class _TableQuery:
                 linha.update(self._update)
             return _Result(data=[dict(linha) for linha in casadas])
 
-        if self._order:
-            casadas.sort(key=lambda linha: (linha.get(self._order) is None, linha.get(self._order)))
+        for coluna in reversed(self._order):
+            casadas.sort(key=lambda linha, c=coluna: (linha.get(c) is None, linha.get(c)))
+        if self._range is not None:
+            inicio, fim = self._range
+            casadas = casadas[inicio : fim + 1]
         return _Result(data=[dict(linha) for linha in casadas])
 
 

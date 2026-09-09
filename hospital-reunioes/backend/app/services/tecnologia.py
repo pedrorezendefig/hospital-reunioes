@@ -606,10 +606,13 @@ def motivo_da_minha_vez(*, responsavel_id: str | None, pessoa_id: str) -> str:
     """Por que este card esta em "Minha vez": porque e meu, ou porque me
     chamaram nele.
 
-    A comparacao e com o `responsavel_id` LIDO, e sem tratar NULL como igual:
-    Demanda sem responsavel nao e de ninguem.
+    Uma comparacao simples basta, e nao ha guarda de NULL: `pessoa_id` vem do
+    `ator["id"]` da sessao e nunca e nulo, entao `None == "P2"` ja e False e uma
+    Demanda sem responsavel cai no outro ramo sozinha. Uma guarda a mais aqui
+    seria codigo morto, com um teste prometendo defender o que a comparacao ja
+    da de graca.
     """
-    if responsavel_id is not None and responsavel_id == pessoa_id:
+    if responsavel_id == pessoa_id:
         return MOTIVO_SOU_RESPONSAVEL
     return MOTIVO_FUI_MENCIONADO
 
