@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-09T19:55:00-03:00",
+      "sha": "c0f36e1",
+      "app_version": "0.123.0",
+      "subject": "a aba Tecnologia fecha: Minha vez, Historico com busca, aviso por e-mail e o Quadro que se atualiza sozinho",
+      "raw_subject": "feat(tecnologia): e-mail nos três gatilhos e o Quadro que se atualiza sozinho (#642) (#661)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 600,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 5 desta sessao, a ULTIMA do PRD #634: issues #641 (abas Minha vez e Historico com busca, PR #660) e #642 (e-mail nos tres gatilhos e atualizacao sozinha do Quadro, PR #661), em paralelo, mergeadas na ordem #641 depois #642, com UM deploy no fim. Com isto o PRD #634 fecha as SETE filhas, e NENHUMA das seis fatias depois da #636 criou migration: a 102 nasceu com as tres tabelas no formato final e aguentou o PRD inteiro. O humano aplicou SQL a mao UMA VEZ nesta sessao. A #641 criou duas rotas (minha-vez e historico), levando a aba a 15 operacoes e 15 gates. A #642 nao criou nenhuma. O eixo da #641 e AUTORIZACAO disfarcada de filtro: 'Minha vez' devolve as Demandas que esperam por VOCE, e se o cliente pudesse escolher de quem e a lista, qualquer Super admin montaria a caixa de entrada de outra pessoa. A rota le o ator do require_super_admin e NAO aceita id de pessoa do cliente. O revisor de seguranca escreveu 24 tentativas de exploracao por todos os caminhos (query, corpo, header) e NENHUMA passou. Ainda assim faltava teste que prendesse a regra, e ele entrou na rodada 2 a pedido do orquestrador. O achado mais importante da onda foi de METODO, nao de codigo: o script de mutacao do autor da #641 estava QUEBRADO e marcava todo mutante de frontend como MORTO sem medir. A linha era `return r.returncode == 0 and 'skipped (' not in r.stdout`, e como o vitest sempre imprime 'skipped' ao rodar um caso so, a funcao devolvia False sempre, e False era impresso como MORTO. Pior: um dos tres mutantes nao medidos era um NO-OP (o de/para trocava a linha por ela mesma mais um comentario), e o que ele deveria provar sobrevivia de verdade. O verificador achou isso lendo o script, nao o codigo. A correcao foi alem do pedido: o autor acrescentou um MUTANTE DE CONTROLE em todos os tres scripts, um no-op que TEM que sair VIVO, com o script abortando com codigo 2 e a mensagem 'SCRIPT QUEBRADO: nada acima vale' se ele sair morto; depois re-rodou tudo, inclusive os conjuntos que nao estavam sob suspeita. O verificador da rodada 2 SABOTOU o controle de proposito para confirmar que o guarda dispara. A regra que fica: um verificador de mutantes que nunca diz 'vivo' nao e verificador. Segundo achado da #641, da mesma familia: o teste da segunda guarda do selo de sequencia NUNCA CHEGAVA NELA. No cenario, quando os cabecalhos do pedido velho chegavam, o pedido novo ja tinha nascido, entao o velho batia na PRIMEIRA guarda e voltava ali; o json() dele nunca era chamado. O teste provava a primeira guarda duas vezes e a segunda nenhuma. E um terceiro, achado pela seguranca: o teto de 1000 linhas do PostgREST corta leitura e devolve HTTP 200 sem aviso. O repo ja sabia disso (paginacao.py, issue #430, 14 leituras da Ouvidoria usam ler_tudo), mas a aba Tecnologia nao usava em lugar nenhum. Na #641 isso era grave porque a leitura soma o fio de TODAS as Demandas numa consulta so, ordenada crescente, entao o corte come as linhas mais NOVAS: exatamente as mencoes recentes, que sao o que cria a vez. Provado: 60 Demandas com 1000 linhas antigas de movimento mais a mencao de hoje devolve 200 e lista VAZIA, e a tela mostra 'nada esperando por voce' sobre dado que o backend nao verificou. Corrigido com ler_tudo nas duas leituras, e o verificador confirmou o ponto mais arriscado: a ordenacao desempata por id (UUID PRIMARY KEY nas duas tabelas), entao a paginacao nao pula nem repete linha. Na #642 o eixo foi que a fatia manda E-MAIL, ou seja, empurra conteudo do hospital para caixas de entrada. Os dois revisores acharam o mesmo problema central: o envio era INLINE numa rota async, sem timeout, e o uvicorn sobe sem --workers (um event loop so). Uma resposta com 3 mencoes = 4 envios sequenciais segurando o loop; se o Resend ficasse lento, a Ouvidoria, as Atas, as Reunioes e o portal publico parariam junto. Um e-mail de Tecnologia viraria indisponibilidade de tudo. A casa faz o contrario em todo lugar (BackgroundTasks), e o autor nao pode usar isso porque o aviso_por_email precisa do resultado antes de responder: o desenho comprou o problema. Corrigido com asyncio.to_thread mais timeout no transporte, que preserva as duas coisas. Tres mutantes ficaram VIVOS na #642, e o revisor notou o padrao: dois deles estavam exatamente nas partes que o relatorio mais defendia em prosa. O mais caro: o aviso 'o e-mail nao saiu' NAO chegava a tela nos caminhos de responder no fio e trocar responsavel pelo card, que sao os gatilhos 2 e 3; desligar os dois deixava 928 testes verdes. O mais sutil: a assercao que provava que o Produto aparece no e-mail era `assert 'Ana' in corpo`, e o titulo do cenario era 'Prazo da Ana', entao ela casava com o titulo e trocar o Produto por um id cru passava batido. O autor da #642 levantou sozinho um ponto para o revisor decidir, e o revisor decidiu contra: modo mock contando como enviado. O argumento que fechou: a fatia existe para a falha nao passar calada, e o modo de falha mais provavel em producao (RESEND_API_KEY rotacionada para vazio, literalmente a issue #435) era o unico que ela deixava passar calado. Corrigido com transporte_configurado() e escape para development. Dois achados de seguranca que atravessam modulo: o titulo da Demanda (campo livre) ia para o log em INFO junto com o endereco completo, legivel por quem tem acesso ao log do Coolify e nenhum perfil na aba; e, sem limitador, um laco de respostas queima a cota e a reputacao de remetente do Resend, que e recurso COMPARTILHADO com a Ouvidoria, que depende dele para avisos de prazo com obrigacao legal (ADR 0034). O segundo virou shared_limit (e nao limit) nas tres rotas de gatilho, com a razao medida escrita no codigo: o key_style default do slowapi e 'url', entao limit daria 60 por minuto POR DEMANDA em rota com id no path, o que nao limita nada. A #642 tocou email_service.py, o transporte de e-mail de TODO o app. O verificador tratou isso como prioridade zero: as quatro mudancas sao todas rastreaveis a um must-fix, nenhuma entrou por conveniencia, o parametro novo e o ultimo da assinatura e tem default, e a Ouvidoria continua identica (230 testes de e-mail dela passando, e as linhas de log byte a byte o que eram). Decisoes do dono no checkpoint: mergear as duas com um deploy so, e o e-mail entra LIGADO em producao. Duas coisas para registrar sobre o processo: as issues #641 e #642 NAO fecharam sozinhas no merge, porque o corpo dos PRs nao trazia a linha Closes; foram fechadas a mao e o motivo ficou comentado nas duas. Isso e do /ship e afeta qualquer issue futura. E o deploy correu limpo: APP_VERSION gravado antes do merge nas duas ondas, health direto na versao certa, e o codigo novo provado em producao pelo par 401 contra 404 nas duas rotas da #641."
+    },
+    {
       "at": "2026-09-09T16:05:00-03:00",
       "sha": "e7d75fe",
       "app_version": "0.121.0",
@@ -1420,25 +1449,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PR #424, issue #419. Sem migration de schema; traz o script backfill_setor_manifestacoes.py (dry-run por default), AINDA NAO RODADO em producao. Corrida de bump resolvida a mao: o PR #424 tambem pedia 0.81.3, foi re-bumpado para 0.81.4 e a main foi mergeada dentro da branch para resolver o conflito do package.json. O APP_VERSION do Coolify foi setado para 0.81.4 antes do merge, e o /api/health confirmou. Entre a v0.81.2 e esta subiu tambem o commit b9ec3b4 (PR #422, issue #410, so skills e docs, sem bump). Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
-    },
-    {
-      "at": "2026-08-28T06:56:00-03:00",
-      "sha": "63b1940",
-      "app_version": "0.81.3",
-      "subject": "Pseudonimizacao apaga nome completo pela base de nomes proprios",
-      "raw_subject": "fix(ouvidoria): pseudonimizacao apaga nome completo pela base de nomes",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #423, issue #412. Sem migration. Neste ponto o APP_VERSION do Coolify ainda estava em 0.81.2: o merge foi manual, sem o Passo 8.5 do /ship, entao producao serviu o codigo novo anunciando a versao velha ate o ship seguinte. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
     }
   ]
 }

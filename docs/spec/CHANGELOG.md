@@ -7,6 +7,18 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.123.0 - 2026-09-09 19:55 - a aba Tecnologia fecha: Minha vez, Histórico com busca, aviso por e-mail e o Quadro que se atualiza sozinho
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `c0f36e1`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.123.0, `db: healthy`; as rotas novas provadas em produção pelo par 401 contra 404)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/c0f36e1
+- Issues: [#641](https://github.com/pedrorezendefig/hospital-reunioes/issues/641) · PR [#660](https://github.com/pedrorezendefig/hospital-reunioes/pull/660) e [#642](https://github.com/pedrorezendefig/hospital-reunioes/issues/642) · PR [#661](https://github.com/pedrorezendefig/hospital-reunioes/pull/661) (PRD [#634](https://github.com/pedrorezendefig/hospital-reunioes/issues/634), ADR 0050)
+- Migration: nenhuma. **O PRD #634 fechou as sete fatias com UMA migration só**, a `102` da fatia #636 · minor, feat
+- Nota: o script de mutação de uma das fatias estava quebrado e marcava todo mutante de frontend como morto sem medir. Um dos não medidos era um no-op, e o que ele deveria provar sobrevivia. A correção acrescentou um mutante de controle que tem que sair vivo, nos três scripts, com abort se sair morto
+- Nota: o envio de e-mail era inline em rota async sem timeout, com uvicorn de um worker só. O Resend lento congelaria o app inteiro, inclusive o portal público da Ouvidoria. Corrigido com `asyncio.to_thread` e timeout no transporte
+- Nota: as issues #641 e #642 não fecharam sozinhas no merge, porque o corpo dos PRs não trazia a linha `Closes`. Fechadas à mão
+
 ## v0.121.0 - 2026-09-09 16:05 - o card se arrasta entre as colunas, o Quadro lembra o filtro, e a Demanda vira link e texto para IA
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `e7d75fe`

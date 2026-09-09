@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-09T16:20:00-03:00",
+  "updated_at": "2026-09-09T20:05:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.121.0",
+  "last_app_version": "0.123.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,10 +21,10 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "e7d75fe",
-      "last_deploy_at": "2026-09-09T16:05:00-03:00",
+      "last_deploy_sha": "c0f36e1",
+      "last_deploy_at": "2026-09-09T19:55:00-03:00",
       "last_health_check": {
-        "at": "2026-09-09T16:18:00-03:00",
+        "at": "2026-09-09T20:02:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -39,10 +39,10 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "e7d75fe",
-      "last_deploy_at": "2026-09-09T16:05:00-03:00",
+      "last_deploy_sha": "c0f36e1",
+      "last_deploy_at": "2026-09-09T19:55:00-03:00",
       "last_health_check": {
-        "at": "2026-09-09T16:18:00-03:00",
+        "at": "2026-09-09T20:02:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -155,94 +155,106 @@
     "total_applied": 92,
     "last_applied": "102_tecnologia_fundacao.sql",
     "pending_local": [],
-    "nota": "As fatias #639 e #640 (PRs #657 e #658, v0.120.0 e v0.121.0) NAO criaram migration. Cinco fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #641 e #642, que tambem nao criam. A fatia #638 (PR #656, v0.119.0) NAO criou migration: tecnologia_conversas ja tinha mencoes VARCHAR(10)[] e editado_em, que e a janela de 10 minutos. Tres fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #639 a #642, que tambem nao criam. A fatia #637 (PR #647, v0.118.0) NAO criou migration: as tres tabelas do modulo de Tecnologia ja nasceram no formato final na 102, e as fatias #638 a #642 tambem nao criam. Se alguma achar que precisa de coluna nova, a regra desta sessao e PARAR e perguntar ao dono, nunca criar a 103 por conta. A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
+    "nota": "As fatias #641 e #642 (PRs #660 e #661, v0.122.0 e v0.123.0) NAO criaram migration, e com isso o PRD #634 fechou as SETE filhas com UMA migration so, a 102 da fatia #636. A decisao de fazer a 102 nascer com as tres tabelas no formato final aguentou o PRD inteiro, e o humano aplicou SQL a mao uma unica vez. As fatias #639 e #640 (PRs #657 e #658, v0.120.0 e v0.121.0) NAO criaram migration. Cinco fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #641 e #642, que tambem nao criam. A fatia #638 (PR #656, v0.119.0) NAO criou migration: tecnologia_conversas ja tinha mencoes VARCHAR(10)[] e editado_em, que e a janela de 10 minutos. Tres fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #639 a #642, que tambem nao criam. A fatia #637 (PR #647, v0.118.0) NAO criou migration: as tres tabelas do modulo de Tecnologia ja nasceram no formato final na 102, e as fatias #638 a #642 tambem nao criam. Se alguma achar que precisa de coluna nova, a regra desta sessao e PARAR e perguntar ao dono, nunca criar a 103 por conta. A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
   },
   "gates": [
     {
-      "name": "Onda 4, a PRIMEIRA em paralelo: #639 e #640 juntas, merge na ordem #639 depois #640, um deploy no fim. As duas sem migration",
+      "name": "Onda 5, a ultima do PRD #634: #641 e #642 em paralelo, merge na ordem #641 depois #642, um deploy no fim. As duas sem migration",
       "status": "ok"
     },
     {
-      "name": "Rebase da #640 sobre a #639 nao perdeu nada: zero linhas removidas dos arquivos do shell, provado por diff. Armadilha registrada: o git fatorou a chave final como sufixo comum em dois arquivos, deixando funcao sem fechar",
+      "name": "PRD #634 com as SETE filhas fechadas e UMA migration so no total. Nenhuma fatia depois da #636 precisou de coluna nova",
       "status": "ok"
     },
     {
-      "name": "A afirmacao '15 mutantes, todos mortos' da #639 NAO se sustentou: o revisor rodou 14 e dois sobreviveram, na guarda que o autor tinha acabado de justificar em prosa. Causa: o teste da corrida respondia numa ordem so, justamente a que nao exercita a guarda",
+      "name": "SCRIPT DE MUTACAO QUEBRADO na #641: marcava todo mutante de frontend como MORTO sem medir, porque o vitest sempre imprime 'skipped' ao rodar um caso so. Um dos nao medidos era um NO-OP, e o que ele deveria provar sobrevivia de verdade",
       "status": "warn"
     },
     {
-      "name": "Autocritica do autor da #639, que vale como regra: contagem de mutantes so vale com a lista de quais, e o proprio autor e o pior juiz de quais faltam. Contagem honesta final: 21",
+      "name": "A correcao foi alem do pedido: mutante de CONTROLE (no-op que TEM que sair VIVO) nos tres scripts, com abort se sair morto. O verificador SABOTOU o controle para confirmar que o guarda dispara. Regra: um verificador de mutantes que nunca diz vivo nao e verificador",
       "status": "ok"
     },
     {
-      "name": "O orquestrador DISCORDOU de uma decisao registrada do autor da #639 e a reverteu: sem o refetch no 409, a frase pedia uma acao que a tela nao oferece. O autor concordou e achou a dependencia entre os dois consertos que ninguem tinha visto",
-      "status": "ok"
-    },
-    {
-      "name": "INJECAO DE PROMPT achada pela seguranca na #640: sem delimitador e com linha de continuacao derramando no nivel de cima, uma resposta multilinha plantava ordem para a IA de quem colasse. Corrigido com cerca, explicacao da cerca no cabecalho e recuo da continuacao",
-      "status": "ok"
-    },
-    {
-      "name": "Nada vaza no texto que sai do hospital: cinco mutantes de id e de operacao morreram, e tambem pelos testes dedicados de ausencia. Decisao do dono: o nome completo PODE sair",
-      "status": "ok"
-    },
-    {
-      "name": "Piso da matriz de gate de novo desatualizado (12 com 13 rotas), o mesmo defeito da #637. Achado pelo orquestrador antes dos revisores. Vale virar checagem fixa: fatia que cria rota sobe o piso no mesmo commit",
+      "name": "O teste da segunda guarda do selo NUNCA CHEGAVA NELA: o pedido velho batia na primeira guarda e voltava ali. O teste provava a primeira duas vezes e a segunda nenhuma",
       "status": "warn"
     },
     {
-      "name": "Quinta aparicao do padrao 'mensagem culpa causa que o codigo nao distingue', desta vez so possivel DEPOIS do merge da #639: o aviso do link mandaria conferir o endereco quando a causa e o filtro. Corrigido com duas frases e um teste que CLICA na saida apontada e prova que ela resolve",
-      "status": "ok"
-    },
-    {
-      "name": "Susto de indisponibilidade que era a VPN do dono cortando o TLS. O orquestrador diagnosticou errado duas vezes (fail2ban e Traefik derrubado por OOM) e avisou o dono de possivel queda. Producao esteve no ar o tempo todo e os quatro builds terminaram sem OOM",
+      "name": "Teto de 1000 linhas do PostgREST cortando leitura com HTTP 200: a aba Tecnologia nao usava o ler_tudo que o repo criou para isso (issue #430). Na Minha vez o corte comia as mencoes MAIS NOVAS, e a tela dizia 'nada esperando por voce' sobre dado nao verificado",
       "status": "warn"
     },
     {
-      "name": "Efeito real do susto: o APP_VERSION nao gravou no meio do merge e o health ficou em 0.119.0 com o codigo novo no ar. Corrigido com gravacao e redeploy do backend",
+      "name": "'Minha vez' e autorizacao, nao filtro: a rota nao aceita id de pessoa do cliente. 24 tentativas de exploracao do revisor de seguranca, nenhuma passou. O teste que prende a regra entrou na rodada 2",
+      "status": "ok"
+    },
+    {
+      "name": "Na #642, envio de e-mail INLINE em rota async sem timeout, com uvicorn de um worker so: o Resend lento congelaria o app INTEIRO, inclusive o portal publico da Ouvidoria. Corrigido com asyncio.to_thread mais timeout",
+      "status": "ok"
+    },
+    {
+      "name": "Tres mutantes VIVOS na #642, dois deles exatamente nas partes que o relatorio mais defendia em prosa. O mais caro: o aviso de e-mail nao chegava a tela nos gatilhos 2 e 3",
+      "status": "warn"
+    },
+    {
+      "name": "Assercao que passava de graca: 'Ana' in corpo provava o Produto, mas o titulo do cenario era 'Prazo da Ana' e casava com ele. Trocar o Produto por id cru passava batido",
+      "status": "warn"
+    },
+    {
+      "name": "Modo mock contando como enviado: o autor levantou e o revisor decidiu contra, porque o modo de falha mais provavel (chave do Resend vazia, issue #435) era o unico que a fatia deixava passar calado",
+      "status": "ok"
+    },
+    {
+      "name": "Sem limitador, um laco de respostas queima a cota do Resend, COMPARTILHADA com os avisos de prazo com obrigacao legal da Ouvidoria. Virou shared_limit (e nao limit) nas tres rotas, porque o key_style 'url' do slowapi daria 60/min POR DEMANDA",
+      "status": "ok"
+    },
+    {
+      "name": "email_service.py, transporte de TODO o app, tocado pela fatia: as quatro mudancas sao rastreaveis a must-fix, o parametro novo tem default, e a Ouvidoria segue identica (230 testes dela, log byte a byte igual)",
+      "status": "ok"
+    },
+    {
+      "name": "As issues #641 e #642 NAO fecharam sozinhas no merge: o corpo dos PRs nao trazia a linha Closes. Fechadas a mao, com o motivo comentado. E do /ship e afeta qualquer issue futura",
       "status": "warn"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Tudo verde",
-      "text": "Deploy e7d75fe saudavel na v0.121.0, sem migration. Arrastar, filtros, Copiar para IA, Copiar link e abrir pela URL estao em producao."
-    },
-    {
-      "kind": "info",
-      "title": "Onda 5, a ultima do PRD #634",
-      "text": "Faltam #641 (abas Minha vez e Historico com busca) e #642 (e-mail nos tres gatilhos e atualizacao sozinha do Quadro), em paralelo, mergeando #641 antes de #642. Quando a #642 fechar, auditar o PRD #634 contra producao (ADR 0029)."
+      "title": "PRD #634 entregue",
+      "text": "Deploy c0f36e1 saudavel na v0.123.0. As sete fatias da aba Tecnologia estao em producao, com uma migration so no total. Auditoria do PRD contra producao rodando (ADR 0029)."
     },
     {
       "kind": "warn",
-      "title": "A #641 precisa herdar o criterio dos filtros",
-      "text": "A issue #639 pede filtros 'compartilhados entre as abas Quadro, Minha vez e Historico'. O estado ja mora no TecnologiaModulo e atravessa a troca de aba, mas Minha vez e Historico sao casca: elas so precisam ler a mesma prop. Se a #641 nao fizer isso, o criterio se perde."
+      "title": "O /ship parou de escrever a linha Closes no corpo do PR",
+      "text": "As issues #641 e #642 ficaram abertas depois do merge e precisaram ser fechadas a mao. Afeta qualquer issue futura, nao so as desta sessao. Vale olhar a skill /ship."
+    },
+    {
+      "kind": "warn",
+      "title": "Regra de metodo que saiu desta sessao",
+      "text": "Todo script de mutacao precisa de um mutante de CONTROLE no-op que TEM que sair VIVO, com o script abortando se sair morto. Sem isso, um script quebrado marca tudo como morto e a contagem mente. Aconteceu na #641."
     },
     {
       "kind": "warn",
       "title": "Checagem fixa para toda fatia que criar rota",
-      "text": "O piso da matriz de gate ficou para tras duas vezes (na #637 com 4 para 10, e na #640 com 12 para 13). Fatia que cria rota sobe o piso no mesmo commit, com a conta escrita no comentario."
-    },
-    {
-      "kind": "info",
-      "title": "Decisoes do dono na onda 4",
-      "text": "O nome completo dos funcionarios pode sair no texto para a IA. E o card do link NAO abre quando o filtro esconde a Demanda: ficou so a mensagem apontando o botao Limpar filtros. O argumento dos dois lados esta no relatorio da #640, se o dono quiser rever."
+      "text": "O piso da matriz de gate ficou para tras duas vezes nesta sessao (#637 com 4 para 10, #640 com 12 para 13). Fatia que cria rota sobe o piso no mesmo commit, com a conta escrita no comentario. Hoje o piso e 15."
     },
     {
       "kind": "warn",
       "title": "Erro do PostgREST sobe cru nas rotas de Tecnologia",
-      "text": "Aberto desde a onda 1: id fora do formato UUID vira 500 em vez de 404. Quem tratar precisa pegar httpx.HTTPError junto com APIError."
+      "text": "Aberto desde a onda 1 e nunca corrigido: id fora do formato UUID vira 500 em vez de 404. Quem tratar precisa pegar httpx.HTTPError junto com APIError, senao o timeout do PostgREST continua subindo cru."
     },
     {
       "kind": "warn",
       "title": "O fio da Demanda nao e atomico com o movimento",
-      "text": "Duas chamadas ao PostgREST, sem transacao. A falha nao passa calada, mas o estado parcial continua possivel. Uma RPC resolveria."
+      "text": "Duas chamadas ao PostgREST, sem transacao. A falha nao passa calada (500 honesto), mas o estado parcial continua possivel. Uma RPC resolveria, deixada de fora de proposito nas fatias #637 e #638."
     },
     {
       "kind": "info",
-      "title": "Registrado na onda 4, sem correcao",
-      "text": "A recarga do Quadro apaga as cinco colunas a cada troca de filtro (herdado da #637, mais visivel agora): vale uma fatia propria. E o aviso de recusa de escrita fica na tela ate a proxima escrita ou troca de aba."
+      "title": "Divida registrada na onda 4 e 5",
+      "text": "A barra de filtros tem DUAS copias (a do QuadroDemandas e a FiltrosDeDemandas da #641), porque juntar tocaria o arquivo que a #642 estava reescrevendo. E o QuadroDemandas confere o selo de sequencia ANTES de ler o corpo, o mesmo furo que a #641 corrigiu no hook dela."
+    },
+    {
+      "kind": "info",
+      "title": "Recarga do Quadro apaga as colunas",
+      "text": "A cada troca de filtro a tela troca as cinco colunas por 'Carregando Demandas...'. Herdado da #637, mais visivel desde a #639. Vale uma fatia propria."
     },
     {
       "kind": "warn",
@@ -252,13 +264,13 @@
     {
       "kind": "info",
       "title": "Auditoria do PRD #591",
-      "text": "As cinco filhas fecharam. Falta auditar o PRD contra producao (ADR 0029)."
+      "text": "As cinco filhas fecharam ha tempos. Falta auditar o PRD contra producao (ADR 0029)."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "e7d75fe",
+    "sha": "c0f36e1",
     "result": "healthy",
-    "duration_seconds": 900
+    "duration_seconds": 600
   }
 }
