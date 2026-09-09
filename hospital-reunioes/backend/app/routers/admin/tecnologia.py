@@ -77,6 +77,7 @@ from app.services.tecnologia import (
     limite_da_janela_de_edicao,
     mencoes_sem_acesso,
     motivo_edicao_recusada,
+    motivo_mencoes_demais,
     motivo_resposta_invalida,
     motivo_transicao_invalida,
     normalizar_mencoes,
@@ -704,13 +705,23 @@ def _texto_e_mencoes(supabase: Client, payload: RespostaPayload) -> tuple[str, l
 
     A lista de pessoas so e consultada quando ha mencao: sem isso, toda
     resposta pagaria uma leitura da tabela de participantes para nada.
+
+    O TETO vem antes da allowlist e e o proprio tamanho dessa lista: mais
+    mencoes do que gente com acesso nao e resposta, e um payload com milhares de
+    ids so serve para queimar CPU do processo que atende todo mundo (a rota e
+    `async` e o uvicorn sobe com um worker so). Recusar aqui e o que fecha o
+    enchimento da coluna, ja que nenhuma rota da aba tem limitador de taxa.
     """
     motivo = motivo_resposta_invalida(payload.texto)
     if motivo:
         _recusar(motivo)
     mencoes = normalizar_mencoes(payload.mencoes)
-    if mencoes and mencoes_sem_acesso(mencoes, {p["id"] for p in _pessoas_da_aba(supabase)}):
-        _recusar(MOTIVO_MENCAO_SEM_ACESSO)
+    if mencoes:
+        com_acesso = {p["id"] for p in _pessoas_da_aba(supabase)}
+        if len(mencoes) > len(com_acesso):
+            _recusar(motivo_mencoes_demais(quantas=len(mencoes), com_acesso=len(com_acesso)))
+        if mencoes_sem_acesso(mencoes, com_acesso):
+            _recusar(MOTIVO_MENCAO_SEM_ACESSO)
     return payload.texto.strip(), mencoes
 
 

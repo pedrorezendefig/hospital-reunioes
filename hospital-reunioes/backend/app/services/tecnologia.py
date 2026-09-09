@@ -232,6 +232,13 @@ MOTIVO_MENCAO_SEM_ACESSO = (
     "Uma das pessoas mencionadas não está na lista de quem tem acesso à aba Tecnologia. "
     "Tire a menção do texto e envie de novo."
 )
+# O byte NUL costuma vir colado de outro programa, e o texto parece normal na
+# tela: por isso a frase diz de onde ele costuma vir, e nao so que "tem
+# caractere invalido".
+MOTIVO_RESPOSTA_COM_CARACTERE_INVALIDO = (
+    "A resposta tem um caractere invisível que o banco não guarda. "
+    "Ele costuma vir junto de texto colado de outro programa: apague o trecho colado e escreva de novo."
+)
 
 
 def instante_do_banco(valor: str | None) -> datetime | None:
@@ -297,15 +304,22 @@ def motivo_edicao_recusada(*, linha: dict[str, Any], ator_id: str, agora: dateti
 
 
 def motivo_resposta_invalida(texto: str) -> str | None:
-    """Os dois limites do texto da resposta, com frase de gente.
+    """Os limites do texto da resposta, com frase de gente.
 
     Sai daqui, e nao de `min_length`/`max_length` no payload, pelo mesmo motivo
     do titulo da Demanda: o `detail` do pydantic vem em LISTA e a tela mostra o
     JSON cru no alerta vermelho.
+
+    O byte NUL entra na mesma peneira porque o Postgres nao aceita `\\x00` em
+    coluna TEXT (erro 22P05): sem esta linha ele passaria a validacao e morreria
+    no insert, e quem escreveu levaria o 500 "a sua resposta nao entrou" no
+    lugar de uma frase que diz o que houve.
     """
     limpo = texto.strip()
     if not limpo:
         return MOTIVO_RESPOSTA_VAZIA
+    if "\x00" in limpo:
+        return MOTIVO_RESPOSTA_COM_CARACTERE_INVALIDO
     if len(limpo) > LIMITE_RESPOSTA:
         return f"A resposta pode ter no máximo {LIMITE_RESPOSTA} caracteres."
     return None
@@ -318,13 +332,37 @@ def normalizar_mencoes(mencoes: list[str] | None) -> list[str]:
     a coluna e ainda faria a guarda de acesso recusar a resposta inteira por
     causa de um `""`, cobrando da pessoa uma correcao que ela nao tem onde
     fazer. A ordem de quem sobra e preservada.
+
+    O controle de repetido e um `set` ao lado da lista, e nao um `in` na propria
+    lista: `in` sobre lista e varredura linear, e a conta inteira ficaria
+    quadratica. Nao e teoria, foi medido na rota (20 mil ids custavam 0,63s e
+    200 mil chegavam perto de um minuto), e como a rota e `async` num uvicorn de
+    um worker so, essa conta parava o app inteiro, nao so a aba.
     """
-    vistos: list[str] = []
+    vistos: set[str] = set()
+    ordenados: list[str] = []
     for bruto in mencoes or []:
         limpo = str(bruto).strip()
         if limpo and limpo not in vistos:
-            vistos.append(limpo)
-    return vistos
+            vistos.add(limpo)
+            ordenados.append(limpo)
+    return ordenados
+
+
+def motivo_mencoes_demais(*, quantas: int, com_acesso: int) -> str:
+    """A recusa da lista de menções maior que a lista de gente da aba.
+
+    O teto natural e o numero de pessoas com acesso: chamar mais gente do que
+    existe nao e resposta, e um payload com dezenas de milhares de ids so serve
+    para queimar CPU do processo que atende todo mundo. A frase diz os DOIS
+    numeros, e a saida (deixar so quem se quer chamar) esta na propria caixa de
+    quem escreveu.
+    """
+    return (
+        f"Esta resposta tem {quantas} menções, e só {com_acesso} "
+        f"{'pessoa tem' if com_acesso == 1 else 'pessoas têm'} acesso à aba Tecnologia. "
+        "Deixe só as menções de quem você quer chamar e envie de novo."
+    )
 
 
 def mencoes_sem_acesso(mencoes: list[str], ids_com_acesso: set[str]) -> list[str]:

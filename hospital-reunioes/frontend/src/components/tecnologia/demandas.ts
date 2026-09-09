@@ -201,8 +201,12 @@ export function momentoLegivel(quando: string | null): string {
  * A janela de correção, do lado da tela (issue #638).
  *
  * Quem recusa de verdade é o backend, que responde 422 depois dos 10 minutos.
- * Esta conta existe para o botão "Corrigir" sumir sozinho enquanto o modal
- * segue aberto, em vez de oferecer um clique que já se sabe recusado.
+ * Esta conta existe para a tela não oferecer um clique que já se sabe recusado.
+ *
+ * A conta roda a cada render, e não num relógio próprio: um modal aberto e
+ * parado desde antes do prazo ainda mostra o botão, e quem clicar lê a recusa
+ * honesta do backend. Um `setInterval` só para apagar um botão custaria mais do
+ * que resolve.
  */
 export function podeCorrigirAgora(editavelAte: string | null, agora: Date = new Date()): boolean {
   if (!editavelAte) return false;
@@ -248,9 +252,25 @@ export function aplicarMencao(texto: string, nome: string): string {
  * Apagar o "@Fulano" da frase tem que tirar a menção: senão a linha continuaria
  * dizendo que chamou alguém que o texto não chama mais (e, na fatia do e-mail,
  * avisaria essa pessoa à toa).
+ *
+ * Quem decide é o mesmo `pedacosDoTexto` que pinta o destaque, e não um
+ * `includes` por nome. Com `includes`, um nome que é começo de outro entrava de
+ * carona: "@Ana Souza Lima" gravava também a "Ana Souza", e o erro era MUDO,
+ * porque o destaque (que já resolvia o prefixo) marcava só o nome longo. A
+ * mesma frase tem que produzir a mesma resposta nos dois lugares, senão a tela
+ * e a coluna contam histórias diferentes.
  */
 export function mencoesNoTexto(texto: string, escolhidas: PessoaDaAba[]): string[] {
-  return escolhidas.filter((p) => texto.includes(`@${p.nome_completo}`)).map((p) => p.id);
+  const chamados = new Set(
+    pedacosDoTexto(
+      texto,
+      escolhidas.map((p) => p.nome_completo),
+    )
+      .filter((pedaco) => pedaco.mencao)
+      // O pedaço marcado carrega o "@" na frente; o nome é o resto.
+      .map((pedaco) => pedaco.texto.slice(1)),
+  );
+  return escolhidas.filter((p) => chamados.has(p.nome_completo)).map((p) => p.id);
 }
 
 /** Um pedaço do texto da linha: menção a destacar ou texto comum. */

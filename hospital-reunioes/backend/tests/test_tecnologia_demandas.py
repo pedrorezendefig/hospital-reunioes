@@ -51,6 +51,7 @@ from app.services.tecnologia import (  # noqa: E402
     MOTIVO_PRODUTO_INATIVO,
     MOTIVO_PRODUTO_SEM_DONO,
     MOTIVO_RESPONSAVEL_SEM_ACESSO,
+    MOTIVO_RESPOSTA_COM_CARACTERE_INVALIDO,
     MOTIVO_RESPOSTA_VAZIA,
     MOTIVO_SO_O_AUTOR_EDITA,
     PRIORIDADES,
@@ -61,6 +62,8 @@ from app.services.tecnologia import (  # noqa: E402
     limite_da_janela_de_edicao,
     mencoes_sem_acesso,
     motivo_edicao_recusada,
+    motivo_mencoes_demais,
+    motivo_resposta_invalida,
     motivo_transicao_invalida,
     normalizar_mencoes,
     texto_movimento_estado,
@@ -1141,11 +1144,6 @@ class TestJanelaDeEdicao:
         """O instante que a tela recebe para sumir com o botao sozinha."""
         assert limite_da_janela_de_edicao(ENVIO) == datetime(2026, 9, 9, 12, 10, 0, tzinfo=UTC)
 
-    def test_a_janela_conta_do_envio_e_nao_da_ultima_edicao(self):
-        """Editar nao renova o prazo: senao uma resposta corrigida de 9 em 9
-        minutos ficaria editavel para sempre, e o fio deixaria de ser trilha."""
-        assert limite_da_janela_de_edicao(ENVIO) == ENVIO + JANELA_DE_EDICAO
-
     def test_instante_ilegivel_nao_vira_data_de_hoje(self):
         """`criado_em` que nao da para ler nao pode virar "acabou de chegar":
         seria uma janela aberta para sempre em cima de dado quebrado."""
@@ -1225,6 +1223,50 @@ class TestMencoesPuras:
         """Par de presenca: uma funcao que sempre apontasse alguem recusaria
         toda mencao."""
         assert mencoes_sem_acesso(["P1", "P2"], {"P1", "P2"}) == []
+
+    def test_a_recusa_do_teto_diz_os_dois_numeros(self):
+        """Guarda-corpo que so diz "nao pode" vira indisponibilidade: a frase
+        tem de dizer quantas mencoes vieram e quanta gente existe, para quem
+        escreveu saber o que sobra tirar."""
+        motivo = motivo_mencoes_demais(quantas=7, com_acesso=3)
+
+        assert "7" in motivo
+        assert "3" in motivo
+        assert "pessoas têm" in motivo
+
+    def test_a_recusa_do_teto_fala_no_singular_quando_e_uma_pessoa_so(self):
+        assert "1 pessoa tem" in motivo_mencoes_demais(quantas=2, com_acesso=1)
+
+    def test_a_dedupe_nao_depende_da_ordem_de_chegada(self):
+        """O controle de repetido virou `set` (a varredura linear era
+        quadratica). O resultado tem de continuar sendo o mesmo: sem repetido, e
+        na ordem em que cada um apareceu pela primeira vez."""
+        assert normalizar_mencoes(["P2", "P1", "P2", "P3", "P1"]) == ["P2", "P1", "P3"]
+
+    def test_a_dedupe_aguenta_lista_grande_sem_virar_conta_quadratica(self):
+        """Nao e teste de relogio, e de ORDEM DE GRANDEZA: com a varredura
+        linear de antes, 20 mil ids levavam mais de meio segundo dentro do event
+        loop de um uvicorn com um worker so, e o app inteiro parava junto."""
+        import time
+
+        muitos = [f"P{i}" for i in range(20_000)]
+
+        comeco = time.monotonic()
+        limpos = normalizar_mencoes(muitos)
+
+        assert len(limpos) == 20_000
+        assert time.monotonic() - comeco < 0.2
+
+    def test_o_byte_nulo_e_recusado_antes_de_chegar_ao_banco(self):
+        """O Postgres nao aceita NUL em coluna TEXT (22P05). Sem esta guarda o
+        texto passava e morria no insert, e quem escreveu levava um 500 no lugar
+        de uma frase que diz o que houve."""
+        assert motivo_resposta_invalida("Oi\x00tudo bem") == MOTIVO_RESPOSTA_COM_CARACTERE_INVALIDO
+
+    def test_texto_normal_nao_e_confundido_com_caractere_invalido(self):
+        """Par de presenca: uma guarda que recusasse texto comum seria pior do
+        que o 500 que ela veio evitar."""
+        assert motivo_resposta_invalida("Oi, tudo bem? Acento é acento.") is None
 
 
 # ─── 7. As duas portas de escrita do fio ─────────────────────────────────────
@@ -1342,6 +1384,47 @@ class TestResponder:
         assert resposta.status_code == 201
         assert sb.tabelas["tecnologia_conversas"][0]["mencoes"] == []
 
+    def test_lista_de_mencoes_maior_que_a_aba_e_recusada(self):
+        """O teto e o tamanho da lista de gente: chamar mais gente do que
+        existe nao e resposta, e um payload com milhares de ids so serve para
+        queimar o CPU do processo que atende todo mundo."""
+        client, sb = _montar(demandas=[_demanda("d1")])
+
+        # Duas pessoas tem acesso a aba no cenario padrao (o facilitador nao).
+        resposta = client.post(
+            f"{BASE}/demandas/d1/conversa",
+            json={"texto": "Chamando meio mundo", "mencoes": ["P1", "P2", "P9"]},
+        )
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == motivo_mencoes_demais(quantas=3, com_acesso=2)
+        assert sb.tabelas["tecnologia_conversas"] == []
+
+    def test_mencionar_todo_mundo_da_aba_continua_valendo(self):
+        """Par de presenca do teto: ele nao pode morder o caso normal, senao o
+        guarda-corpo vira indisponibilidade. Chamar as duas pessoas que existem
+        e legitimo."""
+        client, sb = _montar(demandas=[_demanda("d1")])
+
+        resposta = client.post(
+            f"{BASE}/demandas/d1/conversa",
+            json={"texto": "@Pedro Vitta e @Sócia Vitta, olhem", "mencoes": ["P1", "P2"]},
+        )
+
+        assert resposta.status_code == 201
+        assert sb.tabelas["tecnologia_conversas"][0]["mencoes"] == ["P1", "P2"]
+
+    def test_texto_com_byte_nulo_e_recusado_com_frase_de_gente(self):
+        """Pela rota: o que o Postgres recusaria com 22P05 sai daqui como 422
+        com frase, e nao como o 500 "a sua resposta nao entrou"."""
+        client, sb = _montar(demandas=[_demanda("d1")])
+
+        resposta = client.post(f"{BASE}/demandas/d1/conversa", json={"texto": "Colado\x00de outro lugar"})
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == MOTIVO_RESPOSTA_COM_CARACTERE_INVALIDO
+        assert sb.tabelas["tecnologia_conversas"] == []
+
     def test_demanda_inexistente_da_404_e_nao_grava(self):
         client, sb = _montar()
 
@@ -1441,6 +1524,82 @@ class TestEditarAPropriaResposta:
         assert resposta.status_code == 422
         assert resposta.json()["detail"] == MOTIVO_JANELA_ENCERRADA
         assert sb.tabelas["tecnologia_conversas"][0]["texto"] == "Antiga"
+
+    def test_corrigir_de_novo_dentro_dos_dez_minutos_do_envio_e_aceito(self):
+        """Enviada ha 9 minutos, ja corrigida ha 1: ainda da para corrigir.
+
+        E o par de presenca do teste seguinte: sem ele, uma regra que recusasse
+        toda linha ja corrigida passaria por aquele sem contar a verdade.
+        """
+        client, sb = _montar(
+            demandas=[_demanda("d1")],
+            conversas=[
+                _resposta_no_banco(
+                    "c1",
+                    criado_em=(datetime.now(UTC) - timedelta(minutes=9)).isoformat(),
+                    editado_em=(datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+                    texto="Primeira correção",
+                )
+            ],
+        )
+
+        resposta = client.patch(f"{BASE}/demandas/d1/conversa/c1", json={"texto": "Segunda correção"})
+
+        assert resposta.status_code == 200
+        assert sb.tabelas["tecnologia_conversas"][0]["texto"] == "Segunda correção"
+
+    def test_corrigir_nao_renova_o_prazo(self):
+        """Enviada ha 30 minutos, corrigida ha 1: o prazo continua fechado.
+
+        A janela conta do ENVIO. Se contasse da ultima edicao, corrigir de 9 em
+        9 minutos deixaria a resposta editavel para sempre, e o fio deixaria de
+        ser trilha. O caso so morde porque `editado_em` esta PREENCHIDO e
+        RECENTE: e a unica forma de a guarda ter de escolher entre os dois
+        campos.
+        """
+        client, sb = _montar(
+            demandas=[_demanda("d1")],
+            conversas=[
+                _resposta_no_banco(
+                    "c1",
+                    criado_em=(datetime.now(UTC) - timedelta(minutes=30)).isoformat(),
+                    editado_em=(datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+                    texto="Corrigida uma vez, ha muito tempo",
+                )
+            ],
+        )
+
+        resposta = client.patch(f"{BASE}/demandas/d1/conversa/c1", json={"texto": "Terceira tentativa"})
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == MOTIVO_JANELA_ENCERRADA
+        assert sb.tabelas["tecnologia_conversas"][0]["texto"] == "Corrigida uma vez, ha muito tempo"
+
+    def test_a_linha_ja_corrigida_nao_volta_editavel_no_fio(self):
+        """O mesmo pela porta de LEITURA: o `editavel_ate` daquela linha antiga
+        ja passou, entao a tela nao desenha o botao para ela."""
+        client, _ = _montar(
+            demandas=[_demanda("d1")],
+            conversas=[
+                _resposta_no_banco(
+                    "c1",
+                    criado_em=(datetime.now(UTC) - timedelta(minutes=30)).isoformat(),
+                    editado_em=(datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+                ),
+                _resposta_no_banco(
+                    "c2",
+                    criado_em=(datetime.now(UTC) - timedelta(minutes=2)).isoformat(),
+                    editado_em=(datetime.now(UTC) - timedelta(minutes=1)).isoformat(),
+                ),
+            ],
+        )
+
+        por_id = {linha["id"]: linha for linha in client.get(f"{BASE}/demandas/d1/conversa").json()}
+
+        assert instante_do_banco(por_id["c1"]["editavel_ate"]) < datetime.now(UTC)
+        # Par de presenca no MESMO fio: a linha corrigida ha pouco, mas enviada
+        # ha 2 minutos, continua dentro do prazo.
+        assert instante_do_banco(por_id["c2"]["editavel_ate"]) > datetime.now(UTC)
 
     def test_linha_de_movimento_e_recusada(self):
         movimento = _resposta_no_banco(
@@ -1594,7 +1753,39 @@ class TestOFioDizQuemPodeCorrigir:
 
         linha = client.get(f"{BASE}/demandas/d1/conversa").json()[0]
 
-        assert instante_do_banco(linha["editavel_ate"]) == envio + JANELA_DE_EDICAO
+        # O instante e escrito a mao, e nao como `envio + JANELA_DE_EDICAO`:
+        # repetir a expressao do codigo faria o teste acompanhar qualquer
+        # mudanca da constante em vez de cobrar o valor combinado com a PRD.
+        assert instante_do_banco(linha["editavel_ate"]) == datetime(2026, 9, 9, 12, 10, 0, tzinfo=UTC)
+
+    def test_o_limite_conta_do_envio_mesmo_na_linha_ja_corrigida(self):
+        """A linha corrigida as 12:09 continua fechando as 12:10.
+
+        Se o `editavel_ate` contasse da ultima edicao, a resposta corrigida de 9
+        em 9 minutos ficaria editavel para sempre, e a tela ofereceria o botao
+        eternamente. O caso precisa de `editado_em` PREENCHIDO: sem ele o
+        detector nunca ve a diferenca entre os dois campos.
+        """
+        envio = datetime(2026, 9, 9, 12, 0, 0, tzinfo=UTC)
+        client, _ = _montar(
+            demandas=[_demanda("d1")],
+            conversas=[
+                _resposta_no_banco(
+                    "c1",
+                    criado_em=envio.isoformat(),
+                    editado_em=datetime(2026, 9, 9, 12, 9, 0, tzinfo=UTC).isoformat(),
+                )
+            ],
+        )
+
+        linha = client.get(f"{BASE}/demandas/d1/conversa").json()[0]
+
+        # 12:10, e nao 12:19.
+        assert instante_do_banco(linha["editavel_ate"]) == datetime(2026, 9, 9, 12, 10, 0, tzinfo=UTC)
+        # Par de presenca, no mesmo corpo: a linha realmente esta marcada como
+        # corrigida, entao o `editado_em` chegou ao endpoint e foi ignorado de
+        # proposito, e nao por estar ausente.
+        assert linha["editado_em"] is not None
 
     def test_a_resposta_recem_enviada_ja_volta_editavel(self):
         """Quem acabou de enviar tem que ver o botao sem recarregar o modal."""
