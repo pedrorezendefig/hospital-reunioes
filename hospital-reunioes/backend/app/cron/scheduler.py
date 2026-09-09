@@ -18,8 +18,10 @@ Jobs:
   6. escalonar_prazos_ouvidoria: a cada 10 minutos, sobe os demais degraus da escada
      de escalonamento da Ouvidoria (véspera, gestor da área, Diretoria Executiva),
      issue #336. Idempotente: cada degrau tem o próprio carimbo.
-  7. anonimizar_manifestacoes_antigas: 04:00 diário, apaga o Dossiê das manifestações
-     encerradas há mais de cinco anos e preserva a estatística (issue #343).
+  7. anonimizar_manifestacoes_antigas: 04:00 diário, aplica a política de retenção
+     pelas DUAS portas. A dos cinco anos apaga o Dossiê das manifestações encerradas
+     há mais de cinco anos e preserva a estatística (issue #343); a antecipada conclui
+     o apagamento que a Diretoria pediu e que ficou pela metade (issue #595, ADR 0047).
      Idempotente: o caso anonimizado ganha carimbo e não é revisitado.
   8. enviar_relatorio_quinzenal: 07:00 diário, manda à Diretoria Executiva o relatório
      em PDF da quinzena que fechou (issue #345). O email sai nos dias 1 e 16, que é
@@ -216,23 +218,43 @@ def escalonar_prazos_ouvidoria() -> None:
 
 
 def anonimizar_manifestacoes_antigas() -> None:
-    """Aplica a retenção de cinco anos da Ouvidoria (issue #343).
+    """Aplica a política de retenção da Ouvidoria, pelas duas portas.
 
-    Manifestação encerrada há mais de cinco anos perde o Dossiê (relato,
-    identificação de quem manifestou, anexos) e mantém o que os relatórios
-    contam. Na prática o job nasce dormindo, porque nenhum caso tem cinco anos
-    ainda, mas a política existe desde o primeiro dia. Idempotente: o carimbo
-    `anonimizada_em` impede o segundo passe."""
+    A dos cinco anos (issue #343): manifestação encerrada há mais de cinco anos
+    perde o Dossiê (relato, identificação de quem manifestou, anexos) e mantém o
+    que os relatórios contam. Na prática essa parte nasce dormindo, porque
+    nenhum caso tem cinco anos ainda, mas a política existe desde o primeiro
+    dia.
+
+    E a antecipada (issue #595, ADR 0047): o apagamento que a Diretoria pediu e
+    que ficou pela metade, com o pedido gravado e o Dossiê ainda em pé. Sem esta
+    segunda varredura, sair dali dependeria de a mesma pessoa clicar de novo, e
+    o dado ficaria no banco por tempo indeterminado com o ato já registrado na
+    trilha.
+
+    As duas rodam na mesma passagem e são independentes: uma falha na primeira
+    não pode deixar a segunda sem rodar, porque é a segunda que tem dado vivo
+    esperando. Ambas são idempotentes, e o carimbo `anonimizada_em` impede o
+    segundo passe."""
     from app.services import ouvidoria_retencao
 
     supabase = _supabase()
+    agora = datetime.now(tz=ZoneInfo("UTC"))
     try:
-        anonimizadas = ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, datetime.now(tz=ZoneInfo("UTC")))
+        anonimizadas = ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, agora)
     except Exception as e:
         logger.error(f"[Cron] Erro em anonimizar_manifestacoes_antigas: {e}", exc_info=True)
-        return
+        anonimizadas = 0
     if anonimizadas:
         logger.info(f"[Cron] {anonimizadas} manifestação(ões) da Ouvidoria anonimizada(s) por retenção.")
+
+    try:
+        concluidos = ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, agora)
+    except Exception as e:
+        logger.error(f"[Cron] Erro ao concluir apagamentos pendentes da Ouvidoria: {e}", exc_info=True)
+        return
+    if concluidos:
+        logger.info(f"[Cron] {concluidos} apagamento(s) pendente(s) da Ouvidoria concluído(s).")
 
 
 def _registrar_entrega(competencia: str, entrega, rotulo: str = "Relatório quinzenal") -> None:

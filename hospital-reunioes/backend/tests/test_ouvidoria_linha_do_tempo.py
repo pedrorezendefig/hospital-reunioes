@@ -33,7 +33,7 @@ from app.limiter import limiter  # noqa: E402
 from app.middleware.request_context import RequestContextMiddleware  # noqa: E402
 from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.services import ouvidoria_respostas  # noqa: E402
-from app.services.ouvidoria_retencao import AUTOR_DA_RETENCAO  # noqa: E402
+from app.services.ouvidoria_retencao import AUTOR_DA_RETENCAO, observacao_do_apagamento  # noqa: E402
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 DIRETORIA = {
@@ -758,15 +758,22 @@ class TestOMovimentoDoApagamento:
     descrição seria procurar uma frase que a própria Retenção pode reescrever.
     O evento chega marcado, e a tela pergunta pela marca."""
 
-    def _com_apagamento(self) -> list[dict]:
+    def _com_apagamento(self, autor: str = AUTOR_DA_RETENCAO, motivo: str | None = None) -> list[dict]:
+        """A trilha completa mais o movimento do apagamento, com o texto que o
+        serviço grava de verdade (`observacao_do_apagamento`).
+
+        O texto entra pela função, e não copiado à mão: desde a issue #595 é a
+        MARCA da observação que identifica o ato, e uma frase escrita aqui de
+        memória deixaria este teste verde enquanto a tela perdia o crédito do
+        autor em produção."""
         return _tramitacao_completa() + [
             _movimento(
                 APAGAMENTO_EM,
                 "encerrado",
                 "encerrado",
-                AUTOR_DA_RETENCAO,
+                autor,
                 None,
-                "Caso alcançado pela política de retenção de 5 anos.",
+                observacao_do_apagamento(motivo),
             )
         ]
 
@@ -783,6 +790,22 @@ class TestOMovimentoDoApagamento:
         assert len(marcados) == 1, "o apagamento não se identifica na trilha"
         assert marcados[0]["ocorrido_em"] == APAGAMENTO_EM
         assert marcados[0]["autor"] == AUTOR_DA_RETENCAO
+
+    def test_o_movimento_da_diretoria_tambem_chega_marcado(self, monkeypatch):
+        """A segunda porta (issue #595): a Diretoria assina com nome de pessoa.
+        Enquanto a marca saía do `autor_nome`, este caso chegava à tela sem
+        marca nenhuma e o aviso ficava sem o autor."""
+        supabase = _SupabaseFake(
+            manifestacoes=[_manifestacao(anonimizada_em=APAGAMENTO_EM)],
+            movimentos=self._com_apagamento(autor="Dr. Diretor", motivo="Pedido da paciente."),
+        )
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        eventos = _linha_do_tempo(client).json()["movimentos"]
+
+        marcados = [e for e in eventos if e["apagamento"]]
+        assert len(marcados) == 1, "o apagamento pela Diretoria não se identifica na trilha"
+        assert marcados[0]["autor"] == "Dr. Diretor"
 
     def test_nenhum_outro_movimento_se_diz_apagamento(self, monkeypatch):
         """O contraste: sem ele, marcar tudo passaria igual. O lembrete

@@ -56,6 +56,7 @@ from app.services import (
     ouvidoria_prorrogacao,
     ouvidoria_relatorio,
     ouvidoria_respostas,
+    ouvidoria_retencao,
     ouvidoria_trilha,
     storage,
 )
@@ -559,6 +560,14 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # aviso de caso apagado, e a reabertura por reincidência, que carrega o
     # caso por esta mesma tupla e recusa quem tem o carimbo.
     "anonimizada_em",
+    # O pedido de apagamento (issue #595, migration 100). Andam junto com o
+    # carimbo acima e por isso ficam ao lado dele: o carimbo diz QUE o caso foi
+    # apagado, estes dizem por qual porta, por quem e por quê. Vazios no caso
+    # apagado pelos cinco anos, e é assim que a tela distingue as duas portas
+    # sem perguntar nada ao servidor.
+    "apagamento_pedido_em",
+    "apagamento_pedido_por",
+    "apagamento_motivo",
 )
 _CAMPOS_DOSSIE = ", ".join(_CAMPOS_DOSSIE_TUPLA)
 
@@ -659,15 +668,20 @@ async def require_diretoria_executiva(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase_client),
 ) -> dict:
-    """Gate de quem define os parâmetros do prazo (RN-21). Mais estreito que o
-    da Ouvidoria de propósito: o ouvidor trabalha com o prazo, quem o define é
-    a Diretoria Executiva."""
+    """Gate dos atos que só a Diretoria Executiva pratica na Ouvidoria.
+
+    Mais estreito que o da Ouvidoria de propósito. Nasceu para os parâmetros
+    (a tabela de prazos, RN-21, e os responsáveis de setor): o ouvidor trabalha
+    com o prazo, quem o define é a Diretoria. Desde a issue #595 ele guarda
+    também o apagamento do caso, que não é parâmetro nenhum, e é por isso que a
+    frase da recusa deixou de falar em "parâmetros": ela nomeava um ato que não
+    era o que a pessoa tentou fazer."""
     me = await get_participante_for_user(current_user, supabase)
     barrar_desligado(me)
     if not me or me.get("perfil_ouvidoria") != "diretoria_executiva":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Só a Diretoria Executiva altera os parâmetros da Ouvidoria",
+            detail="Esta ação da Ouvidoria é exclusiva da Diretoria Executiva",
         )
     return me
 
@@ -1042,12 +1056,39 @@ class PedidoTransicao(BaseModel):
     desfecho: str | None = None
     desfecho_descricao: str | None = None
 
+    @field_validator("observacao", "desfecho_descricao")
+    @classmethod
+    def _nao_pode_imitar_o_apagamento(cls, valor: str | None) -> str | None:
+        """A marca do apagamento é vocabulário da trilha, não do ouvidor.
+
+        Estes dois campos são os únicos textos do usuário que chegam CRUS ao
+        início da `observacao` de um movimento (o de encerramento cai no
+        `desfecho_descricao` quando não há observação). Uma marca escrita à mão
+        ali fazia o serviço da retenção adotar o movimento do ouvidor: o motivo
+        da Diretoria não entrava na trilha, o texto plantado virava a exceção da
+        limpeza e sobrevivia à anonimização para sempre, e a tela creditava o
+        apagamento a quem plantou.
+
+        A régua do serviço também exige o par `encerrado` para `encerrado`, que
+        o grafo de transições não permite, então esta recusa é a segunda camada.
+        Ela existe porque a primeira depende de nenhuma rota futura gravar
+        aquele par com texto de usuário na frente, e a trilha é imutável: o que
+        entrar errado aqui não sai mais."""
+        if valor is not None and valor.strip().startswith(ouvidoria_retencao.MARCA_DO_APAGAMENTO):
+            raise ValueError(
+                f'O texto do movimento não pode começar com "{ouvidoria_retencao.MARCA_DO_APAGAMENTO}": '
+                "essa marca é reservada ao registro do apagamento do caso."
+            )
+        return valor
+
 
 # O que a pausa precisa saber do caso: o vencimento que ela congela e o
 # acumulado que ela alimenta (issue #335). `anonimizada_em` entra por causa da
 # guarda do caso apagado logo abaixo: guarda que lê coluna não selecionada lê
 # None e passa em silêncio.
-_CAMPOS_DA_PAUSA = "id, status, prazo_area_em, pausada_em, minutos_pausados, reaberta_em, anonimizada_em"
+_CAMPOS_DA_PAUSA = (
+    "id, status, prazo_area_em, pausada_em, minutos_pausados, reaberta_em, anonimizada_em, apagamento_pedido_em"
+)
 
 
 # A frase única das portas que o caso apagado não atravessa (issue #593). Ela
@@ -1059,9 +1100,37 @@ _CASO_APAGADO = (
     "Este caso foi apagado e não pode mais ser {acao}. O que voltar a ser trazido entra como manifestação nova."
 )
 
+# E a frase do caso que está NO MEIO do apagamento: o pedido da Diretoria já
+# está gravado e o carimbo ainda não. Ela é outra de propósito, porque o fato é
+# outro: ali o Dossiê ainda existe, e dizer "foi apagado" seria a API afirmar o
+# que ainda não aconteceu. O que ela promete é o que o código cumpre: a fila do
+# cron termina o serviço (`concluir_apagamentos_pendentes`).
+_CASO_EM_APAGAMENTO = (
+    "Este caso está sendo apagado por pedido da Diretoria Executiva e não pode ser {acao}. "
+    "O apagamento é concluído automaticamente; o que voltar a ser trazido entra como manifestação nova."
+)
+
 
 def barrar_caso_apagado(caso: dict, acao: str) -> None:
-    """Recusa qualquer mudança num caso cujo relato já foi apagado.
+    """Recusa qualquer mudança num caso cujo relato já foi apagado, ou cujo
+    apagamento a Diretoria já mandou fazer.
+
+    São dois estados e uma regra só. O segundo entrou na issue #595, e o motivo
+    é o efeito que ele destrava (achado da revisão de segurança do PR #632): o
+    pedido gravado sem o carimbo é um caso que a fila do cron vai concluir. Se
+    ele puder ser reaberto nesse intervalo, ganha um ciclo NOVO (área acionada,
+    resposta nova, encerramento novo) e a fila apaga esse ciclo, que ninguém
+    mandou apagar e que nem existia quando a Diretoria escreveu o motivo. A
+    porta humana já recusava esse mesmo caso com 409; era só o robô que dizia
+    sim.
+
+    Barrar aqui também resolve o outro lado do mesmo nó: reaberto, o caso saía
+    da fila (que exige `status = encerrado`) e o pedido ficava pendurado para
+    sempre, com a trilha afirmando que um apagamento começou num caso que
+    seguiu vivo.
+
+    É coerente com a ADR 0047: apagar não tem volta, e o caso que a Diretoria
+    mandou apagar não volta à tramitação enquanto o ato não termina.
 
     A regra mora aqui, e não dentro de uma rota, porque ela vale para toda
     porta que escreve no caso, e a primeira versão dela (só na reabertura) era
@@ -1083,6 +1152,11 @@ def barrar_caso_apagado(caso: dict, acao: str) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail=_CASO_APAGADO.format(acao=acao),
         )
+    if caso.get("apagamento_pedido_em"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_CASO_EM_APAGAMENTO.format(acao=acao),
+        )
 
 
 # O mínimo que uma porta de escrita precisa carregar do caso para a guarda
@@ -1090,7 +1164,7 @@ def barrar_caso_apagado(caso: dict, acao: str) -> None:
 # de existência de propósito: guarda que lê coluna não selecionada lê None e
 # deixa passar em silêncio, e a porta continuaria aberta com a chamada no lugar
 # certo.
-_CAMPOS_COM_O_CARIMBO = "id, protocolo, anonimizada_em"
+_CAMPOS_COM_O_CARIMBO = "id, protocolo, anonimizada_em, apagamento_pedido_em"
 
 
 def efeito_da_pausa(caso: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> dict:
@@ -1831,6 +1905,209 @@ async def arquivar_os_encerrados(
     # veio no corpo é a melhor verdade disponível, e é melhor que um zero sobre
     # um lote que aconteceu.
     return {"arquivadas": atualizadas.count if atualizadas.count is not None else len(guardadas)}
+
+
+# =====================================================================
+# Apagar pela Diretoria: a porta antecipada da Retenção
+# (issue #595, PRD #591, ADR 0047)
+# =====================================================================
+
+# As três colunas do PEDIDO de apagamento (migration 100). Não são o carimbo do
+# ato: quem atesta que o Dossiê saiu é `anonimizada_em`, gravado no fim pelo
+# serviço. Estas dizem quem mandou, quando e por quê, e sobrevivem à
+# anonimização de propósito (a lista está em `ouvidoria_retencao`).
+_CAMPOS_DO_PEDIDO_DE_APAGAMENTO = ("apagamento_pedido_em", "apagamento_pedido_por", "apagamento_motivo")
+
+
+# O teto do motivo do apagamento. É o mesmo da resposta da área
+# (`ouvidoria_respostas.MAXIMO_DE_CARACTERES`), e ele existe porque este texto
+# é o mais permanente do módulo: fica em `apagamento_motivo`, que a política
+# preserva de propósito, e dentro da observação do movimento, que o trigger
+# torna imutável. Um texto colado por engano ficaria nos dois lugares para
+# sempre, sem porta de saída nenhuma.
+MAXIMO_DO_MOTIVO_DO_APAGAMENTO = ouvidoria_respostas.MAXIMO_DE_CARACTERES
+
+
+class PedidoDeApagamento(BaseModel):
+    """O que a Diretoria manda para apagar um caso. O motivo é obrigatório e é
+    a metade do ato que fica legível: o relato some, e é ele, ao lado do
+    movimento na trilha, que explica o buraco (ADR 0047, decisão 1)."""
+
+    motivo: str
+
+    @field_validator("motivo")
+    @classmethod
+    def _motivo_nao_vazio(cls, valor: str) -> str:
+        valor = sanitizar_travessao(valor).strip()
+        if not valor:
+            raise ValueError("Apagar exige o motivo escrito")
+        if len(valor) > MAXIMO_DO_MOTIVO_DO_APAGAMENTO:
+            raise ValueError(
+                f"O motivo do apagamento passa de {MAXIMO_DO_MOTIVO_DO_APAGAMENTO} caracteres. "
+                "Ele fica gravado no caso e na trilha para sempre: escreva a decisão, não o histórico."
+            )
+        return valor
+
+
+@router.post("/manifestacoes/{manifestacao_id}/apagamento")
+@limiter.limit("10/minute")
+async def apagar_manifestacao(
+    request: Request,
+    manifestacao_id: str,
+    pedido: PedidoDeApagamento,
+    me: dict = Depends(require_diretoria_executiva),
+    supabase=Depends(get_supabase_client),
+):
+    """Apaga hoje o Dossiê de um caso encerrado, por ato da Diretoria.
+
+    Apagar NÃO é DELETE (ADR 0047, decisão 1). A linha da manifestação fica, com
+    protocolo, trilha, datas, tipo, área, gravidade e desfecho: nenhum relatório
+    já publicado deixa de bater com o banco. O que sai é o Dossiê, pelos mesmos
+    cinco lugares e pelo MESMO serviço da retenção dos cinco anos, o que faz das
+    duas portas um estado final só.
+
+    **Só a Diretoria, e só sobre caso encerrado.** O gate é o `require_diretoria
+    _executiva` (decisão 3): apagar não tem volta, então fica com quem responde
+    pelo hospital, e o ouvidor sozinho não some com o relato de um caso sobre a
+    própria equipe. O estado é conferido aqui e reconferido no banco, porque
+    caso em tramitação tem prazo correndo e área esperando, e o `encerrada_em`
+    entra junto: sem o marco, a guarda de UPDATE da trilha (migration 100)
+    recusaria a limpeza no meio da varredura, e o caso ficaria meio triturado.
+
+    **A ordem, e por que o pedido é gravado primeiro.** É o `apagamento_pedido
+    _em` no banco que abre a segunda chave da guarda da trilha: gravá-lo depois
+    do serviço faria o gatilho recusar o primeiro passo destrutivo. Gravado
+    antes, o pior caso é um pedido em pé com o Dossiê inteiro, e a chamada
+    seguinte termina o serviço reaproveitando o mesmo movimento.
+
+    **Caso já apagado devolve sucesso e não faz nada.** Não é erro: o pedido de
+    quem clicou duas vezes (ou de quem chegou depois dos cinco anos) já está
+    atendido, e refazer só arriscaria um segundo movimento na trilha dizendo
+    que o caso foi apagado outra vez.
+
+    Apagar não tem lote, de propósito: um ato sem volta, um caso por vez."""
+    # A tupla do Dossiê mais o carimbo do Arquivo, que não faz parte dela: é ele
+    # que diz se o caso JÁ estava guardado, e uma leitura sem ele voltaria None
+    # e faria a rota rearquivar por cima do ouvidor, em silêncio. O campo a mais
+    # é ignorado por `dossie_completo`, que projeta só a tupla.
+    caso = carregar_manifestacao(supabase, manifestacao_id, f"{_CAMPOS_DOSSIE}, arquivada_em")
+    agora = agora_utc()
+
+    # Já apagado (por aqui ou pelos cinco anos): nada a fazer, e nada a gravar.
+    if caso.get("anonimizada_em"):
+        return dossie_completo(supabase, caso, agora)
+
+    if caso.get("status") != "encerrado" or not caso.get("encerrada_em"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Só um caso encerrado, e com a data de encerramento registrada, pode ser apagado. "
+                "Encerre o caso antes de apagar."
+            ),
+        )
+
+    # O pedido já gravado é preservado: a segunda chamada retoma o ato que a
+    # primeira começou, e não o reescreve com outro motivo e outra data.
+    pedido_em = caso.get("apagamento_pedido_em")
+    if pedido_em is None:
+        # A chave que o serviço vai usar é a que o BANCO devolveu, e não o
+        # `isoformat()` daqui: as duas representam o mesmo instante, mas a
+        # comparação acontece no filtro do PostgREST, e uma diferença de
+        # formatação faria cada passo destrutivo ser recusado em silêncio, com
+        # a rota devolvendo 503 para sempre.
+        pedido_em = _gravar_o_pedido_de_apagamento(
+            supabase,
+            manifestacao_id,
+            me,
+            agora.isoformat(),
+            pedido.motivo,
+            ja_arquivado=bool(caso.get("arquivada_em")),
+        )
+
+    apagou = ouvidoria_retencao.apagar_caso(
+        supabase,
+        caso,
+        agora,
+        ouvidoria_retencao.pela_diretoria(
+            autor=me.get("nome_completo") or me["id"],
+            autor_id=me["id"],
+            motivo=caso.get("apagamento_motivo") or pedido.motivo,
+            pedido_em=pedido_em,
+        ),
+    )
+    if not apagou:
+        # O pedido fica gravado, e é isso que faz a tentativa seguinte retomar
+        # de onde esta parou em vez de recomeçar do zero.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível apagar o caso agora. O pedido ficou registrado; tente de novo em instantes.",
+        )
+
+    registrar_acesso(supabase, me, manifestacao_id, "apagar")
+    return dossie_completo(supabase, carregar_manifestacao(supabase, manifestacao_id, _CAMPOS_DOSSIE), agora)
+
+
+def _gravar_o_pedido_de_apagamento(
+    supabase, manifestacao_id: str, me: dict, pedido_em: str, motivo: str, ja_arquivado: bool
+) -> str:
+    """Grava os três campos do pedido e, se preciso, manda o caso para o
+    Arquivo, no mesmo update.
+
+    O Arquivo entra junto porque o caso apagado sai da lista sozinho (ADR 0047,
+    decisão 4): ele não tem mais o que a lista mostra, e deixá-lo na fila de
+    trabalho seria oferecer ao ouvidor um caso sem relato para trabalhar.
+
+    Mas só entra no caso que AINDA NÃO está arquivado. O par do Arquivo é o
+    registro de quem tirou o caso da lista e quando, e regravá-lo aqui trocaria
+    o ouvidor que guardou o caso semana passada pelo diretor que o apagou hoje,
+    em silêncio. Arquivar de novo o que já está arquivado não é o ato desta
+    rota, e o efeito visível seria o mesmo.
+
+    O update repete no PRÓPRIO filtro as três pré-condições que a rota acabou
+    de conferir na leitura, e é isso que fecha a janela entre as duas (TOCTOU):
+    uma reabertura que caísse no meio faria o filtro não casar linha nenhuma, e
+    o caso volta como 409 em vez de nascer com um pedido de apagamento pendente
+    que o serviço nunca vai concluir.
+
+    Devolve o `apagamento_pedido_em` COMO O BANCO O GRAVOU. É esse valor que
+    vira a chave da política no serviço, e não o que esta função mandou
+    escrever: quem compara é o filtro do PostgREST, e duas grafias do mesmo
+    instante não casam lá."""
+    carimbos = {
+        "apagamento_pedido_em": pedido_em,
+        "apagamento_pedido_por": me["id"],
+        "apagamento_motivo": motivo,
+    }
+    if not ja_arquivado:
+        carimbos |= {"arquivada_em": pedido_em, "arquivada_por": me["id"]}
+    try:
+        gravado = (
+            supabase.table("ouvidoria_protocolos")
+            .update(carimbos)
+            .eq("id", manifestacao_id)
+            .eq("status", "encerrado")
+            .not_.is_("encerrada_em", "null")
+            .is_("anonimizada_em", "null")
+            .execute()
+        )
+    except (APIError, HTTPError) as exc:
+        # `HTTPError` junto porque o timeout do PostgREST não vira `APIError`:
+        # ele sobe cru e transformaria esta recusa amiga num 500 com stack.
+        logger.error(
+            "Falha ao gravar o pedido de apagamento do caso %s (%s)",
+            manifestacao_id,
+            getattr(exc, "code", exc.__class__.__name__),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível gravar agora. Tente de novo em instantes.",
+        ) from exc
+    if not gravado.data:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="O caso mudou de estado agora mesmo: recarregue o painel antes de apagar.",
+        )
+    return gravado.data[0].get("apagamento_pedido_em") or pedido_em
 
 
 # =====================================================================
@@ -3101,7 +3378,7 @@ async def classificar_manifestacao(
             # retenção preserva de propósito, e o caso carimbado já saiu da
             # varredura dela. Sem a guarda, esta rota reintroduz dado pessoal
             # permanente num caso que a tela anuncia como apagado.
-            .select("id, status, sigilo_reforcado, tipo_manifestacao, categoria, anonimizada_em")
+            .select("id, status, sigilo_reforcado, tipo_manifestacao, categoria, anonimizada_em, apagamento_pedido_em")
             .eq("id", manifestacao_id)
             .execute()
         )

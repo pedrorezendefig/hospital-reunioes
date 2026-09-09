@@ -22,6 +22,8 @@ import {
   Undo2,
   UserRound,
 } from "lucide-react";
+import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
+import { ReasonModal } from "@/components/admin/ReasonModal";
 import { EncerrarModal } from "@/components/ouvidoria/EncerrarModal";
 import { ValidarModal } from "@/components/ouvidoria/ValidarModal";
 import {
@@ -48,6 +50,7 @@ import {
 import {
   autorDoApagamento,
   estaApagado,
+  podeApagar,
   TITULO_DO_CASO_APAGADO,
 } from "@/lib/ouvidoria/apagamento";
 import { descreverOrigem } from "@/lib/ouvidoria/origem";
@@ -140,6 +143,13 @@ export interface Dossie {
   // marcos: um frontend servido enquanto o backend ainda é o da versão anterior
   // não pode acusar de apagado um caso inteiro.
   anonimizada_em?: string | null;
+  // O pedido de apagamento (issue #595, migration 100). Só o caso apagado pela
+  // Diretoria os tem: no apagado pelos cinco anos ninguém pediu nada, e é essa
+  // diferença que o aviso mostra na tela. Opcionais pelo mesmo motivo do
+  // carimbo acima.
+  apagamento_pedido_em?: string | null;
+  apagamento_pedido_por?: string | null;
+  apagamento_motivo?: string | null;
   acuse?: AcuseDoCaso;
   // O aviso de encerramento ao manifestante (issue #494, RN-80). O par do
   // acuse: um diz que a manifestação chegou, o outro diz no que deu. Opcional
@@ -273,6 +283,18 @@ export function Dossie({ protocolo, token }: DossieProps) {
   const [sigiloMarcado, setSigiloMarcado] = useState(false);
   const [classificando, setClassificando] = useState(false);
   const [avisoClassificacao, setAvisoClassificacao] = useState<string | null>(null);
+  // Apagar pela Diretoria (issue #595, ADR 0047). O perfil vem do
+  // `useCurrentParticipante` porque a página do caso é a mesma para os dois
+  // papéis da Ouvidoria, e este é o único ato que só um deles pratica.
+  const { participante } = useCurrentParticipante();
+  const [confirmandoApagamento, setConfirmandoApagamento] = useState(false);
+  // Dois avisos, e não um: a recusa do servidor tem que aparecer DENTRO do
+  // modal, que sobe por portal com backdrop e cobre a página inteira. Escrita
+  // na página, ela ficaria embaixo do modal e a Diretoria não veria nada
+  // depois de o spinner sumir. O aviso de sucesso é o oposto: no sucesso o
+  // modal fecha, então ele mora na página.
+  const [erroDoApagamento, setErroDoApagamento] = useState<string | null>(null);
+  const [avisoApagamento, setAvisoApagamento] = useState<string | null>(null);
   // As duas ações que a lista oferecia e que passam a viver junto do caso
   // (issue #476). Elas mudam o caso inteiro, então o que vem depois delas é
   // uma leitura nova, e não um remendo no que está na tela.
@@ -789,6 +811,56 @@ export function Dossie({ protocolo, token }: DossieProps) {
     }
   }
 
+  /**
+   * Apaga o caso, com o motivo que a Diretoria escreveu na confirmação
+   * (issue #595, ADR 0047).
+   *
+   * A tela ADOTA o corpo que a rota devolve, como o resto das ações desta
+   * página: o caso volta sem relato, sem identificação e com o carimbo, e é
+   * isso que troca o Dossiê pelo aviso de caso apagado na hora. Recarregar em
+   * vez de adotar deixaria o relato na tela até alguém apertar F5. A trilha é
+   * relida à parte porque o crédito de quem apagou mora nela, e não no caso.
+   */
+  async function apagarCaso(motivo: string) {
+    if (!manifestacaoId || !token) return;
+    setErroDoApagamento(null);
+    setAvisoApagamento(null);
+    try {
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/apagamento`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ motivo }),
+      });
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        // O modal continua aberto: a recusa aparece dentro dele, e o motivo já
+        // digitado continua na tela para a Diretoria corrigir e tentar de novo.
+        setErroDoApagamento(
+          typeof body.detail === "string"
+            ? body.detail
+            : "Não foi possível apagar o caso agora. Tente novamente."
+        );
+        return;
+      }
+      const apagado: Dossie = await res.json();
+      setDossie(apagado);
+      setConfirmandoApagamento(false);
+      // Quando já havia um pedido em pé (uma tentativa anterior que parou no
+      // meio), o servidor preserva o motivo do PRIMEIRO pedido: o ato que vale
+      // é aquele. A tela diz isso, em vez de deixar quem acabou de escrever
+      // acreditar que o texto dele foi o que ficou gravado.
+      const motivoOutro = Boolean(apagado.apagamento_motivo) && apagado.apagamento_motivo !== motivo;
+      setAvisoApagamento(
+        motivoOutro
+          ? "Caso apagado. Este caso já tinha um pedido de apagamento em aberto, e o que ficou na trilha foi o motivo daquele primeiro pedido."
+          : "Caso apagado. O ato ficou na trilha, com o seu nome e o motivo."
+      );
+      carregarMovimentos();
+    } catch {
+      setErroDoApagamento("Não foi possível apagar o caso agora. Tente novamente.");
+    }
+  }
+
   const identificacao = dossie?.anonimo
     ? "Manifestação anônima"
     : dossie?.manifestante_nome || "Não informado";
@@ -1234,6 +1306,14 @@ export function Dossie({ protocolo, token }: DossieProps) {
                 Este caso foi apagado em {formatarDataHora(dossie.anonimizada_em as string)}
                 {autorDoApagamentoDoCaso ? ` por ${autorDoApagamentoDoCaso}` : ""}.
               </p>
+              {/* O motivo, quando houve pedido (issue #595). Ele só existe na
+                  porta antecipada: o caso apagado pelos cinco anos não tem
+                  motivo nenhum a citar, porque ali ninguém pediu, o prazo
+                  venceu. Escrever "sem motivo" naquele caso seria a tela
+                  inventando uma omissão que não aconteceu. */}
+              {dossie.apagamento_motivo && (
+                <p className="text-sm mt-1">Motivo: {dossie.apagamento_motivo}</p>
+              )}
               <p className="text-xs text-slate-500 mt-1 leading-relaxed">
                 O relato, a identificação de quem manifestou, os anexos e a resposta da área não estão
                 mais disponíveis. A ficha do caso e a linha do tempo continuam aqui, e o caso não pode
@@ -1690,6 +1770,61 @@ export function Dossie({ protocolo, token }: DossieProps) {
                 })}
               </ol>
             </div>
+          )}
+
+          {/* Apagar pela Diretoria (issue #595, PRD #591, ADR 0047).
+
+              Fica por último, e sozinho, porque é o único ato desta página que
+              não tem volta. O verbo é "Apagar" em toda a tela: "excluir" e
+              "deletar" prometeriam um DELETE que não acontece (a linha, o
+              protocolo e a trilha ficam), e "anonimizar" é palavra de dentro
+              do sistema, que não diz a quem clica o que vai desaparecer.
+
+              Quem recusa de verdade é o servidor (403 para o ouvidor, 409 para
+              caso em andamento). Aqui a tela só não oferece o caminho. */}
+          {podeApagar(participante?.perfil_ouvidoria, dossie.status, dossie.anonimizada_em) && (
+            <div className="pt-4 border-t border-slate-100">
+              <button
+                onClick={() => {
+                setErroDoApagamento(null);
+                setAvisoApagamento(null);
+                setConfirmandoApagamento(true);
+              }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-white border border-red-200 text-red-700 hover:bg-red-50 transition-colors"
+              >
+                <Lock className="w-3.5 h-3.5" />
+                Apagar
+              </button>
+              <p className="mt-2 text-xs text-slate-500 leading-relaxed">
+                Apagar retira do caso o relato, a identificação de quem manifestou, os anexos e a resposta
+                da área. Ficam o protocolo, a linha do tempo e os números dos relatórios. Não tem volta, e
+                o caso apagado não pode ser reaberto.
+              </p>
+            </div>
+          )}
+
+          {/* O aviso do ato fica FORA do bloco do botão de propósito. Dentro
+              dele, a mensagem de sucesso nunca chegaria a ser lida: no sucesso
+              a tela adota o caso já carimbado, o `podeApagar` vira falso no
+              mesmo render, e o bloco inteiro sai da tela levando a frase
+              junto. Carimbo no servidor sem par na tela some em silêncio. */}
+          {avisoApagamento && (
+            <p className="pt-2 text-xs text-slate-500">{avisoApagamento}</p>
+          )}
+
+          {confirmandoApagamento && (
+            <ReasonModal
+              title={`Apagar a manifestação ${dossie.protocolo}`}
+              description="O relato, a identificação, os anexos e a resposta da área somem. Ficam o protocolo, a linha do tempo e os números. O motivo abaixo fica gravado no caso e na trilha, com o seu nome, e não pode ser apagado depois: escreva a decisão, sem o nome nem o contato de quem manifestou."
+              confirmLabel="Apagar agora"
+              placeholder="Ex.: pedido da paciente, decidido pela Diretoria em reunião"
+              erro={erroDoApagamento}
+              onClose={() => {
+                setErroDoApagamento(null);
+                setConfirmandoApagamento(false);
+              }}
+              onConfirm={apagarCaso}
+            />
           )}
         </div>
       ) : null}

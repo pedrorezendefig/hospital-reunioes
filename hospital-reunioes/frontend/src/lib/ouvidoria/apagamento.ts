@@ -47,3 +47,26 @@ export function estaApagado(anonimizadaEm: string | null | undefined): boolean {
 export function autorDoApagamento(movimentos: EventoDaTrilha[]): string | null {
   return movimentos.find((evento) => evento.apagamento)?.autor ?? null;
 }
+
+/**
+ * A Diretoria pode apagar ESTE caso agora? (issue #595, ADR 0047)
+ *
+ * As três condições andam juntas e cada uma tem um motivo próprio:
+ *
+ * - só a `diretoria_executiva`, porque apagar não tem volta e fica com quem
+ *   responde pelo hospital (decisão 3). O ouvidor nem vê o botão;
+ * - só caso `encerrado`, porque caso em andamento tem prazo correndo e área
+ *   esperando, e apagar o relato deixaria a área sem o que responder;
+ * - só caso que ainda tem Dossiê: o carimbado já foi apagado, e oferecer de
+ *   novo pediria um motivo para um ato que não vai acontecer.
+ *
+ * Quem recusa de verdade é o servidor (403 e 409). Aqui a tela só não oferece
+ * o caminho que terminaria em recusa, como no resto deste módulo.
+ */
+export function podeApagar(
+  perfilOuvidoria: string | null | undefined,
+  status: string,
+  anonimizadaEm: string | null | undefined
+): boolean {
+  return perfilOuvidoria === "diretoria_executiva" && status === "encerrado" && !estaApagado(anonimizadaEm);
+}
