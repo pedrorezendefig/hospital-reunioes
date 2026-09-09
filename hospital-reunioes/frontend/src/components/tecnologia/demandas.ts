@@ -350,3 +350,34 @@ export function queryDeFiltros(filtros: FiltrosDoQuadro): string {
 export function temFiltroAtivo(filtros: FiltrosDoQuadro): boolean {
   return Boolean(filtros.tipo || filtros.produto_id || filtros.responsavel_id);
 }
+
+/**
+ * O endereço da Demanda, montado e lido no mesmo lugar (issue #640).
+ *
+ * As duas funções abaixo são os dois lados do MESMO formato: `linkDaDemanda`
+ * escreve o que o botão "Copiar link" põe no clipboard, e `demandaIdDaUrl` lê o
+ * que o Quadro recebe na barra de endereços. Escrever a URL à mão de um lado e
+ * lê-la à mão do outro seria o jeito mais fácil de copiar um link que a própria
+ * aplicação não abre.
+ */
+export const ROTA_TECNOLOGIA = "/admin/tecnologia";
+
+/** O nome do parâmetro que carrega o id da Demanda no link. */
+export const PARAM_DEMANDA = "demanda";
+
+/** O endereço completo da Demanda, para mandar no WhatsApp. */
+export function linkDaDemanda(id: string, origem: string): string {
+  return `${origem}${ROTA_TECNOLOGIA}?${PARAM_DEMANDA}=${encodeURIComponent(id)}`;
+}
+
+/**
+ * O id da Demanda que veio no link, ou `null` quando não veio nenhum.
+ *
+ * Valor vazio ou só de espaços conta como "não veio": `?demanda=` abriria uma
+ * busca por uma Demanda de id vazio, e a tela acusaria "não está no Quadro"
+ * para um link que não pediu Demanda alguma.
+ */
+export function demandaIdDaUrl(busca: string): string | null {
+  const id = new URLSearchParams(busca).get(PARAM_DEMANDA)?.trim();
+  return id ? id : null;
+}

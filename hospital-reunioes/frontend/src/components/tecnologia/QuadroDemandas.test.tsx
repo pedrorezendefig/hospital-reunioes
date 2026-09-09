@@ -30,6 +30,7 @@ import {
   Demanda,
   EstadoDemanda,
   FiltrosDoQuadro,
+  linkDaDemanda,
   PrioridadeDemanda,
   SEM_FILTRO,
   TipoDemanda,
@@ -1455,5 +1456,145 @@ describe("Duas trocas de filtro em sequência", () => {
 
     expect(await screen.findByText("Ajuste na Ana")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("Abrir a Demanda pelo link (issue #640)", () => {
+  /** Põe a barra de endereços no que o link copiado teria trazido. */
+  function chegarPor(busca: string) {
+    window.history.replaceState({}, "", `/admin/tecnologia${busca}`);
+  }
+
+  /**
+   * O anfitrião deste bloco, com o `carregandoAuth` como prop.
+   *
+   * O `montar()` lá de cima guarda os filtros dentro dele e não devolve o
+   * `rerender`; os testes daqui precisam re-renderizar o Quadro com props
+   * diferentes (a sessão que resolve) e envolvê-lo num `Profiler`. O papel dos
+   * filtros é o mesmo do `Anfitriao` do `montar`: quem os guarda é a aba
+   * Tecnologia (issue #639).
+   */
+  function QuadroHospedado({ carregandoAuth = false }: { carregandoAuth?: boolean }) {
+    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
+    return (
+      <QuadroDemandas
+        token="token-de-teste"
+        carregandoAuth={carregandoAuth}
+        produtos={PRODUTOS}
+        pessoas={PESSOAS}
+        filtros={filtros}
+        onFiltrosChange={setFiltros}
+      />
+    );
+  }
+
+  /** O servidor falso mínimo deste bloco: a lista, e a Conversa vazia do modal. */
+  function servidorCom(lista: Demanda[]) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        async (url: string) =>
+          ({
+            ok: true,
+            status: 200,
+            json: async () => (url.includes("/conversa") ? [] : lista),
+          }) as unknown as Response,
+      ),
+    );
+  }
+
+  afterEach(() => {
+    window.history.replaceState({}, "", "/admin/tecnologia");
+  });
+
+  it("o link abre o card daquela Demanda já aberto", async () => {
+    chegarPor("?demanda=d2");
+    montar([demanda("d1", "Uma nova"), demanda("d2", "A do link")], { conversa: [] });
+
+    const modal = await screen.findByRole("dialog");
+
+    expect((within(modal).getByLabelText("Título") as HTMLInputElement).value).toBe("A do link");
+    // Achada a Demanda, o aviso de "não está no Quadro" não pode ficar na tela
+    // ao lado do card aberto, contando o contrário do que a tela mostra.
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("o link que o botão copia é o link que a tela abre", async () => {
+    // A prova de que os dois lados falam o mesmo formato, pela URL de verdade:
+    // quem chega é o endereço montado pelo `linkDaDemanda`, e não uma query
+    // string escrita à mão neste teste.
+    const link = linkDaDemanda("d2", window.location.origin);
+    chegarPor(new URL(link).search);
+    montar([demanda("d1", "Uma nova"), demanda("d2", "A do link")], { conversa: [] });
+
+    const modal = await screen.findByRole("dialog");
+
+    expect((within(modal).getByLabelText("Título") as HTMLInputElement).value).toBe("A do link");
+  });
+
+  it("sem o parâmetro, nenhum card abre sozinho", async () => {
+    // Irmã de presença dos testes acima: o Quadro desenhou os cards no mesmo
+    // render, então "nenhum modal" é sobre o link, e não sobre uma tela vazia.
+    montar([demanda("d1", "Uma nova"), demanda("d2", "A do link")]);
+
+    expect(await screen.findByText("A do link")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("link para uma Demanda que não está no Quadro: a tela diz isso, sem culpar ninguém", async () => {
+    chegarPor("?demanda=nao-existe");
+    montar([demanda("d1", "Uma nova")]);
+
+    const aviso = await screen.findByRole("status");
+
+    expect(aviso.textContent).toContain("não está no Quadro");
+    // A frase NÃO afirma o que o código não sabe: nem que a Demanda foi
+    // apagada (nada se apaga nesta aba), nem que falta permissão (o gate é da
+    // API, e a recusa dela viraria erro de carregamento, não lista sem o card).
+    expect(aviso.textContent).not.toContain("apagada");
+    expect(aviso.textContent).not.toContain("permissão");
+    // Irmã de presença: o Quadro carregou e mostra o que tem.
+    expect(screen.getByText("Uma nova")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("enquanto a sessão carrega, o link não vira acusação nenhuma", async () => {
+    // O caminho que mordeu na fatia anterior: o `useAuth` nasce com
+    // `{ token: null, loading: true }`, e abrir pela URL acontece no primeiro
+    // render, quando o token ainda não chegou. Dizer "não está no Quadro" aqui
+    // seria acusar um link bom em toda abertura pelo link.
+    chegarPor("?demanda=d1");
+    montar([demanda("d1", "Uma nova")], { carregandoAuth: true });
+
+    expect(screen.queryByRole("status")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    // Irmã de presença: a tela diz o que de fato está acontecendo.
+    expect(screen.getByText("Carregando Demandas...")).toBeTruthy();
+  });
+
+  it("resolvida a sessão, o link abre o card sem a pessoa clicar de novo", async () => {
+    // O link chega ANTES do token: o que se prova aqui é que ele não se perde
+    // no caminho, e que a abertura acontece quando as Demandas chegam.
+    chegarPor("?demanda=d1");
+    servidorCom([demanda("d1", "Uma nova")]);
+    const { rerender } = render(<QuadroHospedado carregandoAuth />);
+
+    expect(screen.queryByRole("dialog")).toBeNull();
+
+    rerender(<QuadroHospedado carregandoAuth={false} />);
+
+    const modal = await screen.findByRole("dialog");
+    expect((within(modal).getByLabelText("Título") as HTMLInputElement).value).toBe("Uma nova");
+  });
+
+  it("sem sessão, o link não vira 'não está no Quadro'", async () => {
+    // Duas causas diferentes, duas frases: sem token o Quadro nem foi lido, e
+    // dizer que a Demanda não está nele afirmaria um fato não verificado.
+    chegarPor("?demanda=d1");
+    montar([demanda("d1", "Uma nova")], { token: null });
+
+    const aviso = await screen.findByRole("alert");
+    expect(aviso.textContent).toContain("a sessão não está ativa");
+    expect(screen.queryByRole("status")).toBeNull();
   });
 });

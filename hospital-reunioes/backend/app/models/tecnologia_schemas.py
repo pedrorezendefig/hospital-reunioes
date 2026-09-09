@@ -186,6 +186,17 @@ class ConversaLinhaResponse(BaseModel):
     editavel_ate: str | None = None
 
 
+class TextoParaIaResponse(BaseModel):
+    """O texto do "Copiar para IA", ja montado (issue #640).
+
+    O corpo e um objeto, e nao a string solta, porque uma resposta que e so um
+    texto nao tem onde crescer: qualquer coisa que venha junto depois (um aviso
+    de fio grande, por exemplo) quebraria quem le.
+    """
+
+    texto: str
+
+
 class RespostaPayload(BaseModel):
     """O que a caixa de resposta manda, ao enviar e ao corrigir.
 

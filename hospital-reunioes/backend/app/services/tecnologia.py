@@ -17,6 +17,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from app.dependencies import is_super_admin
 
@@ -379,3 +380,116 @@ def mencoes_sem_acesso(mencoes: list[str], ids_com_acesso: set[str]) -> list[str
     que a pessoa nao abre.
     """
     return [pid for pid in mencoes if pid not in ids_com_acesso]
+
+
+# ─── O texto do "Copiar para IA" (issue #640) ────────────────────────────────
+
+# O fuso do hospital, o mesmo do resto do app (`ouvidoria_prazos.py`,
+# `dados_atendimento.py`). O banco guarda TIMESTAMPTZ em UTC; quem le o texto
+# colado numa IA le a hora em que a coisa aconteceu aqui.
+FUSO_HOSPITAL = ZoneInfo("America/Sao_Paulo")
+
+# O rotulo que a gente le, como no `ESTADO_ROTULO`. O banco guarda o valor sem
+# acento (CHECK da migration 102); a pessoa, e a IA, leem "Decisão".
+TIPO_ROTULO: dict[str, str] = {
+    "decisao": "Decisão",
+    "informacao": "Informação",
+    "terceiro": "Terceiro",
+    "ajuste": "Ajuste",
+    "novo": "Novo",
+    "defeito": "Defeito",
+    "consultoria": "Consultoria",
+}
+
+# A linha de contexto do topo (PRD #634, historia 30). Ela existe porque quem
+# cola isto numa IA de fora nao tem como explicar o que e a aba: o texto chega
+# sozinho, sem o app em volta.
+CABECALHO_PARA_IA = (
+    "Este é um pedido de tecnologia registrado no aplicativo do hospital, na aba Tecnologia, "
+    "onde o hospital e a Vitta (a empresa que cuida dos sistemas dele) conversam. "
+    "Abaixo vão o pedido e a conversa até agora."
+)
+
+SEM_DESCRICAO = "(sem descrição)"
+SEM_CONVERSA = "(sem conversa até agora)"
+SEM_PRODUTO = "(sem Produto)"
+# Resposta cujo autor nao foi resolvido. Mesma palavra que a linha de movimento
+# usa quando o nome de quem moveu nao veio.
+AUTOR_DESCONHECIDO = "Alguém"
+SEM_DATA = "sem data"
+
+
+def momento_para_ia(valor: str | None) -> str:
+    """A hora da linha do fio, no fuso do hospital.
+
+    Data ilegivel vira "sem data", e nao o instante atual nem uma linha sem
+    marca: quem le precisa saber que aquela linha nao tem hora confiavel, e
+    inventar uma seria pior do que dizer isso.
+    """
+    instante = instante_do_banco(valor)
+    if instante is None:
+        return SEM_DATA
+    return instante.astimezone(FUSO_HOSPITAL).strftime("%d/%m/%Y às %Hh%M")
+
+
+def linha_para_ia(linha: dict[str, Any]) -> str:
+    """Uma linha do fio em texto simples.
+
+    A linha de MOVIMENTO nao ganha prefixo de autor: o texto dela ja foi montado
+    pelo backend com o nome de quem moveu ("Pedro moveu para Aguardando"), e
+    prefixar de novo sairia "Pedro: Pedro moveu para Aguardando".
+    """
+    quando = momento_para_ia(linha.get("criado_em"))
+    texto = str(linha.get("texto") or "").strip()
+    if linha.get("linha") == "movimento":
+        return f"[{quando}] {texto}"
+    autor = linha.get("autor_nome") or AUTOR_DESCONHECIDO
+    return f"[{quando}] {autor}: {texto}"
+
+
+def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> str:
+    """A Demanda inteira em texto simples, para colar numa IA (issue #640).
+
+    Mora aqui, e nao na tela, para ser FONTE UNICA: o mesmo texto tem que sair
+    do botao do modal, do e-mail e de qualquer outra tela que venha depois. Duas
+    montagens divergiriam na primeira mudanca de formato.
+
+    **O que entra**, exatamente o que a issue #640 lista: a linha de contexto,
+    titulo, tipo, Produto, descricao e a Conversa inteira em ordem, com as
+    linhas de movimento no meio.
+
+    **O que fica de fora**, e por que:
+
+    - **id e e-mail** (da Demanda, do Produto, de quem escreveu): o texto sai do
+      app e vai para uma IA de fora. O nome de quem falou e o que a leitura
+      precisa; a chave do nosso banco, nao;
+    - **estado, prioridade, prazo e responsavel**: sao a operacao do Quadro, e
+      quem le esta respondendo ao PEDIDO. A trilha de por onde a Demanda andou
+      ja esta nas linhas de movimento do fio, em ordem;
+    - **a lista de `mencoes`**: sao ids, e o "@Fulano" que a pessoa escreveu ja
+      esta no proprio texto da resposta.
+
+    **Fio enorme:** o texto vai INTEIRO, sem corte. Cortar seria pior do que o
+    problema: a linha de contexto promete "o pedido e a conversa ate agora", e
+    uma IA que recebesse metade responderia sobre metade sem saber disso. O que
+    limita o tamanho na pratica e o teto de 5000 caracteres por resposta
+    (`LIMITE_RESPOSTA`), e a rota e de Super admin, com a Demanda pedida uma por
+    vez.
+    """
+    partes: list[str] = [
+        CABECALHO_PARA_IA,
+        "",
+        f"Título: {str(demanda.get('titulo') or '').strip()}",
+        f"Tipo: {TIPO_ROTULO.get(str(demanda.get('tipo')), str(demanda.get('tipo') or ''))}",
+        f"Produto: {demanda.get('produto_nome') or SEM_PRODUTO}",
+        "",
+        "Descrição:",
+        str(demanda.get("descricao") or "").strip() or SEM_DESCRICAO,
+        "",
+        "Conversa:",
+    ]
+    if linhas:
+        partes.extend(linha_para_ia(linha) for linha in linhas)
+    else:
+        partes.append(SEM_CONVERSA)
+    return "\n".join(partes)

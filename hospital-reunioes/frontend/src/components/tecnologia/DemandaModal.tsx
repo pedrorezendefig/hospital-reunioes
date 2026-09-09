@@ -23,6 +23,7 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import { Select } from "@/components/ui/Select";
 
 import { ConversaDaDemanda } from "./ConversaDaDemanda";
+import { CopiarDaDemanda } from "./CopiarDaDemanda";
 import { TipoIcone } from "./TipoIcone";
 import {
   BASE_TECNOLOGIA,
@@ -284,6 +285,8 @@ export function DemandaModal({ demanda, produtos, pessoas, token, onFechar, onMu
             </div>
           </div>
         </div>
+
+        <CopiarDaDemanda demanda={demanda} token={token} />
 
         <ConversaDaDemanda
           demandaId={demanda.id}

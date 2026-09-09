@@ -29,6 +29,7 @@ import {
   BASE_TECNOLOGIA,
   COLUNAS_RECOLHIDAS,
   Demanda,
+  demandaIdDaUrl,
   destinosDe,
   ESTADO_ROTULO,
   ESTADOS,
@@ -144,6 +145,16 @@ export function QuadroDemandas({
    * preenchido, e sem explicação nenhuma de por que a Demanda não foi criada.
    */
   const erroDeEscrita = useRef(false);
+  /**
+   * O id que veio no link e que ainda não foi encontrado no Quadro (issue #640).
+   *
+   * Ele é estado, e não uma leitura solta, porque o link chega ANTES do token:
+   * quem abre pelo link cai no primeiro render, com a autenticação ainda
+   * resolvendo e as Demandas ainda não pedidas. Guardado aqui, o pedido do link
+   * espera as Demandas chegarem; zerado assim que a Demanda é achada, ele para
+   * de ser cobrado e o aviso abaixo não reaparece depois.
+   */
+  const [idDoLink, setIdDoLink] = useState<string | null>(null);
 
   const autorizacao = useCallback(
     () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
@@ -208,6 +219,27 @@ export function QuadroDemandas({
     }
     carregar();
   }, [carregandoAuth, token, carregar]);
+
+  /**
+   * O id da Demanda que veio no link (issue #640).
+   *
+   * A leitura é do `window.location`, e não do `useSearchParams`: o hook do
+   * Next obriga quem o chama a ficar sob um limite de Suspense, e o limite é o
+   * pedaço da tela que a renderização antecipada pode trocar pelo `fallback`.
+   * Aqui o pedaço seria o Quadro inteiro. O parâmetro é lido uma vez, ao
+   * montar, porque o link abre o card na chegada: nada nesta tela troca a query
+   * string depois.
+   */
+  useEffect(() => {
+    setIdDoLink(demandaIdDaUrl(window.location.search));
+  }, []);
+
+  useEffect(() => {
+    if (idDoLink && demandas.some((d) => d.id === idDoLink)) {
+      setAbertaId(idDoLink);
+      setIdDoLink(null);
+    }
+  }, [idDoLink, demandas]);
 
   async function enviar(url: string, metodo: string, corpo: unknown): Promise<boolean> {
     let resposta: Response;
@@ -359,6 +391,23 @@ export function QuadroDemandas({
         >
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>{erro}</span>
+        </p>
+      )}
+
+      {/* O link pediu uma Demanda que o Quadro carregado não tem (issue #640).
+          A frase fica presa a `!carregando && !erro` de propósito: enquanto a
+          autenticação resolve, ou quando a leitura falhou, o código NÃO SABE se
+          a Demanda está no Quadro, e dizer que não está seria afirmar um fato
+          não verificado. Ela também não fala em Demanda apagada (nada se apaga
+          nesta aba) nem em permissão (o gate é da API, e a recusa dela vira
+          erro de carregamento, não lista sem o card). */}
+      {!carregando && !erro && idDoLink && (
+        <p
+          role="status"
+          className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>A Demanda deste link não está no Quadro. Confira o endereço com quem enviou.</span>
         </p>
       )}
 
