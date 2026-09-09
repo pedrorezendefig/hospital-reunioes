@@ -38,6 +38,19 @@ const BASE = "/api/admin/tecnologia";
 /** A mesma frase nos dois caminhos de rede, carregar e salvar. */
 const FALHA_DE_CONEXAO = "Não foi possível falar com o servidor. Verifique a conexão e tente de novo.";
 
+/**
+ * A frase de quando `useAuth` não devolve token.
+ *
+ * Ela NÃO manda entrar de novo, de propósito. O hook devolve `token: null`
+ * tanto quando a sessão acabou quanto quando o `getUser()` dele falhou por
+ * rede, e o componente não distingue as duas: mandar sair e entrar de novo
+ * seria cobrar justo a ação que a pessoa não consegue fazer quando a causa é a
+ * rede. A frase nomeia as duas causas possíveis e sugere recarregar, que é
+ * possível nos dois casos e resolve os dois quando a causa passa.
+ */
+const SEM_SESSAO =
+  "Não foi possível carregar os Produtos: a sessão não está ativa ou o servidor não respondeu. Tente recarregar a página.";
+
 export function TecnologiaModulo() {
   const { token, loading: carregandoAuth } = useAuth();
 
@@ -95,7 +108,7 @@ export function TecnologiaModulo() {
       // porque `carregar` desiste na primeira linha e ninguém desliga a
       // espera. Dizer o que aconteceu é melhor do que girar sem fim.
       setCarregando(false);
-      setErro("Sua sessão expirou. Entre de novo para ver os Produtos.");
+      setErro(SEM_SESSAO);
       return;
     }
     carregar();

@@ -312,11 +312,20 @@ describe("A falha de rede não vira lista vazia e calada", () => {
     // `carregar` desiste na primeira linha quando não há token, e sem este
     // caminho ninguém desligaria a espera: "Carregando Produtos..." ficaria na
     // tela até a pessoa desistir.
+    //
+    // A frase é a das DUAS causas de propósito. O `useAuth` devolve
+    // `token: null` tanto com a sessão acabada quanto com o `getUser()` dele
+    // falhando por rede, e o componente não distingue: mandar entrar de novo
+    // cobraria justo a ação impossível quando a causa é a rede. Asserir esse
+    // trecho é o que trava a volta da frase antiga.
     sessao.token = null;
     montar([produto("p1", "Ana", 1, { dono_id: "P1" })]);
 
     const aviso = await screen.findByRole("alert");
-    expect(aviso.textContent).toContain("Sua sessão expirou");
+    expect(aviso.textContent).toContain(
+      "a sessão não está ativa ou o servidor não respondeu"
+    );
+    expect(aviso.textContent).toContain("Tente recarregar a página");
     expect(screen.queryByText("Carregando Produtos...")).toBeNull();
   });
 
