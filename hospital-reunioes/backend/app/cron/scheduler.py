@@ -18,8 +18,10 @@ Jobs:
   6. escalonar_prazos_ouvidoria: a cada 10 minutos, sobe os demais degraus da escada
      de escalonamento da Ouvidoria (véspera, gestor da área, Diretoria Executiva),
      issue #336. Idempotente: cada degrau tem o próprio carimbo.
-  7. anonimizar_manifestacoes_antigas: 04:00 diário, apaga o Dossiê das manifestações
-     encerradas há mais de cinco anos e preserva a estatística (issue #343).
+  7. anonimizar_manifestacoes_antigas: 04:00 diário, aplica a política de retenção
+     pelas DUAS portas. A dos cinco anos apaga o Dossiê das manifestações encerradas
+     há mais de cinco anos e preserva a estatística (issue #343); a antecipada conclui
+     o apagamento que a Diretoria pediu e que ficou pela metade (issue #595, ADR 0047).
      Idempotente: o caso anonimizado ganha carimbo e não é revisitado.
   8. enviar_relatorio_quinzenal: 07:00 diário, manda à Diretoria Executiva o relatório
      em PDF da quinzena que fechou (issue #345). O email sai nos dias 1 e 16, que é

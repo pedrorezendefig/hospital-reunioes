@@ -668,15 +668,20 @@ async def require_diretoria_executiva(
     current_user: dict = Depends(get_current_user),
     supabase: Client = Depends(get_supabase_client),
 ) -> dict:
-    """Gate de quem define os parâmetros do prazo (RN-21). Mais estreito que o
-    da Ouvidoria de propósito: o ouvidor trabalha com o prazo, quem o define é
-    a Diretoria Executiva."""
+    """Gate dos atos que só a Diretoria Executiva pratica na Ouvidoria.
+
+    Mais estreito que o da Ouvidoria de propósito. Nasceu para os parâmetros
+    (a tabela de prazos, RN-21, e os responsáveis de setor): o ouvidor trabalha
+    com o prazo, quem o define é a Diretoria. Desde a issue #595 ele guarda
+    também o apagamento do caso, que não é parâmetro nenhum, e é por isso que a
+    frase da recusa deixou de falar em "parâmetros": ela nomeava um ato que não
+    era o que a pessoa tentou fazer."""
     me = await get_participante_for_user(current_user, supabase)
     barrar_desligado(me)
     if not me or me.get("perfil_ouvidoria") != "diretoria_executiva":
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Só a Diretoria Executiva altera os parâmetros da Ouvidoria",
+            detail="Esta ação da Ouvidoria é exclusiva da Diretoria Executiva",
         )
     return me
 
@@ -1081,7 +1086,9 @@ class PedidoTransicao(BaseModel):
 # acumulado que ela alimenta (issue #335). `anonimizada_em` entra por causa da
 # guarda do caso apagado logo abaixo: guarda que lê coluna não selecionada lê
 # None e passa em silêncio.
-_CAMPOS_DA_PAUSA = "id, status, prazo_area_em, pausada_em, minutos_pausados, reaberta_em, anonimizada_em"
+_CAMPOS_DA_PAUSA = (
+    "id, status, prazo_area_em, pausada_em, minutos_pausados, reaberta_em, anonimizada_em, apagamento_pedido_em"
+)
 
 
 # A frase única das portas que o caso apagado não atravessa (issue #593). Ela
@@ -1093,9 +1100,37 @@ _CASO_APAGADO = (
     "Este caso foi apagado e não pode mais ser {acao}. O que voltar a ser trazido entra como manifestação nova."
 )
 
+# E a frase do caso que está NO MEIO do apagamento: o pedido da Diretoria já
+# está gravado e o carimbo ainda não. Ela é outra de propósito, porque o fato é
+# outro: ali o Dossiê ainda existe, e dizer "foi apagado" seria a API afirmar o
+# que ainda não aconteceu. O que ela promete é o que o código cumpre: a fila do
+# cron termina o serviço (`concluir_apagamentos_pendentes`).
+_CASO_EM_APAGAMENTO = (
+    "Este caso está sendo apagado por pedido da Diretoria Executiva e não pode ser {acao}. "
+    "O apagamento é concluído automaticamente; o que voltar a ser trazido entra como manifestação nova."
+)
+
 
 def barrar_caso_apagado(caso: dict, acao: str) -> None:
-    """Recusa qualquer mudança num caso cujo relato já foi apagado.
+    """Recusa qualquer mudança num caso cujo relato já foi apagado, ou cujo
+    apagamento a Diretoria já mandou fazer.
+
+    São dois estados e uma regra só. O segundo entrou na issue #595, e o motivo
+    é o efeito que ele destrava (achado da revisão de segurança do PR #632): o
+    pedido gravado sem o carimbo é um caso que a fila do cron vai concluir. Se
+    ele puder ser reaberto nesse intervalo, ganha um ciclo NOVO (área acionada,
+    resposta nova, encerramento novo) e a fila apaga esse ciclo, que ninguém
+    mandou apagar e que nem existia quando a Diretoria escreveu o motivo. A
+    porta humana já recusava esse mesmo caso com 409; era só o robô que dizia
+    sim.
+
+    Barrar aqui também resolve o outro lado do mesmo nó: reaberto, o caso saía
+    da fila (que exige `status = encerrado`) e o pedido ficava pendurado para
+    sempre, com a trilha afirmando que um apagamento começou num caso que
+    seguiu vivo.
+
+    É coerente com a ADR 0047: apagar não tem volta, e o caso que a Diretoria
+    mandou apagar não volta à tramitação enquanto o ato não termina.
 
     A regra mora aqui, e não dentro de uma rota, porque ela vale para toda
     porta que escreve no caso, e a primeira versão dela (só na reabertura) era
@@ -1117,6 +1152,11 @@ def barrar_caso_apagado(caso: dict, acao: str) -> None:
             status_code=status.HTTP_409_CONFLICT,
             detail=_CASO_APAGADO.format(acao=acao),
         )
+    if caso.get("apagamento_pedido_em"):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=_CASO_EM_APAGAMENTO.format(acao=acao),
+        )
 
 
 # O mínimo que uma porta de escrita precisa carregar do caso para a guarda
@@ -1124,7 +1164,7 @@ def barrar_caso_apagado(caso: dict, acao: str) -> None:
 # de existência de propósito: guarda que lê coluna não selecionada lê None e
 # deixa passar em silêncio, e a porta continuaria aberta com a chamada no lugar
 # certo.
-_CAMPOS_COM_O_CARIMBO = "id, protocolo, anonimizada_em"
+_CAMPOS_COM_O_CARIMBO = "id, protocolo, anonimizada_em, apagamento_pedido_em"
 
 
 def efeito_da_pausa(caso: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> dict:
@@ -3338,7 +3378,7 @@ async def classificar_manifestacao(
             # retenção preserva de propósito, e o caso carimbado já saiu da
             # varredura dela. Sem a guarda, esta rota reintroduz dado pessoal
             # permanente num caso que a tela anuncia como apagado.
-            .select("id, status, sigilo_reforcado, tipo_manifestacao, categoria, anonimizada_em")
+            .select("id, status, sigilo_reforcado, tipo_manifestacao, categoria, anonimizada_em, apagamento_pedido_em")
             .eq("id", manifestacao_id)
             .execute()
         )

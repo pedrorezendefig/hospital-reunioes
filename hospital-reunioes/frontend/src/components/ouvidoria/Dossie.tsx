@@ -1815,7 +1815,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
           {confirmandoApagamento && (
             <ReasonModal
               title={`Apagar a manifestação ${dossie.protocolo}`}
-              description="O relato, a identificação, os anexos e a resposta da área somem. Ficam o protocolo, a linha do tempo e os números. O motivo abaixo fica gravado no caso e na trilha, com o seu nome."
+              description="O relato, a identificação, os anexos e a resposta da área somem. Ficam o protocolo, a linha do tempo e os números. O motivo abaixo fica gravado no caso e na trilha, com o seu nome, e não pode ser apagado depois: escreva a decisão, sem o nome nem o contato de quem manifestou."
               confirmLabel="Apagar agora"
               placeholder="Ex.: pedido da paciente, decidido pela Diretoria em reunião"
               erro={erroDoApagamento}

@@ -273,6 +273,7 @@ class _TabelaFake:
         self._colunas: tuple[str, ...] | None = None
         self._negar = False
         self._limite: int | None = None
+        self.igualdades: dict = {}
         self._janela: tuple[int, int] | None = None
 
     @property
@@ -304,6 +305,11 @@ class _TabelaFake:
         return self
 
     def eq(self, col, value):
+        # Guardado para o teste poder olhar a QUERY, e não só o efeito dela: um
+        # filtro que some do `select` não muda o resultado (quem confere de
+        # novo é o Python), muda o VOLUME lido, e é o volume que carrega o
+        # relato para a memória do backend.
+        self.igualdades[col] = value
         return self._guardar(lambda row: row.get(col) == value)
 
     def neq(self, col, value):
@@ -366,8 +372,11 @@ class _TabelaFake:
             inicio, fim = self._janela
             casadas = casadas[inicio : fim + 1]
         if self._update is not None:
+            payload = dict(self._update)
+            if self.dono.grafia_do_banco and payload.get("apagamento_pedido_em"):
+                payload["apagamento_pedido_em"] = str(payload["apagamento_pedido_em"]).replace("+00:00", "+00")
             for r in casadas:
-                r.update(self._update)
+                r.update(payload)
             recorte = self.request.params.get("select")
             colunas = tuple(c.strip() for c in recorte.split(",")) if recorte else None
             gravadas = [{c: r.get(c) for c in colunas} if colunas else dict(r) for r in casadas]
@@ -389,9 +398,22 @@ class _SupabaseFake:
         # (tabela, operação, payload) de toda escrita proposta, na ordem.
         self.escritas: list[tuple[str, str, dict | None]] = []
         self.quebrar: set[tuple[str, str]] = set()
+        # A exceção que a quebra levanta. É parâmetro porque o tipo importa: o
+        # `except (APIError, HTTPError)` da rota só pega o que o cliente de
+        # verdade levanta, e um RuntimeError genérico passaria por cima dele
+        # sem provar nada.
+        self.excecao_da_quebra: Exception | None = None
+        # Quando ligado, o banco DEVOLVE o instante numa grafia diferente da
+        # que recebeu ("+00:00" vira "+00"). É o mesmo instante, e é assim que
+        # se prova que a chave da política vem do que o banco gravou, e não do
+        # `isoformat()` do Python.
+        self.grafia_do_banco = False
         # Quando ligado, roda uma vez depois do primeiro select em
         # `ouvidoria_protocolos` e some: simula a reabertura concorrente.
         self.reabre_no_meio_da_leitura = False
+        # Todo pedido montado nesta sessão, na ordem, para o teste olhar a
+        # query e não só o que ficou gravado.
+        self.pedidos: list[_TabelaFake] = []
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos if casos is not None else [_caso()],
             "ouvidoria_movimentos": filhas.get("movimentos") or [],
@@ -413,7 +435,9 @@ class _SupabaseFake:
         ao_ler = None
         if nome == "ouvidoria_protocolos" and self.reabre_no_meio_da_leitura:
             ao_ler = self._reabrir_agora
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self, ao_ler)
+        pedido = _TabelaFake(nome, self.tabelas.setdefault(nome, []), self, ao_ler)
+        self.pedidos.append(pedido)
+        return pedido
 
     def _reabrir_agora(self, _casadas: list[dict]) -> None:
         """O manifestante voltou entre a leitura da rota e o update dela."""
@@ -429,7 +453,7 @@ class _SupabaseFake:
 
     def quebrar_se_pedido(self, tabela: str, operacao: str) -> None:
         if (tabela, operacao) in self.quebrar:
-            raise RuntimeError(f"{operacao} recusado em {tabela} (simulado)")
+            raise self.excecao_da_quebra or RuntimeError(f"{operacao} recusado em {tabela} (simulado)")
 
     def caso(self, numero: int = 7) -> dict:
         return next(c for c in self.tabelas["ouvidoria_protocolos"] if c["id"] == f"uuid-{numero}")
@@ -1016,6 +1040,200 @@ class TestApagamentoPendente:
 
         assert ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, INICIO) == 0
         assert supabase.escritas == []
+
+
+class TestCasoEmApagamentoNaoVolta:
+    """O caso com pedido gravado e sem carimbo está NO MEIO do ato, e nesse
+    intervalo a fila do cron vai concluí-lo. Deixá-lo voltar à tramitação daria
+    ao robô um ciclo NOVO para apagar, que ninguém mandou apagar e que nem
+    existia quando a Diretoria escreveu o motivo (achado da revisão de
+    segurança, rodada 2)."""
+
+    # Um caso REABRÍVEL: encerrado agora e já validado um dia. A reabertura tem
+    # outras regras próprias (janela de 30 dias, caso nunca acionado), e o par
+    # de testes abaixo só prova alguma coisa se as duas pontas passarem por
+    # elas: o que muda entre os dois é o pedido de apagamento, e nada mais.
+    REABRIVEL = {"encerrada_em": INICIO.isoformat(), "validada_em": "2026-08-25T17:00:00+00:00"}
+
+    def _pendente(self) -> _SupabaseFake:
+        """O estado real que sobra de um 503 no meio do ato."""
+        supabase = _caso_com_todos_os_registros(**self.REABRIVEL)
+        supabase.quebrar.add(("ouvidoria_tentativas_contato", "update"))
+        return supabase
+
+    def test_reabertura_e_recusada_enquanto_o_apagamento_nao_termina(self, monkeypatch):
+        supabase = self._pendente()
+        client, _ = _client(monkeypatch, supabase)
+        assert _apagar(client).status_code == 503
+        assert supabase.caso()["apagamento_pedido_em"], "sem o pedido pendente o teste não prova nada"
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/reaberturas",
+            json={"motivo": "A paciente voltou a reclamar do mesmo atendimento."},
+        )
+
+        assert r.status_code == 409, r.text
+        # A frase é a do ato EM CURSO, e não a do caso já apagado: ali o Dossiê
+        # ainda existe, e dizer "foi apagado" afirmaria o que não aconteceu.
+        assert "está sendo apagado" in r.json()["detail"]
+        assert supabase.caso()["status"] == "encerrado"
+
+    def test_a_transicao_tambem_e_recusada_no_caso_em_apagamento(self, monkeypatch):
+        """A guarda vale para toda porta que escreve no caso, e cada porta lê
+        uma tupla diferente: a transição lê a da pausa. Guarda que lê coluna
+        não selecionada lê None e deixa passar em silêncio, com a chamada no
+        lugar certo."""
+        supabase = self._pendente()
+        client, _ = _client(monkeypatch, supabase)
+        assert _apagar(client).status_code == 503
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/transicoes",
+            json={"estado": "aguardando_area"},
+        )
+
+        assert r.status_code == 409, r.text
+        assert "está sendo apagado" in r.json()["detail"]
+        assert supabase.caso()["status"] == "encerrado"
+
+    def test_sem_pedido_pendente_a_guarda_nova_nao_fala(self, monkeypatch):
+        """O contraste, e ele é sobre a MENSAGEM, não sobre o 200.
+
+        A reabertura tem outras pré-condições que este arquivo não monta (a
+        janela dos 30 dias, o caso já ter sido acionado, o setor ter titular
+        vigente, o email de acionamento), e montá-las aqui seria refazer o
+        arquivo de teste da reabertura. O que este par precisa provar é que
+        quem recusa acima é a guarda NOVA: no caso sem pedido pendente ela não
+        abre a boca, e o caso segue seu caminho até esbarrar noutra regra. Sem
+        este teste, uma guarda que recusasse toda reabertura passaria igual."""
+        supabase = _caso_com_todos_os_registros(**self.REABRIVEL)
+        client, _ = _client(monkeypatch, supabase)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes/uuid-7/reaberturas",
+            json={"motivo": "A paciente voltou a reclamar do mesmo atendimento."},
+        )
+
+        assert "está sendo apagado" not in r.text, r.text
+        assert "foi apagado" not in r.text, r.text
+
+    def test_a_fila_nao_toca_no_caso_reencerrado_depois_do_pedido(self):
+        """A segunda camada, do lado de quem destrói, e este é o caso que o
+        filtro de estado NÃO pega: o caso reabriu, viveu um ciclo inteiro e foi
+        reencerrado. Ele volta a casar `status = encerrado`, e sem esta régua o
+        robô apagaria o Dossiê do ciclo novo, que ninguém mandou apagar e que
+        nem existia quando a Diretoria escreveu o motivo."""
+        supabase = _caso_com_todos_os_registros(
+            status="encerrado",
+            apagamento_pedido_em=INICIO.isoformat(),
+            apagamento_pedido_por="P11",
+            apagamento_motivo=MOTIVO,
+            reaberta_em="2026-09-08T18:00:00+00:00",
+            encerrada_em="2026-09-30T18:00:00+00:00",
+            relato_integral="Relato NOVO, do segundo ciclo, que ninguém mandou apagar.",
+        )
+
+        concluidos = ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, INICIO)
+
+        assert concluidos == 0
+        assert supabase.caso()["relato_integral"] == "Relato NOVO, do segundo ciclo, que ninguém mandou apagar."
+        assert supabase.caso()["anonimizada_em"] is None
+        assert supabase.escritas == []
+
+    def test_a_fila_termina_o_caso_reencerrado_que_nao_reabriu_depois_do_pedido(self):
+        """O par: a régua é a reabertura POSTERIOR ao pedido, e não a
+        existência de uma reabertura qualquer. Um caso que já tinha reaberto
+        antes (reincidência antiga) segue apagável."""
+        supabase = _caso_com_todos_os_registros(
+            apagamento_pedido_em=INICIO.isoformat(),
+            apagamento_pedido_por="P11",
+            apagamento_motivo=MOTIVO,
+            reaberta_em="2026-08-01T12:00:00+00:00",
+        )
+
+        concluidos = ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, INICIO)
+
+        assert concluidos == 1
+        assert supabase.caso()["relato_integral"] is None
+
+    def test_a_fila_nao_toca_no_caso_que_saiu_do_encerramento(self):
+        """O filtro de estado da fila, preso sozinho: caso fora de `encerrado`
+        não entra, mesmo com o pedido gravado e sem reabertura registrada.
+
+        O pior efeito que isto impede não é o Dossiê (o gatilho barraria a
+        limpeza): é `_garantir_movimento`, que não tem essa guarda e gravaria um
+        movimento de apagamento numa tabela imutável."""
+        supabase = _caso_com_todos_os_registros(
+            status="aguardando_area",
+            apagamento_pedido_em=INICIO.isoformat(),
+            apagamento_pedido_por="P11",
+            apagamento_motivo=MOTIVO,
+        )
+
+        concluidos = ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, INICIO)
+
+        assert concluidos == 0
+        assert supabase.movimentos() == [_movimento_de_resposta()]
+        assert supabase.escritas == []
+
+
+class TestOVolumeQueSaiDoBanco:
+    """O que a busca do movimento traz para a memória do backend.
+
+    A conferência é refeita em Python, então tirar o filtro do `select` não
+    muda o RESULTADO: muda o quanto se lê. E o que se lê ali é a `observacao`
+    da trilha, que é justo onde o relato e a resposta da área moram. Por isso
+    este teste olha a QUERY, e não o efeito dela."""
+
+    def test_a_busca_do_movimento_filtra_o_par_de_estados_no_banco(self, monkeypatch):
+        client, supabase = _client(monkeypatch, _caso_com_todos_os_registros())
+
+        assert _apagar(client).status_code == 200
+
+        leituras = [
+            p for p in supabase.pedidos if p.nome == "ouvidoria_movimentos" and p._insert is None and p._update is None
+        ]
+        assert leituras, "o teste ficaria vazio sem nenhuma leitura da trilha"
+        assert all(
+            p.igualdades.get("estado_anterior") == "encerrado" and p.igualdades.get("estado_novo") == "encerrado"
+            for p in leituras
+        ), "a busca do movimento do apagamento tem que recortar o par no banco, e não em Python"
+
+
+class TestOQueOBancoDevolve:
+    """A chave da política é o carimbo COMO O BANCO O GRAVOU."""
+
+    def test_a_chave_sai_do_banco_e_nao_do_relogio_do_python(self, monkeypatch):
+        """O banco devolve o mesmo instante em outra grafia. A comparação
+        acontece no filtro do PostgREST, então usar o `isoformat()` local faria
+        cada passo destrutivo ser recusado e a rota devolver 503."""
+        supabase = _caso_com_todos_os_registros()
+        supabase.grafia_do_banco = True
+        client, _ = _client(monkeypatch, supabase)
+
+        r = _apagar(client)
+
+        assert r.status_code == 200, r.text
+        assert supabase.caso()["apagamento_pedido_em"] == INICIO.isoformat().replace("+00:00", "+00")
+        assert supabase.caso()["anonimizada_em"]
+        assert supabase.caso()["relato_integral"] is None
+
+
+class TestFalhaDeTransporte:
+    """Timeout do PostgREST não vira `APIError`: ele sobe cru."""
+
+    def test_timeout_ao_gravar_o_pedido_vira_503_com_frase_amiga(self, monkeypatch):
+        supabase = _SupabaseFake()
+        supabase.quebrar.add(("ouvidoria_protocolos", "update"))
+        supabase.excecao_da_quebra = httpx.ReadTimeout("o banco não respondeu")
+        client, _ = _client(monkeypatch, supabase)
+
+        r = _apagar(client)
+
+        assert r.status_code == 503, r.text
+        assert "Tente de novo" in r.json()["detail"]
+        assert supabase.caso()["relato_integral"] == RELATO
+        assert supabase.caso()["apagamento_pedido_em"] is None
 
 
 class TestOArquivoDeQuemJaEstavaGuardado:

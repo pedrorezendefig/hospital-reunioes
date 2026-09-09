@@ -198,14 +198,15 @@ def _evento(movimento: dict) -> dict:
         # relato pelo aviso de caso apagado, e o aviso diz quem apagou: esse
         # nome só existe aqui.
         #
-        # A marca sai da MARCA da observação, e não da assinatura nem do par de
-        # estados. Era a assinatura até a issue #595, quando só o cron apagava:
-        # com a Diretoria assinando com nome de pessoa, a régua por autor
-        # deixaria de casar e o aviso perderia justamente o autor que ele
-        # existe para dizer. É a mesma régua que a Retenção usa para reconhecer
-        # o movimento que já gravou, então quem escreve e quem lê olham a mesma
-        # coisa; o par `encerrado` para `encerrado`, ao contrário, também serve
-        # a atos de job que não apagaram nada.
+        # A régua é o par de estados MAIS a marca da observação, e não a
+        # assinatura. Era a assinatura até a issue #595, quando só o cron
+        # apagava: com a Diretoria assinando com nome de pessoa, a régua por
+        # autor deixaria de casar e o aviso perderia justamente o autor que ele
+        # existe para dizer. E não é só a marca porque a observação da
+        # transição é texto livre do ouvidor: sem o par, um movimento de
+        # encerramento com a marca escrita à mão passaria por apagamento. É a
+        # mesma régua que a Retenção usa para reconhecer o movimento que já
+        # gravou, então quem escreve e quem lê olham a mesma coisa.
         "apagamento": e_movimento_de_apagamento(movimento),
         "marco": marco,
         "marco_rotulo": ROTULO_DO_MARCO.get(marco) if marco else None,

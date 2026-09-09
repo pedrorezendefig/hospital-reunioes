@@ -333,7 +333,9 @@ CAMPOS_ESTATISTICOS: tuple[str, ...] = (
 _CAMPOS_DA_RETENCAO = "id, status, encerrada_em, anonimizada_em"
 
 # O mesmo, mais o pedido, para a fila dos apagamentos que ficaram pela metade.
-_CAMPOS_DO_PEDIDO_PENDENTE = f"{_CAMPOS_DA_RETENCAO}, apagamento_pedido_em, apagamento_pedido_por, apagamento_motivo"
+_CAMPOS_DO_PEDIDO_PENDENTE = (
+    f"{_CAMPOS_DA_RETENCAO}, reaberta_em, apagamento_pedido_em, apagamento_pedido_por, apagamento_motivo"
+)
 
 
 def data_de_corte(agora: dt.datetime) -> dt.datetime:
@@ -409,8 +411,27 @@ def concluir_apagamentos_pendentes(supabase, agora: dt.datetime) -> int:
     jeito. Na prática o movimento quase sempre já existe e é reaproveitado: o
     autor só é usado quando a falha aconteceu antes de gravá-lo.
 
+    **O papel de quem pediu NÃO é reconferido aqui, e é uma decisão.** O gate
+    de `diretoria_executiva` valeu no instante do ato, na rota; esta fila só
+    termina o que já foi decidido, e exigir que o diretor continue no cargo
+    faria um pedido legítimo virar dado preso para sempre no dia em que ele
+    saísse do hospital. É o único passo destrutivo do desenho que roda sem gate
+    de papel, e o que o segura é a chave: sem `apagamento_pedido_em` gravado
+    pela rota, nada entra nesta fila.
+
+    **Caso reaberto depois do pedido fica de fora**, e essa é a segunda camada
+    do mesmo cuidado: o Dossiê do ciclo novo não foi o que a Diretoria mandou
+    apagar. A primeira camada é a guarda da própria reabertura
+    (`barrar_caso_apagado`), que recusa mexer em caso com pedido pendente; esta
+    aqui existe porque quem destrói é este código, e um passo destrutivo não se
+    apoia só na porta de entrada.
+
     Devolve quantos casos foram concluídos nesta rodada."""
     if not settings.ouvidoria_retencao_ativa:
+        # O freio da política automática também segura esta fila, e o log
+        # existe porque a consequência não é inofensiva: com ele puxado, um
+        # apagamento que ficar pela metade fica pendente até alguém religar.
+        logger.info("[Ouvidoria] Retenção desligada por configuração; apagamentos pendentes ficam para depois.")
         return 0
 
     try:
@@ -430,6 +451,13 @@ def concluir_apagamentos_pendentes(supabase, agora: dt.datetime) -> int:
 
     concluidos = 0
     for caso in result.data or []:
+        if _reabriu_depois_do_pedido(caso):
+            logger.error(
+                "[Ouvidoria] Caso %s foi reaberto depois do pedido de apagamento de %s; a fila não o toca",
+                caso["id"],
+                caso["apagamento_pedido_em"],
+            )
+            continue
         apagamento = pela_diretoria(
             autor=_quem_pediu(supabase, caso),
             autor_id=caso.get("apagamento_pedido_por"),
@@ -445,6 +473,23 @@ def concluir_apagamentos_pendentes(supabase, agora: dt.datetime) -> int:
                 caso["id"],
             )
     return concluidos
+
+
+def _reabriu_depois_do_pedido(caso: dict) -> bool:
+    """O caso voltou a tramitar depois de a Diretoria mandar apagar?
+
+    `reaberta_em` é o T1 do ciclo corrente (issue #335). Posterior ao pedido,
+    ele diz que houve tramitação nova: área acionada, resposta nova, conteúdo
+    novo. Nada disso é o que a Diretoria mandou apagar, e apagá-lo seria o robô
+    decidindo sozinho o que a porta humana recusa com 409.
+
+    Comparação de strings ISO 8601 em UTC, que é como o PostgREST as devolve:
+    ordem lexicográfica igual à cronológica. Sem `reaberta_em`, o caso nunca
+    reabriu e a resposta é não."""
+    reaberta_em = caso.get("reaberta_em")
+    if not reaberta_em:
+        return False
+    return str(reaberta_em) > str(caso.get("apagamento_pedido_em") or "")
 
 
 def _quem_pediu(supabase, caso: dict) -> str:

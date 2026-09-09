@@ -231,6 +231,21 @@ describe("a confirmação com motivo obrigatório (issue #595)", () => {
     });
   }
 
+  it("a confirmação avisa que o motivo não sai mais, e pede para não escrever quem manifestou", async () => {
+    // O motivo é o único texto livre que a política preserva, e ele viaja
+    // também para a observação do movimento, que o gatilho torna imutável.
+    // Depois do carimbo nem a retenção o alcança: nome ou contato escritos
+    // ali ficam no banco para sempre, na tela que existe para apagar dado
+    // pessoal.
+    montar(dossie());
+    await abrirAConfirmacao();
+
+    const modal = await screen.findByRole("dialog");
+
+    expect(within(modal).getByText(/não pode ser apagado depois/)).toBeTruthy();
+    expect(within(modal).getByText(/sem o nome nem o contato de quem manifestou/)).toBeTruthy();
+  });
+
   it("sem motivo escrito o ato não sai da tela", async () => {
     const chamadas = montar(dossie());
     await abrirAConfirmacao();
