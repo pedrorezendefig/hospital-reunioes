@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-08T22:45:00-03:00",
+  "updated_at": "2026-09-09T00:12:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.116.0",
+  "last_app_version": "0.116.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "b80caeb",
-      "last_deploy_at": "2026-09-08T22:42:38-03:00",
+      "last_deploy_sha": "6e135f2",
+      "last_deploy_at": "2026-09-09T00:08:29-03:00",
       "last_health_check": {
-        "at": "2026-09-08T22:44:50-03:00",
-        "latency_ms": 158,
+        "at": "2026-09-09T00:11:40-03:00",
+        "latency_ms": 168,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 158,
+      "build_duration_seconds": 178,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "b80caeb",
-      "last_deploy_at": "2026-09-08T22:44:23-03:00",
+      "last_deploy_sha": "6e135f2",
+      "last_deploy_at": "2026-09-09T00:10:14-03:00",
       "last_health_check": {
-        "at": "2026-09-08T22:44:51-03:00",
-        "latency_ms": 151,
+        "at": "2026-09-09T00:10:48-03:00",
+        "latency_ms": 231,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 263,
+      "build_duration_seconds": 283,
       "env_count": 5
     },
     {
@@ -152,76 +152,76 @@
     }
   ],
   "migrations": {
-    "total_applied": 90,
-    "last_applied": "100_ouvidoria_apagamento_pela_diretoria.sql",
+    "total_applied": 91,
+    "last_applied": "101_ouvidoria_lote_do_arquivo_atomico.sql",
     "pending_local": [],
-    "nota": "A 100_ouvidoria_apagamento_pela_diretoria.sql (issue #595, PRD #591, ADR 0047, v0.116.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #632, e a ordem era obrigatoria por um motivo que a revisao mediu: sem as tres colunas novas a rota do Dossie nao degrada, ela devolve 404 e derruba a pagina do caso inteira. A migration e aditiva: ADD COLUMN IF NOT EXISTS de apagamento_pedido_em (TIMESTAMPTZ), apagamento_pedido_por (VARCHAR(10) REFERENCES participantes ON DELETE SET NULL) e apagamento_motivo (TEXT), mais os COMMENT ON COLUMN, e um CREATE OR REPLACE que troca o CORPO da funcao ouvidoria_movimento_anonimizavel que a 079 ja criava. Nenhuma tabela nasce aqui, entao nao ha RLS a ligar; nenhum gatilho e recriado, entao a guarda de DELETE fica intocada. A funcao ganha a SEGUNDA CHAVE da porta antecipada: alem de encerrada_em <= now() - interval '5 years', passa a aceitar apagamento_pedido_em IS NOT NULL, e as duas chaves seguem exigindo status = 'encerrado' AND encerrada_em IS NOT NULL. A revisao de rodada 2 pegou um erro que teria ido para producao em silencio: o bloco SQL do CORPO do PR, que e o que o humano cola no Studio, estava preso na versao anterior e sem o AND p.anonimizada_em IS NULL. Aplicado assim, a fresta da trilha ficaria aberta para sempre em todo caso apagado, e a consulta de conferencia sugerida devolvia true nas duas versoes. O corpo passou a ser gerado do arquivo e a fumaça passou a checar prosrc like '%anonimizada_em IS NULL%', que distingue as duas. As migrations 099 e anteriores continuam valendo com as notas ja registradas."
+    "nota": "A 101_ouvidoria_lote_do_arquivo_atomico.sql (issue #627, PRD #591, ADR 0047, v0.116.1) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #635. Diferente da 100, aqui a ausencia da migration DEGRADA em vez de derrubar: so o botao de arquivar em lote responde 503 (o PostgREST devolve PGRST202 e a rota traduz), e o resto do modulo segue de pe, sem estado parcial possivel. Ela cria a funcao ouvidoria_arquivar_encerrados(VARCHAR, TEXT), que carimba arquivada_em e arquivada_por de todo caso encerrado ainda sem arquivo e grava o log de acesso de cada um na MESMA transacao. Sem bloco EXCEPTION de proposito: falha no log desfaz o arquivamento, porque lote arquivado sem rastro e o que a funcao existe para impedir. O recorte vive dentro do proprio UPDATE, e nao numa leitura anterior, e e isso que faz a segunda rodada devolver zero e impede a reescrita de uma leva antiga. Sem indice, por decisao do dono. SECURITY INVOKER, o padrao da casa, o que EMENDA a triagem da issue: ela pedia SECURITY DEFINER, e a decisao mudou no checkpoint com as duas reviews de acordo, porque quem chama e o backend com service_role, que ja passa por cima do RLS, entao DEFINER nao habilitaria nada e apenas tiraria uma camada (aplicada pelo Studio a funcao nasceria com owner postgres e o REVOKE viraria a unica coisa entre a anon_key do bundle e um UPDATE em massa). REVOKE de PUBLIC, anon e authenticated, GRANT so a service_role, no padrao das 095 e 097. As migrations 100 e anteriores continuam valendo com as notas ja registradas."
   },
   "gates": [
     {
-      "name": "Onda 2 desta sessao: issue #595 (fatia G, PRD #591), sozinha, com --paralelo 1. Backend, frontend e migration na mesma fatia",
+      "name": "Onda 3 desta sessao: issue #627 (fatia M, PRD #591), sozinha, com --paralelo 1",
       "status": "ok"
     },
     {
-      "name": "Revisor independente (ADR 0035), 2 lentes em agentes separados por rodada. Rodada 1: 3 must-fix (marca do apagamento forjavel, pedido gravado e nunca cumprido, recusa do servidor atras do modal). Rodada 2: os 3 fechados e confirmados por mutacao do proprio revisor, mais 2 must-fix novos vindos do codigo que consertou a rodada 1",
+      "name": "Revisor independente (ADR 0035), 2 lentes em agentes separados. Rodada 1: 2 must-fix, ambos girando na mesma linha do SQL. Uma rodada de correcao e uma verificacao focada, que voltou LIMPA nos 5 pontos",
       "status": "ok"
     },
     {
-      "name": "Rodada 3 de revisao autorizada pelo humano fora do limite de 2 da /onda, porque os 2 achados novos eram pequenos e bem especificados. Os dois fecharam: o SQL do corpo do PR foi verificado identico ao arquivo por hash pelo orquestrador, e a fila do cron foi verificada por agente focado com 5 mutantes e as variacoes do caso reaberto",
+      "name": "A cláusula de seguranca da RPC era a UNICA linha do SQL sem guarda de teste: trocar SECURITY INVOKER por DEFINER deixava os 127 testes verdes. Agora o mutante mata 2 testes, e o verificador provou qual assercao trabalha enfraquecendo-a de proposito",
+      "status": "ok"
+    },
+    {
+      "name": "O corpo do PR CONVIDAVA o humano a trocar a clausula na hora de colar no Studio. Achado do revisor de seguranca. Isso quebraria a prova por hash do proprio corpo, deixaria o SET search_path so em prosa, e faria a funcao nascer com owner postgres. O convite saiu e virou um bloco que manda colar exatamente como esta, com as tres razoes",
       "status": "warn"
     },
     {
-      "name": "O achado mais perigoso da onda nao estava no codigo: estava no corpo do PR. O bloco SQL que o humano cola no Studio divergia do arquivo da migration por uma linha, o CI ficava verde porque os testes leem o arquivo, e a fumaça sugerida no proprio corpo nao distinguia as duas versoes",
+      "name": "Prova por hash feita pelo ORQUESTRADOR, nao pelo autor, antes de entregar o SQL ao humano: o bloco do corpo publicado e identico ao arquivo da migration. Repetida depois da edicao do corpo. E a licao do PR #632 virando procedimento",
+      "status": "ok"
+    },
+    {
+      "name": "Fumaca da RPC rodada pelo orquestrador contra producao com a chave anonima, ANTES do merge: SQLSTATE 42501 (permission denied). Prova as duas coisas de uma vez, que a funcao existe (senao viria PGRST202) e que o REVOKE pegou. Segura por construcao: SMOKE627 nao e id valido de participante e as duas colunas escritas tem FK, entao a transacao morreria na FK antes de qualquer escrita",
+      "status": "ok"
+    },
+    {
+      "name": "Teto de lote medido em vez de chutado: authenticator ja tem statement_timeout=8s e lock_timeout=8s, e a RPC rodou em Postgres real com 10 mil casos em 166 ms, 50 mil em 1,9 s e 200 mil em 7,0 s. Nao foi implementado teto, com o motivo escrito no corpo do PR",
+      "status": "ok"
+    },
+    {
+      "name": "Backend devolveu 503 no available server numa leitura isolada logo apos o deploy, durante a troca de container, com o Coolify ja reportando running:healthy. Seis leituras seguidas depois vieram 200 com 0.116.1. Transitorio, sem acao",
       "status": "warn"
-    },
-    {
-      "name": "Prova por mutacao em tres rodadas, todos os mutantes mortos ao final, incluindo mutantes plantados no DETECTOR. Tres mutantes vivos apontados pelo revisor na rodada 2 (HTTPError sem detector, chave vinda do banco sem detector, filtro status = encerrado da fila sem detector) ganharam detector na rodada 3",
-      "status": "ok"
-    },
-    {
-      "name": "Migration 100 aplicada a mao no Studio pelo humano antes do merge, com a fumaça de duas colunas confirmando a segunda chave e o fechamento da fresta",
-      "status": "ok"
-    },
-    {
-      "name": "Version match provado dos dois lados: /api/health devolveu 0.116.0 e o HTML servido pelo frontend traz 0.116.0 embutido. Codigo novo provado em prod sem login: POST na rota de apagamento sem token devolve 401, e a mesma rota com sufixo inventado devolve 404",
-      "status": "ok"
-    },
-    {
-      "name": "Sem corrida de bump nem de migration no momento do merge: origin/main estava em 0.115.3 com a 099 como ultima, e a sessao paralela ja tinha registrado o bookkeeping dela das v0.115.2 e v0.115.3",
-      "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
       "title": "Tudo verde",
-      "text": "Deploy b80caeb saudavel na v0.116.0, com a migration 100 aplicada. Backend e frontend construidos do commit certo."
+      "text": "Deploy 6e135f2 saudavel na v0.116.1, com a migration 101 aplicada. Backend e frontend construidos do commit certo."
     },
     {
       "kind": "warn",
       "title": "Terceira porta de upload sem guarda",
-      "text": "Issue #631 (needs-triage): POST /api/ouvidoria-setor/{token}/responder sobe binario para o mesmo bucket sem passar por barrar_caso_apagado. A #595 foi conferida e NAO piora isso: o desenho do apagamento fica contido em caso encerrado, travado em tres lugares independentes. A porta segue segura por consequencia, nao por guarda."
+      "text": "Issue #631 (needs-triage): POST /api/ouvidoria-setor/{token}/responder sobe binario para o mesmo bucket sem passar por barrar_caso_apagado. A #595 foi conferida e nao piora isso."
     },
     {
       "kind": "warn",
       "title": "Comparacao de data como texto na regua da reabertura",
-      "text": "_reabriu_depois_do_pedido compara timestamp como string e falha aberta com offset que nao seja UTC. Hoje sem efeito porque o PostgREST devolve UTC, mas e uma guarda que depende de formatacao. Residual R3 do verificador do PR #632, sem issue aberta ainda."
+      "text": "_reabriu_depois_do_pedido compara timestamp como string e falha aberta com offset que nao seja UTC. Hoje sem efeito porque o PostgREST devolve UTC. Residual R3 do PR #632, sem issue aberta."
     },
     {
       "kind": "info",
-      "title": "Residuais registrados no PR #632",
-      "text": "Caso meio apagado que chegar ao estado reaberto fica parado para sempre, e esse estado e beco sem saida pela API. So alcancaveis por corrida estreita, e antes deste PR o pedido orfao era o caso normal de qualquer 503."
+      "title": "Candidata a issue vinda do #635",
+      "text": "Generalizar smoke_revoke_rpc_ouvidoria.py, anotado pelo revisor de codigo e nao aplicado no diff."
     },
     {
       "kind": "info",
-      "title": "Fila desta sessao",
-      "text": "Falta a #627 (arquivar em lote com RPC, migration 101). Depois dela, auditar o PRD #591 contra producao (ADR 0029): as filhas #592, #593, #594 e #595 ja fecharam."
+      "title": "Auditoria do PRD #591",
+      "text": "As cinco filhas (#592, #593, #594, #595, #627) fecharam. Falta auditar o PRD contra producao (ADR 0029)."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "b80caeb",
+    "sha": "6e135f2",
     "result": "healthy",
-    "duration_seconds": 445
+    "duration_seconds": 317
   }
 }

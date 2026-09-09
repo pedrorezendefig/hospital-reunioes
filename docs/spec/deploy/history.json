@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-09T00:08:29-03:00",
+      "sha": "6e135f2",
+      "app_version": "0.116.1",
+      "subject": "arquivar todos os encerrados de uma vez passa a gravar o log de acesso na mesma transacao",
+      "raw_subject": "fix(ouvidoria): arquivar o lote e registrar o acesso na mesma transação (#635)",
+      "scope": [
+        "backend",
+        "supabase"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 317,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "101_ouvidoria_lote_do_arquivo_atomico.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 3 desta sessao: issue #627 sozinha, ultima filha aberta do PRD #591. O arquivamento em lote que a #594 entregou carimbava os casos e registrava o log de acesso em dois passos, entao uma falha no meio deixava lote arquivado sem rastro. A migration 101 traz a funcao ouvidoria_arquivar_encerrados, que faz os dois na MESMA transacao, sem bloco EXCEPTION de proposito, e o recorte passou a viver dentro do proprio UPDATE em vez de numa leitura anterior. Sem indice e sem tocar no ato de um caso so, como a triagem pedia. A triagem pedia tambem SECURITY DEFINER, e essa parte foi EMENDADA no checkpoint: ficou SECURITY INVOKER, com as duas reviews e o dono de acordo, porque quem chama e o backend com service_role, que ja passa por cima do RLS; DEFINER nao habilitaria nada e so tiraria uma camada, ja que aplicada pelo Studio a funcao nasceria com owner postgres e o REVOKE seria a unica coisa entre a anon_key do bundle e um UPDATE em massa. A emenda ficou registrada na issue e no corpo do PR. Os dois must-fix da revisao giraram em torno dessa mesma linha do SQL, e o mais perigoso nao era codigo: o corpo do PR CONVIDAVA o humano a trocar a clausula na hora de colar no Studio, o que quebraria a prova por hash que o proprio corpo afirma e deixaria o SET search_path obrigatorio so em prosa. O outro era que essa clausula era a UNICA linha do SQL sem guarda de teste: troca-la deixava os 127 testes verdes. Os dois fecharam em uma rodada, e a verificacao focada voltou limpa nos cinco pontos, com o verificador provando por mutacao no proprio detector qual assercao trabalha. Esta onda transformou a licao do PR #632 em procedimento: o ORQUESTRADOR conferiu por hash, antes de entregar o SQL ao humano, que o bloco do corpo publicado e identico ao arquivo, e repetiu a conferencia depois da edicao do corpo. E a fumaca da RPC rodou contra producao com a chave anonima ANTES do merge, devolvendo SQLSTATE 42501, o que prova de uma vez que a funcao existe (senao viria PGRST202) e que o REVOKE pegou; ela e segura por construcao, porque SMOKE627 nao e id valido de participante e as duas colunas escritas tem FK, entao a transacao morreria antes de qualquer escrita. O teto de lote foi medido em vez de chutado: authenticator ja carrega statement_timeout=8s e lock_timeout=8s, e a RPC rodou 10 mil casos em 166 ms, 50 mil em 1,9 s e 200 mil em 7,0 s num Postgres de verdade, entao nenhum teto foi implementado e o motivo ficou escrito. Uma leitura isolada do /api/health logo apos o deploy devolveu 503 no available server durante a troca de container, com o Coolify ja em running:healthy; seis leituras seguidas depois vieram 200 com 0.116.1, e nada foi feito."
+    },
+    {
       "at": "2026-09-08T22:42:38-03:00",
       "sha": "b80caeb",
       "app_version": "0.116.0",
@@ -1375,25 +1406,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "PR #420, issue #375. Migration 084 (UPDATE de dado: limpa canal_ponto de manifestacao anonima). Aplicacao no Studio de producao NAO confirmada. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
-    },
-    {
-      "at": "2026-08-27T22:57:00-03:00",
-      "sha": "27db833",
-      "app_version": "0.80.1",
-      "subject": "Quem foi desligado do hospital para de receber alerta com protocolo",
-      "raw_subject": "fix(ouvidoria): quem foi desligado do hospital para de receber alerta com protocolo",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #413, issue #403. Sem migration. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
     }
   ]
 }

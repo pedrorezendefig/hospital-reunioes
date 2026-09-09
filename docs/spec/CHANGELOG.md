@@ -7,6 +7,29 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.116.1 - 2026-09-09 00:08 - arquivar todos os encerrados de uma vez passa a gravar o log de acesso na mesma transação
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `6e135f2`
+- Serviços: backend, supabase
+- Resultado: 🟢 healthy (`/api/health` em 0.116.1, `db: healthy`; frontend em 200 com 0.116.1 embutido no HTML servido)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/6e135f2
+- Issues: [#627](https://github.com/pedrorezendefig/hospital-reunioes/issues/627) · PR [#635](https://github.com/pedrorezendefig/hospital-reunioes/pull/635) (PRD [#591](https://github.com/pedrorezendefig/hospital-reunioes/issues/591), ADR 0047)
+- Migration: `101_ouvidoria_lote_do_arquivo_atomico.sql`, aplicada à mão no Studio antes do merge · patch, fix
+
+Onda 3, última filha aberta do PRD #591. O arquivamento em lote que a #594 entregou carimbava os casos e registrava o log de acesso em dois passos, então uma falha no meio deixava lote arquivado sem rastro. A migration 101 traz a função `ouvidoria_arquivar_encerrados`, que faz os dois na mesma transação, sem bloco `EXCEPTION` de propósito. O recorte do lote passou a viver dentro do próprio `UPDATE`, e é isso que faz a segunda rodada devolver zero e impede a reescrita de uma leva antiga.
+
+A triagem pedia `SECURITY DEFINER`, e essa parte foi emendada no checkpoint: ficou `SECURITY INVOKER`. Quem chama é o backend com a `service_role`, que já passa por cima do RLS, então `DEFINER` não habilitaria nada e apenas tiraria uma camada: aplicada pelo Studio, a função nasceria com owner `postgres`, e o `REVOKE` viraria a única coisa entre a chave anônima do bundle e um `UPDATE` em massa. A emenda ficou registrada na issue e no corpo do PR, porque decisão que muda em relação à triagem precisa estar onde alguém vai procurar depois.
+
+Os dois problemas achados pela revisão giraram em torno da mesma linha do SQL, e o mais perigoso não era código.
+
+**O corpo do PR convidava a trocar a cláusula na hora de colar no Studio.** Isso quebraria a prova por hash que o próprio corpo afirma, deixaria o `SET search_path` obrigatório só em prosa, e faria a função nascer com owner `postgres`. O convite virou um bloco que manda colar exatamente como está, com as três razões. O outro problema era que essa cláusula era a única linha do SQL sem guarda de teste: trocá-la deixava os 127 testes verdes.
+
+Esta onda transformou a lição do PR #632 em procedimento. O orquestrador conferiu por hash, antes de entregar o SQL ao humano, que o bloco do corpo publicado é idêntico ao arquivo, e repetiu depois da edição. E a fumaça da RPC rodou contra produção com a chave anônima antes do merge, devolvendo `42501`: prova de uma vez que a função existe (senão viria `PGRST202`) e que o `REVOKE` pegou. Ela é segura por construção, porque `SMOKE627` não é id válido de participante e as duas colunas escritas têm chave estrangeira, então a transação morreria antes de qualquer escrita.
+
+O teto do lote foi medido, não chutado: `authenticator` já carrega `statement_timeout=8s` e `lock_timeout=8s`, e a RPC rodou 10 mil casos em 166 ms, 50 mil em 1,9 s e 200 mil em 7,0 s num Postgres de verdade. Nenhum teto foi implementado, e o motivo ficou escrito.
+
+Uma leitura isolada do `/api/health` logo após o deploy devolveu 503 durante a troca de container, com o Coolify já em `running:healthy`. Seis leituras seguidas depois vieram 200 com 0.116.1, e nada foi feito.
+
 ## v0.116.0 - 2026-09-08 22:42 - a Diretoria apaga o caso encerrado antes dos cinco anos, com motivo escrito à mão
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `b80caeb`
