@@ -25,14 +25,21 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TecnologiaModulo } from "./TecnologiaModulo";
 
-const sessao = vi.hoisted(() => ({ token: "token-de-teste" as string | null }));
+// `loading` é parametrizável de propósito, e não cravado em `false`: cravar
+// esconde o estado de BOOT do `useAuth` (`{ token: null, loading: true }`, duas
+// idas à rede antes do token), que é onde um aviso de sessão apressado vira
+// alarme falso em toda abertura da aba.
+const sessao = vi.hoisted(() => ({
+  token: "token-de-teste" as string | null,
+  carregando: false,
+}));
 
 vi.mock("@/hooks/useAuth", () => ({
   useAuth: () => ({
     token: sessao.token,
     userId: sessao.token ? "auth-1" : null,
     userEmail: sessao.token ? "p1@hsm" : null,
-    loading: false,
+    loading: sessao.carregando,
   }),
 }));
 
@@ -118,6 +125,13 @@ function montar(
         return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
       }
 
+      // O Quadro da aba (issue #637) carrega as Demandas por conta própria e
+      // tem teste só dele: aqui ele fica vazio, para não disputar os `getBy*`
+      // com a lista de Produtos.
+      if (url.includes("/demandas")) {
+        return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+      }
+
       const corpo = url.includes("/pessoas") ? pessoas : produtos;
       return { ok: true, status: 200, json: async () => corpo } as unknown as Response;
     }),
@@ -139,6 +153,7 @@ afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
   sessao.token = "token-de-teste";
+  sessao.carregando = false;
   vi.restoreAllMocks();
 });
 
@@ -203,6 +218,24 @@ describe("A lista de Produtos", () => {
     const linha = (await screen.findByText("Ana")).closest("li")!;
     expect(within(linha).getByText("Inativo")).toBeTruthy();
     expect(within(linha).queryByText("Falta dono")).toBeNull();
+  });
+
+  it("o dono que perdeu o acesso à aba aparece marcado, e o que tem acesso não", async () => {
+    // Par na tela do carimbo do backend: a API recusa abrir Demanda num
+    // Produto assim e manda trocar o dono AQUI. Sem a marca, quem segue a
+    // instrução chega na lista, vê um nome normal e não descobre qual é o
+    // problema.
+    montar([
+      produto("p1", "Ana", 1, { dono_id: "P9", dono_nome: "Saiu da Vitta" }),
+      produto("p2", "POPs", 2, { dono_id: "P1", dono_nome: "Pedro Vitta" }),
+    ]);
+
+    const orfao = await screen.findByRole("combobox", { name: "Dono de Ana" });
+    expect(orfao.textContent).toContain("Saiu da Vitta (sem acesso à aba)");
+
+    const cuidado = screen.getByRole("combobox", { name: "Dono de POPs" });
+    expect(cuidado.textContent).toContain("Pedro Vitta");
+    expect(cuidado.textContent).not.toContain("sem acesso à aba");
   });
 
   it("o dono só pode ser escolhido entre as pessoas com acesso à aba", async () => {
@@ -289,7 +322,10 @@ describe("A falha de rede não vira lista vazia e calada", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     montar([produto("p1", "Ana", 1, { dono_id: "P1" })], { redeFora: "carregar" });
 
-    const aviso = await screen.findByRole("alert");
+    // A busca é dentro da seção de Produtos: com a rede fora, o Quadro avisa
+    // do lado dele também, e o que se afirma aqui é o aviso DESTA lista.
+    const secao = screen.getByRole("region", { name: "Produtos" });
+    const aviso = await within(secao).findByRole("alert");
     expect(aviso.textContent).toContain("Não foi possível falar com o servidor");
     expect(screen.queryByText("Carregando Produtos...")).toBeNull();
   });
@@ -321,12 +357,32 @@ describe("A falha de rede não vira lista vazia e calada", () => {
     sessao.token = null;
     montar([produto("p1", "Ana", 1, { dono_id: "P1" })]);
 
-    const aviso = await screen.findByRole("alert");
+    // Dentro da seção de Produtos: sem sessão, o Quadro avisa do lado dele
+    // também (com a frase dele, sobre Demandas), e o que se afirma aqui é o
+    // aviso DESTA lista.
+    const secao = screen.getByRole("region", { name: "Produtos" });
+    const aviso = await within(secao).findByRole("alert");
     expect(aviso.textContent).toContain(
       "a sessão não está ativa ou o servidor não respondeu"
     );
     expect(aviso.textContent).toContain("Tente recarregar a página");
     expect(screen.queryByText("Carregando Produtos...")).toBeNull();
+  });
+
+  it("durante o boot da autenticação, a aba não acusa sessão nenhuma", async () => {
+    // O `useAuth` nasce com `{ token: null, loading: true }` e só entrega o
+    // token depois de `getUser()` e `getSession()`. Nesse intervalo, um aviso
+    // de sessão pintaria o alerta vermelho em TODA abertura da aba, com a
+    // sessão perfeitamente válida. A asserção é sobre a tela inteira, e não só
+    // sobre a lista de Produtos: quem grita aqui é o Quadro, que recebe o
+    // token por prop e não veria o `loading` sozinho.
+    sessao.carregando = true;
+    montar([produto("p1", "Ana", 1, { dono_id: "P1" })]);
+
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(3));
+    expect(screen.queryAllByRole("alert")).toHaveLength(0);
+    // E ninguém foi à rede antes de saber se existe sessão.
+    expect(chamadas).toHaveLength(0);
   });
 
   it("com token e servidor de pé, a espera termina e a lista aparece", async () => {

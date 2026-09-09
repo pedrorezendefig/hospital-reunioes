@@ -86,6 +86,10 @@ PARAMS_SEM_SEGREDO = {
     "comentario_id",
     "convenio_id",
     "data",
+    # UUID da Demanda da aba Tecnologia (issue #637). Nao e credencial: quem
+    # abre a rota passa pelo `require_super_admin`, e o id sozinho nao da
+    # acesso a nada, como o `produto_id` ao lado.
+    "demanda_id",
     "especialidade_id",
     "externo_id",
     "gravidade",
