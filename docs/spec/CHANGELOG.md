@@ -7,6 +7,17 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.118.0 - 2026-09-09 03:30 - a Demanda nasce, anda pelas cinco colunas do Quadro e guarda o rastro de cada movimento
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `04e7abf`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.118.0 já no primeiro build, `db: healthy`; as três rotas novas provadas em produção pelo par 401 contra 404)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/04e7abf
+- Issues: [#637](https://github.com/pedrorezendefig/hospital-reunioes/issues/637) · PR [#647](https://github.com/pedrorezendefig/hospital-reunioes/pull/647) (PRD [#634](https://github.com/pedrorezendefig/hospital-reunioes/issues/634), ADR 0050)
+- Migration: nenhuma. As três tabelas do módulo já nasceram no formato final na `102` da fatia #636, e as fatias #638 a #642 também não criam · minor, feat
+- Nota: quatro revisões independentes (código, segurança, rodada 2 e verificação final), somando 4 must-fix, depois 1, depois 0. A rodada 2 pegou uma regressão da própria correção anterior: o aviso de sessão disparava em toda abertura da aba, porque o Quadro não sabia que a autenticação ainda carregava
+- Nota: o `APP_VERSION` foi gravado no Coolify antes do merge, aprendendo com a v0.117.0, e o health subiu direto na versão certa
+
 ## v0.117.0 - 2026-09-09 01:52 - a aba Tecnologia nasce com gate de Super admin e a gestão dos Produtos
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `ffa51d1`

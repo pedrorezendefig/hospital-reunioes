@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-09T03:30:00-03:00",
+      "sha": "04e7abf",
+      "app_version": "0.118.0",
+      "subject": "a Demanda nasce, anda pelas cinco colunas do Quadro e guarda o rastro de cada movimento",
+      "raw_subject": "feat(tecnologia): a Demanda nasce e anda no Quadro (máquina de estados e card) (#647)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 280,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 desta sessao: issue #637 sozinha, a fatia G e a maior do PRD #634. Entrega a Demanda nascendo e andando no Quadro: cinco colunas, o card, o modal, a maquina de estados e a Conversa em modo leitura. Seis rotas novas em /api/admin/tecnologia, todas com require_super_admin, o que leva a aba a 10 rotas e 10 gates. NENHUMA MIGRATION: as tres tabelas ja nasceram no formato final na 102 da fatia #636, e o diff nao toca supabase/ em lugar nenhum. Conferido pelo orquestrador antes e depois de cada rodada de correcao. A maquina de estados vive em app/services/tecnologia.py como funcao pura sem I/O. Cinco estados dao 25 pares: 12 permitidas e 13 proibidas, e a revisao conferiu par a par contra a issue e a decisao 5 do ADR 0050, sem nenhuma inventada nem omitida. O CHECK da 102 restringe so os VALORES de estado, nao as transicoes, entao nao existe regra em dois lugares para divergir: quem barra o salto e o Python, como a propria migration documenta. Concluir e cancelar carimbam quem e quando; reabrir LIMPA os quatro campos, e isso esta provado pela rota e nao so pela funcao pura (um update parcial deixaria concluida_em preenchido numa Demanda em andamento). Quatro revisoes independentes rodaram sobre este PR: codigo, seguranca, uma rodada 2 e uma verificacao final. Somaram 4 must-fix na primeira leva, 1 na segunda e 0 na ultima. O achado mais importante da primeira leva foi de coerencia entre portas: criar Demanda entregava o card ao dono do Produto que ja tinha PERDIDO o acesso a aba, enquanto POST /atribuir recusava exatamente essa pessoa com 422. O app criava por uma porta o estado que recusava pela outra, e o card ficava com um responsavel que nao conseguia abrir a aba; pior, o modal mostrava 'Sem responsavel' enquanto o card mostrava o nome. A decisao do orquestrador foi recusar na criacao, alinhando com a porta de atribuir, com a frase apontando a saida ('Troque o dono na lista de Produtos, logo abaixo do Quadro'), porque o guarda-corpo so e legitimo quando quem leva a recusa TEM onde carimbar: aqui tem, na mesma tela, e a decisao 11 do ADR 0050 diz que todos dentro da aba podem tudo. A rodada 2 confirmou que nao existe estado em que o Super admin fique sem poder criar Demanda nenhuma. Os outros tres da primeira leva: apagar o Titulo no modal mostrava JSON cru do pydantic ao Super admin (o min_length=1 respondia antes da frase de gente); sessao sem token deixava o Quadro com cinco colunas zeradas e caladas, indistinguivel de 'nao ha Demanda', que e a mesma falha da fatia #636 com outra causa; e o piso da varredura do gate continuava em 4 rotas com 10 publicadas, o que deixaria as 6 novas sairem da matriz de 403 em silencio numa fatia futura, a morte por varredura parcial das issues #542 e #546 graduada. A rodada 2 achou uma REGRESSAO introduzida pela propria correcao anterior, e esse foi o achado mais fino da onda: o aviso de sessao novo disparava em TODA abertura da aba, porque o QuadroDemandas recebia token por prop e nao sabia que a autenticacao ainda estava resolvendo (o useAuth nasce com token nulo e loading true, e so entrega o token depois de duas idas a rede). O alerta vermelho piscava com a sessao perfeitamente valida. Nenhum teste pegou porque o mock de useAuth cravava loading: false nos dois arquivos, entao o estado de boot nunca era exercido. O revisor provou com sonda, nao deduziu. A correcao passou carregandoAuth ao Quadro e tornou o mock parametrizavel, com dois testes, um por nivel, porque a regressao nasceu justamente da distancia entre eles. A verificacao final rodou a mesma sonda de novo e mediu a diferenca entre consertar e esconder: o mutante 'calar sempre' derruba 27 testes, o mutante 'tirar a guarda' derruba 2. Outros consertos que sairam de nit: TOCTOU no mover (o update passou a amarrar .eq('estado', de), e resultado vazio vira 409); a falha ao gravar a linha do fio deixou de passar calada (sem RPC, por decisao do orquestrador: confere o retorno, pega httpx.HTTPError junto com APIError, e devolve 500 honesto dizendo que a Demanda mudou mas o fio ficou incompleto, porque dizer 'nao deu certo' seria mentira); a frase do 409 parou de culpar causa unica e de afirmar onde a Demanda esta, passando a falar so do desfecho; o log parou de gravar o texto do movimento, que carregava nome de pessoa; e o Select de dono do Produto ganhou a marca '(sem acesso a aba)', porque a frase da recusa mandava ir ate a lista de Produtos e la o dono problematico aparecia com nome normal, carimbo do backend sem par na tela. O deploy correu limpo: aprendendo com a onda 1, o APP_VERSION foi gravado no Coolify ANTES do merge, e o /api/health subiu direto em 0.118.0 sem redeploy extra. Codigo novo provado em producao sem login pelo par 401 contra 404: /demandas, /demandas/{id}/conversa e POST /demandas/{id}/mover respondem 401, uma rota irma inventada responde 404, e /produtos da fatia anterior segue viva."
+    },
+    {
       "at": "2026-09-09T01:52:14-03:00",
       "sha": "ffa51d1",
       "app_version": "0.117.0",
@@ -1392,29 +1421,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PR #414, issue #309. Sem migration. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
-    },
-    {
-      "at": "2026-08-27T23:15:00-03:00",
-      "sha": "66c289e",
-      "app_version": "0.81.0",
-      "subject": "Ponto de escuta: a tela que gera e gere os QR codes dos cartazes",
-      "raw_subject": "feat(ouvidoria): Ponto de escuta, a tela que gera e gere os QR codes dos cartazes",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [
-        "085_ouvidoria_pontos_de_escuta.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "PR #421, issue #378. Migration 085 (CREATE TABLE ouvidoria_pontos). CONFIRMADA aplicada em 28/08: a rota publica /api/ouvidoria/publico/pontos/{codigo} respondeu 404 'Cartaz nao encontrado', ou seja, consultou a tabela. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
     }
   ]
 }

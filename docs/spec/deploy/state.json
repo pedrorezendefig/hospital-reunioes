@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-09T01:55:00-03:00",
+  "updated_at": "2026-09-09T03:35:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.117.0",
+  "last_app_version": "0.118.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,10 +21,10 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "ffa51d1",
-      "last_deploy_at": "2026-09-09T01:52:14-03:00",
+      "last_deploy_sha": "04e7abf",
+      "last_deploy_at": "2026-09-09T03:30:00-03:00",
       "last_health_check": {
-        "at": "2026-09-09T01:54:10-03:00",
+        "at": "2026-09-09T03:33:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -39,10 +39,10 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "ffa51d1",
-      "last_deploy_at": "2026-09-09T01:51:29-03:00",
+      "last_deploy_sha": "04e7abf",
+      "last_deploy_at": "2026-09-09T03:30:00-03:00",
       "last_health_check": {
-        "at": "2026-09-09T01:54:10-03:00",
+        "at": "2026-09-09T03:33:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -155,88 +155,85 @@
     "total_applied": 92,
     "last_applied": "102_tecnologia_fundacao.sql",
     "pending_local": [],
-    "nota": "A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
+    "nota": "A fatia #637 (PR #647, v0.118.0) NAO criou migration: as tres tabelas do modulo de Tecnologia ja nasceram no formato final na 102, e as fatias #638 a #642 tambem nao criam. Se alguma achar que precisa de coluna nova, a regra desta sessao e PARAR e perguntar ao dono, nunca criar a 103 por conta. A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
   },
   "gates": [
     {
-      "name": "Onda 1 desta sessao: issue #636 (fatia M, PRD #634), sozinha, primeira da corrente de bloqueio nativa #636 > #637 > #638 > (#639, #640, #641, #642)",
+      "name": "Onda 2 desta sessao: issue #637 (fatia G, PRD #634), sozinha, segunda da corrente nativa. Fechou #637, o que destrava #638",
       "status": "ok"
     },
     {
-      "name": "Dominio conferido em origin/main ANTES de disparar o sub-agente: ADR 0050 presente e CONTEXT.md com a secao Tecnologia. Sem isso o sub-agente nao teria como desenvolver",
+      "name": "Nenhuma migration criada, conferido pelo orquestrador antes e depois de cada rodada: o diff nao toca supabase/",
       "status": "ok"
     },
     {
-      "name": "Gate 1.5 (spec x diff) pegou o unico defeito de estado inicial: o seed nasce com sete Produtos ativos e sem dono, e a guarda do PATCH olhava so o estado final, entao renomear qualquer um deles devolvia 422 na primeira abertura do sistema",
+      "name": "Maquina de estados conferida par a par pela revisao: 5 estados dao 25 pares, 12 permitidas e 13 proibidas, batendo com a issue e a decisao 5 do ADR 0050. Carimbos provados pela ROTA, e reabrir limpa os quatro campos",
       "status": "ok"
     },
     {
-      "name": "Revisor independente (ADR 0035), duas lentes em agentes separados e em paralelo. Seguranca: zero must-fix em sete itens com evidencia. Codigo: um must-fix e cinco nits",
+      "name": "Quatro revisoes independentes: codigo, seguranca, rodada 2 e verificacao final. 4 must-fix, depois 1, depois 0",
       "status": "ok"
     },
     {
-      "name": "O must-fix era front e silencioso: fetch sem catch fazia falha de rede virar lista de Produtos vazia e sem aviso, indistinguivel de banco sem dado, bem no criterio 'a tela lista os sete Produtos na primeira abertura'",
+      "name": "Coerencia entre portas: criar entregava a Demanda ao dono do Produto que perdeu o acesso a aba, e /atribuir recusava a mesma pessoa com 422. O app criava por uma porta o que recusava pela outra. Decisao do orquestrador: recusar na criacao, com a frase apontando a saida, porque quem leva a recusa TEM onde carimbar na mesma tela",
       "status": "ok"
     },
     {
-      "name": "Dois nits viraram correcao por decisao do orquestrador: dono_id vazio gravava string vazia e violava a FK com 500; e a matriz do gate era lista de rotas cravada a mao, que deixaria rota sem require_super_admin passar nas fatias #637 a #642. Virou varredura de app.openapi()['paths'] com piso, e nao app.routes, por causa da divergencia uv.lock 0.136 contra CI 0.141",
-      "status": "ok"
-    },
-    {
-      "name": "Rodada 2 de revisao, focada no commit de correcao: zero must-fix. Provou que a restauracao do cache do OpenAPI num finally esta correta e que o detector de rota escondida continua vivo",
-      "status": "ok"
-    },
-    {
-      "name": "Um nit de texto corrigido antes do merge: a frase do caminho sem token mandava o Super admin entrar de novo tambem quando a causa era rede caida, ou seja, pedia uma acao impossivel justo no momento em que ela e impossivel",
-      "status": "ok"
-    },
-    {
-      "name": "Prova por hash feita pelo ORQUESTRADOR antes de entregar o SQL ao humano e refeita apos cada uma das duas rodadas de correcao: bloco do corpo do PR identico ao arquivo, sha256 59c85a51, 10166 bytes",
-      "status": "ok"
-    },
-    {
-      "name": "APP_VERSION chegou ao Coolify DEPOIS do webhook do merge ja ter disparado o build do backend, entao o /api/health voltou 0.116.1 com o codigo novo no ar. Consertado por redeploy manual do backend, disparado so depois do frontend terminar para nao concorrer por memoria na VPS",
+      "name": "REGRESSAO introduzida pela propria correcao e pega na rodada 2: o aviso de sessao disparava em TODA abertura da aba, porque o Quadro nao sabia que a autenticacao ainda carregava. Nenhum teste pegou porque o mock cravava loading: false, entao o estado de boot nunca era exercido",
       "status": "warn"
     },
     {
-      "name": "Codigo novo provado em producao sem login pelo par 401 contra 404: as duas rotas novas respondem 401 e uma rota irma inventada responde 404",
+      "name": "A verificacao final mediu a diferenca entre consertar e esconder: o mutante 'calar sempre' derruba 27 testes, o mutante 'tirar a guarda' derruba 2, um em cada nivel",
       "status": "ok"
     },
     {
-      "name": "Leitura isolada do /api/health devolveu 'no available server' durante a troca de container, com o Coolify ja em running:healthy. Transitorio, sem acao, mesmo comportamento do deploy anterior",
-      "status": "warn"
+      "name": "Piso da varredura do gate subiu de 4 para 10 rotas. Continuava calibrado para a fatia anterior, e deixaria as 6 rotas novas sairem da matriz de 403 em silencio numa fatia futura",
+      "status": "ok"
+    },
+    {
+      "name": "APP_VERSION gravado no Coolify ANTES do merge, aprendendo com a onda 1: o /api/health subiu direto em 0.118.0, sem o redeploy extra que a onda 1 precisou",
+      "status": "ok"
+    },
+    {
+      "name": "Codigo novo provado em producao sem login pelo par 401 contra 404, nas tres rotas novas mais a rota da fatia anterior",
+      "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
       "title": "Tudo verde",
-      "text": "Deploy ffa51d1 saudavel na v0.117.0, com a migration 102 aplicada. Backend e frontend construidos do commit certo, e as rotas novas provadas em producao."
+      "text": "Deploy 04e7abf saudavel na v0.118.0, sem migration. O Quadro de Demandas esta em producao."
     },
     {
       "kind": "info",
-      "title": "Onda 2 do PRD #634",
-      "text": "A #636 fechou, entao a #637 (a Demanda nasce e anda no Quadro, fatia G) se destrava sozinha. Depois vem #638, e por fim as quatro ultimas em duas ondas de dois: #639 antes de #640, e #641 antes de #642."
+      "title": "Onda 3 do PRD #634",
+      "text": "A #637 fechou, entao a #638 (Conversa dentro do card, com @mencao e edicao por 10 minutos) se destrava. Depois vem as quatro ultimas em duas ondas de dois: #639 antes de #640, e #641 antes de #642."
     },
     {
       "kind": "info",
-      "title": "Nenhuma fatia de #637 a #642 cria migration",
-      "text": "As tres tabelas ja nascem na 102 no formato final. Se uma fatia achar que precisa de coluna nova, e para PARAR e perguntar ao dono, nao criar a 103."
+      "title": "Decisao do dono no checkpoint da onda 2",
+      "text": "Criar Demanda NAO grava linha no fio, e fica assim: a Conversa mostra so o que aconteceu depois, e o card ja diz quem abriu e quando. A #638 nao deve acrescentar 'Fulano abriu a Demanda' como primeira linha."
     },
     {
       "kind": "warn",
       "title": "Erro do PostgREST sobe cru nas rotas de Tecnologia",
-      "text": "Nit 2 do revisor de codigo, deixado de fora do escopo desta fatia: id que nao e UUID vira 500 em vez de 404, e dois POST simultaneos com o mesmo nome viram 500 em vez de 409. Quem for tratar precisa pegar httpx.HTTPError junto com APIError, senao o timeout do PostgREST continua subindo cru."
+      "text": "Registrado na onda 1 e ainda aberto, agora com mais superficie: id fora do formato UUID vira 500 em vez de 404 em _buscar_demanda, _buscar_produto e no filtro produto_id do GET /demandas. Quem tratar precisa pegar httpx.HTTPError junto com APIError, senao o timeout do PostgREST continua subindo cru."
+    },
+    {
+      "kind": "warn",
+      "title": "O fio da Demanda nao e atomico com o movimento",
+      "text": "Movimento e linha da Conversa sao duas chamadas ao PostgREST, sem transacao. A falha nao passa mais calada (500 honesto dizendo que a Demanda mudou e o fio ficou incompleto), mas o estado parcial continua possivel. Uma RPC resolveria, e foi deixada de fora desta fatia de proposito."
     },
     {
       "kind": "info",
-      "title": "Duas perguntas de dominio que o sub-agente engoliu",
-      "text": "A area de Produtos virou secao a parte e nao uma quarta aba (o ADR 0050 nao preve a quarta aba), e o nome do Produto ficou unico sem distinguir maiusculas. As duas sao trocaveis sem mexer em API."
+      "title": "PATCH com campo null ignorado em silencio",
+      "text": "produto_id e titulo com valor null no PATCH devolvem 200 sem mudanca. Um 422 seria mais honesto. Nit registrado nas duas ondas."
     },
     {
       "kind": "warn",
       "title": "Terceira porta de upload sem guarda",
-      "text": "Issue #631 (needs-triage): POST /api/ouvidoria-setor/{token}/responder sobe binario para o mesmo bucket sem passar por barrar_caso_apagado. Segue aberta."
+      "text": "Issue #631 (needs-triage, e agora com revisor-comentou): POST /api/ouvidoria-setor/{token}/responder sobe binario para o mesmo bucket sem passar por barrar_caso_apagado. Fora da fila-alvo desta sessao."
     },
     {
       "kind": "warn",
@@ -251,8 +248,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "ffa51d1",
+    "sha": "04e7abf",
     "result": "healthy",
-    "duration_seconds": 260
+    "duration_seconds": 280
   }
 }
