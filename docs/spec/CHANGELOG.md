@@ -7,6 +7,17 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.119.0 - 2026-09-09 05:05 - a Conversa da Demanda aceita resposta, menção e correção pelos primeiros dez minutos
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `d0da302`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.119.0 já no primeiro build, `db: healthy`; as duas rotas novas provadas em produção pelo par 401 contra 404)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/d0da302
+- Issues: [#638](https://github.com/pedrorezendefig/hospital-reunioes/issues/638) · PR [#656](https://github.com/pedrorezendefig/hospital-reunioes/pull/656) (PRD [#634](https://github.com/pedrorezendefig/hospital-reunioes/issues/634), ADR 0050)
+- Migration: nenhuma. `tecnologia_conversas` já tinha `mencoes` e `editado_em` desde a `102` · minor, feat
+- Nota: três revisões independentes. O achado principal foi de qualidade de teste, não de código: o teste que dizia provar "a janela conta do envio, nunca da última edição" reescrevia o corpo da função, e dois mutantes que quebravam a regra sobreviviam com a suíte verde. O código estava certo; faltava a prova
+- Nota: o mesmo padrão apareceu de novo na verificação final, no limite de 5000 caracteres. Regra registrada para as fatias restantes: valor combinado se cobra com literal escrito à mão, e regra se prova rodando o mutante
+
 ## v0.118.0 - 2026-09-09 03:30 - a Demanda nasce, anda pelas cinco colunas do Quadro e guarda o rastro de cada movimento
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `04e7abf`

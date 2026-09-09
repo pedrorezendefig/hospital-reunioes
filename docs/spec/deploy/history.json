@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-09T05:05:00-03:00",
+      "sha": "d0da302",
+      "app_version": "0.119.0",
+      "subject": "a Conversa da Demanda aceita resposta, mencao e correcao pelos primeiros dez minutos",
+      "raw_subject": "feat(tecnologia): responder na Conversa do card, com menção e correção por 10 minutos (#656)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 300,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 3 desta sessao: issue #638 sozinha, a Conversa dentro do card do Quadro de Tecnologia. Entrega responder no fio, @mencao e correcao da propria resposta por 10 minutos. Duas rotas novas de escrita, o que leva a aba a 12 operacoes e 12 gates. NENHUMA MIGRATION: tecnologia_conversas ja tinha mencoes VARCHAR(10)[] e editado_em, que e exatamente a janela de 10 minutos; conferido pelo orquestrador antes e depois de cada rodada. A janela e funcao pura com o instante INJETADO, nunca lendo o relogio por dentro, e conta do ENVIO e nao da ultima edicao (senao uma resposta corrigida de 9 em 9 minutos ficaria editavel para sempre e o fio deixaria de ser trilha). instante_do_banco trata dado quebrado com cuidado: valor ilegivel vira None e NUNCA 'agora', que abriria a janela para sempre em cima de dado corrompido. A borda ficou INCLUSIVA por decisao do dono no checkpoint: aos 10m00s cravados ainda da para corrigir, porque a PRD promete 'por ate 10 minutos' e um limite exclusivo recusaria o clique dado no ultimo segundo do prazo prometido. A @mencao NAO faz parsing do texto no backend: quem escolhe na lista manda o id, porque casar '@Fulano de Tal' dentro da frase erraria em nome com espaco e em nome que e prefixo de outro. O backend valida cada id contra a mesma lista de acesso a aba, nas DUAS portas, pelo mesmo funil, para que a edicao nao crie a mencao que o envio recusa. Escrever '@Fulano' a mao sem passar pela lista nao vira mencao: o texto fica, apenas nao destacado. O ACHADO MAIS IMPORTANTE DA SESSAO INTEIRA saiu aqui, e foi de qualidade de teste, nao de codigo. O teste que dizia provar 'a janela conta do envio, nunca da ultima edicao' era TAUTOLOGIA: ele reescrevia o corpo da funcao em vez de exerce-la. O revisor rodou dois mutantes que faziam a janela contar de editado_em, um na guarda do PATCH e outro no editavel_ate do GET, e OS DOIS SOBREVIVERAM com 173 testes verdes. O codigo de producao estava certo; o que nao existia era a prova. A causa raiz: nenhum dos 46 casos novos tinha editado_em preenchido, entao o detector nunca viu o cenario. A correcao removeu o teste tautologico e entrou com quatro casos pela ROTA com editado_em recente, e o autor provou rodando que os dois mutantes agora morrem, nomeando os testes que os matam. A licao, que vale para as fatias seguintes: teste que reescreve a logica em vez de chama-la passa sobre codigo quebrado, e so o mutante revela isso. O segundo must-fix foi mencao fantasma: mencoesNoTexto decidia por texto.includes('@' + nome), entao com 'Ana Souza' e 'Ana Souza Lima' escolhidas o texto '@Ana Souza Lima decide' gravava as DUAS. O erro era mudo (a tela destacava so a certa) e viraria e-mail para quem o texto nao chamou na fatia #642. Curiosamente o proprio autor ja tinha resolvido isso no destaque, indo do nome mais longo para o mais curto; a outra conta ficou para tras. A correcao fez as duas contas sairem do MESMO pedacosDoTexto, com par de presenca provando que a mencao legitima a pessoa de nome curto nao se perde. A revisao de seguranca fechou com ZERO must-fix depois de escrever 11 testes de exploracao proprios, todos apagados depois: tentou forjar criado_em no corpo para reabrir a janela (422), forjar autor_id para assinar por outra pessoa (gravou o id do logado), editar resposta alheia por PATCH direto na API sem passar pela tela (422, texto intacto), descobrir existencia de linha de outra Demanda (404, mesma frase do id inexistente, sem vazar), e injetar XSS pelo texto (zero dangerouslySetInnerHTML no frontend inteiro, e o destaque casa por startsWith sem regex). Ele achou um vetor de indisponibilidade: normalizar_mencoes era O(n2) e uma lista com 200 mil ids custaria perto de um minuto de CPU num app que sobe uvicorn SEM --workers, ou seja um event loop so, o que congelaria o backend inteiro e nao so a aba. Corrigido das duas formas: set de controle na dedupe, e um teto recusando antes lista maior que a lista de pessoas da aba, porque mais mencoes do que gente nao faz sentido. A verificacao final rodou os dois mutantes da janela e confirmou que morrem, nomeando os testes. Ela achou mais um caso do MESMO padrao do must-fix: o valor 5000 de LIMITE_RESPOSTA nao tinha trava, e mutar para 200 deixava a suite verde, porque os testes mediam o limite contra a propria constante. Travado com literais escritos a mao, e o mesmo julgamento foi refeito por mutante (nao por leitura) na JANELA_DE_EDICAO, que ja estava coberta: mutar 10 para 5 minutos derruba sete casos. Na ultima rodada o autor achou um defeito no proprio conserto do teto de mencoes: se ele continuasse medindo a lista JA LIMPA, viraria codigo morto, porque depois da allowlist os ids sao todos validos e distintos e nunca passariam do numero de pessoas. Passou a medir o que veio no payload, e as duas recusas foram reordenadas para que quem tem id invalido leia a frase do id invalido, e nao uma frase sobre quantidade. A frase diz 'veio com N mencoes' de proposito: dizer 'tem N mencoes' para uma lista com a mesma pessoa repetida contaria uma coisa que o texto nao diz. Conhecido e mantido por decisao: '@Ana' dentro de '@Anastacia' ainda conta como mencao, porque o casamento e por startsWith sem fronteira de palavra. Agora esta CONSISTENTE entre o destaque na tela e a coluna gravada, que era o defeito real; resolver pediria parsing de fronteira de palavra, justamente o que a fatia evitou ao nao deixar o backend adivinhar nomes dentro da frase. Deploy limpo pelo segundo deploy seguido: APP_VERSION gravado no Coolify ANTES do merge, e o /api/health subiu direto em 0.119.0. Codigo novo provado em producao sem login pelo par 401 contra 404 nas duas rotas novas, com as rotas das fatias anteriores seguindo vivas."
+    },
+    {
       "at": "2026-09-09T03:30:00-03:00",
       "sha": "04e7abf",
       "app_version": "0.118.0",
@@ -1402,25 +1431,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "PR #416, issue #295. Migration 086 (UPDATE de dado: corrige referencia_id das notificacoes de aceite). Aplicacao no Studio de producao NAO confirmada. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
-    },
-    {
-      "at": "2026-08-28T00:23:00-03:00",
-      "sha": "b77c016",
-      "app_version": "0.81.1",
-      "subject": "Gates de papel recusam quem foi desligado",
-      "raw_subject": "fix(auth): gates de papel recusam quem foi desligado",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #414, issue #309. Sem migration. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
     }
   ]
 }

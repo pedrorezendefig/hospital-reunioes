@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-09T03:35:00-03:00",
+  "updated_at": "2026-09-09T05:10:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.118.0",
+  "last_app_version": "0.119.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,10 +21,10 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "04e7abf",
-      "last_deploy_at": "2026-09-09T03:30:00-03:00",
+      "last_deploy_sha": "d0da302",
+      "last_deploy_at": "2026-09-09T05:05:00-03:00",
       "last_health_check": {
-        "at": "2026-09-09T03:33:00-03:00",
+        "at": "2026-09-09T05:08:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -39,10 +39,10 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "04e7abf",
-      "last_deploy_at": "2026-09-09T03:30:00-03:00",
+      "last_deploy_sha": "d0da302",
+      "last_deploy_at": "2026-09-09T05:05:00-03:00",
       "last_health_check": {
-        "at": "2026-09-09T03:33:00-03:00",
+        "at": "2026-09-09T05:08:00-03:00",
         "latency_ms": null,
         "http_status": 200,
         "body_ok": true
@@ -155,47 +155,47 @@
     "total_applied": 92,
     "last_applied": "102_tecnologia_fundacao.sql",
     "pending_local": [],
-    "nota": "A fatia #637 (PR #647, v0.118.0) NAO criou migration: as tres tabelas do modulo de Tecnologia ja nasceram no formato final na 102, e as fatias #638 a #642 tambem nao criam. Se alguma achar que precisa de coluna nova, a regra desta sessao e PARAR e perguntar ao dono, nunca criar a 103 por conta. A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
+    "nota": "A fatia #638 (PR #656, v0.119.0) NAO criou migration: tecnologia_conversas ja tinha mencoes VARCHAR(10)[] e editado_em, que e a janela de 10 minutos. Tres fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #639 a #642, que tambem nao criam. A fatia #637 (PR #647, v0.118.0) NAO criou migration: as tres tabelas do modulo de Tecnologia ja nasceram no formato final na 102, e as fatias #638 a #642 tambem nao criam. Se alguma achar que precisa de coluna nova, a regra desta sessao e PARAR e perguntar ao dono, nunca criar a 103 por conta. A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
   },
   "gates": [
     {
-      "name": "Onda 2 desta sessao: issue #637 (fatia G, PRD #634), sozinha, segunda da corrente nativa. Fechou #637, o que destrava #638",
+      "name": "Onda 3 desta sessao: issue #638 (fatia M, PRD #634), sozinha, terceira da corrente nativa. Fechou #638, o que destrava as quatro ultimas de uma vez",
       "status": "ok"
     },
     {
-      "name": "Nenhuma migration criada, conferido pelo orquestrador antes e depois de cada rodada: o diff nao toca supabase/",
+      "name": "Nenhuma migration criada, conferido antes e depois de cada rodada: o diff nao toca supabase/",
       "status": "ok"
     },
     {
-      "name": "Maquina de estados conferida par a par pela revisao: 5 estados dao 25 pares, 12 permitidas e 13 proibidas, batendo com a issue e a decisao 5 do ADR 0050. Carimbos provados pela ROTA, e reabrir limpa os quatro campos",
-      "status": "ok"
-    },
-    {
-      "name": "Quatro revisoes independentes: codigo, seguranca, rodada 2 e verificacao final. 4 must-fix, depois 1, depois 0",
-      "status": "ok"
-    },
-    {
-      "name": "Coerencia entre portas: criar entregava a Demanda ao dono do Produto que perdeu o acesso a aba, e /atribuir recusava a mesma pessoa com 422. O app criava por uma porta o que recusava pela outra. Decisao do orquestrador: recusar na criacao, com a frase apontando a saida, porque quem leva a recusa TEM onde carimbar na mesma tela",
-      "status": "ok"
-    },
-    {
-      "name": "REGRESSAO introduzida pela propria correcao e pega na rodada 2: o aviso de sessao disparava em TODA abertura da aba, porque o Quadro nao sabia que a autenticacao ainda carregava. Nenhum teste pegou porque o mock cravava loading: false, entao o estado de boot nunca era exercido",
+      "name": "TAUTOLOGIA no teste da regra central da fatia: o teste que dizia provar 'a janela conta do envio' reescrevia o corpo da funcao. Dois mutantes que faziam a janela contar de editado_em SOBREVIVERAM com 173 testes verdes. Codigo certo, prova inexistente",
       "status": "warn"
     },
     {
-      "name": "A verificacao final mediu a diferenca entre consertar e esconder: o mutante 'calar sempre' derruba 27 testes, o mutante 'tirar a guarda' derruba 2, um em cada nivel",
+      "name": "A causa raiz da tautologia: nenhum dos 46 casos novos tinha editado_em preenchido, entao o detector nunca viu o cenario. Corrigido com quatro casos pela rota, e os dois mutantes agora morrem, com os testes nomeados",
       "status": "ok"
     },
     {
-      "name": "Piso da varredura do gate subiu de 4 para 10 rotas. Continuava calibrado para a fatia anterior, e deixaria as 6 rotas novas sairem da matriz de 403 em silencio numa fatia futura",
+      "name": "Mencao fantasma: mencoesNoTexto usava includes, entao '@Ana Souza Lima' gravava tambem a 'Ana Souza'. Erro mudo hoje, viraria e-mail para quem o texto nao chamou na #642. As duas contas passaram a sair do mesmo pedacosDoTexto",
       "status": "ok"
     },
     {
-      "name": "APP_VERSION gravado no Coolify ANTES do merge, aprendendo com a onda 1: o /api/health subiu direto em 0.118.0, sem o redeploy extra que a onda 1 precisou",
+      "name": "Seguranca fechou com ZERO must-fix depois de 11 testes de exploracao proprios: criado_em forjado, autor_id forjado, edicao alheia por API, IDOR na busca da linha e XSS pelo texto. Nada passou",
       "status": "ok"
     },
     {
-      "name": "Codigo novo provado em producao sem login pelo par 401 contra 404, nas tres rotas novas mais a rota da fatia anterior",
+      "name": "Vetor de indisponibilidade achado pela seguranca: normalizar_mencoes era O(n2) e o app sobe uvicorn sem --workers, entao uma lista de 200 mil ids congelaria o backend inteiro. Corrigido com set na dedupe e teto pelo numero de pessoas da aba",
+      "status": "ok"
+    },
+    {
+      "name": "MESMO padrao da tautologia achado de novo na verificacao final: o valor 5000 de LIMITE_RESPOSTA nao tinha trava, e mutar para 200 deixava a suite verde. Travado com literais. A JANELA_DE_EDICAO foi reconferida por mutante e ja estava coberta",
+      "status": "ok"
+    },
+    {
+      "name": "Defeito no proprio conserto, achado pelo autor: o teto de mencoes medindo a lista JA LIMPA viraria codigo morto, porque depois da allowlist os ids sao validos e distintos. Passou a medir o payload, e as duas recusas foram reordenadas para cada causa ter a sua frase",
+      "status": "ok"
+    },
+    {
+      "name": "APP_VERSION gravado no Coolify ANTES do merge pelo segundo deploy seguido: health subiu direto em 0.119.0. Codigo novo provado em producao pelo par 401 contra 404",
       "status": "ok"
     }
   ],
@@ -203,53 +203,63 @@
     {
       "kind": "ok",
       "title": "Tudo verde",
-      "text": "Deploy 04e7abf saudavel na v0.118.0, sem migration. O Quadro de Demandas esta em producao."
+      "text": "Deploy d0da302 saudavel na v0.119.0, sem migration. A Conversa da Demanda esta em producao."
     },
     {
       "kind": "info",
-      "title": "Onda 3 do PRD #634",
-      "text": "A #637 fechou, entao a #638 (Conversa dentro do card, com @mencao e edicao por 10 minutos) se destrava. Depois vem as quatro ultimas em duas ondas de dois: #639 antes de #640, e #641 antes de #642."
+      "title": "Onda 4 do PRD #634, a primeira em paralelo",
+      "text": "A #638 fechou e destravou as QUATRO ultimas de uma vez. Onda 4: #639 e #640 em paralelo, mergeando #639 antes de #640 (as duas tocam o shell do modulo). Onda 5: #641 e #642, mergeando #641 antes de #642 (as duas tocam o router admin/tecnologia e o servico puro de regras)."
     },
     {
       "kind": "info",
-      "title": "Decisao do dono no checkpoint da onda 2",
-      "text": "Criar Demanda NAO grava linha no fio, e fica assim: a Conversa mostra so o que aconteceu depois, e o card ja diz quem abriu e quando. A #638 nao deve acrescentar 'Fulano abriu a Demanda' como primeira linha."
+      "title": "Decisao do dono no checkpoint da onda 3",
+      "text": "A borda dos 10 minutos fica INCLUSIVA: aos 10m00s cravados ainda da para corrigir. Travada por teste na borda exata."
+    },
+    {
+      "kind": "warn",
+      "title": "Licao de teste para as quatro fatias restantes",
+      "text": "Dois defeitos desta onda foram testes que nao provavam nada: um reescrevia o corpo da funcao, outro media um limite contra a propria constante. Nos dois casos a suite ficava verde sobre codigo quebrado. Regra para #639 a #642: valor combinado se cobra com literal escrito a mao, e regra se prova rodando o mutante, nunca por leitura."
+    },
+    {
+      "kind": "info",
+      "title": "Conhecido e mantido na @mencao",
+      "text": "'@Ana' dentro de '@Anastacia' conta como mencao, porque o casamento e por startsWith sem fronteira de palavra. Consistente entre o destaque e a coluna gravada, que era o defeito real. Resolver pediria parsing de fronteira de palavra, evitado de proposito."
+    },
+    {
+      "kind": "warn",
+      "title": "Para quem acrescentar CHECK sobre texto em tecnologia_conversas",
+      "text": "Os dois logger.exception das portas de Conversa logam so identificador. O texto so chegaria ao log se a APIError trouxesse 'Failing row contains (...)', o que exige check constraint sobre a coluna texto. Hoje nao existe, entao o caminho nao e alcancavel. Quem criar essa constraint precisa revisitar os dois logs."
     },
     {
       "kind": "warn",
       "title": "Erro do PostgREST sobe cru nas rotas de Tecnologia",
-      "text": "Registrado na onda 1 e ainda aberto, agora com mais superficie: id fora do formato UUID vira 500 em vez de 404 em _buscar_demanda, _buscar_produto e no filtro produto_id do GET /demandas. Quem tratar precisa pegar httpx.HTTPError junto com APIError, senao o timeout do PostgREST continua subindo cru."
+      "text": "Aberto desde a onda 1, agora com mais superficie: id fora do formato UUID vira 500 em vez de 404. Quem tratar precisa pegar httpx.HTTPError junto com APIError."
     },
     {
       "kind": "warn",
       "title": "O fio da Demanda nao e atomico com o movimento",
-      "text": "Movimento e linha da Conversa sao duas chamadas ao PostgREST, sem transacao. A falha nao passa mais calada (500 honesto dizendo que a Demanda mudou e o fio ficou incompleto), mas o estado parcial continua possivel. Uma RPC resolveria, e foi deixada de fora desta fatia de proposito."
+      "text": "Duas chamadas ao PostgREST, sem transacao. A falha nao passa calada (500 honesto), mas o estado parcial continua possivel. Uma RPC resolveria, deixada de fora de proposito nas fatias #637 e #638."
     },
     {
-      "kind": "info",
-      "title": "PATCH com campo null ignorado em silencio",
-      "text": "produto_id e titulo com valor null no PATCH devolvem 200 sem mudanca. Um 422 seria mais honesto. Nit registrado nas duas ondas."
+      "kind": "warn",
+      "title": "Nenhuma das 12 rotas da aba tem rate limit",
+      "text": "Observado pela seguranca na onda 3. Nao e regressao de nenhuma fatia, e o alcance e pequeno (o gate e Super admin), mas fica registrado."
     },
     {
       "kind": "warn",
       "title": "Terceira porta de upload sem guarda",
-      "text": "Issue #631 (needs-triage, e agora com revisor-comentou): POST /api/ouvidoria-setor/{token}/responder sobe binario para o mesmo bucket sem passar por barrar_caso_apagado. Fora da fila-alvo desta sessao."
-    },
-    {
-      "kind": "warn",
-      "title": "Comparacao de data como texto na regua da reabertura",
-      "text": "_reabriu_depois_do_pedido compara timestamp como string e falha aberta com offset que nao seja UTC. Hoje sem efeito porque o PostgREST devolve UTC. Residual R3 do PR #632, sem issue aberta."
+      "text": "Issue #631 (needs-triage, com revisor-comentou): POST /api/ouvidoria-setor/{token}/responder sobe binario sem passar por barrar_caso_apagado. Fora da fila-alvo desta sessao."
     },
     {
       "kind": "info",
       "title": "Auditoria do PRD #591",
-      "text": "As cinco filhas (#592, #593, #594, #595, #627) fecharam. Falta auditar o PRD contra producao (ADR 0029)."
+      "text": "As cinco filhas fecharam. Falta auditar o PRD contra producao (ADR 0029)."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "04e7abf",
+    "sha": "d0da302",
     "result": "healthy",
-    "duration_seconds": 280
+    "duration_seconds": 300
   }
 }
