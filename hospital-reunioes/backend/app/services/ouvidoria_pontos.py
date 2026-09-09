@@ -12,6 +12,8 @@ from __future__ import annotations
 import logging
 import secrets
 
+from app.services.pdf_url_fetcher import criar_pdf_url_fetcher
+
 logger = logging.getLogger(__name__)
 
 # Sem os pares que a leitura confunde: `0`/`O` e `1`/`I`. O código é lido em voz
@@ -198,10 +200,19 @@ def html_do_cartaz(ponto: dict) -> str:
 
 def pdf_do_cartaz(ponto: dict) -> bytes:
     """O cartaz pronto para a gráfica. Weasyprint, o mesmo que já serve Ata,
-    POP e o relatório da Ouvidoria."""
+    POP e o relatório da Ouvidoria.
+
+    A allowlist de `file://` é VAZIA de propósito: o `ouvidoria_cartaz.html` não
+    usa asset de arquivo nenhum, porque logo e QR entram embutidos como `data:`
+    (o `get_logo_data_uri` e o `qr_data_uri`). Aqui todo `file://` é recusado.
+
+    O fetcher (issue #633) vai no construtor do `HTML`, que é quem busca os
+    recursos: o `write_pdf` descarta opção que não conhece, então passá-lo ali
+    desligaria a guarda em silêncio (issue #625).
+    """
     from weasyprint import HTML
 
-    return HTML(string=html_do_cartaz(ponto)).write_pdf()
+    return HTML(string=html_do_cartaz(ponto), url_fetcher=criar_pdf_url_fetcher()).write_pdf()
 
 
 def por_id(supabase, ponto_id: str) -> dict | None:

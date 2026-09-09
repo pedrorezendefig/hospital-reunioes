@@ -14,14 +14,13 @@ Nomenclatura travada do DRF §3.3:
 from __future__ import annotations
 
 import io
-import ipaddress
 import logging
 import os
 import re
-import socket
 import unicodedata
 from datetime import datetime
-from urllib.parse import urlsplit
+
+from app.services.pdf_url_fetcher import criar_pdf_url_fetcher
 
 logger = logging.getLogger(__name__)
 
@@ -179,88 +178,11 @@ def markdown_secao_html(conteudo: str) -> str:
 
 # ─── url_fetcher do PDF: defesa em profundidade contra file:// / SSRF ────────
 
-
-def _host_e_privado(host: str) -> bool:
-    """True se o host resolve para um endereço privado, loopback ou link-local
-    (127.0.0.0/8, 10/8, 172.16/12, 192.168/16, 169.254/16, ::1, fc00::/7...).
-    Resolve nomes (localhost e DNS apontando para rede interna) antes de julgar.
-    """
-    if not host:
-        return True
-    host = host.strip("[]")
-    candidatos: list[str] = []
-    try:
-        candidatos.append(str(ipaddress.ip_address(host)))
-    except ValueError:
-        try:
-            infos = socket.getaddrinfo(host, None)
-            candidatos.extend(info[4][0] for info in infos)
-        except (OSError, UnicodeError):
-            # Não resolveu: trata como não confiável (fail-closed).
-            return True
-    for endereco in candidatos:
-        try:
-            ip = ipaddress.ip_address(endereco.split("%")[0])
-        except ValueError:
-            return True
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved or ip.is_unspecified:
-            return True
-    return False
-
-
-def _criar_pdf_url_fetcher(allowed_file_uris: frozenset[str] = frozenset()):
-    """url_fetcher do WeasyPrint para o PDF do POP. Recusa todo `file://` que
-    não seja um asset legítimo do template (logo/fonte do próprio app) e todo
-    host privado/loopback/link-local, fechando o vetor de leitura de arquivo
-    local / SSRF. O conteúdo já é higienizado pelo bleach; isto é a segunda
-    camada. Levanta `ValueError` no que recusa; delega o resto ao fetcher
-    padrão do WeasyPrint.
-
-    A partir do WeasyPrint 70 o fetcher é uma classe (`weasyprint.urls.URLFetcher`),
-    não mais a função `default_url_fetcher`: quem recusa precisa herdar dela, porque
-    o `weasyprint.urls.fetch` lê `url_fetcher._fail_on_errors` ao tratar a exceção.
-    Herdar faz a guarda valer também no redirect, que o WeasyPrint reentrega ao
-    próprio fetcher (um 302 para `127.0.0.1` volta a passar pela recusa de host).
-    Isso não sai de graça: o fetcher herdado tem estado, e a recusa precisa
-    limpá-lo. Ver a invariante no `fetch`.
-
-    A classe nasce aqui dentro porque o import do WeasyPrint é lazy no módulo: ele
-    exige libs nativas (glib/pango) que não existem em todo ambiente de teste.
-    """
-    from weasyprint.urls import URLFetcher
-
-    class _PdfUrlFetcher(URLFetcher):
-        def fetch(self, url, headers=None):
-            # INVARIANTE: toda recusa limpa `self._request` antes de levantar.
-            # Do WeasyPrint 69 em diante o `URLFetcher` guarda o `Request` do
-            # redirect nesse campo e só o limpa dentro do `fetch` do pai, depois
-            # do ponto onde a guarda recusa. Sem limpar, a requisição recusada
-            # fica pendurada e a busca SEGUINTE do mesmo PDF a reexecuta,
-            # devolvendo aqueles bytes como se fossem o recurso legítimo: pedir
-            # o logo passava a devolver o alvo recusado. Recusa nova entra com
-            # a limpeza junto.
-            partes = urlsplit(url)
-            esquema = partes.scheme.lower()
-
-            if esquema == "file":
-                if url in allowed_file_uris:
-                    return super().fetch(url, headers)
-                self._request = None
-                raise ValueError(f"file:// não permitido no PDF do POP: {url}")
-
-            if esquema in ("http", "https"):
-                if _host_e_privado(partes.hostname or ""):
-                    self._request = None
-                    raise ValueError(f"host privado/loopback recusado no PDF do POP: {url}")
-                return super().fetch(url, headers)
-
-            if esquema == "data":
-                return super().fetch(url, headers)
-
-            self._request = None
-            raise ValueError(f"esquema de URL não permitido no PDF do POP: {esquema or url}")
-
-    return _PdfUrlFetcher()
+# A guarda saiu daqui para `app/services/pdf_url_fetcher.py` (issue #633): Ata,
+# relatório da Ouvidoria e cartaz dos Pontos de escuta passaram a usar a mesma,
+# e lá ela também recusa multicast. O nome privado continua sendo o ponto de
+# entrada do POP para o `gerar_pdf_pop` (e para o teste que espia o render).
+_criar_pdf_url_fetcher = criar_pdf_url_fetcher
 
 
 # ─── Geração do PDF ──────────────────────────────────────────────────────────
@@ -314,8 +236,11 @@ def gerar_pdf_pop(*, pop: dict, setor: dict, versao: dict, nomes_designados: dic
             secao["conteudo_html"] = markdown_secao_html(conteudo)
         secoes.append(secao)
 
-    # Caminhos absolutos (sem `..`) para a URI `file://` bater exatamente com o
-    # allowlist do url_fetcher, mesmo após a normalização do WeasyPrint.
+    # Caminhos absolutos para a URI `file://` do template e a do allowlist do
+    # url_fetcher saírem da MESMA expressão: o allowlist é casamento exato de
+    # string, e o WeasyPrint entrega a URL ao fetcher só com percent-encoding,
+    # sem normalizar o `..`. Montar uma ponta com `abspath` e a outra sem faria
+    # a guarda recusar o próprio logo.
     logo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "images", "logo_hospital.png"))
     font_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "fonts", "HPSimplified_Rg.ttf"))
     if not os.path.exists(font_path):
