@@ -11,8 +11,11 @@
  * atrasado. Idade e atraso são coisas diferentes, e o card diz as duas: sem
  * prazo a Demanda não atrasa, só envelhece (ADR 0050, decisão 5).
  *
- * Arrastar entre colunas e a tela de filtros são da issue #639: aqui o gesto é
- * o botão "Mover", que fala com o mesmo endpoint.
+ * Arrastar entre colunas e a barra de filtros são da issue #639. Arrastar não
+ * é um caminho novo: solta o card e chama o MESMO endpoint do botão "Mover",
+ * que continua ali como o caminho de quem não usa o mouse. O card só muda de
+ * coluna depois que o servidor aceitou, porque a recusa (422 da transição
+ * proibida, 409 do Quadro desatualizado) é dele, e não da tela.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -32,6 +35,7 @@ import {
   EstadoDemanda,
   estaAtrasado,
   FALHA_DE_CONEXAO,
+  FiltrosDoQuadro,
   idadeEmDias,
   IDADE_VERMELHA_A_PARTIR_DE,
   motivoDaRecusa,
@@ -41,6 +45,9 @@ import {
   PrioridadeDemanda,
   prazoLegivel,
   ProdutoDaEscolha,
+  queryDeFiltros,
+  SEM_FILTRO,
+  temFiltroAtivo,
   textoDaIdade,
   TIPO_ROTULO,
   TIPOS,
@@ -60,6 +67,15 @@ type Props = {
   carregandoAuth: boolean;
   produtos: ProdutoDaEscolha[];
   pessoas: PessoaDaAba[];
+  /**
+   * Os filtros valendo agora.
+   *
+   * Eles moram na aba Tecnologia, e não aqui, porque precisam sobreviver à
+   * troca de aba: o painel do Quadro é desmontado quando alguém vai a "Minha
+   * vez", e um estado local voltaria ao zero na volta (issue #639).
+   */
+  filtros: FiltrosDoQuadro;
+  onFiltrosChange: (filtros: FiltrosDoQuadro) => void;
 };
 
 const CLASSE_PRIORIDADE: Record<PrioridadeDemanda, string> = {
@@ -79,6 +95,11 @@ const CLASSE_PRIORIDADE: Record<PrioridadeDemanda, string> = {
 const SEM_SESSAO =
   "Não foi possível carregar as Demandas: a sessão não está ativa ou o servidor não respondeu. Tente recarregar a página.";
 
+/** As opções que LIMPAM cada filtro: o rótulo é o mesmo do campo em branco. */
+const TODOS_OS_TIPOS = "Todos os tipos";
+const TODOS_OS_PRODUTOS = "Todos os Produtos";
+const TODOS_OS_RESPONSAVEIS = "Todos os responsáveis";
+
 const FORM_VAZIO = {
   titulo: "",
   tipo: "decisao" as TipoDemanda,
@@ -87,7 +108,14 @@ const FORM_VAZIO = {
   descricao: "",
 };
 
-export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Props) {
+export function QuadroDemandas({
+  token,
+  carregandoAuth,
+  produtos,
+  pessoas,
+  filtros,
+  onFiltrosChange,
+}: Props) {
   const [demandas, setDemandas] = useState<Demanda[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -96,11 +124,17 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
   const [form, setForm] = useState(FORM_VAZIO);
   const [moverAberto, setMoverAberto] = useState<string | null>(null);
   const [abertaId, setAbertaId] = useState<string | null>(null);
+  const [arrastando, setArrastando] = useState<string | null>(null);
 
   const autorizacao = useCallback(
     () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
     [token],
   );
+
+  // Quem peneira é a API, com os filtros que ela já aceita: peneirar aqui
+  // esconderia os cards sem tirá-los da resposta, e a mesma tela mostraria
+  // contas diferentes conforme o que já tivesse sido baixado.
+  const busca = queryDeFiltros(filtros);
 
   /**
    * Carrega o Quadro.
@@ -113,7 +147,7 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
     if (!token) return;
     setCarregando(true);
     try {
-      const resposta = await fetch(`${BASE_TECNOLOGIA}/demandas`, { headers: autorizacao() });
+      const resposta = await fetch(`${BASE_TECNOLOGIA}/demandas${busca}`, { headers: autorizacao() });
       if (!resposta.ok) {
         setErro("Não foi possível carregar as Demandas.");
         return;
@@ -126,7 +160,7 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
     } finally {
       setCarregando(false);
     }
-  }, [token, autorizacao]);
+  }, [token, autorizacao, busca]);
 
   useEffect(() => {
     // Enquanto a autenticação resolve, o token nulo não quer dizer nada ainda:
@@ -182,7 +216,24 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
     await enviar(`${BASE_TECNOLOGIA}/demandas/${demanda.id}/mover`, "POST", { estado });
   }
 
+  /**
+   * Solta o card na coluna.
+   *
+   * Nada muda de lugar antes da resposta: o servidor pode recusar a transição
+   * (422) ou dizer que o Quadro está desatualizado (409), e um card já pintado
+   * na coluna nova contaria uma história que não aconteceu. Soltar na coluna
+   * de origem não é movimento nenhum, e a rota recusaria com um erro que quem
+   * desistiu do gesto não precisa ler.
+   */
+  function soltarEm(estado: EstadoDemanda) {
+    const demanda = demandas.find((d) => d.id === arrastando);
+    setArrastando(null);
+    if (!demanda || demanda.estado === estado) return;
+    mover(demanda, estado);
+  }
+
   const produtosAtivos = produtos.filter((p) => p.ativo);
+  const filtrando = temFiltroAtivo(filtros);
   const aberta = demandas.find((d) => d.id === abertaId) ?? null;
   const agora = new Date();
 
@@ -196,7 +247,19 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
     const atrasada = estaAtrasado(demanda.prazo, agora);
 
     return (
-      <li key={demanda.id} className="rounded-xl border border-border bg-white p-3 space-y-2 shadow-sm">
+      <li
+        key={demanda.id}
+        draggable
+        onDragStart={(e) => {
+          // O `setData` é para o navegador: sem carga, o Firefox nem começa o
+          // arrasto. Quem o componente lê ao soltar é o estado, que o jsdom
+          // também enxerga.
+          e.dataTransfer?.setData("text/plain", demanda.id);
+          setArrastando(demanda.id);
+        }}
+        onDragEnd={() => setArrastando(null)}
+        className="rounded-xl border border-border bg-white p-3 space-y-2 shadow-sm cursor-grab active:cursor-grabbing"
+      >
         <button
           type="button"
           onClick={() => setAbertaId(demanda.id)}
@@ -274,6 +337,59 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
         </button>
       </div>
 
+      <div className="rounded-xl border border-border bg-surface p-3 space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Select
+            label="Filtrar por tipo"
+            value={filtros.tipo}
+            onChange={(tipo) => onFiltrosChange({ ...filtros, tipo })}
+            options={[
+              { value: "", label: TODOS_OS_TIPOS },
+              ...TIPOS.map((t) => ({ value: t, label: TIPO_ROTULO[t] })),
+            ]}
+            placeholder={TODOS_OS_TIPOS}
+          />
+          <Select
+            label="Filtrar por Produto"
+            value={filtros.produto_id}
+            onChange={(produto_id) => onFiltrosChange({ ...filtros, produto_id })}
+            options={[
+              { value: "", label: TODOS_OS_PRODUTOS },
+              ...produtosAtivos.map((p) => ({ value: p.id, label: p.nome })),
+            ]}
+            placeholder={TODOS_OS_PRODUTOS}
+          />
+          <Select
+            label="Filtrar por responsável"
+            value={filtros.responsavel_id}
+            onChange={(responsavel_id) => onFiltrosChange({ ...filtros, responsavel_id })}
+            options={[
+              { value: "", label: TODOS_OS_RESPONSAVEIS },
+              ...pessoas.map((p) => ({ value: p.id, label: p.nome_completo })),
+            ]}
+            placeholder={TODOS_OS_RESPONSAVEIS}
+          />
+        </div>
+
+        {/* O Quadro filtrado e calado é indistinguível do Quadro vazio: quem
+            volta à aba com o filtro de antes concluiria que as Demandas
+            sumiram. O aviso diz o que está acontecendo e onde desfazer. */}
+        {filtrando && (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-amber-700">
+              O Quadro está filtrado: as Demandas fora do filtro não aparecem em nenhuma coluna.
+            </p>
+            <button
+              type="button"
+              onClick={() => onFiltrosChange(SEM_FILTRO)}
+              className="px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-text-secondary hover:border-primary hover:text-primary transition-colors"
+            >
+              Limpar filtros
+            </button>
+          </div>
+        )}
+      </div>
+
       {abrindoForm && (
         <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -338,9 +454,17 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
               <section
                 key={estado}
                 aria-label={ESTADO_ROTULO[estado]}
-                className={`shrink-0 rounded-xl border border-border bg-surface p-3 ${
+                onDragOver={(e) => {
+                  // Sem o `preventDefault` o navegador recusa o "soltar aqui".
+                  if (arrastando) e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  soltarEm(estado);
+                }}
+                className={`shrink-0 rounded-xl border bg-surface p-3 ${
                   expandida ? "w-[260px]" : "w-[180px]"
-                }`}
+                } ${arrastando ? "border-dashed border-primary/50" : "border-border"}`}
               >
                 {recolhivel ? (
                   <button

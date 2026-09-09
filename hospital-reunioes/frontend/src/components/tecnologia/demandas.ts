@@ -309,3 +309,44 @@ export function pedacosDoTexto(texto: string, nomesMencionados: string[]): Pedac
   if (comum) pedacos.push({ texto: comum, mencao: false });
   return pedacos;
 }
+
+/**
+ * O que a barra de filtros do Quadro guarda (issue #639).
+ *
+ * Campo vazio quer dizer "todos", e nao "sem responsavel": o filtro so estreita
+ * o Quadro, e a API entende ausencia do parametro como sem filtro.
+ *
+ * O `estado` fica de fora de proposito: ele e o eixo das colunas, e filtrar por
+ * ele deixaria o Quadro com uma coluna cheia e quatro vazias, sem dizer por que.
+ */
+export type FiltrosDoQuadro = { tipo: string; produto_id: string; responsavel_id: string };
+
+/** O Quadro inteiro: nenhum filtro escolhido. */
+export const SEM_FILTRO: FiltrosDoQuadro = { tipo: "", produto_id: "", responsavel_id: "" };
+
+/**
+ * A busca da listagem, com os filtros que a API ja aceita.
+ *
+ * Sem filtro nenhum a busca sai vazia, nem o "?" sozinho, e os valores viajam
+ * escapados pelo `URLSearchParams`: e a mesma URL que a tela pediria a mao, sem
+ * o risco de um id com espaco quebrar a chamada.
+ */
+export function queryDeFiltros(filtros: FiltrosDoQuadro): string {
+  const busca = new URLSearchParams();
+  if (filtros.tipo) busca.set("tipo", filtros.tipo);
+  if (filtros.produto_id) busca.set("produto_id", filtros.produto_id);
+  if (filtros.responsavel_id) busca.set("responsavel_id", filtros.responsavel_id);
+  const texto = busca.toString();
+  return texto ? `?${texto}` : "";
+}
+
+/**
+ * Se algum filtro esta valendo.
+ *
+ * A tela precisa saber para AVISAR: um Quadro filtrado e calado e
+ * indistinguivel de um Quadro vazio, e quem volta a aba com o filtro de ontem
+ * concluiria que as Demandas sumiram.
+ */
+export function temFiltroAtivo(filtros: FiltrosDoQuadro): boolean {
+  return Boolean(filtros.tipo || filtros.produto_id || filtros.responsavel_id);
+}

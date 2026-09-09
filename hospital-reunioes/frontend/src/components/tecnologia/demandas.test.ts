@@ -15,6 +15,9 @@ import {
   pedacosDoTexto,
   pessoasDoAutocomplete,
   podeCorrigirAgora,
+  queryDeFiltros,
+  SEM_FILTRO,
+  temFiltroAtivo,
   termoDaMencao,
 } from "./demandas";
 
@@ -181,5 +184,43 @@ describe("O destaque da menção no fio", () => {
     expect(pedacosDoTexto("Falei com Sócia Vitta ontem", ["Sócia Vitta"])).toEqual([
       { texto: "Falei com Sócia Vitta ontem", mencao: false },
     ]);
+  });
+});
+
+describe("A busca que os filtros montam", () => {
+  it("sem filtro nenhum a URL fica limpa, sem nem a interrogação", () => {
+    // Um "?" sozinho não quebra o backend, mas denuncia que a tela manda
+    // filtro vazio; e `estado=""` cairia no `if valor` do router como falso,
+    // escondendo aqui um erro que só apareceria com uma API mais rígida.
+    expect(queryDeFiltros(SEM_FILTRO)).toBe("");
+  });
+
+  it("cada filtro escolhido vira o parâmetro que a API já aceita", () => {
+    // Os nomes são escritos à mão de propósito: montá-los a partir do próprio
+    // objeto faria o teste passar com qualquer chave que a tela inventasse.
+    expect(queryDeFiltros({ tipo: "ajuste", produto_id: "", responsavel_id: "" })).toBe("?tipo=ajuste");
+    expect(queryDeFiltros({ tipo: "", produto_id: "prod-1", responsavel_id: "" })).toBe("?produto_id=prod-1");
+    expect(queryDeFiltros({ tipo: "", produto_id: "", responsavel_id: "P2" })).toBe("?responsavel_id=P2");
+  });
+
+  it("os três juntos vão na mesma busca", () => {
+    expect(queryDeFiltros({ tipo: "defeito", produto_id: "prod-2", responsavel_id: "P1" })).toBe(
+      "?tipo=defeito&produto_id=prod-2&responsavel_id=P1",
+    );
+  });
+
+  it("o valor viaja escapado", () => {
+    // Id não tem espaço hoje, mas concatenar na mão passaria a montar uma URL
+    // quebrada no dia em que tiver.
+    expect(queryDeFiltros({ tipo: "", produto_id: "a b&c", responsavel_id: "" })).toBe(
+      "?produto_id=a+b%26c",
+    );
+  });
+
+  it("diz que há filtro ativo quando há, e que não há quando não há", () => {
+    expect(temFiltroAtivo(SEM_FILTRO)).toBe(false);
+    expect(temFiltroAtivo({ tipo: "ajuste", produto_id: "", responsavel_id: "" })).toBe(true);
+    expect(temFiltroAtivo({ tipo: "", produto_id: "prod-1", responsavel_id: "" })).toBe(true);
+    expect(temFiltroAtivo({ tipo: "", produto_id: "", responsavel_id: "P1" })).toBe(true);
   });
 });

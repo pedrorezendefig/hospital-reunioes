@@ -15,7 +15,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { Select } from "@/components/ui/Select";
 
 import { QuadroDemandas } from "./QuadroDemandas";
-import { BASE_TECNOLOGIA, FALHA_DE_CONEXAO, motivoDaRecusa } from "./demandas";
+import {
+  BASE_TECNOLOGIA,
+  FALHA_DE_CONEXAO,
+  FiltrosDoQuadro,
+  motivoDaRecusa,
+  SEM_FILTRO,
+} from "./demandas";
 
 type Pessoa = { id: string; nome_completo: string; email: string };
 
@@ -53,6 +59,21 @@ export function TecnologiaModulo() {
   const { token, loading: carregandoAuth } = useAuth();
 
   const [aba, setAba] = useState<AbaId>("quadro");
+  /**
+   * Os filtros do Quadro moram aqui, e não dentro dele (issue #639).
+   *
+   * Trocar de aba desmonta o painel, então um estado guardado lá dentro
+   * voltaria ao zero na volta, que é justo o que o critério de aceite proíbe.
+   * Aqui em cima eles atravessam a troca de aba e ficam à mão das abas que
+   * ainda vêm (Minha vez e Histórico).
+   *
+   * Não vão para o `localStorage` de propósito: um filtro escolhido ontem
+   * voltaria calado no dia seguinte, escondendo Demandas de quem nem lembra
+   * de tê-lo posto, e a leitura do storage ainda pode lançar em navegador com
+   * dados de site bloqueados. O critério pede a travessia de aba, não a
+   * travessia de sessão.
+   */
+  const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -192,6 +213,8 @@ export function TecnologiaModulo() {
             carregandoAuth={carregandoAuth}
             produtos={produtos}
             pessoas={pessoas}
+            filtros={filtros}
+            onFiltrosChange={setFiltros}
           />
         ) : (
           <div className="rounded-xl border border-border bg-surface p-6">
