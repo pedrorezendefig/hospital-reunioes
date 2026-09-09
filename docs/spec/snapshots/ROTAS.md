@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-09T17:29-0300 -->
+<!-- last_update: 2026-09-09T19:46-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -327,6 +327,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | PATCH | `/admin/tecnologia/demandas/{demanda_id}/conversa/{linha_id}` | Corrige a PROPRIA resposta, dentro da janela de 10 minutos. | ✅ |
 | POST | `/admin/tecnologia/demandas/{demanda_id}/mover` | Move a Demanda de coluna, se a maquina de estados permitir. | ✅ |
 | GET | `/admin/tecnologia/demandas/{demanda_id}/texto-para-ia` | A Demanda inteira em texto simples, para colar numa IA (issue #640). | ✅ |
+| GET | `/admin/tecnologia/historico` | As Demandas Concluidas e Canceladas, com busca por texto (issue #641). | ✅ |
+| GET | `/admin/tecnologia/minha-vez` | O que espera pela pessoa LOGADA (issue #641). | ✅ |
 | GET | `/admin/tecnologia/pessoas` | Quem tem acesso a aba: participante ativo com Super admin. | ✅ |
 | GET | `/admin/tecnologia/produtos` | Todos os Produtos, ativos e inativos, na ordem de exibicao. | ✅ |
 | POST | `/admin/tecnologia/produtos` | Cria Produto. Nasce ativo, e ativo exige dono. | ✅ |
@@ -372,4 +374,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 211 endpoints em 31 routers · 94% exigem auth.
+**Totais:** 213 endpoints em 31 routers · 94% exigem auth.
