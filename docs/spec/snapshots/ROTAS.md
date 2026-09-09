@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-09T01:55-0300 -->
+<!-- last_update: 2026-09-09T03:28-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -318,6 +318,12 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/admin/tecnologia/demandas` | As Demandas do Quadro, com os filtros da PRD. | ✅ |
+| POST | `/admin/tecnologia/demandas` | Abre uma Demanda: ela nasce em `nova`, com o dono do Produto. | ✅ |
+| PATCH | `/admin/tecnologia/demandas/{demanda_id}` | Edita os campos do modal. Campo ausente fica como esta. | ✅ |
+| POST | `/admin/tecnologia/demandas/{demanda_id}/atribuir` | Troca o responsavel, entre as pessoas com acesso a aba. | ✅ |
+| GET | `/admin/tecnologia/demandas/{demanda_id}/conversa` | O fio da Demanda em ordem cronologica, respostas e movimentos juntos. | ✅ |
+| POST | `/admin/tecnologia/demandas/{demanda_id}/mover` | Move a Demanda de coluna, se a maquina de estados permitir. | ✅ |
 | GET | `/admin/tecnologia/pessoas` | Quem tem acesso a aba: participante ativo com Super admin. | ✅ |
 | GET | `/admin/tecnologia/produtos` | Todos os Produtos, ativos e inativos, na ordem de exibicao. | ✅ |
 | POST | `/admin/tecnologia/produtos` | Cria Produto. Nasce ativo, e ativo exige dono. | ✅ |
@@ -363,4 +369,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 202 endpoints em 31 routers · 94% exigem auth.
+**Totais:** 208 endpoints em 31 routers · 94% exigem auth.
