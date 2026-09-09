@@ -206,7 +206,7 @@ def _evento(movimento: dict) -> dict:
         # o movimento que já gravou, então quem escreve e quem lê olham a mesma
         # coisa; o par `encerrado` para `encerrado`, ao contrário, também serve
         # a atos de job que não apagaram nada.
-        "apagamento": e_movimento_de_apagamento(movimento.get("observacao")),
+        "apagamento": e_movimento_de_apagamento(movimento),
         "marco": marco,
         "marco_rotulo": ROTULO_DO_MARCO.get(marco) if marco else None,
         "descricao": descricao,

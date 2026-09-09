@@ -288,6 +288,12 @@ export function Dossie({ protocolo, token }: DossieProps) {
   // papéis da Ouvidoria, e este é o único ato que só um deles pratica.
   const { participante } = useCurrentParticipante();
   const [confirmandoApagamento, setConfirmandoApagamento] = useState(false);
+  // Dois avisos, e não um: a recusa do servidor tem que aparecer DENTRO do
+  // modal, que sobe por portal com backdrop e cobre a página inteira. Escrita
+  // na página, ela ficaria embaixo do modal e a Diretoria não veria nada
+  // depois de o spinner sumir. O aviso de sucesso é o oposto: no sucesso o
+  // modal fecha, então ele mora na página.
+  const [erroDoApagamento, setErroDoApagamento] = useState<string | null>(null);
   const [avisoApagamento, setAvisoApagamento] = useState<string | null>(null);
   // As duas ações que a lista oferecia e que passam a viver junto do caso
   // (issue #476). Elas mudam o caso inteiro, então o que vem depois delas é
@@ -817,6 +823,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
    */
   async function apagarCaso(motivo: string) {
     if (!manifestacaoId || !token) return;
+    setErroDoApagamento(null);
     setAvisoApagamento(null);
     try {
       const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacaoId}/apagamento`, {
@@ -826,19 +833,31 @@ export function Dossie({ protocolo, token }: DossieProps) {
       });
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        setAvisoApagamento(
+        // O modal continua aberto: a recusa aparece dentro dele, e o motivo já
+        // digitado continua na tela para a Diretoria corrigir e tentar de novo.
+        setErroDoApagamento(
           typeof body.detail === "string"
             ? body.detail
             : "Não foi possível apagar o caso agora. Tente novamente."
         );
         return;
       }
-      setDossie(await res.json());
+      const apagado: Dossie = await res.json();
+      setDossie(apagado);
       setConfirmandoApagamento(false);
-      setAvisoApagamento("Caso apagado. O ato ficou na trilha, com o seu nome e o motivo.");
+      // Quando já havia um pedido em pé (uma tentativa anterior que parou no
+      // meio), o servidor preserva o motivo do PRIMEIRO pedido: o ato que vale
+      // é aquele. A tela diz isso, em vez de deixar quem acabou de escrever
+      // acreditar que o texto dele foi o que ficou gravado.
+      const motivoOutro = Boolean(apagado.apagamento_motivo) && apagado.apagamento_motivo !== motivo;
+      setAvisoApagamento(
+        motivoOutro
+          ? "Caso apagado. Este caso já tinha um pedido de apagamento em aberto, e o que ficou na trilha foi o motivo daquele primeiro pedido."
+          : "Caso apagado. O ato ficou na trilha, com o seu nome e o motivo."
+      );
       carregarMovimentos();
     } catch {
-      setAvisoApagamento("Não foi possível apagar o caso agora. Tente novamente.");
+      setErroDoApagamento("Não foi possível apagar o caso agora. Tente novamente.");
     }
   }
 
@@ -1766,7 +1785,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
           {podeApagar(participante?.perfil_ouvidoria, dossie.status, dossie.anonimizada_em) && (
             <div className="pt-4 border-t border-slate-100">
               <button
-                onClick={() => setConfirmandoApagamento(true)}
+                onClick={() => {
+                setErroDoApagamento(null);
+                setAvisoApagamento(null);
+                setConfirmandoApagamento(true);
+              }}
                 className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-white border border-red-200 text-red-700 hover:bg-red-50 transition-colors"
               >
                 <Lock className="w-3.5 h-3.5" />
@@ -1795,7 +1818,11 @@ export function Dossie({ protocolo, token }: DossieProps) {
               description="O relato, a identificação, os anexos e a resposta da área somem. Ficam o protocolo, a linha do tempo e os números. O motivo abaixo fica gravado no caso e na trilha, com o seu nome."
               confirmLabel="Apagar agora"
               placeholder="Ex.: pedido da paciente, decidido pela Diretoria em reunião"
-              onClose={() => setConfirmandoApagamento(false)}
+              erro={erroDoApagamento}
+              onClose={() => {
+                setErroDoApagamento(null);
+                setConfirmandoApagamento(false);
+              }}
               onConfirm={apagarCaso}
             />
           )}

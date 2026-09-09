@@ -258,10 +258,13 @@ class _TabelaFake:
     aí que se prova a ordem das operações, porque o estado final do banco é o
     mesmo em qualquer ordem."""
 
-    def __init__(self, nome: str, rows: list[dict], dono: _SupabaseFake):
+    def __init__(self, nome: str, rows: list[dict], dono: _SupabaseFake, ao_ler=None):
         self.nome = nome
         self.rows = rows
         self.dono = dono
+        # O que acontece DEPOIS de um select casar e ANTES de a rota voltar a
+        # falar com o banco. É assim que a corrida entra no teste, sem thread.
+        self.ao_ler = ao_ler
         self.request = SimpleNamespace(params=httpx.QueryParams())
         self._filtros: list = []
         self._insert: dict | list | None = None
@@ -374,7 +377,10 @@ class _TabelaFake:
             for r in casadas:
                 self.rows.remove(r)
             return type("R", (), {"data": apagadas, "count": None})()
-        return type("R", (), {"data": [self._projetar(r) for r in casadas], "count": None})()
+        resposta = type("R", (), {"data": [self._projetar(r) for r in casadas], "count": None})()
+        if self.ao_ler is not None and casadas:
+            self.ao_ler(casadas)
+        return resposta
 
 
 class _SupabaseFake:
@@ -383,6 +389,9 @@ class _SupabaseFake:
         # (tabela, operação, payload) de toda escrita proposta, na ordem.
         self.escritas: list[tuple[str, str, dict | None]] = []
         self.quebrar: set[tuple[str, str]] = set()
+        # Quando ligado, roda uma vez depois do primeiro select em
+        # `ouvidoria_protocolos` e some: simula a reabertura concorrente.
+        self.reabre_no_meio_da_leitura = False
         self.tabelas: dict[str, list[dict]] = {
             "ouvidoria_protocolos": casos if casos is not None else [_caso()],
             "ouvidoria_movimentos": filhas.get("movimentos") or [],
@@ -401,7 +410,16 @@ class _SupabaseFake:
                 self.storage.arquivos.add(anexo["storage_path"])
 
     def table(self, nome: str):
-        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self)
+        ao_ler = None
+        if nome == "ouvidoria_protocolos" and self.reabre_no_meio_da_leitura:
+            ao_ler = self._reabrir_agora
+        return _TabelaFake(nome, self.tabelas.setdefault(nome, []), self, ao_ler)
+
+    def _reabrir_agora(self, _casadas: list[dict]) -> None:
+        """O manifestante voltou entre a leitura da rota e o update dela."""
+        self.reabre_no_meio_da_leitura = False
+        for row in self.tabelas["ouvidoria_protocolos"]:
+            row["status"] = "aguardando_area"
 
     def rpc(self, nome: str, params: dict | None = None):
         raise AssertionError(f"Apagar não passa por RPC nenhuma, e esta chegou: {nome}")
@@ -434,7 +452,12 @@ def _caso_com_todos_os_registros(**overrides) -> _SupabaseFake:
     )
 
 
-def _client(monkeypatch, supabase: _SupabaseFake | None = None, participante: dict | None = None):
+def _client(
+    monkeypatch,
+    supabase: _SupabaseFake | None = None,
+    participante: dict | None = None,
+    tolerar_erro_do_servidor: bool = False,
+):
     app = FastAPI()
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -451,6 +474,12 @@ def _client(monkeypatch, supabase: _SupabaseFake | None = None, participante: di
     monkeypatch.setattr(ouvidoria_router, "agora_utc", lambda: INICIO)
     app.dependency_overrides[get_current_user] = lambda: {"id": "u1", "email": "u@hsm.br"}
     app.dependency_overrides[get_supabase_client] = lambda: supabase
+    if tolerar_erro_do_servidor:
+        # Só para o contraste do validador de entrada: a rota de transições
+        # segue para a RPC, que este Supabase falso não serve. O que se quer
+        # provar ali é que o 422 veio do validador, e não da requisição ter
+        # morrido antes de chegar nele, então qualquer OUTRO código serve.
+        return TestClient(app, raise_server_exceptions=False), supabase
     return TestClient(app), supabase
 
 
@@ -728,6 +757,267 @@ class TestOQueSobrevive:
         assert MOTIVO in _movimento_do_apagamento(supabase)["observacao"]
 
 
+class TestCorridaEntreALeituraEOUpdate:
+    """A guarda que o update do pedido repete no próprio filtro (TOCTOU).
+
+    Sem ela, uma reabertura que caísse entre a leitura da rota e a escrita
+    deixaria um caso `aguardando_area` com pedido de apagamento pendente, e o
+    serviço nunca o concluiria: nenhuma linha de código estaria errada."""
+
+    def test_reabertura_no_meio_vira_409_e_nao_grava_pedido(self, monkeypatch):
+        supabase = _caso_com_todos_os_registros()
+        supabase.reabre_no_meio_da_leitura = True
+        client, _ = _client(monkeypatch, supabase)
+
+        r = _apagar(client)
+
+        assert r.status_code == 409, r.text
+        assert supabase.caso()["apagamento_pedido_em"] is None
+        assert supabase.caso()["apagamento_motivo"] is None
+        assert supabase.caso()["arquivada_em"] is None
+        assert supabase.caso()["relato_integral"] == RELATO
+        assert supabase.movimentos() == [_movimento_de_resposta()]
+
+
+class TestOTetoDoMotivo:
+    """O motivo é o texto mais permanente do módulo: fica no caso, que a
+    política preserva, e dentro da observação da trilha, que o trigger torna
+    imutável. Um texto colado por engano ficaria nos dois para sempre."""
+
+    def test_motivo_gigante_recebe_422_e_nao_apaga_nada(self, monkeypatch):
+        supabase = _SupabaseFake()
+        client, _ = _client(monkeypatch, supabase)
+
+        r = _apagar(client, motivo="x" * (ouvidoria_router.MAXIMO_DO_MOTIVO_DO_APAGAMENTO + 1))
+
+        assert r.status_code == 422, r.text
+        assert supabase.caso()["relato_integral"] == RELATO
+        assert supabase.escritas == []
+
+    def test_motivo_no_limite_passa(self, monkeypatch):
+        """O par: sem ele, um teto de zero caractere passaria no teste acima."""
+        client, supabase = _client(monkeypatch, _caso_com_todos_os_registros())
+
+        r = _apagar(client, motivo="x" * ouvidoria_router.MAXIMO_DO_MOTIVO_DO_APAGAMENTO)
+
+        assert r.status_code == 200, r.text
+        assert supabase.caso()["anonimizada_em"]
+
+
+class TestAMarcaNaoSeForja:
+    """A marca do apagamento é vocabulário da trilha, e o ouvidor não pode
+    escrevê-la (achado dos dois revisores no PR #632).
+
+    O estrago que isto impede é triplo: o movimento plantado seria adotado no
+    lugar do movimento real (e o motivo da Diretoria nunca entraria na trilha),
+    ele viraria a exceção da limpeza e sobreviveria à anonimização para sempre,
+    e a tela creditaria o apagamento a quem plantou."""
+
+    FORJADO = f"{ouvidoria_retencao.MARCA_DO_APAGAMENTO}: relato de Joana da Silva, tel 11 99999-0000."
+
+    def _transicionar(self, client, **corpo):
+        return client.post("/api/ouvidoria/manifestacoes/uuid-7/transicoes", json=corpo)
+
+    @pytest.mark.parametrize("campo", ["observacao", "desfecho_descricao"])
+    def test_a_transicao_recusa_texto_que_comeca_com_a_marca(self, monkeypatch, campo):
+        """A porta REAL por onde o texto do ouvidor chega cru ao início da
+        observação do movimento."""
+        supabase = _SupabaseFake(casos=[_caso(status="respondido")])
+        client, _ = _client(monkeypatch, supabase, tolerar_erro_do_servidor=True)
+
+        r = self._transicionar(
+            client,
+            estado="encerrado",
+            desfecho="procedente",
+            **{"desfecho_descricao": "Escala ajustada.", campo: self.FORJADO},
+        )
+
+        assert r.status_code == 422, r.text
+        assert ouvidoria_retencao.MARCA_DO_APAGAMENTO in r.text
+        assert supabase.tabelas["ouvidoria_movimentos"] == []
+
+    def test_o_mesmo_pedido_com_texto_comum_nao_e_recusado_pelo_validador(self, monkeypatch):
+        """O contraste. Sem ele, uma rota quebrada por qualquer outro motivo
+        faria o teste de cima passar sobre nada. O que importa aqui é só que o
+        422 do validador não aconteceu: o resto do caminho da transição tem
+        teste próprio, em outro arquivo."""
+        supabase = _SupabaseFake(casos=[_caso(status="respondido")])
+        client, _ = _client(monkeypatch, supabase, tolerar_erro_do_servidor=True)
+
+        r = self._transicionar(client, estado="encerrado", desfecho="procedente", desfecho_descricao="Escala ajustada.")
+
+        assert r.status_code != 422, r.text
+
+    def test_movimento_plantado_no_banco_nao_e_adotado_como_apagamento(self, monkeypatch):
+        """A segunda camada, e a que vale para movimento que já esteja gravado:
+        a régua exige o par `encerrado` para `encerrado`, que o grafo de
+        transições não permite. O que o ouvidor consegue gravar é um movimento
+        de encerramento (`respondido` para `encerrado`), e é esse que entra
+        aqui com a marca na frente."""
+        plantado = {
+            "id": "mov-plantado",
+            "manifestacao_id": "uuid-7",
+            "ocorrido_em": "2026-09-07T14:00:00+00:00",
+            "estado_anterior": "respondido",
+            "estado_novo": "encerrado",
+            "autor_id": OUVIDOR["id"],
+            "autor_nome": OUVIDOR["nome_completo"],
+            "observacao": self.FORJADO,
+        }
+        supabase = _SupabaseFake(casos=[_caso()], movimentos=[plantado], anexos=[_anexo()])
+        client, _ = _client(monkeypatch, supabase)
+
+        r = _apagar(client)
+
+        assert r.status_code == 200, r.text
+        # O movimento do apagamento é o da Diretoria, e ele foi GRAVADO.
+        movimento = _movimento_do_apagamento(supabase)
+        assert movimento["autor_nome"] == DIRETORIA["nome_completo"]
+        assert MOTIVO in movimento["observacao"]
+        # E o texto plantado morreu na limpeza, como qualquer outro.
+        assert next(m for m in supabase.movimentos() if m["id"] == "mov-plantado")["observacao"] is None
+        assert "Joana" not in _todo_o_texto(supabase)
+
+    def test_a_regua_da_trilha_nao_marca_o_movimento_plantado(self):
+        """O mesmo, do lado da tela: o aviso não pode creditar o apagamento a
+        quem escreveu a marca num movimento de encerramento."""
+        eventos = ouvidoria_trilha.linha_do_tempo(
+            [
+                {
+                    "ocorrido_em": "2026-09-07T14:00:00+00:00",
+                    "estado_anterior": "respondido",
+                    "estado_novo": "encerrado",
+                    "autor_id": OUVIDOR["id"],
+                    "autor_nome": OUVIDOR["nome_completo"],
+                    "observacao": self.FORJADO,
+                }
+            ],
+            frozenset(),
+        )
+
+        assert [e["apagamento"] for e in eventos] == [False]
+
+
+class TestApagamentoPendente:
+    """O pedido gravado e não cumprido não pode ficar esperando um clique.
+
+    A rota grava o pedido antes de chamar o serviço (é o que abre a chave da
+    guarda da trilha). Uma falha no meio deixa o caso arquivado, com o ato na
+    trilha, a fresta aberta e o Dossiê inteiro no lugar. Quem fecha a aba
+    deixaria o dado no banco por tempo indeterminado."""
+
+    def _meio_apagado(self) -> _SupabaseFake:
+        supabase = _caso_com_todos_os_registros()
+        supabase.quebrar.add(("ouvidoria_tentativas_contato", "update"))
+        return supabase
+
+    def test_o_cron_conclui_o_apagamento_que_ficou_pela_metade(self, monkeypatch):
+        supabase = self._meio_apagado()
+        supabase.tabelas["participantes"].append({"id": "P11", "nome_completo": "Dr. Diretor"})
+        client, _ = _client(monkeypatch, supabase)
+
+        assert _apagar(client).status_code == 503
+        assert supabase.caso()["relato_integral"] == RELATO, "o teste começaria vazio sem o estado pendente"
+        supabase.quebrar.clear()
+
+        concluidos = ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, INICIO)
+
+        assert concluidos == 1
+        assert supabase.caso()["relato_integral"] is None
+        assert supabase.caso()["anonimizada_em"]
+        assert "Joana" not in _todo_o_texto(supabase)
+        # E não nasce um segundo movimento: o da tentativa anterior é o mesmo ato.
+        movimento = _movimento_do_apagamento(supabase)
+        assert movimento["autor_nome"] == DIRETORIA["nome_completo"]
+
+    def test_o_cron_assina_com_quem_pediu_quando_o_movimento_ainda_nao_existe(self):
+        """A falha pode ter acontecido antes de o movimento ser gravado. Aí o
+        cron precisa assinar, e assinar de sistema creditaria à máquina um ato
+        da Diretoria."""
+        supabase = _caso_com_todos_os_registros(
+            apagamento_pedido_em=INICIO.isoformat(), apagamento_pedido_por="P11", apagamento_motivo=MOTIVO
+        )
+        supabase.tabelas["participantes"].append({"id": "P11", "nome_completo": "Dr. Diretor"})
+
+        concluidos = ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, INICIO)
+
+        assert concluidos == 1
+        movimento = _movimento_do_apagamento(supabase)
+        assert movimento["autor_nome"] == "Dr. Diretor"
+        assert MOTIVO in movimento["observacao"]
+
+    def test_sem_nome_legivel_o_cron_assina_de_sistema_e_conclui_assim_mesmo(self):
+        """O diretor pode ter saído do hospital. O ato não para por causa do
+        crédito, e o motivo escrito continua no texto."""
+        supabase = _caso_com_todos_os_registros(
+            apagamento_pedido_em=INICIO.isoformat(), apagamento_pedido_por="P11", apagamento_motivo=MOTIVO
+        )
+
+        concluidos = ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, INICIO)
+
+        assert concluidos == 1
+        movimento = _movimento_do_apagamento(supabase)
+        assert movimento["autor_nome"] == ouvidoria_retencao.AUTOR_DA_RETENCAO
+        assert MOTIVO in movimento["observacao"]
+
+    def test_a_fila_dos_pendentes_nao_toca_no_caso_sem_pedido(self):
+        """O par de contraste: sem ele, uma varredura que pegasse todo caso
+        encerrado passaria igual, e apagaria o hospital inteiro."""
+        supabase = _caso_com_todos_os_registros()
+
+        concluidos = ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, INICIO)
+
+        assert concluidos == 0
+        assert supabase.caso()["relato_integral"] == RELATO
+        assert supabase.escritas == []
+
+    def test_a_fila_dos_pendentes_nao_revisita_o_caso_ja_apagado(self):
+        supabase = _caso_com_todos_os_registros(
+            apagamento_pedido_em=INICIO.isoformat(),
+            apagamento_pedido_por="P11",
+            apagamento_motivo=MOTIVO,
+            anonimizada_em="2026-09-08T17:00:01+00:00",
+        )
+
+        concluidos = ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, INICIO)
+
+        assert concluidos == 0
+        assert supabase.escritas == []
+
+    def test_o_job_do_cron_roda_as_duas_varreduras(self, monkeypatch):
+        """A fila dos pendentes só serve se alguém a chamar. E as duas rodam
+        independentes: uma falha na dos cinco anos não pode deixar sem rodar a
+        que tem dado vivo esperando."""
+        from app.cron import scheduler as cron
+
+        chamadas: list[str] = []
+
+        def _explode(_supabase, _agora):
+            chamadas.append("cinco_anos")
+            raise RuntimeError("banco fora do ar")
+
+        def _pendentes(_supabase, _agora):
+            chamadas.append("pendentes")
+            return 1
+
+        monkeypatch.setattr(cron, "_supabase", lambda: _SupabaseFake())
+        monkeypatch.setattr(ouvidoria_retencao, "anonimizar_encerradas_antigas", _explode)
+        monkeypatch.setattr(ouvidoria_retencao, "concluir_apagamentos_pendentes", _pendentes)
+
+        cron.anonimizar_manifestacoes_antigas()
+
+        assert chamadas == ["cinco_anos", "pendentes"]
+
+    def test_o_freio_de_configuracao_tambem_segura_a_fila_dos_pendentes(self, monkeypatch):
+        supabase = _caso_com_todos_os_registros(
+            apagamento_pedido_em=INICIO.isoformat(), apagamento_pedido_por="P11", apagamento_motivo=MOTIVO
+        )
+        monkeypatch.setattr(ouvidoria_retencao.settings, "ouvidoria_retencao_ativa", False)
+
+        assert ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, INICIO) == 0
+        assert supabase.escritas == []
+
+
 class TestOArquivoDeQuemJaEstavaGuardado:
     """O caso apagado entra no Arquivo sozinho, mas o que já estava arquivado
     guarda o registro de quem o guardou."""
@@ -999,6 +1289,17 @@ class TestMigration:
         assert "interval '5 years'" in comandos
         assert "p.apagamento_pedido_em is not null" in comandos
         assert " or " in comandos, "as duas chaves precisam conviver"
+
+    def test_a_fresta_fecha_quando_o_apagamento_termina(self, comandos):
+        """A condição vale para as DUAS chaves, e por isso está FORA do
+        parêntese do OR. Sem ela, o caso apagado seguiria para sempre aceitando
+        zerar a observação de qualquer movimento, inclusive a do próprio
+        apagamento, que é a única prova de quem apagou e por quê."""
+        assert "p.anonimizada_em is null" in comandos
+        guarda = comandos[comandos.index("p.id = old.manifestacao_id") :]
+        assert guarda.index("p.anonimizada_em is null") < guarda.index("("), (
+            "a condição precisa valer para as duas chaves, e não só para uma delas"
+        )
 
     def test_a_guarda_continua_exigindo_caso_encerrado(self, comandos):
         """A segunda chave não afrouxa o resto: o gatilho continua conferindo

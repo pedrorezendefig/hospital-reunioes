@@ -1051,6 +1051,31 @@ class PedidoTransicao(BaseModel):
     desfecho: str | None = None
     desfecho_descricao: str | None = None
 
+    @field_validator("observacao", "desfecho_descricao")
+    @classmethod
+    def _nao_pode_imitar_o_apagamento(cls, valor: str | None) -> str | None:
+        """A marca do apagamento é vocabulário da trilha, não do ouvidor.
+
+        Estes dois campos são os únicos textos do usuário que chegam CRUS ao
+        início da `observacao` de um movimento (o de encerramento cai no
+        `desfecho_descricao` quando não há observação). Uma marca escrita à mão
+        ali fazia o serviço da retenção adotar o movimento do ouvidor: o motivo
+        da Diretoria não entrava na trilha, o texto plantado virava a exceção da
+        limpeza e sobrevivia à anonimização para sempre, e a tela creditava o
+        apagamento a quem plantou.
+
+        A régua do serviço também exige o par `encerrado` para `encerrado`, que
+        o grafo de transições não permite, então esta recusa é a segunda camada.
+        Ela existe porque a primeira depende de nenhuma rota futura gravar
+        aquele par com texto de usuário na frente, e a trilha é imutável: o que
+        entrar errado aqui não sai mais."""
+        if valor is not None and valor.strip().startswith(ouvidoria_retencao.MARCA_DO_APAGAMENTO):
+            raise ValueError(
+                f'O texto do movimento não pode começar com "{ouvidoria_retencao.MARCA_DO_APAGAMENTO}": '
+                "essa marca é reservada ao registro do apagamento do caso."
+            )
+        return valor
+
 
 # O que a pausa precisa saber do caso: o vencimento que ela congela e o
 # acumulado que ela alimenta (issue #335). `anonimizada_em` entra por causa da
@@ -1854,6 +1879,15 @@ async def arquivar_os_encerrados(
 _CAMPOS_DO_PEDIDO_DE_APAGAMENTO = ("apagamento_pedido_em", "apagamento_pedido_por", "apagamento_motivo")
 
 
+# O teto do motivo do apagamento. É o mesmo da resposta da área
+# (`ouvidoria_respostas.MAXIMO_DE_CARACTERES`), e ele existe porque este texto
+# é o mais permanente do módulo: fica em `apagamento_motivo`, que a política
+# preserva de propósito, e dentro da observação do movimento, que o trigger
+# torna imutável. Um texto colado por engano ficaria nos dois lugares para
+# sempre, sem porta de saída nenhuma.
+MAXIMO_DO_MOTIVO_DO_APAGAMENTO = ouvidoria_respostas.MAXIMO_DE_CARACTERES
+
+
 class PedidoDeApagamento(BaseModel):
     """O que a Diretoria manda para apagar um caso. O motivo é obrigatório e é
     a metade do ato que fica legível: o relato some, e é ele, ao lado do
@@ -1867,6 +1901,11 @@ class PedidoDeApagamento(BaseModel):
         valor = sanitizar_travessao(valor).strip()
         if not valor:
             raise ValueError("Apagar exige o motivo escrito")
+        if len(valor) > MAXIMO_DO_MOTIVO_DO_APAGAMENTO:
+            raise ValueError(
+                f"O motivo do apagamento passa de {MAXIMO_DO_MOTIVO_DO_APAGAMENTO} caracteres. "
+                "Ele fica gravado no caso e na trilha para sempre: escreva a decisão, não o histórico."
+            )
         return valor
 
 
@@ -1931,9 +1970,18 @@ async def apagar_manifestacao(
     # primeira começou, e não o reescreve com outro motivo e outra data.
     pedido_em = caso.get("apagamento_pedido_em")
     if pedido_em is None:
-        pedido_em = agora.isoformat()
-        _gravar_o_pedido_de_apagamento(
-            supabase, manifestacao_id, me, pedido_em, pedido.motivo, ja_arquivado=bool(caso.get("arquivada_em"))
+        # A chave que o serviço vai usar é a que o BANCO devolveu, e não o
+        # `isoformat()` daqui: as duas representam o mesmo instante, mas a
+        # comparação acontece no filtro do PostgREST, e uma diferença de
+        # formatação faria cada passo destrutivo ser recusado em silêncio, com
+        # a rota devolvendo 503 para sempre.
+        pedido_em = _gravar_o_pedido_de_apagamento(
+            supabase,
+            manifestacao_id,
+            me,
+            agora.isoformat(),
+            pedido.motivo,
+            ja_arquivado=bool(caso.get("arquivada_em")),
         )
 
     apagou = ouvidoria_retencao.apagar_caso(
@@ -1961,7 +2009,7 @@ async def apagar_manifestacao(
 
 def _gravar_o_pedido_de_apagamento(
     supabase, manifestacao_id: str, me: dict, pedido_em: str, motivo: str, ja_arquivado: bool
-) -> None:
+) -> str:
     """Grava os três campos do pedido e, se preciso, manda o caso para o
     Arquivo, no mesmo update.
 
@@ -1979,7 +2027,12 @@ def _gravar_o_pedido_de_apagamento(
     de conferir na leitura, e é isso que fecha a janela entre as duas (TOCTOU):
     uma reabertura que caísse no meio faria o filtro não casar linha nenhuma, e
     o caso volta como 409 em vez de nascer com um pedido de apagamento pendente
-    que o serviço nunca vai concluir."""
+    que o serviço nunca vai concluir.
+
+    Devolve o `apagamento_pedido_em` COMO O BANCO O GRAVOU. É esse valor que
+    vira a chave da política no serviço, e não o que esta função mandou
+    escrever: quem compara é o filtro do PostgREST, e duas grafias do mesmo
+    instante não casam lá."""
     carimbos = {
         "apagamento_pedido_em": pedido_em,
         "apagamento_pedido_por": me["id"],
@@ -1997,8 +2050,14 @@ def _gravar_o_pedido_de_apagamento(
             .is_("anonimizada_em", "null")
             .execute()
         )
-    except APIError as exc:
-        logger.error("Falha ao gravar o pedido de apagamento do caso %s (código %s)", manifestacao_id, exc.code)
+    except (APIError, HTTPError) as exc:
+        # `HTTPError` junto porque o timeout do PostgREST não vira `APIError`:
+        # ele sobe cru e transformaria esta recusa amiga num 500 com stack.
+        logger.error(
+            "Falha ao gravar o pedido de apagamento do caso %s (%s)",
+            manifestacao_id,
+            getattr(exc, "code", exc.__class__.__name__),
+        )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Não foi possível gravar agora. Tente de novo em instantes.",
@@ -2008,6 +2067,7 @@ def _gravar_o_pedido_de_apagamento(
             status_code=status.HTTP_409_CONFLICT,
             detail="O caso mudou de estado agora mesmo: recarregue o painel antes de apagar.",
         )
+    return gravado.data[0].get("apagamento_pedido_em") or pedido_em
 
 
 # =====================================================================

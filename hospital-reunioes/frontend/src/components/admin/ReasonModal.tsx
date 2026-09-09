@@ -16,6 +16,14 @@ interface Props {
    * sugere um motivo que nao tem nada a ver com o ato que esta sendo pedido.
    */
   placeholder?: string;
+  /**
+   * A recusa que o servidor devolveu, mostrada DENTRO do modal.
+   *
+   * Existe porque este modal sobe por portal, com backdrop: um aviso escrito na
+   * pagina fica embaixo dele, e quem confirmou nao ve mensagem nenhuma quando a
+   * chamada falha. Opcional, e quem nao passa nada continua como antes.
+   */
+  erro?: string | null;
   onClose: () => void;
   onConfirm: (reason: string) => Promise<boolean | void>;
 }
@@ -32,6 +40,7 @@ export function ReasonModal({
   confirmLabel,
   confirmVariant = "danger",
   placeholder = "Ex: usuário desligado, erro de cadastro…",
+  erro = null,
   onClose,
   onConfirm,
 }: Props) {
@@ -103,6 +112,11 @@ export function ReasonModal({
       }
     >
       <form id={formId} onSubmit={handleSubmit}>
+        {erro && (
+          <p role="alert" className="mb-3 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-sm text-red-700">
+            {erro}
+          </p>
+        )}
         <label className="flex flex-col gap-1.5">
           <span className="text-xs font-medium text-slate-500 uppercase">
             Motivo <span className="text-red-500">*</span>

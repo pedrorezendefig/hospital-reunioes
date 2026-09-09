@@ -134,13 +134,40 @@ def observacao_do_apagamento(motivo: str | None) -> str:
     return f"{MARCA_DO_APAGAMENTO}{_SEPARADOR}pedido pela Diretoria Executiva. {_O_QUE_SAI} Motivo: {motivo}"
 
 
-def e_movimento_de_apagamento(observacao: str | None) -> bool:
+def e_movimento_de_apagamento(movimento: dict) -> bool:
     """O movimento é o do apagamento do caso?
 
-    A resposta sai da marca, e não do autor nem do par de estados: a Diretoria
-    assina com nome de pessoa, e o par `encerrado` para `encerrado` também serve
-    a atos de job que não apagaram nada."""
-    return str(observacao or "").startswith(MARCA_DO_APAGAMENTO)
+    São DUAS condições, e nenhuma delas basta sozinha:
+
+    1. o par de estados é `encerrado` para `encerrado`;
+    2. a observação começa pela marca.
+
+    A marca sozinha não serve, e essa foi a lição da primeira versão desta
+    fatia: a `observacao` da transição é texto livre do ouvidor, gravado cru
+    (`POST /manifestacoes/{id}/transicoes`), então uma marca escrita à mão
+    fazia o serviço adotar o movimento do usuário. O estrago era triplo: o
+    motivo da Diretoria nunca entrava na trilha, o texto plantado virava o
+    `exceto` da limpeza e sobrevivia à anonimização para sempre, e a tela
+    creditava o apagamento a quem plantou.
+
+    O par de estados é o que o cliente não alcança: `encerrado` para
+    `encerrado` não existe no grafo de transições (de `encerrado` só se sai
+    pela reabertura, para `aguardando_area`), então nenhuma rota de usuário
+    grava esse par. As portas que gravam par igual em caso encerrado (a
+    classificação) escrevem observação que começa com texto do SERVIDOR, e o
+    texto do ouvidor entra depois.
+
+    O autor não entra na régua, e é de propósito: o cron assina com o autor de
+    sistema e a Diretoria com nome de pessoa, e é justamente por isso que a
+    régua por `autor_nome` deixou de servir (aviso da issue #593).
+
+    A porta da transição também recusa, na ENTRADA, observação que comece pela
+    marca (`PedidoTransicao`): duas camadas, porque esta aqui depende de
+    nenhuma rota futura gravar o par de estados com texto de usuário na frente.
+    """
+    if movimento.get("estado_anterior") != ENCERRADO or movimento.get("estado_novo") != ENCERRADO:
+        return False
+    return str(movimento.get("observacao") or "").startswith(MARCA_DO_APAGAMENTO)
 
 
 @dataclasses.dataclass(frozen=True)
@@ -305,6 +332,9 @@ CAMPOS_ESTATISTICOS: tuple[str, ...] = (
 # O que o job precisa do caso para decidir e anonimizar.
 _CAMPOS_DA_RETENCAO = "id, status, encerrada_em, anonimizada_em"
 
+# O mesmo, mais o pedido, para a fila dos apagamentos que ficaram pela metade.
+_CAMPOS_DO_PEDIDO_PENDENTE = f"{_CAMPOS_DA_RETENCAO}, apagamento_pedido_em, apagamento_pedido_por, apagamento_motivo"
+
 
 def data_de_corte(agora: dt.datetime) -> dt.datetime:
     """O instante a partir do qual o encerramento ainda está dentro da retenção.
@@ -354,6 +384,88 @@ def anonimizar_encerradas_antigas(supabase, agora: dt.datetime) -> int:
     return anonimizadas
 
 
+def concluir_apagamentos_pendentes(supabase, agora: dt.datetime) -> int:
+    """Termina o apagamento que a Diretoria pediu e que ficou pela metade.
+
+    A rota grava o pedido ANTES de chamar o serviço, porque é o
+    `apagamento_pedido_em` no banco que abre a segunda chave da guarda da
+    trilha. Se um passo destrutivo falhar depois disso, o caso fica no pior
+    estado possível: o pedido registrado, o movimento na trilha dizendo que a
+    anonimização começou, a fresta de UPDATE aberta, e o Dossiê inteiro no
+    lugar. Até esta rodada, o único jeito de sair dali era a mesma pessoa
+    clicar de novo: quem fechasse a aba deixava o dado no banco por tempo
+    indeterminado, com o ato já registrado na trilha (achado da revisão de
+    segurança do PR #632).
+
+    A varredura dos cinco anos não alcança esses casos, e não deve mesmo: eles
+    não têm prazo nenhum a cumprir, foram pedidos hoje. Por isso a fila é
+    própria, e a régua dela é exatamente o estado meio apagado: pedido gravado
+    e carimbo ausente.
+
+    Quem assina o movimento é quem pediu, e o nome vem do participante: assinar
+    de sistema creditaria à máquina um ato da Diretoria. Sem nome legível (o
+    diretor saiu do hospital, ou a leitura falhou), o autor de sistema entra
+    como último recurso, e o motivo escrito continua no texto de qualquer
+    jeito. Na prática o movimento quase sempre já existe e é reaproveitado: o
+    autor só é usado quando a falha aconteceu antes de gravá-lo.
+
+    Devolve quantos casos foram concluídos nesta rodada."""
+    if not settings.ouvidoria_retencao_ativa:
+        return 0
+
+    try:
+        result = (
+            supabase.table("ouvidoria_protocolos")
+            .select(_CAMPOS_DO_PEDIDO_PENDENTE)
+            .eq("status", ENCERRADO)
+            .is_("anonimizada_em", "null")
+            .not_.is_("apagamento_pedido_em", "null")
+            .order("apagamento_pedido_em")
+            .limit(LOTE_POR_RODADA)
+            .execute()
+        )
+    except Exception:
+        logger.error("[Ouvidoria] Falha ao ler os apagamentos pendentes")
+        return 0
+
+    concluidos = 0
+    for caso in result.data or []:
+        apagamento = pela_diretoria(
+            autor=_quem_pediu(supabase, caso),
+            autor_id=caso.get("apagamento_pedido_por"),
+            motivo=caso.get("apagamento_motivo") or "",
+            pedido_em=caso["apagamento_pedido_em"],
+        )
+        if apagar_caso(supabase, caso, agora, apagamento):
+            concluidos += 1
+        else:
+            logger.error(
+                "[Ouvidoria] Apagamento pedido em %s para o caso %s continua pendente",
+                caso["apagamento_pedido_em"],
+                caso["id"],
+            )
+    return concluidos
+
+
+def _quem_pediu(supabase, caso: dict) -> str:
+    """O nome de quem pediu o apagamento, para o movimento da trilha.
+
+    Falha de leitura e participante sem nome caem no autor de sistema: o ato
+    não pode parar por causa do crédito, e o motivo escrito pela Diretoria
+    continua na observação nos dois casos."""
+    pedido_por = caso.get("apagamento_pedido_por")
+    if not pedido_por:
+        return AUTOR_DA_RETENCAO
+    try:
+        quem = supabase.table("participantes").select("nome_completo").eq("id", pedido_por).execute()
+    except Exception:
+        logger.error("[Ouvidoria] Falha ao ler quem pediu o apagamento do caso %s", caso.get("id"))
+        return AUTOR_DA_RETENCAO
+    if not quem.data:
+        return AUTOR_DA_RETENCAO
+    return quem.data[0].get("nome_completo") or AUTOR_DA_RETENCAO
+
+
 def apagar_caso(supabase, caso: dict, agora: dt.datetime, apagamento: Apagamento) -> bool:
     """Anonimiza um caso inteiro, na ordem que sobrevive a uma falha no meio.
 
@@ -397,7 +509,7 @@ def apagar_caso(supabase, caso: dict, agora: dt.datetime, apagamento: Apagamento
         return False
     if not _apagar_anexos(supabase, caso["id"], apagamento):
         return False
-    return _apagar_dossie(supabase, caso["id"], agora)
+    return _apagar_dossie(supabase, caso["id"], agora, apagamento)
 
 
 def _garantir_movimento(supabase, manifestacao_id: str, apagamento: Apagamento) -> str | None:
@@ -406,8 +518,13 @@ def _garantir_movimento(supabase, manifestacao_id: str, apagamento: Apagamento) 
 
     Não é transição de estado (o caso segue encerrado), então o insert é
     direto, no molde do movimento de prazo rompido. A idempotência não vem do
-    carimbo da manifestação (que ainda não existe neste ponto) e sim da MARCA
-    da observação: um movimento de apagamento já gravado é reaproveitado.
+    carimbo da manifestação (que ainda não existe neste ponto) e sim do par de
+    estados mais a MARCA da observação: um movimento de apagamento já gravado é
+    reaproveitado. Quem decide o que conta é `e_movimento_de_apagamento`, a
+    mesma função que a linha do tempo usa, e o par de estados vai como filtro
+    no banco: ele recorta a leitura para os poucos movimentos que podem ser o
+    ato, em vez de trazer a observação da trilha inteira (que é justo onde o
+    relato e a resposta da área moram) para a memória do backend.
 
     A marca substituiu a assinatura desde a issue #595. Reconhecer o movimento
     pelo `autor_nome` funcionava enquanto só o cron apagava; com a Diretoria
@@ -425,15 +542,17 @@ def _garantir_movimento(supabase, manifestacao_id: str, apagamento: Apagamento) 
     try:
         existentes = (
             supabase.table("ouvidoria_movimentos")
-            .select("id, observacao")
+            .select("id, estado_anterior, estado_novo, observacao")
             .eq("manifestacao_id", manifestacao_id)
+            .eq("estado_anterior", ENCERRADO)
+            .eq("estado_novo", ENCERRADO)
             .execute()
         )
     except Exception:
         logger.error("[Ouvidoria] Falha ao conferir o movimento de anonimização do caso %s", manifestacao_id)
         return None
     for movimento in existentes.data or []:
-        if e_movimento_de_apagamento(movimento.get("observacao")):
+        if e_movimento_de_apagamento(movimento):
             return str(movimento["id"])
 
     try:
@@ -496,6 +615,17 @@ def _limpar_observacoes_da_trilha(supabase, manifestacao_id: str, exceto: str) -
     return True
 
 
+def _pela_chave(consulta, apagamento: Apagamento):
+    """Acrescenta à consulta a chave da política que cobre este apagamento.
+
+    Um lugar só, porque são dois os pontos que precisam dizer a mesma coisa: a
+    reconferência antes de cada passo destrutivo e o update que apaga o Dossiê.
+    Escrita duas vezes, a régua diverge no dia em que uma das duas mudar."""
+    if apagamento.pedido_em is not None:
+        return consulta.eq("apagamento_pedido_em", apagamento.pedido_em)
+    return consulta.lte("encerrada_em", apagamento.corte.isoformat())
+
+
 def _caso_ainda_anonimizavel(supabase, manifestacao_id: str, apagamento: Apagamento) -> bool:
     """Confere na linha do caso que a política de retenção ainda o cobre:
     encerrado, sem carimbo, e alcançado pela chave daquele apagamento (o corte
@@ -524,17 +654,14 @@ def _caso_ainda_anonimizavel(supabase, manifestacao_id: str, apagamento: Apagame
     pedido foi reescrito no meio da rodada.
 
     Falha ao ler também é não: sem confirmação, nada é destruído."""
-    consulta = (
+    consulta = _pela_chave(
         supabase.table("ouvidoria_protocolos")
         .select("id")
         .eq("id", manifestacao_id)
         .eq("status", ENCERRADO)
-        .is_("anonimizada_em", "null")
+        .is_("anonimizada_em", "null"),
+        apagamento,
     )
-    if apagamento.pedido_em is not None:
-        consulta = consulta.eq("apagamento_pedido_em", apagamento.pedido_em)
-    else:
-        consulta = consulta.lte("encerrada_em", apagamento.corte.isoformat())
     try:
         atual = consulta.execute()
     except Exception:
@@ -720,21 +847,29 @@ def _apagar_anexos(supabase, manifestacao_id: str, apagamento: Apagamento) -> bo
     return True
 
 
-def _apagar_dossie(supabase, manifestacao_id: str, agora: dt.datetime) -> bool:
+def _apagar_dossie(supabase, manifestacao_id: str, agora: dt.datetime, apagamento: Apagamento) -> bool:
     """Zera o Dossiê da manifestação e carimba a anonimização no mesmo update.
 
-    O update é condicional (`status = 'encerrado'` e `anonimizada_em IS NULL`):
-    a segunda rodada do job, uma rodada concorrente, ou um caso que reabriu
-    entre a varredura e a gravação não acham o que anonimizar."""
+    O update é condicional, e a condição é a política inteira (`status`,
+    `anonimizada_em` nulo e a chave que cobre este apagamento): a segunda
+    rodada do job, uma rodada concorrente, ou um caso que reabriu entre a
+    varredura e a gravação não acham o que anonimizar.
+
+    A chave entra aqui pelo mesmo motivo que entra na reconferência dos passos
+    anteriores: este é o passo que de fato destrói, e era o único ponto da
+    varredura em que o serviço dizia menos do que a guarda do banco (achado da
+    revisão de segurança do PR #632)."""
     try:
         result = (
-            supabase.table("ouvidoria_protocolos")
-            .update(dict(CAMPOS_DO_DOSSIE) | {"resumo": MARCADOR_ANONIMIZADO, "anonimizada_em": agora.isoformat()})
-            .eq("id", manifestacao_id)
-            .eq("status", ENCERRADO)
-            .is_("anonimizada_em", "null")
-            .execute()
-        )
+            _pela_chave(
+                supabase.table("ouvidoria_protocolos")
+                .update(dict(CAMPOS_DO_DOSSIE) | {"resumo": MARCADOR_ANONIMIZADO, "anonimizada_em": agora.isoformat()})
+                .eq("id", manifestacao_id)
+                .eq("status", ENCERRADO)
+                .is_("anonimizada_em", "null"),
+                apagamento,
+            )
+        ).execute()
     except Exception:
         logger.error("[Ouvidoria] Falha ao apagar o Dossiê do caso %s", manifestacao_id)
         return False

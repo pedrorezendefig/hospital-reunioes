@@ -216,23 +216,43 @@ def escalonar_prazos_ouvidoria() -> None:
 
 
 def anonimizar_manifestacoes_antigas() -> None:
-    """Aplica a retenção de cinco anos da Ouvidoria (issue #343).
+    """Aplica a política de retenção da Ouvidoria, pelas duas portas.
 
-    Manifestação encerrada há mais de cinco anos perde o Dossiê (relato,
-    identificação de quem manifestou, anexos) e mantém o que os relatórios
-    contam. Na prática o job nasce dormindo, porque nenhum caso tem cinco anos
-    ainda, mas a política existe desde o primeiro dia. Idempotente: o carimbo
-    `anonimizada_em` impede o segundo passe."""
+    A dos cinco anos (issue #343): manifestação encerrada há mais de cinco anos
+    perde o Dossiê (relato, identificação de quem manifestou, anexos) e mantém o
+    que os relatórios contam. Na prática essa parte nasce dormindo, porque
+    nenhum caso tem cinco anos ainda, mas a política existe desde o primeiro
+    dia.
+
+    E a antecipada (issue #595, ADR 0047): o apagamento que a Diretoria pediu e
+    que ficou pela metade, com o pedido gravado e o Dossiê ainda em pé. Sem esta
+    segunda varredura, sair dali dependeria de a mesma pessoa clicar de novo, e
+    o dado ficaria no banco por tempo indeterminado com o ato já registrado na
+    trilha.
+
+    As duas rodam na mesma passagem e são independentes: uma falha na primeira
+    não pode deixar a segunda sem rodar, porque é a segunda que tem dado vivo
+    esperando. Ambas são idempotentes, e o carimbo `anonimizada_em` impede o
+    segundo passe."""
     from app.services import ouvidoria_retencao
 
     supabase = _supabase()
+    agora = datetime.now(tz=ZoneInfo("UTC"))
     try:
-        anonimizadas = ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, datetime.now(tz=ZoneInfo("UTC")))
+        anonimizadas = ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, agora)
     except Exception as e:
         logger.error(f"[Cron] Erro em anonimizar_manifestacoes_antigas: {e}", exc_info=True)
-        return
+        anonimizadas = 0
     if anonimizadas:
         logger.info(f"[Cron] {anonimizadas} manifestação(ões) da Ouvidoria anonimizada(s) por retenção.")
+
+    try:
+        concluidos = ouvidoria_retencao.concluir_apagamentos_pendentes(supabase, agora)
+    except Exception as e:
+        logger.error(f"[Cron] Erro ao concluir apagamentos pendentes da Ouvidoria: {e}", exc_info=True)
+        return
+    if concluidos:
+        logger.info(f"[Cron] {concluidos} apagamento(s) pendente(s) da Ouvidoria concluído(s).")
 
 
 def _registrar_entrega(competencia: str, entrega, rotulo: str = "Relatório quinzenal") -> None:

@@ -18,7 +18,7 @@
  * página usa para saber quem está logado.
  */
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TITULO_DO_CASO_APAGADO } from "@/lib/ouvidoria/apagamento";
@@ -279,6 +279,41 @@ describe("a confirmação com motivo obrigatório (issue #595)", () => {
     expect(screen.queryByRole("button", BOTAO_APAGAR)).toBeNull();
   });
 
+  it("a recusa do servidor aparece DENTRO do modal, e não embaixo dele", async () => {
+    // O modal sobe por portal, com backdrop por cima da página inteira: um
+    // aviso escrito na página fica embaixo dele e ninguém lê. Procurar a frase
+    // no documento não pega isso, porque o nó existe de qualquer jeito. Por
+    // isso a busca é feita DENTRO do diálogo, que é o que está por cima.
+    const recusa = "Só um caso encerrado pode ser apagado.";
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.endsWith("/apagamento")) {
+          return { ok: false, status: 409, json: async () => ({ detail: recusa }) } as Response;
+        }
+        if (url.endsWith("/anexos")) return respostaJson({ anexos: [] });
+        if (url.endsWith("/notificacoes")) return respostaJson({ notificacoes: [] });
+        if (url.endsWith("/prorrogacoes")) return respostaJson({ prorrogacoes: [] });
+        if (url.endsWith("/respostas")) return respostaJson({ respostas: [] });
+        if (url.endsWith("/tentativas-contato")) return respostaJson({ tentativas: [] });
+        if (url.endsWith("/movimentos")) return respostaJson({ movimentos: [], degradado: [] });
+        return respostaJson(dossie());
+      })
+    );
+    render(<Dossie protocolo="2026-0012" token="token-de-teste" />);
+    await abrirAConfirmacao();
+
+    fireEvent.change(screen.getByRole("textbox", { name: /Motivo/ }), { target: { value: MOTIVO } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Apagar agora/ }));
+    });
+
+    const modal = await screen.findByRole("dialog");
+    expect(within(modal).getByText(recusa)).toBeTruthy();
+    // E o motivo já digitado continua ali para corrigir e tentar de novo.
+    expect((screen.getByRole("textbox", { name: /Motivo/ }) as HTMLTextAreaElement).value).toBe(MOTIVO);
+  });
+
   it("a recusa do servidor chega à tela com a frase que ele mandou", async () => {
     const recusa = "Só um caso encerrado pode ser apagado.";
     vi.stubGlobal(
@@ -305,6 +340,41 @@ describe("a confirmação com motivo obrigatório (issue #595)", () => {
     });
 
     expect(await screen.findByText(recusa)).toBeTruthy();
+  });
+
+  it("quando vale o motivo de um pedido anterior, a tela diz isso", async () => {
+    // O servidor preserva o motivo do primeiro pedido. Sem este aviso, quem
+    // acabou de escrever um motivo novo sairia acreditando que foi o dele que
+    // ficou gravado no caso e na trilha.
+    montar(dossie(), {
+      depoisDeApagar: apagado(),
+      trilha: { movimentos: [movimentoDoApagamento("Dr. Diretor")], degradado: [] },
+    });
+    await abrirAConfirmacao();
+
+    fireEvent.change(screen.getByRole("textbox", { name: /Motivo/ }), {
+      target: { value: "Motivo digitado agora, na segunda tentativa." },
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Apagar agora/ }));
+    });
+
+    expect(await screen.findByText(/pedido de apagamento em aberto/)).toBeTruthy();
+  });
+
+  it("com o motivo aceito, a tela não fala de pedido anterior nenhum", async () => {
+    // O par de contraste: sem ele, um aviso que falasse sempre em pedido
+    // anterior passaria no teste acima.
+    montar(dossie(), { trilha: { movimentos: [movimentoDoApagamento("Dr. Diretor")], degradado: [] } });
+    await abrirAConfirmacao();
+
+    fireEvent.change(screen.getByRole("textbox", { name: /Motivo/ }), { target: { value: MOTIVO } });
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Apagar agora/ }));
+    });
+
+    expect(await screen.findByText(/Caso apagado\. O ato ficou na trilha/)).toBeTruthy();
+    expect(screen.queryByText(/pedido de apagamento em aberto/)).toBeNull();
   });
 
   it("a tela adota o caso que a rota devolve, sem recarregar nada", async () => {

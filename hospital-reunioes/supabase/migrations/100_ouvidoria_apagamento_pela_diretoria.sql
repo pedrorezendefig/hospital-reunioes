@@ -59,7 +59,16 @@ COMMENT ON COLUMN ouvidoria_protocolos.apagamento_motivo IS
 --      - so em manifestacao ENCERRADA e com o marco `encerrada_em`. A chave
 --        nova nao afrouxa isso: ela troca "faz cinco anos" por "a Diretoria
 --        pediu", e nada mais. Um caso em tramitacao nao passa por nenhuma das
---        duas, entao contornar a API continua nao contornando a politica.
+--        duas, entao contornar a API continua nao contornando a politica;
+--      - e so ENQUANTO o apagamento nao terminou (`anonimizada_em IS NULL`).
+--        Esta condicao e nova, e vale para as DUAS chaves. Sem ela a fresta
+--        ficava aberta para sempre depois do ato: o caso apagado seguiria
+--        aceitando `UPDATE ... SET observacao = NULL` em qualquer movimento,
+--        inclusive no movimento do proprio apagamento, que e a unica prova de
+--        quem apagou e por que. Nao custa nada as duas portas, porque em
+--        `apagar_caso` a limpeza da trilha roda sempre ANTES do carimbo, e
+--        caso ja carimbado nunca volta ao servico (achado da revisao de
+--        seguranca do PR #632).
 --    DELETE continua barrado sem excecao nenhuma, e por isso esta migration
 --    nao toca em gatilho nenhum: ela substitui apenas o CORPO da funcao que o
 --    gatilho de UPDATE ja chama desde a 079. O gatilho de DELETE de
@@ -91,6 +100,7 @@ BEGIN
      WHERE p.id = OLD.manifestacao_id
        AND p.status = 'encerrado'
        AND p.encerrada_em IS NOT NULL
+       AND p.anonimizada_em IS NULL
        AND (
             p.encerrada_em <= now() - interval '5 years'
          OR p.apagamento_pedido_em IS NOT NULL
@@ -105,4 +115,4 @@ END;
 $$ LANGUAGE plpgsql;
 
 COMMENT ON FUNCTION ouvidoria_movimento_anonimizavel() IS
-  'Guarda de UPDATE da trilha: recusa tudo, menos zerar a coluna observacao de manifestacao encerrada que a politica de retencao alcanca, por uma das duas chaves: cinco anos desde o encerramento (issue #343) ou pedido de apagamento gravado pela Diretoria Executiva (issue #595, ADR 0047). O fato registrado continua imutavel; o que sai e o conteudo do relato. DELETE segue barrado sem excecao.';
+  'Guarda de UPDATE da trilha: recusa tudo, menos zerar a coluna observacao de manifestacao encerrada que a politica de retencao alcanca AINDA NAO ANONIMIZADA, por uma das duas chaves: cinco anos desde o encerramento (issue #343) ou pedido de apagamento gravado pela Diretoria Executiva (issue #595, ADR 0047). Terminado o ato (`anonimizada_em` carimbado), a fresta fecha e nem o movimento do apagamento pode ser zerado. O fato registrado continua imutavel; o que sai e o conteudo do relato. DELETE segue barrado sem excecao.';
