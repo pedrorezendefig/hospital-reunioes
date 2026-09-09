@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-09T00:12:00-03:00",
+  "updated_at": "2026-09-09T01:55:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.116.1",
+  "last_app_version": "0.117.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "6e135f2",
-      "last_deploy_at": "2026-09-09T00:08:29-03:00",
+      "last_deploy_sha": "ffa51d1",
+      "last_deploy_at": "2026-09-09T01:52:14-03:00",
       "last_health_check": {
-        "at": "2026-09-09T00:11:40-03:00",
-        "latency_ms": 168,
+        "at": "2026-09-09T01:54:10-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 178,
+      "build_duration_seconds": null,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "6e135f2",
-      "last_deploy_at": "2026-09-09T00:10:14-03:00",
+      "last_deploy_sha": "ffa51d1",
+      "last_deploy_at": "2026-09-09T01:51:29-03:00",
       "last_health_check": {
-        "at": "2026-09-09T00:10:48-03:00",
-        "latency_ms": 231,
+        "at": "2026-09-09T01:54:10-03:00",
+        "latency_ms": null,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 283,
+      "build_duration_seconds": null,
       "env_count": 5
     },
     {
@@ -152,42 +152,58 @@
     }
   ],
   "migrations": {
-    "total_applied": 91,
-    "last_applied": "101_ouvidoria_lote_do_arquivo_atomico.sql",
+    "total_applied": 92,
+    "last_applied": "102_tecnologia_fundacao.sql",
     "pending_local": [],
-    "nota": "A 101_ouvidoria_lote_do_arquivo_atomico.sql (issue #627, PRD #591, ADR 0047, v0.116.1) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #635. Diferente da 100, aqui a ausencia da migration DEGRADA em vez de derrubar: so o botao de arquivar em lote responde 503 (o PostgREST devolve PGRST202 e a rota traduz), e o resto do modulo segue de pe, sem estado parcial possivel. Ela cria a funcao ouvidoria_arquivar_encerrados(VARCHAR, TEXT), que carimba arquivada_em e arquivada_por de todo caso encerrado ainda sem arquivo e grava o log de acesso de cada um na MESMA transacao. Sem bloco EXCEPTION de proposito: falha no log desfaz o arquivamento, porque lote arquivado sem rastro e o que a funcao existe para impedir. O recorte vive dentro do proprio UPDATE, e nao numa leitura anterior, e e isso que faz a segunda rodada devolver zero e impede a reescrita de uma leva antiga. Sem indice, por decisao do dono. SECURITY INVOKER, o padrao da casa, o que EMENDA a triagem da issue: ela pedia SECURITY DEFINER, e a decisao mudou no checkpoint com as duas reviews de acordo, porque quem chama e o backend com service_role, que ja passa por cima do RLS, entao DEFINER nao habilitaria nada e apenas tiraria uma camada (aplicada pelo Studio a funcao nasceria com owner postgres e o REVOKE viraria a unica coisa entre a anon_key do bundle e um UPDATE em massa). REVOKE de PUBLIC, anon e authenticated, GRANT so a service_role, no padrao das 095 e 097. As migrations 100 e anteriores continuam valendo com as notas ja registradas."
+    "nota": "A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
   },
   "gates": [
     {
-      "name": "Onda 3 desta sessao: issue #627 (fatia M, PRD #591), sozinha, com --paralelo 1",
+      "name": "Onda 1 desta sessao: issue #636 (fatia M, PRD #634), sozinha, primeira da corrente de bloqueio nativa #636 > #637 > #638 > (#639, #640, #641, #642)",
       "status": "ok"
     },
     {
-      "name": "Revisor independente (ADR 0035), 2 lentes em agentes separados. Rodada 1: 2 must-fix, ambos girando na mesma linha do SQL. Uma rodada de correcao e uma verificacao focada, que voltou LIMPA nos 5 pontos",
+      "name": "Dominio conferido em origin/main ANTES de disparar o sub-agente: ADR 0050 presente e CONTEXT.md com a secao Tecnologia. Sem isso o sub-agente nao teria como desenvolver",
       "status": "ok"
     },
     {
-      "name": "A cláusula de seguranca da RPC era a UNICA linha do SQL sem guarda de teste: trocar SECURITY INVOKER por DEFINER deixava os 127 testes verdes. Agora o mutante mata 2 testes, e o verificador provou qual assercao trabalha enfraquecendo-a de proposito",
+      "name": "Gate 1.5 (spec x diff) pegou o unico defeito de estado inicial: o seed nasce com sete Produtos ativos e sem dono, e a guarda do PATCH olhava so o estado final, entao renomear qualquer um deles devolvia 422 na primeira abertura do sistema",
       "status": "ok"
     },
     {
-      "name": "O corpo do PR CONVIDAVA o humano a trocar a clausula na hora de colar no Studio. Achado do revisor de seguranca. Isso quebraria a prova por hash do proprio corpo, deixaria o SET search_path so em prosa, e faria a funcao nascer com owner postgres. O convite saiu e virou um bloco que manda colar exatamente como esta, com as tres razoes",
+      "name": "Revisor independente (ADR 0035), duas lentes em agentes separados e em paralelo. Seguranca: zero must-fix em sete itens com evidencia. Codigo: um must-fix e cinco nits",
+      "status": "ok"
+    },
+    {
+      "name": "O must-fix era front e silencioso: fetch sem catch fazia falha de rede virar lista de Produtos vazia e sem aviso, indistinguivel de banco sem dado, bem no criterio 'a tela lista os sete Produtos na primeira abertura'",
+      "status": "ok"
+    },
+    {
+      "name": "Dois nits viraram correcao por decisao do orquestrador: dono_id vazio gravava string vazia e violava a FK com 500; e a matriz do gate era lista de rotas cravada a mao, que deixaria rota sem require_super_admin passar nas fatias #637 a #642. Virou varredura de app.openapi()['paths'] com piso, e nao app.routes, por causa da divergencia uv.lock 0.136 contra CI 0.141",
+      "status": "ok"
+    },
+    {
+      "name": "Rodada 2 de revisao, focada no commit de correcao: zero must-fix. Provou que a restauracao do cache do OpenAPI num finally esta correta e que o detector de rota escondida continua vivo",
+      "status": "ok"
+    },
+    {
+      "name": "Um nit de texto corrigido antes do merge: a frase do caminho sem token mandava o Super admin entrar de novo tambem quando a causa era rede caida, ou seja, pedia uma acao impossivel justo no momento em que ela e impossivel",
+      "status": "ok"
+    },
+    {
+      "name": "Prova por hash feita pelo ORQUESTRADOR antes de entregar o SQL ao humano e refeita apos cada uma das duas rodadas de correcao: bloco do corpo do PR identico ao arquivo, sha256 59c85a51, 10166 bytes",
+      "status": "ok"
+    },
+    {
+      "name": "APP_VERSION chegou ao Coolify DEPOIS do webhook do merge ja ter disparado o build do backend, entao o /api/health voltou 0.116.1 com o codigo novo no ar. Consertado por redeploy manual do backend, disparado so depois do frontend terminar para nao concorrer por memoria na VPS",
       "status": "warn"
     },
     {
-      "name": "Prova por hash feita pelo ORQUESTRADOR, nao pelo autor, antes de entregar o SQL ao humano: o bloco do corpo publicado e identico ao arquivo da migration. Repetida depois da edicao do corpo. E a licao do PR #632 virando procedimento",
+      "name": "Codigo novo provado em producao sem login pelo par 401 contra 404: as duas rotas novas respondem 401 e uma rota irma inventada responde 404",
       "status": "ok"
     },
     {
-      "name": "Fumaca da RPC rodada pelo orquestrador contra producao com a chave anonima, ANTES do merge: SQLSTATE 42501 (permission denied). Prova as duas coisas de uma vez, que a funcao existe (senao viria PGRST202) e que o REVOKE pegou. Segura por construcao: SMOKE627 nao e id valido de participante e as duas colunas escritas tem FK, entao a transacao morreria na FK antes de qualquer escrita",
-      "status": "ok"
-    },
-    {
-      "name": "Teto de lote medido em vez de chutado: authenticator ja tem statement_timeout=8s e lock_timeout=8s, e a RPC rodou em Postgres real com 10 mil casos em 166 ms, 50 mil em 1,9 s e 200 mil em 7,0 s. Nao foi implementado teto, com o motivo escrito no corpo do PR",
-      "status": "ok"
-    },
-    {
-      "name": "Backend devolveu 503 no available server numa leitura isolada logo apos o deploy, durante a troca de container, com o Coolify ja reportando running:healthy. Seis leituras seguidas depois vieram 200 com 0.116.1. Transitorio, sem acao",
+      "name": "Leitura isolada do /api/health devolveu 'no available server' durante a troca de container, com o Coolify ja em running:healthy. Transitorio, sem acao, mesmo comportamento do deploy anterior",
       "status": "warn"
     }
   ],
@@ -195,22 +211,37 @@
     {
       "kind": "ok",
       "title": "Tudo verde",
-      "text": "Deploy 6e135f2 saudavel na v0.116.1, com a migration 101 aplicada. Backend e frontend construidos do commit certo."
+      "text": "Deploy ffa51d1 saudavel na v0.117.0, com a migration 102 aplicada. Backend e frontend construidos do commit certo, e as rotas novas provadas em producao."
+    },
+    {
+      "kind": "info",
+      "title": "Onda 2 do PRD #634",
+      "text": "A #636 fechou, entao a #637 (a Demanda nasce e anda no Quadro, fatia G) se destrava sozinha. Depois vem #638, e por fim as quatro ultimas em duas ondas de dois: #639 antes de #640, e #641 antes de #642."
+    },
+    {
+      "kind": "info",
+      "title": "Nenhuma fatia de #637 a #642 cria migration",
+      "text": "As tres tabelas ja nascem na 102 no formato final. Se uma fatia achar que precisa de coluna nova, e para PARAR e perguntar ao dono, nao criar a 103."
+    },
+    {
+      "kind": "warn",
+      "title": "Erro do PostgREST sobe cru nas rotas de Tecnologia",
+      "text": "Nit 2 do revisor de codigo, deixado de fora do escopo desta fatia: id que nao e UUID vira 500 em vez de 404, e dois POST simultaneos com o mesmo nome viram 500 em vez de 409. Quem for tratar precisa pegar httpx.HTTPError junto com APIError, senao o timeout do PostgREST continua subindo cru."
+    },
+    {
+      "kind": "info",
+      "title": "Duas perguntas de dominio que o sub-agente engoliu",
+      "text": "A area de Produtos virou secao a parte e nao uma quarta aba (o ADR 0050 nao preve a quarta aba), e o nome do Produto ficou unico sem distinguir maiusculas. As duas sao trocaveis sem mexer em API."
     },
     {
       "kind": "warn",
       "title": "Terceira porta de upload sem guarda",
-      "text": "Issue #631 (needs-triage): POST /api/ouvidoria-setor/{token}/responder sobe binario para o mesmo bucket sem passar por barrar_caso_apagado. A #595 foi conferida e nao piora isso."
+      "text": "Issue #631 (needs-triage): POST /api/ouvidoria-setor/{token}/responder sobe binario para o mesmo bucket sem passar por barrar_caso_apagado. Segue aberta."
     },
     {
       "kind": "warn",
       "title": "Comparacao de data como texto na regua da reabertura",
       "text": "_reabriu_depois_do_pedido compara timestamp como string e falha aberta com offset que nao seja UTC. Hoje sem efeito porque o PostgREST devolve UTC. Residual R3 do PR #632, sem issue aberta."
-    },
-    {
-      "kind": "info",
-      "title": "Candidata a issue vinda do #635",
-      "text": "Generalizar smoke_revoke_rpc_ouvidoria.py, anotado pelo revisor de codigo e nao aplicado no diff."
     },
     {
       "kind": "info",
@@ -220,8 +251,8 @@
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "6e135f2",
+    "sha": "ffa51d1",
     "result": "healthy",
-    "duration_seconds": 317
+    "duration_seconds": 260
   }
 }

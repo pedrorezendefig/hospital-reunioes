@@ -7,6 +7,16 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.117.0 - 2026-09-09 01:52 - a aba Tecnologia nasce com gate de Super admin e a gestão dos Produtos
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `ffa51d1`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.117.0, `db: healthy`; rotas novas provadas em produção pelo par 401 contra 404)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/ffa51d1
+- Issues: [#636](https://github.com/pedrorezendefig/hospital-reunioes/issues/636) · PR [#643](https://github.com/pedrorezendefig/hospital-reunioes/pull/643) (PRD [#634](https://github.com/pedrorezendefig/hospital-reunioes/issues/634), ADR 0050)
+- Migration: `102_tecnologia_fundacao.sql`, aplicada à mão no Studio antes do merge. Cria as três tabelas do módulo no formato final (`tecnologia_produtos`, `tecnologia_demandas`, `tecnologia_conversas`), com RLS ligado e zero policy · minor, feat
+- Nota: o `APP_VERSION` chegou ao Coolify depois do webhook do merge, então o backend subiu marcando 0.116.1 com o código novo no ar. Um redeploy manual do backend, após o frontend terminar, corrigiu para 0.117.0
+
 ## v0.116.1 - 2026-09-09 00:08 - arquivar todos os encerrados de uma vez passa a gravar o log de acesso na mesma transação
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `6e135f2`

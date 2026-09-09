@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-09T01:52:14-03:00",
+      "sha": "ffa51d1",
+      "app_version": "0.117.0",
+      "subject": "a aba Tecnologia nasce com gate de Super admin e a gestao dos Produtos",
+      "raw_subject": "feat(tecnologia): aba Tecnologia com gate Super admin e gestao de Produtos (#643)",
+      "scope": [
+        "backend",
+        "frontend",
+        "supabase"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 260,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "102_tecnologia_fundacao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 desta sessao: issue #636 sozinha, a fatia de fundacao do PRD #634 (aba Tecnologia, o quadro de Demandas entre o hospital e a Vitta, ADR 0050). Entrega a aba com gate de Super admin, a gestao de Produtos e as tres abas internas (Quadro, Minha vez, Historico) como casca vazia; a Demanda e a Conversa vem nas fatias #637 a #642, que nao criam migration porque as tres tabelas ja nascem na 102 no formato final. Quatro rotas novas em /api/admin/tecnologia, todas com require_super_admin e nenhuma com DELETE: desativar e a saida. O Gate 1.5 pegou um defeito que so aparecia no estado inicial do sistema: os sete Produtos do seed nascem ativos e SEM dono, porque e a propria migration que manda cria-los assim, e a guarda do PATCH olhava so o estado final, entao renomear qualquer um dos sete devolvia 422 'Produto ativo precisa de dono' na primeira abertura, culpando o Super admin por uma falta que ele nao provocou. A regra pura virou edicao_deixa_produto_ativo_sem_dono(antes, depois): recusa quando a edicao CRIA o estado ruim, passa quando apenas o herda, e quem cobra o dono dos sete passou a ser a tela, com a marca 'Falta dono'. E o caso da licao 'guarda-corpo novo pode virar indisponibilidade' virando correcao antes do merge. A revisao do orquestrador (ADR 0035) rodou com dois revisores independentes em paralelo, codigo e seguranca. Seguranca fechou com zero must-fix percorrendo sete itens com evidencia. Codigo trouxe um must-fix real e de front: o fetch da tela de Produtos nao tinha catch, entao qualquer falha de rede desenhava a lista VAZIA e CALADA, indistinguivel de 'o banco nao tem Produto', bem no criterio de aceite 'a tela lista os sete Produtos na primeira abertura'; quem abrisse concluiria que o seed da migration nao rodou. Tres caminhos foram fechados (carregar, enviar e o token ausente que deixava a tela girando para sempre), no molde do admin/usuarios que ja fazia certo, com quatro testes novos e um teste DETECTOR para que nenhum deles passasse de graca. Dois nits viraram correcao por decisao do orquestrador. O primeiro era bug de verdade: PATCH com dono_id vazio passava pelas duas guardas e gravava string vazia, que nao e NULL e nao existe em participantes, violando a FK com 500. O segundo protege as seis fatias seguintes: a matriz que prova o gate era uma lista de rotas escrita a mao, entao uma rota nova sem require_super_admin em #637 a #642 nao deixaria teste vermelho; virou varredura de app.openapi()['paths'] com piso de sanidade, e a fonte e o schema e nao app.routes, porque o uv.lock fixa FastAPI 0.136 e o CI instala 0.141, onde app.routes volta quase vazio e a varredura ficaria verde sobre nada (a mordida das issues #542 e #546). Essa troca mexe no cache do OpenAPI durante a coleta do pytest, e a rodada 2 de revisao provou que a restauracao num finally esta correta e que o detector de rota escondida continua vivo. A rodada 2 achou so um nit de texto, corrigido: a frase do caminho sem token dizia 'Sua sessao expirou. Entre de novo' tambem quando a causa era rede caida, mandando o Super admin sair e entrar justo quando ele nao consegue. Virou uma frase unica que nomeia as duas causas e pede recarregar a pagina, porque o useAuth devolve token nulo nos dois casos e separa-las exigiria mexer num hook compartilhado por seis modulos so para melhorar um texto. A prova por hash do SQL foi feita pelo ORQUESTRADOR antes de entregar o arquivo ao humano, e refeita depois de cada uma das duas rodadas de correcao: o bloco do corpo do PR e o arquivo tem o mesmo sha256 59c85a512021caf14a8be4518f3849522dabf6ef286a1fda2259f0184603eb07, 10166 bytes. E o procedimento herdado do PR #632 e do #635. O deploy teve um tropeco conhecido e consertado: o APP_VERSION so chegou ao Coolify depois que o webhook do merge ja havia disparado o build do backend, entao o /api/health voltou 0.116.1 com o codigo novo ja no ar. Um redeploy manual do backend, disparado DEPOIS do frontend terminar para nao concorrer por memoria na VPS, resolveu: /api/health passou a 0.117.0. O codigo novo em producao foi provado sem login, pelo par 401 contra 404: /api/admin/tecnologia/produtos e /pessoas respondem 401 (a rota existe e a guarda esta de pe) e uma rota irma inventada responde 404. Uma leitura isolada do health durante a troca de container devolveu 'no available server', transitorio e sem acao, o mesmo comportamento ja registrado no deploy anterior."
+    },
+    {
       "at": "2026-09-09T00:08:29-03:00",
       "sha": "6e135f2",
       "app_version": "0.116.1",
@@ -1383,29 +1415,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "PR #421, issue #378. Migration 085 (CREATE TABLE ouvidoria_pontos). CONFIRMADA aplicada em 28/08: a rota publica /api/ouvidoria/publico/pontos/{codigo} respondeu 404 'Cartaz nao encontrado', ou seja, consultou a tabela. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
-    },
-    {
-      "at": "2026-08-27T23:08:00-03:00",
-      "sha": "385ce63",
-      "app_version": "0.80.2",
-      "subject": "Leva de acabamento das portas publicas da Ouvidoria e rotas de apoio",
-      "raw_subject": "fix(ouvidoria): leva de acabamento das portas publicas e rotas de apoio",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [
-        "084_ouvidoria_ponto_do_cartaz_anonimo.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "PR #420, issue #375. Migration 084 (UPDATE de dado: limpa canal_ponto de manifestacao anonima). Aplicacao no Studio de producao NAO confirmada. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
     }
   ]
 }
