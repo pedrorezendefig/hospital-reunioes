@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-08T22:42:38-03:00",
+      "sha": "b80caeb",
+      "app_version": "0.116.0",
+      "subject": "a Diretoria apaga o caso encerrado antes dos cinco anos, com motivo escrito a mao",
+      "raw_subject": "feat(ouvidoria): a Diretoria apaga o caso encerrado, com motivo escrito (#595) (#632)",
+      "scope": [
+        "backend",
+        "frontend",
+        "supabase"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 445,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "100_ouvidoria_apagamento_pela_diretoria.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 desta sessao: issue #595 sozinha, fatia G do PRD #591, ADR 0047. Abre a porta antecipada da Retencao: a Diretoria Executiva manda apagar o Dossie de um caso encerrado antes dos cinco anos, escrevendo o motivo a mao. A migration 100 acrescenta a SEGUNDA CHAVE na guarda de UPDATE da trilha, sem tocar na guarda de DELETE, e as duas chaves seguem exigindo caso encerrado com marco de encerramento. O desenho nao alcanca caso fora de encerrado, travado em tres lugares independentes: a rota devolve 409, o update repete as pre-condicoes no proprio filtro (fecha o TOCTOU) e a guarda no banco exige o mesmo. Foram TRES rodadas de revisao, uma a mais que o limite da /onda, autorizada pelo humano. Rodada 1, tres must-fix. O pior era regressao de seguranca: a marca do movimento de apagamento tinha virado o prefixo de texto 'Apagamento do Dossie' na observacao, que o ouvidor digita a mao na transicao, quando antes era o autor_nome que so o servidor escreve. Um ouvidor que encerrasse o caso com esse texto fazia o apagamento adotar o movimento dele: o motivo da Diretoria nunca entrava na trilha, o texto plantado era preservado pelo exceto= e virava imutavel, e a tela creditava o apagamento a ele. Junto vieram o pedido gravado e nunca cumprido (falha no meio deixava o caso com o carimbo e o Dossie inteiro, e o cron dos cinco anos nao varria esse estado) e a recusa do servidor escrita na pagina por baixo do modal, que sobe por createPortal, entao nos 409 e 503 a Diretoria nao via mensagem nenhuma e o teste passava porque findByText olha o DOM e nao a sobreposicao. Rodada 2: os tres fechados e confirmados por mutacao do proprio revisor, que varreu as 11 portas que gravam na trilha para provar que a regua nova nao e forjavel. Mas o codigo do conserto trouxe dois achados novos. O segundo era a fila nova do cron apagando o ciclo NOVO de um caso reaberto, porque a reabertura nao limpava o carimbo do pedido; provado com o contraste que fecha o argumento, a rota humana recusava esse mesmo caso com 409 e so o robo dizia sim. O primeiro nao estava no codigo: o bloco SQL do CORPO do PR, que e o que o humano cola no Studio, estava preso na versao anterior e sem o AND p.anonimizada_em IS NULL. O CI ficava verde porque os testes leem o arquivo, ninguem executa o arquivo, e a consulta de conferencia sugerida no proprio corpo devolvia true nas duas versoes, entao nada acusaria. Aplicado assim, a fresta da trilha ficaria aberta para sempre em todo caso apagado. Passou a ser gerado do arquivo, e a fumaça passou a checar prosrc like '%anonimizada_em IS NULL%'. O orquestrador conferiu por hash que o corpo publicado e identico ao arquivo antes de entregar o SQL ao humano. Rodada 3 fechou os dois, mais os tres mutantes vivos que o revisor apontou, e um agente focado verificou a fila do cron com cinco mutantes e as variacoes do caso reaberto. Residuais registrados e nao bloqueantes: caso meio apagado que chegue ao estado reaberto fica parado para sempre e esse estado e beco sem saida pela API (so por corrida estreita, e antes deste PR o pedido orfao era o caso normal de qualquer 503); _reabriu_depois_do_pedido compara timestamp como string e falha aberta com offset nao-UTC, hoje sem efeito porque o PostgREST devolve UTC. A migration foi aplicada a mao pelo humano antes do merge, e a ordem era obrigatoria: sem as colunas a pagina do caso nao degrada, cai com 404. Codigo novo provado em prod sem login: POST na rota de apagamento sem token devolve 401 e com sufixo inventado devolve 404, e o HTML servido traz 0.116.0 embutido."
+    },
+    {
       "at": "2026-09-08T20:52:33-03:00",
       "sha": "387af87",
       "app_version": "0.115.3",
@@ -1362,36 +1394,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PR #413, issue #403. Sem migration. Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
-    },
-    {
-      "at": "2026-08-27T22:28:00-03:00",
-      "sha": "089d7e3",
-      "app_version": "0.80.0",
-      "subject": "Relatorio mensal da Ouvidoria com tendencia de 3 meses, evolucao da nota externa e sugestoes de acao corretiva por IA",
-      "raw_subject": "feat(ouvidoria): relatorio mensal com sugestoes de acao corretiva por IA",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 240,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "083_ouvidoria_relatorio_sugestoes_ia.sql"
-      ],
-      "rollback_target_sha": "adcd408",
-      "notes": "PR #417, issue #346 (I5 do PRD #319, que FECHA o PRD: 7 de 7 fatias). Migration 083 aplicada pelo Pedro no Studio ANTES do merge (duas colunas aditivas, ADD COLUMN IF NOT EXISTS, sem CREATE TABLE, logo sem RLS nova: a tabela ja e default-deny desde a 080). DECISAO DE DESENHO, que se desvia da letra da issue: a IA recebe o AGREGADO, nunca o relato nem resumo de caso. A issue pedia 'resumos dos casos do periodo'. Tres motivos: o furo de NOME da #342 (#412) multiplicaria a exposicao por N e e justamente o canal do QR; ouvidoria_metricas.CAMPOS_TUPLA nem le relato_integral e o docstring do relatorio ja declarava 'nenhum caso e identificado' (RN-40, ADR 0034 decisao 8); e o CONTEXT.md, verbete 'Texto do acionamento', ja dizia que nem relato nem resumo saem da Ouvidoria porque os dois carregam a palavra de quem manifestou. Custo: ~US$ 0,0014 por mes (1 chamada, ~2.200 tokens, gemini-3.7-flash a 0,375/M in e 1,875/M out); mandar 40 relatos custaria 20x mais. Trade-off escrito: as sugestoes sao de gestao, nao de caso. PORTAO EM 3 CAMADAS: (1) nao mandar texto livre (categoria fica de fora; o tema vem de tipo_manifestacao, lista fechada do ADR 0037); (2) poda mecanica de FORA_DO_PROMPT sobre responsavel e registrada_por_nome, os dois unicos nomes de funcionario do agregado; (3) _rotulo_seguro colapsa whitespace, corta em 200 e pseudonimiza. Job novo relatorio_mensal_ouvidoria as 07h30, todo dia (nao so no dia 1: jobstore do APScheduler e em memoria e um deploy na hora do disparo DESCARTA a execucao). A varredura de atrasados nao se repete no job novo: a do quinzenal nao filtra tipo. LIMITE CONSCIENTE registrado no docstring: celula pequena de caso sigiloso sai no agregado ('Denuncia: 1'), aceito porque o agregado nao e cruzado (tipo e area sao contagens separadas, a tupla identificante nunca sai); mudar isso e decisao de dominio. Gates: 2 revisores independentes com o diff apontado a mao (o /security-review le o diff da arvore principal e a branch vivia em worktree). Seguranca LIBEROU; code review BLOQUEOU com 1 MUST-FIX: falha ao ler a nota externa virava 'ninguem digitou nota' no PDF assinado, por causa de um timeout, sem aviso e permanentemente (numeros congelados). Corrigido para os 3 estados que _retrato_externo ja exigia. Outros corrigidos: janela da serie de notas sem teto (nota de setembro entrava no relatorio de agosto e invertia a tendencia), registrada_por_nome fora da poda, degradado 'tendencia' com frase generica FALSA, logger.warning sem traceback, duplicacao da formatacao de nota, e _normalizar_sugestoes cortando antes de filtrar. CINCO testes eram vacuo. Achados que viraram issue: #418 (ready-for-human, retencao/treinamento no OpenRouter, vale para o app todo porque process_transcricao ja manda transcricao inteira de reuniao) e #419 (setor da manifestacao e texto livre sem taxonomia nem max_length, embora exigir_setor_da_taxonomia ja exista). PROVA DO CODIGO NOVO: coolify deploy list mostrou o build do commit 089d7e3, o merge do PR; /health sozinho so provaria restart. ADRs 0034, 0036, 0037, 0013."
     }
   ]
 }

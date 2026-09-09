@@ -7,6 +7,33 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.116.0 - 2026-09-08 22:42 - a Diretoria apaga o caso encerrado antes dos cinco anos, com motivo escrito à mão
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `b80caeb`
+- Serviços: backend, frontend, supabase
+- Resultado: 🟢 healthy (`/api/health` em 0.116.0, `db: healthy`; frontend em 200 com 0.116.0 embutido no HTML servido)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/b80caeb
+- Issues: [#595](https://github.com/pedrorezendefig/hospital-reunioes/issues/595) · PR [#632](https://github.com/pedrorezendefig/hospital-reunioes/pull/632) (PRD [#591](https://github.com/pedrorezendefig/hospital-reunioes/issues/591), ADR 0047)
+- Migration: `100_ouvidoria_apagamento_pela_diretoria.sql`, aplicada à mão no Studio antes do merge · minor, feat
+
+Onda 2 desta sessão, uma fatia grande sozinha. Abre a porta antecipada da Retenção: a Diretoria Executiva manda apagar o Dossiê de um caso encerrado antes dos cinco anos, e escreve o motivo à mão. A migration 100 acrescenta a segunda chave na guarda de UPDATE da trilha, sem tocar na guarda de DELETE, e as duas chaves continuam exigindo caso encerrado com marco de encerramento.
+
+O desenho não alcança caso fora de `encerrado`, e isso está travado em três lugares independentes: a rota devolve 409, o update repete as pré-condições no próprio filtro, e a guarda no banco exige o mesmo. Foi conferido de propósito, porque a issue #631 depende disso.
+
+Foram três rodadas de revisão, uma a mais que o limite da onda, autorizada no checkpoint.
+
+A rodada 1 achou três problemas. O pior era regressão de segurança: a marca do movimento de apagamento tinha virado o prefixo de texto `Apagamento do Dossiê` na observação, que o ouvidor digita à mão na transição, quando antes era o `autor_nome`, valor que só o servidor escreve. Um ouvidor que encerrasse o caso com esse texto fazia o apagamento adotar o movimento dele: o motivo da Diretoria nunca entrava na trilha, o texto plantado virava imutável, e a tela creditava o apagamento a ele. Junto vieram o pedido gravado e nunca cumprido, que o cron dos cinco anos não varria, e a recusa do servidor escrita na página por baixo do modal, invisível nos 409 e 503, com o teste passando porque olhava o DOM e não a sobreposição.
+
+A rodada 2 confirmou os três fechados, por mutação do próprio revisor, que varreu as 11 portas que gravam na trilha. Mas o código do conserto trouxe dois achados novos, e o primeiro deles não estava no código.
+
+**O bloco SQL do corpo do PR, que é o que o humano cola no Studio, estava preso na versão anterior**, sem o `AND p.anonimizada_em IS NULL`. O CI ficava verde porque os testes leem o arquivo, e ninguém executa o arquivo. A consulta de conferência sugerida no próprio corpo devolvia `true` nas duas versões, então nada acusaria. Aplicado assim, a fresta da trilha ficaria aberta para sempre em todo caso apagado. O corpo passou a ser gerado do arquivo, a fumaça passou a distinguir as duas versões, e o corpo publicado foi conferido por hash contra o arquivo antes de o SQL chegar às mãos do humano.
+
+O segundo era a fila nova do cron apagando o ciclo novo de um caso reaberto, porque a reabertura não limpava o carimbo do pedido. O contraste fechou o argumento: a rota humana recusava esse mesmo caso com 409, só o robô dizia sim.
+
+Residuais registrados, nenhum bloqueante: caso meio apagado que chegue ao estado reaberto fica parado para sempre, e esse estado é beco sem saída pela API, os dois alcançáveis só por corrida estreita; e `_reabriu_depois_do_pedido` compara timestamp como string, falhando aberta com offset que não seja UTC, hoje sem efeito porque o PostgREST devolve UTC.
+
+A ordem da migration era obrigatória por um motivo medido na revisão: sem as três colunas a página do caso não degrada, cai com 404.
+
 ## v0.115.3 - 2026-09-08 20:52 - a guarda anti-SSRF do PDF do POP volta a existir de fato, agora na API nova do WeasyPrint
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `387af87`
