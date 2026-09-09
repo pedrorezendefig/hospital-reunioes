@@ -18,6 +18,12 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0042](0042-retornos-ao-manifestante-acuse-e-encerramento.md) | accepted | Retornos ao manifestante: acuse em horas corridas e aviso de encerramento |
 | [0047](0047-apagar-manifestacao-e-retencao-antecipada-nao-delete.md) | accepted | Apagar manifestação é retenção antecipada, não DELETE |
 
+## Tecnologia (Demandas Vitta x Hospital)
+
+| ADR | Status | Título |
+|---|---|---|
+| [0050](0050-demandas-de-tecnologia-moram-no-app-apartadas-das-pendencias.md) | accepted | Demandas de tecnologia moram no app do hospital, só para Super admin, apartadas das Pendências |
+
 ## Reuniões e Atas
 
 | ADR | Status | Título |

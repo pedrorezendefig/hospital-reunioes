@@ -204,6 +204,28 @@ A seção somente leitura da tela Dados do Atendimento que mostra ao vivo o que 
 _Evitar_: chamar de integração de agendamento (não agenda nada), gravar o que a Global Health respondeu.
 _Evitar_: paginação; cortar a lista para caber; supor que a mesma chamada devolve sempre a mesma forma.
 
+## Tecnologia (Demandas entre o hospital e a Vitta)
+
+**Demanda**:
+Um pedido entre o hospital e a Vitta sobre as aplicações que a Vitta mantém para o hospital (Ana, Reuniões, Ouvidoria, POPs). Vai nos dois sentidos: o diretor pede à Vitta (ajuste, dúvida, consultoria) e a Vitta pede ao diretor (decisão, resposta, acesso). Vive na aba **Tecnologia** da área admin, que só o Super admin vê, e fica **totalmente apartada** das Pendências de Ata: Demanda é assunto de tecnologia entre fornecedor e cliente, Pendência é compromisso operacional do hospital. Nasceu em 08/09/2026 para tirar do WhatsApp a conversa entre o Pedro e o diretor, que se perdia.
+_Evitar_: chamar de Pendência, tarefa ou ticket; misturar no painel de Pendências; "Demandas TI" (TI, no vocabulário do programa Ana, é o analista de TI do hospital, um terceiro).
+
+**Tipo da Demanda**:
+Lista fechada de sete, cada um com o seu símbolo desenhado: **Decisão** (a Vitta precisa que o hospital escolha), **Informação** (a Vitta precisa de um dado do hospital), **Terceiro** (depende de alguém de fora: Global Health, analista de TI, MV), **Ajuste** (o hospital quer mudar algo que existe), **Novo** (o hospital quer algo que não existe), **Defeito** (algo quebrado) e **Consultoria** (opinião ou estudo da Vitta, sem código).
+_Evitar_: tipo fora da lista; usar o tipo para dizer de quem é a vez (isso é o estado e o responsável).
+
+**Produto**:
+Cada coisa que a Vitta mantém para o hospital, com um **dono** do lado da Vitta: Ana (WhatsApp), Integração Ana x MV, Reuniões, Ouvidoria, POPs, Site, Infra. Lista editável pelo Super admin. Toda Demanda pertence a um Produto e nasce atribuída ao dono dele, que pode repassar.
+_Evitar_: "aplicação" como eixo separado (é o mesmo eixo, agora com dono); Produto sem dono.
+
+**Estado da Demanda**:
+Cinco colunas de Kanban: **Nova**, **Em andamento**, **Aguardando**, **Concluída**, **Cancelada**. Quem move é quem atende ou quem pediu. Além do estado, a Demanda tem **Responsável** (uma pessoa), **Prioridade** (Baixa, Normal, Alta) e **Prazo** opcional, só quando existe de verdade; sem prazo o card não atrasa, só envelhece (idade em dias à vista, vermelha a partir de 14).
+_Evitar_: estado por arrastar sem responsável; prazo inventado para preencher campo.
+
+**Conversa da Demanda**:
+O fio de respostas dentro do card, com @menção a quem tem acesso à aba. É onde a decisão evolui; o botão **Copiar para IA** copia a Demanda inteira (título, tipo, produto, descrição e a Conversa até ali) em texto simples, pronto para colar numa IA. E-mail sai em três gatilhos: atribuição (inclui a criação), @menção e resposta nova numa Demanda de que você é o responsável.
+_Evitar_: e-mail por mudança de coluna; resumo diário; copiar sem a Conversa.
+
 ## Diálogo de exemplo
 
 > **Dev:** Quando o Colaborador não loga, como ele resolve a Pendência?
