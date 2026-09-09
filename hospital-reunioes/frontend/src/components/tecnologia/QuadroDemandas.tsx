@@ -18,7 +18,7 @@
  * proibida, 409 do Quadro desatualizado) é dele, e não da tela.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CalendarClock, Plus } from "lucide-react";
 
 import { Select } from "@/components/ui/Select";
@@ -125,6 +125,16 @@ export function QuadroDemandas({
   const [moverAberto, setMoverAberto] = useState<string | null>(null);
   const [abertaId, setAbertaId] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState<string | null>(null);
+  /**
+   * O número do pedido de leitura mais recente.
+   *
+   * A rede não devolve na ordem em que foi chamada: trocar o filtro duas vezes
+   * rápido deixa dois GET no ar, e se o primeiro chegar por último ele pinta o
+   * Quadro do filtro que ninguém está mais vendo, com os campos mostrando o
+   * filtro novo. Cada leitura leva o seu número e só escreve na tela se ainda
+   * for a última.
+   */
+  const ultimoPedido = useRef(0);
 
   const autorizacao = useCallback(
     () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
@@ -145,9 +155,14 @@ export function QuadroDemandas({
    */
   const carregar = useCallback(async () => {
     if (!token) return;
+    const meuPedido = ultimoPedido.current + 1;
+    ultimoPedido.current = meuPedido;
     setCarregando(true);
     try {
       const resposta = await fetch(`${BASE_TECNOLOGIA}/demandas${busca}`, { headers: autorizacao() });
+      // Chegou tarde: já há um pedido mais novo no ar, e o que esta resposta
+      // conta não é mais o que a tela está pedindo.
+      if (meuPedido !== ultimoPedido.current) return;
       if (!resposta.ok) {
         setErro("Não foi possível carregar as Demandas.");
         return;
@@ -156,9 +171,12 @@ export function QuadroDemandas({
       setErro(null);
     } catch (e) {
       console.error("[admin/tecnologia] falha ao carregar as Demandas", e);
+      if (meuPedido !== ultimoPedido.current) return;
       setErro(FALHA_DE_CONEXAO);
     } finally {
-      setCarregando(false);
+      // A espera só acaba com a resposta do pedido mais novo: desligá-la na
+      // resposta velha diria "pronto" com a leitura de verdade ainda vindo.
+      if (meuPedido === ultimoPedido.current) setCarregando(false);
     }
   }, [token, autorizacao, busca]);
 
@@ -353,9 +371,13 @@ export function QuadroDemandas({
             label="Filtrar por Produto"
             value={filtros.produto_id}
             onChange={(produto_id) => onFiltrosChange({ ...filtros, produto_id })}
+            // Todos os Produtos, e não só os ativos: desativar tira o Produto
+            // da escolha de quem abre Demanda nova, não do histórico (ADR 0050,
+            // decisão 11). As Demandas dele continuam no Quadro, e sem esta
+            // opção elas ficariam fora do alcance de qualquer filtro.
             options={[
               { value: "", label: TODOS_OS_PRODUTOS },
-              ...produtosAtivos.map((p) => ({ value: p.id, label: p.nome })),
+              ...produtos.map((p) => ({ value: p.id, label: p.ativo ? p.nome : `${p.nome} (inativo)` })),
             ]}
             placeholder={TODOS_OS_PRODUTOS}
           />

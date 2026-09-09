@@ -1158,12 +1158,100 @@ describe("A barra de filtros", () => {
     expect(screen.queryByRole("button", { name: "Limpar filtros" })).toBeNull();
   });
 
-  it("o filtro só oferece Produto ativo", async () => {
+  it("o filtro alcança também o Produto inativado, marcado como tal", async () => {
+    // Desativar um Produto o tira da ESCOLHA de quem abre Demanda nova, não do
+    // histórico (ADR 0050, decisão 11). As Demandas dele continuam no Quadro,
+    // então um filtro que não o oferecesse deixaria essas Demandas fora do
+    // alcance de qualquer filtro. A marca evita a pergunta "por que este
+    // Produto está aqui e não no formulário?".
     montar(CARDS);
     fireEvent.click(await screen.findByRole("combobox", { name: "Filtrar por Produto" }));
 
     const opcoes = within(screen.getByRole("listbox")).getAllByRole("option");
-    // A primeira é a que limpa o filtro; o Produto inativo não entra.
-    expect(opcoes.map((o) => o.textContent)).toEqual(["Todos os Produtos", "Ana", "POPs"]);
+    expect(opcoes.map((o) => o.textContent)).toEqual([
+      "Todos os Produtos",
+      "Ana",
+      "POPs",
+      "Site antigo (inativo)",
+    ]);
+  });
+
+  it("o formulário de Demanda nova continua só com Produto ativo", async () => {
+    // O par do teste acima: filtrar é ler o histórico, abrir é escolher onde a
+    // Demanda nasce, e só a segunda cobra Produto ativo.
+    montar(CARDS);
+    fireEvent.click(await screen.findByRole("button", { name: /Nova Demanda/ }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Produto" }));
+
+    const opcoes = within(screen.getByRole("listbox")).getAllByRole("option");
+    expect(opcoes.map((o) => o.textContent)).toEqual(["Ana", "POPs"]);
+  });
+});
+
+describe("Duas trocas de filtro em sequência", () => {
+  /** O host dos filtros, como o módulo faz. */
+  function Anfitriao() {
+    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
+    return (
+      <QuadroDemandas
+        token="token-de-teste"
+        carregandoAuth={false}
+        produtos={PRODUTOS}
+        pessoas={PESSOAS}
+        filtros={filtros}
+        onFiltrosChange={setFiltros}
+      />
+    );
+  }
+
+  it("a resposta atrasada do filtro antigo não repinta o Quadro do filtro novo", async () => {
+    // A rede não devolve na ordem em que foi chamada. Quem troca o filtro duas
+    // vezes rápido deixa dois GET no ar; se o PRIMEIRO chegar por último, uma
+    // tela ingênua pinta o resultado do filtro que ninguém está mais vendo, com
+    // os campos mostrando o filtro novo. É mentira silenciosa: nada de erro,
+    // nada de espera, só o Quadro errado.
+    const pendentes: { url: string; responder: (dados: Demanda[]) => void }[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (url: string) =>
+          new Promise((resolve) => {
+            pendentes.push({
+              url,
+              responder: (dados) =>
+                resolve({ ok: true, status: 200, json: async () => dados } as unknown as Response),
+            });
+          }),
+      ),
+    );
+
+    const AJUSTE = demanda("d1", "Ajuste na Ana", { tipo: "ajuste" });
+    const DEFEITO = demanda("d2", "Defeito nos POPs", { tipo: "defeito" });
+
+    render(<Anfitriao />);
+
+    await waitFor(() => expect(pendentes).toHaveLength(1));
+    pendentes[0].responder([AJUSTE, DEFEITO]);
+    await screen.findByText("Ajuste na Ana");
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Filtrar por tipo" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Ajuste"));
+    await waitFor(() => expect(pendentes).toHaveLength(2));
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Filtrar por tipo" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Defeito"));
+    await waitFor(() => expect(pendentes).toHaveLength(3));
+
+    expect(pendentes[1].url).toContain("tipo=ajuste");
+    expect(pendentes[2].url).toContain("tipo=defeito");
+
+    // O pedido NOVO chega primeiro, e o velho depois: a ordem que quebra.
+    pendentes[2].responder([DEFEITO]);
+    await screen.findByText("Defeito nos POPs");
+    pendentes[1].responder([AJUSTE]);
+
+    await waitFor(() => expect(screen.queryByText("Carregando Demandas...")).toBeNull());
+    expect(screen.getByText("Defeito nos POPs")).toBeTruthy();
+    expect(screen.queryByText("Ajuste na Ana")).toBeNull();
   });
 });
