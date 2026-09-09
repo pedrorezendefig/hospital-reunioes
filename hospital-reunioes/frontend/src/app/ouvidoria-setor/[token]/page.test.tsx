@@ -639,3 +639,51 @@ describe("o prazo estourado (issue #513)", () => {
     expect(prazo.className).toContain("text-red-700");
   });
 });
+
+describe("a recusa do caso apagado (issue #631)", () => {
+  /**
+   * O `fetch` da tela com o POST da resposta separado do GET do caso, no mesmo
+   * desenho do `comDevolucao`: o stub único devolveria o caso também para o
+   * envio, e o teste ficaria verde sem nunca ter batido na rota que recusa.
+   */
+  function comEnvioDaResposta(resultado: { ok: boolean; status?: number; corpo?: unknown }) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.endsWith("/responder")) {
+          return {
+            ok: resultado.ok,
+            status: resultado.status ?? (resultado.ok ? 200 : 409),
+            json: async () => resultado.corpo ?? {},
+          } as unknown as Response;
+        }
+        return { ok: true, status: 200, json: async () => caso() } as unknown as Response;
+      })
+    );
+  }
+
+  const RECUSA_DO_APAGADO =
+    "Este caso foi apagado e não pode mais ser respondido pelo portal do setor. O que voltar a ser " +
+    "trazido entra como manifestação nova.";
+
+  it("a mensagem do servidor fica à vista, e a resposta digitada continua no campo", async () => {
+    // Carimbo no backend sem par na tela some para quem está usando: o
+    // responsável que apertou RESPONDER precisa ler por que não entrou, e o
+    // que fazer em vez disso.
+    comEnvioDaResposta({ ok: false, status: 409, corpo: { detail: RECUSA_DO_APAGADO } });
+    await abrirTela();
+    fireEvent.change(screen.getByLabelText(/o que foi feito/i), {
+      target: { value: "Trocamos a escala do turno da manhã e avisamos a equipe." },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /^responder/i }));
+
+    await waitFor(() => expect(screen.getByText(/foi apagado/i)).toBeTruthy());
+    expect(screen.getByText(/manifestação nova/i)).toBeTruthy();
+    // O recibo é da resposta que ENTROU: nada entrou aqui.
+    expect(screen.queryByText(/Resposta registrada na manifestação/i)).toBeNull();
+    expect((screen.getByLabelText(/o que foi feito/i) as HTMLTextAreaElement).value).toContain(
+      "escala do turno"
+    );
+  });
+});

@@ -1076,8 +1076,23 @@ _CASO_EM_APAGAMENTO = (
     "O apagamento é concluído automaticamente; o que voltar a ser trazido entra como manifestação nova."
 )
 
+# E a MESMA recusa dita no canal sem login (issue #631). A frase de cima conta
+# quem pediu o apagamento e por qual ato; ela nasceu para o painel, onde quem lê
+# é a Ouvidoria. O portal do setor é link por token, sem login, e quem responde
+# por lá é o titular da área, que numa manifestação de ouvidoria costuma ser a
+# parte reclamada: entregar a ele que a Diretoria Executiva mandou apagar o caso
+# é entregar decisão de governança do hospital a quem o caso investiga.
+#
+# O que sobra é o que basta para o responsável agir: esta porta não recebe mais,
+# e o que voltar a ser trazido é caso novo. Sem causa e sem órgão, no espírito do
+# `_CASO_APAGADO`, que também não nomeia a causa de propósito. E sem "foi
+# apagado", que aqui ainda não é verdade.
+_CASO_EM_APAGAMENTO_NO_CANAL_PUBLICO = (
+    "Este caso não aceita mais ser {acao}. O que voltar a ser trazido entra como manifestação nova."
+)
 
-def barrar_caso_apagado(caso: dict, acao: str) -> None:
+
+def barrar_caso_apagado(caso: dict, acao: str, *, canal_publico: bool = False) -> None:
     """Recusa qualquer mudança num caso cujo relato já foi apagado, ou cujo
     apagamento a Diretoria já mandou fazer.
 
@@ -1112,6 +1127,12 @@ def barrar_caso_apagado(caso: dict, acao: str) -> None:
     `acao` completa a frase com o que aquela porta faria ("reaberto", "movido de
     estado", "classificado"): a recusa precisa dizer o que foi recusado, e as
     três dizem a mesma coisa no resto.
+
+    `canal_publico` diz que quem vai LER a recusa não passou por login (o portal
+    do setor por token, issue #631). Ele muda só o segundo ramo, que é o único
+    que nomeia quem pediu o apagamento: no canal aberto ele sai neutro. A regra
+    barrada é exatamente a mesma nos dois, e nenhuma porta com login muda de
+    mensagem por causa disto.
     """
     if caso.get("anonimizada_em"):
         raise HTTPException(
@@ -1119,9 +1140,10 @@ def barrar_caso_apagado(caso: dict, acao: str) -> None:
             detail=_CASO_APAGADO.format(acao=acao),
         )
     if caso.get("apagamento_pedido_em"):
+        frase = _CASO_EM_APAGAMENTO_NO_CANAL_PUBLICO if canal_publico else _CASO_EM_APAGAMENTO
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=_CASO_EM_APAGAMENTO.format(acao=acao),
+            detail=frase.format(acao=acao),
         )
 
 
@@ -3755,6 +3777,13 @@ async def reenviar_notificacao(
     Sai na hora, mesmo fora do expediente: a janela comercial existe para o
     disparo automático não acordar ninguém de madrugada, e aqui há uma pessoa
     da Ouvidoria decidindo mandar."""
+    # Antes de criar a notificação nova (issue #631): o reenvio COPIA o
+    # `detalhe` do registro anterior, que é justamente um dos campos que a
+    # Retenção limpa. Sem a guarda, esta porta faz nascer num registro novo o
+    # texto que o apagamento tirou do caso.
+    manifestacao = carregar_manifestacao(supabase, manifestacao_id, _CAMPOS_COM_O_CARIMBO)
+    barrar_caso_apagado(manifestacao, "acionado de novo")
+
     try:
         result = (
             supabase.table("ouvidoria_notificacoes")

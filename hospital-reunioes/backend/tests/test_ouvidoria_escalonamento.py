@@ -1801,3 +1801,70 @@ class TestMigration078:
         ddl = self._ddl()
         assert "drop index if exists idx_ouvidoria_protocolos_escalonamento" in ddl
         assert "escalonamento_impossivel_em is null" in ddl
+
+
+# O carimbo que a Retenção grava no fim da anonimização (migration 079), o
+# mesmo que o `TestAnexoEmCasoApagado` do registro manual usa (issue #622).
+APAGADO_EM = "2026-09-01T03:00:00+00:00"
+
+
+class TestReenvioEmCasoApagado:
+    """Issue #631: o caso apagado não ganha notificação nova.
+
+    O reenvio COPIA o `detalhe` do registro anterior, que é justamente o campo
+    que a Retenção já tinha limpado: sem a guarda, a porta ressuscita num
+    registro novo o texto que o apagamento tirou do caso. Ela não muda estado
+    nem vaza o relato, mas é escrita, e escrita em caso apagado é o que a
+    guarda existe para recusar."""
+
+    def _com_degrau(self) -> _SupabaseFake:
+        """Um caso vivo que já tem notificação registrada, que é o que o botão
+        de reenvio precisa ter na tela para ser clicado."""
+        supabase = _SupabaseFake()
+        ouvidoria_escalonamento.escalar_prazos(supabase, NA_VESPERA, SEM_FERIADOS)
+        return supabase
+
+    # Os DOIS carimbos que a guarda lê, com o marcador de cada frase. O reenvio
+    # é porta COM login (`require_perfil_ouvidoria`), então aqui o apagamento
+    # pendente continua dizendo quem pediu o ato: é a Ouvidoria que lê. Sem o
+    # segundo caso, tirar `apagamento_pedido_em` de `_CAMPOS_COM_O_CARIMBO`
+    # deixaria metade da guarda cega e a suíte verde.
+    @pytest.mark.parametrize(
+        ("carimbo", "marcador"),
+        [
+            ("anonimizada_em", "não pode mais ser acionado de novo"),
+            ("apagamento_pedido_em", "está sendo apagado por pedido da Diretoria Executiva"),
+        ],
+    )
+    def test_reenvio_em_caso_apagado_e_recusado_antes_de_a_copia_nascer(
+        self, monkeypatch, _nunca_envia_email_de_verdade, carimbo, marcador
+    ):
+        supabase = self._com_degrau()
+        registro = supabase.tabelas["ouvidoria_notificacoes"][0]
+        # O carimbo entra pelo dublê porque a Retenção não passa por aqui: o
+        # que o teste precisa é do caso NO ESTADO em que ela o deixa.
+        supabase.tabelas["ouvidoria_protocolos"][0][carimbo] = APAGADO_EM
+
+        client = _client(monkeypatch, supabase, NA_VESPERA)
+        resposta = client.post(f"/api/ouvidoria/manifestacoes/uuid-7/notificacoes/{registro['id']}/reenviar")
+
+        assert resposta.status_code == 409, resposta.text
+        detalhe = resposta.json()["detail"]
+        assert marcador in detalhe
+        assert "acionado de novo" in detalhe
+        assert "manifestação nova" in detalhe
+        # Nenhuma cópia nasceu, e nenhum email saiu do caso apagado.
+        assert len(supabase.tabelas["ouvidoria_notificacoes"]) == 1
+        assert _nunca_envia_email_de_verdade == []
+
+    def test_caso_vivo_continua_reenviando(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O contraste que prova que a guarda lê o carimbo, e não o reenvio em
+        si: o mesmo degrau, sem o carimbo, continua saindo."""
+        supabase = self._com_degrau()
+        registro = supabase.tabelas["ouvidoria_notificacoes"][0]
+
+        client = _client(monkeypatch, supabase, NA_VESPERA)
+        resposta = client.post(f"/api/ouvidoria/manifestacoes/uuid-7/notificacoes/{registro['id']}/reenviar")
+
+        assert resposta.status_code == 201, resposta.text
+        assert len(supabase.tabelas["ouvidoria_notificacoes"]) == 2

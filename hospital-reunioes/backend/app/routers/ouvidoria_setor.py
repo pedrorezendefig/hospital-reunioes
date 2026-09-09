@@ -56,7 +56,12 @@ _CAMPOS_DO_PORTAL = (
     # `area_estourou_em` entra porque o portal projeta o prazo com a MESMA
     # função do painel: sem a coluna, as duas APIs diriam `cumprimento`
     # diferente para o mesmo caso devolvido (issue #374).
-    "contato_em, data_abertura, respondida_em, area_estourou_em"
+    "contato_em, data_abertura, respondida_em, area_estourou_em, "
+    # Os dois carimbos do apagamento entram na MESMA tupla da leitura do caso
+    # (issue #631), pelo mesmo motivo das outras portas de escrita: guarda que
+    # lê coluna não selecionada lê None e deixa passar em silêncio, com a
+    # chamada no lugar certo. Nenhum dos dois vai para a resposta do portal.
+    "anonimizada_em, apagamento_pedido_em"
 )
 
 # O caso que chegou ao portal sem extrato diz aqui a MESMA coisa que diz no
@@ -252,8 +257,23 @@ async def responder(
 
     O token é de uso único, com claim atômico: a segunda tentativa pelo mesmo
     link não duplica resposta nem quebra o estado (critério 6)."""
+    from app.routers.ouvidoria import barrar_caso_apagado
+
     agora = agora_utc()
     vinculo, caso = _carregar_caso(supabase, token, agora)
+
+    # Antes de ler o arquivo e antes de qualquer upload (issue #631): binário
+    # de terceiro no bucket privado de um caso apagado é PII permanente, porque
+    # a Retenção só revisita caso com `anonimizada_em IS NULL` e nunca mais
+    # volta a este. A guarda vem antes da conferência de estado de propósito: é
+    # ela que a porta tinha por consequência, e o responsável que lê a recusa
+    # precisa saber que o caso acabou, não que ele "foi movimentado".
+    #
+    # `canal_publico` porque aqui não há login: a recusa do apagamento PENDENTE
+    # sai neutra, sem dizer que a Diretoria Executiva mandou apagar o caso, para
+    # o titular da área (que costuma ser a parte reclamada) não receber decisão
+    # de governança do hospital por um link de email.
+    barrar_caso_apagado(caso, "respondido pelo portal do setor", canal_publico=True)
 
     # A regra do que vale como resposta vive inteira no serviço, e recebe o
     # texto CRU: piso, teto, invisível e travessão são decididos num lugar só,
