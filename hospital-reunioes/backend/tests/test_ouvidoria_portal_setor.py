@@ -1672,3 +1672,70 @@ class TestOPrazoQueOResponsavelLe:
 
         assert corpo["vencimento_formatado"] == frase.group(1)
         assert corpo["rotulo_prazo"] == frase.group(2)
+
+
+# O carimbo que a Retenção grava no fim da anonimização (migration 079), o
+# mesmo do `TestAnexoEmCasoApagado` do registro manual (issue #622).
+APAGADO_EM = "2026-09-01T03:00:00+00:00"
+
+
+class TestRespostaEmCasoApagado:
+    """Issue #631: o caso apagado não recebe resposta nem anexo pelo portal.
+
+    Hoje a porta está segura por CONSEQUÊNCIA, e não por guarda: ela exige
+    `aguardando_area` e a Retenção só carimba caso `encerrado`. O teste força o
+    encontro que a produção ainda não produz (o carimbo entra pelo dublê, com o
+    caso onde a rota o aceita), porque é ele que a #595 aproxima: se o
+    apagamento alcançar caso fora do encerramento, o binário de terceiro sobe
+    ao bucket privado de um caso que a Diretoria mandou apagar, e a Retenção
+    nunca mais volta lá (ela só varre `anonimizada_em IS NULL`)."""
+
+    def _apagado_aguardando_area(self, monkeypatch, enviados):
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(enviados)
+        sb.tabelas["ouvidoria_protocolos"][0]["anonimizada_em"] = APAGADO_EM
+        return client, sb, token
+
+    def test_resposta_em_caso_apagado_e_recusada_antes_de_o_binario_subir(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        client, sb, token = self._apagado_aguardando_area(monkeypatch, _nunca_envia_email_de_verdade)
+
+        resposta = client.post(
+            f"/api/ouvidoria-setor/{token}/responder",
+            data={"resposta": RESPOSTA_DA_AREA},
+            files=[("arquivos", ("evidencia.pdf", b"%PDF-1.4 conteudo", "application/pdf"))],
+        )
+
+        assert resposta.status_code == 409, resposta.text
+        detalhe = resposta.json()["detail"]
+        assert "não pode mais ser respondido pelo portal do setor" in detalhe
+        # A recusa precisa dizer para onde ir: o que voltar a ser trazido é
+        # caso novo, e não resposta neste.
+        assert "manifestação nova" in detalhe
+        # A guarda vem antes de ler o arquivo e antes do upload: binário no
+        # bucket privado do caso apagado é o dano que esta fatia impede.
+        assert sb.storage.arquivos == {}, "O binário subiu ao bucket do caso apagado"
+        assert sb.tabelas["ouvidoria_anexos"] == []
+        # E antes do claim do token e do carimbo T2: o caso não andou.
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "aguardando_area"
+        assert caso["respondida_em"] is None
+        assert caso["resposta_da_area"] is None
+
+    def test_caso_vivo_no_mesmo_estado_continua_respondendo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O contraste que prova que a guarda lê o carimbo, e não o estado nem
+        o envio de resposta em si."""
+        client, sb = _client(monkeypatch)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        resposta = client.post(
+            f"/api/ouvidoria-setor/{token}/responder",
+            data={"resposta": RESPOSTA_DA_AREA},
+            files=[("arquivos", ("evidencia.pdf", b"%PDF-1.4 conteudo", "application/pdf"))],
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert len(sb.storage.arquivos) == 1

@@ -3755,6 +3755,13 @@ async def reenviar_notificacao(
     Sai na hora, mesmo fora do expediente: a janela comercial existe para o
     disparo automático não acordar ninguém de madrugada, e aqui há uma pessoa
     da Ouvidoria decidindo mandar."""
+    # Antes de criar a notificação nova (issue #631): o reenvio COPIA o
+    # `detalhe` do registro anterior, que é justamente um dos campos que a
+    # Retenção limpa. Sem a guarda, esta porta faz nascer num registro novo o
+    # texto que o apagamento tirou do caso.
+    manifestacao = carregar_manifestacao(supabase, manifestacao_id, _CAMPOS_COM_O_CARIMBO)
+    barrar_caso_apagado(manifestacao, "acionado de novo")
+
     try:
         result = (
             supabase.table("ouvidoria_notificacoes")
