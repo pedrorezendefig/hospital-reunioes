@@ -226,9 +226,13 @@ export function QuadroDemandas({
    * A leitura é do `window.location`, e não do `useSearchParams`: o hook do
    * Next obriga quem o chama a ficar sob um limite de Suspense, e o limite é o
    * pedaço da tela que a renderização antecipada pode trocar pelo `fallback`.
-   * Aqui o pedaço seria o Quadro inteiro. O parâmetro é lido uma vez, ao
-   * montar, porque o link abre o card na chegada: nada nesta tela troca a query
-   * string depois.
+   * Aqui o pedaço seria o Quadro inteiro, e o padrão da casa é o contrário
+   * disso: o `app/login/page.tsx` mantém o limite em volta de um input
+   * escondido justamente para a casca vazia não poder apagar a tela. Ler o
+   * `window.location` direto também já é da casa (`RedirecionarParaLogin.tsx`).
+   *
+   * O parâmetro é lido uma vez, ao montar, porque o link abre o card na
+   * chegada: nada nesta tela troca a query string depois.
    */
   useEffect(() => {
     setIdDoLink(demandaIdDaUrl(window.location.search));
