@@ -21,11 +21,20 @@
  *   isso o mesmo render tem uma de 13 dias que não pode estar.
  */
 
-import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { useState } from "react";
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { QuadroDemandas } from "./QuadroDemandas";
-import { Demanda, EstadoDemanda, PrioridadeDemanda, TipoDemanda, TIPOS } from "./demandas";
+import {
+  Demanda,
+  EstadoDemanda,
+  FiltrosDoQuadro,
+  PrioridadeDemanda,
+  SEM_FILTRO,
+  TipoDemanda,
+  TIPOS,
+} from "./demandas";
 
 type Chamada = { url: string; metodo: string; corpo: unknown };
 
@@ -101,6 +110,17 @@ function montar(
    */
   const fio: Record<string, unknown>[] = [...((opcoes.conversa ?? []) as Record<string, unknown>[])];
 
+  /**
+   * O Quadro como o servidor o guarda: mover uma Demanda muda a coluna em que
+   * a leitura seguinte a devolve.
+   *
+   * Sem isso, "o card fica na coluna nova" e "o card volta para a origem"
+   * seriam a MESMA tela (a lista devolvida seria sempre a de partida), e o
+   * teste da recusa passaria sobre um componente que move o card na hora e
+   * ignora o 409.
+   */
+  const quadro: Demanda[] = demandas.map((d) => ({ ...d }));
+
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -142,6 +162,11 @@ function montar(
           fio.push(nova);
           return { ok: true, status: 201, json: async () => nova } as unknown as Response;
         }
+        if (metodo === "POST" && url.endsWith("/mover")) {
+          const alvo = quadro.find((d) => url.endsWith(`/demandas/${d.id}/mover`));
+          if (alvo) alvo.estado = corpoEnviado.estado;
+          return { ok: true, status: 200, json: async () => alvo ?? {} } as unknown as Response;
+        }
         if (metodo === "PATCH" && url.includes("/conversa/")) {
           const alvo = fio.find((linha) => url.endsWith(`/${linha.id}`));
           if (alvo) {
@@ -154,19 +179,43 @@ function montar(
         return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
       }
 
-      const corpo = url.includes("/conversa") ? fio : demandas;
+      if (url.includes("/conversa")) {
+        return { ok: true, status: 200, json: async () => fio } as unknown as Response;
+      }
+
+      // Os filtros são do SERVIDOR, como no backend: uma tela que peneirasse
+      // os cards por conta própria receberia tudo aqui e mostraria tudo.
+      const busca = new URLSearchParams(url.split("?")[1] ?? "");
+      const casa = (chave: string, valor: string | null) => !busca.get(chave) || busca.get(chave) === valor;
+      const corpo = quadro.filter(
+        (d) =>
+          casa("tipo", d.tipo) && casa("produto_id", d.produto_id) && casa("responsavel_id", d.responsavel_id),
+      );
       return { ok: true, status: 200, json: async () => corpo } as unknown as Response;
     }),
   );
 
-  render(
-    <QuadroDemandas
-      token={opcoes.token === undefined ? "token-de-teste" : opcoes.token}
-      carregandoAuth={opcoes.carregandoAuth ?? false}
-      produtos={PRODUTOS}
-      pessoas={PESSOAS}
-    />,
-  );
+  /**
+   * O dono do estado dos filtros, no lugar do módulo.
+   *
+   * O Quadro não guarda os filtros: quem guarda é a aba Tecnologia, para eles
+   * sobreviverem à troca de aba (issue #639). Aqui o anfitrião faz esse papel.
+   */
+  function Anfitriao() {
+    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
+    return (
+      <QuadroDemandas
+        token={opcoes.token === undefined ? "token-de-teste" : opcoes.token}
+        carregandoAuth={opcoes.carregandoAuth ?? false}
+        produtos={PRODUTOS}
+        pessoas={PESSOAS}
+        filtros={filtros}
+        onFiltrosChange={setFiltros}
+      />
+    );
+  }
+
+  render(<Anfitriao />);
 }
 
 const escritas = () => chamadas.filter((c) => c.metodo !== "GET");
@@ -925,5 +974,486 @@ describe("A Conversa dentro do card", () => {
 
     const aviso = await within(modal).findByRole("alert");
     expect(aviso.textContent).toContain("Não foi possível falar com o servidor");
+  });
+});
+
+describe("Arrastar entre colunas", () => {
+  /** O gesto inteiro: pega o card, passa por cima da coluna e solta nela. */
+  function arrastar(titulo: string, paraColuna: string) {
+    fireEvent.dragStart(cardDe(titulo));
+    const alvo = colunaDe(paraColuna);
+    fireEvent.dragOver(alvo);
+    fireEvent.drop(alvo);
+  }
+
+  it("o card sai arrastável e a coluna aceita recebê-lo", async () => {
+    // O jsdom dispara `dragStart` e `drop` em qualquer elemento, então os
+    // testes de gesto abaixo passariam num card que o navegador nem deixa
+    // pegar. Estas duas são as condições que o NAVEGADOR cobra: o atributo
+    // `draggable` no card e o `preventDefault` no `dragOver` da coluna, sem o
+    // qual o "soltar aqui" é recusado antes de virar `drop`.
+    montar([demanda("d1", "Uma nova")]);
+
+    await screen.findByText("Uma nova");
+    expect(cardDe("Uma nova").getAttribute("draggable")).toBe("true");
+
+    fireEvent.dragStart(cardDe("Uma nova"));
+    const passandoPorCima = createEvent.dragOver(colunaDe("Em andamento"));
+    fireEvent(colunaDe("Em andamento"), passandoPorCima);
+
+    expect(passandoPorCima.defaultPrevented).toBe(true);
+  });
+
+  it("soltar noutra coluna chama a mesma rota do botão Mover, e o card fica lá", async () => {
+    montar([demanda("d1", "Uma nova"), demanda("d2", "Outra nova")]);
+
+    await screen.findByText("Uma nova");
+    arrastar("Uma nova", "Em andamento");
+
+    await waitFor(() => expect(escritas()).toHaveLength(1));
+    expect(escritas()[0]).toEqual({
+      url: "/api/admin/tecnologia/demandas/d1/mover",
+      metodo: "POST",
+      corpo: { estado: "em_andamento" },
+    });
+
+    await waitFor(() => expect(within(colunaDe("Em andamento")).getByText("Uma nova")).toBeTruthy());
+    // A irmã de presença: a outra Demanda continua em Nova no mesmo render,
+    // então "saiu de Nova" não é "a coluna Nova sumiu".
+    expect(within(colunaDe("Nova")).queryByText("Uma nova")).toBeNull();
+    expect(within(colunaDe("Nova")).getByText("Outra nova")).toBeTruthy();
+  });
+
+  it("soltar numa transição proibida devolve o card à origem, com a frase do servidor", async () => {
+    // De Concluída para Cancelada o backend recusa: reabrir é o único caminho.
+    const motivo = "A Demanda não pode ir de Concluída para Cancelada.";
+    montar([demanda("d1", "Fechada", { estado: "concluida" }), demanda("d2", "Uma nova")], {
+      recusa: { status: 422, detail: motivo },
+    });
+
+    await screen.findByRole("region", { name: "Concluída" });
+    fireEvent.click(within(colunaDe("Concluída")).getByRole("button"));
+    await screen.findByText("Fechada");
+
+    arrastar("Fechada", "Cancelada");
+
+    expect((await screen.findByRole("alert")).textContent).toContain(motivo);
+    // O card NÃO pode ter ficado no destino que o servidor recusou.
+    expect(within(colunaDe("Concluída")).getByText("Fechada")).toBeTruthy();
+    expect(within(colunaDe("Cancelada")).queryByText("Fechada")).toBeNull();
+  });
+
+  it("no 409 do Quadro desatualizado o card também não muda de coluna", async () => {
+    const motivo =
+      "O Quadro está desatualizado e este movimento não foi feito. Recarregue o Quadro e tente de novo.";
+    montar([demanda("d1", "Uma nova")], { recusa: { status: 409, detail: motivo } });
+
+    await screen.findByText("Uma nova");
+    arrastar("Uma nova", "Aguardando");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Quadro está desatualizado");
+    expect(within(colunaDe("Nova")).getByText("Uma nova")).toBeTruthy();
+    expect(within(colunaDe("Aguardando")).queryByText("Uma nova")).toBeNull();
+  });
+
+  it("soltar na coluna em que o card já está não chama a API", async () => {
+    // A rota recusaria com 422 ("transição inválida") um gesto que não pediu
+    // nada: a tela não gasta a viagem nem inventa um erro para quem desistiu.
+    montar([demanda("d1", "Uma nova")]);
+
+    await screen.findByText("Uma nova");
+    arrastar("Uma nova", "Nova");
+
+    await waitFor(() => expect(within(colunaDe("Nova")).getByText("Uma nova")).toBeTruthy());
+    expect(escritas()).toHaveLength(0);
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("o botão Mover continua fazendo o mesmo que o arrasto", async () => {
+    montar([demanda("d1", "Uma nova")]);
+
+    fireEvent.click(await screen.findByRole("button", { name: "Mover Uma nova" }));
+    fireEvent.click(within(cardDe("Uma nova")).getByRole("button", { name: "Em andamento" }));
+
+    await waitFor(() => expect(escritas()).toHaveLength(1));
+    expect(escritas()[0].url).toBe("/api/admin/tecnologia/demandas/d1/mover");
+    await waitFor(() => expect(within(colunaDe("Em andamento")).getByText("Uma nova")).toBeTruthy());
+  });
+
+  /** As leituras do Quadro (a Conversa do modal tem GET próprio). */
+  const leiturasDoQuadro = () =>
+    chamadas.filter((c) => c.metodo === "GET" && !c.url.includes("/conversa"));
+
+  it("no 409 a tela recarrega o Quadro sozinha, e o motivo continua à vista", async () => {
+    // A frase do servidor manda recarregar o Quadro, e a tela não tem botão de
+    // recarregar: pedir uma ação que o app não oferece é deixar quem levou a
+    // recusa sem saída. Recarregando aqui, a frase vira descrição do que já
+    // aconteceu. O motivo NÃO some junto, senão o Quadro se corrigiria em
+    // silêncio e o card "voltaria" sozinho sem explicação.
+    montar([demanda("d1", "Uma nova")], {
+      recusa: {
+        status: 409,
+        detail: "O Quadro está desatualizado e este movimento não foi feito. Recarregue o Quadro e tente de novo.",
+      },
+    });
+
+    await screen.findByText("Uma nova");
+    const antes = leiturasDoQuadro().length;
+    arrastar("Uma nova", "Aguardando");
+
+    await screen.findByRole("alert");
+    await waitFor(() => expect(leiturasDoQuadro()).toHaveLength(antes + 1));
+    expect(screen.getByRole("alert").textContent).toContain("Quadro está desatualizado");
+  });
+
+  it("no 422 a tela não recarrega: o que está velho não é o Quadro", async () => {
+    // O par de presença do teste acima: uma tela que recarregasse depois de
+    // toda recusa passaria naquele. A transição proibida não tem nada de
+    // desatualizado, e recarregar ali só gastaria a viagem.
+    montar([demanda("d1", "Fechada", { estado: "concluida" })], {
+      recusa: { status: 422, detail: "A Demanda não pode ir de Concluída para Cancelada." },
+    });
+
+    await screen.findByRole("region", { name: "Concluída" });
+    fireEvent.click(within(colunaDe("Concluída")).getByRole("button"));
+    await screen.findByText("Fechada");
+    const antes = leiturasDoQuadro().length;
+
+    arrastar("Fechada", "Cancelada");
+
+    await screen.findByRole("alert");
+    expect(leiturasDoQuadro()).toHaveLength(antes);
+  });
+});
+
+
+describe("A barra de filtros", () => {
+  const CARDS = [
+    demanda("d1", "Ajuste na Ana", { tipo: "ajuste", produto_id: "prod-1", responsavel_id: "P1" }),
+    demanda("d2", "Defeito nos POPs", { tipo: "defeito", produto_id: "prod-2", responsavel_id: "P2" }),
+  ];
+
+  /**
+   * Escolhe uma opção num dos filtros e espera o Quadro voltar do servidor.
+   *
+   * A espera é o que dá sentido à asserção de ausência: enquanto recarrega, a
+   * tela troca as colunas por "Carregando Demandas..." e NENHUM card está na
+   * tela, então um `queryByText(...).toBeNull()` disparado cedo passaria mesmo
+   * com um servidor que não filtrasse nada.
+   */
+  async function filtrar(campo: string, opcao: string, buscaEsperada: string) {
+    fireEvent.click(await screen.findByRole("combobox", { name: campo }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText(opcao));
+    await waitFor(() => expect(chamadas.at(-1)!.url).toBe(buscaEsperada));
+    await waitFor(() => expect(screen.queryByText("Carregando Demandas...")).toBeNull());
+  }
+
+  it("o filtro por tipo vai na busca da API e reduz o Quadro", async () => {
+    montar(CARDS);
+    await screen.findByText("Ajuste na Ana");
+
+    await filtrar("Filtrar por tipo", "Ajuste", "/api/admin/tecnologia/demandas?tipo=ajuste");
+
+    expect(screen.getByText("Ajuste na Ana")).toBeTruthy();
+    expect(screen.queryByText("Defeito nos POPs")).toBeNull();
+  });
+
+  it("o filtro por Produto vai na busca da API e reduz o Quadro", async () => {
+    montar(CARDS);
+    await screen.findByText("Ajuste na Ana");
+
+    await filtrar("Filtrar por Produto", "POPs", "/api/admin/tecnologia/demandas?produto_id=prod-2");
+
+    expect(screen.getByText("Defeito nos POPs")).toBeTruthy();
+    expect(screen.queryByText("Ajuste na Ana")).toBeNull();
+  });
+
+  it("o filtro por responsável vai na busca da API e reduz o Quadro", async () => {
+    montar(CARDS);
+    await screen.findByText("Ajuste na Ana");
+
+    await filtrar("Filtrar por responsável", "Sócia Vitta", "/api/admin/tecnologia/demandas?responsavel_id=P2");
+
+    expect(screen.getByText("Defeito nos POPs")).toBeTruthy();
+    expect(screen.queryByText("Ajuste na Ana")).toBeNull();
+  });
+
+  it("com filtro ativo a tela diz que está filtrando, e limpar traz o Quadro inteiro de volta", async () => {
+    // Um Quadro filtrado e calado é indistinguível de um Quadro vazio: quem
+    // volta à aba precisa ver que sobrou filtro e ter onde desfazê-lo.
+    montar(CARDS);
+    await screen.findByText("Ajuste na Ana");
+
+    await filtrar("Filtrar por tipo", "Ajuste", "/api/admin/tecnologia/demandas?tipo=ajuste");
+    expect(screen.queryByText("Defeito nos POPs")).toBeNull();
+    expect(screen.getByText(/O Quadro está filtrado/)).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Limpar filtros" }));
+
+    expect(await screen.findByText("Defeito nos POPs")).toBeTruthy();
+    expect(screen.getByText("Ajuste na Ana")).toBeTruthy();
+    expect(chamadas.at(-1)!.url).toBe("/api/admin/tecnologia/demandas");
+  });
+
+  it("sem filtro nenhum a tela não diz que está filtrando", async () => {
+    // O par de presença do teste acima: um aviso cravado passaria naquele.
+    montar(CARDS);
+
+    await screen.findByText("Ajuste na Ana");
+    expect(screen.queryByText(/O Quadro está filtrado/)).toBeNull();
+    expect(screen.queryByRole("button", { name: "Limpar filtros" })).toBeNull();
+  });
+
+  it("o filtro alcança também o Produto inativado, marcado como tal", async () => {
+    // Desativar um Produto o tira da ESCOLHA de quem abre Demanda nova, não do
+    // histórico (ADR 0050, decisão 11). As Demandas dele continuam no Quadro,
+    // então um filtro que não o oferecesse deixaria essas Demandas fora do
+    // alcance de qualquer filtro. A marca evita a pergunta "por que este
+    // Produto está aqui e não no formulário?".
+    montar(CARDS);
+    fireEvent.click(await screen.findByRole("combobox", { name: "Filtrar por Produto" }));
+
+    const opcoes = within(screen.getByRole("listbox")).getAllByRole("option");
+    expect(opcoes.map((o) => o.textContent)).toEqual([
+      "Todos os Produtos",
+      "Ana",
+      "POPs",
+      "Site antigo (inativo)",
+    ]);
+  });
+
+  it("o formulário de Demanda nova continua só com Produto ativo", async () => {
+    // O par do teste acima: filtrar é ler o histórico, abrir é escolher onde a
+    // Demanda nasce, e só a segunda cobra Produto ativo.
+    montar(CARDS);
+    fireEvent.click(await screen.findByRole("button", { name: /Nova Demanda/ }));
+    fireEvent.click(screen.getByRole("combobox", { name: "Produto" }));
+
+    const opcoes = within(screen.getByRole("listbox")).getAllByRole("option");
+    expect(opcoes.map((o) => o.textContent)).toEqual(["Ana", "POPs"]);
+  });
+});
+
+describe("Duas trocas de filtro em sequência", () => {
+  /** Uma chamada que o componente fez e que ainda não teve resposta. */
+  type Pendente = {
+    url: string;
+    /** Responde 200 com esta lista. */
+    responder: (dados: Demanda[]) => void;
+    /** Responde com este status de erro. */
+    recusar: (status: number, detail?: string) => void;
+  };
+
+  /**
+   * O `fetch` que NÃO responde sozinho.
+   *
+   * O servidor falso dos outros testes responde na hora, e por isso não sabe
+   * dizer nada sobre ordem de chegada. Aqui cada chamada fica pendurada até o
+   * teste mandar responder, que é o único jeito de escrever a ordem em que as
+   * respostas voltam, que é onde a corrida mora.
+   */
+  function filaDeChamadas(): Pendente[] {
+    const pendentes: Pendente[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (url: string) =>
+          new Promise((resolve) => {
+            pendentes.push({
+              url,
+              responder: (dados) =>
+                resolve({ ok: true, status: 200, json: async () => dados } as unknown as Response),
+              recusar: (status, detail) =>
+                resolve({
+                  ok: false,
+                  status,
+                  json: async () => ({ detail: detail ?? "recusado" }),
+                } as unknown as Response),
+            });
+          }),
+      ),
+    );
+    return pendentes;
+  }
+
+  /**
+   * Dá ao React o tempo de processar a resposta recém entregue.
+   *
+   * Sem esta espera PEDIDA, quem daria o tempo seria o ciclo de algum
+   * `waitFor` mais adiante, e o teste passaria por sorte de agendamento em vez
+   * de por asserção.
+   */
+  async function deixarOReactProcessar() {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+  }
+
+  /** O host dos filtros, como o módulo faz. */
+  function Anfitriao() {
+    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
+    return (
+      <QuadroDemandas
+        token="token-de-teste"
+        carregandoAuth={false}
+        produtos={PRODUTOS}
+        pessoas={PESSOAS}
+        filtros={filtros}
+        onFiltrosChange={setFiltros}
+      />
+    );
+  }
+
+  const AJUSTE = demanda("d1", "Ajuste na Ana", { tipo: "ajuste" });
+  const DEFEITO = demanda("d2", "Defeito nos POPs", { tipo: "defeito" });
+
+  /** Escolhe um tipo na barra de filtros. */
+  function escolherTipo(rotulo: string) {
+    fireEvent.click(screen.getByRole("combobox", { name: "Filtrar por tipo" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText(rotulo));
+  }
+
+  /**
+   * Monta a tela com o Quadro já pintado e DOIS pedidos de filtro no ar.
+   *
+   * Devolve a fila: `[0]` é a leitura inicial (já respondida), `[1]` é o
+   * pedido do filtro Ajuste (o VELHO) e `[2]` o do filtro Defeito (o NOVO).
+   */
+  async function comDoisPedidosNoAr(): Promise<Pendente[]> {
+    const pendentes = filaDeChamadas();
+    render(<Anfitriao />);
+
+    await waitFor(() => expect(pendentes).toHaveLength(1));
+    pendentes[0].responder([AJUSTE, DEFEITO]);
+    await screen.findByText("Ajuste na Ana");
+
+    escolherTipo("Ajuste");
+    await waitFor(() => expect(pendentes).toHaveLength(2));
+    escolherTipo("Defeito");
+    await waitFor(() => expect(pendentes).toHaveLength(3));
+
+    expect(pendentes[1].url).toContain("tipo=ajuste");
+    expect(pendentes[2].url).toContain("tipo=defeito");
+    return pendentes;
+  }
+
+  it("a resposta atrasada do filtro antigo não repinta o Quadro do filtro novo", async () => {
+    // A rede não devolve na ordem em que foi chamada. Quem troca o filtro duas
+    // vezes rápido deixa dois GET no ar; se o PRIMEIRO chegar por último, uma
+    // tela ingênua pinta o resultado do filtro que ninguém está mais vendo, com
+    // os campos mostrando o filtro novo. É mentira silenciosa: nada de erro,
+    // nada de espera, só o Quadro errado.
+    const pendentes = await comDoisPedidosNoAr();
+
+    // O pedido NOVO chega primeiro, e o velho depois.
+    pendentes[2].responder([DEFEITO]);
+    await screen.findByText("Defeito nos POPs");
+    pendentes[1].responder([AJUSTE]);
+    await deixarOReactProcessar();
+
+    expect(screen.getByText("Defeito nos POPs")).toBeTruthy();
+    expect(screen.queryByText("Ajuste na Ana")).toBeNull();
+  });
+
+  it("a resposta do filtro antigo que chega PRIMEIRO não desliga a espera", async () => {
+    // A ordem inversa da anterior, e é ela que exercita a guarda da espera: o
+    // pedido velho chegando antes do novo. Sem a guarda, a tela diz "pronto" e
+    // mostra a lista de ANTES do filtro, com o campo escrito com o filtro novo,
+    // enquanto a leitura de verdade ainda está vindo.
+    const pendentes = await comDoisPedidosNoAr();
+
+    pendentes[1].responder([AJUSTE]);
+    await deixarOReactProcessar();
+
+    expect(screen.getByText("Carregando Demandas...")).toBeTruthy();
+    expect(screen.queryByText("Ajuste na Ana")).toBeNull();
+
+    // A irmã de presença: quando o pedido NOVO chega, a espera acaba e o card
+    // certo aparece, então "ainda carregando" acima não é uma tela travada.
+    pendentes[2].responder([DEFEITO]);
+    expect(await screen.findByText("Defeito nos POPs")).toBeTruthy();
+    expect(screen.queryByText("Carregando Demandas...")).toBeNull();
+  });
+
+  it("a falha do pedido antigo não escreve aviso por cima do Quadro certo", async () => {
+    // Filtro velho devolve 500, filtro novo devolve 200. Se o 500 chegar por
+    // último, uma tela sem guarda mostraria "Não foi possível carregar as
+    // Demandas." em cima de um Quadro que está perfeitamente certo.
+    const pendentes = await comDoisPedidosNoAr();
+
+    pendentes[2].responder([DEFEITO]);
+    await screen.findByText("Defeito nos POPs");
+    pendentes[1].recusar(500);
+    await deixarOReactProcessar();
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("Defeito nos POPs")).toBeTruthy();
+  });
+
+  it("a falha do pedido mais novo, essa sim, vira aviso", async () => {
+    // O par de presença do teste acima: sem ele, uma tela que engolisse TODA
+    // falha de leitura passaria naquele.
+    const pendentes = await comDoisPedidosNoAr();
+
+    pendentes[1].responder([AJUSTE]);
+    pendentes[2].recusar(500);
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Não foi possível carregar as Demandas.",
+    );
+  });
+
+  it("o Quadro que volta não apaga a recusa de uma escrita", async () => {
+    // Com o formulário aberto: trocar o filtro deixa um GET no ar, a escrita é
+    // recusada e escreve o alerta, e o GET chega depois. Se ele limpasse o
+    // erro, o formulário ficaria aberto, preenchido, e sem explicação nenhuma
+    // de por que a Demanda não foi criada.
+    const pendentes = filaDeChamadas();
+    render(<Anfitriao />);
+
+    await waitFor(() => expect(pendentes).toHaveLength(1));
+    pendentes[0].responder([AJUSTE, DEFEITO]);
+    await screen.findByText("Ajuste na Ana");
+
+    fireEvent.click(screen.getByRole("button", { name: /Nova Demanda/ }));
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Encerrar conversas" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Produto" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Ana"));
+
+    escolherTipo("Ajuste");
+    await waitFor(() => expect(pendentes).toHaveLength(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
+    await waitFor(() => expect(pendentes).toHaveLength(3));
+    pendentes[2].recusar(422, "Produto sem dono nao recebe Demanda nova.");
+    expect((await screen.findByRole("alert")).textContent).toContain("Produto sem dono");
+
+    pendentes[1].responder([AJUSTE]);
+    await deixarOReactProcessar();
+
+    expect(screen.getByRole("alert").textContent).toContain("Produto sem dono");
+    // O formulário continua aberto com o que foi digitado, ao lado do motivo.
+    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Encerrar conversas");
+  });
+
+  it("o Quadro que volta apaga, sim, o aviso da leitura anterior", async () => {
+    // O par de presença do teste acima: um `carregar` que nunca limpasse erro
+    // nenhum passaria naquele, e deixaria na tela um aviso de falha que a
+    // leitura seguinte já desmentiu.
+    const pendentes = filaDeChamadas();
+    render(<Anfitriao />);
+
+    await waitFor(() => expect(pendentes).toHaveLength(1));
+    pendentes[0].recusar(500);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Não foi possível carregar as Demandas.",
+    );
+
+    escolherTipo("Ajuste");
+    await waitFor(() => expect(pendentes).toHaveLength(2));
+    pendentes[1].responder([AJUSTE]);
+
+    expect(await screen.findByText("Ajuste na Ana")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

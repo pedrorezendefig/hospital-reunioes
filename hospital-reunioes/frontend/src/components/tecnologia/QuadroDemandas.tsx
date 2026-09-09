@@ -11,11 +11,14 @@
  * atrasado. Idade e atraso são coisas diferentes, e o card diz as duas: sem
  * prazo a Demanda não atrasa, só envelhece (ADR 0050, decisão 5).
  *
- * Arrastar entre colunas e a tela de filtros são da issue #639: aqui o gesto é
- * o botão "Mover", que fala com o mesmo endpoint.
+ * Arrastar entre colunas e a barra de filtros são da issue #639. Arrastar não
+ * é um caminho novo: solta o card e chama o MESMO endpoint do botão "Mover",
+ * que continua ali como o caminho de quem não usa o mouse. O card só muda de
+ * coluna depois que o servidor aceitou, porque a recusa (422 da transição
+ * proibida, 409 do Quadro desatualizado) é dele, e não da tela.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CalendarClock, Plus } from "lucide-react";
 
 import { Select } from "@/components/ui/Select";
@@ -32,6 +35,7 @@ import {
   EstadoDemanda,
   estaAtrasado,
   FALHA_DE_CONEXAO,
+  FiltrosDoQuadro,
   idadeEmDias,
   IDADE_VERMELHA_A_PARTIR_DE,
   motivoDaRecusa,
@@ -41,6 +45,9 @@ import {
   PrioridadeDemanda,
   prazoLegivel,
   ProdutoDaEscolha,
+  queryDeFiltros,
+  SEM_FILTRO,
+  temFiltroAtivo,
   textoDaIdade,
   TIPO_ROTULO,
   TIPOS,
@@ -60,6 +67,15 @@ type Props = {
   carregandoAuth: boolean;
   produtos: ProdutoDaEscolha[];
   pessoas: PessoaDaAba[];
+  /**
+   * Os filtros valendo agora.
+   *
+   * Eles moram na aba Tecnologia, e não aqui, porque precisam sobreviver à
+   * troca de aba: o painel do Quadro é desmontado quando alguém vai a "Minha
+   * vez", e um estado local voltaria ao zero na volta (issue #639).
+   */
+  filtros: FiltrosDoQuadro;
+  onFiltrosChange: (filtros: FiltrosDoQuadro) => void;
 };
 
 const CLASSE_PRIORIDADE: Record<PrioridadeDemanda, string> = {
@@ -79,6 +95,11 @@ const CLASSE_PRIORIDADE: Record<PrioridadeDemanda, string> = {
 const SEM_SESSAO =
   "Não foi possível carregar as Demandas: a sessão não está ativa ou o servidor não respondeu. Tente recarregar a página.";
 
+/** As opções que LIMPAM cada filtro: o rótulo é o mesmo do campo em branco. */
+const TODOS_OS_TIPOS = "Todos os tipos";
+const TODOS_OS_PRODUTOS = "Todos os Produtos";
+const TODOS_OS_RESPONSAVEIS = "Todos os responsáveis";
+
 const FORM_VAZIO = {
   titulo: "",
   tipo: "decisao" as TipoDemanda,
@@ -87,7 +108,14 @@ const FORM_VAZIO = {
   descricao: "",
 };
 
-export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Props) {
+export function QuadroDemandas({
+  token,
+  carregandoAuth,
+  produtos,
+  pessoas,
+  filtros,
+  onFiltrosChange,
+}: Props) {
   const [demandas, setDemandas] = useState<Demanda[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -96,11 +124,36 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
   const [form, setForm] = useState(FORM_VAZIO);
   const [moverAberto, setMoverAberto] = useState<string | null>(null);
   const [abertaId, setAbertaId] = useState<string | null>(null);
+  const [arrastando, setArrastando] = useState<string | null>(null);
+  /**
+   * O número do pedido de leitura mais recente.
+   *
+   * A rede não devolve na ordem em que foi chamada: trocar o filtro duas vezes
+   * rápido deixa dois GET no ar, e se o primeiro chegar por último ele pinta o
+   * Quadro do filtro que ninguém está mais vendo, com os campos mostrando o
+   * filtro novo. Cada leitura leva o seu número e só escreve na tela se ainda
+   * for a última.
+   */
+  const ultimoPedido = useRef(0);
+  /**
+   * Se o aviso na tela veio de uma ESCRITA recusada.
+   *
+   * A leitura que dá certo limpa o aviso, e é o que se quer quando o aviso é
+   * dela. Mas trocar o filtro dispara uma leitura, e ela chegando depois de
+   * uma recusa de escrita apagaria o motivo: o formulário ficaria aberto,
+   * preenchido, e sem explicação nenhuma de por que a Demanda não foi criada.
+   */
+  const erroDeEscrita = useRef(false);
 
   const autorizacao = useCallback(
     () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
     [token],
   );
+
+  // Quem peneira é a API, com os filtros que ela já aceita: peneirar aqui
+  // esconderia os cards sem tirá-los da resposta, e a mesma tela mostraria
+  // contas diferentes conforme o que já tivesse sido baixado.
+  const busca = queryDeFiltros(filtros);
 
   /**
    * Carrega o Quadro.
@@ -111,22 +164,33 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
    */
   const carregar = useCallback(async () => {
     if (!token) return;
+    const meuPedido = ultimoPedido.current + 1;
+    ultimoPedido.current = meuPedido;
     setCarregando(true);
     try {
-      const resposta = await fetch(`${BASE_TECNOLOGIA}/demandas`, { headers: autorizacao() });
+      const resposta = await fetch(`${BASE_TECNOLOGIA}/demandas${busca}`, { headers: autorizacao() });
+      // Chegou tarde: já há um pedido mais novo no ar, e o que esta resposta
+      // conta não é mais o que a tela está pedindo.
+      if (meuPedido !== ultimoPedido.current) return;
       if (!resposta.ok) {
+        erroDeEscrita.current = false;
         setErro("Não foi possível carregar as Demandas.");
         return;
       }
       setDemandas(await resposta.json());
-      setErro(null);
+      // A leitura só apaga o aviso que a leitura pode ter posto.
+      if (!erroDeEscrita.current) setErro(null);
     } catch (e) {
       console.error("[admin/tecnologia] falha ao carregar as Demandas", e);
+      if (meuPedido !== ultimoPedido.current) return;
+      erroDeEscrita.current = false;
       setErro(FALHA_DE_CONEXAO);
     } finally {
-      setCarregando(false);
+      // A espera só acaba com a resposta do pedido mais novo: desligá-la na
+      // resposta velha diria "pronto" com a leitura de verdade ainda vindo.
+      if (meuPedido === ultimoPedido.current) setCarregando(false);
     }
-  }, [token, autorizacao]);
+  }, [token, autorizacao, busca]);
 
   useEffect(() => {
     // Enquanto a autenticação resolve, o token nulo não quer dizer nada ainda:
@@ -151,13 +215,22 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
       resposta = await fetch(url, { method: metodo, headers: autorizacao(), body: JSON.stringify(corpo) });
     } catch (e) {
       console.error("[admin/tecnologia] falha ao salvar a Demanda", e);
+      erroDeEscrita.current = true;
       setErro(FALHA_DE_CONEXAO);
       return false;
     }
     if (!resposta.ok) {
+      erroDeEscrita.current = true;
       setErro(await motivoDaRecusa(resposta));
+      // O 409 diz que o Quadro está desatualizado e manda recarregar, e a tela
+      // não tem onde: pedir uma ação que o app não oferece deixa quem levou a
+      // recusa sem saída. Recarregando aqui, a frase passa a descrever o que
+      // já aconteceu. O motivo continua na tela, senão o card "voltaria"
+      // sozinho e ninguém saberia por quê.
+      if (resposta.status === 409) await carregar();
       return false;
     }
+    erroDeEscrita.current = false;
     setErro(null);
     await carregar();
     return true;
@@ -182,7 +255,24 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
     await enviar(`${BASE_TECNOLOGIA}/demandas/${demanda.id}/mover`, "POST", { estado });
   }
 
+  /**
+   * Solta o card na coluna.
+   *
+   * Nada muda de lugar antes da resposta: o servidor pode recusar a transição
+   * (422) ou dizer que o Quadro está desatualizado (409), e um card já pintado
+   * na coluna nova contaria uma história que não aconteceu. Soltar na coluna
+   * de origem não é movimento nenhum, e a rota recusaria com um erro que quem
+   * desistiu do gesto não precisa ler.
+   */
+  function soltarEm(estado: EstadoDemanda) {
+    const demanda = demandas.find((d) => d.id === arrastando);
+    setArrastando(null);
+    if (!demanda || demanda.estado === estado) return;
+    mover(demanda, estado);
+  }
+
   const produtosAtivos = produtos.filter((p) => p.ativo);
+  const filtrando = temFiltroAtivo(filtros);
   const aberta = demandas.find((d) => d.id === abertaId) ?? null;
   const agora = new Date();
 
@@ -196,7 +286,19 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
     const atrasada = estaAtrasado(demanda.prazo, agora);
 
     return (
-      <li key={demanda.id} className="rounded-xl border border-border bg-white p-3 space-y-2 shadow-sm">
+      <li
+        key={demanda.id}
+        draggable
+        onDragStart={(e) => {
+          // O `setData` é para o navegador: sem carga, o Firefox nem começa o
+          // arrasto. Quem o componente lê ao soltar é o estado, que o jsdom
+          // também enxerga.
+          e.dataTransfer?.setData("text/plain", demanda.id);
+          setArrastando(demanda.id);
+        }}
+        onDragEnd={() => setArrastando(null)}
+        className="rounded-xl border border-border bg-white p-3 space-y-2 shadow-sm cursor-grab active:cursor-grabbing"
+      >
         <button
           type="button"
           onClick={() => setAbertaId(demanda.id)}
@@ -274,6 +376,63 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
         </button>
       </div>
 
+      <div className="rounded-xl border border-border bg-surface p-3 space-y-3">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Select
+            label="Filtrar por tipo"
+            value={filtros.tipo}
+            onChange={(tipo) => onFiltrosChange({ ...filtros, tipo })}
+            options={[
+              { value: "", label: TODOS_OS_TIPOS },
+              ...TIPOS.map((t) => ({ value: t, label: TIPO_ROTULO[t] })),
+            ]}
+            placeholder={TODOS_OS_TIPOS}
+          />
+          <Select
+            label="Filtrar por Produto"
+            value={filtros.produto_id}
+            onChange={(produto_id) => onFiltrosChange({ ...filtros, produto_id })}
+            // Todos os Produtos, e não só os ativos: desativar tira o Produto
+            // da escolha de quem abre Demanda nova, não do histórico (ADR 0050,
+            // decisão 11). As Demandas dele continuam no Quadro, e sem esta
+            // opção elas ficariam fora do alcance de qualquer filtro.
+            options={[
+              { value: "", label: TODOS_OS_PRODUTOS },
+              ...produtos.map((p) => ({ value: p.id, label: p.ativo ? p.nome : `${p.nome} (inativo)` })),
+            ]}
+            placeholder={TODOS_OS_PRODUTOS}
+          />
+          <Select
+            label="Filtrar por responsável"
+            value={filtros.responsavel_id}
+            onChange={(responsavel_id) => onFiltrosChange({ ...filtros, responsavel_id })}
+            options={[
+              { value: "", label: TODOS_OS_RESPONSAVEIS },
+              ...pessoas.map((p) => ({ value: p.id, label: p.nome_completo })),
+            ]}
+            placeholder={TODOS_OS_RESPONSAVEIS}
+          />
+        </div>
+
+        {/* O Quadro filtrado e calado é indistinguível do Quadro vazio: quem
+            volta à aba com o filtro de antes concluiria que as Demandas
+            sumiram. O aviso diz o que está acontecendo e onde desfazer. */}
+        {filtrando && (
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <p className="text-sm text-amber-700">
+              O Quadro está filtrado: as Demandas fora do filtro não aparecem em nenhuma coluna.
+            </p>
+            <button
+              type="button"
+              onClick={() => onFiltrosChange(SEM_FILTRO)}
+              className="px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-text-secondary hover:border-primary hover:text-primary transition-colors"
+            >
+              Limpar filtros
+            </button>
+          </div>
+        )}
+      </div>
+
       {abrindoForm && (
         <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
@@ -338,9 +497,17 @@ export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Pro
               <section
                 key={estado}
                 aria-label={ESTADO_ROTULO[estado]}
-                className={`shrink-0 rounded-xl border border-border bg-surface p-3 ${
+                onDragOver={(e) => {
+                  // Sem o `preventDefault` o navegador recusa o "soltar aqui".
+                  if (arrastando) e.preventDefault();
+                }}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  soltarEm(estado);
+                }}
+                className={`shrink-0 rounded-xl border bg-surface p-3 ${
                   expandida ? "w-[260px]" : "w-[180px]"
-                }`}
+                } ${arrastando ? "border-dashed border-primary/50" : "border-border"}`}
               >
                 {recolhivel ? (
                   <button

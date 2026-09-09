@@ -430,3 +430,43 @@ describe("A recusa do servidor chega ao Super admin", () => {
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+describe("Os filtros do Quadro, lembrados entre as abas", () => {
+  const aba = (nome: string) => screen.getByRole("tab", { name: nome });
+  const demandasPedidas = () => chamadas.filter((c) => c.url.includes("/demandas"));
+
+  it("o filtro escolhido continua valendo depois de ir a outra aba e voltar", async () => {
+    // Se os filtros morassem dentro do Quadro, a troca de aba desmontaria o
+    // componente e o filtro voltaria ao zero: por isso eles moram aqui.
+    montar([produto("p1", "Ana", 1, { dono_id: "P1" })]);
+
+    fireEvent.click(await screen.findByRole("combobox", { name: "Filtrar por tipo" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Ajuste"));
+    await waitFor(() =>
+      expect(demandasPedidas().at(-1)!.url).toBe("/api/admin/tecnologia/demandas?tipo=ajuste"),
+    );
+
+    fireEvent.click(aba("Minha vez"));
+    expect(screen.queryByRole("combobox", { name: "Filtrar por tipo" })).toBeNull();
+
+    fireEvent.click(aba("Quadro"));
+
+    const filtro = await screen.findByRole("combobox", { name: "Filtrar por tipo" });
+    expect(filtro.textContent).toContain("Ajuste");
+    await waitFor(() =>
+      expect(demandasPedidas().at(-1)!.url).toBe("/api/admin/tecnologia/demandas?tipo=ajuste"),
+    );
+  });
+
+  it("sem escolher filtro, a volta à aba pede o Quadro inteiro", async () => {
+    // O par de presença do teste acima: uma tela que sempre mandasse
+    // `?tipo=ajuste` passaria naquele sozinho.
+    montar([produto("p1", "Ana", 1, { dono_id: "P1" })]);
+
+    await screen.findByRole("combobox", { name: "Filtrar por tipo" });
+    fireEvent.click(aba("Histórico"));
+    fireEvent.click(aba("Quadro"));
+
+    await waitFor(() => expect(demandasPedidas().at(-1)!.url).toBe("/api/admin/tecnologia/demandas"));
+  });
+});
