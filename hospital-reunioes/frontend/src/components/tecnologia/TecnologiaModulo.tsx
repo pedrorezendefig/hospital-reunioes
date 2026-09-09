@@ -187,7 +187,12 @@ export function TecnologiaModulo() {
 
       <div role="tabpanel">
         {aba === "quadro" ? (
-          <QuadroDemandas token={token} produtos={produtos} pessoas={pessoas} />
+          <QuadroDemandas
+            token={token}
+            carregandoAuth={carregandoAuth}
+            produtos={produtos}
+            pessoas={pessoas}
+          />
         ) : (
           <div className="rounded-xl border border-border bg-surface p-6">
             <p className="text-sm text-text-secondary">
@@ -296,7 +301,11 @@ export function TecnologiaModulo() {
                             ...opcoesDeDono,
                             {
                               value: produto.dono_id,
-                              label: produto.dono_nome ?? produto.dono_id,
+                              // A marca é o par na tela do carimbo do backend:
+                              // a API recusa abrir Demanda neste Produto e manda
+                              // trocar o dono aqui. Sem ela, quem chega vê um
+                              // nome normal e não descobre qual é o problema.
+                              label: `${produto.dono_nome ?? produto.dono_id} (sem acesso à aba)`,
                             },
                           ]
                         : opcoesDeDono

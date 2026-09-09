@@ -54,7 +54,6 @@ from app.models.tecnologia_schemas import (
     ProdutoUpdatePayload,
 )
 from app.services.tecnologia import (
-    ESTADO_ROTULO,
     MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO,
     MOTIVO_DONO_SEM_ACESSO,
     MOTIVO_PRODUTO_ATIVO_SEM_DONO,
@@ -348,6 +347,25 @@ def _normalizar_prazo(valor: str | None) -> str | None:
         _recusar("Prazo precisa estar no formato AAAA-MM-DD.")
 
 
+LIMITE_TITULO = 200
+
+
+def _titulo_valido(bruto: str) -> str:
+    """O titulo limpo, ou 422 com frase de gente nos DOIS limites.
+
+    Vazio e "grande demais" saem daqui, e nao do pydantic, pelo mesmo motivo:
+    o `detail` do pydantic vem em LISTA, e a tela mostra o JSON cru no alerta
+    vermelho. Colar um texto no campo Título passa de 200 caracteres com
+    facilidade, entao esse caso e tao comum quanto apagar o campo.
+    """
+    titulo = bruto.strip()
+    if not titulo:
+        _recusar("Título da Demanda não pode ser vazio.")
+    if len(titulo) > LIMITE_TITULO:
+        _recusar(f"Título da Demanda pode ter no máximo {LIMITE_TITULO} caracteres.")
+    return titulo
+
+
 def _fio_incompleto() -> NoReturn:
     """500 honesto: o movimento foi, a linha do fio nao."""
     raise HTTPException(
@@ -377,9 +395,14 @@ def _gravar_movimento(
     chamadas ao PostgREST, que nao tem transacao, e RPC nova esta fora do
     escopo desta fatia. O que da para garantir e que a falha nao passe calada.
     Se o insert nao voltar a linha (recusa do banco, timeout, PostgREST fora),
-    o log fica com tudo o que a linha diria, e quem clicou recebe 500 com a
+    o log guarda o identificador e o de/para, e quem clicou recebe 500 com a
     frase honesta: a Demanda MUDOU e o fio ficou incompleto. Dizer "nao deu
     certo" seria mentira, porque o movimento ja esta gravado.
+
+    O log NAO leva o `texto`: ele carrega o nome de quem moveu ("Pedro moveu
+    para Aguardando"), e o padrao da casa e logar identificador, nao payload
+    (o `ouvidoria_setor.py` loga so o `manifestacao_id`). `demanda_id`, `campo`,
+    `de` e `para` dizem a mesma coisa para quem for reconstruir a linha.
     """
     linha = {
         "demanda_id": demanda_id,
@@ -397,10 +420,22 @@ def _gravar_movimento(
         # `except APIError` nao pegaria o `httpx.HTTPError` que o timeout do
         # PostgREST sobe cru, e aqui qualquer falha tem o mesmo desfecho: a
         # linha nao entrou.
-        logger.exception("Falha ao gravar a linha de movimento da Demanda %s: %s", demanda_id, linha)
+        logger.exception(
+            "Falha ao gravar a linha de movimento da Demanda %s (campo=%s, de=%s, para=%s)",
+            demanda_id,
+            campo,
+            de,
+            para,
+        )
         _fio_incompleto()
     if not result.data:
-        logger.error("Linha de movimento nao gravada para a Demanda %s: %s", demanda_id, linha)
+        logger.error(
+            "Linha de movimento nao gravada para a Demanda %s (campo=%s, de=%s, para=%s)",
+            demanda_id,
+            campo,
+            de,
+            para,
+        )
         _fio_incompleto()
 
 
@@ -465,9 +500,7 @@ async def criar_demanda(
     if dono_id not in {p["id"] for p in _pessoas_da_aba(supabase)}:
         _recusar(MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO)
 
-    titulo = payload.titulo.strip()
-    if not titulo:
-        _recusar("Título da Demanda não pode ser vazio.")
+    titulo = _titulo_valido(payload.titulo)
     descricao = (payload.descricao or "").strip() or None
 
     nova = {
@@ -509,10 +542,7 @@ async def atualizar_demanda(
     mudancas: dict = {}
 
     if "titulo" in informados and payload.titulo is not None:
-        titulo = payload.titulo.strip()
-        if not titulo:
-            _recusar("Título da Demanda não pode ser vazio.")
-        mudancas["titulo"] = titulo
+        mudancas["titulo"] = _titulo_valido(payload.titulo)
     if "descricao" in informados:
         mudancas["descricao"] = (payload.descricao or "").strip() or None
     if "tipo" in informados and payload.tipo is not None:
@@ -563,15 +593,13 @@ async def mover_demanda(
 
     result = supabase.table(TABELA_DEMANDAS).update(mudancas).eq("id", demanda_id).eq("estado", de).execute()
     if not result.data:
-        # Nao da para distinguir "outra pessoa moveu" de "a linha sumiu", e as
-        # duas cabem na mesma frase: a Demanda nao esta mais onde estava quando
-        # este clique comecou. Nao culpar uma causa so.
+        # A frase fala do DESFECHO, e nao da causa nem de onde a Demanda esta.
+        # O que o codigo sabe e so isto: o update nao casou linha nenhuma, e
+        # portanto o movimento nao aconteceu. Quem moveu, e para onde a Demanda
+        # foi parar, o codigo nao viu.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"A Demanda não está mais em {ESTADO_ROTULO.get(de, de)}: "
-                "alguém mexeu nela enquanto você olhava. Recarregue o Quadro e tente de novo."
-            ),
+            detail=("O Quadro está desatualizado e este movimento não foi feito. Recarregue o Quadro e tente de novo."),
         )
 
     _gravar_movimento(

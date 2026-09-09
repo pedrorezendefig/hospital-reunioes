@@ -201,6 +201,7 @@ export function DemandaModal({ demanda, produtos, pessoas, token, onFechar, onMu
             <input
               type="text"
               aria-label="Título"
+              maxLength={200}
               value={campos.titulo}
               onChange={(e) => setCampos({ ...campos, titulo: e.target.value })}
               className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"

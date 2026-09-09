@@ -49,6 +49,15 @@ import {
 
 type Props = {
   token: string | null;
+  /**
+   * Se a autenticação ainda está resolvendo.
+   *
+   * O `useAuth` nasce com `{ token: null, loading: true }` e só entrega o
+   * token depois de duas idas à rede. Sem esta prop, o Quadro leria o `token`
+   * nulo do primeiro render como "não há sessão" e piscaria o alerta vermelho
+   * em toda abertura da aba, com a sessão perfeitamente válida.
+   */
+  carregandoAuth: boolean;
   produtos: ProdutoDaEscolha[];
   pessoas: PessoaDaAba[];
 };
@@ -78,7 +87,7 @@ const FORM_VAZIO = {
   descricao: "",
 };
 
-export function QuadroDemandas({ token, produtos, pessoas }: Props) {
+export function QuadroDemandas({ token, carregandoAuth, produtos, pessoas }: Props) {
   const [demandas, setDemandas] = useState<Demanda[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
@@ -120,8 +129,13 @@ export function QuadroDemandas({ token, produtos, pessoas }: Props) {
   }, [token, autorizacao]);
 
   useEffect(() => {
+    // Enquanto a autenticação resolve, o token nulo não quer dizer nada ainda:
+    // acusar sessão aqui pintaria o alerta vermelho em toda abertura da aba.
+    // A tela segue em "Carregando Demandas...", que é o que de fato acontece.
+    if (carregandoAuth) return;
     if (!token) {
-      // Sem token o Quadro desenharia cinco colunas zeradas, calado, que é
+      // Resolvida a autenticação, token nulo é sessão de verdade ausente. Sem
+      // este aviso o Quadro desenharia cinco colunas zeradas, calado, que é
       // indistinguível de "não há Demanda nenhuma". O aviso do módulo não
       // cobre este caso: ele fala de Produtos e mora abaixo do Quadro.
       setCarregando(false);
@@ -129,7 +143,7 @@ export function QuadroDemandas({ token, produtos, pessoas }: Props) {
       return;
     }
     carregar();
-  }, [token, carregar]);
+  }, [carregandoAuth, token, carregar]);
 
   async function enviar(url: string, metodo: string, corpo: unknown): Promise<boolean> {
     let resposta: Response;
@@ -267,6 +281,7 @@ export function QuadroDemandas({ token, produtos, pessoas }: Props) {
               type="text"
               aria-label="Título"
               placeholder="O que precisa acontecer"
+              maxLength={200}
               value={form.titulo}
               onChange={(e) => setForm({ ...form, titulo: e.target.value })}
               className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white md:col-span-2"

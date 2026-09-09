@@ -19,6 +19,7 @@ varre o schema OpenAPI e ja engole toda rota nova deste arquivo.
 from __future__ import annotations
 
 import itertools
+import logging
 import os
 import sys
 from dataclasses import dataclass
@@ -599,6 +600,18 @@ class TestCriarDemanda:
         assert resposta.status_code == 422
         assert resposta.json()["detail"] == "Título da Demanda não pode ser vazio."
 
+    def test_titulo_grande_demais_na_criacao_tambem_volta_frase_de_gente(self):
+        client, sb = _montar()
+
+        resposta = client.post(
+            f"{BASE}/demandas",
+            json={"titulo": "x" * 201, "tipo": "ajuste", "produto_id": "prod-1"},
+        )
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == "Título da Demanda pode ter no máximo 200 caracteres."
+        assert sb.tabelas["tecnologia_demandas"] == []
+
 
 # ─── 3. A Demanda anda ───────────────────────────────────────────────────────
 
@@ -690,8 +703,12 @@ class TestMoverPelaRota:
 
         assert resposta.status_code == 409
         motivo = resposta.json()["detail"]
-        assert "não está mais em Nova" in motivo
+        # A frase fala do DESFECHO. O codigo so sabe que o update nao casou
+        # linha nenhuma: quem mexeu, e onde a Demanda foi parar, ele nao viu.
+        assert "O Quadro está desatualizado" in motivo
+        assert "não foi feito" in motivo
         assert "Recarregue o Quadro" in motivo
+        assert "alguém" not in motivo
         # A escrita nao passou: o estado e o que a outra pessoa deixou.
         assert sb.tabelas["tecnologia_demandas"][0]["estado"] == "aguardando"
         assert sb.tabelas["tecnologia_conversas"] == []
@@ -723,6 +740,25 @@ class TestMoverPelaRota:
         assert "fio desta Demanda ficou incompleto" in motivo
         # E a resposta nao mente: o movimento esta gravado.
         assert sb.tabelas["tecnologia_demandas"][0]["estado"] == "aguardando"
+
+    def test_o_log_da_falha_nao_leva_nome_de_gente(self, caplog):
+        """O padrao da casa e logar identificador, nao payload.
+
+        O `texto` da linha carrega o nome de quem moveu ("Pedro Vitta moveu
+        para Aguardando"). O log diz a mesma coisa com `demanda_id`, `campo`,
+        `de` e `para`, sem nome de pessoa. A ausencia so significa algo porque
+        os marcadores positivos estao no mesmo registro: sem eles, um log vazio
+        passaria.
+        """
+        client, _ = _montar(demandas=[_demanda("d1", estado="nova")], fio_falha="vazio")
+
+        with caplog.at_level(logging.ERROR, logger="app.routers.admin.tecnologia"):
+            client.post(f"{BASE}/demandas/d1/mover", json={"estado": "aguardando"})
+
+        assert "d1" in caplog.text
+        assert "campo=estado" in caplog.text
+        assert "para=aguardando" in caplog.text
+        assert "Pedro Vitta" not in caplog.text
 
     def test_o_movimento_grava_a_linha_na_conversa(self):
         client, sb = _montar(demandas=[_demanda("d1", estado="nova")])
@@ -859,14 +895,31 @@ class TestEditar:
         assert resposta.status_code == 422
         assert resposta.json()["detail"] == "Título da Demanda não pode ser vazio."
 
-    def test_titulo_grande_demais_continua_recusado(self):
-        """O par de presenca de tirar o `min_length`: o `max_length` fica, e
-        passar de 200 caracteres nao e engano de clique."""
-        client, _ = _montar(demandas=[_demanda("d1")])
+    def test_titulo_grande_demais_tambem_volta_frase_de_gente(self):
+        """O outro extremo do titulo, pelo mesmo motivo do vazio.
+
+        Afirmar so o status seria cego ao FORMATO, que e onde estava o defeito:
+        com `max_length` no payload, o `detail` vinha em LISTA e a tela mostrava
+        o JSON do pydantic. Colar um texto no campo passa de 200 caracteres com
+        facilidade.
+        """
+        client, sb = _montar(demandas=[_demanda("d1", titulo="Tinha título")])
 
         resposta = client.patch(f"{BASE}/demandas/d1", json={"titulo": "x" * 201})
 
         assert resposta.status_code == 422
+        assert resposta.json()["detail"] == "Título da Demanda pode ter no máximo 200 caracteres."
+        assert sb.tabelas["tecnologia_demandas"][0]["titulo"] == "Tinha título"
+
+    def test_titulo_no_limite_passa(self):
+        """O par de presenca do teste acima: um limite errado por um caractere
+        recusaria o titulo de 200, que e valido."""
+        client, sb = _montar(demandas=[_demanda("d1")])
+
+        resposta = client.patch(f"{BASE}/demandas/d1", json={"titulo": "x" * 200})
+
+        assert resposta.status_code == 200
+        assert sb.tabelas["tecnologia_demandas"][0]["titulo"] == "x" * 200
 
     def test_prazo_com_formato_invalido_e_recusado(self):
         client, _ = _montar(demandas=[_demanda("d1")])

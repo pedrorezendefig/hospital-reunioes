@@ -84,6 +84,9 @@ function montar(
     // Conversa dentro do modal), por isso três valores.
     redeFora?: "carregar" | "salvar" | "conversa";
     token?: string | null;
+    // O estado de BOOT do `useAuth`: token ainda nulo porque a autenticação
+    // não terminou, e não porque não há sessão.
+    carregandoAuth?: boolean;
   } = {},
 ) {
   chamadas = [];
@@ -121,6 +124,7 @@ function montar(
   render(
     <QuadroDemandas
       token={opcoes.token === undefined ? "token-de-teste" : opcoes.token}
+      carregandoAuth={opcoes.carregandoAuth ?? false}
       produtos={PRODUTOS}
       pessoas={PESSOAS}
     />,
@@ -286,6 +290,15 @@ describe("Abrir uma Demanda", () => {
         descricao: "",
       },
     });
+  });
+
+  it("o campo Título não deixa passar de 200 caracteres", async () => {
+    // O backend recusa com frase de gente, mas quem cola um texto longo tem
+    // que ser barrado antes de clicar: é o limite do campo que evita a viagem.
+    montar([]);
+    fireEvent.click(await screen.findByRole("button", { name: /Nova Demanda/ }));
+
+    expect((screen.getByLabelText("Título") as HTMLInputElement).maxLength).toBe(200);
   });
 
   it("só oferece Produto ativo", async () => {
@@ -467,6 +480,12 @@ describe("O modal da Demanda", () => {
     });
   });
 
+  it("o campo Título do modal também para nos 200 caracteres", async () => {
+    const modal = await abrirModal();
+
+    expect((within(modal).getByLabelText("Título") as HTMLInputElement).maxLength).toBe(200);
+  });
+
   it("com o Título apagado, o Salvar fica desabilitado", async () => {
     // Por cima da guarda do backend, não no lugar dela: a API recusa `""` com
     // frase de gente. Aqui só se evita o clique que já se sabe recusado.
@@ -577,6 +596,19 @@ describe("A falha de rede não vira quadro vazio e calado", () => {
     expect(aviso.textContent).toContain("Tente recarregar a página");
     expect(screen.queryByText("Carregando Demandas...")).toBeNull();
     // E não fingiu que buscou: nenhuma chamada saiu.
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("enquanto a autenticação carrega, o token nulo não vira aviso de sessão", async () => {
+    // O `useAuth` nasce com `{ token: null, loading: true }`. Ler esse nulo
+    // como "não há sessão" pintaria o alerta vermelho em toda abertura da aba,
+    // com a sessão válida, e ele sumiria sozinho quando o token chegasse.
+    // O par de presença é o teste seguinte: resolvida a autenticação, o mesmo
+    // token nulo TEM que avisar.
+    montar([demanda("d1", "Uma nova")], { token: null, carregandoAuth: true });
+
+    expect(screen.getByText("Carregando Demandas...")).toBeTruthy();
+    expect(screen.queryAllByRole("alert")).toHaveLength(0);
     expect(chamadas).toHaveLength(0);
   });
 
