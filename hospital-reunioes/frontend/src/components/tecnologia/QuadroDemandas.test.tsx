@@ -1474,8 +1474,14 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
    * filtros é o mesmo do `Anfitriao` do `montar`: quem os guarda é a aba
    * Tecnologia (issue #639).
    */
-  function QuadroHospedado({ carregandoAuth = false }: { carregandoAuth?: boolean }) {
-    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
+  function QuadroHospedado({
+    carregandoAuth = false,
+    filtroInicial = SEM_FILTRO,
+  }: {
+    carregandoAuth?: boolean;
+    filtroInicial?: FiltrosDoQuadro;
+  }) {
+    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(filtroInicial);
     return (
       <QuadroDemandas
         token="token-de-teste"
@@ -1488,18 +1494,27 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
     );
   }
 
-  /** O servidor falso mínimo deste bloco: a lista, e a Conversa vazia do modal. */
+  /**
+   * O servidor falso deste bloco: a lista, e a Conversa vazia do modal.
+   *
+   * Ele PENEIRA como a API peneira (issue #639), e não devolve a lista inteira:
+   * com filtro valendo, a Demanda do link some da resposta, que é exatamente o
+   * caso em que a frase do aviso precisa mudar.
+   */
   function servidorCom(lista: Demanda[]) {
     vi.stubGlobal(
       "fetch",
-      vi.fn(
-        async (url: string) =>
-          ({
-            ok: true,
-            status: 200,
-            json: async () => (url.includes("/conversa") ? [] : lista),
-          }) as unknown as Response,
-      ),
+      vi.fn(async (url: string) => {
+        if (url.includes("/conversa")) {
+          return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+        }
+        const busca = new URLSearchParams(url.split("?")[1] ?? "");
+        const casa = (campo: string, valor: string | null) => !busca.get(campo) || busca.get(campo) === valor;
+        const corpo = lista.filter(
+          (d) => casa("tipo", d.tipo) && casa("produto_id", d.produto_id) && casa("responsavel_id", d.responsavel_id),
+        );
+        return { ok: true, status: 200, json: async () => corpo } as unknown as Response;
+      }),
     );
   }
 
@@ -1586,9 +1601,60 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
     // API, e a recusa dela viraria erro de carregamento, não lista sem o card).
     expect(aviso.textContent).not.toContain("apagada");
     expect(aviso.textContent).not.toContain("permissão");
+    // Nem em filtro: não há filtro nenhum valendo neste render, e falar dele
+    // aqui mandaria limpar o que já está limpo.
+    expect(aviso.textContent).not.toContain("filtrado");
     // Irmã de presença: o Quadro carregou e mostra o que tem.
     expect(screen.getByText("Uma nova")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
+  });
+
+  it("com filtro valendo, o aviso fala do filtro e não manda conferir o endereço", async () => {
+    // O cenário real: o diretor deixou "Filtrar por Produto: POPs" ligado
+    // ontem, e hoje recebe no WhatsApp o link de uma Demanda do Produto Ana. O
+    // link está perfeito; quem esconde a Demanda é o filtro dele mesmo. Mandar
+    // conferir o endereço com quem enviou é cobrar uma ação que não resolve,
+    // sobre uma causa que não é a verdadeira.
+    chegarPor("?demanda=d1");
+    servidorCom([demanda("d1", "A do link", { produto_id: "prod-1", produto_nome: "Ana" })]);
+
+    render(<QuadroHospedado filtroInicial={{ tipo: "", produto_id: "prod-2", responsavel_id: "" }} />);
+
+    const aviso = await screen.findByRole("status");
+    expect(aviso.textContent).toContain("O Quadro está filtrado");
+    expect(aviso.textContent).toContain("limpe os filtros");
+    expect(aviso.textContent).not.toContain("Confira o endereço");
+    // A saída que a frase promete tem que existir na MESMA tela.
+    expect(screen.getByRole("button", { name: "Limpar filtros" })).toBeTruthy();
+  });
+
+  it("limpar os filtros abre o card do link, sem a pessoa clicar nele", async () => {
+    // O par do teste acima: a ação que o aviso aponta resolve de verdade. Sem
+    // isto, a frase seria só uma desculpa mais educada.
+    chegarPor("?demanda=d1");
+    servidorCom([demanda("d1", "A do link", { produto_id: "prod-1", produto_nome: "Ana" })]);
+
+    render(<QuadroHospedado filtroInicial={{ tipo: "", produto_id: "prod-2", responsavel_id: "" }} />);
+    await screen.findByRole("status");
+
+    fireEvent.click(screen.getByRole("button", { name: "Limpar filtros" }));
+
+    const modal = await screen.findByRole("dialog");
+    expect((within(modal).getByLabelText("Título") as HTMLInputElement).value).toBe("A do link");
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("com filtro valendo, a Demanda que passa pelo filtro abre normalmente", async () => {
+    // Irmã de presença das duas acima: filtro ligado não é, por si, motivo de
+    // aviso nenhum. O que gera o aviso é a Demanda do link ficar de fora.
+    chegarPor("?demanda=d1");
+    servidorCom([demanda("d1", "A do link", { produto_id: "prod-2", produto_nome: "POPs" })]);
+
+    render(<QuadroHospedado filtroInicial={{ tipo: "", produto_id: "prod-2", responsavel_id: "" }} />);
+
+    const modal = await screen.findByRole("dialog");
+    expect((within(modal).getByLabelText("Título") as HTMLInputElement).value).toBe("A do link");
+    expect(screen.queryByRole("status")).toBeNull();
   });
 
   it("enquanto a sessão carrega, o link não vira acusação nenhuma", async () => {

@@ -96,6 +96,26 @@ const CLASSE_PRIORIDADE: Record<PrioridadeDemanda, string> = {
 const SEM_SESSAO =
   "Não foi possível carregar as Demandas: a sessão não está ativa ou o servidor não respondeu. Tente recarregar a página.";
 
+/**
+ * As duas frases de quando o link pede uma Demanda que o Quadro não mostra
+ * (issue #640, com os filtros da issue #639 no ar).
+ *
+ * São duas porque as causas são duas e o código as DISTINGUE. Uma frase só
+ * mandaria conferir o endereço com quem enviou justamente quando o endereço
+ * está certo e quem esconde a Demanda é o filtro que a própria pessoa deixou
+ * ligado ontem: cobrança de uma ação que não resolve, sobre uma causa que não
+ * é a verdadeira.
+ *
+ * A frase do filtro não AFIRMA que o filtro é a causa (a Demanda pode nem
+ * existir, e o código não sabe): ela diz os dois fatos que o código tem, o
+ * filtro valendo e a Demanda fora do que o Quadro mostra, e aponta a ação, que
+ * está na mesma tela, no botão "Limpar filtros".
+ */
+const AVISO_LINK_SEM_FILTRO = "A Demanda deste link não está no Quadro. Confira o endereço com quem enviou.";
+const AVISO_LINK_COM_FILTRO =
+  "O Quadro está filtrado, e a Demanda deste link não está entre as que ele mostra. " +
+  "Ela pode estar escondida pelo filtro: limpe os filtros abaixo e veja de novo.";
+
 /** As opções que LIMPAM cada filtro: o rótulo é o mesmo do campo em branco. */
 const TODOS_OS_TIPOS = "Todos os tipos";
 const TODOS_OS_PRODUTOS = "Todos os Produtos";
@@ -419,14 +439,14 @@ export function QuadroDemandas({
           erro de carregamento, não lista sem o card). E ela olha `achadaDoLink`,
           que é derivado da lista de agora: preso ao efeito que abre o card, o
           aviso apareceria no commit em que a Demanda chega, antes de o card
-          abrir. */}
+          abrir. A frase muda com o filtro: ver `AVISO_LINK_COM_FILTRO`. */}
       {!carregando && !erro && idDoLink && !achadaDoLink && (
         <p
           role="status"
           className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm"
         >
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>A Demanda deste link não está no Quadro. Confira o endereço com quem enviou.</span>
+          <span>{filtrando ? AVISO_LINK_COM_FILTRO : AVISO_LINK_SEM_FILTRO}</span>
         </p>
       )}
 
