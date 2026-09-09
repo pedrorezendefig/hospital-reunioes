@@ -1485,9 +1485,11 @@ def _carimbos_do_update(corpo: str) -> set[str]:
     return atribuidas
 
 
-def _parametros(declaracao: str) -> list[str]:
-    """Os nomes dos parâmetros, na ordem, lidos da declaração."""
-    lista = _entre_parenteses(declaracao, declaracao.index("("))
+def _partes_no_topo(lista: str) -> list[str]:
+    """A lista partida nas vírgulas do NÍVEL DE FORA.
+
+    `NUMERIC(10, 2)` tem uma vírgula que não separa parâmetro nenhum, e
+    `unnest(v_guardadas)` teria o mesmo problema numa lista de valores."""
     partes: list[str] = []
     atual: list[str] = []
     profundidade = 0
@@ -1502,7 +1504,85 @@ def _parametros(declaracao: str) -> list[str]:
         else:
             atual.append(caractere)
     partes.append("".join(atual))
-    return [parte.split()[0] for parte in partes if parte.split()]
+    return partes
+
+
+def _parametros(declaracao: str) -> list[str]:
+    """Os nomes dos parâmetros, na ordem, lidos da declaração."""
+    lista = _entre_parenteses(declaracao, declaracao.index("("))
+    return [parte.split()[0] for parte in _partes_no_topo(lista) if parte.split()]
+
+
+def _tipos_do_create(declaracao: str) -> list[str]:
+    """Os TIPOS dos parâmetros, na ordem, lidos do `CREATE FUNCTION`.
+
+    No Postgres a função é o nome MAIS os tipos, e o `REVOKE` os escreve de
+    novo. Quando as duas leituras discordam, o `REVOKE` fecha uma função que não
+    existe e deixa a de verdade aberta: é o furo que as migrations 095 e 097
+    vieram consertar, e ele passou despercebido por meses porque nada reprova."""
+    lista = _entre_parenteses(declaracao, declaracao.index("("))
+    tipos = []
+    for parte in _partes_no_topo(lista):
+        pedacos = parte.split()
+        if pedacos:
+            tipos.append(" ".join(pedacos[1:]).split("(")[0].strip().upper())
+    return tipos
+
+
+def _tipos_do_revoke(sql: str, funcao: str) -> list[str]:
+    """Os mesmos tipos, lidos do `REVOKE`. A comparação entre os dois é que vale."""
+    limpo = _sem_comentarios(sql)
+    achado = re.search(rf"REVOKE\s+EXECUTE\s+ON\s+FUNCTION\s+(?:public\.)?{funcao}\s*\(", limpo, re.IGNORECASE)
+    assert achado is not None, f"nenhum REVOKE para `{funcao}`"
+    lista = _entre_parenteses(limpo, achado.end() - 1)
+    return [parte.strip().split("(")[0].strip().upper() for parte in _partes_no_topo(lista) if parte.strip()]
+
+
+def _linha_do_log(corpo: str) -> dict[str, str]:
+    """A linha que o `INSERT` grava em `ouvidoria_acessos`: coluna para expressão.
+
+    Existe porque as duas metades desta linha erram em silêncio. A ação é um
+    literal (`'arquivar'`): trocado, o log passa a mentir sobre o que aconteceu,
+    e como arquivar não entra na trilha não há segunda fonte para desmentir. E
+    `ator_nome` recebendo `p_ator_id` gravaria o código no lugar do nome, que é
+    exatamente o dado que o log existe para guardar quando o participante sai do
+    hospital."""
+    limpo = _sem_comentarios(corpo)
+    achado = re.search(
+        # A lista de valores termina no `FROM` ou no `;`, o que vier primeiro:
+        # o `SELECT` de um valor só não precisa de `FROM` nenhum.
+        r"INSERT\s+INTO\s+ouvidoria_acessos\s*\(([^)]*)\)\s*SELECT\s+(.*?)(?:\s+FROM\b|\s*;)",
+        limpo,
+        re.IGNORECASE | re.DOTALL,
+    )
+    assert achado is not None, "não achei o INSERT do log no corpo da função"
+    colunas = [c.strip() for c in achado.group(1).split(",")]
+    valores = [v.strip() for v in _partes_no_topo(achado.group(2))]
+    assert len(colunas) == len(valores), f"{len(colunas)} colunas para {len(valores)} valores"
+    return dict(zip(colunas, valores, strict=True))
+
+
+def _clausula_de_seguranca(declaracao: str) -> str | None:
+    """`INVOKER`, `DEFINER`, ou `None` quando a cláusula não está escrita.
+
+    `None` NÃO é sinônimo de `INVOKER` para este guarda, ainda que o Postgres
+    trate os dois igual: omitir deixa a decisão implícita num arquivo que o
+    humano cola à mão, e o dia em que ela mudar não haverá linha para o diff
+    mostrar."""
+    achado = re.search(r"\bSECURITY\s+(INVOKER|DEFINER)\b", _sem_comentarios(declaracao), re.IGNORECASE)
+    return achado.group(1).upper() if achado else None
+
+
+def _definer_sem_search_path(declaracao: str) -> bool:
+    """A regra que sobrevive à decisão de hoje.
+
+    `SECURITY DEFINER` sem `search_path` fixo é escalada de privilégio: a função
+    passa a rodar como o dono dela, e no Studio o dono é o superusuário. Se um
+    dia esta função virar `DEFINER`, ela tem que trazer o `SET search_path`
+    DENTRO do arquivo, e não em prosa ao lado dele."""
+    if _clausula_de_seguranca(declaracao) != "DEFINER":
+        return False
+    return re.search(r"\bSET\s+search_path\s*=", _sem_comentarios(declaracao), re.IGNORECASE) is None
 
 
 def _migration_do_lote() -> tuple[str, str]:
@@ -1552,6 +1632,88 @@ class TestATransacaoNoSQLDaRpc:
         _, corpo = _declaracao_e_corpo(sql, RPC_DO_LOTE)
 
         assert not _tem_bloco_exception(corpo)
+
+    def test_o_revoke_fecha_a_assinatura_que_o_create_declara(self):
+        """Três leituras têm que concordar, e a terceira é escrita à mão.
+
+        No Postgres a função é o nome MAIS os tipos. `REVOKE ... (TEXT, TEXT)`
+        sobre um `CREATE ... (VARCHAR, TEXT)` fecha uma função que não existe e
+        deixa a de verdade aberta, sem erro nenhum: é o furo das issues #520 e
+        #541, que viveu meses porque a resposta ao anônimo vinha vazia pelo RLS
+        e tinha a cara de "fechado".
+
+        A lista escrita à mão está aqui de propósito. Sem ela, um parser errado
+        concordaria com um REVOKE errado e o guarda ficaria verde sobre os dois."""
+        _, sql = _migration_do_lote()
+        declaracao, _ = _declaracao_e_corpo(sql, RPC_DO_LOTE)
+
+        do_create = _tipos_do_create(declaracao)
+
+        assert do_create == ["VARCHAR", "TEXT"], "a leitura à mão da assinatura"
+        assert do_create == _tipos_do_revoke(sql, RPC_DO_LOTE), "o REVOKE fecha outra função"
+
+    def test_a_linha_do_log_grava_o_ato_certo_com_o_nome_de_quem_fez(self):
+        """As duas metades desta linha erram em silêncio.
+
+        A ação é um literal: trocada, o log passa a mentir sobre o que
+        aconteceu, e como arquivar não entra na trilha (ADR 0047, decisão 4) não
+        existe segunda fonte para desmentir. E `ator_nome` recebendo `p_ator_id`
+        gravaria `P10` no lugar de "Marta Ouvidora", que é justamente o dado que
+        o log guarda para o dia em que o participante sair do hospital e o FK
+        virar NULL.
+
+        Os testes de rota afirmam as duas coisas contra o Supabase falso, que
+        reimplementa este INSERT. Este aqui as cobra do arquivo que o humano
+        cola no Studio."""
+        _, sql = _migration_do_lote()
+
+        _, corpo = _declaracao_e_corpo(sql, RPC_DO_LOTE)
+
+        assert _linha_do_log(corpo) == {
+            "manifestacao_id": "caso",
+            "ator_id": "p_ator_id",
+            "ator_nome": "p_ator_nome",
+            "acao": "'arquivar'",
+        }
+
+    def test_a_funcao_declara_security_invoker(self):
+        """A cláusula de segurança, presa no arquivo.
+
+        Era a ÚNICA linha do SQL sem guarda nenhum: trocar `INVOKER` por
+        `DEFINER` deixava os 127 testes verdes (mutante MX4 da review de código
+        do PR #635), e era justamente a linha que o corpo do PR convidava o
+        humano a trocar na hora de colar no Studio.
+
+        A escolha importa porque muda a quantidade de camadas. Com `INVOKER`,
+        quem chamar com uma chave indevida esbarra no RLS default-deny das
+        migrations 063 e 064 por baixo, mesmo que o `REVOKE` falhe. Com
+        `DEFINER`, a função aplicada pelo Studio nasce com owner `postgres` e o
+        `REVOKE` passa a ser a única coisa entre a anon_key do bundle e um
+        `UPDATE` em massa rodando como superusuário.
+
+        O par deste teste está em `test_nenhum_definer_entra_sem_search_path`:
+        aquele é a regra que continua valendo se a decisão um dia mudar."""
+        _, sql = _migration_do_lote()
+
+        declaracao, _ = _declaracao_e_corpo(sql, RPC_DO_LOTE)
+
+        assert _clausula_de_seguranca(declaracao) == "INVOKER"
+
+    def test_nenhum_definer_entra_sem_search_path(self):
+        """Hoje passa porque a função é `INVOKER`, e é isso mesmo.
+
+        Ele existe para o dia em que alguém trocar a cláusula: aí o teste acima
+        fica vermelho e obriga uma decisão consciente, e este aqui cobra que a
+        decisão venha com o `SET search_path` DENTRO do arquivo. Sem ele, a
+        troca "de uma palavra" continuaria possível, só que com um teste a menos
+        no caminho. O detector é exercido nos dois sentidos contra SQL sintético
+        (`TestOsGuardasDoSQLReprovamOQueDevem`), que é o que impede este teste de
+        valer zero enquanto a função for `INVOKER`."""
+        _, sql = _migration_do_lote()
+
+        declaracao, _ = _declaracao_e_corpo(sql, RPC_DO_LOTE)
+
+        assert not _definer_sem_search_path(declaracao)
 
     def test_o_recorte_do_lote_continua_no_update(self):
         """O recorte mudou de lado nesta issue: era `.eq()` e `.is_()` em
@@ -1639,6 +1801,7 @@ class TestOsGuardasDoSQLReprovamOQueDevem:
     CREATE OR REPLACE FUNCTION ouvidoria_arquivar_encerrados(p_ator_id VARCHAR, p_ator_nome TEXT)
     RETURNS TABLE (arquivadas INTEGER)
     LANGUAGE plpgsql
+    SECURITY INVOKER
     AS $$
     BEGIN
       -- Sem EXCEPTION aqui, de proposito.
@@ -1690,6 +1853,97 @@ class TestOsGuardasDoSQLReprovamOQueDevem:
         _, corpo = _declaracao_e_corpo(sem_update, "ouvidoria_arquivar_encerrados")
 
         assert _escritas_do_corpo(corpo) == {"ouvidoria_acessos"}
+
+    def test_o_leitor_de_tipos_ignora_o_tamanho(self):
+        """`VARCHAR(10)` e `VARCHAR` são o MESMO tipo na assinatura de uma
+        função: o Postgres descarta o tamanho ali. É por isso que a migration
+        095 escreve `VARCHAR` no REVOKE de uma função declarada com
+        `VARCHAR(10)`, e o leitor precisa concordar com ele."""
+        com_tamanho = self.FUNCAO_CERTA.replace("p_ator_id VARCHAR", "p_ator_id VARCHAR(10)")
+        declaracao, _ = _declaracao_e_corpo(com_tamanho, "ouvidoria_arquivar_encerrados")
+
+        assert _tipos_do_create(declaracao) == ["VARCHAR", "TEXT"]
+
+    def test_o_leitor_de_tipos_pega_a_troca_de_tipo(self):
+        """O mutante da auditoria: trocar o tipo no `CREATE` sem trocar no
+        `REVOKE` deixava tudo verde e reabria a porta da issue #520."""
+        trocado = self.FUNCAO_CERTA.replace("p_ator_id VARCHAR", "p_ator_id TEXT")
+        declaracao, _ = _declaracao_e_corpo(trocado, "ouvidoria_arquivar_encerrados")
+
+        assert _tipos_do_create(declaracao) == ["TEXT", "TEXT"]
+
+    def test_o_leitor_da_linha_do_log_casa_coluna_com_valor(self):
+        _, corpo = _declaracao_e_corpo(self.FUNCAO_CERTA, "ouvidoria_arquivar_encerrados")
+
+        assert _linha_do_log(corpo) == {"manifestacao_id": "unnest(v)"}
+
+    def test_o_leitor_da_linha_do_log_nao_se_perde_na_virgula_de_dentro(self):
+        """`unnest(v_guardadas)` e `coalesce(a, b)` têm vírgula dentro dos
+        parênteses. Um leitor que partisse a lista de valores em toda vírgula
+        casaria coluna com valor errado e afirmaria bobagem com ar de rigor."""
+        com_funcao = self.FUNCAO_CERTA.replace(
+            "INSERT INTO ouvidoria_acessos (manifestacao_id) SELECT unnest(v);",
+            "INSERT INTO ouvidoria_acessos (manifestacao_id, ator_nome, acao)\n"
+            "      SELECT caso, coalesce(p_ator_nome, p_ator_id), 'arquivar' FROM unnest(v) AS caso;",
+        )
+        _, corpo = _declaracao_e_corpo(com_funcao, "ouvidoria_arquivar_encerrados")
+
+        assert _linha_do_log(corpo) == {
+            "manifestacao_id": "caso",
+            "ator_nome": "coalesce(p_ator_nome, p_ator_id)",
+            "acao": "'arquivar'",
+        }
+
+    def test_o_guarda_le_a_clausula_declarada(self):
+        declaracao, _ = _declaracao_e_corpo(self.FUNCAO_CERTA, "ouvidoria_arquivar_encerrados")
+
+        assert _clausula_de_seguranca(declaracao) == "INVOKER"
+
+    def test_o_guarda_pega_a_troca_para_definer(self):
+        """O mutante que ficou VIVO na primeira review (MX4): uma palavra
+        trocada, e 127 testes seguiam verdes."""
+        mutante = self.FUNCAO_CERTA.replace("SECURITY INVOKER", "SECURITY DEFINER")
+
+        declaracao, _ = _declaracao_e_corpo(mutante, "ouvidoria_arquivar_encerrados")
+
+        assert _clausula_de_seguranca(declaracao) == "DEFINER"
+
+    def test_o_guarda_pega_a_clausula_apagada(self):
+        """O terceiro sentido, e o mais silencioso: apagar a linha. O Postgres
+        trata a omissão como `INVOKER`, então o comportamento não muda, mas a
+        decisão sai do arquivo e o próximo diff não terá o que mostrar."""
+        mutante = self.FUNCAO_CERTA.replace("    SECURITY INVOKER\n", "")
+
+        declaracao, _ = _declaracao_e_corpo(mutante, "ouvidoria_arquivar_encerrados")
+
+        assert _clausula_de_seguranca(declaracao) is None
+
+    def test_o_guarda_do_search_path_reprova_definer_nu(self):
+        mutante = self.FUNCAO_CERTA.replace("SECURITY INVOKER", "SECURITY DEFINER")
+
+        declaracao, _ = _declaracao_e_corpo(mutante, "ouvidoria_arquivar_encerrados")
+
+        assert _definer_sem_search_path(declaracao)
+
+    def test_o_guarda_do_search_path_aprova_definer_com_o_pin(self):
+        """O outro sentido: o `DEFINER` que traz o `search_path` DENTRO do
+        arquivo passa. Sem este teste, o guarda poderia estar reprovando toda
+        cláusula `DEFINER` por engano, e ninguém veria."""
+        mutante = self.FUNCAO_CERTA.replace(
+            "SECURITY INVOKER", "SECURITY DEFINER\n    SET search_path = public, pg_temp"
+        )
+
+        declaracao, _ = _declaracao_e_corpo(mutante, "ouvidoria_arquivar_encerrados")
+
+        assert _clausula_de_seguranca(declaracao) == "DEFINER"
+        assert not _definer_sem_search_path(declaracao)
+
+    def test_o_guarda_do_search_path_nao_cobra_nada_de_invoker(self):
+        """`INVOKER` não roda como dono nenhum, então `search_path` não é
+        vetor: cobrar o pin dele seria ruído que ensinaria a ignorar o guarda."""
+        declaracao, _ = _declaracao_e_corpo(self.FUNCAO_CERTA, "ouvidoria_arquivar_encerrados")
+
+        assert not _definer_sem_search_path(declaracao)
 
     def test_o_guarda_do_recorte_le_as_duas_condicoes(self):
         _, corpo = _declaracao_e_corpo(self.FUNCAO_CERTA, "ouvidoria_arquivar_encerrados")
