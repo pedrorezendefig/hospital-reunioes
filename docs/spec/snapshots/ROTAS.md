@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-08T20:15-0300 -->
+<!-- last_update: 2026-09-08T22:47-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -137,6 +137,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos` | Anexos do caso, sem o caminho no storage: o acesso ao binário é sempre | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos` | Guarda a evidência junto do caso: foto, PDF, áudio ou documento. | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/anexos/{anexo_id}/url` | URL assinada, com expiração, para abrir o anexo. | ✅ |
+| POST | `/ouvidoria/manifestacoes/{manifestacao_id}/apagamento` | Apaga hoje o Dossiê de um caso encerrado, por ato da Diretoria. | ✅ |
 | DELETE | `/ouvidoria/manifestacoes/{manifestacao_id}/arquivo` | Devolve o caso à lista, limpando os dois carimbos. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/arquivo` | Tira da vista da lista um caso que já acabou (ADR 0047, decisão 3). | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/classificacao` | Classifica a manifestação e, no mesmo ato, resolve o sigilo dela. | ✅ |
@@ -353,4 +354,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 197 endpoints em 30 routers · 94% exigem auth.
+**Totais:** 198 endpoints em 30 routers · 94% exigem auth.
