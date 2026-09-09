@@ -31,6 +31,34 @@ export async function motivoDaRecusa(resposta: Response): Promise<string> {
   return `Não foi possível salvar (${resposta.status}).`;
 }
 
+/**
+ * De quanto em quanto tempo o Quadro se pede de novo (issue #642).
+ *
+ * Trinta segundos é o número da PRD #634 (história 40) e da decisão 9 do
+ * ADR 0050: quem está do outro lado responde e o outro vê sem apertar F5.
+ */
+export const INTERVALO_DE_ATUALIZACAO_MS = 30_000;
+
+/**
+ * O aviso de "isto valeu, mas o e-mail não saiu", quando o servidor manda um
+ * (issue #642).
+ *
+ * A frase vem MONTADA do backend: quem sabe quantos avisos deviam sair, e se
+ * saíram, é quem tentou mandá-los. Escrever a frase aqui seria repetir a regra
+ * de quem recebe cada gatilho, e as duas versões divergiriam.
+ *
+ * Resposta sem corpo JSON, ou de um backend uma versão atrás (sem o campo), não
+ * é aviso nenhum: `null` deixa a tela como estava, em vez de inventar alarme.
+ */
+export async function avisoPorEmail(resposta: Response): Promise<string | null> {
+  try {
+    const corpo = await resposta.json();
+    return typeof corpo?.aviso_por_email === "string" ? corpo.aviso_por_email : null;
+  } catch {
+    return null;
+  }
+}
+
 /** O Produto como as escolhas da Demanda o veem. */
 export type ProdutoDaEscolha = { id: string; nome: string; ativo: boolean };
 

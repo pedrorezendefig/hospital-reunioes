@@ -20,6 +20,7 @@ import { Pencil, Send } from "lucide-react";
 
 import {
   aplicarMencao,
+  avisoPorEmail,
   BASE_TECNOLOGIA,
   FALHA_DE_CONEXAO,
   LinhaDaConversa,
@@ -159,7 +160,12 @@ export function ConversaDaDemanda({ demandaId, linhas, pessoas, token, onFioMudo
         onErro(await motivoDaRecusa(resposta));
         return false;
       }
-      onErro(null);
+      // A resposta entrou. Falta saber se os avisos por e-mail que ela dispara
+      // (a @menção e o "chegou resposta" para quem responde pela Demanda)
+      // saíram (issue #642). Quando não saem, quem escreveu é quem ainda pode
+      // dar o recado por outro caminho, e é a única pessoa que está com a tela
+      // aberta agora. `null` quando não havia nada a avisar, ou tudo saiu.
+      onErro(await avisoPorEmail(resposta));
       await onFioMudou();
       return true;
     } finally {

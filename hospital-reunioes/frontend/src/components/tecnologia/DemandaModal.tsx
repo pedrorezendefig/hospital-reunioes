@@ -26,6 +26,7 @@ import { ConversaDaDemanda } from "./ConversaDaDemanda";
 import { CopiarDaDemanda } from "./CopiarDaDemanda";
 import { TipoIcone } from "./TipoIcone";
 import {
+  avisoPorEmail,
   BASE_TECNOLOGIA,
   Demanda,
   destinosDe,
@@ -115,7 +116,12 @@ export function DemandaModal({ demanda, produtos, pessoas, token, onFechar, onMu
       setErro(await motivoDaRecusa(resposta));
       return false;
     }
-    setErro(null);
+    // A ação valeu. O que pode ter faltado é o aviso por e-mail que ela
+    // dispara (issue #642): trocar o responsável avisa quem recebeu a Demanda,
+    // e quando esse aviso não sai quem trocou é a única pessoa que ainda pode
+    // dar o recado por outro caminho. `null` quando não houve nada a avisar,
+    // que é o mesmo estado de antes.
+    setErro(await avisoPorEmail(resposta));
     await onMudou();
     await carregarConversa();
     return true;

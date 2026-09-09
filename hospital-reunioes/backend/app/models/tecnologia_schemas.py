@@ -97,6 +97,13 @@ class DemandaResponse(BaseModel):
     concluida_por: str | None = None
     cancelada_em: str | None = None
     cancelada_por: str | None = None
+    # A frase de "isto valeu, mas o aviso por e-mail nao saiu" (issue #642), ou
+    # `None` quando nao houve nada a avisar ou o aviso saiu.
+    #
+    # Vem MONTADA do backend, e nao como um booleano: a tela nao tem como
+    # escrever essa frase sem repetir a regra de quem devia receber, e uma
+    # segunda versao do texto divergiria da primeira.
+    aviso_por_email: str | None = None
 
 
 class DemandaCreatePayload(BaseModel):
@@ -184,6 +191,10 @@ class ConversaLinhaResponse(BaseModel):
     # "pode": o modal fica aberto enquanto a janela corre, e um booleano
     # congelado no carregamento continuaria dizendo "pode" dez minutos depois.
     editavel_ate: str | None = None
+    # O mesmo aviso da `DemandaResponse` (issue #642): responder dispara os
+    # gatilhos de menção e de resposta, e quem escreveu precisa saber se eles
+    # saíram. Sempre `None` na LEITURA do fio: ali ninguém acabou de agir.
+    aviso_por_email: str | None = None
 
 
 class TextoParaIaResponse(BaseModel):

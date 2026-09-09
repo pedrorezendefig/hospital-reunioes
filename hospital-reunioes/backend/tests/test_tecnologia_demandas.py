@@ -39,6 +39,7 @@ from app.models.tecnologia_schemas import (  # noqa: E402
     TipoDemanda,
 )
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
+from app.services import tecnologia_email  # noqa: E402
 from app.services.tecnologia import (  # noqa: E402
     ESTADO_ROTULO,
     ESTADOS,
@@ -72,6 +73,23 @@ from app.services.tecnologia import (  # noqa: E402
     texto_para_ia,
     transicao_permitida,
 )
+
+
+@pytest.fixture(autouse=True)
+def _sem_email_de_verdade(monkeypatch):
+    """Nenhum teste deste arquivo fala com o Resend nem com o SMTP (issue #642).
+
+    Criar, atribuir e responder passaram a disparar e-mail, e o pytest carrega o
+    `.env` REAL, com usuario e senha de SMTP do Gmail. Sem esta troca, um teste
+    de transicao de estado abriria conexao para fora.
+
+    O transporte devolve `True` (o envio "deu certo") porque nenhum teste daqui
+    e sobre e-mail: quem prova gatilho, destinatario e falha de envio e o
+    `test_tecnologia_email.py`. E a trava de rede do `conftest.py` continua por
+    baixo, derrubando a sessao se esta fixture algum dia sumir.
+    """
+    monkeypatch.setattr(tecnologia_email, "_enviar_email", lambda *a, **kw: True)
+
 
 # ─── 1. A maquina de estados ─────────────────────────────────────────────────
 

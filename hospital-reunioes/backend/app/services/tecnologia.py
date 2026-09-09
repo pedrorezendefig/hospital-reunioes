@@ -17,7 +17,7 @@ from __future__ import annotations
 
 import unicodedata
 from datetime import UTC, datetime, timedelta
-from typing import Any
+from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
 from app.dependencies import is_super_admin
@@ -692,3 +692,105 @@ def demanda_casa_a_busca(
         return True
     campos = [demanda.get("titulo"), demanda.get("descricao"), *textos_da_conversa]
     return any(alvo in normalizar_para_busca(campo) for campo in campos)
+
+
+# ─── Quem recebe o aviso por e-mail (issue #642) ─────────────────────────────
+
+# A frase que a tela mostra quando a ação valeu e o aviso não saiu.
+#
+# Ela é UMA só para os três gatilhos, e diz o desfecho em vez da causa: o código
+# sabe que o transporte não entregou, e não POR QUE (chave recusada, endereço
+# que quicou, provedor fora). Culpar uma causa que ele não distingue mandaria a
+# pessoa consertar o que talvez não esteja quebrado.
+#
+# E ela não pede nada impossível: quem acabou de agir tem, sim, como fazer o
+# aviso chegar, por qualquer outro caminho que já usa com a mesma pessoa.
+#
+# Por que existe, se a PRD manda "log e segue": não desfazer a ação e passar
+# calado são coisas diferentes. A ação continua de pé (a Demanda mudou, a
+# resposta entrou), e a única pessoa que pode compensar o aviso perdido é a que
+# está com a tela aberta agora. O log serve a quem for investigar depois; ele
+# não avisa ninguém no momento em que ainda dá para consertar.
+AVISO_EMAIL_NAO_SAIU = (
+    "O que você fez está gravado, mas o aviso por e-mail não saiu. "
+    "Se a pessoa precisa saber agora, fale com ela por outro caminho."
+)
+
+# Quanto do texto entra no aviso.
+#
+# O e-mail existe para a pessoa decidir se abre a Demanda agora, e não para
+# substituir o card: uma resposta de 5000 caracteres (`LIMITE_RESPOSTA`) inteira
+# na caixa de entrada afogaria o link, que é o que importa ali.
+LIMITE_TRECHO = 400
+CONTINUA_NA_DEMANDA = "(o texto continua na Demanda)"
+# Gatilho sem texto nenhum: Demanda aberta sem descrição, por exemplo. Dizer que
+# não há trecho é melhor do que uma linha em branco, que se lê como e-mail
+# quebrado.
+SEM_TRECHO = "(sem texto)"
+
+
+class AvisosDaResposta(NamedTuple):
+    """Quem recebe o quê depois de UMA resposta no fio.
+
+    Dois campos, e não uma lista só, porque são dois e-mails diferentes: quem
+    foi chamado pelo nome lê "fulano mencionou você", e quem responde pela
+    Demanda lê "a bola voltou". Misturá-los mandaria o texto errado para um dos
+    dois.
+    """
+
+    mencionados: list[str]
+    responsavel: str | None
+
+
+def destinatario_da_atribuicao(*, responsavel_id: str | None, quem_fez: str) -> str | None:
+    """Quem recebe o aviso de atribuição, ou `None` quando não há a quem avisar.
+
+    Duas saídas por `None`, e as duas de propósito: Demanda sem responsável não
+    tem destinatário, e quem se atribuiu a si mesmo não precisa ser avisado do
+    que acabou de fazer (PRD #634, história 46).
+
+    `""` conta como sem responsável: ele não é NULL e não é ninguém, e seguindo
+    adiante viraria uma busca por participante de id vazio.
+    """
+    if not responsavel_id or not responsavel_id.strip():
+        return None
+    return None if responsavel_id == quem_fez else responsavel_id
+
+
+def avisos_da_resposta(*, responsavel_id: str | None, mencoes: list[str], quem_fez: str) -> AvisosDaResposta:
+    """Os avisos de UMA resposta: os mencionados e, se sobrar, o responsável.
+
+    Duas regras juntas aqui, porque as duas valem sobre a MESMA ação:
+
+    - **quem escreveu nunca recebe**, nem se mencionar a si mesmo, nem se for o
+      responsável: seria aviso de si para si;
+    - **ninguém recebe dois e-mails pela mesma resposta.** Quando a pessoa é
+      responsável E foi mencionada, fica com a MENÇÃO, que é o aviso mais
+      específico: ela carrega o trecho em que a pessoa foi chamada pelo nome, e
+      o de responsável diria apenas que chegou resposta.
+
+    A limpeza das menções passa pelo `normalizar_mencoes` de novo, e não por
+    confiança no que o router já limpou: a regra tem que valer olhando só para
+    os argumentos, senão ela deixa de ser testável sozinha.
+    """
+    mencionados = [pid for pid in normalizar_mencoes(mencoes) if pid != quem_fez]
+    responsavel = destinatario_da_atribuicao(responsavel_id=responsavel_id, quem_fez=quem_fez)
+    if responsavel in mencionados:
+        responsavel = None
+    return AvisosDaResposta(mencionados=mencionados, responsavel=responsavel)
+
+
+def trecho_do_aviso(texto: str | None) -> str:
+    """O pedaço de texto que motivou o aviso, no tamanho de um e-mail.
+
+    O corte é no `LIMITE_TRECHO` e diz que continua: um texto cortado em
+    silêncio faria a pessoa responder ao que leu achando que leu tudo. O texto
+    que cabe inteiro NÃO ganha a marca, senão o e-mail mandaria procurar na
+    Demanda um resto que não existe.
+    """
+    limpo = (texto or "").strip()
+    if not limpo:
+        return SEM_TRECHO
+    if len(limpo) <= LIMITE_TRECHO:
+        return limpo
+    return f"{limpo[:LIMITE_TRECHO].rstrip()} {CONTINUA_NA_DEMANDA}"

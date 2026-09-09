@@ -22,10 +22,12 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { AlertCircle, CalendarClock, Plus } from "lucide-react";
 
 import { Select } from "@/components/ui/Select";
+import { usePolling } from "@/hooks/usePolling";
 
 import { DemandaModal } from "./DemandaModal";
 import { TipoIcone } from "./TipoIcone";
 import {
+  avisoPorEmail,
   BASE_TECNOLOGIA,
   COLUNAS_RECOLHIDAS,
   Demanda,
@@ -39,6 +41,7 @@ import {
   FiltrosDoQuadro,
   idadeEmDias,
   IDADE_VERMELHA_A_PARTIR_DE,
+  INTERVALO_DE_ATUALIZACAO_MS,
   motivoDaRecusa,
   PessoaDaAba,
   PRIORIDADE_ROTULO,
@@ -147,6 +150,16 @@ export function QuadroDemandas({
   const [abertaId, setAbertaId] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState<string | null>(null);
   /**
+   * A aba do navegador está à vista? (issue #642)
+   *
+   * Começa em `true` porque o primeiro render acontece com a aba na frente de
+   * quem abriu; o efeito abaixo corrige no mesmo commit se não for o caso.
+   * Começar em `false` faria o Quadro nascer sem atualização automática toda
+   * vez que o jsdom (ou um navegador que ainda não pintou) não tivesse
+   * `visibilityState` pronto.
+   */
+  const [abaVisivel, setAbaVisivel] = useState(true);
+  /**
    * O número do pedido de leitura mais recente.
    *
    * A rede não devolve na ordem em que foi chamada: trocar o filtro duas vezes
@@ -204,12 +217,23 @@ export function QuadroDemandas({
    * A falha de rede vira AVISO, e não quadro vazio: sem o `catch`, o backend
    * fora do ar desenharia cinco colunas zeradas, que é indistinguível de "não
    * há Demanda nenhuma" e derruba o critério de aceite do Quadro.
+   *
+   * `silencioso` é a leitura que a tela faz sozinha (issue #642): ela NÃO
+   * acende o "Carregando Demandas...". Sem isso, o Quadro trocaria as cinco
+   * colunas pela linha de espera a cada 30 segundos, e ler o quadro viraria
+   * uma corrida contra o relógio, pior do que não atualizar.
+   *
+   * O que ela continua fazendo é APAGAR a espera quando é o pedido mais novo
+   * (o `finally` não olha `silencioso`). É o que impede o Quadro de ficar
+   * preso em "Carregando Demandas..." quando uma leitura da pessoa é
+   * atropelada por uma automática: a leitura antiga sai pelo selo de sequência
+   * sem desligar nada, e só a mais nova tem o direito de desligar.
    */
-  const carregar = useCallback(async () => {
+  const carregar = useCallback(async (silencioso = false) => {
     if (!token) return;
     const meuPedido = ultimoPedido.current + 1;
     ultimoPedido.current = meuPedido;
-    setCarregando(true);
+    if (!silencioso) setCarregando(true);
     try {
       const resposta = await fetch(`${BASE_TECNOLOGIA}/demandas${busca}`, { headers: autorizacao() });
       // Chegou tarde: já há um pedido mais novo no ar, e o que esta resposta
@@ -277,6 +301,75 @@ export function QuadroDemandas({
     }
   }, [idDoLink, achadaDoLink]);
 
+  /**
+   * Quando o Quadro pode se recarregar sem ninguém pedir (issue #642).
+   *
+   * As três condições são três motivos diferentes, e nenhuma é zelo à toa:
+   *
+   * - **autenticação e token**: sem sessão resolvida não há o que pedir, e o
+   *   `carregar` sairia na primeira linha de qualquer jeito;
+   * - **modal fechado**: com o card aberto, uma leitura pode devolver uma
+   *   lista em que a Demanda não está mais (outra pessoa a moveu para uma
+   *   coluna que o filtro esconde), e `aberta` viraria `null`: o modal FECHA,
+   *   levando junto a resposta que estava sendo digitada. O modal já recarrega
+   *   sozinho o que muda dentro dele, a cada escrita;
+   * - **card parado**: recarregar no meio de um arrasto pode tirar do DOM
+   *   justamente o card que está na mão.
+   *
+   * O formulário de Nova Demanda NÃO entra na lista: o `carregar` não toca em
+   * `form` nem em `abrindoForm`, e há teste provando que o que foi digitado
+   * atravessa uma atualização automática. Pausar por causa dele seria congelar
+   * o Quadro por um estado que a recarga não ameaça.
+   */
+  const podeRecarregarSozinho =
+    !carregandoAuth && Boolean(token) && abertaId === null && arrastando === null;
+
+  /**
+   * Quando o RELÓGIO pode disparar.
+   *
+   * A aba escondida atrás de outra continua sendo aba aberta. Pedir de 30 em
+   * 30 segundos para uma tela que ninguém está olhando gasta rede e CPU do
+   * servidor a troco de nada, e quem volta não perde nada: o `focus` abaixo
+   * recarrega na hora. Mesmo desenho do painel da Ouvidoria.
+   *
+   * A condição da aba fica SÓ aqui, e não no `focus`: voltar para uma aba
+   * escondida dispara o `visibilitychange` antes do `focus`, mas o estado que
+   * ele muda só chega ao componente no render seguinte. Um ouvinte de foco
+   * preso a `abaVisivel` ainda estaria desligado no instante do `focus`, e a
+   * volta que mais precisa de recarga seria justamente a que não teria.
+   */
+  const podeAtualizarSozinho = podeRecarregarSozinho && abaVisivel;
+
+  usePolling(() => carregar(true), INTERVALO_DE_ATUALIZACAO_MS, podeAtualizarSozinho);
+
+  /**
+   * A volta para a janela recarrega na hora (PRD #634, história 40).
+   *
+   * O `usePolling` é um `setInterval` sem chamada imediata: quem volta depois
+   * de meia hora fora esperaria até 30 segundos olhando a foto de antes.
+   *
+   * A recarga mora SÓ no `focus`, e não também no `visibilitychange`: voltar
+   * para uma aba escondida devolve o foco à janela, então os dois disparariam
+   * juntos e o mesmo retorno pediria o Quadro duas vezes. O
+   * `visibilitychange` fica com o que é dele, que é dizer se a aba está à
+   * vista.
+   */
+  useEffect(() => {
+    if (!podeRecarregarSozinho) return;
+    const aoFocar = () => carregar(true);
+    window.addEventListener("focus", aoFocar);
+    // Sem esta linha o ouvinte sobreviveria à saída da aba, e cada visita
+    // deixaria mais um preso a um componente que já não está na tela.
+    return () => window.removeEventListener("focus", aoFocar);
+  }, [podeRecarregarSozinho, carregar]);
+
+  useEffect(() => {
+    const aoTrocar = () => setAbaVisivel(document.visibilityState === "visible");
+    aoTrocar();
+    document.addEventListener("visibilitychange", aoTrocar);
+    return () => document.removeEventListener("visibilitychange", aoTrocar);
+  }, []);
+
   async function enviar(url: string, metodo: string, corpo: unknown): Promise<boolean> {
     let resposta: Response;
     try {
@@ -298,8 +391,20 @@ export function QuadroDemandas({
       if (resposta.status === 409) await carregar();
       return false;
     }
-    erroDeEscrita.current = false;
-    setErro(null);
+    /**
+     * A ação valeu. Falta saber se o aviso por e-mail que ela dispara saiu
+     * (issue #642).
+     *
+     * Ele entra pelo MESMO alerta da recusa, e não por uma faixa nova: é onde
+     * a pessoa acabou de olhar, e uma segunda caixa de aviso na tela seria mais
+     * uma coisa a aprender por um caso raro. Entra marcado como
+     * `erroDeEscrita` de propósito: sem isso, a leitura que vem logo em seguida
+     * (esta linha abaixo, ou a atualização automática) apagaria o aviso antes
+     * de alguém ler.
+     */
+    const aviso = await avisoPorEmail(resposta);
+    erroDeEscrita.current = aviso !== null;
+    setErro(aviso);
     await carregar();
     return true;
   }
