@@ -168,7 +168,13 @@ class _Result:
 
 
 class _TableQuery:
-    """PostgREST minimo: select/eq/in_/order/insert/update."""
+    """PostgREST minimo: select/eq/in_/order/range/insert/update.
+
+    `order` ACUMULA as colunas, e `range` existe, pelos mesmos motivos dos
+    dubles irmaos depois da issue #641: o `_fio_ordenado` ordena por
+    `criado_em` e desempata por `id`, e as leituras de lista sao paginadas.
+    Um duble que guardasse so a ultima chamada de `order` deixaria a ordem
+    cronologica do fio verde por outro motivo."""
 
     def __init__(self, rows: list[dict], nome: str):
         self._rows = rows
@@ -177,13 +183,18 @@ class _TableQuery:
         self._in: dict[str, list] = {}
         self._insert: list[dict] | None = None
         self._update: dict | None = None
-        self._order: str | None = None
+        self._order: list[str] = []
+        self._range: tuple[int, int] | None = None
 
     def select(self, *_a, **_kw):
         return self
 
     def order(self, coluna, **_kw):
-        self._order = coluna
+        self._order.append(coluna)
+        return self
+
+    def range(self, inicio, fim):
+        self._range = (inicio, fim)
         return self
 
     def eq(self, coluna, valor):
@@ -223,8 +234,11 @@ class _TableQuery:
                 linha.update(self._update)
             return _Result(data=[dict(linha) for linha in casadas])
 
-        if self._order:
-            casadas.sort(key=lambda linha: (linha.get(self._order) is None, linha.get(self._order)))
+        for coluna in reversed(self._order):
+            casadas.sort(key=lambda linha, c=coluna: (linha.get(c) is None, linha.get(c)))
+        if self._range is not None:
+            inicio, fim = self._range
+            casadas = casadas[inicio : fim + 1]
         return _Result(data=[dict(linha) for linha in casadas])
 
 
