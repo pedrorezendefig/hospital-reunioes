@@ -84,6 +84,21 @@ function demanda(id: string, titulo: string, extra: Partial<Demanda> = {}): Dema
 
 let chamadas: Chamada[] = [];
 
+/**
+ * As leituras do Quadro que ainda não responderam, com `getSobControle` ligado.
+ *
+ * Cada item responde UM `fetch`, na ordem em que ele foi feito. Soltá-los fora
+ * de ordem é o jeito de fabricar a resposta velha chegando depois da nova.
+ */
+let getsPendentes: Array<(corpo: Demanda[]) => void> = [];
+
+/** Responde a n-ésima leitura pendurada com o Quadro que se quiser. */
+async function soltarQuadro(indice: number, corpo: Demanda[]) {
+  await act(async () => {
+    getsPendentes[indice](corpo);
+  });
+}
+
 function montar(
   demandas: Demanda[],
   opcoes: {
@@ -97,9 +112,23 @@ function montar(
     // O estado de BOOT do `useAuth`: token ainda nulo porque a autenticação
     // não terminou, e não porque não há sessão.
     carregandoAuth?: boolean;
+    /**
+     * O `aviso_por_email` que o backend devolve junto de toda escrita aceita
+     * (issue #642): a ação valeu e o aviso não saiu.
+     */
+    avisoPorEmail?: string;
+    /**
+     * Os GET do Quadro ficam PENDURADOS até `soltarQuadro` (issue #642).
+     *
+     * É o que permite olhar a tela DURANTE uma leitura, que é onde mora a
+     * pergunta da atualização automática ("pisca 'Carregando Demandas...'?"),
+     * e responder duas leituras fora de ordem para cobrar o selo de sequência.
+     */
+    getSobControle?: boolean;
   } = {},
 ) {
   chamadas = [];
+  getsPendentes = [];
 
   /**
    * O fio como o servidor o guarda: escrever nele muda o que a leitura
@@ -137,6 +166,20 @@ function montar(
         throw new TypeError("Failed to fetch");
       }
 
+      /**
+       * A escrita aceita, com o `aviso_por_email` que o backend manda junto
+       * quando a ação valeu e o e-mail não saiu (issue #642).
+       */
+      const aceito = (status: number, corpo: unknown) =>
+        ({
+          ok: true,
+          status,
+          json: async () =>
+            opcoes.avisoPorEmail
+              ? { ...(corpo as Record<string, unknown>), aviso_por_email: opcoes.avisoPorEmail }
+              : corpo,
+        }) as unknown as Response;
+
       if (metodo !== "GET") {
         if (opcoes.recusa) {
           return {
@@ -161,12 +204,12 @@ function montar(
             editavel_ate: new Date(Date.now() + 600_000).toISOString(),
           };
           fio.push(nova);
-          return { ok: true, status: 201, json: async () => nova } as unknown as Response;
+          return aceito(201, nova);
         }
         if (metodo === "POST" && url.endsWith("/mover")) {
           const alvo = quadro.find((d) => url.endsWith(`/demandas/${d.id}/mover`));
           if (alvo) alvo.estado = corpoEnviado.estado;
-          return { ok: true, status: 200, json: async () => alvo ?? {} } as unknown as Response;
+          return aceito(200, alvo ?? {});
         }
         if (metodo === "PATCH" && url.includes("/conversa/")) {
           const alvo = fio.find((linha) => url.endsWith(`/${linha.id}`));
@@ -175,9 +218,9 @@ function montar(
             alvo.mencoes = corpoEnviado.mencoes ?? [];
             alvo.editado_em = new Date().toISOString();
           }
-          return { ok: true, status: 200, json: async () => alvo ?? {} } as unknown as Response;
+          return aceito(200, alvo ?? {});
         }
-        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+        return aceito(200, {});
       }
 
       if (url.includes("/conversa")) {
@@ -188,11 +231,23 @@ function montar(
       // os cards por conta própria receberia tudo aqui e mostraria tudo.
       const busca = new URLSearchParams(url.split("?")[1] ?? "");
       const casa = (chave: string, valor: string | null) => !busca.get(chave) || busca.get(chave) === valor;
-      const corpo = quadro.filter(
-        (d) =>
-          casa("tipo", d.tipo) && casa("produto_id", d.produto_id) && casa("responsavel_id", d.responsavel_id),
-      );
-      return { ok: true, status: 200, json: async () => corpo } as unknown as Response;
+      const peneirado = () =>
+        quadro.filter(
+          (d) =>
+            casa("tipo", d.tipo) && casa("produto_id", d.produto_id) && casa("responsavel_id", d.responsavel_id),
+        );
+      const quadroRespondido = (corpo: Demanda[]) =>
+        ({ ok: true, status: 200, json: async () => corpo }) as unknown as Response;
+
+      if (opcoes.getSobControle) {
+        // Fica pendurado até `soltarQuadro`. O corpo é decidido lá, e não aqui:
+        // é o que permite a resposta velha contar uma história diferente da
+        // nova.
+        return await new Promise<Response>((resolve) => {
+          getsPendentes.push((corpoEscolhido) => resolve(quadroRespondido(corpoEscolhido)));
+        });
+      }
+      return quadroRespondido(peneirado());
     }),
   );
 
@@ -216,7 +271,10 @@ function montar(
     );
   }
 
-  render(<Anfitriao />);
+  // O `render` volta para quem precisa DESMONTAR a tela: é assim que se cobra
+  // que o relógio da atualização automática e o ouvinte de foco somem junto
+  // com ela (issue #642).
+  return render(<Anfitriao />);
 }
 
 const escritas = () => chamadas.filter((c) => c.metodo !== "GET");
@@ -1695,5 +1753,437 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
     const aviso = await screen.findByRole("alert");
     expect(aviso.textContent).toContain("a sessão não está ativa");
     expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+/**
+ * A atualização sozinha do Quadro (issue #642, PRD #634, história 40).
+ *
+ * O relógio é falso aqui, e o `usePolling` é o de VERDADE: dublar o hook
+ * provaria que ele foi chamado, e não que a tela se atualiza, nem que o
+ * intervalo e o ouvinte de foco somem quando a tela sai, que é a metade do
+ * critério.
+ */
+describe("A atualização sozinha", () => {
+  const leiturasDoQuadro = () => chamadas.filter((c) => c.metodo === "GET" && !c.url.includes("/conversa"));
+
+  /** Deixa o relógio andar `ms` com o React acompanhando. */
+  async function passar(ms: number) {
+    await act(async () => {
+      vi.advanceTimersByTime(ms);
+    });
+  }
+
+  function esconderAba(escondida: boolean) {
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => (escondida ? "hidden" : "visible"),
+    });
+    act(() => {
+      document.dispatchEvent(new Event("visibilitychange"));
+    });
+  }
+
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    esconderAba(false);
+  });
+
+  it("pede o Quadro de novo a cada 30 segundos", async () => {
+    montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    expect(leiturasDoQuadro()).toHaveLength(1);
+
+    // 30_000 escrito à mão: medir contra a própria constante ficaria verde com
+    // ela trocada para uma hora, que é o mesmo que não atualizar.
+    await passar(30_000);
+    expect(leiturasDoQuadro()).toHaveLength(2);
+
+    await passar(30_000);
+    expect(leiturasDoQuadro()).toHaveLength(3);
+  });
+
+  it("não pede antes da hora", async () => {
+    // A irmã do teste acima: sem ela, um componente que pedisse o Quadro a
+    // cada batida de relógio passaria pelos dois.
+    montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+
+    await passar(29_000);
+
+    expect(leiturasDoQuadro()).toHaveLength(1);
+  });
+
+  it("mostra a Demanda que apareceu do outro lado, sem ninguém clicar", async () => {
+    montar([demanda("d1", "Uma nova")], { getSobControle: true });
+    await soltarQuadro(0, [demanda("d1", "Uma nova")]);
+    expect(screen.getByText("Uma nova")).toBeTruthy();
+    expect(screen.queryByText("Chegou agora")).toBeNull();
+
+    await passar(30_000);
+    await soltarQuadro(1, [demanda("d1", "Uma nova"), demanda("d2", "Chegou agora")]);
+
+    expect(screen.getByText("Chegou agora")).toBeTruthy();
+  });
+
+  it("não pisca 'Carregando Demandas...' durante a atualização automática", async () => {
+    montar([demanda("d1", "Uma nova")], { getSobControle: true });
+    // Irmã de presença: na PRIMEIRA leitura a espera aparece, porque ali não há
+    // nada na tela ainda. É o que dá sentido à ausência logo abaixo.
+    expect(screen.getByText("Carregando Demandas...")).toBeTruthy();
+    await soltarQuadro(0, [demanda("d1", "Uma nova")]);
+    expect(screen.queryByText("Carregando Demandas...")).toBeNull();
+
+    // A automática dispara e fica NO AR: é exatamente este instante que a
+    // pessoa veria piscar a cada 30 segundos.
+    await passar(30_000);
+    expect(leiturasDoQuadro()).toHaveLength(2);
+
+    expect(screen.queryByText("Carregando Demandas...")).toBeNull();
+    expect(screen.getByText("Uma nova")).toBeTruthy();
+  });
+
+  it("a resposta velha que chega depois da nova não pinta a tela", async () => {
+    montar([demanda("d1", "Uma nova")], { getSobControle: true });
+    await soltarQuadro(0, [demanda("d1", "Uma nova")]);
+
+    // Duas leituras automáticas no ar ao mesmo tempo.
+    await passar(30_000);
+    await passar(30_000);
+    expect(leiturasDoQuadro()).toHaveLength(3);
+
+    // A mais NOVA responde primeiro, e a velha chega depois contando outra
+    // história. Sem o selo de sequência, a velha ganharia por ser a última a
+    // escrever.
+    await soltarQuadro(2, [demanda("d1", "Uma nova"), demanda("d9", "Chegou depois")]);
+    await soltarQuadro(1, [demanda("d1", "Uma nova")]);
+
+    expect(screen.getByText("Chegou depois")).toBeTruthy();
+  });
+
+  it("a atualização automática não deixa o Quadro preso em 'Carregando Demandas...'", async () => {
+    // A leitura da PESSOA (trocar o filtro) acende a espera, e uma automática
+    // entra por cima e vira o pedido mais novo. Se só a leitura visível
+    // pudesse apagar a espera, a tela ficaria em "Carregando Demandas..." para
+    // sempre, com as Demandas já na mão.
+    montar([demanda("d1", "Uma nova")], { getSobControle: true });
+    await soltarQuadro(0, [demanda("d1", "Uma nova")]);
+
+    fireEvent.click(screen.getByRole("combobox", { name: "Filtrar por tipo" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Defeito"));
+    expect(screen.getByText("Carregando Demandas...")).toBeTruthy();
+    expect(leiturasDoQuadro()).toHaveLength(2);
+
+    await passar(30_000);
+    expect(leiturasDoQuadro()).toHaveLength(3);
+    await soltarQuadro(2, []);
+
+    expect(screen.queryByText("Carregando Demandas...")).toBeNull();
+  });
+
+  it("para de pedir depois que a tela sai", async () => {
+    const { unmount } = montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    await passar(30_000);
+    expect(leiturasDoQuadro()).toHaveLength(2);
+
+    unmount();
+    await passar(120_000);
+
+    expect(leiturasDoQuadro()).toHaveLength(2);
+  });
+
+  it("o ouvinte de foco sai junto com a tela", async () => {
+    const { unmount } = montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    unmount();
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(leiturasDoQuadro()).toHaveLength(1);
+  });
+
+  it("recarrega ao voltar o foco para a janela, sem esperar os 30 segundos", async () => {
+    montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    expect(leiturasDoQuadro()).toHaveLength(1);
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(leiturasDoQuadro()).toHaveLength(2);
+  });
+
+  it("a volta do foco também não pisca a espera", async () => {
+    montar([demanda("d1", "Uma nova")], { getSobControle: true });
+    await soltarQuadro(0, [demanda("d1", "Uma nova")]);
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(leiturasDoQuadro()).toHaveLength(2);
+    expect(screen.queryByText("Carregando Demandas...")).toBeNull();
+  });
+
+  it("com a aba escondida não fica pedindo, e volta a pedir quando ela reaparece", async () => {
+    montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    expect(leiturasDoQuadro()).toHaveLength(1);
+
+    esconderAba(true);
+    await passar(90_000);
+    expect(leiturasDoQuadro()).toHaveLength(1);
+
+    // A irmã de presença: com a aba de volta, o relógio volta a valer. Sem
+    // ela, um Quadro que nunca se atualizasse passaria pela metade de cima.
+    esconderAba(false);
+    await passar(30_000);
+    expect(leiturasDoQuadro()).toHaveLength(2);
+  });
+
+  it("não recarrega por cima do card aberto", async () => {
+    // O modal fechado sozinho leva junto a resposta que estava sendo digitada:
+    // basta a Demanda sair da lista que a leitura devolveu (outra pessoa a
+    // moveu para uma coluna escondida pelo filtro) para `aberta` virar nulo.
+    montar([demanda("d1", "Uma nova")]);
+    fireEvent.click(await screen.findByText("Uma nova"));
+    await screen.findByRole("dialog");
+    const antes = leiturasDoQuadro().length;
+
+    await passar(90_000);
+
+    expect(leiturasDoQuadro()).toHaveLength(antes);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("a volta do foco também não recarrega por cima do card aberto", async () => {
+    // Alt-tab para conferir uma coisa e voltar é o gesto mais comum de quem
+    // está no meio de uma resposta. Se o `focus` recarregasse, ele levaria o
+    // card embora exatamente como a batida do relógio levaria.
+    montar([demanda("d1", "Uma nova")]);
+    fireEvent.click(await screen.findByText("Uma nova"));
+    await screen.findByRole("dialog");
+    const antes = leiturasDoQuadro().length;
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(leiturasDoQuadro()).toHaveLength(antes);
+    expect(screen.getByRole("dialog")).toBeTruthy();
+  });
+
+  it("a aba escondida não desliga a recarga da volta do foco", async () => {
+    // O `visibilitychange` chega ANTES do `focus` na volta a uma aba
+    // escondida, e o estado que ele muda só vale no render seguinte: um
+    // ouvinte de foco preso a "a aba está à vista" ainda estaria desligado no
+    // instante em que o foco volta, e a volta que mais precisa de recarga
+    // (aba fora da tela por muito tempo) seria a única sem.
+    montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    esconderAba(true);
+    await passar(90_000);
+    expect(leiturasDoQuadro()).toHaveLength(1);
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(leiturasDoQuadro()).toHaveLength(2);
+  });
+
+  it("não recarrega com um card na mão", async () => {
+    // O outro hazard de `podeRecarregarSozinho`, e o que ficou sem teste na
+    // primeira rodada. Uma leitura no meio do arrasto pode tirar do DOM o card
+    // que está sendo arrastado (outra pessoa o moveu para uma coluna que o
+    // filtro esconde), e o gesto morre na mão de quem o começou.
+    montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    fireEvent.dragStart(cardDe("Uma nova"));
+    const antes = leiturasDoQuadro().length;
+
+    await passar(90_000);
+
+    expect(leiturasDoQuadro()).toHaveLength(antes);
+    // Irmã de presença: o card continua na tela, ou seja, o Quadro não sumiu
+    // por outro motivo.
+    expect(screen.getByText("Uma nova")).toBeTruthy();
+  });
+
+  it("a volta do foco também não recarrega com um card na mão", async () => {
+    montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    fireEvent.dragStart(cardDe("Uma nova"));
+    const antes = leiturasDoQuadro().length;
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(leiturasDoQuadro()).toHaveLength(antes);
+  });
+
+  it("largar o card devolve o relógio", async () => {
+    // A irmã de presença dos dois acima: sem ela, um Quadro que nunca se
+    // atualizasse passaria pelos três.
+    montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    fireEvent.dragStart(cardDe("Uma nova"));
+    await passar(90_000);
+    const parado = leiturasDoQuadro().length;
+
+    fireEvent.dragEnd(cardDe("Uma nova"));
+    await passar(30_000);
+
+    expect(leiturasDoQuadro().length).toBeGreaterThan(parado);
+  });
+
+  it("volta a atualizar sozinho depois que o card fecha", async () => {
+    // A irmã do teste acima: sem ela, um Quadro que nunca se atualizasse
+    // passaria pelos dois.
+    montar([demanda("d1", "Uma nova")]);
+    fireEvent.click(await screen.findByText("Uma nova"));
+    const modal = await screen.findByRole("dialog");
+    fireEvent.click(within(modal).getByLabelText("Fechar"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const antes = leiturasDoQuadro().length;
+
+    await passar(30_000);
+
+    expect(leiturasDoQuadro().length).toBeGreaterThan(antes);
+  });
+
+  it("a atualização automática não apaga o que já foi digitado em Nova Demanda", async () => {
+    // O formulário NÃO pausa o relógio de propósito (ver `podeAtualizarSozinho`
+    // no componente): o que se cobra aqui é que ele não PRECISA pausar, porque
+    // a recarga não encosta no que a pessoa escreveu.
+    montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    fireEvent.click(screen.getByRole("button", { name: /Nova Demanda/ }));
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Rascunho que não pode sumir" } });
+
+    await passar(30_000);
+
+    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Rascunho que não pode sumir");
+    expect(leiturasDoQuadro().length).toBeGreaterThan(1);
+  });
+});
+
+/**
+ * O aviso de que a ação valeu e o e-mail não saiu (issue #642).
+ *
+ * A frase vem do backend: a tela só a mostra e não a deixa ser apagada pela
+ * leitura seguinte.
+ */
+describe("O aviso de que o e-mail não saiu", () => {
+  const AVISO = "O que você fez está gravado, mas o aviso por e-mail não saiu.";
+
+  async function abrirDemanda() {
+    fireEvent.click(await screen.findByRole("button", { name: /Nova Demanda/ }));
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Encerrar conversas" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Produto" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Ana"));
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
+  }
+
+  it("chega à tela de quem abriu a Demanda, com a Demanda já criada", async () => {
+    montar([], { avisoPorEmail: AVISO });
+    await abrirDemanda();
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta.textContent).toContain(AVISO);
+    // O aviso NÃO é recusa: o POST foi, e o formulário fechou como fecha
+    // quando dá certo.
+    expect(escritas().some((c) => c.metodo === "POST" && c.url.endsWith("/demandas"))).toBe(true);
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Abrir Demanda" })).toBeNull());
+  });
+
+  it("chega à tela de quem respondeu no fio, dentro do card", async () => {
+    // O gatilho da MENÇÃO e o do RESPONSÁVEL saem daqui, e este caminho é o do
+    // `ConversaDaDemanda`, que não passa pelo `enviar` do Quadro.
+    montar([demanda("d1", "Encerrar conversas")], { conversa: [], avisoPorEmail: AVISO });
+    fireEvent.click(await screen.findByText("Encerrar conversas"));
+    const modal = await screen.findByRole("dialog");
+
+    fireEvent.change(within(modal).getByLabelText("Resposta"), { target: { value: "Já pedi à Global Health" } });
+    fireEvent.click(within(modal).getByRole("button", { name: /Responder/ }));
+
+    const alerta = await within(modal).findByRole("alert");
+    expect(alerta.textContent).toContain(AVISO);
+    // A resposta ENTROU: o aviso não é recusa. A caixa esvaziou e a linha está
+    // no fio.
+    expect(await within(modal).findByText(/Já pedi à Global Health/)).toBeTruthy();
+  });
+
+  it("chega à tela de quem trocou o responsável dentro do card", async () => {
+    // O gatilho da ATRIBUIÇÃO pela porta do modal, que é o `enviar` do
+    // `DemandaModal`, um terceiro caminho.
+    montar([demanda("d1", "Encerrar conversas")], { avisoPorEmail: AVISO });
+    fireEvent.click(await screen.findByText("Encerrar conversas"));
+    const modal = await screen.findByRole("dialog");
+
+    fireEvent.click(within(modal).getByRole("combobox", { name: "Responsável" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Sócia Vitta"));
+
+    const alerta = await within(modal).findByRole("alert");
+    expect(alerta.textContent).toContain(AVISO);
+    expect(
+      escritas().some((c) => c.url === "/api/admin/tecnologia/demandas/d1/atribuir"),
+    ).toBe(true);
+  });
+
+  it("sem aviso do servidor, o card não inventa alarme", async () => {
+    // A irmã de presença dos dois acima, pelos mesmos dois caminhos.
+    montar([demanda("d1", "Encerrar conversas")], { conversa: [] });
+    fireEvent.click(await screen.findByText("Encerrar conversas"));
+    const modal = await screen.findByRole("dialog");
+
+    fireEvent.change(within(modal).getByLabelText("Resposta"), { target: { value: "Respondido" } });
+    fireEvent.click(within(modal).getByRole("button", { name: /Responder/ }));
+    await within(modal).findByText(/Respondido/);
+
+    fireEvent.click(within(modal).getByRole("combobox", { name: "Responsável" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Sócia Vitta"));
+    await waitFor(() => expect(escritas().some((c) => c.url.endsWith("/atribuir"))).toBe(true));
+
+    expect(within(modal).queryByRole("alert")).toBeNull();
+  });
+
+  it("sem aviso do servidor, a tela não inventa alarme", async () => {
+    // A irmã de presença: sem ela, uma tela que mostrasse o alerta em toda
+    // escrita passaria no teste acima.
+    montar([]);
+    await abrirDemanda();
+
+    await waitFor(() => expect(screen.queryByRole("button", { name: "Abrir Demanda" })).toBeNull());
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("não é apagado pela atualização automática que vem logo depois", async () => {
+    // O aviso é de ESCRITA. Uma leitura chegando em seguida e limpando o
+    // alerta deixaria a pessoa sem saber que o recado não chegou a ninguém, e
+    // agora as leituras chegam sozinhas de 30 em 30 segundos.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      montar([], { avisoPorEmail: AVISO });
+      await abrirDemanda();
+      expect((await screen.findByRole("alert")).textContent).toContain(AVISO);
+
+      await act(async () => {
+        vi.advanceTimersByTime(90_000);
+      });
+
+      expect(screen.getByRole("alert").textContent).toContain(AVISO);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

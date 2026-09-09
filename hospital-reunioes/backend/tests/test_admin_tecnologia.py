@@ -27,13 +27,31 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from slowapi import _rate_limit_exceeded_handler  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
+from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
 from app.services.tecnologia import (  # noqa: E402
     e_pessoa_da_aba,
     edicao_deixa_produto_ativo_sem_dono,
     produto_ativo_sem_dono,
 )
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """O slowapi guarda a contagem num storage de PROCESSO (issue #642).
+
+    As tres rotas de gatilho ganharam `@limiter.limit`, e o `TestClient` sempre
+    chega do mesmo endereco: sem este reset, o 61o request do ARQUIVO leva 429 e
+    o teste que quebra e o proximo da fila, nao o que estourou o teto.
+    """
+    limiter._storage.reset()
+    yield
+    limiter._storage.reset()
+
 
 # ─── Supabase dublê ──────────────────────────────────────────────────────────
 
@@ -168,6 +186,10 @@ def _montar(
     produtos: list[dict] | None = None,
 ) -> tuple[TestClient, _SupabaseMock]:
     app = FastAPI()
+    # O limitador das rotas de gatilho precisa do `app.state` (o `main.py` faz o
+    # mesmo): sem ele, `@limiter.limit` estoura em vez de limitar.
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.include_router(tecnologia_router.router, prefix="/api")
 
     pessoas = list(participantes if participantes is not None else [])

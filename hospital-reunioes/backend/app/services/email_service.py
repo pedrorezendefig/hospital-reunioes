@@ -17,6 +17,45 @@ TEMPLATES_DIR = Path(__file__).parent.parent / "templates"
 # de usuário (ex.: nome do POP) — mesmo padrão do reuniao_email_service.
 jinja_env = Environment(loader=FileSystemLoader(str(TEMPLATES_DIR)), autoescape=True)
 
+# Quanto tempo o app espera o provedor de email, em segundos (issue #642).
+#
+# Sem teto, um provedor lento pendura a chamada para SEMPRE. Isso não é
+# hipótese: o `smtplib.SMTP(host, port)` sem `timeout` herda o default global do
+# socket, que é "espere indefinidamente", e o uvicorn deste app sobe com um
+# worker só (`Dockerfile`). Uma chamada pendurada que não vá para thread trava o
+# processo inteiro, e com ele a Ouvidoria, as Atas, as Reuniões e o portal
+# público.
+#
+# 20 segundos é folgado para um POST de email e curto o bastante para não virar
+# indisponibilidade: quem estourar isso já não ia entregar a tempo de nada.
+TIMEOUT_DO_TRANSPORTE = 20
+
+
+def _com_timeout_no_resend() -> None:
+    """Põe o teto de tempo no cliente HTTP do SDK do Resend.
+
+    O `resend` monta a requisição num cliente próprio (`resend.default_http_client`),
+    e é ELE quem tem o `timeout`. As versões novas já trazem 30 segundos por
+    padrão; as antigas, não. Como o `pyproject.toml` pede `resend>=2.0.0`, o que
+    o CI instala não é o que a `uv.lock` fixa (foi o que mordeu nas issues #542 e
+    #546), então o teto é escrito aqui e não deixado por conta da versão.
+
+    Falhar aqui não pode derrubar a subida do app: SDK sem esta peça continua
+    mandando email, só que sem o nosso teto, e o log diz isso.
+    """
+    try:
+        from resend.http_client_requests import RequestsClient
+
+        resend.default_http_client = RequestsClient(timeout=TIMEOUT_DO_TRANSPORTE)
+    except Exception:  # noqa: BLE001 (timeout é guarda-corpo, não requisito de boot)
+        logger.warning(
+            "SDK do Resend sem cliente HTTP configurável: o envio fica sem o teto de %ss desta aplicação.",
+            TIMEOUT_DO_TRANSPORTE,
+        )
+
+
+_com_timeout_no_resend()
+
 
 def _resend_configurado() -> bool:
     return bool(settings.resend_api_key)
@@ -79,6 +118,25 @@ def _alvo_no_log(destinatario: str, endereco_fora_do_log: bool) -> str:
     return ENDERECO_OMITIDO if endereco_fora_do_log else destinatario
 
 
+def _assunto_no_log(assunto: str, assunto_para_o_log: str | None) -> str:
+    """Como o assunto aparece no log da aplicação.
+
+    Irmão do `_alvo_no_log`, e pelo mesmo motivo (issue #642): o log corre em
+    INFO em produção, e o assunto sai lado a lado com o destinatário. Quando o
+    assunto carrega texto que uma PESSOA digitou num campo livre, quem tem
+    acesso ao log do Coolify e nenhum perfil no módulo passa a ler esse texto.
+
+    Quem chama decide: sem `assunto_para_o_log`, vale o assunto de verdade, que
+    é o que sempre valeu (os construtores da Ouvidoria montam o assunto em
+    código, e o residual deles está na decisão 7 do ADR 0039). Com ele, o log
+    fica com a versão neutra e quem recebe continua vendo o assunto útil.
+
+    Truncar não serviria: o começo de "Prontuário da paciente Maria não abre" já
+    é o que não pode ficar escrito. O que resolve é o assunto do log não conter
+    campo livre nenhum."""
+    return assunto_para_o_log or assunto
+
+
 def _falha_no_log(erro: Exception, endereco_fora_do_log: bool) -> str:
     """Como a falha de envio aparece no log.
 
@@ -103,6 +161,7 @@ def _enviar_via_resend(
     texto_fallback: str,
     anexos: list[Anexo] | None = None,
     endereco_fora_do_log: bool = False,
+    assunto_no_log: str | None = None,
 ) -> bool:
     resend.api_key = settings.resend_api_key
     payload = {
@@ -126,7 +185,8 @@ def _enviar_via_resend(
     try:
         resend.Emails.send(payload)
         logger.info(
-            f"Email enviado via Resend para {_alvo_no_log(destinatario, endereco_fora_do_log)} | Assunto: {assunto}"
+            f"Email enviado via Resend para {_alvo_no_log(destinatario, endereco_fora_do_log)} "
+            f"| Assunto: {_assunto_no_log(assunto, assunto_no_log)}"
         )
         return True
     except Exception as e:
@@ -141,6 +201,7 @@ def _enviar_via_smtp(
     texto_fallback: str,
     anexos: list[Anexo] | None = None,
     endereco_fora_do_log: bool = False,
+    assunto_no_log: str | None = None,
 ) -> bool:
     msg = EmailMessage()
     msg["Subject"] = assunto
@@ -152,12 +213,13 @@ def _enviar_via_smtp(
         principal, secundario = _tipo_do_anexo(nome)
         msg.add_attachment(conteudo, maintype=principal, subtype=secundario, filename=nome)
     try:
-        with smtplib.SMTP(settings.smtp_host, settings.smtp_port) as server:
+        with smtplib.SMTP(settings.smtp_host, settings.smtp_port, timeout=TIMEOUT_DO_TRANSPORTE) as server:
             server.starttls()
             server.login(settings.smtp_user, settings.smtp_password)
             server.send_message(msg)
         logger.info(
-            f"Email enviado via SMTP para {_alvo_no_log(destinatario, endereco_fora_do_log)} | Assunto: {assunto}"
+            f"Email enviado via SMTP para {_alvo_no_log(destinatario, endereco_fora_do_log)} "
+            f"| Assunto: {_assunto_no_log(assunto, assunto_no_log)}"
         )
         return True
     except Exception as e:
@@ -172,6 +234,7 @@ def _enviar_email(
     texto_fallback: str,
     anexos: list[Anexo] | None = None,
     endereco_fora_do_log: bool = False,
+    assunto_no_log: str | None = None,
 ) -> bool:
     """
     Tenta enviar email via Resend (primário). Se não configurado, tenta SMTP.
@@ -188,15 +251,19 @@ def _enviar_email(
     `_alvo_no_log`.
     """
     if _resend_configurado():
-        return _enviar_via_resend(destinatario, assunto, html_content, texto_fallback, anexos, endereco_fora_do_log)
+        return _enviar_via_resend(
+            destinatario, assunto, html_content, texto_fallback, anexos, endereco_fora_do_log, assunto_no_log
+        )
 
     if _smtp_configurado():
-        return _enviar_via_smtp(destinatario, assunto, html_content, texto_fallback, anexos, endereco_fora_do_log)
+        return _enviar_via_smtp(
+            destinatario, assunto, html_content, texto_fallback, anexos, endereco_fora_do_log, assunto_no_log
+        )
 
     anexados = ", ".join(f"{nome} ({len(conteudo)} bytes)" for nome, conteudo in anexos or []) or "nenhum"
     cabecalho = (
         f"[MOCK EMAIL] Para: {_alvo_no_log(destinatario, endereco_fora_do_log)} "
-        f"| Assunto: {assunto} | Anexos: {anexados}"
+        f"| Assunto: {_assunto_no_log(assunto, assunto_no_log)} | Anexos: {anexados}"
     )
     if settings.environment == "development":
         logger.warning(

@@ -62,14 +62,16 @@ A linha continua no banco.
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import UTC, date, datetime
 from typing import NoReturn
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from supabase import Client
 
 from app.dependencies import get_supabase_client, require_super_admin
+from app.limiter import limiter
 from app.models.tecnologia_schemas import (
     AtribuirPayload,
     ConversaLinhaResponse,
@@ -88,6 +90,7 @@ from app.models.tecnologia_schemas import (
 )
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
+    AVISO_EMAIL_NAO_SAIU,
     ESTADOS_ABERTOS,
     ESTADOS_FECHADOS,
     MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO,
@@ -97,8 +100,10 @@ from app.services.tecnologia import (
     MOTIVO_PRODUTO_INATIVO,
     MOTIVO_PRODUTO_SEM_DONO,
     MOTIVO_RESPONSAVEL_SEM_ACESSO,
+    avisos_da_resposta,
     carimbos_da_transicao,
     demanda_casa_a_busca,
+    destinatario_da_atribuicao,
     e_pessoa_da_aba,
     edicao_deixa_produto_ativo_sem_dono,
     esperando_resposta_da_pessoa,
@@ -122,6 +127,7 @@ from app.services.tecnologia import (
     textos_de_resposta,
     transicao_permitida,
 )
+from app.services.tecnologia_email import avisar_atribuicao, avisar_mencao, avisar_resposta
 
 logger = logging.getLogger(__name__)
 
@@ -492,6 +498,138 @@ def _gravar_movimento(
         _fio_incompleto()
 
 
+# Quantas vezes por minuto uma mesma origem pode disparar gatilho de e-mail.
+#
+# Mesmo valor da rota equivalente da Ouvidoria (`registrar_manifestacao`). O
+# motivo de existir é que desde a issue #642 cada POST destas três portas
+# consome COTA e reputação de remetente do Resend, que é recurso COMPARTILHADO
+# (uma chave, um `email_service`, um remetente). A Ouvidoria manda por esse
+# mesmo canal os avisos de prazo, que têm obrigação legal (ADR 0034): sem teto,
+# um laço bobo numa conta de Super admin desta aba derrubaria aqueles avisos.
+LIMITE_DE_GATILHO = "60/minute"
+
+# O balde é UM SÓ para as três portas, e não um por porta.
+#
+# É `shared_limit`, e não `limit`, por uma razão medida e não estética: o
+# `Limiter` da casa (`app/limiter.py`) nasce com o `key_style` default do
+# slowapi, que é `"url"`, e ali o balde é a URL CONCRETA da requisição. Com
+# `limit`, `POST /demandas/{id}/atribuir` ganharia 60 por minuto POR DEMANDA, e
+# quem tem cem Demandas teria cem baldes: o teto viraria enfeite justo na porta
+# em que ele foi pedido. `shared_limit` fixa o escopo por nome, então as três
+# portas dividem o mesmo balde por origem.
+#
+# E dividir é o certo aqui: o recurso escasso não é a rota, é a cota do Resend,
+# que é uma só para o app inteiro.
+ESCOPO_DO_GATILHO = "tecnologia-gatilho-de-email"
+
+
+async def _enviar_fora_do_loop(envio, supabase: Client, **argumentos) -> bool:
+    """Manda o e-mail numa thread, e não no event loop.
+
+    O envio é síncrono de propósito (a tela precisa saber se o aviso saiu antes
+    de a resposta voltar, e é isso que alimenta o `aviso_por_email`), mas
+    síncrono NÃO pode significar dentro do loop: o `resend` fala HTTP por
+    `requests` e o SMTP por `smtplib`, os dois bloqueantes, e o uvicorn deste app
+    sobe com um worker só (`Dockerfile`). Uma resposta com três menções são
+    quatro envios em fila; com o provedor lento, o processo INTEIRO para, e com
+    ele a Ouvidoria, as Atas, as Reuniões e o portal público. Um efeito
+    colateral opcional de um terceiro não pode virar indisponibilidade de tudo.
+
+    O resto do app resolve isso com `BackgroundTasks` (`reunioes.py`,
+    `ouvidoria_acuse.py`), que roda no threadpool DEPOIS da resposta. Aqui não
+    serve: o resultado precisa voltar dentro da resposta. `asyncio.to_thread`
+    guarda as duas coisas, a espera e o loop livre.
+
+    O teto de tempo é do transporte (`email_service.TIMEOUT_DO_TRANSPORTE`), e
+    não daqui: um `wait_for` em volta devolveria a requisição no prazo e deixaria
+    a thread pendurada para sempre, que é o mesmo vazamento com outro nome.
+    """
+    return await asyncio.to_thread(envio, supabase, **argumentos)
+
+
+def _nome_de_quem_agiu(ator: dict) -> str:
+    """Como quem disparou o gatilho aparece no e-mail. Mesma palavra que a linha
+    de movimento usa quando o nome não veio."""
+    return ator.get("nome_completo") or "Alguém"
+
+
+async def _aviso_da_atribuicao(supabase: Client, *, demanda: dict, ator: dict) -> str | None:
+    """Gatilho 1, e o aviso na tela quando ele não sai (issue #642).
+
+    Vale para as DUAS portas por onde uma Demanda ganha responsável: a criação
+    (o dono do Produto) e o `atribuir`. É a mesma regra e o mesmo e-mail, então
+    é o mesmo caminho.
+
+    O envio acontece DEPOIS da escrita, e a falha dele não desfaz nada: o que
+    volta é a frase que a tela mostra ao lado do que já foi gravado.
+
+    **`asyncio.to_thread` não é enfeite** (ver `_enviar_fora_do_loop`).
+    """
+    destinatario = destinatario_da_atribuicao(responsavel_id=demanda.get("responsavel_id"), quem_fez=ator["id"])
+    if not destinatario:
+        return None
+    saiu = await _enviar_fora_do_loop(
+        avisar_atribuicao,
+        supabase,
+        demanda=demanda,
+        destinatario_id=destinatario,
+        quem_fez_nome=_nome_de_quem_agiu(ator),
+    )
+    return None if saiu else AVISO_EMAIL_NAO_SAIU
+
+
+async def _aviso_da_resposta(
+    supabase: Client, *, demanda: dict, texto: str, mencoes: list[str], ator: dict
+) -> str | None:
+    """Gatilhos 2 e 3, os dois da MESMA resposta (issue #642).
+
+    Quem decide os destinatários é o serviço puro: os mencionados que não são
+    quem escreveu, e o responsável quando ele não escreveu nem já está entre os
+    mencionados (senão levaria dois e-mails pela mesma fala).
+
+    Os dois envios são dois `if` independentes, e não `if/elif`: uma resposta
+    pode ter as duas coisas ao mesmo tempo, e quem cai só num dos gatilhos não
+    tira o outro do caminho.
+
+    A CHAMADA fica do lado esquerdo do `and`. Escrito ao contrário
+    (`tudo_saiu and avisar_resposta(...)`), um aviso de menção que falhasse
+    impediria o envio ao responsável de ser sequer tentado: uma falha viraria
+    duas, e a segunda seria nossa.
+    """
+    avisos = avisos_da_resposta(
+        responsavel_id=demanda.get("responsavel_id"),
+        mencoes=mencoes,
+        quem_fez=ator["id"],
+    )
+    quem_fez_nome = _nome_de_quem_agiu(ator)
+    tudo_saiu = True
+    if avisos.mencionados:
+        tudo_saiu = (
+            await _enviar_fora_do_loop(
+                avisar_mencao,
+                supabase,
+                demanda=demanda,
+                destinatarios=avisos.mencionados,
+                texto=texto,
+                quem_fez_nome=quem_fez_nome,
+            )
+            and tudo_saiu
+        )
+    if avisos.responsavel:
+        tudo_saiu = (
+            await _enviar_fora_do_loop(
+                avisar_resposta,
+                supabase,
+                demanda=demanda,
+                destinatario_id=avisos.responsavel,
+                texto=texto,
+                quem_fez_nome=quem_fez_nome,
+            )
+            and tudo_saiu
+        )
+    return None if tudo_saiu else AVISO_EMAIL_NAO_SAIU
+
+
 # ─── Demanda: endpoints ──────────────────────────────────────────────────────
 
 
@@ -527,7 +665,9 @@ async def listar_demandas(
 
 
 @router.post("/demandas", response_model=DemandaResponse, status_code=status.HTTP_201_CREATED)
+@limiter.shared_limit(LIMITE_DE_GATILHO, ESCOPO_DO_GATILHO)
 async def criar_demanda(
+    request: Request,
     payload: DemandaCreatePayload,
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
@@ -573,7 +713,10 @@ async def criar_demanda(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Falha ao criar a Demanda",
         )
-    return _com_nomes(supabase, [result.data[0]])[0]
+    criada = _com_nomes(supabase, [result.data[0]])[0]
+    # "Inclusive na criação" (PRD #634, história 41): a Demanda nasce na mão do
+    # dono do Produto, e para ele isso é uma atribuição como qualquer outra.
+    return {**criada, "aviso_por_email": await _aviso_da_atribuicao(supabase, demanda=criada, ator=ator)}
 
 
 @router.patch("/demandas/{demanda_id}", response_model=DemandaResponse)
@@ -667,7 +810,9 @@ async def mover_demanda(
 
 
 @router.post("/demandas/{demanda_id}/atribuir", response_model=DemandaResponse)
+@limiter.shared_limit(LIMITE_DE_GATILHO, ESCOPO_DO_GATILHO)
 async def atribuir_demanda(
+    request: Request,
     demanda_id: str,
     payload: AtribuirPayload,
     ator: dict = Depends(require_super_admin),
@@ -706,7 +851,11 @@ async def atribuir_demanda(
             para_nome=pessoas[novo_id].get("nome_completo") or novo_id,
         ),
     )
-    return _com_nomes(supabase, [result.data[0]])[0]
+    atribuida = _com_nomes(supabase, [result.data[0]])[0]
+    # Depois da linha do fio, e não antes: se o fio falhar, o 500 do
+    # `_gravar_movimento` sai daqui e o e-mail não chega a ser montado. Avisar
+    # antes mandaria "a Demanda é sua" sobre um card cuja trilha ficou quebrada.
+    return {**atribuida, "aviso_por_email": await _aviso_da_atribuicao(supabase, demanda=atribuida, ator=ator)}
 
 
 # ─── Conversa: helpers ───────────────────────────────────────────────────────
@@ -866,7 +1015,9 @@ async def texto_da_demanda_para_ia(
     response_model=ConversaLinhaResponse,
     status_code=status.HTTP_201_CREATED,
 )
+@limiter.shared_limit(LIMITE_DE_GATILHO, ESCOPO_DO_GATILHO)
 async def responder_na_conversa(
+    request: Request,
     demanda_id: str,
     payload: RespostaPayload,
     ator: dict = Depends(require_super_admin),
@@ -878,7 +1029,9 @@ async def responder_na_conversa(
     portas de `mover` e `atribuir` continuam sendo as unicas que mexem no
     quadro.
     """
-    _buscar_demanda(supabase, demanda_id)
+    # Com os nomes resolvidos porque o e-mail dos gatilhos mostra o Produto, e
+    # o `produto_nome` não está na linha da Demanda.
+    demanda = _com_nomes(supabase, [_buscar_demanda(supabase, demanda_id)])[0]
     texto, mencoes = _texto_e_mencoes(supabase, payload)
 
     nova = {
@@ -904,7 +1057,12 @@ async def responder_na_conversa(
         logger.error("Resposta nao gravada na Conversa da Demanda %s", demanda_id)
         _resposta_nao_entrou()
 
-    return _com_janela(result.data[0], ator_id=ator["id"], autor_nome=ator.get("nome_completo"))
+    linha = _com_janela(result.data[0], ator_id=ator["id"], autor_nome=ator.get("nome_completo"))
+    # Os gatilhos 2 e 3 saem DEPOIS de a linha estar gravada: um e-mail que
+    # convidasse a ler uma resposta que não entrou no fio seria pior do que
+    # nenhum e-mail.
+    aviso = await _aviso_da_resposta(supabase, demanda=demanda, texto=texto, mencoes=mencoes, ator=ator)
+    return {**linha, "aviso_por_email": aviso}
 
 
 @router.patch("/demandas/{demanda_id}/conversa/{linha_id}", response_model=ConversaLinhaResponse)
