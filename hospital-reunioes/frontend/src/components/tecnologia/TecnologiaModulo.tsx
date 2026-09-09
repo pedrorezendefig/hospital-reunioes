@@ -35,6 +35,9 @@ type AbaId = (typeof ABAS)[number]["id"];
 
 const BASE = "/api/admin/tecnologia";
 
+/** A mesma frase nos dois caminhos de rede, carregar e salvar. */
+const FALHA_DE_CONEXAO = "Não foi possível falar com o servidor. Verifique a conexão e tente de novo.";
+
 export function TecnologiaModulo() {
   const { token, loading: carregandoAuth } = useAuth();
 
@@ -54,6 +57,14 @@ export function TecnologiaModulo() {
     [token],
   );
 
+  /**
+   * Carrega Produtos e pessoas.
+   *
+   * A falha de rede tem que virar AVISO, não lista vazia: sem o `catch`, o
+   * backend fora do ar desenharia a tela calada e sem Produto nenhum, que é
+   * indistinguível de "o seed da migration não rodou". Molde do
+   * `app/admin/usuarios/page.tsx`, que já trata assim.
+   */
   const carregar = useCallback(async () => {
     if (!token) return;
     setCarregando(true);
@@ -69,22 +80,41 @@ export function TecnologiaModulo() {
       setProdutos(await respProdutos.json());
       setPessoas(await respPessoas.json());
       setErro(null);
+    } catch (e) {
+      console.error("[admin/tecnologia] falha ao carregar", e);
+      setErro(FALHA_DE_CONEXAO);
     } finally {
       setCarregando(false);
     }
   }, [token, autorizacao]);
 
   useEffect(() => {
-    if (!carregandoAuth && token) carregar();
+    if (carregandoAuth) return;
+    if (!token) {
+      // Sem token a tela ficaria em "Carregando Produtos..." para sempre,
+      // porque `carregar` desiste na primeira linha e ninguém desliga a
+      // espera. Dizer o que aconteceu é melhor do que girar sem fim.
+      setCarregando(false);
+      setErro("Sua sessão expirou. Entre de novo para ver os Produtos.");
+      return;
+    }
+    carregar();
   }, [carregandoAuth, token, carregar]);
 
   /** Devolve `true` quando o servidor aceitou. O motivo da recusa vem dele. */
   async function enviar(url: string, metodo: string, corpo: unknown): Promise<boolean> {
-    const resposta = await fetch(url, {
-      method: metodo,
-      headers: autorizacao(),
-      body: JSON.stringify(corpo),
-    });
+    let resposta: Response;
+    try {
+      resposta = await fetch(url, {
+        method: metodo,
+        headers: autorizacao(),
+        body: JSON.stringify(corpo),
+      });
+    } catch (e) {
+      console.error("[admin/tecnologia] falha ao salvar", e);
+      setErro(FALHA_DE_CONEXAO);
+      return false;
+    }
     if (!resposta.ok) {
       setErro(await motivoDaRecusa(resposta));
       return false;

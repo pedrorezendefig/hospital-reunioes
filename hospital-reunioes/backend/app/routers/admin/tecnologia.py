@@ -67,6 +67,20 @@ def _normalizar_nome(nome: str) -> str:
     return " ".join(nome.strip().split())
 
 
+def _normalizar_dono(dono_id: str | None) -> str | None:
+    """String vazia vira NULL.
+
+    `""` passa pelas duas guardas do dono (e falsy, entao nao e "sem dono
+    escolhido" nem "dono a conferir") e chegaria ao banco como texto vazio, que
+    nao existe em `participantes(id)`: violacao de chave estrangeira, 500. Quem
+    manda `dono_id` vazio esta dizendo "sem dono", e e isso que se grava.
+    """
+    if dono_id is None:
+        return None
+    limpo = dono_id.strip()
+    return limpo or None
+
+
 def _buscar_produto(supabase: Client, produto_id: str) -> dict:
     result = supabase.table(TABELA_PRODUTOS).select("*").eq("id", produto_id).execute()
     if not result.data:
@@ -162,15 +176,16 @@ async def criar_produto(
     nome = _normalizar_nome(payload.nome)
     if not nome:
         _recusar("Nome do Produto nao pode ser vazio.")
-    _exigir_dono_no_produto_novo(payload.dono_id)
-    if payload.dono_id:
-        _exigir_dono_com_acesso(supabase, payload.dono_id)
+    dono_id = _normalizar_dono(payload.dono_id)
+    _exigir_dono_no_produto_novo(dono_id)
+    if dono_id:
+        _exigir_dono_com_acesso(supabase, dono_id)
     _exigir_nome_livre(supabase, nome)
 
     novo = {
         "nome": nome,
         "ativo": True,
-        "dono_id": payload.dono_id,
+        "dono_id": dono_id,
         "ordem": payload.ordem if payload.ordem is not None else _proxima_ordem(supabase),
     }
     result = supabase.table(TABELA_PRODUTOS).insert(novo).execute()
@@ -209,7 +224,7 @@ async def atualizar_produto(
         mudancas["nome"] = nome
 
     ativo = payload.ativo if ("ativo" in informados and payload.ativo is not None) else bool(atual.get("ativo"))
-    dono_id = payload.dono_id if "dono_id" in informados else atual.get("dono_id")
+    dono_id = _normalizar_dono(payload.dono_id) if "dono_id" in informados else atual.get("dono_id")
 
     if edicao_deixa_produto_ativo_sem_dono(
         antes_ativo=bool(atual.get("ativo")),
@@ -218,13 +233,13 @@ async def atualizar_produto(
         depois_dono=dono_id,
     ):
         _recusar(MOTIVO_PRODUTO_ATIVO_SEM_DONO)
-    if "dono_id" in informados and payload.dono_id:
-        _exigir_dono_com_acesso(supabase, payload.dono_id)
+    if "dono_id" in informados and dono_id:
+        _exigir_dono_com_acesso(supabase, dono_id)
 
     if "ativo" in informados and payload.ativo is not None:
         mudancas["ativo"] = payload.ativo
     if "dono_id" in informados:
-        mudancas["dono_id"] = payload.dono_id
+        mudancas["dono_id"] = dono_id
     if "ordem" in informados and payload.ordem is not None:
         mudancas["ordem"] = payload.ordem
 

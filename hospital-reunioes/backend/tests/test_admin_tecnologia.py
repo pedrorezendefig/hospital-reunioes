@@ -282,12 +282,58 @@ class TestMigration:
 # ─── 2. O gate ───────────────────────────────────────────────────────────────
 
 
-ROTAS = [
-    ("GET", "/api/admin/tecnologia/pessoas", None),
-    ("GET", "/api/admin/tecnologia/produtos", None),
-    ("POST", "/api/admin/tecnologia/produtos", {"nome": "Novo Produto", "dono_id": "P1"}),
-    ("PATCH", "/api/admin/tecnologia/produtos/prod-1", {"nome": "Renomeado"}),
-]
+PREFIXO = "/api/admin/tecnologia"
+
+
+def _rotas_da_aba() -> list[tuple[str, str, dict | None]]:
+    """Toda rota de `admin/tecnologia` que o app REALMENTE publica.
+
+    Varredura, e nao lista cravada: o gate e o produto desta fatia, e uma rota
+    acrescentada ao router numa fatia seguinte sem `require_super_admin`
+    entraria sem deixar teste vermelho.
+
+    A fonte e o schema OpenAPI, e nao `app.routes`: desde o FastAPI 0.141 o
+    `include_router` guarda o router incluido em vez de copiar as rotas para
+    cima, e a lista volta quase vazia. Isso nao daria erro, daria varredura
+    vazia, que e o pior jeito de uma defesa morrer (mordeu nas issues #542 e
+    #546). O piso de sanidade abaixo e a trava contra isso.
+    """
+    from app.main import app
+
+    # `app.openapi()` CACHEIA o schema em `app.openapi_schema`, e esta varredura
+    # roda na coleta. Congelar o cache aqui envelheceria o schema para quem
+    # acrescenta rota ao app real depois (o `test_handler_global_excecao.py`
+    # registra uma em tempo de import), e o
+    # `test_nenhuma_rota_esta_escondida_do_schema` ficaria vermelho por
+    # contaminação, nao por defeito. Por isso o cache volta como estava.
+    cache = app.openapi_schema
+    try:
+        caminhos = app.openapi()["paths"]
+    finally:
+        app.openapi_schema = cache
+
+    achadas: list[tuple[str, str, dict | None]] = []
+    for caminho, operacoes in caminhos.items():
+        if not caminho.startswith(PREFIXO):
+            continue
+        # `{produto_id}` e afins viram um id qualquer: o que se mede aqui e o
+        # gate, que responde antes de o id existir ou nao.
+        concreto = re.sub(r"\{[^}]+\}", "prod-1", caminho)
+        for metodo in operacoes:
+            verbo = metodo.upper()
+            corpo = {"nome": "Novo Produto", "dono_id": "P1"} if verbo in ("POST", "PUT", "PATCH") else None
+            achadas.append((verbo, concreto, corpo))
+    return sorted(achadas)
+
+
+ROTAS = _rotas_da_aba()
+
+
+def test_a_varredura_enxerga_as_rotas_da_aba():
+    """Controle, antes de qualquer asserção sobre a matriz: varredura vazia
+    satisfaz "toda rota responde 403" sem olhar rota nenhuma."""
+    assert len(ROTAS) >= 4, f"a varredura só achou {len(ROTAS)} rotas em {PREFIXO}: {ROTAS}"
+
 
 PERSONAS_SEM_ACESSO = {
     "facilitador": "regular",
@@ -594,6 +640,42 @@ class TestProdutos:
             "Infra",
             "Portal",
         ]
+
+    def test_dono_vazio_vira_nulo_em_vez_de_ir_para_o_banco(self):
+        """`""` nao e NULL e nao existe em `participantes(id)`: gravado, seria
+        violacao de chave estrangeira e 500. Quem manda dono vazio esta dizendo
+        "sem dono", e e isso que a linha guarda."""
+        dono = _pessoa("P1", "Dona Vitta")
+        client, sb = _montar(
+            logado=dono,
+            produtos=[_produto("prod-1", "Ana", ordem=1, dono_id="P1", ativo=False)],
+        )
+
+        resposta = client.patch("/api/admin/tecnologia/produtos/prod-1", json={"dono_id": ""})
+
+        assert resposta.status_code == 200
+        assert sb.tabelas["tecnologia_produtos"][0]["dono_id"] is None
+
+    def test_dono_vazio_em_produto_ativo_e_recusado(self):
+        """O par do teste acima: vazio vira "sem dono", e sem dono no ativo e
+        justamente o que a API recusa."""
+        dono = _pessoa("P1", "Dona Vitta")
+        client, sb = _montar(logado=dono, produtos=[_produto("prod-1", "Ana", ordem=1, dono_id="P1")])
+
+        resposta = client.patch("/api/admin/tecnologia/produtos/prod-1", json={"dono_id": "   "})
+
+        assert resposta.status_code == 422
+        assert "precisa de dono" in resposta.json()["detail"]
+        assert sb.tabelas["tecnologia_produtos"][0]["dono_id"] == "P1"
+
+    def test_criar_com_dono_vazio_e_recusado(self):
+        dono = _pessoa("P1", "Dona Vitta")
+        client, sb = _montar(logado=dono)
+
+        resposta = client.post("/api/admin/tecnologia/produtos", json={"nome": "Portal", "dono_id": "  "})
+
+        assert resposta.status_code == 422
+        assert sb.tabelas["tecnologia_produtos"] == []
 
     def test_produto_inexistente_da_404(self):
         dono = _pessoa("P1", "Dona Vitta")

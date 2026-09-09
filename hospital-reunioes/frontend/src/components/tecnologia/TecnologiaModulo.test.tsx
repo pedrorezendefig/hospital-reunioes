@@ -25,8 +25,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TecnologiaModulo } from "./TecnologiaModulo";
 
+const sessao = vi.hoisted(() => ({ token: "token-de-teste" as string | null }));
+
 vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ token: "token-de-teste", userId: "auth-1", userEmail: "p1@hsm", loading: false }),
+  useAuth: () => ({
+    token: sessao.token,
+    userId: sessao.token ? "auth-1" : null,
+    userEmail: sessao.token ? "p1@hsm" : null,
+    loading: false,
+  }),
 }));
 
 type Chamada = { url: string; metodo: string; corpo: unknown };
@@ -72,7 +79,13 @@ let chamadas: Chamada[] = [];
  */
 function montar(
   produtos: ReturnType<typeof produto>[],
-  opcoes: { pessoas?: typeof PESSOAS; recusa?: { status: number; detail: string } } = {},
+  opcoes: {
+    pessoas?: typeof PESSOAS;
+    recusa?: { status: number; detail: string };
+    // A rede CAI: o `fetch` rejeita, em vez de responder com status de erro.
+    // São dois caminhos diferentes no componente, por isso dois valores.
+    redeFora?: "carregar" | "salvar";
+  } = {},
 ) {
   chamadas = [];
   const pessoas = opcoes.pessoas ?? PESSOAS;
@@ -86,6 +99,13 @@ function montar(
         metodo,
         corpo: init?.body ? JSON.parse(String(init.body)) : null,
       });
+
+      if (
+        (opcoes.redeFora === "carregar" && metodo === "GET") ||
+        (opcoes.redeFora === "salvar" && metodo !== "GET")
+      ) {
+        throw new TypeError("Failed to fetch");
+      }
 
       if (metodo !== "GET") {
         if (opcoes.recusa) {
@@ -118,6 +138,8 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.unstubAllGlobals();
+  sessao.token = "token-de-teste";
+  vi.restoreAllMocks();
 });
 
 describe("A casca da aba", () => {
@@ -256,6 +278,56 @@ describe("O Super admin mexe nos Produtos", () => {
       metodo: "PATCH",
       corpo: { dono_id: "P2" },
     });
+  });
+});
+
+describe("A falha de rede não vira lista vazia e calada", () => {
+  it("backend fora do ar: a tela avisa, em vez de fingir que não há Produto", async () => {
+    // O critério de aceite é "a tela lista os sete Produtos na primeira
+    // abertura". Sem aviso, quem abrisse com o backend parado concluiria que o
+    // seed da migration não rodou.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    montar([produto("p1", "Ana", 1, { dono_id: "P1" })], { redeFora: "carregar" });
+
+    const aviso = await screen.findByRole("alert");
+    expect(aviso.textContent).toContain("Não foi possível falar com o servidor");
+    expect(screen.queryByText("Carregando Produtos...")).toBeNull();
+  });
+
+  it("rede fora ao salvar: o clique em Novo Produto avisa", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    montar([], { redeFora: "salvar" });
+    await screen.findByRole("button", { name: /Novo Produto/ });
+
+    fireEvent.change(screen.getByLabelText("Nome do Produto"), {
+      target: { value: "Portal do Paciente" },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Novo Produto/ }));
+
+    const aviso = await screen.findByRole("alert");
+    expect(aviso.textContent).toContain("Não foi possível falar com o servidor");
+  });
+
+  it("sem token, a tela diz o que houve em vez de girar para sempre", async () => {
+    // `carregar` desiste na primeira linha quando não há token, e sem este
+    // caminho ninguém desligaria a espera: "Carregando Produtos..." ficaria na
+    // tela até a pessoa desistir.
+    sessao.token = null;
+    montar([produto("p1", "Ana", 1, { dono_id: "P1" })]);
+
+    const aviso = await screen.findByRole("alert");
+    expect(aviso.textContent).toContain("Sua sessão expirou");
+    expect(screen.queryByText("Carregando Produtos...")).toBeNull();
+  });
+
+  it("com token e servidor de pé, a espera termina e a lista aparece", async () => {
+    // O par de presença dos três acima: sem ele, uma tela que nunca mostrasse
+    // "Carregando Produtos..." passaria em todos.
+    montar([produto("p1", "Ana", 1, { dono_id: "P1", dono_nome: "Pedro Vitta" })]);
+
+    expect(screen.getByText("Carregando Produtos...")).toBeTruthy();
+    expect(await screen.findByText("Ana")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
 
