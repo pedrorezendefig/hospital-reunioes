@@ -1824,21 +1824,34 @@ class TestReenvioEmCasoApagado:
         ouvidoria_escalonamento.escalar_prazos(supabase, NA_VESPERA, SEM_FERIADOS)
         return supabase
 
+    # Os DOIS carimbos que a guarda lê, com o marcador de cada frase. O reenvio
+    # é porta COM login (`require_perfil_ouvidoria`), então aqui o apagamento
+    # pendente continua dizendo quem pediu o ato: é a Ouvidoria que lê. Sem o
+    # segundo caso, tirar `apagamento_pedido_em` de `_CAMPOS_COM_O_CARIMBO`
+    # deixaria metade da guarda cega e a suíte verde.
+    @pytest.mark.parametrize(
+        ("carimbo", "marcador"),
+        [
+            ("anonimizada_em", "não pode mais ser acionado de novo"),
+            ("apagamento_pedido_em", "está sendo apagado por pedido da Diretoria Executiva"),
+        ],
+    )
     def test_reenvio_em_caso_apagado_e_recusado_antes_de_a_copia_nascer(
-        self, monkeypatch, _nunca_envia_email_de_verdade
+        self, monkeypatch, _nunca_envia_email_de_verdade, carimbo, marcador
     ):
         supabase = self._com_degrau()
         registro = supabase.tabelas["ouvidoria_notificacoes"][0]
         # O carimbo entra pelo dublê porque a Retenção não passa por aqui: o
         # que o teste precisa é do caso NO ESTADO em que ela o deixa.
-        supabase.tabelas["ouvidoria_protocolos"][0]["anonimizada_em"] = APAGADO_EM
+        supabase.tabelas["ouvidoria_protocolos"][0][carimbo] = APAGADO_EM
 
         client = _client(monkeypatch, supabase, NA_VESPERA)
         resposta = client.post(f"/api/ouvidoria/manifestacoes/uuid-7/notificacoes/{registro['id']}/reenviar")
 
         assert resposta.status_code == 409, resposta.text
         detalhe = resposta.json()["detail"]
-        assert "não pode mais ser acionado de novo" in detalhe
+        assert marcador in detalhe
+        assert "acionado de novo" in detalhe
         assert "manifestação nova" in detalhe
         # Nenhuma cópia nasceu, e nenhum email saiu do caso apagado.
         assert len(supabase.tabelas["ouvidoria_notificacoes"]) == 1

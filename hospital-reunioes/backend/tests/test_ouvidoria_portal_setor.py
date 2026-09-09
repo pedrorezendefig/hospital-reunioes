@@ -1690,30 +1690,36 @@ class TestRespostaEmCasoApagado:
     ao bucket privado de um caso que a Diretoria mandou apagar, e a Retenção
     nunca mais volta lá (ela só varre `anonimizada_em IS NULL`)."""
 
-    def _apagado_aguardando_area(self, monkeypatch, enviados):
+    def _carimbado_aguardando_area(self, monkeypatch, enviados, carimbo: str):
         client, sb = _client(monkeypatch)
         _acionar(client)
         token = _token_do_email(enviados)
-        sb.tabelas["ouvidoria_protocolos"][0]["anonimizada_em"] = APAGADO_EM
+        sb.tabelas["ouvidoria_protocolos"][0][carimbo] = APAGADO_EM
         return client, sb, token
 
-    def test_resposta_em_caso_apagado_e_recusada_antes_de_o_binario_subir(
-        self, monkeypatch, _nunca_envia_email_de_verdade
-    ):
-        client, sb, token = self._apagado_aguardando_area(monkeypatch, _nunca_envia_email_de_verdade)
-
-        resposta = client.post(
+    def _responder(self, client, token):
+        return client.post(
             f"/api/ouvidoria-setor/{token}/responder",
             data={"resposta": RESPOSTA_DA_AREA},
             files=[("arquivos", ("evidencia.pdf", b"%PDF-1.4 conteudo", "application/pdf"))],
         )
 
+    # Os DOIS carimbos que a guarda lê: o apagamento concluído e o pedido da
+    # Diretoria que a fila do cron ainda não terminou. Sem o segundo aqui, tirar
+    # `apagamento_pedido_em` de `_CAMPOS_DO_PORTAL` deixaria a suíte verde com
+    # metade da guarda lendo None para sempre.
+    @pytest.mark.parametrize("carimbo", ["anonimizada_em", "apagamento_pedido_em"])
+    def test_resposta_em_caso_apagado_e_recusada_antes_de_o_binario_subir(
+        self, monkeypatch, _nunca_envia_email_de_verdade, carimbo
+    ):
+        client, sb, token = self._carimbado_aguardando_area(monkeypatch, _nunca_envia_email_de_verdade, carimbo)
+
+        resposta = self._responder(client, token)
+
         assert resposta.status_code == 409, resposta.text
-        detalhe = resposta.json()["detail"]
-        assert "não pode mais ser respondido pelo portal do setor" in detalhe
         # A recusa precisa dizer para onde ir: o que voltar a ser trazido é
         # caso novo, e não resposta neste.
-        assert "manifestação nova" in detalhe
+        assert "manifestação nova" in resposta.json()["detail"]
         # A guarda vem antes de ler o arquivo e antes do upload: binário no
         # bucket privado do caso apagado é o dano que esta fatia impede.
         assert sb.storage.arquivos == {}, "O binário subiu ao bucket do caso apagado"
@@ -1723,6 +1729,34 @@ class TestRespostaEmCasoApagado:
         assert caso["status"] == "aguardando_area"
         assert caso["respondida_em"] is None
         assert caso["resposta_da_area"] is None
+
+    def test_a_recusa_do_caso_ja_apagado_diz_que_ele_foi_apagado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, _sb, token = self._carimbado_aguardando_area(
+            monkeypatch, _nunca_envia_email_de_verdade, "anonimizada_em"
+        )
+
+        resposta = self._responder(client, token)
+
+        assert "não pode mais ser respondido pelo portal do setor" in resposta.json()["detail"]
+
+    def test_a_recusa_do_apagamento_pendente_nao_entrega_a_diretoria_ao_portal(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """O portal é link por token, sem login, e quem responde por ele é o
+        titular da área, que numa manifestação de ouvidoria costuma ser a parte
+        reclamada. A frase do apagamento PENDENTE nomeia quem pediu o ato, e no
+        painel isso está certo: quem lê lá é a Ouvidoria. Aqui não: a recusa sai
+        neutra, dizendo só que esta porta não recebe mais."""
+        client, _sb, token = self._carimbado_aguardando_area(
+            monkeypatch, _nunca_envia_email_de_verdade, "apagamento_pedido_em"
+        )
+
+        resposta = self._responder(client, token)
+
+        detalhe = resposta.json()["detail"]
+        assert "não aceita mais ser respondido pelo portal do setor" in detalhe
+        assert "Diretoria" not in resposta.text
+        assert "está sendo apagado" not in resposta.text
 
     def test_caso_vivo_no_mesmo_estado_continua_respondendo(self, monkeypatch, _nunca_envia_email_de_verdade):
         """O contraste que prova que a guarda lê o carimbo, e não o estado nem

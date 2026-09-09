@@ -268,7 +268,12 @@ async def responder(
     # volta a este. A guarda vem antes da conferência de estado de propósito: é
     # ela que a porta tinha por consequência, e o responsável que lê a recusa
     # precisa saber que o caso acabou, não que ele "foi movimentado".
-    barrar_caso_apagado(caso, "respondido pelo portal do setor")
+    #
+    # `canal_publico` porque aqui não há login: a recusa do apagamento PENDENTE
+    # sai neutra, sem dizer que a Diretoria Executiva mandou apagar o caso, para
+    # o titular da área (que costuma ser a parte reclamada) não receber decisão
+    # de governança do hospital por um link de email.
+    barrar_caso_apagado(caso, "respondido pelo portal do setor", canal_publico=True)
 
     # A regra do que vale como resposta vive inteira no serviço, e recebe o
     # texto CRU: piso, teto, invisível e travessão são decididos num lugar só,
