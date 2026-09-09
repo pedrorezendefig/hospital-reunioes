@@ -213,3 +213,34 @@ class RespostaPayload(BaseModel):
 
     texto: str
     mencoes: list[str] | None = None
+
+
+# ─── Minha vez e Historico (issue #641) ──────────────────────────────────────
+
+
+class DemandaDaMinhaVezResponse(DemandaResponse):
+    """A Demanda como a aba "Minha vez" a le.
+
+    O `motivo` e o par na tela da regra do backend: a aba traz tanto o que e
+    meu quanto o que me chamaram, e sem ele quem abre ve um card cujo
+    responsavel e OUTRA pessoa e nao descobre por que ele esta ali.
+    """
+
+    # `responsavel` ou `mencao` (constantes do servico). E `str`, e nao
+    # `Literal`, pelo mesmo motivo de `estado` e `prioridade`: aqui se le, nao
+    # se recusa.
+    motivo: str
+
+
+class DemandaDoHistoricoResponse(DemandaResponse):
+    """A Demanda como a aba Historico a le.
+
+    Os tres campos de desfecho sao RESOLVIDOS pelo backend, a partir do estado:
+    a tela mostra "quando e por quem" numa linha so, e escolher entre
+    `concluida_em` e `cancelada_em` na tela seria uma segunda copia da regra,
+    que divergiria da primeira na primeira mudanca.
+    """
+
+    fechada_em: str | None = None
+    fechada_por_id: str | None = None
+    fechada_por_nome: str | None = None

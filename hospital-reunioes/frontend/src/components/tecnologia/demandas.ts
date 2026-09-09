@@ -381,3 +381,131 @@ export function demandaIdDaUrl(busca: string): string | null {
   const id = new URLSearchParams(busca).get(PARAM_DEMANDA)?.trim();
   return id ? id : null;
 }
+
+/**
+ * As duas abas que leem recortes da lista (issue #641).
+ *
+ * "Minha vez" e Histórico pedem à API listas com um campo a mais cada uma,
+ * resolvido pelo backend: por que o card está na minha aba, e quem fechou a
+ * Demanda e quando. Os dois são campos calculados lá porque a tela não tem
+ * como calculá-los: ela não sabe qual participante é o usuário logado (o
+ * `useAuth` carrega o id do Supabase Auth, e não o `participantes.id`), e o
+ * desfecho mora em duas colunas diferentes conforme o estado.
+ */
+
+/** A Demanda como a aba "Minha vez" a lê. */
+export type DemandaDaMinhaVez = Demanda & { motivo: string };
+
+/**
+ * O par na tela do `motivo` que o backend carimba.
+ *
+ * Sem ele, quem abre "Minha vez" vê um card cujo responsável é OUTRA pessoa e
+ * não descobre por que ele está ali.
+ */
+export const MOTIVO_ROTULO: Record<string, string> = {
+  responsavel: "Você é o responsável",
+  mencao: "Mencionaram você",
+};
+
+/** A Demanda como a aba Histórico a lê. */
+export type DemandaDoHistorico = Demanda & {
+  fechada_em: string | null;
+  fechada_por_id: string | null;
+  fechada_por_nome: string | null;
+};
+
+/**
+ * O que a busca do Histórico procura, dito na própria tela.
+ *
+ * A frase mora aqui porque ela é a promessa da caixa: o backend varre o
+ * título, a descrição e o texto das respostas da Conversa, e quem digita
+ * precisa saber disso antes de concluir que "não tem nada sobre X".
+ */
+export const O_QUE_A_BUSCA_PROCURA = "Busque por título, descrição ou texto da Conversa";
+
+/** Quando o carimbo do desfecho não veio. */
+export const SEM_REGISTRO_DE_QUANDO = "sem registro de quando";
+export const SEM_REGISTRO_DE_QUEM = "sem registro de quem";
+
+/**
+ * A linha de desfecho do Histórico: o que aconteceu, quando e por quem.
+ *
+ * Quando falta um carimbo, a frase DIZ que falta, em vez de calar: uma linha
+ * que mostrasse só "Concluída" faria a data ausente parecer escolha de layout,
+ * e o critério da issue é justamente mostrar quando e quem.
+ */
+export function textoDoDesfecho(demanda: DemandaDoHistorico): string {
+  const rotulo = ESTADO_ROTULO[demanda.estado] ?? demanda.estado;
+  const quando = momentoLegivel(demanda.fechada_em);
+  return [
+    rotulo,
+    quando ? `em ${quando}` : `(${SEM_REGISTRO_DE_QUANDO})`,
+    demanda.fechada_por_nome ? `por ${demanda.fechada_por_nome}` : `(${SEM_REGISTRO_DE_QUEM})`,
+  ].join(" ");
+}
+
+/**
+ * A busca do Histórico, com os MESMOS filtros das outras abas.
+ *
+ * Ela sai do `queryDeFiltros` de propósito, e não de um segundo montador: os
+ * três filtros são compartilhados entre as três abas (issue #639), e duas
+ * montagens divergiriam na primeira mudança de parâmetro.
+ *
+ * Termo só com espaços não vai: mandar `busca=%20` faria a API procurar um
+ * espaço, e a tela diria "nada encontrado" para quem não buscou nada.
+ */
+export function queryDoHistorico(filtros: FiltrosDoQuadro, termo: string): string {
+  const busca = new URLSearchParams(queryDeFiltros(filtros).replace(/^\?/, ""));
+  const limpo = termo.trim();
+  if (limpo) busca.set("busca", limpo);
+  const texto = busca.toString();
+  return texto ? `?${texto}` : "";
+}
+
+/**
+ * A frase de "Minha vez" vazia.
+ *
+ * Vazio aqui é BOA NOTÍCIA, e a frase precisa dizer isso: "nada esperando por
+ * você" não é falha de carregamento. Com filtro ligado ela muda, porque aí o
+ * código não sabe se não há nada ou se o filtro escondeu, e aponta a saída.
+ */
+export function fraseDaMinhaVezVazia(filtrando: boolean): string {
+  if (filtrando) {
+    return (
+      "Nada esperando por você entre as Demandas que o filtro mostra. " +
+      "Pode haver Demandas suas fora dele: limpe os filtros acima para ver todas."
+    );
+  }
+  return (
+    "Nada esperando por você agora. Uma Demanda aparece aqui quando você vira o responsável dela, " +
+    "ou quando alguém te menciona na Conversa e você ainda não respondeu."
+  );
+}
+
+/**
+ * A frase do Histórico vazio.
+ *
+ * Quatro casos, porque são quatro causas diferentes e o código as distingue:
+ * o Histórico ainda não tem nada, o filtro estreitou, a busca não achou, ou os
+ * dois juntos. Uma frase só mandaria limpar o filtro a quem não tem filtro, ou
+ * mudar o termo a quem não buscou nada.
+ */
+export function fraseDoHistoricoVazio(termo: string, filtrando: boolean): string {
+  const buscando = Boolean(termo.trim());
+  if (buscando && filtrando) {
+    return (
+      `Nenhuma Demanda concluída ou cancelada com "${termo.trim()}" entre as que o filtro mostra. ` +
+      "Tente outras palavras, ou limpe os filtros acima para buscar no Histórico inteiro."
+    );
+  }
+  if (buscando) {
+    return `Nenhuma Demanda concluída ou cancelada com "${termo.trim()}" no título, na descrição ou na Conversa.`;
+  }
+  if (filtrando) {
+    return (
+      "Nenhuma Demanda concluída ou cancelada entre as que o filtro mostra. " +
+      "Limpe os filtros acima para ver o Histórico inteiro."
+    );
+  }
+  return "Nenhuma Demanda foi concluída ou cancelada ainda. Quando a primeira fechar, ela aparece aqui.";
+}

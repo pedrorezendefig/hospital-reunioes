@@ -40,6 +40,21 @@ Copiar (issue #640):
                                                         texto simples, pronta
                                                         para colar numa IA.
 
+Minha vez e Historico (issue #641):
+
+- GET   /admin/tecnologia/minha-vez             o que espera pela pessoa
+                                                LOGADA: as Demandas abertas em
+                                                que ela e a responsavel, mais
+                                                as em que a mencionaram e ela
+                                                ainda nao respondeu.
+- GET   /admin/tecnologia/historico             as Concluidas e Canceladas, com
+                                                busca por texto no titulo, na
+                                                descricao e nas respostas da
+                                                Conversa.
+
+As duas sao irmas de `/demandas`, e nao caminhos sob ele, porque nao falam de
+uma Demanda: sao recortes da lista, do mesmo nivel de `/pessoas` e `/produtos`.
+
 Nao existe DELETE: desativar (Produto) e cancelar (Demanda) sao as saidas
 (ADR 0050, decisao 11), e resposta nao se apaga nunca (PRD #634, historia 29).
 A linha continua no banco.
@@ -59,6 +74,8 @@ from app.models.tecnologia_schemas import (
     AtribuirPayload,
     ConversaLinhaResponse,
     DemandaCreatePayload,
+    DemandaDaMinhaVezResponse,
+    DemandaDoHistoricoResponse,
     DemandaResponse,
     DemandaUpdatePayload,
     MoverPayload,
@@ -70,6 +87,8 @@ from app.models.tecnologia_schemas import (
     TextoParaIaResponse,
 )
 from app.services.tecnologia import (
+    ESTADOS_ABERTOS,
+    ESTADOS_FECHADOS,
     MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO,
     MOTIVO_DONO_SEM_ACESSO,
     MOTIVO_MENCAO_SEM_ACESSO,
@@ -78,20 +97,28 @@ from app.services.tecnologia import (
     MOTIVO_PRODUTO_SEM_DONO,
     MOTIVO_RESPONSAVEL_SEM_ACESSO,
     carimbos_da_transicao,
+    demanda_casa_a_busca,
     e_pessoa_da_aba,
     edicao_deixa_produto_ativo_sem_dono,
+    esperando_resposta_da_pessoa,
+    fechamento_da_demanda,
     instante_do_banco,
     limite_da_janela_de_edicao,
     mencoes_sem_acesso,
+    motivo_da_minha_vez,
     motivo_edicao_recusada,
     motivo_mencoes_demais,
     motivo_resposta_invalida,
     motivo_transicao_invalida,
     normalizar_mencoes,
+    normalizar_para_busca,
+    ordenar_historico,
+    ordenar_minha_vez,
     produto_ativo_sem_dono,
     texto_movimento_estado,
     texto_movimento_responsavel,
     texto_para_ia,
+    textos_de_resposta,
     transicao_permitida,
 )
 
@@ -901,3 +928,161 @@ async def editar_resposta(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Linha da Conversa nao encontrada")
 
     return _com_janela(result.data[0], ator_id=ator["id"], autor_nome=ator.get("nome_completo"))
+
+
+# ─── Minha vez e Historico: helpers (issue #641) ─────────────────────────────
+
+
+def _demandas_filtradas(
+    supabase: Client,
+    *,
+    estados: tuple[str, ...],
+    tipo: str | None,
+    produto_id: str | None,
+    responsavel_id: str | None,
+) -> list[dict]:
+    """As Demandas de um grupo de estados, com os filtros compartilhados da aba.
+
+    Os tres filtros sao os MESMOS do Quadro (issue #639), e valem nas tres abas
+    de proposito: uma aba que os ignorasse mostraria uma lista que contradiz os
+    campos preenchidos logo acima dela.
+
+    A ordem sai do banco por `criado_em` crescente, e e ela que sustenta o "mais
+    velha primeiro" das duas abas.
+    """
+    consulta = supabase.table(TABELA_DEMANDAS).select("*").in_("estado", list(estados))
+    for coluna, valor in (("tipo", tipo), ("produto_id", produto_id), ("responsavel_id", responsavel_id)):
+        if valor:
+            consulta = consulta.eq(coluna, valor)
+    return list(consulta.order("criado_em").execute().data or [])
+
+
+def _fios_por_demanda(supabase: Client, demanda_ids: list[str]) -> dict[str, list[dict]]:
+    """O fio de varias Demandas de uma vez, cada um em ordem cronologica.
+
+    Uma leitura so, e nao uma por Demanda: as duas abas precisam do fio de uma
+    LISTA inteira (as mencoes em "Minha vez", o texto das respostas na busca do
+    Historico), e um `for` chamando o PostgREST por card faria a aba custar
+    tantas idas quantas Demandas houvesse.
+    """
+    if not demanda_ids:
+        return {}
+    result = (
+        supabase.table(TABELA_CONVERSAS)
+        .select("*")
+        .in_("demanda_id", sorted(set(demanda_ids)))
+        .order("criado_em")
+        .execute()
+    )
+    fios: dict[str, list[dict]] = {}
+    for linha in result.data or []:
+        fios.setdefault(str(linha.get("demanda_id")), []).append(linha)
+    return fios
+
+
+# ─── Minha vez e Historico: endpoints ────────────────────────────────────────
+
+
+@router.get("/minha-vez", response_model=list[DemandaDaMinhaVezResponse])
+async def listar_minha_vez(
+    tipo: str | None = None,
+    produto_id: str | None = None,
+    responsavel_id: str | None = None,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """O que espera pela pessoa LOGADA (issue #641).
+
+    Quem diz de quem e a vez e o `ator`, e nao um parametro: a tela nao sabe
+    qual participante e o usuario logado (o `useAuth` carrega o id do Supabase
+    Auth, e nao o `participantes.id`), e um id vindo do cliente ainda deixaria
+    qualquer Super admin pedir a lista de outra pessoa.
+
+    Duas regras somadas, as duas da issue:
+
+    1. sou o responsavel de uma Demanda que ainda nao fechou;
+    2. fui mencionado nela e nao respondi depois da mencao.
+
+    O fio so e lido para as Demandas em que eu NAO sou o responsavel: as minhas
+    ja entraram pela primeira regra, e ler o fio delas seria leitura paga a
+    toa.
+    """
+    eu = ator["id"]
+    abertas = _demandas_filtradas(
+        supabase,
+        estados=ESTADOS_ABERTOS,
+        tipo=tipo,
+        produto_id=produto_id,
+        responsavel_id=responsavel_id,
+    )
+    fios = _fios_por_demanda(supabase, [d["id"] for d in abertas if d.get("responsavel_id") != eu])
+
+    minhas = [
+        d
+        for d in abertas
+        if d.get("responsavel_id") == eu
+        or esperando_resposta_da_pessoa(linhas=fios.get(str(d["id"]), []), pessoa_id=eu)
+    ]
+    return [
+        {**d, "motivo": motivo_da_minha_vez(responsavel_id=d.get("responsavel_id"), pessoa_id=eu)}
+        for d in _com_nomes(supabase, ordenar_minha_vez(minhas))
+    ]
+
+
+@router.get("/historico", response_model=list[DemandaDoHistoricoResponse])
+async def listar_historico(
+    busca: str | None = None,
+    tipo: str | None = None,
+    produto_id: str | None = None,
+    responsavel_id: str | None = None,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """As Demandas Concluidas e Canceladas, com busca por texto (issue #641).
+
+    A busca corre em Python, e nao num `ilike` do PostgREST, porque ela varre
+    tres lugares e um deles esta em OUTRA tabela: o texto das respostas da
+    Conversa. Um `or` de `ilike` no PostgREST cobriria titulo e descricao, e a
+    Conversa continuaria precisando desta segunda leitura, com o resultado
+    saindo de dois criterios diferentes.
+
+    O fio so e lido quando ha termo de busca: sem termo, nada nele muda a lista,
+    e ler a Conversa inteira do Historico a cada abertura da aba seria custo sem
+    resposta.
+
+    **Sem paginacao**: o Historico vem inteiro, na ordem de quem fechou por
+    ultimo. Enquanto o Quadro for de cinco pessoas isso e uma leitura pequena;
+    quando o volume pedir, a paginacao entra aqui, com o mesmo formato.
+    """
+    fechadas = _demandas_filtradas(
+        supabase,
+        estados=ESTADOS_FECHADOS,
+        tipo=tipo,
+        produto_id=produto_id,
+        responsavel_id=responsavel_id,
+    )
+
+    if normalizar_para_busca(busca).strip():
+        fios = _fios_por_demanda(supabase, [d["id"] for d in fechadas])
+        fechadas = [
+            d
+            for d in fechadas
+            if demanda_casa_a_busca(
+                demanda=d,
+                textos_da_conversa=textos_de_resposta(fios.get(str(d["id"]), [])),
+                termo=busca,
+            )
+        ]
+
+    fechadas = ordenar_historico(fechadas)
+    desfechos = {str(d["id"]): fechamento_da_demanda(d) for d in fechadas}
+    nomes = _nomes_de_participantes(supabase, {quem for _, quem in desfechos.values() if quem})
+    return [
+        {
+            **d,
+            "fechada_em": desfechos[str(d["id"])][0],
+            "fechada_por_id": desfechos[str(d["id"])][1],
+            "fechada_por_nome": nomes.get(desfechos[str(d["id"])][1]),
+        }
+        for d in _com_nomes(supabase, fechadas)
+    ]

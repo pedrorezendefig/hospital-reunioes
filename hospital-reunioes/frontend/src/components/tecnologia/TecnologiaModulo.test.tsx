@@ -125,10 +125,10 @@ function montar(
         return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
       }
 
-      // O Quadro da aba (issue #637) carrega as Demandas por conta própria e
-      // tem teste só dele: aqui ele fica vazio, para não disputar os `getBy*`
-      // com a lista de Produtos.
-      if (url.includes("/demandas")) {
+      // As três abas (o Quadro da issue #637, e "Minha vez" e o Histórico da
+      // #641) carregam as próprias listas e têm teste só delas: aqui elas ficam
+      // vazias, para não disputar os `getBy*` com a lista de Produtos.
+      if (url.includes("/demandas") || url.includes("/minha-vez") || url.includes("/historico")) {
         return { ok: true, status: 200, json: async () => [] } as unknown as Response;
       }
 
@@ -447,7 +447,12 @@ describe("Os filtros do Quadro, lembrados entre as abas", () => {
     );
 
     fireEvent.click(aba("Minha vez"));
-    expect(screen.queryByRole("combobox", { name: "Filtrar por tipo" })).toBeNull();
+    // O painel trocou de verdade: o botão de abrir Demanda é do Quadro, e ele
+    // saiu de cena junto com ele.
+    expect(screen.queryByRole("button", { name: /Nova Demanda/ })).toBeNull();
+    // E o filtro atravessou a troca: desde a issue #641 a aba nova desenha a
+    // mesma barra, já com o tipo escolhido no Quadro.
+    expect(screen.getByRole("combobox", { name: "Filtrar por tipo" }).textContent).toContain("Ajuste");
 
     fireEvent.click(aba("Quadro"));
 

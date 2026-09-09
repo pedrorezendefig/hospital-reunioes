@@ -15,6 +15,7 @@ Nesta fatia (issue #636) sao duas regras, as duas sobre Produto:
 
 from __future__ import annotations
 
+import unicodedata
 from datetime import UTC, datetime, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
@@ -527,3 +528,164 @@ def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> s
         partes.append(SEM_CONVERSA)
     partes.append(MARCA_FIM_CONVERSA)
     return "\n".join(partes)
+
+
+# ─── Minha vez e Historico (issue #641) ──────────────────────────────────────
+
+# Os dois grupos de estado que as duas abas leem. Sao o COMPLEMENTO um do
+# outro sobre `ESTADOS`, e o teste cobra isso: um estado novo que ficasse de
+# fora dos dois sumiria das duas abas em silencio, sem erro nenhum.
+ESTADOS_ABERTOS: tuple[str, ...] = ("nova", "em_andamento", "aguardando")
+ESTADOS_FECHADOS: tuple[str, ...] = ("concluida", "cancelada")
+
+# A ordem de "Minha vez": Alta primeiro, Baixa por ultimo (issue #641).
+PESO_DA_PRIORIDADE: dict[str, int] = {"alta": 0, "normal": 1, "baixa": 2}
+
+# Por que a Demanda esta na minha aba. Vai na resposta porque e o PAR NA TELA
+# da regra: sem ele, quem abre "Minha vez" ve um card cujo responsavel e outra
+# pessoa e nao descobre por que ele esta ali.
+MOTIVO_SOU_RESPONSAVEL = "responsavel"
+MOTIVO_FUI_MENCIONADO = "mencao"
+
+
+def peso_da_prioridade(prioridade: Any) -> int:
+    """A posicao da prioridade na ordem de "Minha vez".
+
+    Prioridade que a lista fechada nao conhece (linha antiga, ou valor que
+    entrou por fora do app) vai para o FIM: sumir seria pior, e vir na frente
+    empurraria as Altas para baixo.
+    """
+    return PESO_DA_PRIORIDADE.get(str(prioridade or ""), len(PESO_DA_PRIORIDADE))
+
+
+def ordenar_minha_vez(demandas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Alta primeiro; dentro de cada prioridade, a mais velha primeiro.
+
+    A idade NAO e recalculada aqui: quem entrega a lista e a leitura do banco,
+    ja ordenada por `criado_em` crescente, e o `sorted` do Python e ESTAVEL, o
+    que preserva essa ordem dentro de cada empate de prioridade. Reordenar por
+    data aqui significaria comparar `criado_em` como texto e trazer de volta o
+    problema da data ilegivel, que jogaria a Demanda para a ponta errada.
+    """
+    return sorted(demandas, key=lambda d: peso_da_prioridade(d.get("prioridade")))
+
+
+def esperando_resposta_da_pessoa(*, linhas: list[dict[str, Any]], pessoa_id: str) -> bool:
+    """True quando a pessoa foi mencionada e ainda nao respondeu DEPOIS disso.
+
+    A conta e sobre a ORDEM das linhas do fio, e nao sobre o relogio: o fio
+    chega do banco ordenado por `criado_em`, e comparar instantes aqui traria
+    de volta o caso da data ilegivel, que viraria "a mencao nunca foi
+    respondida" (a Demanda ficaria presa na aba para sempre).
+
+    Tres coisas que a regra diz de proposito:
+
+    - vale a ULTIMA mencao, e nao a primeira: quem respondeu a primeira chamada
+      e foi chamado de novo continua devendo resposta;
+    - mencionar a SI MESMO nao cria vez. "@Sócia Vitta" escrito pela propria
+      Sócia e citacao, nao chamado, e a Demanda cairia na aba de quem acabou de
+      falar nela;
+    - so uma linha `resposta` atende a mencao. Hoje a linha de movimento vem
+      com `autor_id` NULL, mas o fio pode ganhar outros tipos de linha, e uma
+      delas assinada pela pessoa nao e ela dizendo nada a quem a chamou.
+    """
+    ultima_mencao = -1
+    for i, linha in enumerate(linhas):
+        if linha.get("autor_id") == pessoa_id:
+            continue
+        if pessoa_id in (linha.get("mencoes") or []):
+            ultima_mencao = i
+    if ultima_mencao < 0:
+        return False
+    return not any(
+        linha.get("linha") == "resposta" and linha.get("autor_id") == pessoa_id for linha in linhas[ultima_mencao + 1 :]
+    )
+
+
+def motivo_da_minha_vez(*, responsavel_id: str | None, pessoa_id: str) -> str:
+    """Por que este card esta em "Minha vez": porque e meu, ou porque me
+    chamaram nele.
+
+    A comparacao e com o `responsavel_id` LIDO, e sem tratar NULL como igual:
+    Demanda sem responsavel nao e de ninguem.
+    """
+    if responsavel_id is not None and responsavel_id == pessoa_id:
+        return MOTIVO_SOU_RESPONSAVEL
+    return MOTIVO_FUI_MENCIONADO
+
+
+def fechamento_da_demanda(demanda: dict[str, Any]) -> tuple[str | None, str | None]:
+    """Quando e por quem a Demanda fechou, ou `(None, None)` se ela nao fechou.
+
+    Quem manda e o ESTADO, e nao o primeiro carimbo preenchido que se encontre.
+    Reabrir limpa os quatro carimbos (`carimbos_da_transicao`), entao os dois
+    pares nao deveriam estar preenchidos juntos; se estiverem (linha escrita
+    por fora do app), o Historico conta o desfecho em que a Demanda ESTA.
+    """
+    estado = str(demanda.get("estado") or "")
+    if estado == "concluida":
+        return demanda.get("concluida_em"), demanda.get("concluida_por")
+    if estado == "cancelada":
+        return demanda.get("cancelada_em"), demanda.get("cancelada_por")
+    return None, None
+
+
+def ordenar_historico(demandas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """A que fechou por ultimo primeiro.
+
+    A ordem nao sai do banco porque as datas moram em DUAS colunas
+    (`concluida_em` e `cancelada_em`), e um `.order` so leria uma delas. As duas
+    vem de coluna TIMESTAMPTZ, no mesmo formato do PostgREST, entao a
+    comparacao de texto ordena por instante.
+
+    Sem carimbo de data a Demanda vai para o fim, e nao some: `""` e menor que
+    qualquer data, e o `reverse=True` leva o menor para o final.
+    """
+    return sorted(demandas, key=lambda d: str(fechamento_da_demanda(d)[0] or ""), reverse=True)
+
+
+def textos_de_resposta(linhas: list[dict[str, Any]]) -> list[str]:
+    """So o que as PESSOAS escreveram no fio, para a busca do Historico.
+
+    A linha de movimento fica de fora: o texto dela e montado pelo backend com
+    o nome de quem moveu ("Pedro moveu para Concluída"), e buscar "Pedro"
+    acharia toda Demanda que ele tocou, inclusive as em que ele nunca escreveu
+    uma palavra.
+    """
+    return [str(linha.get("texto") or "") for linha in linhas if linha.get("linha") == "resposta"]
+
+
+def normalizar_para_busca(texto: Any) -> str:
+    """O texto como a busca o compara: minusculo e sem acento.
+
+    Sem isto, "regua" nao acharia "régua" e "ENCERRAR" nao acharia "Encerrar",
+    e quem busca meses depois nao lembra do acento que escreveu. Mesmo molde do
+    `ouvidoria_taxonomia.py`.
+    """
+    decomposto = unicodedata.normalize("NFKD", str(texto or ""))
+    return "".join(c for c in decomposto if not unicodedata.combining(c)).casefold()
+
+
+def demanda_casa_a_busca(
+    *,
+    demanda: dict[str, Any],
+    textos_da_conversa: list[str],
+    termo: str | None,
+) -> bool:
+    """Se esta Demanda entra no resultado da busca do Historico.
+
+    **O que a busca procura:** o termo inteiro, como um pedaco de texto, no
+    titulo, na descricao e no texto das RESPOSTAS da Conversa (issue #641).
+    Nao e busca por palavras soltas: "encerrar conversas" acha a frase, e nao
+    toda Demanda que fale de uma coisa ou da outra. E a escolha que nao
+    surpreende quem digita, e a que devolve pouca coisa em vez de muita.
+
+    **Busca vazia traz tudo**, inclusive a que so tem espacos: apagar a caixa
+    volta ao Historico inteiro, e uma busca por nada nao e uma busca que nao
+    achou nada.
+    """
+    alvo = normalizar_para_busca(termo).strip()
+    if not alvo:
+        return True
+    campos = [demanda.get("titulo"), demanda.get("descricao"), *textos_da_conversa]
+    return any(alvo in normalizar_para_busca(campo) for campo in campos)
