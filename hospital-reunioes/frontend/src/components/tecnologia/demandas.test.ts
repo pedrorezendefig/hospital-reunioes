@@ -11,6 +11,8 @@ import { describe, expect, it } from "vitest";
 
 import {
   aplicarMencao,
+  demandaIdDaUrl,
+  linkDaDemanda,
   mencoesNoTexto,
   pedacosDoTexto,
   pessoasDoAutocomplete,
@@ -222,5 +224,48 @@ describe("A busca que os filtros montam", () => {
     expect(temFiltroAtivo({ tipo: "ajuste", produto_id: "", responsavel_id: "" })).toBe(true);
     expect(temFiltroAtivo({ tipo: "", produto_id: "prod-1", responsavel_id: "" })).toBe(true);
     expect(temFiltroAtivo({ tipo: "", produto_id: "", responsavel_id: "P1" })).toBe(true);
+  });
+});
+
+describe("O link da Demanda (issue #640)", () => {
+  it("monta o endereço da aba com o id da Demanda", () => {
+    // O endereço escrito à mão a partir da rota real (`src/app/admin/tecnologia`),
+    // e não montado a partir das constantes do módulo: montá-lo com as mesmas
+    // constantes seria reescrever a função dentro do teste, e uma rota trocada
+    // continuaria casando dos dois lados.
+    expect(linkDaDemanda("d1", "https://app.exemplo.com")).toBe(
+      "https://app.exemplo.com/admin/tecnologia?demanda=d1",
+    );
+  });
+
+  it("o link que se copia é o link que a tela sabe ler", () => {
+    // A prova de que os dois lados falam o mesmo formato. Sem ela, "Copiar
+    // link" poderia gerar um endereço que a própria aplicação não abre.
+    const link = linkDaDemanda("abc-123", "https://app.exemplo.com");
+
+    expect(demandaIdDaUrl(new URL(link).search)).toBe("abc-123");
+  });
+
+  it("id com caractere que a URL trata sobrevive à ida e à volta", () => {
+    const link = linkDaDemanda("id com espaço&outro=1", "https://app.exemplo.com");
+
+    expect(link).not.toContain(" ");
+    expect(demandaIdDaUrl(new URL(link).search)).toBe("id com espaço&outro=1");
+  });
+
+  it("sem o parâmetro não há Demanda a abrir", () => {
+    expect(demandaIdDaUrl("")).toBeNull();
+    expect(demandaIdDaUrl("?outra=coisa")).toBeNull();
+  });
+
+  it("parâmetro vazio ou só de espaços não é id", () => {
+    // Sem isto, `?demanda=` abriria uma busca por uma Demanda de id vazio e a
+    // tela acusaria "não está no Quadro" para um link que não pediu nada.
+    expect(demandaIdDaUrl("?demanda=")).toBeNull();
+    expect(demandaIdDaUrl("?demanda=%20%20")).toBeNull();
+  });
+
+  it("o parâmetro no meio de outros continua sendo lido", () => {
+    expect(demandaIdDaUrl("?aba=quadro&demanda=d7&x=1")).toBe("d7");
   });
 });

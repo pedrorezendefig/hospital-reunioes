@@ -34,6 +34,12 @@ Escrita no fio (issue #638):
                                                         resposta, por 10
                                                         minutos.
 
+Copiar (issue #640):
+
+- GET   /admin/tecnologia/demandas/{id}/texto-para-ia   a Demanda inteira em
+                                                        texto simples, pronta
+                                                        para colar numa IA.
+
 Nao existe DELETE: desativar (Produto) e cancelar (Demanda) sao as saidas
 (ADR 0050, decisao 11), e resposta nao se apaga nunca (PRD #634, historia 29).
 A linha continua no banco.
@@ -61,6 +67,7 @@ from app.models.tecnologia_schemas import (
     ProdutoResponse,
     ProdutoUpdatePayload,
     RespostaPayload,
+    TextoParaIaResponse,
 )
 from app.services.tecnologia import (
     MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO,
@@ -84,6 +91,7 @@ from app.services.tecnologia import (
     produto_ativo_sem_dono,
     texto_movimento_estado,
     texto_movimento_responsavel,
+    texto_para_ia,
     transicao_permitida,
 )
 
@@ -697,6 +705,19 @@ def _com_janela(linha: dict, *, ator_id: str, autor_nome: str | None) -> dict:
     return {**linha, "autor_nome": autor_nome, "editavel_ate": editavel_ate}
 
 
+def _fio_da_demanda(supabase: Client, demanda_id: str) -> list[dict]:
+    """As linhas do fio em ordem cronologica, com o `autor_nome` resolvido.
+
+    Um lugar so para ler o fio: a Conversa do modal e o texto do "Copiar para
+    IA" precisam ver a MESMA coisa, na mesma ordem. Duas leituras separadas
+    divergiriam na primeira mudanca de ordem, e a divergencia seria muda.
+    """
+    result = supabase.table(TABELA_CONVERSAS).select("*").eq("demanda_id", demanda_id).order("criado_em").execute()
+    linhas = list(result.data or [])
+    nomes = _nomes_de_participantes(supabase, {linha["autor_id"] for linha in linhas if linha.get("autor_id")})
+    return [{**linha, "autor_nome": nomes.get(linha.get("autor_id"))} for linha in linhas]
+
+
 def _texto_e_mencoes(supabase: Client, payload: RespostaPayload) -> tuple[str, list[str]]:
     """O que vai para a coluna, ja validado, nas DUAS portas de escrita.
 
@@ -764,10 +785,30 @@ async def listar_conversa(
 ):
     """O fio da Demanda em ordem cronologica, respostas e movimentos juntos."""
     _buscar_demanda(supabase, demanda_id)
-    result = supabase.table(TABELA_CONVERSAS).select("*").eq("demanda_id", demanda_id).order("criado_em").execute()
-    linhas = list(result.data or [])
-    nomes = _nomes_de_participantes(supabase, {linha["autor_id"] for linha in linhas if linha.get("autor_id")})
-    return [_com_janela(linha, ator_id=ator["id"], autor_nome=nomes.get(linha.get("autor_id"))) for linha in linhas]
+    return [
+        _com_janela(linha, ator_id=ator["id"], autor_nome=linha.get("autor_nome"))
+        for linha in _fio_da_demanda(supabase, demanda_id)
+    ]
+
+
+@router.get("/demandas/{demanda_id}/texto-para-ia", response_model=TextoParaIaResponse)
+async def texto_da_demanda_para_ia(
+    demanda_id: str,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """A Demanda inteira em texto simples, para colar numa IA (issue #640).
+
+    O texto sai MONTADO daqui, e nao da tela, para ser fonte unica: o botao do
+    modal so escreve no clipboard o que este endpoint respondeu. Uma montagem no
+    frontend seria uma segunda versao do mesmo texto, e as duas divergiriam na
+    primeira mudanca de formato.
+
+    O que entra e o que fica de fora esta no `texto_para_ia`, com o porque de
+    cada corte.
+    """
+    demanda = _com_nomes(supabase, [_buscar_demanda(supabase, demanda_id)])[0]
+    return {"texto": texto_para_ia(demanda=demanda, linhas=_fio_da_demanda(supabase, demanda_id))}
 
 
 @router.post(

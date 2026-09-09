@@ -29,6 +29,7 @@ import {
   BASE_TECNOLOGIA,
   COLUNAS_RECOLHIDAS,
   Demanda,
+  demandaIdDaUrl,
   destinosDe,
   ESTADO_ROTULO,
   ESTADOS,
@@ -95,6 +96,26 @@ const CLASSE_PRIORIDADE: Record<PrioridadeDemanda, string> = {
 const SEM_SESSAO =
   "Não foi possível carregar as Demandas: a sessão não está ativa ou o servidor não respondeu. Tente recarregar a página.";
 
+/**
+ * As duas frases de quando o link pede uma Demanda que o Quadro não mostra
+ * (issue #640, com os filtros da issue #639 no ar).
+ *
+ * São duas porque as causas são duas e o código as DISTINGUE. Uma frase só
+ * mandaria conferir o endereço com quem enviou justamente quando o endereço
+ * está certo e quem esconde a Demanda é o filtro que a própria pessoa deixou
+ * ligado ontem: cobrança de uma ação que não resolve, sobre uma causa que não
+ * é a verdadeira.
+ *
+ * A frase do filtro não AFIRMA que o filtro é a causa (a Demanda pode nem
+ * existir, e o código não sabe): ela diz os dois fatos que o código tem, o
+ * filtro valendo e a Demanda fora do que o Quadro mostra, e aponta a ação, que
+ * está na mesma tela, no botão "Limpar filtros".
+ */
+const AVISO_LINK_SEM_FILTRO = "A Demanda deste link não está no Quadro. Confira o endereço com quem enviou.";
+const AVISO_LINK_COM_FILTRO =
+  "O Quadro está filtrado, e a Demanda deste link não está entre as que ele mostra. " +
+  "Ela pode estar escondida pelo filtro: limpe os filtros abaixo e veja de novo.";
+
 /** As opções que LIMPAM cada filtro: o rótulo é o mesmo do campo em branco. */
 const TODOS_OS_TIPOS = "Todos os tipos";
 const TODOS_OS_PRODUTOS = "Todos os Produtos";
@@ -144,6 +165,28 @@ export function QuadroDemandas({
    * preenchido, e sem explicação nenhuma de por que a Demanda não foi criada.
    */
   const erroDeEscrita = useRef(false);
+  /**
+   * O id que veio no link e que ainda não foi encontrado no Quadro (issue #640).
+   *
+   * Ele é estado, e não uma leitura solta, porque o link chega ANTES do token:
+   * quem abre pelo link cai no primeiro render, com a autenticação ainda
+   * resolvendo e as Demandas ainda não pedidas. Guardado aqui, o pedido do link
+   * espera as Demandas chegarem; zerado assim que a Demanda é achada, ele para
+   * de ser cobrado e o aviso abaixo não reaparece depois.
+   */
+  const [idDoLink, setIdDoLink] = useState<string | null>(null);
+  /**
+   * A Demanda do link já está na lista que o Quadro carregou?
+   *
+   * Valor DERIVADO do estado de agora, e não uma marca que um efeito acerta um
+   * render depois. O efeito que abre o card roda DEPOIS do commit: no commit em
+   * que a lista chega, a Demanda já está lá e o card ainda não abriu, e um
+   * aviso preso ao efeito entraria no DOM dizendo que ela não está. Para quem
+   * enxerga isso é um piscar; como o aviso é `role="status"` (`aria-live`), o
+   * leitor de tela ANUNCIA a acusação falsa em toda abertura por link bom. É a
+   * mesma família do alarme de sessão que mordeu na fatia #637.
+   */
+  const achadaDoLink = idDoLink !== null && demandas.some((d) => d.id === idDoLink);
 
   const autorizacao = useCallback(
     () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
@@ -208,6 +251,31 @@ export function QuadroDemandas({
     }
     carregar();
   }, [carregandoAuth, token, carregar]);
+
+  /**
+   * O id da Demanda que veio no link (issue #640).
+   *
+   * A leitura é do `window.location`, e não do `useSearchParams`: o hook do
+   * Next obriga quem o chama a ficar sob um limite de Suspense, e o limite é o
+   * pedaço da tela que a renderização antecipada pode trocar pelo `fallback`.
+   * Aqui o pedaço seria o Quadro inteiro, e o padrão da casa é o contrário
+   * disso: o `app/login/page.tsx` mantém o limite em volta de um input
+   * escondido justamente para a casca vazia não poder apagar a tela. Ler o
+   * `window.location` direto também já é da casa (`RedirecionarParaLogin.tsx`).
+   *
+   * O parâmetro é lido uma vez, ao montar, porque o link abre o card na
+   * chegada: nada nesta tela troca a query string depois.
+   */
+  useEffect(() => {
+    setIdDoLink(demandaIdDaUrl(window.location.search));
+  }, []);
+
+  useEffect(() => {
+    if (idDoLink && achadaDoLink) {
+      setAbertaId(idDoLink);
+      setIdDoLink(null);
+    }
+  }, [idDoLink, achadaDoLink]);
 
   async function enviar(url: string, metodo: string, corpo: unknown): Promise<boolean> {
     let resposta: Response;
@@ -359,6 +427,26 @@ export function QuadroDemandas({
         >
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
           <span>{erro}</span>
+        </p>
+      )}
+
+      {/* O link pediu uma Demanda que o Quadro carregado não tem (issue #640).
+          A frase fica presa a `!carregando && !erro` de propósito: enquanto a
+          autenticação resolve, ou quando a leitura falhou, o código NÃO SABE se
+          a Demanda está no Quadro, e dizer que não está seria afirmar um fato
+          não verificado. Ela também não fala em Demanda apagada (nada se apaga
+          nesta aba) nem em permissão (o gate é da API, e a recusa dela vira
+          erro de carregamento, não lista sem o card). E ela olha `achadaDoLink`,
+          que é derivado da lista de agora: preso ao efeito que abre o card, o
+          aviso apareceria no commit em que a Demanda chega, antes de o card
+          abrir. A frase muda com o filtro: ver `AVISO_LINK_COM_FILTRO`. */}
+      {!carregando && !erro && idDoLink && !achadaDoLink && (
+        <p
+          role="status"
+          className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm"
+        >
+          <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{filtrando ? AVISO_LINK_COM_FILTRO : AVISO_LINK_SEM_FILTRO}</span>
         </p>
       )}
 
