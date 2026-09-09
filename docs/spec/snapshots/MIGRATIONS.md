@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-08T22:47-0300 -->
+<!-- last_update: 2026-09-09T00:13-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -102,6 +102,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 98 | `098_ouvidoria_devolucao_a_ouvidoria.sql` | Devolucao a Ouvidoria | 0 | 0 | 0 | 0 |
 | 99 | `099_ouvidoria_arquivo_da_manifestacao.sql` | o Arquivo da Manifestacao | 0 | 1 | 0 | 0 |
 | 100 | `100_ouvidoria_apagamento_pela_diretoria.sql` | apagar pela Diretoria, a porta antecipada da Retencao | 0 | 1 | 0 | 0 |
+| 101 | `101_ouvidoria_lote_do_arquivo_atomico.sql` | o lote do Arquivo e o log de acesso na MESMA transacao | 0 | 0 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 96 migrations.
+**Total:** 97 migrations.
