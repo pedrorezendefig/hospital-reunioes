@@ -15,6 +15,7 @@ Nesta fatia (issue #636) sao duas regras, as duas sobre Produto:
 
 from __future__ import annotations
 
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from app.dependencies import is_super_admin
@@ -197,3 +198,141 @@ def texto_movimento_estado(*, autor_nome: str, para: str) -> str:
 def texto_movimento_responsavel(*, autor_nome: str, para_nome: str) -> str:
     """O texto legivel da linha de movimento de responsavel."""
     return f"{autor_nome} atribuiu a {para_nome}"
+
+
+# ─── A escrita no fio da Conversa (issue #638) ───────────────────────────────
+
+# A janela de correcao da propria resposta (PRD #634, ADR 0050, decisao 6).
+#
+# Ela e uma regra de TEMPO, e por isso mora aqui, com o instante recebido de
+# fora: uma regra que lesse o relogio por dentro nao teria borda testavel, e o
+# criterio da issue #638 e justamente sobre a borda.
+JANELA_DE_EDICAO = timedelta(minutes=10)
+
+# Quantos caracteres cabem numa resposta. Nao e limite de banco (a coluna e
+# TEXT): e o teto que evita colar um documento inteiro no fio, e a frase da
+# recusa diz o numero, porque encurtar o texto e uma acao que quem escreveu
+# consegue fazer na hora, com o texto ainda na caixa.
+LIMITE_RESPOSTA = 5000
+
+MOTIVO_RESPOSTA_VAZIA = "A resposta não pode ser vazia. Escreva o que você quer dizer e envie de novo."
+MOTIVO_SO_O_AUTOR_EDITA = "Só quem escreveu corrige a própria resposta. Escreva uma resposta nova no fio."
+MOTIVO_JANELA_ENCERRADA = (
+    "O prazo de 10 minutos para corrigir esta resposta já passou. Ela fica como está; escreva uma resposta nova no fio."
+)
+MOTIVO_MOVIMENTO_NAO_SE_EDITA = (
+    "Esta linha é o registro automático de um movimento da Demanda, e ela não se edita. "
+    "Se o movimento foi enganado, mova a Demanda de novo: a correção entra como uma linha nova."
+)
+# A frase NAO afirma que a pessoa perdeu o acesso: o codigo so sabe que o id
+# nao esta na lista de quem tem acesso a aba, e isso tanto pode ser alguem que
+# saiu do Super admin quanto um id que veio por fora do app. O que ela diz e o
+# desfecho e a saida, que a pessoa tem na propria caixa de texto.
+MOTIVO_MENCAO_SEM_ACESSO = (
+    "Uma das pessoas mencionadas não está na lista de quem tem acesso à aba Tecnologia. "
+    "Tire a menção do texto e envie de novo."
+)
+
+
+def instante_do_banco(valor: str | None) -> datetime | None:
+    """O `TIMESTAMPTZ` do PostgREST como `datetime` consciente de fuso.
+
+    Devolve `None` quando nao da para ler, e nunca "agora": um `criado_em`
+    quebrado que virasse o instante atual abriria a janela de edicao para
+    sempre em cima de dado corrompido.
+
+    Data sem fuso conta como UTC porque comparar um `datetime` ingenuo com um
+    consciente estoura `TypeError`, e a janela viraria 500 em vez de recusa.
+    """
+    if not valor:
+        return None
+    try:
+        lido = datetime.fromisoformat(str(valor))
+    except ValueError:
+        return None
+    return lido if lido.tzinfo else lido.replace(tzinfo=UTC)
+
+
+def dentro_da_janela_de_edicao(*, criado_em: datetime, agora: datetime) -> bool:
+    """True enquanto a resposta ainda pode ser corrigida pelo autor.
+
+    A borda exata (10 minutos cravados) AINDA vale: a PRD fala em corrigir
+    "por ate 10 minutos", e um limite exclusivo recusaria o clique dado no
+    ultimo segundo do prazo prometido.
+    """
+    return agora - criado_em <= JANELA_DE_EDICAO
+
+
+def limite_da_janela_de_edicao(criado_em: datetime) -> datetime:
+    """Ate quando a resposta aceita correcao.
+
+    A conta e sobre o ENVIO, e nao sobre a ultima edicao: uma janela que se
+    renovasse a cada correcao deixaria uma resposta editavel para sempre, e o
+    fio deixaria de ser trilha.
+    """
+    return criado_em + JANELA_DE_EDICAO
+
+
+def motivo_edicao_recusada(*, linha: dict[str, Any], ator_id: str, agora: datetime) -> str | None:
+    """A frase da recusa, ou `None` quando a edicao pode acontecer.
+
+    A ordem das tres guardas e proposital, porque cada uma nomeia uma causa
+    diferente e a primeira que responder e a que a pessoa le:
+
+    1. linha de MOVIMENTO nao se edita nunca, nem por quem moveu. Ela vem com
+       `autor_id` NULL no banco, entao a guarda de autor diria "nao e sua" a
+       quem acabou de mover, e a de janela sugeriria que dentro do prazo daria;
+    2. resposta de OUTRA pessoa: o prazo dela nao interessa, porque nem depois
+       nem antes ela e sua;
+    3. a JANELA, que e o unico caso em que a pessoa certa chegou tarde.
+    """
+    if linha.get("linha") != "resposta":
+        return MOTIVO_MOVIMENTO_NAO_SE_EDITA
+    if linha.get("autor_id") != ator_id:
+        return MOTIVO_SO_O_AUTOR_EDITA
+    criado_em = instante_do_banco(linha.get("criado_em"))
+    if criado_em is None or not dentro_da_janela_de_edicao(criado_em=criado_em, agora=agora):
+        return MOTIVO_JANELA_ENCERRADA
+    return None
+
+
+def motivo_resposta_invalida(texto: str) -> str | None:
+    """Os dois limites do texto da resposta, com frase de gente.
+
+    Sai daqui, e nao de `min_length`/`max_length` no payload, pelo mesmo motivo
+    do titulo da Demanda: o `detail` do pydantic vem em LISTA e a tela mostra o
+    JSON cru no alerta vermelho.
+    """
+    limpo = texto.strip()
+    if not limpo:
+        return MOTIVO_RESPOSTA_VAZIA
+    if len(limpo) > LIMITE_RESPOSTA:
+        return f"A resposta pode ter no máximo {LIMITE_RESPOSTA} caracteres."
+    return None
+
+
+def normalizar_mencoes(mencoes: list[str] | None) -> list[str]:
+    """A lista de menções limpa: sem espaco em volta, sem vazio, sem repetido.
+
+    Item vazio e sujeira de payload, nao mencao a ninguem: mantido, ele sujaria
+    a coluna e ainda faria a guarda de acesso recusar a resposta inteira por
+    causa de um `""`, cobrando da pessoa uma correcao que ela nao tem onde
+    fazer. A ordem de quem sobra e preservada.
+    """
+    vistos: list[str] = []
+    for bruto in mencoes or []:
+        limpo = str(bruto).strip()
+        if limpo and limpo not in vistos:
+            vistos.append(limpo)
+    return vistos
+
+
+def mencoes_sem_acesso(mencoes: list[str], ids_com_acesso: set[str]) -> list[str]:
+    """Quem foi mencionado mas nao esta na lista de pessoas da aba.
+
+    E a mesma regra da porta de atribuir (ADR 0050, decisao 2): chamar para
+    dentro do card quem nao consegue abrir a aba deixaria a Demanda esperando
+    por alguem que nunca vai ler, e o e-mail da fatia seguinte mandaria um link
+    que a pessoa nao abre.
+    """
+    return [pid for pid in mencoes if pid not in ids_com_acesso]

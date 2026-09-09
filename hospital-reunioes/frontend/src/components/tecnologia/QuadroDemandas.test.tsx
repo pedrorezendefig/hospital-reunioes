@@ -91,11 +91,22 @@ function montar(
 ) {
   chamadas = [];
 
+  /**
+   * O fio como o servidor o guarda: escrever nele muda o que a leitura
+   * seguinte devolve.
+   *
+   * Sem isso, "a resposta aparece no fio sem recarregar a página" passaria com
+   * um componente que nem recarrega a Conversa, porque a lista devolvida seria
+   * sempre a mesma.
+   */
+  const fio: Record<string, unknown>[] = [...((opcoes.conversa ?? []) as Record<string, unknown>[])];
+
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const metodo = init?.method ?? "GET";
-      chamadas.push({ url, metodo, corpo: init?.body ? JSON.parse(String(init.body)) : null });
+      const corpoEnviado = init?.body ? JSON.parse(String(init.body)) : null;
+      chamadas.push({ url, metodo, corpo: corpoEnviado });
 
       if (
         (opcoes.redeFora === "carregar" && metodo === "GET") ||
@@ -113,10 +124,37 @@ function montar(
             json: async () => ({ detail: opcoes.recusa!.detail }),
           } as unknown as Response;
         }
+        // Quem está logado no dublê é o P1: a resposta nova nasce dele e volta
+        // com a janela de 10 minutos aberta, como o backend faz.
+        if (metodo === "POST" && url.endsWith("/conversa")) {
+          const nova = {
+            id: `c-nova-${fio.length}`,
+            autor_id: "P1",
+            autor_nome: "Pedro Vitta",
+            linha: "resposta",
+            texto: corpoEnviado.texto,
+            mencoes: corpoEnviado.mencoes ?? [],
+            movimento_campo: null,
+            criado_em: new Date().toISOString(),
+            editado_em: null,
+            editavel_ate: new Date(Date.now() + 600_000).toISOString(),
+          };
+          fio.push(nova);
+          return { ok: true, status: 201, json: async () => nova } as unknown as Response;
+        }
+        if (metodo === "PATCH" && url.includes("/conversa/")) {
+          const alvo = fio.find((linha) => url.endsWith(`/${linha.id}`));
+          if (alvo) {
+            alvo.texto = corpoEnviado.texto;
+            alvo.mencoes = corpoEnviado.mencoes ?? [];
+            alvo.editado_em = new Date().toISOString();
+          }
+          return { ok: true, status: 200, json: async () => alvo ?? {} } as unknown as Response;
+        }
         return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
       }
 
-      const corpo = url.includes("/conversa") ? (opcoes.conversa ?? []) : demandas;
+      const corpo = url.includes("/conversa") ? fio : demandas;
       return { ok: true, status: 200, json: async () => corpo } as unknown as Response;
     }),
   );
@@ -395,8 +433,11 @@ describe("O modal da Demanda", () => {
       autor_nome: "Sócia Vitta",
       linha: "resposta",
       texto: "Vou olhar hoje",
+      mencoes: [],
       movimento_campo: null,
       criado_em: "2026-09-01T12:00:00Z",
+      editado_em: null,
+      editavel_ate: null,
     },
     {
       id: "c2",
@@ -404,8 +445,11 @@ describe("O modal da Demanda", () => {
       autor_nome: null,
       linha: "movimento",
       texto: "Pedro Vitta moveu para Aguardando",
+      mencoes: [],
       movimento_campo: "estado",
       criado_em: "2026-09-02T12:00:00Z",
+      editado_em: null,
+      editavel_ate: null,
     },
   ];
 
@@ -620,5 +664,266 @@ describe("A falha de rede não vira quadro vazio e calado", () => {
     expect(screen.getByText("Carregando Demandas...")).toBeTruthy();
     expect(await screen.findByText("Uma nova")).toBeTruthy();
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("A Conversa dentro do card", () => {
+  /** Uma linha do fio como o backend a devolve. */
+  function linhaDoFio(id: string, extra: Record<string, unknown> = {}) {
+    return {
+      id,
+      autor_id: "P1",
+      autor_nome: "Pedro Vitta",
+      linha: "resposta",
+      texto: "Vou olhar hoje",
+      mencoes: [],
+      movimento_campo: null,
+      criado_em: "2026-09-01T12:00:00Z",
+      editado_em: null,
+      editavel_ate: null,
+      ...extra,
+    };
+  }
+
+  /** O instante que o backend manda quando a janela ainda está aberta. */
+  const daTempo = () => new Date(Date.now() + 300_000).toISOString();
+  /** E o que ele manda quando ela já fechou. */
+  const tardeDemais = () => new Date(Date.now() - 60_000).toISOString();
+
+  async function abrirCom(fio: unknown[], opcoes: Parameters<typeof montar>[1] = {}) {
+    montar([demanda("d1", "Encerrar conversas")], { conversa: fio, ...opcoes });
+    fireEvent.click(await screen.findByText("Encerrar conversas"));
+    return await screen.findByRole("dialog");
+  }
+
+  const caixa = (modal: HTMLElement) => within(modal).getByLabelText("Resposta");
+  const botaoResponder = (modal: HTMLElement) =>
+    within(modal).getByRole("button", { name: /Responder/ }) as HTMLButtonElement;
+
+  it("enviar a resposta grava a linha e ela aparece no fio sem recarregar a página", async () => {
+    const modal = await abrirCom([]);
+
+    fireEvent.change(caixa(modal), { target: { value: "Já pedi à Global Health" } });
+    fireEvent.click(botaoResponder(modal));
+
+    await waitFor(() => expect(escritas()).toHaveLength(1));
+    expect(escritas()[0]).toEqual({
+      url: "/api/admin/tecnologia/demandas/d1/conversa",
+      metodo: "POST",
+      corpo: { texto: "Já pedi à Global Health", mencoes: [] },
+    });
+    // O fio recarregado mostra a linha nova, com o autor e a hora.
+    const linha = await within(modal).findByText(/Já pedi à Global Health/);
+    expect(linha.closest("li")!.textContent).toContain("Pedro Vitta");
+  });
+
+  it("a caixa esvazia depois do envio, para a resposta não sair duplicada", async () => {
+    const modal = await abrirCom([]);
+
+    fireEvent.change(caixa(modal), { target: { value: "Respondido" } });
+    fireEvent.click(botaoResponder(modal));
+
+    await waitFor(() => expect((caixa(modal) as HTMLTextAreaElement).value).toBe(""));
+  });
+
+  it("com a caixa vazia o botão Responder fica desabilitado", async () => {
+    const modal = await abrirCom([]);
+
+    // Par de presença: com texto, o mesmo botão está de pé no mesmo render.
+    fireEvent.change(caixa(modal), { target: { value: "Tem texto" } });
+    expect(botaoResponder(modal).disabled).toBe(false);
+
+    fireEvent.change(caixa(modal), { target: { value: "   " } });
+    expect(botaoResponder(modal).disabled).toBe(true);
+  });
+
+  it("o @ lista só as pessoas com acesso à aba, e a escolhida vira menção na linha", async () => {
+    const modal = await abrirCom([]);
+
+    fireEvent.change(caixa(modal), { target: { value: "Oi @" } });
+    const lista = await within(modal).findByRole("list", { name: "Pessoas para mencionar" });
+    expect(within(lista).getAllByRole("button").map((b) => b.textContent)).toEqual([
+      "Pedro Vitta",
+      "Sócia Vitta",
+    ]);
+
+    fireEvent.click(within(lista).getByRole("button", { name: "Sócia Vitta" }));
+    expect((caixa(modal) as HTMLTextAreaElement).value).toBe("Oi @Sócia Vitta ");
+
+    fireEvent.click(botaoResponder(modal));
+
+    await waitFor(() => expect(escritas()).toHaveLength(1));
+    expect(escritas()[0].corpo).toEqual({ texto: "Oi @Sócia Vitta ", mencoes: ["P2"] });
+  });
+
+  it("sem @ nenhum o autocomplete não aparece", async () => {
+    // Par de presença do teste acima: uma lista sempre aberta passaria por ele
+    // sem que o @ tivesse feito nada.
+    const modal = await abrirCom([]);
+
+    fireEvent.change(caixa(modal), { target: { value: "Sem menção nenhuma" } });
+
+    expect(within(modal).queryByRole("list", { name: "Pessoas para mencionar" })).toBeNull();
+  });
+
+  it("apagar o nome do texto tira a menção do envio", async () => {
+    const modal = await abrirCom([]);
+
+    fireEvent.change(caixa(modal), { target: { value: "Oi @" } });
+    const lista = await within(modal).findByRole("list", { name: "Pessoas para mencionar" });
+    fireEvent.click(within(lista).getByRole("button", { name: "Sócia Vitta" }));
+    fireEvent.change(caixa(modal), { target: { value: "Deixa comigo" } });
+    fireEvent.click(botaoResponder(modal));
+
+    await waitFor(() => expect(escritas()).toHaveLength(1));
+    expect(escritas()[0].corpo).toEqual({ texto: "Deixa comigo", mencoes: [] });
+  });
+
+  it("a menção gravada aparece destacada no fio", async () => {
+    // O par na tela da coluna `mencoes`: sem ele, chamar alguém ficaria
+    // indistinguível de escrever o nome no meio da frase.
+    const modal = await abrirCom([
+      linhaDoFio("c1", { texto: "@Sócia Vitta consegue olhar?", mencoes: ["P2"] }),
+      linhaDoFio("c2", { texto: "Falei com Sócia Vitta ontem", mencoes: [] }),
+    ]);
+
+    const linhas = await within(modal).findAllByRole("listitem");
+    expect(within(linhas[0]).getByText("@Sócia Vitta").tagName).toBe("STRONG");
+    expect(within(linhas[1]).queryByText("@Sócia Vitta")).toBeNull();
+  });
+
+  it("a própria resposta dentro da janela ganha o botão Corrigir; a linha de movimento, não", async () => {
+    const modal = await abrirCom([
+      linhaDoFio("c1", { texto: "Minha resposta", editavel_ate: daTempo() }),
+      linhaDoFio("c2", {
+        autor_id: null,
+        autor_nome: null,
+        linha: "movimento",
+        texto: "Pedro Vitta moveu para Aguardando",
+        movimento_campo: "estado",
+        editavel_ate: null,
+      }),
+    ]);
+
+    const linhas = await within(modal).findAllByRole("listitem");
+    expect(within(linhas[0]).getByRole("button", { name: /Corrigir/ })).toBeTruthy();
+    expect(within(linhas[1]).queryByRole("button", { name: /Corrigir/ })).toBeNull();
+  });
+
+  it("passada a janela, o botão Corrigir some", async () => {
+    const modal = await abrirCom([
+      linhaDoFio("c1", { texto: "Ainda dá", editavel_ate: daTempo() }),
+      linhaDoFio("c2", { texto: "Tarde demais", editavel_ate: tardeDemais() }),
+    ]);
+
+    const linhas = await within(modal).findAllByRole("listitem");
+    // A irmã de presença no MESMO render: a linha de cima ainda oferece o botão.
+    expect(within(linhas[0]).getByRole("button", { name: /Corrigir/ })).toBeTruthy();
+    expect(within(linhas[1]).queryByRole("button", { name: /Corrigir/ })).toBeNull();
+  });
+
+  it("a resposta de outra pessoa não oferece Corrigir", async () => {
+    // Quem diz de quem é a linha é o backend, pelo `editavel_ate`: a tela não
+    // sabe qual participante é o usuário logado.
+    const modal = await abrirCom([
+      linhaDoFio("c1", { texto: "Minha", editavel_ate: daTempo() }),
+      linhaDoFio("c2", { autor_id: "P2", autor_nome: "Sócia Vitta", texto: "Da sócia", editavel_ate: null }),
+    ]);
+
+    const linhas = await within(modal).findAllByRole("listitem");
+    expect(within(linhas[0]).getByRole("button", { name: /Corrigir/ })).toBeTruthy();
+    expect(within(linhas[1]).queryByRole("button", { name: /Corrigir/ })).toBeNull();
+  });
+
+  it("corrigir manda o texto novo pela porta da linha e marca a resposta como editada", async () => {
+    const modal = await abrirCom([linhaDoFio("c1", { texto: "Vou olhar hoje", editavel_ate: daTempo() })]);
+
+    fireEvent.click(await within(modal).findByRole("button", { name: /Corrigir/ }));
+    fireEvent.change(within(modal).getByLabelText("Corrigir a resposta"), {
+      target: { value: "Vou olhar amanhã" },
+    });
+    fireEvent.click(within(modal).getByRole("button", { name: "Salvar correção" }));
+
+    await waitFor(() => expect(escritas()).toHaveLength(1));
+    expect(escritas()[0]).toEqual({
+      url: "/api/admin/tecnologia/demandas/d1/conversa/c1",
+      metodo: "PATCH",
+      corpo: { texto: "Vou olhar amanhã", mencoes: [] },
+    });
+    const corrigida = await within(modal).findByText(/Vou olhar amanhã/);
+    expect(corrigida.closest("li")!.textContent).toContain("(editado)");
+  });
+
+  it("a correção não apaga a menção que já estava na linha", async () => {
+    // Sem carregar as menções da linha ao abrir a caixa, um conserto de vírgula
+    // tiraria o "@Fulano" da lista sem ninguém pedir.
+    const modal = await abrirCom([
+      linhaDoFio("c1", { texto: "@Sócia Vitta olha isso", mencoes: ["P2"], editavel_ate: daTempo() }),
+    ]);
+
+    fireEvent.click(await within(modal).findByRole("button", { name: /Corrigir/ }));
+    fireEvent.change(within(modal).getByLabelText("Corrigir a resposta"), {
+      target: { value: "@Sócia Vitta olha isso, por favor" },
+    });
+    fireEvent.click(within(modal).getByRole("button", { name: "Salvar correção" }));
+
+    await waitFor(() => expect(escritas()).toHaveLength(1));
+    expect((escritas()[0].corpo as { mencoes: string[] }).mencoes).toEqual(["P2"]);
+  });
+
+  it("cancelar a correção deixa a linha como estava, sem chamar o servidor", async () => {
+    const modal = await abrirCom([linhaDoFio("c1", { texto: "Como estava", editavel_ate: daTempo() })]);
+
+    fireEvent.click(await within(modal).findByRole("button", { name: /Corrigir/ }));
+    fireEvent.change(within(modal).getByLabelText("Corrigir a resposta"), { target: { value: "Desisti" } });
+    fireEvent.click(within(modal).getByRole("button", { name: "Cancelar" }));
+
+    expect(escritas()).toHaveLength(0);
+    expect(within(modal).getByText(/Como estava/)).toBeTruthy();
+  });
+
+  it("o (editado) só aparece na linha que foi corrigida", async () => {
+    // Par de presença do carimbo: uma marca cravada apareceria em todas.
+    const modal = await abrirCom([
+      linhaDoFio("c1", { texto: "Corrigida", editado_em: "2026-09-01T12:05:00Z" }),
+      linhaDoFio("c2", { texto: "Intocada", editado_em: null }),
+    ]);
+
+    const linhas = await within(modal).findAllByRole("listitem");
+    expect(linhas[0].textContent).toContain("(editado)");
+    expect(linhas[1].textContent).not.toContain("(editado)");
+  });
+
+  it("o fio vazio não oferece Corrigir nenhum, e a caixa continua lá", async () => {
+    const modal = await abrirCom([]);
+
+    expect(await within(modal).findByText("Nada aconteceu nesta Demanda ainda.")).toBeTruthy();
+    expect(within(modal).queryByRole("button", { name: /Corrigir/ })).toBeNull();
+    expect(caixa(modal)).toBeTruthy();
+  });
+
+  it("a recusa do servidor aparece com a frase dele", async () => {
+    const modal = await abrirCom([], {
+      recusa: { status: 422, detail: "O prazo de 10 minutos para corrigir esta resposta já passou." },
+    });
+
+    fireEvent.change(caixa(modal), { target: { value: "Tarde demais" } });
+    fireEvent.click(botaoResponder(modal));
+
+    const aviso = await within(modal).findByRole("alert");
+    expect(aviso.textContent).toContain("O prazo de 10 minutos");
+  });
+
+  it("rede fora ao responder: o modal avisa, em vez de engolir a resposta", async () => {
+    // Sem o `catch`, a resposta sumiria calada e quem escreveu acharia que
+    // falou. `redeFora: "salvar"` derruba só a escrita: o fio carrega normal.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const modal = await abrirCom([], { redeFora: "salvar" });
+
+    fireEvent.change(caixa(modal), { target: { value: "Some no caminho" } });
+    fireEvent.click(botaoResponder(modal));
+
+    const aviso = await within(modal).findByRole("alert");
+    expect(aviso.textContent).toContain("Não foi possível falar com o servidor");
   });
 });

@@ -169,8 +169,36 @@ class ConversaLinhaResponse(BaseModel):
     autor_nome: str | None = None
     linha: str
     texto: str
+    mencoes: list[str] = []
     movimento_campo: str | None = None
     movimento_de: str | None = None
     movimento_para: str | None = None
     criado_em: str | None = None
     editado_em: str | None = None
+    # Ate quando ESTA pessoa pode corrigir ESTA linha, ou `None` quando ela nao
+    # pode (linha de movimento, resposta de outra pessoa, data ilegivel).
+    #
+    # Quem calcula e o backend porque a tela nao sabe qual participante e o
+    # usuario logado: o `useAuth` do front carrega o id do Supabase Auth, e nao
+    # o `participantes.id` que assina a linha. Vai o INSTANTE, e nao um booleano
+    # "pode": o modal fica aberto enquanto a janela corre, e um booleano
+    # congelado no carregamento continuaria dizendo "pode" dez minutos depois.
+    editavel_ate: str | None = None
+
+
+class RespostaPayload(BaseModel):
+    """O que a caixa de resposta manda, ao enviar e ao corrigir.
+
+    `mencoes` sao os ids escolhidos no autocomplete do @, e nao um texto para o
+    backend adivinhar: casar "@Fulano de Tal" dentro da frase por conta propria
+    erraria em nome com espaco e em nome que e prefixo de outro. Quem escolheu
+    na lista sabe de quem se trata; o backend confere se essa pessoa tem acesso
+    a aba (a mesma regra da porta de atribuir) e grava.
+
+    Sem `min_length`/`max_length`: os dois limites do texto saem do servico com
+    frase de gente, porque o `detail` do pydantic vem em LISTA e a tela mostra o
+    JSON cru no alerta vermelho.
+    """
+
+    texto: str
+    mencoes: list[str] | None = None

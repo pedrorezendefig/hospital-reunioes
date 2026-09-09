@@ -21,14 +21,22 @@ Demanda e Conversa (issue #637):
 - PATCH /admin/tecnologia/demandas/{id}         edita os campos do modal.
 - POST  /admin/tecnologia/demandas/{id}/mover   anda pela maquina de estados.
 - POST  /admin/tecnologia/demandas/{id}/atribuir troca o responsavel.
-- GET   /admin/tecnologia/demandas/{id}/conversa o fio, so leitura nesta fatia.
+- GET   /admin/tecnologia/demandas/{id}/conversa o fio inteiro.
 
 Mover e atribuir sao portas separadas do PATCH de proposito: sao as duas
 mudancas que gravam linha automatica na Conversa, e um PATCH que tambem as
 aceitasse moveria a Demanda sem deixar rastro no fio.
 
+Escrita no fio (issue #638):
+
+- POST  /admin/tecnologia/demandas/{id}/conversa        responde no card.
+- PATCH /admin/tecnologia/demandas/{id}/conversa/{lid}  corrige a PROPRIA
+                                                        resposta, por 10
+                                                        minutos.
+
 Nao existe DELETE: desativar (Produto) e cancelar (Demanda) sao as saidas
-(ADR 0050, decisao 11). A linha continua no banco.
+(ADR 0050, decisao 11), e resposta nao se apaga nunca (PRD #634, historia 29).
+A linha continua no banco.
 """
 
 from __future__ import annotations
@@ -52,10 +60,12 @@ from app.models.tecnologia_schemas import (
     ProdutoCreatePayload,
     ProdutoResponse,
     ProdutoUpdatePayload,
+    RespostaPayload,
 )
 from app.services.tecnologia import (
     MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO,
     MOTIVO_DONO_SEM_ACESSO,
+    MOTIVO_MENCAO_SEM_ACESSO,
     MOTIVO_PRODUTO_ATIVO_SEM_DONO,
     MOTIVO_PRODUTO_INATIVO,
     MOTIVO_PRODUTO_SEM_DONO,
@@ -63,7 +73,13 @@ from app.services.tecnologia import (
     carimbos_da_transicao,
     e_pessoa_da_aba,
     edicao_deixa_produto_ativo_sem_dono,
+    instante_do_banco,
+    limite_da_janela_de_edicao,
+    mencoes_sem_acesso,
+    motivo_edicao_recusada,
+    motivo_resposta_invalida,
     motivo_transicao_invalida,
+    normalizar_mencoes,
     produto_ativo_sem_dono,
     texto_movimento_estado,
     texto_movimento_responsavel,
@@ -656,18 +672,166 @@ async def atribuir_demanda(
     return _com_nomes(supabase, [result.data[0]])[0]
 
 
+# ─── Conversa: helpers ───────────────────────────────────────────────────────
+
+
+def _com_janela(linha: dict, *, ator_id: str, autor_nome: str | None) -> dict:
+    """A linha do fio como a tela a le, com o limite da janela de edicao.
+
+    `editavel_ate` so vem preenchido na PROPRIA resposta de quem esta pedindo:
+    e o que permite ao modal desenhar o botao de corrigir sem saber qual
+    participante e o usuario logado (o `useAuth` carrega o id do Supabase Auth,
+    nao o `participantes.id`).
+
+    O que vai e o INSTANTE em que a janela fecha, e nao um "pode: sim": o modal
+    fica aberto enquanto os 10 minutos correm, e um booleano congelado no
+    carregamento continuaria oferecendo o botao depois. Quem recusa de verdade
+    continua sendo o PATCH.
+    """
+    editavel_ate = None
+    if linha.get("linha") == "resposta" and linha.get("autor_id") == ator_id:
+        criado_em = instante_do_banco(linha.get("criado_em"))
+        if criado_em is not None:
+            editavel_ate = limite_da_janela_de_edicao(criado_em).isoformat()
+    return {**linha, "autor_nome": autor_nome, "editavel_ate": editavel_ate}
+
+
+def _texto_e_mencoes(supabase: Client, payload: RespostaPayload) -> tuple[str, list[str]]:
+    """O que vai para a coluna, ja validado, nas DUAS portas de escrita.
+
+    Responder e corrigir passam pelo mesmo funil de proposito: um criterio que
+    valesse so no envio deixaria a edicao criar a mencao que o envio recusa.
+
+    A lista de pessoas so e consultada quando ha mencao: sem isso, toda
+    resposta pagaria uma leitura da tabela de participantes para nada.
+    """
+    motivo = motivo_resposta_invalida(payload.texto)
+    if motivo:
+        _recusar(motivo)
+    mencoes = normalizar_mencoes(payload.mencoes)
+    if mencoes and mencoes_sem_acesso(mencoes, {p["id"] for p in _pessoas_da_aba(supabase)}):
+        _recusar(MOTIVO_MENCAO_SEM_ACESSO)
+    return payload.texto.strip(), mencoes
+
+
+def _resposta_nao_entrou() -> NoReturn:
+    """500 honesto: a pessoa falou e o fio nao guardou.
+
+    Devolver 201 com a linha que nao entrou faria quem escreveu achar que
+    respondeu, e o outro lado nunca leria.
+    """
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=(
+            "A sua resposta não entrou na Conversa desta Demanda. Copie o texto, recarregue o Quadro e envie de novo."
+        ),
+    )
+
+
+# ─── Conversa: endpoints ─────────────────────────────────────────────────────
+
+
 @router.get("/demandas/{demanda_id}/conversa", response_model=list[ConversaLinhaResponse])
 async def listar_conversa(
     demanda_id: str,
-    _ator: dict = Depends(require_super_admin),
+    ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
-    """O fio da Demanda em ordem cronologica, respostas e movimentos juntos.
-
-    So leitura nesta fatia: responder no card e da issue #638.
-    """
+    """O fio da Demanda em ordem cronologica, respostas e movimentos juntos."""
     _buscar_demanda(supabase, demanda_id)
     result = supabase.table(TABELA_CONVERSAS).select("*").eq("demanda_id", demanda_id).order("criado_em").execute()
     linhas = list(result.data or [])
     nomes = _nomes_de_participantes(supabase, {linha["autor_id"] for linha in linhas if linha.get("autor_id")})
-    return [{**linha, "autor_nome": nomes.get(linha.get("autor_id"))} for linha in linhas]
+    return [_com_janela(linha, ator_id=ator["id"], autor_nome=nomes.get(linha.get("autor_id"))) for linha in linhas]
+
+
+@router.post(
+    "/demandas/{demanda_id}/conversa",
+    response_model=ConversaLinhaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def responder_na_conversa(
+    demanda_id: str,
+    payload: RespostaPayload,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Responde dentro do card: uma linha `resposta`, assinada por quem escreve.
+
+    Responder nao move a Demanda nem troca o responsavel: falar e falar, e as
+    portas de `mover` e `atribuir` continuam sendo as unicas que mexem no
+    quadro.
+    """
+    _buscar_demanda(supabase, demanda_id)
+    texto, mencoes = _texto_e_mencoes(supabase, payload)
+
+    nova = {
+        "demanda_id": demanda_id,
+        "autor_id": ator["id"],
+        "linha": "resposta",
+        "texto": texto,
+        "mencoes": mencoes,
+        "movimento_campo": None,
+        "movimento_de": None,
+        "movimento_para": None,
+        "editado_em": None,
+    }
+    try:
+        result = supabase.table(TABELA_CONVERSAS).insert(nova).execute()
+    except Exception:
+        # `except APIError` nao pegaria o `httpx.HTTPError` que o timeout do
+        # PostgREST sobe cru, e aqui qualquer falha tem o mesmo desfecho: a
+        # resposta nao entrou. O log leva o identificador, nao o texto.
+        logger.exception("Falha ao gravar a resposta na Conversa da Demanda %s", demanda_id)
+        _resposta_nao_entrou()
+    if not result.data:
+        logger.error("Resposta nao gravada na Conversa da Demanda %s", demanda_id)
+        _resposta_nao_entrou()
+
+    return _com_janela(result.data[0], ator_id=ator["id"], autor_nome=ator.get("nome_completo"))
+
+
+@router.patch("/demandas/{demanda_id}/conversa/{linha_id}", response_model=ConversaLinhaResponse)
+async def editar_resposta(
+    demanda_id: str,
+    linha_id: str,
+    payload: RespostaPayload,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Corrige a PROPRIA resposta, dentro da janela de 10 minutos.
+
+    Tres recusas, cada uma com a sua frase (`motivo_edicao_recusada`): linha de
+    movimento nao se edita, resposta de outra pessoa nao e sua, e passados os
+    10 minutos ela fica como esta. Nao existe porta de apagar: a correcao
+    reescreve o texto e carimba `editado_em`, que a tela mostra.
+
+    A busca amarra as DUAS chaves. Procurar so pelo id da linha deixaria quem
+    soubesse esse id editar por qualquer card.
+    """
+    _buscar_demanda(supabase, demanda_id)
+    achadas = supabase.table(TABELA_CONVERSAS).select("*").eq("id", linha_id).eq("demanda_id", demanda_id).execute()
+    if not achadas.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Linha da Conversa nao encontrada")
+    linha = achadas.data[0]
+
+    motivo = motivo_edicao_recusada(linha=linha, ator_id=ator["id"], agora=datetime.now(UTC))
+    if motivo:
+        _recusar(motivo)
+
+    texto, mencoes = _texto_e_mencoes(supabase, payload)
+    mudancas = {"texto": texto, "mencoes": mencoes, "editado_em": _agora()}
+    try:
+        result = (
+            supabase.table(TABELA_CONVERSAS).update(mudancas).eq("id", linha_id).eq("demanda_id", demanda_id).execute()
+        )
+    except Exception:
+        logger.exception("Falha ao corrigir a linha %s da Conversa da Demanda %s", linha_id, demanda_id)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Não foi possível salvar a correção. Copie o texto, recarregue o Quadro e tente de novo.",
+        ) from None
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Linha da Conversa nao encontrada")
+
+    return _com_janela(result.data[0], ator_id=ator["id"], autor_nome=ator.get("nome_completo"))
