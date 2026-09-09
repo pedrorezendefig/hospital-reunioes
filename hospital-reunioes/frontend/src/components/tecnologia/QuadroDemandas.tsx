@@ -155,6 +155,18 @@ export function QuadroDemandas({
    * de ser cobrado e o aviso abaixo não reaparece depois.
    */
   const [idDoLink, setIdDoLink] = useState<string | null>(null);
+  /**
+   * A Demanda do link já está na lista que o Quadro carregou?
+   *
+   * Valor DERIVADO do estado de agora, e não uma marca que um efeito acerta um
+   * render depois. O efeito que abre o card roda DEPOIS do commit: no commit em
+   * que a lista chega, a Demanda já está lá e o card ainda não abriu, e um
+   * aviso preso ao efeito entraria no DOM dizendo que ela não está. Para quem
+   * enxerga isso é um piscar; como o aviso é `role="status"` (`aria-live`), o
+   * leitor de tela ANUNCIA a acusação falsa em toda abertura por link bom. É a
+   * mesma família do alarme de sessão que mordeu na fatia #637.
+   */
+  const achadaDoLink = idDoLink !== null && demandas.some((d) => d.id === idDoLink);
 
   const autorizacao = useCallback(
     () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
@@ -239,11 +251,11 @@ export function QuadroDemandas({
   }, []);
 
   useEffect(() => {
-    if (idDoLink && demandas.some((d) => d.id === idDoLink)) {
+    if (idDoLink && achadaDoLink) {
       setAbertaId(idDoLink);
       setIdDoLink(null);
     }
-  }, [idDoLink, demandas]);
+  }, [idDoLink, achadaDoLink]);
 
   async function enviar(url: string, metodo: string, corpo: unknown): Promise<boolean> {
     let resposta: Response;
@@ -404,8 +416,11 @@ export function QuadroDemandas({
           a Demanda está no Quadro, e dizer que não está seria afirmar um fato
           não verificado. Ela também não fala em Demanda apagada (nada se apaga
           nesta aba) nem em permissão (o gate é da API, e a recusa dela vira
-          erro de carregamento, não lista sem o card). */}
-      {!carregando && !erro && idDoLink && (
+          erro de carregamento, não lista sem o card). E ela olha `achadaDoLink`,
+          que é derivado da lista de agora: preso ao efeito que abre o card, o
+          aviso apareceria no commit em que a Demanda chega, antes de o card
+          abrir. */}
+      {!carregando && !erro && idDoLink && !achadaDoLink && (
         <p
           role="status"
           className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm"

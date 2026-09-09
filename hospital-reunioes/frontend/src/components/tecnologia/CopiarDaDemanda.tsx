@@ -55,6 +55,20 @@ export function CopiarDaDemanda({ demanda, token }: Props) {
     if (paraPegarAMao) caixa.current?.select();
   }, [paraPegarAMao]);
 
+  /**
+   * Toda ação começa do zero.
+   *
+   * Sem isto, a caixa da ação ANTERIOR fica na tela embaixo do aviso da ação
+   * nova: o pior caso é "não foi possível montar o texto desta Demanda" com o
+   * link da vez passada logo abaixo, numa caixa que a própria tela chamou de
+   * "para copiar à mão". A pessoa lê que não deu certo e vê um texto para
+   * copiar; ou copia a coisa errada, ou não sabe em qual das duas acreditar.
+   */
+  function zerar() {
+    setAviso(null);
+    setParaPegarAMao(null);
+  }
+
   async function copiar(texto: string, oQue: string) {
     try {
       await navigator.clipboard.writeText(texto);
@@ -68,6 +82,7 @@ export function CopiarDaDemanda({ demanda, token }: Props) {
   }
 
   async function copiarParaIa() {
+    zerar();
     try {
       const resposta = await fetch(`${BASE_TECNOLOGIA}/demandas/${demanda.id}/texto-para-ia`, {
         headers: { Authorization: `Bearer ${token}` },
@@ -88,7 +103,10 @@ export function CopiarDaDemanda({ demanda, token }: Props) {
     }
   }
 
-  const copiarLink = () => copiar(linkDaDemanda(demanda.id, window.location.origin), "Link da Demanda");
+  function copiarLink() {
+    zerar();
+    return copiar(linkDaDemanda(demanda.id, window.location.origin), "Link da Demanda");
+  }
 
   return (
     <div className="space-y-2 pt-4 border-t border-border">
@@ -109,8 +127,11 @@ export function CopiarDaDemanda({ demanda, token }: Props) {
           <Link2 className="w-4 h-4" />
           Copiar link
         </button>
+        {/* Diz PARA ONDE o texto vai, e não só o que vai dentro dele. Quem
+            copia precisa saber que o pedido e a Conversa inteira saem daqui
+            antes de colar, e não depois. */}
         <span className="text-xs text-text-secondary">
-          O texto para a IA leva o pedido e a Conversa inteira.
+          O texto sai do app e vai para uma IA de fora: ele leva o pedido e a Conversa inteira.
         </span>
       </div>
 

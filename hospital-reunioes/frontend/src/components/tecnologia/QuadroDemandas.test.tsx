@@ -21,7 +21,7 @@
  *   isso o mesmo render tem uma de 13 dias que não pode estar.
  */
 
-import { useState } from "react";
+import { Profiler, useState } from "react";
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -1517,6 +1517,39 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
     // Achada a Demanda, o aviso de "não está no Quadro" não pode ficar na tela
     // ao lado do card aberto, contando o contrário do que a tela mostra.
     expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("o aviso não chega ao DOM nem no commit em que as Demandas chegam", async () => {
+    // O buraco que o revisor provou com sonda de render: o card é aberto por um
+    // efeito, que roda DEPOIS do commit. No commit em que a lista chega, a
+    // Demanda já está lá e o card ainda não abriu, e um aviso preso ao efeito
+    // entraria no DOM dizendo que ela não está. Para quem enxerga é um piscar;
+    // com `role="status"` (`aria-live`), o leitor de tela ANUNCIA a acusação
+    // falsa em toda abertura por link bom.
+    //
+    // O teste do estado FINAL (o `queryByRole("status")` do teste acima) é cego
+    // a esse instante. O `Profiler` é chamado a cada commit, antes dos efeitos
+    // passivos: é o único jeito de olhar o DOM na hora certa.
+    chegarPor("?demanda=d1");
+    const acusacoes: string[] = [];
+    const olharOCommit = () => {
+      const aviso = document.querySelector('[role="status"]');
+      if (aviso) acusacoes.push(aviso.textContent ?? "");
+    };
+
+    servidorCom([demanda("d1", "A do link")]);
+
+    render(
+      <Profiler id="quadro" onRender={olharOCommit}>
+        <QuadroHospedado />
+      </Profiler>,
+    );
+
+    // Par de presença: o card do link ABRIU, então os commits observados são os
+    // do caminho feliz, e não os de uma tela que nunca carregou.
+    const modal = await screen.findByRole("dialog");
+    expect((within(modal).getByLabelText("Título") as HTMLInputElement).value).toBe("A do link");
+    expect(acusacoes).toEqual([]);
   });
 
   it("o link que o botão copia é o link que a tela abre", async () => {

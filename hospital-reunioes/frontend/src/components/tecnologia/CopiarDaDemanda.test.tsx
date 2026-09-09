@@ -251,3 +251,75 @@ describe("Quando o navegador não deixa copiar", () => {
     expect(screen.queryByLabelText("Texto para copiar à mão")).toBeNull();
   });
 });
+
+
+describe("Uma ação começa do zero (rodada 1 de fix)", () => {
+  it("a caixa da ação anterior não sobrevive à falha da ação seguinte", async () => {
+    // O pior caso que o revisor rodou: o clipboard está negado, a pessoa copia
+    // o link (a caixa aparece com ele), e a busca do texto para a IA falha
+    // depois. Sem zerar, a tela fica com o aviso "não foi possível montar o
+    // texto" e, logo abaixo, o LINK numa caixa que diz "para copiar à mão".
+    montar({ clipboard: "negado", recusa: 500 });
+
+    fireEvent.click(botao("Copiar link"));
+    const caixa = await screen.findByLabelText("Texto para copiar à mão");
+    expect((caixa as HTMLTextAreaElement).value).toContain("?demanda=d1");
+
+    fireEvent.click(botao("Copiar para IA"));
+
+    const aviso = await screen.findByRole("alert");
+    expect(aviso.textContent).toContain("Não foi possível montar o texto");
+    // O par: o aviso está na tela no MESMO render em que a caixa não está.
+    expect(screen.queryByLabelText("Texto para copiar à mão")).toBeNull();
+  });
+
+  it("o aviso de sucesso da ação anterior também sai da tela", async () => {
+    montar({ recusa: 500 });
+
+    fireEvent.click(botao("Copiar link"));
+    expect((await screen.findByRole("status")).textContent).toContain("copiado");
+
+    fireEvent.click(botao("Copiar para IA"));
+
+    await screen.findByRole("alert");
+    // Sem zerar, a tela diria "Link da Demanda copiado." e "não foi possível
+    // montar o texto" ao mesmo tempo, e as duas frases falam de ações
+    // diferentes sem dizer qual é qual.
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+
+  it("a caixa velha sai da tela enquanto o navegador ainda decide sobre a cópia", async () => {
+    // O `writeText` fica PENDENTE enquanto o navegador pergunta à pessoa se
+    // libera a área de transferência, e isso são segundos. Nesse intervalo a
+    // caixa da ação anterior não pode continuar na tela oferecendo o texto de
+    // antes: quem clicou já mudou de ação.
+    montar({ clipboard: "negado" });
+
+    fireEvent.click(botao("Copiar para IA"));
+    expect((await screen.findByLabelText("Texto para copiar à mão")).textContent).toContain("Título");
+
+    let liberar: (() => void) | null = null;
+    Object.defineProperty(window.navigator, "clipboard", {
+      value: { writeText: vi.fn(() => new Promise<void>((resolve) => (liberar = () => resolve()))) },
+      configurable: true,
+    });
+
+    fireEvent.click(botao("Copiar link"));
+
+    await waitFor(() => expect(screen.queryByLabelText("Texto para copiar à mão")).toBeNull());
+    // Par de presença: a cópia ainda NÃO terminou (ninguém resolveu a promessa),
+    // então a caixa sumiu por causa do começo da ação, e não do fim dela.
+    expect(liberar).not.toBeNull();
+    expect(screen.queryByRole("status")).toBeNull();
+  });
+});
+
+describe("A tela diz para onde o texto vai", () => {
+  it("avisa que o texto sai do app antes de a pessoa colar", async () => {
+    montar();
+
+    const marca = screen.getByText(/sai do app e vai para uma IA de fora/);
+
+    expect(marca).toBeTruthy();
+  });
+});
