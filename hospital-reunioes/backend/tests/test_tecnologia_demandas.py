@@ -238,13 +238,17 @@ class _TableQuery:
         self._in: dict[str, list] = {}
         self._insert: list[dict] | None = None
         self._update: dict | None = None
-        self._order: str | None = None
+        # Lista, e nao uma coluna so: a leitura do fio ordena por `criado_em` e
+        # desempata por `id` (issue #641), e um dublê que guardasse apenas a
+        # ultima chamada passaria a ordenar so pelo `id`, deixando os testes de
+        # ordem cronologica verdes por outro motivo.
+        self._order: list[str] = []
 
     def select(self, *_a, **_kw):
         return self
 
     def order(self, coluna, **_kw):
-        self._order = coluna
+        self._order.append(coluna)
         return self
 
     def eq(self, coluna, valor):
@@ -284,8 +288,8 @@ class _TableQuery:
                 linha.update(self._update)
             return _Result(data=[dict(linha) for linha in casadas])
 
-        if self._order:
-            casadas.sort(key=lambda linha: (linha.get(self._order) is None, linha.get(self._order)))
+        for coluna in reversed(self._order):
+            casadas.sort(key=lambda linha, c=coluna: (linha.get(c) is None, linha.get(c)))
         return _Result(data=[dict(linha) for linha in casadas])
 
 

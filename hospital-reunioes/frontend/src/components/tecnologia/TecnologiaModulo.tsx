@@ -3,9 +3,12 @@
 /**
  * O módulo da aba Tecnologia (issue #636, PRD #634, ADR 0050).
  *
- * A fundação: as três abas (Quadro, Minha vez e Histórico) nascem como casca
- * vazia, e o que já funciona é a gestão de Produtos. O gate de verdade é o
- * `require_super_admin` do backend; a sidebar apenas esconde o item.
+ * As três abas (Quadro, Minha vez e Histórico) e a gestão de Produtos. O gate
+ * de verdade é o `require_super_admin` do backend; a sidebar apenas esconde o
+ * item.
+ *
+ * As abas Minha vez e Histórico entraram na issue #641, e leem os filtros que
+ * moram aqui, os mesmos do Quadro.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -14,6 +17,8 @@ import { AlertCircle, Cpu, Pencil, Plus, Power, PowerOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Select } from "@/components/ui/Select";
 
+import { HistoricoDemandas } from "./HistoricoDemandas";
+import { MinhaVez } from "./MinhaVez";
 import { QuadroDemandas } from "./QuadroDemandas";
 import {
   BASE_TECNOLOGIA,
@@ -206,8 +211,12 @@ export function TecnologiaModulo() {
         ))}
       </div>
 
+      {/* As três abas recebem os MESMOS filtros e o mesmo jeito de trocá-los
+          (issue #639): o estado mora aqui em cima justamente para atravessar a
+          troca de aba, e uma aba que não o recebesse mostraria uma lista que
+          contradiz o que a pessoa acabou de escolher na aba ao lado. */}
       <div role="tabpanel">
-        {aba === "quadro" ? (
+        {aba === "quadro" && (
           <QuadroDemandas
             token={token}
             carregandoAuth={carregandoAuth}
@@ -216,12 +225,26 @@ export function TecnologiaModulo() {
             filtros={filtros}
             onFiltrosChange={setFiltros}
           />
-        ) : (
-          <div className="rounded-xl border border-border bg-surface p-6">
-            <p className="text-sm text-text-secondary">
-              A aba {ABAS.find((item) => item.id === aba)?.label} entra em uma próxima entrega.
-            </p>
-          </div>
+        )}
+        {aba === "minha-vez" && (
+          <MinhaVez
+            token={token}
+            carregandoAuth={carregandoAuth}
+            produtos={produtos}
+            pessoas={pessoas}
+            filtros={filtros}
+            onFiltrosChange={setFiltros}
+          />
+        )}
+        {aba === "historico" && (
+          <HistoricoDemandas
+            token={token}
+            carregandoAuth={carregandoAuth}
+            produtos={produtos}
+            pessoas={pessoas}
+            filtros={filtros}
+            onFiltrosChange={setFiltros}
+          />
         )}
       </div>
 
