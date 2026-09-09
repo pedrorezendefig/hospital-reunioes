@@ -23,6 +23,14 @@ Duas armadilhas de teste vazio moram aqui:
 * provar que arquivar não grava movimento é vazio se a requisição morreu antes
   (403, 409, 422). Por isso todo teste do que NÃO acontece confere o 200 antes
   de olhar o efeito.
+
+Desde a issue #627 o LOTE tem uma quinta promessa, e ela é de transação: o
+carimbo e o registro de acesso valem juntos ou não valem. Como quem garante isso
+é o Postgres, e não o Python, ela é provada em duas camadas que se cobrem: o
+Supabase falso é fiel à transação (e o detector dele tem teste próprio nos dois
+sentidos), e um guarda estático lê a migration para cobrar do SQL o que faz o
+banco desfazer o `UPDATE`. Nenhuma das duas sozinha valeria: o fake prova só a
+rota, e o guarda estático prova só o arquivo.
 """
 
 from __future__ import annotations
@@ -30,6 +38,7 @@ from __future__ import annotations
 import datetime as dt
 import logging
 import os
+import re
 import sys
 from types import SimpleNamespace
 
@@ -62,6 +71,15 @@ DIRETORIA = {
 # justamente por isso que o recorte do arquivo precisa do gate próprio.
 SUPER_ADMIN = {"id": "P99", "nome_completo": "Root", "access_profile": "super_admin", "perfil_ouvidoria": None}
 SECRETARIA = {"id": "P12", "nome_completo": "Ana Secretaria", "access_profile": "secretaria", "perfil_ouvidoria": None}
+
+# O nome da RPC do lote sai do ROTEADOR, e não de uma cópia escrita aqui: o
+# Supabase falso e a rota precisam falar do mesmo nome por construção, e quem
+# amarra esse nome ao SQL de verdade é `TestATransacaoNoSQLDaRpc`, que o procura
+# dentro da migration. Com a cópia à mão, um rename da rota deixaria o fake
+# atendendo uma função que o banco não tem, e tudo verde.
+RPC_DO_LOTE = ouvidoria_router.RPC_DO_LOTE_DO_ARQUIVO
+
+MIGRATIONS = os.path.join(os.path.dirname(__file__), "..", "..", "supabase", "migrations")
 
 # Terça-feira, 14h de Brasília: dentro do expediente e longe de feriado.
 INICIO = dt.datetime(2026, 8, 25, 17, 0, tzinfo=dt.UTC)
@@ -298,11 +316,29 @@ class _AgregadoFake:
         return type("R", (), {"data": [dict(linha) for linha in self._linhas]})()
 
 
+class _RpcFake:
+    """A chamada de RPC guardada até o `execute()`, como no cliente de verdade."""
+
+    def __init__(self, corpo):
+        self._corpo = corpo
+
+    def execute(self):
+        return type("R", (), {"data": self._corpo(), "count": None})()
+
+
 class _SupabaseFake:
-    def __init__(self, casos: list[dict], movimentos: list[dict] | None = None):
+    def __init__(self, casos: list[dict], movimentos: list[dict] | None = None, relogio=None):
         # Quando preenchido, roda uma vez logo depois do primeiro select em
         # `ouvidoria_protocolos` e some. Simula a reabertura concorrente.
         self.reabre_no_meio_da_leitura = False
+        # O relógio do BANCO. Desde a migration 101 o carimbo do lote é `now()`
+        # do Postgres, e não mais um `isoformat()` montado no servidor: os dois
+        # relógios do teste são o mesmo objeto justamente porque na vida real
+        # eles deixaram de ser dois.
+        self.relogio = relogio or _Relogio(INICIO).agora
+        # Toda RPC chamada nesta sessão, na ordem, com os parâmetros. É por aqui
+        # que o teste prova que o lote virou UMA ida ao banco.
+        self.rpcs: list[tuple[str, dict]] = []
         # Todo pedido montado nesta sessão, na ordem. É por aqui que o teste
         # olha a QUERY que a rota montou, e não só o efeito dela no banco:
         # `select=id` no update não muda o que fica gravado, então sem isto
@@ -338,14 +374,63 @@ class _SupabaseFake:
         self.pedidos.append(pedido)
         return pedido
 
+    def arquivar_encerrados(self, params: dict) -> list[dict]:
+        """A RPC da migration 101, servida como o Postgres a serve: o UPDATE dos
+        carimbos e o INSERT do log na MESMA transação, e SEM bloco EXCEPTION.
+
+        A fidelidade que importa é a de baixo: se o log for recusado, a função
+        levanta e o carimbo do UPDATE NÃO fica. Um fake que gravasse o carimbo
+        assim mesmo deixaria verde exatamente a rota que a issue #627 existe
+        para consertar, e por isso o detector tem teste próprio nos dois
+        sentidos (`TestOFakeDaTransacao`).
+
+        O INSERT sai por `self.table(...)`, e não por um append direto na lista:
+        é assim que o teste consegue recusar o log no MESMO lugar em que ele
+        falharia de verdade, sem monkeypatch nenhum na função sob teste."""
+        protocolos = self.tabelas["ouvidoria_protocolos"]
+        acessos = self.tabelas["ouvidoria_acessos"]
+        # O ponto de restauração da transação, tirado antes de qualquer escrita.
+        protocolos_antes = [dict(linha) for linha in protocolos]
+        acessos_antes = [dict(linha) for linha in acessos]
+        alvos = [c for c in protocolos if c.get("status") == "encerrado" and c.get("arquivada_em") is None]
+        try:
+            carimbo = self.relogio().isoformat()
+            for caso in alvos:
+                caso["arquivada_em"] = carimbo
+                caso["arquivada_por"] = params["p_ator_id"]
+            if alvos:
+                self.table("ouvidoria_acessos").insert(
+                    [
+                        {
+                            "manifestacao_id": caso["id"],
+                            "ator_id": params["p_ator_id"],
+                            "ator_nome": params["p_ator_nome"],
+                            "acao": "arquivar",
+                        }
+                        for caso in alvos
+                    ]
+                ).execute()
+        except Exception:
+            # ROLLBACK. As duas tabelas voltam ao ponto de restauração, porque
+            # as duas escritas são a mesma transação.
+            protocolos[:] = protocolos_antes
+            acessos[:] = acessos_antes
+            raise
+        # `RETURNS TABLE (arquivadas INTEGER)`: uma linha de uma coluna, que é o
+        # único formato que o `APIResponse` do postgrest-py aceita.
+        return [{"arquivadas": len(alvos)}]
+
     def rpc(self, nome: str, params: dict | None = None):
+        self.rpcs.append((nome, dict(params or {})))
         if nome == "ouvidoria_ultimo_movimento":
             ultimo: dict[str, str] = {}
             for mov in self.tabelas["ouvidoria_movimentos"]:
                 caso = str(mov["manifestacao_id"])
                 ultimo[caso] = max(str(mov["ocorrido_em"]), ultimo.get(caso, ""))
             return _AgregadoFake([{"manifestacao_id": c, "ultimo_movimento_em": q} for c, q in ultimo.items()])
-        raise AssertionError(f"Arquivar não passa por RPC nenhuma, e esta chegou: {nome}")
+        if nome == RPC_DO_LOTE:
+            return _RpcFake(lambda: self.arquivar_encerrados(params or {}))
+        raise AssertionError(f"Arquivar não passa por esta RPC, e ela chegou: {nome}")
 
 
 def _client(monkeypatch, casos: list[dict] | None = None, participante: dict | None = None, movimentos=None):
@@ -356,7 +441,7 @@ def _client(monkeypatch, casos: list[dict] | None = None, participante: dict | N
     app.include_router(ouvidoria_router.router, prefix="/api")
 
     relogio = _Relogio(INICIO)
-    supabase = _SupabaseFake(casos if casos is not None else [_caso()], movimentos)
+    supabase = _SupabaseFake(casos if casos is not None else [_caso()], movimentos, relogio=relogio.agora)
     quem = participante if participante is not None else OUVIDOR
 
     async def _fake_participante(_user, _sb, fields=None):
@@ -970,8 +1055,7 @@ class TestOLoteDosEncerrados:
             # O timeout do transporte NÃO é `APIError`: ele nasce antes de haver
             # resposta HTTP para virar erro do PostgREST. É a falha típica desta
             # rota, que é a escrita mais pesada do módulo, e um `except APIError`
-            # sozinho a deixaria escapar como 500 depois de o update poder ter
-            # commitado, com o log de acesso nunca rodando.
+            # sozinho a deixaria escapar como 500.
             httpx.ReadTimeout("timed out"),
             httpx.ConnectError("connection refused"),
         ],
@@ -981,28 +1065,30 @@ class TestOLoteDosEncerrados:
         """Zero arquivadas com 200 diria ao ouvidor que não havia nada a fazer,
         e o acúmulo continuaria na tela sem explicação.
 
-        A falha é levantada DENTRO do `execute`, e não antes: é lá que ela cai
-        na vida real, e é o único ponto em que o update pode já ter chegado ao
-        banco."""
+        A falha é levantada DENTRO do `execute` da RPC, e não antes: é lá que
+        ela cai na vida real. Desde a migration 101 o que o timeout deixa para
+        trás mudou de natureza, e é o que o teste abaixo confere junto: a
+        transação do banco não commitou, então NADA ficou carimbado."""
         client, supabase = self._base(monkeypatch)
-        de_verdade = supabase.table
+        de_verdade = supabase.rpc
 
-        def _table_que_recusa(nome: str):
-            tabela = de_verdade(nome)
-            if nome == "ouvidoria_protocolos":
+        def _rpc_que_recusa(nome: str, params: dict | None = None):
+            chamada = de_verdade(nome, params)
+            if nome == RPC_DO_LOTE:
 
                 def _explodir():
                     raise falha
 
-                tabela.execute = _explodir
-            return tabela
+                chamada.execute = _explodir
+            return chamada
 
-        monkeypatch.setattr(supabase, "table", _table_que_recusa)
+        monkeypatch.setattr(supabase, "rpc", _rpc_que_recusa)
 
         with caplog.at_level(logging.ERROR):
             assert _arquivar_o_lote(client).status_code == 503
 
-        # O 503 da coluna que não existe (migration 099 pendente) e o 503 do
+        assert _com_carimbo(supabase) == ["uuid-9"], "a transação não commitou: só o arquivo antigo sobra"
+        # O 503 da função que não existe (migration 101 pendente) e o 503 do
         # timeout são o mesmo status e a mesma frase na tela: o que os separa
         # em produção é esta linha. O nome da exceção distingue as famílias, e
         # o código distingue as recusas do PostgREST entre si.
@@ -1010,167 +1096,106 @@ class TestOLoteDosEncerrados:
         assert falha.__class__.__name__ in registrado
         assert getattr(falha, "code", None) is None or str(falha.code) in registrado
 
-    def test_a_contagem_vem_das_linhas_afetadas_e_nao_das_devolvidas(self, monkeypatch):
-        """O servidor afetou sete linhas e devolveu uma. A resposta ao ouvidor
-        é SETE.
+    def test_o_lote_e_uma_ida_so_ao_banco_pela_rpc(self, monkeypatch):
+        """O conserto da issue #627 em uma frase: o `UPDATE` e o `INSERT` do log
+        pararam de ser duas idas ao banco.
 
-        É este o cenário que tira o número da dependência de quanto o servidor
-        decidiu devolver: se a contagem saísse do corpo, um lote de sete
-        apareceria como um, com HTTP 200 e sem erro nenhum. O log fica com o
-        que veio, que é tudo o que ele pode saber; o número, não."""
-        client, supabase = self._base(monkeypatch)
-        de_verdade = supabase.table
-
-        def _table_que_corta_o_corpo(nome: str):
-            tabela = de_verdade(nome)
-            if nome == "ouvidoria_protocolos":
-                resposta_inteira = tabela.execute
-
-                def _cortada():
-                    r = resposta_inteira()
-                    if tabela._update is None:
-                        return r
-                    return type("R", (), {"data": r.data[:1], "count": 7})()
-
-                tabela.execute = _cortada
-            return tabela
-
-        monkeypatch.setattr(supabase, "table", _table_que_corta_o_corpo)
-
-        r = _arquivar_o_lote(client)
-
-        assert r.status_code == 200, r.text
-        assert r.json() == {"arquivadas": 7}
-
-    def test_a_rota_pede_a_contagem_exata_ao_banco(self, monkeypatch):
-        """O irmão do teste acima: aquele prova de ONDE o número sai, este
-        prova que a rota pediu o cabeçalho de onde ele sai. Sem o pedido, o
-        PostgREST não manda o `Content-Range` e a rota cairia para sempre no
-        fallback, sem nada reprovar."""
+        Duas asserções, e as duas precisam estar aqui. A primeira prova que a
+        RPC foi chamada; a segunda prova que a rota não montou mais nenhum
+        `update` do lado de cá. Sem a segunda, a rota que chamasse a RPC E
+        continuasse carimbando por fora ficaria verde, com a janela aberta do
+        mesmo jeito."""
         client, supabase = self._base(monkeypatch)
 
         assert _arquivar_o_lote(client).status_code == 200
 
-        escritas = [
-            pedido
-            for pedido in supabase.pedidos
-            if pedido.nome == "ouvidoria_protocolos" and pedido._update is not None
-        ]
-        assert len(escritas) == 1, "o lote é um update só"
-        assert escritas[0]._contagem_pedida == "exact"
+        assert [nome for nome, _ in supabase.rpcs] == [RPC_DO_LOTE]
+        escritas = [pedido for pedido in supabase.pedidos if pedido._update is not None]
+        assert escritas == [], "o carimbo do lote é do banco: nenhum update sai mais daqui"
 
-    def test_sem_o_cabecalho_a_contagem_cai_para_o_que_veio_no_corpo(self, monkeypatch):
-        """O servidor que não devolve o cabeçalho não pode zerar um lote que
-        aconteceu: aí o corpo é a melhor verdade disponível."""
-        client, supabase = self._base(monkeypatch, quantos_encerrados=2)
-        de_verdade = supabase.table
-
-        def _table_sem_cabecalho(nome: str):
-            tabela = de_verdade(nome)
-            if nome == "ouvidoria_protocolos":
-                com_contagem = tabela.execute
-
-                def _sem_contagem():
-                    r = com_contagem()
-                    return type("R", (), {"data": r.data, "count": None})()
-
-                tabela.execute = _sem_contagem
-            return tabela
-
-        monkeypatch.setattr(supabase, "table", _table_sem_cabecalho)
-
-        assert _arquivar_o_lote(client).json()["arquivadas"] == 2
-
-    def test_a_rota_pede_so_o_id_no_update_que_ela_monta(self, monkeypatch):
-        """O irmão do teste de contrato abaixo, e o que fecha o vácuo dele:
-        aquele prova que a função monta o recorte, este prova que a ROTA a
-        usa. Sem os dois, um lote que voltasse a pedir a linha inteira ficaria
-        verde, porque `select` não muda nada do que fica gravado."""
+    def test_a_rota_manda_o_ator_para_a_rpc(self, monkeypatch):
+        """Quem arquivou entra no carimbo E na linha do log, e as duas coisas
+        agora acontecem lá dentro: o nome precisa atravessar a fronteira. Sem
+        `p_ator_nome`, `ouvidoria_acessos.ator_nome` é NOT NULL e o lote inteiro
+        passaria a falhar em produção sem nada aqui reprovar."""
         client, supabase = self._base(monkeypatch)
 
         assert _arquivar_o_lote(client).status_code == 200
 
-        escritas = [
-            pedido
-            for pedido in supabase.pedidos
-            if pedido.nome == "ouvidoria_protocolos" and pedido._update is not None
-        ]
-        assert len(escritas) == 1, "o lote é um update só"
-        assert escritas[0].request.params.get("select") == "id"
+        assert supabase.rpcs == [(RPC_DO_LOTE, {"p_ator_id": OUVIDOR["id"], "p_ator_nome": OUVIDOR["nome_completo"]})]
 
-    def test_o_fake_recorta_o_retorno_do_update_como_o_postgrest_faz(self):
-        """O detector dos dois testes acima, exercitado nos dois sentidos.
+    def test_o_participante_sem_nome_manda_o_id_no_lugar(self, monkeypatch):
+        """`ator_nome` é NOT NULL, e o cadastro tem participante sem nome
+        completo. A rota já resolvia isso no log de um caso; a RPC herda a mesma
+        regra, e é aqui que ela fica presa."""
+        sem_nome = {**OUVIDOR, "nome_completo": None}
+        client, supabase = self._base(monkeypatch, participante=sem_nome)
 
-        Sem esta projeção, o Supabase falso devolveria a linha inteira mesmo
-        com o recorte pedido, e a rota poderia passar a ler do retorno uma
-        coluna que o PostgREST de verdade não vai mandar, sem nada reprovar."""
-        com_recorte = _TabelaFake("ouvidoria_protocolos", [_caso(1)])
-        com_recorte.request.params = com_recorte.request.params.set("select", "id")
+        assert _arquivar_o_lote(client).status_code == 200
 
-        gravadas = (
-            com_recorte.update({"arquivada_em": "2026-09-08T00:00:00+00:00"}).eq("status", "encerrado").execute().data
-        )
+        assert supabase.rpcs[-1][1]["p_ator_nome"] == sem_nome["id"]
 
-        assert gravadas == [{"id": "uuid-1"}]
-        # O outro sentido: sem recorte, o retorno é a linha toda, com o relato.
-        sem_recorte = _TabelaFake("ouvidoria_protocolos", [_caso(1)])
-        inteiras = (
-            sem_recorte.update({"arquivada_em": "2026-09-08T00:00:00+00:00"}).eq("status", "encerrado").execute().data
-        )
-        assert "relato_integral" in inteiras[0]
+    def test_o_cliente_de_verdade_recusa_a_contagem_escalar(self):
+        """Por que a RPC é `RETURNS TABLE (arquivadas INTEGER)`, e não
+        `RETURNS INTEGER`.
 
-    def test_o_fake_so_devolve_contagem_a_quem_pediu_e_conta_o_que_foi_afetado(self):
-        """O detector dos dois testes da contagem, exercitado nos dois sentidos.
+        O PostgREST devolve função escalar como escalar nu (`3`), e o
+        `APIResponse` do postgrest-py declara `data: List[JSON]`: o corpo
+        escalar levanta ValidationError antes de a rota ver número nenhum, e o
+        lote viraria 500 DEPOIS de a transação já ter commitado, que é o pior
+        desfecho possível para esta rota.
 
-        Os testes acima só valem enquanto o Supabase falso for fiel em duas
-        coisas: guardar o `count` que recebeu (senão o teste do pedido fica
-        verde sobre qualquer rota) e contar as linhas AFETADAS, e não as que
-        couberam no corpo (que é a distinção inteira)."""
-        pedindo = _TabelaFake("ouvidoria_protocolos", [_caso(1), _caso(2)])
+        Este teste fala com a classe REAL da biblioteca, e não com o Supabase
+        falso: o falso devolve o que eu mandar, então ele nunca reprovaria a
+        migration que voltasse ao escalar."""
+        from postgrest.base_request_builder import APIResponse
+        from pydantic import ValidationError
 
-        com_contagem = (
-            pedindo.update({"arquivada_em": "2026-09-08T00:00:00+00:00"}, count="exact")
-            .eq("status", "encerrado")
-            .execute()
-        )
+        with pytest.raises(ValidationError):
+            APIResponse(data=3, count=None)
 
-        assert pedindo._contagem_pedida == "exact"
-        assert com_contagem.count == 2
-        # O outro sentido: quem não pede não recebe cabeçalho nenhum, que é o
-        # que faz a rota cair no fallback do corpo.
-        calado = _TabelaFake("ouvidoria_protocolos", [_caso(1), _caso(2)])
-        sem_contagem = calado.update({"arquivada_em": "2026-09-08T00:00:00+00:00"}).eq("status", "encerrado").execute()
-        assert calado._contagem_pedida is None
-        assert sem_contagem.count is None
+        # O outro sentido, que é o formato que a migration 101 produz.
+        assert APIResponse(data=[{"arquivadas": 3}], count=None).data == [{"arquivadas": 3}]
 
-    def test_o_update_do_lote_pede_so_o_id_ao_cliente_de_verdade(self):
-        """O lote lê `row["id"]` e nada mais, e por isso pede `select=id`: sem
-        ele o PostgREST devolve a linha inteira, com relato, nome e contato de
-        cada caso arquivado, para nada.
 
-        Este teste fala com o cliente REAL, sem rede: o parâmetro entra por um
-        atributo da biblioteca (`request.params`), e o Supabase falso ficaria
-        verde na versão em que esse atributo mudasse de nome."""
-        from postgrest import SyncPostgrestClient
+class TestOFakeDaTransacao:
+    """O detector dos testes do lote, exercitado nos DOIS sentidos.
 
-        cliente = SyncPostgrestClient("http://postgrest.invalido/rest/v1")
-        try:
-            escrita = ouvidoria_router._so_o_id_de_volta(
-                cliente.table("ouvidoria_protocolos")
-                .update({"arquivada_em": "2026-09-08T00:00:00+00:00"}, count="exact")
-                .eq("status", "encerrado")
-                .is_("arquivada_em", "null")
-            )
+    Todo teste de atomicidade acima só vale enquanto o Supabase falso for fiel
+    numa coisa: a recusa do log tem que DESFAZER o carimbo. Um fake que
+    gravasse o carimbo assim mesmo deixaria verde exatamente a rota que a issue
+    #627 existe para consertar."""
 
-            assert escrita.request.params.get("select") == "id"
-            # E o recorte não atropelou os filtros, que entram pela mesma query.
-            assert escrita.request.params.get("status") == "eq.encerrado"
-            assert escrita.request.params.get("arquivada_em") == "is.null"
-            # A contagem exata é pedida por cabeçalho, e é ela que faz o
-            # PostgREST mandar o `Content-Range` de onde sai o número.
-            assert "count=exact" in escrita.request.headers.get("Prefer", "")
-        finally:
-            cliente.session.close()
+    def test_a_transacao_grava_os_dois_lados_quando_o_log_aceita(self):
+        supabase = _SupabaseFake([_caso(1), _caso(2)])
+
+        devolvido = supabase.arquivar_encerrados({"p_ator_id": "P10", "p_ator_nome": "Marta"})
+
+        assert devolvido == [{"arquivadas": 2}]
+        assert all(c["arquivada_em"] for c in supabase.tabelas["ouvidoria_protocolos"])
+        assert len(supabase.tabelas["ouvidoria_acessos"]) == 2
+
+    def test_a_transacao_desfaz_o_carimbo_quando_o_log_recusa(self):
+        supabase = _SupabaseFake([_caso(1), _caso(2)])
+        de_verdade = supabase.table
+
+        def _table_que_recusa_o_log(nome: str):
+            tabela = de_verdade(nome)
+            if nome == "ouvidoria_acessos":
+
+                def _explodir():
+                    raise APIError({"message": "insert or update violates foreign key", "code": "23503"})
+
+                tabela.execute = _explodir
+            return tabela
+
+        supabase.table = _table_que_recusa_o_log
+
+        with pytest.raises(APIError):
+            supabase.arquivar_encerrados({"p_ator_id": "P10", "p_ator_nome": "Marta"})
+
+        assert [c["arquivada_em"] for c in supabase.tabelas["ouvidoria_protocolos"]] == [None, None]
+        assert supabase.tabelas["ouvidoria_acessos"] == []
 
 
 class TestORastroDoLote:
@@ -1199,13 +1224,20 @@ class TestORastroDoLote:
         assert {a["acao"] for a in acessos} == {"arquivar"}
         assert {a["ator_id"] for a in acessos} == {OUVIDOR["id"]}
 
-    def test_a_falha_do_log_deixa_no_servidor_quem_clicou_e_quais_casos(self, monkeypatch, caplog):
-        """O insert do lote é UM só: uma recusa apaga de uma vez o rastro de
-        todos os casos. Como arquivar não entra na trilha, o warning é a última
-        rede, e uma linha que só diz "falhou em 2" não permite reconstruir nada.
+    def test_a_recusa_do_log_desfaz_o_arquivamento_inteiro(self, monkeypatch, caplog):
+        """O critério de aceite da issue #627, e a inversão do que valia até a
+        migration 101: o log do lote DEIXOU de ser fail-open.
 
-        O ato continua valendo (fail-open): o arquivamento já foi gravado, e um
-        500 aqui mandaria o ouvidor repetir um lote que já aconteceu."""
+        Até aqui, o log recusado devolvia 200 e o arquivamento ficava gravado
+        sem rastro nenhum, porque arquivar não entra na trilha e desarquivar
+        apaga os dois carimbos. Dentro de uma transação a conta muda de sinal:
+        ou as duas escritas valem, ou nenhuma vale.
+
+        A recusa é injetada no INSERT do log, que é onde ela cai de verdade, e
+        NÃO na rota: nada aqui monkeypatcha a guarda sob teste. As três
+        asserções cobrem os três lados do ato, e o carimbo é o que importa: um
+        conserto que só trocasse o status para 503 e deixasse a linha carimbada
+        passaria nas outras duas."""
         client, supabase = _client(monkeypatch, casos=[_caso(1), _caso(2)])
         de_verdade = supabase.table
 
@@ -1221,14 +1253,42 @@ class TestORastroDoLote:
 
         monkeypatch.setattr(supabase, "table", _table_que_recusa_o_log)
 
-        with caplog.at_level(logging.WARNING):
+        with caplog.at_level(logging.ERROR):
             r = _arquivar_o_lote(client)
 
-        assert r.status_code == 200, r.text
-        assert r.json()["arquivadas"] == 2, "o ato vale mesmo com o log recusado"
-        registrado = "\n".join(caplog.messages)
-        assert OUVIDOR["id"] in registrado, "sem o ator, ninguém reconstrói quem escondeu a fila"
-        assert "uuid-1" in registrado and "uuid-2" in registrado, "os casos atingidos precisam estar nomeados"
+        assert r.status_code == 503, r.text
+        assert _com_carimbo(supabase) == [], "o log recusado não pode deixar carimbo gravado"
+        assert self._acessos(supabase) == []
+        assert "23503" in "\n".join(caplog.messages), "o código da recusa é o que separa as causas em produção"
+
+    def test_o_lote_recusado_nao_esconde_nada_da_lista(self, monkeypatch):
+        """O mesmo desfecho pelo lado de fora, que é onde o ouvidor está: a
+        recusa do log não pode tirar caso nenhum da vista.
+
+        Sem este par, a asserção de cima ficaria presa ao dicionário do fake, e
+        um dia em que a lista passasse a ler o arquivo de outra coluna nada
+        reprovaria."""
+        client, supabase = _client(monkeypatch, casos=[_caso(1), _caso(2)])
+        assert _listar(client) == ["2026-0002", "2026-0001"], "a contraprova do estado inicial"
+        de_verdade = supabase.table
+
+        def _table_que_recusa_o_log(nome: str):
+            tabela = de_verdade(nome)
+            if nome == "ouvidoria_acessos":
+
+                def _explodir():
+                    raise APIError({"message": "insert or update violates foreign key", "code": "23503"})
+
+                tabela.execute = _explodir
+            return tabela
+
+        monkeypatch.setattr(supabase, "table", _table_que_recusa_o_log)
+
+        assert _arquivar_o_lote(client).status_code == 503
+
+        monkeypatch.setattr(supabase, "table", de_verdade)
+        assert _listar(client) == ["2026-0002", "2026-0001"], "a fila continua inteira"
+        assert _listar(client, arquivados="sim") == []
 
     def test_lote_sem_nada_para_arquivar_nao_registra_acesso(self, monkeypatch):
         """O outro sentido do mesmo detector: log de ATO, e ato que não
@@ -1325,3 +1385,353 @@ class TestOAcordoEntreOLoteEAListaDaTela:
         assert _arquivar_o_lote(client).json()["arquivadas"] == 2
 
         assert _listar(client) == []
+
+
+# ---------------------------------------------------------------------------
+# A transação, lida no SQL (issue #627)
+# ---------------------------------------------------------------------------
+#
+# O Supabase falso acima é fiel à transação porque eu o escrevi assim, e isso
+# não prova nada sobre o banco: quem faz o `INSERT` recusado desfazer o `UPDATE`
+# em produção é o Postgres, e o que decide se ele vai fazer isso está no arquivo
+# da migration. Por isso os guardas abaixo leem o SQL.
+#
+# Eles são exercidos contra SQL SINTÉTICO nos dois sentidos, e não só contra a
+# migration de hoje. Rodar só contra o repositório real provaria pouco: ele está
+# certo agora, então o guarda ficaria verde mesmo com as regras apagadas.
+
+
+def _sem_comentarios(sql: str) -> str:
+    """O SQL sem as linhas de `--`. Sem isto, o guarda do `EXCEPTION` casaria
+    com o cabeçalho da própria migration, que explica por extenso por que o
+    bloco não existe, e reprovaria o arquivo certo."""
+    return "\n".join(linha.split("--")[0] for linha in sql.splitlines())
+
+
+def _declaracao_e_corpo(sql: str, funcao: str) -> tuple[str, str]:
+    """A declaração (do `CREATE` até o `AS $$`) e o CORPO da função.
+
+    O corpo é o que está ENTRE os dois `$$`, e é essa fronteira que dá sentido
+    ao guarda: escrita que caia fora dela é outra transação."""
+    achado = re.search(rf"CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?{funcao}\s*\(", sql, re.IGNORECASE)
+    assert achado is not None, f"`{funcao}` não é criada neste SQL"
+    abertura = sql.index("$$", achado.start())
+    fechamento = sql.index("$$", abertura + 2)
+    return sql[achado.start() : abertura], sql[abertura + 2 : fechamento]
+
+
+def _tem_bloco_exception(corpo: str) -> bool:
+    """O bloco que reintroduziria o fail-open dentro da transação."""
+    return re.search(r"\bEXCEPTION\b", _sem_comentarios(corpo), re.IGNORECASE) is not None
+
+
+def _escritas_do_corpo(corpo: str) -> set[str]:
+    """As tabelas que o corpo da função escreve, pelo comando que as alcança."""
+    limpo = _sem_comentarios(corpo)
+    escritas = set()
+    if re.search(r"\bUPDATE\s+ouvidoria_protocolos\b", limpo, re.IGNORECASE):
+        escritas.add("ouvidoria_protocolos")
+    if re.search(r"\bINSERT\s+INTO\s+ouvidoria_acessos\b", limpo, re.IGNORECASE):
+        escritas.add("ouvidoria_acessos")
+    return escritas
+
+
+def _entre_parenteses(texto: str, abertura: int) -> str:
+    """O que está entre o parêntese aberto em `abertura` e o que o FECHA.
+
+    Regex não serve: `VARCHAR(10)` tem parênteses aninhados, e a declaração
+    inteira ainda traz o `RETURNS TABLE (...)` depois da lista de parâmetros.
+    Cortar no primeiro (ou no último) `)` devolveria lista torta nos dois
+    sentidos."""
+    profundidade = 0
+    for i in range(abertura, len(texto)):
+        if texto[i] == "(":
+            profundidade += 1
+        elif texto[i] == ")":
+            profundidade -= 1
+            if profundidade == 0:
+                return texto[abertura + 1 : i]
+    raise AssertionError("Parêntese aberto e nunca fechado no SQL.")
+
+
+def _recorte_do_update(corpo: str) -> set[str]:
+    """As condições que o `UPDATE` do corpo carrega, pelo que elas recortam.
+
+    Existe porque o recorte MUDOU DE LADO na issue #627: até a migration 101 ele
+    era `.eq("status", ...)` e `.is_("arquivada_em", "null")` em Python, e os
+    testes do lote o exerciam de verdade contra o Supabase falso. Agora ele mora
+    no SQL, e o fake o reimplementa: sem este guarda, apagar a linha do filtro na
+    migration deixaria todos aqueles testes verdes sobre um banco que passou a
+    arquivar caso em andamento e a reescrever o autor de uma leva antiga."""
+    limpo = _sem_comentarios(corpo)
+    recorte = set()
+    if re.search(r"status\s*=\s*'encerrado'", limpo, re.IGNORECASE):
+        recorte.add("so_encerrado")
+    if re.search(r"arquivada_em\s+IS\s+NULL", limpo, re.IGNORECASE):
+        recorte.add("so_sem_arquivo")
+    return recorte
+
+
+def _carimbos_do_update(corpo: str) -> set[str]:
+    """As colunas que o `UPDATE` grava. As duas andam juntas desde a migration
+    099: sem `arquivada_por`, o caso sai da vista sem dizer por quem, que é
+    metade do dano que esta issue existe para impedir."""
+    limpo = _sem_comentarios(corpo)
+    atribuidas = set()
+    if re.search(r"arquivada_em\s*=\s*now\(\)", limpo, re.IGNORECASE):
+        atribuidas.add("arquivada_em")
+    if re.search(r"arquivada_por\s*=\s*p_ator_id", limpo, re.IGNORECASE):
+        atribuidas.add("arquivada_por")
+    return atribuidas
+
+
+def _parametros(declaracao: str) -> list[str]:
+    """Os nomes dos parâmetros, na ordem, lidos da declaração."""
+    lista = _entre_parenteses(declaracao, declaracao.index("("))
+    partes: list[str] = []
+    atual: list[str] = []
+    profundidade = 0
+    for caractere in lista:
+        if caractere == "(":
+            profundidade += 1
+        elif caractere == ")":
+            profundidade -= 1
+        if caractere == "," and profundidade == 0:
+            partes.append("".join(atual))
+            atual = []
+        else:
+            atual.append(caractere)
+    partes.append("".join(atual))
+    return [parte.split()[0] for parte in partes if parte.split()]
+
+
+def _migration_do_lote() -> tuple[str, str]:
+    """O arquivo de migration que cria a RPC do lote, e o SQL dele.
+
+    Achado por varredura, e não por nome escrito à mão: renumerar a migration é
+    rotina nesta casa (sessões paralelas colidem no número), e um caminho fixo
+    aqui quebraria o guarda por um motivo que não é o dele."""
+    achados = []
+    for arquivo in sorted(os.listdir(MIGRATIONS)):
+        if not arquivo.endswith(".sql"):
+            continue
+        with open(os.path.join(MIGRATIONS, arquivo), encoding="utf-8") as f:
+            sql = f.read()
+        if re.search(rf"CREATE\s+(?:OR\s+REPLACE\s+)?FUNCTION\s+(?:public\.)?{RPC_DO_LOTE}\s*\(", sql, re.IGNORECASE):
+            achados.append((arquivo, sql))
+    assert len(achados) == 1, f"a RPC do lote precisa nascer em UMA migration só, e está em {[a for a, _ in achados]}"
+    return achados[0]
+
+
+class TestATransacaoNoSQLDaRpc:
+    """O que faz o log recusado desfazer o arquivamento mora no SQL, não aqui.
+
+    Estes guardas não rodam o Postgres: eles cobram do arquivo as coisas sem as
+    quais o banco NÃO desfaz nada, e cada uma tem um mutante que a mata.
+    """
+
+    def test_as_duas_escritas_moram_no_corpo_da_mesma_funcao(self):
+        """A issue inteira em uma asserção: uma transação só.
+
+        Não basta as duas escritas existirem no arquivo; elas têm que estar
+        DENTRO do `$$ ... $$`. Um `INSERT` que voltasse para depois do `END`
+        seria outro comando, com o mesmo bug de hoje."""
+        _, sql = _migration_do_lote()
+
+        _, corpo = _declaracao_e_corpo(sql, RPC_DO_LOTE)
+
+        assert _escritas_do_corpo(corpo) == {"ouvidoria_protocolos", "ouvidoria_acessos"}
+
+    def test_a_funcao_nao_tem_bloco_exception(self):
+        """O log NÃO é fail-open aqui dentro. Um `EXCEPTION WHEN OTHERS` engole
+        a falha do `INSERT`, a função devolve a contagem como se nada tivesse
+        acontecido, e o lote volta a ficar arquivado sem rastro, agora com a
+        transação inteira verde e sem nem o log de aplicação para contar."""
+        _, sql = _migration_do_lote()
+
+        _, corpo = _declaracao_e_corpo(sql, RPC_DO_LOTE)
+
+        assert not _tem_bloco_exception(corpo)
+
+    def test_o_recorte_do_lote_continua_no_update(self):
+        """O recorte mudou de lado nesta issue: era `.eq()` e `.is_()` em
+        Python, e agora vive no SQL. Os testes do lote que provam que o caso em
+        andamento fica intocado e que a leva antiga não é regravada passaram a
+        exercer o Supabase falso, e não o banco: é este guarda que os impede de
+        virar vácuo se a linha do filtro sumir da migration."""
+        _, sql = _migration_do_lote()
+
+        _, corpo = _declaracao_e_corpo(sql, RPC_DO_LOTE)
+
+        assert _recorte_do_update(corpo) == {"so_encerrado", "so_sem_arquivo"}
+
+    def test_o_update_carimba_as_duas_colunas_do_arquivo(self):
+        """Quem e quando andam juntos desde a migration 099. Um `UPDATE` que
+        esquecesse `arquivada_por` esconderia o caso sem dizer por quem, com o
+        log de acesso gravado do mesmo jeito e a contagem certa na tela."""
+        _, sql = _migration_do_lote()
+
+        _, corpo = _declaracao_e_corpo(sql, RPC_DO_LOTE)
+
+        assert _carimbos_do_update(corpo) == {"arquivada_em", "arquivada_por"}
+
+    def test_a_contagem_volta_como_linha_e_nao_como_escalar(self):
+        """O par de `test_o_cliente_de_verdade_recusa_a_contagem_escalar`:
+        aquele prova que o cliente recusa o escalar, este prova que a migration
+        não manda escalar. Sem os dois, `RETURNS INTEGER` passaria aqui e
+        quebraria o lote em produção DEPOIS do commit."""
+        _, sql = _migration_do_lote()
+
+        declaracao, _ = _declaracao_e_corpo(sql, RPC_DO_LOTE)
+
+        assert re.search(r"RETURNS\s+TABLE\s*\(\s*arquivadas\b", declaracao, re.IGNORECASE), declaracao
+
+    def test_os_parametros_da_rota_sao_os_da_funcao(self, monkeypatch):
+        """No Postgres a função é o nome MAIS os argumentos, e o PostgREST casa
+        a chamada pelos NOMES deles. Uma rota que mandasse `p_ator` para uma
+        função que declara `p_ator_id` levaria PGRST202 em produção com tudo
+        verde aqui, porque o Supabase falso aceita qualquer dicionário.
+
+        O lado da rota é lido de uma chamada de verdade, e não do código: é a
+        mesma chamada que a produção faz."""
+        _, sql = _migration_do_lote()
+        declaracao, _ = _declaracao_e_corpo(sql, RPC_DO_LOTE)
+        client, supabase = _client(monkeypatch, casos=[_caso(1)])
+
+        assert _arquivar_o_lote(client).status_code == 200
+
+        nome, params = supabase.rpcs[-1]
+        assert nome == RPC_DO_LOTE
+        assert sorted(params) == sorted(_parametros(declaracao))
+
+    def test_a_rpc_do_lote_perde_o_execute_das_roles_do_bundle(self):
+        """A função ESCREVE em duas tabelas, e o `ALTER DEFAULT PRIVILEGES` do
+        Supabase concede EXECUTE a `anon` e `authenticated` por nome no momento
+        em que ela nasce (a lição das migrations 095 e 097). O `REVOKE` e o
+        `GRANT` são cobrados com a ASSINATURA, e não só com o nome: fechar
+        `(TEXT, TEXT)` onde a função declara `(VARCHAR, TEXT)` fecha uma função
+        que não existe e deixa a de verdade aberta."""
+        _, sql = _migration_do_lote()
+        limpo = _sem_comentarios(sql)
+
+        revogado = re.search(
+            rf"REVOKE\s+EXECUTE\s+ON\s+FUNCTION\s+{RPC_DO_LOTE}\s*\(\s*VARCHAR\s*,\s*TEXT\s*\)\s*FROM\s+([^;]+);",
+            limpo,
+            re.IGNORECASE,
+        )
+        assert revogado is not None, "sem REVOKE com a assinatura certa, a anon_key alcança o corpo da função"
+        for role in ("PUBLIC", "anon", "authenticated"):
+            assert re.search(rf"\b{role}\b", revogado.group(1), re.IGNORECASE), role
+
+        assert re.search(
+            rf"GRANT\s+EXECUTE\s+ON\s+FUNCTION\s+{RPC_DO_LOTE}\s*\(\s*VARCHAR\s*,\s*TEXT\s*\)\s*TO\s+service_role\s*;",
+            limpo,
+            re.IGNORECASE,
+        ), "sem o GRANT explícito, o backend fica dependendo do default privilege que criou este tipo de furo"
+
+
+class TestOsGuardasDoSQLReprovamOQueDevem:
+    """Os detectores da classe acima, exercitados nos dois sentidos contra SQL
+    sintético. Sem esta classe, uma regex que deixasse de casar transformaria
+    todos os guardas de cima em vácuo silencioso."""
+
+    FUNCAO_CERTA = """
+    CREATE OR REPLACE FUNCTION ouvidoria_arquivar_encerrados(p_ator_id VARCHAR, p_ator_nome TEXT)
+    RETURNS TABLE (arquivadas INTEGER)
+    LANGUAGE plpgsql
+    AS $$
+    BEGIN
+      -- Sem EXCEPTION aqui, de proposito.
+      WITH c AS (UPDATE ouvidoria_protocolos SET arquivada_em = now(), arquivada_por = p_ator_id
+                  WHERE status = 'encerrado' AND arquivada_em IS NULL RETURNING id)
+      SELECT array_agg(id) INTO v FROM c;
+      INSERT INTO ouvidoria_acessos (manifestacao_id) SELECT unnest(v);
+      RETURN NEXT;
+    END;
+    $$;
+    """
+
+    def test_o_guarda_do_exception_ignora_a_palavra_em_comentario(self):
+        """O sentido que mantém o arquivo de verdade verde: o cabeçalho da
+        migration explica o bloco que ela não tem, e essa explicação não pode
+        reprovar a própria migration."""
+        _, corpo = _declaracao_e_corpo(self.FUNCAO_CERTA, "ouvidoria_arquivar_encerrados")
+
+        assert not _tem_bloco_exception(corpo)
+
+    def test_o_guarda_do_exception_pega_o_fail_open_de_verdade(self):
+        """O mutante que a issue #627 existe para impedir."""
+        fail_open = self.FUNCAO_CERTA.replace(
+            "RETURN NEXT;",
+            "RETURN NEXT;\n    EXCEPTION WHEN OTHERS THEN\n      RETURN NEXT;",
+        )
+
+        _, corpo = _declaracao_e_corpo(fail_open, "ouvidoria_arquivar_encerrados")
+
+        assert _tem_bloco_exception(corpo)
+
+    def test_o_guarda_das_escritas_pega_o_log_que_saiu_do_corpo(self):
+        """A outra forma de reabrir a janela: o `INSERT` continua no arquivo,
+        mas DEPOIS do `END`. São duas transações de novo, e um guarda que só
+        procurasse a string no arquivo inteiro ficaria verde."""
+        fora = self.FUNCAO_CERTA.replace(
+            "INSERT INTO ouvidoria_acessos (manifestacao_id) SELECT unnest(v);", ""
+        ).replace("$$;", "$$;\n    INSERT INTO ouvidoria_acessos (manifestacao_id) VALUES ('x');")
+
+        _, corpo = _declaracao_e_corpo(fora, "ouvidoria_arquivar_encerrados")
+
+        assert _escritas_do_corpo(corpo) == {"ouvidoria_protocolos"}
+
+    def test_o_guarda_das_escritas_pega_o_update_que_saiu_do_corpo(self):
+        """O sentido espelhado: o carimbo por fora e o log por dentro erram
+        exatamente igual, e um guarda que só olhasse o `INSERT` não veria."""
+        sem_update = self.FUNCAO_CERTA.replace("UPDATE ouvidoria_protocolos", "SELECT id FROM ouvidoria_protocolos")
+
+        _, corpo = _declaracao_e_corpo(sem_update, "ouvidoria_arquivar_encerrados")
+
+        assert _escritas_do_corpo(corpo) == {"ouvidoria_acessos"}
+
+    def test_o_guarda_do_recorte_le_as_duas_condicoes(self):
+        _, corpo = _declaracao_e_corpo(self.FUNCAO_CERTA, "ouvidoria_arquivar_encerrados")
+
+        assert _recorte_do_update(corpo) == {"so_encerrado", "so_sem_arquivo"}
+
+    @pytest.mark.parametrize(
+        ("apagado", "sobra"),
+        [
+            ("status = 'encerrado' AND ", {"so_sem_arquivo"}),
+            (" AND arquivada_em IS NULL", {"so_encerrado"}),
+        ],
+        ids=["sem_o_filtro_de_estado", "sem_o_filtro_do_arquivo"],
+    )
+    def test_o_guarda_do_recorte_pega_a_condicao_que_sumiu(self, apagado, sobra):
+        """Um mutante por condição, porque um guarda que só olhasse uma delas
+        ficaria verde sobre a outra. Sem o estado, o lote esconde caso em
+        andamento; sem o arquivo, ele reescreve o autor da leva antiga."""
+        mutante = self.FUNCAO_CERTA.replace(apagado, "")
+
+        _, corpo = _declaracao_e_corpo(mutante, "ouvidoria_arquivar_encerrados")
+
+        assert _recorte_do_update(corpo) == sobra
+
+    def test_o_guarda_dos_carimbos_pega_o_autor_que_sumiu(self):
+        sem_autor = self.FUNCAO_CERTA.replace(", arquivada_por = p_ator_id", "")
+
+        _, corpo = _declaracao_e_corpo(sem_autor, "ouvidoria_arquivar_encerrados")
+
+        assert _carimbos_do_update(corpo) == {"arquivada_em"}
+
+    def test_o_leitor_de_parametros_le_os_nomes_na_ordem(self):
+        declaracao, _ = _declaracao_e_corpo(self.FUNCAO_CERTA, "ouvidoria_arquivar_encerrados")
+
+        assert _parametros(declaracao) == ["p_ator_id", "p_ator_nome"]
+
+    def test_o_leitor_de_parametros_aguenta_o_tipo_com_parenteses(self):
+        """`VARCHAR(10)` tem parênteses dentro, e é o tipo da coluna que guarda
+        o ator. Um leitor que cortasse no primeiro `)` devolveria lista torta e
+        o teste dos parâmetros ficaria verde sobre metade da assinatura."""
+        com_tamanho = self.FUNCAO_CERTA.replace("p_ator_id VARCHAR", "p_ator_id VARCHAR(10)")
+
+        declaracao, _ = _declaracao_e_corpo(com_tamanho, "ouvidoria_arquivar_encerrados")
+
+        assert _parametros(declaracao) == ["p_ator_id", "p_ator_nome"]

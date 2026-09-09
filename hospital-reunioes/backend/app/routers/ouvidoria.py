@@ -687,9 +687,12 @@ async def require_diretoria_executiva(
 
 
 def _linha_de_acesso(me: dict, manifestacao_id: str, acao: str) -> dict:
-    """A linha do log de acesso. Um formato só para o ato de um caso e para o
-    lote: separados, o segundo nasceria sem `ator_nome` no dia em que alguém
-    mexesse só no primeiro."""
+    """A linha do log de acesso do ato de UM caso.
+
+    O lote saiu daqui na issue #627: ele monta a linha dentro da própria
+    transação do banco (migration 101), porque é justamente essa fronteira que
+    impede o lote de ficar arquivado sem rastro. As colunas são as mesmas nos
+    dois caminhos, e o dia em que o log ganhar uma coluna, os dois a ganham."""
     return {
         "manifestacao_id": manifestacao_id,
         "ator_id": me["id"],
@@ -706,43 +709,6 @@ def registrar_acesso(supabase, me: dict, manifestacao_id: str, acao: str) -> Non
         supabase.table("ouvidoria_acessos").insert(_linha_de_acesso(me, manifestacao_id, acao)).execute()
     except Exception:
         logger.warning("Falha ao registrar acesso à manifestação %s", manifestacao_id)
-
-
-def registrar_acessos_em_lote(supabase, me: dict, manifestacao_ids: list[str], acao: str) -> None:
-    """O mesmo registro, um por caso, num insert só (issue #594).
-
-    Existe porque o lote do Arquivo age sobre a fila inteira: com uma chamada
-    por caso, arquivar duzentos encerrados seriam duzentas idas ao PostgREST
-    depois de o ato já estar gravado, e o ouvidor esperaria por um log.
-
-    A linha sai da MESMA função que a do ato de um caso: o dia em que o log
-    ganhar uma coluna, os dois caminhos a ganham juntos.
-
-    Falha aqui também não derruba nada, pela razão de sempre: o arquivamento já
-    valeu no banco, e um 500 depois dele mandaria o ouvidor repetir um lote que
-    já aconteceu.
-
-    Mas o silêncio do fail-open muda de peso com o volume, e por isso o warning
-    carrega o ATOR e os IDS, e não só a contagem. O insert é um só: uma recusa
-    apaga de uma vez o rastro de todos os casos do lote, e arquivar não entra na
-    trilha (desarquivar ainda apaga os dois carimbos). Sem estes dois dados, o
-    log de aplicação, que é a última rede, não diria quem escondeu o quê. A
-    lista sai inteira de propósito: cortá-la perderia exatamente o rastro que
-    esta linha existe para guardar."""
-    if not manifestacao_ids:
-        return
-    try:
-        supabase.table("ouvidoria_acessos").insert(
-            [_linha_de_acesso(me, manifestacao_id, acao) for manifestacao_id in manifestacao_ids]
-        ).execute()
-    except Exception:
-        logger.warning(
-            "Falha ao registrar o acesso '%s' do lote de %d manifestações pedido por %s. Casos atingidos: %s",
-            acao,
-            len(manifestacao_ids),
-            me["id"],
-            ", ".join(manifestacao_ids),
-        )
 
 
 def carimbar_visto_da_ouvidoria(supabase, manifestacao_id: str, agora: dt.datetime) -> None:
@@ -1790,25 +1756,12 @@ async def desarquivar_manifestacao(
     return gravado
 
 
-def _so_o_id_de_volta(escrita):
-    """Faz a escrita devolver só a coluna `id`, e não a linha inteira.
-
-    O PostgREST aceita `?select=id` também no PATCH. Quem não expõe isso é o
-    cliente Python: `update()` devolve um builder de filtros, sem `.select()`.
-    O parâmetro entra pela MESMA porta por onde `.eq()` e `.is_()` entram
-    (`request.params`), que é o caminho que a própria biblioteca usa para
-    montar a query.
-
-    Sem isto, o lote traz `relato_integral`, `manifestante_nome` e
-    `manifestante_contato` de todo caso arquivado só para a rota ler
-    `row["id"]`: seria o maior volume de dado sensível do módulo trafegando
-    sem uso nenhum.
-
-    `test_o_update_do_lote_pede_so_o_id_ao_cliente_de_verdade` prende esta
-    linha ao cliente REAL, e não ao Supabase falso: é atributo de biblioteca, e
-    um fake ficaria verde na versão em que ele mudasse de nome."""
-    escrita.request.params = escrita.request.params.set("select", "id")
-    return escrita
+# A função do banco que arquiva o lote e grava o log de acesso na MESMA
+# transação (migration 101, issue #627). O nome vive aqui, e não dentro da
+# rota, porque o teste da assinatura lê daqui o lado do código e do SQL o lado
+# do banco: os dois precisam falar do mesmo nome, e o PostgREST casa a chamada
+# pelos nomes dos parâmetros.
+RPC_DO_LOTE_DO_ARQUIVO = "ouvidoria_arquivar_encerrados"
 
 
 @router.post("/manifestacoes/arquivo-dos-encerrados")
@@ -1819,7 +1772,7 @@ async def arquivar_os_encerrados(
     supabase=Depends(get_supabase_client),
 ):
     """Guarda de uma vez todo caso encerrado que ainda não está no arquivo
-    (issue #594, PRD #591, ADR 0047).
+    (issue #594, PRD #591, ADR 0047), numa transação só (issue #627).
 
     É o ato da rota de cima, repetido: as mesmas duas colunas, a mesma
     pré-condição de estado, nenhum movimento na trilha e nenhuma passagem pela
@@ -1843,53 +1796,46 @@ async def arquivar_os_encerrados(
     outra pessoa entre a carga da tela e o clique, e aí quem diz a verdade é a
     contagem devolvida, sobre a qual a tela recarrega.
 
-    **O filtro do arquivo vive no UPDATE, e não numa leitura anterior.** É ele
-    que faz a segunda rodada devolver zero, e é ele que impede o lote de
-    reescrever quem e quando de uma leva antiga: sem ele, um lote rodado hoje
-    carimbaria com o nome de quem clicou agora um caso que outra pessoa
-    guardou em julho. Pela mesma razão o `status` é filtrado no update e não só
-    conferido antes: é a trava contra a reabertura que caia no meio (a mesma
-    janela TOCTOU que `_gravar_o_arquivo` fecha para um caso).
+    **O filtro do arquivo vive no UPDATE, e não numa leitura anterior.** Ele
+    mora dentro da RPC, e é ele que faz a segunda rodada devolver zero e que
+    impede o lote de reescrever quem e quando de uma leva antiga: sem ele, um
+    lote rodado hoje carimbaria com o nome de quem clicou agora um caso que
+    outra pessoa guardou em julho. Pela mesma razão o `status` é filtrado no
+    update e não só conferido antes: é a trava contra a reabertura que caia no
+    meio (a mesma janela TOCTOU que `_gravar_o_arquivo` fecha para um caso).
 
-    **A contagem vem do `Content-Range`, e não das linhas devolvidas.** É a
-    contagem das linhas AFETADAS pelo update, que é a pergunta que o ouvidor
-    faz ("quantas foram?"). Contar o corpo da resposta amarraria o número a
-    quanto o servidor decidiu devolver, e o módulo já foi mordido por corte
-    silencioso de resposta (issue #430): o sintoma sai no número, nunca no
-    erro. Assim o número não depende de versão nem de configuração de
-    servidor. O corpo continua vindo, reduzido ao `id` (`_so_o_id_de_volta`),
-    porque o log de acesso precisa saber QUAIS casos foram guardados; se ele
-    vier mais curto que a contagem, quem perde linha é o log, e não o número
-    que a tela mostra.
+    **UMA ida ao banco, e é ela que fecha a janela da issue #627.** Até a
+    migration 101 esta rota fazia duas escritas em sequência: o `UPDATE` dos
+    carimbos e o `INSERT` do log de acesso. Entre as duas havia uma janela que
+    nenhum `except` fecha, porque a exceção acontece aqui e o commit acontece
+    lá: num timeout o cliente desiste de esperar, mas o `UPDATE` pode ter
+    commitado, e o log nunca roda. O resultado eram N casos arquivados sem
+    rastro nenhum (arquivar não entra na trilha, e desarquivar apaga os dois
+    carimbos), enquanto a tela dizia que falhou.
 
-    **As duas falhas entram na captura, e o que ela resolve é o código, não a
-    janela.** Timeout e conexão recusada sobem como `HTTPError`, que
-    `APIError` não pega, e esta é a escrita mais pesada do módulo, ou seja, a
-    que estoura o timeout do cliente. Capturando, o ouvidor recebe 503 com
-    frase própria em vez de 500 genérico, e a tela não some com nada.
+    Dentro da RPC as duas escritas são a mesma transação, e o log DEIXOU de ser
+    fail-open: recusa no `INSERT` desfaz o `UPDATE`. É o que se quer, porque o
+    custo do fail-open aqui não é "o ouvidor perde o log", e sim "o lote fica
+    sem rastro", que é o dano que a issue nomeia. O ato de UM caso continua
+    como estava (`registrar_acesso`, fail-open): a janela existe lá igual, mas
+    o raio dela é 1.
 
-    O que a captura NÃO faz, e nenhum `except` faria: fechar a janela entre o
-    update e o log. Num timeout, o cliente desiste de esperar, mas o UPDATE
-    pode ter COMMITADO no banco, e a linha do log nunca roda. Nesse caso os
-    casos ficam arquivados sem rastro nenhum (arquivar não entra na trilha, e
-    desarquivar apaga os dois carimbos), enquanto a tela diz que falhou. O
-    conserto de verdade é o update e o log na MESMA transação, por RPC, e está
-    fora desta fatia: issue #627."""
+    **As duas famílias de falha entram na captura.** Timeout e conexão recusada
+    sobem como `HTTPError`, que `APIError` não pega, e esta é a escrita mais
+    pesada do módulo. Capturando, o ouvidor recebe 503 com frase própria em vez
+    de 500 genérico, e agora o 503 diz a verdade inteira: a transação não
+    commitou, então nada ficou arquivado e o lote pode ser repetido em paz."""
     try:
-        atualizadas = _so_o_id_de_volta(
-            supabase.table("ouvidoria_protocolos")
-            .update(
-                {"arquivada_em": agora_utc().isoformat(), "arquivada_por": me["id"]},
-                count="exact",
-            )
-            .eq("status", "encerrado")
-            .is_("arquivada_em", "null")
+        resultado = supabase.rpc(
+            RPC_DO_LOTE_DO_ARQUIVO,
+            {"p_ator_id": me["id"], "p_ator_nome": me.get("nome_completo") or me["id"]},
         ).execute()
     except (APIError, HTTPError) as exc:
-        # O código entra na linha: sem ele, o 503 da coluna que não existe (a
-        # migration 099 ainda não aplicada) e o 503 do timeout viram a mesma
-        # frase no log, e quem depura em produção não distingue as duas.
-        # `HTTPError` não tem `code`, e é por isso que o acesso é tolerante.
+        # O código entra na linha: sem ele, o 503 da função que não existe (a
+        # migration 101 ainda não aplicada, PGRST202) e o 503 do timeout viram
+        # a mesma frase no log, e quem depura em produção não distingue as
+        # duas. `HTTPError` não tem `code`, e é por isso que o acesso é
+        # tolerante.
         logger.error(
             "Falha ao arquivar o lote dos encerrados: %s (código %s)",
             exc.__class__.__name__,
@@ -1899,12 +1845,12 @@ async def arquivar_os_encerrados(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Não foi possível arquivar agora. Tente de novo em instantes.",
         ) from exc
-    guardadas = [row["id"] for row in (atualizadas.data or []) if row.get("id")]
-    registrar_acessos_em_lote(supabase, me, guardadas, "arquivar")
-    # O fallback existe para o servidor que não devolveu o cabeçalho: aí o que
-    # veio no corpo é a melhor verdade disponível, e é melhor que um zero sobre
-    # um lote que aconteceu.
-    return {"arquivadas": atualizadas.count if atualizadas.count is not None else len(guardadas)}
+    # `RETURNS TABLE (arquivadas INTEGER)`: uma linha de uma coluna. O escalar
+    # nu que o PostgREST devolveria de um `RETURNS INTEGER` nem chegaria aqui,
+    # porque o `APIResponse` do postgrest-py declara `data: List[JSON]` e
+    # levantaria ValidationError DEPOIS de a transação já ter commitado.
+    linhas = resultado.data or []
+    return {"arquivadas": linhas[0]["arquivadas"] if linhas else 0}
 
 
 # =====================================================================
