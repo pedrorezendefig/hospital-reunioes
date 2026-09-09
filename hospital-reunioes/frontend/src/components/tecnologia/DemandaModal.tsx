@@ -11,7 +11,9 @@
  * próprio para cada um. Um "Salvar" que mandasse tudo junto esconderia dentro
  * de uma edição de texto uma mudança que o quadro inteiro precisa ver.
  *
- * Responder no fio é da issue #638: aqui a Conversa é só leitura.
+ * A Conversa, com o fio e as duas portas de escrita, mora no
+ * `ConversaDaDemanda` (issue #638). Quem carrega o fio continua sendo o modal,
+ * porque mover e atribuir também acrescentam linha nele.
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -20,6 +22,7 @@ import { AlertCircle, Save } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { Select } from "@/components/ui/Select";
 
+import { ConversaDaDemanda } from "./ConversaDaDemanda";
 import { TipoIcone } from "./TipoIcone";
 import {
   BASE_TECNOLOGIA,
@@ -29,7 +32,6 @@ import {
   EstadoDemanda,
   FALHA_DE_CONEXAO,
   LinhaDaConversa,
-  momentoLegivel,
   motivoDaRecusa,
   PessoaDaAba,
   PRIORIDADE_ROTULO,
@@ -283,31 +285,14 @@ export function DemandaModal({ demanda, produtos, pessoas, token, onFechar, onMu
           </div>
         </div>
 
-        <section aria-labelledby="titulo-conversa" className="pt-4 border-t border-border">
-          <h3 id="titulo-conversa" className="text-sm font-semibold text-text">
-            Conversa
-          </h3>
-          {conversa.length === 0 ? (
-            <p className="mt-2 text-sm text-text-secondary">Nada aconteceu nesta Demanda ainda.</p>
-          ) : (
-            <ol className="mt-2 space-y-2">
-              {conversa.map((linha) => (
-                <li
-                  key={linha.id}
-                  className={`px-3 py-2 rounded-lg text-sm ${
-                    linha.linha === "movimento" ? "bg-slate-50 text-text-secondary" : "bg-white border border-border"
-                  }`}
-                >
-                  <span className="block">
-                    {linha.autor_nome ? <strong className="font-medium text-text">{linha.autor_nome}: </strong> : null}
-                    {linha.texto}
-                  </span>
-                  <span className="block mt-0.5 text-xs text-slate-400">{momentoLegivel(linha.criado_em)}</span>
-                </li>
-              ))}
-            </ol>
-          )}
-        </section>
+        <ConversaDaDemanda
+          demandaId={demanda.id}
+          linhas={conversa}
+          pessoas={pessoas}
+          token={token}
+          onFioMudou={carregarConversa}
+          onErro={setErro}
+        />
       </div>
     </AdminModal>
   );

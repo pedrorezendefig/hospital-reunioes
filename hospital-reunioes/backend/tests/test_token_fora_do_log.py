@@ -98,6 +98,10 @@ PARAMS_SEM_SEGREDO = {
     "id_reuniao",
     "index",
     "item_id",
+    # UUID da linha da Conversa da Demanda (issue #638). Nao e credencial: a
+    # rota exige `require_super_admin`, e a edicao ainda amarra a Demanda do
+    # caminho, entao o id sozinho nao abre porta nenhuma.
+    "linha_id",
     "manifestacao_id",
     "marco",
     "material_id",

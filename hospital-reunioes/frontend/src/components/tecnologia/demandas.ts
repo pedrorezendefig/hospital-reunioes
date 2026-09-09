@@ -74,8 +74,19 @@ export type LinhaDaConversa = {
   autor_nome: string | null;
   linha: string;
   texto: string;
+  mencoes: string[];
   movimento_campo: string | null;
   criado_em: string | null;
+  editado_em: string | null;
+  /**
+   * Até quando ESTA pessoa pode corrigir ESTA linha, dito pelo backend.
+   *
+   * A tela não sabe qual participante é o usuário logado: o `useAuth` carrega
+   * o id do Supabase Auth, e não o `participantes.id` que assina a linha. Vem
+   * o instante, e não um "pode: sim", porque o modal fica aberto enquanto os
+   * 10 minutos correm.
+   */
+  editavel_ate: string | null;
 };
 
 /** A ordem das colunas no Quadro. */
@@ -184,4 +195,117 @@ export function momentoLegivel(quando: string | null): string {
   const d = new Date(quando);
   if (Number.isNaN(d.getTime())) return "";
   return d.toLocaleString("pt-BR", { dateStyle: "short", timeStyle: "short" });
+}
+
+/**
+ * A janela de correção, do lado da tela (issue #638).
+ *
+ * Quem recusa de verdade é o backend, que responde 422 depois dos 10 minutos.
+ * Esta conta existe para a tela não oferecer um clique que já se sabe recusado.
+ *
+ * A conta roda a cada render, e não num relógio próprio: um modal aberto e
+ * parado desde antes do prazo ainda mostra o botão, e quem clicar lê a recusa
+ * honesta do backend. Um `setInterval` só para apagar um botão custaria mais do
+ * que resolve.
+ */
+export function podeCorrigirAgora(editavelAte: string | null, agora: Date = new Date()): boolean {
+  if (!editavelAte) return false;
+  const limite = new Date(editavelAte);
+  if (Number.isNaN(limite.getTime())) return false;
+  return limite.getTime() >= agora.getTime();
+}
+
+/**
+ * O que a pessoa digitou depois do último @, ou `null` quando não há menção
+ * em aberto.
+ *
+ * O termo vai até o fim do texto porque nome tem espaço ("Sócia Vitta"), e
+ * parar no primeiro espaço nunca acharia o segundo nome. Quem fecha a lista é
+ * o filtro: assim que o termo deixa de ser começo de algum nome (a pessoa
+ * seguiu escrevendo a frase), nenhuma opção casa e o autocomplete some.
+ */
+export function termoDaMencao(texto: string): string | null {
+  const corte = texto.lastIndexOf("@");
+  if (corte < 0) return null;
+  const depois = texto.slice(corte + 1);
+  // Quebra de linha fecha a menção: o @ ficou num parágrafo anterior.
+  if (depois.includes("\n")) return null;
+  return depois;
+}
+
+/** As pessoas cujo nome começa pelo termo digitado, sem distinguir maiúsculas. */
+export function pessoasDoAutocomplete(termo: string, pessoas: PessoaDaAba[]): PessoaDaAba[] {
+  const alvo = termo.toLowerCase();
+  return pessoas.filter((p) => p.nome_completo.toLowerCase().startsWith(alvo));
+}
+
+/** Troca o @termo em aberto pelo nome escolhido, e deixa o cursor depois dele. */
+export function aplicarMencao(texto: string, nome: string): string {
+  const corte = texto.lastIndexOf("@");
+  const antes = corte < 0 ? texto : texto.slice(0, corte);
+  return `${antes}@${nome} `;
+}
+
+/**
+ * Dos escolhidos no autocomplete, os que o texto ainda chama.
+ *
+ * Apagar o "@Fulano" da frase tem que tirar a menção: senão a linha continuaria
+ * dizendo que chamou alguém que o texto não chama mais (e, na fatia do e-mail,
+ * avisaria essa pessoa à toa).
+ *
+ * Quem decide é o mesmo `pedacosDoTexto` que pinta o destaque, e não um
+ * `includes` por nome. Com `includes`, um nome que é começo de outro entrava de
+ * carona: "@Ana Souza Lima" gravava também a "Ana Souza", e o erro era MUDO,
+ * porque o destaque (que já resolvia o prefixo) marcava só o nome longo. A
+ * mesma frase tem que produzir a mesma resposta nos dois lugares, senão a tela
+ * e a coluna contam histórias diferentes.
+ */
+export function mencoesNoTexto(texto: string, escolhidas: PessoaDaAba[]): string[] {
+  const chamados = new Set(
+    pedacosDoTexto(
+      texto,
+      escolhidas.map((p) => p.nome_completo),
+    )
+      .filter((pedaco) => pedaco.mencao)
+      // O pedaço marcado carrega o "@" na frente; o nome é o resto.
+      .map((pedaco) => pedaco.texto.slice(1)),
+  );
+  return escolhidas.filter((p) => chamados.has(p.nome_completo)).map((p) => p.id);
+}
+
+/** Um pedaço do texto da linha: menção a destacar ou texto comum. */
+export type PedacoDoTexto = { texto: string; mencao: boolean };
+
+/**
+ * O texto quebrado em pedaços, com as menções marcadas.
+ *
+ * É o par na tela da coluna `mencoes`: sem ele, a lista gravada pelo backend
+ * não apareceria em lugar nenhum, e chamar alguém ficaria indistinguível de
+ * escrever o nome dela no meio da frase.
+ *
+ * Os nomes são procurados do mais longo para o mais curto porque um nome pode
+ * ser começo de outro: com "Ana" antes de "Ana Maria", "@Ana Maria" seria
+ * marcado pela metade.
+ */
+export function pedacosDoTexto(texto: string, nomesMencionados: string[]): PedacoDoTexto[] {
+  const alvos = [...nomesMencionados].sort((a, b) => b.length - a.length).map((nome) => `@${nome}`);
+  const pedacos: PedacoDoTexto[] = [];
+  let comum = "";
+  let i = 0;
+  while (i < texto.length) {
+    const achado = alvos.find((alvo) => texto.startsWith(alvo, i));
+    if (achado) {
+      if (comum) {
+        pedacos.push({ texto: comum, mencao: false });
+        comum = "";
+      }
+      pedacos.push({ texto: achado, mencao: true });
+      i += achado.length;
+    } else {
+      comum += texto[i];
+      i += 1;
+    }
+  }
+  if (comum) pedacos.push({ texto: comum, mencao: false });
+  return pedacos;
 }
