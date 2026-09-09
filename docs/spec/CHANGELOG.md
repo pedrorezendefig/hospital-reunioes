@@ -7,6 +7,23 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.123.2 - 2026-09-09 21:00 - as duas guardas de segurança que faltavam: anti-SSRF nos geradores de PDF e a recusa de caso apagado nas portas de escrita
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `bbe1fc0`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.123.2, `db: healthy`; frontend HTTP 200 com v0.123.2 no bundle servido)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/bbe1fc0
+- Issues: [#633](https://github.com/pedrorezendefig/hospital-reunioes/issues/633) · PR [#668](https://github.com/pedrorezendefig/hospital-reunioes/pull/668) (v0.123.2) e [#631](https://github.com/pedrorezendefig/hospital-reunioes/issues/631) · PR [#667](https://github.com/pedrorezendefig/hospital-reunioes/pull/667) (v0.123.1). Onda avulsa, fora de PRD
+- Migration: nenhuma. As colunas que a guarda de caso apagado lê já existiam (`anonimizada_em` na `079`, `apagamento_pedido_em` na `100`) · patch, fix
+- Nota: a guarda anti-SSRF do PDF estava **ausente**, nem inerte, em três geradores: Ata, relatório da Ouvidoria e cartaz dos pontos. Os três chamavam `HTML(...).write_pdf()` sem `url_fetcher` nenhum, com o fetcher padrão do WeasyPrint, que não recusa `file://` nem host interno
+- Nota: o erro histórico da #152 não reencarnou. O fetcher vai no construtor `HTML(...)`, que é onde o WeasyPrint de fato lê; passar só no `write_pdf()` faz a opção ser descartada em silêncio, e foi assim que a guarda do POP ficou morta por anos. Três mutantes travam isso, um por gerador
+- Nota: multicast e CGNAT (`100.64.0.0/10`) entraram como predicados novos. Os dois passavam por todos os outros seis, cada um pela mesma razão. Fechados de forma aditiva, sem trocar a base dos predicados, porque a triagem cravou que o comportamento do POP não muda
+- Nota: um comentário factualmente errado foi corrigido em cinco lugares. O WeasyPrint **não** normaliza o `..` da URL antes de entregar ao fetcher (`url_join` devolve `iri_to_uri`, que só faz percent-encoding). O que salva o asset legítimo é template e allowlist saírem da mesma expressão
+- Nota: must-fix pego na revisão do #667. O ramo do apagamento **pendente** devolve frase que nomeia a Diretoria Executiva, e com a guarda dentro do `responder` ela passaria a sair por link sem login para o titular da área, que numa manifestação costuma ser a parte reclamada. Resolvido com o parâmetro keyword-only `canal_publico`, que troca só esse ramo por frase neutra; toda porta com login segue com a frase completa
+- Nota: nos dois PRs o mutante que mais ensinou foi no **detector**. Tirar o campo da tupla do `select` deixava a guarda lendo `None` e a suíte inteira verde, que é exatamente a morte silenciosa da guarda do POP. 13 mutantes na #633 e 9 na #631, todos mortos
+- Nota: efeito visível em produção. Caso apagado cujo link de portal ainda circula passa a responder 409 com a frase do apagamento, no lugar do 410 "a Ouvidoria já movimentou este caso". Decisão deliberada de honestidade da mensagem, julgada pelas duas revisões
+- Nota: issue [#669](https://github.com/pedrorezendefig/hospital-reunioes/issues/669) aberta com o inventário das portas irmãs que continuam sem guarda. A guarda da migration `100` protege só a trilha, nunca `ouvidoria_protocolos`, então o banco não segura nenhuma delas
+
 ## v0.123.0 - 2026-09-09 19:55 - a aba Tecnologia fecha: Minha vez, Histórico com busca, aviso por e-mail e o Quadro que se atualiza sozinho
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `c0f36e1`

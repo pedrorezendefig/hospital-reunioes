@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-09T21:00:00-03:00",
+      "sha": "bbe1fc0",
+      "app_version": "0.123.2",
+      "subject": "duas guardas de seguranca que faltavam: anti-SSRF nos tres geradores de PDF sem guarda nenhuma, e a recusa de caso apagado nas duas portas de escrita fechadas so por acidente",
+      "raw_subject": "fix(pdf): guarda anti-SSRF compartilhada na Ata, no relatorio e no cartaz (#668)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 420,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda avulsa de duas issues de seguranca, fora de PRD, arquivos disjuntos, em paralelo. #633 (PR #668, v0.123.2): a guarda anti-SSRF do PDF estava AUSENTE, nem inerte, em tres geradores (Ata, relatorio da Ouvidoria, cartaz dos pontos). A guarda saiu de pops_pdf_service.py para pdf_url_fetcher.py e foi ligada nos tres, com o fetcher no construtor HTML(...), que e onde o WeasyPrint de fato le. Passar no write_pdf() e o erro da #152, que deixou a guarda do POP morta por anos em silencio. Multicast e CGNAT (100.64.0.0/10) entraram como predicados novos: os dois passavam por todos os outros. 13 mutantes mortos. O revisor renderizou os TRES templates reais (o PR so testava com template falso) e confirmou que a guarda nao recusa o logo legitimo. Um comentario factualmente ERRADO foi corrigido: o WeasyPrint NAO normaliza o .. da URL antes do fetcher (url_join devolve iri_to_uri, so percent-encoding); o que salva o asset e template e allowlist sairem da MESMA expressao. #631 (PR #667, v0.123.1): barrar_caso_apagado virou explicita em POST /ouvidoria-setor/{token}/responder e POST .../notificacoes/{id}/reenviar, que antes dependiam da pre-condicao de estado dar certo por consequencia. MUST-FIX pego na review: o ramo do apagamento PENDENTE devolve frase que nomeia a Diretoria Executiva, e com a guarda no portal ela passaria a sair por link sem login para o titular da area, que costuma ser a parte reclamada. Resolvido com o parametro keyword-only canal_publico, que troca so esse ramo por frase neutra; toda porta com login segue com a frase completa. O default ficou pinado nos dois sentidos por mutante. 9 mutantes mortos. Nos dois PRs o mutante mais importante foi no DETECTOR: tirar o campo da tupla do select deixava a guarda lendo None e a suite inteira verde. Nenhuma das duas criou migration. Issue #669 aberta com o inventario das portas irmas que sobraram sem guarda."
+    },
+    {
       "at": "2026-09-09T19:55:00-03:00",
       "sha": "c0f36e1",
       "app_version": "0.123.0",
@@ -1420,35 +1449,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PR #427, issue #415 (o que sobrou depois que o PR #414 fechou os 11 gates de papel). O soft delete gravava ativo=false e a conta do Supabase Auth seguia viva: o refresh token renovava sessao para sempre. Agora definir_login_liberado bane (ban_duration 876000h) e reabre (none), ligada nas tres portas que escrevem ativo E no provisionamento, porque nascer desligado tambem deixava conta viva. Falha do Auth nao desfaz o desligamento: registra, avisa o admin tecnico e segue. alertar_diretoria_sem_titular sem Diretoria ativa deixou de ser logger.warning e cai no admin tecnico. Sem migration. 10 mutantes, 10 mortos; suite em 2378. ACHADO GRAVE que saiu da review independente e NAO foi corrigido aqui: participantes.py e aceite.py nao tem gate de router, e PATCH /participantes/{id} grava em qualquer participante sem conferir dono, sincronizando o email no Supabase Auth. E cadeia de tomada de conta do Super Admin alcancavel por TODO usuario autenticado, nao so pelo desligado. Anterior a esta issue; virou a issue #440. O docstring de barrar_desligado foi corrigido no mesmo PR porque afirmava que essas rotas nao expunham dado de terceiros, o que e falso. Gates rodaram com revisores independentes (o autor nao se auto-revisa, ADR 0035): spec x diff, code review adversarial e seguranca, em paralelo. Os relatorios chegaram por arquivo, nao pelo canal de mensagem entre agentes, que devolveu so idle sem o texto."
-    },
-    {
-      "at": "2026-08-28T07:12:00-03:00",
-      "sha": "2e78a81",
-      "app_version": "0.81.4",
-      "subject": "Setor da manifestacao preso a taxonomia, com backfill do historico",
-      "raw_subject": "fix(ouvidoria): setor da manifestacao preso a taxonomia, com backfill do historico",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #424, issue #419. Sem migration de schema; traz o script backfill_setor_manifestacoes.py (dry-run por default), AINDA NAO RODADO em producao. Corrida de bump resolvida a mao: o PR #424 tambem pedia 0.81.3, foi re-bumpado para 0.81.4 e a main foi mergeada dentro da branch para resolver o conflito do package.json. O APP_VERSION do Coolify foi setado para 0.81.4 antes do merge, e o /api/health confirmou. Entre a v0.81.2 e esta subiu tambem o commit b9ec3b4 (PR #422, issue #410, so skills e docs, sem bump). Registro reconstruido em lote em 28/08/2026: os ships de 27/08 22:57 a 28/08 07:12 subiram por auto-deploy de webhook e nenhum passou pelo Passo 9 do /deploy ship, entao o history, o state e o CHANGELOG ficaram parados na v0.80.0 enquanto producao ja rodava a v0.81.4. Reconstruido a partir do git (commit, data, package.json) e do GitHub (PR e issue). Duracao de deploy nao registrada nesses ships: o dado nao existe mais."
     }
   ]
 }
