@@ -32,7 +32,11 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from slowapi import _rate_limit_exceeded_handler  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
+from app.limiter import limiter  # noqa: E402
 from app.models.tecnologia_schemas import (  # noqa: E402
     EstadoDemanda,
     PrioridadeDemanda,
@@ -76,6 +80,19 @@ from app.services.tecnologia import (  # noqa: E402
 
 
 @pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """O slowapi guarda a contagem num storage de PROCESSO (issue #642).
+
+    As tres rotas de gatilho ganharam `@limiter.limit`, e o `TestClient` sempre
+    chega do mesmo endereco: sem este reset, o 61o request do ARQUIVO leva 429 e
+    o teste que quebra e o proximo da fila, nao o que estourou o teto.
+    """
+    limiter._storage.reset()
+    yield
+    limiter._storage.reset()
+
+
+@pytest.fixture(autouse=True)
 def _sem_email_de_verdade(monkeypatch):
     """Nenhum teste deste arquivo fala com o Resend nem com o SMTP (issue #642).
 
@@ -89,6 +106,10 @@ def _sem_email_de_verdade(monkeypatch):
     baixo, derrubando a sessao se esta fixture algum dia sumir.
     """
     monkeypatch.setattr(tecnologia_email, "_enviar_email", lambda *a, **kw: True)
+    # E o transporte conta como configurado: sem isto, no CI (sem
+    # `RESEND_API_KEY` e sem `SMTP_USER`) a guarda do modo mock recusaria todo
+    # envio e as respostas destas rotas viriam com `aviso_por_email` preenchido.
+    monkeypatch.setattr(tecnologia_email, "transporte_configurado", lambda: True)
 
 
 # ─── 1. A maquina de estados ─────────────────────────────────────────────────
@@ -449,6 +470,10 @@ def _montar(
     corrida_para: str | None = None,
 ) -> tuple[TestClient, _SupabaseMock]:
     app = FastAPI()
+    # O limitador das rotas de gatilho precisa do `app.state` (o `main.py` faz o
+    # mesmo): sem ele, `@limiter.limit` estoura em vez de limitar.
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.include_router(tecnologia_router.router, prefix="/api")
 
     pessoas = [dict(p) for p in (participantes if participantes is not None else [PEDRO, SOCIA, FACILITADOR])]

@@ -2000,6 +2000,52 @@ describe("A atualização sozinha", () => {
     expect(leiturasDoQuadro()).toHaveLength(2);
   });
 
+  it("não recarrega com um card na mão", async () => {
+    // O outro hazard de `podeRecarregarSozinho`, e o que ficou sem teste na
+    // primeira rodada. Uma leitura no meio do arrasto pode tirar do DOM o card
+    // que está sendo arrastado (outra pessoa o moveu para uma coluna que o
+    // filtro esconde), e o gesto morre na mão de quem o começou.
+    montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    fireEvent.dragStart(cardDe("Uma nova"));
+    const antes = leiturasDoQuadro().length;
+
+    await passar(90_000);
+
+    expect(leiturasDoQuadro()).toHaveLength(antes);
+    // Irmã de presença: o card continua na tela, ou seja, o Quadro não sumiu
+    // por outro motivo.
+    expect(screen.getByText("Uma nova")).toBeTruthy();
+  });
+
+  it("a volta do foco também não recarrega com um card na mão", async () => {
+    montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    fireEvent.dragStart(cardDe("Uma nova"));
+    const antes = leiturasDoQuadro().length;
+
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+
+    expect(leiturasDoQuadro()).toHaveLength(antes);
+  });
+
+  it("largar o card devolve o relógio", async () => {
+    // A irmã de presença dos dois acima: sem ela, um Quadro que nunca se
+    // atualizasse passaria pelos três.
+    montar([demanda("d1", "Uma nova")]);
+    await screen.findByText("Uma nova");
+    fireEvent.dragStart(cardDe("Uma nova"));
+    await passar(90_000);
+    const parado = leiturasDoQuadro().length;
+
+    fireEvent.dragEnd(cardDe("Uma nova"));
+    await passar(30_000);
+
+    expect(leiturasDoQuadro().length).toBeGreaterThan(parado);
+  });
+
   it("volta a atualizar sozinho depois que o card fecha", async () => {
     // A irmã do teste acima: sem ela, um Quadro que nunca se atualizasse
     // passaria pelos dois.
@@ -2058,6 +2104,57 @@ describe("O aviso de que o e-mail não saiu", () => {
     // quando dá certo.
     expect(escritas().some((c) => c.metodo === "POST" && c.url.endsWith("/demandas"))).toBe(true);
     await waitFor(() => expect(screen.queryByRole("button", { name: "Abrir Demanda" })).toBeNull());
+  });
+
+  it("chega à tela de quem respondeu no fio, dentro do card", async () => {
+    // O gatilho da MENÇÃO e o do RESPONSÁVEL saem daqui, e este caminho é o do
+    // `ConversaDaDemanda`, que não passa pelo `enviar` do Quadro.
+    montar([demanda("d1", "Encerrar conversas")], { conversa: [], avisoPorEmail: AVISO });
+    fireEvent.click(await screen.findByText("Encerrar conversas"));
+    const modal = await screen.findByRole("dialog");
+
+    fireEvent.change(within(modal).getByLabelText("Resposta"), { target: { value: "Já pedi à Global Health" } });
+    fireEvent.click(within(modal).getByRole("button", { name: /Responder/ }));
+
+    const alerta = await within(modal).findByRole("alert");
+    expect(alerta.textContent).toContain(AVISO);
+    // A resposta ENTROU: o aviso não é recusa. A caixa esvaziou e a linha está
+    // no fio.
+    expect(await within(modal).findByText(/Já pedi à Global Health/)).toBeTruthy();
+  });
+
+  it("chega à tela de quem trocou o responsável dentro do card", async () => {
+    // O gatilho da ATRIBUIÇÃO pela porta do modal, que é o `enviar` do
+    // `DemandaModal`, um terceiro caminho.
+    montar([demanda("d1", "Encerrar conversas")], { avisoPorEmail: AVISO });
+    fireEvent.click(await screen.findByText("Encerrar conversas"));
+    const modal = await screen.findByRole("dialog");
+
+    fireEvent.click(within(modal).getByRole("combobox", { name: "Responsável" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Sócia Vitta"));
+
+    const alerta = await within(modal).findByRole("alert");
+    expect(alerta.textContent).toContain(AVISO);
+    expect(
+      escritas().some((c) => c.url === "/api/admin/tecnologia/demandas/d1/atribuir"),
+    ).toBe(true);
+  });
+
+  it("sem aviso do servidor, o card não inventa alarme", async () => {
+    // A irmã de presença dos dois acima, pelos mesmos dois caminhos.
+    montar([demanda("d1", "Encerrar conversas")], { conversa: [] });
+    fireEvent.click(await screen.findByText("Encerrar conversas"));
+    const modal = await screen.findByRole("dialog");
+
+    fireEvent.change(within(modal).getByLabelText("Resposta"), { target: { value: "Respondido" } });
+    fireEvent.click(within(modal).getByRole("button", { name: /Responder/ }));
+    await within(modal).findByText(/Respondido/);
+
+    fireEvent.click(within(modal).getByRole("combobox", { name: "Responsável" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Sócia Vitta"));
+    await waitFor(() => expect(escritas().some((c) => c.url.endsWith("/atribuir"))).toBe(true));
+
+    expect(within(modal).queryByRole("alert")).toBeNull();
   });
 
   it("sem aviso do servidor, a tela não inventa alarme", async () => {

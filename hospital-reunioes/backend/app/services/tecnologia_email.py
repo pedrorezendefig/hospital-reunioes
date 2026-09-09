@@ -19,12 +19,15 @@ consequências assumidas, e as duas estão nos testes:
   devolve `False` e o router transforma isso num aviso na tela
   (`AVISO_EMAIL_NAO_SAIU`), sem tocar no que já foi gravado. Um 500 aqui faria
   quem escreveu enviar de novo e duplicar a própria fala no fio;
-- **modo mock conta como enviado.** Sem transporte configurado o
-  `_enviar_email` devolve `True` sem nada sair (a armadilha da issue #435).
-  É de propósito: com a máquina de desenvolvimento sem chave, o contrário
-  pintaria o aviso de falha em cima de toda ação. Em produção o modo mock só
-  acontece com a chave do Resend rotacionada para vazio, e aí o problema é de
-  configuração, não desta aba.
+- **modo mock NÃO conta como enviado, fora do desenvolvimento.** Sem
+  transporte configurado o `_enviar_email` devolve `True` sem nada sair (a
+  armadilha da issue #435, e o motivo de o `transporte_configurado()` existir
+  com um docstring inteiro sobre isso). Esta fatia existe para a falha não
+  passar calada, e a falha MAIS PROVÁVEL em produção é justamente essa: a
+  `RESEND_API_KEY` rotacionada para vazio. Deixá-la passar seria o app dizer
+  "avisei" em toda atribuição e toda resposta sem ninguém receber nada. Em
+  `ENVIRONMENT=development` o modo mock continua contando como enviado, senão a
+  máquina de quem desenvolve pintaria o alerta em cima de toda ação.
 """
 
 from __future__ import annotations
@@ -34,7 +37,7 @@ from typing import Any
 from urllib.parse import quote
 
 from app.config import settings
-from app.services.email_service import _enviar_email, jinja_env
+from app.services.email_service import _enviar_email, jinja_env, transporte_configurado
 from app.services.tecnologia import (
     SEM_PRODUTO,
     TIPO_ROTULO,
@@ -121,13 +124,20 @@ def _mandar(
 
     A peneira e a falha são coisas DIFERENTES, e a diferença é o que a tela vê:
 
-    - quem **não está mais na lista de gente da aba** é descartado sem falha.
-      A #638 já recusa mencionar quem não tem acesso, então a lista gravada
-      nasce limpa; mas entre a menção e o envio a pessoa pode ter perdido o
-      Super admin, e aí o aviso NÃO DEVE sair. Chamar isso de falha cobraria de
-      quem respondeu um conserto que não existe;
+    - quem **não está mais na lista de gente da aba** é descartado sem falha, e
+      o aviso NÃO DEVE sair. Chamar isso de falha cobraria de quem agiu um
+      conserto que não existe;
     - quem **tem acesso e não tem endereço** conta como falha: esse aviso devia
       ter saído e não chegou a lugar nenhum.
+
+    **De onde vem, na prática, um destinatário fora da lista.** Não é da menção:
+    o `_texto_e_mencoes` valida as menções e o envio acontece na MESMA
+    requisição, então uma menção a quem não tem acesso vira 422 e nunca chega
+    aqui. Quem chega é o **responsável** gravado na Demanda, que pode ter
+    perdido o Super admin ou ter sido desativado dias depois de virar
+    responsável. A peneira vale para os dois caminhos porque a regra é uma só, e
+    porque quem escrever o próximo gatilho não deve precisar saber qual dos dois
+    é o real de hoje.
 
     O `except` de fora é largo de propósito: template que sumiu, logo que não
     abre, provedor que estourou de um jeito novo. Todos têm o mesmo desfecho, e
@@ -135,11 +145,36 @@ def _mandar(
     """
     if not destinatarios:
         return True
+    if not transporte_configurado() and settings.environment != "development":
+        # Modo mock em produção: o `_enviar_email` devolveria `True` sem nada
+        # sair. Ver o docstring do módulo.
+        logger.error(
+            "[tecnologia:%s] sem transporte de email configurado: o aviso da Demanda %s não saiu",
+            gatilho,
+            demanda.get("id"),
+        )
+        return False
     try:
         pessoas = _pessoas_por_id(supabase, destinatarios)
         contexto = _contexto(demanda, trecho=trecho, quem_fez_nome=quem_fez_nome)
         html_base = jinja_env.get_template(TEMPLATES[gatilho])
         texto = _texto_simples(abertura=abertura, contexto=contexto)
+        # Quebra de linha no meio do assunto é injeção de cabeçalho: o título da
+        # Demanda é campo livre, e `_titulo_valido` só faz `strip()`, então um
+        # `\r\n` no MEIO passa. Pelo SMTP o `EmailMessage` recusa e o envio
+        # falha; pelo Resend a string viaja como JSON e quem monta o MIME é o
+        # provedor, e daqui não dá para afirmar que ele higieniza. Uma linha
+        # fecha os dois.
+        assunto = " ".join(assunto.split())
+        # O que vai para o LOG no lugar do assunto de verdade.
+        #
+        # O assunto que a pessoa recebe carrega o título da Demanda, que é texto
+        # que alguém digitou num campo livre ("Prontuário da paciente Maria não
+        # abre"). O log corre em INFO em produção, e quem tem acesso a ele e
+        # nenhum perfil na aba não pode ler isso. O que fica é o que responde à
+        # única pergunta que o log precisa responder: o aviso desta Demanda
+        # saiu? Nem título, nem nome de Produto (que também é texto digitado).
+        assunto_para_o_log = f"aviso de {gatilho} da Demanda {demanda.get('id')}"
 
         tudo_saiu = True
         for pid in destinatarios:
@@ -167,7 +202,17 @@ def _mandar(
                 abertura=abertura,
                 **contexto,
             )
-            if not _enviar_email(endereco, assunto, html, texto):
+            if not _enviar_email(
+                endereco,
+                assunto,
+                html,
+                texto,
+                # O endereço fora do log pelo mesmo motivo do assunto: o par
+                # "quem recebeu" + "sobre o quê" é o que monta um índice para
+                # quem lê o log sem ter acesso à aba.
+                endereco_fora_do_log=True,
+                assunto_no_log=assunto_para_o_log,
+            ):
                 # O `_enviar_email` já logou a causa (e o `email_service` decide
                 # o que do endereço entra no log). Aqui fica o que liga a falha
                 # à Demanda, que é o que serve para reconstruir depois.
