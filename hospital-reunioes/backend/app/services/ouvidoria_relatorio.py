@@ -68,6 +68,7 @@ from app.services.ouvidoria_metricas import Periodo
 from app.services.ouvidoria_prazos import FUSO as FUSO_HOSPITAL
 from app.services.ouvidoria_pseudonimizacao import pseudonimizar
 from app.services.ouvidoria_taxonomia import LIMITE_SETOR, ROTULO_TIPO
+from app.services.pdf_url_fetcher import criar_pdf_url_fetcher
 
 logger = logging.getLogger(__name__)
 
@@ -684,22 +685,42 @@ def _apresentar_sugestoes(registro: dict) -> dict:
 # ───────────────────────────── o PDF ─────────────────────────────
 
 
+def _assets_do_template() -> tuple[str, str | None]:
+    """As URIs `file://` do logo e da fonte que o template usa.
+
+    Uma função só porque as duas pontas precisam da MESMA string: o template,
+    que imprime a URI, e a allowlist do url_fetcher, que a compara por
+    casamento exato. `abspath` (sem `..` no meio) porque o WeasyPrint normaliza
+    a URL antes de entregá-la ao fetcher, e a allowlist precisa casar a forma
+    normalizada, senão a guarda recusaria o próprio logo do relatório.
+    """
+    logo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "images", "logo_hospital.png"))
+    fonte = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "fonts", "HPSimplified_Rg.ttf"))
+    return f"file://{logo}", (f"file://{fonte}" if os.path.exists(fonte) else None)
+
+
 def montar_html(registro: dict) -> str:
     """O HTML que vira PDF. Separado do render para o teste poder ler o que
     seria impresso sem depender dos bytes do PDF."""
-    logo = os.path.join(os.path.dirname(__file__), "..", "static", "images", "logo_hospital.png")
-    fonte = os.path.join(os.path.dirname(__file__), "..", "static", "fonts", "HPSimplified_Rg.ttf")
+    logo_uri, font_uri = _assets_do_template()
     return _jinja.get_template("ouvidoria_relatorio_template.html").render(
         r=apresentar(registro),
-        logo_path=f"file://{logo}",
-        font_path=f"file://{fonte}" if os.path.exists(fonte) else None,
+        logo_path=logo_uri,
+        font_path=font_uri,
     )
 
 
 def renderizar_pdf(registro: dict) -> bytes:
-    """Os bytes do PDF, pelo mesmo caminho da Ata: Jinja2 mais WeasyPrint."""
+    """Os bytes do PDF, pelo mesmo caminho da Ata: Jinja2 mais WeasyPrint.
+
+    O url_fetcher (issue #633) recusa file:// fora dos assets do template e
+    host privado/loopback/multicast. Ele vai no construtor do `HTML`, que é quem
+    busca os recursos: o `write_pdf` descarta opção que não conhece, então
+    passá-lo ali desligaria a guarda em silêncio (issue #625).
+    """
     saida = io.BytesIO()
-    HTML(string=montar_html(registro)).write_pdf(target=saida)
+    assets_permitidos = frozenset(uri for uri in _assets_do_template() if uri)
+    HTML(string=montar_html(registro), url_fetcher=criar_pdf_url_fetcher(assets_permitidos)).write_pdf(target=saida)
     return saida.getvalue()
 
 
