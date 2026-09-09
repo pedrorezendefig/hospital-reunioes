@@ -14,6 +14,9 @@ import { AlertCircle, Cpu, Pencil, Plus, Power, PowerOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Select } from "@/components/ui/Select";
 
+import { QuadroDemandas } from "./QuadroDemandas";
+import { BASE_TECNOLOGIA, FALHA_DE_CONEXAO, motivoDaRecusa } from "./demandas";
+
 type Pessoa = { id: string; nome_completo: string; email: string };
 
 type Produto = {
@@ -32,11 +35,6 @@ const ABAS = [
 ] as const;
 
 type AbaId = (typeof ABAS)[number]["id"];
-
-const BASE = "/api/admin/tecnologia";
-
-/** A mesma frase nos dois caminhos de rede, carregar e salvar. */
-const FALHA_DE_CONEXAO = "Não foi possível falar com o servidor. Verifique a conexão e tente de novo.";
 
 /**
  * A frase de quando `useAuth` não devolve token.
@@ -83,8 +81,8 @@ export function TecnologiaModulo() {
     setCarregando(true);
     try {
       const [respProdutos, respPessoas] = await Promise.all([
-        fetch(`${BASE}/produtos`, { headers: autorizacao() }),
-        fetch(`${BASE}/pessoas`, { headers: autorizacao() }),
+        fetch(`${BASE_TECNOLOGIA}/produtos`, { headers: autorizacao() }),
+        fetch(`${BASE_TECNOLOGIA}/pessoas`, { headers: autorizacao() }),
       ]);
       if (!respProdutos.ok || !respPessoas.ok) {
         setErro("Não foi possível carregar os Produtos.");
@@ -138,7 +136,7 @@ export function TecnologiaModulo() {
   }
 
   async function criarProduto() {
-    const criado = await enviar(`${BASE}/produtos`, "POST", {
+    const criado = await enviar(`${BASE_TECNOLOGIA}/produtos`, "POST", {
       nome: nomeNovo,
       dono_id: donoNovo || null,
     });
@@ -149,7 +147,7 @@ export function TecnologiaModulo() {
   }
 
   async function salvarNome(produto: Produto) {
-    const salvo = await enviar(`${BASE}/produtos/${produto.id}`, "PATCH", { nome: nomeEditado });
+    const salvo = await enviar(`${BASE_TECNOLOGIA}/produtos/${produto.id}`, "PATCH", { nome: nomeEditado });
     if (salvo) setEditando(null);
   }
 
@@ -187,10 +185,16 @@ export function TecnologiaModulo() {
         ))}
       </div>
 
-      <div role="tabpanel" className="rounded-xl border border-border bg-surface p-6">
-        <p className="text-sm text-text-secondary">
-          A aba {ABAS.find((item) => item.id === aba)?.label} entra em uma próxima entrega.
-        </p>
+      <div role="tabpanel">
+        {aba === "quadro" ? (
+          <QuadroDemandas token={token} produtos={produtos} pessoas={pessoas} />
+        ) : (
+          <div className="rounded-xl border border-border bg-surface p-6">
+            <p className="text-sm text-text-secondary">
+              A aba {ABAS.find((item) => item.id === aba)?.label} entra em uma próxima entrega.
+            </p>
+          </div>
+        )}
       </div>
 
       <section aria-labelledby="titulo-produtos" className="space-y-4">
@@ -284,7 +288,7 @@ export function TecnologiaModulo() {
                     label={`Dono de ${produto.nome}`}
                     value={produto.dono_id ?? ""}
                     onChange={(dono) =>
-                      enviar(`${BASE}/produtos/${produto.id}`, "PATCH", { dono_id: dono })
+                      enviar(`${BASE_TECNOLOGIA}/produtos/${produto.id}`, "PATCH", { dono_id: dono })
                     }
                     options={
                       produto.dono_id && !opcoesDeDono.some((o) => o.value === produto.dono_id)
@@ -324,7 +328,7 @@ export function TecnologiaModulo() {
 
                 <button
                   onClick={() =>
-                    enviar(`${BASE}/produtos/${produto.id}`, "PATCH", { ativo: !produto.ativo })
+                    enviar(`${BASE_TECNOLOGIA}/produtos/${produto.id}`, "PATCH", { ativo: !produto.ativo })
                   }
                   aria-label={`${produto.ativo ? "Desativar" : "Reativar"} ${produto.nome}`}
                   className="p-1.5 rounded-lg text-slate-500 hover:text-text hover:bg-primary/5 transition-colors"
@@ -342,15 +346,4 @@ export function TecnologiaModulo() {
       </section>
     </div>
   );
-}
-
-async function motivoDaRecusa(resposta: Response): Promise<string> {
-  try {
-    const corpo = await resposta.json();
-    if (typeof corpo?.detail === "string") return corpo.detail;
-    if (corpo?.detail) return JSON.stringify(corpo.detail);
-  } catch {
-    // Resposta sem corpo JSON: sobra o status.
-  }
-  return `Não foi possível salvar (${resposta.status}).`;
 }

@@ -118,6 +118,13 @@ function montar(
         return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
       }
 
+      // O Quadro da aba (issue #637) carrega as Demandas por conta própria e
+      // tem teste só dele: aqui ele fica vazio, para não disputar os `getBy*`
+      // com a lista de Produtos.
+      if (url.includes("/demandas")) {
+        return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+      }
+
       const corpo = url.includes("/pessoas") ? pessoas : produtos;
       return { ok: true, status: 200, json: async () => corpo } as unknown as Response;
     }),
@@ -289,7 +296,10 @@ describe("A falha de rede não vira lista vazia e calada", () => {
     vi.spyOn(console, "error").mockImplementation(() => {});
     montar([produto("p1", "Ana", 1, { dono_id: "P1" })], { redeFora: "carregar" });
 
-    const aviso = await screen.findByRole("alert");
+    // A busca é dentro da seção de Produtos: com a rede fora, o Quadro avisa
+    // do lado dele também, e o que se afirma aqui é o aviso DESTA lista.
+    const secao = screen.getByRole("region", { name: "Produtos" });
+    const aviso = await within(secao).findByRole("alert");
     expect(aviso.textContent).toContain("Não foi possível falar com o servidor");
     expect(screen.queryByText("Carregando Produtos...")).toBeNull();
   });
