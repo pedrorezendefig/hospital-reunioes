@@ -690,9 +690,11 @@ def _assets_do_template() -> tuple[str, str | None]:
 
     Uma função só porque as duas pontas precisam da MESMA string: o template,
     que imprime a URI, e a allowlist do url_fetcher, que a compara por
-    casamento exato. `abspath` (sem `..` no meio) porque o WeasyPrint normaliza
-    a URL antes de entregá-la ao fetcher, e a allowlist precisa casar a forma
-    normalizada, senão a guarda recusaria o próprio logo do relatório.
+    casamento exato. O WeasyPrint não normaliza o `..` no caminho até o fetcher
+    (só aplica percent-encoding), então não há forma canônica de um lado para o
+    outro convergir: a igualdade tem que vir de as duas pontas lerem esta mesma
+    função. `abspath` está aqui por ser o que a garante; montar uma ponta com
+    ele e a outra sem faria a guarda recusar o próprio logo do relatório.
     """
     logo = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "images", "logo_hospital.png"))
     fonte = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "fonts", "HPSimplified_Rg.ttf"))

@@ -13,10 +13,17 @@ inerte da #152 até o PR #630.
 
     HTML(string=html, url_fetcher=criar_pdf_url_fetcher(assets)).write_pdf(...)
 
-A allowlist de `file://` é casamento EXATO da URI, e por isso as URIs dos assets
-precisam ser montadas com `os.path.abspath`: o WeasyPrint normaliza o `..` da
-URL antes de entregá-la ao fetcher, e uma allowlist com `..` no meio nunca
-casaria, deixando o gerador sem o próprio logo.
+A allowlist de `file://` é casamento EXATO da URI, e o WeasyPrint NÃO normaliza a
+URL no caminho até aqui: para URL absoluta o `url_join` devolve `iri_to_uri(url)`,
+que só aplica percent-encoding. Um `..` no meio do caminho chega ao fetcher
+intacto (conferido no WeasyPrint 70.0, a versão que o `uv.lock` fixa).
+
+A invariante, então, não é "o WeasyPrint normaliza dos dois lados": é que a
+string entregue ao TEMPLATE e a string posta na ALLOWLIST precisam ser produzidas
+pela MESMA expressão. `os.path.abspath` está ali por ser o que garante essa
+igualdade nos dois lados, e não porque alguém normaliza o outro lado. Montar uma
+com `abspath` e outra sem faz a guarda recusar o próprio logo do template, em
+silêncio, e o documento sai sem a marca do hospital.
 """
 
 from __future__ import annotations
@@ -25,17 +32,30 @@ import ipaddress
 import socket
 from urllib.parse import urlsplit
 
+# NAT de operadora (RFC 6598). Não é `is_private` no Python, e também não é
+# `is_reserved`, `is_link_local`, `is_loopback` nem `is_multicast`: escapa dos
+# seis predicados, exatamente como o multicast escapava dos cinco. Vive numa
+# constante porque o `ipaddress` não tem predicado para ela.
+_CGNAT = ipaddress.ip_network("100.64.0.0/10")
+
 
 def host_e_privado(host: str) -> bool:
     """True se o host resolve para um endereço que o PDF não deve buscar:
-    privado, loopback, link-local, reservado, unspecified ou multicast
-    (10/8, 127/8, 172.16/12, 192.168/16, 169.254/16, 224.0.0.0/4, ::1, fc00::/7,
-    ff00::/8...). Resolve nomes (localhost e DNS apontando para rede interna)
-    antes de julgar.
+    privado, loopback, link-local, reservado, unspecified, multicast ou CGNAT
+    (10/8, 127/8, 172.16/12, 192.168/16, 169.254/16, 224.0.0.0/4, 100.64/10,
+    ::1, fc00::/7, ff00::/8...). Resolve nomes (localhost e DNS apontando para
+    rede interna) antes de julgar.
 
-    Multicast entrou junto com a mudança de casa (issue #633): ele não cai em
-    nenhum dos outros cinco predicados, então `239.255.255.250` (SSDP) passava
-    reto e um PDF podia fazer descoberta de dispositivo na rede do hospital.
+    Multicast e CGNAT entraram junto com a mudança de casa (issue #633), os dois
+    pelo mesmo motivo: não caem em nenhum dos predicados que o `ipaddress`
+    oferece. `239.255.255.250` (SSDP) passava reto e deixaria um PDF fazer
+    descoberta de dispositivo na rede do hospital; `100.64.0.0/10` é a faixa de
+    NAT de operadora, comum em rede de hospital e de VPN, e passava igual.
+
+    Cada faixa entra como um predicado A MAIS, nunca trocando a base por
+    `not ip.is_global`: a triagem cravou que o comportamento do POP não muda, e
+    um predicado somado é aditivo e reversível, enquanto trocar a base mexeria
+    na semântica herdada de todos os geradores de uma vez.
     """
     if not host:
         return True
@@ -62,6 +82,7 @@ def host_e_privado(host: str) -> bool:
             or ip.is_reserved
             or ip.is_unspecified
             or ip.is_multicast
+            or ip in _CGNAT
         ):
             return True
     return False

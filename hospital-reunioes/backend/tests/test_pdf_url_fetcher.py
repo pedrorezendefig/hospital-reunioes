@@ -31,9 +31,10 @@ import pytest
 def _asset_uri(*partes: str) -> str:
     """URI `file://` de um asset estático do app, no formato que o template usa.
 
-    `abspath` porque o WeasyPrint normaliza o `..` da URL antes de entregá-la ao
-    fetcher: allowlist montada com `..` no meio nunca casaria, e a guarda
-    recusaria o logo do próprio template.
+    `abspath` porque a allowlist é casamento exato e o WeasyPrint entrega a URL
+    ao fetcher só com percent-encoding, sem normalizar o `..`: o teste tem que
+    montar a URI pela mesma expressão que o gerador usa, senão compararia contra
+    uma string que o render nunca produz.
     """
     caminho = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "app", "static", *partes))
     return f"file://{caminho}"
@@ -135,6 +136,39 @@ class TestGuardaCompartilhada:
             with pytest.raises(ValueError, match="host privado/loopback recusado"):
                 self._fetcher().fetch(url)
 
+    def test_recusa_cgnat(self):
+        """O mesmo buraco do multicast, uma faixa depois: `100.64.0.0/10` (NAT de
+        operadora, RFC 6598) é falso em `is_private`, `is_loopback`,
+        `is_link_local`, `is_reserved`, `is_unspecified` E `is_multicast`. Só a
+        checagem explícita de faixa o pega, então este teste morre se ela sair.
+
+        Morde de verdade: é a faixa que operadora usa para NAT, comum em rede de
+        hospital e em VPN, e um PDF que a alcançasse falaria com equipamento
+        interno como se fosse endereço público.
+        """
+        for url in (
+            "http://100.64.0.1/",
+            "http://100.100.100.100/",
+            "https://100.127.255.255/admin",
+        ):
+            with pytest.raises(ValueError, match="host privado/loopback recusado"):
+                self._fetcher().fetch(url)
+
+    def test_bordas_das_faixas_novas_seguem_publicas(self):
+        """A guarda das faixas não pode virar recusa de tudo. `host_e_privado`
+        direto, sem passar pelo `fetch`, porque o ponto aqui é o julgamento do
+        endereço e não a busca (que a trava de rede do conftest barraria antes).
+
+        Os três ladeiam as faixas novas por fora: `100.63.255.255` e
+        `100.128.0.0` são os vizinhos imediatos do CGNAT, e `223.255.255.255` é
+        o vizinho de baixo do multicast. Um mutante que alargasse a faixa (um
+        `/8` no lugar do `/10`, por exemplo) morre aqui.
+        """
+        from app.services.pdf_url_fetcher import host_e_privado
+
+        for host in ("100.63.255.255", "100.128.0.0", "223.255.255.255"):
+            assert host_e_privado(host) is False
+
     def test_recusa_file_uri_fora_da_allowlist(self):
         with pytest.raises(ValueError, match="file:// não permitido"):
             self._fetcher().fetch(ARQUIVO_PROIBIDO)
@@ -172,8 +206,8 @@ class TestGuardaLigadaNaAta:
         assert pdf.startswith(b"%PDF")
         assert ARQUIVO_PROIBIDO in espiao.recusados
         assert HOST_LOOPBACK in espiao.recusados
-        # O logo do próprio template segue entrando: a allowlist casa a URI
-        # normalizada, e a Ata não fica sem a marca do hospital.
+        # O logo do próprio template segue entrando: a allowlist casa a URI que
+        # o gerador de fato produz, e a Ata não fica sem a marca do hospital.
         assert LOGO_URI in espiao.buscados
 
 

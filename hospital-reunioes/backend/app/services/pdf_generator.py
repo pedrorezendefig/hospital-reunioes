@@ -59,9 +59,11 @@ def gerar_pdf_ata(reuniao_record: dict, json_ata: dict) -> bytes:
                 if acao.get("prazo"):
                     acao["prazo"] = formatar_data(acao["prazo"])
 
-        # Define o caminho para a logo. `abspath` (sem `..` no meio) para a URI
-        # `file://` bater exatamente com o allowlist do url_fetcher, mesmo após
-        # a normalização do WeasyPrint.
+        # Define o caminho para a logo. O allowlist do url_fetcher é casamento
+        # EXATO de string, e o WeasyPrint entrega a URL ao fetcher só com
+        # percent-encoding aplicado, sem normalizar o `..`. Então o que vale é a
+        # URI ir para o template e para o allowlist vinda da MESMA expressão;
+        # `abspath` está aqui por ser o que garante essa igualdade nos dois lados.
         logo_path = os.path.abspath(
             os.path.join(os.path.dirname(__file__), "..", "static", "images", "logo_hospital.png")
         )

@@ -236,8 +236,11 @@ def gerar_pdf_pop(*, pop: dict, setor: dict, versao: dict, nomes_designados: dic
             secao["conteudo_html"] = markdown_secao_html(conteudo)
         secoes.append(secao)
 
-    # Caminhos absolutos (sem `..`) para a URI `file://` bater exatamente com o
-    # allowlist do url_fetcher, mesmo após a normalização do WeasyPrint.
+    # Caminhos absolutos para a URI `file://` do template e a do allowlist do
+    # url_fetcher saírem da MESMA expressão: o allowlist é casamento exato de
+    # string, e o WeasyPrint entrega a URL ao fetcher só com percent-encoding,
+    # sem normalizar o `..`. Montar uma ponta com `abspath` e a outra sem faria
+    # a guarda recusar o próprio logo.
     logo_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "images", "logo_hospital.png"))
     font_path = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "static", "fonts", "HPSimplified_Rg.ttf"))
     if not os.path.exists(font_path):
