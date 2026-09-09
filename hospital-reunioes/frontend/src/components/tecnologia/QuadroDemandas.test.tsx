@@ -22,7 +22,7 @@
  */
 
 import { useState } from "react";
-import { cleanup, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
+import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { QuadroDemandas } from "./QuadroDemandas";
@@ -1079,7 +1079,53 @@ describe("Arrastar entre colunas", () => {
     expect(escritas()[0].url).toBe("/api/admin/tecnologia/demandas/d1/mover");
     await waitFor(() => expect(within(colunaDe("Em andamento")).getByText("Uma nova")).toBeTruthy());
   });
+
+  /** As leituras do Quadro (a Conversa do modal tem GET próprio). */
+  const leiturasDoQuadro = () =>
+    chamadas.filter((c) => c.metodo === "GET" && !c.url.includes("/conversa"));
+
+  it("no 409 a tela recarrega o Quadro sozinha, e o motivo continua à vista", async () => {
+    // A frase do servidor manda recarregar o Quadro, e a tela não tem botão de
+    // recarregar: pedir uma ação que o app não oferece é deixar quem levou a
+    // recusa sem saída. Recarregando aqui, a frase vira descrição do que já
+    // aconteceu. O motivo NÃO some junto, senão o Quadro se corrigiria em
+    // silêncio e o card "voltaria" sozinho sem explicação.
+    montar([demanda("d1", "Uma nova")], {
+      recusa: {
+        status: 409,
+        detail: "O Quadro está desatualizado e este movimento não foi feito. Recarregue o Quadro e tente de novo.",
+      },
+    });
+
+    await screen.findByText("Uma nova");
+    const antes = leiturasDoQuadro().length;
+    arrastar("Uma nova", "Aguardando");
+
+    await screen.findByRole("alert");
+    await waitFor(() => expect(leiturasDoQuadro()).toHaveLength(antes + 1));
+    expect(screen.getByRole("alert").textContent).toContain("Quadro está desatualizado");
+  });
+
+  it("no 422 a tela não recarrega: o que está velho não é o Quadro", async () => {
+    // O par de presença do teste acima: uma tela que recarregasse depois de
+    // toda recusa passaria naquele. A transição proibida não tem nada de
+    // desatualizado, e recarregar ali só gastaria a viagem.
+    montar([demanda("d1", "Fechada", { estado: "concluida" })], {
+      recusa: { status: 422, detail: "A Demanda não pode ir de Concluída para Cancelada." },
+    });
+
+    await screen.findByRole("region", { name: "Concluída" });
+    fireEvent.click(within(colunaDe("Concluída")).getByRole("button"));
+    await screen.findByText("Fechada");
+    const antes = leiturasDoQuadro().length;
+
+    arrastar("Fechada", "Cancelada");
+
+    await screen.findByRole("alert");
+    expect(leiturasDoQuadro()).toHaveLength(antes);
+  });
 });
+
 
 describe("A barra de filtros", () => {
   const CARDS = [
@@ -1189,6 +1235,60 @@ describe("A barra de filtros", () => {
 });
 
 describe("Duas trocas de filtro em sequência", () => {
+  /** Uma chamada que o componente fez e que ainda não teve resposta. */
+  type Pendente = {
+    url: string;
+    /** Responde 200 com esta lista. */
+    responder: (dados: Demanda[]) => void;
+    /** Responde com este status de erro. */
+    recusar: (status: number, detail?: string) => void;
+  };
+
+  /**
+   * O `fetch` que NÃO responde sozinho.
+   *
+   * O servidor falso dos outros testes responde na hora, e por isso não sabe
+   * dizer nada sobre ordem de chegada. Aqui cada chamada fica pendurada até o
+   * teste mandar responder, que é o único jeito de escrever a ordem em que as
+   * respostas voltam, que é onde a corrida mora.
+   */
+  function filaDeChamadas(): Pendente[] {
+    const pendentes: Pendente[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (url: string) =>
+          new Promise((resolve) => {
+            pendentes.push({
+              url,
+              responder: (dados) =>
+                resolve({ ok: true, status: 200, json: async () => dados } as unknown as Response),
+              recusar: (status, detail) =>
+                resolve({
+                  ok: false,
+                  status,
+                  json: async () => ({ detail: detail ?? "recusado" }),
+                } as unknown as Response),
+            });
+          }),
+      ),
+    );
+    return pendentes;
+  }
+
+  /**
+   * Dá ao React o tempo de processar a resposta recém entregue.
+   *
+   * Sem esta espera PEDIDA, quem daria o tempo seria o ciclo de algum
+   * `waitFor` mais adiante, e o teste passaria por sorte de agendamento em vez
+   * de por asserção.
+   */
+  async function deixarOReactProcessar() {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+  }
+
   /** O host dos filtros, como o módulo faz. */
   function Anfitriao() {
     const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
@@ -1204,54 +1304,156 @@ describe("Duas trocas de filtro em sequência", () => {
     );
   }
 
-  it("a resposta atrasada do filtro antigo não repinta o Quadro do filtro novo", async () => {
-    // A rede não devolve na ordem em que foi chamada. Quem troca o filtro duas
-    // vezes rápido deixa dois GET no ar; se o PRIMEIRO chegar por último, uma
-    // tela ingênua pinta o resultado do filtro que ninguém está mais vendo, com
-    // os campos mostrando o filtro novo. É mentira silenciosa: nada de erro,
-    // nada de espera, só o Quadro errado.
-    const pendentes: { url: string; responder: (dados: Demanda[]) => void }[] = [];
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(
-        (url: string) =>
-          new Promise((resolve) => {
-            pendentes.push({
-              url,
-              responder: (dados) =>
-                resolve({ ok: true, status: 200, json: async () => dados } as unknown as Response),
-            });
-          }),
-      ),
-    );
+  const AJUSTE = demanda("d1", "Ajuste na Ana", { tipo: "ajuste" });
+  const DEFEITO = demanda("d2", "Defeito nos POPs", { tipo: "defeito" });
 
-    const AJUSTE = demanda("d1", "Ajuste na Ana", { tipo: "ajuste" });
-    const DEFEITO = demanda("d2", "Defeito nos POPs", { tipo: "defeito" });
+  /** Escolhe um tipo na barra de filtros. */
+  function escolherTipo(rotulo: string) {
+    fireEvent.click(screen.getByRole("combobox", { name: "Filtrar por tipo" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText(rotulo));
+  }
 
+  /**
+   * Monta a tela com o Quadro já pintado e DOIS pedidos de filtro no ar.
+   *
+   * Devolve a fila: `[0]` é a leitura inicial (já respondida), `[1]` é o
+   * pedido do filtro Ajuste (o VELHO) e `[2]` o do filtro Defeito (o NOVO).
+   */
+  async function comDoisPedidosNoAr(): Promise<Pendente[]> {
+    const pendentes = filaDeChamadas();
     render(<Anfitriao />);
 
     await waitFor(() => expect(pendentes).toHaveLength(1));
     pendentes[0].responder([AJUSTE, DEFEITO]);
     await screen.findByText("Ajuste na Ana");
 
-    fireEvent.click(screen.getByRole("combobox", { name: "Filtrar por tipo" }));
-    fireEvent.click(within(screen.getByRole("listbox")).getByText("Ajuste"));
+    escolherTipo("Ajuste");
     await waitFor(() => expect(pendentes).toHaveLength(2));
-
-    fireEvent.click(screen.getByRole("combobox", { name: "Filtrar por tipo" }));
-    fireEvent.click(within(screen.getByRole("listbox")).getByText("Defeito"));
+    escolherTipo("Defeito");
     await waitFor(() => expect(pendentes).toHaveLength(3));
 
     expect(pendentes[1].url).toContain("tipo=ajuste");
     expect(pendentes[2].url).toContain("tipo=defeito");
+    return pendentes;
+  }
 
-    // O pedido NOVO chega primeiro, e o velho depois: a ordem que quebra.
+  it("a resposta atrasada do filtro antigo não repinta o Quadro do filtro novo", async () => {
+    // A rede não devolve na ordem em que foi chamada. Quem troca o filtro duas
+    // vezes rápido deixa dois GET no ar; se o PRIMEIRO chegar por último, uma
+    // tela ingênua pinta o resultado do filtro que ninguém está mais vendo, com
+    // os campos mostrando o filtro novo. É mentira silenciosa: nada de erro,
+    // nada de espera, só o Quadro errado.
+    const pendentes = await comDoisPedidosNoAr();
+
+    // O pedido NOVO chega primeiro, e o velho depois.
     pendentes[2].responder([DEFEITO]);
     await screen.findByText("Defeito nos POPs");
     pendentes[1].responder([AJUSTE]);
+    await deixarOReactProcessar();
 
-    await waitFor(() => expect(screen.queryByText("Carregando Demandas...")).toBeNull());
     expect(screen.getByText("Defeito nos POPs")).toBeTruthy();
     expect(screen.queryByText("Ajuste na Ana")).toBeNull();
+  });
+
+  it("a resposta do filtro antigo que chega PRIMEIRO não desliga a espera", async () => {
+    // A ordem inversa da anterior, e é ela que exercita a guarda da espera: o
+    // pedido velho chegando antes do novo. Sem a guarda, a tela diz "pronto" e
+    // mostra a lista de ANTES do filtro, com o campo escrito com o filtro novo,
+    // enquanto a leitura de verdade ainda está vindo.
+    const pendentes = await comDoisPedidosNoAr();
+
+    pendentes[1].responder([AJUSTE]);
+    await deixarOReactProcessar();
+
+    expect(screen.getByText("Carregando Demandas...")).toBeTruthy();
+    expect(screen.queryByText("Ajuste na Ana")).toBeNull();
+
+    // A irmã de presença: quando o pedido NOVO chega, a espera acaba e o card
+    // certo aparece, então "ainda carregando" acima não é uma tela travada.
+    pendentes[2].responder([DEFEITO]);
+    expect(await screen.findByText("Defeito nos POPs")).toBeTruthy();
+    expect(screen.queryByText("Carregando Demandas...")).toBeNull();
+  });
+
+  it("a falha do pedido antigo não escreve aviso por cima do Quadro certo", async () => {
+    // Filtro velho devolve 500, filtro novo devolve 200. Se o 500 chegar por
+    // último, uma tela sem guarda mostraria "Não foi possível carregar as
+    // Demandas." em cima de um Quadro que está perfeitamente certo.
+    const pendentes = await comDoisPedidosNoAr();
+
+    pendentes[2].responder([DEFEITO]);
+    await screen.findByText("Defeito nos POPs");
+    pendentes[1].recusar(500);
+    await deixarOReactProcessar();
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("Defeito nos POPs")).toBeTruthy();
+  });
+
+  it("a falha do pedido mais novo, essa sim, vira aviso", async () => {
+    // O par de presença do teste acima: sem ele, uma tela que engolisse TODA
+    // falha de leitura passaria naquele.
+    const pendentes = await comDoisPedidosNoAr();
+
+    pendentes[1].responder([AJUSTE]);
+    pendentes[2].recusar(500);
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Não foi possível carregar as Demandas.",
+    );
+  });
+
+  it("o Quadro que volta não apaga a recusa de uma escrita", async () => {
+    // Com o formulário aberto: trocar o filtro deixa um GET no ar, a escrita é
+    // recusada e escreve o alerta, e o GET chega depois. Se ele limpasse o
+    // erro, o formulário ficaria aberto, preenchido, e sem explicação nenhuma
+    // de por que a Demanda não foi criada.
+    const pendentes = filaDeChamadas();
+    render(<Anfitriao />);
+
+    await waitFor(() => expect(pendentes).toHaveLength(1));
+    pendentes[0].responder([AJUSTE, DEFEITO]);
+    await screen.findByText("Ajuste na Ana");
+
+    fireEvent.click(screen.getByRole("button", { name: /Nova Demanda/ }));
+    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Encerrar conversas" } });
+    fireEvent.click(screen.getByRole("combobox", { name: "Produto" }));
+    fireEvent.click(within(screen.getByRole("listbox")).getByText("Ana"));
+
+    escolherTipo("Ajuste");
+    await waitFor(() => expect(pendentes).toHaveLength(2));
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
+    await waitFor(() => expect(pendentes).toHaveLength(3));
+    pendentes[2].recusar(422, "Produto sem dono nao recebe Demanda nova.");
+    expect((await screen.findByRole("alert")).textContent).toContain("Produto sem dono");
+
+    pendentes[1].responder([AJUSTE]);
+    await deixarOReactProcessar();
+
+    expect(screen.getByRole("alert").textContent).toContain("Produto sem dono");
+    // O formulário continua aberto com o que foi digitado, ao lado do motivo.
+    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Encerrar conversas");
+  });
+
+  it("o Quadro que volta apaga, sim, o aviso da leitura anterior", async () => {
+    // O par de presença do teste acima: um `carregar` que nunca limpasse erro
+    // nenhum passaria naquele, e deixaria na tela um aviso de falha que a
+    // leitura seguinte já desmentiu.
+    const pendentes = filaDeChamadas();
+    render(<Anfitriao />);
+
+    await waitFor(() => expect(pendentes).toHaveLength(1));
+    pendentes[0].recusar(500);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "Não foi possível carregar as Demandas.",
+    );
+
+    escolherTipo("Ajuste");
+    await waitFor(() => expect(pendentes).toHaveLength(2));
+    pendentes[1].responder([AJUSTE]);
+
+    expect(await screen.findByText("Ajuste na Ana")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });

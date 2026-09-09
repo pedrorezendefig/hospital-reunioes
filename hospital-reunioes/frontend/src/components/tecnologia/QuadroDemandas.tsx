@@ -135,6 +135,15 @@ export function QuadroDemandas({
    * for a última.
    */
   const ultimoPedido = useRef(0);
+  /**
+   * Se o aviso na tela veio de uma ESCRITA recusada.
+   *
+   * A leitura que dá certo limpa o aviso, e é o que se quer quando o aviso é
+   * dela. Mas trocar o filtro dispara uma leitura, e ela chegando depois de
+   * uma recusa de escrita apagaria o motivo: o formulário ficaria aberto,
+   * preenchido, e sem explicação nenhuma de por que a Demanda não foi criada.
+   */
+  const erroDeEscrita = useRef(false);
 
   const autorizacao = useCallback(
     () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
@@ -164,14 +173,17 @@ export function QuadroDemandas({
       // conta não é mais o que a tela está pedindo.
       if (meuPedido !== ultimoPedido.current) return;
       if (!resposta.ok) {
+        erroDeEscrita.current = false;
         setErro("Não foi possível carregar as Demandas.");
         return;
       }
       setDemandas(await resposta.json());
-      setErro(null);
+      // A leitura só apaga o aviso que a leitura pode ter posto.
+      if (!erroDeEscrita.current) setErro(null);
     } catch (e) {
       console.error("[admin/tecnologia] falha ao carregar as Demandas", e);
       if (meuPedido !== ultimoPedido.current) return;
+      erroDeEscrita.current = false;
       setErro(FALHA_DE_CONEXAO);
     } finally {
       // A espera só acaba com a resposta do pedido mais novo: desligá-la na
@@ -203,13 +215,22 @@ export function QuadroDemandas({
       resposta = await fetch(url, { method: metodo, headers: autorizacao(), body: JSON.stringify(corpo) });
     } catch (e) {
       console.error("[admin/tecnologia] falha ao salvar a Demanda", e);
+      erroDeEscrita.current = true;
       setErro(FALHA_DE_CONEXAO);
       return false;
     }
     if (!resposta.ok) {
+      erroDeEscrita.current = true;
       setErro(await motivoDaRecusa(resposta));
+      // O 409 diz que o Quadro está desatualizado e manda recarregar, e a tela
+      // não tem onde: pedir uma ação que o app não oferece deixa quem levou a
+      // recusa sem saída. Recarregando aqui, a frase passa a descrever o que
+      // já aconteceu. O motivo continua na tela, senão o card "voltaria"
+      // sozinho e ninguém saberia por quê.
+      if (resposta.status === 409) await carregar();
       return false;
     }
+    erroDeEscrita.current = false;
     setErro(null);
     await carregar();
     return true;
