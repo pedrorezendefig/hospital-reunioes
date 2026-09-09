@@ -1257,6 +1257,11 @@ class TestMencoesPuras:
         assert len(limpos) == 20_000
         assert time.monotonic() - comeco < 0.2
 
+    def test_o_teto_da_resposta_e_de_cinco_mil_caracteres(self):
+        """A trava do valor, no molde da `test_a_janela_e_de_dez_minutos`: o
+        numero vem da PRD e nao muda sem alguem decidir."""
+        assert LIMITE_RESPOSTA == 5000
+
     def test_o_byte_nulo_e_recusado_antes_de_chegar_ao_banco(self):
         """O Postgres nao aceita NUL em coluna TEXT (22P05). Sem esta guarda o
         texto passava e morria no insert, e quem escreveu levava um 500 no lugar
@@ -1345,6 +1350,28 @@ class TestResponder:
 
         assert resposta.status_code == 201
 
+    def test_cinco_mil_caracteres_cravados_passam(self):
+        """O NUMERO combinado, e nao a mecanica em volta dele.
+
+        Os dois casos acima medem o teto contra ele mesmo (`LIMITE_RESPOSTA`),
+        entao trocar a constante por 200 os deixaria verdes sobre outro limite.
+        Aqui e este par o valor esta escrito a mao: 5000 passa, 5001 nao.
+        """
+        client, _ = _montar(demandas=[_demanda("d1")])
+
+        resposta = client.post(f"{BASE}/demandas/d1/conversa", json={"texto": "x" * 5000})
+
+        assert resposta.status_code == 201
+
+    def test_cinco_mil_e_um_caracteres_sao_recusados_com_o_numero_na_frase(self):
+        client, sb = _montar(demandas=[_demanda("d1")])
+
+        resposta = client.post(f"{BASE}/demandas/d1/conversa", json={"texto": "x" * 5001})
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == "A resposta pode ter no máximo 5000 caracteres."
+        assert sb.tabelas["tecnologia_conversas"] == []
+
     def test_a_mencao_escolhida_fica_na_linha(self):
         client, sb = _montar(demandas=[_demanda("d1")])
 
@@ -1384,21 +1411,62 @@ class TestResponder:
         assert resposta.status_code == 201
         assert sb.tabelas["tecnologia_conversas"][0]["mencoes"] == []
 
-    def test_lista_de_mencoes_maior_que_a_aba_e_recusada(self):
-        """O teto e o tamanho da lista de gente: chamar mais gente do que
-        existe nao e resposta, e um payload com milhares de ids so serve para
-        queimar o CPU do processo que atende todo mundo."""
+    def test_id_fora_da_lista_leva_a_frase_do_id_fora_da_lista(self):
+        """As duas recusas de mencao sao DUAS CAUSAS, e cada uma tem a sua
+        frase.
+
+        Aqui vem tudo junto: tres ids para duas pessoas com acesso, e um deles
+        de fora. A causa que a pessoa precisa ler e o id de fora, que e a
+        especifica; cobrar a QUANTIDADE mandaria cortar mencoes quando o
+        problema e outro. Este caso e o que mata a inversao da ordem.
+        """
         client, sb = _montar(demandas=[_demanda("d1")])
 
         # Duas pessoas tem acesso a aba no cenario padrao (o facilitador nao).
         resposta = client.post(
             f"{BASE}/demandas/d1/conversa",
-            json={"texto": "Chamando meio mundo", "mencoes": ["P1", "P2", "P9"]},
+            json={"texto": "Chamando quem não tem acesso", "mencoes": ["P1", "P2", "P9"]},
         )
 
         assert resposta.status_code == 422
-        assert resposta.json()["detail"] == motivo_mencoes_demais(quantas=3, com_acesso=2)
+        assert resposta.json()["detail"] == MOTIVO_MENCAO_SEM_ACESSO
         assert sb.tabelas["tecnologia_conversas"] == []
+
+    def test_lista_de_mencoes_maior_que_a_aba_e_recusada_pelo_teto(self):
+        """A outra causa, sozinha: todos os ids valem, e ainda assim vieram
+        mais menções do que existe gente com acesso.
+
+        O teto mede o que VEIO no payload, e nao a lista ja limpa: depois da
+        limpeza os ids sao distintos, e a conta nunca passaria do numero de
+        pessoas. Medido no bruto, o numero da frase e o numero que a pessoa
+        mandou, e o guarda-corpo continua fechando o payload de milhares de ids.
+        """
+        client, sb = _montar(demandas=[_demanda("d1")])
+
+        resposta = client.post(
+            f"{BASE}/demandas/d1/conversa",
+            json={"texto": "@Pedro Vitta olha", "mencoes": ["P1", "P1", "P1"]},
+        )
+
+        assert resposta.status_code == 422
+        motivo = resposta.json()["detail"]
+        assert motivo == motivo_mencoes_demais(quantas=3, com_acesso=2)
+        # A frase fala do que veio (3), e nao do que sobrou depois da limpeza (1).
+        assert "3 menções" in motivo
+        assert sb.tabelas["tecnologia_conversas"] == []
+
+    def test_mencao_repetida_dentro_do_teto_continua_valendo(self):
+        """Par de presenca do teto: repetir nao e crime enquanto couber no
+        numero de gente da aba. A lista gravada sai sem repetido."""
+        client, sb = _montar(demandas=[_demanda("d1")])
+
+        resposta = client.post(
+            f"{BASE}/demandas/d1/conversa",
+            json={"texto": "@Pedro Vitta olha", "mencoes": ["P1", "P1"]},
+        )
+
+        assert resposta.status_code == 201
+        assert sb.tabelas["tecnologia_conversas"][0]["mencoes"] == ["P1"]
 
     def test_mencionar_todo_mundo_da_aba_continua_valendo(self):
         """Par de presenca do teto: ele nao pode morder o caso normal, senao o

@@ -357,9 +357,14 @@ def motivo_mencoes_demais(*, quantas: int, com_acesso: int) -> str:
     para queimar CPU do processo que atende todo mundo. A frase diz os DOIS
     numeros, e a saida (deixar so quem se quer chamar) esta na propria caixa de
     quem escreveu.
+
+    "veio com", e nao "tem": o numero e o que chegou no payload, repetidos
+    inclusive, e nao a conta de pessoas distintas chamadas. Dizer "tem 3
+    menções" para uma lista com a mesma pessoa tres vezes seria contar uma
+    coisa que o texto nao diz.
     """
     return (
-        f"Esta resposta tem {quantas} menções, e só {com_acesso} "
+        f"Esta resposta veio com {quantas} menções, e só {com_acesso} "
         f"{'pessoa tem' if com_acesso == 1 else 'pessoas têm'} acesso à aba Tecnologia. "
         "Deixe só as menções de quem você quer chamar e envie de novo."
     )

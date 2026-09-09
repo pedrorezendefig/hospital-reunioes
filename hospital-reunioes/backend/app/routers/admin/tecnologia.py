@@ -706,11 +706,24 @@ def _texto_e_mencoes(supabase: Client, payload: RespostaPayload) -> tuple[str, l
     A lista de pessoas so e consultada quando ha mencao: sem isso, toda
     resposta pagaria uma leitura da tabela de participantes para nada.
 
-    O TETO vem antes da allowlist e e o proprio tamanho dessa lista: mais
-    mencoes do que gente com acesso nao e resposta, e um payload com milhares de
-    ids so serve para queimar CPU do processo que atende todo mundo (a rota e
-    `async` e o uvicorn sobe com um worker so). Recusar aqui e o que fecha o
-    enchimento da coluna, ja que nenhuma rota da aba tem limitador de taxa.
+    Duas recusas, nesta ordem, porque sao DUAS CAUSAS e a frase de cada uma tem
+    de ser verdadeira para quem a le:
+
+    1. a ALLOWLIST, que e a causa mais especifica: um id que nao esta na lista
+       de quem tem acesso a aba. Ela vem primeiro porque, depois da limpeza, os
+       ids sao distintos, e "mais mencoes do que gente com acesso" so acontece
+       quando pelo menos um deles esta fora da lista. Cobrar a QUANTIDADE nesse
+       caso mandaria cortar mencoes quando o problema e outro;
+    2. o TETO, medido sobre o que VEIO no payload (e nao sobre a lista ja
+       limpa), que e o que sobra depois da allowlist: uma lista enorme de ids
+       validos repetidos. E ele que fecha o payload de milhares de ids, que so
+       serve para queimar CPU do processo que atende todo mundo (a rota e
+       `async` e o uvicorn sobe com um worker so), ja que nenhuma rota da aba
+       tem limitador de taxa. Medido no bruto, o numero da frase e sempre o
+       numero que a pessoa mandou.
+
+    A tela nunca cai na segunda: o `guardarEscolhida` do modal nao repete
+    pessoa, e a lista enviada sai das mencoes que o texto ainda chama.
     """
     motivo = motivo_resposta_invalida(payload.texto)
     if motivo:
@@ -718,10 +731,11 @@ def _texto_e_mencoes(supabase: Client, payload: RespostaPayload) -> tuple[str, l
     mencoes = normalizar_mencoes(payload.mencoes)
     if mencoes:
         com_acesso = {p["id"] for p in _pessoas_da_aba(supabase)}
-        if len(mencoes) > len(com_acesso):
-            _recusar(motivo_mencoes_demais(quantas=len(mencoes), com_acesso=len(com_acesso)))
         if mencoes_sem_acesso(mencoes, com_acesso):
             _recusar(MOTIVO_MENCAO_SEM_ACESSO)
+        quantas_vieram = len(payload.mencoes or [])
+        if quantas_vieram > len(com_acesso):
+            _recusar(motivo_mencoes_demais(quantas=quantas_vieram, com_acesso=len(com_acesso)))
     return payload.texto.strip(), mencoes
 
 
