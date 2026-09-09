@@ -36,6 +36,7 @@ from app.routers.admin import dados_atendimento as admin_dados_atendimento
 from app.routers.admin import espelho_global_health as admin_espelho_global_health
 from app.routers.admin import super_admins as admin_super_admins
 from app.routers.admin import taxonomia as admin_taxonomia
+from app.routers.admin import tecnologia as admin_tecnologia
 from app.routers.admin import usuarios as admin_usuarios
 from app.routers.admin import utilitarios as admin_utilitarios
 from app.routers.pops import assinatura as pops_assinatura
@@ -119,6 +120,7 @@ app.include_router(admin.router, prefix=settings.api_prefix)
 app.include_router(admin_super_admins.router, prefix=settings.api_prefix)
 app.include_router(admin_usuarios.router, prefix=settings.api_prefix)
 app.include_router(admin_taxonomia.router, prefix=settings.api_prefix)
+app.include_router(admin_tecnologia.router, prefix=settings.api_prefix)
 app.include_router(admin_utilitarios.router, prefix=settings.api_prefix)
 app.include_router(admin_dados_atendimento.router, prefix=settings.api_prefix)
 app.include_router(admin_espelho_global_health.router, prefix=settings.api_prefix)
