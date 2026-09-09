@@ -80,6 +80,18 @@ MOTIVO_PRODUTO_SEM_DONO = (
 MOTIVO_PRODUTO_INATIVO = "Produto inativo nao recebe Demanda nova. Escolha outro Produto ou reative este."
 MOTIVO_RESPONSAVEL_SEM_ACESSO = "O responsavel precisa ser um participante ativo com Super admin."
 
+# A criacao recusa o mesmo estado que a porta de atribuir recusa: dono que
+# perdeu o acesso a aba (saiu do Super admin ou foi desativado) nao pode virar
+# responsavel, senao o card nasce com o nome de alguem que nao consegue abrir a
+# aba. A frase diz ONDE consertar, porque a acao e possivel na mesma tela: a
+# lista de Produtos fica logo abaixo do Quadro, e dentro da aba todos podem
+# tudo (ADR 0050, decisao 11). Guarda-corpo que so diz "nao pode" vira
+# indisponibilidade.
+MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO = (
+    "O dono deste Produto não tem mais acesso à aba Tecnologia, então a Demanda nasceria sem responsável. "
+    "Troque o dono na lista de Produtos, logo abaixo do Quadro, e abra a Demanda de novo."
+)
+
 ESTADOS: tuple[str, ...] = ("nova", "em_andamento", "aguardando", "concluida", "cancelada")
 
 # O rotulo que a gente le, na tela e no texto da linha de movimento. O banco
@@ -140,8 +152,13 @@ def motivo_transicao_invalida(de: str, para: str) -> str:
     aqui = ESTADO_ROTULO.get(de, de)
     if de == para:
         return f"A Demanda já está em {aqui}."
-    la = ESTADO_ROTULO.get(para, para)
     destinos = sorted(ESTADO_ROTULO[d] for d in TRANSICOES.get(de, frozenset()))
+    if not destinos:
+        # Estado que a maquina nao conhece (linha antiga, ou valor que entrou
+        # por fora do app). Sem esta saida a frase terminaria em "os destinos
+        # sao: .", mandando a pessoa procurar uma lista que nao existe.
+        return f"A Demanda está em um estado que o Quadro não conhece ({de}), e daí ela não sai por aqui."
+    la = ESTADO_ROTULO.get(para, para)
     return f"De {aqui} não dá para ir direto a {la}. De {aqui}, os destinos são: {', '.join(destinos)}."
 
 

@@ -140,6 +140,26 @@ export function DemandaModal({ demanda, produtos, pessoas, token, onFechar, onMu
     .filter((p) => p.ativo || p.id === demanda.produto_id)
     .map((p) => ({ value: p.id, label: p.ativo ? p.nome : `${p.nome} (inativo)` }));
 
+  const opcoesDeResponsavel = pessoas.map((p) => ({ value: p.id, label: p.nome_completo }));
+  /**
+   * O responsável de hoje entra na lista mesmo se saiu da aba.
+   *
+   * A API recusa criar e atribuir para quem perdeu o acesso, mas dado antigo
+   * existe: o `Select` da casa cai no placeholder quando o valor não casa com
+   * nenhuma opção, e o modal diria "Sem responsável" enquanto o card mostra o
+   * nome. Mesmo remendo que a lista de Produtos já faz com o dono.
+   */
+  const opcoesComOAtual =
+    demanda.responsavel_id && !pessoas.some((p) => p.id === demanda.responsavel_id)
+      ? [
+          ...opcoesDeResponsavel,
+          {
+            value: demanda.responsavel_id,
+            label: `${demanda.responsavel_nome ?? demanda.responsavel_id} (sem acesso à aba)`,
+          },
+        ]
+      : opcoesDeResponsavel;
+
   return (
     <AdminModal
       open
@@ -153,7 +173,11 @@ export function DemandaModal({ demanda, produtos, pessoas, token, onFechar, onMu
         <button
           type="button"
           onClick={salvar}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all"
+          // Por cima da guarda do backend, não no lugar dela: quem recusa
+          // título vazio é o router, com frase de gente. Aqui só se evita o
+          // clique que já se sabe que vai voltar recusado.
+          disabled={!campos.titulo.trim()}
+          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all disabled:opacity-50"
         >
           <Save className="w-4 h-4" />
           Salvar
@@ -233,7 +257,7 @@ export function DemandaModal({ demanda, produtos, pessoas, token, onFechar, onMu
               label="Responsável"
               value={demanda.responsavel_id ?? ""}
               onChange={atribuir}
-              options={pessoas.map((p) => ({ value: p.id, label: p.nome_completo }))}
+              options={opcoesComOAtual}
               placeholder="Sem responsável"
             />
             <p className="mt-1 text-xs text-text-secondary">

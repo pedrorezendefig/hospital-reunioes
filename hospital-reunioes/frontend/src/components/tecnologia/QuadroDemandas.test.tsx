@@ -80,7 +80,9 @@ function montar(
     conversa?: unknown[];
     recusa?: { status: number; detail: string };
     // A rede CAI: o `fetch` rejeita, em vez de responder com status de erro.
-    redeFora?: "carregar" | "salvar";
+    // São caminhos diferentes no componente (carregar, salvar e a leitura da
+    // Conversa dentro do modal), por isso três valores.
+    redeFora?: "carregar" | "salvar" | "conversa";
     token?: string | null;
   } = {},
 ) {
@@ -94,7 +96,8 @@ function montar(
 
       if (
         (opcoes.redeFora === "carregar" && metodo === "GET") ||
-        (opcoes.redeFora === "salvar" && metodo !== "GET")
+        (opcoes.redeFora === "salvar" && metodo !== "GET") ||
+        (opcoes.redeFora === "conversa" && metodo === "GET" && url.includes("/conversa"))
       ) {
         throw new TypeError("Failed to fetch");
       }
@@ -393,8 +396,11 @@ describe("O modal da Demanda", () => {
     },
   ];
 
-  async function abrirModal(extra: Partial<Demanda> = {}) {
-    montar([demanda("d1", "Encerrar conversas", extra)], { conversa: CONVERSA });
+  async function abrirModal(
+    extra: Partial<Demanda> = {},
+    opcoes: Parameters<typeof montar>[1] = {},
+  ) {
+    montar([demanda("d1", "Encerrar conversas", extra)], { conversa: CONVERSA, ...opcoes });
     // O título do card é o que abre o modal (o clique sobe para o botão).
     fireEvent.click(await screen.findByText("Encerrar conversas"));
     return await screen.findByRole("dialog");
@@ -461,6 +467,62 @@ describe("O modal da Demanda", () => {
     });
   });
 
+  it("com o Título apagado, o Salvar fica desabilitado", async () => {
+    // Por cima da guarda do backend, não no lugar dela: a API recusa `""` com
+    // frase de gente. Aqui só se evita o clique que já se sabe recusado.
+    const modal = await abrirModal();
+    const salvar = screen.getByRole("button", { name: /Salvar/ }) as HTMLButtonElement;
+
+    // O par de presença: com título, o botão está de pé no mesmo render.
+    expect(salvar.disabled).toBe(false);
+
+    fireEvent.change(within(modal).getByLabelText("Título"), { target: { value: "   " } });
+
+    expect(salvar.disabled).toBe(true);
+  });
+
+  it("o responsável que perdeu o acesso à aba continua à vista no seletor", async () => {
+    // Dado antigo existe: a recusa nova na criação não apaga quem já está
+    // gravado. Sem a opção extra, o `Select` da casa cai no placeholder e o
+    // modal diria "Sem responsável" enquanto o card mostra o nome.
+    const modal = await abrirModal({ responsavel_id: "P9", responsavel_nome: "Saiu da Vitta" });
+
+    const seletor = within(modal).getByRole("combobox", { name: "Responsável" });
+    expect(seletor.textContent).toContain("Saiu da Vitta");
+    expect(seletor.textContent).not.toContain("Sem responsável");
+  });
+
+  it("o responsável que está na lista aparece pelo nome, sem marca de sem acesso", async () => {
+    // O par de presença do teste acima: uma opção extra cravada marcaria todo
+    // mundo como fora da aba.
+    const modal = await abrirModal({ responsavel_id: "P1", responsavel_nome: "Pedro Vitta" });
+
+    const seletor = within(modal).getByRole("combobox", { name: "Responsável" });
+    expect(seletor.textContent).toContain("Pedro Vitta");
+    expect(seletor.textContent).not.toContain("sem acesso à aba");
+  });
+
+  it("rede fora ao salvar: o modal avisa", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const modal = await abrirModal({}, { redeFora: "salvar" });
+
+    fireEvent.change(within(modal).getByLabelText("Título"), { target: { value: "Título novo" } });
+    fireEvent.click(screen.getByRole("button", { name: /Salvar/ }));
+
+    const aviso = await within(modal).findByRole("alert");
+    expect(aviso.textContent).toContain("Não foi possível falar com o servidor");
+  });
+
+  it("rede fora ao ler a Conversa: o modal avisa, em vez de mostrar fio vazio", async () => {
+    // Sem o `catch` do `carregarConversa`, o modal mostraria "Nada aconteceu
+    // nesta Demanda ainda", que é o contrário do que houve.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    const modal = await abrirModal({}, { redeFora: "conversa" });
+
+    const aviso = await within(modal).findByRole("alert");
+    expect(aviso.textContent).toContain("Não foi possível falar com o servidor");
+  });
+
   it("mover pelo modal usa a mesma porta do card", async () => {
     const modal = await abrirModal({ estado: "aguardando" });
 
@@ -483,6 +545,39 @@ describe("A falha de rede não vira quadro vazio e calado", () => {
     const aviso = await screen.findByRole("alert");
     expect(aviso.textContent).toContain("Não foi possível falar com o servidor");
     expect(screen.queryByText("Carregando Demandas...")).toBeNull();
+  });
+
+  it("rede fora ao mover: o clique avisa, em vez de não fazer nada", async () => {
+    // O `catch` do caminho de ESCRITA. Sem ele, o clique em Mover com a rede
+    // fora quebraria a promise sem alerta nenhum, e o card ficaria na coluna
+    // antiga sem explicação.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    montar([demanda("d1", "Uma nova")], { redeFora: "salvar" });
+
+    fireEvent.click(await screen.findByRole("button", { name: "Mover Uma nova" }));
+    fireEvent.click(within(cardDe("Uma nova")).getByRole("button", { name: "Aguardando" }));
+
+    const aviso = await screen.findByRole("alert");
+    expect(aviso.textContent).toContain("Não foi possível falar com o servidor");
+  });
+
+  it("sem sessão, o Quadro diz o que houve em vez de mostrar colunas zeradas", async () => {
+    // `carregar` desiste na primeira linha quando não há token. Sem aviso, o
+    // Quadro desenha Nova 0, Em andamento 0, Aguardando 0, indistinguível de
+    // "não há Demanda nenhuma". O aviso do módulo não cobre este caso: ele
+    // fala de Produtos e mora abaixo do tabpanel do Quadro.
+    //
+    // A frase é a das DUAS causas de propósito: o `useAuth` devolve
+    // `token: null` tanto com a sessão acabada quanto com o `getUser()` dele
+    // falhando por rede, e o componente não distingue.
+    montar([demanda("d1", "Uma nova")], { token: null });
+
+    const aviso = await screen.findByRole("alert");
+    expect(aviso.textContent).toContain("a sessão não está ativa ou o servidor não respondeu");
+    expect(aviso.textContent).toContain("Tente recarregar a página");
+    expect(screen.queryByText("Carregando Demandas...")).toBeNull();
+    // E não fingiu que buscou: nenhuma chamada saiu.
+    expect(chamadas).toHaveLength(0);
   });
 
   it("com servidor de pé, a espera termina, os cards aparecem e não há aviso", async () => {

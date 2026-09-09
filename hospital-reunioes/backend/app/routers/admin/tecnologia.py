@@ -54,6 +54,8 @@ from app.models.tecnologia_schemas import (
     ProdutoUpdatePayload,
 )
 from app.services.tecnologia import (
+    ESTADO_ROTULO,
+    MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO,
     MOTIVO_DONO_SEM_ACESSO,
     MOTIVO_PRODUTO_ATIVO_SEM_DONO,
     MOTIVO_PRODUTO_INATIVO,
@@ -346,6 +348,17 @@ def _normalizar_prazo(valor: str | None) -> str | None:
         _recusar("Prazo precisa estar no formato AAAA-MM-DD.")
 
 
+def _fio_incompleto() -> NoReturn:
+    """500 honesto: o movimento foi, a linha do fio nao."""
+    raise HTTPException(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        detail=(
+            "A Demanda mudou, mas a linha do movimento não entrou na Conversa: "
+            "o fio desta Demanda ficou incompleto. Recarregue o Quadro para ver o estado atual."
+        ),
+    )
+
+
 def _gravar_movimento(
     supabase: Client,
     *,
@@ -355,23 +368,40 @@ def _gravar_movimento(
     para: str,
     texto: str,
 ) -> None:
-    """A linha automatica do fio, na mesma operacao do movimento.
+    """A linha automatica do fio, logo depois do movimento.
 
     Sem autor: quem moveu esta no `texto`, que o backend monta (o de/para
     estruturado fica nas colunas ao lado, para quem for ler por programa).
+
+    NAO e atomico com o movimento, e nao da para fingir que e: sao duas
+    chamadas ao PostgREST, que nao tem transacao, e RPC nova esta fora do
+    escopo desta fatia. O que da para garantir e que a falha nao passe calada.
+    Se o insert nao voltar a linha (recusa do banco, timeout, PostgREST fora),
+    o log fica com tudo o que a linha diria, e quem clicou recebe 500 com a
+    frase honesta: a Demanda MUDOU e o fio ficou incompleto. Dizer "nao deu
+    certo" seria mentira, porque o movimento ja esta gravado.
     """
-    supabase.table(TABELA_CONVERSAS).insert(
-        {
-            "demanda_id": demanda_id,
-            "autor_id": None,
-            "linha": "movimento",
-            "texto": texto,
-            "mencoes": [],
-            "movimento_campo": campo,
-            "movimento_de": de,
-            "movimento_para": para,
-        }
-    ).execute()
+    linha = {
+        "demanda_id": demanda_id,
+        "autor_id": None,
+        "linha": "movimento",
+        "texto": texto,
+        "mencoes": [],
+        "movimento_campo": campo,
+        "movimento_de": de,
+        "movimento_para": para,
+    }
+    try:
+        result = supabase.table(TABELA_CONVERSAS).insert(linha).execute()
+    except Exception:
+        # `except APIError` nao pegaria o `httpx.HTTPError` que o timeout do
+        # PostgREST sobe cru, e aqui qualquer falha tem o mesmo desfecho: a
+        # linha nao entrou.
+        logger.exception("Falha ao gravar a linha de movimento da Demanda %s: %s", demanda_id, linha)
+        _fio_incompleto()
+    if not result.data:
+        logger.error("Linha de movimento nao gravada para a Demanda %s: %s", demanda_id, linha)
+        _fio_incompleto()
 
 
 # ─── Demanda: endpoints ──────────────────────────────────────────────────────
@@ -417,8 +447,14 @@ async def criar_demanda(
     """Abre uma Demanda: ela nasce em `nova`, com o dono do Produto.
 
     O responsavel nao vem do payload de proposito (ADR 0050, decisao 4): o
-    Produto e que diz quem responde por ele, e por isso Produto sem dono ou
-    inativo e recusado aqui, e nao depois, com a Demanda ja orfa no quadro.
+    Produto e que diz quem responde por ele, e por isso Produto sem dono,
+    inativo, ou com dono que perdeu o acesso a aba e recusado aqui, e nao
+    depois, com a Demanda ja orfa no quadro.
+
+    A terceira guarda existe porque `atribuir` recusa exatamente esse estado: o
+    dono do Produto pode ter perdido o Super admin DEPOIS de virar dono, e sem
+    ela o app criaria por uma porta o que recusa pela outra, deixando o card
+    com um responsavel que nao consegue abrir a aba.
     """
     produto = _buscar_produto(supabase, payload.produto_id)
     if not produto.get("ativo"):
@@ -426,6 +462,8 @@ async def criar_demanda(
     dono_id = produto.get("dono_id")
     if not dono_id:
         _recusar(MOTIVO_PRODUTO_SEM_DONO)
+    if dono_id not in {p["id"] for p in _pessoas_da_aba(supabase)}:
+        _recusar(MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO)
 
     titulo = payload.titulo.strip()
     if not titulo:
@@ -505,8 +543,14 @@ async def mover_demanda(
     """Move a Demanda de coluna, se a maquina de estados permitir.
 
     Concluir e cancelar carimbam data e pessoa; reabrir limpa os carimbos. A
-    linha de movimento sai na mesma operacao: sem ela, o quadro mudaria sem
+    linha de movimento e gravada logo em seguida: sem ela, o quadro mudaria sem
     ninguem saber quem mexeu.
+
+    O update amarra o estado LIDO (`.eq("estado", de)`), e nao so o id: sem
+    isso, duas pessoas movendo o mesmo card ao mesmo tempo passariam as duas
+    pela validacao, as duas gravariam, e o fio ganharia duas linhas contando
+    historias diferentes. Com a amarra, a segunda nao casa nenhuma linha e leva
+    409.
     """
     atual = _buscar_demanda(supabase, demanda_id)
     de = str(atual.get("estado") or "")
@@ -517,9 +561,18 @@ async def mover_demanda(
     mudancas: dict = {"estado": para}
     mudancas.update(carimbos_da_transicao(para=para, ator_id=ator["id"], agora=_agora()))
 
-    result = supabase.table(TABELA_DEMANDAS).update(mudancas).eq("id", demanda_id).execute()
+    result = supabase.table(TABELA_DEMANDAS).update(mudancas).eq("id", demanda_id).eq("estado", de).execute()
     if not result.data:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada")
+        # Nao da para distinguir "outra pessoa moveu" de "a linha sumiu", e as
+        # duas cabem na mesma frase: a Demanda nao esta mais onde estava quando
+        # este clique comecou. Nao culpar uma causa so.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                f"A Demanda não está mais em {ESTADO_ROTULO.get(de, de)}: "
+                "alguém mexeu nela enquanto você olhava. Recarregue o Quadro e tente de novo."
+            ),
+        )
 
     _gravar_movimento(
         supabase,

@@ -8,8 +8,9 @@ Dois seams, na ordem em que a regra existe:
   Assim nenhuma transicao fica sem teste: quem acrescentar um estado quebra o
   piso de sanidade, e quem afrouxar a regra cai numa proibida.
 * **Os endpoints**, pela ROTA de verdade com o Supabase dublado, no molde do
-  `test_admin_tecnologia.py` da fatia anterior. E o unico jeito de provar que a
-  linha de movimento sai na MESMA operacao do movimento.
+  `test_admin_tecnologia.py` da fatia anterior. E o unico jeito de provar que o
+  movimento grava a linha do fio logo em seguida, e o que acontece quando essa
+  segunda escrita falha (o PostgREST nao tem transacao).
 
 O gate de papel nao se repete aqui: a matriz de `test_admin_tecnologia.py`
 varre o schema OpenAPI e ja engole toda rota nova deste arquivo.
@@ -39,6 +40,7 @@ from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
 from app.services.tecnologia import (  # noqa: E402
     ESTADO_ROTULO,
     ESTADOS,
+    MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO,
     MOTIVO_PRODUTO_INATIVO,
     MOTIVO_PRODUTO_SEM_DONO,
     MOTIVO_RESPONSAVEL_SEM_ACESSO,
@@ -109,6 +111,16 @@ class TestMaquinaDeEstados:
         assert "Concluída" in motivo
         assert "Cancelada" in motivo
         assert "Em andamento" in motivo
+
+    def test_o_motivo_de_estado_desconhecido_nao_sai_quebrado(self):
+        """Linha antiga, ou valor que entrou por fora do app: sem esta saida a
+        frase terminaria em "os destinos sao: .", mandando a pessoa procurar
+        uma lista que nao existe."""
+        motivo = motivo_transicao_invalida("arquivada", "em_andamento")
+
+        assert "arquivada" in motivo
+        assert "não conhece" in motivo
+        assert "destinos são: ." not in motivo
 
     def test_o_motivo_de_ficar_no_mesmo_estado_nao_culpa_a_transicao(self):
         """Causa que o codigo distingue: quem manda `aguardando` para uma
@@ -265,6 +277,68 @@ class _SupabaseMock:
         return _TableQuery(self.tabelas.setdefault(nome, []), nome)
 
 
+class _SupabaseComFalhaNoFio(_SupabaseMock):
+    """O insert da Conversa falha, do jeito que o PostgREST falha de verdade.
+
+    `vazio`: a escrita volta sem linha nenhuma. `excecao`: a chamada estoura
+    (timeout, PostgREST fora do ar). Os dois caminhos precisam do mesmo
+    desfeixo: a Demanda ja mudou, e o fio ficou sem a linha.
+    """
+
+    def __init__(self, tabelas: dict[str, list[dict]], modo: str):
+        super().__init__(tabelas)
+        self._modo = modo
+
+    def table(self, nome: str):
+        consulta = super().table(nome)
+        if nome != "tecnologia_conversas":
+            return consulta
+        original = consulta.execute
+
+        def execute():
+            # `_insert` privado de proposito: so a ESCRITA falha; a leitura do
+            # fio continua funcionando, senao o teste provaria outra coisa.
+            if consulta._insert is None:
+                return original()
+            if self._modo == "excecao":
+                raise RuntimeError("PostgREST fora do ar")
+            return _Result(data=[])
+
+        consulta.execute = execute
+        return consulta
+
+
+class _SupabaseComCorrida(_SupabaseMock):
+    """Outra pessoa move a mesma Demanda entre a leitura e a escrita.
+
+    Na PRIMEIRA leitura da tabela de Demandas a linha volta como estava; logo
+    depois, o estado no banco muda por fora. E o que acontece quando duas
+    pessoas clicam em Mover no mesmo card ao mesmo tempo.
+    """
+
+    def __init__(self, tabelas: dict[str, list[dict]], estado_de_fora: str):
+        super().__init__(tabelas)
+        self._estado = estado_de_fora
+        self._ja_leu = False
+
+    def table(self, nome: str):
+        consulta = super().table(nome)
+        if nome != "tecnologia_demandas":
+            return consulta
+        original = consulta.execute
+
+        def execute():
+            resultado = original()
+            if not self._ja_leu and consulta._insert is None and consulta._update is None and resultado.data:
+                self._ja_leu = True
+                for linha in self.tabelas["tecnologia_demandas"]:
+                    linha["estado"] = self._estado
+            return resultado
+
+        consulta.execute = execute
+        return consulta
+
+
 # ─── Cenario ─────────────────────────────────────────────────────────────────
 
 
@@ -329,6 +403,8 @@ def _montar(
     produtos: list[dict] | None = None,
     demandas: list[dict] | None = None,
     conversas: list[dict] | None = None,
+    fio_falha: str | None = None,
+    corrida_para: str | None = None,
 ) -> tuple[TestClient, _SupabaseMock]:
     app = FastAPI()
     app.include_router(tecnologia_router.router, prefix="/api")
@@ -337,16 +413,18 @@ def _montar(
     if all(p["id"] != logado["id"] for p in pessoas):
         pessoas.append(dict(logado))
 
-    sb = _SupabaseMock(
-        tabelas={
-            "participantes": pessoas,
-            "tecnologia_produtos": [
-                dict(p) for p in (produtos if produtos is not None else [_produto("prod-1", "Ana")])
-            ],
-            "tecnologia_demandas": [dict(d) for d in (demandas or [])],
-            "tecnologia_conversas": [dict(c) for c in (conversas or [])],
-        }
-    )
+    tabelas = {
+        "participantes": pessoas,
+        "tecnologia_produtos": [dict(p) for p in (produtos if produtos is not None else [_produto("prod-1", "Ana")])],
+        "tecnologia_demandas": [dict(d) for d in (demandas or [])],
+        "tecnologia_conversas": [dict(c) for c in (conversas or [])],
+    }
+    if fio_falha:
+        sb: _SupabaseMock = _SupabaseComFalhaNoFio(tabelas, fio_falha)
+    elif corrida_para:
+        sb = _SupabaseComCorrida(tabelas, corrida_para)
+    else:
+        sb = _SupabaseMock(tabelas)
 
     async def _usuario() -> dict[str, Any]:
         return {"id": logado["auth_user_id"], "email": logado["email"], "metadata": {}}
@@ -448,6 +526,79 @@ class TestCriarDemanda:
 
         assert resposta.status_code == 404
 
+    def test_dono_que_perdeu_o_acesso_a_aba_e_recusado(self):
+        """A criacao recusa o mesmo estado que a porta de atribuir recusa.
+
+        P3 virou dono do Produto quando ainda era Super admin; depois o
+        diretor tirou o papel dele. Sem esta guarda, a Demanda nasceria com
+        `responsavel_id: "P3"` (201) enquanto `POST /atribuir` com o MESMO P3
+        responde 422: o app criaria por uma porta o estado que recusa pela
+        outra, e o card ficaria com um responsavel que nao abre a aba.
+        """
+        client, sb = _montar(produtos=[_produto("prod-1", "Ana", dono_id="P3")])
+
+        resposta = client.post(
+            f"{BASE}/demandas",
+            json={"titulo": "Pedido", "tipo": "ajuste", "produto_id": "prod-1"},
+        )
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO
+        assert sb.tabelas["tecnologia_demandas"] == []
+
+    def test_a_recusa_do_dono_sem_acesso_diz_onde_consertar(self):
+        """Guarda-corpo que so diz "nao pode" vira indisponibilidade.
+
+        Quem TEM onde carimbar e o proprio Super admin, na mesma tela: a lista
+        de Produtos fica logo abaixo do Quadro, e dentro da aba todos podem
+        tudo (ADR 0050, decisao 11). A frase tem que apontar para la.
+        """
+        assert "dono" in MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO
+        assert "lista de Produtos" in MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO
+
+    def test_dono_desativado_tambem_e_recusado(self):
+        """Perder o acesso nao e so perder o Super admin: participante
+        desativado tambem sai da lista da aba."""
+        saiu = _pessoa("P4", "Saiu da Vitta", ativo=False)
+        client, _ = _montar(
+            participantes=[PEDRO, saiu],
+            produtos=[_produto("prod-1", "Ana", dono_id="P4")],
+        )
+
+        resposta = client.post(
+            f"{BASE}/demandas",
+            json={"titulo": "Pedido", "tipo": "ajuste", "produto_id": "prod-1"},
+        )
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO
+
+    def test_dono_com_acesso_segue_criando(self):
+        """O par de presenca das duas recusas acima: a guarda nova nao pode
+        travar o caminho normal, que e o unico que existe hoje em producao."""
+        client, sb = _montar(produtos=[_produto("prod-1", "Ana", dono_id="P2")])
+
+        resposta = client.post(
+            f"{BASE}/demandas",
+            json={"titulo": "Pedido", "tipo": "ajuste", "produto_id": "prod-1"},
+        )
+
+        assert resposta.status_code == 201
+        assert sb.tabelas["tecnologia_demandas"][0]["responsavel_id"] == "P2"
+
+    def test_titulo_vazio_volta_frase_de_gente_e_nao_json_do_pydantic(self):
+        """`min_length=1` responderia ANTES do router e devolveria `detail` em
+        LISTA, que a tela mostra como JSON cru no alerta vermelho."""
+        client, _ = _montar()
+
+        resposta = client.post(
+            f"{BASE}/demandas",
+            json={"titulo": "", "tipo": "ajuste", "produto_id": "prod-1"},
+        )
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == "Título da Demanda não pode ser vazio."
+
 
 # ─── 3. A Demanda anda ───────────────────────────────────────────────────────
 
@@ -524,6 +675,54 @@ class TestMoverPelaRota:
         linha = sb.tabelas["tecnologia_demandas"][0]
         assert linha["cancelada_em"] is None
         assert linha["cancelada_por"] is None
+
+    def test_quem_perde_a_corrida_leva_409_e_nao_move_de_novo(self):
+        """TOCTOU: duas pessoas movem o mesmo card ao mesmo tempo.
+
+        As duas leem `nova`, as duas passam pela maquina de estados. Sem
+        amarrar o estado lido no update, as duas gravariam e o fio ganharia
+        duas linhas contando historias diferentes. Aqui a segunda nao casa
+        linha nenhuma e leva 409, com o fio intacto.
+        """
+        client, sb = _montar(demandas=[_demanda("d1", estado="nova")], corrida_para="aguardando")
+
+        resposta = client.post(f"{BASE}/demandas/d1/mover", json={"estado": "concluida"})
+
+        assert resposta.status_code == 409
+        motivo = resposta.json()["detail"]
+        assert "não está mais em Nova" in motivo
+        assert "Recarregue o Quadro" in motivo
+        # A escrita nao passou: o estado e o que a outra pessoa deixou.
+        assert sb.tabelas["tecnologia_demandas"][0]["estado"] == "aguardando"
+        assert sb.tabelas["tecnologia_conversas"] == []
+
+    def test_sem_corrida_o_movimento_passa(self):
+        """O par de presenca do 409: uma amarra que nunca casasse devolveria
+        409 em todo movimento, e o teste acima passaria sozinho."""
+        client, sb = _montar(demandas=[_demanda("d1", estado="nova")])
+
+        resposta = client.post(f"{BASE}/demandas/d1/mover", json={"estado": "concluida"})
+
+        assert resposta.status_code == 200
+        assert sb.tabelas["tecnologia_demandas"][0]["estado"] == "concluida"
+
+    @pytest.mark.parametrize("modo", ("vazio", "excecao"))
+    def test_falha_ao_gravar_o_fio_nao_passa_calada(self, modo):
+        """O movimento e a linha do fio sao duas chamadas ao PostgREST, que nao
+        tem transacao (e RPC esta fora do escopo desta fatia). O minimo honesto
+        e nao engolir a falha: a resposta diz que a Demanda MUDOU e que o fio
+        ficou incompleto. "Nao deu certo" seria mentira.
+        """
+        client, sb = _montar(demandas=[_demanda("d1", estado="nova")], fio_falha=modo)
+
+        resposta = client.post(f"{BASE}/demandas/d1/mover", json={"estado": "aguardando"})
+
+        assert resposta.status_code == 500
+        motivo = resposta.json()["detail"]
+        assert "A Demanda mudou" in motivo
+        assert "fio desta Demanda ficou incompleto" in motivo
+        # E a resposta nao mente: o movimento esta gravado.
+        assert sb.tabelas["tecnologia_demandas"][0]["estado"] == "aguardando"
 
     def test_o_movimento_grava_a_linha_na_conversa(self):
         client, sb = _montar(demandas=[_demanda("d1", estado="nova")])
@@ -639,6 +838,35 @@ class TestEditar:
         assert linha["titulo"] == "Só o título"
         assert linha["prazo"] == "2026-10-01"
         assert linha["descricao"] == "Antiga"
+
+    def test_titulo_apagado_no_modal_volta_frase_de_gente(self):
+        """Apagar o Título no modal e salvar mandava `""` e, com `min_length=1`
+        no payload, a tela mostrava o JSON do pydantic no alerta vermelho.
+        Quem recusa e o router, com frase de gente e `detail` em TEXTO."""
+        client, sb = _montar(demandas=[_demanda("d1", titulo="Tinha título")])
+
+        resposta = client.patch(f"{BASE}/demandas/d1", json={"titulo": ""})
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == "Título da Demanda não pode ser vazio."
+        assert sb.tabelas["tecnologia_demandas"][0]["titulo"] == "Tinha título"
+
+    def test_titulo_so_de_espacos_cai_na_mesma_frase(self):
+        client, _ = _montar(demandas=[_demanda("d1")])
+
+        resposta = client.patch(f"{BASE}/demandas/d1", json={"titulo": "   "})
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == "Título da Demanda não pode ser vazio."
+
+    def test_titulo_grande_demais_continua_recusado(self):
+        """O par de presenca de tirar o `min_length`: o `max_length` fica, e
+        passar de 200 caracteres nao e engano de clique."""
+        client, _ = _montar(demandas=[_demanda("d1")])
+
+        resposta = client.patch(f"{BASE}/demandas/d1", json={"titulo": "x" * 201})
+
+        assert resposta.status_code == 422
 
     def test_prazo_com_formato_invalido_e_recusado(self):
         client, _ = _montar(demandas=[_demanda("d1")])

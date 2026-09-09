@@ -59,6 +59,17 @@ const CLASSE_PRIORIDADE: Record<PrioridadeDemanda, string> = {
   alta: "bg-amber-50 text-amber-700",
 };
 
+/**
+ * A frase de quando `useAuth` não devolve token.
+ *
+ * Ela NÃO manda entrar de novo, pelo mesmo motivo do módulo: o hook devolve
+ * `token: null` tanto com a sessão acabada quanto com o `getUser()` dele
+ * falhando por rede, e o componente não distingue as duas. Recarregar é
+ * possível nos dois casos.
+ */
+const SEM_SESSAO =
+  "Não foi possível carregar as Demandas: a sessão não está ativa ou o servidor não respondeu. Tente recarregar a página.";
+
 const FORM_VAZIO = {
   titulo: "",
   tipo: "decisao" as TipoDemanda,
@@ -110,7 +121,11 @@ export function QuadroDemandas({ token, produtos, pessoas }: Props) {
 
   useEffect(() => {
     if (!token) {
+      // Sem token o Quadro desenharia cinco colunas zeradas, calado, que é
+      // indistinguível de "não há Demanda nenhuma". O aviso do módulo não
+      // cobre este caso: ele fala de Produtos e mora abaixo do Quadro.
       setCarregando(false);
+      setErro(SEM_SESSAO);
       return;
     }
     carregar();

@@ -331,7 +331,11 @@ describe("A falha de rede não vira lista vazia e calada", () => {
     sessao.token = null;
     montar([produto("p1", "Ana", 1, { dono_id: "P1" })]);
 
-    const aviso = await screen.findByRole("alert");
+    // Dentro da seção de Produtos: sem sessão, o Quadro avisa do lado dele
+    // também (com a frase dele, sobre Demandas), e o que se afirma aqui é o
+    // aviso DESTA lista.
+    const secao = screen.getByRole("region", { name: "Produtos" });
+    const aviso = await within(secao).findByRole("alert");
     expect(aviso.textContent).toContain(
       "a sessão não está ativa ou o servidor não respondeu"
     );

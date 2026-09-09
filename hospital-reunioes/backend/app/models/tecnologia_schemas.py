@@ -107,7 +107,13 @@ class DemandaCreatePayload(BaseModel):
     estaria escolhendo por uma regra que e do backend.
     """
 
-    titulo: str = Field(..., min_length=1, max_length=200)
+    # Sem `min_length`: quem recusa titulo vazio e o router, com a frase de
+    # gente ("Título da Demanda não pode ser vazio."). O `min_length` do
+    # pydantic responde ANTES dela e devolve `detail` em LISTA, que a tela
+    # mostra como JSON cru no alerta vermelho. `max_length` fica: passar de 200
+    # caracteres nao e engano de clique, e o erro do pydantic ali e informacao,
+    # nao ruido.
+    titulo: str = Field(..., max_length=200)
     tipo: TipoDemanda
     produto_id: str = Field(..., min_length=1)
     descricao: str | None = None
@@ -128,7 +134,10 @@ class DemandaUpdatePayload(BaseModel):
     `model_fields_set` em vez de tratar `None` como "nao informado".
     """
 
-    titulo: str | None = Field(default=None, min_length=1, max_length=200)
+    # Sem `min_length`, pelo mesmo motivo do payload de criacao: apagar o
+    # Título no modal e clicar em Salvar tem que devolver a frase de gente, e
+    # nao o JSON do pydantic.
+    titulo: str | None = Field(default=None, max_length=200)
     descricao: str | None = None
     tipo: TipoDemanda | None = None
     produto_id: str | None = Field(default=None, min_length=1)
