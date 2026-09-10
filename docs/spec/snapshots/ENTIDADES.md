@@ -1,12 +1,12 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-09T01:55-0300 -->
+<!-- last_update: 2026-09-10T15:05-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## participantes
 
-> Origem: `001_create_participantes.sql` (alterada em: 014_add_externo_co_responsavel.sql, 017_add_super_admin.sql, 028_add_taxonomy_fks.sql, 036_add_access_profile.sql, 045_pops_fundacao_acesso.sql, 064_ouvidoria_manifestacao.sql)
+> Origem: `001_create_participantes.sql` (alterada em: 014_add_externo_co_responsavel.sql, 017_add_super_admin.sql, 028_add_taxonomy_fks.sql, 036_add_access_profile.sql, 045_pops_fundacao_acesso.sql, 064_ouvidoria_manifestacao.sql, 103_tecnologia_vinculo.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -27,6 +27,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `access_profile` | `TEXT` | — | — | — |
 | `perfil_pop` | `TEXT` | — | — | — |
 | `perfil_ouvidoria` | `TEXT` | — | — | — |
+| `github_login` | `TEXT` | — | — | — |
 
 **Indexes:**
 - `idx_participantes_email` em `(email)` (de `001_create_participantes.sql`)
@@ -39,6 +40,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 - `idx_participantes_cargo_id` em `(cargo_id)` (de `038_fk_indexes.sql`)
 - `idx_participantes_perfil_pop` em `(perfil_pop)` (de `045_pops_fundacao_acesso.sql`)
 - `idx_participantes_perfil_ouvidoria` em `(perfil_ouvidoria)` (de `064_ouvidoria_manifestacao.sql`)
+- `participantes_github_login_lower_idx` em `((lower(github_login)` (de `103_tecnologia_vinculo.sql`)
 
 ## reunioes
 
@@ -817,7 +819,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## tecnologia_demandas
 
-> Origem: `102_tecnologia_fundacao.sql`
+> Origem: `102_tecnologia_fundacao.sql` (alterada em: 103_tecnologia_vinculo.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -837,11 +839,21 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `concluida_por` | `VARCHAR(10)` | — | — | `participantes.id` |
 | `cancelada_em` | `TIMESTAMPTZ` | — | — | — |
 | `cancelada_por` | `VARCHAR(10)` | — | — | `participantes.id` |
+| `github_issue_numero` | `INTEGER` | — | — | — |
+| `etapa` | `TEXT` | NOT NULL | `'registrada'` | — |
+| `partes_entregues` | `INTEGER` | — | — | — |
+| `partes_total` | `INTEGER` | — | — | — |
+| `o_que_muda` | `JSONB` | — | — | — |
+| `partes` | `JSONB` | — | — | — |
+| `github_foto` | `JSONB` | — | — | — |
+| `github_sincronizado_em` | `TIMESTAMPTZ` | — | — | — |
+| `vinculado_por` | `VARCHAR(10)` | — | — | `participantes.id` |
 
 **Indexes:**
 - `idx_tecnologia_demandas_estado` em `(estado)` (de `102_tecnologia_fundacao.sql`)
 - `idx_tecnologia_demandas_responsavel` em `(responsavel_id)` (de `102_tecnologia_fundacao.sql`)
 - `idx_tecnologia_demandas_produto` em `(produto_id)` (de `102_tecnologia_fundacao.sql`)
+- `tecnologia_demandas_github_issue_numero_idx` em `(github_issue_numero)` (de `103_tecnologia_vinculo.sql`)
 
 ## tecnologia_conversas
 

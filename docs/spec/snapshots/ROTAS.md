@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-10T00:43-0300 -->
+<!-- last_update: 2026-09-10T15:05-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -325,8 +325,11 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/admin/tecnologia/demandas/{demanda_id}/conversa` | O fio da Demanda em ordem cronologica, respostas e movimentos juntos. | ✅ |
 | POST | `/admin/tecnologia/demandas/{demanda_id}/conversa` | Responde dentro do card: uma linha `resposta`, assinada por quem escreve. | ✅ |
 | PATCH | `/admin/tecnologia/demandas/{demanda_id}/conversa/{linha_id}` | Corrige a PROPRIA resposta, dentro da janela de 10 minutos. | ✅ |
+| POST | `/admin/tecnologia/demandas/{demanda_id}/desvincular` | Desfaz o Vinculo: apaga o numero, a Etapa e a foto guardada. | ✅ |
 | POST | `/admin/tecnologia/demandas/{demanda_id}/mover` | Move a Demanda de coluna, se a maquina de estados permitir. | ✅ |
 | GET | `/admin/tecnologia/demandas/{demanda_id}/texto-para-ia` | A Demanda inteira em texto simples, para colar numa IA (issue #640). | ✅ |
+| POST | `/admin/tecnologia/demandas/{demanda_id}/vincular` | Liga a Demanda a uma issue-raiz do GitHub pelo numero (ADR 0054, decisao 1). | ✅ |
+| GET | `/admin/tecnologia/eu` | Quem esta olhando a aba, do ponto de vista do Vinculo. | ✅ |
 | GET | `/admin/tecnologia/historico` | As Demandas Concluidas e Canceladas, com busca por texto (issue #641). | ✅ |
 | GET | `/admin/tecnologia/minha-vez` | O que espera pela pessoa LOGADA (issue #641). | ✅ |
 | GET | `/admin/tecnologia/pessoas` | Quem tem acesso a aba: participante ativo com Super admin. | ✅ |
@@ -368,4 +371,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 212 endpoints em 30 routers · 94% exigem auth.
+**Totais:** 215 endpoints em 30 routers · 94% exigem auth.

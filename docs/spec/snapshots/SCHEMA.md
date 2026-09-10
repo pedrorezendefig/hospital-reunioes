@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-09T01:55-0300 -->
+<!-- last_update: 2026-09-10T15:05-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -39,6 +39,7 @@ erDiagram
     participantes ||--o{ tecnologia_demandas : "cancelada_por"
     participantes ||--o{ tecnologia_demandas : "concluida_por"
     participantes ||--o{ tecnologia_demandas : "responsavel_id"
+    participantes ||--o{ tecnologia_demandas : "vinculado_por"
     participantes ||--o{ tecnologia_produtos : "dono_id"
     participantes ||--o{ user_preferences : "participante_id"
     pendencias ||--o{ agendamentos_email : "id_acao"
@@ -64,7 +65,7 @@ erDiagram
         TEXT setor
         user_role role
         BOOLEAN ativo
-        _ mais_colunas "+9"
+        _ mais_colunas "+10"
     }
     reunioes {
         VARCHAR id_reuniao PK
@@ -430,7 +431,7 @@ erDiagram
         TEXT estado
         VARCHAR responsavel_id FK
         VARCHAR autor_id FK
-        _ mais_colunas "+8"
+        _ mais_colunas "+17"
     }
     tecnologia_conversas {
         UUID id PK
@@ -459,6 +460,7 @@ erDiagram
 | `participantes` | `idx_participantes_cargo_id` | `cargo_id` | `038_fk_indexes.sql` |
 | `participantes` | `idx_participantes_perfil_pop` | `perfil_pop` | `045_pops_fundacao_acesso.sql` |
 | `participantes` | `idx_participantes_perfil_ouvidoria` | `perfil_ouvidoria` | `064_ouvidoria_manifestacao.sql` |
+| `participantes` | `participantes_github_login_lower_idx` | `(lower(github_login` | `103_tecnologia_vinculo.sql` |
 | `reunioes` | `idx_reunioes_status` | `status_ata` | `002_create_reunioes.sql` |
 | `reunioes` | `idx_reunioes_data` | `data DESC` | `002_create_reunioes.sql` |
 | `reunioes` | `idx_reunioes_setor` | `setor` | `002_create_reunioes.sql` |
@@ -542,7 +544,8 @@ erDiagram
 | `tecnologia_demandas` | `idx_tecnologia_demandas_estado` | `estado` | `102_tecnologia_fundacao.sql` |
 | `tecnologia_demandas` | `idx_tecnologia_demandas_responsavel` | `responsavel_id` | `102_tecnologia_fundacao.sql` |
 | `tecnologia_demandas` | `idx_tecnologia_demandas_produto` | `produto_id` | `102_tecnologia_fundacao.sql` |
+| `tecnologia_demandas` | `tecnologia_demandas_github_issue_numero_idx` | `github_issue_numero` | `103_tecnologia_vinculo.sql` |
 | `tecnologia_conversas` | `idx_tecnologia_conversas_demanda` | `demanda_id, criado_em` | `102_tecnologia_fundacao.sql` |
 
 ---
-**Resumo:** 41 tabelas · 46 relacionamentos FK detectados.
+**Resumo:** 41 tabelas · 47 relacionamentos FK detectados.
