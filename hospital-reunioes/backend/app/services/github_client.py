@@ -9,9 +9,10 @@ Tres invariantes que o resto do app herda:
 
 - **So este repositorio.** O repositorio vem de `GITHUB_INTEGRACAO_REPO` e
   entra no caminho da URL uma vez so, aqui.
-- **Escrita minima.** O unico verbo de escrita e o PATCH do corpo da issue, que
-  serve ao marcador do Vinculo. O token fine-grained do Pedro tem Issues: write
-  neste repositorio e mais nada (ADR 0054, decisao 8).
+- **Escrita minima.** Dois verbos de escrita, e so dois: o PATCH do corpo da
+  issue, que serve ao marcador do Vinculo, e o POST que abre a issue do "Levar
+  para desenvolvimento" (issue #677). O token fine-grained do Pedro tem Issues:
+  write neste repositorio e mais nada (ADR 0054, decisao 8).
 - **Falha e falha.** Timeout, 5xx e erro de rede viram `GithubIndisponivelError`;
   404 vira `IssueNaoEncontradaError`. Sem token ou sem repositorio configurado e
   `GithubNaoConfiguradoError`, que a rota traduz em 503: o app nao FINGE que leu.
@@ -163,8 +164,26 @@ def ler_sub_issues(numero: int) -> list[dict[str, Any]]:
 
 
 def atualizar_corpo(numero: int, corpo: str) -> None:
-    """Reescreve o `body` da issue. O unico verbo de escrita deste modulo."""
+    """Reescreve o `body` da issue."""
     _chamar("PATCH", f"/issues/{numero}", json={"body": corpo})
+
+
+def criar_issue(*, titulo: str, corpo: str, labels: list[str]) -> dict[str, Any]:
+    """Abre uma issue nova no repositorio da integracao (issue #677).
+
+    Devolve o JSON da issue criada, INTEIRO: e dele que a foto e a Etapa saem
+    logo em seguida, sem uma segunda leitura que gastaria cota e ainda poderia
+    voltar diferente do que acabou de ser escrito.
+
+    Um 404 aqui nao e "issue nao encontrada" (nao ha issue nenhuma ainda): e o
+    repositorio que sumiu ou o token que perdeu acesso a ele. Vira
+    indisponibilidade, que e a leitura honesta para quem clicou e para a rota,
+    que devolve 502 em vez de uma frase sobre um numero que ninguem digitou.
+    """
+    try:
+        return _chamar("POST", "/issues", json={"title": titulo, "body": corpo, "labels": labels})
+    except IssueNaoEncontradaError as exc:
+        raise GithubIndisponivelError("O repositorio da integracao nao aceitou a criacao da issue") from exc
 
 
 def montar_foto(dados: dict[str, Any], partes: list[dict[str, Any]]) -> dict[str, Any]:

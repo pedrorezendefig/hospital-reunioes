@@ -48,8 +48,12 @@ Vinculo com o desenvolvimento (issue #674, ADR 0054):
 - POST  /admin/tecnologia/demandas/{id}/vincular    liga a Demanda a uma
                                                     issue-raiz pelo numero.
 - POST  /admin/tecnologia/demandas/{id}/desvincular desfaz o Vinculo.
+- POST  /admin/tecnologia/demandas/{id}/levar-para-desenvolvimento
+                                                cria a issue com o texto de
+                                                quem pediu e ja a vincula
+                                                (issue #677).
 
-As duas portas do Vinculo exigem `github_login` (403 sem ele, Super admin
+As tres portas do Vinculo exigem `github_login` (403 sem ele, Super admin
 inclusive): o que e da Vitta fica atras do login, e o diretor ve so a Etapa.
 
 Minha vez e Historico (issue #641):
@@ -105,6 +109,7 @@ from app.models.tecnologia_schemas import (
 from app.services import github_client
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
+    AUTOR_DESCONHECIDO,
     AVISO_EMAIL_NAO_SAIU,
     ESTADOS_ABERTOS,
     ESTADOS_FECHADOS,
@@ -115,8 +120,10 @@ from app.services.tecnologia import (
     MOTIVO_PRODUTO_INATIVO,
     MOTIVO_PRODUTO_SEM_DONO,
     MOTIVO_RESPONSAVEL_SEM_ACESSO,
+    SEM_PRODUTO,
     TABELA_CONVERSAS,
     TABELA_DEMANDAS,
+    TIPO_ROTULO,
     avisos_da_resposta,
     carimbos_da_transicao,
     demanda_casa_a_busca,
@@ -146,7 +153,7 @@ from app.services.tecnologia import (
     textos_de_resposta,
     transicao_permitida,
 )
-from app.services.tecnologia_email import avisar_atribuicao, avisar_mencao, avisar_resposta
+from app.services.tecnologia_email import avisar_atribuicao, avisar_mencao, avisar_resposta, link_da_demanda
 from app.services.tecnologia_sincronizacao import mudanca_da_foto
 from app.services.tecnologia_vinculo import (
     ETAPA_REGISTRADA,
@@ -158,13 +165,17 @@ from app.services.tecnologia_vinculo import (
     TEXTO_VINCULO_CRIADO,
     TEXTO_VINCULO_DESFEITO,
     corpo_com_marcador,
+    corpo_da_issue_nova,
     corpo_precisa_do_marcador,
     foto_mudou,
+    labels_da_issue_nova,
     motivo_demanda_ja_vinculada,
     motivo_e_pull_request,
     motivo_issue_inexistente,
+    motivo_ja_vinculada_para_levar,
     motivo_numero_ja_usado,
     tem_github_login,
+    texto_levou_para_desenvolvimento,
     texto_movimento_etapa,
 )
 
@@ -1182,6 +1193,122 @@ async def vincular_demanda(
         )
     if mudou:
         _gravar_etapa(supabase, demanda_id=demanda_id, de=etapa_antes, para=etapa, entregues=entregues, total=total)
+
+    return _com_nomes(supabase, [result.data[0]], ator=ator)[0]
+
+
+@router.post("/demandas/{demanda_id}/levar-para-desenvolvimento", response_model=DemandaResponse)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
+async def levar_para_desenvolvimento(
+    request: Request,
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Cria a issue do pedido no GitHub e ja a vincula (ADR 0054, decisao 1).
+
+    A outra porta do Vinculo, e a que anda no sentido contrario do `vincular`:
+    ali a issue existe e a Demanda vai atras dela; aqui o texto do diretor vira
+    uma issue NOVA, com `needs-triage`, no repositorio publico.
+
+    **Nada e gravado antes de a issue existir.** O GitHub vem primeiro, e so o
+    numero que ele devolve autoriza o UPDATE: uma falha na criacao (ou uma
+    resposta sem numero) sai daqui como 502 com a Demanda exatamente como
+    estava, que e o "sem Vinculo pela metade" que a issue #677 pede. O
+    contrario, gravar antes e escrever depois, deixaria a Demanda apontando
+    para uma issue que nao existe, e so um humano desfaz isso.
+
+    **A Etapa nao e escrita a mao.** A issue nova volta com a label da triagem,
+    e a mesma `etapa_da_foto` do resto do app deriva dela o "Em análise". Um
+    valor cravado aqui seria uma segunda versao da tabela de Etapas, livre para
+    divergir da primeira.
+
+    Vinculada de novo nao passa: uma segunda issue para o mesmo pedido divide o
+    trabalho em dois lugares, e o dano nao se desfaz sozinho.
+    """
+    _exigir_da_vitta(ator)
+
+    # A Demanda vem ANTES da configuracao, ao contrario do `vincular`: aqui nao
+    # ha numero digitado para conferir, e dizer "falta configurar a integracao"
+    # sobre uma Demanda que nao existe mandaria a pessoa mexer no servidor por
+    # causa de um link velho.
+    demanda = _buscar_demanda(supabase, demanda_id)
+    _exigir_integracao()
+
+    ja_vinculada = demanda.get("github_issue_numero")
+    if ja_vinculada:
+        _recusar(motivo_ja_vinculada_para_levar(int(ja_vinculada)))
+
+    titulo = str(demanda.get("titulo") or "").strip()
+    autor_id = demanda.get("autor_id")
+    # Quem PEDIU, e nao quem clicou: a Origem responde de quem e a demanda. O
+    # nome de quem clicou entra na linha do fio, logo abaixo.
+    autor_nome = _nomes_de_participantes(supabase, {autor_id} if autor_id else set()).get(autor_id)
+    legivel = _com_nomes(supabase, [demanda], ator=ator)[0]
+
+    corpo = corpo_da_issue_nova(
+        demanda_id=demanda_id,
+        titulo=titulo,
+        descricao=demanda.get("descricao"),
+        tipo_rotulo=TIPO_ROTULO.get(str(demanda.get("tipo")), str(demanda.get("tipo") or "")),
+        produto_nome=legivel.get("produto_nome") or SEM_PRODUTO,
+        autor_nome=autor_nome or AUTOR_DESCONHECIDO,
+        link=link_da_demanda(demanda_id),
+    )
+
+    try:
+        dados = github_client.criar_issue(titulo=titulo, corpo=corpo, labels=labels_da_issue_nova(demanda.get("tipo")))
+    except github_client.GithubNaoConfiguradoError:
+        # A configuracao pode ter sumido entre a guarda la em cima e a chamada.
+        _exigir_integracao()
+        raise
+    except github_client.GithubIndisponivelError:
+        logger.warning("[tecnologia] GitHub indisponivel ao levar a Demanda %s para o desenvolvimento", demanda_id)
+        _issue_indisponivel()
+
+    numero = dados.get("number")
+    if not isinstance(numero, int):
+        # A issue pode ter nascido; o Vinculo, nao. Sem o numero nao ha par, e
+        # gravar `None` no lugar dele e justamente o meio Vinculo proibido.
+        logger.error("[tecnologia] a criacao da issue da Demanda %s voltou sem numero", demanda_id)
+        _issue_indisponivel()
+
+    # A issue acabou de nascer: ela nao tem sub-issue nenhuma, e a foto sai do
+    # proprio JSON da criacao, sem uma segunda leitura.
+    foto = github_client.montar_foto(dados, [])
+    # O SHAPE do cache vem de um lugar so (`mudanca_da_foto`), o mesmo do
+    # `vincular`, do webhook e da reconciliacao (issue #678): so o par do
+    # Vinculo, que e desta porta, entra por fora. A Etapa sai derivada dali, e
+    # nao cravada aqui: a issue nova vem com a label da triagem, e a tabela de
+    # Etapas le "Em análise" dela.
+    mudanca = {
+        **mudanca_da_foto(foto),
+        "github_issue_numero": numero,
+        "vinculado_por": ator["id"],
+    }
+    etapa = mudanca["etapa"]
+    entregues, total = mudanca["partes_entregues"], mudanca["partes_total"]
+
+    result = supabase.table(TABELA_DEMANDAS).update(mudanca).eq("id", demanda_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada")
+
+    _gravar_movimento(
+        supabase,
+        demanda_id=demanda_id,
+        campo="vinculo",
+        de=None,
+        para=str(numero),
+        texto=texto_levou_para_desenvolvimento(_nome_de_quem_agiu(ator)),
+    )
+    _gravar_etapa(
+        supabase,
+        demanda_id=demanda_id,
+        de=demanda.get("etapa") or ETAPA_REGISTRADA,
+        para=etapa,
+        entregues=entregues,
+        total=total,
+    )
 
     return _com_nomes(supabase, [result.data[0]], ator=ator)[0]
 

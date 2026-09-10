@@ -395,6 +395,135 @@ def corpo_precisa_do_marcador(corpo: str | None, demanda_id: str) -> bool:
     return corpo_com_marcador(corpo, demanda_id) != (corpo or "")
 
 
+# ─── 2b. A issue que o app CRIA (issue #677) ─────────────────────────────────
+#
+# Aqui a direcao se inverte: no resto do modulo o GitHub e a fonte e o app o
+# leitor; nesta secao o texto que alguem digitou no app vira o corpo de uma
+# issue num repositorio PUBLICO, que qualquer pessoa le e que o proprio app
+# depois relê.
+#
+# Duas regras saem disso, e as duas moram no `texto_do_diretor`:
+#
+# 1. **Nada do que o diretor escreve pode virar marcador.** O par do Vinculo e
+#    o comentario HTML, e a reconciliacao encontra a Demanda pelo PRIMEIRO
+#    marcador do corpo. Uma descricao que carregasse um `<!-- demanda-vitta -->`
+#    apontaria a issue nova para outra Demanda, e nada quebraria.
+# 2. **A primeira coluna e do backend.** E a mesma disciplina do "Copiar para
+#    IA" (`recuar_continuacao`, no `tecnologia.py`), pela mesma razao: cabecalho
+#    e separador so valem no comeco da linha, e e por eles que o corpo se
+#    divide entre o que e do diretor e o que e da Vitta. Um "## Origem" digitado
+#    na descricao fabricaria uma segunda secao dizendo que quem pediu foi outra
+#    pessoa.
+
+# O cabecalho com que a issue nasce. Igual ao que o `/to-issues` escreve, e nao
+# uma variante nossa: e o mesmo que o `bloco_para_o_diretor` procura na volta.
+CABECALHO_DO_BLOCO = "## 👔 Para o diretor"
+
+LABEL_TRIAGEM = "needs-triage"
+
+# O tipo da Demanda virando label de tipo (ADR 0054, decisao 1). Os tipos que
+# NAO estao aqui (Decisao, Informacao, Terceiro, Consultoria) nascem sem label
+# de tipo, de proposito: nem todo pedido vira codigo, e um `type:feature`
+# chutado mentiria para quem cura.
+LABEL_DO_TIPO: dict[str, str] = {
+    "defeito": "type:fix",
+    "ajuste": "type:feature",
+    "novo": "type:feature",
+}
+
+# Comentario HTML fechado (o marcador inclusive) e os fragmentos que sobram de
+# um que foi aberto e nunca fechado. Os dois saem do texto de quem digitou: o
+# fragmento tambem, porque um `<!--` solto engoliria na renderizacao tudo o que
+# vem depois dele, ate o `-->` do marcador, e sumiria com a secao Origem da
+# issue publica.
+_FRAGMENTO_HTML = re.compile(r"<!--+|--+>")
+
+# O que estrutura um corpo de issue quando comeca a linha: cabecalho, separador
+# e sublinhado de titulo. A barra invertida do Markdown desliga o efeito e
+# deixa o texto a vista, que e o que se quer: o diretor escreveu aquilo, e ele
+# continua legivel, so nao manda mais na divisao do corpo.
+_ESTRUTURA_NA_COLUNA_ZERO = re.compile(
+    r"^([ \t]*)(#{1,6}(?=\s|$)|(?:-{3,}|\*{3,}|_{3,}|={3,})[ \t]*$)",
+    re.MULTILINE,
+)
+
+
+def texto_do_diretor(bruto: str | None) -> str:
+    """O texto digitado no app, pronto para entrar num corpo de issue publica.
+
+    Tira os comentarios HTML (ver a regra 1 acima), desliga o que estruturaria
+    o corpo a partir da coluna zero (regra 2) e passa pelo sanitizador de
+    travessao, que vale para o que sai do app tanto quanto para o que entra.
+
+    Nao corta, nao resume e nao reescreve o resto: o pedido chega ao
+    desenvolvimento com as palavras de quem pediu, que e o motivo de o botao
+    existir.
+    """
+    sem_comentario = _COMENTARIO_HTML.sub("", bruto or "")
+    sem_fragmento = _FRAGMENTO_HTML.sub("", sem_comentario)
+    neutralizado = _ESTRUTURA_NA_COLUNA_ZERO.sub(r"\1\\\2", sem_fragmento)
+    return sanitizar_travessao(neutralizado).strip()
+
+
+def labels_da_issue_nova(tipo: str | None) -> list[str]:
+    """As labels com que a issue nasce.
+
+    `needs-triage` SEMPRE: e o contrato do protocolo de triagem
+    (docs/agents/triage-labels.md), e sem ela a issue nasce fora da fila de
+    quem cura, invisivel para a `/onda` e para o `/pegar-issue`.
+    """
+    label = LABEL_DO_TIPO.get(str(tipo or "").strip().lower())
+    return [LABEL_TRIAGEM, label] if label else [LABEL_TRIAGEM]
+
+
+def corpo_da_issue_nova(
+    *,
+    demanda_id: str,
+    titulo: str,
+    descricao: str | None,
+    tipo_rotulo: str,
+    produto_nome: str,
+    autor_nome: str,
+    link: str,
+) -> str:
+    """O corpo da issue que o botao "Levar para desenvolvimento" cria.
+
+    Tres partes, na ordem em que a issue #677 as pede, e cada uma com um leitor
+    diferente:
+
+    - o bloco **"Para o diretor"**, que e o que volta para o card pelo
+      `bloco_para_o_diretor` (ADR 0054, decisao 7). Ele acaba no separador, e
+      por isso nada abaixo dele chega ao diretor;
+    - a **Origem**, para quem for curar a issue: quem pediu e onde a Demanda
+      mora. E a unica frase que responde "de quem e este pedido";
+    - o **marcador**, o lado da issue do par do Vinculo.
+
+    Descricao vazia usa o TITULO: uma issue cujo "O que muda" viesse em branco
+    mostraria "Descrição em preparação" no card de quem acabou de pedir.
+    """
+    o_que_muda = texto_do_diretor(descricao) or texto_do_diretor(titulo)
+    return "\n".join(
+        [
+            CABECALHO_DO_BLOCO,
+            "",
+            f"**O que muda:** {o_que_muda}",
+            "",
+            "**O que você precisa saber:**",
+            f"- Tipo do pedido: {tipo_rotulo}",
+            f"- Produto: {produto_nome}",
+            "",
+            "---",
+            "",
+            "## Origem",
+            "",
+            f"Pedido de {autor_nome} na aba Tecnologia do aplicativo do hospital.",
+            f"Abrir a Demanda: {link}",
+            "",
+            marcador_da_demanda(demanda_id),
+        ]
+    )
+
+
 # ─── 3. A foto mudou? ────────────────────────────────────────────────────────
 
 
@@ -443,6 +572,16 @@ TEXTO_VINCULO_CRIADO = "Vínculo com o desenvolvimento criado"
 TEXTO_VINCULO_DESFEITO = "Vínculo com o desenvolvimento desfeito"
 
 
+def texto_levou_para_desenvolvimento(nome: str | None) -> str:
+    """A linha do fio quando alguem da Vitta leva o pedido para o
+    desenvolvimento (issue #677).
+
+    Esta tem NOME, ao contrario da linha da Etapa: aqui alguem agiu, e no app.
+    Sem numero de issue, pelo mesmo motivo das duas acima.
+    """
+    return f"{nome or 'Alguém'} levou para o desenvolvimento"
+
+
 # ─── 5. As frases de recusa ──────────────────────────────────────────────────
 
 # Cada uma tem a SUA causa e a SUA saida: uma frase generica ("nao foi possivel
@@ -482,6 +621,19 @@ def motivo_numero_ja_usado(numero: int, titulo: str) -> str:
 def motivo_demanda_ja_vinculada(numero: int) -> str:
     return (
         f"Esta Demanda já está vinculada à issue #{numero}. Clique em Desvincular antes de apontá-la para outra issue."
+    )
+
+
+def motivo_ja_vinculada_para_levar(numero: int) -> str:
+    """A recusa de levar duas vezes (issue #677).
+
+    Frase propria, e nao a do `vincular`: ali a saida e apontar para outra
+    issue, aqui e nao criar uma SEGUNDA issue para o mesmo pedido, que e o dano
+    que ninguem desfaz sozinho depois.
+    """
+    return (
+        f"A Demanda já está vinculada à issue #{numero}. "
+        "Desfaça o Vínculo antes de levá-la para o desenvolvimento de novo."
     )
 
 

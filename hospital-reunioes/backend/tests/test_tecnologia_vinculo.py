@@ -56,6 +56,8 @@ from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_REGISTRADA,
     ETAPA_ROTULO,
     ETAPAS,
+    LABEL_TRIAGEM,
+    MOTIVO_GITHUB_INDISPONIVEL,
     MOTIVO_INTEGRACAO_DESLIGADA,
     MOTIVO_LOGIN_INVALIDO,
     MOTIVO_SEM_GITHUB_LOGIN,
@@ -64,22 +66,26 @@ from app.services.tecnologia_vinculo import (  # noqa: E402
     TEXTO_VINCULO_DESFEITO,
     bloco_para_o_diretor,
     corpo_com_marcador,
+    corpo_da_issue_nova,
     corpo_precisa_do_marcador,
     demanda_id_do_marcador,
     etapa_da_foto,
     foto_mudou,
+    labels_da_issue_nova,
     marcador_da_demanda,
     motivo_demanda_ja_vinculada,
     motivo_e_pull_request,
     motivo_github_login_invalido,
     motivo_github_login_repetido,
     motivo_issue_inexistente,
+    motivo_ja_vinculada_para_levar,
     motivo_numero_ja_usado,
     normalizar_github_login,
     partes_da_foto,
     partes_para_o_diretor,
     situacao_da_parte,
     tem_github_login,
+    texto_levou_para_desenvolvimento,
     texto_movimento_etapa,
     texto_partes,
 )
@@ -859,12 +865,25 @@ class _GithubFalso:
     """O GitHub como o teste o quer: uma issue por numero, e um registro do que
     foi escrito nela."""
 
-    def __init__(self, issues: dict[int, dict], *, sub_issues: dict[int, list[dict]] | None = None, erro=None):
+    def __init__(
+        self,
+        issues: dict[int, dict],
+        *,
+        sub_issues: dict[int, list[dict]] | None = None,
+        erro=None,
+        erro_ao_criar=None,
+        proximo_numero: int = 900,
+        resposta_sem_numero: bool = False,
+    ):
         self.issues = issues
         self.sub_issues = sub_issues or {}
         self.erro = erro
+        self.erro_ao_criar = erro_ao_criar
+        self.proximo_numero = proximo_numero
+        self.resposta_sem_numero = resposta_sem_numero
         self.corpos_escritos: list[tuple[int, str]] = []
         self.leituras: list[int] = []
+        self.criadas: list[dict] = []
 
     def ler_issue(self, numero: int) -> dict:
         if self.erro is not None:
@@ -880,6 +899,25 @@ class _GithubFalso:
     def atualizar_corpo(self, numero: int, corpo: str) -> None:
         self.corpos_escritos.append((numero, corpo))
         self.issues[numero]["body"] = corpo
+
+    def criar_issue(self, *, titulo: str, corpo: str, labels: list[str]) -> dict:
+        """A issue nova, como o GitHub a devolve (issue #677).
+
+        Devolve a issue INTEIRA, e nao so o numero: e dela que a foto e a Etapa
+        saem, sem uma segunda leitura.
+        """
+        if self.erro_ao_criar is not None:
+            raise self.erro_ao_criar
+        self.criadas.append({"titulo": titulo, "corpo": corpo, "labels": list(labels)})
+        numero = self.proximo_numero
+        self.proximo_numero += 1
+        dados = _issue(numero, corpo=corpo, labels=tuple(labels))
+        dados["title"] = titulo
+        if self.resposta_sem_numero:
+            dados.pop("number")
+            return dados
+        self.issues[numero] = dados
+        return dados
 
 
 def _issue(
@@ -936,6 +974,7 @@ def _montar(
         monkeypatch.setattr(github_client, "ler_issue", gh.ler_issue)
         monkeypatch.setattr(github_client, "ler_sub_issues", gh.ler_sub_issues)
         monkeypatch.setattr(github_client, "atualizar_corpo", gh.atualizar_corpo)
+        monkeypatch.setattr(github_client, "criar_issue", gh.criar_issue)
 
     async def _usuario() -> dict[str, Any]:
         return {"id": logado["auth_user_id"], "email": logado["email"], "metadata": {}}
@@ -972,6 +1011,12 @@ class TestATravaDeRedeContinuaDePe:
         """O verbo que MUDA a issue de outra pessoa merece a sua propria prova."""
         with pytest.raises(AssertionError, match="chamado de verdade"):
             github_client.atualizar_corpo(673, "corpo novo")
+
+    def test_criar_issue_esta_trancada(self):
+        """O verbo mais caro de todos: um teste que esquecesse de dubla-lo
+        abriria uma issue de verdade num repositorio PUBLICO (issue #677)."""
+        with pytest.raises(AssertionError, match="chamado de verdade"):
+            github_client.criar_issue(titulo="Teste", corpo="Teste", labels=[])
 
 
 # ─── 5. O "eu" da aba e a lista de pessoas ───────────────────────────────────
@@ -1996,4 +2041,340 @@ class TestEtapaNaoSeDigita:
 
         client.patch(f"{BASE}/demandas/d-1", json={"titulo": "Outro título", "github_issue_numero": 673})
 
+        assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] is None
+
+
+# ─── 8. Levar para o desenvolvimento (issue #677) ────────────────────────────
+#
+# O caminho INVERSO do resto deste arquivo: aqui o texto que o diretor escreveu
+# no app vira o corpo de uma issue de um repositorio PUBLICO. O que se cobra,
+# entao, alem do fluxo, e que a primeira coluna do corpo continue sendo do
+# backend: nada que o diretor digite pode virar marcador, cabecalho ou
+# separador de secao dentro da issue.
+
+DEMANDA_PARA_LEVAR = dict(
+    demanda_id="d-1",
+    titulo="Rodapé do relatório sai cortado",
+    descricao="Quando eu imprimo o relatório do mês, a última linha some.",
+    tipo_rotulo="Defeito",
+    produto_nome="Ana",
+    autor_nome="Diretor do Hospital",
+    link="https://app.hsm.com/admin/tecnologia?demanda=d-1",
+)
+
+
+class TestLabelsDaIssueNova:
+    """A traducao do tipo da Demanda em label do repositorio (issue #677)."""
+
+    def test_defeito_vira_type_fix(self):
+        assert labels_da_issue_nova("defeito") == [LABEL_TRIAGEM, "type:fix"]
+
+    @pytest.mark.parametrize("tipo", ("ajuste", "novo"))
+    def test_ajuste_e_novo_viram_type_feature(self, tipo):
+        assert labels_da_issue_nova(tipo) == [LABEL_TRIAGEM, "type:feature"]
+
+    @pytest.mark.parametrize("tipo", ("decisao", "informacao", "terceiro", "consultoria"))
+    def test_os_demais_tipos_nao_ganham_label_de_tipo(self, tipo):
+        """Sem label de tipo, e nao com uma inventada: a triagem e humana, e um
+        `type:feature` chutado num pedido de Decisao mentiria para quem cura."""
+        assert labels_da_issue_nova(tipo) == [LABEL_TRIAGEM]
+
+    def test_a_triagem_entra_sempre(self):
+        """`needs-triage` e o contrato do protocolo de triagem: sem ela a issue
+        nasce fora da fila de quem cura."""
+        for tipo in ("defeito", "ajuste", "novo", "decisao", "consultoria", "tipo-que-nao-existe", ""):
+            assert labels_da_issue_nova(tipo)[0] == LABEL_TRIAGEM
+
+
+class TestCorpoDaIssueNova:
+    def test_o_bloco_do_diretor_traz_a_descricao_dele(self):
+        corpo = corpo_da_issue_nova(**DEMANDA_PARA_LEVAR)
+
+        bloco = bloco_para_o_diretor(corpo)
+        assert "a última linha some" in bloco
+        # O bloco vai INTEIRO ate o separador: o tipo e o Produto sao as duas
+        # linhas do "O que voce precisa saber" que a issue pede.
+        assert "Defeito" in bloco
+        assert "Ana" in bloco
+
+    def test_sem_descricao_o_titulo_ocupa_o_lugar(self):
+        corpo = corpo_da_issue_nova(**{**DEMANDA_PARA_LEVAR, "descricao": None})
+
+        assert "Rodapé do relatório sai cortado" in bloco_para_o_diretor(corpo)
+
+    @pytest.mark.parametrize("vazia", ("", "   ", "\n\n"))
+    def test_descricao_em_branco_tambem_cai_no_titulo(self, vazia):
+        corpo = corpo_da_issue_nova(**{**DEMANDA_PARA_LEVAR, "descricao": vazia})
+
+        assert "Rodapé do relatório sai cortado" in bloco_para_o_diretor(corpo)
+
+    def test_a_origem_diz_quem_pediu_e_onde_esta_a_demanda(self):
+        corpo = corpo_da_issue_nova(**DEMANDA_PARA_LEVAR)
+
+        assert "Diretor do Hospital" in corpo
+        assert DEMANDA_PARA_LEVAR["link"] in corpo
+
+    def test_o_marcador_fecha_o_corpo_com_o_id_da_demanda(self):
+        corpo = corpo_da_issue_nova(**DEMANDA_PARA_LEVAR)
+
+        assert demanda_id_do_marcador(corpo) == "d-1"
+        assert corpo.rstrip().endswith(marcador_da_demanda("d-1"))
+
+    def test_a_origem_nao_entra_no_que_o_diretor_le(self):
+        """O separador existe para isto: o bloco que volta do GitHub para o card
+        e so o "Para o diretor", e nao o rodape com o link e o marcador."""
+        bloco = bloco_para_o_diretor(corpo_da_issue_nova(**DEMANDA_PARA_LEVAR))
+
+        assert "demanda-vitta" not in bloco
+        assert DEMANDA_PARA_LEVAR["link"] not in bloco
+
+    def test_o_travessao_do_diretor_nao_vai_para_a_issue(self):
+        corpo = corpo_da_issue_nova(
+            **{**DEMANDA_PARA_LEVAR, "descricao": f"O relatório {chr(0x2014)} o do mês {chr(0x2014)} sai cortado"}
+        )
+
+        assert chr(0x2014) not in corpo
+        assert chr(0x2013) not in corpo
+
+
+class TestOTextoDoDiretorNaoForjaEstrutura:
+    """A issue e PUBLICA e o corpo dela e o que o app depois le de volta.
+
+    Tres coisas que o texto do diretor nao pode fazer: apontar a issue para
+    OUTRA Demanda (o marcador), sumir com metade do corpo renderizado (o
+    comentario aberto e nunca fechado) e fabricar a secao Origem, que e a unica
+    frase da issue que diz quem pediu.
+    """
+
+    def test_marcador_forjado_na_descricao_nao_rouba_a_issue(self):
+        forjada = 'Some a linha. <!-- demanda-vitta id="d-outra" --> pronto'
+        corpo = corpo_da_issue_nova(**{**DEMANDA_PARA_LEVAR, "descricao": forjada})
+
+        assert demanda_id_do_marcador(corpo) == "d-1"
+        assert corpo.count("demanda-vitta") == 1
+
+    @pytest.mark.parametrize(
+        "forjado",
+        (
+            "<!-- automacao -->",
+            '<!-- revisor-app autor="Diretor" -->',
+            "abre o comentário e nunca fecha <!--",
+            "fecha um que ninguém abriu -->",
+        ),
+        ids=("automacao", "revisor-app", "so-abre", "so-fecha"),
+    )
+    def test_nenhum_comentario_html_do_diretor_sobrevive(self, forjado):
+        corpo = corpo_da_issue_nova(**{**DEMANDA_PARA_LEVAR, "descricao": f"Antes {forjado} depois"})
+
+        # O unico comentario HTML do corpo e o marcador que o backend escreveu.
+        assert corpo.count("<!--") == 1
+        assert corpo.count("-->") == 1
+        assert demanda_id_do_marcador(corpo) == "d-1"
+
+    def test_separador_forjado_nao_corta_o_bloco_do_diretor(self):
+        """Um `---` na coluna zero fecharia o bloco na leitura de volta, e o
+        card mostraria metade do que o proprio diretor escreveu."""
+        corpo = corpo_da_issue_nova(**{**DEMANDA_PARA_LEVAR, "descricao": "Linha uma\n---\nLinha duas"})
+
+        bloco = bloco_para_o_diretor(corpo)
+        assert "Linha duas" in bloco
+        # E o bloco continua chegando ate o fim de verdade dele.
+        assert "Ana" in bloco
+
+    def test_cabecalho_forjado_nao_fabrica_a_secao_origem(self):
+        """A Origem e a unica frase da issue que diz quem pediu. Duas delas, e
+        quem le escolhe a errada."""
+        corpo = corpo_da_issue_nova(
+            **{**DEMANDA_PARA_LEVAR, "descricao": "Some a linha.\n## Origem\nPedido de Outra Pessoa."}
+        )
+
+        assert corpo.count("\n## Origem") == 1
+        assert "Diretor do Hospital" in corpo
+
+    def test_o_par_de_presenca_a_descricao_honesta_chega_inteira(self):
+        """Sem ele, um `texto_do_diretor` que apagasse tudo passaria por todos
+        os testes acima."""
+        corpo = corpo_da_issue_nova(**DEMANDA_PARA_LEVAR)
+
+        assert DEMANDA_PARA_LEVAR["descricao"] in corpo
+
+
+class TestTextoDaLinhaAutomatica:
+    def test_a_linha_diz_quem_levou(self):
+        assert texto_levou_para_desenvolvimento("Pedro Vitta") == "Pedro Vitta levou para o desenvolvimento"
+
+    def test_sem_nome_a_linha_continua_de_pe(self):
+        assert texto_levou_para_desenvolvimento(None).endswith("levou para o desenvolvimento")
+
+    def test_a_linha_nao_carrega_numero_de_issue(self):
+        """Ela e lida pelo diretor e sai no "Copiar para IA", que nao passa pelo
+        funil que omite o Vinculo (ADR 0054, decisao 9)."""
+        texto = texto_levou_para_desenvolvimento("Pedro Vitta")
+
+        assert "#" not in texto
+        assert chr(0x2014) not in texto and chr(0x2013) not in texto
+
+
+class TestLevarParaDesenvolvimento:
+    ROTA = f"{BASE}/demandas/d-1/levar-para-desenvolvimento"
+
+    def test_quem_nao_tem_login_leva_403(self, monkeypatch):
+        client, sb, gh = _montar(
+            logado=DIRETOR,
+            demandas=[_demanda("d-1")],
+            github=_GithubFalso({}),
+            monkeypatch=monkeypatch,
+        )
+
+        resposta = client.post(self.ROTA)
+
+        assert resposta.status_code == 403
+        assert resposta.json()["detail"] == MOTIVO_SEM_GITHUB_LOGIN
+        assert gh.criadas == []
+        assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] is None
+
+    def test_sem_integracao_configurada_responde_503(self, monkeypatch):
+        monkeypatch.setattr(settings, "github_integracao_token", "")
+        client, sb, gh = _montar(demandas=[_demanda("d-1")], github=_GithubFalso({}), monkeypatch=monkeypatch)
+
+        resposta = client.post(self.ROTA)
+
+        assert resposta.status_code == 503
+        assert resposta.json()["detail"] == MOTIVO_INTEGRACAO_DESLIGADA
+        assert gh.criadas == []
+
+    def test_demanda_ja_vinculada_e_recusada_sem_criar_nada(self, monkeypatch):
+        client, sb, gh = _montar(
+            demandas=[_demanda("d-1", github_issue_numero=673, etapa=ETAPA_PLANEJADA)],
+            github=_GithubFalso({}),
+            monkeypatch=monkeypatch,
+        )
+
+        resposta = client.post(self.ROTA)
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == motivo_ja_vinculada_para_levar(673)
+        assert "A Demanda já está vinculada" in resposta.json()["detail"]
+        assert gh.criadas == []
+        assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] == 673
+
+    def test_a_issue_nasce_com_o_titulo_o_corpo_e_as_labels(self, monkeypatch):
+        client, sb, gh = _montar(
+            demandas=[
+                _demanda(
+                    "d-1",
+                    titulo="Rodapé do relatório sai cortado",
+                    descricao="A última linha some quando imprimo.",
+                    tipo="defeito",
+                    autor_id="P2",
+                )
+            ],
+            github=_GithubFalso({}),
+            monkeypatch=monkeypatch,
+        )
+
+        resposta = client.post(self.ROTA)
+
+        assert resposta.status_code == 200, resposta.text
+        assert len(gh.criadas) == 1
+        criada = gh.criadas[0]
+        assert criada["titulo"] == "Rodapé do relatório sai cortado"
+        assert criada["labels"] == [LABEL_TRIAGEM, "type:fix"]
+        assert "A última linha some quando imprimo." in criada["corpo"]
+        # O par dos dois lados: a issue carrega o id da Demanda.
+        assert demanda_id_do_marcador(criada["corpo"]) == "d-1"
+        # E a Origem nomeia quem PEDIU (o autor), e nao quem clicou.
+        assert "Diretor do Hospital" in criada["corpo"]
+
+    def test_a_demanda_fica_vinculada_ao_numero_devolvido(self, monkeypatch):
+        gh = _GithubFalso({}, proximo_numero=901)
+        client, sb, _ = _montar(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+
+        corpo = client.post(self.ROTA).json()
+
+        assert corpo["vinculo"]["numero"] == 901
+        assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] == 901
+
+    def test_a_etapa_nasce_em_analise(self, monkeypatch):
+        """Derivada da label `needs-triage` que a issue acabou de ganhar, e nao
+        escrita a mao: e a mesma tabela de Etapas do resto do app."""
+        client, sb, _ = _montar(demandas=[_demanda("d-1")], github=_GithubFalso({}), monkeypatch=monkeypatch)
+
+        corpo = client.post(self.ROTA).json()
+
+        assert corpo["etapa"] == ETAPA_EM_ANALISE
+        assert sb.tabelas["tecnologia_demandas"][0]["etapa"] == ETAPA_EM_ANALISE
+
+    def test_o_que_muda_volta_do_corpo_que_o_app_escreveu(self, monkeypatch):
+        """A volta completa: o texto do diretor virou corpo de issue e voltou
+        pelo mesmo extrator que le as issues escritas a mao."""
+        client, _, _ = _montar(
+            demandas=[_demanda("d-1", descricao="A última linha some quando imprimo.")],
+            github=_GithubFalso({}),
+            monkeypatch=monkeypatch,
+        )
+
+        corpo = client.post(self.ROTA).json()
+
+        assert "A última linha some quando imprimo." in corpo["o_que_muda"]
+
+    def test_a_linha_automatica_entra_no_fio(self, monkeypatch):
+        client, sb, _ = _montar(demandas=[_demanda("d-1")], github=_GithubFalso({}), monkeypatch=monkeypatch)
+
+        client.post(self.ROTA)
+
+        textos = [linha["texto"] for linha in _fio(sb)]
+        assert texto_levou_para_desenvolvimento("Pedro Vitta") in textos
+        # E a Etapa nova tambem vira linha: e o que o diretor le do movimento.
+        assert texto_movimento_etapa(para=ETAPA_EM_ANALISE) in textos
+
+    def test_nenhuma_linha_do_fio_carrega_o_numero_da_issue(self, monkeypatch):
+        """O fio inteiro sai do app no "Copiar para IA", que nao passa pelo
+        funil da decisao 9."""
+        gh = _GithubFalso({}, proximo_numero=901)
+        client, sb, _ = _montar(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+
+        client.post(self.ROTA)
+
+        for linha in _fio(sb):
+            assert "901" not in str(linha["texto"])
+
+    def test_o_diretor_nao_recebe_o_numero_da_issue_que_a_vitta_criou(self, monkeypatch):
+        """O funil da decisao 9 vale para a Demanda que ACABOU de ser levada: a
+        Vitta clica, e o diretor continua vendo so a Etapa."""
+        gh = _GithubFalso({}, proximo_numero=901)
+        client, sb, _ = _montar(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+        client.post(self.ROTA)
+
+        do_diretor, _, _ = _montar(logado=DIRETOR, supabase=sb, monkeypatch=monkeypatch)
+        vista = do_diretor.get(f"{BASE}/demandas").json()[0]
+
+        assert vista["etapa"] == ETAPA_EM_ANALISE
+        assert vista["vinculo"] is None
+
+    def test_falha_ao_criar_devolve_502_e_nao_grava_vinculo(self, monkeypatch):
+        gh = _GithubFalso({}, erro_ao_criar=github_client.GithubIndisponivelError("timeout"))
+        client, sb, _ = _montar(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+
+        resposta = client.post(self.ROTA)
+
+        assert resposta.status_code == 502
+        assert resposta.json()["detail"] == MOTIVO_GITHUB_INDISPONIVEL
+        demanda = sb.tabelas["tecnologia_demandas"][0]
+        assert demanda["github_issue_numero"] is None
+        assert demanda["etapa"] == ETAPA_REGISTRADA
+        assert demanda["o_que_muda"] is None
+        # E o fio nao ganha linha nenhuma: nada aconteceu.
+        assert _fio(sb) == []
+
+    def test_resposta_sem_numero_tambem_e_falha(self, monkeypatch):
+        """O GitHub respondeu 201 com um corpo que nao traz `number`. Gravar
+        `None` no lugar do numero deixaria o Vinculo pela metade, que e
+        exatamente o que a issue proibe."""
+        gh = _GithubFalso({}, resposta_sem_numero=True)
+        client, sb, _ = _montar(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+
+        resposta = client.post(self.ROTA)
+
+        assert resposta.status_code == 502
         assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] is None

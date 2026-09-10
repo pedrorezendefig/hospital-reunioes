@@ -4,7 +4,8 @@
  * Os controles do Vínculo com o desenvolvimento (issue #674, ADR 0054).
  *
  * O que é da Vitta e fica atrás do login no GitHub: o campo "Vincular issue",
- * o botão "Desvincular" e o link "Abrir no GitHub" (decisão 9). Quem não tem
+ * o botão "Levar para desenvolvimento" (issue #677), o botão "Desvincular" e
+ * o link "Abrir no GitHub" (decisão 9). Quem não tem
  * login não vê nada disto, e a API nem manda o número na resposta da Demanda,
  * então esconder aqui não é a proteção: é o par na tela de uma regra que o
  * backend já cumpre com 403.
@@ -15,7 +16,7 @@
  */
 
 import { useState } from "react";
-import { AlertCircle, ExternalLink, Link2, Unlink } from "lucide-react";
+import { AlertCircle, ExternalLink, Link2, Rocket, Unlink } from "lucide-react";
 
 import { BASE_TECNOLOGIA, Demanda, ETAPA_ROTULO, EtapaDemanda, EuNaAba, momentoLegivel } from "./demandas";
 
@@ -44,6 +45,18 @@ export const AVISO_SEM_INTEGRACAO =
   "vincular e desvincular ficam indisponíveis até alguém configurá-la no servidor.";
 
 export const AJUDA_DO_CAMPO = "Número da issue-raiz (o PRD, ou a issue de correção). As fatias entram como partes dela.";
+
+export const LEVAR_PARA_DESENVOLVIMENTO = "Levar para desenvolvimento";
+
+/**
+ * O que o botão faz, dito antes do clique.
+ *
+ * Ele ESCREVE num repositório público, e isso não pode ser surpresa: quem
+ * clica precisa saber que o texto de quem pediu vira uma issue de verdade, e
+ * que a Demanda fica vinculada a ela na mesma hora.
+ */
+export const AJUDA_DE_LEVAR =
+  "Cria a issue com o título e o texto de quem pediu, marca para triagem e já vincula esta Demanda a ela.";
 
 export function VinculoDaDemanda({ demanda, eu, onEnviar }: Props) {
   const [numero, setNumero] = useState("");
@@ -153,6 +166,26 @@ export function VinculoDaDemanda({ demanda, eu, onEnviar }: Props) {
           <p id={`ajuda-vinculo-${demanda.id}`} className="w-full text-xs text-text-secondary">
             {AJUDA_DO_CAMPO}
           </p>
+
+          {/* A outra porta do Vínculo: a issue ainda não existe, e o app a cria
+              a partir do que o diretor escreveu (issue #677). Fica junto do
+              campo, e não em outro canto do modal, porque as duas fazem a mesma
+              coisa por caminhos diferentes, e quem clica escolhe entre elas. */}
+          <div className="w-full pt-2 border-t border-border">
+            <button
+              type="button"
+              disabled={desligada}
+              onClick={() => onEnviar(`${BASE_TECNOLOGIA}/demandas/${demanda.id}/levar-para-desenvolvimento`)}
+              aria-describedby={`ajuda-levar-${demanda.id}`}
+              className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-text hover:border-primary hover:text-primary transition-colors disabled:opacity-50 disabled:hover:border-border disabled:hover:text-text"
+            >
+              <Rocket className="w-4 h-4" />
+              {LEVAR_PARA_DESENVOLVIMENTO}
+            </button>
+            <p id={`ajuda-levar-${demanda.id}`} className="mt-1 text-xs text-text-secondary">
+              {AJUDA_DE_LEVAR}
+            </p>
+          </div>
         </div>
       )}
     </section>

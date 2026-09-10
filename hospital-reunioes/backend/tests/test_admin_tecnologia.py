@@ -382,9 +382,10 @@ def test_a_varredura_enxerga_as_rotas_da_aba():
     morte por varredura parcial das issues #542 e #546. Fatia que acrescentar
     rota sobe o número junto.
 
-    A issue #674 somou 3: o "eu" da aba, vincular e desvincular.
+    A issue #674 somou 3: o "eu" da aba, vincular e desvincular. A issue #677
+    somou 1: levar para desenvolvimento.
     """
-    assert len(ROTAS) >= 18, f"a varredura só achou {len(ROTAS)} rotas em {PREFIXO}: {ROTAS}"
+    assert len(ROTAS) >= 19, f"a varredura só achou {len(ROTAS)} rotas em {PREFIXO}: {ROTAS}"
 
 
 PERSONAS_SEM_ACESSO = {

@@ -25,7 +25,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { DemandaModal } from "./DemandaModal";
 import { QuadroDemandas } from "./QuadroDemandas";
-import { AJUDA_DO_CAMPO, AVISO_SEM_INTEGRACAO } from "./VinculoDaDemanda";
+import { AJUDA_DE_LEVAR, AJUDA_DO_CAMPO, AVISO_SEM_INTEGRACAO, LEVAR_PARA_DESENVOLVIMENTO } from "./VinculoDaDemanda";
 import {
   Demanda,
   ETAPA_ROTULO,
@@ -186,7 +186,13 @@ describe("Os seis textos da Etapa", () => {
   it("nenhum texto do Vínculo tem travessão", () => {
     // Regra da casa: travessão e meia-risca são marca de texto gerado por IA e
     // não entram em nada que o usuário vê. Estes são lidos pelo diretor.
-    const textos = [...Object.values(ETAPA_ROTULO), AVISO_SEM_INTEGRACAO, AJUDA_DO_CAMPO];
+    const textos = [
+      ...Object.values(ETAPA_ROTULO),
+      AVISO_SEM_INTEGRACAO,
+      AJUDA_DO_CAMPO,
+      AJUDA_DE_LEVAR,
+      LEVAR_PARA_DESENVOLVIMENTO,
+    ];
     for (const texto of textos) {
       // Os dois vem por `fromCharCode` porque o proprio lint da casa proibe o
       // caractere literal em qualquer arquivo, inclusive no teste que o caca.
@@ -410,5 +416,163 @@ describe("O que o modal manda ao servidor", () => {
     });
 
     expect(chamadas.some((c) => c.url.includes("/vincular"))).toBe(false);
+  });
+});
+
+// ─── 5. Levar para desenvolvimento (issue #677) ──────────────────────────────
+
+/**
+ * O Quadro com um "eu" escolhido e um banco que MUDA depois do POST.
+ *
+ * É o que permite provar o critério inteiro: a lista volta com a Etapa nova na
+ * releitura que o próprio modal dispara, e o selo aparece sem ninguém recarregar
+ * a página.
+ */
+function montarQuadroComEu(demandas: Demanda[], eu: EuNaAba, depoisDoPost?: Demanda[]) {
+  chamadas = [];
+  let levada = false;
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      const metodo = init?.method ?? "GET";
+      chamadas.push({ url, metodo, corpo: init?.body ? JSON.parse(String(init.body)) : null });
+      if (url.includes("/conversa")) {
+        return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+      }
+      if (metodo !== "GET") {
+        if (url.includes("/levar-para-desenvolvimento")) levada = true;
+        return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => (levada && depoisDoPost ? depoisDoPost : demandas),
+      } as unknown as Response;
+    }),
+  );
+
+  function Anfitriao() {
+    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
+    return (
+      <QuadroDemandas
+        token="token-de-teste"
+        carregandoAuth={false}
+        produtos={PRODUTOS}
+        pessoas={PESSOAS}
+        filtros={filtros}
+        onFiltrosChange={setFiltros}
+        eu={eu}
+      />
+    );
+  }
+
+  return render(<Anfitriao />);
+}
+
+describe("Quem vê o botão de levar para desenvolvimento", () => {
+  it("quem tem login vê o botão na Demanda sem Vínculo", async () => {
+    montarModal(demanda(), DA_VITTA);
+
+    expect(await screen.findByRole("button", { name: LEVAR_PARA_DESENVOLVIMENTO })).toBeTruthy();
+  });
+
+  it("o diretor não vê o botão", async () => {
+    // O botão é da Vitta (ADR 0054, decisão 9), e o backend recusa com 403 quem
+    // não tem login: esconder aqui é o par na tela, não a proteção.
+    montarModal(demanda(), DIRETOR);
+
+    expect(await screen.findByLabelText("Título")).toBeTruthy();
+    expect(screen.queryByRole("button", { name: LEVAR_PARA_DESENVOLVIMENTO })).toBeNull();
+  });
+
+  it("a Demanda que já tem Vínculo não mostra o botão", async () => {
+    // Uma segunda issue para o mesmo pedido divide o trabalho em dois lugares.
+    montarModal(VINCULADA, DA_VITTA);
+
+    expect(await screen.findByRole("button", { name: "Desvincular" })).toBeTruthy();
+    expect(screen.queryByRole("button", { name: LEVAR_PARA_DESENVOLVIMENTO })).toBeNull();
+  });
+
+  it("sem integração o botão fica desabilitado, com o aviso", async () => {
+    montarModal(demanda(), DA_VITTA_SEM_INTEGRACAO);
+
+    expect(await screen.findByText(AVISO_SEM_INTEGRACAO)).toBeTruthy();
+    const botao = screen.getByRole("button", { name: LEVAR_PARA_DESENVOLVIMENTO }) as HTMLButtonElement;
+    expect(botao.disabled).toBe(true);
+  });
+
+  it("com a integração de pé o botão está clicável", async () => {
+    // O par de presença do teste acima: um `disabled` fixo passaria por ele.
+    montarModal(demanda(), DA_VITTA);
+
+    const botao = (await screen.findByRole("button", { name: LEVAR_PARA_DESENVOLVIMENTO })) as HTMLButtonElement;
+    expect(botao.disabled).toBe(false);
+  });
+
+  it("a ajuda diz que o clique cria a issue de verdade", async () => {
+    // Ele ESCREVE num repositório público: isso não pode ser surpresa.
+    montarModal(demanda(), DA_VITTA);
+
+    expect(await screen.findByText(AJUDA_DE_LEVAR)).toBeTruthy();
+  });
+});
+
+describe("O que o clique de levar manda ao servidor", () => {
+  it("chama a porta de levar para desenvolvimento, sem corpo", async () => {
+    montarModal(demanda(), DA_VITTA);
+
+    const botao = await screen.findByRole("button", { name: LEVAR_PARA_DESENVOLVIMENTO });
+    await act(async () => {
+      fireEvent.click(botao);
+    });
+
+    await waitFor(() => {
+      const enviada = chamadas.find((c) => c.url.endsWith("/demandas/d-1/levar-para-desenvolvimento"));
+      expect(enviada?.metodo).toBe("POST");
+      // Corpo vazio: o que a issue precisa (título, texto, tipo, Produto,
+      // autor) o servidor já tem, e mandar daqui abriria uma porta para a tela
+      // escrever no GitHub o que quisesse.
+      expect(enviada?.corpo).toEqual({});
+    });
+  });
+
+  it("a recusa do servidor aparece na tela com a frase DELE", async () => {
+    const detail = "A Demanda já está vinculada à issue #673. Desfaça o Vínculo antes de levá-la para o desenvolvimento de novo.";
+    montarModal(demanda(), DA_VITTA, { recusa: { status: 422, detail } });
+
+    const botao = await screen.findByRole("button", { name: LEVAR_PARA_DESENVOLVIMENTO });
+    await act(async () => {
+      fireEvent.click(botao);
+    });
+
+    expect(await screen.findByText(detail)).toBeTruthy();
+  });
+});
+
+describe("O selo depois de levar para desenvolvimento", () => {
+  it("o card ganha o selo Em análise sem ninguém recarregar a página", async () => {
+    const antes = demanda();
+    const depois = demanda({ etapa: "em_analise", vinculo: { numero: 901, url: null } });
+    montarQuadroComEu([antes], DA_VITTA, [depois]);
+
+    const card = await screen.findByText("Levar o selo ao card");
+    await act(async () => {
+      fireEvent.click(card);
+    });
+    const botao = await screen.findByRole("button", { name: LEVAR_PARA_DESENVOLVIMENTO });
+    await act(async () => {
+      fireEvent.click(botao);
+    });
+
+    expect(await screen.findByText(ETAPA_ROTULO.em_analise)).toBeTruthy();
+  });
+
+  it("o par de presença: sem o clique não há selo nenhum", async () => {
+    const antes = demanda();
+    const depois = demanda({ etapa: "em_analise", vinculo: { numero: 901, url: null } });
+    montarQuadroComEu([antes], DA_VITTA, [depois]);
+
+    expect(await screen.findByText("Levar o selo ao card")).toBeTruthy();
+    expect(screen.queryByText(ETAPA_ROTULO.em_analise)).toBeNull();
   });
 });
