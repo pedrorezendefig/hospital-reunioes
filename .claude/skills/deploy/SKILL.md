@@ -413,10 +413,10 @@ Apresentar ao humano e **não prosseguir** até ele confirmar que aplicou:
   3. Só depois, alternativas: `! pbcopy < <caminho>` (copia direto), o link `raw.githubusercontent.com` e o corpo do PR
 
   Nunca dependa só do bloco ` ```sql ` no chat nem de `SendUserFile`: o humano trabalha no VS Code e copiar do chat falha com script longo. **O arquivo pode não existir na árvore principal** (ela costuma estar atrás de `origin/main` ou em branch antiga), por isso a extração é sempre por `git show` de `origin/<branch>`, nunca por caminho do repo local.
-- O conteúdo **completo** de cada migration nova, num bloco ` ```sql ` copiável (um bloco por arquivo, em ordem cronológica) — como reforço, não como caminho principal. Migrations **DESTRUCTIVE** marcadas com ⚠ e os statements destrutivos apontados por linha.
+- O conteúdo **completo** de cada migration nova, num bloco ` ```sql ` copiável (um bloco por arquivo, em ordem cronológica), como reforço, não como caminho principal. Migrations **DESTRUCTIVE** marcadas com ⚠ e os statements destrutivos apontados por linha.
 - Uma **query de verificação** pronta, também como arquivo clicável, que confirme cada objeto criado (colunas em `information_schema.columns`, índices em `pg_indexes`, constraints em `pg_constraint`), dizendo **quantas linhas** o resultado correto tem.
 - O passo a passo:
-  1. Abrir o **Supabase Studio de produção** (`project.integrations[].supabase_studio_url`, senão a URL `studio.<domínio>` — ex.: `https://studio.hospitalsaomatheus.cloud`). Se o SQL Editor crashar com erro de `includes`, abrir em janela anônima.
+  1. Abrir o **Supabase Studio de produção** (`project.integrations[].supabase_studio_url`, senão a URL `studio.<domínio>`, por exemplo `https://studio.hospitalsaomatheus.cloud`). Se o SQL Editor crashar com erro de `includes`, abrir em janela anônima.
   2. **SQL Editor → New query**.
   3. Colar o script. Havendo mais de um, aplicar **na ordem**, um de cada vez.
   4. **Run** (Cmd/Ctrl+Enter).
