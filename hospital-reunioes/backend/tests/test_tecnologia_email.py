@@ -527,6 +527,40 @@ class TestGatilhoAtribuicao:
         assert resposta.status_code == 200
         assert transporte.destinatarios == ["P2@hsm.com"]
 
+    def test_o_recado_da_entrega_entra_no_lugar_da_descricao(self, transporte):
+        """A devolucao da Entrega usa ESTE gatilho, com outro trecho (issue #679).
+
+        Chamado direto porque quem passa o recado e a sincronizacao, e nao uma
+        rota. A descricao da Demanda entra no cenario de proposito: o que se
+        prova e a TROCA, e nao a presenca do recado ao lado do texto de sempre.
+        """
+        _, sb = _montar(logado=PEDRO)
+        demanda = _demanda(responsavel_id="P2", titulo="Rever o fluxo de férias", descricao="Decidir até sexta.")
+
+        saiu = tecnologia_email.avisar_atribuicao(
+            sb,
+            demanda=demanda,
+            destinatario_id="P2",
+            quem_fez_nome="A entrega",
+            trecho="Entregue, confira e conclua",
+        )
+
+        assert saiu is True
+        enviado = transporte.enviados[0]
+        for corpo in (enviado.html, enviado.texto):
+            assert "Entregue, confira e conclua" in corpo
+            assert "A entrega deixou esta Demanda com você." in corpo
+            assert "Decidir até sexta." not in corpo
+
+    def test_sem_recado_o_aviso_continua_levando_a_descricao(self, transporte):
+        """O par do teste acima: a atribuicao feita a mao nao mudou."""
+        _, sb = _montar(logado=PEDRO)
+        demanda = _demanda(responsavel_id="P2", descricao="Decidir até sexta.")
+
+        tecnologia_email.avisar_atribuicao(sb, demanda=demanda, destinatario_id="P2", quem_fez_nome="Pedro Vitta")
+
+        assert "Decidir até sexta." in transporte.enviados[0].texto
+
     def test_atribuir_a_si_mesmo_nao_manda_aviso(self, transporte):
         client, _ = _montar(logado=PEDRO, demandas=[_demanda(responsavel_id="P2")])
 

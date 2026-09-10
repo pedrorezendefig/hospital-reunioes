@@ -21,6 +21,12 @@ Tres invariantes que valem pelos dois caminhos:
   causa (o GitHub fora do ar e o timeout do PostgREST chegam por portas
   diferentes), e o log guarda o identificador.
 
+Desde a issue #679 a rotina tambem DEVOLVE a Demanda a quem pediu quando a
+Etapa chega a Entregue: Aguardando, com o autor como responsavel, as duas
+linhas automaticas e o e-mail de atribuicao com o recado "Entregue, confira e
+conclua". Fica aqui, e nao no router, porque este e o caminho comum dos dois
+gatilhos: escrito la, a devolucao valeria para o webhook e nao para o lote.
+
 O I/O do GitHub e todo do `github_client`; a regra da Etapa e toda do
 `tecnologia_vinculo`. Aqui mora so a costura entre os dois e o banco.
 """
@@ -33,12 +39,20 @@ from typing import Any
 
 from app.services import github_client
 from app.services.tecnologia import (
+    AUTOR_DA_ENTREGA,
     ESTADOS_ABERTOS,
     ESTADOS_FECHADOS,
+    RECADO_DA_ENTREGA,
+    SEM_EFEITO,
     TABELA_CONVERSAS,
     TABELA_DEMANDAS,
+    TABELA_PRODUTOS,
+    efeito_da_etapa,
     linha_de_movimento,
+    texto_movimento_estado,
+    texto_movimento_responsavel,
 )
+from app.services.tecnologia_email import avisar_atribuicao
 from app.services.tecnologia_vinculo import (
     ETAPA_REGISTRADA,
     etapa_da_foto,
@@ -106,6 +120,155 @@ def demanda_vinculada(supabase, numero: int) -> dict[str, Any] | None:
     return linhas[0] if linhas else None
 
 
+def _gravar_linha(supabase, *, demanda_id: str, campo: str, de: str | None, para: str | None, texto: str) -> None:
+    """A linha automatica do fio, com o desfecho DESTE lado.
+
+    A forma da linha e uma so (`linha_de_movimento`); o que muda e quem tem como
+    reagir a falha dela. O router devolve 500 com a frase honesta a quem clicou;
+    aqui nao ha ninguem clicando, e a falha sobe para o webhook (que responde
+    2xx com `falhou: true`) ou para o lote (que conta a falha e segue). Por isso
+    este helper nao engole excecao: engolir apagaria a unica noticia que os dois
+    gatilhos tem de que o fio ficou incompleto.
+    """
+    supabase.table(TABELA_CONVERSAS).insert(
+        linha_de_movimento(demanda_id=demanda_id, campo=campo, de=de, para=para, texto=texto)
+    ).execute()
+
+
+def _nome_da_pessoa(supabase, pessoa_id: str) -> str:
+    """O nome que a linha do fio mostra. O id quando o nome nao veio, como o
+    router faz: uma linha "A entrega atribuiu a " nao diz a quem."""
+    result = supabase.table("participantes").select("nome_completo").eq("id", pessoa_id).execute()
+    linhas = result.data or []
+    return str((linhas[0].get("nome_completo") if linhas else None) or pessoa_id)
+
+
+def _avisar_a_devolucao(supabase, demanda: dict[str, Any], *, destinatario_id: str) -> None:
+    """O e-mail de atribuicao que ja existe, com o recado da Entrega.
+
+    E o MESMO gatilho da atribuicao feita a mao (`avisar_atribuicao`), e nao um
+    quarto e-mail: o que muda e o trecho que motiva o aviso, que aqui e
+    "Entregue, confira e conclua" em vez da descricao do pedido.
+
+    O nome do Produto e lido aqui porque o e-mail o mostra, e a Demanda que a
+    sincronizacao tem em maos e a LINHA do banco, sem o `produto_nome` que o
+    router resolve no `_com_nomes`. Sem esta leitura o aviso diria "(sem
+    Produto)" sobre uma Demanda que tem Produto.
+
+    E ela roda dentro de um `try` pelo mesmo motivo do `_aviso_da_correcao` do
+    router: acontece com a devolucao JA GRAVADA, e um timeout do PostgREST (que
+    sobe cru, porque nao e `APIError`) faria o webhook responder `falhou: true`
+    sobre um movimento que valeu. A reconciliacao seguinte veria a foto igual e
+    nao repetiria nada: o aviso se perderia de vez. Falha de aviso e aviso que
+    nao saiu, e nao acao desfeita.
+
+    `avisar_atribuicao` nunca levanta (o `_mandar` tem `except` largo e devolve
+    `False`), entao o e-mail que nao sai vira log, e nao excecao.
+    """
+    produto_nome = None
+    produto_id = demanda.get("produto_id")
+    if produto_id:
+        try:
+            result = supabase.table(TABELA_PRODUTOS).select("nome").eq("id", produto_id).execute()
+            linhas = result.data or []
+            produto_nome = linhas[0].get("nome") if linhas else None
+        except Exception:
+            logger.warning(
+                "[tecnologia] Falha ao ler o Produto da Demanda %s para o aviso da entrega.",
+                demanda.get("id"),
+                exc_info=True,
+            )
+    avisar_atribuicao(
+        supabase,
+        demanda={**demanda, "produto_nome": produto_nome},
+        destinatario_id=destinatario_id,
+        quem_fez_nome=AUTOR_DA_ENTREGA,
+        trecho=RECADO_DA_ENTREGA,
+    )
+
+
+def _devolver_a_quem_pediu(supabase, demanda: dict[str, Any], *, etapa_nova: str) -> None:
+    """A Entrega devolve a bola a quem pediu (issue #679, ADR 0054, decisao 6).
+
+    Quem decide SE ha devolucao e o que ela faz e o servico puro
+    (`efeito_da_etapa`); aqui mora so a costura com o banco, nas mesmas duas
+    rotinas que o Quadro ja usa a mao: mover (com a amarra no estado lido) e
+    atribuir (linha do fio, depois o e-mail).
+
+    **A devolucao para no primeiro passo que nao casa.** Se o UPDATE do estado
+    nao casar linha nenhuma, alguem mexeu no card entre a leitura e agora, e
+    esse alguem e gente: pode ter acabado de concluir a Demanda. Atribuir
+    assim mesmo entregaria a um responsavel novo um card que a pessoa fechou.
+
+    **O e-mail vem depois da linha do fio**, como no `atribuir` do router: se o
+    fio falhar, o aviso nem chega a ser montado, e ninguem recebe "a Demanda e
+    sua" sobre um card com a trilha quebrada.
+
+    Nao ha aqui uma segunda checagem de "ja avisei": a corrida entre o webhook e
+    o lote morre no compare-and-swap da Etapa, um degrau acima, e so a thread
+    que mudou a Etapa chega ate esta funcao.
+    """
+    efeito = efeito_da_etapa(demanda, etapa_nova=etapa_nova)
+    if efeito == SEM_EFEITO:
+        return
+
+    demanda_id = str(demanda["id"])
+    if efeito.mover_para:
+        estado_antes = str(demanda.get("estado") or "")
+        movida = (
+            supabase.table(TABELA_DEMANDAS)
+            .update({"estado": efeito.mover_para})
+            .eq("id", demanda_id)
+            .eq("estado", estado_antes)
+            .execute()
+        )
+        if not movida.data:
+            logger.info(
+                "[tecnologia] A Demanda %s saiu de %s antes da entrega devolvê-la; nada foi movido.",
+                demanda_id,
+                estado_antes,
+            )
+            return
+        _gravar_linha(
+            supabase,
+            demanda_id=demanda_id,
+            campo="estado",
+            de=estado_antes,
+            para=efeito.mover_para,
+            texto=texto_movimento_estado(autor_nome=AUTOR_DA_ENTREGA, para=efeito.mover_para),
+        )
+
+    if not efeito.atribuir_a:
+        # O autor JA e o responsavel: nao ha atribuicao, e portanto nao ha
+        # e-mail. E a mesma regra do `atribuir` do router, que nao grava linha
+        # nem avisa quando o responsavel nao muda: o aviso seria "a Demanda e
+        # sua" para quem ja a tinha na mao.
+        return
+
+    responsavel_antes = demanda.get("responsavel_id")
+    atribuida = (
+        supabase.table(TABELA_DEMANDAS).update({"responsavel_id": efeito.atribuir_a}).eq("id", demanda_id).execute()
+    )
+    if not atribuida.data:
+        logger.warning(
+            "[tecnologia] A Demanda %s não recebeu o autor como responsável na devolução da entrega.",
+            demanda_id,
+        )
+        return
+    _gravar_linha(
+        supabase,
+        demanda_id=demanda_id,
+        campo="responsavel",
+        de=responsavel_antes,
+        para=efeito.atribuir_a,
+        texto=texto_movimento_responsavel(
+            autor_nome=AUTOR_DA_ENTREGA,
+            para_nome=_nome_da_pessoa(supabase, efeito.atribuir_a),
+        ),
+    )
+    _avisar_a_devolucao(supabase, atribuida.data[0], destinatario_id=efeito.atribuir_a)
+
+
 def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
     """Rele a issue vinculada e atualiza o cache da Demanda. `True` se mudou.
 
@@ -166,19 +329,24 @@ def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
         )
         return False
 
-    supabase.table(TABELA_CONVERSAS).insert(
-        linha_de_movimento(
-            demanda_id=demanda_id,
-            campo="etapa",
-            de=etapa_antes,
+    _gravar_linha(
+        supabase,
+        demanda_id=demanda_id,
+        campo="etapa",
+        de=etapa_antes,
+        para=mudanca["etapa"],
+        texto=texto_movimento_etapa(
             para=mudanca["etapa"],
-            texto=texto_movimento_etapa(
-                para=mudanca["etapa"],
-                entregues=mudanca["partes_entregues"],
-                total=mudanca["partes_total"],
-            ),
-        )
-    ).execute()
+            entregues=mudanca["partes_entregues"],
+            total=mudanca["partes_total"],
+        ),
+    )
+    # Depois da linha da Etapa, e so aqui dentro: este ponto do codigo e o
+    # unico em que a Etapa acabou de MUDAR e o compare-and-swap acima disse que
+    # foi esta thread quem a mudou. Uma edicao do corpo da issue mexe na foto
+    # sem mexer na Etapa e nao chega ate aqui, entao a Demanda nao e devolvida
+    # de novo a cada webhook depois da entrega.
+    _devolver_a_quem_pediu(supabase, demanda, etapa_nova=mudanca["etapa"])
     return True
 
 

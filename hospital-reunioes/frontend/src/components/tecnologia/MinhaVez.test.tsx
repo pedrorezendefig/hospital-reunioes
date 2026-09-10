@@ -201,6 +201,23 @@ describe("A lista", () => {
     expect(within(screen.getByText("Me chamaram").closest("li")!).getByText("Mencionaram você")).toBeTruthy();
   });
 
+  it("mostra o recado da entrega no card que voltou para quem pediu", async () => {
+    // Issue #679: a Entrega devolve o card e o selo diz o que fazer com ele. O
+    // card comum entra no mesmo render: uma tela que escrevesse o recado em
+    // todo card passaria com um só.
+    montar([
+      demanda("d1", "Entregue para conferir", { motivo: "entregue", estado: "aguardando" }),
+      demanda("d2", "Ainda comigo", { motivo: "responsavel" }),
+    ]);
+
+    await screen.findByText("Entregue para conferir");
+
+    expect(
+      within(screen.getByText("Entregue para conferir").closest("li")!).getByText("Entregue, confira e conclua"),
+    ).toBeTruthy();
+    expect(within(screen.getByText("Ainda comigo").closest("li")!).getByText("Você é o responsável")).toBeTruthy();
+  });
+
   it("abre o modal da Demanda ao clicar na linha", async () => {
     montar([demanda("d1", "Decidir o encerramento")]);
 

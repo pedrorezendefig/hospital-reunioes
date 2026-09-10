@@ -122,6 +122,7 @@ from app.services.tecnologia import (
     SEM_PRODUTO,
     TABELA_CONVERSAS,
     TABELA_DEMANDAS,
+    TABELA_PRODUTOS,
     TIPO_ROTULO,
     avisos_da_resposta,
     carimbos_da_transicao,
@@ -183,8 +184,6 @@ from app.services.tecnologia_vinculo import (
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/admin/tecnologia", tags=["admin", "tecnologia"])
-
-TABELA_PRODUTOS = "tecnologia_produtos"
 
 # O que a lista de pessoas precisa ler do participante. `ativo` e
 # `access_profile`/`is_super_admin` entram porque o filtro roda em Python: um
@@ -1871,7 +1870,7 @@ async def listar_minha_vez(
         or esperando_resposta_da_pessoa(linhas=fios.get(str(d["id"]), []), pessoa_id=eu)
     ]
     return [
-        {**d, "motivo": motivo_da_minha_vez(responsavel_id=d.get("responsavel_id"), pessoa_id=eu)}
+        {**d, "motivo": motivo_da_minha_vez(demanda=d, pessoa_id=eu)}
         for d in _com_nomes(supabase, ordenar_minha_vez(minhas), ator=ator)
     ]
 

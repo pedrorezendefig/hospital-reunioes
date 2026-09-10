@@ -22,14 +22,20 @@ from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
 from app.dependencies import is_super_admin
-from app.services.tecnologia_vinculo import ETAPA_REGISTRADA, ETAPA_ROTULO, texto_movimento_etapa
+from app.services.tecnologia_vinculo import (
+    ETAPA_ENTREGUE,
+    ETAPA_REGISTRADA,
+    ETAPA_ROTULO,
+    texto_movimento_etapa,
+)
 
-# As duas tabelas da aba. Moram aqui, e nao no router, porque a partir da issue
+# As tabelas da aba. Moram aqui, e nao no router, porque a partir da issue
 # #678 quem escreve nelas nao e so o router: o webhook do GitHub e o job de
 # reconciliacao escrevem pelo `tecnologia_sincronizacao`, e um nome de tabela
 # repetido em tres arquivos e uma renomeacao que passa em dois deles.
 TABELA_DEMANDAS = "tecnologia_demandas"
 TABELA_CONVERSAS = "tecnologia_conversas"
+TABELA_PRODUTOS = "tecnologia_produtos"
 
 # O motivo que a tela mostra quando a API recusa. Uma frase so, no lugar de
 # uma por endpoint: e ela que o Super admin le no toast.
@@ -654,6 +660,114 @@ PESO_DA_PRIORIDADE: dict[str, int] = {"alta": 0, "normal": 1, "baixa": 2}
 # pessoa e nao descobre por que ele esta ali.
 MOTIVO_SOU_RESPONSAVEL = "responsavel"
 MOTIVO_FUI_MENCIONADO = "mencao"
+MOTIVO_ENTREGA_DEVOLVIDA = "entregue"
+
+
+# ─── A Entrega devolve a Demanda a quem pediu (issue #679, ADR 0054) ─────────
+
+# A coluna para onde a Entrega devolve o card. Constante porque, desde esta
+# fatia, ela e um destino escolhido por CODIGO, e nao um botao que alguem
+# aperta: um literal solto aqui e la e um destino que muda pela metade.
+ESTADO_AGUARDANDO = "aguardando"
+
+# Quem assina, no fio e no e-mail, o que a Entrega faz sozinha.
+#
+# Nao e "Alguem" (o nome que falta) nem o nome de uma pessoa: ninguem clicou.
+# A frase que sai e "A entrega moveu para Aguardando", que e verdade e nao
+# atribui a ninguem um movimento que o app fez lendo o GitHub.
+AUTOR_DA_ENTREGA = "A entrega"
+
+# O recado da devolucao, na tela e no e-mail. O MESMO texto nos dois lugares,
+# porque e a mesma promessa: o diretor le no selo do card o que leu no aviso.
+RECADO_DA_ENTREGA = "Entregue, confira e conclua"
+
+
+class EfeitoDaEtapa(NamedTuple):
+    """O que a Etapa nova manda fazer com a Demanda. Vazio quase sempre.
+
+    Dois campos e nao um booleano porque as duas metades da devolucao sao
+    independentes: a Demanda ja pode estar em Aguardando (nada a mover) e o
+    autor ja pode ser o responsavel (nada a atribuir, e ninguem a avisar).
+    """
+
+    mover_para: str | None = None
+    atribuir_a: str | None = None
+
+
+SEM_EFEITO = EfeitoDaEtapa()
+
+
+def efeito_da_etapa(demanda: dict[str, Any], *, etapa_nova: str) -> EfeitoDaEtapa:
+    """A UNICA regra automatica de movimento do Quadro (ADR 0054, decisao 6).
+
+    Quando a Etapa chega a Entregue, a bola volta para quem pediu: a Demanda vai
+    para Aguardando e o autor vira o responsavel, para o card cair na "Minha
+    vez" dele com algo para conferir. Quem conclui continua sendo gente: a
+    sincronizacao nunca escreve `concluida`, e este tipo nao tem como dizer isso
+    (o unico destino que ele sabe nomear e `ESTADO_AGUARDANDO`).
+
+    Tres portas fechadas, e cada uma por um motivo diferente:
+
+    - **qualquer Etapa que nao seja Entregue** nao move nada, "Nao sera feita"
+      inclusive: a Vitta explica na Conversa e cancela a mao (historia 29);
+    - **Demanda fechada** nao e reaberta pela Entrega. A lista testada e a
+      POSITIVA (`ESTADOS_ABERTOS`), e nao "tudo menos Concluida e Cancelada":
+      um estado novo que entrasse no banco sem passar por aqui seria movido em
+      silencio pela regra escrita ao contrario;
+    - **Demanda sem autor** nao tem a quem voltar. `autor_id` e anulavel de
+      verdade (`ON DELETE SET NULL` na migration 102): a pessoa que abriu o
+      pedido pode ter sido apagada, e sem esta guarda a Demanda seria "atribuida
+      a ninguem", apagando o responsavel que ela tinha.
+
+    Nao recebe a Etapa anterior: quem garante que a devolucao acontece UMA vez e
+    o compare-and-swap da Etapa em `sincronizar_demanda`, que so deixa passar
+    quem de fato mudou a Etapa. Uma segunda guarda aqui prometeria defender algo
+    que esta funcao nao tem como ver.
+    """
+    if etapa_nova != ETAPA_ENTREGUE:
+        return SEM_EFEITO
+    estado = str(demanda.get("estado") or "")
+    if estado not in ESTADOS_ABERTOS:
+        return SEM_EFEITO
+    autor_id = demanda.get("autor_id")
+    if not autor_id:
+        return SEM_EFEITO
+    return EfeitoDaEtapa(
+        mover_para=None if estado == ESTADO_AGUARDANDO else ESTADO_AGUARDANDO,
+        atribuir_a=None if demanda.get("responsavel_id") == autor_id else autor_id,
+    )
+
+
+def devolvida_pela_entrega(demanda: dict[str, Any]) -> bool:
+    """A Demanda esta parada exatamente como a Entrega a deixou.
+
+    E o par na tela do `efeito_da_etapa`: as tres marcas que a devolucao deixa
+    (Etapa Entregue, coluna Aguardando, responsavel igual ao autor) sao lidas de
+    volta para o card dizer, em "Minha vez", POR QUE ele esta ali.
+
+    A leitura e do ESTADO da Demanda, e nao da ultima linha do fio, por duas
+    razoes que apontam para o mesmo lado:
+
+    - **preco**: "Minha vez" nao le o fio das Demandas de que a pessoa ja e a
+      responsavel (as devolvidas sao todas assim), justamente para nao pagar
+      leitura a toa. Uma regra escrita sobre o fio traria a Conversa inteira de
+      toda Demanda aberta a cada abertura da aba;
+    - **verdade**: as tres marcas somem sozinhas no instante em que alguem mexe
+      no card (mover, atribuir a outra pessoa) ou em que a Etapa anda de novo
+      (o diretor pede ajuste e o selo volta a "Em desenvolvimento"), que e
+      exatamente quando o recado deixa de valer.
+
+    `autor_id` nulo nao casa com responsavel nulo: sem esta guarda, uma Demanda
+    sem autor e sem responsavel passaria por "devolvida" com ninguem dos dois
+    lados da igualdade.
+    """
+    autor_id = demanda.get("autor_id")
+    return (
+        bool(autor_id)
+        and str(demanda.get("etapa") or "") == ETAPA_ENTREGUE
+        and str(demanda.get("estado") or "") == ESTADO_AGUARDANDO
+        and demanda.get("responsavel_id") == autor_id
+    )
 
 
 def peso_da_prioridade(prioridade: Any) -> int:
@@ -741,18 +855,24 @@ def _atende(resposta: dict[str, Any], chamada_em: datetime | None) -> bool:
     return escrita_em is None or escrita_em >= chamada_em
 
 
-def motivo_da_minha_vez(*, responsavel_id: str | None, pessoa_id: str) -> str:
-    """Por que este card esta em "Minha vez": porque e meu, ou porque me
-    chamaram nele.
+def motivo_da_minha_vez(*, demanda: dict[str, Any], pessoa_id: str) -> str:
+    """Por que este card esta em "Minha vez": porque a Entrega o devolveu para
+    mim, porque e meu, ou porque me chamaram nele.
 
-    Uma comparacao simples basta, e nao ha guarda de NULL: `pessoa_id` vem do
-    `ator["id"]` da sessao e nunca e nulo, entao `None == "P2"` ja e False e uma
-    Demanda sem responsavel cai no outro ramo sozinha. Uma guarda a mais aqui
-    seria codigo morto, com um teste prometendo defender o que a comparacao ja
-    da de graca.
+    A devolucao vem PRIMEIRO porque ela e o caso mais especifico: quem foi
+    devolvido tambem e o responsavel, e responder "Voce e o responsavel" ali
+    seria verdade e nao serviria para nada. O que o diretor precisa saber e que
+    ha coisa entregue esperando conferencia (issue #679).
+
+    Uma comparacao simples basta no resto, e nao ha guarda de NULL: `pessoa_id`
+    vem do `ator["id"]` da sessao e nunca e nulo, entao `None == "P2"` ja e
+    False e uma Demanda sem responsavel cai no ultimo ramo sozinha. Uma guarda a
+    mais aqui seria codigo morto, com um teste prometendo defender o que a
+    comparacao ja da de graca.
     """
+    responsavel_id = demanda.get("responsavel_id")
     if responsavel_id == pessoa_id:
-        return MOTIVO_SOU_RESPONSAVEL
+        return MOTIVO_ENTREGA_DEVOLVIDA if devolvida_pela_entrega(demanda) else MOTIVO_SOU_RESPONSAVEL
     return MOTIVO_FUI_MENCIONADO
 
 
