@@ -1,3 +1,6 @@
+import hashlib
+import hmac
+import json
 import logging
 from datetime import UTC, datetime
 
@@ -336,3 +339,109 @@ def _processar_versao_pop(supabase, versao: dict, event_name: str) -> None:
 
     else:
         logger.info(f"[ClickSign webhook] Evento '{event_name}' sem ação definida para POP — ignorado.")
+
+
+# ─── Webhook do GitHub (issue #678, PRD #673, ADR 0054) ──────────────────────
+
+# O que a porta responde a quem não está autenticado quando o segredo falta.
+#
+# Genérica de propósito: quem bate aqui não provou ser ninguém, e "falta a
+# variável X" é informação sobre a instalação. A causa de verdade vai para o
+# log, que é onde o operador olha.
+MOTIVO_WEBHOOK_INDISPONIVEL = "Webhook indisponível."
+
+MOTIVO_ASSINATURA_INVALIDA = "Assinatura inválida"
+
+
+def _assinatura_do_github_confere(corpo: bytes, cabecalho: str | None, segredo: str) -> bool:
+    """Se o `X-Hub-Signature-256` bate com o HMAC SHA-256 do CORPO CRU.
+
+    Cru quer dizer os bytes que chegaram, e não o dicionário re-serializado. O
+    GitHub assina o que mandou; um `json.dumps` do payload parseado devolve os
+    mesmos dados com outro espaçamento, e a assinatura deixaria de bater no dia
+    em que o GitHub mudasse a formatação, em produção, sem nada acusar antes.
+
+    `compare_digest` e não `==`: a comparação ingênua para no primeiro byte
+    diferente, e o tempo dela conta ao atacante quantos bytes ele já acertou.
+    """
+    if not cabecalho:
+        return False
+    algoritmo, _, recebida = cabecalho.partition("=")
+    if algoritmo.strip().lower() != "sha256" or not recebida.strip():
+        return False
+    esperada = hmac.new(segredo.encode("utf-8"), corpo, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(esperada, recebida.strip())
+
+
+@router.post("/github")
+async def webhook_github(
+    request: Request,
+    supabase=Depends(get_supabase_client),
+):
+    """A Demanda vinculada aprendendo do GitHub em segundos (ADR 0054, decisão 2).
+
+    Cadastro no repositório: URL desta rota, content type JSON, segredo igual ao
+    `GITHUB_WEBHOOK_SECRET` do ambiente e **só o evento `issues`**. Os dois lados
+    do cadastro são passo humano do deploy: sem o segredo a rota responde 503, e
+    sem o webhook cadastrado o card só anda de hora em hora, pela reconciliação.
+
+    A ordem das guardas é a ordem das causas, e não é negociável:
+
+    1. **Segredo configurado.** Sem ele não há o que conferir, e aceitar seria
+       deixar a porta aberta com aparência de guarda.
+    2. **Assinatura.** Antes de olhar QUALQUER outra coisa do pedido, o header do
+       evento incluído: conferir o evento primeiro deixaria qualquer um
+       descobrir, sem segredo nenhum, quais eventos o app trata.
+    3. **Evento e ação.** Só `issues`, e só nas ações que mexem em label, estado
+       ou corpo. O resto sai em 2xx sem gastar cota do GitHub.
+    4. **Demanda vinculada.** A esmagadora maioria das issues do repositório não
+       tem Demanda nenhuma atrás, e isso não é erro.
+
+    Responde 2xx mesmo quando a sincronização falha. O GitHub exige 2xx em 10
+    segundos e **não reentrega** o que falhou: um 500 aqui perderia o evento para
+    sempre, e quem recupera é a reconciliação de hora em hora.
+    """
+    from app.services import tecnologia_sincronizacao
+
+    segredo = settings.github_webhook_secret
+    if not segredo:
+        logger.error("[GitHub webhook] GITHUB_WEBHOOK_SECRET não configurado; entrega recusada.")
+        raise HTTPException(status_code=503, detail=MOTIVO_WEBHOOK_INDISPONIVEL)
+
+    corpo = await request.body()
+    if not _assinatura_do_github_confere(corpo, request.headers.get("x-hub-signature-256"), segredo):
+        logger.warning("[GitHub webhook] Assinatura inválida: entrega recusada.")
+        raise HTTPException(status_code=401, detail=MOTIVO_ASSINATURA_INVALIDA)
+
+    if request.headers.get("x-github-event") != "issues":
+        return {"ignorado": "evento"}
+
+    try:
+        payload = json.loads(corpo)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Payload JSON inválido")
+
+    if not isinstance(payload, dict) or payload.get("action") not in tecnologia_sincronizacao.ACOES_DE_ISSUE:
+        return {"ignorado": "acao"}
+
+    numero = (payload.get("issue") or {}).get("number")
+    if not isinstance(numero, int):
+        logger.warning("[GitHub webhook] Evento 'issues' sem número de issue; ignorado.")
+        return {"ignorado": "issue"}
+
+    demanda = tecnologia_sincronizacao.demanda_vinculada(supabase, numero)
+    if demanda is None:
+        return {"ignorado": "sem_vinculo"}
+
+    try:
+        mudou = tecnologia_sincronizacao.sincronizar_demanda(supabase, demanda)
+    except Exception:
+        logger.warning(
+            "[GitHub webhook] Falha ao sincronizar a Demanda %s (issue #%s); a reconciliação recupera.",
+            demanda.get("id"),
+            numero,
+            exc_info=True,
+        )
+        return {"recebido": True, "sincronizada": False}
+
+    return {"recebido": True, "sincronizada": mudou}

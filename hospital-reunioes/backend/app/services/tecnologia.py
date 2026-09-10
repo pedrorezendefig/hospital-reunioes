@@ -26,6 +26,13 @@ from app.services.tecnologia_vinculo import ETAPA_REGISTRADA, ETAPA_ROTULO, text
 
 # O motivo que a tela mostra quando a API recusa. Uma frase so, no lugar de
 # uma por endpoint: e ela que o Super admin le no toast.
+# As duas tabelas da aba. Moram aqui, e nao no router, porque a partir da issue
+# #678 quem escreve nelas nao e so o router: o webhook do GitHub e o job de
+# reconciliacao escrevem pelo `tecnologia_sincronizacao`, e um nome de tabela
+# repetido em tres arquivos e uma renomeacao que passa em dois deles.
+TABELA_DEMANDAS = "tecnologia_demandas"
+TABELA_CONVERSAS = "tecnologia_conversas"
+
 MOTIVO_PRODUTO_ATIVO_SEM_DONO = "Produto ativo precisa de dono. Escolha um dono ou desative o Produto."
 MOTIVO_DONO_SEM_ACESSO = "O dono precisa ser um participante ativo com Super admin."
 
@@ -202,6 +209,30 @@ def texto_movimento_estado(*, autor_nome: str, para: str) -> str:
 def texto_movimento_responsavel(*, autor_nome: str, para_nome: str) -> str:
     """O texto legivel da linha de movimento de responsavel."""
     return f"{autor_nome} atribuiu a {para_nome}"
+
+
+def linha_de_movimento(*, demanda_id: str, campo: str, de: str | None, para: str | None, texto: str) -> dict[str, Any]:
+    """A linha automatica do fio, pronta para o insert.
+
+    Sem autor: quem moveu esta no `texto`. Uma linha de movimento com `autor_id`
+    preenchido seria lida como resposta de gente pelo funil da Conversa.
+
+    A FORMA mora aqui, e a gravacao mora em quem tem como reagir a falha dela: o
+    router devolve 500 com a frase honesta a quem clicou; o webhook e o job de
+    reconciliacao (issue #678) so tem log. Sao dois desfechos legitimos para o
+    mesmo shape, e e o shape que nao pode divergir: uma coluna nova que entrasse
+    so num dos dois deixaria metade do fio sem ela.
+    """
+    return {
+        "demanda_id": demanda_id,
+        "autor_id": None,
+        "linha": "movimento",
+        "texto": texto,
+        "mencoes": [],
+        "movimento_campo": campo,
+        "movimento_de": de,
+        "movimento_para": para,
+    }
 
 
 # ─── A escrita no fio da Conversa (issue #638) ───────────────────────────────
