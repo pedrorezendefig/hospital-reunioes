@@ -80,7 +80,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
-from datetime import UTC, date, datetime
+from datetime import UTC, date, datetime, timedelta
 from typing import NoReturn
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -157,6 +157,7 @@ from app.services.tecnologia_email import avisar_atribuicao, avisar_mencao, avis
 from app.services.tecnologia_sincronizacao import mudanca_da_foto
 from app.services.tecnologia_vinculo import (
     ETAPA_REGISTRADA,
+    MOTIVO_CRIACAO_EM_ANDAMENTO,
     MOTIVO_GITHUB_INDISPONIVEL,
     MOTIVO_INTEGRACAO_DESLIGADA,
     MOTIVO_NUMERO_INVALIDO,
@@ -175,6 +176,7 @@ from app.services.tecnologia_vinculo import (
     motivo_ja_vinculada_para_levar,
     motivo_numero_ja_usado,
     tem_github_login,
+    texto_do_diretor,
     texto_levou_para_desenvolvimento,
     texto_movimento_etapa,
 )
@@ -1063,6 +1065,64 @@ def _dona_do_numero(supabase: Client, numero: int, *, exceto_id: str) -> dict | 
     return None
 
 
+# Por quanto tempo o carimbo de "estou criando a issue agora" segura a porta.
+#
+# Maior que o timeout do cliente do GitHub (10 s) com folga para a escrita que
+# vem depois, e curto o bastante para um processo morto no meio da criacao nao
+# trancar a Demanda para sempre. O caminho normal nem chega perto disso: a
+# falha DEVOLVE a vez na hora (`_devolver_a_vez`), e este teto e so a rede de
+# baixo, para o que o codigo nao consegue desfazer.
+JANELA_DA_CRIACAO = timedelta(seconds=60)
+
+
+def _criacao_em_andamento(demanda: dict) -> bool:
+    """Se outro pedido esta criando a issue desta Demanda AGORA (issue #677).
+
+    O carimbo lido e o `github_sincronizado_em`, que numa Demanda sem Vinculo e
+    sempre NULO: a unica coisa que o preenche antes de existir issue e o claim
+    logo abaixo. Carimbo velho e claim que morreu com o processo, e a porta
+    reabre.
+    """
+    carimbo = instante_do_banco(demanda.get("github_sincronizado_em"))
+    if carimbo is None:
+        return False
+    return datetime.now(UTC) - carimbo < JANELA_DA_CRIACAO
+
+
+def _tomar_a_vez_de_criar(supabase: Client, *, demanda_id: str, carimbo_lido: str | None) -> bool:
+    """Carimba a Demanda como "indo para o desenvolvimento", ou devolve False.
+
+    E o que fecha a janela do duplo clique DO LADO DO SERVIDOR, e nao so no
+    botao: o `github_issue_numero` da Demanda so existe DEPOIS de a issue
+    nascer, entao dois pedidos concorrentes leem os dois "sem Vinculo" e
+    criariam duas issues publicas, a segunda orfa (o marcador dela aponta para
+    a mesma Demanda, que ja aponta para a primeira).
+
+    O UPDATE e condicionado ao valor que ESTE pedido leu (compare-and-swap): o
+    Postgres serializa os dois, o segundo reavalia a condicao com a linha ja
+    escrita e volta sem nenhuma. Nao ha transacao no PostgREST, e nao e preciso:
+    um UPDATE condicionado e atomico por si.
+    """
+    consulta = supabase.table(TABELA_DEMANDAS).update({"github_sincronizado_em": _agora()}).eq("id", demanda_id)
+    # Coluna nulavel: `.eq(coluna, None)` nao casa NULL no PostgREST, `.is_` casa.
+    consulta = (
+        consulta.eq("github_sincronizado_em", carimbo_lido)
+        if carimbo_lido
+        else consulta.is_("github_sincronizado_em", "null")
+    )
+    return bool(consulta.execute().data)
+
+
+def _devolver_a_vez(supabase: Client, *, demanda_id: str, carimbo_lido: str | None) -> None:
+    """Desfaz o claim quando a criacao nao aconteceu.
+
+    Sem isto, a frase do 502 ("tente de novo em alguns instantes") seria
+    mentira: a Demanda ficaria trancada pela `JANELA_DA_CRIACAO` inteira depois
+    de uma falha que durou um segundo.
+    """
+    supabase.table(TABELA_DEMANDAS).update({"github_sincronizado_em": carimbo_lido}).eq("id", demanda_id).execute()
+
+
 def _gravar_etapa(supabase: Client, *, demanda_id: str, de: str, para: str, entregues, total) -> None:
     """A linha automatica da mudanca de Etapa, quando ela de fato mudou.
 
@@ -1111,9 +1171,12 @@ async def vincular_demanda(
 ):
     """Liga a Demanda a uma issue-raiz do GitHub pelo numero (ADR 0054, decisao 1).
 
-    A ordem das guardas e a ordem das causas, da mais barata para a mais cara:
-    quem sou eu, se a integracao existe, se o numero faz sentido, se esta
-    Demanda ou aquela issue ja tem dono, e so entao a ida ao GitHub.
+    A ordem das guardas e a ordem das CAUSAS, e ela e a mesma nas duas portas
+    que falam com o GitHub (issue #677): quem sou eu (403), o que eu pedi faz
+    sentido e existe (422 do numero, 404 da Demanda) e so entao o ambiente
+    (503). A configuracao vem por ultimo porque e a causa mais distante de quem
+    clicou: dizer "falta configurar a integracao" sobre uma Demanda que nao
+    existe manda a pessoa mexer no servidor por causa de um link velho.
 
     O par e guardado dos DOIS lados: a Demanda ganha o numero, a issue ganha o
     id da Demanda num marcador oculto no fim do corpo. O marcador entra por
@@ -1125,13 +1188,14 @@ async def vincular_demanda(
     que nao funcionou.
     """
     _exigir_da_vitta(ator)
-    _exigir_integracao()
 
     numero = payload.numero
     if numero <= 0:
         _recusar(MOTIVO_NUMERO_INVALIDO)
 
     demanda = _buscar_demanda(supabase, demanda_id)
+    _exigir_integracao()
+
     ja_vinculada = demanda.get("github_issue_numero")
     if ja_vinculada and int(ja_vinculada) != numero:
         _recusar(motivo_demanda_ja_vinculada(int(ja_vinculada)))
@@ -1224,22 +1288,38 @@ async def levar_para_desenvolvimento(
     divergir da primeira.
 
     Vinculada de novo nao passa: uma segunda issue para o mesmo pedido divide o
-    trabalho em dois lugares, e o dano nao se desfaz sozinho.
+    trabalho em dois lugares, e o dano nao se desfaz sozinho. Isso vale para o
+    clique repetido de OUTRO dia (o `github_issue_numero` ja gravado) e para o
+    duplo clique do mesmo segundo, que a leitura do numero nao pega porque a
+    issue ainda nao existe em nenhum dos dois pedidos: quem fecha essa janela e
+    o carimbo do `_tomar_a_vez_de_criar`.
+
+    A ordem das guardas e: quem sou eu (403), o que eu pedi existe (404) e so
+    entao o ambiente (503). A configuracao vem por ULTIMO de proposito, e o
+    `vincular` segue a mesma regra: dizer "falta configurar a integracao" sobre
+    uma Demanda que nao existe manda a pessoa mexer no servidor por causa de um
+    link velho.
     """
     _exigir_da_vitta(ator)
-
-    # A Demanda vem ANTES da configuracao, ao contrario do `vincular`: aqui nao
-    # ha numero digitado para conferir, e dizer "falta configurar a integracao"
-    # sobre uma Demanda que nao existe mandaria a pessoa mexer no servidor por
-    # causa de um link velho.
     demanda = _buscar_demanda(supabase, demanda_id)
     _exigir_integracao()
 
     ja_vinculada = demanda.get("github_issue_numero")
     if ja_vinculada:
         _recusar(motivo_ja_vinculada_para_levar(int(ja_vinculada)))
+    if _criacao_em_andamento(demanda):
+        _recusar(MOTIVO_CRIACAO_EM_ANDAMENTO)
 
-    titulo = str(demanda.get("titulo") or "").strip()
+    carimbo_lido = demanda.get("github_sincronizado_em")
+    if not _tomar_a_vez_de_criar(supabase, demanda_id=demanda_id, carimbo_lido=carimbo_lido):
+        # Outro pedido carimbou entre a leitura e agora. Ele esta criando a
+        # issue; este para aqui em vez de criar a segunda.
+        _recusar(MOTIVO_CRIACAO_EM_ANDAMENTO)
+
+    # O titulo tambem vai para o repositorio publico, e nao so o corpo: passa
+    # pela mesma peneira (o corpo ja passava, porque o titulo e o "O que muda"
+    # da Demanda sem descricao).
+    titulo = texto_do_diretor(demanda.get("titulo"))
     autor_id = demanda.get("autor_id")
     # Quem PEDIU, e nao quem clicou: a Origem responde de quem e a demanda. O
     # nome de quem clicou entra na linha do fio, logo abaixo.
@@ -1258,19 +1338,20 @@ async def levar_para_desenvolvimento(
 
     try:
         dados = github_client.criar_issue(titulo=titulo, corpo=corpo, labels=labels_da_issue_nova(demanda.get("tipo")))
+        numero = dados.get("number")
+        if not isinstance(numero, int):
+            # A issue pode ter nascido; o Vinculo, nao. Sem o numero nao ha par,
+            # e gravar `None` no lugar dele e o meio Vinculo proibido.
+            logger.error("[tecnologia] a criacao da issue da Demanda %s voltou sem numero", demanda_id)
+            raise github_client.GithubIndisponivelError("A criacao da issue voltou sem numero")
     except github_client.GithubNaoConfiguradoError:
         # A configuracao pode ter sumido entre a guarda la em cima e a chamada.
+        _devolver_a_vez(supabase, demanda_id=demanda_id, carimbo_lido=carimbo_lido)
         _exigir_integracao()
         raise
     except github_client.GithubIndisponivelError:
+        _devolver_a_vez(supabase, demanda_id=demanda_id, carimbo_lido=carimbo_lido)
         logger.warning("[tecnologia] GitHub indisponivel ao levar a Demanda %s para o desenvolvimento", demanda_id)
-        _issue_indisponivel()
-
-    numero = dados.get("number")
-    if not isinstance(numero, int):
-        # A issue pode ter nascido; o Vinculo, nao. Sem o numero nao ha par, e
-        # gravar `None` no lugar dele e justamente o meio Vinculo proibido.
-        logger.error("[tecnologia] a criacao da issue da Demanda %s voltou sem numero", demanda_id)
         _issue_indisponivel()
 
     # A issue acabou de nascer: ela nao tem sub-issue nenhuma, e a foto sai do

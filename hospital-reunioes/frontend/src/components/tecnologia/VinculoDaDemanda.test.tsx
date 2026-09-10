@@ -91,13 +91,31 @@ const VINCULADA = demanda({
 type Chamada = { url: string; metodo: string; corpo: unknown };
 let chamadas: Chamada[] = [];
 
-function dublarFetch(opcoes: { recusa?: { status: number; detail: string }; demandas?: Demanda[] } = {}) {
+/**
+ * Solta o POST que o `dublarFetch({ segurarEscrita: true })` deixou pendurado.
+ *
+ * Existe para o teste do duplo clique: sem um pedido PARADO no ar não há a
+ * janela que o botão precisa fechar, e um `fetch` que resolve na hora deixaria
+ * o segundo clique acontecer com o botão já liberado, provando o contrário do
+ * que o teste diz provar.
+ */
+let liberarEscrita: (() => void) | null = null;
+
+function dublarFetch(
+  opcoes: { recusa?: { status: number; detail: string }; demandas?: Demanda[]; segurarEscrita?: boolean } = {},
+) {
   chamadas = [];
+  const presa = opcoes.segurarEscrita
+    ? new Promise<void>((resolver) => {
+        liberarEscrita = resolver;
+      })
+    : null;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       const metodo = init?.method ?? "GET";
       chamadas.push({ url, metodo, corpo: init?.body ? JSON.parse(String(init.body)) : null });
+      if (presa && metodo !== "GET") await presa;
       if (metodo !== "GET" && opcoes.recusa) {
         return {
           ok: false,
@@ -574,5 +592,59 @@ describe("O selo depois de levar para desenvolvimento", () => {
 
     expect(await screen.findByText("Levar o selo ao card")).toBeTruthy();
     expect(screen.queryByText(ETAPA_ROTULO.em_analise)).toBeNull();
+  });
+});
+
+// ─── 6. A rodada de fix do PR #688 ───────────────────────────────────────────
+
+describe("Duplo clique em levar para desenvolvimento", () => {
+  it("o segundo clique não manda um segundo POST", async () => {
+    // Cada POST que passar cria uma issue PÚBLICA a mais, e a segunda nasce
+    // órfã. O `fetch` fica pendurado de propósito: é a janela real, a de um
+    // pedido que ainda não voltou.
+    const { unmount } = montarModal(demanda(), DA_VITTA, { segurarEscrita: true });
+
+    const botao = await screen.findByRole("button", { name: LEVAR_PARA_DESENVOLVIMENTO });
+    await act(async () => {
+      fireEvent.click(botao);
+    });
+    await act(async () => {
+      fireEvent.click(botao);
+    });
+
+    expect(chamadas.filter((c) => c.url.includes("/levar-para-desenvolvimento")).length).toBe(1);
+    expect((botao as HTMLButtonElement).disabled).toBe(true);
+
+    await act(async () => {
+      liberarEscrita?.();
+    });
+    unmount();
+  });
+
+  it("depois que a resposta volta o botão libera de novo", async () => {
+    // O par de presença: um botão desabilitado para sempre passaria pelo teste
+    // acima, e quem levou um 502 não conseguiria tentar de novo.
+    montarModal(demanda(), DA_VITTA, { recusa: { status: 502, detail: "O GitHub não respondeu agora." } });
+
+    const botao = (await screen.findByRole("button", { name: LEVAR_PARA_DESENVOLVIMENTO })) as HTMLButtonElement;
+    await act(async () => {
+      fireEvent.click(botao);
+    });
+
+    expect(botao.disabled).toBe(false);
+    expect(chamadas.filter((c) => c.url.includes("/levar-para-desenvolvimento")).length).toBe(1);
+  });
+});
+
+describe("A tela avisa que a issue é pública", () => {
+  it("a ajuda diz onde o texto vai parar e que não dá para desfazer", async () => {
+    // Publicar num repositório público é a única parte do fluxo sem volta:
+    // apagar a issue não desfaz o que já foi lido nem o que os espelhos
+    // guardaram. Quem clica precisa saber ANTES.
+    montarModal(demanda(), DA_VITTA);
+
+    expect(await screen.findByText(AJUDA_DE_LEVAR)).toBeTruthy();
+    expect(AJUDA_DE_LEVAR).toContain("público");
+    expect(AJUDA_DE_LEVAR).toContain("não dá para desfazer");
   });
 });

@@ -25,6 +25,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
@@ -57,9 +58,11 @@ from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_ROTULO,
     ETAPAS,
     LABEL_TRIAGEM,
+    MOTIVO_CRIACAO_EM_ANDAMENTO,
     MOTIVO_GITHUB_INDISPONIVEL,
     MOTIVO_INTEGRACAO_DESLIGADA,
     MOTIVO_LOGIN_INVALIDO,
+    MOTIVO_NUMERO_INVALIDO,
     MOTIVO_SEM_GITHUB_LOGIN,
     MOTIVO_SEM_VINCULO_PARA_DESFAZER,
     TEXTO_VINCULO_CRIADO,
@@ -85,6 +88,7 @@ from app.services.tecnologia_vinculo import (  # noqa: E402
     partes_para_o_diretor,
     situacao_da_parte,
     tem_github_login,
+    texto_do_diretor,
     texto_levou_para_desenvolvimento,
     texto_movimento_etapa,
     texto_partes,
@@ -723,11 +727,13 @@ class _TableQuery:
     por falta de metodo no dublê, e nao por defeito da regra.
     """
 
-    def __init__(self, rows: list[dict], nome: str):
+    def __init__(self, rows: list[dict], nome: str, dono: _SupabaseMock | None = None):
         self._rows = rows
         self._nome = nome
+        self._dono = dono
         self._eq: dict[str, Any] = {}
         self._in: dict[str, list] = {}
+        self._is_null: set[str] = set()
         self._insert: list[dict] | None = None
         self._update: dict | None = None
         self._order: list[str] = []
@@ -748,6 +754,17 @@ class _TableQuery:
         self._eq[coluna] = valor
         return self
 
+    def is_(self, coluna, valor):
+        """`.is_(coluna, "null")`, o unico jeito de casar NULL no PostgREST.
+
+        O duble so conhece essa forma de proposito: `.eq(coluna, None)` NAO casa
+        NULL no PostgREST de verdade, e um duble que aceitasse os dois deixaria
+        passar um `.eq` que em producao nao acharia linha nenhuma.
+        """
+        assert str(valor).lower() == "null", "o dublê só conhece is_(coluna, 'null')"
+        self._is_null.add(coluna)
+        return self
+
     def in_(self, coluna, valores):
         self._in[coluna] = list(valores)
         return self
@@ -764,6 +781,8 @@ class _TableQuery:
     def _casa(self, linha: dict) -> bool:
         if not all(linha.get(c) == v for c, v in self._eq.items()):
             return False
+        if not all(linha.get(c) is None for c in self._is_null):
+            return False
         return all(linha.get(c) in v for c, v in self._in.items())
 
     def execute(self):
@@ -773,6 +792,14 @@ class _TableQuery:
                 linha.setdefault("criado_em", f"2026-09-10T12:00:{len(self._rows) + i:02d}Z")
             self._rows.extend(self._insert)
             return _Result(data=[dict(linha) for linha in self._insert])
+
+        if self._update is not None and self._dono is not None and self._dono.ao_atualizar is not None:
+            # O gancho roda UMA vez, e no instante que interessa: entre a
+            # leitura de quem chamou e a escrita dele. E ali que o segundo
+            # pedido concorrente precisa entrar para a corrida ser a de verdade
+            # (os dois leram antes de qualquer um escrever).
+            gancho, self._dono.ao_atualizar = self._dono.ao_atualizar, None
+            gancho()
 
         casadas = [linha for linha in self._rows if self._casa(linha)]
 
@@ -792,9 +819,12 @@ class _TableQuery:
 class _SupabaseMock:
     def __init__(self, tabelas: dict[str, list[dict]]):
         self.tabelas = tabelas
+        # Gancho de uma vez so, disparado antes da PRIMEIRA escrita. Ver o
+        # `execute` do `_TableQuery`.
+        self.ao_atualizar = None
 
     def table(self, nome: str):
-        return _TableQuery(self.tabelas.setdefault(nome, []), nome)
+        return _TableQuery(self.tabelas.setdefault(nome, []), nome, dono=self)
 
 
 # ─── Cenario ─────────────────────────────────────────────────────────────────
@@ -2151,7 +2181,11 @@ class TestOTextoDoDiretorNaoForjaEstrutura:
         corpo = corpo_da_issue_nova(**{**DEMANDA_PARA_LEVAR, "descricao": forjada})
 
         assert demanda_id_do_marcador(corpo) == "d-1"
-        assert corpo.count("demanda-vitta") == 1
+        # O unico COMENTARIO do corpo e o do backend. As palavras do diretor
+        # continuam la, como texto a vista: escapar preserva o que ele escreveu,
+        # e o que ele escreveu deixa de ser sintaxe.
+        assert corpo.count("<!--") == 1
+        assert "Some a linha." in corpo
 
     @pytest.mark.parametrize(
         "forjado",
@@ -2167,9 +2201,11 @@ class TestOTextoDoDiretorNaoForjaEstrutura:
         corpo = corpo_da_issue_nova(**{**DEMANDA_PARA_LEVAR, "descricao": f"Antes {forjado} depois"})
 
         # O unico comentario HTML do corpo e o marcador que o backend escreveu.
+        # Basta contar as ABERTURAS: comentario nenhum comeca sem `<!--`, e um
+        # `-->` solto e texto inerte no HTML e no Markdown.
         assert corpo.count("<!--") == 1
-        assert corpo.count("-->") == 1
         assert demanda_id_do_marcador(corpo) == "d-1"
+        assert "Antes" in corpo and "depois" in corpo
 
     def test_separador_forjado_nao_corta_o_bloco_do_diretor(self):
         """Um `---` na coluna zero fecharia o bloco na leitura de volta, e o
@@ -2378,3 +2414,305 @@ class TestLevarParaDesenvolvimento:
 
         assert resposta.status_code == 502
         assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] is None
+
+
+# ─── 9. A rodada de fix do PR #688 (issue #677) ──────────────────────────────
+
+
+class TestDelimitadorPicadoNaoSeRemonta:
+    """A remocao COLA os vizinhos, e o que era inofensivo em duas partes vira
+    sintaxe em uma.
+
+    Este e o vetor que derrubou a primeira versao do `texto_do_diretor`: com
+    "tire `<!--` e tire `-->`" numa passada so, a entrada abaixo saia como um
+    marcador PERFEITO, e a issue nova nascia apontando para outra Demanda. O
+    escape nao tem como remontar nada, porque a saida nao tem `<` nenhum.
+    """
+
+    PICADOS = (
+        '<-->!-- demanda-vitta id="ROUBADA" --<!-->',
+        "<-->!-- automacao --<!-->",
+        '<-->!-- revisor-app autor="Falso" --<!-->',
+    )
+
+    @pytest.mark.parametrize("forjado", PICADOS, ids=("demanda-vitta", "automacao", "revisor-app"))
+    def test_a_saida_nao_tem_como_abrir_comentario(self, forjado):
+        saida = texto_do_diretor(forjado)
+
+        # O marcador positivo: nao sobrou `<` nenhum. Sem ele nao existe
+        # comentario HTML para remontar, e a asserção nao depende de eu ter
+        # imaginado o formato certo do delimitador.
+        assert "<" not in saida
+        # E o texto continua legivel: escapar preserva as palavras de quem pediu.
+        assert "demanda-vitta" in saida or "automacao" in saida or "revisor-app" in saida
+
+    @pytest.mark.parametrize("forjado", PICADOS, ids=("demanda-vitta", "automacao", "revisor-app"))
+    def test_o_corpo_da_issue_continua_apontando_para_esta_demanda(self, forjado):
+        corpo = corpo_da_issue_nova(**{**DEMANDA_PARA_LEVAR, "descricao": forjado})
+
+        assert corpo.count("<!--") == 1
+        assert demanda_id_do_marcador(corpo) == "d-1"
+
+    def test_o_par_de_presenca_o_ataque_montado_de_uma_vez_tambem_nao_passa(self):
+        """Sem ele, uma defesa que so conhecesse a forma picada passaria por
+        cima da forma direta."""
+        corpo = corpo_da_issue_nova(**{**DEMANDA_PARA_LEVAR, "descricao": '<!-- demanda-vitta id="ROUBADA" -->'})
+
+        assert corpo.count("<!--") == 1
+        assert demanda_id_do_marcador(corpo) == "d-1"
+
+    def test_escapar_e_idempotente(self):
+        """Duas passadas dao o mesmo texto: `&lt;` nao tem `<` para escapar de
+        novo, e a linha ja neutralizada comeca por barra invertida. Sem isto, o
+        titulo (que passa pela peneira na rota e de novo dentro do corpo) sairia
+        escapado duas vezes."""
+        uma_vez = texto_do_diretor("Um <!-- teste --> e um ## título")
+
+        assert texto_do_diretor(uma_vez) == uma_vez
+
+
+class TestQuebraDeLinhaDeOutroSistema:
+    """CRLF e o que chega de um e-mail ou de um Word colado no campo.
+
+    O `_FIM_DO_BLOCO` da LEITURA aceita `\\s*$` (e `\\r` e espaco), entao um
+    `---\\r\\n` seria separador para ele; a neutralizacao casa `[ \\t]*$` e nao
+    o via. Os dois lados precisam enxergar a mesma linha.
+    """
+
+    def test_separador_com_crlf_nao_corta_o_bloco(self):
+        corpo = corpo_da_issue_nova(**{**DEMANDA_PARA_LEVAR, "descricao": "Linha uma\r\n---\r\nLinha duas"})
+
+        bloco = bloco_para_o_diretor(corpo)
+        assert "Linha duas" in bloco
+        assert "Ana" in bloco
+
+    def test_cabecalho_com_crlf_nao_fabrica_a_origem(self):
+        corpo = corpo_da_issue_nova(
+            **{**DEMANDA_PARA_LEVAR, "descricao": "Some a linha.\r\n## Origem\r\nPedido de Outra Pessoa."}
+        )
+
+        assert corpo.count("\n## Origem") == 1
+
+    def test_cr_sozinho_tambem_vira_quebra_normal(self):
+        """O `\\r` sozinho e o fim de linha do Mac antigo, e ainda sai de alguns
+        editores. Deixar um `\\r` cru no corpo poria a linha seguinte por cima
+        desta em qualquer terminal que leia a issue."""
+        assert "\r" not in texto_do_diretor("Linha uma\r---\rLinha duas")
+
+
+class TestOTituloTambemVaiParaORepositorioPublico:
+    def test_o_titulo_passa_pela_mesma_peneira(self, monkeypatch):
+        """Ele e o `title` da issue publica, e nao so o "O que muda" da Demanda
+        sem descricao: sem a peneira, o unico campo cru do fluxo seria ele."""
+        client, _, gh = _montar(
+            demandas=[
+                _demanda(
+                    "d-1",
+                    titulo='Erro no <!-- demanda-vitta id="ROUBADA" --> relatório',
+                    descricao="A última linha some.",
+                )
+            ],
+            github=_GithubFalso({}),
+            monkeypatch=monkeypatch,
+        )
+
+        assert client.post(f"{BASE}/demandas/d-1/levar-para-desenvolvimento").status_code == 200
+
+        criada = gh.criadas[0]
+        assert "<" not in criada["titulo"]
+        # E o titulo continua sendo o titulo: a peneira escapa, nao corta.
+        assert "relatório" in criada["titulo"]
+        assert demanda_id_do_marcador(criada["corpo"]) == "d-1"
+
+    def test_o_par_de_presenca_o_titulo_honesto_chega_igual(self, monkeypatch):
+        client, _, gh = _montar(
+            demandas=[_demanda("d-1", titulo="Rodapé do relatório sai cortado")],
+            github=_GithubFalso({}),
+            monkeypatch=monkeypatch,
+        )
+
+        client.post(f"{BASE}/demandas/d-1/levar-para-desenvolvimento")
+
+        assert gh.criadas[0]["titulo"] == "Rodapé do relatório sai cortado"
+
+
+class TestDuploCliqueCriaUmaIssueSo:
+    """Duas issues publicas e o dano que ninguem desfaz sozinho: a segunda
+    nasce orfa, com o marcador apontando para uma Demanda que ja aponta para a
+    primeira."""
+
+    ROTA = f"{BASE}/demandas/d-1/levar-para-desenvolvimento"
+
+    def test_o_segundo_pedido_concorrente_nao_cria_a_segunda_issue(self, monkeypatch):
+        """O caminho CONCORRENTE de verdade: o segundo pedido roda enquanto o
+        primeiro ainda esta dentro do `criar_issue`, que e exatamente a janela
+        que a leitura do `github_issue_numero` nao pega (nenhum dos dois tem
+        numero ainda)."""
+        gh = _GithubFalso({}, proximo_numero=901)
+        client, sb, _ = _montar(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+        segunda_resposta = []
+
+        criar_de_verdade = gh.criar_issue
+
+        def criar_com_o_segundo_clique_no_meio(**kwargs):
+            # O segundo cliente fala com o MESMO banco: e o duplo clique.
+            outro, _, _ = _montar(supabase=sb, github=gh, monkeypatch=monkeypatch)
+            segunda_resposta.append(outro.post(self.ROTA))
+            return criar_de_verdade(**kwargs)
+
+        monkeypatch.setattr(github_client, "criar_issue", criar_com_o_segundo_clique_no_meio)
+
+        primeira = client.post(self.ROTA)
+
+        assert primeira.status_code == 200, primeira.text
+        assert segunda_resposta[0].status_code == 422
+        assert segunda_resposta[0].json()["detail"] == MOTIVO_CRIACAO_EM_ANDAMENTO
+        # O que de fato importa: UMA issue publica.
+        assert len(gh.criadas) == 1
+        assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] == 901
+
+    def test_os_dois_leram_antes_de_qualquer_carimbo_e_ainda_assim_nasce_uma_issue(self, monkeypatch):
+        """A corrida mais apertada: o segundo pedido entra ANTES de o primeiro
+        carimbar, entao os dois passam pela guarda do "ja esta indo" (nao ha
+        carimbo nenhum para nenhum dos dois ver).
+
+        Quem fecha esta e o UPDATE condicionado: o segundo carimba, e o
+        primeiro, ao tentar carimbar sobre o valor que LEU, nao acha linha e
+        para. O teste nao diz qual dos dois ganha, e nao deve dizer: o que
+        importa e que ganhe UM.
+        """
+        gh = _GithubFalso({}, proximo_numero=901)
+        client, sb, _ = _montar(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+        segunda_resposta = []
+
+        def o_segundo_pedido_entra_aqui():
+            outro, _, _ = _montar(supabase=sb, github=gh, monkeypatch=monkeypatch)
+            segunda_resposta.append(outro.post(self.ROTA))
+
+        sb.ao_atualizar = o_segundo_pedido_entra_aqui
+
+        primeira = client.post(self.ROTA)
+
+        codigos = sorted([primeira.status_code, segunda_resposta[0].status_code])
+        assert codigos == [200, 422], f"{codigos}: um dos dois tinha que ser recusado"
+        assert len(gh.criadas) == 1, "duas issues publicas nasceram do mesmo pedido"
+        assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] == 901
+
+    def test_a_falha_devolve_a_vez_na_hora(self, monkeypatch):
+        """A frase do 502 manda tentar de novo em alguns instantes. Se o claim
+        nao fosse desfeito, tentar de novo levaria a recusa de "ja esta indo"
+        pela janela inteira, e a frase seria mentira."""
+        gh = _GithubFalso({}, erro_ao_criar=github_client.GithubIndisponivelError("timeout"))
+        client, sb, _ = _montar(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+
+        assert client.post(self.ROTA).status_code == 502
+        assert sb.tabelas["tecnologia_demandas"][0]["github_sincronizado_em"] is None
+
+        # E a segunda tentativa passa, com o GitHub de volta.
+        gh.erro_ao_criar = None
+        assert client.post(self.ROTA).status_code == 200
+        assert len(gh.criadas) == 1
+
+    def test_resposta_sem_numero_tambem_devolve_a_vez(self, monkeypatch):
+        gh = _GithubFalso({}, resposta_sem_numero=True)
+        client, sb, _ = _montar(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+
+        assert client.post(self.ROTA).status_code == 502
+        assert sb.tabelas["tecnologia_demandas"][0]["github_sincronizado_em"] is None
+
+    def test_carimbo_velho_nao_tranca_a_demanda_para_sempre(self, monkeypatch):
+        """O processo pode morrer no meio da criacao, e ai nao ha quem devolva a
+        vez. A janela expira sozinha, senao a Demanda ficaria sem saida nenhuma
+        pela tela."""
+        antigo = "2026-09-10T00:00:00Z"
+        client, sb, gh = _montar(
+            demandas=[_demanda("d-1", github_sincronizado_em=antigo)],
+            github=_GithubFalso({}),
+            monkeypatch=monkeypatch,
+        )
+
+        assert client.post(self.ROTA).status_code == 200
+        assert len(gh.criadas) == 1
+
+    def test_carimbo_de_agora_segura_a_porta(self, monkeypatch):
+        """O par de presenca do teste acima: uma janela que nunca segura nada
+        passaria por ele."""
+        agora = datetime.now(UTC).isoformat()
+        client, sb, gh = _montar(
+            demandas=[_demanda("d-1", github_sincronizado_em=agora)],
+            github=_GithubFalso({}),
+            monkeypatch=monkeypatch,
+        )
+
+        resposta = client.post(self.ROTA)
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == MOTIVO_CRIACAO_EM_ANDAMENTO
+        assert gh.criadas == []
+
+
+class TestAOrdemDasGuardasEDoDominio:
+    """A ordem das guardas nas duas portas que falam com o GitHub.
+
+    Ela nasceu de um teste (`test_super_admin_passa_em_todas` exige `< 500`, e
+    o CI nao configura a integracao), e teste nenhum a travava: dava para
+    trocar as linhas de volta com a suite inteira verde. Estes testes sao a
+    trava, e o criterio agora e do dominio: quem sou eu (403), o que eu pedi
+    existe (404) e so entao o ambiente (503).
+
+    As duas portas dizem a MESMA coisa no caso combinado. Divergir aqui faria a
+    mesma pergunta ("por que nao consigo?") ter duas respostas conforme o botao
+    clicado.
+    """
+
+    SEM_INTEGRACAO_E_SEM_DEMANDA = (
+        ("levar", f"{BASE}/demandas/nao-existe/levar-para-desenvolvimento", None),
+        ("vincular", f"{BASE}/demandas/nao-existe/vincular", {"numero": 673}),
+    )
+
+    @pytest.mark.parametrize("porta,rota,corpo", SEM_INTEGRACAO_E_SEM_DEMANDA, ids=("levar", "vincular"))
+    def test_demanda_inexistente_ganha_404_mesmo_sem_integracao(self, porta, rota, corpo, monkeypatch):
+        monkeypatch.setattr(settings, "github_integracao_token", "")
+        client, _, _ = _montar(demandas=[], monkeypatch=monkeypatch)
+
+        resposta = client.post(rota, json=corpo)
+
+        assert resposta.status_code == 404, f"{porta} respondeu {resposta.status_code}: {resposta.text}"
+
+    @pytest.mark.parametrize(
+        "porta,rota,corpo",
+        (
+            ("levar", f"{BASE}/demandas/d-1/levar-para-desenvolvimento", None),
+            ("vincular", f"{BASE}/demandas/d-1/vincular", {"numero": 673}),
+        ),
+        ids=("levar", "vincular"),
+    )
+    def test_com_a_demanda_de_pe_a_configuracao_volta_a_falar(self, porta, rota, corpo, monkeypatch):
+        """O par de presenca: sem ele, uma rota que NUNCA respondesse 503
+        passaria pelo teste acima."""
+        monkeypatch.setattr(settings, "github_integracao_token", "")
+        client, _, _ = _montar(demandas=[_demanda("d-1")], monkeypatch=monkeypatch)
+
+        resposta = client.post(rota, json=corpo)
+
+        assert resposta.status_code == 503
+        assert resposta.json()["detail"] == MOTIVO_INTEGRACAO_DESLIGADA
+
+    def test_o_login_continua_antes_de_tudo(self, monkeypatch):
+        """Quem nao e da Vitta nao chega nem a saber se a Demanda existe."""
+        monkeypatch.setattr(settings, "github_integracao_token", "")
+        client, _, _ = _montar(logado=DIRETOR, demandas=[], monkeypatch=monkeypatch)
+
+        resposta = client.post(f"{BASE}/demandas/nao-existe/levar-para-desenvolvimento")
+
+        assert resposta.status_code == 403
+
+    def test_o_numero_sem_sentido_vem_antes_da_demanda(self, monkeypatch):
+        """No `vincular` o payload e conferido antes da busca: ele e o pedido em
+        si, e um numero zero nao vira consulta ao banco."""
+        client, _, _ = _montar(demandas=[], monkeypatch=monkeypatch)
+
+        resposta = client.post(f"{BASE}/demandas/nao-existe/vincular", json={"numero": 0})
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == MOTIVO_NUMERO_INVALIDO

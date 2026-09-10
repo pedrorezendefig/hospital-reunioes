@@ -51,21 +51,42 @@ export const LEVAR_PARA_DESENVOLVIMENTO = "Levar para desenvolvimento";
 /**
  * O que o botão faz, dito antes do clique.
  *
- * Ele ESCREVE num repositório público, e isso não pode ser surpresa: quem
- * clica precisa saber que o texto de quem pediu vira uma issue de verdade, e
- * que a Demanda fica vinculada a ela na mesma hora.
+ * Ele ESCREVE num repositório **público**, e isso não pode ser surpresa: o
+ * título e o texto de quem pediu passam a ser lidos por qualquer pessoa da
+ * internet, e apagar issue não desfaz o que já foi visto (nem o que os
+ * espelhos guardaram). Quem clica precisa saber disso ANTES, porque é a única
+ * parte do fluxo que não tem volta.
  */
 export const AJUDA_DE_LEVAR =
-  "Cria a issue com o título e o texto de quem pediu, marca para triagem e já vincula esta Demanda a ela.";
+  "Cria a issue no repositório público do aplicativo, com o título e o texto de quem pediu, marca para triagem " +
+  "e já vincula esta Demanda a ela. O que for publicado lá fica visível para qualquer pessoa e não dá para desfazer.";
 
 export function VinculoDaDemanda({ demanda, eu, onEnviar }: Props) {
   const [numero, setNumero] = useState("");
+  // Enquanto o pedido de levar está no ar. Existe porque o clique repetido não
+  // é hipótese: o pedido leva o tempo de uma ida ao GitHub, e cada clique que
+  // passar cria uma issue PÚBLICA a mais. Aqui é a ponta barata; a janela de
+  // verdade é fechada no servidor (`_tomar_a_vez_de_criar`), que é quem
+  // responde a dois pedidos concorrentes de abas diferentes.
+  const [levando, setLevando] = useState(false);
 
   // A porta é o login, e nada mais: sem ele, nem o bloco existe.
   if (!eu.tem_github_login) return null;
 
   const desligada = !eu.integracao_configurada;
   const vinculo = demanda.vinculo ?? null;
+
+  async function levar() {
+    if (levando) return;
+    setLevando(true);
+    try {
+      await onEnviar(`${BASE_TECNOLOGIA}/demandas/${demanda.id}/levar-para-desenvolvimento`);
+    } finally {
+      // No `finally` porque a recusa também libera o botão: quem levou um 502
+      // precisa poder tentar de novo sem recarregar a página.
+      setLevando(false);
+    }
+  }
 
   async function vincular() {
     const limpo = numero.trim();
@@ -174,8 +195,8 @@ export function VinculoDaDemanda({ demanda, eu, onEnviar }: Props) {
           <div className="w-full pt-2 border-t border-border">
             <button
               type="button"
-              disabled={desligada}
-              onClick={() => onEnviar(`${BASE_TECNOLOGIA}/demandas/${demanda.id}/levar-para-desenvolvimento`)}
+              disabled={desligada || levando}
+              onClick={levar}
               aria-describedby={`ajuda-levar-${demanda.id}`}
               className="inline-flex items-center gap-1.5 px-3 py-2 rounded-lg border border-border text-sm text-text hover:border-primary hover:text-primary transition-colors disabled:opacity-50 disabled:hover:border-border disabled:hover:text-text"
             >

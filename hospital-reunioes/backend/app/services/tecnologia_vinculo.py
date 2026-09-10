@@ -407,7 +407,9 @@ def corpo_precisa_do_marcador(corpo: str | None, demanda_id: str) -> bool:
 # 1. **Nada do que o diretor escreve pode virar marcador.** O par do Vinculo e
 #    o comentario HTML, e a reconciliacao encontra a Demanda pelo PRIMEIRO
 #    marcador do corpo. Uma descricao que carregasse um `<!-- demanda-vitta -->`
-#    apontaria a issue nova para outra Demanda, e nada quebraria.
+#    apontaria a issue nova para outra Demanda, e nada quebraria. Vale igual
+#    para o `<!-- revisor-app -->`, que acende a `revisor-comentou` na Action, e
+#    para o `<!-- automacao -->`, que a faz calar.
 # 2. **A primeira coluna e do backend.** E a mesma disciplina do "Copiar para
 #    IA" (`recuar_continuacao`, no `tecnologia.py`), pela mesma razao: cabecalho
 #    e separador so valem no comeco da linha, e e por eles que o corpo se
@@ -431,12 +433,13 @@ LABEL_DO_TIPO: dict[str, str] = {
     "novo": "type:feature",
 }
 
-# Comentario HTML fechado (o marcador inclusive) e os fragmentos que sobram de
-# um que foi aberto e nunca fechado. Os dois saem do texto de quem digitou: o
-# fragmento tambem, porque um `<!--` solto engoliria na renderizacao tudo o que
-# vem depois dele, ate o `-->` do marcador, e sumiria com a secao Origem da
-# issue publica.
-_FRAGMENTO_HTML = re.compile(r"<!--+|--+>")
+# CR e CRLF viram LF antes de qualquer outra coisa.
+#
+# Nao e cosmetica: a neutralizacao abaixo casa fim de linha com `[ \t]*$`, e um
+# `---\r\n` colado de um e-mail passaria batido por ela, enquanto o
+# `_FIM_DO_BLOCO` da leitura (que aceita `\s*$`, e `\r` e espaco) o leria como
+# separador. Os dois lados precisam ver a mesma linha.
+_QUEBRA_DE_LINHA = re.compile(r"\r\n?")
 
 # O que estrutura um corpo de issue quando comeca a linha: cabecalho, separador
 # e sublinhado de titulo. A barra invertida do Markdown desliga o efeito e
@@ -451,17 +454,36 @@ _ESTRUTURA_NA_COLUNA_ZERO = re.compile(
 def texto_do_diretor(bruto: str | None) -> str:
     """O texto digitado no app, pronto para entrar num corpo de issue publica.
 
-    Tira os comentarios HTML (ver a regra 1 acima), desliga o que estruturaria
-    o corpo a partir da coluna zero (regra 2) e passa pelo sanitizador de
-    travessao, que vale para o que sai do app tanto quanto para o que entra.
+    **Escapa em vez de remover**, e essa escolha e o coracao da funcao.
 
-    Nao corta, nao resume e nao reescreve o resto: o pedido chega ao
-    desenvolvimento com as palavras de quem pediu, que e o motivo de o botao
-    existir.
+    Remover o delimitador parece a defesa obvia e nao e: a remocao COLA os
+    vizinhos, e o que era inofensivo em duas partes vira sintaxe em uma. Com
+    uma passada de "tire `<!--` e tire `-->`", a entrada
+
+        <-->!-- demanda-vitta id="ROUBADA" --<!-->
+
+    sai como um marcador PERFEITO, porque cada pedaco removido junta o que
+    estava a esquerda com o que estava a direita. Iterar ate o ponto fixo
+    fecharia esse buraco, mas ao preco de um laco com teto arbitrario e de
+    apagar texto que a pessoa escreveu.
+
+    O `<` virando `&lt;` nao tem esse problema: a saida NAO CONTEM `<` nenhum,
+    e sem ele nao existe comentario HTML para remontar (um `-->` sozinho e
+    texto inerte, no HTML e no Markdown). O Markdown ainda renderiza `&lt;`
+    como `<`, entao quem le a issue ve exatamente o que o diretor escreveu, que
+    e o motivo de o botao existir. Uma passada, sem laco, sem perda.
+
+    Depois disso, desliga o que estruturaria o corpo a partir da coluna zero
+    (regra 2 acima) e passa pelo sanitizador de travessao, que vale para o que
+    sai do app tanto quanto para o que entra.
+
+    Idempotente: `&lt;` nao tem `<` para escapar de novo, e a linha ja
+    neutralizada comeca por `\\`, que nao casa a estrutura. Aplicar duas vezes
+    da o mesmo texto.
     """
-    sem_comentario = _COMENTARIO_HTML.sub("", bruto or "")
-    sem_fragmento = _FRAGMENTO_HTML.sub("", sem_comentario)
-    neutralizado = _ESTRUTURA_NA_COLUNA_ZERO.sub(r"\1\\\2", sem_fragmento)
+    texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
+    escapado = texto.replace("<", "&lt;")
+    neutralizado = _ESTRUTURA_NA_COLUNA_ZERO.sub(r"\1\\\2", escapado)
     return sanitizar_travessao(neutralizado).strip()
 
 
@@ -622,6 +644,12 @@ def motivo_demanda_ja_vinculada(numero: int) -> str:
     return (
         f"Esta Demanda já está vinculada à issue #{numero}. Clique em Desvincular antes de apontá-la para outra issue."
     )
+
+
+MOTIVO_CRIACAO_EM_ANDAMENTO = (
+    "Esta Demanda já está sendo levada para o desenvolvimento neste instante. "
+    "Espere alguns segundos e recarregue o Quadro para ver a issue que nasceu."
+)
 
 
 def motivo_ja_vinculada_para_levar(numero: int) -> str:
