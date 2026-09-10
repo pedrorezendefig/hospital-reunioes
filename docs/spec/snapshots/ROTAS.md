@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-09T19:46-0300 -->
+<!-- last_update: 2026-09-10T00:43-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -360,12 +360,6 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/pops/admin/usuarios/{participante_id}/setores` | Lista os Setores vinculados à pessoa. | ✅ |
 | PUT | `/pops/admin/usuarios/{participante_id}/setores` | Substitui os vínculos pessoa↔Setor pelo conjunto informado. | ✅ |
 
-## admin (`app/routers/admin/utilitarios.py`)
-
-| Método | Rota | O que faz | Auth |
-|--------|------|-----------|------|
-| POST | `/admin/utilitarios/converter-markdown` | Converte um PDF ou DOCX em Markdown localmente, sem consumo de IA. | ✅ |
-
 ## webhooks (`app/routers/webhooks.py`)
 
 | Método | Rota | O que faz | Auth |
@@ -374,4 +368,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 213 endpoints em 31 routers · 94% exigem auth.
+**Totais:** 212 endpoints em 30 routers · 94% exigem auth.
