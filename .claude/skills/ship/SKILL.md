@@ -401,8 +401,8 @@ NEW_MIGRATIONS=$(git diff --name-only --diff-filter=A "$TARGET_BRANCH..HEAD" -- 
 ```
 
 Se houver migrations novas:
-1. Para cada uma (ordem cronológica), entregar o **SQL completo** num bloco ` ```sql ` copiável; marcar ⚠ as DESTRUCTIVE (regex de DDL destrutivo — ver `/deploy` SKILL.md "Referência — regex de DDL destrutivo").
-2. Entregar o passo a passo: **Supabase Studio de produção** (`studio.<domínio>`, ex.: `https://studio.hospitalsaomatheus.cloud`) → **SQL Editor → New query** → colar → **Run** → confirmar no **Table Editor** ou via `select 1 from <tabela> limit 1;`.
+1. Para cada uma (ordem cronológica), extrair o arquivo para o scratchpad por `git show` e entregar **primeiro o caminho absoluto clicável terminado em `:1`** (abre em aba do VS Code), junto do arquivo de verificação; o bloco ` ```sql ` no chat é reforço, não o caminho principal. Regra completa em `/deploy` SKILL.md, Passo 6.3. Marcar ⚠ as DESTRUCTIVE (regex de DDL destrutivo — ver `/deploy` SKILL.md "Referência — regex de DDL destrutivo").
+2. Entregar o passo a passo: **Supabase Studio de produção** (`studio.<domínio>`, ex.: `https://studio.hospitalsaomatheus.cloud`) → **SQL Editor → New query** → colar → **Run** → rodar a query de verificação e conferir a contagem de linhas esperada.
 3. **Aguardar a confirmação explícita** do humano ("apliquei") antes de seguir para o merge.
 
 É o mesmo gate do `/deploy` Passo 6, antecipado para antes do merge. Pular se não há migration nova no diff.

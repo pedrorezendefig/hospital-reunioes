@@ -26,6 +26,8 @@ Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`)
    - **O que muda:** uma frase de valor, não-técnica — o que o sistema passa a fazer pelo hospital.
    - **O que você precisa saber:** 2–3 regras simples que deixem o revisor reconhecer a feature funcionando.
 
+   **Nunca cite número de issue ou de PR dentro deste bloco** (nada de "o PRD #469", "a #430 entregou"). O bloco é a única parte do corpo que o app lê e mostra ao diretor na aba Tecnologia, e o ADR 0054, decisão 9, diz que ele não vê número de issue. O código não raspa número de texto livre (raspar mutilaria "40 mil" e "3 partes"), então a regra vale aqui, na escrita. Precisa referenciar outro trabalho? Descreva pelo nome ("o PRD da Ouvidoria"), ou deixe a referência na parte técnica, abaixo do bloco.
+
    Capture e **anuncie o número** da issue-PRD criada (o `gh issue create` devolve a URL; o número é o último segmento — ex.: `URL=$(gh issue create …); PRD=${URL##*/}`). Diga ao usuário, ex.: _"PRD publicado como **#41**"_. Esse número é o **pai** das fatias: o `/to-issues` o usa pra vincular cada fatia como **sub-issue** nativa. Rodando `/to-issues` em seguida nesta mesma conversa, ele já tem o `#41` no contexto.
 
 <prd-template>

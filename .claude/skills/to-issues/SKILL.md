@@ -69,6 +69,8 @@ Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o tem
 - **O que muda:** uma frase de valor, não-técnica — o que o sistema passa a fazer pelo hospital.
 - **O que você precisa saber:** 2–3 regras simples que deixem o revisor reconhecer a feature funcionando.
 
+**Nunca cite número de issue ou de PR dentro deste bloco** (nada de "o PRD #469", "a #430 entregou"). O bloco é a única parte do corpo que o app lê e mostra ao diretor na aba Tecnologia, e o ADR 0054, decisão 9, diz que ele não vê número de issue. O código não raspa número de texto livre (raspar mutilaria "40 mil" e "3 partes"), então a regra vale aqui, na escrita. A referência a outra issue vive na parte técnica, abaixo do bloco, onde o campo "Bloqueada por: #X" e o "Pai" já moram.
+
 **Vincule cada fatia como sub-issue nativa do PRD** — dá barra de progresso (ex.: "2 de 4 concluídas") e navegação pai↔filha na UI do GitHub. Logo após criar a fatia:
 
 ```bash
