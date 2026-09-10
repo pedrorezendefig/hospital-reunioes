@@ -7,6 +7,17 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.127.0 - 2026-09-10 18:35 - feat(tecnologia): botão Levar para desenvolvimento cria a issue com o texto do diretor
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `ee5bcf5`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.127.0, `db: healthy`, version match confirmado; frontend HTTP 200)
+- Issue: [#677](https://github.com/pedrorezendefig/hospital-reunioes/issues/677) (PRD [#673](https://github.com/pedrorezendefig/hospital-reunioes/issues/673), ADR 0054)
+- PR: [#688](https://github.com/pedrorezendefig/hospital-reunioes/pull/688)
+- Segurança: a sanitização por remoção era remontável (`<-->!-- ... --<!-->` virava marcador válido e sequestrava o vínculo). Trocada por escape. Duplo clique criava duas issues públicas: fechado com compare-and-swap no servidor.
+- Privacidade: por decisão do diretor, o nome civil não vai mais para a issue pública. A seção Origem passa a ter o link da Demanda e o `@github_login` de quem levou.
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/ee5bcf5
+
 ## v0.126.0 - 2026-09-10 17:55 - a Demanda vinculada aprende do GitHub sozinha, por webhook com HMAC e reconciliação de hora em hora
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `1d4f50b`
