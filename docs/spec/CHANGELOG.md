@@ -7,6 +7,16 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.124.0 - 2026-09-10 15:04 - feat(tecnologia): fundação do Vínculo da Demanda com a issue e a Action do marcador revisor-app
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `3541c39`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.124.0, `db: healthy`, version match confirmado; frontend HTTP 200)
+- Issues: [#674](https://github.com/pedrorezendefig/hospital-reunioes/issues/674), [#675](https://github.com/pedrorezendefig/hospital-reunioes/issues/675) (PRD [#673](https://github.com/pedrorezendefig/hospital-reunioes/issues/673), ADR 0054)
+- PRs: [#684](https://github.com/pedrorezendefig/hospital-reunioes/pull/684), [#682](https://github.com/pedrorezendefig/hospital-reunioes/pull/682)
+- Pendente: migration `103_tecnologia_vinculo.sql` não aplicada (Studio de produção) e env vars `GITHUB_INTEGRACAO_TOKEN` e `GITHUB_INTEGRACAO_REPO` ausentes no Coolify. Sem elas a aba Tecnologia responde 503 e mostra os controles desabilitados, por design.
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/3541c39
+
 ## v0.123.4 - 2026-09-10 14:52 - a menção acrescentada na correção de 10 minutos avisa por e-mail e passa a contar em Minha vez
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `0cd9d13`
