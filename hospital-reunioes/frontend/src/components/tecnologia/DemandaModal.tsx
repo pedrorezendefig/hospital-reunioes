@@ -24,6 +24,7 @@ import { Select } from "@/components/ui/Select";
 
 import { ConversaDaDemanda } from "./ConversaDaDemanda";
 import { CopiarDaDemanda } from "./CopiarDaDemanda";
+import { OQueMudaDaDemanda } from "./OQueMudaDaDemanda";
 import { TipoIcone } from "./TipoIcone";
 import { VinculoDaDemanda } from "./VinculoDaDemanda";
 import {
@@ -240,6 +241,13 @@ export function DemandaModal({ demanda, produtos, pessoas, token, eu, onFechar, 
               className="mt-1 w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
             />
           </label>
+
+          {/* Logo abaixo da descrição, e não junto dos controles do Vínculo
+              (issue #676): a descrição é o que o hospital pediu, e o "O que
+              muda" é o que a Vitta vai entregar em resposta. Quem lê o card
+              lê os dois seguidos. Ele não é editável, e some inteiro quando não
+              há Vínculo. */}
+          <OQueMudaDaDemanda demanda={demanda} />
 
           <Select
             label="Tipo"

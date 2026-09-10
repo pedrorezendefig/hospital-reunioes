@@ -113,10 +113,32 @@ export type Demanda = {
    * diretor não vê número nem link em nenhum dos dois casos.
    */
   vinculo?: VinculoDaDemanda | null;
+  /**
+   * O que a entrega muda para quem pediu (issue #676, ADR 0054, decisão 7).
+   *
+   * Vem do bloco "Para o diretor" da issue e NUNCA é digitado no app. Nulo é
+   * "a Vitta ainda não escreveu", e a tela o traduz numa frase; nulo não é o
+   * corpo técnico da issue, que não sai do GitHub.
+   */
+  o_que_muda?: string | null;
+  partes?: ParteDaEntrega[];
 };
 
 /** O que só quem é da Vitta vê do Vínculo. */
 export type VinculoDaDemanda = { numero: number; url: string | null };
+
+/**
+ * Uma parte da entrega como o card a mostra.
+ *
+ * O `numero` é interno e vem NULO para quem não tem login no GitHub (ADR 0054,
+ * decisão 9). A tela não o desenha em lugar nenhum: ele está aqui porque a
+ * resposta o traz para quem é da Vitta, e não porque alguma tela o mostre.
+ */
+export type ParteDaEntrega = {
+  numero: number | null;
+  o_que_muda: string | null;
+  situacao: EtapaDemanda | null;
+};
 
 /**
  * Quem está olhando a aba, do ponto de vista do Vínculo (issue #674).
@@ -215,6 +237,59 @@ export function textoDoSelo(demanda: Demanda): string {
     return `${rotulo} · ${entregues} de ${total} partes`;
   }
   return rotulo;
+}
+
+/** Um pedaço de uma linha do "O que muda": negrito ou texto comum. */
+export type PedacoForte = { texto: string; forte: boolean };
+
+/** Um parágrafo ou uma lista do "O que muda", já quebrado em linhas. */
+export type BlocoDoTextoSimples = { lista: boolean; linhas: PedacoForte[][] };
+
+// O que abre um item de lista no bloco "Para o diretor": hífen ou asterisco.
+const MARCADOR_DE_ITEM = /^[-*]\s+/;
+
+/**
+ * Uma linha quebrada nos pedaços em negrito.
+ *
+ * Índice ímpar do `split` é o que estava entre `**`, porque o grupo capturado
+ * do separador entra na lista entre os pedaços comuns.
+ */
+export function pedacosFortes(linha: string): PedacoForte[] {
+  return linha
+    .split(/\*\*(.+?)\*\*/g)
+    .map((texto, i) => ({ texto, forte: i % 2 === 1 }))
+    .filter((pedaco) => pedaco.texto !== "");
+}
+
+/**
+ * O texto do "O que muda" em blocos, para a tela desenhar (issue #676).
+ *
+ * Markdown SIMPLES de propósito: negrito e lista, e nada mais. O texto vem de
+ * fora do app (o corpo de uma issue) e é desenhado como texto, nunca como HTML:
+ * link e tag ficam de fora porque nada que venha do GitHub deve virar elemento
+ * clicável na tela do diretor (ADR 0054, decisão 7).
+ *
+ * Linha em branco fecha o bloco: sem isso, dois parágrafos virariam um só e a
+ * lista grudaria no texto que vem antes dela.
+ */
+export function blocosDoTextoSimples(texto: string | null | undefined): BlocoDoTextoSimples[] {
+  const blocos: BlocoDoTextoSimples[] = [];
+  let atual: BlocoDoTextoSimples | null = null;
+
+  for (const bruta of String(texto ?? "").split("\n")) {
+    const linha = bruta.trim();
+    if (!linha) {
+      atual = null;
+      continue;
+    }
+    const lista = MARCADOR_DE_ITEM.test(linha);
+    if (!atual || atual.lista !== lista) {
+      atual = { lista, linhas: [] };
+      blocos.push(atual);
+    }
+    atual.linhas.push(pedacosFortes(lista ? linha.replace(MARCADOR_DE_ITEM, "") : linha));
+  }
+  return blocos;
 }
 
 export type LinhaDaConversa = {

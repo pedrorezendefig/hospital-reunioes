@@ -15,6 +15,8 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.utils.text_sanitizer import sanitizar_travessao
+
 # ─── 1. A Etapa ──────────────────────────────────────────────────────────────
 
 # As seis, na ordem em que a entrega anda (ADR 0054, decisao 3). A mesma lista
@@ -177,7 +179,114 @@ def partes_da_foto(foto: dict[str, Any] | None) -> tuple[int | None, int | None]
     return (sum(1 for parte in partes if _entregue(parte)), len(partes))
 
 
-# ─── 1b. O login no GitHub da pessoa ─────────────────────────────────────────
+# ─── 1b. O bloco "Para o diretor" (issue #676) ───────────────────────────────
+
+# O cabecalho que abre o bloco. Todo PRD e toda fatia nascem com ele (ADR 0020,
+# decisao 7), e o `/to-issues` costuma por um emoji no meio: "## 👔 Para o
+# diretor". O emoji e enfeite, e nao pode decidir se o diretor ve o texto ou
+# nao, entao o casamento e pela FRASE, em qualquer nivel de cabecalho.
+_CABECALHO_DO_DIRETOR = re.compile(r"^#{1,6}[^\n]*?para o diretor[^\n]*$", re.IGNORECASE | re.MULTILINE)
+
+# Onde o bloco acaba: o primeiro separador `---` ou o proximo cabecalho de
+# nivel 2, o que vier antes.
+#
+# `-{3,}` e nao `-+`: um item de lista ("- O texto vem do planejamento") e a
+# forma mais comum de linha do bloco, e ele nao pode fechar o proprio bloco.
+# `##[^#]` e nao `##`: um `###` dentro do bloco e subtitulo do diretor, e nao a
+# volta do corpo tecnico.
+_FIM_DO_BLOCO = re.compile(r"^(?:-{3,}\s*|##[^#\n][^\n]*)$", re.MULTILINE)
+
+# Comentario HTML, o marcador do Vinculo inclusive.
+#
+# Ele e retirado ANTES do recorte porque a issue cujo corpo e so o bloco recebe
+# o marcador no fim dele (`corpo_com_marcador`), ou seja, DENTRO do que o
+# diretor leria. O bloco tambem nao pode carregar HTML nenhum: a tela o mostra
+# como texto, e uma tag apareceria crua no meio da frase.
+_COMENTARIO_HTML = re.compile(r"<!--.*?-->", re.DOTALL)
+
+
+def bloco_para_o_diretor(corpo: str | None) -> str | None:
+    """O bloco "Para o diretor" deste corpo de issue, ou `None`.
+
+    E o UNICO texto do GitHub que chega ao diretor (ADR 0054, decisao 7): o
+    resto do corpo e tecnico, e traz numero de issue, nome de label e caminho de
+    arquivo, que a decisao 9 mantem atras do `github_login`. O corte, portanto,
+    erra para os dois lados: sobrar corpo poe o tecnico na tela dele, e faltar
+    bloco o deixa sem saber o que a entrega muda.
+
+    Nulo quando nao ha cabecalho, quando o corpo e vazio e quando o bloco esta
+    em branco: os tres significam a mesma coisa para quem le ("ainda nao
+    escreveram isto"), e a tela os traduz numa frase so.
+
+    O texto sai SANITIZADO: ele nasce fora do app e vai para a tela do diretor e
+    para o "Copiar para IA", onde a regra da casa contra travessao vale igual.
+    """
+    texto = _COMENTARIO_HTML.sub("", corpo or "")
+    achado = _CABECALHO_DO_DIRETOR.search(texto)
+    if not achado:
+        return None
+
+    resto = texto[achado.end() :]
+    fim = _FIM_DO_BLOCO.search(resto)
+    bloco = (resto[: fim.start()] if fim else resto).strip()
+    return sanitizar_travessao(bloco) or None
+
+
+def situacao_da_parte(parte: dict[str, Any] | None) -> str:
+    """Em que pe esta ESTA parte, no vocabulario da Etapa (ADR 0054, decisao 7).
+
+    Quatro das seis Etapas, e nao um vocabulario proprio: o diretor le o mesmo
+    rotulo no selo do card e no selo de cada parte, e duas listas de palavras
+    para a mesma ideia fariam "Entregue" significar coisas diferentes na mesma
+    tela.
+
+    A precedencia e a da raiz (`etapa_da_foto`), pelo mesmo motivo: a parte
+    fechada com o `in-progress` preso nela esta ENTREGUE, e nao "em
+    desenvolvimento para sempre".
+    """
+    if _entregue(parte):
+        return ETAPA_ENTREGUE
+    labels = _labels(parte)
+    if _fechada(parte) or LABEL_WONTFIX in labels:
+        return ETAPA_NAO_SERA_FEITA
+    if LABEL_EM_ANDAMENTO in labels:
+        return ETAPA_EM_DESENVOLVIMENTO
+    return ETAPA_PLANEJADA
+
+
+def partes_para_o_diretor(foto: dict[str, Any] | None) -> list[dict[str, Any]]:
+    """A lista de partes como a Demanda a guarda: numero, texto e situacao.
+
+    O numero e INTERNO: ele fica no cache para quem e da Vitta rastrear, e o
+    funil da resposta (`_com_nomes`, no router) o omite para quem nao tem
+    `github_login`. O titulo da fatia nao entra em lugar nenhum, porque e
+    tecnico (ADR 0054, decisao 7).
+
+    Parte sem bloco entra com texto nulo em vez de sumir da lista: o diretor
+    precisa saber que a parte existe e em que pe ela esta, mesmo antes de
+    alguem escrever o que ela muda.
+    """
+    return [
+        {
+            "numero": parte.get("numero"),
+            "o_que_muda": parte.get("o_que_muda") or None,
+            "situacao": situacao_da_parte(parte),
+        }
+        for parte in _partes(foto)
+    ]
+
+
+def o_que_muda_da_foto(foto: dict[str, Any] | None) -> str | None:
+    """O bloco da RAIZ que a ultima leitura do GitHub trouxe, ou `None`.
+
+    Le a foto em vez de reabrir o corpo da issue: quem ja leu do GitHub guardou
+    o bloco no no da raiz, e uma segunda extracao aqui seria uma segunda versao
+    da mesma regra.
+    """
+    return (foto or {}).get("o_que_muda") or None
+
+
+# ─── 1c. O login no GitHub da pessoa ─────────────────────────────────────────
 
 # O que o GitHub aceita num login: letras, numeros e hifen, ate 39 caracteres,
 # sem comecar nem terminar em hifen e sem hifen dobrado. A regra e do GitHub, e

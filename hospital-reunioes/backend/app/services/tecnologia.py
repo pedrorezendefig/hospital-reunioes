@@ -21,6 +21,7 @@ from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
 from app.dependencies import is_super_admin
+from app.services.tecnologia_vinculo import ETAPA_REGISTRADA, ETAPA_ROTULO, texto_movimento_etapa
 
 # O motivo que a tela mostra quando a API recusa. Uma frase so, no lugar de
 # uma por endpoint: e ela que o Super admin le no toast.
@@ -478,6 +479,60 @@ def linha_para_ia(linha: dict[str, Any]) -> str:
     return recuar_continuacao(f"[{quando}] {autor}: {texto}")
 
 
+TITULO_O_QUE_MUDA = "O que muda:"
+TITULO_DAS_PARTES = "Partes da entrega:"
+
+
+def linhas_do_desenvolvimento(demanda: dict[str, Any]) -> list[str]:
+    """As linhas da Etapa e do "O que muda", ou nenhuma (issue #676).
+
+    Nenhuma quando a Demanda nao tem Vinculo: uma linha "Etapa: Registrada"
+    diria a quem le que ha um desenvolvimento acontecendo onde nao ha nada.
+
+    Nada aqui carrega numero de issue, endereco ou nome de label. O texto vem do
+    bloco "Para o diretor" da issue, que e escrito para leigo, e o `numero`
+    interno de cada parte NAO e escrito: ele existe para a Vitta rastrear dentro
+    do app, e este texto sai do app (ADR 0054, decisao 9).
+
+    A parte sem bloco fica de fora da lista, e nao entra como marcador vazio: o
+    "X de Y partes" da linha da Etapa ja diz quantas existem, e um item sem
+    texto so ocuparia espaco em quem for ler.
+    """
+    etapa = str(demanda.get("etapa") or ETAPA_REGISTRADA)
+    if etapa == ETAPA_REGISTRADA:
+        return []
+
+    linhas = [
+        "",
+        texto_movimento_etapa(
+            para=etapa,
+            entregues=demanda.get("partes_entregues"),
+            total=demanda.get("partes_total"),
+        ),
+    ]
+
+    o_que_muda = str(demanda.get("o_que_muda") or "").strip()
+    if o_que_muda:
+        linhas += ["", TITULO_O_QUE_MUDA, o_que_muda]
+
+    itens = []
+    for parte in demanda.get("partes") or []:
+        if not isinstance(parte, dict):
+            continue
+        texto = str(parte.get("o_que_muda") or "").strip()
+        if not texto:
+            continue
+        rotulo = ETAPA_ROTULO.get(str(parte.get("situacao")), "")
+        # Recuada como as linhas da Conversa, e pelo mesmo motivo: um texto de
+        # varias linhas derramaria no nivel de cima e a segunda linha pareceria
+        # outro item da lista.
+        itens.append(recuar_continuacao(f"- ({rotulo}) {texto}" if rotulo else f"- {texto}"))
+    if itens:
+        linhas += ["", TITULO_DAS_PARTES, *itens]
+
+    return linhas
+
+
 def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> str:
     """A Demanda inteira em texto simples, para colar numa IA (issue #640).
 
@@ -518,6 +573,10 @@ def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> s
         "",
         "Descrição:",
         str(demanda.get("descricao") or "").strip() or SEM_DESCRICAO,
+        # A Etapa e o "O que muda" entram AQUI, entre a descricao e a Conversa
+        # (issue #676): eles contam o que a Vitta esta entregando, que e a
+        # continuacao do pedido, e nao mais uma fala do fio.
+        *linhas_do_desenvolvimento(demanda),
         "",
         "Conversa:",
         MARCA_INICIO_CONVERSA,
