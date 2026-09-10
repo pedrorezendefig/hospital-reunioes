@@ -29,13 +29,19 @@ type Props = {
 /**
  * O aviso de integração desligada.
  *
- * Ele diz a CAUSA e quem resolve, porque quem lê esta tela (alguém da Vitta)
- * é justamente quem pode configurar. Um "indisponível" seco mandaria a pessoa
- * tentar de novo para sempre.
+ * Diz a CAUSA (falta configuração, não é falha passageira) sem NOMEAR as
+ * variáveis de ambiente. O gate `if (!eu.tem_github_login) return null` é de
+ * runtime: a string vive no bundle JS, que é servido a qualquer um que abra a
+ * página, com sessão ou sem. O backend já acertou nisso (o
+ * `MOTIVO_INTEGRACAO_DESLIGADA` fala de configuração e não cita variável), e a
+ * tela segue o mesmo critério.
+ *
+ * Quem precisa saber QUAIS variáveis são lê o corpo do PR e o `.env.example`,
+ * que é onde essa informação pertence.
  */
 export const AVISO_SEM_INTEGRACAO =
   "A integração com o GitHub não está configurada neste ambiente: " +
-  "vincular e desvincular ficam indisponíveis até GITHUB_INTEGRACAO_TOKEN e GITHUB_INTEGRACAO_REPO entrarem no servidor.";
+  "vincular e desvincular ficam indisponíveis até alguém configurá-la no servidor.";
 
 export const AJUDA_DO_CAMPO = "Número da issue-raiz (o PRD, ou a issue de correção). As fatias entram como partes dela.";
 
@@ -87,15 +93,24 @@ export function VinculoDaDemanda({ demanda, eu, onEnviar }: Props) {
 
       {vinculo ? (
         <div className="flex flex-wrap items-center gap-3">
-          <a
-            href={vinculo.url ?? "#"}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
-          >
-            <ExternalLink className="w-4 h-4" />
-            Abrir no GitHub (#{vinculo.numero})
-          </a>
+          {/* Sem endereço na foto guardada, o número vira TEXTO e o link some.
+              Um `href="#"` seria um clique morto: o cursor vira mãozinha, a
+              pessoa clica e nada acontece, e ela conclui que a página quebrou.
+              O número continua à vista, que é o que ela precisa para achar a
+              issue à mão. */}
+          {vinculo.url ? (
+            <a
+              href={vinculo.url}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1.5 text-sm font-medium text-primary hover:underline"
+            >
+              <ExternalLink className="w-4 h-4" />
+              Abrir no GitHub (#{vinculo.numero})
+            </a>
+          ) : (
+            <span className="text-sm text-text-secondary">Issue #{vinculo.numero}</span>
+          )}
           <button
             type="button"
             // Desabilitado por cima da guarda do backend, não no lugar dela.

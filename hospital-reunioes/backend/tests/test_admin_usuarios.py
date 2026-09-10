@@ -1003,11 +1003,45 @@ class TestGithubLogin:
         assert result["github_login"] == "pedro"
 
     @pytest.mark.asyncio
-    async def test_criar_ja_aceita_o_login(self, monkeypatch):
+    async def test_criar_sem_login_nao_manda_a_coluna(self, monkeypatch):
+        """A janela entre o deploy e a migration colada a mao no Studio.
+
+        O deploy NAO aplica migration neste projeto: o humano cola o SQL depois.
+        Nesse intervalo a coluna `github_login` ainda nao existe, e um INSERT que
+        mandasse `github_login: None` quebraria com 42703, derrubando a criacao
+        de usuario em producao por um campo que a pessoa nem preencheu.
+
+        A LEITURA ja tolera a coluna ausente (`_COLUNAS_OPCIONAIS` do
+        `dependencies.py`); este e o par disso na ESCRITA.
+        """
         sb = _build_supabase(participantes=[])
+        capturado: dict = {}
         monkeypatch.setattr(
             "app.services.auth_provisioning.provision_with_compensation",
-            lambda supabase, payload, role: (dict(payload), "auth-novo"),
+            lambda supabase, payload, role: (capturado.update(payload) or dict(payload), "auth-novo"),
+        )
+
+        await usuarios_router.create_usuario(
+            body=AdminUsuarioCreate(
+                nome_completo="Sem GitHub",
+                email="semgithub@x.com",
+                cargo="Analista",
+                role=UserRole.COORDENADOR,
+            ),
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+
+        assert "github_login" not in capturado, capturado
+
+    @pytest.mark.asyncio
+    async def test_criar_ja_aceita_o_login(self, monkeypatch):
+        sb = _build_supabase(participantes=[])
+        capturado: dict = {}
+        monkeypatch.setattr(
+            "app.services.auth_provisioning.provision_with_compensation",
+            lambda supabase, payload, role: (capturado.update(payload) or dict(payload), "auth-novo"),
         )
 
         novo = await usuarios_router.create_usuario(
@@ -1024,3 +1058,6 @@ class TestGithubLogin:
         )
 
         assert novo["github_login"] == "pedrorezendefig"
+        # O par de presenca do teste acima: uma omissao cravada faria o campo
+        # nunca chegar ao banco, e o login digitado sumiria em silencio.
+        assert capturado["github_login"] == "pedrorezendefig"

@@ -41,7 +41,7 @@ from app.config import settings  # noqa: E402
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
-from app.services import github_client  # noqa: E402
+from app.services import github_client, tecnologia_email  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
@@ -55,6 +55,7 @@ from app.services.tecnologia_vinculo import (  # noqa: E402
     MOTIVO_LOGIN_INVALIDO,
     MOTIVO_SEM_GITHUB_LOGIN,
     MOTIVO_SEM_VINCULO_PARA_DESFAZER,
+    TEXTO_VINCULO_CRIADO,
     TEXTO_VINCULO_DESFEITO,
     corpo_com_marcador,
     corpo_precisa_do_marcador,
@@ -73,7 +74,6 @@ from app.services.tecnologia_vinculo import (  # noqa: E402
     tem_github_login,
     texto_movimento_etapa,
     texto_partes,
-    texto_vinculo_criado,
 )
 
 BASE = "/api/admin/tecnologia"
@@ -108,6 +108,22 @@ def _sem_github_de_verdade(monkeypatch):
         raise AssertionError("O cliente do GitHub foi chamado de verdade neste teste. Duble-o.")
 
     monkeypatch.setattr(github_client.httpx, "request", _proibido)
+
+
+@pytest.fixture(autouse=True)
+def _sem_email_de_verdade(monkeypatch):
+    """Responder na Conversa dispara os gatilhos de e-mail (issue #642).
+
+    Um teste daqui responde no fio para provar que a omissao do numero morde SO
+    a linha do Vinculo, e o pytest carrega o `.env` REAL, com usuario e senha de
+    SMTP do Gmail. Sem esta troca, esse teste abriria conexao para fora, e a
+    trava de rede do `conftest.py` derrubaria a sessao (foi o que ela fez).
+
+    O transporte devolve `True` porque nenhum teste daqui e sobre e-mail: quem
+    prova gatilho e destinatario e o `test_tecnologia_email.py`.
+    """
+    monkeypatch.setattr(tecnologia_email, "_enviar_email", lambda *a, **kw: True)
+    monkeypatch.setattr(tecnologia_email, "transporte_configurado", lambda: True)
 
 
 @pytest.fixture(autouse=True)
@@ -180,6 +196,7 @@ LINHAS_DA_TABELA = [
         ETAPA_EM_DESENVOLVIMENTO,
     ),
     ("fechada como concluida", _foto(estado="closed", motivo="completed"), ETAPA_ENTREGUE),
+    ("fechada sem motivo declarado", _foto(estado="closed", motivo=None), ETAPA_ENTREGUE),
     ("fechada como nao planejada", _foto(estado="closed", motivo="not_planned"), ETAPA_NAO_SERA_FEITA),
     ("wontfix", _foto(labels=("wontfix",)), ETAPA_NAO_SERA_FEITA),
 ]
@@ -190,7 +207,7 @@ class TestTabelaDeEtapas:
         """Controle da lista abaixo: `parametrize` sobre lista vazia satisfaz o
         teste sem rodar caso nenhum, e ele ficaria verde sobre nada."""
         assert len(ETAPAS) == 6
-        assert len(LINHAS_DA_TABELA) == 12
+        assert len(LINHAS_DA_TABELA) == 13
         assert {saida for _, _, saida in LINHAS_DA_TABELA} == set(ETAPAS)
 
     @pytest.mark.parametrize("caso,foto,esperada", LINHAS_DA_TABELA, ids=lambda v: v if isinstance(v, str) else "")
@@ -226,6 +243,17 @@ class TestPrecedenciaEntreAsRegras:
             partes=(_parte(674, labels=("in-progress",)),),
         )
         assert etapa_da_foto(foto) == ETAPA_ENTREGUE
+
+    def test_fechada_sem_motivo_e_entrega_e_nao_recusa(self):
+        """O GitHub devolve `state_reason: null` em varios caminhos de
+        fechamento. Exigir `completed` faria o diretor ler "Não será feita"
+        sobre algo entregue, que e a pior mentira que este selo pode contar."""
+        assert etapa_da_foto(_foto(estado="closed", motivo=None)) == ETAPA_ENTREGUE
+        assert etapa_da_foto(_foto(estado="closed", motivo="")) == ETAPA_ENTREGUE
+
+    def test_fechada_sem_motivo_com_wontfix_ainda_e_nao_sera_feita(self):
+        """A label e uma declaracao explicita, e ganha do fechamento mudo."""
+        assert etapa_da_foto(_foto(estado="closed", motivo=None, labels=("wontfix",))) == ETAPA_ENTREGUE
 
     def test_nao_planejada_ganha_de_in_progress(self):
         foto = _foto(estado="closed", motivo="not_planned", labels=("in-progress",))
@@ -276,6 +304,12 @@ class TestResumoDasPartes:
             )
         )
         assert partes_da_foto(foto) == (1, 3)
+
+    def test_parte_fechada_sem_motivo_conta_como_entregue(self):
+        """ "Entregue" nao pode significar duas coisas no mesmo modulo: a raiz e
+        as partes passam pela mesma regra (`_entregue`)."""
+        foto = _foto(partes=(_parte(674, estado="closed", motivo=None), _parte(675)))
+        assert partes_da_foto(foto) == (1, 2)
 
     def test_resumo_com_total_zero_conta_como_sem_partes(self):
         assert partes_da_foto(_foto(resumo={"total": 0, "entregues": 0})) == (None, None)
@@ -425,10 +459,23 @@ class TestTextosDoFio:
         assert texto_movimento_etapa(para=ETAPA_ENTREGUE, entregues=3, total=7) == "Etapa: Entregue (3 de 7 partes)"
 
     def test_a_linha_do_vinculo(self):
-        assert texto_vinculo_criado(673) == "Vínculo com o desenvolvimento criado na issue #673"
+        assert TEXTO_VINCULO_CRIADO == "Vínculo com o desenvolvimento criado"
 
     def test_a_linha_do_vinculo_desfeito(self):
         assert TEXTO_VINCULO_DESFEITO == "Vínculo com o desenvolvimento desfeito"
+
+    @pytest.mark.parametrize("texto", (TEXTO_VINCULO_CRIADO, TEXTO_VINCULO_DESFEITO))
+    def test_nenhuma_das_duas_carrega_numero_de_issue(self, texto):
+        """As duas sao lidas pelo DIRETOR e saem do app dentro do "Copiar para
+        IA". Um numero de issue aqui furaria a decisao 9 do ADR 0054 pela porta
+        dos fundos, longe do funil que omite o Vinculo.
+
+        A asserção e sobre o MARCADOR positivo (nenhum digito, nenhum `#`), e
+        nao sobre a ausencia da substring "673": esta ultima e cega a qualquer
+        outra forma de escrever o numero.
+        """
+        assert not any(c.isdigit() for c in texto), texto
+        assert "#" not in texto, texto
 
     def test_nenhum_texto_do_fio_tem_travessao(self):
         """Regra da casa: travessao e meia-risca sao marca de texto gerado por
@@ -437,7 +484,7 @@ class TestTextosDoFio:
         textos = [
             *ETAPA_ROTULO.values(),
             texto_movimento_etapa(para=ETAPA_ENTREGUE, entregues=3, total=7),
-            texto_vinculo_criado(673),
+            TEXTO_VINCULO_CRIADO,
             TEXTO_VINCULO_DESFEITO,
             MOTIVO_SEM_GITHUB_LOGIN,
             MOTIVO_INTEGRACAO_DESLIGADA,
@@ -662,6 +709,7 @@ def _montar(
     demandas: list[dict] | None = None,
     conversas: list[dict] | None = None,
     github: _GithubFalso | None = None,
+    supabase: _SupabaseMock | None = None,
     monkeypatch=None,
 ) -> tuple[TestClient, _SupabaseMock, _GithubFalso]:
     app = FastAPI()
@@ -673,7 +721,11 @@ def _montar(
     if all(p["id"] != logado["id"] for p in pessoas):
         pessoas.append(dict(logado))
 
-    sb = _SupabaseMock(
+    # `supabase` reaproveita o banco de outra montagem: e o que permite ESCREVER
+    # como quem e da Vitta e LER como o diretor, sobre as MESMAS linhas. Fabricar
+    # a linha do fio a mao no segundo cliente provaria a leitura sobre um dado
+    # que o escritor talvez nem produza assim.
+    sb = supabase or _SupabaseMock(
         {
             "participantes": pessoas,
             "tecnologia_produtos": [{"id": "prod-1", "nome": "Reuniões", "ativo": True, "ordem": 1, "dono_id": "P1"}],
@@ -1029,7 +1081,7 @@ class TestLinhasAutomaticasDoVinculo:
 
         linhas = _fio(sb)
         assert [linha["movimento_campo"] for linha in linhas] == ["vinculo", "etapa"]
-        assert linhas[0]["texto"] == texto_vinculo_criado(673)
+        assert linhas[0]["texto"] == TEXTO_VINCULO_CRIADO
         assert linhas[1]["texto"] == texto_movimento_etapa(para=ETAPA_PLANEJADA)
         # Linha automatica nao tem autor: quem mudou foi o GitHub.
         assert all(linha["autor_id"] is None for linha in linhas)
@@ -1118,6 +1170,118 @@ class TestLinhasAutomaticasDoVinculo:
         assert [linha["movimento_campo"] for linha in _fio(sb)].count("vinculo") == 1
 
 
+class TestOQueODiretorLeNoFio:
+    """O numero da issue NAO chega ao diretor pela Conversa (ADR 0054, decisao 9).
+
+    O fio e a superficie mais larga que existe: ele aparece na tela E sai do app
+    dentro do "Copiar para IA", que o diretor cola numa ferramenta de fora. As
+    duas rotas que o leem tem so `require_super_admin`, e o diretor E Super
+    admin: o corte tem de estar no funil de leitura, e nao na porta.
+
+    Os testes ESCREVEM como quem e da Vitta, pela rota de vincular, e LEEM como o
+    diretor, pela rota da Conversa, sobre o mesmo banco. Fabricar a linha a mao
+    provaria a leitura sobre um dado que o escritor talvez nem produza assim.
+    """
+
+    @staticmethod
+    def _com_vinculo_gravado(monkeypatch):
+        """Vincula de verdade e devolve o banco resultante."""
+        client, sb, _ = _montar(
+            logado=PEDRO,
+            demandas=[_demanda("d-1")],
+            github=_GithubFalso({673: _issue(673, labels=("ready-for-agent",))}),
+            monkeypatch=monkeypatch,
+        )
+        assert client.post(f"{BASE}/demandas/d-1/vincular", json={"numero": 673}).status_code == 200
+        return sb
+
+    @staticmethod
+    def _linha_do_vinculo(corpo: list[dict]) -> dict:
+        linhas = [linha for linha in corpo if linha.get("movimento_campo") == "vinculo"]
+        assert len(linhas) == 1, f"esperava uma linha de vinculo no fio, achei {len(linhas)}"
+        return linhas[0]
+
+    def test_o_diretor_le_a_linha_do_vinculo_sem_numero(self, monkeypatch):
+        sb = self._com_vinculo_gravado(monkeypatch)
+        client, _, _ = _montar(logado=DIRETOR, supabase=sb, monkeypatch=monkeypatch)
+
+        corpo = client.get(f"{BASE}/demandas/d-1/conversa").json()
+        linha = self._linha_do_vinculo(corpo)
+
+        # Marcador POSITIVO: o texto e exatamente a frase sem numero. Asserir a
+        # ausencia de "673" seria cego a qualquer outra forma de escrever o
+        # numero (issue #673, GH-673, "673").
+        assert linha["texto"] == TEXTO_VINCULO_CRIADO
+        assert linha["movimento_de"] is None
+        assert linha["movimento_para"] is None
+
+    def test_quem_e_da_vitta_continua_lendo_o_numero_no_de_para(self, monkeypatch):
+        """O par de presenca: uma omissao cravada passaria pelo teste acima sem
+        provar nada, e o rastreio de quem trabalha no GitHub sumiria junto."""
+        sb = self._com_vinculo_gravado(monkeypatch)
+        client, _, _ = _montar(logado=PEDRO, supabase=sb, monkeypatch=monkeypatch)
+
+        linha = self._linha_do_vinculo(client.get(f"{BASE}/demandas/d-1/conversa").json())
+
+        assert linha["texto"] == TEXTO_VINCULO_CRIADO
+        assert linha["movimento_para"] == "673"
+
+    def test_a_linha_da_etapa_chega_inteira_aos_dois(self, monkeypatch):
+        """So a linha do VINCULO carrega numero de issue. `etapa`, `estado` e
+        `responsavel` guardam valores do dominio da propria Demanda, e cortar o
+        de/para deles apagaria rastro sem proteger nada."""
+        sb = self._com_vinculo_gravado(monkeypatch)
+        client, _, _ = _montar(logado=DIRETOR, supabase=sb, monkeypatch=monkeypatch)
+
+        corpo = client.get(f"{BASE}/demandas/d-1/conversa").json()
+        etapa = next(linha for linha in corpo if linha.get("movimento_campo") == "etapa")
+
+        assert etapa["movimento_de"] == ETAPA_REGISTRADA
+        assert etapa["movimento_para"] == ETAPA_PLANEJADA
+        assert etapa["texto"] == texto_movimento_etapa(para=ETAPA_PLANEJADA)
+
+    def test_o_texto_para_ia_do_diretor_nao_leva_o_numero(self, monkeypatch):
+        """A pior superficie das duas: este texto SAI do app pelo clipboard."""
+        sb = self._com_vinculo_gravado(monkeypatch)
+        client, _, _ = _montar(logado=DIRETOR, supabase=sb, monkeypatch=monkeypatch)
+
+        texto = client.get(f"{BASE}/demandas/d-1/texto-para-ia").json()["texto"]
+
+        assert TEXTO_VINCULO_CRIADO in texto
+        # A linha do Vinculo, isolada do resto do texto (que tem datas e horas),
+        # nao pode ter digito nenhum.
+        linha = next(pedaco for pedaco in texto.splitlines() if TEXTO_VINCULO_CRIADO in pedaco)
+        assert not any(c.isdigit() for c in linha.split(TEXTO_VINCULO_CRIADO[:8])[-1])
+
+    def test_desvincular_tambem_nao_deixa_numero_no_fio_do_diretor(self, monkeypatch):
+        sb = self._com_vinculo_gravado(monkeypatch)
+        client_vitta, _, _ = _montar(logado=PEDRO, supabase=sb, monkeypatch=monkeypatch)
+        assert client_vitta.post(f"{BASE}/demandas/d-1/desvincular").status_code == 200
+
+        client, _, _ = _montar(logado=DIRETOR, supabase=sb, monkeypatch=monkeypatch)
+        corpo = client.get(f"{BASE}/demandas/d-1/conversa").json()
+        desfeito = [linha for linha in corpo if linha["texto"] == TEXTO_VINCULO_DESFEITO]
+
+        assert len(desfeito) == 1
+        assert desfeito[0]["movimento_de"] is None
+        assert desfeito[0]["movimento_para"] is None
+
+    def test_a_resposta_de_gente_atravessa_intacta(self, monkeypatch):
+        """A omissao morde SO a linha do Vinculo: uma que apagasse o de/para de
+        toda linha, ou que mexesse no texto das respostas, quebraria o fio."""
+        sb = self._com_vinculo_gravado(monkeypatch)
+        client, _, _ = _montar(logado=DIRETOR, supabase=sb, monkeypatch=monkeypatch)
+        assert (
+            client.post(f"{BASE}/demandas/d-1/conversa", json={"texto": "Combinado, pode seguir."}).status_code == 201
+        )
+
+        corpo = client.get(f"{BASE}/demandas/d-1/conversa").json()
+        resposta = next(linha for linha in corpo if linha["linha"] == "resposta")
+
+        assert resposta["texto"] == "Combinado, pode seguir."
+        assert resposta["autor_nome"] == "Diretor do Hospital"
+
+
 # ─── 7. Desvincular ──────────────────────────────────────────────────────────
 
 
@@ -1182,6 +1346,41 @@ class TestDesvincular:
 
         assert client.post(f"{BASE}/demandas/d-1/desvincular").status_code == 200
         assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] is None
+
+
+class TestTetoDasPortasDeEscrita:
+    """O recurso escasso aqui e a cota da API do GitHub, que e UMA para o app
+    inteiro (ADR 0054, decisao 8: um token pessoal). Cada `vincular` gasta duas
+    leituras e ate uma escrita la; sem teto, um laco bobo numa conta de Super
+    admin da Vitta derrubaria a integracao para todo mundo, inclusive para a
+    reconciliacao da fatia seguinte."""
+
+    def test_as_duas_portas_dividem_o_mesmo_balde(self):
+        """`shared_limit` por NOME, e nao `limit`.
+
+        O `Limiter` da casa nasce com `key_style="url"`: com `limit`, cada
+        Demanda ganharia o proprio balde, e quem tem cem Demandas teria cem
+        tetos. O teto viraria enfeite justo na porta em que ele foi pedido.
+        """
+        # O balde do Vinculo nao e o dos gatilhos de e-mail: sao recursos
+        # externos diferentes (cota do GitHub e cota do Resend), e um laco num
+        # deles nao pode consumir o teto do outro.
+        assert tecnologia_router.ESCOPO_DO_VINCULO != tecnologia_router.ESCOPO_DO_GATILHO
+
+    def test_o_teto_de_verdade_recusa_com_429(self, monkeypatch):
+        """Prova pela ROTA, e nao pela presenca do decorador: um teto declarado
+        e nao ligado (o `app.state.limiter` esquecido, por exemplo) passaria por
+        qualquer asserção de atributo."""
+        gh = _GithubFalso({673: _issue(673)})
+        client, _, _ = _montar(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+
+        limite = int(tecnologia_router.LIMITE_DO_VINCULO.split("/")[0])
+        respostas = [client.post(f"{BASE}/demandas/d-1/desvincular").status_code for _ in range(limite + 1)]
+
+        assert respostas[-1] == 429, respostas[-3:]
+        # E o teto e o unico motivo da recusa final: as anteriores passaram pela
+        # regra (422 de "não tem Vínculo para desfazer"), e não por 429.
+        assert 429 not in respostas[:limite]
 
 
 # ─── 8. Quem ve o numero e quem ve so a Etapa ────────────────────────────────

@@ -52,8 +52,11 @@ LABEL_EM_ANDAMENTO = "in-progress"
 LABEL_WONTFIX = "wontfix"
 LABELS_PLANEJADA = ("ready-for-agent", "ready-for-human")
 
-# Como o GitHub diz que a issue fechou.
-FECHAMENTO_CONCLUIDA = "completed"
+# Como o GitHub diz que a issue fechou. Ele manda `completed` ou `not_planned`
+# em `state_reason`, e o campo pode vir NULO. So o `not_planned` e lido aqui:
+# tudo o mais que fechou conta como entrega (ver `_entregue`), e por isso nao ha
+# constante para o `completed`, que seria uma segunda porta para a mesma regra.
+FECHAMENTO_NAO_PLANEJADA = "not_planned"
 
 
 def _labels(no: dict[str, Any] | None) -> set[str]:
@@ -65,6 +68,22 @@ def _labels(no: dict[str, Any] | None) -> set[str]:
 
 def _fechada(no: dict[str, Any] | None) -> bool:
     return bool(no) and str(no.get("estado") or "").lower() == "closed"
+
+
+def _entregue(no: dict[str, Any] | None) -> bool:
+    """Se este no (raiz ou parte) conta como ENTREGUE.
+
+    Fechada e entrega, a menos que o motivo diga o contrario. O GitHub devolve
+    `state_reason: null` em varios caminhos de fechamento (issue antiga,
+    fechamento por API sem o campo), e exigir `completed` faria o diretor ler
+    "Não será feita" sobre algo que foi feito. `not_planned` e a excecao, e quem
+    a escolhe a declara.
+
+    Uma funcao so para a raiz e para as partes: "entregue" nao pode significar
+    duas coisas diferentes no mesmo modulo, senao a Etapa e o "X de Y partes"
+    contariam historias divergentes sobre a mesma issue.
+    """
+    return _fechada(no) and str((no or {}).get("motivo_do_fechamento") or "").lower() != FECHAMENTO_NAO_PLANEJADA
 
 
 def _partes(foto: dict[str, Any] | None) -> list[dict[str, Any]]:
@@ -88,16 +107,29 @@ def etapa_da_foto(foto: dict[str, Any] | None) -> str:
     labels_raiz = _labels(foto)
     partes = _partes(foto)
 
-    # 1. Fechada como concluida: entregue, aconteca o que acontecer com as
-    #    labels e com as partes.
-    if _fechada(foto) and str(foto.get("motivo_do_fechamento") or "").lower() == FECHAMENTO_CONCLUIDA:
+    # 1. Fechada como concluida, ou fechada sem motivo declarado: entregue,
+    #    aconteca o que acontecer com as labels e com as partes.
+    #
+    #    A ausencia de motivo entra AQUI, e nao na regra 2, porque fechar e o
+    #    desfecho normal de uma issue que foi feita: `not_planned` e a excecao, e
+    #    quem a escolhe a declara.
+    if _entregue(foto):
         return ETAPA_ENTREGUE
 
-    # 2. Fechada por outro motivo (`not_planned`), ou marcada `wontfix`: nao
-    #    sera feita. A label conta mesmo com a issue aberta porque ela ja e a
-    #    decisao; o fechamento vem depois, e a Etapa nao pode esperar por ele
-    #    para parar de prometer entrega.
-    if _fechada(foto) or LABEL_WONTFIX in labels_raiz:
+    # 2. Fechada como NAO PLANEJADA, ou marcada `wontfix`: nao sera feita.
+    #
+    #    O motivo tem de ser explicito. O GitHub devolve `state_reason: null` em
+    #    varios caminhos de fechamento (issue antiga, fechamento por API sem o
+    #    campo), e tratar a ausencia como "nao planejada" faria o diretor ler
+    #    "Não será feita" sobre uma entrega que aconteceu. Fechado sem motivo cai
+    #    na regra 1 logo acima, que e o desfecho comum: a issue fechou.
+    #
+    #    A label conta mesmo com a issue aberta porque ela ja e a decisao; o
+    #    fechamento vem depois, e a Etapa nao pode esperar por ele para parar de
+    #    prometer entrega.
+    if (_fechada(foto) and str(foto.get("motivo_do_fechamento") or "").lower() == FECHAMENTO_NAO_PLANEJADA) or (
+        LABEL_WONTFIX in labels_raiz
+    ):
         return ETAPA_NAO_SERA_FEITA
 
     # 3. `in-progress` na raiz ou em QUALQUER parte: alguem esta com a mao nisso.
@@ -142,12 +174,7 @@ def partes_da_foto(foto: dict[str, Any] | None) -> tuple[int | None, int | None]
     partes = _partes(foto)
     if not partes:
         return (None, None)
-    concluidas = sum(
-        1
-        for parte in partes
-        if _fechada(parte) and str(parte.get("motivo_do_fechamento") or "").lower() == FECHAMENTO_CONCLUIDA
-    )
-    return (concluidas, len(partes))
+    return (sum(1 for parte in partes if _entregue(parte)), len(partes))
 
 
 # ─── 1b. O login no GitHub da pessoa ─────────────────────────────────────────
@@ -286,10 +313,17 @@ def texto_movimento_etapa(*, para: str, entregues: int | None = None, total: int
     return f"Etapa: {rotulo} ({partes})" if partes else f"Etapa: {rotulo}"
 
 
-def texto_vinculo_criado(numero: int) -> str:
-    return f"Vínculo com o desenvolvimento criado na issue #{numero}"
-
-
+# As duas linhas do Vinculo, SEM o numero da issue.
+#
+# O texto da Conversa e lido pelo diretor e sai do app inteiro dentro do
+# "Copiar para IA": e a superficie mais larga que existe, e ela nao passa pelo
+# funil que omite o Vinculo (`_com_nomes`). Um "#673" aqui furaria a decisao 9
+# do ADR 0054 pela porta dos fundos, e o proprio bloco "Para o diretor" da issue
+# #674 ("Você não vê número, link nem botão técnico") junto.
+#
+# Quem precisa do numero para rastrear le `movimento_de` e `movimento_para`, que
+# o router omite para quem nao tem `github_login`.
+TEXTO_VINCULO_CRIADO = "Vínculo com o desenvolvimento criado"
 TEXTO_VINCULO_DESFEITO = "Vínculo com o desenvolvimento desfeito"
 
 

@@ -349,12 +349,24 @@ async def create_usuario(
         "access_profile": body.access_profile,
         "is_externo": body.is_externo,
         "ativo": body.ativo,
-        "github_login": _github_login_valido(supabase, body.github_login),
         # FKs resolvidas silenciosamente (Fase 1 super-admin CRUD).
         "setor_id": taxonomy_ids["setor_id"],
         "cargo_id": taxonomy_ids["cargo_id"],
     }
     _normalize_access_profile_fields(payload, is_create=True)
+
+    # A chave so entra no INSERT quando ha login de verdade.
+    #
+    # A LEITURA de `participantes` ja tolera a coluna ausente
+    # (`_COLUNAS_OPCIONAIS` do `dependencies.py`), e a ESCRITA precisa da mesma
+    # tolerancia pelo mesmo motivo: o deploy NAO aplica migration, o humano cola
+    # o SQL no Studio depois, e entre uma coisa e outra um INSERT que mandasse
+    # `github_login: None` quebraria com 42703 e a criacao de usuario cairia em
+    # producao. Mandar a chave so quando ela tem valor faz o caso comum (quase
+    # todo mundo, que nao tem login) atravessar essa janela intacto.
+    login = _github_login_valido(supabase, body.github_login)
+    if login is not None:
+        payload["github_login"] = login
 
     # Saga manual: INSERT participante + auth user com rollback se Admin API
     # falhar (evita registro órfão sem auth_user_id). Mantemos a postura

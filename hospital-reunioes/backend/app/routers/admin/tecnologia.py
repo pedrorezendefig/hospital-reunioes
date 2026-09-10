@@ -151,6 +151,7 @@ from app.services.tecnologia_vinculo import (
     MOTIVO_NUMERO_INVALIDO,
     MOTIVO_SEM_GITHUB_LOGIN,
     MOTIVO_SEM_VINCULO_PARA_DESFAZER,
+    TEXTO_VINCULO_CRIADO,
     TEXTO_VINCULO_DESFEITO,
     corpo_com_marcador,
     corpo_precisa_do_marcador,
@@ -163,7 +164,6 @@ from app.services.tecnologia_vinculo import (
     partes_da_foto,
     tem_github_login,
     texto_movimento_etapa,
-    texto_vinculo_criado,
 )
 
 logger = logging.getLogger(__name__)
@@ -971,6 +971,22 @@ async def atribuir_demanda(
 # ─── Vinculo com o desenvolvimento (issue #674, ADR 0054) ────────────────────
 
 
+# Quantas vezes por minuto uma mesma origem pode mexer no Vinculo.
+#
+# O recurso escasso aqui NAO e a cota do Resend (o balde dos gatilhos de e-mail
+# fica de fora): e a cota da API do GitHub, que e UMA para o app inteiro e
+# atende o token pessoal do Pedro. Cada `vincular` gasta duas leituras e ate uma
+# escrita la; um laco bobo numa conta de Super admin da Vitta derrubaria a
+# integracao para todo mundo, inclusive para a reconciliacao da fatia seguinte.
+#
+# `shared_limit`, e nao `limit`, pelo mesmo motivo das portas de gatilho: o
+# `Limiter` da casa nasce com `key_style="url"`, e com `limit` cada Demanda
+# ganharia o proprio balde, o que faria o teto virar enfeite justo na porta em
+# que ele foi pedido.
+LIMITE_DO_VINCULO = "30/minute"
+ESCOPO_DO_VINCULO = "tecnologia-vinculo-github"
+
+
 def _exigir_da_vitta(ator: dict) -> None:
     """403 para quem nao tem `github_login`, Super admin inclusive.
 
@@ -1052,7 +1068,9 @@ async def quem_sou_eu(
 
 
 @router.post("/demandas/{demanda_id}/vincular", response_model=DemandaResponse)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
 async def vincular_demanda(
+    request: Request,
     demanda_id: str,
     payload: VincularPayload,
     ator: dict = Depends(require_super_admin),
@@ -1140,7 +1158,7 @@ async def vincular_demanda(
             campo="vinculo",
             de=None,
             para=str(numero),
-            texto=texto_vinculo_criado(numero),
+            texto=TEXTO_VINCULO_CRIADO,
         )
     if mudou:
         _gravar_etapa(supabase, demanda_id=demanda_id, de=etapa_antes, para=etapa, entregues=entregues, total=total)
@@ -1149,7 +1167,9 @@ async def vincular_demanda(
 
 
 @router.post("/demandas/{demanda_id}/desvincular", response_model=DemandaResponse)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
 async def desvincular_demanda(
+    request: Request,
     demanda_id: str,
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
@@ -1239,21 +1259,47 @@ def _fio_ordenado(consulta):
     return consulta.order("criado_em").order("id")
 
 
-def _fio_da_demanda(supabase: Client, demanda_id: str) -> list[dict]:
+def _sem_o_numero_da_issue(linha: dict) -> dict:
+    """A linha de movimento do Vinculo sem o numero da issue no de/para.
+
+    So a linha de `vinculo` carrega numero de issue: `estado`, `responsavel` e
+    `etapa` guardam valores do proprio dominio da Demanda, que o diretor ja le
+    na tela.
+    """
+    if linha.get("movimento_campo") != "vinculo":
+        return linha
+    return {**linha, "movimento_de": None, "movimento_para": None}
+
+
+def _fio_da_demanda(supabase: Client, demanda_id: str, *, ator: dict) -> list[dict]:
     """As linhas do fio em ordem cronologica, com o `autor_nome` resolvido.
 
     Um lugar so para ler o fio DE UMA Demanda: a Conversa do modal e o texto do
     "Copiar para IA" precisam ver a MESMA coisa, na mesma ordem.
 
+    E o funil onde o numero da issue e cortado para quem nao tem `github_login`,
+    pelo mesmo motivo de o `_com_nomes` cortar o objeto do Vinculo: o fio e a
+    superficie mais LARGA que existe (o "Copiar para IA" tira o texto do app e o
+    diretor o cola numa ferramenta de fora), e uma rota nova que lesse o fio por
+    fora daqui vazaria o numero sem nada acusar. O texto das linhas ja nasce sem
+    numero (`TEXTO_VINCULO_CRIADO`); o que sobra e o de/para estruturado, que
+    fica para quem e da Vitta rastrear.
+
     A leitura de VARIAS Demandas de uma vez ("Minha vez" e a busca do Historico)
     mora no `_fios_por_demanda`, e nao aqui, porque tem outra forma: outro
-    filtro, outras colunas e paginacao. O que as duas nao podem decidir
-    separado, a ordem, sai do `_fio_ordenado`, que e o mesmo para as duas.
+    filtro, outras colunas e paginacao. Ela nunca DEVOLVE linha a quem chama (so
+    filtra as Demandas), entao nao tem o que omitir. O que as duas nao podem
+    decidir separado, a ordem, sai do `_fio_ordenado`, que e o mesmo para as
+    duas.
     """
     result = _fio_ordenado(supabase.table(TABELA_CONVERSAS).select("*").eq("demanda_id", demanda_id)).execute()
     linhas = list(result.data or [])
     nomes = _nomes_de_participantes(supabase, {linha["autor_id"] for linha in linhas if linha.get("autor_id")})
-    return [{**linha, "autor_nome": nomes.get(linha.get("autor_id"))} for linha in linhas]
+    da_vitta = tem_github_login(ator)
+    return [
+        {**(linha if da_vitta else _sem_o_numero_da_issue(linha)), "autor_nome": nomes.get(linha.get("autor_id"))}
+        for linha in linhas
+    ]
 
 
 def _texto_e_mencoes(supabase: Client, payload: RespostaPayload) -> tuple[str, list[str]]:
@@ -1325,7 +1371,7 @@ async def listar_conversa(
     _buscar_demanda(supabase, demanda_id)
     return [
         _com_janela(linha, ator_id=ator["id"], autor_nome=linha.get("autor_nome"))
-        for linha in _fio_da_demanda(supabase, demanda_id)
+        for linha in _fio_da_demanda(supabase, demanda_id, ator=ator)
     ]
 
 
@@ -1346,7 +1392,7 @@ async def texto_da_demanda_para_ia(
     cada corte.
     """
     demanda = _com_nomes(supabase, [_buscar_demanda(supabase, demanda_id)], ator=ator)[0]
-    return {"texto": texto_para_ia(demanda=demanda, linhas=_fio_da_demanda(supabase, demanda_id))}
+    return {"texto": texto_para_ia(demanda=demanda, linhas=_fio_da_demanda(supabase, demanda_id, ator=ator))}
 
 
 @router.post(

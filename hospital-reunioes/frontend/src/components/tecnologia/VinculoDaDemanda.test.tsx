@@ -172,6 +172,17 @@ describe("Os seis textos da Etapa", () => {
     ]);
   });
 
+  it("o aviso não expõe o nome das variáveis de ambiente", () => {
+    // O gate `if (!eu.tem_github_login) return null` é de RUNTIME: esta string
+    // vive no bundle JS, servido a qualquer um que abra a página, com sessão ou
+    // sem. O backend já acertou nisso (o motivo dele fala de configuração sem
+    // citar variável), e a tela segue o mesmo critério.
+    expect(AVISO_SEM_INTEGRACAO).not.toContain("GITHUB_INTEGRACAO");
+    // E o par de presença: o aviso continua dizendo a CAUSA, e não um
+    // "indisponível" seco que mandaria a pessoa tentar de novo para sempre.
+    expect(AVISO_SEM_INTEGRACAO).toContain("não está configurada");
+  });
+
   it("nenhum texto do Vínculo tem travessão", () => {
     // Regra da casa: travessão e meia-risca são marca de texto gerado por IA e
     // não entram em nada que o usuário vê. Estes são lidos pelo diretor.
@@ -280,6 +291,35 @@ describe("Quem vê os controles do Vínculo", () => {
     expect(screen.getByRole("button", { name: "Desvincular" })).toBeTruthy();
     // E o campo de vincular some: a Demanda já tem Vínculo.
     expect(screen.queryByLabelText("Vincular issue")).toBeNull();
+  });
+});
+
+describe("Quando a foto guardada não tem o endereço da issue", () => {
+  const SEM_URL = { ...VINCULADA, vinculo: { numero: 673, url: null } };
+
+  it("o número vira texto e o link some", async () => {
+    // `href="#"` seria um clique morto: o cursor vira mãozinha, a pessoa clica
+    // e nada acontece, e ela conclui que a página quebrou. O número continua à
+    // vista, que é o que ela precisa para achar a issue à mão.
+    montarModal(SEM_URL, DA_VITTA);
+
+    expect(await screen.findByText("Issue #673")).toBeTruthy();
+    expect(screen.queryByText(/Abrir no GitHub/)).toBeNull();
+  });
+
+  it("com endereço o link continua lá", async () => {
+    // O par de presença: um link escondido sempre passaria pelo teste acima.
+    montarModal(VINCULADA, DA_VITTA);
+
+    const link = await screen.findByText("Abrir no GitHub (#673)");
+    expect(link.closest("a")?.getAttribute("href")).toContain("/issues/673");
+    expect(screen.queryByText("Issue #673")).toBeNull();
+  });
+
+  it("o Desvincular continua disponível sem o endereço", async () => {
+    montarModal(SEM_URL, DA_VITTA);
+
+    expect((await screen.findByRole("button", { name: "Desvincular" }) as HTMLButtonElement).disabled).toBe(false);
   });
 });
 
