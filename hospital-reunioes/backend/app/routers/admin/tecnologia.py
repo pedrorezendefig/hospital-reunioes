@@ -110,6 +110,7 @@ from app.services.tecnologia import (
     fechamento_da_demanda,
     instante_do_banco,
     limite_da_janela_de_edicao,
+    mencoes_acrescentadas,
     mencoes_sem_acesso,
     motivo_da_minha_vez,
     motivo_edicao_recusada,
@@ -501,22 +502,22 @@ def _gravar_movimento(
 # Quantas vezes por minuto uma mesma origem pode disparar gatilho de e-mail.
 #
 # Mesmo valor da rota equivalente da Ouvidoria (`registrar_manifestacao`). O
-# motivo de existir é que desde a issue #642 cada POST destas três portas
+# motivo de existir é que desde a issue #642 cada escrita destas portas
 # consome COTA e reputação de remetente do Resend, que é recurso COMPARTILHADO
 # (uma chave, um `email_service`, um remetente). A Ouvidoria manda por esse
 # mesmo canal os avisos de prazo, que têm obrigação legal (ADR 0034): sem teto,
 # um laço bobo numa conta de Super admin desta aba derrubaria aqueles avisos.
 LIMITE_DE_GATILHO = "60/minute"
 
-# O balde é UM SÓ para as três portas, e não um por porta.
+# O balde é UM SÓ para as quatro portas de gatilho, e não um por porta.
 #
 # É `shared_limit`, e não `limit`, por uma razão medida e não estética: o
 # `Limiter` da casa (`app/limiter.py`) nasce com o `key_style` default do
 # slowapi, que é `"url"`, e ali o balde é a URL CONCRETA da requisição. Com
 # `limit`, `POST /demandas/{id}/atribuir` ganharia 60 por minuto POR DEMANDA, e
 # quem tem cem Demandas teria cem baldes: o teto viraria enfeite justo na porta
-# em que ele foi pedido. `shared_limit` fixa o escopo por nome, então as três
-# portas dividem o mesmo balde por origem.
+# em que ele foi pedido. `shared_limit` fixa o escopo por nome, então as portas
+# dividem o mesmo balde por origem.
 #
 # E dividir é o certo aqui: o recurso escasso não é a rota, é a cota do Resend,
 # que é uma só para o app inteiro.
@@ -628,6 +629,46 @@ async def _aviso_da_resposta(
             and tudo_saiu
         )
     return None if tudo_saiu else AVISO_EMAIL_NAO_SAIU
+
+
+async def _aviso_da_correcao(
+    supabase: Client, *, demanda: dict, texto: str, mencionados: list[str], ator: dict
+) -> str | None:
+    """O gatilho da MENÇÃO na porta da correção (issue #670).
+
+    Só a menção, e só para quem ENTROU: o "chegou resposta" do responsável já
+    saiu no envio, e mandá-lo de novo faria de cada correção de vírgula um
+    e-mail. Sem ninguém novo, não há o que tentar, e o `None` que volta é
+    "nada a avisar", e não "falhou".
+
+    Os nomes são resolvidos AQUI, e não na entrada da rota, porque o e-mail
+    mostra o Produto e a correção que não chama ninguém (a maioria delas) não
+    tem por que pagar essa leitura.
+
+    E por isso essa leitura roda dentro de um `try`: ela acontece com a correção
+    JÁ GRAVADA, e um `httpx.ReadTimeout` do PostgREST (que sobe cru, porque não
+    é `APIError`) viraria 500 numa ação que valeu. A tela mostraria "não foi
+    possível salvar", a pessoa salvaria de novo, e na segunda vez a menção já
+    estaria na linha: a diferença voltaria vazia e o e-mail não sairia NUNCA,
+    que é exatamente o defeito que esta issue veio consertar. Falha de aviso é
+    aviso que não saiu, e não ação desfeita, como o `_mandar` já diz.
+    """
+    if not mencionados:
+        return None
+    try:
+        com_nomes = _com_nomes(supabase, [demanda])[0]
+    except Exception:
+        logger.exception("Falha ao ler os nomes da Demanda %s para o aviso da correcao", demanda.get("id"))
+        return AVISO_EMAIL_NAO_SAIU
+    saiu = await _enviar_fora_do_loop(
+        avisar_mencao,
+        supabase,
+        demanda=com_nomes,
+        destinatarios=mencionados,
+        texto=texto,
+        quem_fez_nome=_nome_de_quem_agiu(ator),
+    )
+    return None if saiu else AVISO_EMAIL_NAO_SAIU
 
 
 # ─── Demanda: endpoints ──────────────────────────────────────────────────────
@@ -1066,7 +1107,9 @@ async def responder_na_conversa(
 
 
 @router.patch("/demandas/{demanda_id}/conversa/{linha_id}", response_model=ConversaLinhaResponse)
+@limiter.shared_limit(LIMITE_DE_GATILHO, ESCOPO_DO_GATILHO)
 async def editar_resposta(
+    request: Request,
     demanda_id: str,
     linha_id: str,
     payload: RespostaPayload,
@@ -1082,8 +1125,14 @@ async def editar_resposta(
 
     A busca amarra as DUAS chaves. Procurar so pelo id da linha deixaria quem
     soubesse esse id editar por qualquer card.
+
+    Corrigir tambem CHAMA (issue #670): a mencao acrescentada nos 10 minutos
+    manda o e-mail da historia 42 para quem entrou, e so para quem entrou. Por
+    isso esta porta divide o balde do limitador com as outras tres, e por isso
+    ela devolve `aviso_por_email` como o envio: quem corrigiu e a unica pessoa
+    com a tela aberta para dar o recado por outro caminho quando ele nao sai.
     """
-    _buscar_demanda(supabase, demanda_id)
+    demanda = _buscar_demanda(supabase, demanda_id)
     achadas = supabase.table(TABELA_CONVERSAS).select("*").eq("id", linha_id).eq("demanda_id", demanda_id).execute()
     if not achadas.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Linha da Conversa nao encontrada")
@@ -1094,6 +1143,9 @@ async def editar_resposta(
         _recusar(motivo)
 
     texto, mencoes = _texto_e_mencoes(supabase, payload)
+    # A diferenca sai daqui, com a linha como ela esta ANTES do update: depois
+    # de gravar, "quem ja estava mencionado" seria a propria lista nova.
+    novos = mencoes_acrescentadas(antes=linha.get("mencoes"), depois=mencoes, quem_fez=ator["id"])
     mudancas = {"texto": texto, "mencoes": mencoes, "editado_em": _agora()}
     try:
         result = (
@@ -1108,7 +1160,11 @@ async def editar_resposta(
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Linha da Conversa nao encontrada")
 
-    return _com_janela(result.data[0], ator_id=ator["id"], autor_nome=ator.get("nome_completo"))
+    corrigida = _com_janela(result.data[0], ator_id=ator["id"], autor_nome=ator.get("nome_completo"))
+    # Depois da escrita, pelo mesmo motivo do envio: um e-mail que convidasse a
+    # ler uma correcao que nao entrou seria pior do que nenhum e-mail.
+    aviso = await _aviso_da_correcao(supabase, demanda=demanda, texto=texto, mencionados=novos, ator=ator)
+    return {**corrigida, "aviso_por_email": aviso}
 
 
 # ─── Minha vez e Historico: helpers (issue #641) ─────────────────────────────
@@ -1156,9 +1212,15 @@ def _demandas_filtradas(
 # a regra da mencao olha `autor_id`, `linha` e `mencoes`. Menos dado tambem e
 # menos chance de bater no teto de linhas do PostgREST.
 #
-# `criado_em` e `id` nao entram na lista: o PostgREST ordena por coluna que nao
-# foi selecionada, e nenhuma das duas abas le esses campos do fio.
-COLUNAS_DO_FIO_PARA_MENCAO = "demanda_id, autor_id, linha, mencoes"
+# `id` nao entra na lista: o PostgREST ordena por coluna que nao foi
+# selecionada, e nenhuma das duas abas le esse campo do fio.
+#
+# `criado_em` e `editado_em` entram so na lista da mencao, e desde a issue #670:
+# a chamada acrescentada numa correcao vale a partir do `editado_em`, e para
+# saber se a resposta veio antes ou depois dele e preciso o instante das duas
+# linhas. Sem as duas colunas, a regra roda certa sobre linha nenhuma e a aba
+# responde "ninguem te chamou" com a chamada gravada no banco.
+COLUNAS_DO_FIO_PARA_MENCAO = "demanda_id, autor_id, linha, mencoes, criado_em, editado_em"
 COLUNAS_DO_FIO_PARA_BUSCA = "demanda_id, linha, texto"
 
 

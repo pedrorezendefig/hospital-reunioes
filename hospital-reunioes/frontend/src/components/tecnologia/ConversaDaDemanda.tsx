@@ -162,9 +162,11 @@ export function ConversaDaDemanda({ demandaId, linhas, pessoas, token, onFioMudo
       }
       // A resposta entrou. Falta saber se os avisos por e-mail que ela dispara
       // (a @menção e o "chegou resposta" para quem responde pela Demanda)
-      // saíram (issue #642). Quando não saem, quem escreveu é quem ainda pode
-      // dar o recado por outro caminho, e é a única pessoa que está com a tela
-      // aberta agora. `null` quando não havia nada a avisar, ou tudo saiu.
+      // saíram (issue #642). A correção passa por aqui pelo mesmo motivo: a
+      // menção acrescentada nos 10 minutos também chama (issue #670). Quando não
+      // saem, quem escreveu é quem ainda pode dar o recado por outro caminho, e
+      // é a única pessoa que está com a tela aberta agora. `null` quando não
+      // havia nada a avisar, ou tudo saiu.
       onErro(await avisoPorEmail(resposta));
       await onFioMudou();
       return true;

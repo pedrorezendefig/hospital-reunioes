@@ -90,8 +90,8 @@ class TestPesoDaPrioridade:
         assert peso_da_prioridade(estranha) > peso_da_prioridade("baixa")
 
 
-def _resposta(autor_id: str | None, texto: str = "resposta", mencoes: list[str] | None = None) -> dict:
-    return {"linha": "resposta", "autor_id": autor_id, "texto": texto, "mencoes": mencoes or []}
+def _resposta(autor_id: str | None, texto: str = "resposta", mencoes: list[str] | None = None, **campos) -> dict:
+    return {"linha": "resposta", "autor_id": autor_id, "texto": texto, "mencoes": mencoes or [], **campos}
 
 
 def _movimento(texto: str = "Pedro moveu para Aguardando") -> dict:
@@ -170,6 +170,99 @@ class TestEsperandoResposta:
 
     def test_fio_vazio(self):
         assert esperando_resposta_da_pessoa(linhas=[], pessoa_id="P2") is False
+
+
+class TestAMencaoQueEntrouNaCorrecao:
+    """A mencao acrescentada na janela de 10 minutos conta a partir do
+    `editado_em` (issue #670).
+
+    A correcao NAO mexe no `criado_em`, entao a linha fica onde estava na fila.
+    Sem olhar o `editado_em`, uma resposta escrita ENTRE o envio e a correcao
+    ficaria depois da mencao na ordem e daria por atendida uma chamada que ainda
+    nao existia quando ela foi escrita.
+
+    A linha nao guarda QUAIS mencoes entraram na correcao (nao ha coluna para
+    isso), entao toda mencao de linha corrigida conta do `editado_em`. Uma
+    correcao de virgula pode trazer de volta uma chamada ja respondida, e esse e
+    o lado seguro do erro: a Demanda reaparece na aba, em vez de uma chamada
+    sumir de vista.
+    """
+
+    ENVIO = "2026-09-02T09:00:00Z"
+    ANTES_DA_CORRECAO = "2026-09-02T09:03:00Z"
+    CORRECAO = "2026-09-02T09:05:00Z"
+    DEPOIS_DA_CORRECAO = "2026-09-02T09:07:00Z"
+
+    def _mencao_corrigida(self, **campos) -> dict:
+        datas = {"criado_em": self.ENVIO, "editado_em": self.CORRECAO, **campos}
+        return _resposta("P1", "@Sócia Vitta e agora?", mencoes=["P2"], **datas)
+
+    def test_a_resposta_anterior_a_correcao_nao_atende_a_mencao_nova(self):
+        """O caso da issue: a Sócia falou no fio antes de ser chamada, e a
+        chamada so passou a existir na correcao."""
+        linhas = [
+            self._mencao_corrigida(),
+            _resposta("P2", "nao era comigo", criado_em=self.ANTES_DA_CORRECAO),
+        ]
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is True
+
+    def test_a_resposta_posterior_a_correcao_encerra_a_vez(self):
+        """A irma de presenca: sem ela, uma regra que ignorasse a resposta
+        depois da correcao prenderia a Demanda na aba para sempre."""
+        linhas = [
+            self._mencao_corrigida(),
+            _resposta("P2", "agora vi", criado_em=self.DEPOIS_DA_CORRECAO),
+        ]
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is False
+
+    def test_a_linha_que_ninguem_corrigiu_continua_valendo_pela_ordem(self):
+        """Sem `editado_em`, nada de relogio: quem manda e a POSICAO das linhas,
+        como antes desta issue."""
+        linhas = [
+            _resposta("P1", "@Sócia Vitta e agora?", mencoes=["P2"], criado_em=self.CORRECAO, editado_em=None),
+            _resposta("P2", "respondi", criado_em=self.ENVIO),
+        ]
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is False
+
+    def test_o_carimbo_que_vale_e_o_da_ultima_mencao(self):
+        """Vale a ultima chamada, e o `editado_em` e o DELA.
+
+        Duas chamadas para a mesma pessoa: a segunda nunca foi corrigida, entao
+        cai na ordem, e a resposta que veio depois dela encerra a vez. A
+        primeira linha so foi corrigida MAIS TARDE, e uma regra que lesse o
+        carimbo da linha errada deixaria a Demanda presa na aba em cima de um
+        instante que nao e o da chamada que vale.
+        """
+        linhas = [
+            _resposta("P1", "@Sócia Vitta e agora?", mencoes=["P2"], criado_em=self.ENVIO, editado_em=self.CORRECAO),
+            _resposta(
+                "P1",
+                "@Sócia Vitta, e isto aqui?",
+                mencoes=["P2"],
+                criado_em=self.ANTES_DA_CORRECAO,
+                editado_em=None,
+            ),
+            _resposta("P2", "vi as duas", criado_em="2026-09-02T09:04:00Z"),
+        ]
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is False
+
+    def test_data_ilegivel_na_correcao_cai_na_ordem_das_linhas(self):
+        """A data quebrada nao pode prender a Demanda na aba: sem instante
+        legivel, vale a ordem, que e a regra que sempre valeu."""
+        linhas = [
+            self._mencao_corrigida(editado_em="ontem"),
+            _resposta("P2", "respondi", criado_em=self.ANTES_DA_CORRECAO),
+        ]
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is False
+
+    def test_resposta_com_data_ilegivel_conta_como_atendida(self):
+        """O mesmo cuidado pelo outro lado: e a linha da RESPOSTA que vem sem
+        instante legivel, e a Demanda tambem nao fica presa."""
+        linhas = [
+            self._mencao_corrigida(),
+            _resposta("P2", "respondi", criado_em="ontem"),
+        ]
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is False
 
 
 class TestMotivoDaMinhaVez:
@@ -919,6 +1012,49 @@ class TestAOrdemDoFio:
                 ),
             ],
         )
+
+        assert client.get(f"{BASE}/minha-vez").json() == []
+
+
+class TestAMencaoDaCorrecaoPelaRota:
+    """A mesma regra da correcao, pela rota (issue #670).
+
+    A prova pura nao basta aqui: a "Minha vez" le o fio com uma LISTA de
+    colunas (`COLUNAS_DO_FIO_PARA_MENCAO`), o dublê projeta como o PostgREST, e
+    uma regra certa em cima de um `select` que nao pede `editado_em` responde
+    "ninguem te chamou" com a chamada gravada no banco.
+    """
+
+    ENVIO = "2026-09-02T09:00:00Z"
+    ANTES_DA_CORRECAO = "2026-09-02T09:03:00Z"
+    CORRECAO = "2026-09-02T09:05:00Z"
+    DEPOIS_DA_CORRECAO = "2026-09-02T09:07:00Z"
+
+    def _client(self, resposta_em: str):
+        return _montar(
+            logado=SOCIA,
+            demandas=[_demanda("d1", responsavel_id="P1")],
+            conversas=[
+                _linha(
+                    "d1",
+                    id="c1",
+                    autor_id="P1",
+                    texto="@Sócia Vitta e agora?",
+                    mencoes=["P2"],
+                    criado_em=self.ENVIO,
+                    editado_em=self.CORRECAO,
+                ),
+                _linha("d1", id="c2", autor_id="P2", texto="nao era comigo", criado_em=resposta_em),
+            ],
+        )
+
+    def test_a_demanda_aparece_para_quem_a_correcao_chamou(self):
+        client = self._client(self.ANTES_DA_CORRECAO)
+
+        assert [d["id"] for d in client.get(f"{BASE}/minha-vez").json()] == ["d1"]
+
+    def test_e_sai_quando_a_resposta_veio_depois_da_correcao(self):
+        client = self._client(self.DEPOIS_DA_CORRECAO)
 
         assert client.get(f"{BASE}/minha-vez").json() == []
 
