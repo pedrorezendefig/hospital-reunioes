@@ -7,6 +7,24 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.126.0 - 2026-09-10 17:55 - a Demanda vinculada aprende do GitHub sozinha, por webhook com HMAC e reconciliação de hora em hora
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `1d4f50b`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.126.0, `db: healthy`; frontend HTTP 200; a rota nova provada por 503 com corpo do app contra 404 em rota falsa)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/1d4f50b
+- Issues: [#678](https://github.com/pedrorezendefig/hospital-reunioes/issues/678) · PR [#687](https://github.com/pedrorezendefig/hospital-reunioes/pull/687). Fatia do PRD [#673](https://github.com/pedrorezendefig/hospital-reunioes/issues/673), ADR 0054
+- Migration: nenhuma. A issue proibia, e as colunas de Vínculo vieram na `103` · minor, feat
+- ⚠️ **PASSO HUMANO PENDENTE.** A integração está **dormente**: `GITHUB_WEBHOOK_SECRET` ainda não existe no Coolify, então a rota responde 503 com `{"detail":"Webhook indisponível."}`. Criar a variável na TELA do Coolify (backend, Is Secret, Build Variable desmarcado), redeployar o backend, e só então cadastrar o webhook no repositório (URL `/api/webhooks/github`, content type JSON, só o evento `Issues`). Conferir pelo CORPO da delivery, nunca pelo código 200
+- Nota: os dois caminhos do molde da ClickSign. O webhook chega em segundos; a reconciliação de hora em hora existe porque o GitHub **não reentrega** o que falhou. A rotina `sincronizar_demanda` é uma só para os dois, e relê a issue no GitHub em vez de acreditar no payload, o que faz entrega fora de ordem convergir sozinha
+- Nota: os dois revisores independentes (código e segurança) acharam o **mesmo** bug sem combinar, e cada um reproduziu um 500. Header `X-Hub-Signature-256` com byte não ASCII fazia `hmac.compare_digest` levantar `TypeError` em vez de devolver `False`: 500 no lugar de 401, e nesse caminho a linha de log da recusa nunca era alcançada, então a tentativa malformada era justamente a que não deixava rastro. Nenhum dos 53 testes podia pegar, porque o httpx recusa esse header antes de sair
+- Nota: rota pública sem teto de taxa, lendo até 100 MB para a RAM antes do HMAC. O custo do replay não é o banco (foto igual não escreve), é a **cota da API do GitHub**, que é uma só para a integração inteira: queimá-la derrubaria o Vínculo, a reconciliação e o `vincular` da tela junto. Fechado com 120/minute por IP e teto de `Content-Length`
+- Nota: a rota bloqueava o único event loop do processo por até 20s (duas chamadas síncronas ao GitHub, container com um worker só). Uma fila de entregas pararia o `/api/health` e o HEALTHCHECK tiraria o backend do ar no Traefik. Resolvido com `run_in_threadpool`, junto do compare-and-swap no UPDATE da Etapa: o bloqueio escondia uma corrida que duplicaria a linha no fio do diretor, e consertar um sem o outro abriria a janela
+- Nota: zero testes olhavam o **corpo** da resposta, que é onde o passo humano se apoia. Mutante vivo fixava `sincronizada: true` inclusive no `except` que engole a falha, ou seja, o operador leria "deu certo" com toda entrega falhando. A falha ganhou `falhou: true`, porque `sincronizada: false` significava tanto "nada mudou" quanto "quebrei"
+- Nota: 40 mutantes na implementação e 3 no detector, todos mortos. Dois testes em vácuo foram pegos pelo próprio autor na primeira rodada, um deles lendo o código-fonte atrás da palavra `compare_digest`, que também aparece no docstring
+- Nota: o rebase sobre a #676 revelou acoplamento real. O `o_que_muda` só era gravado pela porta de vincular, e sem movê-lo para o `mudanca_da_foto` compartilhado o webhook atualizaria a Etapa deixando congelado o texto que o diretor lê
+- Nota: três follow-ups registrados e conscientemente não feitos. A guarda `foto_mudou` compara só a foto crua, então mudança na REGRA (label nova, ajuste no bloco do diretor) não é recalculada e a reconciliação não conserta; o teto de 25 MB olha o `Content-Length` anunciado, e `Transfer-Encoding: chunked` passa por baixo até o teto global de 100 MB (resíduo igual à linha de base do app, e agora com 120/min por cima); e a janela `UPDATE` para `INSERT` não tem transação, então se o insert da linha do fio falhar ela se perde para sempre
+
 ## v0.125.0 - 2026-09-10 17:05 - feat(tecnologia): seção O que muda no card e no Copiar para IA
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `c436fc8`

@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-10T17:55:00-03:00",
+      "sha": "1d4f50b",
+      "app_version": "0.126.0",
+      "subject": "a Demanda vinculada aprende do GitHub sozinha, por webhook com HMAC e reconciliacao de hora em hora",
+      "raw_subject": "feat(tecnologia): webhook do GitHub com HMAC e reconciliação de hora em hora (#678) (#687)",
+      "scope": [
+        "backend"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 260,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #678, fatia do PRD #673 (ADR 0054). Sem migration. PENDENTE: GITHUB_WEBHOOK_SECRET nao existe no Coolify, entao a rota responde 503 e a integracao esta dormente ate o passo humano. Duas reviews independentes (codigo e seguranca) acharam 4 must-fix na rodada 1, todos reais. Os dois revisores acharam o MESMO bug de forma independente e cada um reproduziu um 500: header X-Hub-Signature-256 com byte nao ASCII fazia hmac.compare_digest levantar TypeError em vez de devolver False, virando 500 em vez de 401, e nesse caminho a linha de log da recusa nunca era alcancada. Os outros tres: rota publica sem teto de taxa lendo ate 100 MB para a RAM antes do HMAC, com replay de entrega capturada queimando a cota da API do GitHub (que e uma so para a integracao inteira); rota async chamando I/O sincrono de ate 20s no unico event loop do processo, o que derrubava o /api/health e faria o Traefik tirar o backend do ar; e zero testes sobre o CORPO da resposta, que e justamente o smoke do passo humano, com mutante vivo fixando sincronizada=true inclusive no except que engole a falha. Corrigidos com comparacao em bytes, 120/minute por IP mais teto de Content-Length, run_in_threadpool com compare-and-swap no UPDATE da Etapa (o threadpool abria a corrida que o bloqueio escondia), e falhou=true no corpo. 40 mutantes na implementacao e 3 no detector, todos mortos. Rebase sobre a #676 revelou acoplamento real: o o_que_muda so era gravado pela porta de vincular, e sem mover para o mudanca_da_foto compartilhado o webhook atualizaria a Etapa deixando congelado o texto que o diretor le."
+    },
+    {
       "at": "2026-09-10T16:47:56-03:00",
       "sha": "c436fc8",
       "app_version": "0.125.0",
@@ -1419,35 +1447,6 @@
       "migrations_applied": [],
       "rollback_target_sha": "ec76191",
       "notes": "Onda AFK de 2 issues em paralelo (#431 e #439), com checkpoint humano unico de merge no fim. Nenhuma migration nova: a ultima na main continua a 088_ouvidoria_relatorio_entregas.sql. Nenhuma env var nova; so o APP_VERSION do backend, setado no Coolify ANTES do merge do #455. A corrida de bump aconteceu e foi resolvida: o #454 pediu 0.85.4 e o #455 pediu 0.86.0. Mergeado o #454 primeiro, o #455 ficou CONFLICTING no package.json; o conflito foi resolvido mergeando origin/main dentro da branch e mantendo 0.86.0 (o maior), com CI reexecutado e verde antes do merge final. Os dois PRs passaram por 2 rodadas de review independente do orquestrador (ADR 0035), cada rodada com 2 lentes, codigo e seguranca. Um must-fix por PR, os dois resolvidos.\n\nO que a review pegou, e que teste verde nao pegava. No #454, trocar a linha 74 do middleware.ts por 'const isProtected = false' deixava os 226 testes do frontend VERDES: a suite testava a funcao isProtectedPath e nunca a fiacao dela dentro do middleware() montado. O conserto foi um vi.mock do @supabase/ssr (barato, porque a #438 ja tinha trazido jsdom e testing-library) mais tres chamadas ao middleware montado; o revisor confirmou o conserto por tres provas independentes de que o mock e mesmo consultado. No #455, o marcador de degradacao novo 'devolucoes' nao tinha entrada em EFEITO_DA_DEGRADACAO, entao a trilha indisponivel faria o PDF da diretoria abrir dizendo 'os numeros que dependem dela nao valem' desqualificando numeros corretos. Os dois revisores acharam esse mesmo defeito de forma independente.\n\nRessalva honesta sobre o #455. A regua compartilhada DESTINO_DA_DEVOLUCAO fecha divergencia por renomeacao do destino, nao por mudanca da regra: o revisor rodou o mutante de e_devolucao ganhando um segundo destino valido no grafo e os 2610 testes ficaram VERDES, porque o .eq corta antes. O numero esta certo hoje; o comentario em ouvidoria_estados.py:71-78 promete mais do que a construcao entrega. Registrado como nit, nao bloqueio. Segundo nit aberto: o matcher do Next e case-insensitive e o isProtectedPath e case-sensitive, assimetria pre-existente que o 404 do App Router fecha hoje. Os dois merecem follow-up.\n\nCorrecao de registro: o gate de seguranca do #455 afirmou rate limit de 60/minute na rota /metricas. E 15/minute desde a #429 (routers/ouvidoria.py:3145), conferido na fonte. O raciocinio de fundo (a sexta leitura agrava o custo por chamada) continua valendo; o numero nao."
-    },
-    {
-      "at": "2026-08-31T13:50:00-03:00",
-      "sha": "ec76191",
-      "app_version": "0.85.3",
-      "subject": "Onda de tres fatias da Ouvidoria: harness de teste de componente, endurecimento das metricas e apresentacao do PDF quinzenal",
-      "raw_subject": "fix(ouvidoria): PDF quinzenal diz de que janela e a coluna Anterior, e a area sem classificacao sai com nome (#453)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda AFK de 3 issues em paralelo (#438, #433, #436), com checkpoint humano unico de merge no fim. Nenhuma migration nova e nenhuma env var nova: a ultima migration da main continua a 088_ouvidoria_relatorio_entregas.sql. A corrida de bump aconteceu e foi resolvida: os tres PRs pediram versao colidindo, com o #451 e o #453 pedindo os dois a 0.85.1. A saida foi mergear um a um e re-numerar em 0.85.1, 0.85.2 e 0.85.3. Os PRs #452 e #453 ficaram CONFLICTING e foram rebasados a mao, escrevendo a versao nova direto no conflito. O merge saiu por gh api -X PUT .../merge, porque a arvore principal esta em detached HEAD e o gh pr merge recusa nessa condicao. O deploy subiu por auto-deploy de webhook, sem comando manual. O #452 e o #453 tocaram os dois o mesmo ouvidoria_metricas.py, com hunks disjuntos: aplicou limpo no rebase, e a suite subiu de 2584 para 2592 testes passando com as duas mudancas juntas. Achado que vale registrar, vindo da review independente do #452: o defeito descrito no item 2 da issue #433, um 'A definir' em categoria sumindo do ranking de temas, ja tinha morrido na issue #429, porque os temas passaram a sair de tipo_manifestacao. O ramo categoria entregue e codigo morto preparado, nao correcao de bug vivo. A unica mudanca de comportamento viva do #452 e outra: area escrita exatamente 'A classificar' deixa de ser descartada. Nenhum numero do relatorio do diretor muda hoje."
     }
   ]
 }

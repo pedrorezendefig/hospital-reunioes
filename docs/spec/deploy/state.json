@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-10T16:47:56-03:00",
+  "updated_at": "2026-09-10T17:55:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.125.0",
+  "last_app_version": "0.126.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,16 +21,16 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "c436fc8",
-      "last_deploy_at": "2026-09-10T16:47:56-03:00",
+      "last_deploy_sha": "1d4f50b",
+      "last_deploy_at": "2026-09-10T17:55:00-03:00",
       "last_health_check": {
-        "at": "2026-09-10T16:47:56-03:00",
-        "latency_ms": null,
+        "at": "2026-09-10T17:55:00-03:00",
+        "latency_ms": 149,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 58,
-      "env_count": 21
+      "build_duration_seconds": 45,
+      "env_count": 23
     },
     {
       "id": "frontend",
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "c436fc8",
-      "last_deploy_at": "2026-09-10T16:47:56-03:00",
+      "last_deploy_sha": "1d4f50b",
+      "last_deploy_at": "2026-09-10T17:55:00-03:00",
       "last_health_check": {
-        "at": "2026-09-10T16:47:56-03:00",
-        "latency_ms": null,
+        "at": "2026-09-10T17:55:00-03:00",
+        "latency_ms": 217,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 365,
+      "build_duration_seconds": 260,
       "env_count": 5
     },
     {
@@ -155,7 +155,7 @@
     "total_applied": 92,
     "last_applied": "102_tecnologia_fundacao.sql",
     "pending_local": [],
-    "nota": "A issue #670 (PR #683, v0.123.4) NAO criou migration: a issue proibia, e o aviso da mencao acrescentada e a conta de Minha vez saem de colunas que ja existiam (mencoes e editado_em, criadas na 102). A 102 segue sendo a ultima aplicada. A issue #671 (PR #672, v0.123.3) NAO criou migration: e remocao pura de codigo (conversor PDF/DOCX para Markdown), o conversor nunca gravou nada. A 102 segue sendo a ultima aplicada. As issues #631 (PR #667) e #633 (PR #668) NAO criaram migration: as duas so acrescentam guarda em codigo, e as colunas que a guarda de caso apagado le ja existiam (anonimizada_em na 079, apagamento_pedido_em na 100). A 102 segue sendo a ultima aplicada. As fatias #641 e #642 (PRs #660 e #661, v0.122.0 e v0.123.0) NAO criaram migration, e com isso o PRD #634 fechou as SETE filhas com UMA migration so, a 102 da fatia #636. A decisao de fazer a 102 nascer com as tres tabelas no formato final aguentou o PRD inteiro, e o humano aplicou SQL a mao uma unica vez. As fatias #639 e #640 (PRs #657 e #658, v0.120.0 e v0.121.0) NAO criaram migration. Cinco fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #641 e #642, que tambem nao criam. A fatia #638 (PR #656, v0.119.0) NAO criou migration: tecnologia_conversas ja tinha mencoes VARCHAR(10)[] e editado_em, que e a janela de 10 minutos. Tres fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #639 a #642, que tambem nao criam. A fatia #637 (PR #647, v0.118.0) NAO criou migration: as tres tabelas do modulo de Tecnologia ja nasceram no formato final na 102, e as fatias #638 a #642 tambem nao criam. Se alguma achar que precisa de coluna nova, a regra desta sessao e PARAR e perguntar ao dono, nunca criar a 103 por conta. A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
+    "nota": "A issue #678 (PR #687, v0.126.0) NAO criou migration: a issue proibia, e o webhook e a reconciliacao usam as colunas de Vinculo que a 103 criou. A 103 segue sendo a ultima aplicada. A issue #670 (PR #683, v0.123.4) NAO criou migration: a issue proibia, e o aviso da mencao acrescentada e a conta de Minha vez saem de colunas que ja existiam (mencoes e editado_em, criadas na 102). A 102 segue sendo a ultima aplicada. A issue #671 (PR #672, v0.123.3) NAO criou migration: e remocao pura de codigo (conversor PDF/DOCX para Markdown), o conversor nunca gravou nada. A 102 segue sendo a ultima aplicada. As issues #631 (PR #667) e #633 (PR #668) NAO criaram migration: as duas so acrescentam guarda em codigo, e as colunas que a guarda de caso apagado le ja existiam (anonimizada_em na 079, apagamento_pedido_em na 100). A 102 segue sendo a ultima aplicada. As fatias #641 e #642 (PRs #660 e #661, v0.122.0 e v0.123.0) NAO criaram migration, e com isso o PRD #634 fechou as SETE filhas com UMA migration so, a 102 da fatia #636. A decisao de fazer a 102 nascer com as tres tabelas no formato final aguentou o PRD inteiro, e o humano aplicou SQL a mao uma unica vez. As fatias #639 e #640 (PRs #657 e #658, v0.120.0 e v0.121.0) NAO criaram migration. Cinco fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #641 e #642, que tambem nao criam. A fatia #638 (PR #656, v0.119.0) NAO criou migration: tecnologia_conversas ja tinha mencoes VARCHAR(10)[] e editado_em, que e a janela de 10 minutos. Tres fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #639 a #642, que tambem nao criam. A fatia #637 (PR #647, v0.118.0) NAO criou migration: as tres tabelas do modulo de Tecnologia ja nasceram no formato final na 102, e as fatias #638 a #642 tambem nao criam. Se alguma achar que precisa de coluna nova, a regra desta sessao e PARAR e perguntar ao dono, nunca criar a 103 por conta. A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
   },
   "gates": [
     {
@@ -197,25 +197,30 @@
   ],
   "next_actions": [
     {
+      "kind": "warn",
+      "title": "PASSO HUMANO PENDENTE: GITHUB_WEBHOOK_SECRET",
+      "text": "A rota POST /api/webhooks/github esta no ar e responde 503 com {\"detail\":\"Webhook indisponivel.\"} porque o segredo ainda nao existe no Coolify. Criar na TELA do Coolify (backend, Is Secret, Build Variable desmarcado), redeployar o backend, e so entao cadastrar o webhook no repositorio (URL /api/webhooks/github, content type JSON, so o evento Issues). Conferir pelo CORPO da delivery, nunca pelo codigo 200."
+    },
+    {
       "kind": "ok",
-      "title": "Deploy v0.123.4 saudavel",
-      "text": "Backend 58s e frontend 6m05s, sem OOM. /api/health responde 200 em v0.123.4, com version match confirmado."
+      "title": "Deploy v0.126.0 saudavel",
+      "text": "Backend 45s e frontend 4m20s. /api/health em 0.126.0. Rota nova provada por 503 com corpo do app contra 404 em rota falsa."
     },
     {
       "kind": "info",
-      "title": "Onda 2 espera a fatia #674",
-      "text": "A #678 (webhook do GitHub) esta bloqueada pela #674, que a Sessao A leva no PR #684 (bump 0.124.0 + migration 103)."
+      "title": "Onda 3 (#679) destravada",
+      "text": "A #679 dependia da #678, que fechou. A devolucao da Entrega acontece dentro da rotina de sincronizacao criada aqui."
     },
     {
       "kind": "warn",
-      "title": "Follow-up sem issue: a mencao corrigida reabre Minha vez",
-      "text": "Sem coluna que guarde quais mencoes entraram na correcao, toda correcao que acrescenta mencao traz de volta quem ja respondeu naquela linha. Julgado o lado seguro do erro na review; consertar exige migration, que a #670 proibia."
+      "title": "Follow-ups registrados na review, sem issue aberta",
+      "text": "1) foto_mudou compara so a foto crua, entao mudanca na REGRA (label nova, ajuste no bloco do diretor) nao e recalculada e a reconciliacao nao conserta. 2) O teto de 25 MB olha o Content-Length anunciado: Transfer-Encoding chunked passa por baixo ate o teto global de 100 MB. 3) A janela UPDATE para INSERT nao tem transacao: se o insert da linha do fio falhar, ela se perde para sempre."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "c436fc8",
+    "sha": "1d4f50b",
     "result": "healthy",
-    "duration_seconds": null
+    "duration_seconds": 260
   }
 }
