@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-09T21:00:00-03:00",
+  "updated_at": "2026-09-10T00:41:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.123.2",
+  "last_app_version": "0.123.3",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "bbe1fc0",
-      "last_deploy_at": "2026-09-09T21:00:00-03:00",
+      "last_deploy_sha": "9968e77",
+      "last_deploy_at": "2026-09-10T00:41:00-03:00",
       "last_health_check": {
-        "at": "2026-09-09T21:00:00-03:00",
-        "latency_ms": 231,
+        "at": "2026-09-10T00:41:00-03:00",
+        "latency_ms": 140,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 22,
+      "build_duration_seconds": 129,
       "env_count": 21
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "bbe1fc0",
-      "last_deploy_at": "2026-09-09T21:00:00-03:00",
+      "last_deploy_sha": "9968e77",
+      "last_deploy_at": "2026-09-10T00:41:00-03:00",
       "last_health_check": {
-        "at": "2026-09-09T21:00:00-03:00",
-        "latency_ms": 187,
+        "at": "2026-09-10T00:41:00-03:00",
+        "latency_ms": 206,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 198,
+      "build_duration_seconds": 268,
       "env_count": 5
     },
     {
@@ -155,86 +155,72 @@
     "total_applied": 92,
     "last_applied": "102_tecnologia_fundacao.sql",
     "pending_local": [],
-    "nota": "As issues #631 (PR #667) e #633 (PR #668) NAO criaram migration: as duas so acrescentam guarda em codigo, e as colunas que a guarda de caso apagado le ja existiam (anonimizada_em na 079, apagamento_pedido_em na 100). A 102 segue sendo a ultima aplicada. As fatias #641 e #642 (PRs #660 e #661, v0.122.0 e v0.123.0) NAO criaram migration, e com isso o PRD #634 fechou as SETE filhas com UMA migration so, a 102 da fatia #636. A decisao de fazer a 102 nascer com as tres tabelas no formato final aguentou o PRD inteiro, e o humano aplicou SQL a mao uma unica vez. As fatias #639 e #640 (PRs #657 e #658, v0.120.0 e v0.121.0) NAO criaram migration. Cinco fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #641 e #642, que tambem nao criam. A fatia #638 (PR #656, v0.119.0) NAO criou migration: tecnologia_conversas ja tinha mencoes VARCHAR(10)[] e editado_em, que e a janela de 10 minutos. Tres fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #639 a #642, que tambem nao criam. A fatia #637 (PR #647, v0.118.0) NAO criou migration: as tres tabelas do modulo de Tecnologia ja nasceram no formato final na 102, e as fatias #638 a #642 tambem nao criam. Se alguma achar que precisa de coluna nova, a regra desta sessao e PARAR e perguntar ao dono, nunca criar a 103 por conta. A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
+    "nota": "A issue #671 (PR #672, v0.123.3) NAO criou migration: e remocao pura de codigo (conversor PDF/DOCX para Markdown), o conversor nunca gravou nada. A 102 segue sendo a ultima aplicada. As issues #631 (PR #667) e #633 (PR #668) NAO criaram migration: as duas so acrescentam guarda em codigo, e as colunas que a guarda de caso apagado le ja existiam (anonimizada_em na 079, apagamento_pedido_em na 100). A 102 segue sendo a ultima aplicada. As fatias #641 e #642 (PRs #660 e #661, v0.122.0 e v0.123.0) NAO criaram migration, e com isso o PRD #634 fechou as SETE filhas com UMA migration so, a 102 da fatia #636. A decisao de fazer a 102 nascer com as tres tabelas no formato final aguentou o PRD inteiro, e o humano aplicou SQL a mao uma unica vez. As fatias #639 e #640 (PRs #657 e #658, v0.120.0 e v0.121.0) NAO criaram migration. Cinco fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #641 e #642, que tambem nao criam. A fatia #638 (PR #656, v0.119.0) NAO criou migration: tecnologia_conversas ja tinha mencoes VARCHAR(10)[] e editado_em, que e a janela de 10 minutos. Tres fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #639 a #642, que tambem nao criam. A fatia #637 (PR #647, v0.118.0) NAO criou migration: as tres tabelas do modulo de Tecnologia ja nasceram no formato final na 102, e as fatias #638 a #642 tambem nao criam. Se alguma achar que precisa de coluna nova, a regra desta sessao e PARAR e perguntar ao dono, nunca criar a 103 por conta. A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
   },
   "gates": [
     {
-      "name": "Onda avulsa de duas issues de seguranca (#633 e #631), fora de PRD, arquivos disjuntos, rodadas em paralelo com merge sequencial e um deploy so",
+      "name": "Fatia avulsa #671, sem PRD e sem ADR, decidida em grilling: remocao ponta a ponta do conversor PDF/DOCX para Markdown (item Utilitarios do admin)",
       "status": "ok"
     },
     {
-      "name": "A guarda anti-SSRF do PDF estava AUSENTE (nem inerte) em tres geradores: Ata, relatorio da Ouvidoria e cartaz dos pontos. Os tres chamavam HTML(...).write_pdf() sem url_fetcher nenhum",
+      "name": "Diff e remocao pura: zero linhas de codigo executavel adicionadas fora do teste da sidebar e do bump. 15 arquivos, +17 / -955",
       "status": "ok"
     },
     {
-      "name": "O erro historico da #152 nao reencarnou: o fetcher vai no construtor HTML(...), nunca so no write_pdf(), que o WeasyPrint descarta em silencio. Tres mutantes provam isso, um por gerador",
+      "name": "uv.lock so removeu (276 linhas, 17 pacotes, zero adicoes): markitdown e a subarvore exclusiva dele (magika, mammoth, markdownify, onnxruntime, numpy, sympy, protobuf, beautifulsoup4 e outros). pdfplumber, docx2txt, pdfminer.six e lxml ficaram",
       "status": "ok"
     },
     {
-      "name": "CGNAT 100.64.0.0/10 passava pelos seis predicados da guarda, mesmo buraco do multicast uma faixa depois. Fechado aditivo, sem trocar a base dos predicados",
+      "name": "Guardrails da issue conferidos pelo gate spec x diff: pdfplumber e docx2txt continuam servindo transcricao_extractor.py; somenteSuperAdmin continua nas secoes Pessoas, Taxonomia e Tecnologia; ROTAS.md nao foi editado a mao",
       "status": "ok"
     },
     {
-      "name": "MOTIVO ESCRITO ERRADO em 5 comentarios da #633: o autor afirmava que o WeasyPrint normaliza o .. da URL antes do fetcher. E falso (url_join devolve iri_to_uri, que so faz percent-encoding). O comportamento estava certo, a explicacao nao. Corrigido",
-      "status": "warn"
-    },
-    {
-      "name": "A guarda de caso apagado virou explicita em duas portas de escrita que estavam fechadas so por consequencia da pre-condicao de estado: responder pelo portal do setor e reenviar acionamento",
+      "name": "Teste de ausencia na sidebar com marcador de presenca no mesmo render (Tecnologia visivel, Utilitarios e Ferramentas ausentes), nas variantes desktop e drawer. RED antes da remocao, GREEN depois",
       "status": "ok"
     },
     {
-      "name": "MUST-FIX pego na review do #667: a frase do apagamento PENDENTE nomeia a Diretoria Executiva e passou a sair pelo portal por token, SEM login, para o titular da area, que costuma ser a parte reclamada. Resolvido com frase neutra so no canal publico",
-      "status": "warn"
-    },
-    {
-      "name": "Mutante no DETECTOR em ambas as issues: tirar o campo da tupla do select deixava a guarda lendo None e a suite inteira verde. E a mesma morte silenciosa que deixou a guarda do POP inerte por anos",
-      "status": "warn"
-    },
-    {
-      "name": "Prova por mutacao: 13 mutantes na #633 e 9 na #631, todos mortos, um por vez mexendo em UMA coisa. Os revisores reproduziram por conta propria e acrescentaram mutantes que os autores nao tinham pensado",
+      "name": "Prova em producao: POST /api/admin/utilitarios/converter-markdown responde 404 sem token, contra 401 na rota viva de controle /api/admin/usuarios. /api/health em 0.123.3 com db healthy",
       "status": "ok"
     },
     {
-      "name": "As issues #631 e #633 FECHARAM sozinhas no merge: a linha Closes estava no corpo dos dois PRs. O problema visto nas #641 e #642 nao se repetiu",
+      "name": "Security review sem achado: sai um endpoint autenticado de upload e toda a cadeia de parsing de arquivo (markitdown, onnxruntime, magika), a superficie diminui",
+      "status": "ok"
+    },
+    {
+      "name": "Code review sem bug de correcao. Achado durável fora do escopo: o PULL_REQUEST_TEMPLATE.md e o SKILL.md do /ship semeiam travessao nos titulos dos gates de todo PR novo",
+      "status": "ok"
+    },
+    {
+      "name": "APP_VERSION no Coolify: o classifier negou o comando na sessao; o humano rodou com o prefixo ! ANTES do merge. Primeiro comando saiu com UUID errado escrito de cabeca (404 Application not found); o certo veio do project.json",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Duas issues de seguranca em producao",
-      "text": "Deploy bbe1fc0 saudavel na v0.123.2. Guarda anti-SSRF nos quatro geradores de PDF do app, e guarda de caso apagado explicita nas duas portas de escrita que faltavam."
+      "title": "Conversor PDF/DOCX para Markdown fora do app",
+      "text": "Deploy 9968e77 saudavel na v0.123.3. A secao Ferramentas da sidebar do admin sumiu, a rota e a pagina respondem 404 e o backend ficou 17 pacotes mais leve."
     },
     {
       "kind": "warn",
-      "title": "Issue #669 aberta com as portas irmas que sobraram",
-      "text": "Inventario das revisoes: devolver e prorrogacao do portal publico, cobrar-setor, arquivo e DELETE arquivo, mais tres barradas so por transicao. A guarda da migration 100 protege SO a trilha, nunca ouvidoria_protocolos, entao o banco nao segura nenhuma delas. Precisa de triagem."
+      "title": "Template do PR ainda semeia travessao",
+      "text": "Os titulos dos tres gates (com travessao depois de 'Gate N') em .github/PULL_REQUEST_TEMPLATE.md e em .claude/skills/ship/SKILL.md (linhas dos gates) colocam U+2014 no corpo de todo PR novo. Corrigido a mao no PR #672. Vale um chore de skills para trocar por dois-pontos."
     },
     {
       "kind": "warn",
-      "title": "Decisao de produto pendente na #669",
-      "text": "arquivo e DELETE arquivo sao o unico par efetivamente alcancavel hoje em caso apagado: arquivar exige encerrado, e desarquivar nao tem pre-condicao nenhuma por decisao da ADR 0047. Desarquivar devolve a lista um caso que o apagamento tinha guardado. Pode ser bug ou pode ser o desejado."
+      "title": "Issue #669 continua aberta",
+      "text": "Inventario das portas irmas sem guarda de caso apagado (devolver e prorrogacao do portal publico, cobrar-setor, arquivo e DELETE arquivo). Precisa de triagem e decisao de produto sobre desarquivar."
     },
     {
       "kind": "info",
-      "title": "Efeito visivel em producao no portal do setor",
-      "text": "Caso apagado cujo link de portal ainda circula passa a responder 409 com a frase do apagamento, no lugar do 410 \"a Ouvidoria ja movimentou este caso\". Foi decisao deliberada de honestidade da mensagem, julgada pelas duas revisoes."
-    },
-    {
-      "kind": "info",
-      "title": "Custo de manutencao conhecido",
-      "text": "O teste da frase neutra do #667 se acopla a redacao exata. Reescrever a frase deixa o teste vermelho sem nada errado ter acontecido. Trocar pelo teste de ausencia nao serve: e o marcador positivo que mata o mutante da flag canal_publico."
-    },
-    {
-      "kind": "info",
-      "title": "Nao morde hoje, mas fica registrado",
-      "text": "A allowlist de file:// e casamento exato de string e o WeasyPrint aplica percent-encoding, entao caminho de asset com espaco ou acento faria a guarda recusar o proprio logo do hospital. Em producao o path e /app, tudo ASCII. Provado por render pelo revisor."
+      "title": "Snapshot ROTAS.md regenerado pelo deploy",
+      "text": "A rota POST /admin/utilitarios/converter-markdown saiu do ROTAS.md pelo /snapshot, nunca a mao, como a issue pediu."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "bbe1fc0",
+    "sha": "9968e77",
     "result": "healthy",
-    "duration_seconds": 420
+    "duration_seconds": 300
   }
 }

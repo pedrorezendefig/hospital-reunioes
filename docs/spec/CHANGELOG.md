@@ -7,6 +7,21 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.123.3 - 2026-09-10 00:41 - o conversor PDF/DOCX para Markdown (item Utilitários) sai do painel de administração
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `9968e77`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.123.3, `db: healthy`; frontend HTTP 200; a rota removida responde 404 contra 401 na rota de controle)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/9968e77
+- Issues: [#671](https://github.com/pedrorezendefig/hospital-reunioes/issues/671) · PR [#672](https://github.com/pedrorezendefig/hospital-reunioes/pull/672). Fatia avulsa, sem PRD e sem ADR, decidida em grilling
+- Migration: nenhuma. O conversor nunca gravou nada · patch, chore
+- Nota: remoção de ponta a ponta. Página `/admin/utilitarios`, item Utilitários e seção Ferramentas da sidebar (só tinha esse item), rota `POST /admin/utilitarios/converter-markdown`, schema de resposta, serviço de conversão, teste e três fixtures binárias que só ele usava, e a dependência `markitdown`
+- Nota: o `uv.lock` só perdeu linhas (276, 17 pacotes: `markitdown` e a subárvore exclusiva dele, como `onnxruntime`, `magika`, `mammoth`, `numpy` e `sympy`), zero adições. `pdfplumber`, `docx2txt`, `pdfminer.six` e `lxml` ficaram: a importação de transcrição e os POPs dependem deles
+- Nota: TDD com teste de ausência na sidebar, nas variantes desktop e gaveta do celular, com o item Tecnologia como marcador de presença no mesmo render. RED antes da remoção, GREEN depois
+- Nota: gates. Code review sem bug de correção; spec × diff sem faltante nem scope creep; security review sem achado (sai um endpoint autenticado de upload e toda a cadeia de parsing de arquivo, a superfície diminui); CI verde nos três jobs
+- Nota: achado durável fora do escopo. O `PULL_REQUEST_TEMPLATE.md` e o `SKILL.md` do `/ship` semeiam travessão nos títulos dos gates de todo PR novo; corrigido à mão só no corpo do PR #672
+- Nota: `APP_VERSION` no Coolify foi setada pelo humano com `!` antes do merge (classifier negou na sessão). O primeiro comando entregue tinha UUID errado, escrito de cabeça, e voltou 404; o certo veio do `project.json`
+
 ## v0.123.2 - 2026-09-09 21:00 - as duas guardas de segurança que faltavam: anti-SSRF nos geradores de PDF e a recusa de caso apagado nas portas de escrita
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `bbe1fc0`

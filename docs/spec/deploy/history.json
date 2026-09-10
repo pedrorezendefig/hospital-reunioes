@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-10T00:41:00-03:00",
+      "sha": "9968e77",
+      "app_version": "0.123.3",
+      "subject": "o conversor PDF/DOCX para Markdown (item Utilitarios do admin) sai do app de ponta a ponta, com a secao Ferramentas da sidebar e a dependencia markitdown",
+      "raw_subject": "chore(admin): remover o conversor PDF/DOCX para Markdown (item Utilitários) (#672)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 300,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Fatia avulsa #671 (PR #672), sem PRD e sem ADR, decidida em grilling. Remocao pura: pagina /admin/utilitarios, item Utilitarios e secao Ferramentas da sidebar, rota POST /admin/utilitarios/converter-markdown, schema ConversaoMarkdownResponse, servico markdown_converter, teste e tres fixtures binarias que so ele usava, e markitdown no pyproject. uv.lock so removeu (276 linhas, 17 pacotes: markitdown e a subarvore exclusiva dele), zero adicoes; pdfplumber, docx2txt, pdfminer.six e lxml ficaram porque a importacao de transcricao e os POPs dependem deles. TDD: teste de ausencia na sidebar (desktop e drawer) com Tecnologia como marcador de presenca, RED antes e GREEN depois. openapi conferido uma vez no PR: 175 rotas, nenhuma com utilitarios. Quatro gates verdes: code-review sem bug (travessoes do template corrigidos a mao no corpo do PR; duplicacao do describe.each ficou por nomear a issue), spec x diff aprovado sem faltante nem scope creep, security review sem achado (superficie diminui: sai um endpoint autenticado de upload e toda a cadeia de parsing), CI verde nos tres jobs. Merge pela API (gh pr merge nao funciona em worktree). APP_VERSION: classifier negou, humano rodou com !; o primeiro comando que entreguei tinha UUID errado escrito de cabeca (404), o certo veio do project.json. Prova em prod: rota removida 404 contra 401 na rota de controle, /api/health em 0.123.3 com db healthy. Issue fechou no merge com 5/5 criterios marcados."
+    },
+    {
       "at": "2026-09-09T21:00:00-03:00",
       "sha": "bbe1fc0",
       "app_version": "0.123.2",
@@ -1421,34 +1450,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda AFK com tres issues em paralelo (#397, #429, #434). Dois PRs mergeados aqui: #442 (issue #429, v0.82.1) e #443 (issue #397, v0.82.2). O deploy carregou junto a v0.82.0 do PR #428 (sessao paralela), que estava na main sem ter sido deployada. PR #442: metricas da Ouvidoria pararam de projetar email e categoria (leitura sem consumidor) e GET /ouvidoria/metricas caiu de 60 para 15/minute; review independente limpa de primeira. PR #443: quatro dos nove follow-ups da review do PR #394. delete_file passou a conferir a resposta do Storage arquivo a arquivo, CAMPOS_ESTATISTICOS ganhou as treze colunas restantes com fixture nao nula, e os quatro passos destrutivos que so filtravam por manifestacao_id passaram a reconferir estado e prazo. DOIS MUST-FIX vieram da review independente e foram corrigidos antes do merge, os dois eram regressao introduzida pelo proprio PR. (1) _apagar_anexos perdeu a idempotencia: remove() devolve lista vazia quando o objeto ja nao esta no bucket, entao arquivo ausente virava falha e o caso travava para sempre, deixando relato e nome no banco alem dos cinco anos. Fix: parear a remocao do binario com o delete da propria linha, anexo a anexo, com teste que roda o passo duas vezes e prova a convergencia. (2) canal_ponto tinha entrado em CAMPOS_ESTATISTICOS citando a migration 067, mas a 084 (posterior) diz que o ponto reidentifica quem pediu anonimato (issue #375, decisao 5); foi para CAMPOS_DO_DOSSIE. Mais dois acertos: as guardas passaram a conferir encerrada_em <= corte (sem isso um caso reaberto e reencerrado tinha o Dossie triturado dentro do prazo) e delete_file passou a recusar item ilegivel dentro da lista. Itens 3, 4, 8 e 9 da #397 ficaram como follow-up documentado (decisao de produto ou infra de teste nova). Sem migration nesta subida. O PR #444 (issue #434, relatorio quinzenal) ficou aberto e verde por decisao humana: ele traz a migration 087, que precisa ser aplicada no Studio de producao ANTES do codigo subir."
-    },
-    {
-      "at": "2026-08-28T09:57:36-03:00",
-      "sha": "5b472e3",
-      "app_version": "0.81.5",
-      "subject": "Desligamento fecha a conta de login e o alerta sem Diretoria acha dono",
-      "raw_subject": "fix(auth): desligamento fecha a conta de login e o alerta sem Diretoria acha dono (#427)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 244,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PR #427, issue #415 (o que sobrou depois que o PR #414 fechou os 11 gates de papel). O soft delete gravava ativo=false e a conta do Supabase Auth seguia viva: o refresh token renovava sessao para sempre. Agora definir_login_liberado bane (ban_duration 876000h) e reabre (none), ligada nas tres portas que escrevem ativo E no provisionamento, porque nascer desligado tambem deixava conta viva. Falha do Auth nao desfaz o desligamento: registra, avisa o admin tecnico e segue. alertar_diretoria_sem_titular sem Diretoria ativa deixou de ser logger.warning e cai no admin tecnico. Sem migration. 10 mutantes, 10 mortos; suite em 2378. ACHADO GRAVE que saiu da review independente e NAO foi corrigido aqui: participantes.py e aceite.py nao tem gate de router, e PATCH /participantes/{id} grava em qualquer participante sem conferir dono, sincronizando o email no Supabase Auth. E cadeia de tomada de conta do Super Admin alcancavel por TODO usuario autenticado, nao so pelo desligado. Anterior a esta issue; virou a issue #440. O docstring de barrar_desligado foi corrigido no mesmo PR porque afirmava que essas rotas nao expunham dado de terceiros, o que e falso. Gates rodaram com revisores independentes (o autor nao se auto-revisa, ADR 0035): spec x diff, code review adversarial e seguranca, em paralelo. Os relatorios chegaram por arquivo, nao pelo canal de mensagem entre agentes, que devolveu so idle sem o texto."
     }
   ]
 }
