@@ -34,6 +34,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -169,11 +170,13 @@ class _TableQuery:
         nome: str,
         falhas: dict[str, Exception] | None = None,
         antes_do_update=None,
+        falhar_ao_ler: str | None = None,
     ):
         self._rows = rows
         self._nome = nome
         self._falhas = falhas or {}
         self._antes_do_update = antes_do_update
+        self._falhar_ao_ler = falhar_ao_ler
         self._eq: dict[str, Any] = {}
         self._in: dict[str, list] = {}
         self._nao_e: dict[str, str] = {}
@@ -219,6 +222,11 @@ class _TableQuery:
             self._rows.extend(self._insert)
             return _Result(data=[dict(linha) for linha in self._insert])
 
+        if self._update is None and self._falhar_ao_ler == self._nome:
+            # O timeout do PostgREST numa LEITURA. Sobe cru (`httpx.HTTPError`
+            # nao e `APIError`), que e a forma pela qual ele morde de verdade.
+            raise httpx.ReadTimeout(f"timeout lendo {self._nome}")
+
         if self._update is not None and self._antes_do_update is not None:
             # O gancho da CORRIDA: ele mexe nas linhas ANTES de a consulta
             # peneirar, que e a unica forma de encenar "alguem escreveu entre a
@@ -246,13 +254,21 @@ class _SupabaseMock:
         tabelas: dict[str, list[dict]],
         falhas: dict[str, Exception] | None = None,
         antes_do_update=None,
+        falhar_ao_ler: str | None = None,
     ):
         self.tabelas = tabelas
         self.falhas = falhas or {}
         self.antes_do_update = antes_do_update
+        self.falhar_ao_ler = falhar_ao_ler
 
     def table(self, nome: str):
-        return _TableQuery(self.tabelas.setdefault(nome, []), nome, self.falhas, self.antes_do_update)
+        return _TableQuery(
+            self.tabelas.setdefault(nome, []),
+            nome,
+            self.falhas,
+            self.antes_do_update,
+            self.falhar_ao_ler,
+        )
 
 
 # ─── Cenario ─────────────────────────────────────────────────────────────────
@@ -344,6 +360,7 @@ def _montar(
     github: _GithubFalso | None = None,
     falhas: dict[str, Exception] | None = None,
     antes_do_update=None,
+    falhar_ao_ler: str | None = None,
     monkeypatch=None,
 ) -> tuple[TestClient, _SupabaseMock, _GithubFalso]:
     app = FastAPI()
@@ -360,6 +377,7 @@ def _montar(
         },
         falhas=falhas,
         antes_do_update=antes_do_update,
+        falhar_ao_ler=falhar_ao_ler,
     )
 
     gh = github or _GithubFalso({})
@@ -1544,6 +1562,11 @@ def _entregue(numero: int = 673) -> dict:
     return _issue(numero, estado="closed", motivo="completed")
 
 
+def _pessoa(pid: str = "P1", nome: str | None = "Diretor Geral", **campos) -> dict:
+    """Quem ve a aba: ativo e Super admin (`e_pessoa_da_aba`)."""
+    return {"id": pid, "nome_completo": nome, "ativo": True, "is_super_admin": True, "access_profile": None, **campos}
+
+
 def _campos_do_fio(sb: _SupabaseMock) -> list[tuple]:
     return [(linha["movimento_campo"], linha["movimento_de"], linha["movimento_para"]) for linha in _fio(sb)]
 
@@ -1557,10 +1580,10 @@ class TestADevolucaoPelaRota:
     (assinatura, threadpool, corpo da resposta). O lote usa a mesma rotina.
     """
 
-    def _cenario(self, monkeypatch, *, demanda: dict, **extra):
+    def _cenario(self, monkeypatch, *, demanda: dict, participantes=None, **extra):
         return _montar(
             demandas=[demanda],
-            participantes=[{"id": "P1", "nome_completo": "Diretor Geral"}],
+            participantes=[_pessoa()] if participantes is None else participantes,
             produtos=[{"id": "prod-1", "nome": "Prontuário"}],
             github=_GithubFalso({673: _entregue()}),
             monkeypatch=monkeypatch,
@@ -1711,6 +1734,18 @@ class TestADevolucaoPelaRota:
         assert _fio(sb) == []
         assert _sem_email_de_verdade == []
 
+    def test_os_textos_da_entrega_sao_estes(self):
+        """As duas constantes, presas ao LITERAL.
+
+        Sem esta linha, toda asserção da devolução calcula o esperado a partir
+        da propria constante, e trocar o texto deixa o backend inteiro verde: o
+        e-mail passaria a dizer uma coisa e o selo da tela outra, quebrando a
+        promessa escrita em cima da constante. O par do outro lado e o teste do
+        `MOTIVO_ROTULO` no frontend, que prende o mesmo literal em TypeScript.
+        """
+        assert RECADO_DA_ENTREGA == "Entregue, confira e conclua"
+        assert AUTOR_DA_ENTREGA == "A entrega"
+
     def test_quem_conclui_a_mao_no_meio_da_devolucao_ganha(self, monkeypatch, _sem_email_de_verdade):
         """A corrida real: a rotina le o card em Em andamento e o diretor conclui
         no mesmo segundo.
@@ -1737,3 +1772,174 @@ class TestADevolucaoPelaRota:
         assert (demanda["estado"], demanda["responsavel_id"]) == ("concluida", "P2")
         assert _campos_do_fio(sb) == [("etapa", ETAPA_EM_ANALISE, ETAPA_ENTREGUE)]
         assert _sem_email_de_verdade == []
+
+    def test_quem_conclui_a_mao_ganha_tambem_quando_nao_ha_o_que_mover(
+        self, monkeypatch, _sem_email_de_verdade, caplog
+    ):
+        """O par do teste acima, no ramo em que NAO ha movimento.
+
+        A Demanda ja esta em Aguardando, entao a devolucao so tem a atribuicao a
+        fazer, e o bloco do movimento (com a amarra) nem roda. Sem uma amarra
+        PROPRIA no UPDATE do responsavel, este e o caminho por onde o fio de uma
+        Demanda FECHADA ganharia "A entrega atribuiu a Fulano" e o e-mail sairia
+        para quem acabou de concluir o card.
+        """
+
+        def conclui_no_meio(nome, payload, linhas):
+            if nome == "tecnologia_demandas" and payload.get("responsavel_id"):
+                for linha in linhas:
+                    linha["estado"] = "concluida"
+
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="aguardando", responsavel_id="P2", autor_id="P1"),
+            antes_do_update=conclui_no_meio,
+        )
+
+        with caplog.at_level(logging.ERROR):
+            _entregar(cliente, _corpo(acao="closed"))
+
+        demanda = _demandas(sb)[0]
+        assert (demanda["estado"], demanda["responsavel_id"]) == ("concluida", "P2")
+        assert _campos_do_fio(sb) == [("etapa", ETAPA_EM_ANALISE, ETAPA_ENTREGUE)]
+        assert _sem_email_de_verdade == []
+        assert "pela metade" in caplog.text, "a devolução incompleta precisa de alarme, e não de silêncio"
+
+    @pytest.mark.parametrize(
+        "autor",
+        (_pessoa(ativo=False), _pessoa(is_super_admin=False)),
+        ids=("desativado", "sem_super_admin"),
+    )
+    def test_autor_que_saiu_da_aba_nao_recebe_o_card_de_volta(self, monkeypatch, _sem_email_de_verdade, caplog, autor):
+        """A mesma guarda que o `atribuir` do router tem, e pelo mesmo motivo.
+
+        Se o card fosse para quem saiu, ele sumiria da "Minha vez" de TODO
+        MUNDO (ninguem seria responsavel, e mencao nao ha) e o e-mail tambem nao
+        sairia, porque o envio pula quem nao esta na aba e so registra um INFO.
+        O card fica em Aguardando com o responsavel que tinha: alguem da Vitta
+        ainda o ve e pode repassa-lo a mao.
+        """
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1"),
+            participantes=[autor],
+        )
+
+        with caplog.at_level(logging.WARNING):
+            _entregar(cliente, _corpo(acao="closed"))
+
+        demanda = _demandas(sb)[0]
+        assert (demanda["estado"], demanda["responsavel_id"]) == ("aguardando", "P2")
+        assert _campos_do_fio(sb) == [
+            ("etapa", ETAPA_EM_ANALISE, ETAPA_ENTREGUE),
+            ("estado", "em_andamento", "aguardando"),
+        ]
+        assert _sem_email_de_verdade == []
+        assert "não está mais na lista de acesso" in caplog.text
+
+    def test_a_linha_do_fio_cai_no_id_quando_o_nome_nao_veio(self, monkeypatch):
+        """`nome_completo` e anulavel. Sem o resguardo, a linha sairia como
+        "A entrega atribuiu a ", que nao diz a quem."""
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1"),
+            participantes=[_pessoa(nome=None)],
+        )
+
+        _entregar(cliente, _corpo(acao="closed"))
+
+        assert _fio(sb)[2]["texto"] == f"{AUTOR_DA_ENTREGA} atribuiu a P1"
+
+    def test_a_devolucao_perdida_no_meio_grita(self, monkeypatch, caplog):
+        """O pior estado possivel, e o unico alarme que existe para ele.
+
+        O cache e a linha da Etapa ja estao gravados quando a devolucao estoura,
+        e a passagem seguinte vai sair no `foto_mudou` sem refazer nada: esta
+        devolucao esta PERDIDA. O webhook responde `falhou: true` como sempre, e
+        o que distingue este caso de uma falha comum e o ERROR nomeando a
+        Demanda, para alguem termina-la a mao.
+        """
+
+        def estoura_no_movimento(nome, payload, linhas):
+            if nome == "tecnologia_demandas" and payload.get("estado"):
+                raise httpx.ReadTimeout("timeout no PostgREST")
+
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1"),
+            antes_do_update=estoura_no_movimento,
+        )
+
+        with caplog.at_level(logging.ERROR):
+            resposta = _entregar(cliente, _corpo(acao="closed"))
+
+        assert resposta.json() == {"recebido": True, "sincronizada": False, "falhou": True}
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE, "o cache ficou gravado: e o que torna a perda definitiva"
+        assert "NÃO foi concluída na Demanda D1" in caplog.text
+        assert "termine à mão" in caplog.text
+
+    def test_a_leitura_do_produto_que_falha_nao_desfaz_a_devolucao(self, monkeypatch, _sem_email_de_verdade, caplog):
+        """A leitura do nome do Produto acontece com a devolucao JA GRAVADA.
+
+        Um timeout do PostgREST ali nao pode virar `falhou: true` sobre um
+        movimento que valeu: a reconciliacao veria a foto igual e o aviso se
+        perderia de vez. O e-mail sai assim mesmo, sem o nome do Produto.
+        """
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1"),
+            falhar_ao_ler="tecnologia_produtos",
+        )
+
+        with caplog.at_level(logging.WARNING):
+            resposta = _entregar(cliente, _corpo(acao="closed"))
+
+        assert resposta.json() == {"recebido": True, "sincronizada": True}
+        demanda = _demandas(sb)[0]
+        assert (demanda["estado"], demanda["responsavel_id"]) == ("aguardando", "P1")
+        assert _sem_email_de_verdade[0]["demanda"]["produto_nome"] is None
+        assert "Falha ao ler o Produto" in caplog.text
+
+    def test_o_card_reaberto_e_devolvido_de_novo_quando_a_entrega_sai_outra_vez(
+        self, monkeypatch, _sem_email_de_verdade
+    ):
+        """O ciclo inteiro: entregue, o diretor pede ajuste, entregue de novo.
+
+        A re-devolucao AQUI e desejada (PRD #673, historia 21: "Voltou para
+        desenvolvimento"), e e o outro lado do teste da edicao de corpo: o que
+        nao pode repetir e a devolucao sobre a MESMA Etapa, e nao a devolucao
+        depois de a Etapa dar a volta.
+        """
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(
+            demandas=[
+                _demanda(
+                    "D1",
+                    github_issue_numero=673,
+                    estado="aguardando",
+                    responsavel_id="P1",
+                    autor_id="P1",
+                    etapa=ETAPA_ENTREGUE,
+                    github_foto=github_client.montar_foto(_entregue(), []),
+                )
+            ],
+            participantes=[_pessoa()],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        # 1. O diretor pediu ajuste: a issue reabriu e voltou a andar.
+        _entregar(cliente, _corpo(acao="reopened"))
+
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+        assert _sem_email_de_verdade == [], "voltar para desenvolvimento não devolve nada"
+
+        # 2. A Vitta passou a bola de volta para si enquanto refazia.
+        _demandas(sb)[0]["responsavel_id"] = "P2"
+        gh.issues[673] = _entregue()
+
+        _entregar(cliente, _corpo(acao="closed"))
+
+        demanda = _demandas(sb)[0]
+        assert (demanda["etapa"], demanda["estado"], demanda["responsavel_id"]) == (ETAPA_ENTREGUE, "aguardando", "P1")
+        assert [aviso["trecho"] for aviso in _sem_email_de_verdade] == [RECADO_DA_ENTREGA]

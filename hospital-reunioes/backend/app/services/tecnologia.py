@@ -37,6 +37,11 @@ TABELA_DEMANDAS = "tecnologia_demandas"
 TABELA_CONVERSAS = "tecnologia_conversas"
 TABELA_PRODUTOS = "tecnologia_produtos"
 
+# A tabela de gente do app inteiro, nomeada aqui pelo mesmo motivo das tres de
+# cima: quem escreve fora do router (a sincronizacao) le por constante, e nao
+# soletra o nome a mao no meio de tres que vem daqui.
+TABELA_PARTICIPANTES = "participantes"
+
 # O motivo que a tela mostra quando a API recusa. Uma frase so, no lugar de
 # uma por endpoint: e ela que o Super admin le no toast.
 MOTIVO_PRODUTO_ATIVO_SEM_DONO = "Produto ativo precisa de dono. Escolha um dono ou desative o Produto."

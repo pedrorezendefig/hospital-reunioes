@@ -40,13 +40,16 @@ from typing import Any
 from app.services import github_client
 from app.services.tecnologia import (
     AUTOR_DA_ENTREGA,
+    ESTADO_AGUARDANDO,
     ESTADOS_ABERTOS,
     ESTADOS_FECHADOS,
     RECADO_DA_ENTREGA,
     SEM_EFEITO,
     TABELA_CONVERSAS,
     TABELA_DEMANDAS,
+    TABELA_PARTICIPANTES,
     TABELA_PRODUTOS,
+    e_pessoa_da_aba,
     efeito_da_etapa,
     linha_de_movimento,
     texto_movimento_estado,
@@ -135,12 +138,33 @@ def _gravar_linha(supabase, *, demanda_id: str, campo: str, de: str | None, para
     ).execute()
 
 
-def _nome_da_pessoa(supabase, pessoa_id: str) -> str:
-    """O nome que a linha do fio mostra. O id quando o nome nao veio, como o
-    router faz: uma linha "A entrega atribuiu a " nao diz a quem."""
-    result = supabase.table("participantes").select("nome_completo").eq("id", pessoa_id).execute()
+# O que a peneira de acesso precisa ler do participante.
+#
+# `ativo` e `is_super_admin`/`access_profile` entram porque o filtro roda em
+# Python (`e_pessoa_da_aba`): um `.eq("ativo", True)` no PostgREST descartaria
+# as linhas com `ativo` NULL, que contam como ativas. `nome_completo` entra
+# porque a linha do fio o mostra, e essa e a mesma consulta.
+_CAMPOS_DA_PESSOA = "id, nome_completo, ativo, is_super_admin, access_profile"
+
+
+def _pessoa_da_aba(supabase, pessoa_id: str) -> dict[str, Any] | None:
+    """O autor, se ele AINDA ve a aba. `None` quando ele saiu.
+
+    A pergunta e a mesma que o `atribuir` do router faz antes de trocar o
+    responsavel, e existe pelo mesmo motivo escrito la: entregar a Demanda a
+    quem nao pode abri-la a deixa parada sem ninguem saber por que. Na devolucao
+    automatica o silencio seria pior, porque ninguem clicou para receber um erro:
+    o card sumiria da "Minha vez" de todo mundo (ninguem seria responsavel, e a
+    mencao nao existe) e o e-mail tambem nao sairia, porque o `_mandar` pula quem
+    nao passa nesta mesma peneira e so registra um INFO.
+
+    Uma consulta so para as duas coisas: se a pessoa ainda esta na aba e como ela
+    se chama. Sao a mesma leitura, e separa-las pagaria duas.
+    """
+    result = supabase.table(TABELA_PARTICIPANTES).select(_CAMPOS_DA_PESSOA).eq("id", pessoa_id).execute()
     linhas = result.data or []
-    return str((linhas[0].get("nome_completo") if linhas else None) or pessoa_id)
+    pessoa = linhas[0] if linhas else None
+    return pessoa if e_pessoa_da_aba(pessoa) else None
 
 
 def _avisar_a_devolucao(supabase, demanda: dict[str, Any], *, destinatario_id: str) -> None:
@@ -245,13 +269,47 @@ def _devolver_a_quem_pediu(supabase, demanda: dict[str, Any], *, etapa_nova: str
         # sua" para quem ja a tinha na mao.
         return
 
+    autor = _pessoa_da_aba(supabase, efeito.atribuir_a)
+    if autor is None:
+        # O card ja foi movido, e fica em Aguardando com o responsavel que
+        # tinha: alguem da Vitta continua com ele na "Minha vez" e pode
+        # repassa-lo a mao. Entrega-lo a quem saiu o faria sumir da aba de todo
+        # mundo, e em silencio, porque o e-mail tambem nao sairia.
+        logger.warning(
+            "[tecnologia] O autor %s da Demanda %s não está mais na lista de acesso à aba: "
+            "a entrega moveu o card e NÃO trocou o responsável.",
+            efeito.atribuir_a,
+            demanda_id,
+        )
+        return
+
     responsavel_antes = demanda.get("responsavel_id")
     atribuida = (
-        supabase.table(TABELA_DEMANDAS).update({"responsavel_id": efeito.atribuir_a}).eq("id", demanda_id).execute()
+        supabase.table(TABELA_DEMANDAS)
+        .update({"responsavel_id": efeito.atribuir_a})
+        .eq("id", demanda_id)
+        # A MESMA amarra do movimento, e ela precisa estar aqui tambem: quando a
+        # Demanda ja estava em Aguardando o bloco de cima nem roda, e sem esta
+        # linha o UPDATE casaria so por id. Bastaria alguem concluir o card no
+        # intervalo para o fio de uma Demanda FECHADA ganhar "A entrega atribuiu
+        # a Fulano" e o e-mail sair para quem acabou de concluir.
+        #
+        # A amarra e pelo ESTADO, e nao pelo `responsavel_id`: aquela coluna e
+        # anulavel, e um `.eq` sobre NULL no PostgREST nao casa linha nenhuma
+        # (a Demanda sem responsavel nunca seria devolvida).
+        .eq("estado", ESTADO_AGUARDANDO)
+        .execute()
     )
     if not atribuida.data:
-        logger.warning(
-            "[tecnologia] A Demanda %s não recebeu o autor como responsável na devolução da entrega.",
+        # Duas causas possiveis, e daqui nao da para distinguir: alguem mexeu no
+        # card no intervalo, ou a escrita nao valeu. O desfecho e o mesmo, e e
+        # por isso que o nivel e ERROR: o card ficou em Aguardando com o
+        # responsavel antigo, ninguem foi avisado, e a passagem seguinte NAO
+        # refaz nada (a foto ja gravada barra a releitura).
+        logger.error(
+            "[tecnologia] A devolução da entrega NÃO trocou o responsável da Demanda %s "
+            "(alguém mexeu no card, ou a escrita não valeu): a devolução ficou pela metade "
+            "e precisa ser terminada à mão.",
             demanda_id,
         )
         return
@@ -263,7 +321,9 @@ def _devolver_a_quem_pediu(supabase, demanda: dict[str, Any], *, etapa_nova: str
         para=efeito.atribuir_a,
         texto=texto_movimento_responsavel(
             autor_nome=AUTOR_DA_ENTREGA,
-            para_nome=_nome_da_pessoa(supabase, efeito.atribuir_a),
+            # O id quando o nome nao veio, como o router faz: uma linha
+            # "A entrega atribuiu a " nao diz a quem.
+            para_nome=str(autor.get("nome_completo") or efeito.atribuir_a),
         ),
     )
     _avisar_a_devolucao(supabase, atribuida.data[0], destinatario_id=efeito.atribuir_a)
@@ -346,7 +406,24 @@ def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
     # foi esta thread quem a mudou. Uma edicao do corpo da issue mexe na foto
     # sem mexer na Etapa e nao chega ate aqui, entao a Demanda nao e devolvida
     # de novo a cada webhook depois da entrega.
-    _devolver_a_quem_pediu(supabase, demanda, etapa_nova=mudanca["etapa"])
+    try:
+        _devolver_a_quem_pediu(supabase, demanda, etapa_nova=mudanca["etapa"])
+    except Exception:
+        # A excecao continua subindo (o webhook responde `falhou: true`, o lote
+        # conta a falha), mas ela sai daqui com NOME. O cache e a linha da Etapa
+        # ja estao gravados, entao a passagem seguinte vera a foto igual e sairá
+        # sem refazer nada: esta devolucao esta PERDIDA, e alguem precisa
+        # termina-la a mao. Um WARNING generico prometendo que "a reconciliacao
+        # recupera" mandaria quem le o log esperar por uma segunda passagem que
+        # nao vai acontecer.
+        logger.error(
+            "[tecnologia] A devolução da entrega NÃO foi concluída na Demanda %s e a reconciliação "
+            "não vai refazê-la (a foto já foi gravada): termine à mão o movimento para Aguardando, "
+            "o responsável e o aviso.",
+            demanda_id,
+            exc_info=True,
+        )
+        raise
     return True
 
 
