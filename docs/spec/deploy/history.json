@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-10T16:47:56-03:00",
+      "sha": "c436fc8",
+      "app_version": "0.125.0",
+      "subject": "Secao O que muda no card e no Copiar para IA",
+      "raw_subject": "feat(tecnologia): secao O que muda no card e no Copiar para IA (#686)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 (issue #676, PRD #673). Migration 103 ja aplicada na onda 1. Review de seguranca pegou forja da cerca do Copiar para IA: corpo de issue publica podia injetar conversa fabricada na coluna zero; corrigido com indent do bloco da raiz. Decisao do diretor: /to-prd e /to-issues passam a proibir numero de issue no bloco Para o diretor."
+    },
+    {
       "at": "2026-09-10T15:04:57-03:00",
       "sha": "3541c39",
       "app_version": "0.124.0",
@@ -1419,37 +1448,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda AFK de 3 issues em paralelo (#438, #433, #436), com checkpoint humano unico de merge no fim. Nenhuma migration nova e nenhuma env var nova: a ultima migration da main continua a 088_ouvidoria_relatorio_entregas.sql. A corrida de bump aconteceu e foi resolvida: os tres PRs pediram versao colidindo, com o #451 e o #453 pedindo os dois a 0.85.1. A saida foi mergear um a um e re-numerar em 0.85.1, 0.85.2 e 0.85.3. Os PRs #452 e #453 ficaram CONFLICTING e foram rebasados a mao, escrevendo a versao nova direto no conflito. O merge saiu por gh api -X PUT .../merge, porque a arvore principal esta em detached HEAD e o gh pr merge recusa nessa condicao. O deploy subiu por auto-deploy de webhook, sem comando manual. O #452 e o #453 tocaram os dois o mesmo ouvidoria_metricas.py, com hunks disjuntos: aplicou limpo no rebase, e a suite subiu de 2584 para 2592 testes passando com as duas mudancas juntas. Achado que vale registrar, vindo da review independente do #452: o defeito descrito no item 2 da issue #433, um 'A definir' em categoria sumindo do ranking de temas, ja tinha morrido na issue #429, porque os temas passaram a sair de tipo_manifestacao. O ramo categoria entregue e codigo morto preparado, nao correcao de bug vivo. A unica mudanca de comportamento viva do #452 e outra: area escrita exatamente 'A classificar' deixa de ser descartada. Nenhum numero do relatorio do diretor muda hoje."
-    },
-    {
-      "at": "2026-08-31T11:12:00-03:00",
-      "sha": "11240c1",
-      "app_version": "0.85.0",
-      "subject": "Onda de tres fatias da Ouvidoria: paginacao contra o teto do PostgREST, proximos vencimentos no painel e envio honesto do relatorio",
-      "raw_subject": "feat(ouvidoria): carimbo de enviado so nasce de envio real, e a entrega vira historico (#447)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 286,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "088_ouvidoria_relatorio_entregas.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda AFK de 3 issues em paralelo (#430, #437, #435), merge sequencial 0.83.1 -> 0.84.0 -> 0.85.0, um deploy so no fim. As tres passaram por 2 lentes de revisao independente e todas voltaram com must-fix real. O mais grave era o #435: o aviso de que o job desistiu de enviar o relatorio saia pelo proprio email quebrado, entao a quinzena se perdia em silencio; agora falta de transporte nao consome tentativa e a edicao entrega sozinha quando a chave volta. O #430 consertava a contagem da listagem mas deixava o calendario cortado no mesmo caminho, com rotulo de prazo errado sem erro na tela. O bump do #447 virou no-op no rebase (patch already upstream) e precisou de re-bump manual: MERGEABLE/CLEAN do GitHub nao acusa esse caso."
     }
   ]
 }
