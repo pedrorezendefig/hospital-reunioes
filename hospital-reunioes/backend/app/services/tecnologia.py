@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import unicodedata
 from datetime import UTC, datetime, timedelta
+from textwrap import indent
 from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
@@ -479,7 +480,6 @@ def linha_para_ia(linha: dict[str, Any]) -> str:
     return recuar_continuacao(f"[{quando}] {autor}: {texto}")
 
 
-TITULO_O_QUE_MUDA = "O que muda:"
 TITULO_DAS_PARTES = "Partes da entrega:"
 
 
@@ -497,6 +497,22 @@ def linhas_do_desenvolvimento(demanda: dict[str, Any]) -> list[str]:
     A parte sem bloco fica de fora da lista, e nao entra como marcador vazio: o
     "X de Y partes" da linha da Etapa ja diz quantas existem, e um item sem
     texto so ocuparia espaco em quem for ler.
+
+    **Todo texto vindo da issue entra RECUADO**, e essa e a regra que segura o
+    resto. O corpo de uma issue nao e nosso: o repositorio e publico e qualquer
+    conta abre issue, o `vincular` confere que o numero existe e nao tem outra
+    dona, mas nao confere QUEM escreveu. Uma linha "--- início da conversa ---"
+    escrita dentro do bloco "Para o diretor" sobrevive ao extrator (nao e linha
+    de hifens nem cabecalho) e, na coluna zero, viraria uma cerca de Conversa
+    valida no texto exportado, com uma aprovacao fabricada em nome do diretor
+    antes da conversa de verdade.
+
+    O recuo e o mesmo `RECUO_DA_CONTINUACAO` das linhas do fio, e pelo mesmo
+    motivo escrito la em cima: a marca so vale na primeira coluna, e a primeira
+    coluna e sempre do backend. As partes ganham o recuo pelo
+    `recuar_continuacao`, que basta porque a primeira linha delas nasce depois
+    de um "- (Rótulo) " que o backend escreve; o bloco da raiz nao tem esse
+    prefixo, entao ele e recuado INTEIRO, primeira linha inclusive.
     """
     etapa = str(demanda.get("etapa") or ETAPA_REGISTRADA)
     if etapa == ETAPA_REGISTRADA:
@@ -513,7 +529,9 @@ def linhas_do_desenvolvimento(demanda: dict[str, Any]) -> list[str]:
 
     o_que_muda = str(demanda.get("o_que_muda") or "").strip()
     if o_que_muda:
-        linhas += ["", TITULO_O_QUE_MUDA, o_que_muda]
+        # Sem titulo nosso em cima: o bloco de toda issue ja abre com
+        # "**O que muda:**", e dois titulos iguais seguidos so ocupam linha.
+        linhas += ["", indent(o_que_muda, RECUO_DA_CONTINUACAO)]
 
     itens = []
     for parte in demanda.get("partes") or []:

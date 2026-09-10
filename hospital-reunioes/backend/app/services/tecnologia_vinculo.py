@@ -188,13 +188,20 @@ def partes_da_foto(foto: dict[str, Any] | None) -> tuple[int | None, int | None]
 _CABECALHO_DO_DIRETOR = re.compile(r"^#{1,6}[^\n]*?para o diretor[^\n]*$", re.IGNORECASE | re.MULTILINE)
 
 # Onde o bloco acaba: o primeiro separador `---` ou o proximo cabecalho de
-# nivel 2, o que vier antes.
+# nivel 1 ou 2, o que vier antes.
 #
 # `-{3,}` e nao `-+`: um item de lista ("- O texto vem do planejamento") e a
 # forma mais comum de linha do bloco, e ele nao pode fechar o proprio bloco.
-# `##[^#]` e nao `##`: um `###` dentro do bloco e subtitulo do diretor, e nao a
-# volta do corpo tecnico.
-_FIM_DO_BLOCO = re.compile(r"^(?:-{3,}\s*|##[^#\n][^\n]*)$", re.MULTILINE)
+#
+# `#{1,2}` e nao so `##`: o corpo tecnico comeca no cabecalho seguinte, e o
+# nivel dele e convencao do `/to-issues`, nao contrato. Se um dia o "## Pai"
+# virar "# Pai", um recorte que so conhecesse o nivel 2 mandaria o corpo
+# tecnico INTEIRO para a tela do diretor sem nada quebrar. `###` continua de
+# fora de proposito: um subtitulo dentro do bloco e do diretor tambem.
+#
+# O `\s` depois dos `#` e o que separa cabecalho de texto: "#673" no meio de uma
+# frase nao e titulo de secao nenhum.
+_FIM_DO_BLOCO = re.compile(r"^(?:-{3,}\s*|#{1,2}\s[^\n]*)$", re.MULTILINE)
 
 # Comentario HTML, o marcador do Vinculo inclusive.
 #
