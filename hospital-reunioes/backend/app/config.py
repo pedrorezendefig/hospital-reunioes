@@ -75,6 +75,15 @@ class Settings(BaseSettings):
     github_integracao_token: str = ""
     github_integracao_repo: str = ""
 
+    # O segredo do webhook do GitHub (issue #678). Ele é o ÚNICO jeito de a rota
+    # `/webhooks/github` saber que a entrega veio mesmo do GitHub: a porta é
+    # pública e não tem login nenhum na frente.
+    #
+    # Vazio = webhook indisponível: a rota responde 503 e registra a causa no
+    # log. Nunca um default, que seria um segredo público, e nunca "sem segredo
+    # aceita tudo", que é a porta aberta com aparência de guarda.
+    github_webhook_secret: str = ""
+
     # Email (Resend)
     resend_api_key: str = ""
     resend_from_email: str = "noreply@hospitalsaomatheus.cloud"

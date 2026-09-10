@@ -28,6 +28,10 @@ Jobs:
      quando a quinzena fecha; os demais dias existem para a edição não se perder se o
      container estiver fora do ar na hora. Idempotente: o registro guarda quando o
      email saiu, e a segunda rodada da mesma quinzena não manda nada.
+  9. reconciliar_vinculos_tecnologia: de hora em hora, relê no GitHub as Demandas
+     vinculadas ainda abertas e atualiza a Etapa (issue #678, ADR 0054). É a rede
+     de proteção do webhook, que o GitHub não reentrega quando falha. Idempotente:
+     foto igual à guardada não escreve nada.
 """
 
 import logging
@@ -151,6 +155,27 @@ def reconciliar_clicksign() -> None:
             )
     except Exception as e:
         logger.error(f"[Cron] Erro em reconciliar_clicksign: {e}", exc_info=True)
+
+
+def reconciliar_vinculos_tecnologia() -> None:
+    """Relê de hora em hora as Demandas vinculadas ainda abertas (issue #678).
+
+    O par da reconciliação da ClickSign, e pelo mesmo motivo: o webhook é o
+    caminho rápido e é perdível. O GitHub exige 2xx em 10 segundos e NÃO
+    reentrega o que falhou, então um deploy no momento errado apaga o evento, e
+    sem esta passagem o selo do card mentiria até alguém mexer nele à mão.
+
+    De hora em hora, e não de dez em dez minutos: a cota da API do GitHub é uma
+    só para o app inteiro, e cada Demanda vinculada custa duas leituras. Foto
+    igual não escreve nada, então a passagem que não encontra novidade é barata
+    para o banco e silenciosa para a Conversa do diretor.
+    """
+    from app.services import tecnologia_sincronizacao
+
+    try:
+        tecnologia_sincronizacao.reconciliar_vinculos(_supabase())
+    except Exception as e:
+        logger.error(f"[Cron] Erro em reconciliar_vinculos_tecnologia: {e}", exc_info=True)
 
 
 def despachar_notificacoes_ouvidoria() -> None:
@@ -370,6 +395,16 @@ def start_scheduler() -> None:
         id="reconciliar_clicksign",
         replace_existing=True,
     )
+    # De hora em hora, sem hora fixa: o que importa é a frequência, e o job é
+    # idempotente (foto igual não escreve nada), então a primeira passagem depois
+    # de um deploy pode cair a qualquer minuto sem consequência.
+    scheduler.add_job(
+        reconciliar_vinculos_tecnologia,
+        "interval",
+        hours=1,
+        id="reconciliacao_tecnologia",
+        replace_existing=True,
+    )
     scheduler.add_job(
         despachar_notificacoes_ouvidoria,
         "interval",
@@ -428,7 +463,8 @@ def start_scheduler() -> None:
         "lembrete_24h_reunioes (a cada 15min), reconciliar_clicksign (05:30), "
         "notificacoes_ouvidoria (a cada 10min), cobranca_prazos_ouvidoria (a cada 10min), "
         "escalonamento_ouvidoria (a cada 10min), retencao_ouvidoria (04:00), "
-        "relatorio_quinzenal_ouvidoria (07:00 diário, email nos dias 1 e 16)"
+        "relatorio_quinzenal_ouvidoria (07:00 diário, email nos dias 1 e 16), "
+        "reconciliacao_tecnologia (de hora em hora)"
     )
 
 

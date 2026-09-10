@@ -392,6 +392,10 @@ SEM_ANONIMATO_A_PROTEGER = {
     "GET /api/health",
     # Callback servidor a servidor da ClickSign, não é visitante.
     "POST /api/webhooks/clicksign",
+    # Callback servidor a servidor do GitHub (issue #678): quem chega aqui é a
+    # infraestrutura deles, provada pelo HMAC, e não uma pessoa. Não há
+    # anonimato de manifestante a proteger no IP de origem.
+    "POST /api/webhooks/github",
     # As rotas da Ana pedem `X-API-Key` (`require_ana_api_key`), que é
     # credencial de máquina; o schema não as marca porque a checagem é de header
     # e não um esquema de segurança declarado. Não há visitante anônimo aqui.

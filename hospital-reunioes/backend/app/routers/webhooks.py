@@ -1,10 +1,16 @@
+import hashlib
+import hmac
+import json
 import logging
 from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException, Request
+from starlette.concurrency import run_in_threadpool
 
 from app.config import settings
 from app.dependencies import get_supabase_client
+from app.limiter import limiter
+from app.services.github_client import IssueNaoEncontradaError
 
 router = APIRouter(prefix="/webhooks", tags=["webhooks"])
 logger = logging.getLogger(__name__)
@@ -336,3 +342,204 @@ def _processar_versao_pop(supabase, versao: dict, event_name: str) -> None:
 
     else:
         logger.info(f"[ClickSign webhook] Evento '{event_name}' sem ação definida para POP — ignorado.")
+
+
+# ─── Webhook do GitHub (issue #678, PRD #673, ADR 0054) ──────────────────────
+
+# O que a porta responde a quem não está autenticado quando o segredo falta.
+#
+# Genérica de propósito: quem bate aqui não provou ser ninguém, e "falta a
+# variável X" é informação sobre a instalação. A causa de verdade vai para o
+# log, que é onde o operador olha.
+MOTIVO_WEBHOOK_INDISPONIVEL = "Webhook indisponível."
+
+MOTIVO_ASSINATURA_INVALIDA = "Assinatura inválida"
+
+MOTIVO_CORPO_GRANDE_DEMAIS = "Corpo grande demais."
+
+# Teto do corpo da entrega, antes de ela ir para a memória.
+#
+# 25 MB é o teto do PRÓPRIO GitHub para o payload de um webhook: entrega legítima
+# nunca chega perto, e o que passar disso não veio dele. O teto existe porque o
+# HMAC precisa dos bytes CRUS, e por isso `await request.body()` traz o corpo
+# inteiro para a RAM ANTES de qualquer prova de origem. O middleware global do
+# app é de 100 MB e é rede de segurança contra corpo sem fim, não limite fino de
+# uma porta pública.
+TETO_DO_CORPO_DO_WEBHOOK = 25 * 1024 * 1024
+
+# Quantas entregas por minuto uma mesma origem pode tentar.
+#
+# FOLGADO de propósito, e a folga é a decisão: o GitHub não reentrega o que
+# falhou, então um 429 num pico legítimo (uma `/onda` marcando `in-progress` em
+# seis issues, uma faxina de labels em lote) perderia o evento até a próxima
+# reconciliação. O teto não está aqui para moldar o tráfego do GitHub, e sim para
+# que quem martela a porta sem assinatura não gaste leitura de corpo e HMAC do
+# app à vontade.
+#
+# `limit`, e não `shared_limit`: o `Limiter` da casa nasce com `key_style="url"`,
+# e esta rota é uma URL só, então o balde já é por IP. O Dockerfile sobe com
+# `--proxy-headers --forwarded-allow-ips`, então o `get_remote_address` enxerga o
+# IP real e o balde do atacante não é o mesmo do GitHub.
+LIMITE_DO_WEBHOOK_GITHUB = "120/minute"
+
+
+def _assinatura_do_github_confere(corpo: bytes, cabecalho: str | None, segredo: str) -> bool:
+    """Se o `X-Hub-Signature-256` bate com o HMAC SHA-256 do CORPO CRU.
+
+    Cru quer dizer os bytes que chegaram, e não o dicionário re-serializado. O
+    GitHub assina o que mandou; um `json.dumps` do payload parseado devolve os
+    mesmos dados com outro espaçamento, e a assinatura deixaria de bater no dia
+    em que o GitHub mudasse a formatação, em produção, sem nada acusar antes.
+
+    `compare_digest` e não `==`: a comparação ingênua para no primeiro byte
+    diferente, e o tempo dela conta ao atacante quantos bytes ele já acertou.
+
+    A comparação é em BYTES, e isso não é estilo. `hmac.compare_digest` com dois
+    `str` exige ASCII nos dois lados e LEVANTA `TypeError` fora disso, em vez de
+    devolver `False`. O Starlette decodifica header em latin-1 e os parsers de
+    HTTP aceitam qualquer byte 0x80-0xFF no valor, então um header com um byte
+    desses transformaria a recusa em 500 com traceback, e a linha de log da
+    recusa nem seria alcançada: justamente a tentativa malformada seria a que não
+    deixa rastro. Em bytes, a comparação não tem como levantar.
+    """
+    if not cabecalho:
+        return False
+    algoritmo, _, recebida = cabecalho.partition("=")
+    if algoritmo.strip().lower() != "sha256" or not recebida.strip():
+        return False
+    esperada = hmac.new(segredo.encode("utf-8"), corpo, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(
+        esperada.encode("ascii"),
+        recebida.strip().encode("utf-8", "surrogateescape"),
+    )
+
+
+def _e_do_repositorio_configurado(payload: dict) -> bool:
+    """Se a entrega diz vir do repositório da integração.
+
+    Defesa em profundidade, e não a guarda principal: quem forja o payload não
+    consegue nada com ele, porque a sincronização relê a issue do repositório
+    CONFIGURADO e nunca escreve campo vindo daqui. O que esta linha fecha é o
+    mesmo segredo reaproveitado noutro repositório ou num fork, que mandaria o
+    app reler issues pelo número errado.
+
+    Sem repositório configurado não há com o que comparar, e a sincronização vai
+    falhar adiante de qualquer jeito (o cliente exige as duas variáveis).
+    """
+    esperado = settings.github_integracao_repo
+    if not esperado:
+        return True
+    veio_de = (payload.get("repository") or {}).get("full_name")
+    return str(veio_de or "").lower() == esperado.lower()
+
+
+@router.post("/github")
+@limiter.limit(LIMITE_DO_WEBHOOK_GITHUB)
+async def webhook_github(
+    request: Request,
+    supabase=Depends(get_supabase_client),
+):
+    """A Demanda vinculada aprendendo do GitHub em segundos (ADR 0054, decisão 2).
+
+    Cadastro no repositório: URL desta rota, content type JSON, segredo igual ao
+    `GITHUB_WEBHOOK_SECRET` do ambiente e **só o evento `issues`**. Os dois lados
+    do cadastro são passo humano do deploy: sem o segredo a rota responde 503, e
+    sem o webhook cadastrado o card só anda de hora em hora, pela reconciliação.
+
+    A ordem das guardas é a ordem das causas, e não é negociável:
+
+    1. **Segredo configurado.** Sem ele não há o que conferir, e aceitar seria
+       deixar a porta aberta com aparência de guarda.
+    2. **Tamanho do corpo**, antes de ele ir para a memória, porque o HMAC
+       precisa dos bytes crus e essa leitura acontece sem prova de origem.
+    3. **Assinatura.** Antes de olhar QUALQUER outra coisa do pedido, o header do
+       evento incluído: conferir o evento primeiro deixaria qualquer um
+       descobrir, sem segredo nenhum, quais eventos o app trata.
+    4. **Evento e ação.** Só `issues`, e só nas ações que mexem em label, estado
+       ou corpo. O resto sai em 2xx sem gastar cota do GitHub.
+    5. **Repositório**, como defesa em profundidade.
+    6. **Demanda vinculada.** A esmagadora maioria das issues do repositório não
+       tem Demanda nenhuma atrás, e isso não é erro.
+
+    O corpo da resposta é o SMOKE do passo humano: o operador confere a
+    instalação pelo corpo da delivery em `Recent Deliveries`, e não pelo 200.
+    Por isso os três desfechos são distinguíveis, e o `sincronizada: false` do
+    "nada mudou" não pode ser confundido com o da falha, que leva `falhou: true`
+    junto. Sem essa distinção, quem cadastrasse o webhook leria "recebido" sobre
+    uma integração que falha em toda entrega.
+
+    A sincronização sai do event loop pelo `run_in_threadpool`. Ela faz DUAS
+    chamadas síncronas ao GitHub (10 s de timeout cada) mais o I/O do PostgREST,
+    e o container sobe com um worker só: chamá-la direto pararia o backend
+    inteiro, `/api/health` incluído, e uma fila de entregas marcaria o container
+    unhealthy no Traefik, tirando o app do ar para todo mundo.
+
+    Responde 2xx mesmo quando a sincronização falha. O GitHub exige 2xx em 10
+    segundos e **não reentrega** o que falhou: um 500 aqui perderia o evento para
+    sempre, e quem recupera é a reconciliação de hora em hora.
+    """
+    from app.services import tecnologia_sincronizacao
+
+    segredo = settings.github_webhook_secret
+    if not segredo:
+        logger.error("[GitHub webhook] GITHUB_WEBHOOK_SECRET não configurado; entrega recusada.")
+        raise HTTPException(status_code=503, detail=MOTIVO_WEBHOOK_INDISPONIVEL)
+
+    anunciado = request.headers.get("content-length") or ""
+    if anunciado.isdigit() and int(anunciado) > TETO_DO_CORPO_DO_WEBHOOK:
+        logger.warning("[GitHub webhook] Corpo de %s bytes acima do teto; entrega recusada.", anunciado)
+        raise HTTPException(status_code=413, detail=MOTIVO_CORPO_GRANDE_DEMAIS)
+
+    corpo = await request.body()
+    if not _assinatura_do_github_confere(corpo, request.headers.get("x-hub-signature-256"), segredo):
+        logger.warning("[GitHub webhook] Assinatura inválida: entrega recusada.")
+        raise HTTPException(status_code=401, detail=MOTIVO_ASSINATURA_INVALIDA)
+
+    if request.headers.get("x-github-event") != "issues":
+        return {"ignorado": "evento"}
+
+    try:
+        payload = json.loads(corpo)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Payload JSON inválido")
+
+    if not isinstance(payload, dict) or payload.get("action") not in tecnologia_sincronizacao.ACOES_DE_ISSUE:
+        return {"ignorado": "acao"}
+
+    if not _e_do_repositorio_configurado(payload):
+        logger.warning("[GitHub webhook] Entrega de outro repositório; ignorada.")
+        return {"ignorado": "outro_repositorio"}
+
+    numero = (payload.get("issue") or {}).get("number")
+    # `isinstance(numero, int)` sozinho aceitaria `True`, porque em Python bool é
+    # int: `{"number": true}` viraria uma consulta por `github_issue_numero=True`.
+    if isinstance(numero, bool) or not isinstance(numero, int) or numero <= 0:
+        logger.warning("[GitHub webhook] Evento 'issues' sem número de issue utilizável; ignorado.")
+        return {"ignorado": "issue"}
+
+    demanda = tecnologia_sincronizacao.demanda_vinculada(supabase, numero)
+    if demanda is None:
+        return {"ignorado": "sem_vinculo"}
+
+    try:
+        mudou = await run_in_threadpool(tecnologia_sincronizacao.sincronizar_demanda, supabase, demanda)
+    except IssueNaoEncontradaError:
+        # Condição PERMANENTE, e não indisponibilidade: a issue foi apagada ou
+        # transferida. Uma linha, sem stack: repetir o traceback a cada entrega
+        # não acrescenta nada, e quem vai resolver isso desfaz o Vínculo na tela.
+        logger.warning(
+            "[GitHub webhook] A issue #%s da Demanda %s não existe mais no repositório.",
+            numero,
+            demanda.get("id"),
+        )
+        return {"recebido": True, "sincronizada": False, "falhou": True}
+    except Exception:
+        logger.warning(
+            "[GitHub webhook] Falha ao sincronizar a Demanda %s (issue #%s); a reconciliação recupera.",
+            demanda.get("id"),
+            numero,
+            exc_info=True,
+        )
+        return {"recebido": True, "sincronizada": False, "falhou": True}
+
+    return {"recebido": True, "sincronizada": mudou}

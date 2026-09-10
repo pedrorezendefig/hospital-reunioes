@@ -115,6 +115,8 @@ from app.services.tecnologia import (
     MOTIVO_PRODUTO_INATIVO,
     MOTIVO_PRODUTO_SEM_DONO,
     MOTIVO_RESPONSAVEL_SEM_ACESSO,
+    TABELA_CONVERSAS,
+    TABELA_DEMANDAS,
     avisos_da_resposta,
     carimbos_da_transicao,
     demanda_casa_a_busca,
@@ -125,6 +127,7 @@ from app.services.tecnologia import (
     fechamento_da_demanda,
     instante_do_banco,
     limite_da_janela_de_edicao,
+    linha_de_movimento,
     mencoes_acrescentadas,
     mencoes_sem_acesso,
     motivo_da_minha_vez,
@@ -144,6 +147,7 @@ from app.services.tecnologia import (
     transicao_permitida,
 )
 from app.services.tecnologia_email import avisar_atribuicao, avisar_mencao, avisar_resposta
+from app.services.tecnologia_sincronizacao import mudanca_da_foto
 from app.services.tecnologia_vinculo import (
     ETAPA_REGISTRADA,
     MOTIVO_GITHUB_INDISPONIVEL,
@@ -155,15 +159,11 @@ from app.services.tecnologia_vinculo import (
     TEXTO_VINCULO_DESFEITO,
     corpo_com_marcador,
     corpo_precisa_do_marcador,
-    etapa_da_foto,
     foto_mudou,
     motivo_demanda_ja_vinculada,
     motivo_e_pull_request,
     motivo_issue_inexistente,
     motivo_numero_ja_usado,
-    o_que_muda_da_foto,
-    partes_da_foto,
-    partes_para_o_diretor,
     tem_github_login,
     texto_movimento_etapa,
 )
@@ -173,8 +173,6 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/admin/tecnologia", tags=["admin", "tecnologia"])
 
 TABELA_PRODUTOS = "tecnologia_produtos"
-TABELA_DEMANDAS = "tecnologia_demandas"
-TABELA_CONVERSAS = "tecnologia_conversas"
 
 # O que a lista de pessoas precisa ler do participante. `ativo` e
 # `access_profile`/`is_super_admin` entram porque o filtro roda em Python: um
@@ -561,16 +559,7 @@ def _gravar_movimento(
     (o `ouvidoria_setor.py` loga so o `manifestacao_id`). `demanda_id`, `campo`,
     `de` e `para` dizem a mesma coisa para quem for reconstruir a linha.
     """
-    linha = {
-        "demanda_id": demanda_id,
-        "autor_id": None,
-        "linha": "movimento",
-        "texto": texto,
-        "mencoes": [],
-        "movimento_campo": campo,
-        "movimento_de": de,
-        "movimento_para": para,
-    }
+    linha = linha_de_movimento(demanda_id=demanda_id, campo=campo, de=de, para=para, texto=texto)
     try:
         result = supabase.table(TABELA_CONVERSAS).insert(linha).execute()
     except Exception:
@@ -1161,24 +1150,16 @@ async def vincular_demanda(
         _issue_indisponivel()
 
     etapa_antes = demanda.get("etapa") or ETAPA_REGISTRADA
-    etapa = etapa_da_foto(foto)
-    entregues, total = partes_da_foto(foto)
-
+    # O SHAPE do cache vem de um lugar so (`mudanca_da_foto`), o mesmo que o
+    # webhook e a reconciliacao usam (issue #678): so o par do Vinculo, que e
+    # exclusivo desta porta, entra por fora.
     mudanca = {
+        **mudanca_da_foto(foto),
         "github_issue_numero": numero,
-        "etapa": etapa,
-        "partes_entregues": entregues,
-        "partes_total": total,
-        # O texto que o diretor le, lido do GitHub e nunca digitado no app
-        # (issue #676, ADR 0054, decisao 7). Fica em coluna propria, e nao so
-        # dentro da foto, porque e dado de leitura da tela: a foto existe para a
-        # sincronizacao seguinte saber se algo mudou.
-        "o_que_muda": o_que_muda_da_foto(foto),
-        "partes": partes_para_o_diretor(foto),
-        "github_foto": foto,
-        "github_sincronizado_em": _agora(),
         "vinculado_por": ator["id"],
     }
+    etapa = mudanca["etapa"]
+    entregues, total = mudanca["partes_entregues"], mudanca["partes_total"]
     # Foto igual a guardada nao escreve nada no fio: e a guarda que impede a
     # reconciliacao da fatia seguinte de repetir a mesma linha de hora em hora.
     # Aqui ela quase sempre muda (a Demanda acabou de ganhar o numero), mas
