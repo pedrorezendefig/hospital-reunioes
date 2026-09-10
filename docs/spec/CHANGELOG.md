@@ -7,6 +7,16 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.125.0 - 2026-09-10 17:05 - feat(tecnologia): seção O que muda no card e no Copiar para IA
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `c436fc8`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.125.0, `db: healthy`, version match confirmado; frontend HTTP 200)
+- Issue: [#676](https://github.com/pedrorezendefig/hospital-reunioes/issues/676) (PRD [#673](https://github.com/pedrorezendefig/hospital-reunioes/issues/673), ADR 0054)
+- PR: [#686](https://github.com/pedrorezendefig/hospital-reunioes/pull/686)
+- Segurança: a review pegou que o corpo de uma issue pública podia forjar a cerca da Conversa no "Copiar para IA" e injetar uma conversa fabricada. Corrigido recuando o bloco da raiz.
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/c436fc8
+
 ## v0.124.0 - 2026-09-10 15:04 - feat(tecnologia): fundação do Vínculo da Demanda com a issue e a Action do marcador revisor-app
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `3541c39`
