@@ -22,6 +22,8 @@ import { MinhaVez } from "./MinhaVez";
 import { QuadroDemandas } from "./QuadroDemandas";
 import {
   BASE_TECNOLOGIA,
+  EU_DESCONHECIDO,
+  EuNaAba,
   FALHA_DE_CONEXAO,
   FiltrosDoQuadro,
   motivoDaRecusa,
@@ -81,6 +83,18 @@ export function TecnologiaModulo() {
   const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
+  /**
+   * Quem está olhando, do ponto de vista do Vínculo (issue #674).
+   *
+   * Carregado UMA vez aqui e passado às três abas: elas mostram o mesmo modal,
+   * e uma chamada por aba multiplicaria a ida à rede e abriria espaço para as
+   * abas discordarem entre si.
+   *
+   * O default é o mais restrito: sem resposta, nenhum controle da Vitta
+   * aparece. Backend uma versão atrás (sem a rota) cai exatamente nesse
+   * default, em vez de desenhar um campo que ele não sabe atender.
+   */
+  const [eu, setEu] = useState<EuNaAba>(EU_DESCONHECIDO);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
 
@@ -106,9 +120,10 @@ export function TecnologiaModulo() {
     if (!token) return;
     setCarregando(true);
     try {
-      const [respProdutos, respPessoas] = await Promise.all([
+      const [respProdutos, respPessoas, respEu] = await Promise.all([
         fetch(`${BASE_TECNOLOGIA}/produtos`, { headers: autorizacao() }),
         fetch(`${BASE_TECNOLOGIA}/pessoas`, { headers: autorizacao() }),
+        fetch(`${BASE_TECNOLOGIA}/eu`, { headers: autorizacao() }),
       ]);
       if (!respProdutos.ok || !respPessoas.ok) {
         setErro("Não foi possível carregar os Produtos.");
@@ -116,6 +131,11 @@ export function TecnologiaModulo() {
       }
       setProdutos(await respProdutos.json());
       setPessoas(await respPessoas.json());
+      // O "eu" NÃO entra na condição acima de propósito: ele decide apenas se
+      // os controles do Vínculo aparecem, e uma aba inteira em erro vermelho
+      // porque essa rota falhou seria desproporcional. Sem resposta, o default
+      // restrito vale e o resto da aba funciona.
+      setEu(respEu.ok ? await respEu.json() : EU_DESCONHECIDO);
       setErro(null);
     } catch (e) {
       console.error("[admin/tecnologia] falha ao carregar", e);
@@ -224,6 +244,7 @@ export function TecnologiaModulo() {
             pessoas={pessoas}
             filtros={filtros}
             onFiltrosChange={setFiltros}
+            eu={eu}
           />
         )}
         {aba === "minha-vez" && (
@@ -234,6 +255,7 @@ export function TecnologiaModulo() {
             pessoas={pessoas}
             filtros={filtros}
             onFiltrosChange={setFiltros}
+            eu={eu}
           />
         )}
         {aba === "historico" && (
@@ -244,6 +266,7 @@ export function TecnologiaModulo() {
             pessoas={pessoas}
             filtros={filtros}
             onFiltrosChange={setFiltros}
+            eu={eu}
           />
         )}
       </div>

@@ -43,6 +43,11 @@ from app.models.admin_schemas import (
 )
 from app.services import audit, ouvidoria_escalonamento
 from app.services.auth_provisioning import definir_login_liberado
+from app.services.tecnologia_vinculo import (
+    motivo_github_login_invalido,
+    motivo_github_login_repetido,
+    normalizar_github_login,
+)
 from app.utils.postgrest_filters import validate_pid_for_filter
 from app.utils.query_params import sanitize_for_ilike
 
@@ -56,7 +61,7 @@ router = APIRouter(prefix="/admin/usuarios", tags=["admin", "usuarios"])
 # Campos que exibimos/retornamos sempre que possivel.
 _SELECT_FIELDS = (
     "id, nome_completo, email, cargo, area, setor, role, ativo, is_externo, "
-    "is_super_admin, access_profile, perfil_pop, perfil_ouvidoria, auth_user_id, data_cadastro"
+    "is_super_admin, access_profile, perfil_pop, perfil_ouvidoria, github_login, auth_user_id, data_cadastro"
 )
 
 
@@ -116,6 +121,38 @@ def _assert_email_disponivel(supabase: Client, email: str, exclude_id: str | Non
             status_code=status.HTTP_409_CONFLICT,
             detail="Email ja cadastrado em outro participante",
         )
+
+
+def _github_login_valido(supabase: Client, bruto: str | None, *, exclude_id: str | None = None) -> str | None:
+    """O login normalizado, ou 422 com a frase da recusa.
+
+    Duas guardas, e nao uma: o formato (o GitHub nao aceita qualquer texto) e a
+    unicidade (o indice da migration 103 recusaria com erro de banco, ou seja
+    500 com cara de defeito nosso, quando o que houve foi digitar o login de
+    outra pessoa).
+
+    A comparacao roda em Python sobre a lista inteira, e nao com `.eq` no
+    PostgREST, pelo mesmo motivo do `_exigir_nome_livre` da aba Tecnologia:
+    `.eq` numa coluna nula descarta as linhas com NULL, e aqui a esmagadora
+    maioria e nula.
+    """
+    login = normalizar_github_login(bruto)
+    motivo = motivo_github_login_invalido(login)
+    if motivo:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=motivo)
+    if login is None:
+        return None
+
+    result = selecionar_participantes(supabase, "id, nome_completo, github_login")
+    for linha in result.data or []:
+        if linha.get("id") == exclude_id:
+            continue
+        if normalizar_github_login(linha.get("github_login")) == login:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail=motivo_github_login_repetido(login, linha.get("nome_completo")),
+            )
+    return login
 
 
 def _generate_password() -> str:
@@ -318,6 +355,19 @@ async def create_usuario(
     }
     _normalize_access_profile_fields(payload, is_create=True)
 
+    # A chave so entra no INSERT quando ha login de verdade.
+    #
+    # A LEITURA de `participantes` ja tolera a coluna ausente
+    # (`_COLUNAS_OPCIONAIS` do `dependencies.py`), e a ESCRITA precisa da mesma
+    # tolerancia pelo mesmo motivo: o deploy NAO aplica migration, o humano cola
+    # o SQL no Studio depois, e entre uma coisa e outra um INSERT que mandasse
+    # `github_login: None` quebraria com 42703 e a criacao de usuario cairia em
+    # producao. Mandar a chave so quando ela tem valor faz o caso comum (quase
+    # todo mundo, que nao tem login) atravessar essa janela intacto.
+    login = _github_login_valido(supabase, body.github_login)
+    if login is not None:
+        payload["github_login"] = login
+
     # Saga manual: INSERT participante + auth user com rollback se Admin API
     # falhar (evita registro órfão sem auth_user_id). Mantemos a postura
     # "best effort" do auth: se falhar, o helper já fez o rollback do INSERT,
@@ -366,6 +416,7 @@ async def create_usuario(
         "is_externo",
         "is_super_admin",
         "access_profile",
+        "github_login",
         "data_cadastro",
     ):
         novo.setdefault(campo, payload.get(campo))
@@ -419,6 +470,12 @@ async def update_usuario(
     # Valida unicidade de email.
     if "email" in data and data["email"] != atual.get("email"):
         _assert_email_disponivel(supabase, data["email"], exclude_id=participante_id)
+
+    # `github_login` passa por `exclude_unset` acima, entao `null` explicito
+    # chega aqui e APAGA o login (quem deixou de trabalhar no GitHub para de ver
+    # os controles do Vinculo). Campo ausente nao mexe em nada.
+    if "github_login" in data:
+        data["github_login"] = _github_login_valido(supabase, data["github_login"], exclude_id=participante_id)
 
     # Monta changes (antes/depois) apenas para campos realmente alterados.
     changes: dict[str, dict] = {}

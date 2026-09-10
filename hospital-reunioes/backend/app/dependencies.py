@@ -70,7 +70,7 @@ async def get_current_user(
 
 _PARTICIPANTE_FULL_FIELDS = (
     "id, nome_completo, cargo, email, role, setor, area, ativo, is_externo, "
-    "is_super_admin, access_profile, perfil_pop, perfil_ouvidoria, auth_user_id, data_cadastro"
+    "is_super_admin, access_profile, perfil_pop, perfil_ouvidoria, github_login, auth_user_id, data_cadastro"
 )
 
 
@@ -84,7 +84,7 @@ _PARTICIPANTE_FULL_FIELDS = (
 # que impede um ambiente rodar meses com a Ouvidoria invisível sem ninguém
 # saber por quê. Coluna sai desta lista quando a migration dela é passado
 # garantido em todo ambiente.
-_COLUNAS_OPCIONAIS = ("perfil_ouvidoria",)
+_COLUNAS_OPCIONAIS = ("perfil_ouvidoria", "github_login")
 
 _COLUNA_INEXISTENTE = "42703"
 

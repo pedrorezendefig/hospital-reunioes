@@ -155,6 +155,7 @@ def _pessoa(
     *,
     access_profile: str | None = "super_admin",
     ativo: bool | None = True,
+    github_login: str | None = None,
 ) -> dict:
     return {
         "id": pid,
@@ -171,6 +172,7 @@ def _pessoa(
         "access_profile": access_profile,
         "perfil_pop": None,
         "perfil_ouvidoria": None,
+        "github_login": github_login,
         "data_cadastro": "2026-01-01",
     }
 
@@ -379,8 +381,10 @@ def test_a_varredura_enxerga_as_rotas_da_aba():
     continuar VERDE e onze rotas saírem da matriz de 403 em silêncio, que é a
     morte por varredura parcial das issues #542 e #546. Fatia que acrescentar
     rota sobe o número junto.
+
+    A issue #674 somou 3: o "eu" da aba, vincular e desvincular.
     """
-    assert len(ROTAS) >= 15, f"a varredura só achou {len(ROTAS)} rotas em {PREFIXO}: {ROTAS}"
+    assert len(ROTAS) >= 18, f"a varredura só achou {len(ROTAS)} rotas em {PREFIXO}: {ROTAS}"
 
 
 PERSONAS_SEM_ACESSO = {
@@ -406,8 +410,16 @@ def test_quem_nao_e_super_admin_leva_403(persona, metodo, caminho, corpo):
 @pytest.mark.parametrize("metodo,caminho,corpo", ROTAS, ids=lambda v: v if isinstance(v, str) else "")
 def test_super_admin_passa_em_todas(metodo, caminho, corpo):
     """O par de presenca do teste acima: sem ele, um 403 cravado em toda rota
-    passaria pelos dois."""
-    dono = _pessoa("P1", "Dona Vitta")
+    passaria pelos dois.
+
+    A persona vem COM `github_login` porque o que esta matriz mede e o gate de
+    PAPEL, e as portas do Vinculo (issue #674) tem um segundo gate, ortogonal a
+    ele: quem nao trabalha no GitHub leva 403 mesmo sendo Super admin. Sem o
+    login aqui, o 403 dessa segunda guarda seria lido como falha do gate de
+    papel, e o teste apontaria para o lugar errado. Quem prova o gate do login
+    e o `test_tecnologia_vinculo.py`.
+    """
+    dono = _pessoa("P1", "Dona Vitta", github_login="donavitta")
     client, _ = _montar(
         logado=dono,
         participantes=[dono],

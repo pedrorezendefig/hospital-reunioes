@@ -82,6 +82,10 @@ class AdminUsuarioResponse(BaseModel):
     perfil_pop: Literal["superadmin", "gestor_qualidade", "gerente", "coordenador"] | None = None
     # Eixo do contexto Ouvidoria (ADR 0034): quem lê o Dossiê.
     perfil_ouvidoria: Literal["ouvidor", "diretoria_executiva"] | None = None
+    # Login no GitHub (ADR 0054, decisao 4): um fato sobre a pessoa, nao um
+    # lado. E ele que separa, na aba Tecnologia, quem ve o Vinculo com o
+    # desenvolvimento de quem ve so a Etapa em palavras.
+    github_login: str | None = None
     auth_user_id: str | None = None
     data_cadastro: date | None = None
 
@@ -103,6 +107,9 @@ class AdminUsuarioCreate(BaseModel):
     access_profile: AccessProfile = "regular"
     is_externo: bool = False
     ativo: bool = True
+    # Texto livre curto: quem valida o formato e normaliza para minusculas e o
+    # router, que tambem cobra a unicidade com frase de gente.
+    github_login: str | None = Field(None, max_length=39)
 
 
 class AdminUsuarioUpdate(BaseModel):
@@ -121,6 +128,10 @@ class AdminUsuarioUpdate(BaseModel):
     access_profile: AccessProfile | None = None
     is_externo: bool | None = None
     ativo: bool | None = None
+    # `github_login: null` explicito APAGA o login, e por isso o router olha
+    # `model_fields_set`: quem deixou de trabalhar no GitHub deixa de ver os
+    # controles do Vinculo, e isso precisa ser possivel pela mesma tela.
+    github_login: str | None = Field(None, max_length=39)
     reason: str | None = Field(None, max_length=1000)
 
 

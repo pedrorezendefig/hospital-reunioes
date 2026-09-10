@@ -25,6 +25,7 @@ import { Select } from "@/components/ui/Select";
 import { ConversaDaDemanda } from "./ConversaDaDemanda";
 import { CopiarDaDemanda } from "./CopiarDaDemanda";
 import { TipoIcone } from "./TipoIcone";
+import { VinculoDaDemanda } from "./VinculoDaDemanda";
 import {
   avisoPorEmail,
   BASE_TECNOLOGIA,
@@ -32,6 +33,7 @@ import {
   destinosDe,
   ESTADO_ROTULO,
   EstadoDemanda,
+  EuNaAba,
   FALHA_DE_CONEXAO,
   LinhaDaConversa,
   motivoDaRecusa,
@@ -50,6 +52,8 @@ type Props = {
   produtos: ProdutoDaEscolha[];
   pessoas: PessoaDaAba[];
   token: string | null;
+  /** Quem está olhando, do ponto de vista do Vínculo (issue #674). */
+  eu: EuNaAba;
   onFechar: () => void;
   onMudou: () => void | Promise<void>;
 };
@@ -65,7 +69,7 @@ function camposDa(demanda: Demanda) {
   };
 }
 
-export function DemandaModal({ demanda, produtos, pessoas, token, onFechar, onMudou }: Props) {
+export function DemandaModal({ demanda, produtos, pessoas, token, eu, onFechar, onMudou }: Props) {
   const [campos, setCampos] = useState(() => camposDa(demanda));
   const [conversa, setConversa] = useState<LinhaDaConversa[]>([]);
   const [erro, setErro] = useState<string | null>(null);
@@ -144,6 +148,15 @@ export function DemandaModal({ demanda, produtos, pessoas, token, onFechar, onMu
 
   const atribuir = (responsavel_id: string) =>
     enviar(`${BASE_TECNOLOGIA}/demandas/${demanda.id}/atribuir`, "POST", { responsavel_id });
+
+  /**
+   * As duas portas do Vínculo passam pelo MESMO `enviar` das outras (issue
+   * #674): quem diz o motivo da recusa (403 de quem não tem login, 503 da
+   * integração desligada, 422 do número que não serve) é o servidor, e a frase
+   * dele já aparece no alerta lá em cima. Um caminho de rede próprio para o
+   * Vínculo repetiria esse tratamento e divergiria dele na primeira mudança.
+   */
+  const enviarDoVinculo = (url: string, corpo?: unknown) => enviar(url, "POST", corpo ?? {});
 
   const opcoesDeProduto = produtos
     .filter((p) => p.ativo || p.id === demanda.produto_id)
@@ -291,6 +304,8 @@ export function DemandaModal({ demanda, produtos, pessoas, token, onFechar, onMu
             </div>
           </div>
         </div>
+
+        <VinculoDaDemanda demanda={demanda} eu={eu} onEnviar={enviarDoVinculo} />
 
         <CopiarDaDemanda demanda={demanda} token={token} />
 

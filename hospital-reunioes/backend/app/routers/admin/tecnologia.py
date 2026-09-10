@@ -40,6 +40,18 @@ Copiar (issue #640):
                                                         texto simples, pronta
                                                         para colar numa IA.
 
+Vinculo com o desenvolvimento (issue #674, ADR 0054):
+
+- GET   /admin/tecnologia/eu                    quem esta olhando: se tem login
+                                                no GitHub e se a integracao
+                                                esta configurada.
+- POST  /admin/tecnologia/demandas/{id}/vincular    liga a Demanda a uma
+                                                    issue-raiz pelo numero.
+- POST  /admin/tecnologia/demandas/{id}/desvincular desfaz o Vinculo.
+
+As duas portas do Vinculo exigem `github_login` (403 sem ele, Super admin
+inclusive): o que e da Vitta fica atras do login, e o diretor ve so a Etapa.
+
 Minha vez e Historico (issue #641):
 
 - GET   /admin/tecnologia/minha-vez             o que espera pela pessoa
@@ -70,7 +82,7 @@ from typing import NoReturn
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from supabase import Client
 
-from app.dependencies import get_supabase_client, require_super_admin
+from app.dependencies import get_supabase_client, require_super_admin, selecionar_participantes
 from app.limiter import limiter
 from app.models.tecnologia_schemas import (
     AtribuirPayload,
@@ -80,6 +92,7 @@ from app.models.tecnologia_schemas import (
     DemandaDoHistoricoResponse,
     DemandaResponse,
     DemandaUpdatePayload,
+    EuNaAbaResponse,
     MoverPayload,
     PessoaDaAba,
     ProdutoCreatePayload,
@@ -87,7 +100,9 @@ from app.models.tecnologia_schemas import (
     ProdutoUpdatePayload,
     RespostaPayload,
     TextoParaIaResponse,
+    VincularPayload,
 )
+from app.services import github_client
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
     AVISO_EMAIL_NAO_SAIU,
@@ -129,6 +144,27 @@ from app.services.tecnologia import (
     transicao_permitida,
 )
 from app.services.tecnologia_email import avisar_atribuicao, avisar_mencao, avisar_resposta
+from app.services.tecnologia_vinculo import (
+    ETAPA_REGISTRADA,
+    MOTIVO_GITHUB_INDISPONIVEL,
+    MOTIVO_INTEGRACAO_DESLIGADA,
+    MOTIVO_NUMERO_INVALIDO,
+    MOTIVO_SEM_GITHUB_LOGIN,
+    MOTIVO_SEM_VINCULO_PARA_DESFAZER,
+    TEXTO_VINCULO_CRIADO,
+    TEXTO_VINCULO_DESFEITO,
+    corpo_com_marcador,
+    corpo_precisa_do_marcador,
+    etapa_da_foto,
+    foto_mudou,
+    motivo_demanda_ja_vinculada,
+    motivo_e_pull_request,
+    motivo_issue_inexistente,
+    motivo_numero_ja_usado,
+    partes_da_foto,
+    tem_github_login,
+    texto_movimento_etapa,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -141,16 +177,26 @@ TABELA_CONVERSAS = "tecnologia_conversas"
 # O que a lista de pessoas precisa ler do participante. `ativo` e
 # `access_profile`/`is_super_admin` entram porque o filtro roda em Python: um
 # `.eq("ativo", True)` no PostgREST descartaria as linhas com `ativo` NULL.
-_CAMPOS_PESSOA = "id, nome_completo, email, ativo, is_super_admin, access_profile"
+_CAMPOS_PESSOA = "id, nome_completo, email, ativo, is_super_admin, access_profile, github_login"
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
 
 
 def _pessoas_da_aba(supabase: Client) -> list[dict]:
-    """Participantes ativos com Super admin, em ordem de nome."""
-    result = supabase.table("participantes").select(_CAMPOS_PESSOA).order("nome_completo").execute()
-    return [linha for linha in (result.data or []) if e_pessoa_da_aba(linha)]
+    """Participantes ativos com Super admin, em ordem de nome.
+
+    Passa pelo `selecionar_participantes` da casa, e nao por um `select` direto,
+    porque `github_login` e coluna NOVA (migration 103): o backend sobe antes de
+    a migration ser aplicada a mao no Studio, e um `select` cru derrubaria a aba
+    inteira nesse intervalo em vez de apenas deixar o Vinculo desligado.
+    """
+    result = selecionar_participantes(supabase, _CAMPOS_PESSOA, lambda q: q.order("nome_completo"))
+    return [
+        {**linha, "tem_github_login": tem_github_login(linha)}
+        for linha in (result.data or [])
+        if e_pessoa_da_aba(linha)
+    ]
 
 
 def _recusar(motivo: str) -> NoReturn:
@@ -367,9 +413,16 @@ def _nomes_de_participantes(supabase: Client, ids: set[str]) -> dict[str, str]:
     return {linha["id"]: linha.get("nome_completo") for linha in (result.data or [])}
 
 
-def _com_nomes(supabase: Client, demandas: list[dict]) -> list[dict]:
+def _com_nomes(supabase: Client, demandas: list[dict], *, ator: dict) -> list[dict]:
     """Resolve `produto_nome` e `responsavel_nome` em duas consultas, para toda
-    a lista de uma vez: o card mostra os dois, e a tela nao cruza tabela."""
+    a lista de uma vez: o card mostra os dois, e a tela nao cruza tabela.
+
+    E o funil por onde TODA Demanda sai desta API, e por isso o objeto do
+    Vinculo e montado aqui, e nao em cada rota. O que se decide neste ponto e
+    quem ve numero e endereco de issue (ADR 0054, decisao 9): uma rota nova que
+    esquecesse de aplicar a regra mostraria o numero ao diretor, e ninguem
+    perceberia, porque a resposta continuaria bem formada.
+    """
     produtos_ids = {d["produto_id"] for d in demandas if d.get("produto_id")}
     nomes_produto: dict[str, str] = {}
     if produtos_ids:
@@ -378,14 +431,30 @@ def _com_nomes(supabase: Client, demandas: list[dict]) -> list[dict]:
 
     nomes_pessoa = _nomes_de_participantes(supabase, {d["responsavel_id"] for d in demandas if d.get("responsavel_id")})
 
+    da_vitta = tem_github_login(ator)
     return [
         {
             **d,
             "produto_nome": nomes_produto.get(d.get("produto_id")),
             "responsavel_nome": nomes_pessoa.get(d.get("responsavel_id")),
+            "vinculo": _vinculo_visivel(d) if da_vitta else None,
         }
         for d in demandas
     ]
+
+
+def _vinculo_visivel(demanda: dict) -> dict | None:
+    """Numero e endereco da issue, ou `None` quando nao ha Vinculo.
+
+    O endereco sai da foto guardada, e nao montado a mao a partir do numero: o
+    repositorio da integracao e uma variavel de ambiente, e um link montado
+    aqui apontaria para o repositorio errado no dia em que ela mudar.
+    """
+    numero = demanda.get("github_issue_numero")
+    if not numero:
+        return None
+    foto = demanda.get("github_foto") or {}
+    return {"numero": numero, "url": foto.get("url") if isinstance(foto, dict) else None}
 
 
 def _normalizar_prazo(valor: str | None) -> str | None:
@@ -443,7 +512,7 @@ def _gravar_movimento(
     demanda_id: str,
     campo: str,
     de: str | None,
-    para: str,
+    para: str | None,
     texto: str,
 ) -> None:
     """A linha automatica do fio, logo depois do movimento.
@@ -656,7 +725,12 @@ async def _aviso_da_correcao(
     if not mencionados:
         return None
     try:
-        com_nomes = _com_nomes(supabase, [demanda])[0]
+        # O `ator` viaja ate aqui porque desde a issue #674 e o `_com_nomes` que
+        # decide quem ve o objeto do Vinculo (numero e URL da issue). Nada disso
+        # entra no e-mail, mas a regra mora num lugar so: uma chamada que
+        # passasse por fora dela seria a fresta por onde o proximo campo
+        # reservado a Vitta vazaria.
+        com_nomes = _com_nomes(supabase, [demanda], ator=ator)[0]
     except Exception:
         logger.exception("Falha ao ler os nomes da Demanda %s para o aviso da correcao", demanda.get("id"))
         return AVISO_EMAIL_NAO_SAIU
@@ -680,7 +754,7 @@ async def listar_demandas(
     tipo: str | None = None,
     produto_id: str | None = None,
     responsavel_id: str | None = None,
-    _ator: dict = Depends(require_super_admin),
+    ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
     """As Demandas do Quadro, com os filtros da PRD.
@@ -702,7 +776,7 @@ async def listar_demandas(
         if valor:
             consulta = consulta.eq(coluna, valor)
     result = consulta.order("criado_em").execute()
-    return _com_nomes(supabase, list(result.data or []))
+    return _com_nomes(supabase, list(result.data or []), ator=ator)
 
 
 @router.post("/demandas", response_model=DemandaResponse, status_code=status.HTTP_201_CREATED)
@@ -754,7 +828,7 @@ async def criar_demanda(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Falha ao criar a Demanda",
         )
-    criada = _com_nomes(supabase, [result.data[0]])[0]
+    criada = _com_nomes(supabase, [result.data[0]], ator=ator)[0]
     # "Inclusive na criação" (PRD #634, história 41): a Demanda nasce na mão do
     # dono do Produto, e para ele isso é uma atribuição como qualquer outra.
     return {**criada, "aviso_por_email": await _aviso_da_atribuicao(supabase, demanda=criada, ator=ator)}
@@ -764,7 +838,7 @@ async def criar_demanda(
 async def atualizar_demanda(
     demanda_id: str,
     payload: DemandaUpdatePayload,
-    _ator: dict = Depends(require_super_admin),
+    ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
     """Edita os campos do modal. Campo ausente fica como esta.
@@ -792,12 +866,12 @@ async def atualizar_demanda(
         mudancas["produto_id"] = _buscar_produto(supabase, payload.produto_id)["id"]
 
     if not mudancas:
-        return _com_nomes(supabase, [atual])[0]
+        return _com_nomes(supabase, [atual], ator=ator)[0]
 
     result = supabase.table(TABELA_DEMANDAS).update(mudancas).eq("id", demanda_id).execute()
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada")
-    return _com_nomes(supabase, [result.data[0]])[0]
+    return _com_nomes(supabase, [result.data[0]], ator=ator)[0]
 
 
 @router.post("/demandas/{demanda_id}/mover", response_model=DemandaResponse)
@@ -847,7 +921,7 @@ async def mover_demanda(
         para=para,
         texto=texto_movimento_estado(autor_nome=ator.get("nome_completo") or "Alguém", para=para),
     )
-    return _com_nomes(supabase, [result.data[0]])[0]
+    return _com_nomes(supabase, [result.data[0]], ator=ator)[0]
 
 
 @router.post("/demandas/{demanda_id}/atribuir", response_model=DemandaResponse)
@@ -875,7 +949,7 @@ async def atribuir_demanda(
     if de == novo_id:
         # Nada mudou: gravar linha de movimento aqui encheria o fio de
         # "atribuiu a Fulano" sempre que alguem reabrisse o seletor.
-        return _com_nomes(supabase, [atual])[0]
+        return _com_nomes(supabase, [atual], ator=ator)[0]
 
     result = supabase.table(TABELA_DEMANDAS).update({"responsavel_id": novo_id}).eq("id", demanda_id).execute()
     if not result.data:
@@ -892,11 +966,260 @@ async def atribuir_demanda(
             para_nome=pessoas[novo_id].get("nome_completo") or novo_id,
         ),
     )
-    atribuida = _com_nomes(supabase, [result.data[0]])[0]
+    atribuida = _com_nomes(supabase, [result.data[0]], ator=ator)[0]
     # Depois da linha do fio, e não antes: se o fio falhar, o 500 do
     # `_gravar_movimento` sai daqui e o e-mail não chega a ser montado. Avisar
     # antes mandaria "a Demanda é sua" sobre um card cuja trilha ficou quebrada.
     return {**atribuida, "aviso_por_email": await _aviso_da_atribuicao(supabase, demanda=atribuida, ator=ator)}
+
+
+# ─── Vinculo com o desenvolvimento (issue #674, ADR 0054) ────────────────────
+
+
+# Quantas vezes por minuto uma mesma origem pode mexer no Vinculo.
+#
+# O recurso escasso aqui NAO e a cota do Resend (o balde dos gatilhos de e-mail
+# fica de fora): e a cota da API do GitHub, que e UMA para o app inteiro e
+# atende o token pessoal do Pedro. Cada `vincular` gasta duas leituras e ate uma
+# escrita la; um laco bobo numa conta de Super admin da Vitta derrubaria a
+# integracao para todo mundo, inclusive para a reconciliacao da fatia seguinte.
+#
+# `shared_limit`, e nao `limit`, pelo mesmo motivo das portas de gatilho: o
+# `Limiter` da casa nasce com `key_style="url"`, e com `limit` cada Demanda
+# ganharia o proprio balde, o que faria o teto virar enfeite justo na porta em
+# que ele foi pedido.
+LIMITE_DO_VINCULO = "30/minute"
+ESCOPO_DO_VINCULO = "tecnologia-vinculo-github"
+
+
+def _exigir_da_vitta(ator: dict) -> None:
+    """403 para quem nao tem `github_login`, Super admin inclusive.
+
+    O gate NAO e de papel, e por isso nao se resolve com `require_super_admin`:
+    a aba inteira ja e de Super admin, e o diretor e um deles. O que separa
+    aqui e trabalhar no GitHub ou nao (ADR 0054, decisao 9). Sem esta guarda, o
+    botao escondido na tela seria a unica protecao, e esconder nao e proteger.
+    """
+    if not tem_github_login(ator):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=MOTIVO_SEM_GITHUB_LOGIN)
+
+
+def _exigir_integracao() -> None:
+    """503 sem token ou sem repositorio configurado.
+
+    503, e nao 500: nao ha defeito nenhum, falta configuracao no ambiente, e a
+    frase diz isso. Nao ha o que tentar de novo sem alguem mexer no Coolify.
+    """
+    if not github_client.integracao_configurada():
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=MOTIVO_INTEGRACAO_DESLIGADA,
+        )
+
+
+def _issue_indisponivel() -> NoReturn:
+    raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_GITHUB_INDISPONIVEL)
+
+
+def _dona_do_numero(supabase: Client, numero: int, *, exceto_id: str) -> dict | None:
+    """A OUTRA Demanda que ja usa este numero, se houver.
+
+    O indice unico da migration 103 recusaria isto no banco, mas com erro de
+    Postgres: 500 com cara de defeito nosso, quando o que houve foi digitar o
+    numero de um PRD que ja tem dono. A frase daqui diz de quem e.
+    """
+    result = supabase.table(TABELA_DEMANDAS).select("id, titulo").eq("github_issue_numero", numero).execute()
+    for linha in result.data or []:
+        if str(linha.get("id")) != str(exceto_id):
+            return linha
+    return None
+
+
+def _gravar_etapa(supabase: Client, *, demanda_id: str, de: str, para: str, entregues, total) -> None:
+    """A linha automatica da mudanca de Etapa, quando ela de fato mudou.
+
+    Etapa igual nao grava nada: e a mesma guarda do `foto_mudou`, um degrau
+    abaixo. Sem ela, cada sincronizacao repetiria "Etapa: Planejada" no fio que
+    o diretor le.
+    """
+    if de == para:
+        return
+    _gravar_movimento(
+        supabase,
+        demanda_id=demanda_id,
+        campo="etapa",
+        de=de,
+        para=para,
+        texto=texto_movimento_etapa(para=para, entregues=entregues, total=total),
+    )
+
+
+@router.get("/eu", response_model=EuNaAbaResponse)
+async def quem_sou_eu(
+    ator: dict = Depends(require_super_admin),
+):
+    """Quem esta olhando a aba, do ponto de vista do Vinculo.
+
+    Duas respostas que a tela nao tem como dar sozinha: se ESTA pessoa tem
+    login no GitHub (o `useAuth` do front carrega o id do Supabase Auth, e nao
+    o `participantes.id`) e se a integracao esta configurada no ambiente.
+    """
+    return {
+        "id": ator["id"],
+        "nome_completo": ator.get("nome_completo"),
+        "tem_github_login": tem_github_login(ator),
+        "integracao_configurada": github_client.integracao_configurada(),
+    }
+
+
+@router.post("/demandas/{demanda_id}/vincular", response_model=DemandaResponse)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
+async def vincular_demanda(
+    request: Request,
+    demanda_id: str,
+    payload: VincularPayload,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Liga a Demanda a uma issue-raiz do GitHub pelo numero (ADR 0054, decisao 1).
+
+    A ordem das guardas e a ordem das causas, da mais barata para a mais cara:
+    quem sou eu, se a integracao existe, se o numero faz sentido, se esta
+    Demanda ou aquela issue ja tem dono, e so entao a ida ao GitHub.
+
+    O par e guardado dos DOIS lados: a Demanda ganha o numero, a issue ganha o
+    id da Demanda num marcador oculto no fim do corpo. O marcador entra por
+    substituicao (`corpo_com_marcador`), entao vincular duas vezes o mesmo
+    numero deixa o corpo identico e nem chega a chamar o PATCH.
+
+    Sincroniza na hora: sem isso o card mostraria o selo vazio ate a
+    reconciliacao da fatia seguinte passar, e quem acabou de vincular concluiria
+    que nao funcionou.
+    """
+    _exigir_da_vitta(ator)
+    _exigir_integracao()
+
+    numero = payload.numero
+    if numero <= 0:
+        _recusar(MOTIVO_NUMERO_INVALIDO)
+
+    demanda = _buscar_demanda(supabase, demanda_id)
+    ja_vinculada = demanda.get("github_issue_numero")
+    if ja_vinculada and int(ja_vinculada) != numero:
+        _recusar(motivo_demanda_ja_vinculada(int(ja_vinculada)))
+
+    outra = _dona_do_numero(supabase, numero, exceto_id=demanda_id)
+    if outra:
+        _recusar(motivo_numero_ja_usado(numero, str(outra.get("titulo") or "sem título")))
+
+    try:
+        dados = github_client.ler_issue(numero)
+        if github_client.e_pull_request(dados):
+            _recusar(motivo_e_pull_request(numero))
+
+        corpo = dados.get("body")
+        if corpo_precisa_do_marcador(corpo, demanda_id):
+            github_client.atualizar_corpo(numero, corpo_com_marcador(corpo, demanda_id))
+
+        foto = github_client.montar_foto(dados, github_client.ler_sub_issues(numero))
+    except github_client.IssueNaoEncontradaError:
+        _recusar(motivo_issue_inexistente(numero))
+    except github_client.GithubNaoConfiguradoError:
+        # A configuracao pode ter sumido entre a guarda la em cima e a chamada.
+        _exigir_integracao()
+        raise
+    except github_client.GithubIndisponivelError:
+        logger.warning("[tecnologia] GitHub indisponivel ao vincular a Demanda %s a issue #%s", demanda_id, numero)
+        _issue_indisponivel()
+
+    etapa_antes = demanda.get("etapa") or ETAPA_REGISTRADA
+    etapa = etapa_da_foto(foto)
+    entregues, total = partes_da_foto(foto)
+
+    mudanca = {
+        "github_issue_numero": numero,
+        "etapa": etapa,
+        "partes_entregues": entregues,
+        "partes_total": total,
+        "github_foto": foto,
+        "github_sincronizado_em": _agora(),
+        "vinculado_por": ator["id"],
+    }
+    # Foto igual a guardada nao escreve nada no fio: e a guarda que impede a
+    # reconciliacao da fatia seguinte de repetir a mesma linha de hora em hora.
+    # Aqui ela quase sempre muda (a Demanda acabou de ganhar o numero), mas
+    # vincular DE NOVO o mesmo numero passa por ela e fica calado, que e o
+    # comportamento que a issue pede do marcador e vale igual para a Conversa.
+    mudou = foto_mudou(demanda.get("github_foto"), foto)
+
+    result = supabase.table(TABELA_DEMANDAS).update(mudanca).eq("id", demanda_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada")
+
+    if not ja_vinculada:
+        _gravar_movimento(
+            supabase,
+            demanda_id=demanda_id,
+            campo="vinculo",
+            de=None,
+            para=str(numero),
+            texto=TEXTO_VINCULO_CRIADO,
+        )
+    if mudou:
+        _gravar_etapa(supabase, demanda_id=demanda_id, de=etapa_antes, para=etapa, entregues=entregues, total=total)
+
+    return _com_nomes(supabase, [result.data[0]], ator=ator)[0]
+
+
+@router.post("/demandas/{demanda_id}/desvincular", response_model=DemandaResponse)
+@limiter.shared_limit(LIMITE_DO_VINCULO, ESCOPO_DO_VINCULO)
+async def desvincular_demanda(
+    request: Request,
+    demanda_id: str,
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Desfaz o Vinculo: apaga o numero, a Etapa e a foto guardada.
+
+    NAO depende do GitHub, de proposito: o que se limpa e o lado de ca, e uma
+    integracao fora do ar nao pode prender a Demanda a uma issue errada. O
+    marcador que ficou na issue nao mente por muito tempo: quem vincular essa
+    issue de novo entra por substituicao, e nao por acumulo.
+
+    A Demanda volta a `registrada`, que e a Etapa da ausencia de Vinculo, e o
+    card volta a nao ter selo.
+    """
+    _exigir_da_vitta(ator)
+
+    demanda = _buscar_demanda(supabase, demanda_id)
+    numero = demanda.get("github_issue_numero")
+    if not numero:
+        _recusar(MOTIVO_SEM_VINCULO_PARA_DESFAZER)
+
+    mudanca = {
+        "github_issue_numero": None,
+        "etapa": ETAPA_REGISTRADA,
+        "partes_entregues": None,
+        "partes_total": None,
+        "o_que_muda": None,
+        "partes": None,
+        "github_foto": None,
+        "github_sincronizado_em": None,
+        "vinculado_por": None,
+    }
+    result = supabase.table(TABELA_DEMANDAS).update(mudanca).eq("id", demanda_id).execute()
+    if not result.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Demanda nao encontrada")
+
+    _gravar_movimento(
+        supabase,
+        demanda_id=demanda_id,
+        campo="vinculo",
+        de=str(numero),
+        para=None,
+        texto=TEXTO_VINCULO_DESFEITO,
+    )
+    return _com_nomes(supabase, [result.data[0]], ator=ator)[0]
 
 
 # ─── Conversa: helpers ───────────────────────────────────────────────────────
@@ -941,21 +1264,47 @@ def _fio_ordenado(consulta):
     return consulta.order("criado_em").order("id")
 
 
-def _fio_da_demanda(supabase: Client, demanda_id: str) -> list[dict]:
+def _sem_o_numero_da_issue(linha: dict) -> dict:
+    """A linha de movimento do Vinculo sem o numero da issue no de/para.
+
+    So a linha de `vinculo` carrega numero de issue: `estado`, `responsavel` e
+    `etapa` guardam valores do proprio dominio da Demanda, que o diretor ja le
+    na tela.
+    """
+    if linha.get("movimento_campo") != "vinculo":
+        return linha
+    return {**linha, "movimento_de": None, "movimento_para": None}
+
+
+def _fio_da_demanda(supabase: Client, demanda_id: str, *, ator: dict) -> list[dict]:
     """As linhas do fio em ordem cronologica, com o `autor_nome` resolvido.
 
     Um lugar so para ler o fio DE UMA Demanda: a Conversa do modal e o texto do
     "Copiar para IA" precisam ver a MESMA coisa, na mesma ordem.
 
+    E o funil onde o numero da issue e cortado para quem nao tem `github_login`,
+    pelo mesmo motivo de o `_com_nomes` cortar o objeto do Vinculo: o fio e a
+    superficie mais LARGA que existe (o "Copiar para IA" tira o texto do app e o
+    diretor o cola numa ferramenta de fora), e uma rota nova que lesse o fio por
+    fora daqui vazaria o numero sem nada acusar. O texto das linhas ja nasce sem
+    numero (`TEXTO_VINCULO_CRIADO`); o que sobra e o de/para estruturado, que
+    fica para quem e da Vitta rastrear.
+
     A leitura de VARIAS Demandas de uma vez ("Minha vez" e a busca do Historico)
     mora no `_fios_por_demanda`, e nao aqui, porque tem outra forma: outro
-    filtro, outras colunas e paginacao. O que as duas nao podem decidir
-    separado, a ordem, sai do `_fio_ordenado`, que e o mesmo para as duas.
+    filtro, outras colunas e paginacao. Ela nunca DEVOLVE linha a quem chama (so
+    filtra as Demandas), entao nao tem o que omitir. O que as duas nao podem
+    decidir separado, a ordem, sai do `_fio_ordenado`, que e o mesmo para as
+    duas.
     """
     result = _fio_ordenado(supabase.table(TABELA_CONVERSAS).select("*").eq("demanda_id", demanda_id)).execute()
     linhas = list(result.data or [])
     nomes = _nomes_de_participantes(supabase, {linha["autor_id"] for linha in linhas if linha.get("autor_id")})
-    return [{**linha, "autor_nome": nomes.get(linha.get("autor_id"))} for linha in linhas]
+    da_vitta = tem_github_login(ator)
+    return [
+        {**(linha if da_vitta else _sem_o_numero_da_issue(linha)), "autor_nome": nomes.get(linha.get("autor_id"))}
+        for linha in linhas
+    ]
 
 
 def _texto_e_mencoes(supabase: Client, payload: RespostaPayload) -> tuple[str, list[str]]:
@@ -1027,14 +1376,14 @@ async def listar_conversa(
     _buscar_demanda(supabase, demanda_id)
     return [
         _com_janela(linha, ator_id=ator["id"], autor_nome=linha.get("autor_nome"))
-        for linha in _fio_da_demanda(supabase, demanda_id)
+        for linha in _fio_da_demanda(supabase, demanda_id, ator=ator)
     ]
 
 
 @router.get("/demandas/{demanda_id}/texto-para-ia", response_model=TextoParaIaResponse)
 async def texto_da_demanda_para_ia(
     demanda_id: str,
-    _ator: dict = Depends(require_super_admin),
+    ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
     """A Demanda inteira em texto simples, para colar numa IA (issue #640).
@@ -1047,8 +1396,8 @@ async def texto_da_demanda_para_ia(
     O que entra e o que fica de fora esta no `texto_para_ia`, com o porque de
     cada corte.
     """
-    demanda = _com_nomes(supabase, [_buscar_demanda(supabase, demanda_id)])[0]
-    return {"texto": texto_para_ia(demanda=demanda, linhas=_fio_da_demanda(supabase, demanda_id))}
+    demanda = _com_nomes(supabase, [_buscar_demanda(supabase, demanda_id)], ator=ator)[0]
+    return {"texto": texto_para_ia(demanda=demanda, linhas=_fio_da_demanda(supabase, demanda_id, ator=ator))}
 
 
 @router.post(
@@ -1072,7 +1421,7 @@ async def responder_na_conversa(
     """
     # Com os nomes resolvidos porque o e-mail dos gatilhos mostra o Produto, e
     # o `produto_nome` não está na linha da Demanda.
-    demanda = _com_nomes(supabase, [_buscar_demanda(supabase, demanda_id)])[0]
+    demanda = _com_nomes(supabase, [_buscar_demanda(supabase, demanda_id)], ator=ator)[0]
     texto, mencoes = _texto_e_mencoes(supabase, payload)
 
     nova = {
@@ -1301,7 +1650,7 @@ async def listar_minha_vez(
     ]
     return [
         {**d, "motivo": motivo_da_minha_vez(responsavel_id=d.get("responsavel_id"), pessoa_id=eu)}
-        for d in _com_nomes(supabase, ordenar_minha_vez(minhas))
+        for d in _com_nomes(supabase, ordenar_minha_vez(minhas), ator=ator)
     ]
 
 
@@ -1311,7 +1660,7 @@ async def listar_historico(
     tipo: str | None = None,
     produto_id: str | None = None,
     responsavel_id: str | None = None,
-    _ator: dict = Depends(require_super_admin),
+    ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
     """As Demandas Concluidas e Canceladas, com busca por texto (issue #641).
@@ -1360,5 +1709,5 @@ async def listar_historico(
             "fechada_por_id": desfechos[str(d["id"])][1],
             "fechada_por_nome": nomes.get(desfechos[str(d["id"])][1]),
         }
-        for d in _com_nomes(supabase, fechadas)
+        for d in _com_nomes(supabase, fechadas, ator=ator)
     ]

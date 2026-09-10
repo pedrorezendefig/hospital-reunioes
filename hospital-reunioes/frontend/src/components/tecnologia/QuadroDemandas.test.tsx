@@ -29,6 +29,7 @@ import { QuadroDemandas } from "./QuadroDemandas";
 import {
   Demanda,
   EstadoDemanda,
+  EU_DESCONHECIDO,
   FiltrosDoQuadro,
   linkDaDemanda,
   PrioridadeDemanda,
@@ -267,6 +268,7 @@ function montar(
         pessoas={PESSOAS}
         filtros={filtros}
         onFiltrosChange={setFiltros}
+        eu={EU_DESCONHECIDO}
       />
     );
   }
@@ -1359,6 +1361,7 @@ describe("Duas trocas de filtro em sequência", () => {
         pessoas={PESSOAS}
         filtros={filtros}
         onFiltrosChange={setFiltros}
+        eu={EU_DESCONHECIDO}
       />
     );
   }
@@ -1548,6 +1551,7 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
         pessoas={PESSOAS}
         filtros={filtros}
         onFiltrosChange={setFiltros}
+        eu={EU_DESCONHECIDO}
       />
     );
   }

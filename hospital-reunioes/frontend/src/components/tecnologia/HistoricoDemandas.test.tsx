@@ -25,7 +25,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testi
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HistoricoDemandas } from "./HistoricoDemandas";
-import { DemandaDoHistorico, FiltrosDoQuadro, SEM_FILTRO } from "./demandas";
+import { DemandaDoHistorico, EU_DESCONHECIDO, FiltrosDoQuadro, SEM_FILTRO } from "./demandas";
 
 const PRODUTOS = [
   { id: "prod-1", nome: "Ana", ativo: true },
@@ -128,6 +128,7 @@ function montar(
         pessoas={PESSOAS}
         filtros={filtros}
         onFiltrosChange={setFiltros}
+        eu={EU_DESCONHECIDO}
       />
     );
   }
@@ -469,6 +470,7 @@ describe("Duas leituras no ar ao mesmo tempo", () => {
         pessoas={PESSOAS}
         filtros={filtros}
         onFiltrosChange={setFiltros}
+        eu={EU_DESCONHECIDO}
       />
     );
   }

@@ -15,6 +15,13 @@ export interface AdminUsuario {
   access_profile: AccessProfile;
   perfil_pop?: PerfilPop | null;
   perfil_ouvidoria?: PerfilOuvidoria | null;
+  /**
+   * Login no GitHub (ADR 0054): um fato sobre a pessoa, não um lado.
+   *
+   * É ele que separa, na aba Tecnologia, quem vê o Vínculo com o
+   * desenvolvimento de quem vê só a Etapa em palavras.
+   */
+  github_login?: string | null;
   auth_user_id?: string | null;
   data_cadastro?: string | null;
 }
@@ -50,6 +57,8 @@ export interface AdminUsuarioPayload {
   access_profile?: AccessProfile;
   is_externo?: boolean;
   ativo?: boolean;
+  /** `null` explícito APAGA o login; campo ausente não mexe nele. */
+  github_login?: string | null;
   reason?: string;
 }
 

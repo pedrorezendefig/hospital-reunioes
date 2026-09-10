@@ -37,6 +37,10 @@ from app.models.admin_schemas import (  # noqa: E402
 )
 from app.models.schemas import UserRole  # noqa: E402
 from app.routers.admin import usuarios as usuarios_router  # noqa: E402
+from app.services.tecnologia_vinculo import (  # noqa: E402
+    MOTIVO_LOGIN_INVALIDO,
+    motivo_github_login_repetido,
+)
 
 # ─── Infra de mocks Supabase ─────────────────────────────────────────────────
 
@@ -877,3 +881,183 @@ class TestReativacaoDevolveLogin:
         await self._patch(sb, AdminUsuarioUpdate(ativo=True, reason="voltou ao quadro"))
 
         sb.auth.admin.update_user_by_id.assert_not_called()
+
+
+class TestGithubLogin:
+    """O campo Login no GitHub na tela de Usuarios (issue #674, ADR 0054).
+
+    Ele nao e um enfeite de cadastro: e a chave que abre os controles do Vinculo
+    na aba Tecnologia. Por isso as tres regras (minusculas, unicidade e formato)
+    moram no backend, e nao na tela: a tela pode ser contornada, e um login
+    gravado com maiuscula viraria uma segunda pessoa para o app.
+    """
+
+    @staticmethod
+    def _linha(pid: str, nome: str, email: str, github_login: str | None = None) -> dict:
+        return {
+            "id": pid,
+            "nome_completo": nome,
+            "email": email,
+            "cargo": "Analista",
+            "area": None,
+            "setor": None,
+            "role": "coordenador",
+            "ativo": True,
+            "is_externo": False,
+            "is_super_admin": False,
+            "github_login": github_login,
+        }
+
+    async def _patch(self, sb, participante_id: str, **campos):
+        return await usuarios_router.update_usuario(
+            participante_id=participante_id,
+            body=AdminUsuarioUpdate(**campos),
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+
+    @pytest.mark.asyncio
+    async def test_grava_em_minusculas(self):
+        """O GitHub nao distingue maiusculas em login: "Pedro" e "pedro" sao a
+        mesma conta, e duas linhas assim seriam duas pessoas para o app."""
+        sb = _build_supabase(participantes=[self._linha("P010", "Pedro", "p@x.com")])
+
+        result = await self._patch(sb, "P010", github_login="  PedroRezendeFig  ")
+
+        assert result["github_login"] == "pedrorezendefig"
+
+    @pytest.mark.asyncio
+    async def test_o_arroba_colado_junto_e_ruido_e_nao_dado(self):
+        sb = _build_supabase(participantes=[self._linha("P010", "Pedro", "p@x.com")])
+
+        result = await self._patch(sb, "P010", github_login="@pedro")
+
+        assert result["github_login"] == "pedro"
+
+    @pytest.mark.asyncio
+    async def test_campo_apagado_vira_nulo_e_nao_texto_vazio(self):
+        """Texto vazio faria o indice unico tratar duas pessoas SEM login como
+        duas donas do mesmo login, e o `tem_github_login` da aba diria "sim"
+        para quem nao tem nada."""
+        sb = _build_supabase(participantes=[self._linha("P010", "Pedro", "p@x.com", "pedro")])
+
+        result = await self._patch(sb, "P010", github_login="")
+
+        assert result["github_login"] is None
+
+    @pytest.mark.asyncio
+    async def test_nulo_explicito_apaga_o_login(self):
+        sb = _build_supabase(participantes=[self._linha("P010", "Pedro", "p@x.com", "pedro")])
+
+        result = await self._patch(sb, "P010", github_login=None)
+
+        assert result["github_login"] is None
+
+    @pytest.mark.asyncio
+    async def test_login_repetido_e_recusado_com_a_frase_de_quem_ja_o_tem(self):
+        sb = _build_supabase(
+            participantes=[
+                self._linha("P010", "Pedro Vitta", "p@x.com", "pedrorezendefig"),
+                self._linha("P011", "Outra Pessoa", "o@x.com"),
+            ]
+        )
+
+        with pytest.raises(HTTPException) as exc:
+            await self._patch(sb, "P011", github_login="PedroRezendeFig")
+
+        assert exc.value.status_code == 422
+        assert exc.value.detail == motivo_github_login_repetido("pedrorezendefig", "Pedro Vitta")
+        # E a linha do outro nao foi tocada.
+        assert sb.participantes[1]["github_login"] is None
+
+    @pytest.mark.asyncio
+    async def test_manter_o_proprio_login_nao_e_repeticao(self):
+        """O par de presenca da guarda acima: uma recusa cravada impediria a
+        pessoa de reeditar qualquer outro campo do proprio cadastro."""
+        sb = _build_supabase(participantes=[self._linha("P010", "Pedro", "p@x.com", "pedro")])
+
+        result = await self._patch(sb, "P010", github_login="pedro", nome_completo="Pedro Vitta")
+
+        assert result["github_login"] == "pedro"
+        assert result["nome_completo"] == "Pedro Vitta"
+
+    @pytest.mark.asyncio
+    async def test_login_que_o_github_nao_aceita_e_recusado(self):
+        sb = _build_supabase(participantes=[self._linha("P010", "Pedro", "p@x.com")])
+
+        with pytest.raises(HTTPException) as exc:
+            await self._patch(sb, "P010", github_login="pedro rezende")
+
+        assert exc.value.status_code == 422
+        assert exc.value.detail == MOTIVO_LOGIN_INVALIDO
+        assert sb.participantes[0]["github_login"] is None
+
+    @pytest.mark.asyncio
+    async def test_quem_nao_mandou_o_campo_nao_perde_o_login(self):
+        """`exclude_unset`: campo ausente e "nao mexi nisso", e nao "apague"."""
+        sb = _build_supabase(participantes=[self._linha("P010", "Pedro", "p@x.com", "pedro")])
+
+        result = await self._patch(sb, "P010", nome_completo="Pedro Vitta")
+
+        assert result["github_login"] == "pedro"
+
+    @pytest.mark.asyncio
+    async def test_criar_sem_login_nao_manda_a_coluna(self, monkeypatch):
+        """A janela entre o deploy e a migration colada a mao no Studio.
+
+        O deploy NAO aplica migration neste projeto: o humano cola o SQL depois.
+        Nesse intervalo a coluna `github_login` ainda nao existe, e um INSERT que
+        mandasse `github_login: None` quebraria com 42703, derrubando a criacao
+        de usuario em producao por um campo que a pessoa nem preencheu.
+
+        A LEITURA ja tolera a coluna ausente (`_COLUNAS_OPCIONAIS` do
+        `dependencies.py`); este e o par disso na ESCRITA.
+        """
+        sb = _build_supabase(participantes=[])
+        capturado: dict = {}
+        monkeypatch.setattr(
+            "app.services.auth_provisioning.provision_with_compensation",
+            lambda supabase, payload, role: (capturado.update(payload) or dict(payload), "auth-novo"),
+        )
+
+        await usuarios_router.create_usuario(
+            body=AdminUsuarioCreate(
+                nome_completo="Sem GitHub",
+                email="semgithub@x.com",
+                cargo="Analista",
+                role=UserRole.COORDENADOR,
+            ),
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+
+        assert "github_login" not in capturado, capturado
+
+    @pytest.mark.asyncio
+    async def test_criar_ja_aceita_o_login(self, monkeypatch):
+        sb = _build_supabase(participantes=[])
+        capturado: dict = {}
+        monkeypatch.setattr(
+            "app.services.auth_provisioning.provision_with_compensation",
+            lambda supabase, payload, role: (capturado.update(payload) or dict(payload), "auth-novo"),
+        )
+
+        novo = await usuarios_router.create_usuario(
+            body=AdminUsuarioCreate(
+                nome_completo="Pedro Vitta",
+                email="pedro@x.com",
+                cargo="Analista",
+                role=UserRole.COORDENADOR,
+                github_login="PedroRezendeFig",
+            ),
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+
+        assert novo["github_login"] == "pedrorezendefig"
+        # O par de presenca do teste acima: uma omissao cravada faria o campo
+        # nunca chegar ao banco, e o login digitado sumiria em silencio.
+        assert capturado["github_login"] == "pedrorezendefig"
