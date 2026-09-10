@@ -25,6 +25,7 @@ import { Select } from "@/components/ui/Select";
 import { usePolling } from "@/hooks/usePolling";
 
 import { DemandaModal } from "./DemandaModal";
+import { SeloDeEtapa } from "./SeloDeEtapa";
 import { TipoIcone } from "./TipoIcone";
 import {
   avisoPorEmail,
@@ -38,6 +39,7 @@ import {
   EstadoDemanda,
   estaAtrasado,
   FALHA_DE_CONEXAO,
+  EuNaAba,
   FiltrosDoQuadro,
   idadeEmDias,
   IDADE_VERMELHA_A_PARTIR_DE,
@@ -80,6 +82,14 @@ type Props = {
    */
   filtros: FiltrosDoQuadro;
   onFiltrosChange: (filtros: FiltrosDoQuadro) => void;
+  /**
+   * Quem está olhando, do ponto de vista do Vínculo (issue #674).
+   *
+   * Vem de cima, e não de uma chamada por painel: as três abas mostram o mesmo
+   * modal, e três respostas do mesmo `GET /eu` só multiplicariam a ida à rede
+   * e o risco de as abas discordarem entre si.
+   */
+  eu: EuNaAba;
 };
 
 const CLASSE_PRIORIDADE: Record<PrioridadeDemanda, string> = {
@@ -139,6 +149,7 @@ export function QuadroDemandas({
   pessoas,
   filtros,
   onFiltrosChange,
+  eu,
 }: Props) {
   const [demandas, setDemandas] = useState<Demanda[]>([]);
   const [carregando, setCarregando] = useState(true);
@@ -490,6 +501,10 @@ export function QuadroDemandas({
             {PRIORIDADE_ROTULO[demanda.prioridade]}
           </span>
           <span className={velha ? "font-semibold text-red-600" : ""}>{textoDaIdade(dias)}</span>
+          {/* O selo do desenvolvimento (issue #674): só aparece quando há
+              Vínculo, e some junto com ele. Quem decide é o `temSelo` dentro do
+              componente, para que os três cards não repitam a condição. */}
+          <SeloDeEtapa demanda={demanda} />
           {atrasada && demanda.prazo && (
             <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium bg-red-50 text-red-700">
               <CalendarClock className="w-3 h-3" />
@@ -748,6 +763,7 @@ export function QuadroDemandas({
           produtos={produtos}
           pessoas={pessoas}
           token={token}
+          eu={eu}
           onFechar={() => setAbertaId(null)}
           onMudou={carregar}
         />

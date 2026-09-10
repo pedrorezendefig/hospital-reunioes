@@ -28,10 +28,12 @@ import { AlertCircle, Search } from "lucide-react";
 
 import { DemandaModal } from "./DemandaModal";
 import { FiltrosDeDemandas } from "./FiltrosDeDemandas";
+import { SeloDeEtapa } from "./SeloDeEtapa";
 import { TipoIcone } from "./TipoIcone";
 import { useListaDeDemandas } from "./useListaDeDemandas";
 import {
   DemandaDoHistorico,
+  EuNaAba,
   FiltrosDoQuadro,
   fraseDoHistoricoVazio,
   O_QUE_A_BUSCA_PROCURA,
@@ -50,6 +52,14 @@ type Props = {
   pessoas: PessoaDaAba[];
   filtros: FiltrosDoQuadro;
   onFiltrosChange: (filtros: FiltrosDoQuadro) => void;
+  /**
+   * Quem está olhando, do ponto de vista do Vínculo (issue #674).
+   *
+   * Vem de cima, e não de uma chamada por painel: as três abas mostram o mesmo
+   * modal, e três respostas do mesmo `GET /eu` só multiplicariam a ida à rede
+   * e o risco de as abas discordarem entre si.
+   */
+  eu: EuNaAba;
 };
 
 /** Quanto a busca espera a digitação parar, em milissegundos. */
@@ -61,7 +71,7 @@ const SEM_SESSAO =
 
 const NAO_DEU_PARA_CARREGAR = "Não foi possível carregar o Histórico.";
 
-export function HistoricoDemandas({ token, carregandoAuth, produtos, pessoas, filtros, onFiltrosChange }: Props) {
+export function HistoricoDemandas({ token, carregandoAuth, produtos, pessoas, filtros, onFiltrosChange, eu }: Props) {
   /** O que está escrito na caixa agora. */
   const [termo, setTermo] = useState("");
   /** O que já foi perguntado ao servidor: o termo depois que a digitação parou. */
@@ -107,6 +117,9 @@ export function HistoricoDemandas({ token, carregandoAuth, produtos, pessoas, fi
           {/* O par na tela dos carimbos de desfecho do backend: sem esta linha,
               "quem fechou e quando" ficaria gravado no banco e invisível. */}
           <span className="font-medium text-text-secondary">{textoDoDesfecho(demanda)}</span>
+          {/* O mesmo selo dos outros dois cards (issue #674): o Histórico
+              também mostra em que ponto o desenvolvimento parou. */}
+          <SeloDeEtapa demanda={demanda} />
         </div>
       </li>
     );
@@ -176,6 +189,7 @@ export function HistoricoDemandas({ token, carregandoAuth, produtos, pessoas, fi
           produtos={produtos}
           pessoas={pessoas}
           token={token}
+          eu={eu}
           onFechar={() => setAbertaId(null)}
           onMudou={recarregar}
         />

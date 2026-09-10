@@ -94,7 +94,128 @@ export type Demanda = {
   criado_em: string | null;
   concluida_em: string | null;
   cancelada_em: string | null;
+  /**
+   * Onde o desenvolvimento está, em palavras (issue #674, ADR 0054).
+   *
+   * Vem para TODO MUNDO, inclusive para quem não é da Vitta: é o selo que o
+   * diretor lê. Backend uma versão atrás não manda o campo, e aí o `??` do
+   * `temSelo` trata como "Registrada", que é a ausência de selo.
+   */
+  etapa?: EtapaDemanda;
+  partes_entregues?: number | null;
+  partes_total?: number | null;
+  github_sincronizado_em?: string | null;
+  /**
+   * Número e endereço da issue: só para quem tem login no GitHub.
+   *
+   * O backend OMITE o objeto inteiro para quem não tem (ADR 0054, decisão 9),
+   * então aqui ele é indistinguível de "não há Vínculo". É de propósito: o
+   * diretor não vê número nem link em nenhum dos dois casos.
+   */
+  vinculo?: VinculoDaDemanda | null;
 };
+
+/** O que só quem é da Vitta vê do Vínculo. */
+export type VinculoDaDemanda = { numero: number; url: string | null };
+
+/**
+ * Quem está olhando a aba, do ponto de vista do Vínculo (issue #674).
+ *
+ * As duas respostas vêm do backend porque a tela não tem como dá-las: ela não
+ * sabe qual participante é o usuário logado (o `useAuth` carrega o id do
+ * Supabase Auth, e não o `participantes.id`), nem se o token do GitHub está
+ * configurado no ambiente do servidor.
+ */
+export type EuNaAba = {
+  id: string;
+  nome_completo: string | null;
+  tem_github_login: boolean;
+  integracao_configurada: boolean;
+};
+
+/** O "eu" de antes da resposta: sem controle nenhum à vista. */
+export const EU_DESCONHECIDO: EuNaAba = {
+  id: "",
+  nome_completo: null,
+  tem_github_login: false,
+  integracao_configurada: false,
+};
+
+/** As seis Etapas, espelho da tupla do backend (`app/services/tecnologia_vinculo.py`). */
+export type EtapaDemanda =
+  | "registrada"
+  | "em_analise"
+  | "planejada"
+  | "em_desenvolvimento"
+  | "entregue"
+  | "nao_sera_feita";
+
+export const ETAPAS: EtapaDemanda[] = [
+  "registrada",
+  "em_analise",
+  "planejada",
+  "em_desenvolvimento",
+  "entregue",
+  "nao_sera_feita",
+];
+
+/**
+ * O rótulo em palavras do diretor.
+ *
+ * Ele não vê label, número nem estado de issue: vê estas seis frases
+ * (ADR 0054, decisão 9).
+ */
+export const ETAPA_ROTULO: Record<EtapaDemanda, string> = {
+  registrada: "Registrada",
+  em_analise: "Em análise",
+  planejada: "Planejada",
+  em_desenvolvimento: "Em desenvolvimento",
+  entregue: "Entregue",
+  nao_sera_feita: "Não será feita",
+};
+
+/** A cor de cada Etapa, na mesma escala das outras marcas do card. */
+export const ETAPA_CLASSE: Record<EtapaDemanda, string> = {
+  registrada: "bg-slate-100 text-slate-500",
+  em_analise: "bg-slate-100 text-slate-600",
+  planejada: "bg-sky-50 text-sky-700",
+  em_desenvolvimento: "bg-amber-50 text-amber-700",
+  entregue: "bg-emerald-50 text-emerald-700",
+  nao_sera_feita: "bg-slate-100 text-slate-500",
+};
+
+/**
+ * Se o card desenha selo.
+ *
+ * "Registrada" é a AUSÊNCIA de Vínculo, e a ausência de selo é como ela
+ * aparece (ADR 0054, decisão 9): um selo cinza dizendo "Registrada" em toda
+ * Demanda de Decisão e de Informação viraria ruído em quase todo o Quadro.
+ *
+ * Etapa que o backend não mandou (versão anterior no ar) também não tem selo:
+ * inventar um seria pior do que não mostrar nada.
+ */
+export function temSelo(demanda: Demanda): boolean {
+  const etapa = demanda.etapa;
+  if (!etapa || etapa === "registrada") return false;
+  return etapa in ETAPA_ROTULO;
+}
+
+/**
+ * O texto do selo: a Etapa e, quando há partes, "X de Y partes".
+ *
+ * Sem total não há fração: "0 de 0 partes" é uma barra vazia onde não existe
+ * barra, e o card precisa distinguir a issue simples do PRD que ainda não
+ * entregou nada.
+ */
+export function textoDoSelo(demanda: Demanda): string {
+  const rotulo = ETAPA_ROTULO[demanda.etapa as EtapaDemanda] ?? "";
+  const total = demanda.partes_total;
+  const entregues = demanda.partes_entregues;
+  if (typeof total === "number" && total > 0 && typeof entregues === "number") {
+    return `${rotulo} · ${entregues} de ${total} partes`;
+  }
+  return rotulo;
+}
 
 export type LinhaDaConversa = {
   id: string;

@@ -22,6 +22,11 @@ class PessoaDaAba(BaseModel):
     id: str
     nome_completo: str
     email: str
+    # Se esta pessoa e da Vitta (ADR 0054, decisao 9). Vai o BOOLEANO, e nao o
+    # login: quem le esta lista e a tela de escolha de dono, responsavel e
+    # @mencao, e ela nao tem nada que fazer com a identidade de ninguem no
+    # GitHub. O que ela precisa saber e se o Vinculo existe para essa pessoa.
+    tem_github_login: bool = False
 
 
 class ProdutoResponse(BaseModel):
@@ -67,6 +72,19 @@ EstadoDemanda = Literal["nova", "em_andamento", "aguardando", "concluida", "canc
 PrioridadeDemanda = Literal["baixa", "normal", "alta"]
 
 
+class VinculoDaDemanda(BaseModel):
+    """O que so quem e da Vitta ve do Vinculo (issue #674, ADR 0054).
+
+    Numero e endereco da issue-raiz. Fica num OBJETO, e nao em dois campos
+    soltos da Demanda, porque e assim que a omissao vira uma decisao so: sem
+    `github_login`, o objeto inteiro nao vai, e nao ha campo tecnico algum na
+    resposta que o diretor recebe.
+    """
+
+    numero: int
+    url: str | None = None
+
+
 class DemandaResponse(BaseModel):
     """Demanda como o card e o modal a leem.
 
@@ -97,6 +115,20 @@ class DemandaResponse(BaseModel):
     concluida_por: str | None = None
     cancelada_em: str | None = None
     cancelada_por: str | None = None
+    # ─── Vinculo com o desenvolvimento (issue #674, ADR 0054) ───
+    #
+    # A Etapa e os numeros das partes vao para TODO MUNDO: e por eles que o
+    # diretor ve em que ponto a Vitta esta, e sao palavras, nao nada tecnico.
+    # `registrada` (o default do banco) e a ausencia de Vinculo, e o card nao
+    # desenha selo nenhum nela.
+    etapa: str = "registrada"
+    partes_entregues: int | None = None
+    partes_total: int | None = None
+    github_sincronizado_em: str | None = None
+    # O que e da Vitta: numero e endereco da issue. Vem preenchido so para quem
+    # tem `github_login`, e OMITIDO (nulo) para quem nao tem (ADR 0054, decisao
+    # 9). O diretor nao ve numero de issue nem link.
+    vinculo: VinculoDaDemanda | None = None
     # A frase de "isto valeu, mas o aviso por e-mail nao saiu" (issue #642), ou
     # `None` quando nao houve nada a avisar ou o aviso saiu.
     #
@@ -161,6 +193,36 @@ class AtribuirPayload(BaseModel):
     """Quem passa a responder pela Demanda, entre as pessoas com acesso a aba."""
 
     responsavel_id: str = Field(..., min_length=1)
+
+
+class EuNaAbaResponse(BaseModel):
+    """Quem esta olhando a aba, do ponto de vista do Vinculo (issue #674).
+
+    Duas perguntas que a tela nao tem como responder sozinha:
+
+    * `tem_github_login`: o `useAuth` do front carrega o id do Supabase Auth, e
+      nao o `participantes.id`, entao a tela nao consegue se achar na lista de
+      pessoas para ler o proprio login.
+    * `integracao_configurada`: e uma variavel de ambiente do backend. Sem esta
+      resposta, o campo de vincular so descobriria no clique que nao ha
+      integracao, depois de a pessoa digitar o numero.
+    """
+
+    id: str
+    nome_completo: str | None = None
+    tem_github_login: bool = False
+    integracao_configurada: bool = False
+
+
+class VincularPayload(BaseModel):
+    """O numero da issue-raiz, como a pessoa o digita.
+
+    Sem `ge=1` no pydantic de proposito, no mesmo espirito do titulo da Demanda:
+    quem recusa numero zero ou negativo e o router, com frase de gente. O
+    `detail` do pydantic vem em LISTA e a tela mostraria o JSON cru no alerta.
+    """
+
+    numero: int
 
 
 class ConversaLinhaResponse(BaseModel):

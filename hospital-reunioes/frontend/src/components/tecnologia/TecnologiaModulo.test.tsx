@@ -24,6 +24,7 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TecnologiaModulo } from "./TecnologiaModulo";
+import { EU_DESCONHECIDO, EuNaAba } from "./demandas";
 
 // `loading` é parametrizável de propósito, e não cravado em `false`: cravar
 // esconde o estado de BOOT do `useAuth` (`{ token: null, loading: true }`, duas
@@ -92,6 +93,10 @@ function montar(
     // A rede CAI: o `fetch` rejeita, em vez de responder com status de erro.
     // São dois caminhos diferentes no componente, por isso dois valores.
     redeFora?: "carregar" | "salvar";
+    /** Quem está olhando, do ponto de vista do Vínculo (issue #674). */
+    eu?: EuNaAba;
+    /** O `GET /eu` responde erro: a aba tem que seguir de pé sem ele. */
+    euFalha?: boolean;
   } = {},
 ) {
   chamadas = [];
@@ -130,6 +135,14 @@ function montar(
       // vazias, para não disputar os `getBy*` com a lista de Produtos.
       if (url.includes("/demandas") || url.includes("/minha-vez") || url.includes("/historico")) {
         return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+      }
+
+      if (url.endsWith("/eu")) {
+        if (opcoes.euFalha) {
+          return { ok: false, status: 500, json: async () => ({}) } as unknown as Response;
+        }
+        const eu = opcoes.eu ?? EU_DESCONHECIDO;
+        return { ok: true, status: 200, json: async () => eu } as unknown as Response;
       }
 
       const corpo = url.includes("/pessoas") ? pessoas : produtos;
@@ -473,5 +486,52 @@ describe("Os filtros do Quadro, lembrados entre as abas", () => {
     fireEvent.click(aba("Quadro"));
 
     await waitFor(() => expect(demandasPedidas().at(-1)!.url).toBe("/api/admin/tecnologia/demandas"));
+  });
+});
+
+describe("Quem está olhando, do ponto de vista do Vínculo (issue #674)", () => {
+  const DA_VITTA: EuNaAba = {
+    id: "P1",
+    nome_completo: "Pedro Vitta",
+    tem_github_login: true,
+    integracao_configurada: true,
+  };
+
+  it("a aba pergunta ao servidor quem está olhando", async () => {
+    montar([produto("prod-1", "Ana", 1)], { eu: DA_VITTA });
+
+    await waitFor(() => {
+      expect(chamadas.some((c) => c.url.endsWith("/admin/tecnologia/eu") && c.metodo === "GET")).toBe(true);
+    });
+  });
+
+  it("a pergunta sai UMA vez, e não uma por aba", async () => {
+    // As três abas mostram o mesmo modal: uma chamada por aba multiplicaria a
+    // ida à rede e abriria espaço para elas discordarem entre si.
+    montar([produto("prod-1", "Ana", 1)], { eu: DA_VITTA });
+
+    await waitFor(() => {
+      expect(chamadas.filter((c) => c.url.endsWith("/admin/tecnologia/eu")).length).toBe(1);
+    });
+
+    fireEvent.click(screen.getByRole("tab", { name: "Minha vez" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Histórico" }));
+
+    expect(chamadas.filter((c) => c.url.endsWith("/admin/tecnologia/eu")).length).toBe(1);
+  });
+
+  it("o `eu` que falha não derruba a aba", async () => {
+    // Ele decide apenas se os controles do Vínculo aparecem: uma aba inteira em
+    // vermelho porque essa rota caiu seria desproporcional. Sem resposta, vale
+    // o default restrito e o resto da tela continua funcionando.
+    montar([produto("prod-1", "Ana", 1)], { euFalha: true });
+
+    expect(await screen.findByText("Ana")).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("o default de antes da resposta é o mais restrito", () => {
+    expect(EU_DESCONHECIDO.tem_github_login).toBe(false);
+    expect(EU_DESCONHECIDO.integracao_configurada).toBe(false);
   });
 });

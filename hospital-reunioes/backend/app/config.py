@@ -65,6 +65,16 @@ class Settings(BaseSettings):
     # service, não em env var: apontar para outro ambiente exige commit.
     gh_token_homolog: str = ""
 
+    # Integração com o GitHub (ADR 0054, decisão 8): token pessoal
+    # fine-grained, só neste repositório, só Issues: write. Nunca `GITHUB_TOKEN`,
+    # que é reservado das Actions.
+    #
+    # Vazio = integração desligada: a API responde 503 com frase de gente e a
+    # tela desenha os controles do Vínculo desabilitados, em vez de deixar
+    # alguém digitar um número de issue que ninguém vai ler.
+    github_integracao_token: str = ""
+    github_integracao_repo: str = ""
+
     # Email (Resend)
     resend_api_key: str = ""
     resend_from_email: str = "noreply@hospitalsaomatheus.cloud"

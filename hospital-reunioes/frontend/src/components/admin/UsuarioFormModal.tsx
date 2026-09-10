@@ -74,6 +74,7 @@ export function UsuarioFormModal({
   const [cargo, setCargo] = useState(initial?.cargo ?? "");
   const [setor, setSetor] = useState(initial?.setor ?? "");
   const [area, setArea] = useState(initial?.area ?? "");
+  const [githubLogin, setGithubLogin] = useState(initial?.github_login ?? "");
   const [role, setRole] = useState<UserRole>(
     (initial?.role as UserRole) ?? "coordenador"
   );
@@ -108,6 +109,7 @@ export function UsuarioFormModal({
           access_profile: accessProfile,
           is_externo: isExterno,
           ativo,
+          github_login: githubLogin.trim() || null,
         };
       } else {
         payload = {};
@@ -128,6 +130,10 @@ export function UsuarioFormModal({
         }
         if (isExterno !== initial?.is_externo) payload.is_externo = isExterno;
         if (ativo !== initial?.ativo) payload.ativo = ativo;
+        // Campo apagado manda `null`, e não texto vazio: "esta pessoa não
+        // trabalha no GitHub" é a ausência de login, e é isso que o backend
+        // grava (ADR 0054).
+        if (githubLogin !== (initial?.github_login ?? "")) payload.github_login = githubLogin.trim() || null;
         if (reason.trim()) payload.reason = reason.trim();
       }
       const perfilPopChange: PerfilPopChange | undefined =
@@ -313,6 +319,18 @@ export function UsuarioFormModal({
             <input
               value={area ?? ""}
               onChange={(e) => setArea(e.target.value)}
+              className={INPUT_CLASS}
+            />
+          </Field>
+          {/* ADR 0054: quem tem login no GitHub vê o Vínculo com o
+              desenvolvimento na aba Tecnologia (número da issue, campo de
+              vincular, link). Quem não tem vê só a Etapa em palavras. Fica
+              vazio para quase todo mundo, e é isso mesmo. */}
+          <Field label="Login no GitHub (opcional)">
+            <input
+              value={githubLogin ?? ""}
+              onChange={(e) => setGithubLogin(e.target.value)}
+              placeholder="Ex.: pedrorezendefig"
               className={INPUT_CLASS}
             />
           </Field>
