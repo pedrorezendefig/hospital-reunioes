@@ -33,6 +33,7 @@ from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -215,9 +216,10 @@ class _TableQuery:
     Um duble que guardasse so a ultima chamada de `order` deixaria a ordem
     cronologica do fio verde por outro motivo."""
 
-    def __init__(self, rows: list[dict], nome: str):
+    def __init__(self, rows: list[dict], nome: str, falhar_ao_ler: str | None = None):
         self._rows = rows
         self._nome = nome
+        self._falhar_ao_ler = falhar_ao_ler
         self._eq: dict[str, Any] = {}
         self._in: dict[str, list] = {}
         self._insert: list[dict] | None = None
@@ -259,6 +261,12 @@ class _TableQuery:
         return all(linha.get(c) in v for c, v in self._in.items())
 
     def execute(self):
+        # A LEITURA que estoura o timeout do PostgREST (issue #670). O erro e
+        # `httpx.ReadTimeout` de proposito: ele NAO e `APIError`, sobe cru, e o
+        # projeto ja foi mordido por um `except APIError` que nao o pegava.
+        if self._falhar_ao_ler == self._nome and self._insert is None and self._update is None:
+            raise httpx.ReadTimeout("o PostgREST nao respondeu a tempo")
+
         if self._insert is not None:
             for i, linha in enumerate(self._insert):
                 linha.setdefault("id", f"{self._nome}-{len(self._rows) + i + 1}")
@@ -282,8 +290,11 @@ class _TableQuery:
 
 
 class _SupabaseMock:
-    def __init__(self, tabelas: dict[str, list[dict]]):
+    def __init__(self, tabelas: dict[str, list[dict]], falhar_ao_ler: str | None = None):
         self.tabelas = tabelas
+        # A tabela cuja LEITURA estoura. So a leitura: a escrita que ja
+        # aconteceu antes dela continua acontecendo, que e o cenario inteiro.
+        self.falhar_ao_ler = falhar_ao_ler
         # A thread da PRIMEIRA consulta de cada requisicao e a da rota, que roda
         # no event loop. A da ULTIMA e a do `_pessoas_por_id`, que acontece
         # DENTRO do envio. As duas juntas medem se o envio saiu do loop: a
@@ -296,7 +307,7 @@ class _SupabaseMock:
         if self.thread_da_primeira_consulta is None:
             self.thread_da_primeira_consulta = agora
         self.thread_da_ultima_consulta = agora
-        return _TableQuery(self.tabelas.setdefault(nome, []), nome)
+        return _TableQuery(self.tabelas.setdefault(nome, []), nome, self.falhar_ao_ler)
 
 
 @dataclass
@@ -448,6 +459,7 @@ def _montar(
     produtos: list[dict] | None = None,
     demandas: list[dict] | None = None,
     conversas: list[dict] | None = None,
+    falhar_ao_ler: str | None = None,
 ) -> tuple[TestClient, _SupabaseMock]:
     app = FastAPI()
     # O limitador das rotas de gatilho precisa do `app.state` (o `main.py` faz o
@@ -466,7 +478,8 @@ def _montar(
             "tecnologia_produtos": [dict(p) for p in (produtos if produtos is not None else [_produto()])],
             "tecnologia_demandas": [dict(d) for d in (demandas or [])],
             "tecnologia_conversas": [dict(c) for c in (conversas or [])],
-        }
+        },
+        falhar_ao_ler=falhar_ao_ler,
     )
 
     async def _usuario() -> dict[str, Any]:
@@ -752,13 +765,19 @@ class TestGatilhoDaCorrecao:
         assert transporte.destinatarios == ["P2@hsm.com"]
 
     def test_corrigir_sem_mexer_nas_mencoes_nao_manda_aviso(self, transporte):
-        """A correcao de virgula continua muda, inclusive para o responsavel."""
+        """A correcao de virgula continua muda, inclusive para o responsavel.
+
+        A assercao do campo nao e enfeite: "nao havia o que avisar" tem que
+        chegar na tela como `None`, e nao como o aviso de falha. Sem ela, um
+        codigo que devolvesse `AVISO_EMAIL_NAO_SAIU` quando nao ha ninguem a
+        chamar pintaria o alerta em TODA correcao de virgula."""
         client, _ = _montar(logado=PEDRO, demandas=[_demanda(responsavel_id="P2")], conversas=[_conversa()])
 
         editada = client.patch(f"{BASE}/demandas/d1/conversa/c1", json={"texto": "Decidido: sexta-feira."})
 
         assert editada.status_code == 200
         assert transporte.enviados == []
+        assert editada.json()["aviso_por_email"] is None
 
     def test_quem_corrige_nao_chama_a_si_mesmo(self, transporte):
         client, _ = _montar(logado=PEDRO, demandas=[_demanda(responsavel_id="P1")], conversas=[_conversa()])
@@ -783,6 +802,60 @@ class TestGatilhoDaCorrecao:
 
         assert editada.status_code == 200
         assert editada.json()["aviso_por_email"] == AVISO_EMAIL_NAO_SAIU
+
+    def test_a_leitura_que_estoura_depois_da_escrita_nao_vira_500(self, transporte):
+        """O aviso da correcao le o Produto DEPOIS de a correcao estar gravada.
+
+        Se essa leitura derrubar a rota, a tela diz "nao foi possivel salvar", a
+        pessoa salva de novo, e na segunda vez a mencao JA esta na linha: a
+        diferenca volta vazia e o e-mail nao sai nunca, que e o defeito que esta
+        issue veio consertar. Por isso a falha vira aviso, e nao 500.
+
+        O erro e `httpx.ReadTimeout`, e nao `APIError`: e o que o timeout do
+        PostgREST sobe cru, e um `except APIError` nao o pegaria.
+        """
+        client, sb = _montar(
+            logado=PEDRO,
+            demandas=[_demanda(responsavel_id="P2")],
+            conversas=[_conversa()],
+            falhar_ao_ler="tecnologia_produtos",
+        )
+
+        editada = client.patch(
+            f"{BASE}/demandas/d1/conversa/c1",
+            json={"texto": "@Diretor do Hospital, decidido: sexta-feira.", "mencoes": ["P3"]},
+        )
+
+        assert editada.status_code == 200
+        assert editada.json()["aviso_por_email"] == AVISO_EMAIL_NAO_SAIU
+        # A correcao ENTROU: e por isso que a falha nao pode virar 500.
+        gravada = sb.tabelas["tecnologia_conversas"][0]
+        assert gravada["texto"] == "@Diretor do Hospital, decidido: sexta-feira."
+        assert gravada["mencoes"] == ["P3"]
+        assert gravada["editado_em"]
+        # E o e-mail nao saiu, porque nem chegou ao transporte.
+        assert transporte.enviados == []
+
+    def test_o_duble_so_derruba_a_leitura_daquela_tabela(self, transporte):
+        """O controle do teste acima: sem ele, um dublê que estourasse em
+        qualquer consulta deixaria o 200 provado por acaso (a rota nem teria
+        gravado), e um dublê que nao estourasse em nada deixaria o teste verde
+        sobre falha nenhuma."""
+        client, sb = _montar(
+            logado=PEDRO,
+            demandas=[_demanda(responsavel_id="P2")],
+            conversas=[_conversa()],
+            falhar_ao_ler="tecnologia_produtos",
+        )
+
+        with pytest.raises(httpx.ReadTimeout):
+            sb.table("tecnologia_produtos").select("*").execute()
+        # As outras tabelas seguem lendo, e por isso a correcao chega a ser
+        # gravada la em cima.
+        assert sb.table("tecnologia_conversas").select("*").execute().data
+        # E sem a injecao, nem essa tabela estoura.
+        limpo = _montar(logado=PEDRO, demandas=[_demanda(responsavel_id="P2")])[1]
+        assert limpo.table("tecnologia_produtos").select("*").execute().data is not None
 
     def test_a_correcao_que_avisou_nao_inventa_alarme(self, transporte):
         """A irma de presenca da de cima: um campo cravado no aviso pintaria o
@@ -1278,18 +1351,21 @@ class TestOQueVaiParaOLog:
 
 
 class TestLimiteDeGatilho:
-    """Cada POST destas tres portas consome cota e reputacao de remetente do
-    Resend, que e recurso COMPARTILHADO: uma chave, um `email_service`, um
+    """Cada escrita nestas QUATRO portas consome cota e reputacao de remetente
+    do Resend, que e recurso COMPARTILHADO: uma chave, um `email_service`, um
     remetente. A Ouvidoria manda por esse mesmo canal os avisos de prazo, que
     tem obrigacao legal (ADR 0034). Um laco numa conta de Super admin desta aba
     sem teto derrubaria aqueles avisos.
+
+    A quarta e a CORRECAO (issue #670): ela virou gatilho quando a mencao
+    acrescentada nos 10 minutos passou a chamar quem entrou.
     """
 
     # Escrito a mao a partir do `@limiter.limit("60/minute")`: medir contra a
     # propria constante ficaria verde com o teto trocado para 60 mil.
     TETO_POR_MINUTO = 60
 
-    def test_o_teto_existe_nas_tres_portas_de_gatilho(self):
+    def test_o_teto_existe_nas_portas_de_gatilho(self):
         assert tecnologia_router.LIMITE_DE_GATILHO == f"{self.TETO_POR_MINUTO}/minute"
         assert tecnologia_router.ESCOPO_DO_GATILHO
 
@@ -1318,7 +1394,7 @@ class TestLimiteDeGatilho:
 
         O `Limiter` da casa nasce com `key_style="url"`, entao um `@limiter.limit`
         comum daria 60 por minuto POR DEMANDA e o teto viraria enfeite: bastava
-        rodar o laco trocando o id. E por isso que as tres portas usam
+        rodar o laco trocando o id. E por isso que as portas de gatilho usam
         `shared_limit` com escopo proprio.
         """
         client, _ = _montar(logado=PEDRO, demandas=[_demanda(did=f"d{i}", responsavel_id="P1") for i in range(70)])
@@ -1331,22 +1407,42 @@ class TestLimiteDeGatilho:
         assert codigos[: self.TETO_POR_MINUTO] == [200] * self.TETO_POR_MINUTO
         assert codigos[self.TETO_POR_MINUTO] == 429
 
-    def test_o_balde_e_um_so_para_as_tres_portas(self):
+    def test_corrigir_demais_leva_429(self):
+        """A quarta porta (issue #670). Sem ela no balde, um laco de correcoes
+        acrescentando e tirando mencao mandaria e-mail sem teto nenhum."""
+        client, _ = _montar(logado=PEDRO, demandas=[_demanda(responsavel_id="P2")], conversas=[_conversa()])
+
+        codigos = [
+            client.patch(f"{BASE}/demandas/d1/conversa/c1", json={"texto": f"Correção {i}"}).status_code
+            for i in range(self.TETO_POR_MINUTO + 1)
+        ]
+
+        assert codigos[: self.TETO_POR_MINUTO] == [200] * self.TETO_POR_MINUTO
+        assert codigos[self.TETO_POR_MINUTO] == 429
+
+    def test_o_balde_e_um_so_para_as_quatro_portas(self):
         """O recurso escasso e a cota do Resend, que e uma so para o app: um
-        balde por porta daria o triplo do teto a quem alternasse entre elas."""
+        balde por porta daria quatro vezes o teto a quem alternasse entre elas.
+
+        As duas portas atropeladas sao de METODOS diferentes (POST e PATCH), e e
+        a correcao que fecha o caso novo: com `limit` no lugar de `shared_limit`
+        ela teria balde proprio e responderia 200 aqui."""
         client, _ = _montar(
             logado=PEDRO,
             produtos=[_produto(dono_id="P2")],
             demandas=[_demanda(responsavel_id="P2")],
+            conversas=[_conversa()],
         )
         corpo = {"titulo": "Fechar a conversa da Ana", "tipo": "decisao", "produto_id": "prod-1"}
         for _ in range(self.TETO_POR_MINUTO):
             assert client.post(f"{BASE}/demandas", json=corpo).status_code == 201
 
-        # Porta diferente, mesmo balde.
+        # Portas diferentes, mesmo balde.
         atropelada = client.post(f"{BASE}/demandas/d1/conversa", json={"texto": "E aí?"})
+        correcao = client.patch(f"{BASE}/demandas/d1/conversa/c1", json={"texto": "Corrigindo"})
 
         assert atropelada.status_code == 429
+        assert correcao.status_code == 429
 
     def test_ler_o_quadro_nao_tem_teto(self):
         """A irma de ausencia: o teto e das portas que MANDAM e-mail. Um teto na

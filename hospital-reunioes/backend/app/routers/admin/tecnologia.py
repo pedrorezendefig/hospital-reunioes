@@ -644,13 +644,26 @@ async def _aviso_da_correcao(
     Os nomes são resolvidos AQUI, e não na entrada da rota, porque o e-mail
     mostra o Produto e a correção que não chama ninguém (a maioria delas) não
     tem por que pagar essa leitura.
+
+    E por isso essa leitura roda dentro de um `try`: ela acontece com a correção
+    JÁ GRAVADA, e um `httpx.ReadTimeout` do PostgREST (que sobe cru, porque não
+    é `APIError`) viraria 500 numa ação que valeu. A tela mostraria "não foi
+    possível salvar", a pessoa salvaria de novo, e na segunda vez a menção já
+    estaria na linha: a diferença voltaria vazia e o e-mail não sairia NUNCA,
+    que é exatamente o defeito que esta issue veio consertar. Falha de aviso é
+    aviso que não saiu, e não ação desfeita, como o `_mandar` já diz.
     """
     if not mencionados:
         return None
+    try:
+        com_nomes = _com_nomes(supabase, [demanda])[0]
+    except Exception:
+        logger.exception("Falha ao ler os nomes da Demanda %s para o aviso da correcao", demanda.get("id"))
+        return AVISO_EMAIL_NAO_SAIU
     saiu = await _enviar_fora_do_loop(
         avisar_mencao,
         supabase,
-        demanda=_com_nomes(supabase, [demanda])[0],
+        demanda=com_nomes,
         destinatarios=mencionados,
         texto=texto,
         quem_fez_nome=_nome_de_quem_agiu(ator),

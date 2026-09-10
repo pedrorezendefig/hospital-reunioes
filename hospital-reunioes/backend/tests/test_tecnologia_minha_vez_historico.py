@@ -224,6 +224,28 @@ class TestAMencaoQueEntrouNaCorrecao:
         ]
         assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is False
 
+    def test_o_carimbo_que_vale_e_o_da_ultima_mencao(self):
+        """Vale a ultima chamada, e o `editado_em` e o DELA.
+
+        Duas chamadas para a mesma pessoa: a segunda nunca foi corrigida, entao
+        cai na ordem, e a resposta que veio depois dela encerra a vez. A
+        primeira linha so foi corrigida MAIS TARDE, e uma regra que lesse o
+        carimbo da linha errada deixaria a Demanda presa na aba em cima de um
+        instante que nao e o da chamada que vale.
+        """
+        linhas = [
+            _resposta("P1", "@Sócia Vitta e agora?", mencoes=["P2"], criado_em=self.ENVIO, editado_em=self.CORRECAO),
+            _resposta(
+                "P1",
+                "@Sócia Vitta, e isto aqui?",
+                mencoes=["P2"],
+                criado_em=self.ANTES_DA_CORRECAO,
+                editado_em=None,
+            ),
+            _resposta("P2", "vi as duas", criado_em="2026-09-02T09:04:00Z"),
+        ]
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is False
+
     def test_data_ilegivel_na_correcao_cai_na_ordem_das_linhas(self):
         """A data quebrada nao pode prender a Demanda na aba: sem instante
         legivel, vale a ordem, que e a regra que sempre valeu."""
