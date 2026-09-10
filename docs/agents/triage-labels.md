@@ -24,9 +24,9 @@ Quando uma skill mencionar um papel (ex.: "aplique a label de AFK-ready"), use a
 
 | Label | Significado |
 | --- | --- |
-| `revisor-comentou` | Um login de `REVIEWER_LOGINS` comentou na issue; curadoria pendente — o agente lê, classifica e age (HITL), e remove a label ao final |
+| `revisor-comentou` | Um login de `REVIEWER_LOGINS` comentou na issue, ou o app espelhou a resposta de um revisor sem login (marcador `<!-- revisor-app`); curadoria pendente: o agente lê, classifica e age (HITL), e remove a label ao final |
 
-Aplicada automaticamente pela Action de higiene (`.github/workflows/higiene-issues.yml`) em `issue_comment.created`. A Action **só sinaliza** — nunca reabre nem edita. Comentários de automação não disparam o loop: a Action ignora comentários em PRs, comentários com o disclaimer do `/triage` e comentários com o marcador `<!-- automacao -->`. O protocolo de curadoria vive na skill `/triage`; o acesso do revisor e a config `REVIEWER_LOGINS` estão em `docs/agents/issue-tracker.md`.
+Aplicada automaticamente pela Action de higiene (`.github/workflows/higiene-issues.yml`) em `issue_comment.created`, por **dois gatilhos**: o login do autor estar em `REVIEWER_LOGINS`, ou o corpo do comentário conter o marcador `<!-- revisor-app` (ADR 0054, decisão 4), que vale independente do login. A Action **só sinaliza**, nunca reabre nem edita. Comentários de automação não disparam o loop: a Action ignora comentários em PRs e, nos comentários **sem** o marcador de revisor, os que trazem o disclaimer do `/triage` ou o marcador `<!-- automacao -->`. O protocolo de curadoria vive na skill `/triage`; o acesso do revisor e a config `REVIEWER_LOGINS` estão em `docs/agents/issue-tracker.md`.
 
 ## Labels de tamanho de fatia (Plano vivo)
 
