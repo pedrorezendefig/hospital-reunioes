@@ -7,6 +7,22 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.123.4 - 2026-09-10 14:52 - a menção acrescentada na correção de 10 minutos avisa por e-mail e passa a contar em Minha vez
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `0cd9d13`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.123.4, `db: healthy`, version match confirmado; frontend HTTP 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/0cd9d13
+- Issues: [#670](https://github.com/pedrorezendefig/hospital-reunioes/issues/670) · PR [#683](https://github.com/pedrorezendefig/hospital-reunioes/pull/683). Correção da auditoria do PRD [#634](https://github.com/pedrorezendefig/hospital-reunioes/issues/634), seção 2.1; as observações 3.1 a 3.5 ficaram fora de propósito
+- Migration: nenhuma. A issue proibia, e as colunas usadas (`mencoes` e `editado_em`) já nasceram na `102` · patch, fix
+- Nota: `mencoes_acrescentadas` compara as menções já gravadas na linha com as que vieram no PATCH, as duas normalizadas e sem quem corrigiu, então só quem entrou na correção recebe e-mail. Em `esperando_resposta_da_pessoa`, uma linha com `editado_em` passa a contar a chamada a partir do carimbo, e data ilegível dos dois lados cai de volta na ordem das linhas, para nenhuma Demanda ficar presa na aba
+- Nota: must-fix pego pela review independente da onda. O `_com_nomes` do `_aviso_da_correcao` lia o PostgREST DEPOIS do `update` e fora de qualquer `try`. Um timeout subia `httpx.ReadTimeout` cru, a rota devolvia 500 com a correção já gravada, a pessoa salvava de novo e aí `mencoes_acrescentadas` voltava vazia: o e-mail nunca mais sairia. Exatamente o defeito que a issue veio consertar, agora sem aviso na tela
+- Nota: o conserto usa a semântica que a casa já tem (`AVISO_EMAIL_NAO_SAIU`, porque a ação gravada não pode ser derrubada pelo aviso). Provado com `httpx.ReadTimeout` injetado DENTRO da leitura, mais um teste de controle que separa "derrubou aquela leitura" de "derrubou tudo", senão o 200 estaria provado por acaso
+- Nota: a rota `PATCH editar_resposta` ganhou o `shared_limit` das portas de gatilho, porque virou porta de e-mail e passa a gastar cota do Resend. Julgado consequência legítima na review: o recurso escasso é a cota, não a rota, e o 429 do slowapi não culpa causa errada na tela
+- Nota: dívida consciente, sem issue aberta ainda. Não há coluna que guarde QUAIS menções entraram na correção, então toda correção que acrescenta menção reabre "Minha vez" de quem já respondeu naquela linha (o e-mail não repete, só a aba). Julgado o lado seguro do erro, porque o contrário é a chamada sumir em silêncio. Consertar exige migration, que esta issue proibia
+- Nota: 14 mutantes mortos ao todo, um mexendo em UMA coisa cada, o detector do frontend incluído. Na rodada de fix entraram cinco, entre eles a leitura sem `try`, o carimbo lido da linha errada e o balde próprio no lugar do compartilhado
+- Nota: produção ficou fora do ar por alguns minutos antes deste deploy, com TLS reset em `api`, `app` e `coolify` e as portas 22 e 443 abertas (assinatura de proxy caído, não de fail2ban). O humano resolveu e o ship seguiu. Backend buildou em 58s e o frontend em 6m05s, sem OOM
+
 ## v0.123.3 - 2026-09-10 00:41 - o conversor PDF/DOCX para Markdown (item Utilitários) sai do painel de administração
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `9968e77`

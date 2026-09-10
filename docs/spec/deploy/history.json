@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-10T14:52:00-03:00",
+      "sha": "0cd9d13",
+      "app_version": "0.123.4",
+      "subject": "a mencao acrescentada na correcao de 10 minutos avisa por e-mail e passa a contar em Minha vez",
+      "raw_subject": "fix(tecnologia): a menção acrescentada na correção avisa e conta em Minha vez (#683)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 365,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #670, correcao da auditoria do PRD #634 secao 2.1 (as observacoes 3.1 a 3.5 ficaram fora de proposito). Sem migration, por regra da issue. A review independente do orquestrador achou 1 must-fix real na rodada 1: o _com_nomes do _aviso_da_correcao lia o PostgREST DEPOIS do update e fora de try, entao um timeout devolvia 500 com a correcao ja gravada, e no retry mencoes_acrescentadas voltava vazia e o e-mail nunca mais saia. Corrigido com try/except devolvendo AVISO_EMAIL_NAO_SAIU, provado com httpx.ReadTimeout injetado DENTRO da leitura mais um controle que separa 'derrubou aquela leitura' de 'derrubou tudo'. Rodada 2 limpa. A rota PATCH editar_resposta ganhou o shared_limit das portas de gatilho porque virou porta de e-mail e passa a gastar cota do Resend. Decisao consciente que fica de divida: sem coluna que guarde QUAIS mencoes entraram na correcao, toda mencao de linha com editado_em conta a partir do carimbo, entao toda correcao que acrescenta mencao reabre Minha vez de quem ja respondeu naquela linha (o e-mail nao repete, so a aba). Julgado o lado seguro do erro, porque o contrario e a chamada sumir em silencio. Producao ficou fora do ar por alguns minutos antes deste deploy, com TLS reset em api, app e coolify e as portas 22 e 443 abertas; o humano resolveu e o ship seguiu."
+    },
+    {
       "at": "2026-09-10T00:41:00-03:00",
       "sha": "9968e77",
       "app_version": "0.123.3",
@@ -1422,34 +1451,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Terceira e ultima fatia da onda de 28/08 (issues #397, #429, #434); as duas primeiras subiram na v0.82.2. Ficou segurada tres dias por decisao humana no checkpoint, porque traz a migration 087 e o schema precisa existir ANTES do codigo: sem as colunas, GET /ouvidoria/relatorios daria 500, a varredura diaria morreria, e uma falha de envio quebraria o _falha na coluna inexistente, perdendo a edicao em silencio. A 087 foi aplicada a mao no Studio antes do merge. A varredura passou a ser por ESTADO e nao por janela de data: ORDER BY periodo_fim DESC LIMIT 3 fazia a quarta edicao nao enviada sair da janela para sempre. Agora ordena por tentativas ASC, periodo_fim ASC com indice parcial proprio, entao a fila gira em vez de reler as mesmas tres linhas. O 'exceto a edicao do dia' foi empurrado para o banco (neq antes do limit), senao o lote caia de 3 para 2 nos dias 1 e 16. Teto de tentativas com desistido_em como estado terminal; o reenvio manual nao gasta o teto e continua entregando. Falha e recuperacao do job entram no audit_log, no mesmo formato do reenvio manual, sem relato nem nome. DOIS MUST-FIX da review independente, corrigidos antes do merge. (1) O aviso de 'sem Diretoria ativa' rodava FORA de qualquer try, entre o _reivindicar (que ja gravou enviado_em) e o _falha (que devolve o carimbo): get_logo_data_uri levanta FileNotFoundError se o PNG faltar na imagem, e a edicao ficava marcada como entregue sem ter saido, sumindo da fila para sempre. E o buraco que a propria issue veio fechar. (2) A desistencia era silenciosa: ao bater o teto nenhum aviso saia, e os textos mandavam usar 'o reenvio pelo painel', tela que nao existe no frontend. Uma quinzena inteira deixaria de chegar a Diretoria em definitivo sem sinal nenhum; antes o estado era feio (tentava todo dia para sempre) mas autocuravel. Agora a desistencia avisa os admins tecnicos. Mais tres acertos: a instrucao do estado terminal parou de ser cortada pelo truncamento em 300 chars, o aviso deixou de sair ate 5 vezes por manha, e o reenvio manual bem sucedido limpa desistido_em e tentativas. Rebase feito 3 dias depois (a main tinha andado): unico conflito foi o bump; suite de 2549 verde depois do rebase. Decisao mantida e escrita junto do job: a estreia manda a quinzena ja fechada no primeiro 07h apos o deploy. Follow-up conhecido: GET /ouvidoria/relatorios continua sem tela no frontend, entao o estado terminal so e visivel pela API."
-    },
-    {
-      "at": "2026-08-28T21:16:17-03:00",
-      "sha": "7a826ef",
-      "app_version": "0.82.2",
-      "subject": "Onda de tres issues da Ouvidoria: metricas minimizadas e retencao que confirma a remocao",
-      "raw_subject": "fix(ouvidoria): retencao confirma a remocao no Storage e reconfere o estado do caso (#443)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 544,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda AFK com tres issues em paralelo (#397, #429, #434). Dois PRs mergeados aqui: #442 (issue #429, v0.82.1) e #443 (issue #397, v0.82.2). O deploy carregou junto a v0.82.0 do PR #428 (sessao paralela), que estava na main sem ter sido deployada. PR #442: metricas da Ouvidoria pararam de projetar email e categoria (leitura sem consumidor) e GET /ouvidoria/metricas caiu de 60 para 15/minute; review independente limpa de primeira. PR #443: quatro dos nove follow-ups da review do PR #394. delete_file passou a conferir a resposta do Storage arquivo a arquivo, CAMPOS_ESTATISTICOS ganhou as treze colunas restantes com fixture nao nula, e os quatro passos destrutivos que so filtravam por manifestacao_id passaram a reconferir estado e prazo. DOIS MUST-FIX vieram da review independente e foram corrigidos antes do merge, os dois eram regressao introduzida pelo proprio PR. (1) _apagar_anexos perdeu a idempotencia: remove() devolve lista vazia quando o objeto ja nao esta no bucket, entao arquivo ausente virava falha e o caso travava para sempre, deixando relato e nome no banco alem dos cinco anos. Fix: parear a remocao do binario com o delete da propria linha, anexo a anexo, com teste que roda o passo duas vezes e prova a convergencia. (2) canal_ponto tinha entrado em CAMPOS_ESTATISTICOS citando a migration 067, mas a 084 (posterior) diz que o ponto reidentifica quem pediu anonimato (issue #375, decisao 5); foi para CAMPOS_DO_DOSSIE. Mais dois acertos: as guardas passaram a conferir encerrada_em <= corte (sem isso um caso reaberto e reencerrado tinha o Dossie triturado dentro do prazo) e delete_file passou a recusar item ilegivel dentro da lista. Itens 3, 4, 8 e 9 da #397 ficaram como follow-up documentado (decisao de produto ou infra de teste nova). Sem migration nesta subida. O PR #444 (issue #434, relatorio quinzenal) ficou aberto e verde por decisao humana: ele traz a migration 087, que precisa ser aplicada no Studio de producao ANTES do codigo subir."
     }
   ]
 }
