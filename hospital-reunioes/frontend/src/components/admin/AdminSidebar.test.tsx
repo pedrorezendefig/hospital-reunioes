@@ -108,3 +108,19 @@ describe.each([
     expect(within(menu).queryByRole("link", { name: "Tecnologia" })).toBeNull();
   });
 });
+
+describe.each([
+  ["desktop", "desktop" as const],
+  ["gaveta do celular", "drawer" as const],
+])("Sem seção Ferramentas na %s (issue #671)", (_rotulo, variant) => {
+  it("nem o Super admin vê Utilitários, e continua vendo Tecnologia", () => {
+    sessao.participante = pessoa("super_admin");
+
+    render(<AdminSidebar variant={variant} />);
+
+    const menu = screen.getByRole("navigation");
+    expect(within(menu).getByRole("link", { name: "Tecnologia" })).toBeTruthy();
+    expect(within(menu).queryByRole("link", { name: "Utilitários" })).toBeNull();
+    expect(within(menu).queryByText("Ferramentas")).toBeNull();
+  });
+});
