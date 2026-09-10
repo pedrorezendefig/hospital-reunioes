@@ -85,6 +85,23 @@ class VinculoDaDemanda(BaseModel):
     url: str | None = None
 
 
+class ParteDaEntrega(BaseModel):
+    """Uma parte da entrega como o diretor a le (issue #676, ADR 0054, decisao 7).
+
+    Duas coisas, e nada mais: o que aquela parte muda para ele e em que pe ela
+    esta. O titulo da fatia NAO entra, porque e tecnico; o `numero` e interno e
+    vem preenchido so para quem tem `github_login` (decisao 9), pelo mesmo funil
+    que omite o objeto do Vinculo.
+
+    `situacao` e opcional porque uma linha gravada antes desta fatia nao a tem: a
+    tela desenha o texto sem selo em vez de derrubar o modal inteiro.
+    """
+
+    numero: int | None = None
+    o_que_muda: str | None = None
+    situacao: str | None = None
+
+
 class DemandaResponse(BaseModel):
     """Demanda como o card e o modal a leem.
 
@@ -129,6 +146,16 @@ class DemandaResponse(BaseModel):
     # tem `github_login`, e OMITIDO (nulo) para quem nao tem (ADR 0054, decisao
     # 9). O diretor nao ve numero de issue nem link.
     vinculo: VinculoDaDemanda | None = None
+    # ─── O que muda (issue #676, ADR 0054, decisao 7) ───
+    #
+    # O bloco "Para o diretor" da issue-raiz e o de cada parte, lidos do GitHub
+    # e NUNCA digitados no app. Vao para todo mundo: e este texto que explica ao
+    # diretor o que a entrega muda para ele.
+    #
+    # `o_que_muda` nulo e "a Vitta ainda nao escreveu", e a tela o traduz numa
+    # frase; nulo NAO e o corpo tecnico da issue, que nao sai do GitHub.
+    o_que_muda: str | None = None
+    partes: list[ParteDaEntrega] = []
     # A frase de "isto valeu, mas o aviso por e-mail nao saiu" (issue #642), ou
     # `None` quando nao houve nada a avisar ou o aviso saiu.
     #

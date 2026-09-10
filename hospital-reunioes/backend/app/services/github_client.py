@@ -29,6 +29,7 @@ from typing import Any
 import httpx
 
 from app.config import settings
+from app.services.tecnologia_vinculo import bloco_para_o_diretor
 
 logger = logging.getLogger(__name__)
 
@@ -115,6 +116,12 @@ def _no(dados: dict[str, Any]) -> dict[str, Any]:
 
     Sempre os mesmos campos, para a raiz e para cada parte, porque a regra da
     Etapa le os dois do mesmo jeito.
+
+    Do `body` fica so o bloco "Para o diretor" (issue #676): e o unico pedaco do
+    corpo que o app mostra, e guardar o resto poria numero de issue, nome de
+    label e caminho de arquivo dentro do cache, a um `select` de distancia da
+    tela do diretor. O corte e feito AQUI, na entrada, e nao na saida, porque a
+    saida tem varias portas e a entrada tem uma so.
     """
     return {
         "numero": dados.get("number"),
@@ -122,6 +129,7 @@ def _no(dados: dict[str, Any]) -> dict[str, Any]:
         "url": dados.get("html_url"),
         "estado": dados.get("state"),
         "motivo_do_fechamento": dados.get("state_reason"),
+        "o_que_muda": bloco_para_o_diretor(dados.get("body")),
         "labels": sorted(
             str(label["name"]) for label in (dados.get("labels") or []) if isinstance(label, dict) and label.get("name")
         ),

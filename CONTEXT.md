@@ -222,6 +222,10 @@ _Evitar_: "aplicação" como eixo separado (é o mesmo eixo, agora com dono); Pr
 Cinco colunas de Kanban: **Nova**, **Em andamento**, **Aguardando**, **Concluída**, **Cancelada**. Quem move é quem atende ou quem pediu. Além do estado, a Demanda tem **Responsável** (uma pessoa), **Prioridade** (Baixa, Normal, Alta) e **Prazo** opcional, só quando existe de verdade; sem prazo o card não atrasa, só envelhece (idade em dias à vista, vermelha a partir de 14).
 _Evitar_: estado por arrastar sem responsável; prazo inventado para preencher campo.
 
+**O que muda**:
+O que a entrega acrescenta para quem pediu, em linguagem de leigo. O card da Demanda vinculada mostra o texto da entrega inteira e, embaixo, o de cada parte dela com a situação (Planejada, Em desenvolvimento, Entregue). Vem do bloco "Para o diretor" da issue e **nunca é digitado no app**: quem escreve é o planejamento da Vitta, e o app só lê (ADR 0054, decisão 7). Sem o bloco escrito, o card diz "Descrição em preparação". O botão **Copiar para IA** leva esse texto junto.
+_Evitar_: reescrever o valor na descrição da Demanda (duplica e apodrece); mostrar o corpo técnico da issue no lugar do bloco; título de parte, número de issue, link ou label na tela de quem não trabalha no GitHub.
+
 **Conversa da Demanda**:
 O fio de respostas dentro do card, com @menção a quem tem acesso à aba. É onde a decisão evolui; o botão **Copiar para IA** copia a Demanda inteira (título, tipo, produto, descrição e a Conversa até ali) em texto simples, pronto para colar numa IA. E-mail sai em três gatilhos: atribuição (inclui a criação), @menção e resposta nova numa Demanda de que você é o responsável.
 _Evitar_: e-mail por mudança de coluna; resumo diário; copiar sem a Conversa.

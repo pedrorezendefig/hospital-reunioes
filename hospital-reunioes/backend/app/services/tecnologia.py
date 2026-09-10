@@ -17,10 +17,12 @@ from __future__ import annotations
 
 import unicodedata
 from datetime import UTC, datetime, timedelta
+from textwrap import indent
 from typing import Any, NamedTuple
 from zoneinfo import ZoneInfo
 
 from app.dependencies import is_super_admin
+from app.services.tecnologia_vinculo import ETAPA_REGISTRADA, ETAPA_ROTULO, texto_movimento_etapa
 
 # O motivo que a tela mostra quando a API recusa. Uma frase so, no lugar de
 # uma por endpoint: e ela que o Super admin le no toast.
@@ -478,6 +480,77 @@ def linha_para_ia(linha: dict[str, Any]) -> str:
     return recuar_continuacao(f"[{quando}] {autor}: {texto}")
 
 
+TITULO_DAS_PARTES = "Partes da entrega:"
+
+
+def linhas_do_desenvolvimento(demanda: dict[str, Any]) -> list[str]:
+    """As linhas da Etapa e do "O que muda", ou nenhuma (issue #676).
+
+    Nenhuma quando a Demanda nao tem Vinculo: uma linha "Etapa: Registrada"
+    diria a quem le que ha um desenvolvimento acontecendo onde nao ha nada.
+
+    Nada aqui carrega numero de issue, endereco ou nome de label. O texto vem do
+    bloco "Para o diretor" da issue, que e escrito para leigo, e o `numero`
+    interno de cada parte NAO e escrito: ele existe para a Vitta rastrear dentro
+    do app, e este texto sai do app (ADR 0054, decisao 9).
+
+    A parte sem bloco fica de fora da lista, e nao entra como marcador vazio: o
+    "X de Y partes" da linha da Etapa ja diz quantas existem, e um item sem
+    texto so ocuparia espaco em quem for ler.
+
+    **Todo texto vindo da issue entra RECUADO**, e essa e a regra que segura o
+    resto. O corpo de uma issue nao e nosso: o repositorio e publico e qualquer
+    conta abre issue, o `vincular` confere que o numero existe e nao tem outra
+    dona, mas nao confere QUEM escreveu. Uma linha "--- início da conversa ---"
+    escrita dentro do bloco "Para o diretor" sobrevive ao extrator (nao e linha
+    de hifens nem cabecalho) e, na coluna zero, viraria uma cerca de Conversa
+    valida no texto exportado, com uma aprovacao fabricada em nome do diretor
+    antes da conversa de verdade.
+
+    O recuo e o mesmo `RECUO_DA_CONTINUACAO` das linhas do fio, e pelo mesmo
+    motivo escrito la em cima: a marca so vale na primeira coluna, e a primeira
+    coluna e sempre do backend. As partes ganham o recuo pelo
+    `recuar_continuacao`, que basta porque a primeira linha delas nasce depois
+    de um "- (Rótulo) " que o backend escreve; o bloco da raiz nao tem esse
+    prefixo, entao ele e recuado INTEIRO, primeira linha inclusive.
+    """
+    etapa = str(demanda.get("etapa") or ETAPA_REGISTRADA)
+    if etapa == ETAPA_REGISTRADA:
+        return []
+
+    linhas = [
+        "",
+        texto_movimento_etapa(
+            para=etapa,
+            entregues=demanda.get("partes_entregues"),
+            total=demanda.get("partes_total"),
+        ),
+    ]
+
+    o_que_muda = str(demanda.get("o_que_muda") or "").strip()
+    if o_que_muda:
+        # Sem titulo nosso em cima: o bloco de toda issue ja abre com
+        # "**O que muda:**", e dois titulos iguais seguidos so ocupam linha.
+        linhas += ["", indent(o_que_muda, RECUO_DA_CONTINUACAO)]
+
+    itens = []
+    for parte in demanda.get("partes") or []:
+        if not isinstance(parte, dict):
+            continue
+        texto = str(parte.get("o_que_muda") or "").strip()
+        if not texto:
+            continue
+        rotulo = ETAPA_ROTULO.get(str(parte.get("situacao")), "")
+        # Recuada como as linhas da Conversa, e pelo mesmo motivo: um texto de
+        # varias linhas derramaria no nivel de cima e a segunda linha pareceria
+        # outro item da lista.
+        itens.append(recuar_continuacao(f"- ({rotulo}) {texto}" if rotulo else f"- {texto}"))
+    if itens:
+        linhas += ["", TITULO_DAS_PARTES, *itens]
+
+    return linhas
+
+
 def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> str:
     """A Demanda inteira em texto simples, para colar numa IA (issue #640).
 
@@ -518,6 +591,10 @@ def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> s
         "",
         "Descrição:",
         str(demanda.get("descricao") or "").strip() or SEM_DESCRICAO,
+        # A Etapa e o "O que muda" entram AQUI, entre a descricao e a Conversa
+        # (issue #676): eles contam o que a Vitta esta entregando, que e a
+        # continuacao do pedido, e nao mais uma fala do fio.
+        *linhas_do_desenvolvimento(demanda),
         "",
         "Conversa:",
         MARCA_INICIO_CONVERSA,

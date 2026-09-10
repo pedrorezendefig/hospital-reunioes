@@ -161,7 +161,9 @@ from app.services.tecnologia_vinculo import (
     motivo_e_pull_request,
     motivo_issue_inexistente,
     motivo_numero_ja_usado,
+    o_que_muda_da_foto,
     partes_da_foto,
+    partes_para_o_diretor,
     tem_github_login,
     texto_movimento_etapa,
 )
@@ -438,8 +440,34 @@ def _com_nomes(supabase: Client, demandas: list[dict], *, ator: dict) -> list[di
             "produto_nome": nomes_produto.get(d.get("produto_id")),
             "responsavel_nome": nomes_pessoa.get(d.get("responsavel_id")),
             "vinculo": _vinculo_visivel(d) if da_vitta else None,
+            "partes": _partes_visiveis(d, da_vitta=da_vitta),
         }
         for d in demandas
+    ]
+
+
+def _partes_visiveis(demanda: dict, *, da_vitta: bool) -> list[dict]:
+    """As partes da entrega como quem esta olhando pode ve-las (issue #676).
+
+    O texto e a situacao vao para todo mundo: e por eles que o diretor entende o
+    que cada parte acrescenta. O `numero` e interno e sai NULO para quem nao tem
+    `github_login`, pela mesma decisao 9 que omite o objeto do Vinculo.
+
+    O corte e aqui, e nao na tela, porque a resposta desta API sai do app: o
+    "Copiar para IA" monta o texto a partir DESTE dicionario, e o que for
+    omitido aqui nao tem como viajar depois.
+    """
+    partes = demanda.get("partes")
+    if not isinstance(partes, list):
+        return []
+    return [
+        {
+            "numero": parte.get("numero") if da_vitta else None,
+            "o_que_muda": parte.get("o_que_muda"),
+            "situacao": parte.get("situacao"),
+        }
+        for parte in partes
+        if isinstance(parte, dict)
     ]
 
 
@@ -1141,6 +1169,12 @@ async def vincular_demanda(
         "etapa": etapa,
         "partes_entregues": entregues,
         "partes_total": total,
+        # O texto que o diretor le, lido do GitHub e nunca digitado no app
+        # (issue #676, ADR 0054, decisao 7). Fica em coluna propria, e nao so
+        # dentro da foto, porque e dado de leitura da tela: a foto existe para a
+        # sincronizacao seguinte saber se algo mudou.
+        "o_que_muda": o_que_muda_da_foto(foto),
+        "partes": partes_para_o_diretor(foto),
         "github_foto": foto,
         "github_sincronizado_em": _agora(),
         "vinculado_por": ator["id"],
