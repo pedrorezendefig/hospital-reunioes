@@ -109,7 +109,6 @@ from app.models.tecnologia_schemas import (
 from app.services import github_client
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
-    AUTOR_DESCONHECIDO,
     AVISO_EMAIL_NAO_SAIU,
     ESTADOS_ABERTOS,
     ESTADOS_FECHADOS,
@@ -1320,10 +1319,6 @@ async def levar_para_desenvolvimento(
     # pela mesma peneira (o corpo ja passava, porque o titulo e o "O que muda"
     # da Demanda sem descricao).
     titulo = texto_do_diretor(demanda.get("titulo"))
-    autor_id = demanda.get("autor_id")
-    # Quem PEDIU, e nao quem clicou: a Origem responde de quem e a demanda. O
-    # nome de quem clicou entra na linha do fio, logo abaixo.
-    autor_nome = _nomes_de_participantes(supabase, {autor_id} if autor_id else set()).get(autor_id)
     legivel = _com_nomes(supabase, [demanda], ator=ator)[0]
 
     corpo = corpo_da_issue_nova(
@@ -1332,7 +1327,11 @@ async def levar_para_desenvolvimento(
         descricao=demanda.get("descricao"),
         tipo_rotulo=TIPO_ROTULO.get(str(demanda.get("tipo")), str(demanda.get("tipo") or "")),
         produto_nome=legivel.get("produto_nome") or SEM_PRODUTO,
-        autor_nome=autor_nome or AUTOR_DESCONHECIDO,
+        # Login, e nao nome: nome civil nenhum sai para o repositorio publico
+        # (decisao do diretor). Quem le a issue chega a quem pediu pelo link da
+        # Demanda, que exige o app. O nome de quem levou continua na Conversa,
+        # que e de dentro.
+        levado_por_login=ator.get("github_login"),
         link=link_da_demanda(demanda_id),
     )
 

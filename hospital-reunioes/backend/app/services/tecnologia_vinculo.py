@@ -498,6 +498,25 @@ def labels_da_issue_nova(tipo: str | None) -> list[str]:
     return [LABEL_TRIAGEM, label] if label else [LABEL_TRIAGEM]
 
 
+def login_para_publicar(bruto: str | None) -> str | None:
+    """O login que pode entrar num corpo de issue PUBLICA, ou `None`.
+
+    Passa pelo MESMO alfabeto que o cadastro exige (`_LOGIN_RE`), e nao por uma
+    peneira propria: um login so tem letra, digito e hifen, entao nada que saia
+    daqui carrega `<`, quebra de linha ou marca de Markdown. Isso e mais forte
+    do que escapar, porque a lista do que pode e fechada.
+
+    `None` quando o campo esta vazio ou quando o texto gravado nao e um login de
+    verdade (linha antiga, cadastro feito antes da validacao): nesse caso a
+    Origem sai sem a mencao, e nao com um `@` grudado em algo que ninguem sabe
+    o que e.
+    """
+    login = normalizar_github_login(bruto)
+    if login is None or motivo_github_login_invalido(login) is not None:
+        return None
+    return login
+
+
 def corpo_da_issue_nova(
     *,
     demanda_id: str,
@@ -505,25 +524,38 @@ def corpo_da_issue_nova(
     descricao: str | None,
     tipo_rotulo: str,
     produto_nome: str,
-    autor_nome: str,
+    levado_por_login: str | None,
     link: str,
 ) -> str:
     """O corpo da issue que o botao "Levar para desenvolvimento" cria.
 
-    Tres partes, na ordem em que a issue #677 as pede, e cada uma com um leitor
-    diferente:
+    Tres partes, e cada uma com um leitor diferente:
 
     - o bloco **"Para o diretor"**, que e o que volta para o card pelo
       `bloco_para_o_diretor` (ADR 0054, decisao 7). Ele acaba no separador, e
       por isso nada abaixo dele chega ao diretor;
-    - a **Origem**, para quem for curar a issue: quem pediu e onde a Demanda
-      mora. E a unica frase que responde "de quem e este pedido";
+    - a **Origem**, para quem for curar a issue: o endereco da Demanda no app e
+      quem a levou;
     - o **marcador**, o lado da issue do par do Vinculo.
+
+    **Nome civil nenhum sai daqui** (decisao do diretor, rodada de seguranca do
+    PR #688). A issue #677 pedia a Origem "com o autor", e a Origem levava o
+    nome completo de quem pediu para um repositorio publico a cada clique. O
+    que ficou no lugar responde a mesma pergunta sem publicar pessoa:
+
+    - o **link da Demanda** e a rastreabilidade de verdade. Quem le a issue tem
+      acesso ao app, e la esta o autor, o fio inteiro e o resto;
+    - o **`@login`** e de quem LEVOU, nao de quem pediu, e e identificador que a
+      propria pessoa ja tornou publico no GitHub. Ele existe sempre, porque a
+      rota devolve 403 para quem nao tem `github_login`.
 
     Descricao vazia usa o TITULO: uma issue cujo "O que muda" viesse em branco
     mostraria "Descrição em preparação" no card de quem acabou de pedir.
     """
     o_que_muda = texto_do_diretor(descricao) or texto_do_diretor(titulo)
+    login = login_para_publicar(levado_por_login)
+    origem = "Pedido registrado na aba Tecnologia do aplicativo do hospital"
+    origem = f"{origem}, levado para o desenvolvimento por @{login}." if login else f"{origem}."
     return "\n".join(
         [
             CABECALHO_DO_BLOCO,
@@ -538,7 +570,7 @@ def corpo_da_issue_nova(
             "",
             "## Origem",
             "",
-            f"Pedido de {autor_nome} na aba Tecnologia do aplicativo do hospital.",
+            origem,
             f"Abrir a Demanda: {link}",
             "",
             marcador_da_demanda(demanda_id),

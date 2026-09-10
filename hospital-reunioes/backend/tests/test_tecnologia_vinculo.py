@@ -48,6 +48,7 @@ from app.services.tecnologia import (  # noqa: E402
     MARCA_INICIO_CONVERSA,
     RECUO_DA_CONTINUACAO,
 )
+from app.services.tecnologia_email import link_da_demanda  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
@@ -2088,8 +2089,21 @@ DEMANDA_PARA_LEVAR = dict(
     descricao="Quando eu imprimo o relatório do mês, a última linha some.",
     tipo_rotulo="Defeito",
     produto_nome="Ana",
-    autor_nome="Diretor do Hospital",
+    levado_por_login="pedrorezendefig",
     link="https://app.hsm.com/admin/tecnologia?demanda=d-1",
+)
+
+# A secao Origem inteira, como ela tem que sair. Escrita a mao, e comparada por
+# IGUALDADE: o criterio desta rodada e o que a issue publica NAO pode carregar,
+# e "o nome nao aparece" e cego a variacao de forma (sobrenome sozinho, nome no
+# meio de uma frase, nome dentro do link). Comparar a secao inteira diz o que
+# pode estar la, que e a unica forma de dizer que o resto nao pode.
+ORIGEM_ESPERADA = (
+    "## Origem\n"
+    "\n"
+    "Pedido registrado na aba Tecnologia do aplicativo do hospital, "
+    "levado para o desenvolvimento por @pedrorezendefig.\n"
+    "Abrir a Demanda: https://app.hsm.com/admin/tecnologia?demanda=d-1"
 )
 
 
@@ -2138,11 +2152,22 @@ class TestCorpoDaIssueNova:
 
         assert "Rodapé do relatório sai cortado" in bloco_para_o_diretor(corpo)
 
-    def test_a_origem_diz_quem_pediu_e_onde_esta_a_demanda(self):
+    def test_a_origem_e_o_link_mais_o_login_de_quem_levou(self):
+        """A secao inteira, por igualdade: e assim que se diz o que PODE estar
+        la, e portanto que nome civil nenhum esta."""
         corpo = corpo_da_issue_nova(**DEMANDA_PARA_LEVAR)
 
-        assert "Diretor do Hospital" in corpo
-        assert DEMANDA_PARA_LEVAR["link"] in corpo
+        assert ORIGEM_ESPERADA in corpo
+
+    def test_sem_login_valido_a_origem_fica_so_com_o_link(self):
+        """Linha antiga, cadastro anterior a validacao: um `@` grudado em algo
+        que ninguem sabe o que e seria pior do que a mencao nao existir. O link,
+        que e a rastreabilidade de verdade, continua."""
+        corpo = corpo_da_issue_nova(**{**DEMANDA_PARA_LEVAR, "levado_por_login": "nao é um login"})
+
+        assert "Pedido registrado na aba Tecnologia do aplicativo do hospital.\n" in corpo
+        assert f"Abrir a Demanda: {DEMANDA_PARA_LEVAR['link']}" in corpo
+        assert "@" not in corpo.split("## Origem")[1]
 
     def test_o_marcador_fecha_o_corpo_com_o_id_da_demanda(self):
         corpo = corpo_da_issue_nova(**DEMANDA_PARA_LEVAR)
@@ -2225,7 +2250,7 @@ class TestOTextoDoDiretorNaoForjaEstrutura:
         )
 
         assert corpo.count("\n## Origem") == 1
-        assert "Diretor do Hospital" in corpo
+        assert ORIGEM_ESPERADA in corpo
 
     def test_o_par_de_presenca_a_descricao_honesta_chega_inteira(self):
         """Sem ele, um `texto_do_diretor` que apagasse tudo passaria por todos
@@ -2319,8 +2344,8 @@ class TestLevarParaDesenvolvimento:
         assert "A última linha some quando imprimo." in criada["corpo"]
         # O par dos dois lados: a issue carrega o id da Demanda.
         assert demanda_id_do_marcador(criada["corpo"]) == "d-1"
-        # E a Origem nomeia quem PEDIU (o autor), e nao quem clicou.
-        assert "Diretor do Hospital" in criada["corpo"]
+        # E a Origem sai com o login de quem levou, sem nome de gente.
+        assert "levado para o desenvolvimento por @pedrorezendefig." in criada["corpo"]
 
     def test_a_demanda_fica_vinculada_ao_numero_devolvido(self, monkeypatch):
         gh = _GithubFalso({}, proximo_numero=901)
@@ -2716,3 +2741,77 @@ class TestAOrdemDasGuardasEDoDominio:
 
         assert resposta.status_code == 422
         assert resposta.json()["detail"] == MOTIVO_NUMERO_INVALIDO
+
+
+# ─── 10. Nome civil nao sai para o repositorio publico (rodada 2) ────────────
+
+
+class TestNomeCivilNaoVaiParaAIssuePublica:
+    """Decisao do diretor, vinda da review de seguranca do PR #688.
+
+    A issue #677 pedia a Origem "com o autor", e a Origem publicava o nome
+    completo de quem pediu num repositorio PUBLICO a cada clique. O ADR 0054
+    nunca registrou isso, e a decisao passou a ser nao publicar.
+
+    O que ficou responde a mesma pergunta sem publicar pessoa: o LINK da
+    Demanda (quem le a issue tem acesso ao app, e la esta o autor e o fio
+    inteiro) e o `@login` de quem LEVOU, que e identificador que a propria
+    pessoa ja tornou publico no GitHub.
+    """
+
+    ROTA = f"{BASE}/demandas/d-1/levar-para-desenvolvimento"
+
+    def _levar(self, monkeypatch):
+        # Quem PEDE e o diretor (P2, sem login); quem LEVA e o Pedro (P1, com
+        # login). E o caso real: nome civil dos dois no banco, nenhum dos dois
+        # na issue.
+        client, sb, gh = _montar(
+            logado=PEDRO,
+            demandas=[_demanda("d-1", autor_id="P2", responsavel_id="P1")],
+            github=_GithubFalso({}),
+            monkeypatch=monkeypatch,
+        )
+        assert client.post(self.ROTA).status_code == 200
+        return sb, gh
+
+    def test_a_origem_publicada_e_exatamente_o_link_mais_o_login(self, monkeypatch):
+        """O marcador POSITIVO: a secao inteira, por igualdade. Dizer o que pode
+        estar la e a unica forma de dizer que o resto nao pode, e ela nao e cega
+        a variacao de forma (so o sobrenome, o nome no meio de uma frase, o nome
+        dentro do link)."""
+        _, gh = self._levar(monkeypatch)
+
+        esperada = (
+            "## Origem\n"
+            "\n"
+            "Pedido registrado na aba Tecnologia do aplicativo do hospital, "
+            "levado para o desenvolvimento por @pedrorezendefig.\n"
+            f"Abrir a Demanda: {link_da_demanda('d-1')}"
+        )
+        assert esperada in gh.criadas[0]["corpo"]
+
+    def test_nem_o_nome_de_quem_pediu_nem_o_de_quem_levou_saem_daqui(self, monkeypatch):
+        """O complemento do teste acima, e nao o teste: ele sozinho seria a
+        asserção de ausencia que a rodada proibiu."""
+        _, gh = self._levar(monkeypatch)
+
+        corpo = gh.criadas[0]["corpo"]
+        assert "Diretor do Hospital" not in corpo
+        assert "Pedro Vitta" not in corpo
+
+    def test_o_par_de_presenca_o_link_e_o_login_continuam_la(self, monkeypatch):
+        """Sem ele, um corpo que perdesse a Origem inteira passaria pelo teste de
+        cima: a rastreabilidade morreria junto com o nome."""
+        _, gh = self._levar(monkeypatch)
+
+        corpo = gh.criadas[0]["corpo"]
+        assert link_da_demanda("d-1") in corpo
+        assert "@pedrorezendefig" in corpo
+
+    def test_por_dentro_o_nome_continua(self, monkeypatch):
+        """A omissao vale para o que SAI para o GitHub. A Conversa e de dentro,
+        e la o diretor precisa ler quem agiu, com nome de gente."""
+        sb, _ = self._levar(monkeypatch)
+
+        textos = [linha["texto"] for linha in _fio(sb)]
+        assert texto_levou_para_desenvolvimento("Pedro Vitta") in textos
