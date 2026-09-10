@@ -588,6 +588,22 @@ def esperando_resposta_da_pessoa(*, linhas: list[dict[str, Any]], pessoa_id: str
     - so uma linha `resposta` atende a mencao. Hoje a linha de movimento vem
       com `autor_id` NULL, mas o fio pode ganhar outros tipos de linha, e uma
       delas assinada pela pessoa nao e ela dizendo nada a quem a chamou.
+
+    A UNICA excecao a ordem e a linha CORRIGIDA (issue #670). A correcao nao
+    mexe no `criado_em`, entao a linha fica onde estava na fila, e a mencao
+    acrescentada nos 10 minutos ja nasceria "respondida" por quem tivesse
+    falado entre o envio e a correcao. Numa linha com `editado_em`, a chamada
+    conta a partir DESSE instante.
+
+    Como a linha nao guarda quais mencoes entraram na correcao (nao ha coluna
+    para isso), toda mencao de linha corrigida conta do `editado_em`: uma
+    correcao de virgula pode trazer de volta uma chamada ja respondida, e esse e
+    o lado seguro do erro (a Demanda reaparece na aba, em vez de uma chamada
+    sumir de vista).
+
+    Data ilegivel, dos dois lados, cai de volta na ORDEM: e a regra que sempre
+    valeu, e e o que impede o caso da data quebrada de virar "a mencao nunca foi
+    respondida", com a Demanda presa na aba para sempre.
     """
     ultima_mencao = -1
     for i, linha in enumerate(linhas):
@@ -597,9 +613,24 @@ def esperando_resposta_da_pessoa(*, linhas: list[dict[str, Any]], pessoa_id: str
             ultima_mencao = i
     if ultima_mencao < 0:
         return False
+    chamada_em = instante_do_banco(linhas[ultima_mencao].get("editado_em"))
     return not any(
-        linha.get("linha") == "resposta" and linha.get("autor_id") == pessoa_id for linha in linhas[ultima_mencao + 1 :]
+        linha.get("linha") == "resposta" and linha.get("autor_id") == pessoa_id and _atende(linha, chamada_em)
+        for linha in linhas[ultima_mencao + 1 :]
     )
+
+
+def _atende(resposta: dict[str, Any], chamada_em: datetime | None) -> bool:
+    """Se esta resposta, que vem DEPOIS da mencao na fila, atende a chamada.
+
+    Sem correcao (`chamada_em` nulo) a posicao ja disse tudo. Com correcao, a
+    resposta escrita ANTES do carimbo nao pode atender uma chamada que ainda nao
+    existia quando ela foi escrita.
+    """
+    if chamada_em is None:
+        return True
+    escrita_em = instante_do_banco(resposta.get("criado_em"))
+    return escrita_em is None or escrita_em >= chamada_em
 
 
 def motivo_da_minha_vez(*, responsavel_id: str | None, pessoa_id: str) -> str:
@@ -778,6 +809,26 @@ def avisos_da_resposta(*, responsavel_id: str | None, mencoes: list[str], quem_f
     if responsavel in mencionados:
         responsavel = None
     return AvisosDaResposta(mencionados=mencionados, responsavel=responsavel)
+
+
+def mencoes_acrescentadas(*, antes: list[str] | None, depois: list[str] | None, quem_fez: str) -> list[str]:
+    """Quem ENTROU na menção pela correção, e só (issue #670).
+
+    A correção reescreve a linha inteira, e o que chega no PATCH é a lista
+    FINAL de menções. Avisar "os mencionados" chamaria de novo, pela mesma
+    fala, quem o envio já tinha chamado; não avisar ninguém (o que o app fazia)
+    grava a menção, deixa "Minha vez" contar com ela e não manda o e-mail que a
+    história 42 promete. A diferença entre as duas listas é o que sobra.
+
+    Quem corrige nunca entra, pela mesma razão do `avisos_da_resposta`: escrever
+    o próprio nome é citar-se, não chamar.
+
+    As duas listas passam pelo `normalizar_mencoes`, e não só a que veio do
+    payload: o mesmo id com um espaço a mais viraria "menção nova" e mandaria o
+    aviso de novo.
+    """
+    ja_chamados = set(normalizar_mencoes(antes))
+    return [pid for pid in normalizar_mencoes(depois) if pid != quem_fez and pid not in ja_chamados]
 
 
 def trecho_do_aviso(texto: str | None) -> str:

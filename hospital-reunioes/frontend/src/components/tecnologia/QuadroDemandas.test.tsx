@@ -2123,6 +2123,42 @@ describe("O aviso de que o e-mail não saiu", () => {
     expect(await within(modal).findByText(/Já pedi à Global Health/)).toBeTruthy();
   });
 
+  it("chega à tela de quem corrigiu a resposta acrescentando uma menção", async () => {
+    // A correção dentro dos 10 minutos também chama (issue #670): o PATCH passou
+    // a devolver `aviso_por_email` como o POST, e este é o quarto caminho.
+    montar([demanda("d1", "Encerrar conversas")], {
+      conversa: [
+        {
+          id: "c1",
+          autor_id: "P1",
+          autor_nome: "Pedro Vitta",
+          linha: "resposta",
+          texto: "Vou olhar hoje",
+          mencoes: [],
+          movimento_campo: null,
+          criado_em: "2026-09-01T12:00:00Z",
+          editado_em: null,
+          editavel_ate: new Date(Date.now() + 300_000).toISOString(),
+        },
+      ],
+      avisoPorEmail: AVISO,
+    });
+    fireEvent.click(await screen.findByText("Encerrar conversas"));
+    const modal = await screen.findByRole("dialog");
+
+    fireEvent.click(await within(modal).findByRole("button", { name: /Corrigir/ }));
+    fireEvent.change(within(modal).getByLabelText("Corrigir a resposta"), {
+      target: { value: "@Sócia Vitta, vou olhar hoje" },
+    });
+    fireEvent.click(within(modal).getByRole("button", { name: "Salvar correção" }));
+
+    const alerta = await within(modal).findByRole("alert");
+    expect(alerta.textContent).toContain(AVISO);
+    // A correção ENTROU: o aviso não é recusa. O PATCH foi e a caixa fechou.
+    expect(escritas().some((c) => c.metodo === "PATCH" && c.url.includes("/conversa/c1"))).toBe(true);
+    await waitFor(() => expect(within(modal).queryByLabelText("Corrigir a resposta")).toBeNull());
+  });
+
   it("chega à tela de quem trocou o responsável dentro do card", async () => {
     // O gatilho da ATRIBUIÇÃO pela porta do modal, que é o `enviar` do
     // `DemandaModal`, um terceiro caminho.
