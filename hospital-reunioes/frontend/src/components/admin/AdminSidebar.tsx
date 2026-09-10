@@ -14,7 +14,6 @@ import {
   Cpu,
   HeartPulse,
   LucideIcon,
-  Wrench,
 } from "lucide-react";
 
 type Item = { href: string; label: string; icon: LucideIcon };
@@ -55,11 +54,6 @@ const SECTIONS: Section[] = [
     label: "Tecnologia",
     somenteSuperAdmin: true,
     items: [{ href: "/admin/tecnologia", label: "Tecnologia", icon: Cpu }],
-  },
-  {
-    label: "Ferramentas",
-    somenteSuperAdmin: true,
-    items: [{ href: "/admin/utilitarios", label: "Utilitários", icon: Wrench }],
   },
 ];
 
