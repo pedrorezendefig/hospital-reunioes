@@ -40,12 +40,16 @@ from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from slowapi import _rate_limit_exceeded_handler  # noqa: E402
+from slowapi.errors import RateLimitExceeded  # noqa: E402
+
 from app.config import settings  # noqa: E402
 from app.cron import scheduler as scheduler_mod  # noqa: E402
 from app.dependencies import get_supabase_client  # noqa: E402
+from app.limiter import limiter  # noqa: E402
 from app.routers import webhooks as webhooks_router  # noqa: E402
 from app.services import github_client, tecnologia_sincronizacao  # noqa: E402
-from app.services.tecnologia import ESTADOS_ABERTOS, ESTADOS_FECHADOS  # noqa: E402
+from app.services.tecnologia import ESTADOS, ESTADOS_FECHADOS  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
@@ -57,6 +61,8 @@ ROTA = "/api/webhooks/github"
 
 # Valor de mentira, deste arquivo. O segredo de verdade e do Coolify.
 SEGREDO = "segredo-falso-de-teste-678"
+
+REPO = "pedrorezendefig/hospital-reunioes"
 
 
 # ─── Fixtures de seguranca ───────────────────────────────────────────────────
@@ -80,13 +86,25 @@ def _sem_github_de_verdade(monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _segredo_configurado(monkeypatch):
-    """O segredo de pe, como estara no Coolify.
+    """O segredo e o repositorio de pe, como estarao no Coolify.
 
-    O `.env` local nao o tem, e sem isto TODA entrega responderia 503 e os testes
+    O `.env` local nao os tem, e sem isto TODA entrega responderia 503 (ou
+    passaria pela guarda do repositorio sem nada com o que comparar) e os testes
     de 401 ficariam verdes pelo motivo errado. Quem prova o 503 e o teste que
     APAGA a variavel, e nao a ausencia dela por acidente.
     """
     monkeypatch.setattr(settings, "github_webhook_secret", SEGREDO)
+    monkeypatch.setattr(settings, "github_integracao_repo", REPO)
+
+
+@pytest.fixture(autouse=True)
+def _reset_rate_limiter():
+    """O slowapi guarda a contagem num storage de PROCESSO: sem o reset, o 429
+    de um arquivo anterior quebraria um teste daqui que nada tem com o teto, e o
+    teste do teto veria o balde de outra pessoa."""
+    limiter._storage.reset()
+    yield
+    limiter._storage.reset()
 
 
 # ─── Supabase duble ──────────────────────────────────────────────────────────
@@ -274,6 +292,8 @@ def _montar(
     monkeypatch=None,
 ) -> tuple[TestClient, _SupabaseMock, _GithubFalso]:
     app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.include_router(webhooks_router.router, prefix="/api")
 
     sb = _SupabaseMock(
@@ -290,7 +310,10 @@ def _montar(
         monkeypatch.setattr(github_client, "ler_sub_issues", gh.ler_sub_issues)
 
     app.dependency_overrides[get_supabase_client] = lambda: sb
-    return TestClient(app), sb, gh
+    # `raise_server_exceptions=False` para o 500 chegar como RESPOSTA, e nao como
+    # excecao que estoura no teste: e assim que o cliente de verdade (o GitHub)
+    # ve a rota, e e a unica forma de assertar "isto responde 401, e nao 500".
+    return TestClient(app, raise_server_exceptions=False), sb, gh
 
 
 def _fio(sb: _SupabaseMock) -> list[dict]:
@@ -301,14 +324,15 @@ def _demandas(sb: _SupabaseMock) -> list[dict]:
     return sb.tabelas["tecnologia_demandas"]
 
 
-def _corpo(numero: int = 673, acao: str = "labeled") -> bytes:
+def _corpo(numero: int | bool | None = 673, acao: str = "labeled", repo: str = REPO) -> bytes:
     """O corpo CRU, com os espacos que o GitHub manda.
 
     Cru de proposito, e nao um `dict` que o teste serializa na hora do envio: e a
     unica forma de o teste distinguir o corpo recebido do corpo re-serializado, e
     e essa distincao que a assinatura do GitHub cobra.
     """
-    return json.dumps({"action": acao, "issue": {"number": numero}}, indent=2).encode("utf-8")
+    payload = {"action": acao, "issue": {"number": numero}, "repository": {"full_name": repo}}
+    return json.dumps(payload, indent=2).encode("utf-8")
 
 
 def _assinar(corpo: bytes, segredo: str = SEGREDO) -> str:
@@ -330,6 +354,22 @@ def _entregar(
         assinatura = _assinar(corpo)
     if assinatura is not None:
         cabecalhos["X-Hub-Signature-256"] = assinatura
+    return cliente.post(ROTA, content=corpo, headers=cabecalhos)
+
+
+def _entregar_com_header_cru(cliente: TestClient, corpo: bytes, assinatura: bytes):
+    """A entrega com o header da assinatura em BYTES.
+
+    Existe porque o httpx codifica header em ASCII e recusaria o valor antes de
+    sair, o que apagaria o caso justamente onde ele morde. Em bytes, o valor
+    atravessa e chega a rota como o Starlette o entrega em producao: decodificado
+    em latin-1, com o byte alto virando caractere nao ASCII.
+    """
+    cabecalhos = {
+        b"Content-Type": b"application/json",
+        b"X-GitHub-Event": b"issues",
+        b"X-Hub-Signature-256": assinatura,
+    }
     return cliente.post(ROTA, content=corpo, headers=cabecalhos)
 
 
@@ -433,6 +473,38 @@ class TestAssinatura:
         assert resposta.status_code == 401
         assert _fio(sb) == []
 
+    def test_byte_nao_ascii_no_header_e_401_e_nao_500(self, monkeypatch):
+        """A recusa tem que ser recusa, e nao defeito.
+
+        `hmac.compare_digest` com dois `str` exige ASCII nos dois lados: fora
+        disso ele LEVANTA `TypeError` em vez de devolver `False`. O Starlette
+        decodifica header em latin-1 e os parsers de HTTP deixam passar qualquer
+        byte 0x80-0xFF no valor, entao um header assim virava 500 com traceback,
+        e a linha de log da recusa nem era alcancada: justamente a tentativa
+        malformada era a unica que nao deixava rastro.
+
+        Enviado com o header em BYTES porque o httpx recusaria o valor antes de
+        sair, o que e o motivo de nenhum dos casos anteriores ter pego isto.
+        """
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _entregar_com_header_cru(cliente, _corpo(), b"sha256=" + b"a" * 63 + b"\xe7")
+
+        assert resposta.status_code == 401
+        assert _fio(sb) == []
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_ANALISE
+
+    def test_a_recusa_do_header_nao_ascii_fica_no_log(self, monkeypatch, caplog):
+        """O par do teste acima: 401 sem log seria a mesma cegueira com outro
+        numero. A linha da recusa precisa ser ALCANCADA neste caminho."""
+        cliente, _, _ = _montar(monkeypatch=monkeypatch)
+
+        with caplog.at_level(logging.WARNING, logger="app.routers.webhooks"):
+            _entregar_com_header_cru(cliente, _corpo(), b"sha256=" + b"a" * 63 + b"\xe7")
+
+        assert "Assinatura inválida" in caplog.text
+
     def test_o_algoritmo_declarado_precisa_ser_sha256(self, monkeypatch):
         """O MESMO hash, com outro rotulo na frente, nao passa.
 
@@ -469,7 +541,9 @@ class TestAssinatura:
         monkeypatch.setattr(webhooks_router.hmac, "compare_digest", _espiao)
         cliente, _, _ = _montar(monkeypatch=monkeypatch)
         corpo = _corpo(numero=999)
-        digest = _assinar(corpo).removeprefix("sha256=")
+        # Em BYTES: a comparacao e de bytes justamente para nao levantar
+        # `TypeError` com header nao ASCII (ver o caso do byte alto acima).
+        digest = _assinar(corpo).removeprefix("sha256=").encode("ascii")
 
         resposta = _entregar(cliente, corpo)
 
@@ -480,6 +554,73 @@ class TestAssinatura:
             "a assinatura foi conferida sem `hmac.compare_digest` sobre o digest esperado: "
             "o `==` conta ao atacante quantos bytes ele ja acertou"
         )
+
+
+class TestTetoDoCorpo:
+    """O HMAC precisa dos bytes CRUS, entao o corpo inteiro vai para a memoria
+    ANTES de qualquer prova de origem. O teto e o que impede uma porta publica de
+    aceitar cem megabytes de quem nao provou ser ninguem."""
+
+    def test_o_teto_e_o_do_proprio_github(self):
+        """O piso do teste abaixo, que roda com o teto rebaixado: sem esta linha,
+        o valor que VAI para producao nao teria asserção nenhuma, e trocar 25 MB
+        por 25 KB (ou por 2 GB) passaria batido."""
+        assert webhooks_router.TETO_DO_CORPO_DO_WEBHOOK == 25 * 1024 * 1024
+
+    def test_corpo_acima_do_teto_e_recusado_antes_de_ir_para_a_memoria(self, monkeypatch):
+        """A recusa vem do `Content-Length` ANUNCIADO, e a prova disso e a
+        assinatura VALIDA: se a rota lesse o corpo antes de olhar o tamanho, esta
+        entrega passaria pela assinatura e sincronizaria.
+
+        O teto e rebaixado em vez de o teste mandar 25 MB pela suite. Rebaixar o
+        NUMERO nao e monkeypatch da guarda: a guarda continua sendo a que roda, e
+        o valor de producao tem o teste acima.
+        """
+        monkeypatch.setattr(webhooks_router, "TETO_DO_CORPO_DO_WEBHOOK", 10)
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _entregar(cliente, _corpo())
+
+        assert resposta.status_code == 413
+        assert gh.leituras == []
+        assert _fio(sb) == []
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_ANALISE
+
+    def test_corpo_dentro_do_teto_passa(self, monkeypatch):
+        """O detector: um teto que recusasse tudo passaria no teste acima."""
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _entregar(cliente, _corpo())
+
+        assert resposta.status_code == 200
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+
+
+class TestTetoDeTaxa:
+    def test_martelar_a_porta_leva_429(self, monkeypatch):
+        """Sem teto, quem martela sem assinatura gasta leitura de corpo e HMAC do
+        app a vontade, e uma entrega capturada no `Recent Deliveries` vira replay
+        sem fim queimando a cota da API do GitHub, que e uma so para o app."""
+        cliente, _, _ = _montar(monkeypatch=monkeypatch)
+        corpo = _corpo(numero=999)
+
+        vistos = {_entregar(cliente, corpo, assinatura=None).status_code for _ in range(130)}
+
+        assert 429 in vistos
+
+    def test_o_teto_e_folgado_o_bastante_para_um_pico_legitimo(self, monkeypatch):
+        """A folga E a decisao: o GitHub nao reentrega, entao um 429 numa faxina
+        de labels em lote perderia o evento ate a reconciliacao da hora seguinte.
+        Uma dezena de entregas seguidas nao pode esbarrar no teto."""
+        gh = _GithubFalso({999: _issue(999)})
+        cliente, _, _ = _montar(demandas=[], github=gh, monkeypatch=monkeypatch)
+        corpo = _corpo(numero=999)
+
+        vistos = {_entregar(cliente, corpo).status_code for _ in range(30)}
+
+        assert vistos == {200}
 
 
 class TestSemSegredoConfigurado:
@@ -599,13 +740,74 @@ class TestIssueSemDemandaVinculada:
         assert _fio(sb) == []
         assert _demandas(sb)[0]["github_foto"] is None
 
-    def test_payload_sem_numero_de_issue_nao_derruba_a_rota(self, monkeypatch):
-        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], monkeypatch=monkeypatch)
-        corpo = json.dumps({"action": "labeled", "issue": {}}).encode("utf-8")
+    @pytest.mark.parametrize(
+        "numero",
+        (None, "673", 0, -1, True),
+        ids=("ausente", "texto", "zero", "negativo", "booleano"),
+    )
+    def test_numero_que_nao_serve_e_ignorado_sem_consultar_o_banco(self, numero, monkeypatch):
+        """A guarda diz "e um numero de issue", e precisa ser isso.
+
+        O `True` esta na lista porque em Python bool E int: `isinstance(x, int)`
+        sozinho aceitaria `{"number": true}` e viraria uma consulta por
+        `github_issue_numero=True`.
+
+        A tabela tem uma Demanda VINCULADA e uma SEM vinculo de proposito. Com so
+        a vinculada, tirar a guarda inteira manteria o teste verde, porque
+        nenhuma linha casaria com o numero invalido: e a nao vinculada
+        (`github_issue_numero=None`) que faz o `.eq(..., None)` casar e denunciar
+        a ausencia da guarda pelo CORPO da resposta.
+        """
+        cliente, sb, _ = _montar(
+            demandas=[_demanda("D1", github_issue_numero=673), _demanda("D2", github_issue_numero=None)],
+            monkeypatch=monkeypatch,
+        )
+        corpo = _corpo(numero=numero)
 
         resposta = _entregar(cliente, corpo)
 
         assert resposta.status_code == 200
+        assert resposta.json() == {"ignorado": "issue"}
+        assert _fio(sb) == []
+
+
+class TestRepositorioDaEntrega:
+    """Defesa em profundidade: o mesmo segredo reaproveitado noutro repositorio
+    ou num fork mandaria o app reler issues pelo numero errado."""
+
+    def test_entrega_de_outro_repositorio_e_ignorada(self, monkeypatch):
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _entregar(cliente, _corpo(repo="outra-pessoa/hospital-reunioes"))
+
+        assert resposta.status_code == 200
+        assert resposta.json() == {"ignorado": "outro_repositorio"}
+        assert gh.leituras == []
+        assert _fio(sb) == []
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_ANALISE
+
+    def test_entrega_sem_repositorio_no_payload_e_ignorada(self, monkeypatch):
+        """Todo evento `issues` do GitHub traz `repository`. Um payload sem ele
+        nao veio de la, e "nao consigo comparar" nao pode virar "pode passar"."""
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], monkeypatch=monkeypatch)
+        corpo = json.dumps({"action": "labeled", "issue": {"number": 673}}).encode("utf-8")
+
+        resposta = _entregar(cliente, corpo)
+
+        assert resposta.json() == {"ignorado": "outro_repositorio"}
+        assert _fio(sb) == []
+
+    def test_sem_repositorio_configurado_a_guarda_nao_bloqueia(self, monkeypatch):
+        """Sem `GITHUB_INTEGRACAO_REPO` nao ha com o que comparar, e recusar aqui
+        trocaria uma falha honesta adiante (o cliente exige a variavel) por um
+        silencio que ninguem liga a causa."""
+        monkeypatch.setattr(settings, "github_integracao_repo", "")
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], monkeypatch=monkeypatch)
+
+        resposta = _entregar(cliente, _corpo(repo="qualquer/coisa"))
+
+        assert resposta.json() != {"ignorado": "outro_repositorio"}
         assert _fio(sb) == []
 
 
@@ -747,6 +949,215 @@ class TestSincronizacaoPeloWebhook:
         assert _fio(sb) == []
         assert _demandas(sb)[0]["etapa"] == ETAPA_EM_ANALISE
 
+    def test_demanda_concluida_nao_e_tocada_pelo_webhook(self, monkeypatch):
+        """Os dois gatilhos precisam concordar: a reconciliacao ja exclui
+        Concluida e Cancelada pelo filtro de estado, e o webhook chega pelo numero
+        da issue, sem esse filtro. Sem a guarda na rotina, fechar a issue depois
+        de alguem concluir a Demanda a mao escreveria no fio de um card fechado.
+        """
+        gh = _GithubFalso({673: _issue(673, estado="closed", motivo="completed")})
+        cliente, sb, _ = _montar(
+            demandas=[_demanda("D1", github_issue_numero=673, estado="concluida", etapa=ETAPA_PLANEJADA)],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        resposta = _entregar(cliente, _corpo(acao="closed"))
+
+        assert resposta.status_code == 200
+        assert gh.leituras == [], "nem chegou a gastar cota sobre um card fechado"
+        assert _fio(sb) == []
+        assert _demandas(sb)[0]["etapa"] == ETAPA_PLANEJADA
+
+
+class TestOEventLoopNaoFicaBloqueado:
+    """`sincronizar_demanda` faz DUAS chamadas sincronas ao GitHub (10 s de
+    timeout cada) mais o I/O sincrono do PostgREST, e o container sobe com UM
+    worker so. Chamada direto de dentro do `async def`, ela para o backend
+    inteiro enquanto roda, `/api/health` incluido, e uma fila de entregas marca o
+    container unhealthy no Traefik, tirando o app do ar para todo mundo."""
+
+    def test_a_sincronizacao_roda_fora_do_event_loop(self, monkeypatch):
+        """Prova pela THREAD em que a rotina roda.
+
+        Asserir "a rota respondeu" nao provaria nada: ela responde igual dos dois
+        jeitos, e o bloqueio so aparece com carga. O que distingue o codigo certo
+        do errado e ONDE o I/O acontece, e isso da para observar de dentro dele.
+
+        As duas threads sao lidas de dentro da propria rota, e nao da thread do
+        teste: o `TestClient` ja roda o app noutra thread, entao comparar com a
+        do teste ficaria verde ate sem o `run_in_threadpool`. O
+        `demanda_vinculada` e chamado direto do corpo `async`, entao ele DA a
+        thread do event loop; o `sincronizar_demanda` e o que precisa estar fora
+        dela.
+        """
+        import threading
+
+        do_event_loop: list[int] = []
+        da_rotina: list[int] = []
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        buscar = tecnologia_sincronizacao.demanda_vinculada
+        sincronizar = tecnologia_sincronizacao.sincronizar_demanda
+
+        def _espiao_do_loop(supabase, numero):
+            do_event_loop.append(threading.get_ident())
+            return buscar(supabase, numero)
+
+        def _espiao_da_rotina(supabase, demanda):
+            da_rotina.append(threading.get_ident())
+            return sincronizar(supabase, demanda)
+
+        monkeypatch.setattr(tecnologia_sincronizacao, "demanda_vinculada", _espiao_do_loop)
+        monkeypatch.setattr(tecnologia_sincronizacao, "sincronizar_demanda", _espiao_da_rotina)
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _entregar(cliente, _corpo())
+
+        assert resposta.status_code == 200
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO, "o caso perdeu o sentido: nada sincronizou"
+        assert do_event_loop and da_rotina, "os dois espiões precisam ter sido chamados"
+        assert da_rotina[0] != do_event_loop[0], (
+            "a sincronização rodou na thread que carrega o event loop: com um worker só, "
+            "isso para o backend inteiro por até 20 segundos, /api/health incluído"
+        )
+
+
+class TestCorridaEntreOJobEOWebhook:
+    """O job roda numa THREAD do `BackgroundScheduler` e o webhook roda no event
+    loop (agora tambem numa thread, pelo `run_in_threadpool`): entre o `select` de
+    um e o `insert` do outro ha uma janela sem trava, e os dois leriam a mesma
+    Etapa antiga.
+
+    A corrida e encenada de forma DETERMINISTICA: as duas leituras acontecem
+    antes de qualquer escrita, que e exatamente o estado que a janela produz.
+    """
+
+    def _dois_leitores(self, monkeypatch):
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        monkeypatch.setattr(github_client, "ler_issue", gh.ler_issue)
+        monkeypatch.setattr(github_client, "ler_sub_issues", gh.ler_sub_issues)
+        sb = _SupabaseMock(
+            {
+                "tecnologia_demandas": [_demanda("D1", github_issue_numero=673, etapa=ETAPA_PLANEJADA)],
+                "tecnologia_conversas": [],
+            }
+        )
+        guardada = sb.tabelas["tecnologia_demandas"][0]
+        return sb, dict(guardada), dict(guardada)
+
+    def test_a_linha_da_etapa_nao_sai_duas_vezes(self, monkeypatch):
+        sb, pelo_webhook, pelo_job = self._dois_leitores(monkeypatch)
+
+        primeira = tecnologia_sincronizacao.sincronizar_demanda(sb, pelo_webhook)
+        segunda = tecnologia_sincronizacao.sincronizar_demanda(sb, pelo_job)
+
+        assert primeira is True
+        assert segunda is False, "o segundo leitor achou que ainda era ele quem movia a Etapa"
+        assert [linha["texto"] for linha in _fio(sb)] == ["Etapa: Em desenvolvimento"]
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+
+    def test_quem_perde_a_corrida_deixa_rastro(self, monkeypatch, caplog):
+        """Silencio aqui seria indistinguivel de "nada mudou", e quem for
+        investigar uma linha faltando no fio precisa achar o motivo."""
+        sb, pelo_webhook, pelo_job = self._dois_leitores(monkeypatch)
+        tecnologia_sincronizacao.sincronizar_demanda(sb, pelo_webhook)
+
+        with caplog.at_level(logging.INFO, logger="app.services.tecnologia_sincronizacao"):
+            tecnologia_sincronizacao.sincronizar_demanda(sb, pelo_job)
+
+        assert "já tinha sido movida" in caplog.text
+
+    def test_o_detector_da_corrida_nao_e_vacuo(self, monkeypatch):
+        """O piso: os dois leitores precisam MESMO chegar com a Etapa antiga na
+        mao, senao o teste acima estaria provando "a segunda chamada nao faz
+        nada" por outro motivo (foto igual, por exemplo)."""
+        _, pelo_webhook, pelo_job = self._dois_leitores(monkeypatch)
+
+        assert pelo_webhook["etapa"] == pelo_job["etapa"] == ETAPA_PLANEJADA
+        assert pelo_webhook["github_foto"] is None and pelo_job["github_foto"] is None
+
+
+class TestOCorpoDaRespostaEOSmokeDoPassoHumano:
+    """O corpo do PR manda o operador conferir a instalacao pelo CORPO da
+    delivery, e nao pelo 200. Entao o corpo e contrato, e nao enfeite: sem estes
+    testes, fixar `sincronizada: true` no caminho de sucesso E no `except` que
+    engole a falha ficaria verde, e quem cadastrasse o webhook leria "funcionou"
+    sobre uma integracao que falha em toda entrega."""
+
+    def test_evento_ignorado_diz_que_foi_o_evento(self, monkeypatch):
+        cliente, _, _ = _montar(monkeypatch=monkeypatch)
+
+        assert _entregar(cliente, _corpo(), evento="push").json() == {"ignorado": "evento"}
+
+    def test_acao_ignorada_diz_que_foi_a_acao(self, monkeypatch):
+        cliente, _, _ = _montar(monkeypatch=monkeypatch)
+
+        assert _entregar(cliente, _corpo(acao="assigned")).json() == {"ignorado": "acao"}
+
+    def test_issue_sem_vinculo_diz_que_nao_ha_vinculo(self, monkeypatch):
+        gh = _GithubFalso({999: _issue(999)})
+        cliente, _, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        assert _entregar(cliente, _corpo(numero=999)).json() == {"ignorado": "sem_vinculo"}
+
+    def test_sincronizada_de_verdade(self, monkeypatch):
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, _, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        assert _entregar(cliente, _corpo()).json() == {"recebido": True, "sincronizada": True}
+
+    def test_nada_mudou_e_falha_nao_dizem_a_mesma_coisa(self, monkeypatch):
+        """O par que faz o smoke valer alguma coisa.
+
+        "Recebi e nao havia novidade" e "recebi e quebrei" sao desfechos
+        diferentes, e o operador precisa distinguir os dois na tela do GitHub. Um
+        `sincronizada: false` para os dois casos deixaria a falha invisivel
+        exatamente na hora em que ele confere o passo humano.
+        """
+        gh_calmo = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente_calmo, _, _ = _montar(
+            demandas=[
+                _demanda(
+                    "D1",
+                    github_issue_numero=673,
+                    etapa=ETAPA_EM_DESENVOLVIMENTO,
+                    github_foto=_foto_guardada(gh_calmo, 673),
+                )
+            ],
+            github=gh_calmo,
+            monkeypatch=monkeypatch,
+        )
+        # A entrega calma sai ANTES da segunda montagem: as duas dublam o mesmo
+        # `github_client`, e montar as duas primeiro faria o GitHub quebrado
+        # atender tambem o cliente calmo.
+        sem_novidade = _entregar(cliente_calmo, _corpo()).json()
+
+        gh_quebrado = _GithubFalso({673: _issue(673)}, erro=github_client.GithubIndisponivelError("502"))
+        cliente_quebrado, _, _ = _montar(
+            demandas=[_demanda("D1", github_issue_numero=673)],
+            github=gh_quebrado,
+            monkeypatch=monkeypatch,
+        )
+        com_falha = _entregar(cliente_quebrado, _corpo()).json()
+
+        assert sem_novidade == {"recebido": True, "sincronizada": False}
+        assert com_falha == {"recebido": True, "sincronizada": False, "falhou": True}
+        assert sem_novidade != com_falha
+
+    def test_issue_apagada_nao_gera_stack_no_log(self, monkeypatch, caplog):
+        """Condicao PERMANENTE, e nao indisponibilidade: repetir o traceback a
+        cada entrega (e a cada hora, no lote) nao acrescenta nada sobre algo que
+        nao se auto-resolve."""
+        gh = _GithubFalso({})
+        cliente, _, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        with caplog.at_level(logging.WARNING, logger="app.routers.webhooks"):
+            resposta = _entregar(cliente, _corpo())
+
+        assert resposta.json() == {"recebido": True, "sincronizada": False, "falhou": True}
+        assert "não existe mais no repositório" in caplog.text
+        assert "Traceback" not in caplog.text
+
 
 # ─── 4. A reconciliacao de hora em hora ──────────────────────────────────────
 
@@ -803,9 +1214,17 @@ class TestReconciliacao:
 
     def test_os_estados_do_lote_sao_o_complemento_dos_fechados(self):
         """O piso da consulta acima: um estado novo que nao entrasse em nenhuma
-        das duas listas sumiria da reconciliacao em silencio."""
-        assert set(ESTADOS_ABERTOS) & set(ESTADOS_FECHADOS) == set()
-        assert set(tecnologia_sincronizacao.ESTADOS_DA_RECONCILIACAO) == set(ESTADOS_ABERTOS)
+        das duas listas sumiria da reconciliacao em silencio.
+
+        A asserção e de UNIAO sobre `ESTADOS`, e nao a igualdade com
+        `ESTADOS_ABERTOS`: essa seria tautologia, porque
+        `ESTADOS_DA_RECONCILIACAO` e um alias dele, e um estado novo passaria
+        batido justamente aqui.
+        """
+        do_lote = set(tecnologia_sincronizacao.ESTADOS_DA_RECONCILIACAO)
+
+        assert do_lote & set(ESTADOS_FECHADOS) == set()
+        assert do_lote | set(ESTADOS_FECHADOS) == set(ESTADOS)
 
     def test_uma_falha_nao_derruba_o_lote(self, monkeypatch):
         """Criterio de aceite. A falha e no UPDATE da segunda Demanda, e nao no
@@ -892,6 +1311,45 @@ class TestReconciliacao:
 
         assert "2 lida(s)" in caplog.text
         assert "1 mudada(s)" in caplog.text
+
+    def test_issue_apagada_conta_como_falha_sem_stack(self, monkeypatch, caplog):
+        """Condicao PERMANENTE tratada como as outras falhas viraria um traceback
+        inteiro por HORA, para sempre, sobre algo que nao se auto-resolve: quem
+        for consertar desfaz o Vinculo na tela."""
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        monkeypatch.setattr(github_client, "ler_issue", gh.ler_issue)
+        monkeypatch.setattr(github_client, "ler_sub_issues", gh.ler_sub_issues)
+        sb = _SupabaseMock(
+            {
+                "tecnologia_demandas": [
+                    _demanda("D1", github_issue_numero=673),
+                    _demanda("D2", github_issue_numero=404),
+                ],
+                "tecnologia_conversas": [],
+            }
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.services.tecnologia_sincronizacao"):
+            contagem = tecnologia_sincronizacao.reconciliar_vinculos(sb)
+
+        assert contagem == {"lidas": 2, "mudadas": 1, "falhas": 1}
+        assert "não existe mais no repositório" in caplog.text
+        assert "Traceback" not in caplog.text
+
+    def test_falha_de_verdade_continua_com_stack(self, monkeypatch, caplog):
+        """O par do teste acima: tirar o `exc_info` de TODAS as falhas apagaria a
+        unica pista das que sao mesmo defeito."""
+        monkeypatch.setattr(github_client, "ler_issue", lambda numero: _issue(numero, labels=("in-progress",)))
+        monkeypatch.setattr(github_client, "ler_sub_issues", lambda numero: [])
+        sb = _SupabaseMock(
+            {"tecnologia_demandas": [_demanda("D1", github_issue_numero=673)], "tecnologia_conversas": []},
+            falhas={"D1": RuntimeError("PostgREST fora do ar")},
+        )
+
+        with caplog.at_level(logging.WARNING, logger="app.services.tecnologia_sincronizacao"):
+            tecnologia_sincronizacao.reconciliar_vinculos(sb)
+
+        assert "Traceback" in caplog.text
 
     def test_sem_demanda_vinculada_o_lote_nao_le_o_github(self, monkeypatch):
         sb = _SupabaseMock(

@@ -24,8 +24,6 @@ from zoneinfo import ZoneInfo
 from app.dependencies import is_super_admin
 from app.services.tecnologia_vinculo import ETAPA_REGISTRADA, ETAPA_ROTULO, texto_movimento_etapa
 
-# O motivo que a tela mostra quando a API recusa. Uma frase so, no lugar de
-# uma por endpoint: e ela que o Super admin le no toast.
 # As duas tabelas da aba. Moram aqui, e nao no router, porque a partir da issue
 # #678 quem escreve nelas nao e so o router: o webhook do GitHub e o job de
 # reconciliacao escrevem pelo `tecnologia_sincronizacao`, e um nome de tabela
@@ -33,6 +31,8 @@ from app.services.tecnologia_vinculo import ETAPA_REGISTRADA, ETAPA_ROTULO, text
 TABELA_DEMANDAS = "tecnologia_demandas"
 TABELA_CONVERSAS = "tecnologia_conversas"
 
+# O motivo que a tela mostra quando a API recusa. Uma frase so, no lugar de
+# uma por endpoint: e ela que o Super admin le no toast.
 MOTIVO_PRODUTO_ATIVO_SEM_DONO = "Produto ativo precisa de dono. Escolha um dono ou desative o Produto."
 MOTIVO_DONO_SEM_ACESSO = "O dono precisa ser um participante ativo com Super admin."
 

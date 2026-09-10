@@ -34,6 +34,7 @@ from typing import Any
 from app.services import github_client
 from app.services.tecnologia import (
     ESTADOS_ABERTOS,
+    ESTADOS_FECHADOS,
     TABELA_CONVERSAS,
     TABELA_DEMANDAS,
     linha_de_movimento,
@@ -112,9 +113,18 @@ def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
     para quem chamou, porque o desfeito e diferente nos dois gatilhos. O webhook
     engole e responde 2xx (o GitHub nao reentrega, e insistir nao traria o evento
     de volta); o lote conta a falha e segue para a proxima Demanda.
+
+    Demanda Concluida ou Cancelada nao e tocada, pelos DOIS gatilhos. O lote ja
+    nem a le (o filtro de estado poupa a cota do GitHub), mas a guarda mora aqui
+    e nao la, porque o webhook chega pelo numero da issue e nao tem esse filtro:
+    sem ela, fechar a issue depois que alguem concluiu a Demanda a mao escreveria
+    no fio de um card fechado, e os dois caminhos que a issue chama de "a mesma
+    rotina" se comportariam diferente.
     """
     numero = demanda.get("github_issue_numero")
     if not numero:
+        return False
+    if str(demanda.get("estado") or "") in ESTADOS_FECHADOS:
         return False
     numero = int(numero)
 
@@ -126,22 +136,49 @@ def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
     demanda_id = str(demanda["id"])
     etapa_antes = demanda.get("etapa") or ETAPA_REGISTRADA
     mudanca = mudanca_da_foto(foto)
-    supabase.table(TABELA_DEMANDAS).update(mudanca).eq("id", demanda_id).execute()
+    muda_a_etapa = mudanca["etapa"] != etapa_antes
 
-    if mudanca["etapa"] != etapa_antes:
-        supabase.table(TABELA_CONVERSAS).insert(
-            linha_de_movimento(
-                demanda_id=demanda_id,
-                campo="etapa",
-                de=etapa_antes,
+    consulta = supabase.table(TABELA_DEMANDAS).update(mudanca).eq("id", demanda_id)
+    if muda_a_etapa:
+        # Trava otimista, e nao enfeite: o job roda numa THREAD do
+        # `BackgroundScheduler` e o webhook roda no event loop, entao entre o
+        # `select` de um e o `insert` do outro ha uma janela sem trava. Os dois
+        # leriam `etapa_antes` igual, os dois achariam que a Etapa mudou, e o
+        # diretor leria a MESMA linha duas vezes no fio.
+        #
+        # O `.eq("etapa", ...)` transforma o UPDATE num compare-and-swap: o
+        # Postgres serializa a linha, e so um dos dois casa. Quem perde sai sem
+        # escrever a segunda linha. O cache dele se perde junto, e tudo bem: quem
+        # ganhou acabou de gravar uma foto lida do mesmo GitHub, e se ela for a
+        # mais velha das duas a reconciliacao da hora seguinte reescreve.
+        #
+        # A coluna e NOT NULL com default na migration 103, entao o `.eq` nao cai
+        # na armadilha do PostgREST de descartar linha com valor nulo.
+        consulta = consulta.eq("etapa", etapa_antes)
+    result = consulta.execute()
+
+    if not muda_a_etapa:
+        return True
+    if not result.data:
+        logger.info(
+            "[tecnologia] A Etapa da Demanda %s já tinha sido movida por outro caminho; linha não repetida.",
+            demanda_id,
+        )
+        return False
+
+    supabase.table(TABELA_CONVERSAS).insert(
+        linha_de_movimento(
+            demanda_id=demanda_id,
+            campo="etapa",
+            de=etapa_antes,
+            para=mudanca["etapa"],
+            texto=texto_movimento_etapa(
                 para=mudanca["etapa"],
-                texto=texto_movimento_etapa(
-                    para=mudanca["etapa"],
-                    entregues=mudanca["partes_entregues"],
-                    total=mudanca["partes_total"],
-                ),
-            )
-        ).execute()
+                entregues=mudanca["partes_entregues"],
+                total=mudanca["partes_total"],
+            ),
+        )
+    ).execute()
     return True
 
 
@@ -171,6 +208,17 @@ def reconciliar_vinculos(supabase) -> dict[str, int]:
         try:
             if sincronizar_demanda(supabase, demanda):
                 mudadas += 1
+        except github_client.IssueNaoEncontradaError:
+            # Condicao PERMANENTE: a issue foi apagada ou transferida. Uma linha,
+            # sem stack. Tratada como as outras falhas seria um traceback inteiro
+            # por HORA, para sempre, sobre algo que nao se auto-resolve: quem for
+            # consertar desfaz o Vinculo na tela.
+            falhas += 1
+            logger.warning(
+                "[tecnologia] A issue #%s da Demanda %s não existe mais no repositório.",
+                demanda.get("github_issue_numero"),
+                demanda.get("id"),
+            )
         except Exception:
             # Qualquer causa, de proposito: `except GithubIndisponivelError`
             # deixaria o timeout do PostgREST subir cru e derrubar o lote na
