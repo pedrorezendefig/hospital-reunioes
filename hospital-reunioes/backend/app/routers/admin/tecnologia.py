@@ -725,7 +725,12 @@ async def _aviso_da_correcao(
     if not mencionados:
         return None
     try:
-        com_nomes = _com_nomes(supabase, [demanda])[0]
+        # O `ator` viaja ate aqui porque desde a issue #674 e o `_com_nomes` que
+        # decide quem ve o objeto do Vinculo (numero e URL da issue). Nada disso
+        # entra no e-mail, mas a regra mora num lugar so: uma chamada que
+        # passasse por fora dela seria a fresta por onde o proximo campo
+        # reservado a Vitta vazaria.
+        com_nomes = _com_nomes(supabase, [demanda], ator=ator)[0]
     except Exception:
         logger.exception("Falha ao ler os nomes da Demanda %s para o aviso da correcao", demanda.get("id"))
         return AVISO_EMAIL_NAO_SAIU
