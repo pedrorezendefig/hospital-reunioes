@@ -1447,6 +1447,37 @@
       ],
       "rollback_target_sha": "9422abb",
       "notes": "Precisou de DUAS rodadas de fix.\n\nRodada 1, 3 must-fix. (a) A guarda nova era fail-open, porque o default de environment em config.py era \"development\": a protecao dependia de uma env var cujo default e o lado aberto, e o furo original nasceu justamente de uma env var mudando de valor. Corrigido com default \"production\" MAIS um validador que recusa ambiente fora de {development, ci, staging, production}, o que puxou ENVIRONMENT: ci para o ci.yml e alinhou os dois .env.example. (b) A chamada da RPC estava fora do try e sem tratar erro, numa dependencia aplicada a mao em producao: o email ja teria saido quando a excecao subisse, com enviado_em carimbado e o lote inteiro de atrasadas derrubado. (c) O PR afirmava que destinatario e assunto nao carregam dado de caso, e os assuntos reais dos construtores carregam protocolo, setor e estado, com o teste medindo num assunto sintetico que nenhum construtor gera.\n\nRodada 2, 1 must-fix: o except APIError do cinto novo caia na MESMA armadilha do PR irmao #462, nao pegava timeout, entao o dano voltava inteiro. Fechado com (APIError, httpx.HTTPError).\n\nSobre a prova por mutacao: o autor foi honesto ao reportar que um mutante dele SOBREVIVEU e expos um teste vacuo do proprio autor, porque a parametrizacao derivava da constante que media e encolhia junto com o mutante. Outros tres mutantes viraram equivalentes depois que o fake passou a espelhar a whitelist. O revisor da rodada 2 aplicou a migration num Postgres 18.4 real, com os papeis anon e authenticated criados, e confirmou a dedup dentro do lote, a ordem de chegada, a concorrencia com transacoes sobrepostas e o REVOKE efetivo.\n\nResidual conhecido e aceito, registrado na decisao 7 do ADR 0039: o assunto do email segue no log com protocolo e setor, porque a issue autorizou manter destinatario e assunto.\n\nA migration 089_ouvidoria_relatorio_entrega_atomica.sql foi aplicada A MAO no Studio de producao pelo humano ANTES do merge, porque o codigo novo depende da RPC.\n\nFECHAMENTO DA ONDA. 3 de 3 issues em producao (#459 na v0.87.1, #449 na v0.87.2, #450 na v0.87.3), em 3 deploys separados. O CI da conta ficou bloqueado por cobranca das 22:05 UTC de 31/08 ate a virada do mes: era cota esgotada, nao pagamento recusado, e renovou sozinha no dia 1, o que destravou os dois PRs que tinham ficado abertos. O re-bump de versao a cada merge criou conflito no package.json, porque a main ja tinha o numero que o PR trazia; resolvido com merge da main na branch, ja que PR com conflito nao gera CI e o sintoma e \"no checks reported\", sem erro.\n\nIssues novas abertas pelos revisores nesta onda: #464 (portas irmas da #459: token orfao agenda reuniao e dispara convite por email sem rate limit, e reescreve reuniao alheia tomando o facilitador_id), #465 (o token do portal do setor e o do aceite vao em claro para o log do container, e com ele da para responder em nome do setor; o banco guarda so o hash) e #466 (avisar_admins_tecnicos loga o corpo do aviso em producao sem guarda, o que deixa a #450 entregue pela metade)."
+    },
+    {
+      "at": "2026-09-11T13:39:34-03:00",
+      "sha": "1e781bf",
+      "app_version": "0.129.0",
+      "subject": "Tecnologia: Conversa espelhada na issue com o marcador do revisor",
+      "raw_subject": "feat(tecnologia): conversa espelhada na issue com o marcador do revisor (#680) (#696)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "104_tecnologia_conversa_espelhada.sql"
+      ],
+      "rollback_target_sha": "83cdc5a2",
+      "notes": "Ultima fatia do PRD #673. Tres rodadas de review independente antes do merge. A primeira tirou o nome civil do comentario espelhado (decisao do diretor no PR #688) e pos aviso na tela de que a resposta e publicada. A segunda derrubou o escape de barra: o CommonMark come a barra antes do filtro de mencao, e \\@fulano notifica igual. A terceira derrubou a crase: quando o autor ja escreveu crase, a crase inserida pelo app quebra o code span dele em dois e ACENDE mencao que estava apagada. A forma que ficou e espaco depois do arroba, que nao abre nem fecha delimitador, provada em doze corpos pelo gh api /markdown. Bump 0.129.0 saiu de rebase sobre 0.128.3 (corrida de bump com os PRs #697/#698)."
     }
   ]
 }

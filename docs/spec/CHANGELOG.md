@@ -7,6 +7,22 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.129.0 - 2026-09-11 16:45 - a Conversa da Demanda vinculada é espelhada na issue com o marcador do revisor
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `1e781bf`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.129.0, `db: healthy`; frontend HTTP 200; rota da conversa responde 401 sem token, provando o código novo)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/1e781bf
+- Issues: [#680](https://github.com/pedrorezendefig/hospital-reunioes/issues/680) · PR [#696](https://github.com/pedrorezendefig/hospital-reunioes/pull/696) · PRD [#673](https://github.com/pedrorezendefig/hospital-reunioes/issues/673)
+- Migration: `104_tecnologia_conversa_espelhada.sql`, aplicada à mão no Studio antes do merge. Uma coluna em `tecnologia_conversas` (`github_comentario_id BIGINT`), sem tabela nova, RLS como está · minor, feat
+- Nota: última fatia do PRD #673, que fecha o ciclo do diretor sem GitHub. Toda resposta numa Demanda vinculada vira comentário na issue, e a resposta de quem não tem login acende `revisor-comentou` pelo marcador.
+- Nota: três rodadas de review independente antes do merge, todas sobre o mesmo risco, o repositório ser público. A primeira tirou o nome civil do comentário espelhado, estendendo a decisão do diretor do PR #688, e pôs na tela o aviso de que a resposta é publicada, já que quem não tem login não vê o Vínculo.
+- Nota: as duas formas óbvias de desligar a menção do GitHub caíram, cada uma provada no `gh api /markdown` e não por leitura de código. O escape de barra (`\@fulano`) falha porque o CommonMark consome a barra antes do filtro de menção. A crase falha pior: quando o autor já escreveu crase, a crase inserida pelo app quebra o code span dele em dois e **acende** uma menção que estava apagada, regressão que a rodada 2 introduziu e a rodada 3 pegou. Ficou o espaço depois do arroba, que não abre nem fecha delimitador, neutro nos doze corpos testados, com o `@login` de quem foi escolhido no autocomplete ainda notificando.
+- Nota: o detector do próprio teste estava cego, porque ignorava code span e daria verde justamente nos corpos que vazavam. Perdeu a exceção e ganhou teste próprio; quatro mutantes mortos, um deles no detector.
+- Nota: bump saiu de rebase sobre 0.128.3, corrida com os PRs #697 e #698 de outra sessão. O conflito era só a linha de versão em `package.json`.
+
+---
+
 ## v0.128.3 - 2026-09-11 12:40 - o alarme da devolução distingue metade escrita de nada escrito, e o webhook do GitHub conta os bytes durante a leitura
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `eb425f7`
