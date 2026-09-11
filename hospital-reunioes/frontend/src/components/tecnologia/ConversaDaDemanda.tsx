@@ -39,6 +39,12 @@ type Props = {
   linhas: LinhaDaConversa[];
   pessoas: PessoaDaAba[];
   token: string | null;
+  /**
+   * A Demanda tem Vínculo, e a resposta sai do app como comentário público
+   * (issue #680). A caixa avisa antes de a pessoa escrever; sem isso, quem não
+   * vê o Vínculo escreveria achando que fala só com a Vitta.
+   */
+  publicada: boolean;
   /** Recarrega o fio depois de escrever nele. */
   onFioMudou: () => void | Promise<void>;
   /** O alerta é um só, e mora no modal. */
@@ -47,6 +53,13 @@ type Props = {
 
 const CLASSE_CAIXA =
   "w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white";
+
+/**
+ * O aviso de que a resposta sai do app (issue #680). Sem número de issue, link
+ * nem label (ADR 0054, decisão 9): diz o que acontece, não onde.
+ */
+export const AVISO_RESPOSTA_PUBLICA =
+  "Esta resposta também é publicada na página pública do pedido, fora do app. Não escreva dados de paciente.";
 
 /**
  * A caixa de texto com o autocomplete do @.
@@ -61,12 +74,14 @@ function CaixaComMencao({
   aoMudar,
   pessoas,
   aoMencionar,
+  publicada,
 }: {
   rotulo: string;
   valor: string;
   aoMudar: (texto: string) => void;
   pessoas: PessoaDaAba[];
   aoMencionar: (pessoa: PessoaDaAba) => void;
+  publicada: boolean;
 }) {
   const termo = termoDaMencao(valor);
   const sugestoes = termo === null ? [] : pessoasDoAutocomplete(termo, pessoas);
@@ -80,6 +95,8 @@ function CaixaComMencao({
         onChange={(e) => aoMudar(e.target.value)}
         className={CLASSE_CAIXA}
       />
+      {/* Nas duas caixas, escrever e corrigir: a correção republica. */}
+      {publicada && <p className="mt-1 text-xs text-amber-700">{AVISO_RESPOSTA_PUBLICA}</p>}
       {sugestoes.length > 0 && (
         <ul aria-label="Pessoas para mencionar" className="mt-1 rounded-lg border border-border bg-surface">
           {sugestoes.map((pessoa) => (
@@ -123,7 +140,7 @@ function TextoDaLinha({ linha, pessoas }: { linha: LinhaDaConversa; pessoas: Pes
   );
 }
 
-export function ConversaDaDemanda({ demandaId, linhas, pessoas, token, onFioMudou, onErro }: Props) {
+export function ConversaDaDemanda({ demandaId, linhas, pessoas, token, publicada, onFioMudou, onErro }: Props) {
   const [texto, setTexto] = useState("");
   const [escolhidas, setEscolhidas] = useState<PessoaDaAba[]>([]);
   const [editandoId, setEditandoId] = useState<string | null>(null);
@@ -227,6 +244,7 @@ export function ConversaDaDemanda({ demandaId, linhas, pessoas, token, onFioMudo
                     aoMudar={setTextoEditado}
                     pessoas={pessoas}
                     aoMencionar={(pessoa) => setEscolhidasEditadas((atuais) => guardarEscolhida(atuais, pessoa))}
+                    publicada={publicada}
                   />
                   <div className="flex gap-2">
                     <button
@@ -284,6 +302,7 @@ export function ConversaDaDemanda({ demandaId, linhas, pessoas, token, onFioMudo
           aoMudar={setTexto}
           pessoas={pessoas}
           aoMencionar={(pessoa) => setEscolhidas((atuais) => guardarEscolhida(atuais, pessoa))}
+          publicada={publicada}
         />
         <div className="flex items-center gap-3">
           <button

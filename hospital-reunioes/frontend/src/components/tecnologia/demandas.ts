@@ -223,6 +223,19 @@ export function temSelo(demanda: Demanda): boolean {
 }
 
 /**
+ * Se o que se escreve na Conversa sai do app (issue #680, ADR 0054, decisão 4).
+ *
+ * Toda resposta numa Demanda com Vínculo é publicada como comentário na issue,
+ * num repositório público. Quem não tem login no GitHub não vê o Vínculo
+ * (decisão 9), então o único sinal de que ele existe é o mesmo do selo: a
+ * Etapa saiu de "Registrada". É por isso que a caixa de resposta avisa, e
+ * avisa sem número, link nem label.
+ */
+export function conversaPublicada(demanda: Demanda): boolean {
+  return temSelo(demanda);
+}
+
+/**
  * O texto do selo: a Etapa e, quando há partes, "X de Y partes".
  *
  * Sem total não há fração: "0 de 0 partes" é uma barra vazia onde não existe

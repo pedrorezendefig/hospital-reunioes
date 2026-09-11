@@ -50,6 +50,17 @@ A alternativa seria pôr as Demandas fechadas de volta no filtro do lote de hora
 
 O critério de aceite da #679 foi reescrito para dizer o que de fato existe. As decisões 1 a 5 e 7 a 9 ficam intactas.
 
+## Emenda a este ADR (11/set/2026, rodada de segurança do PR #696)
+
+**Decisão 4, o que da pessoa sai no comentário espelhado.** A decisão escrevia o marcador como `<!-- revisor-app autor="Nome" -->`, e a issue #680 pedia o cabeçalho "**Nome** escreveu na Demanda:". Isso contradiz a decisão do diretor na review do PR #688 (emenda na issue #677): **nome civil não sai para o GitHub**, porque o repositório é público. A decisão posterior vale, e a implementação da #680 segue ela:
+
+- quem tem `github_login` sai como `@login` no cabeçalho (identificador que a própria pessoa já tornou público), com o marcador `<!-- automacao -->`;
+- quem não tem sai com o rótulo neutro **"Pessoa do hospital"** no cabeçalho e no `autor` do marcador: `<!-- revisor-app autor="Pessoa do hospital" demanda="id" -->`. Quem tem acesso ao app vê o autor pelo link da Demanda, que já está no corpo da issue;
+- a **@menção do app** no texto (`@Nome Completo`, gravada pelo autocomplete) vira o rótulo da pessoa mencionada (`@login` ou o neutro), e qualquer outra menção digitada à mão sai com um espaço depois do `@` (`@ fulano`): sem isso, "@Pedro Vitta" notificaria a conta `Pedro` do GitHub e publicaria o nome de um colaborador. As duas formas mais óbvias caíram no `gh api /markdown` deste repositório: o escape de barra do CommonMark (`\@`) é consumido antes do filtro de menção e acende igual (rodada 2 do PR #696), e a crase (`` `@fulano` ``, code span) funciona em texto limpo mas quebra em dois o code span de quem já escreveu crase, acendendo uma menção que estava apagada (rodada 3). O espaço não abre nem fecha delimitador nenhum, então sai neutro inclusive dentro da crase e do itálico do autor;
+- a **caixa de resposta avisa** que a resposta é publicada fora do app quando a Demanda tem Vínculo, sem número, link nem label (decisão 9 intacta). O mesmo aviso que o PR #688 pôs no botão "Levar para desenvolvimento", agora para quem escreve sem ver o Vínculo.
+
+A frase "com o meu nome no texto" da história 37 do PRD #673 fica superada por esta emenda. As demais decisões ficam intactas.
+
 ## Consequências
 
 - `tecnologia_demandas` ganha as colunas do vínculo (número da issue, Etapa, resumo de partes, "O que muda" em cache, última sincronização). `participantes` ganha `github_login`. Migration com o próximo número livre na hora da fatia.

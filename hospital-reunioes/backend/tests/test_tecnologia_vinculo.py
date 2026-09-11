@@ -905,16 +905,23 @@ class _GithubFalso:
         erro_ao_criar=None,
         proximo_numero: int = 900,
         resposta_sem_numero: bool = False,
+        erro_ao_comentar=None,
     ):
         self.issues = issues
         self.sub_issues = sub_issues or {}
         self.erro = erro
         self.erro_ao_criar = erro_ao_criar
+        self.erro_ao_comentar = erro_ao_comentar
         self.proximo_numero = proximo_numero
         self.resposta_sem_numero = resposta_sem_numero
         self.corpos_escritos: list[tuple[int, str]] = []
         self.leituras: list[int] = []
         self.criadas: list[dict] = []
+        # Os comentarios espelhados (issue #680): o que foi publicado e o que
+        # foi editado, com o id que o GitHub "deu" a cada um.
+        self.comentarios_criados: list[dict] = []
+        self.comentarios_editados: list[dict] = []
+        self.proximo_comentario_id = 3_000_000_001
 
     def ler_issue(self, numero: int) -> dict:
         if self.erro is not None:
@@ -949,6 +956,24 @@ class _GithubFalso:
             return dados
         self.issues[numero] = dados
         return dados
+
+    def criar_comentario(self, numero: int, corpo: str) -> int:
+        """Publica o comentario e devolve o id, como o GitHub (issue #680).
+
+        Ids acima de 2^31 de proposito: e o tamanho real do id de comentario
+        do GitHub hoje, e um `INTEGER` no banco o recusaria.
+        """
+        if self.erro_ao_comentar is not None:
+            raise self.erro_ao_comentar
+        comentario_id = self.proximo_comentario_id
+        self.proximo_comentario_id += 1
+        self.comentarios_criados.append({"numero": numero, "corpo": corpo, "id": comentario_id})
+        return comentario_id
+
+    def editar_comentario(self, comentario_id: int, corpo: str) -> None:
+        if self.erro_ao_comentar is not None:
+            raise self.erro_ao_comentar
+        self.comentarios_editados.append({"id": comentario_id, "corpo": corpo})
 
 
 def _issue(
@@ -1006,6 +1031,8 @@ def _montar(
         monkeypatch.setattr(github_client, "ler_sub_issues", gh.ler_sub_issues)
         monkeypatch.setattr(github_client, "atualizar_corpo", gh.atualizar_corpo)
         monkeypatch.setattr(github_client, "criar_issue", gh.criar_issue)
+        monkeypatch.setattr(github_client, "criar_comentario", gh.criar_comentario)
+        monkeypatch.setattr(github_client, "editar_comentario", gh.editar_comentario)
 
     async def _usuario() -> dict[str, Any]:
         return {"id": logado["auth_user_id"], "email": logado["email"], "metadata": {}}

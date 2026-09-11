@@ -34,6 +34,7 @@ import {
   destinosDe,
   ESTADO_ROTULO,
   EstadoDemanda,
+  conversaPublicada,
   EuNaAba,
   FALHA_DE_CONEXAO,
   LinhaDaConversa,
@@ -322,6 +323,7 @@ export function DemandaModal({ demanda, produtos, pessoas, token, eu, onFechar, 
           linhas={conversa}
           pessoas={pessoas}
           token={token}
+          publicada={conversaPublicada(demanda)}
           onFioMudou={carregarConversa}
           onErro={setErro}
         />
