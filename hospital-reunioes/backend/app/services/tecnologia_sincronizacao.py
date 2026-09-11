@@ -302,14 +302,33 @@ def _devolver_a_quem_pediu(supabase, demanda: dict[str, Any], *, etapa_nova: str
     )
     if not atribuida.data:
         # Duas causas possiveis, e daqui nao da para distinguir: alguem mexeu no
-        # card no intervalo, ou a escrita nao valeu. O desfecho e o mesmo, e e
-        # por isso que o nivel e ERROR: o card ficou em Aguardando com o
-        # responsavel antigo, ninguem foi avisado, e a passagem seguinte NAO
-        # refaz nada (a foto ja gravada barra a releitura).
+        # card no intervalo, ou a escrita nao valeu. O que muda e o RAMO em que
+        # este UPDATE nao casou (issue #694), porque os dois deixam o card em
+        # lugares diferentes.
+        if not efeito.mover_para:
+            # A Demanda ja estava em Aguardando: o bloco do movimento nem rodou,
+            # e este UPDATE era a UNICA escrita da devolucao. Nao casar significa
+            # que NADA foi escrito, e o desfecho e correto: o card esta como
+            # estava, o fio intacto, ninguem avisado de nada errado. ERROR aqui
+            # viraria alerta por uma corrida bem resolvida, e a mesma corrida um
+            # degrau acima (o movimento que nao casa) ja sai em INFO.
+            logger.warning(
+                "[tecnologia] A devolução da entrega não trocou o responsável da Demanda %s "
+                "(alguém mexeu no card, ou a escrita não valeu): nada foi escrito, "
+                "o card está como estava.",
+                demanda_id,
+            )
+            return
+        # O ramo do movimento, e aqui a devolucao ficou MESMO pela metade: o card
+        # ja andou para Aguardando e ja ganhou a linha do fio, ninguem foi
+        # avisado, e a passagem seguinte NAO refaz nada (a foto ja gravada barra
+        # a releitura). A frase manda CONFERIR antes de refazer, e nao refazer os
+        # tres passos: parte deles ja esta feita, e quem le no susto repetiria o
+        # movimento que valeu.
         logger.error(
             "[tecnologia] A devolução da entrega NÃO trocou o responsável da Demanda %s "
-            "(alguém mexeu no card, ou a escrita não valeu): a devolução ficou pela metade "
-            "e precisa ser terminada à mão.",
+            "(alguém mexeu no card, ou a escrita não valeu): a devolução ficou pela metade. "
+            "Confira o estado do card (movimento, responsável e aviso) antes de terminá-la à mão.",
             demanda_id,
         )
         return
