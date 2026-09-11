@@ -7,6 +7,22 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.129.3 - 2026-09-11 18:50 - a issue recusada não aparece como Entregue nem devolve a Demanda
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `48f5397`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.129.3, `db: healthy`; frontend HTTP 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/48f5397
+- Issues: [#701](https://github.com/pedrorezendefig/hospital-reunioes/issues/701) · PR [#702](https://github.com/pedrorezendefig/hospital-reunioes/pull/702) · PRD [#673](https://github.com/pedrorezendefig/hospital-reunioes/issues/673)
+- Migration: nenhuma. A Etapa `nao_sera_feita` já está no CHECK da 103 e nada de schema mudou · patch, fix
+- Nota: achado pela auditoria de conclusão do PRD #673, que reabriu o PRD. Uma issue marcada `wontfix` e fechada pelo botão padrão do GitHub (que fecha como concluída) virava Etapa Entregue. Não parava no selo: Entregue é a única Etapa que move o Kanban, então a Demanda recusada ia para Aguardando com o autor como responsável e saía o e-mail "Entregue, confira e conclua". O defeito não chegou a acordar em produção, porque nenhuma Demanda está vinculada a issue.
+- Nota: o ADR 0054, decisão 3, sempre disse "fechada como não planejada ou `wontfix`". Era o código que divergia da decisão. E um teste existente já apontava para o defeito: tinha nome e docstring dizendo "não será feita" e assert dizendo `ETAPA_ENTREGUE`, ou seja, a expectativa foi ajustada ao comportamento em vez de o comportamento ao critério.
+- Nota: três rodadas de review independente. A primeira mostrou que a barra "X de Y partes" **não** tinha sido consertada de verdade, porque `partes_da_foto` prefere o `sub_issues_summary` do GitHub, que conta a fatia recusada como concluída: o card diria "2 de 3 partes" acima de uma lista com uma parte "Não será feita". A mesma rodada mostrou que um dos mutantes declarados era equivalente e não podia morrer.
+- Nota: a segunda rodada mostrou que o critério novo lia só a label e deixava de fora o fechamento como não planejada, que é a outra forma de recusa que o módulo inteiro reconhece. O critério final é "fechada e não entregue", escrito com o próprio predicado de entrega, e parte recusada ainda aberta deixa de descartar o número do GitHub, porque ali não há divergência.
+- Nota: terceira corrida de bump seguida neste PR (0.129.1, 0.129.2, 0.129.3), todas **sem conflito**, porque os dois lados escrevem a mesma linha a partir da mesma base. O deploy subiria versão já publicada, sem prova de que o código novo entrou. Reconferir a main no momento do merge virou parte do ciclo.
+
+---
+
 ## v0.129.2 - 2026-09-11 15:03 - a correção que acrescenta menção deixa de reabrir "Minha vez" de quem já tinha respondido aquela mesma fala
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `15f459a`
