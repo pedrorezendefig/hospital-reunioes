@@ -61,6 +61,16 @@ O critério de aceite da #679 foi reescrito para dizer o que de fato existe. As 
 
 A frase "com o meu nome no texto" da história 37 do PRD #673 fica superada por esta emenda. As demais decisões ficam intactas.
 
+## Emenda a este ADR (11/set/2026, auditoria de conclusão do PRD #673)
+
+**Decisão 3, o que conta como recusa e de onde sai a barra.** A decisão já dizia que "Não será feita" é a issue fechada como não planejada ou marcada `wontfix`, mas o código só tirava a entrega pelo motivo do fechamento. Como o protocolo de triagem não obriga ninguém a escolher esse motivo, quem recusava marcava a label e fechava pelo botão padrão do GitHub, que fecha como concluída, e a Demanda aparecia como **Entregue**. Isso não parava no selo: Entregue é a única Etapa que move o Kanban (decisão 6), então a Demanda recusada era devolvida a quem pediu com o e-mail "Entregue, confira e conclua". A issue #701 corrigiu, e a implementação volta a bater com o que esta decisão sempre disse.
+
+A mesma decisão nomeia o `sub_issues_summary` do GitHub como fonte do "X de Y partes entregues", e agora há uma exceção declarada. O GitHub conta como concluída toda sub-issue fechada pelo botão padrão, label nenhuma importa, então uma fatia recusada entraria no número dele como entregue, e o card mostraria "2 de 3 partes" logo acima de uma lista em que uma parte diz "Não será feita". Quando há parte **recusada e fechada** entre as que lemos, a conta própria manda; no resto, o número do GitHub continua mandando, que é o que a tela do GitHub mostra. Recusada aqui são as duas formas, a label e o fechamento como não planejada: o critério é "fechada e não entregue", escrito com o mesmo predicado de entrega que a Etapa usa, para não existirem duas definições de entrega no mesmo módulo.
+
+Fica registrado o que não foi tratado: `ler_sub_issues` não pagina, e o padrão do GitHub é 30 por página. Numa raiz com mais de 30 sub-issues em que alguma das lidas seja recusada, o total passa a ser o da nossa lista. O maior PRD do repositório tem 7 sub-issues.
+
+As demais decisões ficam intactas.
+
 ## Consequências
 
 - `tecnologia_demandas` ganha as colunas do vínculo (número da issue, Etapa, resumo de partes, "O que muda" em cache, última sincronização). `participantes` ganha `github_login`. Migration com o próximo número livre na hora da fatia.
