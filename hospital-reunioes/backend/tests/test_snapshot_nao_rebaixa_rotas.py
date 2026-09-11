@@ -124,7 +124,7 @@ class TestPelaLinhaDeComando:
         erro = capsys.readouterr().err
         assert "rebaixaria" in erro.lower(), "a recusa precisa dizer por que, não sair calada"
 
-    def test_a_escotilha_deixa_passar_de_proposito(self, tmp_path, monkeypatch):
+    def test_a_escotilha_deixa_passar_de_proposito(self, tmp_path, monkeypatch, capsys):
         """Quem clonou sem venv precisa conseguir gerar os outros arquivos.
         Sem esta saída o guarda vira indisponibilidade para o repo novo."""
         repo = _repo_minimo(tmp_path, ROTAS_COMPLETO)
@@ -142,6 +142,11 @@ class TestPelaLinhaDeComando:
         assert "**192 endpoints** em 30 áreas" in arq, (
             "o bloco AUTO:rotas não tem onde carimbar 'parcial': rebaixado de 192 para 1, "
             "ninguém depois sabe que o número está errado"
+        )
+        erro = capsys.readouterr().err
+        assert "rebaixado a pedido" in erro, (
+            "com a escotilha o aviso tem que culpar o arquivo certo: dizer que o ROTAS.md "
+            "não foi tocado logo depois de reescrevê-lo é mensagem que mente"
         )
 
     def test_com_ja_parcial_em_disco_segue_sem_escotilha(self, tmp_path, monkeypatch):
@@ -199,3 +204,25 @@ class TestPelaLinhaDeComando:
 
         arq = (repo / "docs" / "ARQUITETURA.md").read_text(encoding="utf-8")
         assert "**192 endpoints** em 30 áreas" in arq
+        assert "(dados)" not in arq, (
+            "pular as rotas não pode virar pular o arquivo: um return False cedo no "
+            "update_arquitetura deixaria dados e integrações congelados em silêncio, e a "
+            "asserção de cima sozinha passaria"
+        )
+
+    def test_force_com_only_rotas_nao_fura_a_protecao(self, tmp_path, monkeypatch):
+        """A receita que a SKILL.md documenta (`--force --only ROTAS`) é o
+        caminho mais curto para rebaixar sem querer. Sem este caso, acrescentar
+        `and not args.force` ou `and not only_filter` ao skip passa verde."""
+        repo = _repo_minimo(tmp_path, ROTAS_COMPLETO)
+        antes = (repo / "docs" / "spec" / "snapshots" / "ROTAS.md").read_text(encoding="utf-8")
+
+        monkeypatch.setattr(
+            "sys.argv",
+            ["snapshot", "--root", str(repo), "--force", "--only", "ROTAS", "--no-commit"],
+        )
+        codigo = snapshot.main()
+
+        depois = (repo / "docs" / "spec" / "snapshots" / "ROTAS.md").read_text(encoding="utf-8")
+        assert depois == antes
+        assert codigo == 4
