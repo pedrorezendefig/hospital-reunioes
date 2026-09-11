@@ -474,6 +474,11 @@ async def webhook_github(
     inteiro, `/api/health` incluído, e uma fila de entregas marcaria o container
     unhealthy no Traefik, tirando o app do ar para todo mundo.
 
+    Desde a issue #679 há um terceiro I/O externo nesse caminho: o transporte de
+    e-mail do aviso da devolução (`TIMEOUT_DO_TRANSPORTE`, 20 s). Ele é o
+    ÚLTIMO passo, depois de todas as escritas, então um estouro do orçamento de
+    10 segundos do GitHub custa o 2xx da entrega, e não a devolução.
+
     Responde 2xx mesmo quando a sincronização falha. O GitHub exige 2xx em 10
     segundos e **não reentrega** o que falhou: um 500 aqui perderia o evento para
     sempre, e quem recupera é a reconciliação de hora em hora.
@@ -535,7 +540,14 @@ async def webhook_github(
         return {"recebido": True, "sincronizada": False, "falhou": True}
     except Exception:
         logger.warning(
-            "[GitHub webhook] Falha ao sincronizar a Demanda %s (issue #%s); a reconciliação recupera.",
+            # A frase NAO promete recuperacao. A reconciliacao rele de hora em
+            # hora, mas so escreve quando a foto mudou: o que esta passagem
+            # gravou antes de estourar (o cache, a linha da Etapa) ja barra a
+            # releitura. Quando a perda e da devolucao da entrega, o
+            # `tecnologia_sincronizacao` registra um ERROR dizendo o que ficou
+            # pela metade.
+            "[GitHub webhook] Falha ao sincronizar a Demanda %s (issue #%s); a reconciliação relê depois, "
+            "mas não refaz o que esta passagem já tinha gravado.",
             demanda.get("id"),
             numero,
             exc_info=True,

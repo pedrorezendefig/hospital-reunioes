@@ -34,6 +34,7 @@ import sys
 from dataclasses import dataclass
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -49,12 +50,23 @@ from app.dependencies import get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers import webhooks as webhooks_router  # noqa: E402
 from app.services import github_client, tecnologia_sincronizacao  # noqa: E402
-from app.services.tecnologia import ESTADOS, ESTADOS_FECHADOS  # noqa: E402
+from app.services.tecnologia import (  # noqa: E402
+    AUTOR_DA_ENTREGA,
+    ESTADOS,
+    ESTADOS_ABERTOS,
+    ESTADOS_FECHADOS,
+    RECADO_DA_ENTREGA,
+    SEM_EFEITO,
+    EfeitoDaEtapa,
+    efeito_da_etapa,
+)
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
     ETAPA_ENTREGUE,
+    ETAPA_NAO_SERA_FEITA,
     ETAPA_PLANEJADA,
+    ETAPAS,
 )
 
 ROTA = "/api/webhooks/github"
@@ -82,6 +94,28 @@ def _sem_github_de_verdade(monkeypatch):
         raise AssertionError("O cliente do GitHub foi chamado de verdade neste teste. Duble-o.")
 
     monkeypatch.setattr(github_client.httpx, "request", _proibido)
+
+
+@pytest.fixture(autouse=True)
+def _sem_email_de_verdade(monkeypatch):
+    """Nenhum teste deste arquivo manda e-mail, e todos podem tentar.
+
+    Desde a issue #679 a sincronizacao chama o aviso de atribuicao quando a
+    Entrega devolve o card, e o `.env` que os testes carregam tem credencial de
+    verdade. A troca e AUTOUSE por isso: um caso novo que caia na devolucao sem
+    lembrar do dublê tentaria falar com o provedor.
+
+    Devolve a lista dos avisos pedidos, que e o que os testes da devolucao
+    asseguram.
+    """
+    enviados: list[dict] = []
+
+    def _registrar(supabase, **argumentos):
+        enviados.append(argumentos)
+        return True
+
+    monkeypatch.setattr(tecnologia_sincronizacao, "avisar_atribuicao", _registrar)
+    return enviados
 
 
 @pytest.fixture(autouse=True)
@@ -130,10 +164,19 @@ class _Nao:
 class _TableQuery:
     """PostgREST minimo: select/eq/in_/not_.is_/insert/update."""
 
-    def __init__(self, rows: list[dict], nome: str, falhas: dict[str, Exception] | None = None):
+    def __init__(
+        self,
+        rows: list[dict],
+        nome: str,
+        falhas: dict[str, Exception] | None = None,
+        antes_do_update=None,
+        falhar_ao_ler: str | None = None,
+    ):
         self._rows = rows
         self._nome = nome
         self._falhas = falhas or {}
+        self._antes_do_update = antes_do_update
+        self._falhar_ao_ler = falhar_ao_ler
         self._eq: dict[str, Any] = {}
         self._in: dict[str, list] = {}
         self._nao_e: dict[str, str] = {}
@@ -179,6 +222,17 @@ class _TableQuery:
             self._rows.extend(self._insert)
             return _Result(data=[dict(linha) for linha in self._insert])
 
+        if self._update is None and self._falhar_ao_ler == self._nome:
+            # O timeout do PostgREST numa LEITURA. Sobe cru (`httpx.HTTPError`
+            # nao e `APIError`), que e a forma pela qual ele morde de verdade.
+            raise httpx.ReadTimeout(f"timeout lendo {self._nome}")
+
+        if self._update is not None and self._antes_do_update is not None:
+            # O gancho da CORRIDA: ele mexe nas linhas ANTES de a consulta
+            # peneirar, que e a unica forma de encenar "alguem escreveu entre a
+            # leitura e o UPDATE" contra um compare-and-swap de verdade.
+            self._antes_do_update(self._nome, self._update, self._rows)
+
         casadas = [linha for linha in self._rows if self._casa(linha)]
 
         if self._update is not None:
@@ -195,12 +249,26 @@ class _TableQuery:
 
 
 class _SupabaseMock:
-    def __init__(self, tabelas: dict[str, list[dict]], falhas: dict[str, Exception] | None = None):
+    def __init__(
+        self,
+        tabelas: dict[str, list[dict]],
+        falhas: dict[str, Exception] | None = None,
+        antes_do_update=None,
+        falhar_ao_ler: str | None = None,
+    ):
         self.tabelas = tabelas
         self.falhas = falhas or {}
+        self.antes_do_update = antes_do_update
+        self.falhar_ao_ler = falhar_ao_ler
 
     def table(self, nome: str):
-        return _TableQuery(self.tabelas.setdefault(nome, []), nome, self.falhas)
+        return _TableQuery(
+            self.tabelas.setdefault(nome, []),
+            nome,
+            self.falhas,
+            self.antes_do_update,
+            self.falhar_ao_ler,
+        )
 
 
 # ─── Cenario ─────────────────────────────────────────────────────────────────
@@ -287,8 +355,12 @@ def _montar(
     *,
     demandas: list[dict] | None = None,
     conversas: list[dict] | None = None,
+    participantes: list[dict] | None = None,
+    produtos: list[dict] | None = None,
     github: _GithubFalso | None = None,
     falhas: dict[str, Exception] | None = None,
+    antes_do_update=None,
+    falhar_ao_ler: str | None = None,
     monkeypatch=None,
 ) -> tuple[TestClient, _SupabaseMock, _GithubFalso]:
     app = FastAPI()
@@ -300,8 +372,12 @@ def _montar(
         {
             "tecnologia_demandas": [dict(d) for d in (demandas or [])],
             "tecnologia_conversas": [dict(c) for c in (conversas or [])],
+            "participantes": [dict(p) for p in (participantes or [])],
+            "tecnologia_produtos": [dict(p) for p in (produtos or [])],
         },
         falhas=falhas,
+        antes_do_update=antes_do_update,
+        falhar_ao_ler=falhar_ao_ler,
     )
 
     gh = github or _GithubFalso({})
@@ -1412,3 +1488,458 @@ class TestJobNoScheduler:
         monkeypatch.setattr(scheduler_mod, "_supabase", lambda: (_ for _ in ()).throw(RuntimeError("banco fora")))
 
         scheduler_mod.reconciliar_vinculos_tecnologia()
+
+
+# ─── 6. A Entrega devolve a Demanda a quem pediu (issue #679) ────────────────
+
+
+class TestEfeitoDaEtapa:
+    """A regra pura da devolucao, direto e sem duble.
+
+    Ela mora com a sincronizacao porque e ela que a devolucao serve, e nao o
+    Quadro: esta e a UNICA regra automatica de movimento do app (ADR 0054,
+    decisao 6). O que se prova aqui e a tabela inteira, inclusive o que NAO
+    acontece; a costura com o banco e provada logo abaixo, pela rota.
+    """
+
+    @pytest.mark.parametrize("estado", ESTADOS_ABERTOS)
+    def test_entregue_devolve_o_card_ao_autor(self, estado):
+        demanda = {"estado": estado, "autor_id": "P1", "responsavel_id": "P2"}
+
+        efeito = efeito_da_etapa(demanda, etapa_nova=ETAPA_ENTREGUE)
+
+        assert efeito.atribuir_a == "P1"
+        assert efeito.mover_para == (None if estado == "aguardando" else "aguardando")
+
+    def test_o_autor_que_ja_e_o_responsavel_nao_e_atribuido_de_novo(self):
+        """Criterio de aceite: nao se atribui a Demanda a quem ja a tem na mao,
+        e por isso nao sai e-mail dizendo "a Demanda e sua" para essa pessoa."""
+        demanda = {"estado": "em_andamento", "autor_id": "P1", "responsavel_id": "P1"}
+
+        assert efeito_da_etapa(demanda, etapa_nova=ETAPA_ENTREGUE) == EfeitoDaEtapa(mover_para="aguardando")
+
+    def test_card_ja_em_aguardando_com_o_autor_nao_tem_o_que_fazer(self):
+        demanda = {"estado": "aguardando", "autor_id": "P1", "responsavel_id": "P1"}
+
+        assert efeito_da_etapa(demanda, etapa_nova=ETAPA_ENTREGUE) == SEM_EFEITO
+
+    @pytest.mark.parametrize("estado", ESTADOS_FECHADOS)
+    def test_demanda_fechada_nao_e_reaberta_pela_entrega(self, estado):
+        """Criterio de aceite (historia 28): a Entrega nao mexe no que alguem
+        fechou a mao."""
+        demanda = {"estado": estado, "autor_id": "P1", "responsavel_id": "P2"}
+
+        assert efeito_da_etapa(demanda, etapa_nova=ETAPA_ENTREGUE) == SEM_EFEITO
+
+    def test_estado_que_o_quadro_nao_conhece_nao_move(self):
+        """A lista consultada e a POSITIVA. Escrita ao contrario ("tudo menos
+        Concluida e Cancelada"), a regra moveria em silencio um estado novo que
+        entrasse no banco sem passar por aqui."""
+        demanda = {"estado": "arquivada", "autor_id": "P1", "responsavel_id": "P2"}
+
+        assert efeito_da_etapa(demanda, etapa_nova=ETAPA_ENTREGUE) == SEM_EFEITO
+
+    @pytest.mark.parametrize("etapa", [e for e in ETAPAS if e != ETAPA_ENTREGUE])
+    def test_nenhuma_outra_etapa_move_a_demanda(self, etapa):
+        """ "Nao sera feita" esta nesta lista de proposito (historia 29): ela so
+        escreve a linha automatica, e quem cancela e a Vitta, a mao, depois de
+        explicar na Conversa."""
+        demanda = {"estado": "em_andamento", "autor_id": "P1", "responsavel_id": "P2"}
+
+        assert efeito_da_etapa(demanda, etapa_nova=etapa) == SEM_EFEITO
+
+    def test_demanda_sem_autor_nao_tem_a_quem_voltar(self):
+        """`autor_id` e `ON DELETE SET NULL` na migration 102: quem abriu o
+        pedido pode ter sido apagado. Sem esta guarda a Demanda seria "atribuida
+        a ninguem", apagando o responsavel que ela tinha."""
+        demanda = {"estado": "em_andamento", "autor_id": None, "responsavel_id": "P2"}
+
+        assert efeito_da_etapa(demanda, etapa_nova=ETAPA_ENTREGUE) == SEM_EFEITO
+
+
+def _entregue(numero: int = 673) -> dict:
+    """A issue fechada como concluida, que e o que leva a Etapa a Entregue."""
+    return _issue(numero, estado="closed", motivo="completed")
+
+
+def _pessoa(pid: str = "P1", nome: str | None = "Diretor Geral", **campos) -> dict:
+    """Quem ve a aba: ativo e Super admin (`e_pessoa_da_aba`)."""
+    return {"id": pid, "nome_completo": nome, "ativo": True, "is_super_admin": True, "access_profile": None, **campos}
+
+
+def _campos_do_fio(sb: _SupabaseMock) -> list[tuple]:
+    return [(linha["movimento_campo"], linha["movimento_de"], linha["movimento_para"]) for linha in _fio(sb)]
+
+
+class TestADevolucaoPelaRota:
+    """A costura, pela porta de verdade: o webhook entrega, a rotina sincroniza,
+    e o card volta para a mao de quem pediu.
+
+    Pela ROTA, e nao chamando `sincronizar_demanda` direto, porque a devolucao
+    tem que valer para os DOIS gatilhos, e e a rota que prova o caminho inteiro
+    (assinatura, threadpool, corpo da resposta). O lote usa a mesma rotina.
+    """
+
+    def _cenario(self, monkeypatch, *, demanda: dict, participantes=None, **extra):
+        return _montar(
+            demandas=[demanda],
+            participantes=[_pessoa()] if participantes is None else participantes,
+            produtos=[{"id": "prod-1", "nome": "Prontuário"}],
+            github=_GithubFalso({673: _entregue()}),
+            monkeypatch=monkeypatch,
+            **extra,
+        )
+
+    def test_a_entrega_devolve_o_card_e_avisa_quem_pediu(self, monkeypatch, _sem_email_de_verdade):
+        """Criterio de aceite inteiro: move, atribui, grava as duas linhas e
+        chama o e-mail de atribuicao com o recado da Entrega."""
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1"),
+        )
+
+        resposta = _entregar(cliente, _corpo(acao="closed"))
+
+        assert resposta.json() == {"recebido": True, "sincronizada": True}
+        demanda = _demandas(sb)[0]
+        assert (demanda["etapa"], demanda["estado"], demanda["responsavel_id"]) == (ETAPA_ENTREGUE, "aguardando", "P1")
+        assert _campos_do_fio(sb) == [
+            ("etapa", ETAPA_EM_ANALISE, ETAPA_ENTREGUE),
+            ("estado", "em_andamento", "aguardando"),
+            ("responsavel", "P2", "P1"),
+        ]
+        assert _fio(sb)[1]["texto"] == f"{AUTOR_DA_ENTREGA} moveu para Aguardando"
+        assert _fio(sb)[2]["texto"] == f"{AUTOR_DA_ENTREGA} atribuiu a Diretor Geral"
+        assert [(aviso["destinatario_id"], aviso["trecho"]) for aviso in _sem_email_de_verdade] == [
+            ("P1", RECADO_DA_ENTREGA)
+        ]
+        assert _sem_email_de_verdade[0]["demanda"]["produto_nome"] == "Prontuário"
+
+    def test_o_autor_que_ja_e_o_responsavel_nao_recebe_email(self, monkeypatch, _sem_email_de_verdade):
+        """Criterio de aceite: a regra de nao avisar quem ja tem a Demanda na mao
+        continua valendo quando quem atribui e a Entrega. O card ainda ANDA, o
+        que prova que o silencio e do aviso, e nao da devolucao inteira."""
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P1", autor_id="P1"),
+        )
+
+        _entregar(cliente, _corpo(acao="closed"))
+
+        assert _demandas(sb)[0]["estado"] == "aguardando"
+        assert _campos_do_fio(sb) == [
+            ("etapa", ETAPA_EM_ANALISE, ETAPA_ENTREGUE),
+            ("estado", "em_andamento", "aguardando"),
+        ]
+        assert _sem_email_de_verdade == []
+
+    @pytest.mark.parametrize("estado", ESTADOS_FECHADOS)
+    def test_demanda_fechada_nao_e_movida_nem_atribuida(self, monkeypatch, _sem_email_de_verdade, estado):
+        """Historia 28. Quem segura isto e a guarda da issue #678, um degrau
+        acima: a Demanda fechada nao e sequer lida (nem gasta cota do GitHub), e
+        por isso ela tambem nao ganha a linha da Etapa.
+        """
+        cliente, sb, gh = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado=estado, responsavel_id="P2", autor_id="P1"),
+        )
+
+        _entregar(cliente, _corpo(acao="closed"))
+
+        demanda = _demandas(sb)[0]
+        assert (demanda["estado"], demanda["responsavel_id"]) == (estado, "P2")
+        assert gh.leituras == []
+        assert _fio(sb) == []
+        assert _sem_email_de_verdade == []
+
+    def test_nao_sera_feita_so_escreve_a_linha_da_etapa(self, monkeypatch, _sem_email_de_verdade):
+        """Historia 29: a Vitta explica na Conversa e cancela a mao."""
+        cliente, sb, _ = _montar(
+            demandas=[
+                _demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1")
+            ],
+            github=_GithubFalso({673: _issue(673, estado="closed", motivo="not_planned")}),
+            monkeypatch=monkeypatch,
+        )
+
+        _entregar(cliente, _corpo(acao="closed"))
+
+        demanda = _demandas(sb)[0]
+        assert demanda["etapa"] == ETAPA_NAO_SERA_FEITA
+        assert (demanda["estado"], demanda["responsavel_id"]) == ("em_andamento", "P2")
+        assert _campos_do_fio(sb) == [("etapa", ETAPA_EM_ANALISE, ETAPA_NAO_SERA_FEITA)]
+        assert _sem_email_de_verdade == []
+
+    @pytest.mark.parametrize(
+        "issue",
+        (
+            _issue(673, estado="closed", motivo="completed"),
+            _issue(673, estado="closed", motivo="not_planned"),
+            _issue(673, labels=("in-progress",)),
+            _issue(673, labels=("ready-for-agent",)),
+        ),
+        ids=("entregue", "nao_sera_feita", "em_desenvolvimento", "planejada"),
+    )
+    def test_a_sincronizacao_nunca_conclui_a_demanda(self, monkeypatch, issue):
+        """Historia 30: a Demanda so vai para Concluida pela mao de alguem.
+
+        Por foto, e nao so pela Entrega: a porta por onde um "concluida" entraria
+        e o UPDATE do estado, e ele nao distingue de onde a Etapa veio.
+        """
+        cliente, sb, _ = _montar(
+            demandas=[
+                _demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1")
+            ],
+            github=_GithubFalso({673: issue}),
+            monkeypatch=monkeypatch,
+        )
+
+        _entregar(cliente, _corpo(acao="closed"))
+
+        assert _demandas(sb)[0]["estado"] in ESTADOS_ABERTOS
+
+    def test_a_edicao_do_corpo_depois_da_entrega_nao_devolve_de_novo(self, monkeypatch, _sem_email_de_verdade):
+        """A foto muda (o corpo da issue foi editado) e a Etapa nao: o card ja
+        estava Entregue.
+
+        E o caso que morde de verdade em producao: depois da devolucao o diretor
+        pode ter movido o card e passado a bola adiante, e uma segunda devolucao
+        a cada edicao de issue o puxaria de volta para a mao dele para sempre.
+        Quem segura isto e o LUGAR de onde a devolucao e chamada, dentro do ramo
+        que so a mudanca de Etapa alcanca.
+        """
+        foto_antiga = github_client.montar_foto(_entregue(), [])
+        foto_antiga["corpo"] = "## Para o diretor\n\nOutro texto, editado depois."
+        cliente, sb, _ = _montar(
+            demandas=[
+                _demanda(
+                    "D1",
+                    github_issue_numero=673,
+                    estado="em_andamento",
+                    responsavel_id="P2",
+                    autor_id="P1",
+                    etapa=ETAPA_ENTREGUE,
+                    github_foto=foto_antiga,
+                )
+            ],
+            github=_GithubFalso({673: _entregue()}),
+            monkeypatch=monkeypatch,
+        )
+
+        resposta = _entregar(cliente, _corpo(acao="edited"))
+
+        assert resposta.json() == {"recebido": True, "sincronizada": True}, "o cache do texto acompanha"
+        demanda = _demandas(sb)[0]
+        assert (demanda["estado"], demanda["responsavel_id"]) == ("em_andamento", "P2")
+        assert _fio(sb) == []
+        assert _sem_email_de_verdade == []
+
+    def test_os_textos_da_entrega_sao_estes(self):
+        """As duas constantes, presas ao LITERAL.
+
+        Sem esta linha, toda asserção da devolução calcula o esperado a partir
+        da propria constante, e trocar o texto deixa o backend inteiro verde: o
+        e-mail passaria a dizer uma coisa e o selo da tela outra, quebrando a
+        promessa escrita em cima da constante. O par do outro lado e o teste do
+        `MOTIVO_ROTULO` no frontend, que prende o mesmo literal em TypeScript.
+        """
+        assert RECADO_DA_ENTREGA == "Entregue, confira e conclua"
+        assert AUTOR_DA_ENTREGA == "A entrega"
+
+    def test_quem_conclui_a_mao_no_meio_da_devolucao_ganha(self, monkeypatch, _sem_email_de_verdade):
+        """A corrida real: a rotina le o card em Em andamento e o diretor conclui
+        no mesmo segundo.
+
+        O UPDATE amarra o estado LIDO, entao ele nao casa linha nenhuma e a
+        devolucao para ali: nem move, nem atribui, nem avisa. Sem a amarra, a
+        Demanda que alguem acabou de concluir voltaria para Aguardando.
+        """
+
+        def conclui_no_meio(nome, payload, linhas):
+            if nome == "tecnologia_demandas" and payload.get("estado"):
+                for linha in linhas:
+                    linha["estado"] = "concluida"
+
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1"),
+            antes_do_update=conclui_no_meio,
+        )
+
+        _entregar(cliente, _corpo(acao="closed"))
+
+        demanda = _demandas(sb)[0]
+        assert (demanda["estado"], demanda["responsavel_id"]) == ("concluida", "P2")
+        assert _campos_do_fio(sb) == [("etapa", ETAPA_EM_ANALISE, ETAPA_ENTREGUE)]
+        assert _sem_email_de_verdade == []
+
+    def test_quem_conclui_a_mao_ganha_tambem_quando_nao_ha_o_que_mover(
+        self, monkeypatch, _sem_email_de_verdade, caplog
+    ):
+        """O par do teste acima, no ramo em que NAO ha movimento.
+
+        A Demanda ja esta em Aguardando, entao a devolucao so tem a atribuicao a
+        fazer, e o bloco do movimento (com a amarra) nem roda. Sem uma amarra
+        PROPRIA no UPDATE do responsavel, este e o caminho por onde o fio de uma
+        Demanda FECHADA ganharia "A entrega atribuiu a Fulano" e o e-mail sairia
+        para quem acabou de concluir o card.
+        """
+
+        def conclui_no_meio(nome, payload, linhas):
+            if nome == "tecnologia_demandas" and payload.get("responsavel_id"):
+                for linha in linhas:
+                    linha["estado"] = "concluida"
+
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="aguardando", responsavel_id="P2", autor_id="P1"),
+            antes_do_update=conclui_no_meio,
+        )
+
+        with caplog.at_level(logging.ERROR):
+            _entregar(cliente, _corpo(acao="closed"))
+
+        demanda = _demandas(sb)[0]
+        assert (demanda["estado"], demanda["responsavel_id"]) == ("concluida", "P2")
+        assert _campos_do_fio(sb) == [("etapa", ETAPA_EM_ANALISE, ETAPA_ENTREGUE)]
+        assert _sem_email_de_verdade == []
+        assert "pela metade" in caplog.text, "a devolução incompleta precisa de alarme, e não de silêncio"
+
+    @pytest.mark.parametrize(
+        "autor",
+        (_pessoa(ativo=False), _pessoa(is_super_admin=False)),
+        ids=("desativado", "sem_super_admin"),
+    )
+    def test_autor_que_saiu_da_aba_nao_recebe_o_card_de_volta(self, monkeypatch, _sem_email_de_verdade, caplog, autor):
+        """A mesma guarda que o `atribuir` do router tem, e pelo mesmo motivo.
+
+        Se o card fosse para quem saiu, ele sumiria da "Minha vez" de TODO
+        MUNDO (ninguem seria responsavel, e mencao nao ha) e o e-mail tambem nao
+        sairia, porque o envio pula quem nao esta na aba e so registra um INFO.
+        O card fica em Aguardando com o responsavel que tinha: alguem da Vitta
+        ainda o ve e pode repassa-lo a mao.
+        """
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1"),
+            participantes=[autor],
+        )
+
+        with caplog.at_level(logging.WARNING):
+            _entregar(cliente, _corpo(acao="closed"))
+
+        demanda = _demandas(sb)[0]
+        assert (demanda["estado"], demanda["responsavel_id"]) == ("aguardando", "P2")
+        assert _campos_do_fio(sb) == [
+            ("etapa", ETAPA_EM_ANALISE, ETAPA_ENTREGUE),
+            ("estado", "em_andamento", "aguardando"),
+        ]
+        assert _sem_email_de_verdade == []
+        assert "não está mais na lista de acesso" in caplog.text
+
+    def test_a_linha_do_fio_cai_no_id_quando_o_nome_nao_veio(self, monkeypatch):
+        """`nome_completo` e anulavel. Sem o resguardo, a linha sairia como
+        "A entrega atribuiu a ", que nao diz a quem."""
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1"),
+            participantes=[_pessoa(nome=None)],
+        )
+
+        _entregar(cliente, _corpo(acao="closed"))
+
+        assert _fio(sb)[2]["texto"] == f"{AUTOR_DA_ENTREGA} atribuiu a P1"
+
+    def test_a_devolucao_perdida_no_meio_grita(self, monkeypatch, caplog):
+        """O pior estado possivel, e o unico alarme que existe para ele.
+
+        O cache e a linha da Etapa ja estao gravados quando a devolucao estoura,
+        e a passagem seguinte vai sair no `foto_mudou` sem refazer nada: esta
+        devolucao esta PERDIDA. O webhook responde `falhou: true` como sempre, e
+        o que distingue este caso de uma falha comum e o ERROR nomeando a
+        Demanda, para alguem termina-la a mao.
+        """
+
+        def estoura_no_movimento(nome, payload, linhas):
+            if nome == "tecnologia_demandas" and payload.get("estado"):
+                raise httpx.ReadTimeout("timeout no PostgREST")
+
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1"),
+            antes_do_update=estoura_no_movimento,
+        )
+
+        with caplog.at_level(logging.ERROR):
+            resposta = _entregar(cliente, _corpo(acao="closed"))
+
+        assert resposta.json() == {"recebido": True, "sincronizada": False, "falhou": True}
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE, "o cache ficou gravado: e o que torna a perda definitiva"
+        assert "NÃO foi concluída na Demanda D1" in caplog.text
+        assert "termine à mão" in caplog.text
+
+    def test_a_leitura_do_produto_que_falha_nao_desfaz_a_devolucao(self, monkeypatch, _sem_email_de_verdade, caplog):
+        """A leitura do nome do Produto acontece com a devolucao JA GRAVADA.
+
+        Um timeout do PostgREST ali nao pode virar `falhou: true` sobre um
+        movimento que valeu: a reconciliacao veria a foto igual e o aviso se
+        perderia de vez. O e-mail sai assim mesmo, sem o nome do Produto.
+        """
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1"),
+            falhar_ao_ler="tecnologia_produtos",
+        )
+
+        with caplog.at_level(logging.WARNING):
+            resposta = _entregar(cliente, _corpo(acao="closed"))
+
+        assert resposta.json() == {"recebido": True, "sincronizada": True}
+        demanda = _demandas(sb)[0]
+        assert (demanda["estado"], demanda["responsavel_id"]) == ("aguardando", "P1")
+        assert _sem_email_de_verdade[0]["demanda"]["produto_nome"] is None
+        assert "Falha ao ler o Produto" in caplog.text
+
+    def test_o_card_reaberto_e_devolvido_de_novo_quando_a_entrega_sai_outra_vez(
+        self, monkeypatch, _sem_email_de_verdade
+    ):
+        """O ciclo inteiro: entregue, o diretor pede ajuste, entregue de novo.
+
+        A re-devolucao AQUI e desejada (PRD #673, historia 21: "Voltou para
+        desenvolvimento"), e e o outro lado do teste da edicao de corpo: o que
+        nao pode repetir e a devolucao sobre a MESMA Etapa, e nao a devolucao
+        depois de a Etapa dar a volta.
+        """
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(
+            demandas=[
+                _demanda(
+                    "D1",
+                    github_issue_numero=673,
+                    estado="aguardando",
+                    responsavel_id="P1",
+                    autor_id="P1",
+                    etapa=ETAPA_ENTREGUE,
+                    github_foto=github_client.montar_foto(_entregue(), []),
+                )
+            ],
+            participantes=[_pessoa()],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        # 1. O diretor pediu ajuste: a issue reabriu e voltou a andar.
+        _entregar(cliente, _corpo(acao="reopened"))
+
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+        assert _sem_email_de_verdade == [], "voltar para desenvolvimento não devolve nada"
+
+        # 2. A Vitta passou a bola de volta para si enquanto refazia.
+        _demandas(sb)[0]["responsavel_id"] = "P2"
+        gh.issues[673] = _entregue()
+
+        _entregar(cliente, _corpo(acao="closed"))
+
+        demanda = _demandas(sb)[0]
+        assert (demanda["etapa"], demanda["estado"], demanda["responsavel_id"]) == (ETAPA_ENTREGUE, "aguardando", "P1")
+        assert [aviso["trecho"] for aviso in _sem_email_de_verdade] == [RECADO_DA_ENTREGA]

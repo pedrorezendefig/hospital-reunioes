@@ -229,8 +229,22 @@ def _mandar(
         return False
 
 
-def avisar_atribuicao(supabase, *, demanda: dict[str, Any], destinatario_id: str, quem_fez_nome: str) -> bool:
-    """Gatilho 1: a Demanda caiu na mão de alguém (PRD #634, história 41)."""
+def avisar_atribuicao(
+    supabase,
+    *,
+    demanda: dict[str, Any],
+    destinatario_id: str,
+    quem_fez_nome: str,
+    trecho: str | None = None,
+) -> bool:
+    """Gatilho 1: a Demanda caiu na mão de alguém (PRD #634, história 41).
+
+    O `trecho` é o que MOTIVA o aviso, e por isso ele é parâmetro desde a issue
+    #679: quando quem atribui é a Entrega, o que a pessoa precisa ler não é a
+    descrição do pedido (que ela mesma escreveu, meses atrás), e sim o recado
+    "Entregue, confira e conclua". É o mesmo e-mail, com o mesmo assunto e o
+    mesmo link, porque a ação é a mesma: a Demanda caiu na mão dela.
+    """
     titulo = str(demanda.get("titulo") or "").strip()
     return _mandar(
         supabase,
@@ -239,9 +253,9 @@ def avisar_atribuicao(supabase, *, demanda: dict[str, Any], destinatario_id: str
         assunto=f"Demanda na sua mão: {titulo}",
         abertura=f"{quem_fez_nome} deixou esta Demanda com você.",
         demanda=demanda,
-        # O trecho da atribuição é a DESCRIÇÃO da Demanda: é o que diz do que
-        # se trata para quem está recebendo o pedido agora.
-        trecho=trecho_do_aviso(demanda.get("descricao")),
+        # O trecho da atribuição feita por gente é a DESCRIÇÃO da Demanda: é o
+        # que diz do que se trata para quem está recebendo o pedido agora.
+        trecho=trecho or trecho_do_aviso(demanda.get("descricao")),
         quem_fez_nome=quem_fez_nome,
     )
 

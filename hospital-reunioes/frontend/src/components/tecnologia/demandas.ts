@@ -629,6 +629,10 @@ export type DemandaDaMinhaVez = Demanda & { motivo: string };
 export const MOTIVO_ROTULO: Record<string, string> = {
   responsavel: "Você é o responsável",
   mencao: "Mencionaram você",
+  // A Entrega devolveu o card para quem pediu (issue #679). O texto é o MESMO
+  // do e-mail que sai na devolução: quem abre a aba depois de ler o aviso
+  // precisa reconhecer o card pelo que leu.
+  entregue: "Entregue, confira e conclua",
 };
 
 /** A Demanda como a aba Histórico a lê. */

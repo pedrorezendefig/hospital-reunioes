@@ -273,10 +273,10 @@ class TestMotivoDaMinhaVez:
     """
 
     def test_sou_o_responsavel(self):
-        assert motivo_da_minha_vez(responsavel_id="P2", pessoa_id="P2") == "responsavel"
+        assert motivo_da_minha_vez(demanda={"responsavel_id": "P2"}, pessoa_id="P2") == "responsavel"
 
     def test_fui_mencionada(self):
-        assert motivo_da_minha_vez(responsavel_id="P1", pessoa_id="P2") == "mencao"
+        assert motivo_da_minha_vez(demanda={"responsavel_id": "P1"}, pessoa_id="P2") == "mencao"
 
     def test_demanda_sem_responsavel_cai_como_mencao(self):
         """Demanda sem responsavel nao e de ninguem.
@@ -286,7 +286,56 @@ class TestMotivoDaMinhaVez:
         coluna e anulavel e a linha existe no banco, e nao porque haja codigo
         defendendo dela.
         """
-        assert motivo_da_minha_vez(responsavel_id=None, pessoa_id="P2") == "mencao"
+        assert motivo_da_minha_vez(demanda={"responsavel_id": None}, pessoa_id="P2") == "mencao"
+
+
+class TestOSeloDaEntregaDevolvida:
+    """ "Entregue, confira e conclua": por que o card voltou para a minha mao
+    (issue #679).
+
+    O motivo e lido do ESTADO da Demanda, e nao da ultima linha do fio: "Minha
+    vez" nao le o fio das Demandas de que a pessoa ja e a responsavel (e as
+    devolvidas sao todas assim), e uma regra escrita sobre o fio faria a aba
+    puxar a Conversa inteira de toda Demanda aberta a cada abertura.
+
+    As tres marcas juntas sao o que a devolucao deixa, e cada uma some sozinha
+    quando o recado deixa de valer: alguem move o card, alguem o repassa, ou a
+    Etapa anda de novo porque o diretor pediu ajuste.
+    """
+
+    def _devolvida(self, **campos) -> dict:
+        base = {"etapa": "entregue", "estado": "aguardando", "responsavel_id": "P2", "autor_id": "P2"}
+        base.update(campos)
+        return base
+
+    def test_a_demanda_devolvida_diz_por_que_esta_aqui(self):
+        assert motivo_da_minha_vez(demanda=self._devolvida(), pessoa_id="P2") == "entregue"
+
+    def test_a_etapa_que_andou_de_novo_apaga_o_selo(self):
+        """O diretor pediu ajuste e o selo voltou para "Em desenvolvimento": nao
+        ha mais o que conferir."""
+        demanda = self._devolvida(etapa="em_desenvolvimento")
+
+        assert motivo_da_minha_vez(demanda=demanda, pessoa_id="P2") == "responsavel"
+
+    def test_o_card_que_saiu_de_aguardando_apaga_o_selo(self):
+        demanda = self._devolvida(estado="em_andamento")
+
+        assert motivo_da_minha_vez(demanda=demanda, pessoa_id="P2") == "responsavel"
+
+    def test_quem_recebeu_o_card_de_outra_pessoa_nao_ve_o_selo(self):
+        """Sou o responsavel de uma Demanda entregue que NAO e minha: alguem me
+        repassou. O recado "confira e conclua" e de quem pediu."""
+        demanda = self._devolvida(autor_id="P9")
+
+        assert motivo_da_minha_vez(demanda=demanda, pessoa_id="P2") == "responsavel"
+
+    def test_demanda_sem_autor_e_sem_responsavel_nao_e_devolvida(self):
+        """`autor_id` e anulavel (`ON DELETE SET NULL`). Sem a guarda, nulo dos
+        dois lados da igualdade passaria por "devolvida a quem pediu"."""
+        demanda = self._devolvida(autor_id=None, responsavel_id=None)
+
+        assert motivo_da_minha_vez(demanda=demanda, pessoa_id="P2") == "mencao"
 
 
 class TestFechamentoDaDemanda:
@@ -747,6 +796,33 @@ class TestMinhaVezPelaRota:
 
         assert por_id["minha"]["motivo"] == "responsavel"
         assert por_id["chamada"]["motivo"] == "mencao"
+
+    def test_a_demanda_devolvida_pela_entrega_chega_com_o_recado(self):
+        """Criterio de aceite (issue #679): a aba entrega o motivo pronto, porque
+        a tela nao sabe qual participante e quem esta logado.
+
+        As duas Demandas sao da MESMA pessoa e a outra tambem esta em
+        Aguardando: o que distingue uma da outra e so a Etapa entregue, que e o
+        que o selo promete dizer.
+        """
+        client = _montar(
+            logado=SOCIA,
+            demandas=[
+                _demanda(
+                    "devolvida",
+                    estado="aguardando",
+                    responsavel_id="P2",
+                    autor_id="P2",
+                    etapa="entregue",
+                ),
+                _demanda("esperando", estado="aguardando", responsavel_id="P2", autor_id="P2"),
+            ],
+        )
+
+        por_id = {d["id"]: d for d in client.get(f"{BASE}/minha-vez").json()}
+
+        assert por_id["devolvida"]["motivo"] == "entregue"
+        assert por_id["esperando"]["motivo"] == "responsavel"
 
     def test_a_ordem_e_prioridade_e_depois_idade(self):
         client = _montar(
