@@ -578,6 +578,69 @@ def corpo_da_issue_nova(
     )
 
 
+# ─── 2c. A resposta espelhada na issue (issue #680) ──────────────────────────
+#
+# Toda resposta da Conversa de uma Demanda vinculada vira comentario na issue
+# (ADR 0054, decisao 4). Do lado do GitHub o autor do comentario e SEMPRE a
+# integracao, entao quem diz de quem e a voz e o marcador que abre o corpo, e
+# nao o login de quem publicou. A Action de higiene le os dois:
+#
+# - `<!-- automacao -->` para quem tem `github_login`: e a Vitta respondendo ao
+#   diretor, e a Action ja ignora esse marcador (senao o "vou ver" do Pedro
+#   acenderia `revisor-comentou` e travaria a `/onda`);
+# - `<!-- revisor-app autor="Nome" demanda="id" -->` para quem nao tem: e o
+#   diretor, e a Action acende a label por ele (emenda ao ADR 0020, decisao 5).
+#
+# A forma do marcador do revisor e LITERAL, um espaco depois de `<!--`: o
+# matcher da Action aceita exatamente esse espaco, e dois falhariam em
+# silencio, sem label e sem erro. E ele sai em linha propria, como PRIMEIRA
+# coisa do corpo, porque a Action o ancora ali (emenda de 10/09/2026 na issue
+# #680): um comentario de curadoria que cite o marcador no meio do texto nao
+# pode acender a label.
+MARCADOR_AUTOMACAO = "<!-- automacao -->"
+
+
+def _nome_no_marcador(nome: str) -> str:
+    """O nome dentro do atributo `autor="..."`, sem o que fecharia o atributo
+    (`"`) ou o comentario HTML (`>`) antes da hora. Sem `<` porque com ele nao
+    ha como remontar comentario nenhum."""
+    return sanitizar_travessao(nome).replace('"', "'").replace("<", "").replace(">", "").strip()
+
+
+def marcador_do_revisor_no_app(*, autor_nome: str, demanda_id: str) -> str:
+    return f'<!-- revisor-app autor="{_nome_no_marcador(autor_nome)}" demanda="{demanda_id}" -->'
+
+
+def corpo_do_comentario_espelhado(
+    *, texto: str, autor_nome: str | None, demanda_id: str, tem_github_login: bool
+) -> str:
+    """O comentario que o app publica na issue quando alguem responde no card.
+
+    O texto do autor passa pelo `texto_do_diretor`, o MESMO funil do corpo da
+    issue nova, e pelo mesmo motivo: ele escapa o `<` (vira `&lt;`), e sem `<`
+    nao existe `<!--` para remontar. Sem isso, bastaria alguem digitar o
+    marcador do revisor dentro da resposta para a Action acender a label em
+    nome de outra pessoa, e o teto de `author_association` do GitHub nao
+    protegeria nada, porque o autor do comentario e a integracao. O que o
+    diretor escreveu continua legivel: o Markdown renderiza `&lt;` como `<`.
+
+    Uma linha em branco entre o cabecalho e o texto, para o Markdown nao colar
+    os dois num paragrafo so.
+    """
+    nome = autor_nome or "Alguém"
+    marcador = (
+        MARCADOR_AUTOMACAO if tem_github_login else marcador_do_revisor_no_app(autor_nome=nome, demanda_id=demanda_id)
+    )
+    return "\n".join(
+        [
+            marcador,
+            f"**{texto_do_diretor(nome)}** escreveu na Demanda:",
+            "",
+            texto_do_diretor(texto),
+        ]
+    )
+
+
 # ─── 3. A foto mudou? ────────────────────────────────────────────────────────
 
 

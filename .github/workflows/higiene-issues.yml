@@ -119,7 +119,15 @@ jobs:
             // dessa voz: vale ANTES de REVIEWER_LOGINS e independe do login do autor
             // (que é sempre o da integração). Quem tem login recebe `<!-- automacao -->`
             // no espelho e cai no caminho de baixo, como qualquer automação.
-            const doRevisorNoApp = corpo.includes('<!-- revisor-app');
+            //
+            // ANCORADO no início do corpo (issue #680, emenda de 10/09/2026): o app
+            // sempre escreve o marcador em linha própria, como primeira coisa do
+            // corpo, na forma literal `<!-- revisor-app autor="Nome" demanda="id" -->`
+            // (um espaço só depois de `<!--`). Sem a âncora, qualquer comentário que
+            // CITASSE o marcador (as issues #673, #675 e #680 o citam no corpo) acendia
+            // a label e travava a /onda. O texto do autor chega com `<!--` neutralizado
+            // pelo app, então um marcador digitado à mão na resposta nunca começa o corpo.
+            const doRevisorNoApp = /^<!-- revisor-app autor="[^"]*" demanda="[^"]*" -->[ \t]*(\r?\n|$)/.test(corpo);
 
             if (!doRevisorNoApp) {
               const revisores = (process.env.REVIEWER_LOGINS || '')

@@ -9,10 +9,13 @@ Tres invariantes que o resto do app herda:
 
 - **So este repositorio.** O repositorio vem de `GITHUB_INTEGRACAO_REPO` e
   entra no caminho da URL uma vez so, aqui.
-- **Escrita minima.** Dois verbos de escrita, e so dois: o PATCH do corpo da
-  issue, que serve ao marcador do Vinculo, e o POST que abre a issue do "Levar
-  para desenvolvimento" (issue #677). O token fine-grained do Pedro tem Issues:
-  write neste repositorio e mais nada (ADR 0054, decisao 8).
+- **Escrita minima.** Quatro verbos de escrita, e so quatro: o PATCH do corpo
+  da issue, que serve ao marcador do Vinculo; o POST que abre a issue do "Levar
+  para desenvolvimento" (issue #677); e o par POST/PATCH do comentario
+  espelhado da Conversa (issue #680). Nenhum verbo de LEITURA de comentario:
+  nada do GitHub volta para a Conversa (ADR 0054, decisao 5). O token
+  fine-grained do Pedro tem Issues: write neste repositorio e mais nada
+  (ADR 0054, decisao 8).
 - **Falha e falha.** Timeout, 5xx e erro de rede viram `GithubIndisponivelError`;
   404 vira `IssueNaoEncontradaError`. Sem token ou sem repositorio configurado e
   `GithubNaoConfiguradoError`, que a rota traduz em 503: o app nao FINGE que leu.
@@ -184,6 +187,39 @@ def criar_issue(*, titulo: str, corpo: str, labels: list[str]) -> dict[str, Any]
         return _chamar("POST", "/issues", json={"title": titulo, "body": corpo, "labels": labels})
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError("O repositorio da integracao nao aceitou a criacao da issue") from exc
+
+
+def criar_comentario(numero: int, corpo: str) -> int:
+    """Publica um comentario na issue e devolve o id que o GitHub lhe deu
+    (issue #680).
+
+    So o id, e nao o JSON inteiro: e a unica coisa que o app guarda dele, na
+    linha da Conversa, para a correcao da resposta editar o MESMO comentario.
+    Vale em issue fechada tambem, e e de proposito (ADR 0054, decisao 6): a
+    resposta do diretor numa Demanda entregue e o que reabre o trabalho.
+
+    Um 404 aqui e a issue que sumiu (apagada, ou o token que perdeu o
+    repositorio), e sobe como esta: quem chama trata qualquer erro do mesmo
+    jeito, logando sem desfazer a resposta.
+
+    Resposta sem `id` inteiro vira indisponibilidade: gravar `None` no lugar do
+    id faria a correcao seguinte publicar um segundo comentario em vez de
+    editar o primeiro, e ninguem saberia por que.
+    """
+    dados = _chamar("POST", f"/issues/{numero}/comments", json={"body": corpo})
+    comentario_id = dados.get("id") if isinstance(dados, dict) else None
+    if not isinstance(comentario_id, int):
+        raise GithubIndisponivelError("GitHub criou o comentario sem devolver o id")
+    return comentario_id
+
+
+def editar_comentario(comentario_id: int, corpo: str) -> None:
+    """Reescreve o corpo de um comentario ja publicado (issue #680).
+
+    O caminho e o do comentario, sem numero de issue: e assim que a API do
+    GitHub endereca comentarios, pelo id que `criar_comentario` devolveu.
+    """
+    _chamar("PATCH", f"/issues/comments/{comentario_id}", json={"body": corpo})
 
 
 def montar_foto(dados: dict[str, Any], partes: list[dict[str, Any]]) -> dict[str, Any]:

@@ -167,6 +167,7 @@ from app.services.tecnologia_vinculo import (
     TEXTO_VINCULO_DESFEITO,
     corpo_com_marcador,
     corpo_da_issue_nova,
+    corpo_do_comentario_espelhado,
     corpo_precisa_do_marcador,
     foto_mudou,
     labels_da_issue_nova,
@@ -771,6 +772,93 @@ async def _aviso_da_correcao(
         quem_fez_nome=_nome_de_quem_agiu(ator),
     )
     return None if saiu else AVISO_EMAIL_NAO_SAIU
+
+
+def _corpo_espelhado(*, demanda: dict, texto: str, ator: dict) -> str:
+    return corpo_do_comentario_espelhado(
+        texto=texto,
+        autor_nome=ator.get("nome_completo"),
+        demanda_id=demanda["id"],
+        tem_github_login=tem_github_login(ator),
+    )
+
+
+async def _espelhar_resposta(supabase: Client, *, demanda: dict, linha: dict, texto: str, ator: dict) -> None:
+    """A resposta vira comentario na issue vinculada (issue #680, ADR 0054,
+    decisao 4), DEPOIS de gravada e fora do loop, como o e-mail.
+
+    Demanda sem Vinculo nao tem onde espelhar, e a funcao sai sem chamar o
+    GitHub. Com Vinculo, o comentario e publicado e o id que o GitHub devolve
+    fica na linha do fio, para a correcao dentro dos 10 minutos editar o MESMO
+    comentario em vez de publicar outro.
+
+    **Falha aqui nao desfaz nada e nao muda a resposta da rota.** O GitHub fora
+    do ar, o token vencido ou o `UPDATE` do id que nao entrou ficam no log, com
+    identificadores e sem o texto; a pessoa que respondeu recebe 201 com a
+    linha que entrou no fio, porque a Conversa nunca depende do GitHub. O
+    `except Exception` e largo de proposito: o cliente traduz timeout e 5xx em
+    excecao propria, mas o `UPDATE` do PostgREST sobe `httpx.HTTPError` cru, e
+    qualquer um dos dois tem o mesmo desfecho.
+
+    So a RESPOSTA de gente passa por aqui: as linhas automaticas (movimento,
+    responsavel, Etapa, Vinculo) sao gravadas pelo `_gravar_movimento` e pela
+    sincronizacao, que nunca chamam esta funcao. A issue nao recebe "Pedro
+    moveu para Aguardando".
+
+    Fora do loop pelo mesmo motivo do `_enviar_fora_do_loop`: o cliente do
+    GitHub fala HTTP sincrono, e o uvicorn deste app sobe com um worker so.
+    """
+    numero = demanda.get("github_issue_numero")
+    if not numero:
+        return
+    corpo = _corpo_espelhado(demanda=demanda, texto=texto, ator=ator)
+    try:
+        comentario_id = await asyncio.to_thread(github_client.criar_comentario, numero, corpo)
+    except Exception:
+        logger.exception(
+            "Falha ao espelhar a resposta %s da Demanda %s na issue vinculada", linha.get("id"), demanda["id"]
+        )
+        return
+    try:
+        supabase.table(TABELA_CONVERSAS).update({"github_comentario_id": comentario_id}).eq("id", linha["id"]).execute()
+    except Exception:
+        logger.exception(
+            "Resposta %s da Demanda %s espelhada (comentario %s), mas o id nao entrou na linha do fio",
+            linha.get("id"),
+            demanda["id"],
+            comentario_id,
+        )
+
+
+async def _espelhar_correcao(*, demanda: dict, linha: dict, texto: str, ator: dict) -> None:
+    """A correcao da resposta edita o comentario espelhado, se houver id
+    (issue #680).
+
+    Sem id gravado nao ha o que editar, e a funcao sai sem chamar o GitHub: e
+    a resposta que nasceu antes do Vinculo, a que nasceu com o GitHub fora do
+    ar, ou a de uma Demanda que nunca foi vinculada. Publicar um comentario
+    NOVO nesse caso faria a issue guardar a correcao sem o original, que e
+    metade da conversa.
+
+    O corpo e remontado inteiro, com o mesmo marcador do envio: o autor da
+    correcao e o autor da resposta (o PATCH so aceita a propria linha), entao
+    a voz e a mesma.
+
+    Falha fica no log e nao desfaz a correcao, pelo mesmo motivo do envio.
+    """
+    comentario_id = linha.get("github_comentario_id")
+    if not comentario_id:
+        return
+    corpo = _corpo_espelhado(demanda=demanda, texto=texto, ator=ator)
+    try:
+        await asyncio.to_thread(github_client.editar_comentario, comentario_id, corpo)
+    except Exception:
+        logger.exception(
+            "Falha ao editar o comentario %s espelhado da resposta %s da Demanda %s",
+            comentario_id,
+            linha.get("id"),
+            demanda["id"],
+        )
 
 
 # ─── Demanda: endpoints ──────────────────────────────────────────────────────
@@ -1673,6 +1761,10 @@ async def responder_na_conversa(
     # convidasse a ler uma resposta que não entrou no fio seria pior do que
     # nenhum e-mail.
     aviso = await _aviso_da_resposta(supabase, demanda=demanda, texto=texto, mencoes=mencoes, ator=ator)
+    # O espelho na issue tambem sai DEPOIS da linha gravada, e depois do e-mail:
+    # ele e o efeito que pode falhar em silencio, e nada do que vem antes
+    # depende dele (issue #680).
+    await _espelhar_resposta(supabase, demanda=demanda, linha=linha, texto=texto, ator=ator)
     return {**linha, "aviso_por_email": aviso}
 
 
@@ -1734,6 +1826,9 @@ async def editar_resposta(
     # Depois da escrita, pelo mesmo motivo do envio: um e-mail que convidasse a
     # ler uma correcao que nao entrou seria pior do que nenhum e-mail.
     aviso = await _aviso_da_correcao(supabase, demanda=demanda, texto=texto, mencionados=novos, ator=ator)
+    # O comentario espelhado acompanha a correcao pelo id que a linha guardou
+    # no envio (issue #680); sem id, nada a editar.
+    await _espelhar_correcao(demanda=demanda, linha=linha, texto=texto, ator=ator)
     return {**corrigida, "aviso_por_email": aviso}
 
 
