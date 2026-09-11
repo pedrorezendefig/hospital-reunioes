@@ -81,10 +81,20 @@ def _entregue(no: dict[str, Any] | None) -> bool:
     "Não será feita" sobre algo que foi feito. `not_planned` e a excecao, e quem
     a escolhe a declara.
 
+    `wontfix` tambem tira a entrega, e nao so o motivo do fechamento (issue
+    #701, achado na auditoria do PRD #673). O protocolo nao obriga ninguem a
+    escolher "nao planejada" ao fechar, entao quem recusa marca a label e clica
+    no botao padrao do GitHub, que fecha como CONCLUIDA. A label e a decisao; o
+    motivo do fechamento e so como o botao foi clicado. Sem isto, a issue
+    recusada aparecia como Entregue, e Entregue nao para no selo: dispara a
+    devolucao a quem pediu e o e-mail "Entregue, confira e conclua".
+
     Uma funcao so para a raiz e para as partes: "entregue" nao pode significar
     duas coisas diferentes no mesmo modulo, senao a Etapa e o "X de Y partes"
     contariam historias divergentes sobre a mesma issue.
     """
+    if LABEL_WONTFIX in _labels(no):
+        return False
     return _fechada(no) and str((no or {}).get("motivo_do_fechamento") or "").lower() != FECHAMENTO_NAO_PLANEJADA
 
 
@@ -110,7 +120,10 @@ def etapa_da_foto(foto: dict[str, Any] | None) -> str:
     partes = _partes(foto)
 
     # 1. Fechada como concluida, ou fechada sem motivo declarado: entregue,
-    #    aconteca o que acontecer com as labels e com as partes.
+    #    aconteca o que acontecer com as partes e com as outras labels.
+    #    `wontfix` e a unica label que tira a entrega, e ela sai dentro do
+    #    proprio `_entregue` (issue #701), para a raiz e as partes contarem a
+    #    mesma historia.
     #
     #    A ausencia de motivo entra AQUI, e nao na regra 2, porque fechar e o
     #    desfecho normal de uma issue que foi feita: `not_planned` e a excecao, e
@@ -163,20 +176,42 @@ def partes_da_foto(foto: dict[str, Any] | None) -> tuple[int | None, int | None]
     propria tela do GitHub mostra; sem ele, a conta sai da lista de partes que
     ja foi lida para as labels. Duas fontes que divergem seriam pior do que uma
     so, mas aqui a segunda so entra quando a primeira nao existe.
+
+    A excecao e a parte RECUSADA (issue #701). O GitHub conta como concluida
+    toda sub-issue fechada pelo botao padrao, label nenhuma importa, entao uma
+    fatia com `wontfix` entra no numero dele como entregue. Aqui ela nao e
+    entregue, e o selo dela na lista diz "Nao sera feita". Manter o resumo
+    nesse caso poria o card contando "2 de 3 partes" logo acima de uma lista
+    que mostra uma parte recusada: o diretor veria duas historias sobre a mesma
+    issue. Quando ha parte recusada entre as que lemos, a conta propria manda;
+    no resto, o numero do GitHub continua mandando.
+
+    "Recusada" aqui e o que o modulo inteiro chama assim, as DUAS formas: a
+    label `wontfix` e o fechamento como nao planejada (ADR 0054, decisao 3:
+    "fechada como nao planejada ou `wontfix`"). Ler so a label deixaria de fora
+    a sub-issue fechada com o motivo declarado, que o `situacao_da_parte` ja
+    mostra como "Nao sera feita" na lista. O criterio e "fechada e nao
+    entregue", escrito com o proprio `_entregue` para nao existir uma segunda
+    definicao de entrega neste arquivo.
+
+    Parte recusada ainda ABERTA nao entra: o GitHub tambem nao a conta como
+    concluida, entao nao ha divergencia a corrigir e descartar o resumo por
+    causa dela seria trocar o numero do GitHub por outro sem ganho nenhum.
     """
     if not foto:
         return (None, None)
 
+    partes_lidas = _partes(foto)
+    ha_parte_recusada = any(_fechada(parte) and not _entregue(parte) for parte in partes_lidas)
     resumo = foto.get("resumo_das_partes") or {}
     total = resumo.get("total")
     entregues = resumo.get("entregues")
-    if isinstance(total, int) and isinstance(entregues, int):
+    if isinstance(total, int) and isinstance(entregues, int) and not ha_parte_recusada:
         return (None, None) if total <= 0 else (entregues, total)
 
-    partes = _partes(foto)
-    if not partes:
+    if not partes_lidas:
         return (None, None)
-    return (sum(1 for parte in partes if _entregue(parte)), len(partes))
+    return (sum(1 for parte in partes_lidas if _entregue(parte)), len(partes_lidas))
 
 
 # ─── 1b. O bloco "Para o diretor" (issue #676) ───────────────────────────────

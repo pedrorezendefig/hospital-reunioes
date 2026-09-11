@@ -2022,6 +2022,40 @@ class TestADevolucaoPelaRota:
         ]
         assert _sem_email_de_verdade[0]["demanda"]["produto_nome"] == "Prontuário"
 
+    def test_a_issue_recusada_nao_devolve_o_card_nem_avisa_ninguem(self, monkeypatch, _sem_email_de_verdade):
+        """Issue #701, pela rota, que e onde a correcao tem de valer.
+
+        A foto e a do caminho comum de recusa: `wontfix` na issue e fechamento
+        pelo botao padrao do GitHub, que fecha como CONCLUIDA. Antes da
+        correcao ela virava Entregue, e Entregue e a unica Etapa que move o
+        Kanban: o card ia para Aguardando com o autor como responsavel e saia o
+        e-mail "Entregue, confira e conclua" sobre um pedido recusado.
+
+        Este teste atravessa a assinatura, o threadpool, o `sincronizar_demanda`,
+        o compare-and-swap e o `_devolver_a_quem_pediu`. E o unico lugar que
+        prova as tres coisas juntas: a Etapa certa, o card parado e o silencio
+        do e-mail. Chamar `etapa_da_foto` e `efeito_da_etapa` em sequencia
+        dentro do teste nao provaria nada: quem liga as duas e o codigo de
+        producao, e e justamente essa ligacao que esta sob teste.
+        """
+        cliente, sb, _ = _montar(
+            demandas=[
+                _demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1")
+            ],
+            participantes=[_pessoa()],
+            produtos=[{"id": "prod-1", "nome": "Prontuário"}],
+            github=_GithubFalso({673: _issue(673, estado="closed", motivo="completed", labels=("wontfix",))}),
+            monkeypatch=monkeypatch,
+        )
+
+        _entregar(cliente, _corpo(acao="closed"))
+
+        demanda = _demandas(sb)[0]
+        assert demanda["etapa"] == ETAPA_NAO_SERA_FEITA
+        assert (demanda["estado"], demanda["responsavel_id"]) == ("em_andamento", "P2")
+        assert _campos_do_fio(sb) == [("etapa", ETAPA_EM_ANALISE, ETAPA_NAO_SERA_FEITA)]
+        assert _sem_email_de_verdade == []
+
     def test_o_autor_que_ja_e_o_responsavel_nao_recebe_email(self, monkeypatch, _sem_email_de_verdade):
         """Criterio de aceite: a regra de nao avisar quem ja tem a Demanda na mao
         continua valendo quando quem atribui e a Entrega. O card ainda ANDA, o
