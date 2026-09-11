@@ -2314,3 +2314,124 @@ class TestReacionamentoDoCasoDevolvido:
 
         assert r.status_code == 200, r.text
         assert r.json()["extrato_para_o_setor"] == EXTRATO
+
+
+# O carimbo que a Retenção grava no fim da anonimização (migration 079), o
+# mesmo instante usado pelas outras portas da guarda (issue #622).
+APAGADO_EM = "2026-09-01T03:00:00+00:00"
+
+
+class TestValidacaoEmCasoApagado:
+    """Issue #669: o caso apagado não é validado nem acionado.
+
+    Hoje a porta está segura por CONSEQUÊNCIA: ela exige `em_classificacao`, e a
+    Retenção só carimba caso encerrado. Validar é a ÚNICA porta do despacho:
+    acorda a área por email com o relato integral e emite token do portal. Num
+    caso apagado isso manda para fora do hospital o que o apagamento tirou de
+    dentro.
+
+    Esta porta não carregava os carimbos: o `select` dela é recortado à mão, e a
+    guarda sozinha nasceria morta lendo `None`. Por isso a tupla mudou junto, e o
+    teste-mutante em cima dela é o par de casos abaixo."""
+
+    def _em_classificacao_e_apagado(self, monkeypatch, carimbo: str):
+        supabase = _SupabaseFake([_manifestacao(**{carimbo: APAGADO_EM})])
+        return _client(monkeypatch, OUVIDOR, supabase)
+
+    # Os DOIS carimbos que a guarda lê, cada um com o marcador da SUA frase.
+    # Esta porta tem login (`require_perfil_ouvidoria`), então o apagamento
+    # pendente continua nomeando quem pediu o ato: quem lê é a Ouvidoria.
+    @pytest.mark.parametrize(
+        ("carimbo", "marcador"),
+        [
+            ("anonimizada_em", "Este caso foi apagado e não pode mais ser validado e acionado."),
+            (
+                "apagamento_pedido_em",
+                "Este caso está sendo apagado por pedido da Diretoria Executiva e não pode ser validado e acionado.",
+            ),
+        ],
+    )
+    def test_validar_caso_apagado_e_recusado_antes_de_a_area_ser_acordada(
+        self, monkeypatch, _nunca_envia_email_de_verdade, carimbo, marcador
+    ):
+        client, supabase = self._em_classificacao_e_apagado(monkeypatch, carimbo)
+
+        resposta = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        assert resposta.status_code == 409, resposta.text
+        assert marcador in resposta.json()["detail"]
+        # Nenhum email saiu, nenhum token do portal nasceu e o caso não andou: a
+        # guarda vem antes de tudo isso.
+        assert _nunca_envia_email_de_verdade == []
+        assert supabase.tabelas.get("ouvidoria_setor_tokens", []) == []
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "em_classificacao"
+        assert caso["validada_em"] is None
+        assert caso["prazo_area_em"] is None
+
+    def test_caso_vivo_no_mesmo_estado_continua_sendo_acionado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O contraste que prova que a guarda lê o carimbo, e não o estado nem a
+        validação em si."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        assert client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO).status_code == 200
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"
+
+
+class TestCobrancaEmCasoApagado:
+    """Issue #669: o caso apagado não é cobrado do setor.
+
+    É o gêmeo do reenvio que o PR #667 fechou, e o que ele cria é pior: a
+    cobrança resolve o destinatário AGORA, dispara email e EMITE TOKEN NOVO do
+    portal. Token novo em caso apagado é uma porta de escrita sem login aberta
+    para um caso que a Diretoria mandou apagar.
+
+    Como o `select` desta rota é recortado à mão e não trazia os carimbos, a
+    tupla mudou junto com a guarda, e o par de casos abaixo é o teste-mutante
+    dela."""
+
+    def _acionado_e_apagado(self, monkeypatch, enviados, carimbo: str):
+        client, supabase = _client(monkeypatch, OUVIDOR)
+        assert client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO).status_code == 200
+        supabase.tabelas["ouvidoria_protocolos"][0][carimbo] = APAGADO_EM
+        enviados.clear()
+        return client, supabase
+
+    @pytest.mark.parametrize(
+        ("carimbo", "marcador"),
+        [
+            ("anonimizada_em", "Este caso foi apagado e não pode mais ser cobrado do setor."),
+            (
+                "apagamento_pedido_em",
+                "Este caso está sendo apagado por pedido da Diretoria Executiva e não pode ser cobrado do setor.",
+            ),
+        ],
+    )
+    def test_cobrar_caso_apagado_e_recusado_antes_do_token_novo(
+        self, monkeypatch, _nunca_envia_email_de_verdade, carimbo, marcador
+    ):
+        client, supabase = self._acionado_e_apagado(monkeypatch, _nunca_envia_email_de_verdade, carimbo)
+        tokens_antes = len(supabase.tabelas["ouvidoria_setor_tokens"])
+        notificacoes_antes = len(supabase.tabelas["ouvidoria_notificacoes"])
+
+        resposta = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert resposta.status_code == 409, resposta.text
+        assert marcador in resposta.json()["detail"]
+        # Nenhum token novo, nenhuma notificação nova e nenhum email: os três
+        # efeitos desta porta ficaram do lado de fora da guarda.
+        assert len(supabase.tabelas["ouvidoria_setor_tokens"]) == tokens_antes
+        assert len(supabase.tabelas["ouvidoria_notificacoes"]) == notificacoes_antes
+        assert _nunca_envia_email_de_verdade == []
+
+    def test_caso_vivo_no_mesmo_estado_continua_sendo_cobrado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O contraste que prova que a guarda lê o carimbo, e não o estado nem a
+        cobrança em si."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+        assert client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO).status_code == 200
+        tokens_antes = len(supabase.tabelas["ouvidoria_setor_tokens"])
+
+        resposta = client.post("/api/ouvidoria/manifestacoes/uuid-7/cobrar-setor")
+
+        assert resposta.status_code == 201, resposta.text
+        assert len(supabase.tabelas["ouvidoria_setor_tokens"]) > tokens_antes

@@ -575,3 +575,88 @@ class TestOCarimboDoEstouroNoRollback:
         depois = _caso_no_banco(sb)
         assert depois["status"] == "em_classificacao"
         assert depois["area_estourou_em"] == PRAZO_QUE_A_AREA_FUROU
+
+
+# O carimbo que a Retenção grava no fim da anonimização (migration 079), o
+# mesmo instante usado pelas outras portas da guarda (issue #622).
+APAGADO_EM = "2026-09-01T03:00:00+00:00"
+
+
+class TestDevolucaoAOuvidoriaEmCasoApagado:
+    """Issue #669: o caso apagado não é devolvido à Ouvidoria por este link.
+
+    É a porta mais forte da fatia. Ela tira o caso do encerramento levando para
+    `em_classificacao`, que é literalmente o nó que o docstring de
+    `barrar_caso_apagado` descreve como o a evitar: caso apagado que volta à
+    tramitação sai da fila do cron (que exige `status = encerrado`) e o pedido
+    de apagamento fica pendurado para sempre, com a trilha afirmando que um
+    apagamento começou num caso que seguiu vivo.
+
+    Hoje ela só não alcança o caso apagado por CONSEQUÊNCIA (exige
+    `aguardando_area`), que é a mesma defesa que o `responder` tinha antes do PR
+    #667."""
+
+    def _na_area_e_apagado(self, monkeypatch, emails, carimbo: str):
+        client, sb, token = _portal_com_caso_na_area(monkeypatch, emails)
+        # O carimbo entra pelo dublê porque a Retenção não passa por aqui: o que
+        # o teste precisa é do caso NO ESTADO em que ela o deixa.
+        _caso_no_banco(sb)[carimbo] = APAGADO_EM
+        return client, sb, token
+
+    def _devolver(self, client, token):
+        return client.post(f"/api/ouvidoria-setor/{token}/devolver", json={"motivo": MOTIVO})
+
+    @pytest.mark.parametrize("carimbo", ["anonimizada_em", "apagamento_pedido_em"])
+    def test_devolucao_em_caso_apagado_e_recusada_antes_do_claim_do_link(
+        self, monkeypatch, _nunca_envia_email_de_verdade, carimbo
+    ):
+        client, sb, token = self._na_area_e_apagado(monkeypatch, _nunca_envia_email_de_verdade, carimbo)
+
+        resposta = self._devolver(client, token)
+
+        assert resposta.status_code == 409, resposta.text
+        # A recusa diz para onde ir: o que voltar a ser trazido é caso novo.
+        assert "manifestação nova" in resposta.json()["detail"]
+        # O caso não saiu do encerramento nem do prazo, e o link de uso único
+        # continua valendo: a guarda vem antes do claim, como no `responder`.
+        depois = _caso_no_banco(sb)
+        assert depois["status"] == "aguardando_area"
+        assert depois["prazo_area_em"] is not None
+        # O link continua valendo, provado pelo lado de fora: tirado o carimbo,
+        # a MESMA requisição com o MESMO token entra. Olhar só a coluna
+        # `usado_em` deixaria passar um claim que tivesse gravado outra coisa.
+        _caso_no_banco(sb)[carimbo] = None
+        assert self._devolver(client, token).status_code == 200
+
+    def test_a_recusa_do_caso_ja_apagado_diz_que_ele_foi_apagado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, _sb, token = self._na_area_e_apagado(monkeypatch, _nunca_envia_email_de_verdade, "anonimizada_em")
+
+        detalhe = self._devolver(client, token).json()["detail"]
+
+        assert "Este caso foi apagado e não pode mais ser devolvido à Ouvidoria por este link." in detalhe
+
+    def test_a_recusa_do_apagamento_pendente_nao_entrega_a_causa_nem_o_autor(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """O portal é link por token, sem login, e quem devolve por ele é o
+        titular da área, que numa manifestação de ouvidoria costuma ser a parte
+        reclamada. A frase do apagamento PENDENTE nomeia quem pediu o ato, e no
+        painel isso está certo, porque quem lê lá é a Ouvidoria. Aqui não: a
+        recusa sai neutra, sem a causa e sem o órgão (must-fix do PR #667)."""
+        client, _sb, token = self._na_area_e_apagado(monkeypatch, _nunca_envia_email_de_verdade, "apagamento_pedido_em")
+
+        resposta = self._devolver(client, token)
+
+        detalhe = resposta.json()["detail"]
+        assert "Este caso não aceita mais ser devolvido à Ouvidoria por este link." in detalhe
+        # Nem a causa, nem o autor, em resposta nenhuma desta porta.
+        assert "Diretoria" not in resposta.text
+        assert "está sendo apagado" not in resposta.text
+
+    def test_caso_vivo_no_mesmo_estado_continua_sendo_devolvido(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O contraste que prova que a guarda lê o carimbo, e não o estado nem a
+        devolução em si."""
+        client, sb, token = _portal_com_caso_na_area(monkeypatch, _nunca_envia_email_de_verdade)
+
+        assert self._devolver(client, token).status_code == 200
+        assert _caso_no_banco(sb)["status"] == "em_classificacao"

@@ -1654,7 +1654,13 @@ def _carregar_para_o_arquivo(supabase, manifestacao_id: str) -> dict:
     try:
         atual = (
             supabase.table("ouvidoria_protocolos")
-            .select("id, status, " + ", ".join(_CAMPOS_DO_ARQUIVO))
+            # Os dois carimbos do apagamento entram na MESMA tupla da leitura
+            # (issue #669), pela regra das outras portas de escrita: guarda que
+            # lê coluna não selecionada lê None e deixa passar em silêncio, com
+            # a chamada no lugar certo. Quem os lê é só o DESARQUIVAR, mas o
+            # select é um só porque a leitura é a mesma, e nenhum dos dois vai
+            # para a resposta da rota (`_CAMPOS_DO_ARQUIVO` recorta o retorno).
+            .select("id, status, anonimizada_em, apagamento_pedido_em, " + ", ".join(_CAMPOS_DO_ARQUIVO))
             .eq("id", manifestacao_id)
             .execute()
         )
@@ -1772,7 +1778,17 @@ async def desarquivar_manifestacao(
 
     O registro de acesso é o que sobra: como este ato apaga os dois carimbos,
     ele é a única memória de que o caso esteve arquivado."""
-    _carregar_para_o_arquivo(supabase, manifestacao_id)
+    caso = _carregar_para_o_arquivo(supabase, manifestacao_id)
+    # O caso apagado não volta à lista (issue #669). Esta é a porta mais
+    # alcançável da guarda: ela não tem pré-condição de estado nenhuma, e o caso
+    # apagado é um caso encerrado, que é exatamente o que o arquivo guarda.
+    # Desarquivar devolveria ao trabalho do dia um caso que o apagamento tinha
+    # escondido, e a Retenção nunca mais volta lá (ela só varre
+    # `anonimizada_em IS NULL`).
+    #
+    # ARQUIVAR continua livre, de propósito (triagem da #669): guardar o caso
+    # apagado é o comportamento desejado. Só a volta fecha.
+    barrar_caso_apagado(caso, "tirado do arquivo")
     gravado = _gravar_o_arquivo(supabase, manifestacao_id, {"arquivada_em": None, "arquivada_por": None})
     registrar_acesso(supabase, me, manifestacao_id, "desarquivar")
     return gravado
@@ -2346,6 +2362,16 @@ async def devolver_por_insuficiencia(
     if not atual.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
     caso = atual.data[0]
+
+    # O caso apagado não é devolvido (issue #669). Vem ANTES da conferência de
+    # origem de propósito, na doutrina do `responder` (issue #631): é a guarda
+    # que esta porta tinha por consequência, e o ouvidor que lê a recusa precisa
+    # saber que o caso acabou, não que ele "está em encerrado". Devolver acorda
+    # a área com email, encurta o prazo e grava movimento na trilha, e tira do
+    # encerramento um caso que a fila do cron ia concluir.
+    #
+    # `_CAMPOS_DOSSIE` já traz os dois carimbos, então aqui a guarda é uma linha.
+    barrar_caso_apagado(caso, "devolvido ao setor por insuficiência")
 
     # A origem tem que ser uma das duas de onde a devolução sai. A checagem
     # vem ANTES de `validar_transicao` porque o grafo ganhou outra aresta para
@@ -3431,8 +3457,14 @@ async def validar_e_acionar(
             # primeiro para o compromisso com o manifestante não ser movido, o
             # segundo para saber se a área MUDOU, que é o que decide o destino
             # do carimbo do estouro consumado.
+            #
+            # Os dois carimbos do apagamento entram na MESMA tupla (issue #669).
+            # Este `select` é recortado à mão, e sem eles aqui a guarda logo
+            # abaixo leria `None` para sempre: nasceria morta, com a chamada no
+            # lugar certo e a suíte verde.
             .select(
-                "id, status, sigilo_reforcado, tipo_manifestacao, contato_em, data_abertura, prazo_conclusivo_em, setor"
+                "id, status, sigilo_reforcado, tipo_manifestacao, contato_em, data_abertura, "
+                "prazo_conclusivo_em, setor, anonimizada_em, apagamento_pedido_em"
             )
             .eq("id", manifestacao_id)
             .execute()
@@ -3443,6 +3475,13 @@ async def validar_e_acionar(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
 
     caso = atual.data[0]
+    # O caso apagado não é despachado (issue #669). Vem antes das conferências
+    # de estado porque é a guarda que esta porta tinha por consequência, e
+    # porque o que ela impede é o pior efeito da lista: validar é a ÚNICA porta
+    # do despacho (ADR 0034, decisão 3) e manda para fora do painel o relato
+    # integral por email, mais um token do portal, de um caso que a Diretoria
+    # mandou apagar.
+    barrar_caso_apagado(caso, "validado e acionado")
     # Acionar é ir de `em_classificacao` para `aguardando_area`. Chegar aqui
     # vindo de `respondido` ou de `aguardando_area` seria DEVOLUÇÃO, que tem
     # porta própria e regra própria (motivo obrigatório, meio prazo). O grafo
@@ -3906,7 +3945,18 @@ async def cobrar_setor(
 
     Sai na hora, mesmo fora do expediente, pelo mesmo motivo do reenvio: há uma
     pessoa da Ouvidoria decidindo mandar."""
-    caso = carregar_manifestacao(supabase, manifestacao_id, "id, protocolo, setor, status")
+    # Os dois carimbos do apagamento entram na MESMA tupla da leitura do caso
+    # (issue #669): este `select` é recortado à mão, e sem eles a guarda logo
+    # abaixo leria `None` para sempre, nascendo morta com a chamada no lugar
+    # certo.
+    caso = carregar_manifestacao(
+        supabase, manifestacao_id, "id, protocolo, setor, status, anonimizada_em, apagamento_pedido_em"
+    )
+    # O caso apagado não é cobrado (issue #669). É o gêmeo do reenvio fechado
+    # pelo PR #667, e cria mais do que ele: além da notificação e do email, a
+    # cobrança EMITE TOKEN NOVO do portal, ou seja, abre uma porta de escrita
+    # sem login para um caso que a Diretoria mandou apagar.
+    barrar_caso_apagado(caso, "cobrado do setor")
     if caso.get("status") != ouvidoria_prorrogacao.AGUARDANDO_AREA:
         # Cobrar é insistir com quem está devendo resposta. A fila só oferece o
         # botão em `aguardando_area`, mas o gate é do servidor: por esta rota,
@@ -4059,6 +4109,11 @@ async def decidir_prorrogacao(
     if not encontrado.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
     caso = encontrado.data[0]
+    # O caso apagado não recebe decisão (issue #669). Aprovar move o vencimento
+    # do caso, e os dois caminhos gravam movimento na trilha e email a quem
+    # pediu: é escrita, e escrita em caso apagado é o que a guarda recusa.
+    # `_CAMPOS_DOSSIE` já traz os dois carimbos, então aqui ela é uma linha.
+    barrar_caso_apagado(caso, "decidido quanto à prorrogação")
     pedido = ouvidoria_prorrogacao.carregar_pedido(supabase, manifestacao_id)
     if pedido is None or pedido["id"] != prorrogacao_id:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Pedido de prorrogação não encontrado")
