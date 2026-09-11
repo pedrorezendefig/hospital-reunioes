@@ -185,12 +185,24 @@ def partes_da_foto(foto: dict[str, Any] | None) -> tuple[int | None, int | None]
     que mostra uma parte recusada: o diretor veria duas historias sobre a mesma
     issue. Quando ha parte recusada entre as que lemos, a conta propria manda;
     no resto, o numero do GitHub continua mandando.
+
+    "Recusada" aqui e o que o modulo inteiro chama assim, as DUAS formas: a
+    label `wontfix` e o fechamento como nao planejada (ADR 0054, decisao 3:
+    "fechada como nao planejada ou `wontfix`"). Ler so a label deixaria de fora
+    a sub-issue fechada com o motivo declarado, que o `situacao_da_parte` ja
+    mostra como "Nao sera feita" na lista. O criterio e "fechada e nao
+    entregue", escrito com o proprio `_entregue` para nao existir uma segunda
+    definicao de entrega neste arquivo.
+
+    Parte recusada ainda ABERTA nao entra: o GitHub tambem nao a conta como
+    concluida, entao nao ha divergencia a corrigir e descartar o resumo por
+    causa dela seria trocar o numero do GitHub por outro sem ganho nenhum.
     """
     if not foto:
         return (None, None)
 
     partes_lidas = _partes(foto)
-    ha_parte_recusada = any(LABEL_WONTFIX in _labels(parte) for parte in partes_lidas)
+    ha_parte_recusada = any(_fechada(parte) and not _entregue(parte) for parte in partes_lidas)
     resumo = foto.get("resumo_das_partes") or {}
     total = resumo.get("total")
     entregues = resumo.get("entregues")

@@ -579,6 +579,32 @@ class TestSituacaoDaParte:
         assert situacoes == [ETAPA_ENTREGUE, ETAPA_NAO_SERA_FEITA, ETAPA_PLANEJADA]
         assert situacoes.count(ETAPA_ENTREGUE) == entregues
 
+    def test_a_parte_fechada_como_nao_planejada_tambem_e_recusa(self):
+        """As DUAS formas de recusa contam, nao so a label (ADR 0054, decisao
+        3: "fechada como nao planejada ou `wontfix`"). A parte fechada com o
+        motivo declarado ja aparece como "Nao sera feita" na lista, entao a
+        barra tambem nao pode soma-la. Sem este caso, um criterio que lesse so
+        a label passaria na suite inteira."""
+        partes = (
+            _parte(674, estado="closed", motivo="completed"),
+            _parte(675, estado="closed", motivo="not_planned"),
+            _parte(676),
+        )
+        foto = _foto(partes=partes, resumo={"total": 3, "entregues": 2})
+
+        assert partes_da_foto(foto) == (1, 3)
+        assert situacao_da_parte(partes[1]) == ETAPA_NAO_SERA_FEITA
+
+    def test_a_parte_recusada_ainda_aberta_nao_descarta_o_resumo_do_github(self):
+        """A recusa so diverge do GitHub depois que a issue fecha: enquanto ela
+        esta aberta, o GitHub tambem nao a conta como concluida. Descartar o
+        resumo nesse caso trocaria o numero que a tela do GitHub mostra por
+        outro, sem corrigir divergencia nenhuma."""
+        partes = (_parte(674, estado="closed", motivo="completed"), _parte(675, labels=("wontfix",)))
+        foto = _foto(partes=partes, resumo={"total": 9, "entregues": 4})
+
+        assert partes_da_foto(foto) == (4, 9)
+
     def test_a_parte_recusada_e_lida_sem_distinguir_maiusculas(self):
         """A guarda nova le a label pelo `_labels`, que normaliza. Trocada por
         um conjunto cru, uma label gravada "WONTFIX" voltaria a contar como
