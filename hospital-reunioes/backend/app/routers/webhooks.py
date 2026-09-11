@@ -495,7 +495,23 @@ async def webhook_github(
         logger.warning("[GitHub webhook] Corpo de %s bytes acima do teto; entrega recusada.", anunciado)
         raise HTTPException(status_code=413, detail=MOTIVO_CORPO_GRANDE_DEMAIS)
 
-    corpo = await request.body()
+    # A contagem de verdade, por cima do pré-check: quem manda o corpo em
+    # pedaços (`Transfer-Encoding: chunked`) não anuncia `Content-Length`
+    # nenhum, e o pré-check acima não tem o que olhar. Um atacante deliberado
+    # nunca anuncia, e sem isto o corpo iria até o teto global de 100 MB do
+    # middleware sem nenhuma prova de origem. Os bytes ficam acumulados aqui
+    # porque o HMAC precisa deles CRUS, na ordem em que vieram.
+    acumulado = bytearray()
+    async for pedaco in request.stream():
+        acumulado.extend(pedaco)
+        if len(acumulado) > TETO_DO_CORPO_DO_WEBHOOK:
+            logger.warning(
+                "[GitHub webhook] Corpo passou do teto de %s bytes durante a leitura; entrega recusada.",
+                TETO_DO_CORPO_DO_WEBHOOK,
+            )
+            raise HTTPException(status_code=413, detail=MOTIVO_CORPO_GRANDE_DEMAIS)
+    corpo = bytes(acumulado)
+
     if not _assinatura_do_github_confere(corpo, request.headers.get("x-hub-signature-256"), segredo):
         logger.warning("[GitHub webhook] Assinatura inválida: entrega recusada.")
         raise HTTPException(status_code=401, detail=MOTIVO_ASSINATURA_INVALIDA)

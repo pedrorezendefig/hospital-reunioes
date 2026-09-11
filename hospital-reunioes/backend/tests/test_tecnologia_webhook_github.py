@@ -449,6 +449,97 @@ def _entregar_com_header_cru(cliente: TestClient, corpo: bytes, assinatura: byte
     return cliente.post(ROTA, content=corpo, headers=cabecalhos)
 
 
+def _entregar_em_pedacos(cliente: TestClient, corpo: bytes, *, tamanho_do_pedaco: int = 8):
+    """A entrega SEM anunciar `Content-Length`, como faz quem manda o corpo em
+    pedacos (`Transfer-Encoding: chunked`).
+
+    O httpx so omite o `Content-Length` quando o conteudo e um iteravel de
+    tamanho desconhecido, e e por isso que o corpo sai daqui por um gerador: com
+    `bytes` ele anunciaria o tamanho e o caso perderia o sentido, porque o
+    pre-check do anunciado o recusaria antes de a leitura comecar.
+
+    A assinatura continua sendo a do corpo INTEIRO: ela e o que cobra que o HMAC
+    fechou sobre os bytes crus acumulados, e nao sobre um pedaco.
+    """
+
+    def _pedacos():
+        for inicio in range(0, len(corpo), tamanho_do_pedaco):
+            yield corpo[inicio : inicio + tamanho_do_pedaco]
+
+    cabecalhos = {
+        "Content-Type": "application/json",
+        "X-GitHub-Delivery": "d-1",
+        "X-GitHub-Event": "issues",
+        "X-Hub-Signature-256": _assinar(corpo),
+    }
+    return cliente.post(ROTA, content=_pedacos(), headers=cabecalhos)
+
+
+async def _entregar_por_asgi(
+    cliente: TestClient,
+    pedacos: list[bytes],
+    *,
+    anunciado: str | None = None,
+) -> tuple[int, list[int]]:
+    """A entrega falando ASGI direto com o app da rota, devolvendo o status e o
+    tamanho de cada pedaco que a rota chegou a PEDIR.
+
+    Existe porque o transporte do `TestClient` junta o corpo num pedaco so: por
+    ele, "recusou no terceiro pedaco" e "leu os cinco e recusou depois" sao
+    indistinguiveis, e essa distincao e o criterio de aceite. Aqui quem entrega
+    os pedacos e o teste, um a um, e o que fica registrado e o que foi pedido.
+
+    Continua sendo a ROTA de verdade: o mesmo app montado, o mesmo roteamento e
+    as mesmas dependencias. O que muda e so quem fala do outro lado do fio.
+    """
+    corpo = b"".join(pedacos)
+    cabecalhos = [
+        (b"host", b"testserver"),
+        (b"content-type", b"application/json"),
+        (b"x-github-delivery", b"d-1"),
+        (b"x-github-event", b"issues"),
+        (b"x-hub-signature-256", _assinar(corpo).encode("ascii")),
+    ]
+    if anunciado is None:
+        cabecalhos.append((b"transfer-encoding", b"chunked"))
+    else:
+        cabecalhos.append((b"content-length", anunciado.encode("ascii")))
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": ROTA,
+        "raw_path": ROTA.encode("ascii"),
+        "query_string": b"",
+        "root_path": "",
+        "headers": cabecalhos,
+        "client": ("127.0.0.1", 50000),
+        "server": ("testserver", 80),
+    }
+
+    pendentes = list(pedacos)
+    pedidos: list[int] = []
+
+    async def receive():
+        if not pendentes:
+            return {"type": "http.request", "body": b"", "more_body": False}
+        pedaco = pendentes.pop(0)
+        pedidos.append(len(pedaco))
+        return {"type": "http.request", "body": pedaco, "more_body": bool(pendentes)}
+
+    mensagens: list[dict] = []
+
+    async def send(mensagem):
+        mensagens.append(mensagem)
+
+    await cliente.app(scope, receive, send)
+    status = next(m["status"] for m in mensagens if m["type"] == "http.response.start")
+    return status, pedidos
+
+
 # ─── 1. A porta: HMAC ────────────────────────────────────────────────────────
 
 
@@ -669,6 +760,88 @@ class TestTetoDoCorpo:
         cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
 
         resposta = _entregar(cliente, _corpo())
+
+        assert resposta.status_code == 200
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+
+    async def test_o_anunciado_recusa_sem_pedir_um_byte_do_corpo(self, monkeypatch):
+        """O pre-check do `Content-Length` anunciado continua de pe, e a prova e
+        que a rota nem PEDE o corpo: 413 com a lista de pedacos pedidos vazia.
+
+        Sem esta asserção, a contagem na leitura (o teste abaixo) sozinha
+        deixaria o pre-check virar codigo morto sem nada acusar, e a entrega
+        honesta grande passaria a custar a leitura inteira antes da recusa.
+        """
+        monkeypatch.setattr(webhooks_router, "TETO_DO_CORPO_DO_WEBHOOK", 10)
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+        corpo = _corpo()
+
+        status, pedidos = await _entregar_por_asgi(cliente, [corpo], anunciado=str(len(corpo)))
+
+        assert status == 413
+        assert pedidos == [], "a rota leu o corpo antes de olhar o tamanho anunciado"
+        assert gh.leituras == []
+        assert _fio(sb) == []
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_ANALISE
+
+    def test_corpo_em_pedacos_sem_content_length_e_recusado(self, monkeypatch):
+        """O buraco que esta issue fecha: quem manda o corpo em pedacos nao
+        anuncia `Content-Length` nenhum, e o pre-check do anunciado nao tem o que
+        olhar. Um atacante deliberado nunca anuncia.
+
+        A assinatura e VALIDA de proposito: e ela que separa "recusou pelo
+        tamanho" de "leu tudo e recusou por outro motivo". Se a rota confiasse so
+        no anunciado, esta entrega passaria pela assinatura e sincronizaria.
+        """
+        monkeypatch.setattr(webhooks_router, "TETO_DO_CORPO_DO_WEBHOOK", 10)
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _entregar_em_pedacos(cliente, _corpo())
+
+        assert resposta.status_code == 413
+        assert gh.leituras == []
+        assert _fio(sb) == []
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_ANALISE
+
+    async def test_a_leitura_para_no_pedaco_que_passa_do_teto(self, monkeypatch):
+        """O 413 sai ANTES de o corpo inteiro ir para a memoria, e nao depois de
+        acumular tudo e conferir no fim.
+
+        Contar os bytes so no fim do laco daria o mesmo 413 do teste acima: o que
+        distingue os dois desfechos e quantos pedacos a rota chegou a pedir. Com
+        teto de 10 e pedacos de 4, a soma passa no terceiro, e e ali que a
+        leitura tem que parar, por mais corpo que ainda houvesse para vir.
+        """
+        monkeypatch.setattr(webhooks_router, "TETO_DO_CORPO_DO_WEBHOOK", 10)
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+        corpo = _corpo()
+        pedacos = [corpo[i : i + 4] for i in range(0, len(corpo), 4)]
+        assert len(pedacos) > 3, "o corpo do caso precisa ter mais pedacos do que a rota deveria ler"
+
+        status, pedidos = await _entregar_por_asgi(cliente, pedacos)
+
+        assert status == 413
+        assert pedidos == [4, 4, 4], (
+            f"a rota pediu {len(pedidos)} pedacos de {len(pedacos)}: ela acumulou o corpo antes de conferir o teto"
+        )
+        assert _fio(sb) == []
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_ANALISE
+
+    def test_entrega_em_pedacos_dentro_do_teto_passa_e_a_assinatura_fecha(self, monkeypatch):
+        """O detector, e a segunda pergunta junto: uma guarda que recusasse toda
+        entrega sem `Content-Length` passaria nos dois testes acima, e o GitHub
+        tem liberdade de mandar o corpo em pedacos.
+
+        A assinatura e do corpo INTEIRO: o 200 aqui so acontece se o HMAC tiver
+        sido calculado sobre os bytes crus acumulados, na ordem em que vieram.
+        """
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _entregar_em_pedacos(cliente, _corpo())
 
         assert resposta.status_code == 200
         assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
