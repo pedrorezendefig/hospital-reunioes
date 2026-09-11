@@ -158,6 +158,31 @@ class EnumeracaoDeRotasQuebrada(RuntimeError):
     """
 
 
+# Marca que o gen_rotas_md carimba quando a listagem veio do parser AST.
+MARCA_DE_LISTAGEM_PARCIAL = "**Listagem parcial.**"
+
+
+# Quando o ROTAS.md em disco veio da introspecção e esta passagem só tem o AST,
+# reescrever SUBTRAI: além de perder as rotas criadas por factory, o AST não
+# enxerga as dependências dos routers e vira a coluna Auth de ✅ para ❌ em rota
+# autenticada. O banner de listagem parcial avisa sobre rota que falta, não
+# sobre auth que mente, e ninguém lê banner num commit automático (mordeu na
+# onda de 10/09/2026). Diferente da EnumeracaoDeRotasQuebrada: ali a
+# introspecção rodou e mentiu, e abortar é certo; aqui ela não rodou, e os
+# outros quatro arquivos (que não dependem de rota) continuam válidos.
+#
+# Por isso o desfecho é PULAR o ROTAS.md e o bloco AUTO:rotas do ARQUITETURA.md,
+# nunca abortar a passagem: --check e --only MIGRATIONS não escreveriam o
+# ROTAS.md de jeito nenhum, e recusá-los seria regressão.
+
+
+def _rebaixaria_o_rotas_md(rotas_md: Path, fonte: str) -> bool:
+    """True quando reescrever o ROTAS.md perderia informação que já está lá."""
+    if fonte == "runtime" or not rotas_md.exists():
+        return False
+    return MARCA_DE_LISTAGEM_PARCIAL not in rotas_md.read_text(encoding="utf-8")
+
+
 def _introspect_routes_runtime(routers_dir: Path) -> list[dict] | None:
     """Lê as rotas do app FastAPI montado. None se não der (sem venv, sem uv,
     import quebrado, .env faltando), e aí quem chama cai no parser AST.
@@ -537,7 +562,7 @@ def gen_rotas_md(routes: list[dict], project_name: str, fonte: str = "runtime") 
     ]
     if fonte != "runtime":
         out += [
-            "> ⚠️ **Listagem parcial.** Gerada pelo parser estático porque o app não pôde ser",
+            f"> ⚠️ {MARCA_DE_LISTAGEM_PARCIAL} Gerada pelo parser estático porque o app não pôde ser",
             "> montado (venv do backend ausente, dependências ou `.env` faltando). Rotas criadas",
             "> por factory não aparecem aqui. Rode o `/snapshot` com o backend instalado para a",
             "> listagem completa.",
@@ -931,14 +956,20 @@ def _arq_integracoes(project_json: dict) -> str:
 
 
 def update_arquitetura(repo_root: Path, generated: dict, project_json: dict,
-                       dry_run: bool, force: bool) -> bool:
+                       dry_run: bool, force: bool, pular_rotas: bool = False) -> bool:
     """Atualiza só os blocos AUTO de docs/ARQUITETURA.md. Não cria do zero
-    (o doc é curado por humano uma vez; aqui só refrescamos rotas/dados/integrações)."""
+    (o doc é curado por humano uma vez; aqui só refrescamos rotas/dados/integrações).
+
+    `pular_rotas` deixa o bloco AUTO:rotas como está. Ele é só a CONTAGEM de
+    endpoints por área, e não tem onde carimbar "listagem parcial": rebaixado
+    de 192 para 1, ninguém depois consegue saber que aquele número está errado.
+    Por isso ele nunca é rebaixado, nem com --aceitar-listagem-parcial."""
     arq = repo_root / "docs" / "ARQUITETURA.md"
     if not arq.exists():
         return False
     text = arq.read_text(encoding="utf-8")
-    text = _replace_auto(text, "rotas", _arq_rotas(generated["ROTAS"]))
+    if not pular_rotas:
+        text = _replace_auto(text, "rotas", _arq_rotas(generated["ROTAS"]))
     text = _replace_auto(text, "dados", _arq_dados(generated["ENTIDADES"]))
     text = _replace_auto(text, "integracoes", _arq_integracoes(project_json))
     return _write_if_changed(arq, text, dry_run, force)
@@ -951,6 +982,10 @@ def cmd_default(args, paths: dict, project_json: dict) -> int:
 
     # Parse
     routes, fonte_rotas = parse_routers(paths["routers"]) if paths["routers"] else ([], "ast")
+    rebaixaria = _rebaixaria_o_rotas_md(paths["snapshots"] / "ROTAS.md", fonte_rotas)
+    # O bloco AUTO:rotas do ARQUITETURA.md é contagem pura, sem onde carimbar
+    # "parcial": fica de fora sempre que rebaixaria, escotilha ou não.
+    pular_rotas = rebaixaria and not args.aceitar_listagem_parcial
     parsed = parse_migrations(paths["migrations"]) if paths["migrations"] else {"tables": {}, "history": []}
 
     # Generate
@@ -972,12 +1007,16 @@ def cmd_default(args, paths: dict, project_json: dict) -> int:
     for name in TARGET_FILES:
         if only_filter and name != only_filter:
             continue
+        if name == "ROTAS" and pular_rotas:
+            continue
         path = paths["snapshots"] / f"{name}.md"
         if _write_if_changed(path, generated[name], dry_run=args.check, force=args.force):
             changed_files.append(name)
 
     # Documento único consolidado (pro funcional): atualiza blocos AUTO
-    if not only_filter and update_arquitetura(repo_root, generated, project_json, args.check, args.force):
+    if not only_filter and update_arquitetura(
+        repo_root, generated, project_json, args.check, args.force, pular_rotas=rebaixaria
+    ):
         changed_files.append("ARQUITETURA")
 
     # Alerts
@@ -993,6 +1032,15 @@ def cmd_default(args, paths: dict, project_json: dict) -> int:
             print(f"  {f}.md")
     else:
         print("nenhuma mudança relevante desde último snapshot")
+    if rebaixaria:
+        alvo = "ROTAS.md e o bloco de rotas do ARQUITETURA.md"
+        if args.aceitar_listagem_parcial:
+            alvo = "bloco de rotas do ARQUITETURA.md (o ROTAS.md foi rebaixado a pedido)"
+        print(f"\n[snapshot] o {alvo} não foi tocado: a introspecção do app não rodou e o "
+              "parser AST rebaixaria a listagem (perde rota criada por factory e vira a "
+              "coluna Auth de rota autenticada).", file=sys.stderr)
+        print("[snapshot] conserto: rode com o backend instalado (`.venv` e `.env` no lugar).",
+              file=sys.stderr)
     if alerts:
         print("\nAlertas (FLUXOGRAMAS.md pode estar desatualizado):")
         for a in alerts:
@@ -1002,7 +1050,10 @@ def cmd_default(args, paths: dict, project_json: dict) -> int:
     if not args.check and not args.no_commit and changed_files:
         _git_commit_snapshot(repo_root, changed_files)
 
-    return 0
+    # 4 = passou, mas deixou a listagem de rotas para trás. O Passo 9.4 do
+    # /deploy é warn-only e não distingue códigos; o valor aqui é para quem
+    # roda à mão e para script futuro, e o que de fato avisa é o stderr acima.
+    return 4 if rebaixaria else 0
 
 
 def _git_commit_snapshot(repo_root: Path, changed_files: list[str]) -> None:
@@ -1209,6 +1260,10 @@ def main() -> int:
     parser.add_argument("--diff", metavar="RANGE", help="Markdown da mudança entre <base>..HEAD")
     parser.add_argument("--no-commit", action="store_true",
                         help="Não cria commit automático (default: commita chore(spec): ...)")
+    parser.add_argument("--aceitar-listagem-parcial", action="store_true",
+                        help="Deixa o parser AST reescrever um ROTAS.md completo, que sai "
+                             "carimbado como parcial (perde rota de factory e vira a coluna "
+                             "Auth). O bloco de rotas do ARQUITETURA.md continua intocado.")
     args = parser.parse_args()
 
     repo_root = Path(args.root).resolve()
