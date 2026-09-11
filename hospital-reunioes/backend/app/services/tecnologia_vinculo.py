@@ -611,9 +611,15 @@ MARCADOR_AUTOMACAO = "<!-- automacao -->"
 # pessoa sem login e, por definicao, do lado do hospital (ADR 0054, decisao 4).
 ROTULO_SEM_LOGIN = "Pessoa do hospital"
 
-# `@` seguido de letra, digito ou sublinhado, que e o que o GitHub le como
-# mencao. O `@` sozinho, antes de espaco ou de pontuacao, nao chama ninguem.
-_ARROBA_DE_MENCAO = re.compile(r"@(?=[A-Za-z0-9_])")
+# O que o GitHub le como mencao: `@` no inicio ou depois de algo que nao e
+# letra, seguido do login (letras, digitos, hifen, sublinhado) e, no caso de
+# time, `/nome`. O `@` colado a uma palavra (`ana@hsm.com`) e autolink de
+# e-mail, nao mencao, e o `@` sozinho antes de espaco nao chama ninguem.
+_MENCAO_DO_GITHUB = re.compile(r"(?<![A-Za-z0-9_])@[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9_-]+)?")
+
+# Depois do nome mencionado tem de vir algo que nao e letra (ou o fim): sem
+# isso, "Ana" mencionada casaria o comeco de "@Anastácia".
+_FIM_DO_NOME = r"(?![^\W_])"
 
 
 def rotulo_no_github(participante: dict[str, Any] | None) -> str:
@@ -628,11 +634,17 @@ def marcador_do_revisor_no_app(*, demanda_id: str) -> str:
     return f'<!-- revisor-app autor="{ROTULO_SEM_LOGIN}" demanda="{demanda_id}" -->'
 
 
-def _escapar_arrobas(texto: str) -> str:
-    """`\\@` e o escape de pontuacao do CommonMark: o GitHub renderiza como `@`
-    e nao trata como mencao. Um `@fulano` digitado a mao deixa de notificar a
-    conta `fulano`, que nao tem nada a ver com o hospital."""
-    return _ARROBA_DE_MENCAO.sub(r"\\@", texto)
+def _neutralizar_mencoes(texto: str) -> str:
+    """Um `@fulano` digitado a mao vira `` `@fulano` `` (code span).
+
+    E a forma que o renderizador do GitHub aceita como texto: o filtro de
+    mencao nao entra em codigo. O escape de barra do CommonMark (`\\@`) NAO
+    serve, conferido no `gh api /markdown` na rodada 2 do PR #696: a barra e
+    consumida antes do filtro, e `\\@fulano` vira mencao igual. Entidade
+    `&#64;` tambem vira. Legivel no comentario, e a conta `fulano`, que nao
+    tem nada a ver com o hospital, nao e notificada.
+    """
+    return _MENCAO_DO_GITHUB.sub(lambda m: f"`{m.group(0)}`", texto)
 
 
 def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> str:
@@ -646,32 +658,37 @@ def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> 
        id da pessoa em `mencoes`) vira o rotulo dessa pessoa: `@login` quando
        ela tem, que e mencao de verdade no GitHub e chama quem o autor quis
        chamar, ou o rotulo neutro. O nome civil do mencionado nao sai;
-    2. qualquer **outro** `@` seguido de letra ou digito sai escapado, para nao
-       notificar conta alheia. O e-mail digitado no texto cai aqui tambem, e
-       continua legivel.
+    2. qualquer **outra** mencao (`@fulano` digitado a mao) sai dentro de
+       crase, que e o que desliga o filtro de mencao do GitHub. O e-mail
+       digitado no texto nao e mencao e fica como esta.
 
-    A troca do passo 1 e feita por trechos, com o escape do passo 2 aplicado
-    so ao que esta ENTRE as mencoes: aplicado ao texto inteiro depois, ele
-    escaparia o `@login` que o passo 1 acabou de por. O nome mais longo ganha
-    quando um e prefixo do outro ("Ana Paula" antes de "Ana").
+    A troca do passo 1 roda sobre o texto BRUTO, antes do `texto_do_diretor`:
+    e o nome do cadastro que tem de casar, e o funil transforma o texto (`<`
+    vira `&lt;`, travessao vira virgula) sem transformar o nome. E e feita por
+    trechos, com o passo 2 aplicado so ao que esta ENTRE as mencoes: aplicado
+    ao texto inteiro depois, ele poria em crase o `@login` que o passo 1
+    acabou de por. O nome mais longo ganha quando um e prefixo do outro ("Ana
+    Paula" antes de "Ana"), e depois do nome tem de vir algo que nao e letra.
     """
-    texto = texto_do_diretor(bruto)
+    texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
     rotulos = {
         nome: rotulo_no_github(pessoa)
         for pessoa in mencionados
         if (nome := str((pessoa or {}).get("nome_completo") or "").strip())
     }
     if not rotulos:
-        return _escapar_arrobas(texto)
-    padrao = re.compile("|".join(re.escape(f"@{nome}") for nome in sorted(rotulos, key=len, reverse=True)))
+        return texto_do_diretor(_neutralizar_mencoes(texto))
+    padrao = re.compile(
+        "|".join(re.escape(f"@{nome}") + _FIM_DO_NOME for nome in sorted(rotulos, key=len, reverse=True))
+    )
     partes: list[str] = []
     fim = 0
     for achado in padrao.finditer(texto):
-        partes.append(_escapar_arrobas(texto[fim : achado.start()]))
+        partes.append(_neutralizar_mencoes(texto[fim : achado.start()]))
         partes.append(rotulos[achado.group(0)[1:]])
         fim = achado.end()
-    partes.append(_escapar_arrobas(texto[fim:]))
-    return "".join(partes)
+    partes.append(_neutralizar_mencoes(texto[fim:]))
+    return texto_do_diretor("".join(partes))
 
 
 def corpo_do_comentario_espelhado(
@@ -692,8 +709,8 @@ def corpo_do_comentario_espelhado(
     O texto passa pelo `texto_espelhado`: sem isso, bastaria alguem digitar o
     marcador do revisor dentro da resposta para a Action acender a label em
     nome de outra pessoa (o teto de `author_association` do GitHub nao
-    protegeria nada, porque o autor do comentario e a integracao), e um `@`
-    digitado a mao notificaria conta alheia.
+    protegeria nada, porque o autor do comentario e a integracao), e um
+    `@fulano` digitado a mao notificaria conta alheia.
 
     Uma linha em branco entre o cabecalho e o texto, para o Markdown nao colar
     os dois num paragrafo so.

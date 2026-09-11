@@ -56,7 +56,7 @@ O critério de aceite da #679 foi reescrito para dizer o que de fato existe. As 
 
 - quem tem `github_login` sai como `@login` no cabeçalho (identificador que a própria pessoa já tornou público), com o marcador `<!-- automacao -->`;
 - quem não tem sai com o rótulo neutro **"Pessoa do hospital"** no cabeçalho e no `autor` do marcador: `<!-- revisor-app autor="Pessoa do hospital" demanda="id" -->`. Quem tem acesso ao app vê o autor pelo link da Demanda, que já está no corpo da issue;
-- a **@menção do app** no texto (`@Nome Completo`, gravada pelo autocomplete) vira o rótulo da pessoa mencionada (`@login` ou o neutro), e qualquer outro `@` seguido de letra sai escapado (`\@`): sem isso, "@Pedro Vitta" notificaria a conta `Pedro` do GitHub e publicaria o nome de um colaborador;
+- a **@menção do app** no texto (`@Nome Completo`, gravada pelo autocomplete) vira o rótulo da pessoa mencionada (`@login` ou o neutro), e qualquer outra menção digitada à mão sai dentro de crase (`` `@fulano` ``, code span): sem isso, "@Pedro Vitta" notificaria a conta `Pedro` do GitHub e publicaria o nome de um colaborador. O escape de barra do CommonMark (`\@`) não serve: o renderizador do GitHub consome a barra antes do filtro de menção e `\@fulano` vira menção igual (conferido no `gh api /markdown`, rodada 2 do PR #696);
 - a **caixa de resposta avisa** que a resposta é publicada fora do app quando a Demanda tem Vínculo, sem número, link nem label (decisão 9 intacta). O mesmo aviso que o PR #688 pôs no botão "Levar para desenvolvimento", agora para quem escreve sem ver o Vínculo.
 
 A frase "com o meu nome no texto" da história 37 do PRD #673 fica superada por esta emenda. As demais decisões ficam intactas.

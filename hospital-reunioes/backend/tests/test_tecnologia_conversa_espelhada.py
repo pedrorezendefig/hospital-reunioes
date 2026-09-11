@@ -63,6 +63,13 @@ from app.services.tecnologia_vinculo import (  # noqa: E402
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "104_tecnologia_conversa_espelhada.sql"
 
 
+def _mencoes_fora_de_crase(texto: str) -> list[str]:
+    """As mencoes que o GitHub ainda leria como mencao: `@login` no inicio ou
+    depois de algo que nao e letra, e que NAO esta dentro de um code span."""
+    sem_codigo = re.sub(r"`[^`]*`", "", texto)
+    return re.findall(r"(?<![A-Za-z0-9_])@[A-Za-z0-9][A-Za-z0-9_-]*", sem_codigo)
+
+
 # ─── 1. O corpo do comentario espelhado ──────────────────────────────────────
 
 
@@ -168,9 +175,12 @@ class TestArrobaNoTextoEspelhado:
     Completo` no texto, e no GitHub isso vira mencao a uma conta alheia (o
     `@Pedro` de "Pedro Vitta" notifica o usuario `Pedro`) e publica o nome
     civil de um colaborador do hospital. A mencao do app vira o rotulo da
-    pessoa mencionada (`@login` ou o neutro), e qualquer outro `@` seguido de
-    letra ou digito sai escapado: `\\@` e o escape do CommonMark, que o
-    GitHub renderiza como `@` sem tratar como mencao."""
+    pessoa mencionada (`@login` ou o neutro), e qualquer outra mencao sai
+    dentro de crase (code span), que e o que o renderizador do GitHub aceita
+    como texto. O escape de barra (`\\@`) NAO serve: o CommonMark consome a
+    barra antes do filtro de mencao (prova no `gh api /markdown`, rodada 2 do
+    PR #696). Os testes assertam a CRASE em volta, que e o marcador, e nao a
+    ausencia do `@`."""
 
     def test_mencao_a_quem_tem_login_vira_o_login_no_github(self):
         texto = texto_espelhado("@Pedro Vitta, veja isso", mencionados=[PEDRO])
@@ -182,17 +192,25 @@ class TestArrobaNoTextoEspelhado:
 
         assert texto == "Pessoa do hospital, pode conferir?"
 
-    def test_arroba_digitado_a_mao_sai_escapado_e_sem_nome_de_terceiro(self):
+    def test_arroba_digitado_a_mao_sai_em_crase_e_sem_nome_de_terceiro(self):
         """O teste pedido pela review: resposta com `@Pedro Vitta` espelhada
-        sem `@` seguido de letra. Aqui ninguem foi escolhido no autocomplete
-        (lista de mencionados vazia), entao o texto e o que o autor digitou."""
-        texto = texto_espelhado("Fala com @Pedro Vitta ou @fulano_123 amanhã", mencionados=[])
+        sem mencao viva. Aqui ninguem foi escolhido no autocomplete (lista de
+        mencionados vazia), entao o texto e o que o autor digitou: o `@Pedro`
+        (que notificaria a conta `Pedro`) sai em crase, e o resto do nome fica
+        como texto. Asserta a forma que sai, e confere que TODO `@` de mencao
+        esta dentro de crase."""
+        texto = texto_espelhado("Fala com @Pedro Vitta ou (@fulano_123) amanhã", mencionados=[])
 
-        assert texto == "Fala com \\@Pedro Vitta ou \\@fulano_123 amanhã"
-        assert re.search(r"(?<!\\)@[A-Za-z0-9_]", texto) is None
+        assert texto == "Fala com `@Pedro` Vitta ou (`@fulano_123`) amanhã"
+        assert _mencoes_fora_de_crase(texto) == []
 
-    def test_email_no_texto_nao_vira_mencao(self):
-        assert texto_espelhado("manda para ana@hsm.com", mencionados=[]) == "manda para ana\\@hsm.com"
+    def test_mencao_a_time_tambem_sai_em_crase(self):
+        assert texto_espelhado("chama o @vitta/dev", mencionados=[]) == "chama o `@vitta/dev`"
+
+    def test_email_no_texto_fica_como_esta(self):
+        """`ana@hsm.com` nao e mencao para o GitHub (e autolink de e-mail, sem
+        notificar ninguem), e por em crase quebraria o endereco ao meio."""
+        assert texto_espelhado("manda para ana@hsm.com", mencionados=[]) == "manda para ana@hsm.com"
 
     def test_arroba_sozinho_ou_antes_de_espaco_fica_como_esta(self):
         assert texto_espelhado("valor @ 10 reais", mencionados=[]) == "valor @ 10 reais"
@@ -202,7 +220,7 @@ class TestArrobaNoTextoEspelhado:
         o `@pedrorezendefig` que o app pos e mencao de verdade, e fica."""
         texto = texto_espelhado("@Pedro Vitta e @Diretor do Hospital, e @alguem", mencionados=[PEDRO, DIRETOR])
 
-        assert texto == "@pedrorezendefig e Pessoa do hospital, e \\@alguem"
+        assert texto == "@pedrorezendefig e Pessoa do hospital, e `@alguem`"
 
     def test_o_nome_mais_longo_ganha_quando_um_e_prefixo_do_outro(self):
         ana = {**DIRETOR, "id": "P3", "nome_completo": "Ana", "github_login": "ana-hsm"}
@@ -211,6 +229,24 @@ class TestArrobaNoTextoEspelhado:
         texto = texto_espelhado("@Ana Paula e @Ana", mencionados=[ana, ana_paula])
 
         assert texto == "Pessoa do hospital e @ana-hsm"
+
+    def test_o_nome_mencionado_nao_casa_o_comeco_de_outra_palavra(self):
+        """ "Ana" mencionada e `@Anastácia` no texto: sem fronteira, sairia
+        `@ana-hsmstácia`. Sai em crase, como mencao digitada a mao."""
+        ana = {**DIRETOR, "id": "P3", "nome_completo": "Ana", "github_login": "ana-hsm"}
+
+        texto = texto_espelhado("@Anastácia e @Ana", mencionados=[ana])
+
+        assert texto == "`@Anast`ácia e @ana-hsm"
+
+    def test_nome_de_cadastro_com_sinal_de_menor_ainda_casa(self):
+        """A troca roda sobre o texto BRUTO: o funil do `texto_do_diretor`
+        transforma o texto (`<` vira `&lt;`) e nao o nome do cadastro."""
+        estranha = {**DIRETOR, "id": "P3", "nome_completo": "Ana <Silva>", "github_login": None}
+
+        texto = texto_espelhado("@Ana <Silva>, veja", mencionados=[estranha])
+
+        assert texto == "Pessoa do hospital, veja"
 
     def test_o_rotulo_de_cada_pessoa(self):
         assert rotulo_no_github(PEDRO) == "@pedrorezendefig"
@@ -223,7 +259,7 @@ class TestArrobaNoTextoEspelhado:
             texto="@Pedro Vitta, e @outro", autor=DIRETOR, demanda_id="d-1", mencionados=[PEDRO]
         )
 
-        assert corpo.split("\n")[-1] == "@pedrorezendefig, e \\@outro"
+        assert corpo.split("\n")[-1] == "@pedrorezendefig, e `@outro`"
 
 
 # ─── 2. Responder numa Demanda vinculada ─────────────────────────────────────
@@ -253,9 +289,10 @@ class TestResponderEspelha:
         ]
         assert _fio(sb)[0]["github_comentario_id"] == 3_000_000_001
 
-    def test_o_diretor_sem_github_login_sai_com_o_marcador_do_revisor_e_o_nome_dele(self, monkeypatch):
-        """E o que acende `revisor-comentou` (ADR 0054, decisao 4). O nome e o
-        id da Demanda viajam no marcador; o login da integracao nao diz nada."""
+    def test_o_diretor_sem_github_login_sai_com_o_marcador_do_revisor_e_o_rotulo_neutro(self, monkeypatch):
+        """E o que acende `revisor-comentou` (ADR 0054, decisao 4). O rotulo
+        neutro e o id da Demanda viajam no marcador; o nome civil nao sai e o
+        login da integracao nao diz nada."""
         client, _, gh = _montar(logado=DIRETOR, demandas=[_vinculada()], monkeypatch=monkeypatch)
 
         client.post(f"{BASE}/demandas/d-1/conversa", json={"texto": "O botão ficou no lugar errado"})
@@ -276,7 +313,7 @@ class TestResponderEspelha:
         )
 
         assert resposta.status_code == 201
-        assert gh.comentarios_criados[0]["corpo"].split("\n")[-1] == "@pedrorezendefig, veja; e avisa o \\@fulano"
+        assert gh.comentarios_criados[0]["corpo"].split("\n")[-1] == "@pedrorezendefig, veja; e avisa o `@fulano`"
         assert "Pedro Vitta" not in gh.comentarios_criados[0]["corpo"]
 
     def test_demanda_sem_vinculo_nao_chama_o_github(self, monkeypatch):
@@ -431,6 +468,21 @@ class TestCorrigirEspelha:
         ]
         # Editou, e nao publicou outro: o comentario do envio continua sendo o unico.
         assert len(gh.comentarios_criados) == 1
+
+    def test_a_correcao_com_mencao_tambem_resolve_o_login_e_poe_o_arroba_solto_em_crase(self, monkeypatch):
+        """A correcao passa pelo mesmo funil do envio, com as mencoes DA
+        CORRECAO: sem isso, corrigir para "@Pedro Vitta" publicaria o nome."""
+        client, sb, gh = _montar(logado=DIRETOR, demandas=[_vinculada()], monkeypatch=monkeypatch)
+        linha_id = self._responder(client, sb)
+
+        resposta = client.patch(
+            f"{BASE}/demandas/d-1/conversa/{linha_id}",
+            json={"texto": "@Pedro Vitta, corrigido; e o @fulano", "mencoes": ["P1"]},
+        )
+
+        assert resposta.status_code == 200
+        assert gh.comentarios_editados[0]["corpo"].split("\n")[-1] == "@pedrorezendefig, corrigido; e o `@fulano`"
+        assert "Pedro Vitta" not in gh.comentarios_editados[0]["corpo"]
 
     def test_sem_id_gravado_a_correcao_nao_chama_nada(self, monkeypatch):
         """A resposta que nasceu com o GitHub fora do ar ficou sem id. Corrigir
