@@ -1383,3 +1383,132 @@ class TestComentariosApontamParaAMigrationCerta:
             citadas = set(re.findall(r"índice\s+único\s+da\s+migration\s+(\d+)", texto))
             assert citadas, f"{relativo} deixou de citar o índice único; ajuste ou remova este teste"
             assert citadas == {numero}, f"{relativo} cita a migration {citadas}, mas o índice mora na {numero}"
+
+
+# O carimbo que a Retenção grava no fim da anonimização (migration 079), o
+# mesmo instante usado pelas outras portas da guarda (issue #622).
+APAGADO_EM = "2026-09-01T03:00:00+00:00"
+
+
+class TestPedidoDeProrrogacaoEmCasoApagado:
+    """Issue #669: o caso apagado não recebe pedido de prazo pelo portal.
+
+    O pedido insere em `ouvidoria_prorrogacoes` com JUSTIFICATIVA DE TEXTO LIVRE
+    escrita pelo setor, e o mesmo texto vira movimento na trilha. Agravante: a
+    porta não consome o token, então é repetível. Texto livre novo entrando num
+    caso que a Retenção nunca mais revisita (ela só varre
+    `anonimizada_em IS NULL`) é exatamente o que o apagamento veio impedir."""
+
+    def _apagado_no_portal(self, monkeypatch, enviados, carimbo: str):
+        client, sb, token = _portal(monkeypatch, enviados)
+        # O carimbo entra pelo dublê porque a Retenção não passa por aqui: o que
+        # o teste precisa é do caso NO ESTADO em que ela o deixa.
+        sb.tabelas["ouvidoria_protocolos"][0][carimbo] = APAGADO_EM
+        return client, sb, token
+
+    @pytest.mark.parametrize("carimbo", ["anonimizada_em", "apagamento_pedido_em"])
+    def test_pedido_em_caso_apagado_e_recusado_antes_de_o_texto_livre_entrar(
+        self, monkeypatch, _nunca_envia_email_de_verdade, carimbo
+    ):
+        client, sb, token = self._apagado_no_portal(monkeypatch, _nunca_envia_email_de_verdade, carimbo)
+
+        resposta = _pedir(client, token)
+
+        assert resposta.status_code == 409, resposta.text
+        # A recusa diz para onde ir: o que voltar a ser trazido é caso novo.
+        assert "manifestação nova" in resposta.json()["detail"]
+        # Nada foi inserido, e o prazo do caso não se moveu.
+        assert sb.tabelas["ouvidoria_prorrogacoes"] == []
+        assert sb.tabelas["ouvidoria_protocolos"][0]["prazo_area_em"] == PRAZO_ORIGINAL
+
+    def test_a_recusa_do_caso_ja_apagado_diz_que_ele_foi_apagado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, _sb, token = self._apagado_no_portal(monkeypatch, _nunca_envia_email_de_verdade, "anonimizada_em")
+
+        detalhe = _pedir(client, token).json()["detail"]
+
+        assert "Este caso foi apagado e não pode mais ser acrescido de pedido de prazo pelo portal do setor." in detalhe
+
+    def test_a_recusa_do_apagamento_pendente_nao_entrega_a_causa_nem_o_autor(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """O portal é link por token, sem login, e quem pede prazo por ele é o
+        titular da área, que numa manifestação de ouvidoria costuma ser a parte
+        reclamada. A frase do apagamento PENDENTE nomeia quem pediu o ato, e no
+        painel isso está certo, porque quem lê lá é a Ouvidoria. Aqui não: a
+        recusa sai neutra, sem a causa e sem o órgão (must-fix do PR #667)."""
+        client, _sb, token = self._apagado_no_portal(monkeypatch, _nunca_envia_email_de_verdade, "apagamento_pedido_em")
+
+        resposta = _pedir(client, token)
+
+        detalhe = resposta.json()["detail"]
+        assert "Este caso não aceita mais ser acrescido de pedido de prazo pelo portal do setor." in detalhe
+        # Nem a causa, nem o autor, em resposta nenhuma desta porta.
+        assert "Diretoria" not in resposta.text
+        assert "está sendo apagado" not in resposta.text
+
+    def test_caso_vivo_continua_pedindo_prazo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O contraste que prova que a guarda lê o carimbo, e não o pedido em
+        si."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+
+        assert _pedir(client, token).status_code == 201
+        assert len(sb.tabelas["ouvidoria_prorrogacoes"]) == 1
+
+
+class TestDecisaoDaProrrogacaoEmCasoApagado:
+    """Issue #669: o caso apagado não recebe decisão de prorrogação.
+
+    Aprovar move o vencimento do caso; negar ou aprovar grava movimento na
+    trilha e email registrado a quem pediu. Hoje a porta está segura por
+    CONSEQUÊNCIA (ela exige `aguardando_area`), e é a consequência que esta
+    fatia troca por guarda."""
+
+    def _pendente_e_apagado(self, monkeypatch, enviados, carimbo: str):
+        client, sb, token = _portal(monkeypatch, enviados)
+        criado = _pedir(client, token).json()["prorrogacao"]
+        sb.tabelas["ouvidoria_protocolos"][0][carimbo] = APAGADO_EM
+        enviados.clear()
+        return client, sb, criado
+
+    # Esta porta tem login (`require_perfil_ouvidoria`), então o apagamento
+    # pendente continua nomeando quem pediu o ato: quem lê é a Ouvidoria.
+    @pytest.mark.parametrize(
+        ("carimbo", "marcador"),
+        [
+            ("anonimizada_em", "Este caso foi apagado e não pode mais ser decidido quanto à prorrogação."),
+            (
+                "apagamento_pedido_em",
+                "Este caso está sendo apagado por pedido da Diretoria Executiva e não pode ser "
+                "decidido quanto à prorrogação.",
+            ),
+        ],
+    )
+    def test_decidir_em_caso_apagado_e_recusado(self, monkeypatch, _nunca_envia_email_de_verdade, carimbo, marcador):
+        client, sb, criado = self._pendente_e_apagado(monkeypatch, _nunca_envia_email_de_verdade, carimbo)
+
+        resposta = client.post(
+            f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir",
+            json={"aprovada": True, "justificativa": "Justificativa aceita."},
+        )
+
+        assert resposta.status_code == 409, resposta.text
+        assert marcador in resposta.json()["detail"]
+        # O pedido continua pendente, o prazo do caso não andou e ninguém foi
+        # avisado de uma decisão que não houve.
+        assert sb.tabelas["ouvidoria_prorrogacoes"][0]["status"] == "pendente"
+        assert sb.tabelas["ouvidoria_protocolos"][0]["prazo_area_em"] == PRAZO_ORIGINAL
+        assert _nunca_envia_email_de_verdade == []
+
+    def test_caso_vivo_continua_recebendo_decisao(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O contraste que prova que a guarda lê o carimbo, e não o estado nem a
+        decisão em si."""
+        client, sb, token = _portal(monkeypatch, _nunca_envia_email_de_verdade)
+        criado = _pedir(client, token).json()["prorrogacao"]
+
+        resposta = client.post(
+            f"/api/ouvidoria/manifestacoes/uuid-7/prorrogacoes/{criado['id']}/decidir",
+            json={"aprovada": True, "justificativa": "Justificativa aceita."},
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        assert sb.tabelas["ouvidoria_protocolos"][0]["prazo_area_em"] == PRAZO_PRORROGADO

@@ -507,10 +507,27 @@ async def devolver_a_ouvidoria(
 
     `prazo_conclusivo_em` não é tocado: ele é o compromisso com o manifestante
     (T0 até T3) e não depende de qual área está com o caso."""
-    from app.routers.ouvidoria import carregar_feriados
+    from app.routers.ouvidoria import barrar_caso_apagado, carregar_feriados
 
     agora = agora_utc()
     vinculo, caso = _carregar_caso(supabase, token, agora)
+
+    # Antes de tudo (issue #669): esta é a porta que tira o caso do
+    # encerramento levando para `em_classificacao`, que é o nó que a guarda
+    # existe para evitar. Caso apagado que volta à tramitação sai da fila do
+    # cron (ela exige `status = encerrado`) e o pedido de apagamento fica
+    # pendurado, com a trilha afirmando que um apagamento começou num caso que
+    # seguiu vivo.
+    #
+    # Vem antes do CLAIM do token pelo motivo do `responder`: recusa não pode
+    # queimar o link de uso único, senão o responsável fica sem devolução e sem
+    # link para tentar de novo.
+    #
+    # `canal_publico` porque aqui não há login: a recusa do apagamento PENDENTE
+    # sai neutra, sem nomear a causa nem o órgão que pediu o ato, para o
+    # titular da área (que costuma ser a parte reclamada) não receber decisão
+    # de governança do hospital por um link de email.
+    barrar_caso_apagado(caso, "devolvido à Ouvidoria por este link", canal_publico=True)
 
     recusa = ouvidoria_devolucao_a_ouvidoria.motivo_de_recusa(devolucao.motivo)
     if recusa:
@@ -741,7 +758,7 @@ async def pedir_prorrogacao(
 
     O token NÃO é consumido: quem pede prorrogação ainda precisa do mesmo link
     para responder depois."""
-    from app.routers.ouvidoria import carregar_feriados
+    from app.routers.ouvidoria import barrar_caso_apagado, carregar_feriados
 
     # A regra do que vale como justificativa vive inteira no serviço, e recebe o
     # texto CRU. Vem antes de qualquer leitura, como vinha quando era validador
@@ -753,6 +770,18 @@ async def pedir_prorrogacao(
 
     agora = agora_utc()
     vinculo, caso = _carregar_caso(supabase, token, agora)
+
+    # Antes de o texto livre entrar (issue #669): o pedido grava a
+    # justificativa escrita pelo setor em `ouvidoria_prorrogacoes` E na trilha,
+    # e não consome o token, então é repetível. Texto novo num caso que a
+    # Retenção nunca mais revisita (ela só varre `anonimizada_em IS NULL`) é o
+    # oposto do que o apagamento faz.
+    #
+    # `canal_publico` porque aqui não há login: a recusa do apagamento PENDENTE
+    # sai neutra, sem nomear a causa nem o órgão que pediu o ato, para o
+    # titular da área (que costuma ser a parte reclamada) não receber decisão
+    # de governança do hospital por um link de email.
+    barrar_caso_apagado(caso, "acrescido de pedido de prazo pelo portal do setor", canal_publico=True)
 
     anterior = _carregar_pedido_de_prazo(supabase, vinculo["manifestacao_id"])
     motivo = ouvidoria_prorrogacao.motivo_de_recusa(caso, anterior, agora)

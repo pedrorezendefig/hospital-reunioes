@@ -743,3 +743,71 @@ class TestADevolucaoNaoMenteAoOuvidor:
         alertas = [n for n in sb.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == "alerta_sem_titular"]
         assert len(alertas) == 1
         assert alertas[0]["destinatario_email"] == "diretor@hsm.br"
+
+
+# O carimbo que a Retenção grava no fim da anonimização (migration 079), o
+# mesmo instante usado pelas outras portas da guarda (issue #622).
+APAGADO_EM = "2026-09-01T03:00:00+00:00"
+
+
+class TestDevolucaoEmCasoApagado:
+    """Issue #669: o caso apagado não é devolvido ao setor.
+
+    Hoje a porta está segura por CONSEQUÊNCIA: ela exige origem em
+    `ORIGENS_DA_DEVOLUCAO` e marco T2 gravado, e a Retenção só carimba caso
+    encerrado. O teste força o encontro que a produção ainda não produz (o
+    carimbo entra pelo dublê, no caso onde a rota o aceita), porque é o encontro
+    que a #595 aproxima: devolver acorda a área com email, meio prazo novo e
+    movimento na trilha, e tira do encerramento um caso que a fila do cron ia
+    concluir."""
+
+    def _respondido_e_apagado(self, monkeypatch, enviados, carimbo: str):
+        client, sb = _respondido(monkeypatch, enviados)
+        # O carimbo entra pelo dublê porque a Retenção não passa por aqui: o que
+        # o teste precisa é do caso NO ESTADO em que ela o deixa.
+        sb.tabelas["ouvidoria_protocolos"][0][carimbo] = APAGADO_EM
+        return client, sb
+
+    # Os DOIS carimbos que a guarda lê, cada um com o marcador da SUA frase.
+    # Esta porta tem login (`require_perfil_ouvidoria`), então o apagamento
+    # pendente continua dizendo quem pediu o ato: é a Ouvidoria que lê.
+    @pytest.mark.parametrize(
+        ("carimbo", "marcador"),
+        [
+            (
+                "anonimizada_em",
+                "Este caso foi apagado e não pode mais ser devolvido ao setor por insuficiência.",
+            ),
+            (
+                "apagamento_pedido_em",
+                "Este caso está sendo apagado por pedido da Diretoria Executiva e não pode ser "
+                "devolvido ao setor por insuficiência.",
+            ),
+        ],
+    )
+    def test_devolucao_em_caso_apagado_e_recusada(self, monkeypatch, _nunca_envia_email_de_verdade, carimbo, marcador):
+        client, sb = self._respondido_e_apagado(monkeypatch, _nunca_envia_email_de_verdade, carimbo)
+        emails_antes = len(sb.tabelas["ouvidoria_notificacoes"])
+        movimentos_antes = len(sb.tabelas["ouvidoria_movimentos"])
+        prazo_antes = sb.tabelas["ouvidoria_protocolos"][0]["prazo_area_em"]
+
+        resposta = _devolver(client)
+
+        assert resposta.status_code == 409, resposta.text
+        assert marcador in resposta.json()["detail"]
+        # O caso não andou, o marco da resposta ficou de pé e ninguém foi
+        # acordado: a guarda vem antes da RPC, do prazo e do email.
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        assert caso["status"] == "respondido"
+        assert caso["respondida_em"] is not None
+        assert caso["prazo_area_em"] == prazo_antes
+        assert len(sb.tabelas["ouvidoria_movimentos"]) == movimentos_antes
+        assert len(sb.tabelas["ouvidoria_notificacoes"]) == emails_antes
+
+    def test_caso_vivo_no_mesmo_estado_continua_sendo_devolvido(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O contraste que prova que a guarda lê o carimbo, e não o estado nem a
+        devolução em si."""
+        client, sb = _respondido(monkeypatch, _nunca_envia_email_de_verdade)
+
+        assert _devolver(client).status_code == 201
+        assert sb.tabelas["ouvidoria_protocolos"][0]["status"] == "aguardando_area"

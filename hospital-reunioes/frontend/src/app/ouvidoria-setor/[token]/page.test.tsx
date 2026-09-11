@@ -687,3 +687,104 @@ describe("a recusa do caso apagado (issue #631)", () => {
     );
   });
 });
+
+describe("a recusa do caso apagado nas outras duas portas do portal (issue #669)", () => {
+  /**
+   * As duas frases que o backend devolve, copiadas do que a guarda monta. Elas
+   * são o marcador procurado na tela: asserir "a mensagem apareceu" sem o texto
+   * exato passaria por qualquer erro do servidor.
+   *
+   * As duas são do canal PÚBLICO, então nenhuma nomeia a causa nem o órgão que
+   * pediu o apagamento (must-fix do PR #667). É isso que o último teste de cada
+   * porta confere na tela: o que o backend não manda, a tela não inventa.
+   */
+  const RECUSA_DA_DEVOLUCAO =
+    "Este caso foi apagado e não pode mais ser devolvido à Ouvidoria por este link. O que voltar a " +
+    "ser trazido entra como manifestação nova.";
+  const RECUSA_DO_PEDIDO_DE_PRAZO =
+    "Este caso foi apagado e não pode mais ser acrescido de pedido de prazo pelo portal do setor. " +
+    "O que voltar a ser trazido entra como manifestação nova.";
+
+  /**
+   * O `fetch` com o POST da porta separado do GET do caso, no mesmo desenho do
+   * `comDevolucao`: o stub único devolveria o caso também para o envio, e o
+   * teste ficaria verde sem nunca ter batido na rota que recusa.
+   */
+  function comRecusaEm(rota: string, detail: string) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.endsWith(rota)) {
+          return { ok: false, status: 409, json: async () => ({ detail }) } as unknown as Response;
+        }
+        return { ok: true, status: 200, json: async () => caso() } as unknown as Response;
+      })
+    );
+  }
+
+  it("a devolução recusada mostra a mensagem do servidor, e o motivo digitado continua no campo", async () => {
+    // Carimbo no backend sem par na tela some em silêncio: quem apertou
+    // DEVOLVER precisa ler por que não entrou, e o que fazer em vez disso.
+    comRecusaEm("/devolver", RECUSA_DA_DEVOLUCAO);
+    await abrirTela();
+    fireEvent.click(screen.getByTestId("abrir-devolucao"));
+    fireEvent.change(screen.getByLabelText(/por que este caso não é da sua área/i), {
+      target: { value: "É do Centro Médico." },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /devolver à ouvidoria/i }));
+
+    await waitFor(() => expect(screen.getByText(RECUSA_DA_DEVOLUCAO)).toBeTruthy());
+    // O recibo é da devolução que ENTROU: nada entrou aqui.
+    expect(screen.queryByTestId("devolucao-confirmada")).toBeNull();
+    expect((screen.getByLabelText(/por que este caso não é da sua área/i) as HTMLTextAreaElement).value).toContain(
+      "Centro Médico"
+    );
+  });
+
+  it("a devolução recusada não põe na tela a causa nem o autor do apagamento", async () => {
+    comRecusaEm("/devolver", RECUSA_DA_DEVOLUCAO);
+    await abrirTela();
+    fireEvent.click(screen.getByTestId("abrir-devolucao"));
+    fireEvent.change(screen.getByLabelText(/por que este caso não é da sua área/i), {
+      target: { value: "É do Centro Médico." },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /devolver à ouvidoria/i }));
+
+    await waitFor(() => expect(screen.getByText(RECUSA_DA_DEVOLUCAO)).toBeTruthy());
+    expect(screen.queryByText(/Diretoria/i)).toBeNull();
+    expect(screen.queryByText(/está sendo apagado/i)).toBeNull();
+  });
+
+  it("o pedido de prazo recusado mostra a mensagem do servidor, e a justificativa continua no campo", async () => {
+    comRecusaEm("/prorrogacao", RECUSA_DO_PEDIDO_DE_PRAZO);
+    await abrirTela();
+    fireEvent.click(screen.getByRole("button", { name: /solicitar prorrogação de prazo/i }));
+    fireEvent.change(screen.getByLabelText(/por que o setor precisa de mais prazo/i), {
+      target: { value: "A auditoria interna só devolve o laudo na semana que vem." },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /enviar pedido/i }));
+
+    await waitFor(() => expect(screen.getByText(RECUSA_DO_PEDIDO_DE_PRAZO)).toBeTruthy());
+    expect((screen.getByLabelText(/por que o setor precisa de mais prazo/i) as HTMLTextAreaElement).value).toContain(
+      "auditoria interna"
+    );
+  });
+
+  it("o pedido de prazo recusado não põe na tela a causa nem o autor do apagamento", async () => {
+    comRecusaEm("/prorrogacao", RECUSA_DO_PEDIDO_DE_PRAZO);
+    await abrirTela();
+    fireEvent.click(screen.getByRole("button", { name: /solicitar prorrogação de prazo/i }));
+    fireEvent.change(screen.getByLabelText(/por que o setor precisa de mais prazo/i), {
+      target: { value: "A auditoria interna só devolve o laudo na semana que vem." },
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: /enviar pedido/i }));
+
+    await waitFor(() => expect(screen.getByText(RECUSA_DO_PEDIDO_DE_PRAZO)).toBeTruthy());
+    expect(screen.queryByText(/Diretoria/i)).toBeNull();
+    expect(screen.queryByText(/está sendo apagado/i)).toBeNull();
+  });
+});

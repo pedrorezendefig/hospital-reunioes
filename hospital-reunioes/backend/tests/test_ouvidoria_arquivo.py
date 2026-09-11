@@ -1989,3 +1989,78 @@ class TestOsGuardasDoSQLReprovamOQueDevem:
         declaracao, _ = _declaracao_e_corpo(com_tamanho, "ouvidoria_arquivar_encerrados")
 
         assert _parametros(declaracao) == ["p_ator_id", "p_ator_nome"]
+
+
+# O carimbo que a Retenção grava no fim da anonimização (migration 079), o
+# mesmo instante dos testes de caso apagado das outras portas (issue #622).
+APAGADO_EM = "2026-09-01T03:00:00+00:00"
+
+
+class TestDesarquivarEmCasoApagado:
+    """Issue #669: o caso apagado não sai do arquivo.
+
+    Esta é a porta mais alcançável da fatia, e a única que não depende de
+    nenhuma pré-condição para encontrar o caso apagado: desarquivar não exige
+    estado nenhum (ADR 0047, decisão 3) e o caso apagado é justamente um caso
+    encerrado, que é o que o arquivo guarda. Sem a guarda, um clique devolve à
+    lista de trabalho um caso que o apagamento tinha escondido dela.
+
+    O outro lado do mesmo ato continua livre por decisão de produto (triagem de
+    11/09/2026): ARQUIVAR caso apagado é guardar, que é o comportamento
+    desejado. Só a volta é barrada."""
+
+    def _apagado_e_arquivado(self, monkeypatch, carimbo: str):
+        return _client(
+            monkeypatch,
+            casos=[
+                _caso(
+                    arquivada_em="2026-08-25T17:00:01+00:00",
+                    arquivada_por="P10",
+                    **{carimbo: APAGADO_EM},
+                )
+            ],
+        )
+
+    # Os DOIS carimbos que a guarda lê, cada um com o marcador da SUA frase. Sem
+    # o segundo, tirar `apagamento_pedido_em` da tupla da leitura deixaria
+    # metade da guarda cega e a suíte verde.
+    @pytest.mark.parametrize(
+        ("carimbo", "marcador"),
+        [
+            ("anonimizada_em", "Este caso foi apagado e não pode mais ser tirado do arquivo."),
+            (
+                "apagamento_pedido_em",
+                "Este caso está sendo apagado por pedido da Diretoria Executiva e não pode ser tirado do arquivo.",
+            ),
+        ],
+    )
+    def test_desarquivar_caso_apagado_e_recusado(self, monkeypatch, carimbo, marcador):
+        client, supabase = self._apagado_e_arquivado(monkeypatch, carimbo)
+
+        resposta = _desarquivar(client)
+
+        assert resposta.status_code == 409, resposta.text
+        assert marcador in resposta.json()["detail"]
+        # O caso continua guardado: a recusa não pode ter deixado o par de
+        # carimbos pela metade.
+        assert _gravado(supabase)["arquivada_em"] == "2026-08-25T17:00:01+00:00"
+        assert _gravado(supabase)["arquivada_por"] == "P10"
+
+    def test_arquivar_caso_apagado_continua_permitido(self, monkeypatch):
+        """A decisão de produto da triagem, provada pelo lado de fora: guardar
+        o caso apagado é o que se quer, e só a volta é que fecha."""
+        client, supabase = _client(monkeypatch, casos=[_caso(anonimizada_em=APAGADO_EM)])
+
+        assert _arquivar(client).status_code == 200
+        assert _gravado(supabase)["arquivada_em"] is not None
+
+    def test_caso_vivo_continua_desarquivando(self, monkeypatch):
+        """O contraste que prova que a guarda lê o carimbo, e não o
+        desarquivamento em si."""
+        client, supabase = _client(
+            monkeypatch,
+            casos=[_caso(arquivada_em="2026-08-25T17:00:01+00:00", arquivada_por="P10")],
+        )
+
+        assert _desarquivar(client).status_code == 200
+        assert _gravado(supabase)["arquivada_em"] is None
