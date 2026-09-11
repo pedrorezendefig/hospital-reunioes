@@ -7,6 +7,18 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.128.3 - 2026-09-11 12:40 - o alarme da devolução distingue metade escrita de nada escrito, e o webhook do GitHub conta os bytes durante a leitura
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `eb425f7`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.128.3, `db: healthy`; frontend HTTP 200 servindo 0.128.3)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/eb425f7
+- Issues: [#694](https://github.com/pedrorezendefig/hospital-reunioes/issues/694) · PR [#697](https://github.com/pedrorezendefig/hospital-reunioes/pull/697) (v0.128.2) · [#691](https://github.com/pedrorezendefig/hospital-reunioes/issues/691) · PR [#698](https://github.com/pedrorezendefig/hospital-reunioes/pull/698) (v0.128.3)
+- Migration: nenhuma. A #694 só mexe em nível e frase de log, e a #691 só acrescenta contagem de bytes na leitura do webhook. A 103 segue sendo a última · patch, fix
+- Nota: os dois PRs bumparam para 0.128.1 e a `main` já estava em 0.128.1 pelo #699 de outra sessão. O rebase do #697 **descartou** o commit de bump ("patch contents already upstream"), o bump fantasma que o playbook prevê: sem re-bump os dois merges teriam subido sem versão nova. Re-bumpados à mão para 0.128.2 e 0.128.3
+- Nota: a revisão independente pegou 1 must-fix no #698, de prova e não de produção. Nenhum teste entregava mais de um pedaço útil abaixo do teto, então o mutante `acumulado[:0] = pedaco` (corpo montado ao contrário) passava verde na suíte inteira e teria virado 401 em toda entrega grande do GitHub, corrigida só pela reconciliação de hora em hora, sem nada vermelho no CI. Fechado na rodada 2 só com teste, e os 12 mutantes morreram
+- Nota: a frase que a #694 cita literalmente ("termine à mão o movimento para Aguardando, o responsável e o aviso") mora em outro alarme, o `logger.error` do `except` de `sincronizar_demanda`, que ficou intacto porque a triagem cravou o escopo em `_devolver_a_quem_pediu`
+
 ## v0.128.1 - 2026-09-11 12:20 - a guarda de caso apagado vira explícita nas sete portas de escrita que ainda deixavam mexer num caso apagado
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `d38aae9`

@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-11T12:40:15-03:00",
+      "sha": "eb425f7",
+      "app_version": "0.128.3",
+      "subject": "o alarme da devolucao distingue metade escrita de nada escrito, e o webhook do GitHub conta os bytes durante a leitura para pegar Transfer-Encoding chunked",
+      "raw_subject": "fix(tecnologia): o webhook do GitHub conta os bytes durante a leitura (#698)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 242,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda AFK com duas issues em paralelo, #694 (PR #697) e #691 (PR #698), nenhuma criou migration: a #694 so mexe em nivel e frase de log e a #691 so acrescenta contagem de bytes na leitura do webhook. A 103 segue sendo a ultima. O merge do #697 disparou um build intermediario (3a446c0, v0.128.2) que terminou antes do #698 comecar, entao nao houve build concorrente. Os dois PRs bumparam para 0.128.1 e a main ja estava em 0.128.1 pelo #699 de outra sessao: o rebase do #697 DESCARTOU o commit de bump (patch contents already upstream), o bump fantasma que o playbook preve. Re-bumpados a mao para 0.128.2 e 0.128.3. Revisao independente pegou 1 must-fix no #698: nenhum teste entregava mais de um pedaco util abaixo do teto, entao o mutante acumulado[:0] = pedaco (corpo montado ao contrario) passava verde e teria virado 401 em toda entrega grande do GitHub. Corrigido na rodada 2, so em teste, com os 12 mutantes mortos."
+    },
+    {
       "at": "2026-09-11T12:20:00-03:00",
       "sha": "d38aae9",
       "app_version": "0.128.1",
@@ -1418,35 +1447,6 @@
       ],
       "rollback_target_sha": "9422abb",
       "notes": "Precisou de DUAS rodadas de fix.\n\nRodada 1, 3 must-fix. (a) A guarda nova era fail-open, porque o default de environment em config.py era \"development\": a protecao dependia de uma env var cujo default e o lado aberto, e o furo original nasceu justamente de uma env var mudando de valor. Corrigido com default \"production\" MAIS um validador que recusa ambiente fora de {development, ci, staging, production}, o que puxou ENVIRONMENT: ci para o ci.yml e alinhou os dois .env.example. (b) A chamada da RPC estava fora do try e sem tratar erro, numa dependencia aplicada a mao em producao: o email ja teria saido quando a excecao subisse, com enviado_em carimbado e o lote inteiro de atrasadas derrubado. (c) O PR afirmava que destinatario e assunto nao carregam dado de caso, e os assuntos reais dos construtores carregam protocolo, setor e estado, com o teste medindo num assunto sintetico que nenhum construtor gera.\n\nRodada 2, 1 must-fix: o except APIError do cinto novo caia na MESMA armadilha do PR irmao #462, nao pegava timeout, entao o dano voltava inteiro. Fechado com (APIError, httpx.HTTPError).\n\nSobre a prova por mutacao: o autor foi honesto ao reportar que um mutante dele SOBREVIVEU e expos um teste vacuo do proprio autor, porque a parametrizacao derivava da constante que media e encolhia junto com o mutante. Outros tres mutantes viraram equivalentes depois que o fake passou a espelhar a whitelist. O revisor da rodada 2 aplicou a migration num Postgres 18.4 real, com os papeis anon e authenticated criados, e confirmou a dedup dentro do lote, a ordem de chegada, a concorrencia com transacoes sobrepostas e o REVOKE efetivo.\n\nResidual conhecido e aceito, registrado na decisao 7 do ADR 0039: o assunto do email segue no log com protocolo e setor, porque a issue autorizou manter destinatario e assunto.\n\nA migration 089_ouvidoria_relatorio_entrega_atomica.sql foi aplicada A MAO no Studio de producao pelo humano ANTES do merge, porque o codigo novo depende da RPC.\n\nFECHAMENTO DA ONDA. 3 de 3 issues em producao (#459 na v0.87.1, #449 na v0.87.2, #450 na v0.87.3), em 3 deploys separados. O CI da conta ficou bloqueado por cobranca das 22:05 UTC de 31/08 ate a virada do mes: era cota esgotada, nao pagamento recusado, e renovou sozinha no dia 1, o que destravou os dois PRs que tinham ficado abertos. O re-bump de versao a cada merge criou conflito no package.json, porque a main ja tinha o numero que o PR trazia; resolvido com merge da main na branch, ja que PR com conflito nao gera CI e o sintoma e \"no checks reported\", sem erro.\n\nIssues novas abertas pelos revisores nesta onda: #464 (portas irmas da #459: token orfao agenda reuniao e dispara convite por email sem rate limit, e reescreve reuniao alheia tomando o facilitador_id), #465 (o token do portal do setor e o do aceite vao em claro para o log do container, e com ele da para responder em nome do setor; o banco guarda so o hash) e #466 (avisar_admins_tecnicos loga o corpo do aviso em producao sem guarda, o que deixa a #450 entregue pela metade)."
-    },
-    {
-      "at": "2026-09-01T00:35:00-03:00",
-      "sha": "9422abb",
-      "app_version": "0.87.2",
-      "subject": "O sistema para de contar feriado como dia util quando nao consegue ler o calendario, e avisa na tela em vez de afirmar um prazo que nao sabe",
-      "raw_subject": "fix(ouvidoria): leitura do calendário de feriados falha de forma visível (#462)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": "5bcc9cb",
-      "notes": "A review independente achou 2 must-fix, e o principal tinha INVERTIDO a intencao da issue.\n\nA tupla (APIError, OSError, ValueError) prometia cobrir rede caida e nao cobria. APIError so nasce depois que a resposta HTTP chega (postgrest/_sync/request_builder.py:47, com o send() fora do try), e nenhuma excecao do httpx e subclasse de OSError. Ou seja, o fail-open tinha virado fail-closed: uma oscilacao de rede passaria a devolver 500 na porta por token do portal do setor, tirando do titular a pagina inteira para responder enquanto o relogio do prazo corre. Corrigido com httpx.HTTPError na tupla, mais 11 casos novos que falham DENTRO do execute(), porque o fake antigo falhava no table() e so produzia APIError, deixando o caminho de transporte sem teste nenhum.\n\nO segundo must-fix era de metodo: um mutante que mexia em duas linhas do page.tsx de uma vez, escondendo que o banner de aviso nao tinha teste. Mutante que altera duas coisas junto mente, porque o vermelho nao diz qual delas o teste pega.\n\nO revisor da rodada 2 rodou os mutantes por conta propria em vez de aceitar a tabela do autor.\n\nO que mudou para o usuario: carregar_feriados deixou de engolir erro em silencio. O except Exception largo virou tupla nomeada, o warning ganhou exc_info=True, e a resposta passou a distinguir calendario vazio de verdade de nao consegui ler o calendario, carimbando degradado no mesmo vocabulario que as metricas do painel ja usam. Painel e portal do setor param de afirmar prazo em dias uteis quando o calendario nao pode ser lido.\n\nHealth confirmou a 0.87.2. Smoke: 401 em /ouvidoria/protocolos, 404 no portal com token falso e 307 no painel do frontend."
     }
   ]
 }
