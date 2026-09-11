@@ -79,6 +79,18 @@ class TestRebaixariaORotasMd:
         assert snapshot._rebaixaria_o_rotas_md(tmp_path / "ROTAS.md", "ast") is False
 
 
+ARQUITETURA_COM_BLOCO = """# ARQUITETURA
+
+<!-- AUTO:rotas:start -->
+**192 endpoints** em 30 áreas
+<!-- AUTO:rotas:end -->
+
+<!-- AUTO:dados:start -->
+(dados)
+<!-- AUTO:dados:end -->
+"""
+
+
 def _repo_minimo(tmp_path: Path, conteudo_rotas: str) -> Path:
     """Repo de mentira com o bastante para o snapshot rodar: project.json sem
     service fastapi (logo, sem routers para introspectar, logo fonte 'ast')."""
@@ -88,6 +100,7 @@ def _repo_minimo(tmp_path: Path, conteudo_rotas: str) -> Path:
         json.dumps({"project": {"name": "Projeto"}, "services": []}), encoding="utf-8"
     )
     (tmp_path / "docs" / "spec" / "snapshots" / "ROTAS.md").write_text(conteudo_rotas, encoding="utf-8")
+    (tmp_path / "docs" / "ARQUITETURA.md").write_text(ARQUITETURA_COM_BLOCO, encoding="utf-8")
     return tmp_path
 
 
@@ -102,13 +115,12 @@ class TestPelaLinhaDeComando:
         repo = _repo_minimo(tmp_path, ROTAS_COMPLETO)
         antes = (repo / "docs" / "spec" / "snapshots" / "ROTAS.md").read_text(encoding="utf-8")
 
-        monkeypatch.setattr("sys.argv", ["snapshot", "--root", str(repo)])
+        monkeypatch.setattr("sys.argv", ["snapshot", "--root", str(repo), "--no-commit"])
         codigo = snapshot.main()
 
         depois = (repo / "docs" / "spec" / "snapshots" / "ROTAS.md").read_text(encoding="utf-8")
-        assert codigo == 4, "sair 0 faria o /deploy seguir como se nada tivesse acontecido"
         assert depois == antes, "o ROTAS.md completo foi reescrito pelo parser AST"
-        assert "Listagem parcial" not in depois
+        assert codigo == 4, "quem roda à mão precisa distinguir 'fiz tudo' de 'deixei as rotas'"
         erro = capsys.readouterr().err
         assert "rebaixaria" in erro.lower(), "a recusa precisa dizer por que, não sair calada"
 
@@ -124,8 +136,13 @@ class TestPelaLinhaDeComando:
         codigo = snapshot.main()
 
         depois = (repo / "docs" / "spec" / "snapshots" / "ROTAS.md").read_text(encoding="utf-8")
-        assert codigo == 0
+        arq = (repo / "docs" / "ARQUITETURA.md").read_text(encoding="utf-8")
+        assert codigo == 4, "a escotilha rebaixa o ROTAS, mas a passagem segue incompleta"
         assert "Listagem parcial" in depois, "com a escotilha, o rebaixamento é explícito"
+        assert "**192 endpoints** em 30 áreas" in arq, (
+            "o bloco AUTO:rotas não tem onde carimbar 'parcial': rebaixado de 192 para 1, "
+            "ninguém depois sabe que o número está errado"
+        )
 
     def test_com_ja_parcial_em_disco_segue_sem_escotilha(self, tmp_path, monkeypatch):
         """Controle do teste acima: se o guarda travasse todo caso 'ast', o
@@ -135,3 +152,50 @@ class TestPelaLinhaDeComando:
         monkeypatch.setattr("sys.argv", ["snapshot", "--root", str(repo), "--no-commit"])
 
         assert snapshot.main() == 0
+
+    def test_only_migrations_nao_e_barrado(self, tmp_path, monkeypatch):
+        """MIGRATIONS não depende de rota nenhuma. Abortar a passagem inteira
+        por causa do ROTAS era regressão contra a main."""
+        repo = _repo_minimo(tmp_path, ROTAS_COMPLETO)
+
+        monkeypatch.setattr("sys.argv", ["snapshot", "--root", str(repo), "--only", "MIGRATIONS", "--no-commit"])
+        codigo = snapshot.main()
+
+        assert codigo == 4, "seguiu, mas avisa que as rotas ficaram para trás"
+        assert (repo / "docs" / "spec" / "snapshots" / "MIGRATIONS.md").exists(), (
+            "o arquivo que não depende de rota tem que ser gerado"
+        )
+
+    def test_check_nao_e_barrado(self, tmp_path, monkeypatch, capsys):
+        """O dry-run não escreve nem commita, então não tem como rebaixar nada.
+        E é o comando que o /deploy manda rodar para diagnosticar."""
+        repo = _repo_minimo(tmp_path, ROTAS_COMPLETO)
+        antes = (repo / "docs" / "spec" / "snapshots" / "ROTAS.md").read_text(encoding="utf-8")
+
+        monkeypatch.setattr("sys.argv", ["snapshot", "--root", str(repo), "--check"])
+        codigo = snapshot.main()
+
+        saida = capsys.readouterr()
+        assert codigo == 4
+        assert "dry-run" in saida.out, "o relatório do --check tem que sair"
+        assert (repo / "docs" / "spec" / "snapshots" / "ROTAS.md").read_text(encoding="utf-8") == antes
+
+    def test_only_invalido_continua_dizendo_o_que_e_valido(self, tmp_path, monkeypatch, capsys):
+        """Controle: o guarda não pode roubar a mensagem de erro do --only."""
+        repo = _repo_minimo(tmp_path, ROTAS_COMPLETO)
+
+        monkeypatch.setattr("sys.argv", ["snapshot", "--root", str(repo), "--only", "LIXO"])
+
+        assert snapshot.main() == 2
+        assert "--only" in capsys.readouterr().err
+
+    def test_o_bloco_de_rotas_do_arquitetura_nao_e_rebaixado(self, tmp_path, monkeypatch):
+        """O ROTAS.md pelo menos sai carimbado. O bloco AUTO:rotas é contagem
+        pura: rebaixado, mente sem deixar marca."""
+        repo = _repo_minimo(tmp_path, ROTAS_COMPLETO)
+
+        monkeypatch.setattr("sys.argv", ["snapshot", "--root", str(repo), "--no-commit"])
+        snapshot.main()
+
+        arq = (repo / "docs" / "ARQUITETURA.md").read_text(encoding="utf-8")
+        assert "**192 endpoints** em 30 áreas" in arq

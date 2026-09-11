@@ -38,7 +38,10 @@ Flags suportadas pelo script:
 | `--force` | Regenera tudo ignorando idempotência (útil pra debug). |
 | `--only <ARQUIVO>` | Regenera só 1 dos 5 auto-gerados (ROTAS / ENTIDADES / SCHEMA / MIGRATIONS / INTEGRACOES). **Não aceita** FLUXOGRAMAS ou ESTRUTURA (são curados humano). |
 | `--no-commit` | Não cria commit automático (default: commita). Mudanças ficam no working tree. |
+| `--aceitar-listagem-parcial` | Deixa o parser AST reescrever um `ROTAS.md` que veio da introspecção. O arquivo sai carimbado como parcial (perde rota criada por factory e vira a coluna Auth). O bloco `AUTO:rotas` do `ARQUITETURA.md` continua intocado nos dois casos, porque ali não há onde carimbar. |
 | `--root <path>` | Raiz do repo (default: cwd). |
+
+**Código de saída 4:** a passagem correu, mas a listagem de rotas ficou para trás, porque a introspecção do app não rodou (sem `.venv` ou sem `.env`) e o parser AST rebaixaria o que já está em disco. Os outros quatro arquivos são gerados normalmente. O Passo 9.4 do `/deploy` é warn-only e não distingue códigos: quem lê o 4 é quem roda à mão. O conserto é rodar com o backend instalado.
 
 Observação: `FLUXOGRAMAS.md` e `ESTRUTURA.md` são **curados humano** (blocos `<!-- curated -->`). O script só alerta de gaps (rotas/estados novos sem fluxograma correspondente), nunca sobrescreve.
 
