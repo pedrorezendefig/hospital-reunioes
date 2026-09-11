@@ -612,10 +612,16 @@ MARCADOR_AUTOMACAO = "<!-- automacao -->"
 ROTULO_SEM_LOGIN = "Pessoa do hospital"
 
 # O que o GitHub le como mencao: `@` no inicio ou depois de algo que nao e
-# letra, seguido do login (letras, digitos, hifen, sublinhado) e, no caso de
-# time, `/nome`. O `@` colado a uma palavra (`ana@hsm.com`) e autolink de
-# e-mail, nao mencao, e o `@` sozinho antes de espaco nao chama ninguem.
-_MENCAO_DO_GITHUB = re.compile(r"(?<![A-Za-z0-9_])@[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9_-]+)?")
+# letra nem digito, seguido do login (letras, digitos, hifen, sublinhado) e,
+# no caso de time, `/nome`. O `@` colado a uma palavra (`ana@hsm.com`) e
+# autolink de e-mail, nao mencao, e o `@` sozinho antes de espaco nao chama
+# ninguem. O sublinhado NAO entra no lookbehind: em `_@fulano_` ele abre
+# enfase, o `@` estreia o conteudo do `<em>` e o filtro do GitHub acende a
+# mencao (conferido no `gh api /markdown` na rodada 3 do PR #696). Em
+# `fulano_@octocat` o sublinhado fica literal e o GitHub nao acende nada, mas
+# tratar os dois casos igual custa um espaco num texto que ninguem escreve e
+# evita depender de onde o CommonMark decide abrir enfase.
+_MENCAO_DO_GITHUB = re.compile(r"(?<![A-Za-z0-9])@[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9_-]+)?")
 
 # Depois do nome mencionado tem de vir algo que nao e letra (ou o fim): sem
 # isso, "Ana" mencionada casaria o comeco de "@Anastácia".
@@ -635,16 +641,24 @@ def marcador_do_revisor_no_app(*, demanda_id: str) -> str:
 
 
 def _neutralizar_mencoes(texto: str) -> str:
-    """Um `@fulano` digitado a mao vira `` `@fulano` `` (code span).
+    """Um `@fulano` digitado a mao vira `@ fulano`: um espaco depois do `@`.
 
-    E a forma que o renderizador do GitHub aceita como texto: o filtro de
-    mencao nao entra em codigo. O escape de barra do CommonMark (`\\@`) NAO
-    serve, conferido no `gh api /markdown` na rodada 2 do PR #696: a barra e
-    consumida antes do filtro, e `\\@fulano` vira mencao igual. Entidade
-    `&#64;` tambem vira. Legivel no comentario, e a conta `fulano`, que nao
-    tem nada a ver com o hospital, nao e notificada.
+    O filtro de mencao do GitHub quer o login colado no `@`, entao o espaco
+    desliga a mencao sem inserir delimitador nenhum no texto. As duas formas
+    que parecem obvias nao servem, ambas conferidas no `gh api /markdown`
+    deste repositorio:
+
+    - `\\@fulano` (escape de barra, rodada 2 do PR #696): o CommonMark come a
+      barra antes de o filtro rodar, e a mencao acende igual. `&#64;` tambem;
+    - `` `@fulano` `` (code span, rodada 3): funciona em texto limpo, mas se o
+      autor ja escreveu crase, a crase inserida QUEBRA o code span dele em
+      dois e acende uma mencao que estava apagada. Em `` `ver @octocat
+      agora` `` o GitHub nao notificava ninguem, e passava a notificar.
+
+    O espaco nao tem essa borda: nao abre nem fecha nada, e sai neutro
+    inclusive dentro do code span e do italico do autor.
     """
-    return _MENCAO_DO_GITHUB.sub(lambda m: f"`{m.group(0)}`", texto)
+    return _MENCAO_DO_GITHUB.sub(lambda m: f"@ {m.group(0)[1:]}", texto)
 
 
 def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> str:
@@ -658,9 +672,10 @@ def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> 
        id da pessoa em `mencoes`) vira o rotulo dessa pessoa: `@login` quando
        ela tem, que e mencao de verdade no GitHub e chama quem o autor quis
        chamar, ou o rotulo neutro. O nome civil do mencionado nao sai;
-    2. qualquer **outra** mencao (`@fulano` digitado a mao) sai dentro de
-       crase, que e o que desliga o filtro de mencao do GitHub. O e-mail
-       digitado no texto nao e mencao e fica como esta.
+    2. qualquer **outra** mencao (`@fulano` digitado a mao) sai com um espaco
+       depois do `@`, que e o que desliga o filtro de mencao do GitHub sem
+       criar delimitador no texto do autor. O e-mail digitado no texto nao e
+       mencao e fica como esta.
 
     A troca do passo 1 roda sobre o texto BRUTO, antes do `texto_do_diretor`:
     e o nome do cadastro que tem de casar, e o funil transforma o texto (`<`
