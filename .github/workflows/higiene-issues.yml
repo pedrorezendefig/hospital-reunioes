@@ -122,7 +122,7 @@ jobs:
             //
             // ANCORADO no início do corpo (issue #680, emenda de 10/09/2026): o app
             // sempre escreve o marcador em linha própria, como primeira coisa do
-            // corpo, na forma literal `<!-- revisor-app autor="Nome" demanda="id" -->`
+            // corpo, na forma literal `<!-- revisor-app autor="Pessoa do hospital" demanda="id" -->`
             // (um espaço só depois de `<!--`). Sem a âncora, qualquer comentário que
             // CITASSE o marcador (as issues #673, #675 e #680 o citam no corpo) acendia
             // a label e travava a /onda. O texto do autor chega com `<!--` neutralizado

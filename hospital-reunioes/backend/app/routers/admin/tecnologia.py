@@ -122,6 +122,7 @@ from app.services.tecnologia import (
     SEM_PRODUTO,
     TABELA_CONVERSAS,
     TABELA_DEMANDAS,
+    TABELA_PARTICIPANTES,
     TABELA_PRODUTOS,
     TIPO_ROTULO,
     avisos_da_resposta,
@@ -774,16 +775,29 @@ async def _aviso_da_correcao(
     return None if saiu else AVISO_EMAIL_NAO_SAIU
 
 
-def _corpo_espelhado(*, demanda: dict, texto: str, ator: dict) -> str:
-    return corpo_do_comentario_espelhado(
-        texto=texto,
-        autor_nome=ator.get("nome_completo"),
-        demanda_id=demanda["id"],
-        tem_github_login=tem_github_login(ator),
-    )
+def _corpo_espelhado(supabase: Client, *, demanda: dict, texto: str, mencoes: list[str], ator: dict) -> str:
+    """O comentario espelhado, com o autor e os mencionados como o banco os
+    conhece (nome e login): e o servico puro que decide o que de cada um pode
+    sair para o repositorio publico (nunca o nome civil).
+
+    Os mencionados vem por `mencoes` (ids), ja validados pelo `_texto_e_mencoes`
+    na entrada da rota; a leitura so acontece quando ha mencao.
+    """
+    mencionados: list[dict] = []
+    if mencoes:
+        result = (
+            supabase.table(TABELA_PARTICIPANTES)
+            .select("id, nome_completo, github_login")
+            .in_("id", sorted(set(mencoes)))
+            .execute()
+        )
+        mencionados = list(result.data or [])
+    return corpo_do_comentario_espelhado(texto=texto, autor=ator, demanda_id=demanda["id"], mencionados=mencionados)
 
 
-async def _espelhar_resposta(supabase: Client, *, demanda: dict, linha: dict, texto: str, ator: dict) -> None:
+async def _espelhar_resposta(
+    supabase: Client, *, demanda: dict, linha: dict, texto: str, mencoes: list[str], ator: dict
+) -> None:
     """A resposta vira comentario na issue vinculada (issue #680, ADR 0054,
     decisao 4), DEPOIS de gravada e fora do loop, como o e-mail.
 
@@ -797,8 +811,8 @@ async def _espelhar_resposta(supabase: Client, *, demanda: dict, linha: dict, te
     identificadores e sem o texto; a pessoa que respondeu recebe 201 com a
     linha que entrou no fio, porque a Conversa nunca depende do GitHub. O
     `except Exception` e largo de proposito: o cliente traduz timeout e 5xx em
-    excecao propria, mas o `UPDATE` do PostgREST sobe `httpx.HTTPError` cru, e
-    qualquer um dos dois tem o mesmo desfecho.
+    excecao propria, mas a leitura dos mencionados e o `UPDATE` do PostgREST
+    sobem `httpx.HTTPError` cru, e qualquer um dos tres tem o mesmo desfecho.
 
     So a RESPOSTA de gente passa por aqui: as linhas automaticas (movimento,
     responsavel, Etapa, Vinculo) sao gravadas pelo `_gravar_movimento` e pela
@@ -811,8 +825,8 @@ async def _espelhar_resposta(supabase: Client, *, demanda: dict, linha: dict, te
     numero = demanda.get("github_issue_numero")
     if not numero:
         return
-    corpo = _corpo_espelhado(demanda=demanda, texto=texto, ator=ator)
     try:
+        corpo = _corpo_espelhado(supabase, demanda=demanda, texto=texto, mencoes=mencoes, ator=ator)
         comentario_id = await asyncio.to_thread(github_client.criar_comentario, numero, corpo)
     except Exception:
         logger.exception(
@@ -830,7 +844,9 @@ async def _espelhar_resposta(supabase: Client, *, demanda: dict, linha: dict, te
         )
 
 
-async def _espelhar_correcao(*, demanda: dict, linha: dict, texto: str, ator: dict) -> None:
+async def _espelhar_correcao(
+    supabase: Client, *, demanda: dict, linha: dict, texto: str, mencoes: list[str], ator: dict
+) -> None:
     """A correcao da resposta edita o comentario espelhado, se houver id
     (issue #680).
 
@@ -849,8 +865,8 @@ async def _espelhar_correcao(*, demanda: dict, linha: dict, texto: str, ator: di
     comentario_id = linha.get("github_comentario_id")
     if not comentario_id:
         return
-    corpo = _corpo_espelhado(demanda=demanda, texto=texto, ator=ator)
     try:
+        corpo = _corpo_espelhado(supabase, demanda=demanda, texto=texto, mencoes=mencoes, ator=ator)
         await asyncio.to_thread(github_client.editar_comentario, comentario_id, corpo)
     except Exception:
         logger.exception(
@@ -1764,7 +1780,7 @@ async def responder_na_conversa(
     # O espelho na issue tambem sai DEPOIS da linha gravada, e depois do e-mail:
     # ele e o efeito que pode falhar em silencio, e nada do que vem antes
     # depende dele (issue #680).
-    await _espelhar_resposta(supabase, demanda=demanda, linha=linha, texto=texto, ator=ator)
+    await _espelhar_resposta(supabase, demanda=demanda, linha=linha, texto=texto, mencoes=mencoes, ator=ator)
     return {**linha, "aviso_por_email": aviso}
 
 
@@ -1828,7 +1844,7 @@ async def editar_resposta(
     aviso = await _aviso_da_correcao(supabase, demanda=demanda, texto=texto, mencionados=novos, ator=ator)
     # O comentario espelhado acompanha a correcao pelo id que a linha guardou
     # no envio (issue #680); sem id, nada a editar.
-    await _espelhar_correcao(demanda=demanda, linha=linha, texto=texto, ator=ator)
+    await _espelhar_correcao(supabase, demanda=demanda, linha=linha, texto=texto, mencoes=mencoes, ator=ator)
     return {**corrigida, "aviso_por_email": aviso}
 
 

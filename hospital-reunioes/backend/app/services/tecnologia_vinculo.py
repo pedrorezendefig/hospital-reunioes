@@ -588,7 +588,7 @@ def corpo_da_issue_nova(
 # - `<!-- automacao -->` para quem tem `github_login`: e a Vitta respondendo ao
 #   diretor, e a Action ja ignora esse marcador (senao o "vou ver" do Pedro
 #   acenderia `revisor-comentou` e travaria a `/onda`);
-# - `<!-- revisor-app autor="Nome" demanda="id" -->` para quem nao tem: e o
+# - `<!-- revisor-app autor="..." demanda="id" -->` para quem nao tem: e o
 #   diretor, e a Action acende a label por ele (emenda ao ADR 0020, decisao 5).
 #
 # A forma do marcador do revisor e LITERAL, um espaco depois de `<!--`: o
@@ -597,46 +597,114 @@ def corpo_da_issue_nova(
 # coisa do corpo, porque a Action o ancora ali (emenda de 10/09/2026 na issue
 # #680): um comentario de curadoria que cite o marcador no meio do texto nao
 # pode acender a label.
+#
+# **Nome civil nenhum sai daqui**, o mesmo invariante do `corpo_da_issue_nova`
+# (decisao do diretor na review do PR #688, estendida a esta fatia na rodada 1
+# do PR #696): o repositorio e publico. Quem tem login sai como `@login`, que a
+# propria pessoa ja tornou publico no GitHub; quem nao tem sai com o rotulo
+# neutro, no cabecalho e no `autor` do marcador. Quem tem acesso ao app ve o
+# autor pelo link da Demanda, que ja esta no corpo da issue.
 MARCADOR_AUTOMACAO = "<!-- automacao -->"
 
+# O rotulo de quem nao tem login publicavel. Uma frase so, porque e o que fica
+# no lugar do nome em TODOS os pontos (cabecalho, marcador, mencao no texto): a
+# pessoa sem login e, por definicao, do lado do hospital (ADR 0054, decisao 4).
+ROTULO_SEM_LOGIN = "Pessoa do hospital"
 
-def _nome_no_marcador(nome: str) -> str:
-    """O nome dentro do atributo `autor="..."`, sem o que fecharia o atributo
-    (`"`) ou o comentario HTML (`>`) antes da hora. Sem `<` porque com ele nao
-    ha como remontar comentario nenhum."""
-    return sanitizar_travessao(nome).replace('"', "'").replace("<", "").replace(">", "").strip()
+# `@` seguido de letra, digito ou sublinhado, que e o que o GitHub le como
+# mencao. O `@` sozinho, antes de espaco ou de pontuacao, nao chama ninguem.
+_ARROBA_DE_MENCAO = re.compile(r"@(?=[A-Za-z0-9_])")
 
 
-def marcador_do_revisor_no_app(*, autor_nome: str, demanda_id: str) -> str:
-    return f'<!-- revisor-app autor="{_nome_no_marcador(autor_nome)}" demanda="{demanda_id}" -->'
+def rotulo_no_github(participante: dict[str, Any] | None) -> str:
+    """Como esta pessoa aparece num texto publicado no GitHub: `@login` quando
+    ha login publicavel (`login_para_publicar`, alfabeto fechado), senao o
+    rotulo neutro. Nunca o nome."""
+    login = login_para_publicar((participante or {}).get("github_login"))
+    return f"@{login}" if login else ROTULO_SEM_LOGIN
+
+
+def marcador_do_revisor_no_app(*, demanda_id: str) -> str:
+    return f'<!-- revisor-app autor="{ROTULO_SEM_LOGIN}" demanda="{demanda_id}" -->'
+
+
+def _escapar_arrobas(texto: str) -> str:
+    """`\\@` e o escape de pontuacao do CommonMark: o GitHub renderiza como `@`
+    e nao trata como mencao. Um `@fulano` digitado a mao deixa de notificar a
+    conta `fulano`, que nao tem nada a ver com o hospital."""
+    return _ARROBA_DE_MENCAO.sub(r"\\@", texto)
+
+
+def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> str:
+    """O texto da resposta, pronto para um comentario em repositorio publico.
+
+    Passa pelo `texto_do_diretor` (o `<` vira `&lt;`, estrutura em coluna zero
+    desligada, travessao sanitizado) e depois trata o `@`, que aquele funil
+    nao conhece porque no corpo da issue nova nao ha mencao:
+
+    1. a **mencao do app** (o `@Nome Completo` que o autocomplete grava, com o
+       id da pessoa em `mencoes`) vira o rotulo dessa pessoa: `@login` quando
+       ela tem, que e mencao de verdade no GitHub e chama quem o autor quis
+       chamar, ou o rotulo neutro. O nome civil do mencionado nao sai;
+    2. qualquer **outro** `@` seguido de letra ou digito sai escapado, para nao
+       notificar conta alheia. O e-mail digitado no texto cai aqui tambem, e
+       continua legivel.
+
+    A troca do passo 1 e feita por trechos, com o escape do passo 2 aplicado
+    so ao que esta ENTRE as mencoes: aplicado ao texto inteiro depois, ele
+    escaparia o `@login` que o passo 1 acabou de por. O nome mais longo ganha
+    quando um e prefixo do outro ("Ana Paula" antes de "Ana").
+    """
+    texto = texto_do_diretor(bruto)
+    rotulos = {
+        nome: rotulo_no_github(pessoa)
+        for pessoa in mencionados
+        if (nome := str((pessoa or {}).get("nome_completo") or "").strip())
+    }
+    if not rotulos:
+        return _escapar_arrobas(texto)
+    padrao = re.compile("|".join(re.escape(f"@{nome}") for nome in sorted(rotulos, key=len, reverse=True)))
+    partes: list[str] = []
+    fim = 0
+    for achado in padrao.finditer(texto):
+        partes.append(_escapar_arrobas(texto[fim : achado.start()]))
+        partes.append(rotulos[achado.group(0)[1:]])
+        fim = achado.end()
+    partes.append(_escapar_arrobas(texto[fim:]))
+    return "".join(partes)
 
 
 def corpo_do_comentario_espelhado(
-    *, texto: str, autor_nome: str | None, demanda_id: str, tem_github_login: bool
+    *,
+    texto: str,
+    autor: dict[str, Any] | None,
+    demanda_id: str,
+    mencionados: list[dict[str, Any]] | None = None,
 ) -> str:
     """O comentario que o app publica na issue quando alguem responde no card.
 
-    O texto do autor passa pelo `texto_do_diretor`, o MESMO funil do corpo da
-    issue nova, e pelo mesmo motivo: ele escapa o `<` (vira `&lt;`), e sem `<`
-    nao existe `<!--` para remontar. Sem isso, bastaria alguem digitar o
+    O marcador vai pelo FATO de ter login (`tem_github_login`): e ele que separa
+    a Vitta do hospital para a Action. O cabecalho vai pelo login PUBLICAVEL
+    (`rotulo_no_github`): uma linha antiga com login fora do alfabeto ainda e
+    da Vitta para o marcador, mas o cabecalho nao publica o que ninguem sabe o
+    que e.
+
+    O texto passa pelo `texto_espelhado`: sem isso, bastaria alguem digitar o
     marcador do revisor dentro da resposta para a Action acender a label em
-    nome de outra pessoa, e o teto de `author_association` do GitHub nao
-    protegeria nada, porque o autor do comentario e a integracao. O que o
-    diretor escreveu continua legivel: o Markdown renderiza `&lt;` como `<`.
+    nome de outra pessoa (o teto de `author_association` do GitHub nao
+    protegeria nada, porque o autor do comentario e a integracao), e um `@`
+    digitado a mao notificaria conta alheia.
 
     Uma linha em branco entre o cabecalho e o texto, para o Markdown nao colar
     os dois num paragrafo so.
     """
-    nome = autor_nome or "Alguém"
-    marcador = (
-        MARCADOR_AUTOMACAO if tem_github_login else marcador_do_revisor_no_app(autor_nome=nome, demanda_id=demanda_id)
-    )
+    marcador = MARCADOR_AUTOMACAO if tem_github_login(autor) else marcador_do_revisor_no_app(demanda_id=demanda_id)
     return "\n".join(
         [
             marcador,
-            f"**{texto_do_diretor(nome)}** escreveu na Demanda:",
+            f"**{rotulo_no_github(autor)}** escreveu na Demanda:",
             "",
-            texto_do_diretor(texto),
+            texto_espelhado(texto, mencionados=list(mencionados or [])),
         ]
     )
 

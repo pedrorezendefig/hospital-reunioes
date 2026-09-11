@@ -26,6 +26,7 @@ cliente, e um duble proprio deixaria os dois divergirem em silencio.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -52,8 +53,11 @@ from test_tecnologia_vinculo import _sem_github_de_verdade as _sem_github_de_ver
 from app.services import github_client  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     MARCADOR_AUTOMACAO,
+    ROTULO_SEM_LOGIN,
     corpo_do_comentario_espelhado,
     marcador_do_revisor_no_app,
+    rotulo_no_github,
+    texto_espelhado,
 )
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "104_tecnologia_conversa_espelhada.sql"
@@ -63,54 +67,73 @@ MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "1
 
 
 class TestCorpoDoComentarioEspelhado:
-    def test_autor_com_github_login_sai_com_o_marcador_de_automacao(self):
+    """Nome civil nenhum sai daqui (decisao do diretor na review do PR #688,
+    emenda na issue #677, estendida a esta fatia na rodada 1 do PR #696): o
+    repositorio e publico. Quem tem login sai como `@login`; quem nao tem sai
+    com o rotulo neutro, no cabecalho e no marcador. O link da Demanda ja esta
+    no corpo da issue, e e la que quem tem acesso ve o autor."""
+
+    def test_autor_com_github_login_sai_com_o_marcador_de_automacao_e_o_login(self):
         """Criterio: a resposta de quem tem login (a Vitta respondendo ao
         diretor) NAO acende `revisor-comentou`. `<!-- automacao -->` e o
-        marcador que a Action ja ignora."""
-        corpo = corpo_do_comentario_espelhado(
-            texto="Já pedi à Global Health",
-            autor_nome="Pedro Vitta",
-            demanda_id="d-1",
-            tem_github_login=True,
-        )
+        marcador que a Action ja ignora. O cabecalho leva o `@login`, que a
+        propria pessoa ja tornou publico no GitHub, e nao o nome civil."""
+        corpo = corpo_do_comentario_espelhado(texto="Já pedi à Global Health", autor=PEDRO, demanda_id="d-1")
 
-        assert corpo == "<!-- automacao -->\n**Pedro Vitta** escreveu na Demanda:\n\nJá pedi à Global Health"
+        assert corpo == "<!-- automacao -->\n**@pedrorezendefig** escreveu na Demanda:\n\nJá pedi à Global Health"
 
-    def test_autor_sem_github_login_sai_com_o_marcador_do_revisor(self):
-        """Criterio: o marcador na forma LITERAL `<!-- revisor-app autor="Nome"
+    def test_autor_sem_github_login_sai_com_o_marcador_do_revisor_e_o_rotulo_neutro(self):
+        """Criterio: o marcador na forma LITERAL `<!-- revisor-app autor="..."
         demanda="id" -->`, um espaco so depois de `<!--`. O matcher da Action
-        aceita exatamente um espaco; dois falham em silencio."""
-        corpo = corpo_do_comentario_espelhado(
-            texto="O botão ficou no lugar errado",
-            autor_nome="Diretor do Hospital",
-            demanda_id="d-1",
-            tem_github_login=False,
-        )
+        aceita exatamente um espaco; dois falham em silencio. No `autor` vai o
+        rotulo neutro, nunca o nome."""
+        corpo = corpo_do_comentario_espelhado(texto="O botão ficou no lugar errado", autor=DIRETOR, demanda_id="d-1")
 
         assert corpo == (
-            '<!-- revisor-app autor="Diretor do Hospital" demanda="d-1" -->\n'
-            "**Diretor do Hospital** escreveu na Demanda:\n\n"
+            '<!-- revisor-app autor="Pessoa do hospital" demanda="d-1" -->\n'
+            "**Pessoa do hospital** escreveu na Demanda:\n\n"
             "O botão ficou no lugar errado"
         )
 
+    def test_o_nome_civil_do_autor_nao_sai_em_nenhum_dos_dois_casos(self):
+        """Asserta o rotulo que ficou no lugar, e nao so a ausencia do nome: e
+        o cabecalho inteiro que tem de ser o neutro (ou o login)."""
+        do_diretor = corpo_do_comentario_espelhado(texto="x", autor=DIRETOR, demanda_id="d-1").split("\n")
+        do_pedro = corpo_do_comentario_espelhado(texto="x", autor=PEDRO, demanda_id="d-1").split("\n")
+
+        assert do_diretor[1] == "**Pessoa do hospital** escreveu na Demanda:"
+        assert do_pedro[1] == "**@pedrorezendefig** escreveu na Demanda:"
+        assert "Diretor do Hospital" not in "\n".join(do_diretor)
+        assert "Pedro Vitta" not in "\n".join(do_pedro)
+
+    def test_login_gravado_fora_do_alfabeto_nao_sai_e_cai_no_rotulo_neutro(self):
+        """Linha antiga com login invalido: o marcador continua o de automacao
+        (a pessoa TEM login), mas o cabecalho nao publica o que ninguem sabe o
+        que e."""
+        autor = {**PEDRO, "github_login": "pedro rezende"}
+
+        corpo = corpo_do_comentario_espelhado(texto="x", autor=autor, demanda_id="d-1")
+
+        assert corpo.split("\n")[:2] == [MARCADOR_AUTOMACAO, f"**{ROTULO_SEM_LOGIN}** escreveu na Demanda:"]
+
     def test_o_marcador_e_a_primeira_linha_e_fica_sozinho_nela(self):
-        """O mesmo dado dos dois testes acima, olhado pela forma: a Action
-        ancora o marcador no inicio do corpo, entao ele tem de ser a primeira
-        coisa e nao dividir a linha com o texto."""
-        for tem_login in (True, False):
-            corpo = corpo_do_comentario_espelhado(
-                texto="texto", autor_nome="Alguém", demanda_id="d-1", tem_github_login=tem_login
-            )
+        """O mesmo dado dos testes acima, olhado pela forma: a Action ancora o
+        marcador no inicio do corpo, entao ele tem de ser a primeira coisa e
+        nao dividir a linha com o texto."""
+        for autor in (PEDRO, DIRETOR):
+            corpo = corpo_do_comentario_espelhado(texto="texto", autor=autor, demanda_id="d-1")
             primeira, *_resto = corpo.split("\n")
             assert primeira.startswith("<!-- ")
             assert primeira.endswith(" -->")
             assert primeira.count("<!--") == 1
 
     def test_a_forma_literal_do_marcador_do_revisor(self):
-        assert marcador_do_revisor_no_app(autor_nome="Ana", demanda_id="abc") == (
-            '<!-- revisor-app autor="Ana" demanda="abc" -->'
+        assert (
+            marcador_do_revisor_no_app(demanda_id="abc")
+            == '<!-- revisor-app autor="Pessoa do hospital" demanda="abc" -->'
         )
         assert MARCADOR_AUTOMACAO == "<!-- automacao -->"
+        assert ROTULO_SEM_LOGIN == "Pessoa do hospital"
 
     def test_marcador_escrito_a_mao_na_resposta_nao_vira_marcador(self):
         """Criterio central da emenda de 10/09: do lado do GitHub o autor do
@@ -125,9 +148,7 @@ class TestCorpoDoComentarioEspelhado:
         """
         texto = 'Segue:\n<!-- revisor-app autor="Impostor" demanda="outra" -->\nfim'
 
-        corpo = corpo_do_comentario_espelhado(
-            texto=texto, autor_nome="Pedro Vitta", demanda_id="d-1", tem_github_login=True
-        )
+        corpo = corpo_do_comentario_espelhado(texto=texto, autor=PEDRO, demanda_id="d-1")
 
         linhas = corpo.split("\n")
         assert linhas[0] == MARCADOR_AUTOMACAO
@@ -135,24 +156,74 @@ class TestCorpoDoComentarioEspelhado:
         assert corpo.count("<!--") == 1
         assert 'revisor-app autor="Impostor"' in corpo  # o texto do diretor continua legivel
 
-    def test_o_nome_do_autor_nao_fecha_o_marcador_antes_da_hora(self):
-        """O nome vem do cadastro, e `"` ou `-->` nele quebrariam o atributo ou
-        fechariam o comentario HTML no meio. O marcador continua inteiro e
-        literal, com o nome limpo."""
-        corpo = corpo_do_comentario_espelhado(
-            texto="texto", autor_nome='Ana "A" --> <b>', demanda_id="d-1", tem_github_login=False
-        )
-
-        primeira = corpo.split("\n")[0]
-        assert primeira == '<!-- revisor-app autor="Ana \'A\' -- b" demanda="d-1" -->'
-
     def test_texto_com_travessao_sai_sem_travessao(self):
-        corpo = corpo_do_comentario_espelhado(
-            texto=f"antes {chr(0x2014)} depois", autor_nome="Ana", demanda_id="d-1", tem_github_login=True
-        )
+        corpo = corpo_do_comentario_espelhado(texto=f"antes {chr(0x2014)} depois", autor=PEDRO, demanda_id="d-1")
 
         assert chr(0x2014) not in corpo
         assert "antes, depois" in corpo
+
+
+class TestArrobaNoTextoEspelhado:
+    """Rodada 1 do PR #696, achado 2: o autocomplete do app grava `@Nome
+    Completo` no texto, e no GitHub isso vira mencao a uma conta alheia (o
+    `@Pedro` de "Pedro Vitta" notifica o usuario `Pedro`) e publica o nome
+    civil de um colaborador do hospital. A mencao do app vira o rotulo da
+    pessoa mencionada (`@login` ou o neutro), e qualquer outro `@` seguido de
+    letra ou digito sai escapado: `\\@` e o escape do CommonMark, que o
+    GitHub renderiza como `@` sem tratar como mencao."""
+
+    def test_mencao_a_quem_tem_login_vira_o_login_no_github(self):
+        texto = texto_espelhado("@Pedro Vitta, veja isso", mencionados=[PEDRO])
+
+        assert texto == "@pedrorezendefig, veja isso"
+
+    def test_mencao_a_quem_nao_tem_login_vira_o_rotulo_neutro(self):
+        texto = texto_espelhado("@Diretor do Hospital, pode conferir?", mencionados=[DIRETOR])
+
+        assert texto == "Pessoa do hospital, pode conferir?"
+
+    def test_arroba_digitado_a_mao_sai_escapado_e_sem_nome_de_terceiro(self):
+        """O teste pedido pela review: resposta com `@Pedro Vitta` espelhada
+        sem `@` seguido de letra. Aqui ninguem foi escolhido no autocomplete
+        (lista de mencionados vazia), entao o texto e o que o autor digitou."""
+        texto = texto_espelhado("Fala com @Pedro Vitta ou @fulano_123 amanhã", mencionados=[])
+
+        assert texto == "Fala com \\@Pedro Vitta ou \\@fulano_123 amanhã"
+        assert re.search(r"(?<!\\)@[A-Za-z0-9_]", texto) is None
+
+    def test_email_no_texto_nao_vira_mencao(self):
+        assert texto_espelhado("manda para ana@hsm.com", mencionados=[]) == "manda para ana\\@hsm.com"
+
+    def test_arroba_sozinho_ou_antes_de_espaco_fica_como_esta(self):
+        assert texto_espelhado("valor @ 10 reais", mencionados=[]) == "valor @ 10 reais"
+
+    def test_a_mencao_do_app_e_o_arroba_solto_convivem_no_mesmo_texto(self):
+        """A troca da mencao nao pode ser desfeita pelo escape que vem depois:
+        o `@pedrorezendefig` que o app pos e mencao de verdade, e fica."""
+        texto = texto_espelhado("@Pedro Vitta e @Diretor do Hospital, e @alguem", mencionados=[PEDRO, DIRETOR])
+
+        assert texto == "@pedrorezendefig e Pessoa do hospital, e \\@alguem"
+
+    def test_o_nome_mais_longo_ganha_quando_um_e_prefixo_do_outro(self):
+        ana = {**DIRETOR, "id": "P3", "nome_completo": "Ana", "github_login": "ana-hsm"}
+        ana_paula = {**DIRETOR, "id": "P4", "nome_completo": "Ana Paula", "github_login": None}
+
+        texto = texto_espelhado("@Ana Paula e @Ana", mencionados=[ana, ana_paula])
+
+        assert texto == "Pessoa do hospital e @ana-hsm"
+
+    def test_o_rotulo_de_cada_pessoa(self):
+        assert rotulo_no_github(PEDRO) == "@pedrorezendefig"
+        assert rotulo_no_github(DIRETOR) == ROTULO_SEM_LOGIN
+        assert rotulo_no_github({"github_login": "Nao Vale"}) == ROTULO_SEM_LOGIN
+        assert rotulo_no_github(None) == ROTULO_SEM_LOGIN
+
+    def test_o_corpo_espelhado_passa_o_texto_pelo_mesmo_funil(self):
+        corpo = corpo_do_comentario_espelhado(
+            texto="@Pedro Vitta, e @outro", autor=DIRETOR, demanda_id="d-1", mencionados=[PEDRO]
+        )
+
+        assert corpo.split("\n")[-1] == "@pedrorezendefig, e \\@outro"
 
 
 # ─── 2. Responder numa Demanda vinculada ─────────────────────────────────────
@@ -176,7 +247,7 @@ class TestResponderEspelha:
         assert gh.comentarios_criados == [
             {
                 "numero": 673,
-                "corpo": "<!-- automacao -->\n**Pedro Vitta** escreveu na Demanda:\n\nJá pedi à Global Health",
+                "corpo": "<!-- automacao -->\n**@pedrorezendefig** escreveu na Demanda:\n\nJá pedi à Global Health",
                 "id": 3_000_000_001,
             }
         ]
@@ -190,8 +261,23 @@ class TestResponderEspelha:
         client.post(f"{BASE}/demandas/d-1/conversa", json={"texto": "O botão ficou no lugar errado"})
 
         assert gh.comentarios_criados[0]["corpo"].split("\n")[0] == (
-            '<!-- revisor-app autor="Diretor do Hospital" demanda="d-1" -->'
+            '<!-- revisor-app autor="Pessoa do hospital" demanda="d-1" -->'
         )
+        assert "Diretor do Hospital" not in gh.comentarios_criados[0]["corpo"]
+
+    def test_a_mencao_do_app_chega_ao_github_como_login_e_o_arroba_solto_escapado(self, monkeypatch):
+        """Pela rota: os mencionados vem de `mencoes` (ids), e e o router que
+        resolve nome e login de cada um para o funil do texto."""
+        client, _, gh = _montar(logado=DIRETOR, demandas=[_vinculada()], monkeypatch=monkeypatch)
+
+        resposta = client.post(
+            f"{BASE}/demandas/d-1/conversa",
+            json={"texto": "@Pedro Vitta, veja; e avisa o @fulano", "mencoes": ["P1"]},
+        )
+
+        assert resposta.status_code == 201
+        assert gh.comentarios_criados[0]["corpo"].split("\n")[-1] == "@pedrorezendefig, veja; e avisa o \\@fulano"
+        assert "Pedro Vitta" not in gh.comentarios_criados[0]["corpo"]
 
     def test_demanda_sem_vinculo_nao_chama_o_github(self, monkeypatch):
         client, sb, gh = _montar(logado=PEDRO, demandas=[_demanda("d-1")], monkeypatch=monkeypatch)
@@ -337,8 +423,8 @@ class TestCorrigirEspelha:
             {
                 "id": 3_000_000_001,
                 "corpo": (
-                    '<!-- revisor-app autor="Diretor do Hospital" demanda="d-1" -->\n'
-                    "**Diretor do Hospital** escreveu na Demanda:\n\n"
+                    '<!-- revisor-app autor="Pessoa do hospital" demanda="d-1" -->\n'
+                    "**Pessoa do hospital** escreveu na Demanda:\n\n"
                     "Versão corrigida"
                 ),
             }
@@ -423,7 +509,7 @@ class TestMigration:
 
 @pytest.mark.parametrize("tem_login", [True, False])
 def test_nenhum_texto_novo_tem_travessao(tem_login):
-    corpo = corpo_do_comentario_espelhado(texto="x", autor_nome="A", demanda_id="d", tem_github_login=tem_login)
+    corpo = corpo_do_comentario_espelhado(texto="x", autor=PEDRO if tem_login else DIRETOR, demanda_id="d")
 
     assert chr(0x2014) not in corpo
     assert chr(0x2013) not in corpo

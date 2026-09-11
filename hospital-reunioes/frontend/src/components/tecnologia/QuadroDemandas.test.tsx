@@ -810,6 +810,43 @@ describe("A Conversa dentro do card", () => {
   const botaoResponder = (modal: HTMLElement) =>
     within(modal).getByRole("button", { name: /Responder/ }) as HTMLButtonElement;
 
+  // O aviso de que a resposta sai do app (issue #680, rodada de segurança do
+  // PR #696). Quem não tem login no GitHub não vê o Vínculo (ADR 0054,
+  // decisão 9), então a caixa avisa; e avisa sem número, link nem label.
+  const AVISO_PUBLICA = /publicada na página pública do pedido/;
+
+  it("numa Demanda com Vínculo a caixa de resposta avisa que a resposta sai do app", async () => {
+    montar([demanda("d1", "Encerrar conversas", { etapa: "planejada" })], { conversa: [] });
+    fireEvent.click(await screen.findByText("Encerrar conversas"));
+    const modal = await screen.findByRole("dialog");
+
+    const aviso = within(modal).getByText(AVISO_PUBLICA);
+    expect(aviso.textContent).toContain("Não escreva dados de paciente");
+    // Sem nada técnico no aviso: nem número de issue, nem link, nem label.
+    expect(aviso.textContent).not.toMatch(/#\d|github|http|label/i);
+    expect(within(modal).queryByRole("link", { name: /GitHub/ })).toBeNull();
+  });
+
+  it("sem Vínculo a caixa não avisa nada", async () => {
+    // Par de presença: a mesma Demanda, sem Etapa, e a mesma caixa de pé.
+    const modal = await abrirCom([]);
+
+    expect(caixa(modal)).toBeTruthy();
+    expect(within(modal).queryByText(AVISO_PUBLICA)).toBeNull();
+  });
+
+  it("a caixa de correção também avisa, porque a correção republica", async () => {
+    montar([demanda("d1", "Encerrar conversas", { etapa: "em_desenvolvimento" })], {
+      conversa: [linhaDoFio("c1", { editavel_ate: daTempo() })],
+    });
+    fireEvent.click(await screen.findByText("Encerrar conversas"));
+    const modal = await screen.findByRole("dialog");
+
+    fireEvent.click(await within(modal).findByRole("button", { name: /Corrigir/ }));
+
+    expect(within(modal).getAllByText(AVISO_PUBLICA)).toHaveLength(2);
+  });
+
   it("enviar a resposta grava a linha e ela aparece no fio sem recarregar a página", async () => {
     const modal = await abrirCom([]);
 
