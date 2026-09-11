@@ -176,20 +176,30 @@ def partes_da_foto(foto: dict[str, Any] | None) -> tuple[int | None, int | None]
     propria tela do GitHub mostra; sem ele, a conta sai da lista de partes que
     ja foi lida para as labels. Duas fontes que divergem seriam pior do que uma
     so, mas aqui a segunda so entra quando a primeira nao existe.
+
+    A excecao e a parte RECUSADA (issue #701). O GitHub conta como concluida
+    toda sub-issue fechada pelo botao padrao, label nenhuma importa, entao uma
+    fatia com `wontfix` entra no numero dele como entregue. Aqui ela nao e
+    entregue, e o selo dela na lista diz "Nao sera feita". Manter o resumo
+    nesse caso poria o card contando "2 de 3 partes" logo acima de uma lista
+    que mostra uma parte recusada: o diretor veria duas historias sobre a mesma
+    issue. Quando ha parte recusada entre as que lemos, a conta propria manda;
+    no resto, o numero do GitHub continua mandando.
     """
     if not foto:
         return (None, None)
 
+    partes_lidas = _partes(foto)
+    ha_parte_recusada = any(LABEL_WONTFIX in _labels(parte) for parte in partes_lidas)
     resumo = foto.get("resumo_das_partes") or {}
     total = resumo.get("total")
     entregues = resumo.get("entregues")
-    if isinstance(total, int) and isinstance(entregues, int):
+    if isinstance(total, int) and isinstance(entregues, int) and not ha_parte_recusada:
         return (None, None) if total <= 0 else (entregues, total)
 
-    partes = _partes(foto)
-    if not partes:
+    if not partes_lidas:
         return (None, None)
-    return (sum(1 for parte in partes if _entregue(parte)), len(partes))
+    return (sum(1 for parte in partes_lidas if _entregue(parte)), len(partes_lidas))
 
 
 # ─── 1b. O bloco "Para o diretor" (issue #676) ───────────────────────────────

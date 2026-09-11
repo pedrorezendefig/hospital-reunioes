@@ -368,14 +368,22 @@ class TestResumoDasPartes:
         fatia marcada `wontfix` e fechada pelo botao padrao (como concluida)
         entrava na conta de "X de Y partes entregues". A regra e uma so
         (`_entregue`), entao a correcao da raiz tem de aparecer aqui tambem."""
-        foto = _foto(
-            partes=(
-                _parte(674, estado="closed", motivo="completed"),
-                _parte(675, estado="closed", motivo="completed", labels=("wontfix",)),
-                _parte(676),
-            )
+        partes = (
+            _parte(674, estado="closed", motivo="completed"),
+            _parte(675, estado="closed", motivo="completed", labels=("wontfix",)),
+            _parte(676),
         )
-        assert partes_da_foto(foto) == (1, 3)
+
+        assert partes_da_foto(_foto(partes=partes)) == (1, 3)
+
+        # E com o resumo do GitHub presente, que e o caminho de producao: o
+        # `sub_issues_summary` conta a fatia recusada como concluida (o botao
+        # padrao fecha como completed), entao o resumo diria 2 de 3 ao lado de
+        # uma lista que mostra a parte como "Nao sera feita". Com parte
+        # recusada, a conta propria manda.
+        com_resumo = _foto(partes=partes, resumo={"total": 3, "entregues": 2})
+
+        assert partes_da_foto(com_resumo) == (1, 3)
 
     def test_resumo_com_total_zero_conta_como_sem_partes(self):
         assert partes_da_foto(_foto(resumo={"total": 0, "entregues": 0})) == (None, None)
@@ -551,6 +559,34 @@ class TestSituacaoDaParte:
 
         assert (entregues, total) == (1, 2)
         assert [situacao_da_parte(p) for p in partes].count(ETAPA_ENTREGUE) == entregues
+
+    def test_a_parte_recusada_conta_a_mesma_historia_nos_dois_lugares(self):
+        """Issue #701, com a parte recusada no meio e o resumo do GitHub
+        presente, que e como a foto chega em producao. O selo da parte e a
+        conta do card tem de dizer a mesma coisa: se a lista mostra "Nao sera
+        feita", a barra nao pode ter somado aquela parte como entregue."""
+        partes = (
+            _parte(674, estado="closed", motivo="completed"),
+            _parte(675, estado="closed", motivo="completed", labels=("wontfix",)),
+            _parte(676),
+        )
+        foto = _foto(partes=partes, resumo={"total": 3, "entregues": 2})
+
+        entregues, total = partes_da_foto(foto)
+        situacoes = [situacao_da_parte(p) for p in partes]
+
+        assert (entregues, total) == (1, 3)
+        assert situacoes == [ETAPA_ENTREGUE, ETAPA_NAO_SERA_FEITA, ETAPA_PLANEJADA]
+        assert situacoes.count(ETAPA_ENTREGUE) == entregues
+
+    def test_a_parte_recusada_e_lida_sem_distinguir_maiusculas(self):
+        """A guarda nova le a label pelo `_labels`, que normaliza. Trocada por
+        um conjunto cru, uma label gravada "WONTFIX" voltaria a contar como
+        entrega, e nada aqui ficaria vermelho sem este caso."""
+        parte = _parte(675, estado="closed", motivo="completed", labels=("WONTFIX",))
+
+        assert situacao_da_parte(parte) == ETAPA_NAO_SERA_FEITA
+        assert partes_da_foto(_foto(partes=(parte,), resumo={"total": 1, "entregues": 1})) == (0, 1)
 
 
 class TestPartesParaODiretor:
