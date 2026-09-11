@@ -557,7 +557,7 @@ async def webhook_github(
     except Exception:
         logger.warning(
             # A frase NAO promete recuperacao. A reconciliacao rele de hora em
-            # hora, mas so escreve quando a foto mudou: o que esta passagem
+            # hora, mas so escreve quando o cache derivado muda: o que esta passagem
             # gravou antes de estourar (o cache, a linha da Etapa) ja barra a
             # releitura. Quando a perda e da devolucao da entrega, o
             # `tecnologia_sincronizacao` registra um ERROR dizendo o que ficou

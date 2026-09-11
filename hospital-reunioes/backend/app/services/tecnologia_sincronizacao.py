@@ -457,8 +457,8 @@ def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
     except Exception:
         # A excecao continua subindo (o webhook responde `falhou: true`, o lote
         # conta a falha), mas ela sai daqui com NOME. O cache e a linha da Etapa
-        # ja estao gravados, entao a passagem seguinte vera a foto igual e sairá
-        # sem refazer nada: esta devolucao esta PERDIDA, e alguem precisa
+        # ja estao gravados, entao a passagem seguinte vera o cache ja em dia e
+        # sairá sem refazer nada: esta devolucao esta PERDIDA, e alguem precisa
         # termina-la a mao. Um WARNING generico prometendo que "a reconciliacao
         # recupera" mandaria quem le o log esperar por uma segunda passagem que
         # nao vai acontecer.

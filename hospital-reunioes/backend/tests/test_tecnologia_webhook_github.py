@@ -1225,6 +1225,32 @@ class TestSincronizacaoPeloWebhook:
         assert _fio(sb) == []
         assert _demandas(sb)[0]["github_sincronizado_em"] == CARIMBO_ANTERIOR
 
+    def test_a_foto_crua_que_muda_sozinha_e_regravada_com_o_fio_calado(self, monkeypatch):
+        """O avesso do caso acima: a foto mudou e nenhum derivado mudou.
+
+        O repositorio foi renomeado, a `url` da issue e outra, e label, corpo e
+        partes continuam iguais. A foto e uma das colunas do cache, e por isso
+        entra na comparacao junto com os derivados (issue #690): sem ela, o
+        `github_foto` congelaria no endereco velho, e como o `_vinculo_visivel`
+        do router le a `url` de la, o link do Vinculo na tela apontaria para o
+        endereco morto para sempre. Nada ficaria vermelho, e ninguem tem por que
+        editar a issue de novo so para destravar isso.
+        """
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        demandas = [_ja_sincronizada(gh, 673)]
+        url_nova = "https://github.com/pedrorezendefig/hospital-reunioes-renomeado/issues/673"
+        gh.issues[673]["html_url"] = url_nova
+        cliente, sb, _ = _montar(demandas=demandas, github=gh, monkeypatch=monkeypatch)
+
+        _entregar(cliente, _corpo(acao="edited"))
+
+        demanda = _demandas(sb)[0]
+        assert demanda["github_foto"]["url"] == url_nova
+        assert demanda["github_sincronizado_em"] != CARIMBO_ANTERIOR
+        assert demanda["etapa"] == ETAPA_EM_DESENVOLVIMENTO, "o piso: nenhum derivado mudou, so a foto crua"
+        assert demanda["o_que_muda"] == "O selo se atualiza sozinho."
+        assert _fio(sb) == [], "a Etapa nao mudou: o fio fica calado"
+
     def test_a_entrega_repetida_nao_duplica_a_linha(self, monkeypatch):
         """O GitHub reentrega, e a mesma entrega duas vezes nao pode virar duas
         linhas no fio. A guarda e a foto, e nao o id da entrega: quem chega pela
