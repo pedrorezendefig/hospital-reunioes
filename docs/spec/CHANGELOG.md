@@ -7,6 +7,19 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.129.1 - 2026-09-11 14:34 - a mudança de regra volta a recalcular Etapa e "O que muda" das Demandas, mesmo sem novidade no GitHub
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `d35a130`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.129.1, `db: healthy`; frontend HTTP 200 servindo 0.129.1)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/d35a130
+- Issues: [#690](https://github.com/pedrorezendefig/hospital-reunioes/issues/690) · PR [#700](https://github.com/pedrorezendefig/hospital-reunioes/pull/700)
+- Migration: nenhuma. A correção só amplia o que a guarda compara, e `o_que_muda` e `partes` já existiam na 103 · patch, fix
+- Nota: `cache_desatualizado` compara o derivado de `mudanca_da_foto` contra as colunas **sem** o carimbo `github_sincronizado_em`. Se o carimbo entrasse na conta, como `mudanca_da_foto` chama `datetime.now(UTC)`, o derivado nunca seria igual e toda passada horária viraria escrita
+- Nota: a revisão independente rodou 9 mutantes e **um sobreviveu**: tirar `github_foto` da comparação deixava verdes os 4749 testes da suíte. Promovido a must-fix (mesma classe do achado do PR #698) e fechado na rodada 2 com um teste só. Sem ele, repositório renomeado com os derivados iguais congelaria o `github_foto`, e o link do Vínculo na tela apontaria para o endereço velho para sempre, com o CI todo verde
+- Nota: na estreia, a primeira passada depois de uma mudança de regra grava linha no fio, move o estado, troca o responsável e dispara `avisar_atribuicao` **em lote**. É um lote único por mudança de regra, não escrita por passada, mas quem mexer em `LABELS_PLANEJADA` ou no `bloco_para_o_diretor` está mandando e-mail para gente de verdade naquele commit
+- Nota: Demandas vinculadas antes da #676 têm `o_que_muda` e `partes` nulos e levam um UPDATE silencioso único, sem linha no fio
+
 ## v0.129.0 - 2026-09-11 16:45 - a Conversa da Demanda vinculada é espelhada na issue com o marcador do revisor
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `1e781bf`
