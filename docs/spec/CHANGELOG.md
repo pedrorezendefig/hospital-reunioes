@@ -7,6 +7,20 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.128.1 - 2026-09-11 12:20 - a guarda de caso apagado vira explícita nas sete portas de escrita que ainda deixavam mexer num caso apagado
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `d38aae9`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.128.1, `db: healthy`; frontend HTTP 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/d38aae9
+- Issues: [#669](https://github.com/pedrorezendefig/hospital-reunioes/issues/669) · PR [#699](https://github.com/pedrorezendefig/hospital-reunioes/pull/699). Irmã da [#631](https://github.com/pedrorezendefig/hospital-reunioes/issues/631)
+- Migration: nenhuma. Os carimbos que a guarda lê já existiam (`anonimizada_em` na 079, `apagamento_pedido_em` na 100) · patch, fix
+- Nota: as sete portas são `devolver` e `prorrogacao` do portal do setor, `cobrar-setor`, `DELETE .../arquivo` (só o desarquivar), `devolucoes`, `validar` e `prorrogacoes/{id}/decidir`. Arquivar caso apagado continua **livre** por decisão de produto, e um teste trava essa decisão: quem "completar" a guarda no arquivar amanhã derruba o teste
+- Nota: três `select` recortados à mão precisaram ser ampliados para trazer os carimbos, um a mais do que a triagem previu. O terceiro é o `_carregar_para_o_arquivo`: sem ele a guarda do desarquivar nasceria lendo `None`, viva no código e morta na prática. Os dois gates conferiram que a função só serve `arquivar` e `desarquivar`, que o `arquivar` segue lendo apenas `status`, e que o corpo da resposta é recortado por `_CAMPOS_DO_ARQUIVO`
+- Nota: nas duas portas do canal público a frase de recusa não nomeia a causa nem o autor do apagamento, que era o must-fix herdado do PR #667. A tela do portal não mudou porque `mensagemDoPortal` já repassa o `detail` cru em 409 nos dois formulários, verificado no código da branch e não só na palavra do autor
+- Nota: ficou por corrigir, com aval dos dois revisores, que dois testes de tela são decorativos, porque o stub devolve a frase que nunca conteve a palavra procurada. A prova que importa está no backend e está de pé
+- Nota: achado fora de escopo, vale issue nova. A Retenção não invalida os tokens do portal do setor, então enquanto o apagamento está **pendente** o `GET /{token}` ainda serve o relato integral para quem tem o link
+
 ## v0.128.0 - 2026-09-10 22:15 - a Entrega devolve a Demanda a quem pediu, e o card volta para Aguardando com o selo "Entregue, confira e conclua"
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `fae4a28`

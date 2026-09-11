@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-11T12:20:00-03:00",
+      "sha": "d38aae9",
+      "app_version": "0.128.1",
+      "subject": "a guarda de caso apagado vira explicita nas sete portas de escrita que ainda aceitavam mexer num caso apagado",
+      "raw_subject": "fix(ouvidoria): a guarda de caso apagado vira explícita nas sete portas que sobraram (#699)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 230,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda AFK, issue #669. Escopo cravado na triagem: sete guardas (devolver e prorrogacao do portal, cobrar-setor, DELETE .../arquivo, devolucoes, validar, decidir prorrogacao). Arquivar caso apagado continua LIVRE por decisao de produto, com teste travando a decisao. Desvio do plano aceito nos dois gates: um terceiro select (_carregar_para_o_arquivo) precisou ser ampliado, senao a guarda do desarquivar nasceria lendo None. Nice-to-have registrado e nao corrigido: dois testes de tela sao decorativos (o stub devolve a frase que nunca teve a palavra procurada); a prova real esta no backend. Achado fora de escopo para issue nova: o token do portal do setor nao e invalidado pela Retencao, entao o GET do caso segue legivel enquanto o apagamento esta pendente."
+    },
+    {
       "at": "2026-09-10T22:15:00-03:00",
       "sha": "fae4a28",
       "app_version": "0.128.0",
@@ -1418,35 +1447,6 @@
       "migrations_applied": [],
       "rollback_target_sha": "5bcc9cb",
       "notes": "A review independente achou 2 must-fix, e o principal tinha INVERTIDO a intencao da issue.\n\nA tupla (APIError, OSError, ValueError) prometia cobrir rede caida e nao cobria. APIError so nasce depois que a resposta HTTP chega (postgrest/_sync/request_builder.py:47, com o send() fora do try), e nenhuma excecao do httpx e subclasse de OSError. Ou seja, o fail-open tinha virado fail-closed: uma oscilacao de rede passaria a devolver 500 na porta por token do portal do setor, tirando do titular a pagina inteira para responder enquanto o relogio do prazo corre. Corrigido com httpx.HTTPError na tupla, mais 11 casos novos que falham DENTRO do execute(), porque o fake antigo falhava no table() e so produzia APIError, deixando o caminho de transporte sem teste nenhum.\n\nO segundo must-fix era de metodo: um mutante que mexia em duas linhas do page.tsx de uma vez, escondendo que o banner de aviso nao tinha teste. Mutante que altera duas coisas junto mente, porque o vermelho nao diz qual delas o teste pega.\n\nO revisor da rodada 2 rodou os mutantes por conta propria em vez de aceitar a tabela do autor.\n\nO que mudou para o usuario: carregar_feriados deixou de engolir erro em silencio. O except Exception largo virou tupla nomeada, o warning ganhou exc_info=True, e a resposta passou a distinguir calendario vazio de verdade de nao consegui ler o calendario, carimbando degradado no mesmo vocabulario que as metricas do painel ja usam. Painel e portal do setor param de afirmar prazo em dias uteis quando o calendario nao pode ser lido.\n\nHealth confirmou a 0.87.2. Smoke: 401 em /ouvidoria/protocolos, 404 no portal com token falso e 307 no painel do frontend."
-    },
-    {
-      "at": "2026-08-31T22:22:00-03:00",
-      "sha": "0755324",
-      "app_version": "0.87.1",
-      "subject": "Gate de acesso nas rotas de roster de reuniao: quem nao participa da reuniao nao escreve mais no roster dela nem dispara convite por email",
-      "raw_subject": "fix(reunioes): gate de acesso nas rotas de roster de reunião (#461)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": "79fb895",
-      "notes": "Onda de composicao fixa de tres issues (#459, #449 e #450), pedida na mao pelo humano, nao puxada da fila padrao.\n\nSo 1 dos 3 PRs entrou, e o motivo foi externo. O CI da conta GitHub Actions ficou bloqueado por cobranca as 22:05 UTC de 31/08: os jobs morrem em 1 a 3 segundos sem rodar nenhum step, e o workflow Higiene de issues da main caiu junto. O PR #461 rodou verde as 21:59, antes do corte. Os PRs #462 (issue #449) e #463 (issue #450) nunca rodaram. O humano escolheu mergear so o que tinha CI verde de verdade, deixando #462 e #463 abertos, os dois com gates locais verdes e review independente limpa.\n\nA review independente do orquestrador (ADR 0035) pegou o que o autor nao viu, nos tres PRs. No #461 nao houve must-fix, mas o revisor de seguranca achou duas portas irmas abertas com a MESMA raiz: POST /reunioes/agendar deixa token orfao criar reuniao e disparar convite por email sem rate limit, e PATCH /reunioes/{id} deixa token orfao reescrever titulo, data e tomar o facilitador_id de reuniao alheia. Ou seja, o impacto que a #459 nomeia como principal, a rota como disparador de email pelo dominio do hospital, continua alcancavel por outra porta. Virou a issue #464.\n\nUma armadilha de biblioteca apareceu nos DOIS outros PRs, de forma independente. O except APIError do postgrest nao pega falha de transporte, porque APIError so nasce depois da resposta HTTP chegar (postgrest/_sync/request_builder.py:47, com o send() fora do try), e as excecoes do httpx herdam direto de Exception, nao de OSError. No #462 isso tinha invertido o fail-open em fail-closed, com 500 na porta por token do setor; no #463 derrubava o lote inteiro de entregas depois de o email ja ter saido. Os dois foram corrigidos com httpx.HTTPError na tupla e provados por mutante que o revisor rodou por conta propria, nao por leitura.\n\nIssues novas abertas pelos revisores: #464 (portas irmas da #459), #465 (o token do portal do setor e o do aceite vao em claro para o log do container, e com ele da para responder em nome do setor: o banco guarda so o hash, o log guarda o token inteiro) e #466 (avisar_admins_tecnicos loga o corpo do aviso em producao sem guarda, o que deixa a #450 entregue pela metade).\n\nA label revisor-comentou apareceu na #459 como falso positivo conhecido: a Action aplica ao comentario do proprio sub-agente. Foi removida.\n\nO #461 divergiu de um criterio de aceite de proposito. A recusa por escopo devolve 404 'Reuniao nao encontrada' em vez de 403, seguindo o padrao do router desde a issue #194, de nao vazar existencia. O 403 fica reservado ao token orfao.\n\nDebito deixado no #461 por causa do CI bloqueado: falta o controle positivo da Secretaria nas rotas de roster. O corpo do PR afirmava que esse teste existia, e ele nao existia; o revisor conferiu por probe que a Secretaria passa hoje. Nao foi corrigido porque um push novo derrubaria o verde do CI que o PR ja tinha. Registrado na issue #464."
     }
   ]
 }
