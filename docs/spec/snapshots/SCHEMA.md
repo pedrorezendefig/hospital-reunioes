@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-10T15:05-0300 -->
+<!-- last_update: 2026-09-11T14:35-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -442,7 +442,7 @@ erDiagram
         VARCHAR mencoes
         TEXT movimento_campo
         TEXT movimento_de
-        _ mais_colunas "+3"
+        _ mais_colunas "+4"
     }
 ```
 

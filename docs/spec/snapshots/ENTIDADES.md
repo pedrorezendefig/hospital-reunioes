@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-10T15:05-0300 -->
+<!-- last_update: 2026-09-11T14:35-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -857,7 +857,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## tecnologia_conversas
 
-> Origem: `102_tecnologia_fundacao.sql`
+> Origem: `102_tecnologia_fundacao.sql` (alterada em: 104_tecnologia_conversa_espelhada.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -872,6 +872,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `movimento_para` | `TEXT` | — | — | — |
 | `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 | `editado_em` | `TIMESTAMPTZ` | — | — | — |
+| `github_comentario_id` | `BIGINT` | — | — | — |
 
 **Indexes:**
 - `idx_tecnologia_conversas_demanda` em `(demanda_id, criado_em)` (de `102_tecnologia_fundacao.sql`)

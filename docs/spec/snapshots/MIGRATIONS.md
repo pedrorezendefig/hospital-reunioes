@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-10T15:05-0300 -->
+<!-- last_update: 2026-09-11T14:35-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -105,6 +105,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 101 | `101_ouvidoria_lote_do_arquivo_atomico.sql` | o lote do Arquivo e o log de acesso na MESMA transacao | 0 | 0 | 0 | 0 |
 | 102 | `102_tecnologia_fundacao.sql` | fundacao da aba Tecnologia | 3 | 0 | 5 | 0 |
 | 103 | `103_tecnologia_vinculo.sql` | vinculo da Demanda com a issue do GitHub | 0 | 10 | 2 | 0 |
+| 104 | `104_tecnologia_conversa_espelhada.sql` | a Conversa espelhada na issue do GitHub | 0 | 1 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 99 migrations.
+**Total:** 100 migrations.
