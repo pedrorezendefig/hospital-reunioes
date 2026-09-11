@@ -7,6 +7,21 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.129.2 - 2026-09-11 15:03 - a correção que acrescenta menção deixa de reabrir "Minha vez" de quem já tinha respondido aquela mesma fala
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `15f459a`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.129.2, `db: healthy`; frontend HTTP 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/15f459a
+- Issues: [#693](https://github.com/pedrorezendefig/hospital-reunioes/issues/693) · PR [#703](https://github.com/pedrorezendefig/hospital-reunioes/pull/703). Achado da review da [#670](https://github.com/pedrorezendefig/hospital-reunioes/issues/670)
+- Migration: **105_tecnologia_mencoes_da_correcao.sql**, aplicada à mão no Studio de produção antes do merge · patch, fix
+- Nota: a linha guardava `editado_em` mas não **quais** menções tinham entrado na correção, então o carimbo valia para todas. Uma vírgula corrigida reabria a vez de quem já tinha respondido
+- Nota: a coluna nova tem **três** estados com significados distintos, e a diferença entre os dois últimos é o conserto inteiro. `NULL` é linha nunca corrigida ou corrigida antes da coluna existir, e aí vale o comportamento da #670, que é o lado seguro do erro. Lista vazia é correção sem menção nova, não chama ninguém. Lista com ids é só essa gente contando do `editado_em`
+- Nota: a ordem migration-antes-do-merge era **obrigatória**, não recomendada. A coluna entra no `select` do fio, então sem ela o PostgREST responde 42703 e a aba "Minha vez" cai em 500. Falha ruidosa, sem corromper dado, e volta sozinha assim que a coluna existe
+- Nota: prova por mutação com 7 mutantes do autor e 5 do revisor independente, todos mortos, um deles no **detector** (a coluna sai do `select` e a regra nasce lendo `None`). A janela de 10 minutos foi provada pelos dois lados, pela rota (dois PATCH seguidos, provando que a lista **substitui** e não acumula) e pela regra
+- Nota: risco aceito e registrado. A lista guarda só a **última** correção, então numa fatia estreita (duas correções na mesma janela, com a pessoa tendo falado na Demanda entre o envio e a primeira) ela perde o carimbo e **some** de "Minha vez" sem ter respondido, que é a #670 em miniatura. O conserto de verdade é carimbo por pessoa, fora do escopo cravado na triagem
+- Nota: sem backfill, de propósito. Linha antiga fica `NULL` e aparece a mais, nunca a menos. Quem estiver preso **dentro** da aba por linha corrigida antes da migration segue preso até responder de novo naquela Demanda. Backfill para lista vazia seria pior, apagaria chamadas reais
+
 ## v0.129.1 - 2026-09-11 14:34 - a mudança de regra volta a recalcular Etapa e "O que muda" das Demandas, mesmo sem novidade no GitHub
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `d35a130`
