@@ -15,7 +15,7 @@ set -euo pipefail
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
 ORIGEM="$RAIZ/docs/manual/tecnologia"
 ASSETS="$RAIZ/docs/comunicacao/_assets"
-DESTINO="${TMPDIR:-/tmp}/manual-tecnologia-publish"
+DESTINO="${TMPDIR:-/tmp}/manual-tecnologia-hsm"
 
 for a in "$ASSETS/logo-hsm.png" "$ASSETS/fonts/HPSimplified_Rg.ttf"; do
   [ -f "$a" ] || { echo "asset não encontrado: $a" >&2; exit 1; }
