@@ -1,8 +1,11 @@
 ---
 status: accepted
+amended_by: 0054
 ---
 
 # Ciclo de vida da issue: status fiel, critérios auto-verificados e loop do diretor
+
+> Emendado pelo ADR 0054 em 10/09/2026 nas decisões 3 e 5: o revisor canônico comenta no app (Conversa da Demanda vinculada), e a Action acende `revisor-comentou` também pelo marcador `<!-- revisor-app -->`.
 
 > Renumerado de 0007 para 0020 em 06/07/2026 por colisão de numeração com o ADR 0007 (POPs segundo contexto). Referências antigas a "ADR 0007, decisão N" sobre ciclo de vida de issue apontam para este documento.
 

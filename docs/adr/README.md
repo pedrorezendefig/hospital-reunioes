@@ -23,6 +23,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | ADR | Status | Título |
 |---|---|---|
 | [0050](0050-demandas-de-tecnologia-moram-no-app-apartadas-das-pendencias.md) | accepted | Demandas de tecnologia moram no app do hospital, só para Super admin, apartadas das Pendências |
+| [0054](0054-demanda-vinculada-a-issue-etapa-derivada-e-revisor-no-app.md) | accepted | Demanda vinculada a issue do GitHub: Etapa derivada, comentário do diretor espelhado e a bola volta a quem pediu (emenda 0020) |
 
 ## Reuniões e Atas
 
