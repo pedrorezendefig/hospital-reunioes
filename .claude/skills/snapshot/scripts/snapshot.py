@@ -158,6 +158,30 @@ class EnumeracaoDeRotasQuebrada(RuntimeError):
     """
 
 
+# Marca que o gen_rotas_md carimba quando a listagem veio do parser AST.
+MARCA_DE_LISTAGEM_PARCIAL = "**Listagem parcial.**"
+
+
+class RebaixamentoDeRotas(RuntimeError):
+    """O ROTAS.md em disco veio da introspecção e esta passagem só tem o AST.
+
+    Diferente da EnumeracaoDeRotasQuebrada: ali a introspecção rodou e mentiu,
+    aqui ela não rodou. O fallback AST é legítimo para gerar do zero, mas por
+    cima de uma listagem completa ele SUBTRAI: além de perder as rotas criadas
+    por factory, ele não enxerga as dependências dos routers e vira a coluna
+    Auth de ✅ para ❌ em rota autenticada. O banner de listagem parcial avisa
+    sobre rota que falta, não sobre auth que mente, e ninguém lê banner num
+    commit automático (mordeu na onda de 10/09/2026).
+    """
+
+
+def _rebaixaria_o_rotas_md(rotas_md: Path, fonte: str) -> bool:
+    """True quando reescrever o ROTAS.md perderia informação que já está lá."""
+    if fonte == "runtime" or not rotas_md.exists():
+        return False
+    return MARCA_DE_LISTAGEM_PARCIAL not in rotas_md.read_text(encoding="utf-8")
+
+
 def _introspect_routes_runtime(routers_dir: Path) -> list[dict] | None:
     """Lê as rotas do app FastAPI montado. None se não der (sem venv, sem uv,
     import quebrado, .env faltando), e aí quem chama cai no parser AST.
@@ -537,7 +561,7 @@ def gen_rotas_md(routes: list[dict], project_name: str, fonte: str = "runtime") 
     ]
     if fonte != "runtime":
         out += [
-            "> ⚠️ **Listagem parcial.** Gerada pelo parser estático porque o app não pôde ser",
+            f"> ⚠️ {MARCA_DE_LISTAGEM_PARCIAL} Gerada pelo parser estático porque o app não pôde ser",
             "> montado (venv do backend ausente, dependências ou `.env` faltando). Rotas criadas",
             "> por factory não aparecem aqui. Rode o `/snapshot` com o backend instalado para a",
             "> listagem completa.",
@@ -951,6 +975,12 @@ def cmd_default(args, paths: dict, project_json: dict) -> int:
 
     # Parse
     routes, fonte_rotas = parse_routers(paths["routers"]) if paths["routers"] else ([], "ast")
+    if not args.aceitar_listagem_parcial and _rebaixaria_o_rotas_md(
+        paths["snapshots"] / "ROTAS.md", fonte_rotas
+    ):
+        raise RebaixamentoDeRotas(
+            "o ROTAS.md em disco veio da introspecção e esta passagem só tem o parser AST"
+        )
     parsed = parse_migrations(paths["migrations"]) if paths["migrations"] else {"tables": {}, "history": []}
 
     # Generate
@@ -1209,6 +1239,9 @@ def main() -> int:
     parser.add_argument("--diff", metavar="RANGE", help="Markdown da mudança entre <base>..HEAD")
     parser.add_argument("--no-commit", action="store_true",
                         help="Não cria commit automático (default: commita chore(spec): ...)")
+    parser.add_argument("--aceitar-listagem-parcial", action="store_true",
+                        help="Deixa o parser AST reescrever um ROTAS.md completo "
+                             "(rebaixa a listagem: perde rota de factory e vira a coluna Auth)")
     args = parser.parse_args()
 
     repo_root = Path(args.root).resolve()
@@ -1227,6 +1260,14 @@ def main() -> int:
         print(f"[snapshot] erro: {exc}", file=sys.stderr)
         print("[snapshot] nada foi escrito: o ROTAS.md sairia mutilado.", file=sys.stderr)
         return 3
+    except RebaixamentoDeRotas as exc:
+        print(f"[snapshot] erro: {exc}", file=sys.stderr)
+        print("[snapshot] nada foi escrito: reescrever agora rebaixaria a listagem "
+              "(perde rota criada por factory e vira a coluna Auth de rota autenticada).",
+              file=sys.stderr)
+        print("[snapshot] conserto: rode com o backend instalado (`.venv` e `.env` no lugar). "
+              "Para rebaixar de propósito, passe --aceitar-listagem-parcial.", file=sys.stderr)
+        return 4
 
 
 if __name__ == "__main__":
