@@ -455,6 +455,9 @@ def _demanda(did: str, **campos) -> dict:
 PEDRO = _pessoa("P1", "Pedro Vitta")
 SOCIA = _pessoa("P2", "Sócia Vitta")
 FACILITADOR = _pessoa("P3", "Facilitador", access_profile="regular")
+# Segunda pessoa MENCIONAVEL: o Facilitador nao tem acesso a aba, entao ele nao
+# serve para provar mencao (a rota recusaria antes de chegar na regra).
+DIRETOR = _pessoa("P4", "Diretor do Hospital")
 
 BASE = "/api/admin/tecnologia"
 
@@ -1601,6 +1604,74 @@ class TestEditarAPropriaResposta:
         assert resposta.status_code == 200
         assert resposta.json()["mencoes"] == []
         assert sb.tabelas["tecnologia_conversas"][0]["mencoes"] == []
+
+    def test_a_correcao_grava_quem_ela_acrescentou(self):
+        """Issue #693: a linha passa a guardar QUEM entrou na correcao, e e essa
+        lista que "Minha vez" le para nao reabrir a vez de quem ja respondeu.
+
+        A Socia ja estava chamada e continua na `mencoes`; so o Diretor entrou.
+        Gravar a lista FINAL aqui seria o mesmo defeito por outro caminho.
+        """
+        client, sb = _montar(
+            participantes=[PEDRO, SOCIA, DIRETOR],
+            demandas=[_demanda("d1")],
+            conversas=[_resposta_no_banco("c1", mencoes=["P2"], texto="@Sócia Vitta, e agora?")],
+        )
+
+        resposta = client.patch(
+            f"{BASE}/demandas/d1/conversa/c1",
+            json={"texto": "@Sócia Vitta, @Diretor do Hospital, e agora?", "mencoes": ["P2", "P4"]},
+        )
+
+        assert resposta.status_code == 200
+        assert sb.tabelas["tecnologia_conversas"][0]["mencoes_da_correcao"] == ["P4"]
+
+    def test_a_correcao_sem_mencao_nova_grava_lista_vazia(self):
+        """A correcao de virgula grava `[]`, e nao deixa a coluna nula: nulo
+        quer dizer "linha corrigida antes desta coluna existir", que e o
+        comportamento antigo de chamar todo mundo de novo."""
+        client, sb = _montar(
+            participantes=[PEDRO, SOCIA, DIRETOR],
+            demandas=[_demanda("d1")],
+            conversas=[_resposta_no_banco("c1", mencoes=["P2"], texto="@Sócia Vitta, e agora")],
+        )
+
+        resposta = client.patch(
+            f"{BASE}/demandas/d1/conversa/c1",
+            json={"texto": "@Sócia Vitta, e agora?", "mencoes": ["P2"]},
+        )
+
+        assert resposta.status_code == 200
+        assert sb.tabelas["tecnologia_conversas"][0]["mencoes_da_correcao"] == []
+
+    def test_a_segunda_correcao_da_janela_substitui_a_lista_da_primeira(self):
+        """A janela de 10 minutos aceita varias correcoes, e cada uma renova o
+        `editado_em`. Como o carimbo e SEMPRE o da ultima, a lista tambem tem de
+        ser: acumular deixaria o Diretor, chamado e respondido na primeira
+        correcao, contando a partir de um instante posterior a fala dele, e ele
+        voltaria para a aba a cada virgula corrigida depois.
+        """
+        client, sb = _montar(
+            participantes=[PEDRO, SOCIA, DIRETOR],
+            demandas=[_demanda("d1")],
+            conversas=[_resposta_no_banco("c1", mencoes=[], texto="e agora?")],
+        )
+
+        primeira = client.patch(
+            f"{BASE}/demandas/d1/conversa/c1",
+            json={"texto": "@Diretor do Hospital, e agora?", "mencoes": ["P4"]},
+        )
+        segunda = client.patch(
+            f"{BASE}/demandas/d1/conversa/c1",
+            json={"texto": "@Diretor do Hospital, @Sócia Vitta, e agora?", "mencoes": ["P4", "P2"]},
+        )
+
+        assert [primeira.status_code, segunda.status_code] == [200, 200]
+        assert sb.tabelas["tecnologia_conversas"][0]["mencoes_da_correcao"] == ["P2"]
+        # Os dois carimbos andam JUNTOS: e o par que faz a regra fechar. Uma
+        # lista nova sobre um `editado_em` velho (ou o contrario) apontaria a
+        # chamada para um instante que nao e o dela.
+        assert segunda.json()["editado_em"] > primeira.json()["editado_em"]
 
     def test_outra_pessoa_nao_edita_a_resposta_alheia(self):
         client, sb = _montar(

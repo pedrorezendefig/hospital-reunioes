@@ -1824,7 +1824,14 @@ async def editar_resposta(
     # A diferenca sai daqui, com a linha como ela esta ANTES do update: depois
     # de gravar, "quem ja estava mencionado" seria a propria lista nova.
     novos = mencoes_acrescentadas(antes=linha.get("mencoes"), depois=mencoes, quem_fez=ator["id"])
-    mudancas = {"texto": texto, "mencoes": mencoes, "editado_em": _agora()}
+    # A MESMA lista que decide o e-mail decide a aba (issue #693): quem entrou
+    # nesta correcao conta a partir do carimbo dela, e quem ja estava chamado
+    # continua contando pela ordem do fio. Ela e SUBSTITUIDA a cada correcao,
+    # como o `editado_em`: os dois falam sempre da ultima, e uma lista que
+    # acumulasse chamaria de novo, a cada virgula, quem a correcao anterior ja
+    # tinha chamado. Vazia quando nada entrou, e nunca nula: nulo e a linha
+    # corrigida antes desta coluna existir.
+    mudancas = {"texto": texto, "mencoes": mencoes, "editado_em": _agora(), "mencoes_da_correcao": novos}
     try:
         result = (
             supabase.table(TABELA_CONVERSAS).update(mudancas).eq("id", linha_id).eq("demanda_id", demanda_id).execute()
@@ -1901,7 +1908,12 @@ def _demandas_filtradas(
 # saber se a resposta veio antes ou depois dele e preciso o instante das duas
 # linhas. Sem as duas colunas, a regra roda certa sobre linha nenhuma e a aba
 # responde "ninguem te chamou" com a chamada gravada no banco.
-COLUNAS_DO_FIO_PARA_MENCAO = "demanda_id, autor_id, linha, mencoes, criado_em, editado_em"
+#
+# `mencoes_da_correcao` entra pelo mesmo motivo, e desde a issue #693: e ela que
+# diz para QUEM aquele `editado_em` vale. Fora do `select`, a coluna chega nula
+# em toda linha, a regra le isso como "corrigida antes da coluna existir" e a
+# aba volta a chamar quem ja respondeu, com a lista certa gravada no banco.
+COLUNAS_DO_FIO_PARA_MENCAO = "demanda_id, autor_id, linha, mencoes, criado_em, editado_em, mencoes_da_correcao"
 COLUNAS_DO_FIO_PARA_BUSCA = "demanda_id, linha, texto"
 
 

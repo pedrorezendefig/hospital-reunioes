@@ -181,11 +181,10 @@ class TestAMencaoQueEntrouNaCorrecao:
     ficaria depois da mencao na ordem e daria por atendida uma chamada que ainda
     nao existia quando ela foi escrita.
 
-    A linha nao guarda QUAIS mencoes entraram na correcao (nao ha coluna para
-    isso), entao toda mencao de linha corrigida conta do `editado_em`. Uma
-    correcao de virgula pode trazer de volta uma chamada ja respondida, e esse e
-    o lado seguro do erro: a Demanda reaparece na aba, em vez de uma chamada
-    sumir de vista.
+    Em toda esta classe a correcao ACRESCENTOU a Socia, e e por isso que a
+    `mencoes_da_correcao` a traz: desde a issue #693 o carimbo so vale para quem
+    entrou na correcao, e sem a lista aqui estes cenarios estariam provando o
+    caminho do historico (coluna nula) em vez do caminho vivo.
     """
 
     ENVIO = "2026-09-02T09:00:00Z"
@@ -194,7 +193,12 @@ class TestAMencaoQueEntrouNaCorrecao:
     DEPOIS_DA_CORRECAO = "2026-09-02T09:07:00Z"
 
     def _mencao_corrigida(self, **campos) -> dict:
-        datas = {"criado_em": self.ENVIO, "editado_em": self.CORRECAO, **campos}
+        datas = {
+            "criado_em": self.ENVIO,
+            "editado_em": self.CORRECAO,
+            "mencoes_da_correcao": ["P2"],
+            **campos,
+        }
         return _resposta("P1", "@Sócia Vitta e agora?", mencoes=["P2"], **datas)
 
     def test_a_resposta_anterior_a_correcao_nao_atende_a_mencao_nova(self):
@@ -263,6 +267,131 @@ class TestAMencaoQueEntrouNaCorrecao:
             _resposta("P2", "respondi", criado_em="ontem"),
         ]
         assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is False
+
+
+class TestQuemAMencaoDaCorrecaoChama:
+    """A correcao chama SO quem ela acrescentou (issue #693).
+
+    A #670 fez toda mencao de linha corrigida contar do `editado_em`, porque a
+    linha nao guardava QUAIS mencoes tinham entrado na correcao. O preco era
+    reabrir "Minha vez" de quem ja havia respondido naquela mesma linha: uma
+    virgula corrigida chamava todo mundo de novo.
+
+    A coluna `mencoes_da_correcao` (migration 105) guarda a lista da ULTIMA
+    correcao. Quem esta nela conta do `editado_em`; os demais contam do
+    `criado_em`, que aqui e a ORDEM das linhas, a regra que sempre valeu.
+    """
+
+    ENVIO = "2026-09-02T09:00:00Z"
+    ANTES_DA_CORRECAO = "2026-09-02T09:03:00Z"
+    CORRECAO = "2026-09-02T09:05:00Z"
+
+    def test_quem_ja_respondeu_e_nao_entrou_na_correcao_nao_volta_para_a_aba(self):
+        """O bug da issue: o Pedro chamou a Socia e o Diretor, a Socia
+        respondeu, e a correcao acrescentou so o Diretor. A Socia ja disse o
+        que tinha a dizer sobre aquela fala e nao pode reaparecer."""
+        linhas = [
+            _resposta(
+                "P1",
+                "@Sócia Vitta e @Diretor, e agora?",
+                mencoes=["P2", "P3"],
+                criado_em=self.ENVIO,
+                editado_em=self.CORRECAO,
+                mencoes_da_correcao=["P3"],
+            ),
+            _resposta("P2", "ja respondi", criado_em=self.ANTES_DA_CORRECAO),
+        ]
+
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is False
+
+    def test_quem_a_correcao_acrescentou_volta_mesmo_tendo_falado_antes(self):
+        """A irma de presenca da anterior: no MESMO fio, o Diretor entrou na
+        correcao. A fala dele veio antes de a chamada existir, entao ela nao
+        responde o que ainda nao tinha sido perguntado.
+
+        Sem este par, uma regra que nunca olhasse o `editado_em` passaria no
+        teste de cima e desligaria a issue #670 inteira.
+        """
+        linhas = [
+            _resposta(
+                "P1",
+                "@Sócia Vitta e @Diretor, e agora?",
+                mencoes=["P2", "P3"],
+                criado_em=self.ENVIO,
+                editado_em=self.CORRECAO,
+                mencoes_da_correcao=["P3"],
+            ),
+            _resposta("P3", "passei por aqui", criado_em=self.ANTES_DA_CORRECAO),
+        ]
+
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P3") is True
+
+    def test_correcao_sem_mencao_nova_nao_chama_ninguem(self):
+        """A correcao de virgula: a lista gravada e VAZIA, e a Socia, que ja
+        respondeu, continua fora da aba.
+
+        Lista vazia nao e lista ausente. Uma guarda escrita por verdade
+        (`if da_correcao:`) trataria `[]` como "nao sei quem entrou" e cairia no
+        comportamento antigo, que e exatamente o defeito da issue.
+        """
+        linhas = [
+            _resposta(
+                "P1",
+                "@Sócia Vitta, e agora?",
+                mencoes=["P2"],
+                criado_em=self.ENVIO,
+                editado_em=self.CORRECAO,
+                mencoes_da_correcao=[],
+            ),
+            _resposta("P2", "ja respondi", criado_em=self.ANTES_DA_CORRECAO),
+        ]
+
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is False
+
+    def test_a_linha_corrigida_antes_da_coluna_mantem_o_lado_seguro(self):
+        """Lista NULA e a linha que a #670 corrigiu sem ter onde gravar quem
+        entrou. Sem esse dado, chamar de novo (e a Demanda reaparecer) e melhor
+        do que uma chamada sumir de vista: e a escolha que a #670 ja tinha
+        feito, e ela continua valendo para o historico."""
+        linhas = [
+            _resposta(
+                "P1",
+                "@Sócia Vitta, e agora?",
+                mencoes=["P2"],
+                criado_em=self.ENVIO,
+                editado_em=self.CORRECAO,
+                mencoes_da_correcao=None,
+            ),
+            _resposta("P2", "ja respondi", criado_em=self.ANTES_DA_CORRECAO),
+        ]
+
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is True
+
+    def test_varias_correcoes_na_janela_e_so_a_ultima_lista_chama(self):
+        """A janela de 10 minutos aceita correcao atras de correcao, e cada uma
+        renova o `editado_em`. A primeira chamou o Diretor, que respondeu; a
+        segunda chamou a Socia, e so ela conta do carimbo novo.
+
+        E o caso que o efeito do bug REPETIA: com a lista acumulando (ou sem
+        lista nenhuma), o Diretor voltaria para a aba a cada correcao seguinte,
+        porque a resposta dele e sempre anterior ao ultimo `editado_em`.
+        """
+        linha_corrigida_duas_vezes = _resposta(
+            "P1",
+            "@Diretor, @Sócia Vitta, e agora?",
+            mencoes=["P3", "P2"],
+            criado_em=self.ENVIO,
+            editado_em="2026-09-02T09:06:00Z",
+            mencoes_da_correcao=["P2"],
+        )
+        linhas = [
+            linha_corrigida_duas_vezes,
+            _resposta("P3", "ja respondi", criado_em=self.CORRECAO),
+        ]
+
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P3") is False
+        # A irma de presenca, no mesmo fio: a chamada da ULTIMA correcao vale.
+        assert esperando_resposta_da_pessoa(linhas=linhas, pessoa_id="P2") is True
 
 
 class TestMotivoDaMinhaVez:
@@ -673,6 +802,7 @@ def _linha(did: str, **campos) -> dict:
         "movimento_para": None,
         "criado_em": "2026-09-02T09:00:00Z",
         "editado_em": None,
+        "mencoes_da_correcao": None,
     }
     base.update(campos)
     return base
@@ -1133,6 +1263,54 @@ class TestAMencaoDaCorrecaoPelaRota:
         client = self._client(self.DEPOIS_DA_CORRECAO)
 
         assert client.get(f"{BASE}/minha-vez").json() == []
+
+
+class TestQuemACorrecaoChamaPelaRota:
+    """A mesma regra da issue #693, pela rota.
+
+    A prova pura nao basta: "Minha vez" le o fio com uma LISTA de colunas
+    (`COLUNAS_DO_FIO_PARA_MENCAO`), o dublê projeta como o PostgREST, e uma
+    coluna que faltasse ali chegaria NULA em toda linha. A regra leria isso como
+    "linha corrigida antes da coluna existir", cairia no comportamento da #670 e
+    a aba voltaria a chamar quem ja respondeu, com a lista certa gravada no
+    banco.
+    """
+
+    ENVIO = "2026-09-02T09:00:00Z"
+    ANTES_DA_CORRECAO = "2026-09-02T09:03:00Z"
+    CORRECAO = "2026-09-02T09:05:00Z"
+
+    def _client(self, *, mencoes_da_correcao: list[str] | None):
+        return _montar(
+            logado=SOCIA,
+            demandas=[_demanda("d1", responsavel_id="P1")],
+            conversas=[
+                _linha(
+                    "d1",
+                    id="c1",
+                    autor_id="P1",
+                    texto="@Sócia Vitta e @Diretor, e agora?",
+                    mencoes=["P2", "P3"],
+                    criado_em=self.ENVIO,
+                    editado_em=self.CORRECAO,
+                    mencoes_da_correcao=mencoes_da_correcao,
+                ),
+                _linha("d1", id="c2", autor_id="P2", texto="ja respondi", criado_em=self.ANTES_DA_CORRECAO),
+            ],
+        )
+
+    def test_a_correcao_que_chamou_outra_pessoa_nao_traz_a_socia_de_volta(self):
+        client = self._client(mencoes_da_correcao=["P3"])
+
+        assert client.get(f"{BASE}/minha-vez").json() == []
+
+    def test_a_socia_continua_aparecendo_quando_a_correcao_chamou_ela(self):
+        """A irma de presenca: no MESMO cenario, com a Socia na lista da
+        correcao, a Demanda aparece. Sem ela, uma aba que nunca mostrasse nada
+        passaria no teste de cima."""
+        client = self._client(mencoes_da_correcao=["P2"])
+
+        assert [d["id"] for d in client.get(f"{BASE}/minha-vez").json()] == ["d1"]
 
 
 class TestOTetoDoPostgrest:
