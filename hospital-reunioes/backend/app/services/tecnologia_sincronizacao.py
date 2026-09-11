@@ -1,7 +1,8 @@
 """A Demanda vinculada relendo o GitHub (issue #678, PRD #673, ADR 0054).
 
 Uma rotina, dois gatilhos. `sincronizar_demanda` le a issue, monta a foto,
-compara com a guardada e, se mudou, grava o cache e a linha automatica da Etapa.
+compara o cache que ela derivaria com o que ja esta na Demanda e, se mudou,
+grava o cache e a linha automatica da Etapa.
 Quem a chama e o webhook (em segundos, pelo numero da issue do payload) e o job
 de hora em hora (sobre o lote inteiro). O par webhook + reconciliacao e o mesmo
 molde da ClickSign, e existe pelo mesmo motivo: o GitHub NAO reentrega webhook
@@ -10,10 +11,13 @@ congelaria o selo do card ate alguem mexer nele a mao.
 
 Tres invariantes que valem pelos dois caminhos:
 
-- **Foto igual nao escreve NADA.** Nem a linha do fio, nem o `UPDATE`, nem o
+- **Cache igual nao escreve NADA.** Nem a linha do fio, nem o `UPDATE`, nem o
   carimbo da ultima sincronizacao. E o que faz a entrega repetida do GitHub e a
   passagem de hora em hora serem inofensivas: sem esta guarda, o fio do diretor
-  ganharia uma linha por hora dizendo a mesma coisa.
+  ganharia uma linha por hora dizendo a mesma coisa. "Igual" e sobre o cache
+  DERIVADO, e nao so sobre a foto crua (issue #690): a regra que deriva a Etapa
+  e o "O que muda" muda com o app, e quem comparasse a foto deixaria a Demanda
+  sem novidade no GitHub com o valor da regra velha para sempre.
 - **Etapa igual nao grava linha.** Um degrau abaixo da guarda acima: editar o
   corpo da issue muda a foto sem mudar a Etapa, e o cache precisa acompanhar
   enquanto o fio fica calado.
@@ -59,7 +63,6 @@ from app.services.tecnologia_email import avisar_atribuicao
 from app.services.tecnologia_vinculo import (
     ETAPA_REGISTRADA,
     etapa_da_foto,
-    foto_mudou,
     o_que_muda_da_foto,
     partes_da_foto,
     partes_para_o_diretor,
@@ -109,6 +112,30 @@ def mudanca_da_foto(foto: dict[str, Any]) -> dict[str, Any]:
         "github_foto": foto,
         "github_sincronizado_em": datetime.now(UTC).isoformat(),
     }
+
+
+# A unica coluna do cache que muda a cada leitura, e por isso fica FORA da
+# comparacao: incluida, ela diria "mudou" toda vez e a guarda de baixo nunca
+# calaria ninguem.
+CARIMBO_DA_SINCRONIZACAO = "github_sincronizado_em"
+
+
+def cache_desatualizado(demanda: dict[str, Any], mudanca: dict[str, Any]) -> bool:
+    """Se o que esta gravado na Demanda ja diz o que esta mudanca diria.
+
+    A pergunta e sobre o DERIVADO, e nao sobre a foto crua (issue #690). Etapa,
+    partes, "O que muda" e as contagens sao funcoes puras da foto, e a REGRA que
+    as calcula muda com o app: basta uma label nova em `LABELS_PLANEJADA` ou um
+    fim de bloco diferente no "Para o diretor". Comparando so o `github_foto`,
+    toda Demanda cujo issue nao mexesse mais no GitHub ficaria com o valor da
+    regra velha para sempre, e a reconciliacao de hora em hora passaria por ela
+    sem consertar nada, porque a foto continua identica.
+
+    A foto entra na conta junto com os derivados: ela e uma das colunas de
+    `mudanca_da_foto`, e comparar todas de uma vez mantem esta guarda com um
+    criterio so. Uma coluna nova no cache passa a ser comparada sozinha.
+    """
+    return any(valor != demanda.get(campo) for campo, valor in mudanca.items() if campo != CARIMBO_DA_SINCRONIZACAO)
 
 
 def demanda_vinculada(supabase, numero: int) -> dict[str, Any] | None:
@@ -372,12 +399,12 @@ def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
 
     dados = github_client.ler_issue(numero)
     foto = github_client.montar_foto(dados, github_client.ler_sub_issues(numero))
-    if not foto_mudou(demanda.get("github_foto"), foto):
+    mudanca = mudanca_da_foto(foto)
+    if not cache_desatualizado(demanda, mudanca):
         return False
 
     demanda_id = str(demanda["id"])
     etapa_antes = demanda.get("etapa") or ETAPA_REGISTRADA
-    mudanca = mudanca_da_foto(foto)
     muda_a_etapa = mudanca["etapa"] != etapa_antes
 
     consulta = supabase.table(TABELA_DEMANDAS).update(mudanca).eq("id", demanda_id)

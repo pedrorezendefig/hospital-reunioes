@@ -351,6 +351,29 @@ def _foto_guardada(gh: _GithubFalso, numero: int) -> dict:
     return github_client.montar_foto(gh.issues[numero], gh.sub_issues.get(numero, []))
 
 
+# O carimbo que a sincronizacao ANTERIOR deixou. Valor fixo para os casos poderem
+# dizer "este carimbo nao foi tocado" sem depender do relogio.
+CARIMBO_ANTERIOR = "2026-09-09T08:00:00+00:00"
+
+
+def _ja_sincronizada(gh: _GithubFalso, numero: int, did: str = "D1", **campos) -> dict:
+    """A Demanda como a sincronizacao anterior a deixou: a foto guardada E o
+    cache que a regra de hoje deriva dela.
+
+    O cache vem do MESMO `mudanca_da_foto` que a rotina usa (issue #690), e nao
+    escrito a mao: uma Demanda com a foto guardada e as colunas derivadas vazias
+    nao e "ja sincronizada", e sim uma Demanda desatualizada, que a rotina tem o
+    dever de regravar. Testes de idempotencia montados assim ficariam verdes
+    provando o contrario do que dizem.
+
+    Quem quer o cache VELHO (a regra mudou desde entao) passa a coluna por
+    `campos`: o caso mostra, numa linha so, o que esta fora de dia.
+    """
+    cache = tecnologia_sincronizacao.mudanca_da_foto(_foto_guardada(gh, numero))
+    cache["github_sincronizado_em"] = CARIMBO_ANTERIOR
+    return _demanda(did, github_issue_numero=numero, **{**cache, **campos})
+
+
 def _montar(
     *,
     demandas: list[dict] | None = None,
@@ -1176,31 +1199,31 @@ class TestSincronizacaoPeloWebhook:
         assert demanda["github_foto"]["partes"][0]["numero"] == 678
         assert [linha["texto"] for linha in _fio(sb)] == ["Etapa: Em desenvolvimento (3 de 7 partes)"]
 
-    def test_foto_igual_nao_escreve_nada(self, monkeypatch):
+    def test_foto_igual_e_derivado_igual_nao_escrevem_nada(self, monkeypatch):
         """Criterio de aceite: foto igual a guardada nao grava linha nem mexe na
         ultima sincronizacao. Sem esta guarda, a reconciliacao de hora em hora
-        encheria o fio do diretor de linhas repetidas."""
+        encheria o fio do diretor de linhas repetidas.
+
+        Desde a issue #690 a guarda olha o DERIVADO, e nao so a foto crua, e o
+        caso cobra o UPDATE de frente: sem o espiao, um `update` que casasse
+        zero linha (ou que regravasse o mesmo valor) passaria despercebido, e a
+        promessa aqui e que nenhuma escrita SAI.
+        """
         gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
-        antes = "2026-09-09T08:00:00+00:00"
+        updates: list[tuple[str, dict]] = []
         cliente, sb, _ = _montar(
-            demandas=[
-                _demanda(
-                    "D1",
-                    github_issue_numero=673,
-                    etapa=ETAPA_EM_DESENVOLVIMENTO,
-                    github_foto=_foto_guardada(gh, 673),
-                    github_sincronizado_em=antes,
-                )
-            ],
+            demandas=[_ja_sincronizada(gh, 673)],
             github=gh,
+            antes_do_update=lambda nome, update, _linhas: updates.append((nome, update)),
             monkeypatch=monkeypatch,
         )
 
         resposta = _entregar(cliente, _corpo())
 
         assert resposta.status_code == 200
+        assert updates == [], "nada mudou no GitHub nem na regra: nenhum UPDATE pode sair"
         assert _fio(sb) == []
-        assert _demandas(sb)[0]["github_sincronizado_em"] == antes
+        assert _demandas(sb)[0]["github_sincronizado_em"] == CARIMBO_ANTERIOR
 
     def test_a_entrega_repetida_nao_duplica_a_linha(self, monkeypatch):
         """O GitHub reentrega, e a mesma entrega duas vezes nao pode virar duas
@@ -1295,6 +1318,112 @@ class TestSincronizacaoPeloWebhook:
         assert gh.leituras == [], "nem chegou a gastar cota sobre um card fechado"
         assert _fio(sb) == []
         assert _demandas(sb)[0]["etapa"] == ETAPA_PLANEJADA
+
+
+class TestARegraQueMudaAlcancaQuemNaoTeveNovidade:
+    """Issue #690. Etapa, partes e "O que muda" sao funcoes PURAS da foto, e a
+    regra que as calcula muda com o app: uma label nova em `LABELS_PLANEJADA`, um
+    fim de bloco diferente no "Para o diretor".
+
+    Quem decidisse escrever so pela foto CRUA deixaria toda Demanda sem novidade
+    no GitHub com o valor da regra velha para sempre: a foto continua identica,
+    a reconciliacao de hora em hora passa por ela e nao conserta nada. A guarda
+    compara o DERIVADO (sem o carimbo) com o que ja esta nas colunas.
+
+    Os casos montam a Demanda com o cache de ONTEM (o helper `_ja_sincronizada`
+    deriva o de hoje) porque e assim que a mudanca de regra chega ao banco: a
+    coluna ficou para tras sozinha, sem ninguem tocar na issue.
+    """
+
+    def _com_partes(self) -> _GithubFalso:
+        return _GithubFalso(
+            {673: _issue(673, labels=("in-progress",), resumo={"total": 7, "completed": 3})},
+            sub_issues={673: [_issue(678, labels=("in-progress",))]},
+        )
+
+    def test_a_etapa_da_regra_velha_e_reescrita_com_a_foto_igual(self, monkeypatch):
+        """O caso do criterio de aceite: a Etapa volta a bater com a regra de
+        hoje, e o fio ganha a linha, na primeira sincronizacao depois da
+        mudanca."""
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(
+            # A regra de ontem lia esta MESMA foto como "Em análise".
+            demandas=[_ja_sincronizada(gh, 673, etapa=ETAPA_EM_ANALISE)],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        resposta = _entregar(cliente, _corpo())
+
+        demanda = _demandas(sb)[0]
+        assert resposta.json()["sincronizada"] is True
+        assert demanda["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+        assert demanda["github_sincronizado_em"] != CARIMBO_ANTERIOR
+        assert [linha["texto"] for linha in _fio(sb)] == ["Etapa: Em desenvolvimento"]
+
+    def test_o_bloco_do_diretor_da_regra_velha_e_reescrito_sem_linha_no_fio(self, monkeypatch):
+        """A regra do "Para o diretor" muda sem mexer na Etapa: o cache
+        acompanha e o fio fica calado, como na edicao do corpo da issue."""
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(
+            demandas=[_ja_sincronizada(gh, 673, o_que_muda="O que o fim de bloco antigo cortava aqui.")],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        _entregar(cliente, _corpo(acao="edited"))
+
+        assert _demandas(sb)[0]["o_que_muda"] == "O selo se atualiza sozinho."
+        assert _fio(sb) == [], "a Etapa nao mudou: a linha do fio repetiria o que o diretor ja leu"
+
+    @pytest.mark.parametrize(
+        "coluna, de_ontem",
+        [
+            ("etapa", ETAPA_EM_ANALISE),
+            ("o_que_muda", "O que o fim de bloco antigo cortava aqui."),
+            ("partes", []),
+            ("partes_entregues", None),
+            ("partes_total", None),
+        ],
+    )
+    def test_qualquer_coluna_derivada_fora_de_dia_manda_regravar(self, monkeypatch, coluna, de_ontem):
+        """Uma por uma, e nao so a Etapa: a comparacao e sobre o cache INTEIRO.
+
+        Olhar so a Etapa deixaria "3 de 7 partes" e a lista que o diretor le
+        congeladas na regra velha, com o selo certo em cima delas, que e pior do
+        que o selo errado: parece atualizado.
+        """
+        gh = self._com_partes()
+        cliente, sb, _ = _montar(
+            demandas=[_ja_sincronizada(gh, 673, **{coluna: de_ontem})],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        _entregar(cliente, _corpo())
+
+        de_hoje = tecnologia_sincronizacao.mudanca_da_foto(_foto_guardada(gh, 673))
+        demanda = _demandas(sb)[0]
+        assert demanda[coluna] == de_hoje[coluna]
+        assert demanda["github_sincronizado_em"] != CARIMBO_ANTERIOR
+
+    def test_o_piso_do_caso_igual_e_a_foto_identica_com_o_cache_cheio(self):
+        """O detector, e nao o codigo: sem este piso, "foto igual e derivado
+        igual nao escreve nada" poderia estar verde porque a Demanda montada nem
+        tem foto guardada (e a rotina escreveria por outro motivo), ou porque as
+        colunas derivadas estao vazias dos dois lados.
+
+        E o mesmo piso do lado de cima: os casos da regra velha so provam algo
+        se o resto do cache estiver em dia.
+        """
+        gh = self._com_partes()
+        demanda = _ja_sincronizada(gh, 673)
+
+        assert demanda["github_foto"] == _foto_guardada(gh, 673)
+        assert demanda["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+        assert demanda["o_que_muda"] == "O selo se atualiza sozinho."
+        assert (demanda["partes_entregues"], demanda["partes_total"]) == (3, 7)
+        assert [parte["numero"] for parte in demanda["partes"]] == [678]
 
 
 class TestOEventLoopNaoFicaBloqueado:
@@ -1443,14 +1572,7 @@ class TestOCorpoDaRespostaEOSmokeDoPassoHumano:
         """
         gh_calmo = _GithubFalso({673: _issue(673, labels=("in-progress",))})
         cliente_calmo, _, _ = _montar(
-            demandas=[
-                _demanda(
-                    "D1",
-                    github_issue_numero=673,
-                    etapa=ETAPA_EM_DESENVOLVIMENTO,
-                    github_foto=_foto_guardada(gh_calmo, 673),
-                )
-            ],
+            demandas=[_ja_sincronizada(gh_calmo, 673)],
             github=gh_calmo,
             monkeypatch=monkeypatch,
         )
@@ -1622,12 +1744,7 @@ class TestReconciliacao:
             {
                 "tecnologia_demandas": [
                     _demanda("D1", github_issue_numero=673),
-                    _demanda(
-                        "D2",
-                        github_issue_numero=678,
-                        etapa=ETAPA_EM_ANALISE,
-                        github_foto=_foto_guardada(gh, 678),
-                    ),
+                    _ja_sincronizada(gh, 678, did="D2"),
                 ],
                 "tecnologia_conversas": [],
             }
