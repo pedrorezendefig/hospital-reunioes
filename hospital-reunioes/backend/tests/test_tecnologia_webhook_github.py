@@ -449,6 +449,99 @@ def _entregar_com_header_cru(cliente: TestClient, corpo: bytes, assinatura: byte
     return cliente.post(ROTA, content=corpo, headers=cabecalhos)
 
 
+def _entregar_em_pedacos(cliente: TestClient, corpo: bytes, *, tamanho_do_pedaco: int = 8):
+    """A entrega SEM anunciar `Content-Length`, como faz quem manda o corpo em
+    pedacos (`Transfer-Encoding: chunked`).
+
+    O httpx so omite o `Content-Length` quando o conteudo e um iteravel de
+    tamanho desconhecido, e e por isso que o corpo sai daqui por um gerador: com
+    `bytes` ele anunciaria o tamanho e o caso perderia o sentido, porque o
+    pre-check do anunciado o recusaria antes de a leitura comecar.
+
+    O corpo sai daqui partido, mas nao chega partido: o transporte do
+    `TestClient` o junta num pedaco util so antes de entrega-lo a rota. O que
+    este helper alcanca, entao, e a AUSENCIA do `Content-Length`, e nao a ordem
+    dos pedacos, que e assunto do `_entregar_por_asgi`.
+    """
+
+    def _pedacos():
+        for inicio in range(0, len(corpo), tamanho_do_pedaco):
+            yield corpo[inicio : inicio + tamanho_do_pedaco]
+
+    cabecalhos = {
+        "Content-Type": "application/json",
+        "X-GitHub-Delivery": "d-1",
+        "X-GitHub-Event": "issues",
+        "X-Hub-Signature-256": _assinar(corpo),
+    }
+    return cliente.post(ROTA, content=_pedacos(), headers=cabecalhos)
+
+
+async def _entregar_por_asgi(
+    cliente: TestClient,
+    pedacos: list[bytes],
+    *,
+    anunciado: str | None = None,
+) -> tuple[int, list[int]]:
+    """A entrega falando ASGI direto com o app da rota, devolvendo o status e o
+    tamanho de cada pedaco que a rota chegou a PEDIR.
+
+    Existe porque o transporte do `TestClient` junta o corpo num pedaco so: por
+    ele, "recusou no terceiro pedaco" e "leu os cinco e recusou depois" sao
+    indistinguiveis, e essa distincao e o criterio de aceite. Aqui quem entrega
+    os pedacos e o teste, um a um, e o que fica registrado e o que foi pedido.
+
+    Continua sendo a ROTA de verdade: o mesmo app montado, o mesmo roteamento e
+    as mesmas dependencias. O que muda e so quem fala do outro lado do fio.
+    """
+    corpo = b"".join(pedacos)
+    cabecalhos = [
+        (b"host", b"testserver"),
+        (b"content-type", b"application/json"),
+        (b"x-github-delivery", b"d-1"),
+        (b"x-github-event", b"issues"),
+        (b"x-hub-signature-256", _assinar(corpo).encode("ascii")),
+    ]
+    if anunciado is None:
+        cabecalhos.append((b"transfer-encoding", b"chunked"))
+    else:
+        cabecalhos.append((b"content-length", anunciado.encode("ascii")))
+
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0", "spec_version": "2.3"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": ROTA,
+        "raw_path": ROTA.encode("ascii"),
+        "query_string": b"",
+        "root_path": "",
+        "headers": cabecalhos,
+        "client": ("127.0.0.1", 50000),
+        "server": ("testserver", 80),
+    }
+
+    pendentes = list(pedacos)
+    pedidos: list[int] = []
+
+    async def receive():
+        if not pendentes:
+            return {"type": "http.request", "body": b"", "more_body": False}
+        pedaco = pendentes.pop(0)
+        pedidos.append(len(pedaco))
+        return {"type": "http.request", "body": pedaco, "more_body": bool(pendentes)}
+
+    mensagens: list[dict] = []
+
+    async def send(mensagem):
+        mensagens.append(mensagem)
+
+    await cliente.app(scope, receive, send)
+    status = next(m["status"] for m in mensagens if m["type"] == "http.response.start")
+    return status, pedidos
+
+
 # ─── 1. A porta: HMAC ────────────────────────────────────────────────────────
 
 
@@ -672,6 +765,164 @@ class TestTetoDoCorpo:
 
         assert resposta.status_code == 200
         assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+
+    async def test_o_anunciado_recusa_sem_pedir_um_byte_do_corpo(self, monkeypatch):
+        """O pre-check do `Content-Length` anunciado continua de pe, e a prova e
+        que a rota nem PEDE o corpo: 413 com a lista de pedacos pedidos vazia.
+
+        Sem esta asserção, a contagem na leitura (o teste abaixo) sozinha
+        deixaria o pre-check virar codigo morto sem nada acusar, e a entrega
+        honesta grande passaria a custar a leitura inteira antes da recusa.
+        """
+        monkeypatch.setattr(webhooks_router, "TETO_DO_CORPO_DO_WEBHOOK", 10)
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+        corpo = _corpo()
+
+        status, pedidos = await _entregar_por_asgi(cliente, [corpo], anunciado=str(len(corpo)))
+
+        assert status == 413
+        assert pedidos == [], "a rota leu o corpo antes de olhar o tamanho anunciado"
+        assert gh.leituras == []
+        assert _fio(sb) == []
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_ANALISE
+
+    def test_corpo_em_pedacos_sem_content_length_e_recusado(self, monkeypatch):
+        """O buraco que esta issue fecha: quem manda o corpo em pedacos nao
+        anuncia `Content-Length` nenhum, e o pre-check do anunciado nao tem o que
+        olhar. Um atacante deliberado nunca anuncia.
+
+        A assinatura e VALIDA de proposito: e ela que separa "recusou pelo
+        tamanho" de "leu tudo e recusou por outro motivo". Se a rota confiasse so
+        no anunciado, esta entrega passaria pela assinatura e sincronizaria.
+        """
+        monkeypatch.setattr(webhooks_router, "TETO_DO_CORPO_DO_WEBHOOK", 10)
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _entregar_em_pedacos(cliente, _corpo())
+
+        assert resposta.status_code == 413
+        assert gh.leituras == []
+        assert _fio(sb) == []
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_ANALISE
+
+    async def test_a_leitura_para_no_pedaco_que_passa_do_teto(self, monkeypatch):
+        """O 413 sai ANTES de o corpo inteiro ir para a memoria, e nao depois de
+        acumular tudo e conferir no fim.
+
+        Contar os bytes so no fim do laco daria o mesmo 413 do teste acima: o que
+        distingue os dois desfechos e quantos pedacos a rota chegou a pedir. Com
+        teto de 10 e pedacos de 4, a soma passa no terceiro, e e ali que a
+        leitura tem que parar, por mais corpo que ainda houvesse para vir.
+        """
+        monkeypatch.setattr(webhooks_router, "TETO_DO_CORPO_DO_WEBHOOK", 10)
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+        corpo = _corpo()
+        pedacos = [corpo[i : i + 4] for i in range(0, len(corpo), 4)]
+        assert len(pedacos) > 3, "o corpo do caso precisa ter mais pedacos do que a rota deveria ler"
+
+        status, pedidos = await _entregar_por_asgi(cliente, pedacos)
+
+        assert status == 413
+        assert pedidos == [4, 4, 4], (
+            f"a rota pediu {len(pedidos)} pedacos de {len(pedacos)}: ela acumulou o corpo antes de conferir o teto"
+        )
+        assert _fio(sb) == []
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_ANALISE
+
+    def test_entrega_sem_content_length_dentro_do_teto_passa(self, monkeypatch):
+        """O detector: uma guarda que recusasse toda entrega sem
+        `Content-Length` passaria nos dois testes acima, e o GitHub tem liberdade
+        de mandar o corpo em pedacos.
+
+        O que este caso NAO prova e a ordem dos bytes: o transporte do
+        `TestClient` junta o corpo num pedaco util so antes de entrega-lo a rota,
+        e com um pedaco toda ordem e a mesma ordem. Quem prova a ordem e o teste
+        seguinte, que entrega os pedacos um a um.
+        """
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _entregar_em_pedacos(cliente, _corpo())
+
+        assert resposta.status_code == 200
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+
+    async def test_o_corpo_montado_em_varios_pedacos_fecha_o_hmac_na_ordem(self, monkeypatch):
+        """O HMAC fecha sobre os bytes crus NA ORDEM EM QUE VIERAM, e para isso o
+        caso precisa de mais de um pedaco util de verdade.
+
+        Montar o corpo ao contrario (`acumulado[:0] = pedaco`) e mutante de uma
+        linha que atravessaria a suite inteira sem este teste: com um pedaco util
+        so, inverter a ordem nao muda nada. Em producao o preco seria 401 em toda
+        entrega grande, justamente a que o GitHub parte em pedacos, e o card so
+        andaria pela reconciliacao da hora seguinte, sem nada vermelho no CI.
+
+        Teto de PRODUCAO aqui, e nao rebaixado: o caso nao e sobre o teto, e sim
+        sobre a entrega legitima que chega partida e precisa fechar a assinatura.
+        """
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+        corpo = _corpo()
+        pedacos = [corpo[i : i + 8] for i in range(0, len(corpo), 8)]
+        assert len(pedacos) > 2, "o caso perde o sentido com um pedaco util so: e a ordem que ele cobra"
+
+        status, pedidos = await _entregar_por_asgi(cliente, pedacos)
+
+        assert status == 200, "a entrega legitima partida em pedacos foi recusada"
+        assert len(pedidos) == len(pedacos), "a rota parou de ler antes do fim de uma entrega que cabia no teto"
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+
+    async def test_o_corpo_do_tamanho_exato_do_teto_passa_pelas_duas_guardas(self, monkeypatch):
+        """A fronteira, nas DUAS guardas: o teto e `>` estrito, entao a entrega
+        de tamanho exatamente igual ao teto passa.
+
+        Todo outro caso deste arquivo esta longe da borda (corpo de ~100 bytes
+        contra teto de 10), e por isso trocar `>` por `>=` sobreviveria nas duas
+        linhas. O risco nao e so o mutante: e as duas guardas divergirem na
+        borda, e a mesma entrega ser aceita por uma e recusada pela outra sem
+        nada acusar.
+
+        A entrega que anuncia passa pelas DUAS guardas, entao dizer "foi o
+        anunciado" na falha seria culpar causa que o desfecho nao distingue. Quem
+        distingue e a lista de pedacos PEDIDOS: vazia so quando a recusa veio
+        antes de a leitura comecar.
+        """
+        corpo = _corpo()
+        monkeypatch.setattr(webhooks_router, "TETO_DO_CORPO_DO_WEBHOOK", len(corpo))
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
+
+        anunciando, pedidos = await _entregar_por_asgi(cliente, [corpo], anunciado=str(len(corpo)))
+        em_pedacos, _ = await _entregar_por_asgi(cliente, [corpo[:40], corpo[40:]])
+
+        assert anunciando == 200, "o corpo do tamanho EXATO do teto foi recusado " + (
+            "pela guarda do anunciado, sem ler um byte" if pedidos == [] else "pela contagem da leitura"
+        )
+        assert em_pedacos == 200, "a contagem da leitura recusou o corpo do tamanho EXATO do teto"
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+
+    async def test_a_recusa_pela_contagem_fica_no_log(self, monkeypatch, caplog):
+        """As duas recusas respondem o MESMO 413 com o mesmo motivo generico, que
+        e o que a porta publica deve a quem nao provou ser ninguem.
+
+        No stdout do container, entao, a linha do log e a UNICA coisa que
+        distingue "recusou o que foi anunciado" de "cortou no meio da leitura", e
+        e por ela que o operador ve alguem mandando corpo grande sem anunciar.
+        Apagar o `logger.warning` nao muda resposta nenhuma.
+        """
+        monkeypatch.setattr(webhooks_router, "TETO_DO_CORPO_DO_WEBHOOK", 10)
+        cliente, _, _ = _montar(monkeypatch=monkeypatch)
+        corpo = _corpo()
+        pedacos = [corpo[i : i + 4] for i in range(0, len(corpo), 4)]
+
+        with caplog.at_level(logging.WARNING, logger="app.routers.webhooks"):
+            status, _ = await _entregar_por_asgi(cliente, pedacos)
+
+        assert status == 413
+        assert "passou do teto de 10 bytes durante a leitura" in caplog.text
 
 
 class TestTetoDeTaxa:
