@@ -81,10 +81,20 @@ def _entregue(no: dict[str, Any] | None) -> bool:
     "Não será feita" sobre algo que foi feito. `not_planned` e a excecao, e quem
     a escolhe a declara.
 
+    `wontfix` tambem tira a entrega, e nao so o motivo do fechamento (issue
+    #701, achado na auditoria do PRD #673). O protocolo nao obriga ninguem a
+    escolher "nao planejada" ao fechar, entao quem recusa marca a label e clica
+    no botao padrao do GitHub, que fecha como CONCLUIDA. A label e a decisao; o
+    motivo do fechamento e so como o botao foi clicado. Sem isto, a issue
+    recusada aparecia como Entregue, e Entregue nao para no selo: dispara a
+    devolucao a quem pediu e o e-mail "Entregue, confira e conclua".
+
     Uma funcao so para a raiz e para as partes: "entregue" nao pode significar
     duas coisas diferentes no mesmo modulo, senao a Etapa e o "X de Y partes"
     contariam historias divergentes sobre a mesma issue.
     """
+    if LABEL_WONTFIX in _labels(no):
+        return False
     return _fechada(no) and str((no or {}).get("motivo_do_fechamento") or "").lower() != FECHAMENTO_NAO_PLANEJADA
 
 
@@ -110,7 +120,10 @@ def etapa_da_foto(foto: dict[str, Any] | None) -> str:
     partes = _partes(foto)
 
     # 1. Fechada como concluida, ou fechada sem motivo declarado: entregue,
-    #    aconteca o que acontecer com as labels e com as partes.
+    #    aconteca o que acontecer com as partes e com as outras labels.
+    #    `wontfix` e a unica label que tira a entrega, e ela sai dentro do
+    #    proprio `_entregue` (issue #701), para a raiz e as partes contarem a
+    #    mesma historia.
     #
     #    A ausencia de motivo entra AQUI, e nao na regra 2, porque fechar e o
     #    desfecho normal de uma issue que foi feita: `not_planned` e a excecao, e

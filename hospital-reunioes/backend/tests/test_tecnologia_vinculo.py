@@ -272,7 +272,40 @@ class TestPrecedenciaEntreAsRegras:
 
     def test_fechada_sem_motivo_com_wontfix_ainda_e_nao_sera_feita(self):
         """A label e uma declaracao explicita, e ganha do fechamento mudo."""
-        assert etapa_da_foto(_foto(estado="closed", motivo=None, labels=("wontfix",))) == ETAPA_ENTREGUE
+        assert etapa_da_foto(_foto(estado="closed", motivo=None, labels=("wontfix",))) == ETAPA_NAO_SERA_FEITA
+
+    def test_fechada_como_concluida_com_wontfix_e_recusa_e_nao_entrega(self):
+        """Issue #701, achado da auditoria do PRD #673. O caminho que produz
+        esta foto e o comum: o protocolo nao obriga ninguem a escolher o motivo
+        "nao planejada", entao quem marca `wontfix` e clica no botao padrao do
+        GitHub fecha como CONCLUIDA. A label e a decisao; o motivo do
+        fechamento e so como o botao foi clicado.
+
+        Nao para no selo: Entregue dispara a devolucao a quem pediu, manda a
+        Demanda para Aguardando com o autor como responsavel e envia o e-mail
+        "Entregue, confira e conclua". O diretor receberia aviso de entrega de
+        um pedido que foi recusado."""
+        foto = _foto(estado="closed", motivo="completed", labels=("wontfix",))
+
+        assert etapa_da_foto(foto) == ETAPA_NAO_SERA_FEITA
+
+    def test_wontfix_ganha_das_labels_de_andamento_e_de_fila(self):
+        """A recusa e a palavra final, mesmo com o `in-progress` preso na issue
+        (o caso comum: ninguem tira a label ao fechar) ou com a label da fila."""
+        presa = _foto(estado="closed", motivo="completed", labels=("wontfix", "in-progress"))
+        na_fila = _foto(estado="closed", motivo="completed", labels=("wontfix", "ready-for-agent"))
+
+        assert etapa_da_foto(presa) == ETAPA_NAO_SERA_FEITA
+        assert etapa_da_foto(na_fila) == ETAPA_NAO_SERA_FEITA
+
+    def test_fechada_como_concluida_sem_wontfix_continua_entregue(self):
+        """A guarda que nao pode cair junto: fechar e o desfecho normal de uma
+        issue que foi feita, com motivo declarado ou sem. Se este teste ficar
+        vermelho, a correcao da #701 passou do ponto e o diretor vai ler "Nao
+        sera feita" sobre entrega que aconteceu."""
+        assert etapa_da_foto(_foto(estado="closed", motivo="completed")) == ETAPA_ENTREGUE
+        assert etapa_da_foto(_foto(estado="closed", motivo=None)) == ETAPA_ENTREGUE
+        assert etapa_da_foto(_foto(estado="closed", motivo="completed", labels=("in-progress",))) == ETAPA_ENTREGUE
 
     def test_nao_planejada_ganha_de_in_progress(self):
         foto = _foto(estado="closed", motivo="not_planned", labels=("in-progress",))
@@ -329,6 +362,20 @@ class TestResumoDasPartes:
         as partes passam pela mesma regra (`_entregue`)."""
         foto = _foto(partes=(_parte(674, estado="closed", motivo=None), _parte(675)))
         assert partes_da_foto(foto) == (1, 2)
+
+    def test_parte_recusada_nao_conta_como_entregue(self):
+        """Issue #701, o mesmo defeito da Etapa visto na barra do diretor: uma
+        fatia marcada `wontfix` e fechada pelo botao padrao (como concluida)
+        entrava na conta de "X de Y partes entregues". A regra e uma so
+        (`_entregue`), entao a correcao da raiz tem de aparecer aqui tambem."""
+        foto = _foto(
+            partes=(
+                _parte(674, estado="closed", motivo="completed"),
+                _parte(675, estado="closed", motivo="completed", labels=("wontfix",)),
+                _parte(676),
+            )
+        )
+        assert partes_da_foto(foto) == (1, 3)
 
     def test_resumo_com_total_zero_conta_como_sem_partes(self):
         assert partes_da_foto(_foto(resumo={"total": 0, "entregues": 0})) == (None, None)

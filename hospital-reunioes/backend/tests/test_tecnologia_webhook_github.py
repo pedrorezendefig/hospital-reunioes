@@ -1933,6 +1933,38 @@ class TestEfeitoDaEtapa:
 
         assert efeito_da_etapa(demanda, etapa_nova=ETAPA_ENTREGUE) == SEM_EFEITO
 
+    def test_a_issue_recusada_nao_devolve_a_demanda_nem_dispara_o_email(self):
+        """Issue #701, a costura que a auditoria do PRD #673 cobrou. Os testes
+        acima provam o efeito a partir de uma Etapa JA decidida; este parte da
+        foto que o GitHub entrega de verdade e atravessa as duas funcoes.
+
+        A foto e a do caminho comum de recusa: `wontfix` na issue e fechamento
+        pelo botao padrao, que fecha como CONCLUIDA. Antes da correcao ela
+        virava Entregue, e Entregue devolve a Demanda a quem pediu com o recado
+        de entrega. O diretor receberia "Entregue, confira e conclua" sobre um
+        pedido recusado.
+
+        Sem este teste, a correcao no serviço puro poderia ser desfeita e so um
+        teste de selo ficaria vermelho, sem ninguem ver que o e-mail indevido
+        voltou junto."""
+        from app.services.tecnologia_vinculo import etapa_da_foto
+
+        foto = {
+            "numero": 673,
+            "titulo": "Demanda recusada",
+            "url": "https://github.com/pedrorezendefig/hospital-reunioes/issues/673",
+            "estado": "closed",
+            "motivo_do_fechamento": "completed",
+            "labels": ["wontfix"],
+            "partes": [],
+        }
+        demanda = {"estado": "em_andamento", "autor_id": "P1", "responsavel_id": "P2"}
+
+        etapa = etapa_da_foto(foto)
+
+        assert etapa == ETAPA_NAO_SERA_FEITA
+        assert efeito_da_etapa(demanda, etapa_nova=etapa) == SEM_EFEITO
+
     @pytest.mark.parametrize("etapa", [e for e in ETAPAS if e != ETAPA_ENTREGUE])
     def test_nenhuma_outra_etapa_move_a_demanda(self, etapa):
         """ "Nao sera feita" esta nesta lista de proposito (historia 29): ela so
