@@ -819,14 +819,20 @@ def esperando_resposta_da_pessoa(*, linhas: list[dict[str, Any]], pessoa_id: str
     A UNICA excecao a ordem e a linha CORRIGIDA (issue #670). A correcao nao
     mexe no `criado_em`, entao a linha fica onde estava na fila, e a mencao
     acrescentada nos 10 minutos ja nasceria "respondida" por quem tivesse
-    falado entre o envio e a correcao. Numa linha com `editado_em`, a chamada
-    conta a partir DESSE instante.
+    falado entre o envio e a correcao. Para QUEM A CORRECAO ACRESCENTOU, a
+    chamada conta a partir do `editado_em`.
 
-    Como a linha nao guarda quais mencoes entraram na correcao (nao ha coluna
-    para isso), toda mencao de linha corrigida conta do `editado_em`: uma
-    correcao de virgula pode trazer de volta uma chamada ja respondida, e esse e
-    o lado seguro do erro (a Demanda reaparece na aba, em vez de uma chamada
-    sumir de vista).
+    E so para essa gente (issue #693). A linha guarda em `mencoes_da_correcao`
+    quem entrou na ULTIMA correcao, e quem ja estava mencionado antes dela
+    continua contando pela ordem: sem essa lista, uma virgula corrigida
+    reabriria a vez de todo mundo que aquela fala ja tinha chamado, inclusive
+    de quem respondeu. Lista VAZIA e a correcao que nao acrescentou ninguem, e
+    nao chama pessoa nenhuma.
+
+    Lista NULA e a linha corrigida antes desta coluna existir: nela nao ha como
+    saber quem entrou, e vale o comportamento da #670 (todos do `editado_em`).
+    E o lado seguro do erro para o historico: a Demanda reaparece na aba, em vez
+    de uma chamada sumir de vista.
 
     Data ilegivel, dos dois lados, cai de volta na ORDEM: e a regra que sempre
     valeu, e e o que impede o caso da data quebrada de virar "a mencao nunca foi
@@ -840,11 +846,24 @@ def esperando_resposta_da_pessoa(*, linhas: list[dict[str, Any]], pessoa_id: str
             ultima_mencao = i
     if ultima_mencao < 0:
         return False
-    chamada_em = instante_do_banco(linhas[ultima_mencao].get("editado_em"))
+    chamada_em = _carimbo_da_chamada(linhas[ultima_mencao], pessoa_id=pessoa_id)
     return not any(
         linha.get("linha") == "resposta" and linha.get("autor_id") == pessoa_id and _atende(linha, chamada_em)
         for linha in linhas[ultima_mencao + 1 :]
     )
+
+
+def _carimbo_da_chamada(linha: dict[str, Any], *, pessoa_id: str) -> datetime | None:
+    """De quando vale a chamada desta pessoa nesta linha, ou `None` para a ordem.
+
+    `None` nao e "sem carimbo": e "a POSICAO da linha ja disse tudo", que e a
+    regra geral do fio. So a correcao tira a pessoa dessa regra, e so se ela
+    estiver na lista da ultima correcao.
+    """
+    da_correcao = linha.get("mencoes_da_correcao")
+    if da_correcao is not None and pessoa_id not in da_correcao:
+        return None
+    return instante_do_banco(linha.get("editado_em"))
 
 
 def _atende(resposta: dict[str, Any], chamada_em: datetime | None) -> bool:
