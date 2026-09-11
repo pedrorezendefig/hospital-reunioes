@@ -1571,6 +1571,19 @@ def _campos_do_fio(sb: _SupabaseMock) -> list[tuple]:
     return [(linha["movimento_campo"], linha["movimento_de"], linha["movimento_para"]) for linha in _fio(sb)]
 
 
+def _alarme_da_atribuicao(caplog) -> logging.LogRecord:
+    """O registro do UPDATE do responsavel que nao casou, seja qual for o ramo.
+
+    O filtro morde o trecho que os DOIS ramos compartilham ("da Demanda D1"),
+    e nunca o nivel nem a frase: sao eles que cada teste vai conferir. Um helper
+    que ja procurasse "pela metade" acharia so o ramo do ERROR, e o teste do
+    outro ramo passaria por nao encontrar nada.
+    """
+    alarmes = [registro for registro in caplog.records if "responsável da Demanda D1" in registro.getMessage()]
+    assert len(alarmes) == 1, f"esperado um alarme da atribuição, e vieram {len(alarmes)}"
+    return alarmes[0]
+
+
 class TestADevolucaoPelaRota:
     """A costura, pela porta de verdade: o webhook entrega, a rotina sincroniza,
     e o card volta para a mao de quem pediu.
@@ -1783,6 +1796,11 @@ class TestADevolucaoPelaRota:
         PROPRIA no UPDATE do responsavel, este e o caminho por onde o fio de uma
         Demanda FECHADA ganharia "A entrega atribuiu a Fulano" e o e-mail sairia
         para quem acabou de concluir o card.
+
+        O alarme sai em WARNING, e nao em ERROR (issue #694): aqui o UPDATE que
+        nao casa e a UNICA escrita que a devolucao tinha para fazer, entao nada
+        foi escrito e o card ficou intacto. E o mesmo desfecho correto que o ramo
+        do movimento registra em INFO.
         """
 
         def conclui_no_meio(nome, payload, linhas):
@@ -1796,14 +1814,56 @@ class TestADevolucaoPelaRota:
             antes_do_update=conclui_no_meio,
         )
 
-        with caplog.at_level(logging.ERROR):
+        with caplog.at_level(logging.INFO):
             _entregar(cliente, _corpo(acao="closed"))
 
         demanda = _demandas(sb)[0]
         assert (demanda["estado"], demanda["responsavel_id"]) == ("concluida", "P2")
         assert _campos_do_fio(sb) == [("etapa", ETAPA_EM_ANALISE, ETAPA_ENTREGUE)]
         assert _sem_email_de_verdade == []
-        assert "pela metade" in caplog.text, "a devolução incompleta precisa de alarme, e não de silêncio"
+        alarme = _alarme_da_atribuicao(caplog)
+        assert alarme.levelno == logging.WARNING, "o desfecho em que nada foi escrito nao pode virar alerta"
+        assert "nada foi escrito" in alarme.getMessage(), (
+            "a devolução que não escreveu nada precisa de alarme com essa frase, e não de silêncio"
+        )
+
+    def test_o_card_que_ja_andou_e_perdeu_a_atribuicao_grita_em_error(self, monkeypatch, _sem_email_de_verdade, caplog):
+        """O outro ramo, o que de fato fica pela metade (issue #694).
+
+        A Demanda estava em Em andamento: o movimento para Aguardando VALEU e ja
+        gravou a linha do fio. So entao alguem conclui o card, e o UPDATE do
+        responsavel nao casa. Aqui o card andou, ninguem foi avisado e a passagem
+        seguinte nao refaz nada: e o ERROR que continua de pe, nomeando a Demanda
+        e mandando conferir o card antes de terminar a mao.
+        """
+
+        def conclui_depois_do_movimento(nome, payload, linhas):
+            if nome == "tecnologia_demandas" and payload.get("responsavel_id"):
+                for linha in linhas:
+                    linha["estado"] = "concluida"
+
+        cliente, sb, _ = self._cenario(
+            monkeypatch,
+            demanda=_demanda("D1", github_issue_numero=673, estado="em_andamento", responsavel_id="P2", autor_id="P1"),
+            antes_do_update=conclui_depois_do_movimento,
+        )
+
+        with caplog.at_level(logging.INFO):
+            _entregar(cliente, _corpo(acao="closed"))
+
+        demanda = _demandas(sb)[0]
+        assert (demanda["estado"], demanda["responsavel_id"]) == ("concluida", "P2"), "o movimento valeu e foi por cima"
+        assert _campos_do_fio(sb) == [
+            ("etapa", ETAPA_EM_ANALISE, ETAPA_ENTREGUE),
+            ("estado", "em_andamento", "aguardando"),
+        ], "a linha do movimento ficou gravada: e o que torna esta devolução uma metade"
+        assert _sem_email_de_verdade == []
+        alarme = _alarme_da_atribuicao(caplog)
+        assert alarme.levelno == logging.ERROR, "a devolução que ficou pela metade continua sendo alerta"
+        assert "pela metade" in alarme.getMessage()
+        assert "Confira o estado do card" in alarme.getMessage(), (
+            "quem lê no susto precisa olhar o card antes de refazer"
+        )
 
     @pytest.mark.parametrize(
         "autor",
