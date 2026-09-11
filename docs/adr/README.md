@@ -17,6 +17,8 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0041](0041-acionamento-leva-resumo-relato-integral-e-nota.md) | accepted | O acionamento leva resumo, relato integral e nota da ouvidoria |
 | [0042](0042-retornos-ao-manifestante-acuse-e-encerramento.md) | accepted | Retornos ao manifestante: acuse em horas corridas e aviso de encerramento |
 | [0047](0047-apagar-manifestacao-e-retencao-antecipada-nao-delete.md) | accepted | Apagar manifestação é retenção antecipada, não DELETE |
+| [0051](0051-email-recebido-passa-por-triagem-antes-de-virar-manifestacao.md) | accepted | E-mail recebido em ouvidoria@ passa por triagem antes de virar manifestação |
+| [0052](0052-paciente-do-caso-viaja-para-a-area-no-caso-anonimo.md) | accepted | O Paciente do caso viaja para a área, inclusive no caso anônimo |
 
 ## Tecnologia (Demandas Vitta x Hospital)
 

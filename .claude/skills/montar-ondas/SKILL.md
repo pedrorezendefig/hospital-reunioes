@@ -118,7 +118,24 @@ Mostre a tabela final: sessão · onda · issues · arquivo em comum dentro da s
 
 ### 5. Escrever os prompts
 
-Um prompt por sessão, gravado em `<scratchpad>/prompts-sessoes-<ddmm>.md` e impresso inteiro na resposta (o Pedro copia do celular). Template:
+Um prompt por sessão, gravado em `<scratchpad>/prompts-sessoes-<ddmm>.md` e impresso inteiro na resposta (o Pedro copia do celular).
+
+Cada prompt vem com um **cabeçalho de leitura** logo acima do bloco de código. O Pedro lê o cabeçalho para saber o que a sessão vai fazer antes de colar; a sessão só recebe o bloco. O cabeçalho fica **fora** do bloco, porque a primeira linha colada precisa ser `/onda` para a skill disparar. Formato:
+
+```markdown
+### Sessão <letra>: <tema>
+
+**Issues que ela toca:** #a, #b (onda 1) · #d (onda 2)
+
+**O que cada uma faz:**
+- #a: <uma linha, o que muda no código>
+- #b: <uma linha>
+- #d: <uma linha>
+
+**Por que vale a pena:** <2 ou 3 frases, na língua do diretor: o que o usuário ganha ou o risco que fecha quando esta sessão terminar. Sem nome de arquivo.>
+```
+
+Depois do cabeçalho, o bloco do prompt. Template:
 
 ```
 /onda --paralelo <N>
@@ -151,7 +168,7 @@ A resposta final tem esta forma, nesta ordem. É o que o Pedro lê do celular.
 2. **O que eu fiz:** issues triadas, decisões que o humano tomou e onde ficaram registradas, issue criada, PRD destravado, o que mudou no mundo durante o plano (sessão paralela, versão de prod, migration nova).
 3. **As Y que ficam com você:** uma linha por issue, com a ação concreta ("cadastrar os 4 pontos na tela e mandar os PNGs", "disparar o pedido de API ao Google") e o que ela destrava. PRDs entram aqui como "fecham sozinhos quando as filhas fecharem".
 4. **Tabela final** do passo 4.
-5. **Os prompts**, inteiros, um bloco de código por sessão.
+5. **Os prompts**, inteiros, cada um com o cabeçalho de leitura (issues, resumo por issue, valor) em cima do bloco de código.
 6. **Passo a passo:**
    1. Abrir os terminais na árvore principal e colar um prompt em cada. Cada sessão monta a fila e para.
    2. Escrever `vai` em todas. Elas rodam até PR verde sem chamar.

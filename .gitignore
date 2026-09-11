@@ -63,3 +63,6 @@ hospital-reunioes/supabase/.branches/
 .pytest_cache/
 .ruff_cache/
 .mypy_cache/
+# apresentação da Ouvidoria: só o gerador e o modelo ficam no git (ADR 0044)
+docs/comunicacao/ouvidoria/apresentacao/ouvidoria-apresentacao.pptx
+docs/comunicacao/ouvidoria/apresentacao/videos/
