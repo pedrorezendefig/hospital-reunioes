@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-10T22:15:00-03:00",
+      "sha": "fae4a28",
+      "app_version": "0.128.0",
+      "subject": "a Entrega devolve a Demanda a quem pediu, com o card voltando para Aguardando e o selo Entregue, confira e conclua",
+      "raw_subject": "feat(tecnologia): a Entrega devolve a Demanda a quem pediu (#679) (#689)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 190,
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Issue #679, ultima fatia desta sessao do PRD #673 (ADR 0054, decisao 6). Sem migration. A devolucao mora DENTRO do sincronizar_demanda que a #678 criou, entao vale de graca pelo webhook e pelo lote de hora em hora. A review independente achou 4 must-fix reais. O mais grave: a devolucao atribuia o card ao autor sem checar se ele ainda ve a aba, coisa que o atribuir do router recusa desde sempre; diretor que saiu do hospital virava responsavel de um card que sumia da Minha vez de todo mundo e sem e-mail, porque o filtro de acesso pula quem nao e pessoa da aba. Corrigido usando a MESMA funcao e_pessoa_da_aba, movendo o card sem trocar o responsavel. Os outros tres: o UPDATE do responsavel sem amarra de estado no ramo em que a Demanda ja esta em Aguardando (quem concluia a mao no mesmo segundo ganhava linha no fio de card fechado e e-mail); texto do e-mail sem nenhum teste preso ao literal, entao trocar RECADO_DA_ENTREGA deixava tudo verde com o e-mail dizendo uma coisa e o selo da tela outra; e devolucao pela metade que ninguem recuperava, com o log do webhook prometendo uma recuperacao que a guarda da foto impede. DIVERGENCIA DE SPEC, decidida pelo dono: o criterio 4 dizia que Demanda fechada que chega a Entregue so ganha a linha de Etapa, mas a #678 ja tinha tirado as fechadas dos dois gatilhos; o criterio foi reescrito na issue e a consequencia virou emenda no ADR 0054 (commit 3a13c42): o selo de Etapa de Demanda fechada congela no dia do fechamento, e quem quiser atualizar reabre a Demanda."
+    },
+    {
       "at": "2026-09-10T18:28:00-03:00",
       "sha": "ee5bcf5",
       "app_version": "0.127.0",
@@ -1418,35 +1447,6 @@
       "migrations_applied": [],
       "rollback_target_sha": "79fb895",
       "notes": "Onda de composicao fixa de tres issues (#459, #449 e #450), pedida na mao pelo humano, nao puxada da fila padrao.\n\nSo 1 dos 3 PRs entrou, e o motivo foi externo. O CI da conta GitHub Actions ficou bloqueado por cobranca as 22:05 UTC de 31/08: os jobs morrem em 1 a 3 segundos sem rodar nenhum step, e o workflow Higiene de issues da main caiu junto. O PR #461 rodou verde as 21:59, antes do corte. Os PRs #462 (issue #449) e #463 (issue #450) nunca rodaram. O humano escolheu mergear so o que tinha CI verde de verdade, deixando #462 e #463 abertos, os dois com gates locais verdes e review independente limpa.\n\nA review independente do orquestrador (ADR 0035) pegou o que o autor nao viu, nos tres PRs. No #461 nao houve must-fix, mas o revisor de seguranca achou duas portas irmas abertas com a MESMA raiz: POST /reunioes/agendar deixa token orfao criar reuniao e disparar convite por email sem rate limit, e PATCH /reunioes/{id} deixa token orfao reescrever titulo, data e tomar o facilitador_id de reuniao alheia. Ou seja, o impacto que a #459 nomeia como principal, a rota como disparador de email pelo dominio do hospital, continua alcancavel por outra porta. Virou a issue #464.\n\nUma armadilha de biblioteca apareceu nos DOIS outros PRs, de forma independente. O except APIError do postgrest nao pega falha de transporte, porque APIError so nasce depois da resposta HTTP chegar (postgrest/_sync/request_builder.py:47, com o send() fora do try), e as excecoes do httpx herdam direto de Exception, nao de OSError. No #462 isso tinha invertido o fail-open em fail-closed, com 500 na porta por token do setor; no #463 derrubava o lote inteiro de entregas depois de o email ja ter saido. Os dois foram corrigidos com httpx.HTTPError na tupla e provados por mutante que o revisor rodou por conta propria, nao por leitura.\n\nIssues novas abertas pelos revisores: #464 (portas irmas da #459), #465 (o token do portal do setor e o do aceite vao em claro para o log do container, e com ele da para responder em nome do setor: o banco guarda so o hash, o log guarda o token inteiro) e #466 (avisar_admins_tecnicos loga o corpo do aviso em producao sem guarda, o que deixa a #450 entregue pela metade).\n\nA label revisor-comentou apareceu na #459 como falso positivo conhecido: a Action aplica ao comentario do proprio sub-agente. Foi removida.\n\nO #461 divergiu de um criterio de aceite de proposito. A recusa por escopo devolve 404 'Reuniao nao encontrada' em vez de 403, seguindo o padrao do router desde a issue #194, de nao vazar existencia. O 403 fica reservado ao token orfao.\n\nDebito deixado no #461 por causa do CI bloqueado: falta o controle positivo da Secretaria nas rotas de roster. O corpo do PR afirmava que esse teste existia, e ele nao existia; o revisor conferiu por probe que a Secretaria passa hoje. Nao foi corrigido porque um push novo derrubaria o verde do CI que o PR ja tinha. Registrado na issue #464."
-    },
-    {
-      "at": "2026-08-31T18:21:00-03:00",
-      "sha": "4cc7dac",
-      "app_version": "0.87.0",
-      "subject": "Onda de tres fatias: gate de dono no cadastro de participantes, criticos por area no relatorio da Ouvidoria e endurecimento da pseudonimizacao",
-      "raw_subject": "feat(ouvidoria): contagem de criticos abertos por area nas metricas e no PDF (#457)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Tres PRs mergeados um a um (#456 v0.86.1, #458 v0.86.2, #457 v0.87.0). Os dois ultimos precisaram de merge da main na branch: os tres bumparam a MESMA linha do package.json a partir da 0.86.0, e trocar o numero nao desfaz o conflito. Review foi do orquestrador (ADR 0035): 2 lentes no #456, 1 nos outros dois, e o revisor achou o que o autor nao viu em dois dos tres PRs. O #456 deixava token orfao ler o diretorio inteiro pelas rotas de leitura recem-gateadas (200 com o email do Super Admin no corpo); o #458 tinha REGRESSAO, o separador literal perdeu o espaco Unicode e CPF e telefone com NBSP passavam inteiros onde a main mascarava. Os dois foram corrigidos e provados por execucao, nao por leitura. Sobraram as issues #459 (roster de reuniao alheia, serio) e #460 (tracos CJK). O deploy do backend foi manual porque o APP_VERSION so entra no /health no startup."
     }
   ]
 }

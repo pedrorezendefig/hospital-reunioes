@@ -7,6 +7,22 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.128.0 - 2026-09-10 22:15 - a Entrega devolve a Demanda a quem pediu, e o card volta para Aguardando com o selo "Entregue, confira e conclua"
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `fae4a28`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.128.0, `db: healthy`; frontend HTTP 200; webhook seguiu em 401 para assinatura inválida, provando que o segredo sobreviveu ao redeploy)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/fae4a28
+- Issues: [#679](https://github.com/pedrorezendefig/hospital-reunioes/issues/679) · PR [#689](https://github.com/pedrorezendefig/hospital-reunioes/pull/689). Fatia do PRD [#673](https://github.com/pedrorezendefig/hospital-reunioes/issues/673), ADR 0054 decisão 6
+- Migration: nenhuma. A devolução usa colunas de Vínculo e de Kanban que já existiam · minor, feat
+- Nota: a devolução mora **dentro** do `sincronizar_demanda` que a #678 criou, no ramo que só a mudança de Etapa alcança. Com isso ela vale de graça pelos dois gatilhos, o webhook e o lote de hora em hora, sem uma linha duplicada no serviço do GitHub
+- Nota: must-fix mais grave da review. A devolução atribuía o card ao autor **sem checar se ele ainda vê a aba**, coisa que o `atribuir` do router recusa desde sempre. Diretor que saiu do hospital virava responsável de um card que sumia da "Minha vez" de todo mundo, e sem e-mail, porque o filtro de acesso pula quem não é pessoa da aba. Silêncio perfeito. Corrigido usando a **mesma** função `e_pessoa_da_aba`: nesse caso o card é movido e o responsável não muda, então continua achável
+- Nota: o UPDATE do responsável não tinha amarra de estado no ramo em que a Demanda **já está** em Aguardando, que é onde o bloco do movimento nem roda. Quem concluísse o card a mão no mesmo segundo ganhava linha no fio de um card fechado e e-mail "Entregue, confira e conclua". Fechado com `.eq("estado", ESTADO_AGUARDANDO)`
+- Nota: nenhum teste prendia o texto do e-mail a literal nenhum (as asserções calculavam o esperado a partir da própria constante). Trocar `RECADO_DA_ENTREGA` deixava o backend inteiro verde, com o e-mail dizendo uma coisa e o selo da tela outra, quebrando a promessa escrita em cima da constante
+- Nota: devolução pela metade não era recuperada por ninguém, porque a foto já gravada faz a reconciliação sair antes, e o log do webhook prometia recuperação. Agora há `logger.error` nomeando a Demanda nos dois caminhos, e a frase do webhook parou de prometer
+- Nota: **divergência de spec, decidida pelo dono.** O critério 4 dizia que Demanda fechada que chega a Entregue "só ganha a linha automática de Etapa", mas a #678 já tinha tirado as fechadas dos dois gatilhos. O critério foi reescrito na issue e a consequência virou emenda no ADR 0054 (commit `3a13c42`): o selo de Etapa de Demanda fechada congela no dia do fechamento, e quem quiser o selo atualizado reabre a Demanda
+- Nota: 19 mutantes no código e 2 nos detectores, nenhum sobrevivente. O teste do ciclo entregue, reaberta, entregue prova pela rota, com duas entregas de webhook de verdade
+
 ## v0.127.0 - 2026-09-10 18:35 - feat(tecnologia): botão Levar para desenvolvimento cria a issue com o texto do diretor
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `ee5bcf5`
