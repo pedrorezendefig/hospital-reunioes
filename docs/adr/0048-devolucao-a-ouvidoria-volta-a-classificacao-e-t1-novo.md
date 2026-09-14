@@ -1,6 +1,7 @@
 ---
 status: accepted
 amends: 0034
+amended_by: 0055
 ---
 
 # Devolução à Ouvidoria volta o caso à classificação, e o reacionamento carimba T1 novo
