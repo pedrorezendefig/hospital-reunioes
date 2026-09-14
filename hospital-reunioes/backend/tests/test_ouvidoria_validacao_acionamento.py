@@ -1646,9 +1646,7 @@ class TestNotificacaoEmVoo:
         # à mão, sem passar pela validação. Desde a issue #707 isso importa: o
         # despacho só emite link do portal para quem responde pelo setor que
         # está com o caso, e o dublê precisa dizer qual é esse setor.
-        caso = supabase.tabelas["ouvidoria_protocolos"][0]
-        caso["setor"] = "Recepcao"
-        caso["status"] = "aguardando_area"
+        supabase.tabelas["ouvidoria_protocolos"][0]["setor"] = "Recepcao"
         registro = ouvidoria_notificacoes.registrar(
             supabase,
             manifestacao_id="uuid-7",

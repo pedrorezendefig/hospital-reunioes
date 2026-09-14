@@ -3894,7 +3894,16 @@ async def reenviar_notificacao(
 
     entregue = ouvidoria_notificacoes.despachar(supabase, copia, agora, carregar_feriados(supabase))
     registrar_acesso(supabase, me, manifestacao_id, "reenviar_notificacao")
-    return {"id": copia["id"], "gatilho": copia["gatilho"], "entregue": entregue}
+    # O `motivo` acompanha o `entregue` desde a issue #707: nem toda recusa é do
+    # provedor, e nem toda recusa será tentada de novo. Sem ele a tela dizia as
+    # duas coisas de qualquer jeito, e o ouvidor reclicava o botão achando que
+    # insistia com um provedor que nunca foi chamado.
+    return {
+        "id": copia["id"],
+        "gatilho": copia["gatilho"],
+        "entregue": entregue,
+        "motivo": None if entregue else ouvidoria_notificacoes.motivo_da_falha(supabase, copia["id"]),
+    }
 
 
 def _recusa_da_cobranca(setor: str, responsaveis: list[dict], hoje: dt.date) -> str:

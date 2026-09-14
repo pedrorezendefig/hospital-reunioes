@@ -25,6 +25,7 @@ from postgrest.exceptions import APIError
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.limiter import limiter  # noqa: E402
+from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.services import ouvidoria_notificacoes, ouvidoria_setor_tokens  # noqa: E402
 
 sys.path.insert(0, os.path.dirname(__file__))
@@ -48,6 +49,8 @@ FRASE_DO_LINK_REVOGADO = "Este caso foi encaminhado a outra área; este link nã
 # Um instante qualquer depois do reacionamento dos testes deste arquivo, e o
 # instante em que a cobrança retida pela janela comercial foi agendada (antes).
 DEPOIS_DA_REVOGACAO = dt.datetime(2026, 8, 25, 18, 0, tzinfo=dt.UTC)
+# Depois da espera crescente que a falha de rede impõe à notificação.
+DEPOIS_DA_ESPERA = dt.datetime(2026, 8, 25, 19, 0, tzinfo=dt.UTC)
 QUANDO_A_JANELA_ABRE = dt.datetime(2026, 8, 25, 16, 0, tzinfo=dt.UTC)
 
 MIGRATIONS_DIR = os.path.join(os.path.dirname(__file__), "..", "..", "supabase", "migrations")
@@ -178,12 +181,18 @@ class TestLinksDaAreaAntiga:
         linha = next(t for t in sb.tabelas["ouvidoria_setor_tokens"] if t.get("usado_em"))
         carimbo_de_uso = linha["usado_em"]
 
+        # O relógio anda antes do reacionamento, e isso é a asserção funcionar.
+        # Com o instante congelado, uma revogação que reescrevesse `usado_em`
+        # gravaria o MESMO valor que já estava lá, e a comparação abaixo ficaria
+        # verde por cima da reescrita.
+        monkeypatch.setattr(ouvidoria_router, "agora_utc", lambda: DEPOIS_DA_REVOGACAO)
         reacionamento = client.post(
             "/api/ouvidoria/manifestacoes/uuid-7/validar",
             json=VALIDACAO | {"setor": AREA_NOVA},
         )
         assert reacionamento.status_code == 200, reacionamento.text
 
+        assert linha["revogado_em"] == DEPOIS_DA_REVOGACAO.isoformat(), "a revogação não carimbou este link"
         assert linha["usado_em"] == carimbo_de_uso, "a revogação reescreveu a marca de uso"
         resposta = client.get(f"/api/ouvidoria-setor/{usado}")
         assert resposta.status_code == 410
@@ -418,3 +427,145 @@ class TestFalhaDeRedeNaRevogacao:
         assert resposta.status_code == 500, resposta.text
         assert "links da área anterior não foram derrubados" in resposta.json()["detail"]
         assert "Confira a manifestação no painel." in resposta.json()["detail"]
+
+
+class TestOCadastroQueMudaNoMeioDoCaminho:
+    """A guarda pergunta se o email PERTENCE ao setor do caso, e não se quem o
+    recebeu continua vigente hoje.
+
+    A diferença aparece na janela entre o REGISTRO e a ENTREGA, que existe por
+    desenho: o acionamento de sexta à noite espera a janela comercial de
+    segunda, e o provedor que falha devolve a linha à fila com espera
+    crescente. Nessa janela a Diretoria pode mexer no cadastro."""
+
+    def test_a_troca_de_titular_no_mesmo_setor_nao_engole_o_acionamento(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """O caso NÃO mudou de área: mudou quem responde por ela.
+
+        Descartar aqui seria pior que o buraco que a guarda fecha: o email do
+        acionamento leva o extrato e o link de resposta, `falha` é terminal (o
+        job só relê `agendada`) e o prazo da área já está correndo."""
+        emails = _nunca_envia_email_de_verdade
+        client, sb = _client(monkeypatch)
+        acionamento = ouvidoria_notificacoes.registrar(
+            sb,
+            manifestacao_id="uuid-7",
+            gatilho=ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA,
+            destinatario_nome="Carlos Titular",
+            destinatario_email="carlos@hsm.br",
+            papel_destinatario="titular",
+            enviar_a_partir_de=QUANDO_A_JANELA_ABRE,
+        )
+        sb.tabelas["ouvidoria_protocolos"][0]["setor"] = "Recepcao"
+
+        # O fim de semana da Diretoria: Carlos sai, Ana entra na MESMA Recepção.
+        sb.tabelas["ouvidoria_setor_responsaveis"][0]["vigencia_fim"] = "2026-08-24"
+        sb.tabelas["ouvidoria_setor_responsaveis"].append(
+            _responsavel(nome="Ana Titular", email="ana@hsm.br", id="resp-ana", vigencia_inicio="2026-08-25")
+        )
+
+        ouvidoria_notificacoes.despachar_pendentes(sb, DEPOIS_DA_REVOGACAO, frozenset())
+
+        assert [e["destinatario"] for e in emails] == ["carlos@hsm.br"], "o acionamento sumiu na troca de titular"
+        linha = next(n for n in sb.tabelas["ouvidoria_notificacoes"] if n["id"] == acionamento["id"])
+        assert linha["status"] == ouvidoria_notificacoes.ENVIADA
+        assert len(_links_vivos_de(sb, "carlos@hsm.br")) == 1
+
+    def test_a_caixa_do_email_no_cadastro_nao_derruba_a_entrega(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O cadastro é digitado à mão, e o email da linha foi copiado dele
+        meses antes. A Diretoria corrigir a grafia depois do registro não pode
+        virar cobrança silenciada: os dois lados da comparação são
+        normalizados."""
+        emails = _nunca_envia_email_de_verdade
+        client, sb = _client(monkeypatch)
+        caso = sb.tabelas["ouvidoria_protocolos"][0]
+        caso["setor"], caso["status"] = "Recepcao", "aguardando_area"
+        sb.tabelas["ouvidoria_setor_responsaveis"][0]["email"] = " Carlos@HSM.br "
+        cobranca = ouvidoria_notificacoes.registrar(
+            sb,
+            manifestacao_id="uuid-7",
+            gatilho=ouvidoria_notificacoes.GATILHO_PRAZO_ROMPIDO,
+            destinatario_nome="Carlos Titular",
+            destinatario_email="carlos@hsm.br",
+            papel_destinatario="titular",
+            enviar_a_partir_de=QUANDO_A_JANELA_ABRE,
+        )
+
+        ouvidoria_notificacoes.despachar_pendentes(sb, DEPOIS_DA_REVOGACAO, frozenset())
+
+        assert [e["destinatario"] for e in emails] == ["carlos@hsm.br"]
+        linha = next(n for n in sb.tabelas["ouvidoria_notificacoes"] if n["id"] == cobranca["id"])
+        assert linha["status"] == ouvidoria_notificacoes.ENVIADA
+
+    def test_cadastro_ilegivel_devolve_a_notificacao_a_fila_em_vez_de_descartar(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """A guarda falha FECHADA e recuperável, e as duas metades importam.
+
+        Fechada: não emite o link, porque uma leitura que estourou não prova que
+        o destinatário continua sendo do setor. Recuperável: a linha volta para
+        `agendada` com espera crescente, e só vira `falha` na terceira
+        tentativa. Trocar isso por um `except` que devolve True reabriria o
+        buraco da issue #707 em silêncio, e a suíte inteira não veria."""
+        emails = _nunca_envia_email_de_verdade
+        client, sb = _client(monkeypatch)
+        acionamento = ouvidoria_notificacoes.registrar(
+            sb,
+            manifestacao_id="uuid-7",
+            gatilho=ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA,
+            destinatario_nome="Carlos Titular",
+            destinatario_email="carlos@hsm.br",
+            papel_destinatario="titular",
+            enviar_a_partir_de=QUANDO_A_JANELA_ABRE,
+        )
+        sb.tabelas["ouvidoria_protocolos"][0]["setor"] = "Recepcao"
+        sb.falhas_no_execute = {"ouvidoria_setor_responsaveis": httpx.ReadTimeout("o banco não respondeu no tempo")}
+
+        ouvidoria_notificacoes.despachar_pendentes(sb, DEPOIS_DA_REVOGACAO, frozenset())
+
+        assert emails == [], "o link saiu sem ninguém conferir de quem é o setor"
+        assert _links_vivos_de(sb, "carlos@hsm.br") == []
+        linha = next(n for n in sb.tabelas["ouvidoria_notificacoes"] if n["id"] == acionamento["id"])
+        assert linha["status"] == ouvidoria_notificacoes.AGENDADA, "a notificação foi descartada em vez de esperar"
+        assert linha["tentativas"] == 1
+
+        # A rede volta, e a mesma linha é entregue na varredura seguinte.
+        sb.falhas_no_execute = {}
+        ouvidoria_notificacoes.despachar_pendentes(sb, DEPOIS_DA_ESPERA, frozenset())
+        assert [e["destinatario"] for e in emails] == ["carlos@hsm.br"]
+
+
+class TestMotivoDaRecusaNoReenvio:
+    """O que o ouvidor lê quando clica em Reenviar e o email não sai."""
+
+    def test_o_reenvio_recusado_devolve_o_motivo_em_vez_de_culpar_o_provedor(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """Sem o motivo, a tela dizia que o provedor recusou e que o sistema
+        tentaria de novo. As duas metades são falsas aqui: o provedor nem foi
+        chamado, e `falha` é terminal. O ouvidor reclicava o botão criando
+        linha nova em falha, sem email nenhum."""
+        emails = _nunca_envia_email_de_verdade
+        client, sb = _com_a_segunda_area(monkeypatch, emails)
+        acionamento_antigo = sb.tabelas["ouvidoria_notificacoes"][0]["id"]
+        _devolver_e_reacionar(client, emails)
+
+        resposta = client.post(f"/api/ouvidoria/manifestacoes/uuid-7/notificacoes/{acionamento_antigo}/reenviar")
+
+        assert resposta.status_code == 201, resposta.text
+        assert resposta.json()["entregue"] is False
+        assert resposta.json()["motivo"] == ouvidoria_notificacoes.LINK_FORA_DA_AREA
+
+    def test_o_reenvio_que_saiu_nao_inventa_motivo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A contraprova: entregue não carrega explicação nenhuma, e a tela
+        volta a dizer só que reenviou."""
+        emails = _nunca_envia_email_de_verdade
+        client, sb = _com_a_segunda_area(monkeypatch, emails)
+        acionamento = sb.tabelas["ouvidoria_notificacoes"][0]["id"]
+
+        resposta = client.post(f"/api/ouvidoria/manifestacoes/uuid-7/notificacoes/{acionamento}/reenviar")
+
+        assert resposta.status_code == 201, resposta.text
+        assert resposta.json()["entregue"] is True
+        assert resposta.json()["motivo"] is None
