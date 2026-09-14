@@ -24,6 +24,11 @@ class TokenExpiradoError(Exception):
     """Token vencido, ou o caso já saiu do estado que aceita resposta."""
 
 
+class TokenRevogadoError(Exception):
+    """Token derrubado por um acionamento posterior do mesmo caso (ADR 0055):
+    o link é da área que já não está com a manifestação."""
+
+
 def _hash_token(token: str) -> str:
     return hashlib.sha256(token.encode("utf-8")).hexdigest()
 
@@ -55,14 +60,46 @@ def emitir(supabase, *, manifestacao_id: str, destinatario_nome: str, destinatar
     return token
 
 
+def revogar_os_vivos(supabase, manifestacao_id: str, agora: dt.datetime) -> int:
+    """Derruba todo link vivo da manifestação e devolve quantos caíram.
+
+    Chamada no acionamento que sai de `em_classificacao` (ADR 0055): a área
+    nova recebe o caso, e o que sobrou da anterior (o link do acionamento dela
+    e o de cada cobrança) não pode continuar abrindo uma porta de escrita sem
+    login. Revogar zero links é no-op, que é o primeiro despacho de todo caso.
+
+    `usado_em` não é tocado, nem como filtro de escrita: link já consumido
+    continua contando que alguém respondeu por ele, e link revogado continua
+    contando que ninguém respondeu. O filtro por `revogado_em` nulo guarda o
+    instante da PRIMEIRA revogação, que é quando o caso de fato saiu da área."""
+    result = (
+        supabase.table("ouvidoria_setor_tokens")
+        .update({"revogado_em": agora.isoformat()})
+        .eq("manifestacao_id", manifestacao_id)
+        .is_("usado_em", "null")
+        .is_("revogado_em", "null")
+        .execute()
+    )
+    return len(result.data or [])
+
+
 def carregar(supabase, token: str, agora: dt.datetime) -> dict:
     """Acha o vínculo do token e aplica as regras de recusa.
 
     Levanta `TokenInvalidoError` (sem linha), `TokenUsadoError` (resposta já
-    entrou por ele) ou `TokenExpiradoError` (passou da validade)."""
+    entrou por ele), `TokenExpiradoError` (passou da validade) ou
+    `TokenRevogadoError` (o caso foi acionado em outra área depois).
+
+    A ordem das três recusas é regra: quem já usou o link lê que usou, quem
+    perdeu o prazo do link lê que ele venceu, e só quem não caiu em nenhuma das
+    duas lê que o caso mudou de área. A revogação não reescreve a história de
+    ninguém."""
     result = (
         supabase.table("ouvidoria_setor_tokens")
-        .select("id, manifestacao_id, destinatario_nome, destinatario_email, expira_em, usado_em")
+        # `revogado_em` entra na MESMA tupla das outras marcas: a guarda abaixo
+        # lê o que este `select` trouxer, e coluna de fora chega como None para
+        # sempre, deixando passar em silêncio com a chamada no lugar certo.
+        .select("id, manifestacao_id, destinatario_nome, destinatario_email, expira_em, usado_em, revogado_em")
         .eq("token_hash", _hash_token(token))
         .limit(1)
         .execute()
@@ -75,6 +112,8 @@ def carregar(supabase, token: str, agora: dt.datetime) -> dict:
     expira_em = vinculo.get("expira_em")
     if expira_em and dt.datetime.fromisoformat(str(expira_em)) < agora:
         raise TokenExpiradoError()
+    if vinculo.get("revogado_em"):
+        raise TokenRevogadoError()
     return vinculo
 
 

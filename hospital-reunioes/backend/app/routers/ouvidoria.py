@@ -57,6 +57,7 @@ from app.services import (
     ouvidoria_relatorio,
     ouvidoria_respostas,
     ouvidoria_retencao,
+    ouvidoria_setor_tokens,
     ouvidoria_trilha,
     storage,
 )
@@ -3714,6 +3715,31 @@ async def validar_e_acionar(
                 # a área anterior, e a frase precisa dizer isso.
                 "O caso mudou de estado, mas a área, o prazo e o marco da validação não foram gravados, "
                 "e o setor não foi notificado. Confira a manifestação no painel."
+            ),
+        ) from exc
+
+    # Os links vivos do caso caem AQUI, antes de o email do acionamento novo
+    # emitir o dele (issue #707, ADR 0055). A ordem é a regra inteira: emitir
+    # primeiro derrubaria junto o link que acabou de sair para a área nova.
+    #
+    # Esta rota é a única porta que sai de `em_classificacao`, então ela cobre
+    # também o reacionamento depois de uma Devolução à Ouvidoria, que é por
+    # onde o buraco já existe hoje: o link do acionamento anterior e o de cada
+    # cobrança da área antiga voltavam a valer quando o caso retornava a
+    # `aguardando_area`, e a área errada respondia pelo caso da área certa.
+    #
+    # Falhar aqui é parar o despacho, e não seguir em silêncio: o email que
+    # sairia logo abaixo abre uma porta de escrita sem login para a área nova
+    # enquanto a antiga continua com a dela.
+    try:
+        ouvidoria_setor_tokens.revogar_os_vivos(supabase, manifestacao_id, agora)
+    except APIError as exc:
+        logger.error("Falha ao revogar os links do portal da manifestação %s (código %s)", manifestacao_id, exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "O caso mudou de estado, mas os links da área anterior não foram derrubados e o setor não foi "
+                "notificado. Confira a manifestação no painel."
             ),
         ) from exc
 
