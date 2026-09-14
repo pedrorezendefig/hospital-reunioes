@@ -1642,6 +1642,13 @@ class TestNotificacaoEmVoo:
     minutos e não sabe que um request está no meio de uma chamada ao Resend."""
 
     def _registrar(self, supabase) -> dict:
+        # O acionamento nasce com o caso JÁ na área, e aqui a linha é registrada
+        # à mão, sem passar pela validação. Desde a issue #707 isso importa: o
+        # despacho só emite link do portal para quem responde pelo setor que
+        # está com o caso, e o dublê precisa dizer qual é esse setor.
+        caso = supabase.tabelas["ouvidoria_protocolos"][0]
+        caso["setor"] = "Recepcao"
+        caso["status"] = "aguardando_area"
         registro = ouvidoria_notificacoes.registrar(
             supabase,
             manifestacao_id="uuid-7",

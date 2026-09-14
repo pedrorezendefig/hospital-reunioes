@@ -96,7 +96,13 @@ def sem_provedor(monkeypatch):
 
 
 def _despachar(banco, caplog, *, gatilho, papel, email) -> bool:
-    """Põe uma notificação na fila e a entrega. Devolve se o envio saiu."""
+    """Põe uma notificação na fila e a entrega. Devolve se o envio saiu.
+
+    O destinatário entra no cadastro do setor do caso porque desde a issue #707
+    o despacho recusa emitir link do portal para quem não responde por ele. O
+    que estes testes medem é o LOG do envio, e sem o cadastro não haveria envio
+    nenhum para medir."""
+    banco.cadastrar_responsavel(email)
     linha = {
         "id": f"n-{len(banco.notificacoes) + 1}",
         "manifestacao_id": "uuid-7",

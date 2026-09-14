@@ -3731,10 +3731,22 @@ async def validar_e_acionar(
     # Falhar aqui é parar o despacho, e não seguir em silêncio: o email que
     # sairia logo abaixo abre uma porta de escrita sem login para a área nova
     # enquanto a antiga continua com a dela.
+    # `HTTPError` entra na tupla junto com `APIError` pelo motivo de sempre
+    # neste arquivo: timeout, conexão recusada e pool esgotado nascem ANTES de
+    # existir resposta HTTP, então não são `APIError` e escapariam crus. O 500
+    # genérico que o FastAPI devolveria não carrega a frase abaixo, que é a
+    # única coisa que este bloco entrega ao ouvidor, e a segunda tentativa dele
+    # bate na recusa "Este caso já está com a área", porque o caso transicionou.
     try:
         ouvidoria_setor_tokens.revogar_os_vivos(supabase, manifestacao_id, agora)
-    except APIError as exc:
-        logger.error("Falha ao revogar os links do portal da manifestação %s (código %s)", manifestacao_id, exc.code)
+    except (APIError, HTTPError) as exc:
+        # `code` só existe no `APIError`: lido direto, o log da falha de rede
+        # quebraria dentro do próprio tratamento de erro.
+        logger.error(
+            "Falha ao revogar os links do portal da manifestação %s (código %s)",
+            manifestacao_id,
+            getattr(exc, "code", None),
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=(
