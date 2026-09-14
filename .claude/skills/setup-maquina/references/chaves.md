@@ -26,7 +26,7 @@ Chaves de produção: só no Coolify. A lista e o "quem mexe" estão no `README.
 | `SUPABASE_URL`, `SUPABASE_SERVICE_ROLE_KEY`, `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY` | por pessoa | Saída de `supabase status` depois de `supabase start` em `hospital-reunioes/`. |
 | `OPENROUTER_API_KEY` | por pessoa ou compartilhada | 1Password, VITTA TECH, item "OpenRouter" (criar). Vazia liga o mock de IA. |
 | `CLICKSIGN_API_KEY` (sandbox) | compartilhada | 1Password, VITTA TECH, item "ClickSign sandbox" (criar). |
-| `SMTP_USER`, `SMTP_PASSWORD` | por pessoa | Senha de app do Gmail de quem roda. Vazio imprime o email no log. |
+| `SMTP_USER`, `SMTP_PASSWORD` | por pessoa | Senha de app do Gmail de quem roda. Vazio imprime o email no log. O Supabase local lê os mesmos nomes de `hospital-reunioes/supabase/.env` (molde em `supabase/.env.example`). |
 | `RESEND_API_KEY` | só produção | 1Password, VITTA TECH, item "Resend". Não entra no local. |
 | `GH_TOKEN_HOMOLOG` | só produção | 1Password, HOSPITAL SÃO MATHEUS, item "Global Health". É a agenda de homologação, não é GitHub. Não entra no local. |
 | `FIREFLIES_*`, `DIRETOR_EMAIL`, `DEFAULT_USER_PASSWORD` | só produção | Vivem no Coolify. |

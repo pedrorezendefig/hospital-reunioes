@@ -169,7 +169,7 @@ Esperado: conexão e autenticação ok, e a tabela com os apps. Sem isso, `/depl
 **Três coisas que economizam tempo:**
 - `coolify app env update <uuid> <KEY> --value "<valor>"`: a chave é **posicional**, e mande só `--value`. A flag `--key` é o rename, e acrescentar `--runtime`/`--build-time` faz a API devolver `422`.
 - `coolify app env list <uuid>` esconde os valores (`********`). Para ver de verdade: `coolify app env list <uuid> -s`.
-- `coolify deploy uuid <uuid>` (o que dispara build) é **negado** dentro da sessão do Claude. Rode você mesmo, no prompt do Claude Code, com o prefixo `!`: `! coolify deploy uuid <uuid>`.
+- `coolify deploy uuid <uuid>` (o que dispara build) pode ser **negado** dentro da sessão do Claude, mesmo com `Bash(coolify:*)` na allow-list. Se for, rode você mesmo, no prompt do Claude Code, com o prefixo `!`: `! coolify deploy uuid <uuid>`.
 - `--format json` imprime um aviso de versão nova antes do JSON. Filtre antes do `jq`: `... --format json | sed -n '/^[[{]/,$p' | jq`.
 
 ### 4.2 GitHub e Context7
@@ -194,6 +194,8 @@ O Claude Code pede confirmação pra cada comando Bash novo. Pra reduzir prompts
       "Bash(git:*)",
       "Bash(gh:*)",
       "Bash(jq:*)",
+      "Bash(uv:*)",
+      "Bash(coolify:*)",
       "Bash(python3:*)",
       "Bash(pnpm:*)",
       "Bash(npm:*)",
@@ -302,6 +304,36 @@ Pronto.
 
 ---
 
+## 10. Lições de campo
+
+O que a memória do Claude Code do Pedro aprendeu em produção e que nenhuma skill diz por inteiro. Cada linha custou pelo menos um round-trip real. Leia uma vez; volte aqui quando o sintoma da primeira coluna aparecer.
+
+| Sintoma ou situação | O que está acontecendo | O que fazer |
+|---|---|---|
+| PR mergeado, prod com código novo e versão velha no `/api/health` | Bump fantasma: o rebase descartou o commit do bump (`patch contents already upstream`) e o PR entrou sem mexer na versão | Antes de todo merge: `gh pr diff <N> \| grep '"version"'`; a linha `-` tem que ser a versão que está hoje em `origin/main`. Corrigir com re-bump em commit novo |
+| Duas migrations com o mesmo número mergeiam limpo | Sessões paralelas numeraram igual; o git não vê | Antes do push final: `git ls-tree origin/main:hospital-reunioes/supabase/migrations/ \| tail`; renumerar com `git mv` + cabeçalho + corpo do PR |
+| PR com `no checks reported` | Ou está `CONFLICTING` (o GitHub não roda CI sem merge ref) ou é PR empilhado (o `ci.yml` só roda em `main`) | Rebase + `push --force-with-lease`; commit vazio e close/reopen não resolvem. Pilha: rodar os 3 jobs à mão e esperar o PR de baixo mergear |
+| Mergear pilha de PRs após squash | Cada squash cria SHA novo; `git rebase <base>` puro reaplica os commits de baixo | `git rebase --onto origin/main <sha-do-topo-antigo-da-base> <branch-de-cima>` a cada merge. `git rebase --skip` é negado: resolva à mão e `--continue` |
+| `pnpm-lock.yaml` ou `uv.lock` em conflito | As duas branches adicionaram dependência | `git checkout --ours` no lockfile e regenerar (`uv lock`; `echo y \| corepack pnpm@9 install --no-frozen-lockfile`). `CI=true` força frozen e quebra |
+| Versão oscila no `/api/health` entre duas chamadas seguidas | Container órfão: ao trocar o toggle Consistent Container Names o Coolify subiu o novo e não matou o antigo; o Traefik alterna | Terminal do Coolify: `docker ps \| grep jo6zt` e `docker rm -f <container-com-sufixo-numérico>`. `coolify app restart` não resolve. O toggle e a marcação Build Variable só existem na tela (a API devolve 422) |
+| SQL Editor do Studio crasha com `reading 'includes'` em query trivial | Bug de UI do Studio self-hosted (localStorage), o SQL nem chegou ao banco | Janela anônima. Antes de reaplicar: `select to_regclass('public.<tabela>');`. Fallback: Coolify, serviço Supabase, container `supabase-db`, Terminal, `psql -U postgres`. Erro 42701 é paste duplicado |
+| Teste passa isolado e dá 429 na suíte inteira | O `limiter` (slowapi) acumula o contador por IP entre arquivos | Fixture autouse que faz `limiter._storage.reset()` (modelo em `tests/test_ata_guiada.py`) |
+| `uv run pytest` dá `ModuleNotFoundError: app` num worktree novo | Projeto é `virtual` no lock e o worktree nasce sem `.env` nem `.venv` | Copiar `hospital-reunioes/.env` da árvore principal; `cd backend && uv run --extra dev python -m pytest`. Frontend é `corepack pnpm@9` |
+| Teste toca a ClickSign de verdade, ou "verificação em prod" que na real olhou o banco local | O `.env` local tem a chave real da ClickSign e o `SUPABASE_URL` de `127.0.0.1` | Sempre mockar `clicksign_service` ou `httpx.Client` (padrão em `tests/test_signatarios_status.py`). Schema de prod só pelo Studio ou por smoke na API pública |
+| Tabela nova acessível pela anon key do frontend | Migration saiu sem RLS | Toda migration com `CREATE TABLE` leva `ALTER TABLE <t> ENABLE ROW LEVEL SECURITY;` (default-deny; o backend usa service_role). `CREATE POLICY` não tem `IF NOT EXISTS`: use `DROP POLICY IF EXISTS` antes |
+| Precisa provar uma tela sem subir Playwright | Chrome headless executa o JS e despeja o DOM | `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --virtual-time-budget=20000 --dump-dom <url>` ou `--screenshot=<png> --window-size=1440,1900`. Achatar com `tr '\n' ' '` antes de grepar |
+| Playwright acusa erro em todo `<video>` MP4 | O Chromium do Playwright não tem H.264 | `p.chromium.launch(channel="chrome")` e servir por HTTP (`python3 -m http.server`); confirmar por `readyState >= 1` e `duration > 0` |
+| Dois ADRs com o mesmo número em sessões paralelas | O lint indexa por número e um sobrescreve o outro em silêncio | Antes de numerar: `git log origin/main --oneline -5` e `git worktree list`. Quem chega depois renumera e vira emenda em prosa (citação abaixo do frontmatter) |
+| Entrada nova do `CHANGELOG.md` sai com travessão e sem versão | `changelog_prepend.py` monta o título no formato errado | Depois do Passo 9.5 do `/deploy ship`, reescrever a entrada à mão no formato das anteriores (`## vX.Y.Z - DATA - assunto`) |
+| Classifier nega remoção em massa (worktrees, branches, arquivos) | Loops de remoção são barrados comando a comando | Calcular as listas em arquivo, gravar um script idempotente que só lê as listas, mostrar o resumo e pedir `! bash <script>` |
+| Pasta nova nasceu no caminho aposentado | A árvore principal fica atrás de `origin/main`; o `.gitignore` só cobre o layout novo | `git ls-tree -d --name-only origin/main docs/` antes de criar; `git check-ignore -v` no primeiro arquivo gerado (MP4, render, build) |
+| Comando devolvido ao humano com `! ...` deu 404 | O UUID ou SHA veio "de cabeça" | Valor lido no mesmo turno: `jq -r '.services[] \| select(.id=="backend") \| .uuid' docs/spec/deploy/project.json` |
+| Env var secreta no Coolify | `! coolify app env create ... --value <token>` grava o valor no transcript da sessão | Segredo entra pela tela do Coolify (Environment Variables). Por CLI só valor não secreto (`APP_VERSION`, nome de repo) |
+| Senha inicial de usuário do seed | O repo é público; a fórmula antiga da senha vazou no histórico (limpo no PR #589) | Rotação é por aviso do diretor pedindo troca, não por script. Conferir `updated_at` em Studio, Authentication, Users |
+| `LLM_MODEL` de produção | Desde 21/08/2026 é `google/gemini-3.7-flash` (env no Coolify; o default do `config.py` continua o modelo antigo) | Preço promocional até 31/12/2026, dobra em 01/01/2027: reavaliar custo em janeiro |
+
+---
+
 ## Apêndice — Template completo do `~/.claude/settings.json`
 
 Pra quem quer copiar e ajustar de uma vez. Substitua `<seu-user>` por `whoami`.
@@ -314,6 +346,8 @@ Pra quem quer copiar e ajustar de uma vez. Substitua `<seu-user>` por `whoami`.
       "Bash(git:*)",
       "Bash(gh:*)",
       "Bash(jq:*)",
+      "Bash(uv:*)",
+      "Bash(coolify:*)",
       "Bash(python3:*)",
       "Bash(pnpm:*)",
       "Bash(npm:*)",

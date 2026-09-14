@@ -17,6 +17,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0041](0041-acionamento-leva-resumo-relato-integral-e-nota.md) | accepted | O acionamento leva resumo, relato integral e nota da ouvidoria |
 | [0042](0042-retornos-ao-manifestante-acuse-e-encerramento.md) | accepted | Retornos ao manifestante: acuse em horas corridas e aviso de encerramento |
 | [0047](0047-apagar-manifestacao-e-retencao-antecipada-nao-delete.md) | accepted | Apagar manifestação é retenção antecipada, não DELETE |
+| [0048](0048-devolucao-a-ouvidoria-volta-a-classificacao-e-t1-novo.md) | accepted | Devolução à Ouvidoria volta o caso à classificação, e o reacionamento carimba T1 novo |
 | [0051](0051-email-recebido-passa-por-triagem-antes-de-virar-manifestacao.md) | accepted | E-mail recebido em ouvidoria@ passa por triagem antes de virar manifestação |
 | [0052](0052-paciente-do-caso-viaja-para-a-area-no-caso-anonimo.md) | accepted | O Paciente do caso viaja para a área, inclusive no caso anônimo |
 
@@ -65,6 +66,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0035](0035-gates-de-review-da-onda-pertencem-ao-orquestrador.md) | accepted | Gates de review da onda pertencem ao orquestrador |
 | [0043](0043-skills-locais-sao-o-kit-do-workflow.md) | accepted | Skills locais são o kit completo do workflow, duplicata com as globais é intencional |
 | [0049](0049-wayfinder-instalada-e-lock-com-ref.md) | accepted | A wayfinder entra instalada no clone, e o `skills-lock.json` fixa o commit de origem |
+| [0053](0053-fluxo-exportavel-por-roteiro-versionado.md) | accepted | O fluxo de trabalho é exportável por um roteiro versionado no repositório, não por prompt solto |
 
 ## UI e design system
 
@@ -83,6 +85,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0044](0044-layout-do-repositorio.md) | accepted | Layout do repositório: o que fica no git, onde fica, e o que vive fora |
 | [0045](0045-video-e-pagina-de-divulgacao-sao-uma-entrega-so.md) | accepted | Vídeo de percepção e página de divulgação são uma entrega só, numa pasta só por PRD |
 | [0046](0046-readme-e-o-mapa-do-repositorio.md) | accepted | O `README.md` da raiz é o mapa do repositório |
+| [0047](0047-apagar-manifestacao-e-retencao-antecipada-nao-delete.md) | accepted | Apagar manifestação é retenção antecipada, não DELETE |
 
 ## Infra e deploy
 

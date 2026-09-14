@@ -25,3 +25,5 @@ A preparação antecipada tem um motivo técnico: a wayfinder v1.1 procura a se�
 - Quando o mapa limpar (nada mais a decidir), o handoff é para `/to-prd` + `/to-issues` (não o to-spec/to-tickets do upstream). Tickets tipo grilling usam `/grill-with-docs`, com o gate de uma pergunta por vez e recomendação destacada.
 - O wayfinder planeja e não mergeia: o invariante "push na main é ação humana" não é tocado.
 - Ao instalar a skill (gatilho: primeiro épico com névoa), traduzir narração e corpos de issue para pt-BR, manter os labels `wayfinder:*` em inglês e trocar o handoff final, conforme a seção do issue-tracker.md.
+
+**Instalada em 2026-09-07** (gatilho: PRD #472, avaliações do Google, em `needs-info` por dependência externa), em `.claude/skills/wayfinder/`, com as adaptações acima aplicadas.
