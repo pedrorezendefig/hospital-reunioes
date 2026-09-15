@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-11T15:05-0300 -->
+<!-- last_update: 2026-09-15T00:44-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -668,7 +668,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## ouvidoria_setor_tokens
 
-> Origem: `069_ouvidoria_portal_setor.sql`
+> Origem: `069_ouvidoria_portal_setor.sql` (alterada em: 106_ouvidoria_token_do_setor_revogado.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -680,6 +680,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `criado_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 | `expira_em` | `TIMESTAMPTZ` | NOT NULL | `now() + interval '30 days'` | — |
 | `usado_em` | `TIMESTAMPTZ` | — | — | — |
+| `revogado_em` | `TIMESTAMPTZ` | — | — | — |
 
 **Indexes:**
 - `idx_ouvidoria_setor_tokens_hash` em `(token_hash)` (de `069_ouvidoria_portal_setor.sql`)
