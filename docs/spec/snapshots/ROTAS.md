@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-10T18:28-0300 -->
+<!-- last_update: 2026-09-15T17:04-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -149,6 +149,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes` | O pedido de prorrogação do caso, quando existe. É uma lista de zero ou | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/prorrogacoes/{prorrogacao_id}/decidir` | O ouvidor aprova ou nega o pedido da área (PRD #318, história 3). | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/reaberturas` | Devolve à área um caso encerrado que o manifestante voltou a cobrar. | ✅ |
+| POST | `/ouvidoria/manifestacoes/{manifestacao_id}/redirecionamentos` | O Redirecionamento: o caso sai da área antiga e entra na nova, numa | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/respostas` | O histórico de respostas do caso, um ciclo por resposta da área. | ✅ |
 | GET | `/ouvidoria/manifestacoes/{manifestacao_id}/tentativas-contato` | O que já se tentou NESTE ciclo do caso, em ordem cronológica. | ✅ |
 | POST | `/ouvidoria/manifestacoes/{manifestacao_id}/tentativas-contato` | Grava que a Ouvidoria tentou falar com o manifestante. | ✅ |
@@ -373,4 +374,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 217 endpoints em 30 routers · 94% exigem auth.
+**Totais:** 218 endpoints em 30 routers · 94% exigem auth.
