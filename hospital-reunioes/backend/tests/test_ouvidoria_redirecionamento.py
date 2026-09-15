@@ -958,6 +958,30 @@ class TestAMigration:
         assert "ouvidoria_notificacoes_gatilho_check" not in _ddl()
 
 
+class TestAsMarcasQueATelaLe:
+    """A tela decide se relê o caso pela MARCA que o backend põe no começo da
+    frase de erro, e não pela faixa do status (issue #717, achado do PR #715).
+
+    Quem reescrever o começo de uma das três frases sem mexer na marca faz a
+    releitura morrer em silêncio, e o ouvidor volta a agir sobre o Dossiê
+    velho. O resto do texto continua livre.
+    """
+
+    @pytest.mark.parametrize(
+        ("frase", "marca"),
+        [
+            (ouvidoria_router.SAIU_DA_AREA_NO_MEIO, ouvidoria_router.MARCA_DE_SAIU_DA_AREA_NO_MEIO),
+            (ouvidoria_router.FALHA_DEPOIS_DA_SAIDA, ouvidoria_router.MARCA_DE_FALHA_DEPOIS_DA_SAIDA),
+            (
+                ouvidoria_router.FALHA_DE_ESTADO_INDETERMINADO,
+                ouvidoria_router.MARCA_DE_FALHA_DE_ESTADO_INDETERMINADO,
+            ),
+        ],
+    )
+    def test_cada_frase_comeca_pela_marca_que_a_tela_procura(self, frase, marca):
+        assert frase.startswith(marca)
+
+
 class TestSemTravessao:
     """Décimo critério (ADR 0013): travessão e meia-risca são marca de texto
     gerado por IA e não aparecem em nada que o time lê."""

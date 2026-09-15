@@ -4105,6 +4105,24 @@ _CAMPOS_DO_REDIRECIONAMENTO = (
     "prazo_area_em, respondida_em, respondida_por_nome, area_estourou_em"
 )
 
+# As marcas com que a tela do redirecionamento reconhece que o caso JÁ NÃO ESTÁ
+# como ela o mostra. Cada uma é o começo, byte a byte, da frase logo abaixo.
+#
+# O frontend casa por PREFIXO contra estes três textos, em
+# `hospital-reunioes/frontend/src/lib/ouvidoria/redirecionamento.ts`
+# (`MARCAS_DO_CASO_QUE_SE_MOVEU`, lido por `lerAFalhaDoRedirecionamento`), e é
+# por eles que decide reler o caso do banco ao fechar a modal. A régua é a marca
+# porque esta rota devolve 409 depois de escritas já aplicadas em dois caminhos:
+# derivar "o caso se moveu" da faixa do status deixaria os dois de fora.
+#
+# Quem reescrever uma frase continua livre para mudar o resto do texto; apagar o
+# prefixo derruba o teste da classe `TestAsMarcasQueATelaLe`. Reescrever a marca
+# aqui junto com a frase NÃO é o conserto: o teste volta ao verde e a tela para
+# de reler em silêncio. A marca só muda junto com a lista do front.
+MARCA_DE_FALHA_DEPOIS_DA_SAIDA = "O caso saiu da área anterior e está em classificação"
+MARCA_DE_FALHA_DE_ESTADO_INDETERMINADO = "O redirecionamento não terminou."
+MARCA_DE_SAIU_DA_AREA_NO_MEIO = "Este caso saiu da fila da área durante o envio"
+
 # A frase do caso que saiu da área antiga e não chegou à nova. Ela aponta o
 # botão certo de propósito: redirecionar de novo recusaria (o caso já está em
 # `em_classificacao`, que não é origem do ato), e sem a instrução o ouvidor
