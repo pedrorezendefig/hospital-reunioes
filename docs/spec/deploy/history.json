@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-15T18:32:00-03:00",
+      "sha": "8890493",
+      "app_version": "0.135.0",
+      "subject": "O registro manual da Ouvidoria aceita WhatsApp, Instagram, Reclame Aqui e Google como canal de origem",
+      "raw_subject": "feat(ouvidoria): registro manual aceita WhatsApp, Instagram, Reclame Aqui e Google (#724)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 223,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "109_ouvidoria_canais_manuais.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Primeira fatia do PRD #720. O select do registro manual passa de tres para sete canais e nasce em WhatsApp, nao mais em Telefone. A 109 so alarga o CHECK, e por ser superconjunto estrito dos seis valores da 067 pode ser aplicada antes do merge sem quebrar o codigo que ja estava no ar, que foi o que o humano fez. Ordem de subida registrada no corpo do PR e obrigatoria: migration, backend, frontend. Se o frontend subisse antes do backend, o caminho PADRAO quebraria, porque o modal nasce em whatsapp e o backend antigo devolveria 422 com uma tela que culpa relato, tipo, setor e resumo, causa que nao e a real. Corrida com a sessao B no meio da onda: ela mergeou a #717 e deployou v0.134.1, o PR ficou CONFLICTING no package.json e foi rebaseado mantendo 0.135.0. O Gate 1.5 nasceu carimbado [x] no corpo do PR antes de a revisao rodar, o que esvazia o gate; foi corrigido no mesmo turno e o corpo hoje diz quando cada gate rodou de verdade."
+    },
+    {
       "at": "2026-09-15T18:20:00-03:00",
       "sha": "671a273",
       "app_version": "0.134.1",
@@ -1421,34 +1452,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda 1 do PRD #470, duas fatias em paralelo. A revisao independente pegou 4 problemas reais que o CI verde nao pegou: dois testes vacuo (um media o proprio fake, outro casava a frase num bloco antigo da mesma pagina) e duas leituras sem paginar que o teto de linhas do PostgREST cortaria em silencio. O backend precisou de um segundo deploy porque o APP_VERSION so foi sincronizado depois do primeiro container subir, e o /health le a variavel no startup."
-    },
-    {
-      "at": "2026-09-02T00:35:00-03:00",
-      "sha": "bdb7261",
-      "app_version": "0.95.0",
-      "subject": "A tela do responsavel da area passa a mostrar os tres blocos da manifestacao na ordem da RN-59, e o caso do cidadao para de ficar gravado no aparelho",
-      "raw_subject": "feat(ouvidoria): tela do responsável na ordem da RN-59, com os três blocos (#507)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 e ultima do PRD #469 (#483, PR #507). A revisao de seguranca achou um furo que nenhuma fatia tinha criado sozinha: o service worker gravava a resposta de GET /api/ouvidoria-setor/{token} no Cache Storage do aparelho por 24h, pela regra apis do defaultCache do serwist. Depois que a #506 poe resumo, relato integral e nome do manifestante nesse payload, bastava o responsavel abrir o link no celular e, uma vez o link de uso unico consumido, por o aparelho em modo aviao para a tela reabrir o caso inteiro sem passar pelo servidor. O Cache-Control no-store nao protegia: a Cache Storage API nao le esse header. Corrigido com regra NetworkOnly antes do defaultCache, provado por mutacao. Continuam cacheados, e esta dito no PR, a casca HTML da rota (sem dado do caso, mas com o token na URL) e as entradas velhas nos aparelhos que ja abriram o link, que deixam de ser servidas mas nao sao apagadas. A revisao tambem derrubou um teste vacuo (o fixture do caso protegido nao carregava resumo nem relato, entao o teste nao provava que a tela nao busca o dado fora de blocos) e uma divergencia de contagem entre cliente e servidor que habilitava o botao errado: Ok, ja resolvido com tres emojis tem 19 code points e 22 unidades UTF-16."
     }
   ]
 }

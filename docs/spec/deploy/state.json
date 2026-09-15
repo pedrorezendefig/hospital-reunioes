@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-15T18:20:00-03:00",
+  "updated_at": "2026-09-15T18:32:00-03:00",
   "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.134.1",
+  "last_app_version": "0.135.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "671a273",
-      "last_deploy_at": "2026-09-15T18:13:23-03:00",
+      "last_deploy_sha": "8890493",
+      "last_deploy_at": "2026-09-15T18:29:23-03:00",
       "last_health_check": {
-        "at": "2026-09-15T18:20:00-03:00",
-        "latency_ms": 132,
+        "at": "2026-09-15T18:32:00-03:00",
+        "latency_ms": 91,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 26,
+      "build_duration_seconds": 136,
       "env_count": 24
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "671a273",
-      "last_deploy_at": "2026-09-15T18:16:12-03:00",
+      "last_deploy_sha": "8890493",
+      "last_deploy_at": "2026-09-15T18:30:50-03:00",
       "last_health_check": {
-        "at": "2026-09-15T18:20:00-03:00",
-        "latency_ms": 198,
+        "at": "2026-09-15T18:32:00-03:00",
+        "latency_ms": 115,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 195,
+      "build_duration_seconds": 223,
       "env_count": 5
     },
     {
@@ -152,75 +152,102 @@
     }
   ],
   "migrations": {
-    "total_applied": 96,
-    "last_applied": "108_ouvidoria_aviso_a_area_antiga.sql",
+    "total_applied": 97,
+    "last_applied": "109_ouvidoria_canais_manuais.sql",
     "pending_local": [],
-    "nota": "A issue #717 (PR #723, v0.134.1) NAO criou migration: e acabamento em codigo, tres constantes nomeadas mais um teste, sem tocar schema. A 108 segue sendo a ultima aplicada. A issue #711 (PR #718, v0.134.0) NAO criou migration: a abertura do cadastro de responsaveis para o Perfil da Ouvidoria inteiro e troca de guarda nas rotas, e o rastro de quem mexeu vai para audit_log, tabela que existe desde a 018. A alternativa rejeitada foi coluna de autor em ouvidoria_setor_responsaveis, justamente para nao gastar migration aplicada a mao. Fica registrado o achado do code-review: a RLS de audit_log (023) so libera leitura para super admin, e a RN-40 mantem o super admin fora da Ouvidoria, entao o rastro e gravado mas ninguem da Ouvidoria o le no app; a leitura virou a issue #719. A 108 segue sendo a ultima aplicada. A issue #693 (PR #703, v0.129.2) CRIOU a 105_tecnologia_mencoes_da_correcao.sql, aplicada A MAO pelo humano no Studio de producao ANTES do merge. Uma coluna so, mencoes_da_correcao VARCHAR(10)[] nullable em tecnologia_conversas, com ADD COLUMN IF NOT EXISTS mais COMMENT ON COLUMN: idempotente, nao destrutiva, sem reescrita de tabela. Sem CREATE TABLE, entao o RLS default-deny da 102 continua valendo e nao ha policy nova. A ordem migration-antes-do-merge era OBRIGATORIA e nao recomendada: a coluna entra em COLUNAS_DO_FIO_PARA_MENCAO, entao sem ela o PostgREST responde 42703 e a aba Minha vez cai em 500 (falha ruidosa, sem corromper dado, reversivel assim que a coluna existe). ATENCAO ao campo total_applied deste arquivo: ele estava em 92 com 101 arquivos em disco, ou seja, ja vinha 9 atras antes desta sessao, porque as 103 e 104 foram aplicadas sem atualizar o contador. Aqui ele foi so incrementado, a divergencia NAO foi reconciliada. A issue #669 (PR #699, v0.128.1) NAO criou migration: sao sete guardas de caso apagado em codigo, e os carimbos que elas leem (anonimizada_em na 079, apagamento_pedido_em na 100) ja existiam. Tres selects recortados a mao foram ampliados para trazer os carimbos (cobrar-setor, validar e _carregar_para_o_arquivo), o que e mudanca de query, nao de schema. A 103 segue sendo a ultima. A issue #679 (PR #689, v0.128.0) NAO criou migration: a devolucao da Entrega usa as colunas de Vinculo e de Kanban que ja existiam. A 103 segue sendo a ultima. A issue #678 (PR #687, v0.126.0) NAO criou migration: a issue proibia, e o webhook e a reconciliacao usam as colunas de Vinculo que a 103 criou. A 103 segue sendo a ultima aplicada. A issue #670 (PR #683, v0.123.4) NAO criou migration: a issue proibia, e o aviso da mencao acrescentada e a conta de Minha vez saem de colunas que ja existiam (mencoes e editado_em, criadas na 102). A 102 segue sendo a ultima aplicada. A issue #671 (PR #672, v0.123.3) NAO criou migration: e remocao pura de codigo (conversor PDF/DOCX para Markdown), o conversor nunca gravou nada. A 102 segue sendo a ultima aplicada. As issues #631 (PR #667) e #633 (PR #668) NAO criaram migration: as duas so acrescentam guarda em codigo, e as colunas que a guarda de caso apagado le ja existiam (anonimizada_em na 079, apagamento_pedido_em na 100). A 102 segue sendo a ultima aplicada. As fatias #641 e #642 (PRs #660 e #661, v0.122.0 e v0.123.0) NAO criaram migration, e com isso o PRD #634 fechou as SETE filhas com UMA migration so, a 102 da fatia #636. A decisao de fazer a 102 nascer com as tres tabelas no formato final aguentou o PRD inteiro, e o humano aplicou SQL a mao uma unica vez. As fatias #639 e #640 (PRs #657 e #658, v0.120.0 e v0.121.0) NAO criaram migration. Cinco fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #641 e #642, que tambem nao criam. A fatia #638 (PR #656, v0.119.0) NAO criou migration: tecnologia_conversas ja tinha mencoes VARCHAR(10)[] e editado_em, que e a janela de 10 minutos. Tres fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #639 a #642, que tambem nao criam. A fatia #637 (PR #647, v0.118.0) NAO criou migration: as tres tabelas do modulo de Tecnologia ja nasceram no formato final na 102, e as fatias #638 a #642 tambem nao criam. Se alguma achar que precisa de coluna nova, a regra desta sessao e PARAR e perguntar ao dono, nunca criar a 103 por conta. A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
+    "nota": "A issue #721 (PR #724, v0.135.0) CRIOU a 109_ouvidoria_canais_manuais.sql, aplicada A MAO pelo humano no Studio de producao ANTES do merge, exatamente na ordem que o corpo do PR pedia. Ela so reescreve o CHECK de ouvidoria_protocolos.canal (DROP CONSTRAINT IF EXISTS, ADD CONSTRAINT, COMMENT ON COLUMN), sem UPDATE em linha nenhuma, 38 linhas, sha256 34d160506dca6b6301a06fa234ee791c1435dfe4da555dfc57f6c6fb1884b940. A lista nova tem dez valores (ana, telefone, presencial, email, site, qr, whatsapp, instagram, reclame_aqui, google) e e superconjunto ESTRITO dos seis da 067, entao nenhuma linha ja gravada quebra o ADD CONSTRAINT e nao existe cenario de migration pela metade por dado antigo. O revisor de seguranca conferiu nas 066 e 067 que 'carta' NUNCA esteve em CHECK nenhum, portanto remove-lo de TITULO_POR_CANAL no frontend nao orfana linha alguma. O CHECK e mais largo que o Literal da rota manual (sete valores) so em ana, site e qr, que sao dos outros dois escritores (API da Ana e canal publico, que carimba qr/site no servidor e nao le canal do corpo): o CHECK e a uniao dos escritores, nao superficie nova. Fica registrado o achado do revisor de codigo, sem issue aberta: NENHUM teste amarra o Literal da rota ao CHECK da migration, entao quem acrescentar valor ao Literal sem migration ganha 500 em producao; e o detector do teste da migration proibe so a palavra 'update', deixando passar DELETE, TRUNCATE e DISABLE ROW LEVEL SECURITY. ATENCAO ao total_applied: ele ja vinha 9 atras (105 arquivos em disco contra 97 aqui) desde antes desta sessao; foi so incrementado, a divergencia NAO foi reconciliada. A issue #717 (PR #723, v0.134.1) NAO criou migration: e acabamento em codigo, tres constantes nomeadas mais um teste, sem tocar schema. A 108 segue sendo a ultima aplicada. A issue #711 (PR #718, v0.134.0) NAO criou migration: a abertura do cadastro de responsaveis para o Perfil da Ouvidoria inteiro e troca de guarda nas rotas, e o rastro de quem mexeu vai para audit_log, tabela que existe desde a 018. A alternativa rejeitada foi coluna de autor em ouvidoria_setor_responsaveis, justamente para nao gastar migration aplicada a mao. Fica registrado o achado do code-review: a RLS de audit_log (023) so libera leitura para super admin, e a RN-40 mantem o super admin fora da Ouvidoria, entao o rastro e gravado mas ninguem da Ouvidoria o le no app; a leitura virou a issue #719. A 108 segue sendo a ultima aplicada. A issue #693 (PR #703, v0.129.2) CRIOU a 105_tecnologia_mencoes_da_correcao.sql, aplicada A MAO pelo humano no Studio de producao ANTES do merge. Uma coluna so, mencoes_da_correcao VARCHAR(10)[] nullable em tecnologia_conversas, com ADD COLUMN IF NOT EXISTS mais COMMENT ON COLUMN: idempotente, nao destrutiva, sem reescrita de tabela. Sem CREATE TABLE, entao o RLS default-deny da 102 continua valendo e nao ha policy nova. A ordem migration-antes-do-merge era OBRIGATORIA e nao recomendada: a coluna entra em COLUNAS_DO_FIO_PARA_MENCAO, entao sem ela o PostgREST responde 42703 e a aba Minha vez cai em 500 (falha ruidosa, sem corromper dado, reversivel assim que a coluna existe). ATENCAO ao campo total_applied deste arquivo: ele estava em 92 com 101 arquivos em disco, ou seja, ja vinha 9 atras antes desta sessao, porque as 103 e 104 foram aplicadas sem atualizar o contador. Aqui ele foi so incrementado, a divergencia NAO foi reconciliada. A issue #669 (PR #699, v0.128.1) NAO criou migration: sao sete guardas de caso apagado em codigo, e os carimbos que elas leem (anonimizada_em na 079, apagamento_pedido_em na 100) ja existiam. Tres selects recortados a mao foram ampliados para trazer os carimbos (cobrar-setor, validar e _carregar_para_o_arquivo), o que e mudanca de query, nao de schema. A 103 segue sendo a ultima. A issue #679 (PR #689, v0.128.0) NAO criou migration: a devolucao da Entrega usa as colunas de Vinculo e de Kanban que ja existiam. A 103 segue sendo a ultima. A issue #678 (PR #687, v0.126.0) NAO criou migration: a issue proibia, e o webhook e a reconciliacao usam as colunas de Vinculo que a 103 criou. A 103 segue sendo a ultima aplicada. A issue #670 (PR #683, v0.123.4) NAO criou migration: a issue proibia, e o aviso da mencao acrescentada e a conta de Minha vez saem de colunas que ja existiam (mencoes e editado_em, criadas na 102). A 102 segue sendo a ultima aplicada. A issue #671 (PR #672, v0.123.3) NAO criou migration: e remocao pura de codigo (conversor PDF/DOCX para Markdown), o conversor nunca gravou nada. A 102 segue sendo a ultima aplicada. As issues #631 (PR #667) e #633 (PR #668) NAO criaram migration: as duas so acrescentam guarda em codigo, e as colunas que a guarda de caso apagado le ja existiam (anonimizada_em na 079, apagamento_pedido_em na 100). A 102 segue sendo a ultima aplicada. As fatias #641 e #642 (PRs #660 e #661, v0.122.0 e v0.123.0) NAO criaram migration, e com isso o PRD #634 fechou as SETE filhas com UMA migration so, a 102 da fatia #636. A decisao de fazer a 102 nascer com as tres tabelas no formato final aguentou o PRD inteiro, e o humano aplicou SQL a mao uma unica vez. As fatias #639 e #640 (PRs #657 e #658, v0.120.0 e v0.121.0) NAO criaram migration. Cinco fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #641 e #642, que tambem nao criam. A fatia #638 (PR #656, v0.119.0) NAO criou migration: tecnologia_conversas ja tinha mencoes VARCHAR(10)[] e editado_em, que e a janela de 10 minutos. Tres fatias seguidas do PRD #634 sem migration nova, exatamente como planejado quando a 102 nasceu com as tres tabelas no formato final. Restam #639 a #642, que tambem nao criam. A fatia #637 (PR #647, v0.118.0) NAO criou migration: as tres tabelas do modulo de Tecnologia ja nasceram no formato final na 102, e as fatias #638 a #642 tambem nao criam. Se alguma achar que precisa de coluna nova, a regra desta sessao e PARAR e perguntar ao dono, nunca criar a 103 por conta. A 102_tecnologia_fundacao.sql (issue #636, PRD #634, ADR 0050, v0.117.0) foi aplicada A MAO no Studio de producao pelo humano ANTES do merge do PR #643, porque o merge dispara o auto-build e o codigo novo depende das tabelas. Ela cria as TRES tabelas do modulo de Tecnologia de uma vez, no formato final: tecnologia_produtos (usada ja nesta fatia), tecnologia_demandas e tecnologia_conversas (usadas pelas fatias #637 a #642). A decisao de criar as tres juntas foi do orquestrador e esta registrada na issue: como a migration e aplicada a mao, uma por fatia multiplicaria o passo humano por seis, e nenhuma das seis fatias seguintes cria migration. RLS ligado nas tres e ZERO policy, o default-deny da casa: so a service_role passa, e o gate de papel vive na rota com require_super_admin. Nao e destrutiva e e idempotente ponta a ponta (CREATE TABLE IF NOT EXISTS, CREATE INDEX IF NOT EXISTS, CREATE OR REPLACE FUNCTION, DROP TRIGGER IF EXISTS antes do CREATE TRIGGER, ALTER TABLE DROP CONSTRAINT IF EXISTS antes do ADD, e o seed dos sete Produtos com ON CONFLICT DO NOTHING). As FKs de Produto e de Demanda sao ON DELETE RESTRICT de proposito: Produto com Demanda nao e apagado, e desativado. Uma ressalva conhecida e nao corrigida: o comentario do ON CONFLICT promete mais idempotencia do que entrega, porque um Produto do seed renomeado a mao voltaria como linha nova se a migration fosse reaplicada; ficou como esta para nao mexer no arquivo depois da prova por hash. As migrations 101 e anteriores continuam valendo com as notas ja registradas."
   },
   "gates": [
     {
-      "name": "Onda 1 do PRD #706 com uma fatia so (#717), fechada como acabamento das #708/#710: sem mudanca de comportamento, campo estruturado na resposta deixado fora por decisao de triagem",
+      "name": "Onda 1 do PRD #720 com uma fatia so (#721); a #722 e so manual e Vercel e destravou sozinha pela dependencia nativa quando a #721 fechou",
       "status": "ok"
     },
     {
-      "name": "CI 3/3 verde no head com bump (Backend Lint/Format/Tests, Frontend Lint & Type Check, Docker Build); PR MERGEABLE e CLEAN",
+      "name": "CI 3/3 verde no head pos-rebase c08a46d5 (Backend Lint/Format/Tests, Frontend Lint & Type Check, Docker Build); PR MERGEABLE e CLEAN",
       "status": "ok"
     },
     {
-      "name": "Prova por mutacao: 3 de 3 mutantes mortos, um por frase, cada um mexendo em UMA palavra do comeco daquela frase. Provado duas vezes de forma independente, pelo sub-agente e pelo revisor, este em copia fora do repo",
+      "name": "Prova por mutacao: 9 mutantes, todos mortos, com detector proprio em cada seam. Vacuo encontrado e corrigido: o teste de CANAL_PADRAO na lib ficava verde com o modal nascendo em telefone, e foi por isso que nasceu o canal-de-origem.test.tsx, que renderiza o componente em vez de ler a constante",
       "status": "ok"
     },
     {
-      "name": "Revisor independente com as duas lentes (codigo e seguranca): veredito LIMPO, 0 must-fix, 2 nits registrados no PR",
+      "name": "Gate 1.5 (spec x diff) por revisor independente: aprovado, 9 de 9 criterios no diff, sem scope creep",
       "status": "ok"
     },
     {
-      "name": "Zero mudanca de comportamento conferida: as tres frases seguem byte a byte iguais a origin/main (diff +18/-0 e +24/-0, zero delecao) e as tres marcas batem byte a byte com MARCAS_DO_CASO_QUE_SE_MOVEU no front, em NFC dos dois lados, correspondencia bijetiva",
+      "name": "DOIS revisores do orquestrador (codigo+correcao e seguranca dedicada, porque o diff toca migration): os dois LIMPOS, 0 must-fix, 10 notas somadas, todas registradas no PR",
       "status": "ok"
     },
     {
-      "name": "Seguranca: adicao pura de constantes e teste, nenhuma frase ganhou id, nome de setor, PII ou nome de tabela. A rota que devolve esses 409 e POST /manifestacoes/{id}/redirecionamentos, com require_perfil_ouvidoria: tela de ouvidor autenticado, nao o canal publico sem login",
+      "name": "Consistencia das cinco listas conferida valor a valor pelos dois revisores: CHECK (10) x Literal da rota (7) x CANAIS do frontend (7, mesma ordem) x _ROTULO_CANAL (10) x TITULO_POR_CANAL (10), zero divergencia nos dois sentidos",
       "status": "ok"
     },
     {
-      "name": "APP_VERSION 0.134.1 setada no Coolify pelo CLI ANTES do merge, na forma posicional. Sem negativa do classifier nesta sessao",
+      "name": "Corrida de bump com a sessao B: ela mergeou a #717 (PR #723) e deployou v0.134.1 no meio da onda, o PR #724 virou CONFLICTING no package.json e foi rebaseado sobre origin/main mantendo 0.135.0 (feature, ja maior que 0.134.1). routers/ouvidoria.py NAO conflitou: as constantes da #717 vieram intactas",
       "status": "ok"
     },
     {
-      "name": "gh pr merge devolveu erro do --delete-branch (main ja checada na arvore principal) mas o merge PASSOU. Conferido por mergedAt antes de tentar a API: repetir por cima teria sido merge duplo",
+      "name": "Migration 109 aplicada A MAO pelo humano no Studio ANTES do merge, com o arquivo entregue por caminho clicavel mais hash e contagem de linhas, nunca por SQL colado no corpo do PR",
+      "status": "ok"
+    },
+    {
+      "name": "APP_VERSION 0.135.0 setada no Coolify pelo CLI ANTES do merge, na forma posicional. Sem negativa do classifier nesta sessao",
+      "status": "ok"
+    },
+    {
+      "name": "Codigo novo PROVADO no ar, nao so restart: /api/health em 0.135.0 (era 0.134.1) e os 16 chunks da rota /ouvidoria baixados de producao contem os quatro canais novos, rotulo E valor (Reclame Aqui/reclame_aqui, Instagram/instagram, Google, WhatsApp/whatsapp)",
       "status": "ok"
     },
     {
       "name": "Semaforo de deploy pego antes do primeiro push na main e solto no fim",
+      "status": "ok"
+    },
+    {
+      "name": "gh pr merge devolveu erro do --delete-branch (branch checada no worktree do sub-agente) mas o merge PASSOU; conferido por mergedAt antes de qualquer retentativa",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.134.1 saudavel",
-      "text": "Backend 26s e frontend 3m15s no SHA 671a273. /api/health em 0.134.1 com db healthy, frontend em 200."
+      "title": "Deploy v0.135.0 saudavel",
+      "text": "Backend 2m16s e frontend 3m43s no SHA 8890493. /api/health em 0.135.0 com db healthy, frontend em 200. Os dois webhooks dispararam juntos no merge e o frontend NAO deu OOM desta vez."
     },
     {
       "kind": "warn",
-      "title": "Nit aberto na #717: mutante no DETECTOR sobrevive",
-      "text": "O teste e so frase.startswith(marca), entao quem esvaziar uma MARCA_DE_* deixa o teste verde (\"x\".startswith(\"\") e sempre True) e a tela para de reler em silencio. Fechar de vez exigiria teste cruzando backend e front, que a triagem deixou fora do escopo. Hoje o guarda-corpo e so o comentario no codigo."
+      "title": "Nada amarra o Literal da rota ao CHECK da migration",
+      "text": "Achado do revisor de codigo, sem issue aberta. Hoje as listas batem por disciplina e conferencia manual. Quem acrescentar um canal ao Literal sem migration ganha 500 em producao (o insert bate no CHECK e cai no HTTPException generico). Guarda barata sugerida: no teste que ja le o SQL, extrair os argumentos do Literal e asserir set(literal) <= set(check). Vale o mesmo para CANAIS do frontend x Literal."
+    },
+    {
+      "kind": "warn",
+      "title": "Detector da migration proibe so a palavra update",
+      "text": "test_a_migration_nao_reescreve_linha_nenhuma procura a palavra 'update'. Um DELETE, TRUNCATE, DROP POLICY ou ALTER TABLE DISABLE ROW LEVEL SECURITY passaria verde. Mais forte: asserir a lista branca de comandos permitidos (so alter table e comment on column)."
     },
     {
       "kind": "info",
-      "title": "Prefixo compartilhado fora do diff",
-      "text": "ouvidoria_setor.py:387,586,619 tem uma quarta frase comecando pelo mesmo texto de SAIU_DA_AREA_NO_MEIO. E outro fluxo (link do setor) e lerAFalhaDoRedirecionamento nao le essa resposta, entao nao e defeito; fica o aviso para quem for reescrever qualquer um dos dois textos."
+      "title": "Trilha do Dossie imprime a chave crua",
+      "text": "ouvidoria.py grava 'Registro manual da ouvidoria (canal: reclame_aqui)' e essa observacao vira o texto do evento de entrada na trilha, entao o ouvidor le reclame_aqui com underline na tela. Fora dos tres lugares que o PRD listou para rotular canal e sem perda de informacao (o telefone de hoje ja se comporta assim). Candidato a follow-up junto do manual."
+    },
+    {
+      "kind": "info",
+      "title": "Docstrings envelhecidos no arquivo mudado",
+      "text": "ouvidoria.py:8 e :877 e NovaManifestacaoModal.tsx:53 continuam dizendo 'chegou por telefone, balcao ou email', a lista antiga, logo acima da nova."
+    },
+    {
+      "kind": "info",
+      "title": "Heranca para o ADR 0051 (caixa de entrada de e-mail)",
+      "text": "Aquele fluxo abre o registro manual pre-preenchido com canal email. Hoje nao existe consumidor pre-preenchendo o modal, entao nao ha regressao, mas quando nascer tem que setar canal email EXPLICITAMENTE: o VAZIO do modal deixou de ser telefone e passou a ser whatsapp."
     },
     {
       "kind": "info",
       "title": "Follow-ups antigos sem issue aberta",
-      "text": "Seguem valendo os cinco registrados no deploy v0.128.0 (foto_mudou, teto de 25 MB com chunked, janela UPDATE para INSERT, mencao reabrindo Minha vez, logger.error da devolucao pela metade)."
+      "text": "Seguem valendo os cinco registrados no deploy v0.128.0 (foto_mudou, teto de 25 MB com chunked, janela UPDATE para INSERT, mencao reabrindo Minha vez, logger.error da devolucao pela metade), mais o nit da #717 (mutante no detector das marcas sobrevive)."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "671a273",
+    "sha": "8890493",
     "result": "healthy",
-    "duration_seconds": 195
+    "duration_seconds": 223
   }
 }
