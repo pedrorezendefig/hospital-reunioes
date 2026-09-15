@@ -7,6 +7,26 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.135.0 - 2026-09-15 18:30 - o registro manual da Ouvidoria aceita WhatsApp, Instagram, Reclame Aqui e Google
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `8890493`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.135.0, `db: healthy`; frontend HTTP 200) · build 136s no backend, 223s no frontend
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/8890493
+- Issues: [#721](https://github.com/pedrorezendefig/hospital-reunioes/issues/721) · PR [#724](https://github.com/pedrorezendefig/hospital-reunioes/pull/724) · PRD [#720](https://github.com/pedrorezendefig/hospital-reunioes/issues/720) · ADR 0034 · minor, feat
+- Migration: `109_ouvidoria_canais_manuais.sql`, aplicada à mão no Studio de produção pelo humano ANTES do merge. Só reescreve o CHECK de `ouvidoria_protocolos.canal` (`DROP CONSTRAINT IF EXISTS`, `ADD CONSTRAINT`, `COMMENT ON COLUMN`), sem `UPDATE` em linha nenhuma. 38 linhas, sha256 `34d160506dca6b6301a06fa234ee791c1435dfe4da555dfc57f6c6fb1884b940`.
+- Nota: primeira fatia do PRD #720. O select do registro manual passa de três para sete canais (WhatsApp, Telefone, Presencial, E-mail, Instagram, Reclame Aqui, Google) e nasce em WhatsApp, não mais em Telefone. Os canais que o sistema carimba sozinho (Ana, site, QR) continuam fora do select, porque ninguém os escolhe à mão.
+- Nota: a 109 podia ser aplicada antes do merge sem risco, e foi isso que se fez. A lista nova de dez valores é superconjunto estrito dos seis da 067, então toda linha já gravada continua passando e não existe cenário de `ADD CONSTRAINT` falhando por dado antigo. Ela também é idempotente, com `DROP CONSTRAINT IF EXISTS` antes do `ADD`.
+- Nota: a ordem de subida está escrita no corpo do PR e é obrigatória, migration, backend, frontend. Se o frontend subisse antes do backend, o caminho PADRÃO quebraria: o modal nasce em `whatsapp`, o backend antigo devolveria 422 e a tela culparia "relato, tipo, setor e resumo", causa que não é a real, com o ouvidor conferindo quatro campos preenchidos sem ter como suspeitar do canal.
+- Nota: a migration tem que ser colada no SQL Editor numa query só, que o Studio roda em transação. Statement a statement, um `ADD CONSTRAINT` que falhe depois do `DROP CONSTRAINT IF EXISTS` deixa a coluna `canal` sem CHECK nenhum, aceitando qualquer string até alguém recolocar.
+- Nota: `carta` saiu do dicionário de rótulos do frontend. Conferido nas migrations 066 e 067 que ele nunca esteve em CHECK nenhum, logo não existe (nem podia existir) linha gravada com esse valor, e a remoção não órfã nada. Mesmo que existisse, o `descreverOrigem` cai no fallback em vez de sumir com o rótulo em silêncio.
+- Nota: dois revisores independentes do orquestrador (código e segurança dedicada, porque o diff toca migration) voltaram limpos, 0 must-fix. As cinco listas foram conferidas valor a valor nos dois sentidos: CHECK com 10, `Literal` da rota com 7, `CANAIS` do frontend com os mesmos 7 na mesma ordem, `_ROTULO_CANAL` e `TITULO_POR_CANAL` com 10. O CHECK é a união dos três escritores, não superfície nova, e nenhum canal novo é alcançável pelo canal público (aquela rota carimba `qr`/`site` no servidor e não lê `canal` do corpo).
+- Nota: prova por mutação com 9 mutantes, todos mortos, com detector próprio em cada seam. O vácuo que apareceu valeu o achado: o teste de `CANAL_PADRAO` na lib ficava verde com o modal nascendo em `telefone`, e foi por isso que nasceu o `canal-de-origem.test.tsx`, que renderiza o componente em vez de ler a constante.
+- Nota: código novo provado no ar, não só restart. Os 16 chunks da rota `/ouvidoria` foram baixados de produção e contêm os quatro canais novos, rótulo e valor.
+- Nota: dois follow-ups sem issue aberta, achados do revisor de código. Nenhum teste amarra o `Literal` da rota ao CHECK da migration, então quem acrescentar um canal ao `Literal` sem migration ganha 500 em produção; e o detector do teste da migration proíbe só a palavra `update`, deixando passar `DELETE`, `TRUNCATE` e `DISABLE ROW LEVEL SECURITY`.
+- Nota: corrida com a sessão B no meio da onda. Ela mergeou a #717 e deployou v0.134.1 enquanto o PR #724 estava em revisão, o PR virou `CONFLICTING` no `package.json` e foi rebaseado sobre `origin/main` mantendo 0.135.0. O `routers/ouvidoria.py` não conflitou: as constantes de erro da #717 vieram intactas.
+- Nota: o Gate 1.5 nasceu carimbado `[x]` no corpo do PR antes de a revisão rodar, o que esvazia o gate. Foi corrigido no mesmo turno, e o corpo hoje diz quando cada gate rodou de verdade.
+
 ## v0.134.1 - 2026-09-15 18:16 - as marcas de erro que a tela do redirecionamento lê viram constantes com teste
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `671a273`
