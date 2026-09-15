@@ -12,7 +12,9 @@ bash docs/manual/ouvidoria/publicar.sh --dry-run  # só monta a pasta, não publ
 Os MP4 dos capítulos não ficam no git (`.gitignore` desta pasta) e cada deploy da Vercel
 é uma cópia nova: sem os arquivos aqui, o manual sobe com os quadros de vídeo quebrados.
 O script confere antes e para, dizendo quais faltam e o `curl` que baixa cada um do manual
-publicado. Baixe, e só então publique.
+publicado. Baixe, e só então publique. A conferência tem piso de sanidade: se o número de
+`.mp4` que o `index.html` menciona não bater com o que o parsing reconheceu, o script aborta
+em vez de publicar um vídeo a menos em silêncio.
 
 Para abrir o `index.html` local sem publicar, copie os dois assets para cá primeiro:
 

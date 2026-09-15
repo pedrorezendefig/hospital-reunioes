@@ -27,7 +27,23 @@ cp "$ASSETS/logo-hsm.png" "$ASSETS/fonts/HPSimplified_Rg.ttf" "$DESTINO"/
 # eles e cada deploy da Vercel é uma cópia nova: publicar sem os arquivos deixa
 # todos os quadros de vídeo quebrados no manual do time. Por isso a falta trava a
 # publicação em vez de passar batido.
-VIDEOS=$(grep -oE 'src="[^"]+\.mp4"' "$ORIGEM/index.html" | sed 's/^src="//; s/"$//' | sort -u)
+#
+# O parsing só entende `src="...mp4"`. Um src fora desse formato não seria
+# copiado NEM reportado: a trava falharia aberta, publicando um vídeo a menos e
+# saindo com sucesso, que é exatamente o que ela existe para impedir. Por isso o
+# piso de sanidade: quantos .mp4 o arquivo menciona tem que bater com quantos o
+# parsing reconheceu.
+MENCOES=$(grep -o '\.mp4' "$ORIGEM/index.html" | wc -l | tr -d ' ')
+BRUTOS=$(grep -oE 'src="[^"]+\.mp4"' "$ORIGEM/index.html" | sed 's/^src="//; s/"$//')
+RECONHECIDOS=$(printf '%s\n' "$BRUTOS" | grep -c . || true)
+if [ "$RECONHECIDOS" != "$MENCOES" ]; then
+  echo "o index.html menciona $MENCOES arquivos .mp4 e o parsing reconheceu $RECONHECIDOS." >&2
+  echo "algum src saiu do formato src=\"...\": conserte o parsing antes de publicar," >&2
+  echo "senão o vídeo que escapou some do deploy sem ninguém avisar." >&2
+  exit 1
+fi
+
+VIDEOS=$(printf '%s\n' "$BRUTOS" | sort -u)
 FALTANDO=""
 for v in $VIDEOS; do
   if [ -f "$ORIGEM/$v" ]; then
@@ -49,4 +65,11 @@ if [ "${1:-}" = "--dry-run" ]; then
   exit 0
 fi
 cd "$DESTINO" && npx vercel@latest deploy --prod --yes
-[ -d "$DESTINO/.vercel" ] && cp -R "$DESTINO/.vercel" "$ORIGEM"/ && echo "vínculo .vercel guardado (fica fora do git)"
+
+# `[ -d ... ] && cp && echo` como última linha faz o script sair 1 quando não há
+# .vercel, ou seja, anunciar falha depois de publicar com sucesso. Em bloco, o
+# status final é o do deploy.
+if [ -d "$DESTINO/.vercel" ]; then
+  cp -R "$DESTINO/.vercel" "$ORIGEM"/
+  echo "vínculo .vercel guardado (fica fora do git)"
+fi
