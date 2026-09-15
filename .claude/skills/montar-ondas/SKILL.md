@@ -160,6 +160,31 @@ Regras extras:
 
 A linha "Auditorias de PRD" entra quando a última sub-issue aberta de um PRD está nesta sessão. A linha por issue entra quando houver decisão que o corpo não traz sozinho (escopo reduzido aceitável, item recusado, valor cravado, o que fica como follow-up). Cada sessão lista no "Não toque" as issues da outra, não só o PRD.
 
+### 5b. Divulgação dos PRDs que fecham neste plano
+
+PRD que fecha é entrega para o diretor e para quem opera o hospital, e eles só "veem" a funcionalidade pelo vídeo e pela página do `/divulgar`. Para **cada PRD cuja última fatia está nos prompts**, o plano traz também uma linha de divulgação. Sem ela, o PRD fecha no GitHub e ninguém fora do time fica sabendo.
+
+Regras:
+
+1. **Terminal próprio, nunca dentro da `/onda`.** O `/divulgar` tem gate humano no draft do vídeo; a `/onda` é AFK até o PR verde. Misturar os dois deixa a onda parada esperando um OK que não é de merge. O plano abre uma **sessão de divulgação** (uma só, sequencial: um PRD de cada vez) com um prompt por PRD.
+2. **Quando cada vídeo pode começar** é decisão do plano, não do humano. Leia as fatias que faltam do PRD:
+   - Se as fatias restantes **não mudam tela** (chore, teste, docs, manual): o vídeo começa **agora**, em paralelo com as ondas. O carimbo retrata a versão de prod de hoje e o PRD já está inteiro no app.
+   - Se alguma fatia restante **muda tela**: o vídeo espera o deploy da última fatia visual (o carimbo "retrata o app em vX.Y.Z" precisa da versão que tem a tela) e roda em paralelo com o que sobrar (manual, docs).
+3. **Saída padrão é vídeo e página** (o comando sem flag). `--so-video` só se o humano pedir. Contexto com página de módulo (`docs/comunicacao/ouvidoria/modulo/`): o prompt lembra de atualizar a cópia do MP4 lá.
+4. O prompt de divulgação segue o mesmo formato do passo 5 (cabeçalho de leitura fora do bloco, comando na primeira linha do bloco) e diz **o que esperar antes de colar**: "cole depois do deploy verde da onda N da sessão A" ou "pode colar agora". Template:
+
+```
+/divulgar <PRD>
+
+Contexto: o PRD #<PRD> fechou com as fatias #a, #b, #c (as visuais já estão em prod v<X.Y.Z>; a #d é só <chore/manual> e não muda tela).
+O exemplo único da demonstração: <uma linha com o caso de uso ponta a ponta que a issue descreve, no vocabulário do CONTEXT.md>.
+Fontes: o PRD e as filhas no GitHub, o código real do frontend (gh pr view <PR> --json files), ROTAS.md e o CONTEXT.md.
+Pare no draft e me mostre os frames antes do render final. Depois da página publicada, registre o link no PRD com <!-- automacao --> na primeira linha do comentário.
+<Se houver página de módulo: Atualize a cópia do MP4 em docs/comunicacao/<contexto>/modulo/ e republique a página de módulo.>
+```
+
+5. No passo a passo (6), a divulgação entra como item próprio: em qual momento colar cada prompt e a quem mandar o link depois (diretor, usuários do módulo). O envio do link é "precisa de você".
+
 ### 6. Relatório e ordem de comando
 
 A resposta final tem esta forma, nesta ordem. É o que o Pedro lê do celular.
@@ -168,12 +193,13 @@ A resposta final tem esta forma, nesta ordem. É o que o Pedro lê do celular.
 2. **O que eu fiz:** issues triadas, decisões que o humano tomou e onde ficaram registradas, issue criada, PRD destravado, o que mudou no mundo durante o plano (sessão paralela, versão de prod, migration nova).
 3. **As Y que ficam com você:** uma linha por issue, com a ação concreta ("cadastrar os 4 pontos na tela e mandar os PNGs", "disparar o pedido de API ao Google") e o que ela destrava. PRDs entram aqui como "fecham sozinhos quando as filhas fecharem".
 4. **Tabela final** do passo 4.
-5. **Os prompts**, inteiros, cada um com o cabeçalho de leitura (issues, resumo por issue, valor) em cima do bloco de código.
+5. **Os prompts**, inteiros, cada um com o cabeçalho de leitura (issues, resumo por issue, valor) em cima do bloco de código. Por último, os prompts de divulgação (5b), um por PRD que fecha.
 6. **Passo a passo:**
    1. Abrir os terminais na árvore principal e colar um prompt em cada. Cada sessão monta a fila e para.
    2. Escrever `vai` em todas. Elas rodam até PR verde sem chamar.
    3. Checkpoints de merge, **uma sessão por vez**, esperando o deploy verde antes do próximo. Liste a sequência onda a onda, alternando sessões, e marque na linha certa "aplique a migration 0XX no Studio" e "ela audita o PRD #X em seguida". Ordem: a sessão menor primeiro, a onda com migration quando o Pedro estiver perto do Studio, a fatia que reabre auditoria de PRD por último. É isso que dissolve a corrida de bump.
-   4. "No tempo morto": as tarefas do item 3.
+   4. **Divulgação:** para cada PRD que fecha, a linha "cole o prompt de `/divulgar #X` no terminal de divulgação" no momento certo (agora, ou logo após o deploy da onda que sobe a última tela) e, depois do link publicado, "mande o link ao diretor e aos usuários do módulo".
+   5. "No tempo morto": as tarefas do item 3.
 
 ## O que esta skill não faz
 
@@ -181,3 +207,4 @@ A resposta final tem esta forma, nesta ordem. É o que o Pedro lê do celular.
 - Não tria issue sem critério de aceite. Não decide sozinha uma decisão de domínio (ADR, RN do `CONTEXT.md`): ela pergunta ao humano (2b) e crava a resposta. Só vai para "precisa de você" a decisão sem saídas formuladas, ou a que vira PRD novo.
 - Não faz ação operacional (cadastro em produção, envio de arquivo a terceiros, pedido a serviço externo). Isso é "precisa de você", com o passo escrito.
 - Não substitui o `/triage` para issue nova sem critério; só move as que já nasceram prontas.
+- Não gera vídeo nem página: escreve o prompt do `/divulgar` e diz quando colar. Quem roda é o terminal de divulgação, com o gate humano no draft.
