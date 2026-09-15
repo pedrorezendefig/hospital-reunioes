@@ -733,3 +733,10 @@ class TestACorridaQueAArestaNovaDestrancou:
         assert depois["prazo_area_em"] == prazo, "o relógio da área parou numa corrida perdida"
         assert depois["respondida_em"] == t2, "a resposta recém-chegada foi apagada"
         assert not any(m["estado_novo"] == "em_classificacao" for m in sb.tabelas["ouvidoria_movimentos"])
+        # A frase conta o que ACONTECEU: esta requisição não escreveu nada.
+        # Copiar a do ramo em que a RPC pode ter commitado ("a devolução pode já
+        # ter sido registrada") assustaria o responsável com um risco que este
+        # caminho não tem, e ele já ficou sem o link para conferir sozinho.
+        detalhe = resposta.json()["detail"]
+        assert "Nada foi alterado agora" in detalhe
+        assert "pode já ter sido registrada" not in detalhe

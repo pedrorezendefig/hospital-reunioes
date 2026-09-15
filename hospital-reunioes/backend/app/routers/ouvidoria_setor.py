@@ -575,11 +575,16 @@ async def devolver_a_ouvidoria(
             "Devolução à Ouvidoria abortada: a manifestação %s saiu de aguardando_area antes da parada",
             vinculo["manifestacao_id"],
         )
+        # A frase NÃO é a do ramo em que a RPC pode ter commitado, e a diferença
+        # é o que de fato aconteceu: aqui o update casou ZERO linhas, então esta
+        # requisição não escreveu nada no caso. Dizer "a devolução pode já ter
+        # sido registrada" assustaria o responsável com um risco que este
+        # caminho não tem, e ele já ficou sem o link para conferir sozinho.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=(
                 "Este caso saiu da fila da área durante o envio, então este link não responde mais por ele. "
-                "A devolução pode já ter sido registrada: confirme com a Ouvidoria antes de enviar de novo."
+                "Nada foi alterado agora. Se ainda for preciso devolver, fale com a Ouvidoria."
             ),
         )
 

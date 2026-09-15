@@ -3528,7 +3528,19 @@ async def validar_e_acionar(
     # caso parado em `em_classificacao`. Redirecionar confere primeiro, e por
     # isso "nada acontece" quando a área nova não tem responsável (ADR 0055).
     area = conferir_o_acionamento(supabase, caso, pedido, agora.astimezone(FUSO_HOSPITAL).date())
-    return acionar_a_area(supabase, me, caso, pedido, area, agora, acao_no_log="validar_e_acionar")
+    return acionar_a_area(
+        supabase,
+        me,
+        caso,
+        pedido,
+        area,
+        agora,
+        acao_no_log="validar_e_acionar",
+        # Esta rota não lê o andamento: ela parte de `em_classificacao` e as
+        # frases de falha do acionamento já dizem exatamente onde o caso ficou.
+        # Quem precisa dele é o redirecionamento.
+        andamento=AndamentoDoAcionamento(),
+    )
 
 
 # A recusa da chegada pela porta da validação. Ela nomeia as DUAS saídas, e a
@@ -3561,6 +3573,14 @@ class AreaAcionavel:
     # (achado da review do PR #714). A conclusiva é `None` quando o caso já tem
     # a data congelada, e é a MESMA condicional de antes: quem já tem, mantém
     # (issue #601).
+    #
+    # Das três, duas são exercitadas pelo redirecionamento e têm teste de ordem.
+    # A conclusiva é PREVENTIVA: no redirecionamento o caso sempre chega com
+    # `prazo_conclusivo_em` congelado desde o primeiro despacho, então ela não
+    # acontece em nenhum dos dois desenhos e nenhum teste honesto a distingue
+    # (rodada 2 de review, NIT 1). Ela sobe junto porque a regra é do LUGAR e não
+    # do caminho: leitura de banco depois do ponto sem volta é o que não pode
+    # existir, e deixar uma para trás convidaria a próxima a nascer ali.
     feriados: frozenset[dt.date]
     prazo_da_area: Prazo
     prazo_conclusivo: Prazo | None
@@ -3637,6 +3657,22 @@ def recusa_de_setor_sem_responsavel(setor: str) -> str:
     return f"O setor {setor} não tem titular nem gestor vigente. Cadastre o responsável antes de acionar a área."
 
 
+@dataclass
+class AndamentoDoAcionamento:
+    """Até onde o acionamento chegou quando ele falha no meio.
+
+    Mutável e passado de fora de propósito: quem chama precisa saber, no
+    `except`, se o caso ainda está em `em_classificacao`, e a exceção não carrega
+    essa informação. Reler o caso do banco para descobrir seria uma ida a mais
+    justamente no caminho em que o banco acabou de falhar.
+
+    Um campo só, e é o único fato que muda a resposta ao ouvidor: depois da
+    transição de entrada, nenhuma frase pode afirmar que o caso está em
+    classificação (rodada 2 de review do PR #714)."""
+
+    saiu_da_classificacao: bool = False
+
+
 def acionar_a_area(
     supabase,
     me: dict,
@@ -3645,6 +3681,7 @@ def acionar_a_area(
     area: AreaAcionavel,
     agora: dt.datetime,
     acao_no_log: str,
+    andamento: AndamentoDoAcionamento,
 ) -> dict:
     """O despacho em si: transição para `aguardando_area`, marco T1, prazo da
     área, revogação dos links da área anterior e o email ao responsável.
@@ -3663,7 +3700,12 @@ def acionar_a_area(
     `acao_no_log` é o nome do ato no registro de acesso, e é parâmetro porque
     o registro precisa distinguir quem chamou: redirecionamento e validação
     chegam ao mesmo despacho por decisões diferentes do ouvidor, e a auditoria
-    (LGPD, ADR 0034) não pode contar as duas como a mesma coisa."""
+    (LGPD, ADR 0034) não pode contar as duas como a mesma coisa.
+
+    `andamento` é carimbado assim que a transição de entrada commita, para quem
+    chamou poder responder sem afirmar um estado que ninguém conferiu. A rota de
+    validação passa um e ignora: ela parte de `em_classificacao` e não tem outra
+    frase a escolher."""
     manifestacao_id = caso["id"]
     setor = area.setor
     destinatario = area.destinatario
@@ -3770,6 +3812,20 @@ def acionar_a_area(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao acionar a área",
         ) from exc
+
+    # A transição de ENTRADA commitou: o caso já não está em `em_classificacao`.
+    #
+    # Este carimbo existe para quem chamou poder responder honestamente numa
+    # falha adiante. Quem redireciona precisa saber disto e não tem outro jeito
+    # de saber: daqui para baixo toda falha deixa o caso FORA da classificação, e
+    # uma frase dizendo "o caso está em classificação, use Validar e acionar"
+    # afirmaria um estado que ninguém conferiu e apontaria um ato que a própria
+    # API recusa nesse estado (achado da rodada 2 de review do PR #714).
+    #
+    # A marca é AQUI, e não depois do update do marco T1: entre esta linha e ele
+    # o caso está em `aguardando_area` com a área ANTIGA e sem vencimento, que
+    # também não é "em classificação".
+    andamento.saiu_da_classificacao = True
 
     # Agora a transição existe: o marco e o vencimento podem ser carimbados.
     # Falha aqui é falha de infraestrutura e não pode passar em silêncio, senão
@@ -3961,6 +4017,24 @@ _CAMPOS_DO_REDIRECIONAMENTO = (
 FALHA_DEPOIS_DA_SAIDA = (
     "O caso saiu da área anterior e está em classificação, mas a área nova não foi acionada. "
     "Use Validar e acionar para despachá-lo, sem redirecionar de novo."
+)
+
+# A frase de quando o acionamento falhou DEPOIS de a transição de entrada
+# commitar, e o caso já não está em `em_classificacao` (rodada 2 de review do
+# PR #714).
+#
+# Ela não afirma estado nenhum, e isso é a regra: entre a transição de entrada e
+# o fim do acionamento o caso pode estar com a área antiga sem vencimento, ou
+# inteiro com a área nova, e o `except` não sabe qual. A frase anterior afirmava
+# o terceiro cenário (o caso em classificação) e mandava clicar no Validar e
+# acionar, que responde 409 nesses dois estados: o ouvidor lia a instrução,
+# levava a recusa e só descobria o que houve abrindo o Dossiê.
+#
+# Dizer menos é dizer a verdade. O Dossiê, que a frase manda abrir, é quem
+# responde onde o caso está.
+FALHA_DE_ESTADO_INDETERMINADO = (
+    "O redirecionamento não terminou. Confira a manifestação no painel antes de agir: "
+    "o caso pode já estar com a área nova."
 )
 
 # A frase do caso que se moveu entre a leitura e a saída. Mesma forma da
@@ -4218,31 +4292,61 @@ def redirecionar_o_caso(supabase, me: dict, caso: dict, pedido: PedidoRedirecion
     # `ReadTimeout` ali escapava cru até o FastAPI, e o ouvidor recebia um 500
     # sem corpo: nunca lia que o caso tinha saído da área antiga, e o caso
     # ficava parado até alguém notar. O critério de aceite promete o contrário.
+    #
+    # E o `andamento` é quem escolhe a frase, porque o estado do caso numa falha
+    # aqui NÃO é um só. Até a transição de entrada, o caso está em
+    # `em_classificacao` e a frase que aponta o Validar e acionar é verdadeira.
+    # Depois dela, não: a frase afirmaria um estado que ninguém conferiu e
+    # mandaria o ouvidor num ato que a própria API recusa nesse estado, com 409
+    # (achado da rodada 2 de review do PR #714).
+    andamento = AndamentoDoAcionamento()
     try:
-        return acionar_a_area(supabase, me, caso, pedido, area, agora, acao_no_log="redirecionamento")
+        return acionar_a_area(
+            supabase, me, caso, pedido, area, agora, acao_no_log="redirecionamento", andamento=andamento
+        )
     except HTTPException as exc:
         # O código de quem falhou é preservado: um 503 da tabela de prazos não
         # pode virar 500, senão o ouvidor perde a informação de que vale tentar
-        # de novo. O que muda é a frase, que precisa dizer onde o caso ficou.
+        # de novo.
+        #
+        # As frases INTERNAS do acionamento já são honestas (o marco T1 e a
+        # revogação dizem exatamente o que não foi gravado), então elas viajam
+        # inteiras nos dois ramos. O que muda é só o prefixo.
         raise HTTPException(
             status_code=exc.status_code,
-            detail=f"{FALHA_DEPOIS_DA_SAIDA} O acionamento respondeu: {exc.detail}",
+            detail=f"{_prefixo_da_falha(andamento)} O acionamento respondeu: {exc.detail}",
         ) from exc
     except Exception as exc:
         # `Exception` e não a tupla do PostgREST: o que não pode acontecer é o
-        # ouvidor ficar sem a frase, e qualquer falha daqui para baixo deixa o
-        # caso no MESMO estado (fora da área antiga, em classificação, com o
-        # movimento gravado). O tipo não muda o que ele precisa fazer, então
-        # estreitar a captura só reabriria o buraco para o tipo seguinte.
+        # ouvidor ficar sem frase nenhuma. O tipo não muda o que ele precisa
+        # fazer, então estreitar a captura só reabriria o buraco para o tipo
+        # seguinte. Aqui não há frase interna a aproveitar: a exceção veio crua
+        # de uma escrita sem `except`, então o prefixo é a resposta inteira.
         logger.error(
-            "Falha não tratada no acionamento do redirecionamento da manifestação %s (%s)",
+            "Falha não tratada no acionamento do redirecionamento da manifestação %s (%s, saiu da classificação: %s)",
             manifestacao_id,
             type(exc).__name__,
+            andamento.saiu_da_classificacao,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=FALHA_DEPOIS_DA_SAIDA,
+            detail=_prefixo_da_falha(andamento),
         ) from exc
+
+
+def _prefixo_da_falha(andamento: AndamentoDoAcionamento) -> str:
+    """A frase que abre a resposta de um redirecionamento que falhou no
+    acionamento, escolhida pelo único fato que o código conferiu.
+
+    Antes da transição de entrada o caso está em `em_classificacao` de verdade,
+    e apontar o Validar e acionar é a instrução certa. Depois dela o caso já
+    saiu, e a mesma frase mentiria em cada cláusula: diria que o caso está em
+    classificação (não está), que a área nova não foi acionada (pode ter sido,
+    com setor, prazo e T1 gravados) e mandaria clicar num botão que responde 409
+    nesse estado, por desenho desta fatia."""
+    if andamento.saiu_da_classificacao:
+        return FALHA_DE_ESTADO_INDETERMINADO
+    return FALHA_DEPOIS_DA_SAIDA
 
 
 @router.get("/manifestacoes/{manifestacao_id}/notificacoes")

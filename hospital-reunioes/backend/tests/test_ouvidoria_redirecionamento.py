@@ -965,7 +965,10 @@ class TestSemTravessao:
             ouvidoria_redirecionamento.RECUSA_SEM_AREA,
             ouvidoria_router.RECUSA_DO_CASO_JA_NA_AREA,
             ouvidoria_router.FALHA_DEPOIS_DA_SAIDA,
+            ouvidoria_router.FALHA_DE_ESTADO_INDETERMINADO,
             ouvidoria_router.SAIU_DA_AREA_NO_MEIO,
+            ouvidoria_router.RECUSA_DA_MESMA_AREA,
+            ouvidoria_router.RECUSA_DA_TRANSICAO_GENERICA,
             ouvidoria_router.recusa_de_setor_sem_responsavel(SETOR_NOVO),
         ],
     )
@@ -1191,6 +1194,36 @@ class TestOPayloadDaDevolucaoNaoMudou:
         assert "respondida_por_nome" not in enviados[0]
         assert parado.carimbo_da_resposta_a_restaurar == {}
 
+    def test_sem_o_opt_in_o_ramo_do_estouro_tambem_e_byte_a_byte_o_de_antes(self):
+        """O outro ramo do payload, que a comparação de dicionário inteiro não
+        alcançava (rodada 2 de review, NIT 3): a área furou o prazo e a devolução
+        carimba o estouro consumado na MESMA escrita que para o relógio.
+
+        É justamente o ramo que a issue #607 acrescentou e o que mais importa
+        para a rota pública: um campo a mais entrando aqui escreveria no caso de
+        quem devolve pelo link, sem login."""
+        from app.services import ouvidoria_prorrogacao, ouvidoria_relogio_da_area
+
+        supabase, enviados = _espiar_os_updates()
+        furou = "2026-08-24T20:00:00+00:00"
+
+        parado = ouvidoria_relogio_da_area.parar(
+            supabase,
+            "uuid-7",
+            dict(CASO_RESPONDIDO_CRU, status="aguardando_area", prazo_area_em=furou),
+            dt.datetime.fromisoformat(furou),
+        )
+
+        assert enviados == [
+            {"prazo_area_em": None, "area_estourou_em": furou} | ouvidoria_prorrogacao.carimbos_a_zerar()
+        ], "o payload da devolução do setor mudou no ramo do estouro"
+        assert "respondida_em" not in enviados[0]
+        assert "respondida_por_nome" not in enviados[0]
+        # E o rollback do mesmo ramo, inteiro: devolve o vencimento e o carimbo
+        # do estouro, e nada do marco T2.
+        ouvidoria_relogio_da_area.restaurar(supabase, "uuid-7", parado)
+        assert enviados[-1] == {"prazo_area_em": furou, "area_estourou_em": None}
+
     def test_com_o_opt_in_as_duas_colunas_do_marco_entram(self):
         from app.services import ouvidoria_relogio_da_area
 
@@ -1346,7 +1379,16 @@ class TestNenhumaLeituraDepoisDoPontoSemVolta:
     teste que injetasse falha nelas passaria verde com as leituras em qualquer
     lugar, e seria vácuo. O que a mudança entrega é o invariante auditável
     "depois do ponto sem volta, nenhuma ida ao banco que dê para fazer antes", e
-    é ele que esta asserção guarda."""
+    é ele que esta asserção guarda.
+
+    Duas das três leituras que subiram são exercitadas aqui. A terceira,
+    `carregar_prazo_conclusivo`, é PREVENTIVA e fica sem teste de propósito: no
+    redirecionamento o caso sempre chega com `prazo_conclusivo_em` congelado
+    desde o primeiro despacho, então ela não acontece nem no desenho novo nem no
+    antigo, e o único cenário que a distinguiria (caso despachado sem prazo
+    conclusivo) exigiria um caso sem `contato_em`, que é NOT NULL desde a
+    migration 066. Um teste desses provaria o dublê, não o código (rodada 2 de
+    review, NIT 1)."""
 
     def test_a_tabela_de_prazos_e_o_calendario_sao_lidos_antes_da_primeira_escrita(
         self, monkeypatch, _nunca_envia_email_de_verdade
@@ -1381,3 +1423,188 @@ class TestNenhumaLeituraDepoisDoPontoSemVolta:
         )
         assert "leu ouvidoria_prazos" not in passos[parada:], "sobrou leitura de prazo depois do ponto sem volta"
         assert "leu ouvidoria_feriados" not in passos[parada:], "sobrou leitura do calendário depois do ponto sem volta"
+
+
+class TestAFronteiraDasDuasFrases:
+    """MUST-FIX da rodada 2 de review do PR #714.
+
+    `FALHA_DEPOIS_DA_SAIDA` afirma três coisas: que o caso está em classificação,
+    que a área nova não foi acionada e que o ouvidor deve usar o Validar e
+    acionar. As três valem enquanto o caso NÃO passou pela transição de entrada.
+    Depois dela, as três mentem, e a terceira manda o ouvidor num ato que a
+    própria API recusa nesse estado, com 409, por desenho desta fatia.
+
+    A fronteira é a transição de ENTRADA, e não o update do marco T1: entre as
+    duas o caso está em `aguardando_area` com a área ANTIGA e sem vencimento, que
+    também não é "em classificação"."""
+
+    def _falhar_no_select_do_dossie(self, monkeypatch):
+        """A escrita que não tem `except` nenhum e roda por ÚLTIMO, depois de o
+        caso já estar inteiro com a área nova."""
+        select_de_verdade = _TabelaFake.select
+
+        def _cai(self, colunas="*", *a, **kw):
+            if self.nome == "ouvidoria_protocolos" and "natureza_informada" in colunas:
+                raise httpx.ReadTimeout("o banco não respondeu no tempo")
+            return select_de_verdade(self, colunas, *a, **kw)
+
+        monkeypatch.setattr(_TabelaFake, "select", _cai)
+
+    def test_falha_no_fim_do_acionamento_nao_afirma_estado_nenhum(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O caso está INTEIRO com a área nova (setor, prazo e T1 gravados), e a
+        frase antiga dizia o contrário nas três cláusulas."""
+        client, supabase = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
+        self._falhar_no_select_do_dossie(monkeypatch)
+
+        resposta = _redirecionar(client)
+
+        assert resposta.status_code == 500, resposta.text
+        detalhe = resposta.json()["detail"]
+        assert detalhe == ouvidoria_router.FALHA_DE_ESTADO_INDETERMINADO
+        assert "Validar e acionar" not in detalhe, "a resposta aponta um ato que a API recusa com 409 neste estado"
+        assert "está em classificação" not in detalhe, "a resposta afirma um estado que o código não conferiu"
+        # E o estado que a frase antiga negava:
+        caso = _caso(supabase)
+        assert caso["status"] == "aguardando_area"
+        assert caso["setor"] == SETOR_NOVO
+        assert caso["prazo_area_em"] == PRAZO_DA_AREA_NOVA
+        assert caso["validada_em"] == UM_DIA_DEPOIS.isoformat()
+
+    def test_a_frase_neutra_manda_conferir_o_painel(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O marcador positivo: dizer menos é dizer a verdade, mas a resposta
+        ainda precisa dizer ao ouvidor o que fazer."""
+        client, _ = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
+        self._falhar_no_select_do_dossie(monkeypatch)
+
+        detalhe = _redirecionar(client).json()["detail"]
+
+        assert "Confira a manifestação no painel" in detalhe
+        assert "não terminou" in detalhe
+
+    def test_falha_ao_revogar_os_links_tambem_cai_na_frase_neutra(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O caminho que já existia na rodada 0 e passou por dois revisores: a
+        revogação falha DEPOIS do marco T1, e a frase interna dela (que é
+        honesta) vinha prefixada pela que não era."""
+        client, supabase = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
+        update_de_verdade = _TabelaFake.update
+
+        def _cai_ao_revogar(self, payload):
+            if self.nome == "ouvidoria_setor_tokens" and "revogado_em" in payload:
+                raise APIError({"code": "57014", "message": "statement timeout"})
+            return update_de_verdade(self, payload)
+
+        monkeypatch.setattr(_TabelaFake, "update", _cai_ao_revogar)
+
+        resposta = _redirecionar(client)
+
+        assert resposta.status_code == 500, resposta.text
+        detalhe = resposta.json()["detail"]
+        assert detalhe.startswith(ouvidoria_router.FALHA_DE_ESTADO_INDETERMINADO)
+        # A frase INTERNA viaja inteira: ela é honesta e diz o que não foi feito.
+        assert "os links da área anterior não foram derrubados" in detalhe
+        assert "está em classificação" not in detalhe
+        assert _caso(supabase)["setor"] == SETOR_NOVO
+
+    def test_a_janela_entre_a_entrada_e_o_marco_t1_ja_e_do_lado_de_la(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A janela que decide ONDE fica a fronteira, e é por isso que ela é a
+        transição de ENTRADA e não o marco T1.
+
+        Aqui a transição commitou e o update do marco falhou: o caso está em
+        `aguardando_area` com a área ANTIGA e sem vencimento. Não é "em
+        classificação", então a frase que aponta o Validar e acionar mentiria na
+        primeira cláusula, e o botão que ela indica responde 409 neste estado.
+        Cortar a fronteira depois do T1 deixaria justamente esta janela com a
+        frase errada."""
+        client, supabase = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
+        update_de_verdade = _TabelaFake.update
+
+        def _cai_no_marco_t1(self, payload):
+            if self.nome == "ouvidoria_protocolos" and "validada_em" in payload:
+                raise APIError({"code": "57014", "message": "statement timeout"})
+            return update_de_verdade(self, payload)
+
+        monkeypatch.setattr(_TabelaFake, "update", _cai_no_marco_t1)
+
+        resposta = _redirecionar(client)
+
+        assert resposta.status_code == 500, resposta.text
+        detalhe = resposta.json()["detail"]
+        assert detalhe.startswith(ouvidoria_router.FALHA_DE_ESTADO_INDETERMINADO)
+        assert "está em classificação" not in detalhe, "a resposta afirma um estado que o caso não tem"
+        assert "Validar e acionar" not in detalhe, "a resposta aponta um ato que a API recusa neste estado"
+        # A frase INTERNA do marco T1 viaja inteira: ela já diz o que não foi
+        # gravado, e é honesta.
+        assert "o prazo e o marco da validação não foram gravados" in detalhe
+        # E o estado exato da janela, que é o que torna a frase antiga falsa.
+        caso = _caso(supabase)
+        assert caso["status"] == "aguardando_area", "a janela não foi exercitada: o caso nem saiu da classificação"
+        assert caso["setor"] == "Recepcao", "a área nova foi gravada apesar de o marco ter falhado"
+        assert caso["prazo_area_em"] is None
+
+    @pytest.mark.parametrize("erro", [httpx.ReadTimeout("timeout"), APIError({"code": "57014", "message": "t"})])
+    def test_falha_antes_da_transicao_de_entrada_continua_apontando_o_validar(
+        self, monkeypatch, erro, _nunca_envia_email_de_verdade
+    ):
+        """O outro lado da fronteira, que é o que não pode regredir: enquanto o
+        caso está mesmo em `em_classificacao`, a frase que aponta o Validar e
+        acionar é VERDADEIRA e é a instrução certa."""
+        client, supabase = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
+        rpc_de_verdade = supabase.rpc
+
+        def _cai_na_entrada(nome, params):
+            if params["p_estado_novo"] == "aguardando_area":
+
+                class _Cai:
+                    def execute(self):
+                        raise erro
+
+                return _Cai()
+            return rpc_de_verdade(nome, params)
+
+        monkeypatch.setattr(supabase, "rpc", _cai_na_entrada)
+
+        resposta = _redirecionar(client)
+
+        assert resposta.status_code == 500, resposta.text
+        detalhe = resposta.json()["detail"]
+        assert detalhe.startswith(ouvidoria_router.FALHA_DEPOIS_DA_SAIDA)
+        assert "Validar e acionar" in detalhe
+        caso = _caso(supabase)
+        assert caso["status"] == "em_classificacao", "a frase só vale enquanto isto for verdade"
+        assert caso["setor"] == "Recepcao"
+
+    def test_a_falha_na_classificacao_e_do_lado_de_ca_da_fronteira(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A escrita sem `except` nenhum que roda ANTES da transição de entrada:
+        o caso continua em classificação, então a frase que aponta o Validar e
+        acionar continua sendo a certa."""
+        client, supabase = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
+        update_de_verdade = _TabelaFake.update
+
+        def _cai_na_classificacao(self, payload):
+            if self.nome == "ouvidoria_protocolos" and "tipo_manifestacao" in payload:
+                raise httpx.ConnectError("conexão recusada")
+            return update_de_verdade(self, payload)
+
+        monkeypatch.setattr(_TabelaFake, "update", _cai_na_classificacao)
+
+        resposta = _redirecionar(client)
+
+        assert resposta.status_code == 500, resposta.text
+        assert resposta.json()["detail"] == ouvidoria_router.FALHA_DEPOIS_DA_SAIDA
+        assert _caso(supabase)["status"] == "em_classificacao"
+
+    def test_o_validar_e_acionar_recusa_mesmo_o_caso_que_a_frase_antiga_mandava_despachar(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """A prova de que a instrução antiga era um beco sem saída, e não só uma
+        imprecisão: depois da falha no fim do acionamento, o ouvidor que segue a
+        frase antiga leva 409 da própria API."""
+        client, _ = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
+        self._falhar_no_select_do_dossie(monkeypatch)
+        assert _redirecionar(client).status_code == 500
+
+        # O ouvidor clica no Validar e acionar, como a frase ANTIGA mandava.
+        tentativa = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "setor": SETOR_NOVO})
+
+        assert tentativa.status_code == 409, tentativa.text
+        assert tentativa.json()["detail"] == ouvidoria_router.RECUSA_DO_CASO_JA_NA_AREA
