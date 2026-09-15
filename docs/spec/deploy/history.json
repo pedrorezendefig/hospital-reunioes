@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-15T18:20:00-03:00",
+      "sha": "671a273",
+      "app_version": "0.134.1",
+      "subject": "As marcas de erro que a tela do redirecionamento le viram constantes com teste",
+      "raw_subject": "chore(ouvidoria): marcas de erro do redirecionamento viram constantes com teste (#723)",
+      "scope": [
+        "backend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 195,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Acabamento das #708/#710, sem mudanca de comportamento: as tres frases seguem byte a byte iguais. O front casa por prefixo e ninguem protegia isso; agora cada marca e constante nomeada com teste que morre se o prefixo sumir. Limite conhecido e assumido: o teste compara backend contra backend, entao esvaziar a constante ou reescrever frase e constante no mesmo edit ainda passa verde. O frontend so rebuildou por causa do bump; o webhook rebuilda os dois com watch_paths nulo."
+    },
+    {
       "at": "2026-09-15T17:05:00-03:00",
       "sha": "49a3b8d",
       "app_version": "0.134.0",
@@ -1421,34 +1449,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 2 e ultima do PRD #469 (#483, PR #507). A revisao de seguranca achou um furo que nenhuma fatia tinha criado sozinha: o service worker gravava a resposta de GET /api/ouvidoria-setor/{token} no Cache Storage do aparelho por 24h, pela regra apis do defaultCache do serwist. Depois que a #506 poe resumo, relato integral e nome do manifestante nesse payload, bastava o responsavel abrir o link no celular e, uma vez o link de uso unico consumido, por o aparelho em modo aviao para a tela reabrir o caso inteiro sem passar pelo servidor. O Cache-Control no-store nao protegia: a Cache Storage API nao le esse header. Corrigido com regra NetworkOnly antes do defaultCache, provado por mutacao. Continuam cacheados, e esta dito no PR, a casca HTML da rota (sem dado do caso, mas com o token na URL) e as entradas velhas nos aparelhos que ja abriram o link, que deixam de ser servidas mas nao sao apagadas. A revisao tambem derrubou um teste vacuo (o fixture do caso protegido nao carregava resumo nem relato, entao o teste nao provava que a tela nao busca o dado fora de blocos) e uma divergencia de contagem entre cliente e servidor que habilitava o botao errado: Ok, ja resolvido com tres emojis tem 19 code points e 22 unidades UTF-16."
-    },
-    {
-      "at": "2026-09-01T23:45:00-03:00",
-      "sha": "df82be2",
-      "app_version": "0.94.0",
-      "subject": "Os tres blocos da manifestacao passam a chegar a area no email de acionamento e na rota do token, e o servidor recusa resposta curta demais e prorrogacao ja vencida",
-      "raw_subject": "feat(ouvidoria): os três blocos chegam à área no email e na rota do token (#506)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 do PRD #469, duas fatias em paralelo (#482 PR #505 como v0.93.0, #481 PR #506 como v0.94.0), um deploy so. A revisao independente pegou dois furos reais. Na #482, o campo resposta tinha piso de 20 caracteres e nenhum teto, entao um POST de 90 MB gravava na trilha imutavel e inviabilizava o Dossie do caso para sempre; teto de 10.000 no servico, provado por 6 mutantes. Na #481, dois fallbacks diferentes para o mesmo extrato ausente na mesma resposta, e o teste da rota do token nao guardava o resumo (o email guardava), entao bastaria alguem por a chave no payload para o resumo de caso sigiloso vazar sem teste vermelho. Os dois PRs bumparam para 0.93.0 e colidiram: o #506 foi re-bumpado para 0.94.0 e precisou de rebase, porque PR CONFLICTING nao gera CI. Fica pendente de ratificacao do diretor a questao aberta registrada no ADR 0041: hoje todo caso anonimo chega a area so com a nota da ouvidoria, o que estreita a RN-78."
     }
   ]
 }
