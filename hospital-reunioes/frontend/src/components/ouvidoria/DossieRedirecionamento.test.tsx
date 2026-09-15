@@ -91,16 +91,36 @@ function movimentoDeDevolucao(setor = "Recepcao") {
   };
 }
 
+/** O registro do aviso curto que a área ANTERIOR recebe (gatilho da #709). */
+function notificacaoDoRedirecionamento() {
+  return {
+    id: "notificacao-1",
+    gatilho: "redirecionamento_area",
+    destinatario_nome: "Carlos Titular",
+    destinatario_email: "carlos@hsm.br",
+    papel_destinatario: "titular",
+    status: "enviada",
+    tentativas: 1,
+    enviar_a_partir_de: "2026-09-15T13:00:00+00:00",
+    enviada_em: "2026-09-15T13:01:00+00:00",
+    criada_em: "2026-09-15T13:00:00+00:00",
+  };
+}
+
 function respostaJson(body: unknown) {
   return { ok: true, json: async () => body } as Response;
 }
 
-function montar(dossie: Record<string, unknown>, movimentos: unknown[] = []) {
+function montar(
+  dossie: Record<string, unknown>,
+  movimentos: unknown[] = [],
+  notificacoes: unknown[] = []
+) {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string) => {
       if (url.endsWith("/anexos")) return respostaJson({ anexos: [] });
-      if (url.endsWith("/notificacoes")) return respostaJson({ notificacoes: [] });
+      if (url.endsWith("/notificacoes")) return respostaJson({ notificacoes });
       if (url.endsWith("/prorrogacoes")) return respostaJson({ prorrogacoes: [] });
       if (url.endsWith("/respostas")) return respostaJson({ respostas: [] });
       if (url.endsWith("/tentativas-contato")) return respostaJson({ tentativas: [] });
@@ -214,6 +234,50 @@ describe("o que o Dossiê diz depois de redirecionar (issue #710)", () => {
         screen.getByText("Caso redirecionado para Centro Medico. A área anterior foi avisada.")
       ).toBeTruthy()
     );
+  });
+});
+
+describe("o aviso à área anterior na lista de notificações (issue #710)", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("aparece com nome de gente, e não com a chave do gatilho", async () => {
+    // O Dossiê escreve `LABEL_GATILHO[n.gatilho] ?? n.gatilho`: gatilho que a
+    // tela não conhece aparece como chave crua de programador, bem ao lado do
+    // botão Redirecionar, e é essa mesma lista que a fumaça de produção manda
+    // o operador ler.
+    montar(caso(), [], [notificacaoDoRedirecionamento()]);
+
+    await waitFor(() =>
+      expect(screen.getByText("Aviso de redirecionamento à área anterior")).toBeTruthy()
+    );
+    // O marcador positivo já prova o rótulo; esta linha é sobre o que NÃO pode
+    // vazar para a tela, e o que vazaria é a chave exata.
+    expect(screen.queryByText("redirecionamento_area")).toBeNull();
+  });
+
+  it("o rótulo não se confunde com o acionamento da área nova, que sai no mesmo instante", async () => {
+    // As duas notificações nascem na MESMA requisição. Sem dizer o
+    // destinatário, as duas linhas ficariam indistinguíveis na lista.
+    montar(
+      caso(),
+      [],
+      [
+        notificacaoDoRedirecionamento(),
+        { ...notificacaoDoRedirecionamento(), id: "notificacao-2", gatilho: "nova_demanda" },
+      ]
+    );
+
+    await waitFor(() =>
+      expect(screen.getByText("Aviso de redirecionamento à área anterior")).toBeTruthy()
+    );
+    expect(screen.getByText("Acionamento do setor")).toBeTruthy();
   });
 });
 
