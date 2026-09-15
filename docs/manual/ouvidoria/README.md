@@ -14,3 +14,22 @@ Para abrir o `index.html` local sem publicar, copie os dois assets para cá prim
 ```bash
 cp docs/comunicacao/_assets/logo-hsm.png docs/comunicacao/_assets/fonts/HPSimplified_Rg.ttf docs/manual/ouvidoria/
 ```
+
+## Prints de `img/`
+
+São capturas reais do app rodando em localhost, tiradas com o Playwright do `python3` do
+sistema (`page.screenshot`, `device_scale_factor=2`). A receita, na ordem:
+
+1. Supabase local no ar (`supabase start` em `hospital-reunioes/`). Se o PostgREST não subir,
+   o backend fica `degraded` e a tela da Ouvidoria trava em "Carregando manifestações...":
+   `supabase stop` e `supabase start` recriam o container.
+2. Stack do app com o código que o print vai mostrar: `bash .claude/skills/atualizar-app/scripts/apply.sh`.
+   Confira depois que a tela nova está mesmo no build, senão o print sai da versão antiga.
+3. Login como ouvidor (`admin@hospital.com`). A senha do ambiente local sai do
+   `DEFAULT_USER_PASSWORD` do `.env`; se estiver vazio, defina uma pela API de admin do
+   Supabase **local** (nunca de produção).
+4. Navegue até a tela, abra o que precisa aparecer e capture.
+
+Lista de `<select>`: o menu nativo do sistema operacional não sai na captura. Antes do
+screenshot, transforme o campo em lista visível (`el.size = <n>`) e recorte a área dele.
+É assim que `canal-de-origem.png` mostra as sete opções do "Canal de origem".

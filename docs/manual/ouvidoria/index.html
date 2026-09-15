@@ -159,7 +159,7 @@
     <img class="top-logo" src="logo-hsm.png" alt="Hospital São Matheus">
     <div class="top-t">Plataforma de Gestão<small>Manual do módulo · Ouvidoria</small></div>
     <button class="menu-btn" id="menuBtn" type="button">Sumário</button>
-    <div class="top-s"><span class="pulse"></span> app v0.109.0 · 04/09/2026</div>
+    <div class="top-s"><span class="pulse"></span> app v0.135.0 · 15/09/2026</div>
   </div>
 </header>
 
@@ -169,7 +169,7 @@
   <a href="#visao"><span class="n">0</span>Como funciona, em uma página</a>
   <div class="sub"><a href="#palavras">As palavras que você vai ver</a><a href="#caminho">O caminho de um caso</a></div>
   <a href="#entrada"><span class="n">1</span>Por onde o caso chega</a>
-  <div class="sub"><a href="#formulario">Pelo site, sem senha</a><a href="#qr">Pelo cartaz na parede</a><a href="#ana">Pelo WhatsApp, com a Ana</a><a href="#manual">Pelo telefone ou pelo balcão</a></div>
+  <div class="sub"><a href="#formulario">Pelo site, sem senha</a><a href="#qr">Pelo cartaz na parede</a><a href="#ana">Pelo WhatsApp, com a Ana</a><a href="#manual">Quando o ouvidor registra à mão</a></div>
   <a href="#validacao"><span class="n">2</span>A Ouvidoria lê e encaminha</a>
   <div class="sub"><a href="#fila">A lista de casos</a><a href="#validar">Classificar e acionar</a><a href="#sigilo">O que é sigiloso</a><a href="#caso">A página do caso</a></div>
   <a href="#portal"><span class="n">3</span>O setor responde</a>
@@ -276,8 +276,8 @@
       <p>A assistente de atendimento conversa com a pessoa e registra o relato. Ela registra, ela não classifica.</p>
     </div>
     <div class="card">
-      <h4>Pelo telefone ou pelo balcão</h4>
-      <p>Continua existindo. O ouvidor digita o caso, com a hora real em que a pessoa falou, e anexa o que tiver.</p>
+      <h4>Quando o ouvidor registra à mão</h4>
+      <p>Telefone, balcão, e-mail, WhatsApp do hospital, Instagram, Reclame Aqui, Google. O ouvidor digita o caso, com a hora real em que a pessoa falou, e anexa o que tiver.</p>
     </div>
   </div>
 
@@ -345,10 +345,30 @@
   <h3 id="ana">Pelo WhatsApp, com a Ana</h3>
   <p>A Ana é a assistente que conversa com pacientes e acompanhantes pelo WhatsApp. Ela não tem conta no sistema e não é usuária: ela registra o caso por uma porta própria, com nome, contato e o relato inteiro.</p>
   <p>Ela também guarda um palpite sobre a gravidade, mas esse palpite fica separado, marcado como palpite, e <b>nunca vira a classificação do caso</b>. Se ela tentar mandar qualquer decisão que é do ouvidor (a situação, o desfecho, o tipo, o sigilo), o sistema recusa e diz por quê.</p>
+  <p>Nem todo caso de WhatsApp é caso da Ana. Quando quem conversou com o paciente foi uma pessoa do hospital, o caso entra pelo registro manual, com o canal <b>WhatsApp</b>: está explicado <a href="#manual">mais adiante neste capítulo</a>.</p>
 
-  <h3 id="manual">Pelo telefone ou pelo balcão</h3>
-  <p>Nem todo mundo escreve. O botão <b>"Nova manifestação"</b> abre um formulário onde o ouvidor digita o caso que chegou por telefone, presencialmente ou por e-mail.</p>
+  <h3 id="manual">Quando o ouvidor registra à mão</h3>
+  <p>Nem todo mundo escreve no site. O botão <b>"Nova manifestação"</b> abre um formulário onde o ouvidor digita o caso que chegou por outro caminho: uma ligação, uma conversa no balcão, um e-mail, uma mensagem no WhatsApp do hospital, um comentário no Instagram, uma avaliação no Reclame Aqui ou uma avaliação no Google.</p>
   <p>Duas coisas importam aqui. A primeira: a data e a hora que ele preenche são as do <b>contato de verdade</b>, não as do momento em que ele está digitando. Um telefonema de ontem pode ser registrado hoje com a hora de ontem, e o prazo conta a partir dali. A segunda: o que a pessoa disse entra inteiro, sem resumo e sem correção.</p>
+
+  <h4>O campo "Canal de origem"</h4>
+  <p>O primeiro campo do formulário pergunta por onde o caso chegou. São sete opções, nesta ordem: <b>WhatsApp</b>, <b>Telefone</b>, <b>Presencial (balcão)</b>, <b>Email</b>, <b>Instagram</b>, <b>Reclame Aqui</b> e <b>Google</b>. O formulário já abre em WhatsApp, que é de onde mais chega. Se o caso veio de outro lugar, basta trocar antes de salvar.</p>
+
+  <figure><img src="img/canal-de-origem.png" alt="As sete opções do campo Canal de origem">
+    <figcaption>As sete opções, na ordem em que aparecem na tela. <b>O formulário nasce em WhatsApp</b>: quem for registrar um telefonema precisa trocar o canal.</figcaption>
+  </figure>
+
+  <p>Nada disso é ligação automática com aplicativo nenhum. O ouvidor continua lendo a conversa, o comentário ou a avaliação na plataforma e digitando o caso à mão, do mesmo jeito que sempre fez com um telefonema. O que muda é o que o relatório do mês consegue mostrar: por onde as reclamações realmente chegam, em vez de somar quase tudo em "telefone".</p>
+
+  <div class="note">
+    <p><b>WhatsApp e Ana não são a mesma coisa, e a diferença é quem atendeu.</b> Marque <b>WhatsApp</b> quando foi uma pessoa do hospital que conversou com o paciente e é o ouvidor quem está digitando o caso agora. O que a Ana atendeu não passa por este formulário: ela registra sozinha, e o caso já nasce marcado como Ana. Os dois aparecem em linhas separadas no relatório do mês, então marcar um no lugar do outro muda o número que a Diretoria lê.</p>
+  </div>
+
+  <div class="note warn">
+    <p><b>Não existe campo para o link da avaliação nem para o @ do perfil.</b> Quando o caso vem do Google, do Reclame Aqui ou do Instagram, coloque o endereço da avaliação ou o @ de quem escreveu no campo <b>Contato</b>, junto do telefone ou do e-mail, ou anexe um print da tela. É o mesmo lugar onde já vai qualquer forma de encontrar a pessoa depois.</p>
+  </div>
+
+  <p>O canal é escolhido uma vez, no nascimento do caso, e não tem edição depois: vale conferir antes de salvar. Os casos antigos ficam como foram registrados, sem correção em massa, então o WhatsApp começa do zero no relatório do mês da virada. Isso é esperado, não é erro de conta.</p>
 
   <figure><img src="img/nova-manifestacao-modal.png" alt="Formulário de nova manifestação">
     <figcaption>Registro feito pelo ouvidor. <b>A hora do contato é a hora real</b>, não a do clique. Dá para anexar foto, PDF, áudio ou documento de até 20 MB.</figcaption>
@@ -788,7 +808,7 @@
 </section>
 
 <footer>
-  <p>Manual do módulo de Ouvidoria · Plataforma de Gestão do Hospital São Matheus · atualizado em 04/09/2026 · mostra o sistema na versão 0.109.0. As telas deste manual são capturas reais do sistema. Se alguma delas não bater com o que você vê, avise a Ouvidoria: o manual é atualizado junto com o sistema.</p>
+  <p>Manual do módulo de Ouvidoria · Plataforma de Gestão do Hospital São Matheus · atualizado em 15/09/2026 · mostra o sistema na versão 0.135.0. As telas deste manual são capturas reais do sistema, e cada vídeo diz a versão em que foi gravado. Se alguma delas não bater com o que você vê, avise a Ouvidoria: o manual é atualizado junto com o sistema.</p>
 </footer>
 
 </div>
