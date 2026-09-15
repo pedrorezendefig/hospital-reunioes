@@ -13,6 +13,7 @@ chamando a função da rota direto não provaria porta nenhuma.
 
 from __future__ import annotations
 
+import datetime as dt
 import os
 import sys
 
@@ -33,6 +34,7 @@ from test_ouvidoria_validacao_acionamento import (  # noqa: E402
 )
 
 from app.limiter import limiter  # noqa: E402
+from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.services import ouvidoria_notificacoes  # noqa: E402
 
 
@@ -298,3 +300,22 @@ class TestAProximaCobrancaVaiAoNovo:
         assert r.status_code == 201, r.text
         assert r.json()["destinatario"] == "Bianca Nova"
         assert [e["destinatario"] for e in _nunca_envia_email_de_verdade] == ["bianca@hsm.br"]
+
+
+class TestARecusaApontaQuemConserta:
+    """A cobrança recusada é o lugar onde a falta de cadastro aparece, e a
+    frase dela mandava esperar a Diretoria. Agora quem lê é quem conserta, e a
+    recusa aponta a tela (issue #711)."""
+
+    def test_setor_sem_ninguem_manda_cadastrar_na_tela(self):
+        recusa = ouvidoria_router._recusa_da_cobranca("Recepcao", [], dt.date(2026, 8, 25))
+
+        assert "Responsáveis por setor" in recusa
+        assert "Recepcao" in recusa
+
+    def test_responsavel_sem_email_manda_completar_na_tela(self):
+        vigente = _responsavel("titular", email="", vigencia_inicio="2026-01-01")
+        recusa = ouvidoria_router._recusa_da_cobranca("Recepcao", [vigente], dt.date(2026, 8, 25))
+
+        assert "Responsáveis por setor" in recusa
+        assert "Carlos Titular" in recusa

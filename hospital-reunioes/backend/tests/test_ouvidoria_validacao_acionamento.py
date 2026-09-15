@@ -1981,10 +1981,10 @@ class TestCobrancaDoSetorPelaFila:
         assert r.status_code == 409, r.text
         detalhe = r.json()["detail"]
         assert "titular nem gestor vigente" in detalhe
-        # O cadastro de responsáveis é da Diretoria Executiva: o ouvidor que lê
-        # a recusa não tem a tela para consertar, e a frase precisa dizer de
-        # quem é o conserto em vez de mandá-lo cadastrar.
-        assert "Diretoria Executiva" in detalhe
+        # A frase mandava esperar a Diretoria Executiva porque o ouvidor não
+        # tinha a tela para consertar. Desde a issue #711 ele tem, então ela
+        # aponta o conserto: quem lê a recusa é quem pode fazê-lo.
+        assert "Responsáveis por setor" in detalhe
         assert _nunca_envia_email_de_verdade == []
         assert len(supabase.tabelas["ouvidoria_notificacoes"]) == notificacoes_antes
         assert len(supabase.tabelas["ouvidoria_setor_tokens"]) == tokens_antes
@@ -2004,7 +2004,7 @@ class TestCobrancaDoSetorPelaFila:
         detalhe = r.json()["detail"]
         assert "Carlos Titular" in detalhe
         assert "sem email" in detalhe
-        assert "Diretoria Executiva" in detalhe
+        assert "Responsáveis por setor" in detalhe
         assert "não responde mais" not in detalhe
         assert "titular nem gestor vigente" not in detalhe
         assert _nunca_envia_email_de_verdade == []

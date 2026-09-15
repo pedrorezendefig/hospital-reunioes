@@ -4604,15 +4604,17 @@ def _recusa_da_cobranca(setor: str, responsaveis: list[dict], hoje: dt.date) -> 
     ninguém vigente, o conserto é cadastrar um responsável; com responsável
     vigente sem email, é completar o cadastro de quem já está lá.
 
-    As duas nomeiam a Diretoria Executiva porque é dela o cadastro de
-    responsáveis (`podeGerirResponsaveis`): o ouvidor que lê esta recusa não
-    tem a tela para consertar, e mandá-lo "cadastrar o responsável" seria uma
-    ordem que ele não pode cumprir."""
+    As duas nomeavam a Diretoria Executiva porque o cadastro era dela: o
+    ouvidor que lia esta recusa não tinha a tela para consertar, e mandá-lo
+    "cadastrar o responsável" seria uma ordem que ele não podia cumprir. Desde
+    a issue #711 ele tem (`podeGerirResponsaveis` aceita os dois perfis), então
+    a frase aponta a tela em vez de apontar outra pessoa: quem lê a recusa é
+    quem pode consertá-la."""
     responsavel = quem_responde_hoje(responsaveis, hoje)
     if responsavel is None:
         return (
-            f"O setor {setor} não tem titular nem gestor vigente. A Diretoria Executiva precisa cadastrar "
-            "quem responde pela área para a cobrança poder sair."
+            f"O setor {setor} não tem titular nem gestor vigente. Cadastre quem responde pela área em "
+            "Responsáveis por setor para a cobrança poder sair."
         )
     quem = responsavel.get("nome")
     falta = (
@@ -4620,7 +4622,7 @@ def _recusa_da_cobranca(setor: str, responsaveis: list[dict], hoje: dt.date) -> 
         if quem
         else f"Quem responde por {setor} hoje está sem email no cadastro"
     )
-    return f"{falta}. A Diretoria Executiva precisa completar o cadastro para a cobrança poder sair."
+    return f"{falta}. Complete o cadastro em Responsáveis por setor para a cobrança poder sair."
 
 
 def _registrar_cobranca_na_trilha(supabase, manifestacao_id: str, me: dict, quem: str, entregue: bool) -> None:

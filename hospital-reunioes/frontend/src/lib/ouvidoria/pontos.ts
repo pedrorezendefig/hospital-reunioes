@@ -25,10 +25,11 @@ export interface GrupoDeCartazes {
 
 /**
  * Quem cria e aposenta cartaz: os dois perfis da Ouvidoria (ADR 0036,
- * decisão 7). É mais largo que a tela de Responsáveis, que é só da Diretoria,
- * porque cartaz é operação do canal e não governança: não carrega dado de
- * paciente e não muda prazo nem responsabilidade. O backend recusa de novo,
- * para quem chamar a API direto.
+ * decisão 7). Era mais largo que a tela de Responsáveis, que foi só da
+ * Diretoria até a issue #711; hoje as duas têm a mesma régua, e quem continua
+ * só da Diretoria é a Tabela de prazos. O motivo de cartaz nunca ter sido
+ * governança segue de pé: não carrega dado de paciente e não muda prazo nem
+ * responsabilidade. O backend recusa de novo, para quem chamar a API direto.
  */
 export function podeGerirPontos(perfilOuvidoria: string | null | undefined): boolean {
   return perfilOuvidoria === "ouvidor" || perfilOuvidoria === "diretoria_executiva";
