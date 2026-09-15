@@ -4116,7 +4116,9 @@ _CAMPOS_DO_REDIRECIONAMENTO = (
 # derivar "o caso se moveu" da faixa do status deixaria os dois de fora.
 #
 # Quem reescrever uma frase continua livre para mudar o resto do texto; apagar o
-# prefixo derruba o teste da classe `TestAsMarcasQueATelaLe`.
+# prefixo derruba o teste da classe `TestAsMarcasQueATelaLe`. Reescrever a marca
+# aqui junto com a frase NÃO é o conserto: o teste volta ao verde e a tela para
+# de reler em silêncio. A marca só muda junto com a lista do front.
 MARCA_DE_FALHA_DEPOIS_DA_SAIDA = "O caso saiu da área anterior e está em classificação"
 MARCA_DE_FALHA_DE_ESTADO_INDETERMINADO = "O redirecionamento não terminou."
 MARCA_DE_SAIU_DA_AREA_NO_MEIO = "Este caso saiu da fila da área durante o envio"
