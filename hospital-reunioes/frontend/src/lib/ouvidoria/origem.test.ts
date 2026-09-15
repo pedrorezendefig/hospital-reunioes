@@ -74,3 +74,26 @@ describe("origem do caso no Dossiê (issue #375, itens 10 e 11)", () => {
     expect(descreverOrigem({ canal: null, canal_setor: null, canal_ponto: null })).toBeNull();
   });
 });
+
+describe("origem dos canais manuais novos (issue #721)", () => {
+  it.each([
+    ["whatsapp", "WhatsApp"],
+    ["instagram", "Instagram"],
+    ["reclame_aqui", "Reclame Aqui"],
+    ["google", "Google"],
+  ])("%s é lido em linguagem de gente, e não pela chave crua", (canal, nome) => {
+    // O Dossiê diz "Registrada pela Ouvidoria (Google)", e não "Chegou pelo
+    // canal google": quem lê o caso está lendo a origem, não a coluna.
+    const origem = descreverOrigem({ canal, canal_setor: null, canal_ponto: null });
+
+    expect(origem?.titulo).toBe(`Registrada pela Ouvidoria (${nome})`);
+  });
+
+  it("canal que o banco recusa cai no fallback genérico", () => {
+    // `carta` era título conhecido do Dossiê e nunca esteve no CHECK do banco:
+    // um rótulo bonito para um valor impossível faz parecer que o canal existe.
+    const origem = descreverOrigem({ canal: "carta", canal_setor: null, canal_ponto: null });
+
+    expect(origem?.titulo).toBe("Chegou pelo canal carta");
+  });
+});

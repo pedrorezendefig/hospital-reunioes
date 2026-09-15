@@ -1,5 +1,11 @@
 import { describe, expect, it } from "vitest";
-import { CANAIS, EXTENSOES_ACEITAS, montarRegistro, type FormularioRegistro } from "./registro";
+import {
+  CANAIS,
+  CANAL_PADRAO,
+  EXTENSOES_ACEITAS,
+  montarRegistro,
+  type FormularioRegistro,
+} from "./registro";
 
 const FORMULARIO: FormularioRegistro = {
   canal: "telefone",
@@ -50,8 +56,20 @@ describe("registro manual da ouvidoria (issue #321)", () => {
     expect(montarRegistro({ ...FORMULARIO, categoria: "  " }).categoria).toBeNull();
   });
 
-  it("os canais oferecidos sao os do registro manual", () => {
-    expect(CANAIS.map((c) => c.valor)).toEqual(["telefone", "presencial", "email"]);
+  it("os canais oferecidos sao os do registro manual, com WhatsApp na frente", () => {
+    // Issue #721: a ordem e o que o ouvidor ve no select, e o primeiro da lista
+    // e o padrao do formulario. WhatsApp vem primeiro porque e de onde mais
+    // chega; `ana` e o canal aberto (`site`, `qr`) nao sao registro manual.
+    expect(CANAIS.map((c) => c.valor)).toEqual([
+      "whatsapp",
+      "telefone",
+      "presencial",
+      "email",
+      "instagram",
+      "reclame_aqui",
+      "google",
+    ]);
+    expect(CANAL_PADRAO).toBe("whatsapp");
   });
 
   it("o seletor de arquivo oferece so o que o backend aceita", () => {

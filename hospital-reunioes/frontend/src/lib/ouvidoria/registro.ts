@@ -8,13 +8,35 @@
 
 import type { TipoManifestacao } from "./taxonomia";
 
-export type CanalManual = "telefone" | "presencial" | "email";
+export type CanalManual =
+  | "whatsapp"
+  | "telefone"
+  | "presencial"
+  | "email"
+  | "instagram"
+  | "reclame_aqui"
+  | "google";
 
+/**
+ * Os canais que o ouvidor escolhe ao registrar à mão (issue #721).
+ *
+ * A ordem é a do select, e não é decorativa: WhatsApp vem primeiro porque é de
+ * onde mais chega, e o primeiro da lista é o padrão do formulário. `ana` é a
+ * agente de IA e o canal aberto (`site`, `qr`) nasce sem ouvidor: nenhum dos
+ * três entra aqui.
+ */
 export const CANAIS: { valor: CanalManual; rotulo: string }[] = [
+  { valor: "whatsapp", rotulo: "WhatsApp" },
   { valor: "telefone", rotulo: "Telefone" },
   { valor: "presencial", rotulo: "Presencial (balcão)" },
   { valor: "email", rotulo: "Email" },
+  { valor: "instagram", rotulo: "Instagram" },
+  { valor: "reclame_aqui", rotulo: "Reclame Aqui" },
+  { valor: "google", rotulo: "Google" },
 ];
+
+/** Com o que o formulário nasce: o primeiro da lista, sem opção vazia. */
+export const CANAL_PADRAO: CanalManual = CANAIS[0].valor;
 
 export const VINCULOS = [
   { valor: "paciente", rotulo: "Paciente" },

@@ -801,7 +801,10 @@ class RegistroManual(BaseModel):
     hospital, não o momento do clique. Sem fuso na entrada, vale o horário de
     Brasília, que é como o ouvidor pensa a hora do telefonema."""
 
-    canal: Literal["telefone", "presencial", "email"]
+    # Os sete canais do ouvidor (issue #721). `ana` e o canal aberto (`site`,
+    # `qr`) têm porta própria e não entram por aqui. `whatsapp` é o humano no
+    # WhatsApp do hospital, distinto da agente de IA da Ana.
+    canal: Literal["whatsapp", "telefone", "presencial", "email", "instagram", "reclame_aqui", "google"]
     contato_em: datetime
     tipo_manifestacao: TipoManifestacao
     categoria: str | None = None
