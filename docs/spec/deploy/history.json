@@ -2,6 +2,35 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-15T17:05:00-03:00",
+      "sha": "49a3b8d",
+      "app_version": "0.134.0",
+      "subject": "O Perfil da Ouvidoria inteiro mantem o cadastro de responsaveis por setor",
+      "raw_subject": "feat(ouvidoria): o Perfil da Ouvidoria inteiro mantém o cadastro de responsáveis (#711) (#718)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": 273,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Ultima fatia do PRD #706 (ADR 0055, decisao 5). O critério do histórico de vigência com autor foi renegociado para audit_log: a coluna de autor nunca existiu. Achado do code-review deixado em aberto na issue #719: a RLS do audit_log so libera super admin, entao o rastro e gravado e ninguem da Ouvidoria o le no app."
+    },
+    {
       "at": "2026-09-15T13:20:00-03:00",
       "sha": "a173716",
       "app_version": "0.133.0",
@@ -1420,35 +1449,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 1 do PRD #469, duas fatias em paralelo (#482 PR #505 como v0.93.0, #481 PR #506 como v0.94.0), um deploy so. A revisao independente pegou dois furos reais. Na #482, o campo resposta tinha piso de 20 caracteres e nenhum teto, entao um POST de 90 MB gravava na trilha imutavel e inviabilizava o Dossie do caso para sempre; teto de 10.000 no servico, provado por 6 mutantes. Na #481, dois fallbacks diferentes para o mesmo extrato ausente na mesma resposta, e o teste da rota do token nao guardava o resumo (o email guardava), entao bastaria alguem por a chave no payload para o resumo de caso sigiloso vazar sem teste vermelho. Os dois PRs bumparam para 0.93.0 e colidiram: o #506 foi re-bumpado para 0.94.0 e precisou de rebase, porque PR CONFLICTING nao gera CI. Fica pendente de ratificacao do diretor a questao aberta registrada no ADR 0041: hoje todo caso anonimo chega a area so com a nota da ouvidoria, o que estreita a RN-78."
-    },
-    {
-      "at": "2026-09-01T20:20:00-03:00",
-      "sha": "6293b3a",
-      "app_version": "0.92.0",
-      "subject": "A pagina do caso passa a mostrar os quatro marcos com o tempo decorrido em cada trecho, e diz quando nao pode confirmar a conta",
-      "raw_subject": "feat(ouvidoria): os quatro marcos com tempo decorrido na página do caso (#504)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 3 e ultima fatia do PRD #468 (#480, PR #504). A revisao de codigo achou 3 must-fix: o bloco sumia da tela depois de quatro acoes do ouvidor, a nota da prorrogacao mentia em caso que so demorou na triagem, e o aviso de calendario degradado convivia com os numeros. Os tres corrigidos. A decisao de dominio (ler a coluna congelada) foi auditada contra o PRD e aprovada. O autor resolveu o primeiro fix na origem, no backend, em vez de na tela, e o revisor considerou a escolha melhor que a sugerida."
     }
   ]
 }
