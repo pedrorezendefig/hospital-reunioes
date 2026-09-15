@@ -38,7 +38,13 @@ const TITULO_POR_CANAL: Record<string, string> = {
   telefone: "Registrada pela Ouvidoria (telefone)",
   presencial: "Registrada pela Ouvidoria (presencial)",
   email: "Registrada pela Ouvidoria (email)",
-  carta: "Registrada pela Ouvidoria (carta)",
+  // Os quatro canais manuais da issue #721, pelo nome da plataforma. `carta`
+  // saiu daqui: era título para um valor que o CHECK do banco nunca aceitou, e
+  // rótulo bonito faz canal impossível parecer canal de verdade.
+  whatsapp: "Registrada pela Ouvidoria (WhatsApp)",
+  instagram: "Registrada pela Ouvidoria (Instagram)",
+  reclame_aqui: "Registrada pela Ouvidoria (Reclame Aqui)",
+  google: "Registrada pela Ouvidoria (Google)",
 };
 
 export function descreverOrigem(caso: OrigemDoCaso): OrigemDescrita | null {

@@ -6,6 +6,7 @@ import { AdminModal } from "@/components/admin/AdminModal";
 import {
   agoraParaCampoLocal,
   CANAIS,
+  CANAL_PADRAO,
   EXTENSOES_ACEITAS,
   montarRegistro,
   VINCULOS,
@@ -22,7 +23,7 @@ const LIMITE_MB = 20;
 const LIMITE_BYTES = LIMITE_MB * 1024 * 1024;
 
 const VAZIO: FormularioRegistro = {
-  canal: "telefone",
+  canal: CANAL_PADRAO,
   contatoEm: "",
   tipoManifestacao: "",
   categoria: "",

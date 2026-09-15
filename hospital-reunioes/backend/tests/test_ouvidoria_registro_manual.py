@@ -11,6 +11,7 @@ testes de ouvidoria já existentes), mais a regra de anexo como função pura.
 from __future__ import annotations
 
 import os
+import re
 import sys
 
 import pytest
@@ -713,3 +714,91 @@ class TestSchemaDoRegistroManual:
         assert "on conflict (id) do nothing" in ddl
         for constraint in ("ouvidoria_protocolos_canal_check",):
             assert f"drop constraint if exists {constraint}" in ddl
+
+
+# ─────────────────── canais de origem manuais (issue #721) ───────────────────
+
+MIGRATION_CANAIS_MANUAIS = "109_ouvidoria_canais_manuais.sql"
+
+CANAIS_NOVOS = ("whatsapp", "instagram", "reclame_aqui", "google")
+
+CANAIS_DO_BANCO = (
+    "ana",
+    "telefone",
+    "presencial",
+    "email",
+    "site",
+    "qr",
+    *CANAIS_NOVOS,
+)
+
+
+class TestCanalDeOrigemManual:
+    """Os sete canais que o registro manual aceita (issue #721, PRD #720).
+
+    O ouvidor atende no WhatsApp do hospital (hoje no Kommo) e acompanha
+    avaliação no Google, no Reclame Aqui e no Instagram, mas o campo só
+    oferecia telefone, presencial e email: ele carimbava tudo como telefone, e
+    o bloco "Canais de entrada" do relatório mensal mentia.
+
+    `ana` e `whatsapp` continuam distintos, e a diferença é quem atendeu: `ana`
+    é a agente de IA pela API da Ana, `whatsapp` é humano. Nem `ana` nem o
+    canal aberto (`site`, `qr`) entram por esta rota.
+    """
+
+    @pytest.mark.parametrize("canal", ("telefone", "presencial", "email", *CANAIS_NOVOS))
+    def test_o_caso_gravado_carrega_o_canal_que_o_ouvidor_escolheu(self, monkeypatch, canal):
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "canal": canal})
+
+        assert r.status_code == 201, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["canal"] == canal
+
+    @pytest.mark.parametrize("canal", ("facebook", "carta", "site", "qr", "ana"))
+    def test_canal_fora_da_lista_do_registro_manual_e_recusado_antes_de_gravar(self, monkeypatch, canal):
+        """Ninguém grava valor que o relatório não sabe rotular. O canal aberto
+        e a API da Ana têm porta própria e não entram pela do ouvidor."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "canal": canal})
+
+        assert r.status_code == 422
+        assert supabase.tabelas["ouvidoria_protocolos"] == []
+
+
+class TestMigrationDosCanaisManuais:
+    """A migration 109 só reescreve o CHECK do canal (issue #721).
+
+    O humano aplica no Studio antes do deploy do backend: sem ela, o banco
+    recusa o INSERT com canal novo.
+    """
+
+    def _comandos(self) -> list[str]:
+        """As linhas de comando da migration, sem os comentários do arquivo."""
+        ddl = _ddl(MIGRATION_CANAIS_MANUAIS).lower()
+        return [linha for linha in ddl.splitlines() if not linha.strip().startswith("--")]
+
+    def test_o_check_do_canal_traz_exatamente_os_dez_valores(self):
+        corpo = " ".join(self._comandos())
+        clausula = corpo.split("check (canal in (", 1)[1].split(")", 1)[0]
+        assert sorted(re.findall(r"'([a-z_]+)'", clausula)) == sorted(CANAIS_DO_BANCO)
+
+    def test_a_migration_nao_reescreve_linha_nenhuma(self):
+        """Canal é fixo depois do nascimento: o caso carimbado como telefone
+        continua telefone, e o WhatsApp começa do zero no mês da virada. Um
+        UPDATE aqui inventaria um passado que ninguém conferiu."""
+        assert not any("update" in linha for linha in self._comandos())
+
+    def test_o_check_e_reaplicavel_no_studio(self):
+        corpo = " ".join(self._comandos())
+        assert "drop constraint if exists ouvidoria_protocolos_canal_check" in corpo
+        assert corpo.index("drop constraint if exists") < corpo.index("add constraint")
+
+    def test_a_coluna_carrega_os_canais_novos_no_comentario(self):
+        """Quem for mexer na coluna precisa ler os canais do ouvidor sem ter de
+        achar esta issue."""
+        corpo = " ".join(self._comandos())
+        comentario = corpo.split("comment on column ouvidoria_protocolos.canal is", 1)[1]
+        for canal in CANAIS_NOVOS:
+            assert canal.replace("_", " ") in comentario

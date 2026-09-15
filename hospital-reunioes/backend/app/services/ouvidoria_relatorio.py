@@ -158,6 +158,12 @@ _ROTULO_CANAL = {
     "email": "Email",
     "site": "Site",
     "qr": "QR code",
+    # Os canais manuais da issue #721. Sem rótulo, a chave crua ("reclame_aqui")
+    # cairia no texto que a Diretoria lê e que a IA copia para a sugestão.
+    "whatsapp": "WhatsApp",
+    "instagram": "Instagram",
+    "reclame_aqui": "Reclame Aqui",
+    "google": "Google",
 }
 
 

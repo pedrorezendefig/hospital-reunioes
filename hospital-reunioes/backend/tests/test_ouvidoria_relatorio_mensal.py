@@ -835,3 +835,34 @@ class TestAgendamentoDoMensal:
         # que é pesado, e no dia 1 as duas edições fecham juntas.
         assert mensal[0]["minute"] == 30
         assert "day" not in mensal[0], "o dia do disparo é decidido por mes_encerrado, não pelo cron"
+
+
+class TestCanaisDeEntradaDoMensal:
+    """O bloco "Canais de entrada" nomeia os canais novos (issue #721).
+
+    A Diretoria lê este bloco para saber por onde as manifestações chegam de
+    verdade. Chave crua no meio do texto ("reclame_aqui: 3") é o tipo de linha
+    que a IA copia para a sugestão de ação corretiva e que ninguém entende na
+    reunião.
+    """
+
+    @pytest.mark.parametrize(
+        ("chave", "rotulo"),
+        [
+            ("reclame_aqui", "Reclame Aqui"),
+            ("whatsapp", "WhatsApp"),
+            ("instagram", "Instagram"),
+            ("google", "Google"),
+        ],
+    )
+    def test_o_canal_novo_sai_pelo_nome_e_nunca_pela_chave_crua(self, chave, rotulo):
+        dados = {
+            "periodo": {"inicio": "2026-09-01", "fim": "2026-09-30"},
+            "volume": {"total": 3, "por_canal": [{"chave": chave, "total": 3}]},
+        }
+
+        resumo = ouvidoria_relatorio.resumo_para_a_ia(dados)
+
+        bloco = resumo.split("CANAIS DE ENTRADA", 1)[1].split("\n\n", 1)[0]
+        assert f"- {rotulo}: 3" in bloco
+        assert chave not in bloco
