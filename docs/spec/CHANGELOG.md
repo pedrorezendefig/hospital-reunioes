@@ -7,6 +7,20 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.134.1 - 2026-09-15 18:16 - as marcas de erro que a tela do redirecionamento lê viram constantes com teste
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `671a273`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.134.1, `db: healthy`; frontend HTTP 200) · build 26s no backend, 195s no frontend
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/671a273
+- Issues: [#717](https://github.com/pedrorezendefig/hospital-reunioes/issues/717) · PR [#723](https://github.com/pedrorezendefig/hospital-reunioes/pull/723) · PRD [#706](https://github.com/pedrorezendefig/hospital-reunioes/issues/706) · ADR 0055 · patch, chore
+- Migration: nenhuma. É acabamento em código (três constantes nomeadas e um teste), sem tocar schema. A 108 segue sendo a última.
+- Nota: acabamento das fatias #708 e #710, sem mudança de comportamento. A tela do redirecionamento decide se relê o caso do banco pela marca no começo da mensagem de erro, e não pela faixa do status HTTP. A regra estava certa e ninguém a protegia: os testes assertavam sempre contra a constante, nunca contra o literal. Quem reescrevesse a frase passava verde dos dois lados e a releitura da tela morria em silêncio, que é exatamente o defeito que o PR #715 tinha consertado.
+- Nota: as três marcas (`SAIU_DA_AREA_NO_MEIO`, `FALHA_DEPOIS_DA_SAIDA`, `FALHA_DE_ESTADO_INDETERMINADO`) viraram constante nomeada com comentário apontando o arquivo do front que casa por prefixo. Conferido byte a byte contra `MARCAS_DO_CASO_QUE_SE_MOVEU` em `frontend/src/lib/ouvidoria/redirecionamento.ts`, em NFC dos dois lados, correspondência bijetiva. As três frases seguem iguais byte a byte à main anterior: o diff é adição pura, +18/-0 no router e +24/-0 no teste.
+- Nota: prova por mutação feita duas vezes de forma independente, pelo sub-agente da issue e pelo revisor, este em cópia fora do repo. Três mutantes, um por frase, cada um mexendo em uma palavra do começo daquela frase: os três derrubam o teste.
+- Nota: limite conhecido e assumido, registrado no comentário do código e nos nits do PR. O teste é `frase.startswith(marca)` e compara backend contra backend, então esvaziar uma constante deixa tudo verde (`"x".startswith("")` é sempre `True`), e reescrever frase e constante no mesmo edit também passa. Fechar isso de vez exigiria teste cruzando as duas fatias, que a triagem deixou fora do escopo. Fora do diff, `ouvidoria_setor.py` tem uma quarta frase que começa com o mesmo texto: é outro fluxo, o front não lê essa resposta, mas fica o aviso para quem reescrever qualquer um dos dois.
+- Nota: a rota que devolve esses 409 é `POST /manifestacoes/{id}/redirecionamentos`, protegida por `require_perfil_ouvidoria`. É tela de ouvidor autenticado, não o canal público sem login.
+
 ## v0.134.0 - 2026-09-15 17:05 - o Perfil da Ouvidoria inteiro mantém o cadastro de responsáveis por setor
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `49a3b8d`
