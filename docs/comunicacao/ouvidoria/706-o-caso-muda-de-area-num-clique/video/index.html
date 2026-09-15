@@ -1,0 +1,706 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Percepção de Valor · O caso muda de área num clique</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="percepcao-meta">
+{"prd": 706, "issues": [707, 708, 709, 710, 711], "contexto": "ouvidoria",
+ "titulo": "O caso muda de área num clique",
+ "app_version": "0.134.0", "gerado_em": "2026-09-15T18:00:00-03:00"}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+    --g-critico: #B3261E; --g-alto: #C77700; --g-medio: #1F3864; --g-baixo: #5F5E5A;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* réplica do app desenhada em 960x540 e ampliada 2x */
+  .screen { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #F8FAFC; }
+
+  /* ===== slides ===== */
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 84px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
+
+  .duas { display: grid; grid-template-columns: 1fr 1fr; gap: 80px; align-items: start; width: 1560px; }
+  .metade { display: flex; flex-direction: column; align-items: center; gap: 26px; }
+  .chip-fase { font-size: 24px; font-weight: 700; border-radius: 999px; padding: 8px 34px; }
+  .chip-antes { background: #F1F5F9; color: #64748B; border: 2px solid #CBD5E1; }
+  .chip-agora { background: var(--navy); color: #fff; border: 2px solid var(--navy); }
+  .mini-shot { background: #fff; border: 2px solid var(--app-border); border-radius: 16px; padding: 30px; width: 660px; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+  .mini-shot.apagado { filter: grayscale(.3); background: #fafafa; }
+  .metade p { font-size: 27px; color: var(--app-sec); max-width: 640px; line-height: 1.45; }
+  .mock-card { width: 560px; background: #fff; border: 1.5px solid var(--app-border); border-radius: 12px; padding: 22px 26px; text-align: left; box-shadow: 0 12px 30px -14px rgba(0,0,0,.15); }
+  .mock-card h5 { font-size: 22px; color: var(--app-text); }
+  .mock-card .ml { font-size: 18px; color: var(--app-sec); margin-top: 9px; }
+  .mock-card .ml b { color: var(--app-text); }
+  .mock-tag { display: inline-block; margin-top: 15px; font-size: 16px; font-weight: 700; border-radius: 999px; padding: 4px 14px; }
+  .mock-tag.ruim { background: #FEF2F2; color: #B4443E; border: 1.5px solid #F3BFBF; }
+  .mock-tag.bom { background: #E8F6EE; color: #1F7A4D; border: 1.5px solid #A9DEC2; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  /* ===== casca do app ===== */
+  .app-top { height: 40px; border-bottom: 1px solid #EEF2F7; display: flex; align-items: center; gap: 10px; padding: 0 16px; background: #fff; }
+  .logo-dot { width: 22px; height: 22px; border-radius: 6px; background: linear-gradient(135deg, var(--navy), var(--navy-light)); color: #fff; font-size: 10px; font-weight: 800; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .bc { color: var(--app-sec); font-size: 11.5px; }
+  .bc b { color: var(--app-text); font-weight: 700; }
+  .app-body { position: relative; height: 500px; padding: 14px 18px; }
+  .pg-head { margin-bottom: 12px; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; }
+  .pg-head h2 { font-size: 16px; font-weight: 800; color: var(--app-text); }
+  .pg-head .pm { font-size: 10.5px; color: var(--app-sec); margin-top: 2px; }
+  .tb-card { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 8px 20px -10px rgba(0,0,0,.12); overflow: hidden; }
+  .atalhos { display: flex; align-items: center; gap: 5px; }
+  .atalho { display: inline-flex; align-items: center; gap: 3px; padding: 3.5px 9px; border-radius: 6px; font-size: 8.4px; font-weight: 700; background: #fff; border: 1px solid var(--app-border); color: #475569; }
+  .atalho.marcado { border-color: #9DA2D6; background: #EEF0FB; color: var(--navy); }
+  .contador { display: inline-flex; align-items: center; padding: 3.5px 10px; border-radius: 999px; font-size: 8.4px; font-weight: 600; background: #E0F2FE; color: #0369A1; }
+
+  /* ===== fila em dois níveis ===== */
+  .grp { display: flex; align-items: center; justify-content: space-between; padding: 4px 13px; font-size: 8px; font-weight: 800; letter-spacing: .06em; text-transform: uppercase; }
+  .grp.aguardando { background: #FEF3C7; color: #B45309; }
+  .grp.respondida { background: #D1FAE5; color: #047857; }
+  .grp.classificacao { background: #E0F2FE; color: #0369A1; }
+  .grp.espera { background: #E2E8F0; color: #475569; }
+  .linha { display: flex; align-items: center; gap: 9px; padding: 7px 13px; border-top: 1px solid #F1F5F9; }
+  .linha.alvo { position: relative; }
+  .ln-1 { display: flex; align-items: center; gap: 6px; }
+  .ln-prot { font-family: ui-monospace, monospace; font-size: 9.4px; font-weight: 700; color: #334155; }
+  .ln-res { font-size: 9px; color: #475569; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 330px; }
+  .ln-2 { display: flex; align-items: center; gap: 5px; margin-top: 3px; font-size: 7.8px; color: #94A3B8; }
+  .ln-2 .sep { color: #CBD5E1; }
+  .ln-acoes { margin-left: auto; display: flex; align-items: center; gap: 5px; flex-shrink: 0; }
+  .btn-l { display: inline-flex; align-items: center; gap: 4px; padding: 4px 8px; border-radius: 5px; font-size: 7.6px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase; }
+  .btn-l.ambar { background: #F59E0B; color: #fff; }
+  .btn-l.verde { background: #059669; color: #fff; }
+  .btn-l.navy { background: var(--navy); color: #fff; }
+  .btn-l.cinza { background: #F1F5F9; color: #475569; }
+  .kebab { width: 15px; height: 15px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #94A3B8; }
+  .kebab.aceso { background: #F1F5F9; }
+  .menu { position: absolute; right: 13px; top: 32px; width: 110px; padding: 3px 0; border-radius: 7px; border: 1px solid var(--app-border); background: #fff; box-shadow: 0 10px 24px -10px rgba(0,0,0,.28); z-index: 20; opacity: 0; }
+  .menu .mi { display: flex; align-items: center; gap: 5px; padding: 5px 9px; font-size: 8.2px; color: #334155; }
+  .menu .mi.realce { background: #F8FAFC; }
+
+  /* ===== modal ===== */
+  .veu { position: absolute; inset: 0; background: rgba(15,23,42,.34); }
+  .modal { position: absolute; left: 50%; margin-left: -235px; top: 10px; width: 470px; background: #fff; border-radius: 10px; box-shadow: 0 26px 60px -18px rgba(0,0,0,.42); overflow: hidden; }
+  .modal-h { display: flex; align-items: center; gap: 9px; padding: 11px 16px; border-bottom: 1px solid #F1F5F9; }
+  .modal-ic { width: 28px; height: 28px; border-radius: 7px; background: #EEF0FB; color: var(--navy); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .modal-h h3 { font-size: 12px; font-weight: 800; color: #0F172A; }
+  .modal-h p { font-size: 8.6px; color: var(--app-sec); margin-top: 1px; line-height: 1.4; }
+  .modal-b { padding: 13px 16px; display: flex; flex-direction: column; gap: 9px; }
+
+  .rot { display: block; font-size: 7.4px; font-weight: 800; color: #94A3B8; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 3px; }
+  .rot .leve { text-transform: none; letter-spacing: 0; font-weight: 700; }
+  .campo { display: flex; align-items: flex-start; width: 100%; min-height: 22px; padding: 5px 8px; border-radius: 5px; border: 1px solid #E2E8F0; font-size: 8.4px; color: #334155; background: #fff; line-height: 1.45; }
+  .campo.fantasma { color: #B4BECB; }
+  .campo.foco { border-color: #9DA2D6; box-shadow: 0 0 0 2px rgba(43,46,126,.12); }
+  .select { display: flex; align-items: center; justify-content: space-between; }
+  .select .cv { color: #B4BECB; }
+  .select .cv.cheio { color: #334155; }
+  .ajuda { font-size: 7.4px; color: #94A3B8; margin-top: 4px; line-height: 1.5; }
+  .grav { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+  .gv { border: 1px solid #E2E8F0; border-radius: 6px; padding: 5px 8px; background: #fff; }
+  .gv .gn { font-size: 8.2px; font-weight: 700; color: #334155; }
+  .gv .gd { font-size: 7.2px; color: #94A3B8; margin-top: 1px; }
+  .gv.on { background: #FFF7ED; border-color: #FDBA74; }
+  .gv.on .gn { color: #C2410C; }
+  .alerta { display: flex; align-items: flex-start; gap: 5px; border-radius: 7px; padding: 6px 9px; font-size: 8px; line-height: 1.5; }
+  .alerta.ambar { background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; }
+  .alerta.verde { background: #ECFDF5; border: 1px solid #A7F3D0; color: #065F46; }
+  .alerta.vermelho { background: #FEF2F2; border: 1px solid #FECACA; color: #991B1B; }
+  .btn-a { display: inline-flex; align-items: center; gap: 4px; padding: 4.5px 9px; border-radius: 5px; font-size: 8.2px; font-weight: 800; letter-spacing: .05em; text-transform: uppercase; }
+  .btn-a.navy { background: var(--navy); color: #fff; }
+  .btn-a.plano { color: #64748B; }
+  .btn-a.branco { background: #fff; border: 1px solid #CBD5E1; color: #475569; }
+  .btn-a.desligado { opacity: .5; }
+
+  /* ===== Dossiê ===== */
+  .dos-tit { display: flex; align-items: center; gap: 4px; font-size: 7.4px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: .07em; margin-bottom: 4px; }
+  .dos-cx { border: 1px solid var(--app-border); border-radius: 7px; background: #fff; padding: 9px 12px; }
+  .dos-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 8px 12px; }
+  .dos-l dt { font-size: 7.2px; font-weight: 700; color: #94A3B8; text-transform: uppercase; letter-spacing: .07em; }
+  .dos-l dd { font-size: 8.8px; color: #334155; margin-top: 1px; }
+  .dos-l dd.novo { color: #C2410C; font-weight: 700; }
+  .trilha { border-left: 1px solid #E2E8F0; margin-left: 3px; display: flex; flex-direction: column; gap: 9px; }
+  .ev { position: relative; padding-left: 9px; }
+  .ev .pt { position: absolute; left: -3.5px; top: 4px; width: 5px; height: 5px; border-radius: 50%; background: #CBD5E1; }
+  .ev.marco .pt { background: #2563EB; }
+  .ev .q { font-size: 7.2px; color: #94A3B8; }
+  .ev .d { font-size: 8.6px; color: #1E293B; margin-top: 1px; }
+  .ev .d.rotulo { font-weight: 700; color: var(--navy); }
+  .ev .t { font-size: 8px; color: #475569; margin-top: 2px; line-height: 1.5; }
+
+  /* ===== painel lateral "num ato só" ===== */
+  .painel { position: absolute; width: 330px; background: #fff; border: 1px solid var(--app-border); border-radius: 10px; box-shadow: 0 20px 44px -18px rgba(0,0,0,.3); padding: 12px 14px; opacity: 0; }
+  .painel .ph { font-size: 9px; font-weight: 800; color: #0F172A; margin-bottom: 8px; }
+  .painel .pl { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; font-size: 8.2px; padding: 4.5px 0; border-bottom: 1px solid #F1F5F9; }
+  .painel .pl:last-of-type { border-bottom: 0; }
+  .painel .pl .k { color: #94A3B8; }
+  .painel .pl .v { font-weight: 700; color: #334155; text-align: right; }
+  .painel .pl .v.novo { color: #C2410C; }
+  .painel .pl .v.ok { color: #047857; }
+  .painel .nota { font-size: 7.6px; color: #94A3B8; line-height: 1.5; margin-top: 7px; }
+
+  /* ===== email ===== */
+  .email { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; box-shadow: 0 22px 48px -16px rgba(0,0,0,.34); overflow: hidden; }
+  .email-h { display: flex; align-items: flex-start; gap: 7px; padding: 8px 12px; border-bottom: 1px solid #F1F5F9; background: #FAFBFC; color: var(--app-sec); }
+  .email-h .et { font-size: 7.4px; color: var(--app-sec); line-height: 1.4; }
+  .email-h .et b { display: block; font-size: 8.8px; color: #1E293B; margin-bottom: 1px; }
+  .email-b { padding: 10px 12px; display: flex; flex-direction: column; gap: 8px; }
+  .faixa-cx { border: 1px solid #E2E8F0; border-radius: 7px; background: #F8FAFC; padding: 8px 12px; }
+  .faixa-cx .k { font-size: 6.4px; font-weight: 800; letter-spacing: .09em; text-transform: uppercase; color: #94A3B8; }
+  .faixa-cx .prot { font-size: 13px; font-weight: 800; color: #1E293B; line-height: 1.25; margin: 2px 0 6px; }
+  .faixa-cx .lin { font-size: 8px; color: #334155; margin-top: 2px; }
+  .faixa-cx .lin b { color: #1E293B; }
+  .aviso-cx { border-radius: 7px; padding: 8px 11px; font-size: 8.2px; line-height: 1.55; background: #F8FAFC; border: 1px solid #E2E8F0; color: #334155; }
+  .email-p { font-size: 8.2px; color: #475569; line-height: 1.5; }
+  .email-p b { color: #1E293B; }
+  .email-fim { font-size: 7px; color: #94A3B8; text-align: center; line-height: 1.5; }
+  .sem { display: flex; align-items: center; gap: 5px; font-size: 7.8px; color: #94A3B8; }
+
+  /* ===== portal com link revogado ===== */
+  .pcard { background: #fff; border: 1px solid var(--app-border); border-radius: 13px; box-shadow: 0 12px 30px -16px rgba(0,0,0,.2); padding: 17px 19px; }
+  .pcard .plogo { display: flex; align-items: center; justify-content: center; gap: 5px; margin-bottom: 13px; }
+  .pcard .plogo .ln { font-size: 9px; font-weight: 700; color: var(--navy); }
+  .prv { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 8px; }
+  .prv .pic { width: 34px; height: 34px; border-radius: 50%; background: #FEF2F2; color: #B91C1C; display: flex; align-items: center; justify-content: center; }
+  .prv h1 { font-size: 11px; font-weight: 800; color: #0F172A; line-height: 1.35; max-width: 250px; }
+  .prv p { font-size: 8.4px; color: #64748B; line-height: 1.5; max-width: 250px; }
+
+  /* ===== responsáveis por setor ===== */
+  .rs-form { background: #fff; border: 1px solid var(--app-border); border-radius: 8px; box-shadow: 0 8px 20px -10px rgba(0,0,0,.12); padding: 11px 13px; margin-bottom: 9px; }
+  .rs-form h3 { font-size: 8.4px; font-weight: 800; text-transform: uppercase; letter-spacing: .06em; color: #475569; margin-bottom: 7px; }
+  .rs-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 7px 11px; }
+  .rs-setor { display: flex; align-items: center; gap: 6px; padding: 5px 13px; background: #F8FAFC; border-top: 1px solid #F1F5F9; }
+  .rs-setor .nm { font-size: 9px; font-weight: 700; color: #334155; }
+  .selo { display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 999px; font-size: 7.2px; font-weight: 800; text-transform: uppercase; letter-spacing: .04em; }
+  .selo.ambar { background: #FEF3C7; color: #B45309; }
+  .rs-li { display: flex; align-items: center; gap: 8px; padding: 6px 13px; border-top: 1px solid #F8FAFC; font-size: 8.4px; }
+  .rs-papel { display: inline-flex; align-items: center; padding: 1.5px 7px; border-radius: 999px; font-size: 7.4px; font-weight: 700; background: #F1F5F9; color: #475569; }
+  .rs-nome { font-weight: 700; color: #334155; }
+  .rs-mail { color: #64748B; }
+  .rs-vig { font-size: 7.4px; color: #94A3B8; }
+  .rs-vig.fora { color: #C2410C; }
+  .rs-dir { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+
+  /* anotações */
+  .anot { position: absolute; background: #16181d; color: #f4f2ec; font-size: 12px; font-weight: 600; border-radius: 9px; padding: 7px 12px; max-width: 250px; line-height: 1.4; box-shadow: 0 10px 26px -8px rgba(0,0,0,.45); z-index: 30; opacity: 0; }
+  .anot::after { content: ""; position: absolute; left: 20px; top: -5px; width: 10px; height: 10px; background: #16181d; transform: rotate(45deg); }
+
+  /* cursor fantasma */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+
+  .fx { opacity: 0; }
+</style>
+</head>
+<body>
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="77.5" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="cena-abertura" class="clip scene slide" data-start="0" data-duration="4.5" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Percepção de Valor · Ouvidoria</div>
+    <h1 class="titulo" id="ab-titulo">O caso muda de área num clique</h1>
+    <p class="sub" id="ab-sub">O ouvidor despachou para a área errada. Agora ele corrige sozinho, sem esperar o setor devolver e sem abrir outro protocolo.</p>
+  </section>
+
+  <!-- 2 · Antes | Agora -->
+  <section id="cena-antes" class="clip scene slide" data-start="4.5" data-duration="5" data-track-index="2">
+    <div class="duas">
+      <div class="metade" id="an-metade-1">
+        <span class="chip-fase chip-antes">Antes</span>
+        <div class="mini-shot apagado">
+          <div class="mock-card">
+            <h5>Despachou para a área errada</h5>
+            <div class="ml">O ouvidor percebeu sozinho: <b>não tinha caminho</b></div>
+            <div class="ml">A área errada respondeu qualquer coisa: <b>também não</b></div>
+            <div class="ml">Sobrava: <b>encerrar e abrir outro protocolo</b></div>
+            <span class="mock-tag ruim">Dois números para o paciente, ou o caso parado esperando</span>
+          </div>
+        </div>
+        <p>Só a área conseguia dizer que o caso não era dela.</p>
+      </div>
+      <div class="metade" id="an-metade-2">
+        <span class="chip-fase chip-agora">Agora</span>
+        <div class="mini-shot">
+          <div class="mock-card">
+            <h5>Redirecionar, com motivo escrito</h5>
+            <div class="ml">Na fila e no Dossiê: <b>um clique</b></div>
+            <div class="ml">A área nova recebe <b>o prazo inteiro</b></div>
+            <div class="ml">Os links da área anterior <b>deixam de valer</b></div>
+            <span class="mock-tag bom">Mesmo protocolo, trilha inteira, área certa</span>
+          </div>
+        </div>
+        <p>O ouvidor corrige o despacho no mesmo ato em que percebe o erro.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 3 · A fila: o botão Redirecionar -->
+  <section id="cena-fila" class="clip scene" data-start="9.5" data-duration="9.5" data-track-index="3">
+    <div class="screen" id="scr-fila"></div>
+  </section>
+
+  <!-- 4 · A modal em modo redirecionamento -->
+  <section id="cena-modal" class="clip scene" data-start="19" data-duration="15.5" data-track-index="4">
+    <div class="screen" id="scr-modal"></div>
+  </section>
+
+  <!-- 5 · O que o servidor fez, numa requisição só -->
+  <section id="cena-dossie" class="clip scene" data-start="34.5" data-duration="13" data-track-index="5">
+    <div class="screen" id="scr-dossie"></div>
+  </section>
+
+  <!-- 6 · A área antiga: aviso curto e link que não vale mais -->
+  <section id="cena-antiga" class="clip scene" data-start="47.5" data-duration="10.5" data-track-index="6">
+    <div class="screen" id="scr-antiga"></div>
+  </section>
+
+  <!-- 7 · Responsáveis por setor, mantidos pela Ouvidoria -->
+  <section id="cena-resp" class="clip scene" data-start="58" data-duration="13.5" data-track-index="7">
+    <div class="screen" id="scr-resp"></div>
+  </section>
+
+  <!-- 8 · Fecho -->
+  <section id="cena-fecho" class="clip scene slide" data-start="71.5" data-duration="6" data-track-index="8">
+    <div class="fecho-titulo" id="fc-titulo">O caso muda de área num clique</div>
+    <div class="carimbo" id="fc-carimbo">PRD #706 · retrata o app em v0.134.0 · gerado em 15/09/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Ouvidoria</div>
+  </section>
+
+</div>
+
+<script>
+/* ============================================================
+   Ícones (traço estilo lucide, como no app)
+   ============================================================ */
+function ic(nome, s, cls) {
+  const P = {
+    trocar: '<path d="M2 9a3 3 0 0 1 3-3h13"/><path d="m15 3 3 3-3 3"/><path d="M22 15a3 3 0 0 1-3 3H6"/><path d="m9 21-3-3 3-3"/>',
+    enviar: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+    checkc: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    relogio: '<circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/>',
+    email: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+    pessoa: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>',
+    semgente: '<path d="M2 21a8 8 0 0 1 11.873-7"/><circle cx="10" cy="8" r="5"/><path d="m17 17 5 5"/><path d="m22 17-5 5"/>',
+    doc: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v5h5"/>',
+    mais: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    lixo: '<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>',
+    escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+    cadeado: '<rect width="18" height="11" x="3" y="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    alerta: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    proibido: '<circle cx="12" cy="12" r="10"/><path d="m4.9 4.9 14.2 14.2"/>',
+    pontos: '<circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/><circle cx="5" cy="12" r="1"/>',
+    predio: '<rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01"/><path d="M16 6h.01"/><path d="M12 6h.01"/><path d="M12 10h.01"/><path d="M12 14h.01"/><path d="M16 10h.01"/><path d="M16 14h.01"/><path d="M8 10h.01"/><path d="M8 14h.01"/>'
+  };
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls || ""}" style="flex-shrink:0">${P[nome]}</svg>`;
+}
+function ghostHTML(id) {
+  return `<div class="ghost" id="${id}"><div class="pulse"></div>
+    <svg width="20" height="20" viewBox="0 0 20 20"><path d="M3 1 L3 15 L7 11.5 L9.5 17 L12 16 L9.5 10.5 L15 10.5 Z" fill="#16181d" stroke="#fff" stroke-width="1.2"/></svg></div>`;
+}
+function appTop(trilha) {
+  return `<div class="app-top"><div class="logo-dot">H</div><span class="bc">${trilha}</span></div>`;
+}
+function fundoBorrado(titulo) {
+  return `<div class="app-body" data-layout-allow-overlap data-layout-allow-occlusion style="filter:blur(1px);opacity:.6">
+    <div class="pg-head"><div><h2>Ouvidoria</h2><div class="pm" data-layout-allow-overlap>${titulo}</div></div></div>
+    <div class="tb-card" data-layout-allow-overlap data-layout-allow-occlusion style="height:400px"></div>
+  </div>
+  <div class="veu" data-layout-allow-overlap data-layout-allow-occlusion></div>`;
+}
+
+/* dados do exemplo único, os mesmos da primeira à última cena */
+const PROTOCOLO = "2026-0192";
+const RESUMO = "Instrumental cirúrgico entregue com a embalagem violada";
+const EXTRATO = "A equipe do centro cirúrgico recebeu duas caixas de instrumental com a embalagem violada e adiou o procedimento. Apurar o que houve na esterilização e informar as providências.";
+const MOTIVO = "O material é de esterilização, e a Farmácia não tem como apurar o processo da autoclave. O caso é da CME.";
+
+/* ============================================================
+   Cena 3 · A fila: o botão Redirecionar
+   ============================================================ */
+function linhaDaFila(o) {
+  return `<div class="linha ${o.alvo ? "alvo" : ""}" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div style="min-width:0;flex:1">
+      <div class="ln-1">
+        <span class="ln-prot">${o.protocolo}</span>
+        ${o.gravidade ? `<span class="selo" style="background:${o.gCor};color:${o.gTexto}">${o.gravidade}</span>` : ""}
+        <span class="ln-res">${o.resumo}</span>
+      </div>
+      <div class="ln-2"><span>${o.setor}</span><span class="sep">·</span><span>${o.responsavel}</span><span class="sep">·</span><span style="${o.prazoEstilo || ""}">${o.prazo}</span></div>
+    </div>
+    <div class="ln-acoes">
+      <span class="btn-l ${o.corPrimaria}">${ic(o.icone, 8)} ${o.primaria}</span>
+      <span class="kebab ${o.alvo ? "" : ""}" ${o.alvo ? 'id="fl-kebab"' : ""}>${ic("pontos", 11)}</span>
+    </div>
+    ${o.alvo ? `<div class="menu" id="fl-menu" data-layout-allow-overlap data-layout-allow-occlusion>
+      <div class="mi realce" id="fl-mi-red">${ic("trocar", 9)} Redirecionar</div>
+      <div class="mi">${ic("checkc", 9)} Encerrar</div>
+      <div class="mi">${ic("doc", 9)} Abrir manifestação</div>
+    </div>` : ""}
+  </div>`;
+}
+
+document.getElementById("scr-fila").innerHTML =
+  appTop(`Ouvidoria`) +
+  `<div class="app-body">
+    <div class="pg-head">
+      <div><h2>Ouvidoria</h2><div class="pm">Manifestações do hospital, na ordem do trabalho da ouvidoria</div></div>
+      <div style="display:flex;align-items:center;gap:7px">
+        <div class="atalhos">
+          <span class="atalho">Painel</span>
+          <span class="atalho">Nota externa</span>
+          <span class="atalho">Responsáveis</span>
+          <span class="atalho">Prazos</span>
+        </div>
+        <span class="contador">7 em andamento</span>
+      </div>
+    </div>
+    <div class="tb-card" id="fl-card" data-layout-allow-overlap data-layout-allow-occlusion>
+      <div class="grp classificacao"><span>Em classificação</span><span>2</span></div>
+      ${linhaDaFila({ protocolo: "2026-0194", gravidade: "", gCor: "transparent", gTexto: "transparent",
+        resumo: "Espera de mais de duas horas para o atendimento de urgência", setor: "A definir",
+        responsavel: "Sem responsável", prazo: "19/09/2026", primaria: "Validar e acionar", corPrimaria: "navy", icone: "enviar" })}
+      ${linhaDaFila({ protocolo: "2026-0195", gravidade: "", gCor: "transparent", gTexto: "transparent",
+        resumo: "Elogio à equipe de enfermagem do quarto andar", setor: "A definir",
+        responsavel: "Sem responsável", prazo: "21/09/2026", primaria: "Validar e acionar", corPrimaria: "navy", icone: "enviar" })}
+      <div class="grp aguardando"><span>Aguardando área</span><span>3</span></div>
+      ${linhaDaFila({ protocolo: "2026-0190", gravidade: "Médio", gCor: "#E0E7FF", gTexto: "#3730A3",
+        resumo: "Demora na entrega do resultado de exame laboratorial", setor: "Laboratório",
+        responsavel: "Heloísa Pinto", prazo: "18/09/2026, 17:00", primaria: "Cobrar", corPrimaria: "ambar", icone: "enviar" })}
+      ${linhaDaFila({ alvo: true, protocolo: PROTOCOLO, gravidade: "Alto", gCor: "#FFEDD5", gTexto: "#C2410C",
+        resumo: RESUMO, setor: "Farmácia", responsavel: "Rogério Tavares",
+        prazo: "16/09/2026, 17:00", primaria: "Cobrar", corPrimaria: "ambar", icone: "enviar" })}
+      ${linhaDaFila({ protocolo: "2026-0193", gravidade: "Baixo", gCor: "#F1F5F9", gTexto: "#475569",
+        resumo: "Falta de sinalização para a sala de espera do terceiro andar", setor: "Manutenção",
+        responsavel: "Ivo Sampaio", prazo: "22/09/2026, 17:00", primaria: "Cobrar", corPrimaria: "ambar", icone: "enviar" })}
+      <div class="grp espera" style="border-top:1px solid #F1F5F9"><span>Aguardando manifestante</span><span>1</span></div>
+      ${linhaDaFila({ protocolo: "2026-0181", gravidade: "Médio", gCor: "#E0E7FF", gTexto: "#3730A3",
+        resumo: "Dúvida sobre a cobertura do convênio no exame de imagem", setor: "Faturamento",
+        responsavel: "Denise Prado", prazo: "relógio pausado desde 11/09/2026", primaria: "Encerrar", corPrimaria: "verde", icone: "checkc" })}
+      <div class="grp respondida" style="border-top:1px solid #F1F5F9"><span>Respondida</span><span>1</span></div>
+      ${linhaDaFila({ protocolo: "2026-0186", gravidade: "Médio", gCor: "#E0E7FF", gTexto: "#3730A3",
+        resumo: "Cobrança indevida de acompanhante na internação", setor: "Faturamento",
+        responsavel: "Denise Prado", prazo: "respondida em 14/09/2026", primaria: "Encerrar", corPrimaria: "verde", icone: "checkc" })}
+    </div>
+  </div>
+  ${ghostHTML("g1")}
+  <div class="anot" data-layout-allow-overlap id="fl-n1" style="left:120px;top:296px;max-width:300px">O ouvidor lê o caso e percebe: instrumental esterilizado é da CME, não da Farmácia</div>
+  <div class="anot" data-layout-allow-overlap id="fl-n2" style="left:470px;top:296px;max-width:320px">Redirecionar mora no menu da linha, junto das outras ações. O mesmo botão está no Dossiê</div>`;
+
+/* ============================================================
+   Cena 4 · A modal em modo redirecionamento
+   ============================================================ */
+document.getElementById("scr-modal").innerHTML =
+  appTop(`Ouvidoria`) +
+  fundoBorrado("Manifestações do hospital, na ordem do trabalho da ouvidoria") +
+  `<div class="modal" id="md-modal" data-layout-allow-overlap data-layout-allow-occlusion>
+    <div class="modal-h">
+      <div class="modal-ic">${ic("enviar", 14)}</div>
+      <div>
+        <h3>Redirecionar ${PROTOCOLO} para outra área</h3>
+        <p>A área nova recebe o email de acionamento com o prazo inteiro, e a anterior recebe um aviso curto de que não precisa mais responder.</p>
+      </div>
+    </div>
+    <div class="modal-b">
+      <div>
+        <span class="rot">Tipo da manifestação</span>
+        <div class="campo select"><span class="cv cheio">Reclamação</span></div>
+      </div>
+      <div>
+        <span class="rot">Área responsável</span>
+        <div class="campo select" id="md-setor"><span class="cv" id="md-setor-vazio">Escolha o setor</span><span class="cv cheio fx" id="md-setor-cheio" style="display:none">CME</span></div>
+        <div class="ajuda">O caso está com Farmácia. Escolha a área certa: a mesma área não vale.</div>
+      </div>
+      <div>
+        <span class="rot">Motivo do redirecionamento <span class="leve">(obrigatório)</span></span>
+        <div class="campo fantasma" id="md-motivo" style="min-height:34px;position:relative"><span id="md-motivo-vazio">Ex.: o caso é de conduta médica, e a Recepção não tem como apurar.</span><span id="md-motivo-cheio" class="fx" style="position:absolute;left:8px;right:8px;top:5px;color:#334155">${MOTIVO}</span></div>
+        <div class="ajuda">Fica na trilha do caso, com o seu nome e a área de onde ele saiu. Não vai no aviso à área anterior.</div>
+      </div>
+      <div class="alerta ambar" id="md-semtitular" style="opacity:0">${ic("escudo", 10)}<span>Setor sem titular vigente. A demanda vai subir ao gestor da área e a Diretoria Executiva recebe o alerta.</span></div>
+      <div>
+        <span class="rot">Gravidade</span>
+        <div class="grav">
+          <div class="gv"><div class="gn">Crítico</div><div class="gd">4 horas úteis</div></div>
+          <div class="gv on"><div class="gn">Alto</div><div class="gd">2 dias úteis</div></div>
+          <div class="gv"><div class="gn">Médio</div><div class="gd">4 dias úteis</div></div>
+          <div class="gv"><div class="gn">Baixo</div><div class="gd">resolvido pela Ouvidoria</div></div>
+        </div>
+      </div>
+      <div>
+        <span class="rot">Extrato para o setor <span class="leve">(obrigatório)</span></span>
+        <div class="campo" style="min-height:40px">${EXTRATO}</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:flex-end;gap:7px">
+        <span class="btn-a plano">Cancelar</span>
+        <span class="btn-a navy desligado" id="md-btn">${ic("checkc", 9)} Redirecionar para a área nova</span>
+      </div>
+    </div>
+  </div>
+  ${ghostHTML("g2")}
+  <div class="anot" data-layout-allow-overlap id="md-n1" style="left:30px;top:60px;max-width:210px">É a mesma tela da validação, já preenchida com o tipo, a gravidade e o extrato do acionamento anterior</div>
+  <div class="anot" data-layout-allow-overlap id="md-n2" style="left:30px;top:190px;max-width:210px">A área nasce em branco, de propósito: confirmar sem escolher mandaria o caso de volta para a Farmácia</div>
+  <div class="anot" data-layout-allow-overlap id="md-n3" style="left:722px;top:210px;max-width:210px">Sem motivo escrito, o botão não habilita. É ele que conta, meses depois, por que o caso saiu de onde estava</div>
+  <div class="anot" data-layout-allow-overlap id="md-n4" style="left:722px;top:330px;max-width:210px">A CME tem gestor vigente, e por isso o ato segue. Sem titular nem gestor, o sistema recusaria e o caso ficaria onde estava</div>`;
+
+/* ============================================================
+   Cena 5 · O que o servidor fez, numa requisição só
+   ============================================================ */
+document.getElementById("scr-dossie").innerHTML =
+  appTop(`Ouvidoria · <b>Manifestação ${PROTOCOLO}</b>`) +
+  `<div class="app-body" style="padding:12px 16px">
+    <div class="tb-card" id="ds-card" style="padding:12px 14px;display:flex;flex-direction:column;gap:10px;width:530px" data-layout-allow-overlap data-layout-allow-occlusion>
+      <div style="display:flex;align-items:center;gap:8px">
+        <span style="width:22px;height:22px;border-radius:7px;background:#EEF0FB;color:var(--navy);display:flex;align-items:center;justify-content:center">${ic("pessoa", 12)}</span>
+        <div><div style="font-size:11.5px;font-weight:800;color:#0F172A">Manifestação ${PROTOCOLO}</div><div style="font-size:8.4px;color:#64748B">Aguardando área</div></div>
+      </div>
+      <div class="alerta verde" id="ds-aviso" style="opacity:0">${ic("trocar", 10)}<span>Caso redirecionado para CME. A área anterior foi avisada.</span></div>
+      <dl class="dos-grid">
+        <div class="dos-l"><dt>Área responsável</dt><dd id="ds-setor"><span id="ds-setor-1">Farmácia</span><span id="ds-setor-2" class="fx" style="display:none;color:#C2410C;font-weight:700">CME</span></dd></div>
+        <div class="dos-l"><dt>Prazo da área</dt><dd id="ds-prazo"><span id="ds-prazo-1">16/09/2026, 17:00</span><span id="ds-prazo-2" class="fx" style="display:none;color:#C2410C;font-weight:700">17/09/2026, 17:00</span></dd></div>
+        <div class="dos-l"><dt>Prazo com o manifestante</dt><dd>28/09/2026</dd></div>
+      </dl>
+      <div>
+        <div class="dos-tit">${ic("pessoa", 9)} Relato de quem manifestou</div>
+        <div class="campo" style="min-height:34px">Solange Ferraz, acompanhante. O procedimento da minha mãe foi adiado porque o material chegou com a embalagem aberta. Ninguém soube explicar o que aconteceu.</div>
+      </div>
+      <div>
+        <div class="dos-tit">${ic("enviar", 9)} Extrato enviado ao setor</div>
+        <div class="campo" style="min-height:34px">${EXTRATO}</div>
+      </div>
+      <div>
+        <div class="dos-tit">${ic("relogio", 9)} Linha do tempo do caso</div>
+        <div class="trilha">
+          <div class="ev marco"><div class="pt"></div><div class="q">14/09/2026, 10:41, Beatriz Lemos</div><div class="d">Caso encaminhado à área</div><div class="t">Farmácia acionada por email, com prazo de 2 dias úteis.</div></div>
+          <div class="ev marco fx" id="ds-ev-1"><div class="pt"></div><div class="q">15/09/2026, 14:22, Beatriz Lemos</div><div class="d rotulo">Redirecionado pelo ouvidor (de Farmácia)</div><div class="t">${MOTIVO}</div></div>
+          <div class="ev marco fx" id="ds-ev-2"><div class="pt"></div><div class="q">15/09/2026, 14:22, Beatriz Lemos</div><div class="d">Caso encaminhado à área</div><div class="t">CME acionada por email, com prazo de 2 dias úteis.</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="painel" id="ds-painel" data-layout-allow-overlap data-layout-allow-occlusion style="right:22px;top:140px">
+    <div class="ph">Tudo isto num ato só</div>
+    <div class="pl"><span class="k">Protocolo</span><span class="v">o mesmo, ${PROTOCOLO}</span></div>
+    <div class="pl"><span class="k">Prazo da área nova</span><span class="v novo">inteiro, contado de agora</span></div>
+    <div class="pl"><span class="k">Prazo com o manifestante</span><span class="v ok">não se move</span></div>
+    <div class="pl"><span class="k">Cobrança e escalonamento da Farmácia</span><span class="v ok">zerados</span></div>
+    <div class="pl"><span class="k">Links que a Farmácia recebeu</span><span class="v novo">deixam de valer</span></div>
+    <div class="pl"><span class="k">Tempo perdido com a área errada</span><span class="v">na conta da Triagem da Ouvidoria</span></div>
+    <div class="nota">O tempo gasto na área errada não é cobrado da CME: ele fica com quem despachou.</div>
+  </div>
+  <div class="anot" data-layout-allow-overlap id="ds-n1" style="left:600px;top:60px;max-width:290px">A trilha guarda os dois movimentos na ordem: a saída com o motivo, e o acionamento da área certa</div>
+  <div class="anot" data-layout-allow-overlap id="ds-n2" style="left:600px;top:60px;max-width:290px">O Dossiê separa o redirecionamento do ouvidor da devolução feita pela área: um não conta pelo outro</div>`;
+
+/* ============================================================
+   Cena 6 · A área antiga: aviso curto e link que não vale mais
+   ============================================================ */
+document.getElementById("scr-antiga").innerHTML =
+  `<div style="position:absolute;inset:0;background:#F1F5F9"></div>
+  <div class="email" id="an-email" data-layout-allow-overlap data-layout-allow-occlusion style="position:absolute;left:30px;top:40px;width:360px">
+    <div class="email-h">${ic("email", 12)}<div class="et"><b>Ouvidoria ${PROTOCOLO}: a demanda foi encaminhada a outra area</b>Para: Rogério Tavares, titular da Farmácia</div></div>
+    <div class="email-b">
+      <div class="faixa-cx">
+        <div class="k">Protocolo</div>
+        <div class="prot">${PROTOCOLO}</div>
+        <div class="lin">Setor: <b>Farmácia</b></div>
+      </div>
+      <div class="email-p">Olá, <b>Rogério Tavares</b>!</div>
+      <div class="aviso-cx">A Ouvidoria encaminhou esta manifestação a outra área. <b>Não é preciso responder.</b> A demanda do setor Farmácia sobre este protocolo está encerrada.</div>
+      <div class="email-p">Os links que você recebeu para responder este caso não valem mais. Se você já tinha começado a apurar alguma coisa, fale com a Ouvidoria informando o número do protocolo acima.</div>
+      <div class="email-fim">Não responda a este email. O encaminhamento fica registrado na manifestação.</div>
+    </div>
+  </div>
+  <div class="painel" id="an-sem" data-layout-allow-overlap data-layout-allow-occlusion style="left:30px;top:322px;width:360px">
+    <div class="ph">O que este aviso não diz</div>
+    <div class="sem" style="margin-bottom:4px">${ic("proibido", 9)} o motivo escrito pelo ouvidor</div>
+    <div class="sem" style="margin-bottom:4px">${ic("proibido", 9)} para qual área o caso foi</div>
+    <div class="sem" style="margin-bottom:4px">${ic("proibido", 9)} o relato de quem manifestou</div>
+    <div class="sem">${ic("proibido", 9)} qualquer link para o caso</div>
+  </div>
+  <div class="pcard" id="an-portal" data-layout-allow-overlap data-layout-allow-occlusion style="position:absolute;right:40px;top:120px;width:290px;opacity:0">
+    <div class="plogo"><div class="logo-dot">H</div><span class="ln">Hospital São Matheus</span></div>
+    <div class="prv">
+      <div class="pic">${ic("cadeado", 17)}</div>
+      <h1>Este caso foi encaminhado a outra área; este link não vale mais</h1>
+      <p>Se você precisa falar sobre esta manifestação, procure a Ouvidoria com o número do protocolo.</p>
+    </div>
+  </div>
+  <div class="anot" data-layout-allow-overlap id="an-n1" style="left:404px;top:56px;max-width:200px">A área antiga sabe na hora que pode parar. O aviso fica registrado e pode ser reenviado</div>
+  <div class="anot" data-layout-allow-overlap id="an-n2" style="left:630px;top:322px;max-width:290px">O link que a Farmácia tinha morre no mesmo ato: a área errada não responde pelo caso da área certa</div>`;
+
+/* ============================================================
+   Cena 7 · Responsáveis por setor, mantidos pela Ouvidoria
+   ============================================================ */
+document.getElementById("scr-resp").innerHTML =
+  appTop(`Ouvidoria · <b>Responsáveis por setor</b>`) +
+  `<div class="app-body" style="padding:12px 16px">
+    <div class="pg-head"><div><h2>Responsáveis por setor</h2><div class="pm">O titular recebe o acionamento da Ouvidoria. Setor sem titular vigente não é acionável: a demanda sobe ao gestor da área e a Diretoria recebe o alerta.</div></div></div>
+    <div class="rs-form" data-layout-allow-overlap data-layout-allow-occlusion>
+      <h3>Cadastrar responsável</h3>
+      <div class="rs-grid">
+        <div><span class="rot">Setor</span><div class="campo select" id="rp-setor"><span class="cv" id="rp-setor-vazio">Escolha o setor</span><span class="cv cheio fx" id="rp-setor-cheio" style="display:none">CME</span></div></div>
+        <div><span class="rot">Papel</span><div class="campo select"><span class="cv cheio">Titular</span></div></div>
+        <div><span class="rot">Nome</span><div class="campo fantasma" id="rp-nome" style="position:relative"><span id="rp-nome-vazio"></span><span id="rp-nome-cheio" class="fx" style="position:absolute;left:8px;top:5px;color:#334155">Marta Vasques</span></div></div>
+        <div><span class="rot">Email</span><div class="campo fantasma" id="rp-mail" style="position:relative"><span id="rp-mail-vazio"></span><span id="rp-mail-cheio" class="fx" style="position:absolute;left:8px;top:5px;color:#334155">marta.vasques@hsaomatheus.com.br</span></div></div>
+        <div><span class="rot">Início da vigência</span><div class="campo"><span>15/09/2026</span></div></div>
+        <div><span class="rot">Fim da vigência <span class="leve">(opcional)</span></span><div class="campo fantasma"><span>dd/mm/aaaa</span></div></div>
+      </div>
+      <div style="display:flex;justify-content:flex-end;margin-top:8px"><span class="btn-a navy" id="rp-btn">${ic("mais", 9)} Cadastrar</span></div>
+    </div>
+    <div class="tb-card" data-layout-allow-overlap data-layout-allow-occlusion>
+      <div class="rs-setor"><span class="nm">CME</span><span class="selo ambar" id="rp-selo">${ic("semgente", 9)} Sem titular vigente</span></div>
+      <div class="rs-li"><span class="rs-papel">Gestor</span><span class="rs-nome">Elias Monteiro</span><span class="rs-mail">elias.monteiro@hsaomatheus.com.br</span><span class="rs-vig">vigente, de 02/03/2026 até sem data de saída</span><span class="rs-dir"><span class="btn-l cinza">Encerrar vigência hoje</span>${ic("lixo", 10, "")}</span></div>
+      <div class="rs-li"><span class="rs-papel">Titular</span><span class="rs-nome">Newton Aguiar</span><span class="rs-mail">newton.aguiar@hsaomatheus.com.br</span><span class="rs-vig fora">fora de vigência, de 05/01/2026 até 31/08/2026</span><span class="rs-dir">${ic("lixo", 10, "")}</span></div>
+      <div class="rs-li fx" id="rp-nova"><span class="rs-papel">Titular</span><span class="rs-nome">Marta Vasques</span><span class="rs-mail">marta.vasques@hsaomatheus.com.br</span><span class="rs-vig">vigente, de 15/09/2026 até sem data de saída</span><span class="rs-dir"><span class="btn-l cinza">Encerrar vigência hoje</span>${ic("lixo", 10, "")}</span></div>
+      <div class="rs-setor" style="border-top:1px solid #F1F5F9"><span class="nm">Farmácia</span></div>
+      <div class="rs-li"><span class="rs-papel">Titular</span><span class="rs-nome">Rogério Tavares</span><span class="rs-mail">rogerio.tavares@hsaomatheus.com.br</span><span class="rs-vig">vigente, de 12/01/2026 até sem data de saída</span><span class="rs-dir"><span class="btn-l cinza">Encerrar vigência hoje</span>${ic("lixo", 10, "")}</span></div>
+    </div>
+  </div>
+  ${ghostHTML("g3")}
+  <div class="anot" data-layout-allow-overlap id="rp-n1" style="left:40px;top:118px;max-width:260px">Esta tela era só da Diretoria. Agora o ouvidor mantém o cadastro sem pedir a ninguém</div>
+  <div class="anot" data-layout-allow-overlap id="rp-n2" style="left:60px;top:468px;max-width:330px">O titular anterior continua no histórico, com a vigência encerrada e o nome de quem mexeu</div>
+  <div class="anot" data-layout-allow-overlap id="rp-n3" style="left:60px;top:468px;max-width:360px">Com o titular vigente no lugar, a próxima cobrança da CME já vai para a pessoa certa</div>`;
+
+/* ============================================================
+   Timeline (uma só, pausada, tempos absolutos)
+   ============================================================ */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
+const troca = (a, b, t) => {
+  tl.set(a, { display: "none" }, t);
+  tl.set(b, { display: "inline", opacity: 1 }, t);
+};
+
+/* 1 · Abertura (0 a 4.5) */
+surge("#ab-eyebrow", 0.3, 24);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 30 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.55);
+surge("#ab-sub", 1.0, 24);
+
+/* 2 · Antes | Agora (4.5 a 9.5) */
+surge("#an-metade-1", 4.7, 20);
+surge("#an-metade-2", 5.1, 20);
+
+/* 3 · A fila (9.5 a 19) */
+tl.fromTo("#fl-card", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 9.8);
+surge("#fl-n1", 10.4);
+some("#fl-n1", 12.8);
+/* abre o menu da linha */
+tl.set("#g1", { x: 921, y: 306, opacity: 1 }, 12.7);
+tl.to("#g1", { x: 916, y: 264, duration: 0.7, ease: "power2.inOut" }, 12.9);
+clique("#g1", 13.6);
+tl.to("#fl-kebab", { backgroundColor: "#F1F5F9", duration: 0.2 }, 13.6);
+tl.fromTo("#fl-menu", { opacity: 0, y: -6 }, { opacity: 1, y: 0, duration: 0.3, ease: "power2.out", ...IR }, 13.85);
+surge("#fl-n2", 14.3);
+/* clica em Redirecionar */
+tl.to("#g1", { x: 848, y: 292, duration: 0.7, ease: "power2.inOut" }, 15.8);
+clique("#g1", 16.5);
+tl.to("#fl-mi-red", { backgroundColor: "#EEF0FB", duration: 0.2 }, 16.5);
+tl.to("#g1", { opacity: 0, duration: 0.25 }, 17.0);
+
+/* 4 · A modal (19 a 34.5) */
+tl.fromTo("#md-modal", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 19.2);
+surge("#md-n1", 19.8);
+some("#md-n1", 21.8);
+surge("#md-n2", 22.0);
+/* escolhe a área */
+tl.set("#g2", { x: 540, y: 200, opacity: 1 }, 22.6);
+tl.to("#g2", { x: 500, y: 152, duration: 0.6, ease: "power2.inOut" }, 22.8);
+clique("#g2", 23.4);
+tl.to("#md-setor", { borderColor: "#9DA2D6", duration: 0.2 }, 23.4);
+troca("#md-setor-vazio", "#md-setor-cheio", 23.7);
+some("#md-n2", 24.4);
+/* o motivo */
+surge("#md-n3", 24.6);
+tl.to("#md-motivo-vazio", { opacity: 0, duration: 0.15 }, 25.2);
+tl.to("#md-motivo-cheio", { opacity: 1, duration: 0.25 }, 25.35);
+tl.to("#md-motivo", { borderColor: "#9DA2D6", duration: 0.25 }, 25.2);
+tl.to("#md-btn", { opacity: 1, duration: 0.3 }, 25.8);
+some("#md-n3", 27.2);
+/* o aviso de setor sem titular vigente */
+tl.to("#md-semtitular", { opacity: 1, duration: 0.35 }, 23.9);
+surge("#md-n4", 27.6);
+some("#md-n4", 30.0);
+/* confirma */
+tl.to("#g2", { x: 618, y: 490, duration: 0.8, ease: "power2.inOut" }, 30.0);
+clique("#g2", 30.8);
+tl.to("#md-btn", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, 30.8);
+tl.to("#md-modal", { opacity: 0, y: -10, duration: 0.5 }, 31.4);
+tl.to("#g2", { opacity: 0, duration: 0.25 }, 31.4);
+
+/* 5 · O Dossiê (34.5 a 47.5) */
+tl.fromTo("#ds-card", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 34.7);
+tl.to("#ds-aviso", { opacity: 1, duration: 0.4 }, 35.2);
+troca("#ds-setor-1", "#ds-setor-2", 35.6);
+troca("#ds-prazo-1", "#ds-prazo-2", 35.9);
+tl.to("#ds-ev-1", { opacity: 1, duration: 0.4 }, 36.5);
+tl.to("#ds-ev-2", { opacity: 1, duration: 0.4 }, 37.1);
+surge("#ds-n1", 37.6);
+some("#ds-n1", 40.0);
+surge("#ds-n2", 40.2);
+some("#ds-n2", 42.4);
+tl.fromTo("#ds-painel", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 42.4);
+
+/* 6 · A área antiga (47.5 a 58) */
+tl.fromTo("#an-email", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 47.7);
+surge("#an-n1", 48.3);
+tl.fromTo("#an-sem", { opacity: 0, y: 16 }, { opacity: 1, y: 0, duration: 0.45, ease: "power2.out", ...IR }, 50.0);
+some("#an-n1", 51.6);
+tl.fromTo("#an-portal", { opacity: 0, y: 18 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 51.8);
+surge("#an-n2", 52.4);
+
+/* 7 · Responsáveis (58 a 71.5) */
+surge("#rp-n1", 58.4);
+some("#rp-n1", 60.6);
+/* preenche o cadastro */
+tl.set("#g3", { x: 290, y: 195, opacity: 1 }, 60.4);
+tl.to("#g3", { x: 250, y: 146, duration: 0.6, ease: "power2.inOut" }, 60.6);
+clique("#g3", 61.2);
+tl.to("#rp-setor", { borderColor: "#9DA2D6", duration: 0.2 }, 61.2);
+troca("#rp-setor-vazio", "#rp-setor-cheio", 61.5);
+tl.to("#rp-nome-cheio", { opacity: 1, duration: 0.25 }, 62.0);
+tl.to("#rp-nome", { borderColor: "#9DA2D6", duration: 0.2 }, 62.0);
+tl.to("#rp-mail-cheio", { opacity: 1, duration: 0.25 }, 62.5);
+tl.to("#rp-mail", { borderColor: "#9DA2D6", duration: 0.2 }, 62.5);
+/* cadastra */
+tl.to("#g3", { x: 888, y: 252, duration: 0.8, ease: "power2.inOut" }, 63.2);
+clique("#g3", 64.0);
+tl.to("#rp-btn", { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, 64.0);
+tl.to("#g3", { opacity: 0, duration: 0.25 }, 64.4);
+tl.fromTo("#rp-nova", { opacity: 0, x: -14 }, { opacity: 1, x: 0, duration: 0.5, ease: "power2.out", ...IR }, 64.6);
+tl.to("#rp-selo", { opacity: 0, duration: 0.35 }, 65.2);
+surge("#rp-n2", 65.6);
+some("#rp-n2", 67.9);
+surge("#rp-n3", 68.1);
+
+/* 8 · Fecho (71.5 a 77.5) */
+surge("#fc-titulo", 71.9, 20);
+tl.fromTo("#fc-carimbo", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 72.4);
+tl.fromTo("#fc-org", { opacity: 0 }, { opacity: 1, duration: 0.5, ...IR }, 72.7);
+
+window.__timelines["main"] = tl;
+</script>
+</body>
+</html>
