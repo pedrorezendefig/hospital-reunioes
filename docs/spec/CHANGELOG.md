@@ -7,6 +7,21 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.130.0 - 2026-09-15 00:45 - os links da área antiga param de valer quando o ouvidor reaciona o caso em outra área
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `29da463`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.130.0, `db: healthy`; frontend HTTP 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/29da463
+- Issues: [#707](https://github.com/pedrorezendefig/hospital-reunioes/issues/707) · PR [#712](https://github.com/pedrorezendefig/hospital-reunioes/pull/712) · PRD [#706](https://github.com/pedrorezendefig/hospital-reunioes/issues/706) · ADR 0055
+- Migration: `106_ouvidoria_token_do_setor_revogado.sql`, aplicada à mão no Studio ANTES do merge · minor, feat
+- Nota: primeira fatia do PRD #706. A coluna `revogado_em` é separada de `usado_em` de propósito: `usado_em` prova que alguém respondeu por aquele link, e sobrescrever apagaria o rastro de quem respondeu. Sem backfill, para não derrubar o link que está na caixa de entrada de quem está com o caso agora.
+- Nota: o PR nasceu verde no CI e a review achou dois buracos que o CI não pega. O primeiro: revogar fecha os tokens que existem, não a fábrica. Três portas emitiam token novo para a área antiga depois da revogação, e a pior era `GATILHO_PRORROGACAO_DECIDIDA`, que está em `GATILHOS_COM_PORTAL` e fora de `GATILHOS_QUE_COBRAM_A_AREA`, logo não tinha nem a guarda de status: pedido pendente da área A sobrevive à devolução, e decidi-lo depois do reacionamento move o prazo de B e manda link vivo para A, sem corrida nenhuma. Fechado com guarda no `despachar`, ponto único por onde as três portas passam.
+- Nota: o segundo buraco foi a guarda nova virando indisponibilidade. Ela perguntava se o destinatário é vigente hoje no setor, e não se o email pertence ao setor do caso. Troca de titular no mesmo setor durante a janela comercial fazia ninguém receber, nem o titular antigo nem o novo, com `falha` terminal (o job lê só `agendada`, não incrementa tentativa, não alerta o admin) e o prazo já correndo. Decisão: o critério virou pertencimento ao cadastro do setor, sem filtro de vigência. Perde-se barrar o ex-titular com vigência vencida, que é higiene de cadastro e não desta fatia; o conjunto de recusas encolheu estritamente. O filtro por setor é load-bearing: removido, derruba 5 testes.
+- Nota: achado de tela. O motivo que a guarda grava não aparecia em lugar nenhum (`grep ultimo_erro` no front voltava vazio) e o Reenviar dizia que o provedor recusou e o sistema tenta de novo, falso nas duas metades, com cada reclique criando outra linha em `falha` sem sair email. Agora `reenviar_notificacao` devolve o motivo e o Dossiê o exibe.
+- Nota: dois mutantes sobreviviam a 2355 testes, o fail-open na leitura do cadastro (que reabria o buraco da #707 em silêncio) e a normalização do email. Os dois passaram a ter teste que mata.
+- Nota: aplicar a migration antes do merge é requisito, não preferência. Com o código no ar e a coluna ausente, o `select` do `carregar` vira 42703 e o portal do setor inteiro responde 503, mais 500 em todo `validar` com o caso já transicionado. Prova de que o PostgREST enxerga a coluna (o cache de schema dele, não o `information_schema`): token inexistente devolve 404 "Link inválido", não 503.
+
 ## v0.129.3 - 2026-09-11 18:50 - a issue recusada não aparece como Entregue nem devolve a Demanda
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `48f5397`
