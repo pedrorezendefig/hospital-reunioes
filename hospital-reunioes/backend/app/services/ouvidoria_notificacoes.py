@@ -1219,8 +1219,17 @@ def avisar_a_area_antiga(
     mais nada a fazer por ele (issue #709). O aviso espera o expediente como
     qualquer não crítico."""
     if not destinatario or not destinatario.get("destinatario_email"):
+        # A frase não afirma a CAUSA, e isso é a mesma doutrina do resto da
+        # fatia anterior: `destinatario_do_ultimo_acionamento` devolve None em
+        # dois casos diferentes (o caso não tem acionamento registrado, ou a
+        # leitura caiu), e daqui não dá para saber qual foi. Dizer "sem
+        # acionamento anterior" mandaria quem investiga procurar buraco de
+        # cadastro quando o PostgREST é que tinha caído. Quem separa os dois no
+        # log é a linha de erro da própria leitura, que só existe no segundo.
         logger.warning(
-            "[Ouvidoria] A manifestação %s foi redirecionada sem acionamento anterior para avisar", manifestacao_id
+            "[Ouvidoria] A manifestação %s foi redirecionada e o aviso à área antiga não teve a quem ir "
+            "(sem acionamento registrado, ou a leitura dele falhou: a falha tem linha de erro própria)",
+            manifestacao_id,
         )
         return None
     notificacao = registrar(

@@ -327,6 +327,27 @@ class TestOAvisoNasceNoRedirecionamento:
         assert _caso(supabase)["setor"] == SETOR_NOVO
         assert _avisos(supabase) == []
 
+    def test_o_redirecionamento_nao_cai_quando_o_aviso_levanta(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A outra metade do "melhor esforço", e ela precisa de teste porque o
+        que a sustenta é um `except` do orquestrador, não o que os callees
+        fazem hoje (achado da rodada 1 de review do PR #716).
+
+        Quando este bloco roda, o caso já saiu da área antiga e já entrou na
+        nova, com os dois movimentos na trilha IMUTÁVEL. Não há ato a desfazer
+        nem segunda tentativa a oferecer, então uma exceção aqui só trocaria um
+        redirecionamento que deu certo por um 500 na tela do ouvidor."""
+        client, supabase = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
+
+        def _explode(*_args, **_kwargs):
+            raise RuntimeError("o registro do aviso caiu")
+
+        monkeypatch.setattr(ouvidoria_notificacoes, "avisar_a_area_antiga", _explode)
+
+        resposta = _redirecionar(client)
+
+        assert resposta.status_code == 201, resposta.text
+        assert _caso(supabase)["setor"] == SETOR_NOVO, "o redirecionamento foi desfeito por causa do aviso"
+
 
 # =====================================================================
 # 4. O email
@@ -387,13 +408,20 @@ class TestOEmailDoAviso:
             assert proibido not in email["html"]
             assert proibido not in email["texto"]
 
-    def test_o_email_nao_afirma_prazo_nem_gravidade(self, monkeypatch, _nunca_envia_email_de_verdade):
+    def test_o_email_manda_nao_fazer_nada_em_vez_de_afirmar_prazo(self, monkeypatch, _nunca_envia_email_de_verdade):
         """O relógio da área acabou de parar, e a faixa de gravidade diz com que
-        pressa agir num email cuja mensagem é que não há o que fazer."""
-        email = self._email_da_area_antiga(monkeypatch, _nunca_envia_email_de_verdade)
+        pressa agir num email cuja mensagem é que não há o que fazer.
 
-        assert "Prazo" not in email["html"]
-        assert "MÉDIO" not in email["html"]
+        O marcador POSITIVO é quem segura a regra: procurar só por "Prazo" e
+        "MÉDIO" era cego a "prazo de resposta" em minúscula e a "Médio" na faixa
+        (achado da rodada 1 de review do PR #716). A busca pelas duas palavras
+        continua, agora em `casefold`, mas ela é o reforço."""
+        email = self._email_da_area_antiga(monkeypatch, _nunca_envia_email_de_verdade)
+        html = email["html"].casefold()
+
+        assert "não é preciso responder".casefold() in html, "o email perdeu a única instrução que ele dá"
+        for palavra in ("prazo", "gravidade", "médio", "vencimento"):
+            assert palavra.casefold() not in html, f"o email da área antiga voltou a falar de {palavra}"
 
     @pytest.mark.parametrize("campo", ["assunto", "html", "texto"])
     def test_sem_travessao_nem_meia_risca(self, monkeypatch, _nunca_envia_email_de_verdade, campo):

@@ -4424,14 +4424,30 @@ def redirecionar_o_caso(supabase, me: dict, caso: dict, pedido: PedidoRedirecion
     # mudou de área duas vezes na trilha imutável, e não há ato a desfazer nem
     # segunda tentativa a oferecer. Uma exceção deste bloco transformaria um
     # redirecionamento que deu certo num 500 na tela do ouvidor.
-    ouvidoria_notificacoes.avisar_a_area_antiga(
-        supabase,
-        manifestacao_id,
-        destinatario=destinatario_da_area_antiga,
-        detalhe=detalhe_do_aviso,
-        agora=agora,
-        feriados=area.feriados,
-    )
+    #
+    # O `except` é o que faz a frase acima ser verdade, e não confiança no que
+    # os callees fazem hoje. Hoje nada escapa (`registrar` e `despachar` têm
+    # `except` próprio), mas "melhor esforço" é promessa desta chamada, não
+    # deles: estreitar um `except` lá embaixo amanhã viraria 500 num
+    # redirecionamento que já aconteceu e já está na trilha (achado da rodada 1
+    # de review do PR #716). `Exception` de propósito, e não a tupla do
+    # PostgREST: o que não pode acontecer é o ouvidor levar erro por causa do
+    # aviso, e o tipo não muda isso.
+    try:
+        ouvidoria_notificacoes.avisar_a_area_antiga(
+            supabase,
+            manifestacao_id,
+            destinatario=destinatario_da_area_antiga,
+            detalhe=detalhe_do_aviso,
+            agora=agora,
+            feriados=area.feriados,
+        )
+    except Exception:  # noqa: BLE001
+        logger.error(
+            "Falha ao avisar a área antiga do redirecionamento da manifestação %s: o caso foi redirecionado",
+            manifestacao_id,
+            exc_info=True,
+        )
     return dossie
 
 
