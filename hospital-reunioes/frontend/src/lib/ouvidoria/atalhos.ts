@@ -32,7 +32,9 @@ export interface Atalho {
 
 /**
  * Na ordem do trabalho: o retrato de agora, o que entra de fora, os lugares de
- * escuta e, por último, os dois cadastros que a Diretoria mantém.
+ * escuta e, por último, os dois cadastros. O de responsáveis é do Perfil da
+ * Ouvidoria inteiro desde a issue #711; a tabela de prazos continua da
+ * Diretoria.
  */
 const ATALHOS: (Atalho & { permitido: (perfil: string | null | undefined) => boolean })[] = [
   {
