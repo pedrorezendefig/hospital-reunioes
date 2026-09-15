@@ -1318,16 +1318,23 @@ class TestFalhaCruaDepoisDaSaida:
         monkeypatch.setattr(supabase, "rpc", _cai_na_entrada)
 
     def test_timeout_na_rpc_de_entrada_vira_a_frase_e_nao_um_500_mudo(self, monkeypatch, _nunca_envia_email_de_verdade):
-        """`httpx.ReadTimeout` não é `APIError` e não vira `HTTPException`
-        dentro do acionamento: é o tipo exato que escapava cru até o
-        `TestClient`."""
+        """`httpx.ReadTimeout` não é `APIError` e escapava cru até o
+        `TestClient`: é o 500 mudo que a rodada 1 fechou, e continua fechado.
+
+        A frase que sai é a de estado INDETERMINADO, e não a que aponta o
+        Validar e acionar: sem resposta do servidor não dá para saber se a
+        transição commitou, e a rodada 3 mostrou que ela pode ter commitado. Qual
+        das duas metades este dublê exercita não importa aqui; o que importa é
+        que o ouvidor recebe uma frase. As duas metades têm teste próprio em
+        `TestOTimeoutQueTalvezTenhaCommitado`."""
         client, supabase = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
         self._com_a_rpc_de_entrada_caindo(supabase, monkeypatch, httpx.ReadTimeout("o banco não respondeu"))
 
         resposta = _redirecionar(client)
 
         assert resposta.status_code == 500, resposta.text
-        assert "Validar e acionar" in resposta.json()["detail"]
+        assert resposta.json()["detail"], "o 500 voltou a ser mudo"
+        assert resposta.json()["detail"].startswith(ouvidoria_router.FALHA_DE_ESTADO_INDETERMINADO)
         caso = _caso(supabase)
         assert caso["status"] == "em_classificacao"
         saida = next(m for m in _movimentos(supabase) if m["estado_novo"] == "em_classificacao")
@@ -1541,13 +1548,20 @@ class TestAFronteiraDasDuasFrases:
         assert caso["setor"] == "Recepcao", "a área nova foi gravada apesar de o marco ter falhado"
         assert caso["prazo_area_em"] is None
 
-    @pytest.mark.parametrize("erro", [httpx.ReadTimeout("timeout"), APIError({"code": "57014", "message": "t"})])
     def test_falha_antes_da_transicao_de_entrada_continua_apontando_o_validar(
-        self, monkeypatch, erro, _nunca_envia_email_de_verdade
+        self, monkeypatch, _nunca_envia_email_de_verdade
     ):
         """O outro lado da fronteira, que é o que não pode regredir: enquanto o
         caso está mesmo em `em_classificacao`, a frase que aponta o Validar e
-        acionar é VERDADEIRA e é a instrução certa."""
+        acionar é VERDADEIRA e é a instrução certa.
+
+        O erro é `APIError` e só ele, e isso é a regra: uma resposta de erro do
+        servidor PROVA que o statement foi cancelado, então o caso continua onde
+        estava. Este teste era parametrizado com `httpx.ReadTimeout` junto, e
+        aquele caso saiu daqui na rodada 3 de review: sem resposta do servidor
+        não se sabe se commitou, e afirmar que o caso está em classificação era
+        justamente a mentira que a rodada 2 fechou, entrando por outra porta. O
+        `ReadTimeout` tem classe própria agora."""
         client, supabase = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
         rpc_de_verdade = supabase.rpc
 
@@ -1556,7 +1570,7 @@ class TestAFronteiraDasDuasFrases:
 
                 class _Cai:
                     def execute(self):
-                        raise erro
+                        raise APIError({"code": "57014", "message": "statement timeout"})
 
                 return _Cai()
             return rpc_de_verdade(nome, params)
@@ -1608,3 +1622,174 @@ class TestAFronteiraDasDuasFrases:
 
         assert tentativa.status_code == 409, tentativa.text
         assert tentativa.json()["detail"] == ouvidoria_router.RECUSA_DO_CASO_JA_NA_AREA
+
+
+class TestOTimeoutQueTalvezTenhaCommitado:
+    """MUST-FIX da rodada 3 de review do PR #714: a RPC de ENTRADA que estoura o
+    read timeout DEPOIS de o Postgres ter commitado.
+
+    O carimbo do andamento vinha depois do `execute()`, e o `except APIError`
+    daquele ramo não pega `httpx`: o timeout escapava com o caso ainda marcado
+    como "em classificação", e o ouvidor recebia a frase que manda usar o Validar
+    e acionar, para um caso que já estava em `aguardando_area`. O botão responde
+    409 ali. Era o beco sem saída da rodada 2 entrando por uma porta que ninguém
+    tinha aberto.
+
+    As duas metades do timeout têm teste aqui, e o dublê da primeira executa a
+    RPC de VERDADE antes de levantar: é o que separa este teste do parametrizado
+    da rodada 2, que levantava ANTES de executar e por isso era cego para a
+    metade que importa."""
+
+    def _timeout_na_entrada(self, supabase, monkeypatch, *, commitando: bool):
+        """O `ReadTimeout` da RPC de entrada, com ou sem o commit tendo
+        acontecido.
+
+        Com `commitando=True` a transição é aplicada DE VERDADE antes de a
+        exceção subir, que é o que o PostgREST faz quando executa e a resposta
+        não volta no tempo. É a metade que o teste parametrizado da rodada 2 não
+        alcançava, porque o dublê dele levantava antes de executar.
+
+        O fake do PostgREST aplica o efeito da RPC já no `rpc()`, e não no
+        `execute()`: por isso `commitando=False` não pode nem CHAMAR o `rpc` de
+        verdade, senão o caso transiciona mesmo com o dublê prometendo que não.
+        Este detalhe custou uma falha de teste, e ele é o que separa as duas
+        metades aqui."""
+        rpc_de_verdade = supabase.rpc
+
+        def _cai_na_entrada(nome, params):
+            if params["p_estado_novo"] != "aguardando_area":
+                return rpc_de_verdade(nome, params)
+
+            executor = rpc_de_verdade(nome, params) if commitando else None
+
+            class _Timeout:
+                def execute(self):
+                    if executor is not None:
+                        executor.execute()
+                    raise httpx.ReadTimeout("a resposta não voltou no tempo")
+
+            return _Timeout()
+
+        monkeypatch.setattr(supabase, "rpc", _cai_na_entrada)
+
+    def test_o_timeout_que_commitou_nao_manda_o_ouvidor_ao_validar_e_acionar(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        """A metade que o teste antigo não alcançava. O caso ESTÁ em
+        `aguardando_area`, então as três cláusulas da frase antiga mentiriam."""
+        client, supabase = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
+        self._timeout_na_entrada(supabase, monkeypatch, commitando=True)
+
+        resposta = _redirecionar(client)
+
+        assert resposta.status_code == 500, resposta.text
+        detalhe = resposta.json()["detail"]
+        assert detalhe.startswith(ouvidoria_router.FALHA_DE_ESTADO_INDETERMINADO)
+        assert "Validar e acionar" not in detalhe, "a resposta aponta um ato que a API recusa neste estado"
+        assert "está em classificação" not in detalhe, "a resposta afirma um estado que o caso não tem"
+        # O estado real, que é o que torna a frase antiga falsa nas três cláusulas.
+        assert _caso(supabase)["status"] == "aguardando_area", "a metade do commit não foi exercitada"
+
+    def test_o_ouvidor_que_seguisse_a_frase_antiga_levaria_409(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A premissa, medida pela API e não afirmada: depois do timeout que
+        commitou, o ato que a frase antiga mandava praticar é recusado pela
+        própria rota de validação."""
+        client, supabase = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
+        self._timeout_na_entrada(supabase, monkeypatch, commitando=True)
+        assert _redirecionar(client).status_code == 500
+
+        tentativa = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json={**VALIDACAO, "setor": SETOR_NOVO})
+
+        assert tentativa.status_code == 409, tentativa.text
+        assert tentativa.json()["detail"] == ouvidoria_router.RECUSA_DO_CASO_JA_NA_AREA
+
+    def test_o_timeout_que_nao_commitou_recebe_a_mesma_frase(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A outra metade, e a razão de a frase neutra ser a resposta certa para
+        as duas: aqui o caso ficou mesmo em `em_classificacao`, e a frase
+        continua verdadeira, porque ela diz "pode já estar" e não afirma.
+
+        Perde-se precisão (o ouvidor não é mandado direto ao Validar e acionar) e
+        ganha-se honestidade. Como o código não distingue as duas metades, a
+        única frase que serve é a que vale nas duas."""
+        client, supabase = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
+        self._timeout_na_entrada(supabase, monkeypatch, commitando=False)
+
+        resposta = _redirecionar(client)
+
+        assert resposta.status_code == 500, resposta.text
+        assert resposta.json()["detail"].startswith(ouvidoria_router.FALHA_DE_ESTADO_INDETERMINADO)
+        assert _caso(supabase)["status"] == "em_classificacao"
+
+    def test_o_apierror_da_mesma_rpc_continua_sabendo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A contraprova que impede o conserto de virar "na dúvida, sempre
+        neutro": quando o servidor RESPONDE o erro, o statement foi cancelado, o
+        caso continua em classificação e a frase precisa continuar apontando o
+        Validar e acionar, que ali é a instrução certa."""
+        client, supabase = _com_o_caso_na_recepcao(monkeypatch, _nunca_envia_email_de_verdade)
+        rpc_de_verdade = supabase.rpc
+
+        def _erro_do_servidor(nome, params):
+            if params["p_estado_novo"] == "aguardando_area":
+
+                class _Cai:
+                    def execute(self):
+                        raise APIError({"code": "57014", "message": "statement timeout"})
+
+                return _Cai()
+            return rpc_de_verdade(nome, params)
+
+        monkeypatch.setattr(supabase, "rpc", _erro_do_servidor)
+
+        resposta = _redirecionar(client)
+
+        assert resposta.json()["detail"].startswith(ouvidoria_router.FALHA_DEPOIS_DA_SAIDA)
+        assert _caso(supabase)["status"] == "em_classificacao"
+
+    def test_a_validacao_tambem_deixa_de_responder_um_500_mudo(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """A varredura da rodada 3: o mesmo `except APIError` solo atendia a rota
+        de VALIDAÇÃO, onde o `httpx` escapava cru e virava um 500 do FastAPI sem
+        corpo nenhum. Agora ela responde com frase."""
+        supabase = _banco()
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+        rpc_de_verdade = supabase.rpc
+
+        def _timeout(nome, params):
+            class _Cai:
+                def execute(self):
+                    raise httpx.ReadTimeout("a resposta não voltou no tempo")
+
+            return _Cai() if params["p_estado_novo"] == "aguardando_area" else rpc_de_verdade(nome, params)
+
+        monkeypatch.setattr(supabase, "rpc", _timeout)
+
+        resposta = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        assert resposta.status_code == 500, resposta.text
+        assert resposta.json()["detail"] == "Erro ao acionar a área", "a rota de validação voltou a ser um 500 mudo"
+
+    def test_o_marco_t1_com_timeout_nao_afirma_que_nada_foi_gravado(self, monkeypatch, _nunca_envia_email_de_verdade):
+        """O segundo `except APIError` solo que a varredura achou. A frase do
+        ramo do `APIError` afirma que a área, o prazo e o marco NÃO foram
+        gravados, e com timeout isso não se sabe: a escrita pode ter commitado.
+
+        Pela rota de VALIDAÇÃO, que é onde o `httpx` daqui escapava cru e virava
+        500 sem corpo (no redirecionamento ele já caía na frase neutra do
+        orquestrador, que é correta)."""
+        supabase = _banco()
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+        update_de_verdade = _TabelaFake.update
+
+        def _timeout_no_marco(self, payload):
+            if self.nome == "ouvidoria_protocolos" and "validada_em" in payload:
+                raise httpx.ReadTimeout("a resposta não voltou no tempo")
+            return update_de_verdade(self, payload)
+
+        monkeypatch.setattr(_TabelaFake, "update", _timeout_no_marco)
+
+        resposta = client.post("/api/ouvidoria/manifestacoes/uuid-7/validar", json=VALIDACAO)
+
+        assert resposta.status_code == 500, resposta.text
+        detalhe = resposta.json()["detail"]
+        assert detalhe, "a rota voltou a ser um 500 mudo"
+        assert "não foi confirmada" in detalhe
+        assert "não foram gravados" not in detalhe, "a frase afirma uma gravação que o código não conferiu"

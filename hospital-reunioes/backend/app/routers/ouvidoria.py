@@ -3668,9 +3668,17 @@ class AndamentoDoAcionamento:
 
     Um campo só, e é o único fato que muda a resposta ao ouvidor: depois da
     transição de entrada, nenhuma frase pode afirmar que o caso está em
-    classificação (rodada 2 de review do PR #714)."""
+    classificação (rodada 2 de review do PR #714).
 
-    saiu_da_classificacao: bool = False
+    O campo é uma AFIRMAÇÃO, e o nome carrega isso: ele só fica `True` enquanto
+    o código SABE que o caso continua em classificação. Ele cai para `False` nos
+    dois casos em que a frase que afirma esse estado seria arriscada: quando a
+    transição de entrada commitou (o caso saiu, e o código viu) e quando ela pode
+    ter commitado sem o código saber (falha de rede, sem resposta do servidor).
+    Um campo chamado "saiu" teria que mentir no segundo caso para acertar a
+    frase, e foi a rodada 3 de review que encontrou esse segundo caso."""
+
+    o_caso_continua_em_classificacao: bool = True
 
 
 def acionar_a_area(
@@ -3805,9 +3813,43 @@ def acionar_a_area(
             },
         ).execute()
     except APIError as exc:
+        # O servidor RESPONDEU um erro, então o statement foi cancelado e o caso
+        # continua onde estava. É por isso que este ramo não mexe no
+        # `andamento`: aqui dá para saber.
         if exc.code == "23514":
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Transição recusada") from exc
         logger.error("Erro na RPC ouvidoria_transicionar durante a validação (código %s)", exc.code)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Erro ao acionar a área",
+        ) from exc
+    except HTTPError as exc:
+        # Aqui NÃO dá para saber, e é a diferença inteira (rodada 3 de review do
+        # PR #714). `HTTPError` é timeout, conexão recusada e pool esgotado:
+        # nenhum deles nasce de uma resposta do servidor, então o `ReadTimeout`
+        # não prova que o Postgres deixou de executar. A transição pode ter
+        # COMMITADO e a resposta não ter voltado no tempo.
+        #
+        # O carimbo cai para "não sei", e é o que impede a mentira: sem isto, o
+        # redirecionamento respondia "o caso está em classificação, use Validar e
+        # acionar" para um caso que já estava em `aguardando_area`, e o botão que
+        # a frase manda usar devolve 409 nesse estado.
+        #
+        # A doutrina é a mesma do ramo da RPC de SAÍDA, que também se recusa a
+        # inferir "exceção levantada logo não commitou". A diferença de forma é
+        # deliberada: lá é preciso DECIDIR se o prazo volta, e cada estado pede
+        # uma ação diferente, então o código sonda com o `restaurar`, cujo filtro
+        # carrega a resposta. Aqui só se escolhe uma FRASE, e a frase de estado
+        # indeterminado é verdadeira nos dois estados possíveis. Sondar seria uma
+        # ida a mais ao banco, justamente quando ele acabou de não responder,
+        # para escolher entre uma frase verdadeira em um caso e outra verdadeira
+        # nos dois.
+        andamento.o_caso_continua_em_classificacao = False
+        logger.error(
+            "Falha de rede na RPC ouvidoria_transicionar durante o acionamento da manifestação %s (%s)",
+            manifestacao_id,
+            type(exc).__name__,
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Erro ao acionar a área",
@@ -3825,7 +3867,7 @@ def acionar_a_area(
     # A marca é AQUI, e não depois do update do marco T1: entre esta linha e ele
     # o caso está em `aguardando_area` com a área ANTIGA e sem vencimento, que
     # também não é "em classificação".
-    andamento.saiu_da_classificacao = True
+    andamento.o_caso_continua_em_classificacao = False
 
     # Agora a transição existe: o marco e o vencimento podem ser carimbados.
     # Falha aqui é falha de infraestrutura e não pode passar em silêncio, senão
@@ -3897,8 +3939,29 @@ def acionar_a_area(
                 # A área entrou nesta escrita junto com o marco (issue #601),
                 # então ela também não ficou gravada: o caso continua mostrando
                 # a área anterior, e a frase precisa dizer isso.
+                #
+                # O servidor RESPONDEU o erro, então o update foi cancelado e
+                # esta frase pode afirmar. O irmão logo abaixo não pode.
                 "O caso mudou de estado, mas a área, o prazo e o marco da validação não foram gravados, "
                 "e o setor não foi notificado. Confira a manifestação no painel."
+            ),
+        ) from exc
+    except HTTPError as exc:
+        # O mesmo par do `except APIError` da RPC de entrada, pelo mesmo motivo
+        # (varredura da rodada 3 de review do PR #714): sem resposta do servidor,
+        # o update pode ter commitado. A frase do ramo de cima afirma que a área,
+        # o prazo e o marco NÃO foram gravados, e aqui isso não se sabe.
+        #
+        # Antes desta rodada o `httpx` escapava cru daqui: no redirecionamento
+        # ele caía no `except Exception` do orquestrador (que responde a frase
+        # neutra, correta), mas na rota de validação virava um 500 do FastAPI sem
+        # corpo nenhum, e o ouvidor não lia nada.
+        logger.error("Falha de rede ao gravar o marco T1 da manifestação %s (%s)", manifestacao_id, type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "O caso mudou de estado, mas a gravação da área, do prazo e do marco da validação não foi "
+                "confirmada, e o setor não foi notificado. Confira a manifestação no painel."
             ),
         ) from exc
 
@@ -4323,10 +4386,10 @@ def redirecionar_o_caso(supabase, me: dict, caso: dict, pedido: PedidoRedirecion
         # seguinte. Aqui não há frase interna a aproveitar: a exceção veio crua
         # de uma escrita sem `except`, então o prefixo é a resposta inteira.
         logger.error(
-            "Falha não tratada no acionamento do redirecionamento da manifestação %s (%s, saiu da classificação: %s)",
+            "Falha não tratada no acionamento do redirecionamento da manifestação %s (%s, ainda em classificação: %s)",
             manifestacao_id,
             type(exc).__name__,
-            andamento.saiu_da_classificacao,
+            andamento.o_caso_continua_em_classificacao,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -4344,9 +4407,9 @@ def _prefixo_da_falha(andamento: AndamentoDoAcionamento) -> str:
     classificação (não está), que a área nova não foi acionada (pode ter sido,
     com setor, prazo e T1 gravados) e mandaria clicar num botão que responde 409
     nesse estado, por desenho desta fatia."""
-    if andamento.saiu_da_classificacao:
-        return FALHA_DE_ESTADO_INDETERMINADO
-    return FALHA_DEPOIS_DA_SAIDA
+    if andamento.o_caso_continua_em_classificacao:
+        return FALHA_DEPOIS_DA_SAIDA
+    return FALHA_DE_ESTADO_INDETERMINADO
 
 
 @router.get("/manifestacoes/{manifestacao_id}/notificacoes")
