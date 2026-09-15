@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-15T13:20:00-03:00",
+      "sha": "a173716",
+      "app_version": "0.133.0",
+      "subject": "a area que perdeu o caso e avisada, e o ouvidor redireciona pela fila e pelo Dossie",
+      "raw_subject": "feat(ouvidoria): aviso a area antiga (#709) e botao Redirecionar (#710)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "108_ouvidoria_aviso_a_area_antiga.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda AFK, issues #709 (PR #716) e #710 (PR #715), fatias 3 e 4 do PRD #706 (ADR 0055), mergeadas em sequencia com um deploy so. A 108 e SO o CHECK de gatilho: DROP + ADD com a lista inteira, 15 gatilhos da 098 mais redirecionamento_area. Conferido item a item pelo orquestrador: nada perdido. Sem ela o aviso NUNCA nasce, em silencio, porque o INSERT volta 23514 e o registrar engole a excecao e devolve None; a fumaca certa e a AUSENCIA da segunda linha de notificacao, nao um ultimo_erro (que nao existiria). A #709 tinha uma armadilha herdada da #707: a guarda do despachar so deixa emitir para quem PERTENCE ao cadastro do setor ATUAL, e o aviso vai para a area ANTIGA, que por definicao ja nao e o setor do caso. Resolvido mantendo o gatilho FORA de GATILHOS_COM_PORTAL, sem excecao na guarda, o que tambem e a decisao certa de dominio: a area antiga nao deve receber link de portal nenhum, porque a #707 acabou de derrubar os dela. Mutante que poe o gatilho dentro da tupla derruba 15 testes. Privacidade do email auditada campo a campo: 5 campos, e o motivo do ouvidor, o relato, o extrato, o manifestante, a resposta da area e o nome da area NOVA nenhum entra (mesma decisao do ADR 0055, nao divergencia). Protocolo e setor sao congelados no ato: lidos na hora do envio seriam os da area nova, e o email diria a Recepcao que ela e o Centro Medico. A #709 tambem consertou um vacuo que nao era dela: o duble do PostgREST mentia na ordenacao (\"\" > \"\" devolvia a linha mais antiga) e o teste do destinatario da #708 era vacuo; com o carimbo de criada_em o mutante passou de 1 morte para 15. Na #710 o MUST-FIX era heranca da #708: a tela deduzia \"o caso se moveu\" da FAIXA do status (>= 500), mas o backend devolve 409 DEPOIS de escritas aplicadas em dois caminhos, e a modal fechava sem reler, deixando o Dossie mostrar a area antiga com o botao Redirecionar oferecido. Pior, um teste TRAVAVA a regra errada; foi consertado no lugar, nao apagado, e os arquivos foram de 64 para 82 testes. A releitura passou a ser decidida pela MARCA que o servidor emite. Corrida de bump resolvida a mao: os dois PRs pediam 0.132.0 com a mesma mudanca na mesma base, entao o git NAO acusa conflito e o auto-resolve deixaria as duas fatias na mesma versao, fazendo a fumaca da segunda passar verde sem ela ter subido; o #716 levou 0.132.0 e o #715 foi rebumpado para 0.133.0 antes do merge. Acoplamento registrado na issue #717 (sub-issue do #706): o front casa as marcas de erro do backend por prefixo de frase e nenhum teste do backend assere o literal, entao uma reescrita de texto mata a releitura em silencio. Lacuna de spec registrada no PR #716: o aviso vai para o destinatario da ultima nova_demanda, mas resposta_devolvida e caso_reaberto re-escolhem destinatario do cadastro sem registrar nova_demanda, entao quem esta com o link vivo pode nao ser avisado. Prova do codigo novo em producao sem login: o botao Redirecionar aparece no bundle JS servido."
+    },
+    {
       "at": "2026-09-15T12:05:00-03:00",
       "sha": "f1b3966",
       "app_version": "0.131.0",
@@ -1418,35 +1449,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 3 e ultima fatia do PRD #468 (#480, PR #504). A revisao de codigo achou 3 must-fix: o bloco sumia da tela depois de quatro acoes do ouvidor, a nota da prorrogacao mentia em caso que so demorou na triagem, e o aviso de calendario degradado convivia com os numeros. Os tres corrigidos. A decisao de dominio (ler a coluna congelada) foi auditada contra o PRD e aprovada. O autor resolveu o primeiro fix na origem, no backend, em vez de na tela, e o revisor considerou a escolha melhor que a sugerida."
-    },
-    {
-      "at": "2026-09-01T19:35:00-03:00",
-      "sha": "b59da78",
-      "app_version": "0.91.0",
-      "subject": "O caso da Ouvidoria ganha endereco proprio: cada manifestacao tem uma URL que pode ser mandada por email e aberta direto",
-      "raw_subject": "feat(ouvidoria): página do caso com rota própria por protocolo (#503)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 do PRD #468, fatia G sozinha (#476, PR #503). A revisao de codigo achou 2 must-fix, sendo um grave: trocar de caso pela URL deixava os botoes do caso anterior na tela, e validar ali dispararia email para o setor errado. Os dois corrigidos e reconfirmados. A revisao de seguranca fechou limpa, com a enumeracao de protocolo provada indistinguivel. APP_VERSION setado antes do merge desta vez, entao nao precisou de redeploy manual."
     }
   ]
 }

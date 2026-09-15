@@ -7,6 +7,22 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.133.0 - 2026-09-15 13:20 - a área que perdeu o caso é avisada, e o ouvidor redireciona pela fila e pelo Dossiê
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `a173716`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.133.0, `db: healthy`; frontend HTTP 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/a173716
+- Issues: [#709](https://github.com/pedrorezendefig/hospital-reunioes/issues/709) · PR [#716](https://github.com/pedrorezendefig/hospital-reunioes/pull/716) · [#710](https://github.com/pedrorezendefig/hospital-reunioes/issues/710) · PR [#715](https://github.com/pedrorezendefig/hospital-reunioes/pull/715) · PRD [#706](https://github.com/pedrorezendefig/hospital-reunioes/issues/706) · ADR 0055
+- Migration: `108_ouvidoria_aviso_a_area_antiga.sql`, aplicada à mão no Studio ANTES do merge · minor, feat
+- Nota: duas fatias mergeadas em sequência com um deploy só, fechando o PRD #706 no que cabia a esta sessão. A 108 é só o CHECK de gatilho (`DROP` + `ADD` com a lista inteira: os 15 da 098 mais `redirecionamento_area`), conferida item a item. Sem ela o aviso nunca nasce, em silêncio: o INSERT volta `23514`, o `registrar` engole a exceção e devolve `None`. A fumaça certa é a ausência da segunda linha de notificação, não um `ultimo_erro`, que não existiria.
+- Nota: a #709 tinha uma armadilha herdada da #707. A guarda do `despachar` só deixa emitir para quem pertence ao cadastro do setor atual, e o aviso vai para a área antiga, que por definição já não é o setor do caso. Resolvido mantendo o gatilho fora de `GATILHOS_COM_PORTAL`, sem exceção na guarda, o que também é a decisão certa de domínio: a área antiga não deve receber link de portal nenhum, porque a #707 acabou de derrubar os dela. O mutante que põe o gatilho dentro da tupla derruba 15 testes.
+- Nota: privacidade do email auditada campo a campo. São 5 campos, e o motivo escrito pelo ouvidor, o relato, o extrato, o manifestante, a resposta da área e o nome da área nova não entram em nenhum. É a mesma decisão do ADR 0055, não divergência. O protocolo e o setor são congelados no ato: lidos na hora do envio seriam os da área nova, e o email diria à Recepção que ela é o Centro Médico.
+- Nota: a #709 consertou um vácuo que não era dela. O dublê do PostgREST mentia na ordenação e o teste do destinatário da #708 era vácuo; com o carimbo de `criada_em` o mutante passou de 1 morte para 15.
+- Nota: na #710 o defeito era herança da #708. A tela deduzia "o caso se moveu" da faixa do status HTTP, mas o backend devolve 409 depois de escritas já aplicadas em dois caminhos, e a modal fechava sem reler, deixando o Dossiê mostrar a área antiga com o botão Redirecionar oferecido. Um teste travava a regra errada, e foi consertado no lugar em vez de apagado: os arquivos foram de 64 para 82 testes. A releitura passou a ser decidida pela marca que o servidor emite.
+- Nota: corrida de bump resolvida à mão. Os dois PRs pediam `0.132.0` com a mesma mudança na mesma base, então o git não acusa conflito e o auto-resolve deixaria as duas fatias na mesma versão, fazendo a fumaça da segunda passar verde sem ela ter subido. O #716 levou `0.132.0` e o #715 foi rebumpado para `0.133.0` antes do merge.
+- Nota: dois itens registrados em vez de consertados. A issue [#717](https://github.com/pedrorezendefig/hospital-reunioes/issues/717) cobre o acoplamento do front às frases do backend (casamento por prefixo, sem teste do literal no backend, então uma reescrita mata a releitura em silêncio). E o corpo do PR #716 registra a lacuna de spec do destinatário: o aviso vai para o da última `nova_demanda`, mas `resposta_devolvida` e `caso_reaberto` re-escolhem destinatário do cadastro sem registrar `nova_demanda`, então quem está com o link vivo pode não ser avisado.
+
 ## v0.131.0 - 2026-09-15 12:05 - o ouvidor move o caso de uma área para outra num clique, com motivo obrigatório
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `f1b3966`
