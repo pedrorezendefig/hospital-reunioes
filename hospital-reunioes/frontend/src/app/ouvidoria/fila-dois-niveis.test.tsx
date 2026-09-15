@@ -135,6 +135,12 @@ function montar(
           }),
         } as Response;
       }
+      // A taxonomia que a modal de validação e a de redirecionamento leem. Sem
+      // ela o seletor de área nasce sem opção nenhuma, e nenhum dos dois atos
+      // chega a ser enviado (issue #710).
+      if (endereco.includes("/participantes/setores")) {
+        return { ok: true, status: 200, json: async () => ["Recepção", "Centro Medico"] } as Response;
+      }
       if (endereco.includes("/responsaveis")) {
         if (opcoes.cadastroFora) {
           return { ok: false, status: 503, json: async () => ({}) } as Response;
@@ -413,6 +419,58 @@ describe("redirecionar a partir da linha da fila (issue #710, PRD #706, ADR 0055
     expect(screen.getByLabelText(/Motivo do redirecionamento/)).toBeTruthy();
     // E a área nasce em branco, e não na área que já tem o caso.
     expect((screen.getByLabelText(/Área responsável/) as HTMLSelectElement).value).toBe("");
+  });
+});
+
+describe("o aviso do redirecionamento na fila (issue #710)", () => {
+  /** Abre a modal pela linha, escolhe a área nova, escreve o motivo e confirma. */
+  async function redirecionarPelaLinha(protocolo: string) {
+    const linha = await linhaDe(protocolo);
+    fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
+    fireEvent.click(within(linha).getByRole("button", { name: "Redirecionar" }));
+    await screen.findByRole("option", { name: "Centro Medico" });
+    fireEvent.change(screen.getByLabelText(/Área responsável/), {
+      target: { value: "Centro Medico" },
+    });
+    fireEvent.change(screen.getByLabelText(/Motivo do redirecionamento/), {
+      target: { value: "O caso é de conduta médica." },
+    });
+    // O extrato precisa ser DIGITADO quando a modal abre pela fila: o índice
+    // (`ManifestacaoIndice`) não carrega `extrato_para_o_setor`, então o campo
+    // nasce vazio e o botão não libera sem ele. Efeito colateral conhecido e
+    // declarado no corpo do PR: por este caminho o redirecionamento grava um
+    // extrato novo por cima do que o caso tinha.
+    fireEvent.change(screen.getByLabelText(/Extrato para o setor/), {
+      target: { value: "Apurar a conduta e responder a Ouvidoria." },
+    });
+    fireEvent.click(screen.getByRole("button", { name: /Redirecionar para a área nova/ }));
+  }
+
+  it("a fila diz o que aconteceu, com a área nova e o aviso à área anterior", async () => {
+    // Carimbo do servidor sem par na tela some em silêncio: sem esta frase, a
+    // linha voltaria da recarga com outra área e nada diria por quê.
+    montar([caso(7, "aguardando_area")]);
+    await redirecionarPelaLinha("2026-0007");
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("Caso redirecionado para Centro Medico. A área anterior foi avisada.")
+      ).toBeTruthy()
+    );
+  });
+
+  it("o aviso não sobrevive ao ato seguinte", async () => {
+    // "Caso redirecionado para X" pendurado no topo enquanto o ouvidor cobra
+    // outro caso fala de uma linha que ele já esqueceu. Mesma regra dos avisos
+    // do arquivo.
+    montar([caso(7, "aguardando_area")]);
+    await redirecionarPelaLinha("2026-0007");
+    await waitFor(() => expect(screen.getByText(/Caso redirecionado para/)).toBeTruthy());
+
+    const linha = await linhaDe("2026-0007");
+    fireEvent.click(within(linha).getByRole("button", { name: "Cobrar" }));
+
+    await waitFor(() => expect(screen.queryByText(/Caso redirecionado para/)).toBeNull());
   });
 });
 

@@ -287,10 +287,14 @@ describe("cada recusa da rota aparece com a frase do servidor", () => {
       // O marcador é a frase do servidor, inteira. Asserir a AUSÊNCIA de uma
       // frase genérica seria cego a maiúscula, corte e aspas.
       await waitFor(() => expect(screen.getByText(recusa.detail)).toBeTruthy());
-      // A modal fica aberta, com o que o ouvidor escreveu: fechar o obrigaria
-      // a redigitar o motivo por causa de uma recusa que ele pode resolver ali
-      // mesmo trocando a área.
-      expect(screen.getByLabelText(/Motivo do redirecionamento/)).toBeTruthy();
+      // A modal fica aberta COM O TEXTO que o ouvidor escreveu, e o que se
+      // assere é o VALOR do campo, não a presença dele: um `setMotivo("")` no
+      // ramo de erro deixaria o campo na tela, vazio, e o ouvidor perderia até
+      // 10.000 caracteres por causa de uma recusa que ele resolve ali mesmo
+      // trocando a área.
+      expect((screen.getByLabelText(/Motivo do redirecionamento/) as HTMLTextAreaElement).value).toBe(
+        MOTIVO
+      );
       expect(onClose).not.toHaveBeenCalled();
       expect(onAcionada).not.toHaveBeenCalled();
     });
@@ -362,10 +366,58 @@ describe("a falha DEPOIS da saída não é sucesso nem erro genérico", () => {
     expect(onClose).toHaveBeenCalled();
   });
 
-  it("a recusa que não moveu o caso fecha sem recarregar nada", async () => {
-    // A contraprova do teste acima: 409, 422 e 403 acontecem ANTES de qualquer
-    // escrita. Recarregar ali seria pedir ao servidor uma leitura por causa de
-    // um campo mal preenchido.
+  it("o 409 do relógio que parou e não voltou também recarrega ao fechar", async () => {
+    // Caminho (a) do backend: o `parar` JÁ GRAVOU (o prazo e o marco T2 da área
+    // foram limpos), a RPC de saída falhou e o `restaurar` não casou linha. O
+    // status é 409, não 5xx. Derivar "o caso se moveu" da faixa do status
+    // deixava este caso de fora, e a linha da fila seguia mostrando um prazo
+    // que já não existe até alguém apertar F5.
+    const { onAcionada, onClose } = montar({
+      ok: false,
+      status: 409,
+      corpo: {
+        detail:
+          "Este caso saiu da fila da área durante o envio, então o redirecionamento não valeu por ele. " +
+          "Confira a manifestação no painel antes de tentar de novo.",
+      },
+    });
+    await preencher();
+    fireEvent.click(botaoDeConfirmar());
+
+    await waitFor(() => expect(screen.getByText(/saiu da fila da área durante o envio/)).toBeTruthy());
+    fireEvent.click(screen.getByRole("button", { name: /Cancelar/ }));
+
+    expect(onAcionada).toHaveBeenCalledWith();
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it("o 409 com o prefixo da falha depois da saída recarrega e trava o botão", async () => {
+    // Caminho (b): o 23514 da transição de ENTRADA, que no redirecionamento só
+    // roda depois do ponto sem volta, sobe com o status PRESERVADO. Existe,
+    // portanto, um 409 cujo texto começa com a frase da falha depois da saída,
+    // e essa frase manda literalmente não redirecionar de novo.
+    const { onAcionada } = montar({
+      ok: false,
+      status: 409,
+      corpo: { detail: `${FALHA_DEPOIS_DA_SAIDA} O acionamento respondeu: Transição recusada` },
+    });
+    await preencher();
+    fireEvent.click(botaoDeConfirmar());
+
+    await waitFor(() => expect(screen.getByText(new RegExp(FALHA_DEPOIS_DA_SAIDA))).toBeTruthy());
+    // O botão não pode convidar a repetir um ato que a própria resposta
+    // desaconselha.
+    expect(botaoDeConfirmar().disabled).toBe(true);
+
+    fireEvent.click(screen.getByRole("button", { name: /Cancelar/ }));
+    expect(onAcionada).toHaveBeenCalledWith();
+  });
+
+  it("CONTRAPROVA: a recusa da mesma área fecha sem recarregar, com o motivo intacto e o botão vivo", async () => {
+    // Escolher a área que já tem o caso é recusado ANTES de qualquer escrita, e
+    // o ouvidor resolve trocando a área ali mesmo. Recarregar seria pedir uma
+    // leitura ao servidor por causa de um campo mal escolhido, e travar o botão
+    // deixaria o ato indisponível para quem tem direito a ele.
     const { onAcionada } = montar({
       ok: false,
       status: 409,
@@ -375,8 +427,99 @@ describe("a falha DEPOIS da saída não é sucesso nem erro genérico", () => {
     fireEvent.click(botaoDeConfirmar());
 
     await waitFor(() => expect(screen.getByText(/já está com essa área/)).toBeTruthy());
-    fireEvent.click(screen.getByRole("button", { name: /Cancelar/ }));
+    expect(botaoDeConfirmar().disabled).toBe(false);
+    expect((screen.getByLabelText(/Motivo do redirecionamento/) as HTMLTextAreaElement).value).toBe(
+      MOTIVO
+    );
 
+    fireEvent.click(screen.getByRole("button", { name: /Cancelar/ }));
+    expect(onAcionada).not.toHaveBeenCalled();
+  });
+
+  it("CONTRAPROVA: o 422 do motivo fecha sem recarregar e o ouvidor pode corrigir e reenviar", async () => {
+    const { onAcionada } = montar({
+      ok: false,
+      status: 422,
+      corpo: { detail: "O motivo passou de 10.000 caracteres. Resuma por que o caso vai para outra área." },
+    });
+    await preencher();
+    fireEvent.click(botaoDeConfirmar());
+
+    await waitFor(() => expect(screen.getByText(/passou de 10.000 caracteres/)).toBeTruthy());
+    expect(botaoDeConfirmar().disabled).toBe(false);
+
+    fireEvent.click(screen.getByRole("button", { name: /Cancelar/ }));
+    expect(onAcionada).not.toHaveBeenCalled();
+  });
+
+  it("a marca é PEGAJOSA: uma recusa limpa depois de um 5xx não apaga a releitura", async () => {
+    // Sem isso, o ouvidor que leva um 500 e tenta de novo levando um 409 de
+    // estado fecharia a modal sem reler justamente o caso que pode ter se
+    // movido no primeiro envio.
+    const respostas = [
+      { status: 500, detail: "O caso não saiu da área anterior e nada foi redirecionado." },
+      { status: 409, detail: "Este caso já está com essa área, então não há para onde redirecioná-lo." },
+    ];
+    let envio = 0;
+    const onAcionada = vi.fn();
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        if (url.includes("/setores")) {
+          return { ok: true, json: async () => ["Recepcao", "Centro Medico"] } as Response;
+        }
+        if (url.includes("/responsaveis")) {
+          return { ok: true, json: async () => ({ responsaveis: [] }) } as Response;
+        }
+        const r = respostas[Math.min(envio++, respostas.length - 1)];
+        return { ok: false, status: r.status, json: async () => ({ detail: r.detail }) } as Response;
+      })
+    );
+    render(
+      <ValidarModal
+        manifestacao={caso() as never}
+        token="token-de-teste"
+        modo="redirecionamento"
+        onClose={vi.fn()}
+        onAcionada={onAcionada}
+      />
+    );
+    await preencher();
+
+    fireEvent.click(botaoDeConfirmar());
+    await waitFor(() => expect(screen.getByText(/nada foi redirecionado/)).toBeTruthy());
+    fireEvent.click(botaoDeConfirmar());
+    await waitFor(() => expect(screen.getByText(/já está com essa área/)).toBeTruthy());
+
+    fireEvent.click(screen.getByRole("button", { name: /Cancelar/ }));
+    expect(onAcionada).toHaveBeenCalledWith();
+  });
+});
+
+describe("o limite de taxa não manda ninguém conferir o painel (429)", () => {
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("tem frase própria, e não a que manda conferir a manifestação", async () => {
+    // O handler do slowapi responde `{"error": ...}`, SEM `detail`, e nada
+    // aconteceu no servidor: o fallback geral mandaria o ouvidor ao painel por
+    // causa de um limite de taxa.
+    const { onAcionada } = montar({
+      ok: false,
+      status: 429,
+      corpo: { error: "Rate limit exceeded: 30 per 1 minute" },
+    });
+    await preencher();
+    fireEvent.click(botaoDeConfirmar());
+
+    await waitFor(() =>
+      expect(
+        screen.getByText("O painel recebeu pedidos demais em pouco tempo. Espere um minuto e tente de novo.")
+      ).toBeTruthy()
+    );
+    fireEvent.click(screen.getByRole("button", { name: /Cancelar/ }));
     expect(onAcionada).not.toHaveBeenCalled();
   });
 });

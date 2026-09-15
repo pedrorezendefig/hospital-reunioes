@@ -226,6 +226,8 @@ export default function OuvidoriaPage() {
     if (!token) return;
     const anotar = (resultado: ResultadoDaCobranca) =>
       setCobrancas((antes) => ({ ...antes, [m.id]: resultado }));
+    // O aviso do redirecionamento não sobrevive ao ato seguinte (issue #710).
+    setAvisoDoRedirecionamento(null);
     anotar({ fase: "enviando" });
     try {
       const res = await fetch(`/api/ouvidoria/manifestacoes/${m.id}/cobrar-setor`, {
@@ -278,6 +280,7 @@ export default function OuvidoriaPage() {
     if (!token || noArquivo) return;
     setNoArquivo(m.id);
     setErroDoArquivo(null);
+    setAvisoDoRedirecionamento(null);
     // O aviso do lote não sobrevive ao ato seguinte: depois de "12
     // manifestações arquivadas", arquivar UMA linha deixaria o verde na tela
     // dizendo 12 sobre um clique que guardou um caso. E numa recusa os dois
@@ -334,6 +337,7 @@ export default function OuvidoriaPage() {
     setNoArquivo(O_LOTE);
     setErroDoArquivo(null);
     setResumoDoLote(null);
+    setAvisoDoRedirecionamento(null);
     try {
       const res = await fetch("/api/ouvidoria/manifestacoes/arquivo-dos-encerrados", {
         method: "POST",
@@ -380,6 +384,7 @@ export default function OuvidoriaPage() {
     // linha que talvez nem esteja mais na tela.
     setErroDoArquivo(null);
     setResumoDoLote(null);
+    setAvisoDoRedirecionamento(null);
     if (token) recarregar(token, proximo);
   }
 
@@ -395,15 +400,26 @@ export default function OuvidoriaPage() {
   const aguardandoEncerramento = aguardandoSeuEncerramento(manifestacoes);
 
   /**
-   * Abrir o redirecionamento apaga o aviso do anterior (issue #710).
+   * O aviso do redirecionamento não sobrevive ao ato seguinte, qualquer que ele
+   * seja (issue #710), que é a mesma regra dos avisos do arquivo aqui de cima.
    *
-   * "Caso redirecionado para X" pendurado no topo enquanto o ouvidor escolhe a
-   * área do caso SEGUINTE fala de uma linha que já saiu da vista, e é a mesma
-   * regra dos avisos do arquivo: aviso velho é pior que nenhum.
+   * "Caso redirecionado para X" pendurado no topo enquanto o ouvidor cobra,
+   * arquiva ou valida outro caso fala de uma linha que ele já esqueceu, e um
+   * aviso velho é pior que nenhum.
    */
   function abrirRedirecionamento(m: ManifestacaoIndice) {
     setAvisoDoRedirecionamento(null);
     setRedirecionando(m);
+  }
+
+  function abrirValidacao(m: ManifestacaoIndice) {
+    setAvisoDoRedirecionamento(null);
+    setValidando(m);
+  }
+
+  function abrirEncerramento(m: ManifestacaoIndice) {
+    setAvisoDoRedirecionamento(null);
+    setEncerrando(m);
   }
   const emAndamento = manifestacoes.filter((m) => EM_ANDAMENTO.has(m.status)).length;
   const estourados = hoje
@@ -584,9 +600,9 @@ export default function OuvidoriaPage() {
             responsaveis={responsaveis}
             podeAbrirDossie={podeAbrirDossie}
             cobrancas={cobrancas}
-            onValidar={setValidando}
+            onValidar={abrirValidacao}
             onRedirecionar={abrirRedirecionamento}
-            onEncerrar={setEncerrando}
+            onEncerrar={abrirEncerramento}
             onCobrar={cobrar}
             onArquivar={(m) => mudarOArquivo(m, "POST")}
             onDesarquivar={(m) => mudarOArquivo(m, "DELETE")}
@@ -690,9 +706,9 @@ export default function OuvidoriaPage() {
                   podeAbrirDossie={podeAbrirDossie}
                   arquivados={arquivados}
                   cobrancas={cobrancas}
-                  onValidar={setValidando}
+                  onValidar={abrirValidacao}
                   onRedirecionar={abrirRedirecionamento}
-                  onEncerrar={setEncerrando}
+                  onEncerrar={abrirEncerramento}
                   onCobrar={cobrar}
                   onArquivar={(m) => mudarOArquivo(m, "POST")}
                   onDesarquivar={(m) => mudarOArquivo(m, "DELETE")}

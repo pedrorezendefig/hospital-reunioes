@@ -3,7 +3,10 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Loader2, Send, ShieldAlert } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
-import { confirmacaoDoRedirecionamento } from "@/lib/ouvidoria/redirecionamento";
+import {
+  confirmacaoDoRedirecionamento,
+  lerAFalhaDoRedirecionamento,
+} from "@/lib/ouvidoria/redirecionamento";
 import {
   ehSigilosoPorNatureza,
   LABEL_TIPO,
@@ -129,7 +132,16 @@ export function ValidarModal({
   // manda conferir a manifestação no painel. Sem esta marca, o ouvidor fecharia
   // o modal e continuaria olhando a tela de antes, que afirma um estado que já
   // não existe.
+  //
+  // As duas são PEGAJOSAS (`antes || agora`): uma falha que pode ter mexido no
+  // caso não é desfeita por uma recusa limpa numa segunda tentativa. Sem isso,
+  // um 500 seguido de um 409 de estado apagaria a marca do primeiro, e a tela
+  // fecharia sem reler justamente o caso que se moveu.
   const [conferirDepois, setConferirDepois] = useState(false);
+  // O servidor disse que o caso saiu da área: repetir o ato não é o caminho, e
+  // o botão não pode convidar a isso (a frase da falha depois da saída manda
+  // literalmente não redirecionar de novo).
+  const [atoConsumido, setAtoConsumido] = useState(false);
 
   useEffect(() => {
     if (!manifestacao) return;
@@ -153,6 +165,7 @@ export function ValidarModal({
     setMotivo("");
     setErro(null);
     setConferirDepois(false);
+    setAtoConsumido(false);
   }, [manifestacao, redirecionando]);
 
   // A taxonomia chega depois do reset acima, então a poda é aqui: caso do
@@ -218,10 +231,31 @@ export function ValidarModal({
    * nada legível (rede caída, corpo que não é JSON): toda recusa da API viaja
    * na tela com o texto que o servidor mandou, porque é ele que diz a causa
    * REAL e o que fazer antes de tentar de novo.
+   *
+   * O 429 tem frase própria porque ele é o único degrau que chega SEM `detail`
+   * por desenho: o handler do slowapi responde `{"error": ...}`, e nada
+   * aconteceu no servidor. O fallback geral manda conferir a manifestação no
+   * painel, que é o lugar errado para quem só esbarrou no limite de taxa.
    */
-  const falhaSemResposta = redirecionando
-    ? "Não foi possível redirecionar o caso agora. Confira a manifestação no painel antes de tentar de novo."
-    : "Não foi possível acionar a área. Tente novamente.";
+  function falhaSemResposta(status: number | null): string {
+    if (status === 429) {
+      return "O painel recebeu pedidos demais em pouco tempo. Espere um minuto e tente de novo.";
+    }
+    return redirecionando
+      ? "Não foi possível redirecionar o caso agora. Confira a manifestação no painel antes de tentar de novo."
+      : "Não foi possível acionar a área. Tente novamente.";
+  }
+
+  /**
+   * O que a falha deixa para trás. Fica aqui, e não espalhado nos dois ramos do
+   * `try`, para a rede caída e a resposta lida seguirem a MESMA régua.
+   */
+  function anotarAFalha(status: number | null, detail: string | null) {
+    if (!redirecionando) return;
+    const falha = lerAFalhaDoRedirecionamento(status, detail);
+    setConferirDepois((antes) => antes || falha.releiaOCaso);
+    setAtoConsumido((antes) => antes || falha.atoConsumido);
+  }
 
   async function acionar() {
     if (!manifestacao || !token || !gravidade || !tipo) return;
@@ -261,17 +295,14 @@ export function ValidarModal({
       // O `typeof` é a rede do 422 do pydantic, que responde uma LISTA de erros
       // de schema em vez de texto: jogada no JSX, ela quebraria a tela em cima
       // de uma recusa.
-      setErro(typeof corpo.detail === "string" ? corpo.detail : falhaSemResposta);
-      // 5xx é o único degrau em que o caso pode ter se movido sem o ato ter
-      // terminado: as recusas de entrada, de estado e de permissão (403, 404,
-      // 409, 422) acontecem ANTES de qualquer escrita e deixam o caso como
-      // estava.
-      if (redirecionando && res.status >= 500) setConferirDepois(true);
+      const detail = typeof corpo.detail === "string" ? corpo.detail : null;
+      setErro(detail ?? falhaSemResposta(res.status));
+      anotarAFalha(res.status, detail);
     } catch {
-      setErro(falhaSemResposta);
+      setErro(falhaSemResposta(null));
       // Requisição que nem chegou a ter resposta: ninguém sabe se ela rodou no
       // servidor, e o redirecionamento não é ato repetível às cegas.
-      if (redirecionando) setConferirDepois(true);
+      anotarAFalha(null, null);
     } finally {
       setSalvando(false);
     }
@@ -510,7 +541,10 @@ export function ValidarModal({
           <button
             type="button"
             onClick={acionar}
-            disabled={!pronto}
+            // Depois do ponto sem volta o botão não convida a repetir: a
+            // própria resposta do servidor manda conferir a manifestação antes
+            // de agir, e a segunda tentativa levaria a recusa de estado.
+            disabled={!pronto || atoConsumido}
             className="inline-flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-semibold uppercase tracking-wide bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
           >
             {salvando ? (
