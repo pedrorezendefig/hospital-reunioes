@@ -12,6 +12,7 @@ import datetime as dt
 import logging
 import re
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 from typing import Literal
 from zoneinfo import ZoneInfo
@@ -54,7 +55,9 @@ from app.services import (
     ouvidoria_novidade,
     ouvidoria_pontos,
     ouvidoria_prorrogacao,
+    ouvidoria_redirecionamento,
     ouvidoria_relatorio,
+    ouvidoria_relogio_da_area,
     ouvidoria_respostas,
     ouvidoria_retencao,
     ouvidoria_setor_tokens,
@@ -69,6 +72,7 @@ from app.services.ouvidoria_anexos import (
 )
 from app.services.ouvidoria_estados import (
     DESFECHO_SEM_RETORNO,
+    DESTINO_DO_REDIRECIONAMENTO,
     JANELA_REINCIDENCIA_DIAS,
     ORIGENS_DA_DEVOLUCAO,
     DadosInsuficientesError,
@@ -97,7 +101,13 @@ from app.services.ouvidoria_prazos import (
     vencimento_apos_devolucao,
     vencimento_apos_retomada,
 )
-from app.services.ouvidoria_responsaveis import GESTOR, TITULAR, escolher_destinatario, quem_responde_hoje
+from app.services.ouvidoria_responsaveis import (
+    GESTOR,
+    TITULAR,
+    Destinatario,
+    escolher_destinatario,
+    quem_responde_hoje,
+)
 from app.services.ouvidoria_taxonomia import (
     LIMITE_SETOR,
     ROTULO_TIPO,
@@ -1262,6 +1272,15 @@ async def transicionar_manifestacao(
             desfecho=pedido.desfecho,
             desfecho_descricao=pedido.desfecho_descricao,
             motivo_pausa=pedido.observacao,
+            # A observação também responde pelo motivo do redirecionamento
+            # (issue #708), como já responde pelo da pausa. Esta rota é a porta
+            # de fundo que o ADR 0055 nomeia: ela leva o caso de
+            # `aguardando_area` (e agora de `respondido`) para
+            # `em_classificacao` sem parar o relógio da área, sem derrubar os
+            # links dela e sem acionar ninguém. Continuar a aceitá-la é
+            # deliberado (o painel precisa da transição genérica), mas agora ela
+            # só passa DIZENDO POR QUÊ, e o que ela escreve fica na trilha.
+            motivo_redirecionamento=pedido.observacao,
         )
     except DadosInsuficientesError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
@@ -3492,16 +3511,61 @@ async def validar_e_acionar(
     if e_devolucao(caso["status"], "aguardando_area"):
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                "Este caso já está com a área. Para recusar a resposta recebida, use a devolução por "
-                "insuficiência, que exige o motivo e recalcula o prazo."
-            ),
+            detail=RECUSA_DO_CASO_JA_NA_AREA,
         )
     try:
         validar_transicao(caso["status"], "aguardando_area")
     except TransicaoInvalidaError as exc:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
 
+    agora = agora_utc()
+    # As conferências que não escrevem nada acontecem juntas, ANTES de qualquer
+    # efeito, e o resultado delas é o que o acionamento consome (issue #708). A
+    # separação existe para o Redirecionamento: lá o acionamento vem DEPOIS de
+    # o caso já ter saído da área antiga, e uma recusa naquele ponto deixaria o
+    # caso parado em `em_classificacao`. Redirecionar confere primeiro, e por
+    # isso "nada acontece" quando a área nova não tem responsável (ADR 0055).
+    area = conferir_o_acionamento(supabase, caso, pedido, agora.astimezone(FUSO_HOSPITAL).date())
+    return acionar_a_area(supabase, me, caso, pedido, area, agora, acao_no_log="validar_e_acionar")
+
+
+# A recusa da chegada pela porta da validação. Ela nomeia as DUAS saídas, e a
+# do redirecionamento entrou na issue #708: sem ela, o ouvidor que percebeu o
+# despacho errado lia uma frase que só falava da devolução por insuficiência
+# (mesmo setor, meio prazo), que é o ato errado para o problema dele.
+RECUSA_DO_CASO_JA_NA_AREA = (
+    "Este caso já está com a área. Para recusar a resposta recebida, use a devolução por "
+    "insuficiência, que exige o motivo e recalcula o prazo. Para mandá-lo a outra área, use o "
+    "redirecionamento, que exige o motivo e dá prazo cheio à área nova."
+)
+
+
+@dataclass(frozen=True)
+class AreaAcionavel:
+    """O que as conferências do acionamento apuraram, pronto para ser usado.
+
+    Existe para o acionamento poder ser chamado depois de outros efeitos sem
+    que uma recusa dele chegue tarde: quem confere primeiro sabe que o resto
+    não recusa mais por área, por responsável, por sigilo nem por extrato."""
+
+    setor: str
+    destinatario: Destinatario
+    sigiloso: bool
+    extrato: str
+
+
+def conferir_o_acionamento(supabase, caso: dict, pedido: PedidoValidacao, hoje: dt.date) -> AreaAcionavel:
+    """Tudo o que pode RECUSAR um acionamento, conferido sem escrever nada.
+
+    Levanta a mesma `HTTPException` que a rota de validação sempre levantou, e
+    com as mesmas frases: 409 de sigilo travado, 422 de extrato faltando, 503
+    ou 422 da taxonomia, 409 de setor sem titular nem gestor vigente.
+
+    A ordem é a de antes, e ela importa: o sigilo é resolvido antes de o
+    extrato ser exigido, e o setor é conferido contra a taxonomia antes de
+    qualquer busca de responsável, porque o que segue daqui é a grafia canônica
+    (é ela que casa com o cadastro e que o relatório da Diretoria agrupa,
+    issue #419)."""
     # A validação é onde o tipo é DECIDIDO, então é aqui que a regra do sigilo
     # vale de novo, pela mesma função da rota de classificação: caso que chegou
     # pela Ana nasce sem tipo (logo, sigiloso) e vira denúncia ou elogio na mão
@@ -3528,8 +3592,6 @@ async def validar_e_acionar(
     # responsáveis e que o relatório da Diretoria agrupa (issue #419).
     setor = exigir_setor_da_taxonomia(supabase, pedido.setor)
 
-    agora = agora_utc()
-    hoje = agora.astimezone(FUSO_HOSPITAL).date()
     destinatario = escolher_destinatario(carregar_responsaveis(supabase, setor), hoje)
     if destinatario is None:
         # Sem titular e sem gestor não há para quem despachar. Recusar é a
@@ -3537,11 +3599,49 @@ async def validar_e_acionar(
         # o prazo correria contra ninguém.
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
-            detail=(
-                f"O setor {setor} não tem titular nem gestor vigente. Cadastre o responsável antes de acionar a área."
-            ),
+            detail=recusa_de_setor_sem_responsavel(setor),
         )
 
+    return AreaAcionavel(setor=setor, destinatario=destinatario, sigiloso=sigiloso, extrato=extrato)
+
+
+def recusa_de_setor_sem_responsavel(setor: str) -> str:
+    """A frase que o ouvidor lê quando a área escolhida não tem para quem
+    despachar. Uma só, porque a validação e o redirecionamento recusam pelo
+    mesmo motivo e o critério de aceite da #708 pede a MESMA frase nos dois."""
+    return f"O setor {setor} não tem titular nem gestor vigente. Cadastre o responsável antes de acionar a área."
+
+
+def acionar_a_area(
+    supabase,
+    me: dict,
+    caso: dict,
+    pedido: PedidoValidacao,
+    area: AreaAcionavel,
+    agora: dt.datetime,
+    acao_no_log: str,
+) -> dict:
+    """O despacho em si: transição para `aguardando_area`, marco T1, prazo da
+    área, revogação dos links da área anterior e o email ao responsável.
+
+    Extraído da rota de validação na issue #708 sem mudar uma linha da ordem,
+    porque é ele que o Redirecionamento reusa: a área nova tem que receber o
+    caso exatamente como qualquer outro acionamento receberia (T1 novo, prazo
+    da área cheio, prazo conclusivo congelado, `nova_demanda` com link novo).
+    Uma segunda implementação do despacho seria uma segunda chance de esquecer
+    um dos carimbos que este bloco zera.
+
+    `caso` é o caso como foi LIDO, e não relido: o `setor` que ele carrega é o
+    da área ANTERIOR, e é a comparação com ele que decide o destino do carimbo
+    do estouro consumado.
+
+    `acao_no_log` é o nome do ato no registro de acesso, e é parâmetro porque
+    o registro precisa distinguir quem chamou: redirecionamento e validação
+    chegam ao mesmo despacho por decisões diferentes do ouvidor, e a auditoria
+    (LGPD, ADR 0034) não pode contar as duas como a mesma coisa."""
+    manifestacao_id = caso["id"]
+    setor = area.setor
+    destinatario = area.destinatario
     feriados = carregar_feriados(supabase)
     vencimento = calcular_vencimento(agora, carregar_prazo_da_area(supabase, pedido.gravidade), feriados)
 
@@ -3610,9 +3710,9 @@ async def validar_e_acionar(
     # existiu. Vão logo depois da transição valer.
     classificacao = {
         "tipo_manifestacao": pedido.tipo_manifestacao,
-        "sigilo_reforcado": sigiloso,
+        "sigilo_reforcado": area.sigiloso,
         "gravidade": pedido.gravidade,
-        "extrato_para_o_setor": extrato,
+        "extrato_para_o_setor": area.extrato,
     }
     if pedido.categoria:
         classificacao["categoria"] = pedido.categoria
@@ -3796,12 +3896,234 @@ async def validar_e_acionar(
     # aceso, sem erro nenhum. Escrita nova na trilha desta rota entra ANTES
     # desta linha.
     carimbar_visto_da_acao(supabase, manifestacao_id)
-    registrar_acesso(supabase, me, manifestacao_id, "validar_e_acionar")
+    registrar_acesso(supabase, me, manifestacao_id, acao_no_log)
     row = resultado.data[0] if isinstance(resultado.data, list) else resultado.data
     completo = supabase.table("ouvidoria_protocolos").select(_CAMPOS_DOSSIE).eq("id", manifestacao_id).execute()
     if completo.data:
         row = completo.data[0]
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA} | _projetar_prazo(row, agora, feriados)
+
+
+# =====================================================================
+# Redirecionamento pelo ouvidor (issue #708, PRD #706, ADR 0055)
+# =====================================================================
+
+# O que a rota precisa saber do caso. As dez primeiras colunas são as mesmas
+# que a validação lê, porque é `acionar_a_area` que as consome; as três últimas
+# são o relógio da área, que só esta porta para (a validação nunca parou
+# relógio nenhum, ela sempre partiu de `em_classificacao`).
+_CAMPOS_DO_REDIRECIONAMENTO = (
+    "id, status, sigilo_reforcado, tipo_manifestacao, contato_em, data_abertura, "
+    "prazo_conclusivo_em, setor, anonimizada_em, apagamento_pedido_em, "
+    "prazo_area_em, respondida_em, area_estourou_em"
+)
+
+# A frase do caso que saiu da área antiga e não chegou à nova. Ela aponta o
+# botão certo de propósito: redirecionar de novo recusaria (o caso já está em
+# `em_classificacao`, que não é origem do ato), e sem a instrução o ouvidor
+# ficaria clicando no botão que a tela ainda mostra.
+FALHA_DEPOIS_DA_SAIDA = (
+    "O caso saiu da área anterior e está em classificação, mas a área nova não foi acionada. "
+    "Use Validar e acionar para despachá-lo, sem redirecionar de novo."
+)
+
+# A frase do caso que se moveu entre a leitura e a saída. Mesma forma da
+# Devolução à Ouvidoria: quem não sabe se o efeito entrou não pode ser
+# convidado a repetir o ato sem conferir.
+SAIU_DA_AREA_NO_MEIO = (
+    "Este caso saiu da fila da área durante o envio, então o redirecionamento não valeu por ele. "
+    "Confira a manifestação no painel antes de tentar de novo."
+)
+
+
+class PedidoRedirecionamento(PedidoValidacao):
+    """O corpo da validação mais o motivo (ADR 0055): a tela do
+    redirecionamento É a Validação e acionamento pré-preenchida, com a área em
+    branco e o motivo obrigatório.
+
+    Herdar em vez de repetir os campos é o que garante que os dois corpos não
+    divirjam: campo novo na validação nasce no redirecionamento também, com as
+    mesmas peneiras de texto.
+
+    `motivo` chega CRU, sem `field_validator`: quem decide o que vale é
+    `ouvidoria_redirecionamento`, no mesmo desenho do motivo da Devolução à
+    Ouvidoria, para teto, vazio e travessão serem decididos num lugar só e a
+    recusa sair como frase que o ouvidor lê."""
+
+    motivo: str
+
+
+@router.post("/manifestacoes/{manifestacao_id}/redirecionamentos", status_code=status.HTTP_201_CREATED)
+@limiter.limit("30/minute")
+async def redirecionar_para_outra_area(
+    request: Request,
+    manifestacao_id: str,
+    pedido: PedidoRedirecionamento,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O Redirecionamento: o caso sai da área antiga e entra na nova, numa
+    requisição só (issue #708, ADR 0055).
+
+    Casca fina: carrega o caso e chama o serviço, que devolve o Dossiê."""
+    try:
+        atual = (
+            supabase.table("ouvidoria_protocolos")
+            .select(_CAMPOS_DO_REDIRECIONAMENTO)
+            .eq("id", manifestacao_id)
+            .execute()
+        )
+    except (APIError, HTTPError) as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada") from exc
+    if not atual.data:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+
+    return redirecionar_o_caso(supabase, me, atual.data[0], pedido)
+
+
+def redirecionar_o_caso(supabase, me: dict, caso: dict, pedido: PedidoRedirecionamento) -> dict:
+    """Tira o caso da área antiga e o aciona na nova, nesta ordem.
+
+    Fica neste módulo, e não em `app/services/ouvidoria_redirecionamento.py`,
+    por uma razão só: o despacho da área nova é `acionar_a_area`, que é
+    HTTP-shaped (levanta `HTTPException` com as frases que o ouvidor lê) e mora
+    aqui. Um orquestrador em `services/` teria que importar o router de volta,
+    que é a dependência invertida que o módulo do portal do setor só aceita por
+    import tardio dentro da função. O que é REGRA de domínio (o que vale como
+    motivo, o prefixo da trilha, de quais estados o ato parte) está no serviço,
+    e é de lá que vem cada frase e cada peneira usada abaixo.
+
+    A ordem é a ordem de compensação, e cada passo sabe desfazer o anterior:
+
+    1. as guardas, todas ANTES de qualquer escrita, inclusive as do próprio
+       acionamento (`conferir_o_acionamento`). É isso que cumpre a promessa do
+       ADR 0055: área nova sem titular nem gestor vigente e "nada acontece";
+    2. o relógio da área antiga para, pela função que a Devolução à Ouvidoria
+       usa;
+    3. a transição de saída. Se ela falhar, o relógio volta;
+    4. o acionamento da área nova, que revoga os links vivos da área antiga
+       antes de emitir o link novo (ele faz isso desde a issue #707, e é por
+       isso que esta rota não chama `revogar_os_vivos` de novo: a ordem certa
+       já mora lá, e uma segunda chamada aqui derrubaria o link recém-emitido
+       se um dia a ordem de lá mudasse).
+
+    Depois do passo 3 não há mais volta, e é regra (ADR 0055): o caso nunca
+    fica em `aguardando_area` sem acionamento válido, então ele fica em
+    `em_classificacao`, com o movimento na trilha, e a resposta diz o que
+    conferir."""
+    manifestacao_id = caso["id"]
+    # O caso apagado não é redirecionado (RN da issue #708, mesma guarda das
+    # outras portas de escrita). Vem antes de tudo porque o efeito que ela
+    # impede é o pior da lista: redirecionar manda para FORA do painel, por
+    # email e com token de portal, o caso que a Diretoria mandou apagar.
+    barrar_caso_apagado(caso, "redirecionado para outra área")
+
+    recusa = ouvidoria_redirecionamento.motivo_de_recusa(pedido.motivo)
+    if recusa:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=recusa)
+    motivo = ouvidoria_redirecionamento.texto_do_motivo(pedido.motivo)
+
+    recusa_do_estado = ouvidoria_redirecionamento.recusa_do_estado(caso.get("status"))
+    if recusa_do_estado:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=recusa_do_estado)
+
+    agora = agora_utc()
+    # A máquina de estados é consultada mesmo depois da guarda acima, e não em
+    # vez dela: a guarda existe para o ouvidor ler o que fazer, e esta é a
+    # porta de entrada única da máquina (ADR 0034). Sem ela, a única régua da
+    # aresta seria a tabela de frases do serviço.
+    try:
+        validar_transicao(
+            caso["status"],
+            DESTINO_DO_REDIRECIONAMENTO,
+            motivo_redirecionamento=motivo,
+        )
+    except DadosInsuficientesError as exc:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
+    except TransicaoInvalidaError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc)) from exc
+
+    # A área nova é conferida aqui, e não dentro do acionamento: depois do
+    # passo 2 o caso já perdeu o relógio, e uma recusa ali o deixaria parado em
+    # classificação por causa de um cadastro que dava para conferir antes.
+    area = conferir_o_acionamento(supabase, caso, pedido, agora.astimezone(FUSO_HOSPITAL).date())
+
+    # O setor antigo viaja CONGELADO na observação, porque o acionamento logo
+    # abaixo sobrescreve `setor` no caso: lida meses depois, a trilha diria que
+    # o caso saiu da área em que ele acabou de entrar.
+    observacao = ouvidoria_redirecionamento.observacao_do_redirecionamento(caso.get("setor"), motivo)
+
+    estourou = ouvidoria_relogio_da_area.estouro_a_carimbar(caso, agora)
+    try:
+        parado = ouvidoria_relogio_da_area.parar(supabase, manifestacao_id, caso, estourou)
+    except (APIError, HTTPError) as exc:
+        # `code` só existe no `APIError`: lido direto, o log da falha de rede
+        # quebraria dentro do próprio tratamento de erro.
+        logger.error(
+            "Falha ao parar o relógio da área no redirecionamento da manifestação %s (código %s)",
+            manifestacao_id,
+            getattr(exc, "code", None),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "O prazo da área anterior não foi encerrado, então nada foi redirecionado. "
+                "O caso continua com ela. Tente de novo em instantes."
+            ),
+        ) from exc
+
+    try:
+        supabase.rpc(
+            "ouvidoria_transicionar",
+            {
+                "p_manifestacao_id": manifestacao_id,
+                "p_estado_novo": DESTINO_DO_REDIRECIONAMENTO,
+                "p_autor_id": me["id"],
+                "p_autor_nome": me.get("nome_completo") or me["id"],
+                "p_observacao": observacao,
+                "p_desfecho": None,
+                "p_desfecho_descricao": None,
+            },
+        ).execute()
+    except (APIError, HTTPError) as exc:
+        # A restauração é quem diz onde o caso está, como na Devolução à
+        # Ouvidoria: ela só casa linha enquanto o caso continua no estado de
+        # origem. Não casar significa que a transição passou (o `ReadTimeout`
+        # não prova que o Postgres deixou de executar) ou que outra porta moveu
+        # o caso, e nos dois o prazo não volta.
+        if not ouvidoria_relogio_da_area.restaurar(supabase, manifestacao_id, parado):
+            logger.error(
+                "Redirecionamento falhou com o caso %s fora do estado de origem %s",
+                manifestacao_id,
+                parado.estado_de_origem,
+            )
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=SAIU_DA_AREA_NO_MEIO) from exc
+        codigo = getattr(exc, "code", None)
+        if codigo == "23514":
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="O caso foi movimentado agora mesmo por outra porta: recarregue a página.",
+            ) from exc
+        logger.error("Erro na RPC ouvidoria_transicionar pelo redirecionamento (código %s)", codigo)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "O caso não saiu da área anterior e nada foi redirecionado. "
+                "O prazo dela foi restaurado. Tente de novo em instantes."
+            ),
+        ) from exc
+
+    # Daqui em diante o caso já saiu, e o movimento está na trilha imutável.
+    try:
+        return acionar_a_area(supabase, me, caso, pedido, area, agora, acao_no_log="redirecionamento")
+    except HTTPException as exc:
+        # O código de quem falhou é preservado: um 503 da tabela de prazos não
+        # pode virar 500, senão o ouvidor perde a informação de que vale tentar
+        # de novo. O que muda é a frase, que precisa dizer onde o caso ficou.
+        raise HTTPException(
+            status_code=exc.status_code,
+            detail=f"{FALHA_DEPOIS_DA_SAIDA} O acionamento respondeu: {exc.detail}",
+        ) from exc
 
 
 @router.get("/manifestacoes/{manifestacao_id}/notificacoes")

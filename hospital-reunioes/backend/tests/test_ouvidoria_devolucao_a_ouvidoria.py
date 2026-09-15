@@ -56,16 +56,31 @@ def _ddl(nome: str = MIGRATION) -> str:
         return f.read()
 
 
-def _migration_vigente_do_check_de_gatilhos() -> str:
-    """A migration mais recente que redefine o CHECK de gatilhos. As migrations
+def _migration_mais_recente_com(marca: str, o_que: str) -> str:
+    """A migration mais recente que carrega esta marca no texto. As migrations
     são numeradas, então a ordem alfabética é a cronológica."""
     candidatas = sorted(
         os.path.basename(caminho)
         for caminho in glob.glob(os.path.join(MIGRATIONS_DIR, "*.sql"))
-        if "ouvidoria_notificacoes_gatilho_check" in open(caminho, encoding="utf-8").read()
+        if marca in open(caminho, encoding="utf-8").read()
     )
-    assert candidatas, "Nenhuma migration define o CHECK de gatilhos das notificações"
+    assert candidatas, f"Nenhuma migration define {o_que}"
     return candidatas[-1]
+
+
+def _migration_vigente_do_check_de_gatilhos() -> str:
+    return _migration_mais_recente_com("ouvidoria_notificacoes_gatilho_check", "o CHECK de gatilhos das notificações")
+
+
+def _migration_vigente_do_grafo() -> str:
+    """A migration que recriou o grafo por último, e portanto a única cujo
+    corpo vale no banco: `CREATE OR REPLACE` substitui o anterior inteiro.
+
+    O número NÃO é fixo aqui, pela mesma razão escrita no teste irmão do CHECK
+    de gatilhos: fixá-lo faria a próxima fatia que acrescentar uma aresta
+    derrubar este teste sem ter quebrado nada. A #708 foi a primeira a esbarrar
+    nisso (migration 107)."""
+    return _migration_mais_recente_com("CREATE OR REPLACE FUNCTION ouvidoria_transicionar", "o grafo da RPC")
 
 
 @pytest.fixture(autouse=True)
@@ -118,8 +133,16 @@ class TestArestaDaMaquinaDeEstados:
     fora (ADR 0048, decisão 1)."""
 
     def test_caso_aguardando_area_pode_voltar_para_em_classificacao(self):
-        """Critério: a função pura aceita `aguardando_area -> em_classificacao`."""
-        ouvidoria_estados.validar_transicao("aguardando_area", "em_classificacao")
+        """Critério: a função pura aceita `aguardando_area -> em_classificacao`.
+
+        O motivo entra desde a issue #708: a mesma aresta é a saída do
+        Redirecionamento pelo ouvidor, e a transição genérica não pode virar
+        redirecionamento sem dizer por quê (ADR 0055). A aresta continua aceita,
+        que é o que esta fatia trouxe; a recusa sem motivo é cobrada no arquivo
+        da #708."""
+        ouvidoria_estados.validar_transicao(
+            "aguardando_area", "em_classificacao", motivo_redirecionamento="Este caso é do Centro Médico."
+        )
 
     @pytest.mark.parametrize(
         ("atual", "novo"),
@@ -147,12 +170,15 @@ class TestArestaDaMaquinaDeEstados:
     @pytest.mark.parametrize(
         ("atual", "novo"),
         [
-            # As portas que continuam fechadas: só quem esperava a área volta
-            # à classificação, e a classificação não vira laço.
+            # As portas que continuam fechadas depois desta fatia. `respondido
+            # -> em_classificacao` saiu daqui na issue #708: é a aresta do
+            # Redirecionamento pelo ouvidor de um caso que a área errada já
+            # respondeu (ADR 0055), coberta dos dois lados (aceita com motivo,
+            # recusa sem) no arquivo da #708. As outras quatro seguem fechadas,
+            # e a pausa continua exigindo a retomada antes.
             ("em_classificacao", "em_classificacao"),
             ("novo", "aguardando_area"),
             ("aguardando_manifestante", "em_classificacao"),
-            ("respondido", "em_classificacao"),
             ("encerrado", "em_classificacao"),
         ],
     )
@@ -244,8 +270,11 @@ class TestAMigration:
 
     def test_o_grafo_recriado_carrega_todas_as_arestas_anteriores(self):
         """`CREATE OR REPLACE` substitui o corpo inteiro: uma aresta esquecida
-        aqui trava em produção um caminho que hoje funciona."""
-        ddl = _ddl()
+        aqui trava em produção um caminho que hoje funciona.
+
+        Cobrado na migration VIGENTE do grafo, e não na 098, pelo motivo
+        escrito em `_migration_vigente_do_grafo`."""
+        ddl = _ddl(_migration_vigente_do_grafo())
         for atual, destinos in ouvidoria_estados.TRANSICOES.items():
             linha = next(linha for linha in ddl.splitlines() if f"v_atual = '{atual}'" in linha)
             for destino in destinos:
