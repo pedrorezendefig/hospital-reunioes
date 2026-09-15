@@ -27,6 +27,7 @@ from app.services import (
     ouvidoria_devolucao_a_ouvidoria,
     ouvidoria_notificacoes,
     ouvidoria_prorrogacao,
+    ouvidoria_relogio_da_area,
     ouvidoria_respostas,
     ouvidoria_setor_tokens,
     storage,
@@ -34,8 +35,6 @@ from app.services import (
 from app.services.ouvidoria_anexos import AnexoRecusadoError, validar_anexo
 from app.services.ouvidoria_prazos import (
     TETO_PRORROGACAO_DIAS_UTEIS,
-    estouro_consumado,
-    ler_instante,
     vencimento_prorrogado,
 )
 
@@ -463,45 +462,6 @@ class DevolucaoAOuvidoria(BaseModel):
     motivo: str
 
 
-def _restaurar_prazo(supabase, vinculo: dict, prazo_anterior, carimbo_a_restaurar: dict) -> bool:
-    """Devolve o vencimento da área quando a transição NÃO entrou, e só nesse
-    caso. Devolve se restaurou de fato.
-
-    Mesma prova do `_limpar_t2`, pela mesma razão: o `ReadTimeout` não diz que
-    o Postgres deixou de executar, e o filtro por `aguardando_area` é o que
-    separa os dois mundos, porque ele só casa enquanto a transição não passou.
-    Restaurar às cegas devolveria prazo a um caso que já voltou à Ouvidoria, e
-    a cobrança passaria a caçar uma área que não tem mais nada a fazer.
-
-    Os carimbos dos jobs de prazo ficam zerados de propósito: a linha casada
-    prova que o caso continua com a área, e um carimbo zerado a mais custa um
-    aviso repetido, enquanto restaurá-lo errado custa a cobrança que não sai.
-
-    O estouro consumado volta JUNTO com o vencimento porque os dois saíram
-    juntos, e desfazer meio par é pior que não desfazer nada: o caso ficaria
-    com o prazo de volta e o carimbo do estouro gravado, e
-    `cumprimento_da_area` lê o carimbo antes de tudo. Uma prorrogação aprovada
-    depois nunca mais conseguiria levar aquele caso a `cumprido` (issue #607).
-
-    Ele volta pelo `carimbo_a_restaurar`, e não como valor solto, para que a
-    coluna entre no update sob a MESMA condicional da ida: quem não escreveu
-    não desescreve. Incluir a chave quando a ida não a tocou é a escrita cega
-    que a ida já evita, só que pela porta do `except` (issue #623).
-    """
-    try:
-        result = (
-            supabase.table("ouvidoria_protocolos")
-            .update({"prazo_area_em": prazo_anterior} | carimbo_a_restaurar)
-            .eq("id", vinculo["manifestacao_id"])
-            .eq("status", "aguardando_area")
-            .execute()
-        )
-    except FALHAS_DO_POSTGREST:
-        logger.warning("Falha ao restaurar o prazo da área da manifestação %s", vinculo["manifestacao_id"])
-        return False
-    return bool(result.data)
-
-
 @router.post("/{token}/devolver")
 @limiter.limit("10/minute")
 async def devolver_a_ouvidoria(
@@ -564,12 +524,7 @@ async def devolver_a_ouvidoria(
     #
     # Ciclo cumprido não carimba nada, e estouro já gravado não é reescrito:
     # as duas regras moram em `estouro_consumado`, não aqui.
-    estourou = estouro_consumado(
-        ler_instante(caso.get("prazo_area_em")),
-        ler_instante(caso.get("respondida_em")),
-        agora,
-        ler_instante(caso.get("area_estourou_em")),
-    )
+    estourou = ouvidoria_relogio_da_area.estouro_a_carimbar(caso, agora)
 
     try:
         claim = ouvidoria_setor_tokens.consumir(supabase, vinculo, agora)
@@ -585,48 +540,53 @@ async def devolver_a_ouvidoria(
             status_code=status.HTTP_410_GONE, detail="Este link já foi usado: a resposta do setor já entrou"
         )
 
-    # O relógio da área para ANTES da transição, e os carimbos dos jobs de
-    # prazo saem junto: sem eles, o caso reacionado depois ficaria fora da
-    # véspera, da cobrança e da escada para sempre (issue #373). O prazo
-    # anterior fica guardado porque é ele que volta se a transição não entrar.
-    #
-    # O filtro por `aguardando_area` é o mesmo do `_restaurar_prazo`, e pelo
-    # mesmo motivo: entre a leitura do caso e esta escrita há duas idas ao
-    # PostgREST, e a Ouvidoria pode ter pausado ou movido o caso no meio.
-    # Zerar às cegas tiraria o vencimento de um caso que já não é da área, a
-    # restauração depois não casaria linha (ela filtra pelo mesmo estado) e o
-    # caso voltaria para a fila com `prazo_area_em` NULL. A cobrança e o
-    # escalonamento filtram por `.lte("prazo_area_em", ...)`, que descarta
-    # NULL: o caso sairia das duas em silêncio.
-    prazo_anterior = caso.get("prazo_area_em")
-    estouro_anterior = caso.get("area_estourou_em")
     # A MESMA frase vai para a trilha e para o `detalhe` da notificação. O
     # setor viaja congelado nela porque o reacionamento troca `setor` no caso
     # logo depois: lido do caso na hora do envio, o aviso (e o reenvio dele
     # meses adiante) culparia a área errada pela devolução.
     observacao = ouvidoria_devolucao_a_ouvidoria.observacao_da_devolucao(caso.get("setor"), motivo)
-    # A coluna só entra no update quando há estouro a gravar. Escrever
-    # `None` nela seria escrita cega sobre um carimbo que esta requisição não
-    # decidiu apagar: a devolução por insuficiência grava o mesmo campo sem
-    # filtro de status, e o `None` daqui apagaria o carimbo dela na corrida.
-    carimbo_do_estouro = {"area_estourou_em": estourou.isoformat()} if estourou else {}
-    # E o desfazer nasce colado no fazer: o rollback devolve a coluna ao valor
-    # que ela tinha, mas só quando a ida a escreveu. Sem esse par, o `except`
-    # mandaria `None` para um caso cujo carimbo esta requisição nunca tocou
-    # (issue #623).
-    carimbo_a_restaurar = {"area_estourou_em": estouro_anterior} if carimbo_do_estouro else {}
+    # O relógio da área para ANTES da transição, pela mesma função que o
+    # Redirecionamento pelo ouvidor usa (issue #708): as duas portas tiram o
+    # caso da área e devolvem à fila do ouvidor, e o par escrever/desfazer é o
+    # mesmo. O que a chamada guarda (prazo anterior e carimbo a restaurar) é o
+    # que o `except` da transição usa para desfazer.
     try:
-        (
-            supabase.table("ouvidoria_protocolos")
-            .update({"prazo_area_em": None} | carimbo_do_estouro | ouvidoria_prorrogacao.carimbos_a_zerar())
-            .eq("id", vinculo["manifestacao_id"])
-            .eq("status", "aguardando_area")
-            .execute()
-        )
+        parado = ouvidoria_relogio_da_area.parar(supabase, vinculo["manifestacao_id"], caso, estourou)
     except FALHAS_DO_POSTGREST as exc:
         _devolver_o_link(supabase, vinculo, agora.isoformat())
         logger.error("Falha ao parar o relógio da área da manifestação %s", vinculo["manifestacao_id"])
         raise _indisponivel() from exc
+    if parado is None:
+        # O caso saiu de `aguardando_area` entre a leitura e esta escrita: a
+        # Ouvidoria o pausou, ou a área respondeu por outro link.
+        #
+        # Até a issue #708 este ramo não precisava de resposta própria, porque a
+        # RPC logo abaixo recusava sozinha todo estado que não fosse
+        # `aguardando_area`. Com a aresta `respondido -> em_classificacao`
+        # aberta, ela passa a ACEITAR o caso que acabou de ser respondido, e
+        # seguir em frente devolveria à Ouvidoria um caso com o relógio da área
+        # ainda correndo e com a resposta recém-chegada intacta.
+        #
+        # O link NÃO volta, pelo mesmo motivo do `responder` e do ramo em que a
+        # restauração não casa: o `GET` do portal não olha status nenhum, e um
+        # claim devolvido aqui reabriria a leitura do relato integral e da
+        # identificação de quem manifestou pelo resto dos 30 dias do token.
+        logger.warning(
+            "Devolução à Ouvidoria abortada: a manifestação %s saiu de aguardando_area antes da parada",
+            vinculo["manifestacao_id"],
+        )
+        # A frase NÃO é a do ramo em que a RPC pode ter commitado, e a diferença
+        # é o que de fato aconteceu: aqui o update casou ZERO linhas, então esta
+        # requisição não escreveu nada no caso. Dizer "a devolução pode já ter
+        # sido registrada" assustaria o responsável com um risco que este
+        # caminho não tem, e ele já ficou sem o link para conferir sozinho.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Este caso saiu da fila da área durante o envio, então este link não responde mais por ele. "
+                "Nada foi alterado agora. Se ainda for preciso devolver, fale com a Ouvidoria."
+            ),
+        )
 
     try:
         supabase.rpc(
@@ -643,7 +603,7 @@ async def devolver_a_ouvidoria(
         # Mesmo desenho do `responder`: a restauração do prazo é quem diz onde
         # o caso está, porque ela só casa linha enquanto ele continua com a
         # área.
-        restaurou = _restaurar_prazo(supabase, vinculo, prazo_anterior, carimbo_a_restaurar)
+        restaurou = ouvidoria_relogio_da_area.restaurar(supabase, vinculo["manifestacao_id"], parado)
         if not restaurou:
             # O caso saiu de `aguardando_area`, ou não foi possível saber. Nos
             # dois, o link não volta, pelo mesmo motivo do `responder`: o `GET`

@@ -56,16 +56,31 @@ def _ddl(nome: str = MIGRATION) -> str:
         return f.read()
 
 
-def _migration_vigente_do_check_de_gatilhos() -> str:
-    """A migration mais recente que redefine o CHECK de gatilhos. As migrations
+def _migration_mais_recente_com(marca: str, o_que: str) -> str:
+    """A migration mais recente que carrega esta marca no texto. As migrations
     são numeradas, então a ordem alfabética é a cronológica."""
     candidatas = sorted(
         os.path.basename(caminho)
         for caminho in glob.glob(os.path.join(MIGRATIONS_DIR, "*.sql"))
-        if "ouvidoria_notificacoes_gatilho_check" in open(caminho, encoding="utf-8").read()
+        if marca in open(caminho, encoding="utf-8").read()
     )
-    assert candidatas, "Nenhuma migration define o CHECK de gatilhos das notificações"
+    assert candidatas, f"Nenhuma migration define {o_que}"
     return candidatas[-1]
+
+
+def _migration_vigente_do_check_de_gatilhos() -> str:
+    return _migration_mais_recente_com("ouvidoria_notificacoes_gatilho_check", "o CHECK de gatilhos das notificações")
+
+
+def _migration_vigente_do_grafo() -> str:
+    """A migration que recriou o grafo por último, e portanto a única cujo
+    corpo vale no banco: `CREATE OR REPLACE` substitui o anterior inteiro.
+
+    O número NÃO é fixo aqui, pela mesma razão escrita no teste irmão do CHECK
+    de gatilhos: fixá-lo faria a próxima fatia que acrescentar uma aresta
+    derrubar este teste sem ter quebrado nada. A #708 foi a primeira a esbarrar
+    nisso (migration 107)."""
+    return _migration_mais_recente_com("CREATE OR REPLACE FUNCTION ouvidoria_transicionar", "o grafo da RPC")
 
 
 @pytest.fixture(autouse=True)
@@ -118,8 +133,16 @@ class TestArestaDaMaquinaDeEstados:
     fora (ADR 0048, decisão 1)."""
 
     def test_caso_aguardando_area_pode_voltar_para_em_classificacao(self):
-        """Critério: a função pura aceita `aguardando_area -> em_classificacao`."""
-        ouvidoria_estados.validar_transicao("aguardando_area", "em_classificacao")
+        """Critério: a função pura aceita `aguardando_area -> em_classificacao`.
+
+        O motivo entra desde a issue #708: a mesma aresta é a saída do
+        Redirecionamento pelo ouvidor, e a transição genérica não pode virar
+        redirecionamento sem dizer por quê (ADR 0055). A aresta continua aceita,
+        que é o que esta fatia trouxe; a recusa sem motivo é cobrada no arquivo
+        da #708."""
+        ouvidoria_estados.validar_transicao(
+            "aguardando_area", "em_classificacao", motivo_redirecionamento="Este caso é do Centro Médico."
+        )
 
     @pytest.mark.parametrize(
         ("atual", "novo"),
@@ -147,12 +170,15 @@ class TestArestaDaMaquinaDeEstados:
     @pytest.mark.parametrize(
         ("atual", "novo"),
         [
-            # As portas que continuam fechadas: só quem esperava a área volta
-            # à classificação, e a classificação não vira laço.
+            # As portas que continuam fechadas depois desta fatia. `respondido
+            # -> em_classificacao` saiu daqui na issue #708: é a aresta do
+            # Redirecionamento pelo ouvidor de um caso que a área errada já
+            # respondeu (ADR 0055), coberta dos dois lados (aceita com motivo,
+            # recusa sem) no arquivo da #708. As outras quatro seguem fechadas,
+            # e a pausa continua exigindo a retomada antes.
             ("em_classificacao", "em_classificacao"),
             ("novo", "aguardando_area"),
             ("aguardando_manifestante", "em_classificacao"),
-            ("respondido", "em_classificacao"),
             ("encerrado", "em_classificacao"),
         ],
     )
@@ -244,8 +270,11 @@ class TestAMigration:
 
     def test_o_grafo_recriado_carrega_todas_as_arestas_anteriores(self):
         """`CREATE OR REPLACE` substitui o corpo inteiro: uma aresta esquecida
-        aqui trava em produção um caminho que hoje funciona."""
-        ddl = _ddl()
+        aqui trava em produção um caminho que hoje funciona.
+
+        Cobrado na migration VIGENTE do grafo, e não na 098, pelo motivo
+        escrito em `_migration_vigente_do_grafo`."""
+        ddl = _ddl(_migration_vigente_do_grafo())
         for atual, destinos in ouvidoria_estados.TRANSICOES.items():
             linha = next(linha for linha in ddl.splitlines() if f"v_atual = '{atual}'" in linha)
             for destino in destinos:
@@ -660,3 +689,54 @@ class TestDevolucaoAOuvidoriaEmCasoApagado:
 
         assert self._devolver(client, token).status_code == 200
         assert _caso_no_banco(sb)["status"] == "em_classificacao"
+
+
+class TestACorridaQueAArestaNovaDestrancou:
+    """A aresta `respondido -> em_classificacao` (issue #708) mudou o que
+    acontece quando a área RESPONDE entre a leitura do caso e a parada do
+    relógio, por outro link vivo do mesmo caso.
+
+    Antes dela, a RPC recusava sozinha: `respondido -> em_classificacao` não
+    existia no grafo, o rollback devolvia o prazo e o responsável lia 409. Com a
+    aresta aberta a RPC passa a ACEITAR, e sem guarda a devolução entraria com o
+    relógio da área nunca parado e a resposta recém-chegada intacta, num caso
+    que já não estava mais esperando a área.
+
+    Quem barra agora é o `parar` devolvendo None quando nenhuma linha casa. Este
+    teste é da rota PÚBLICA, sem login, e é ele que prova que a aresta nova não
+    abriu buraco no portal do setor."""
+
+    def test_a_devolucao_aborta_se_a_area_responder_antes_da_parada(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb, token = _portal_com_caso_na_area(monkeypatch, _nunca_envia_email_de_verdade)
+        prazo = _caso_no_banco(sb)["prazo_area_em"]
+        update_de_verdade = _TabelaFake.update
+        t2 = "2026-08-25T18:00:00+00:00"
+
+        def _a_area_responde_no_meio(self, payload):
+            if self.nome == "ouvidoria_protocolos" and payload.get("prazo_area_em", "?") is None:
+                caso = _caso_no_banco(sb)
+                if caso["status"] == "aguardando_area":
+                    # Outra requisição, pelo link de uma cobrança, acabou de
+                    # entrar com a resposta da área.
+                    caso["status"] = "respondido"
+                    caso["respondida_em"] = t2
+                    caso["respondida_por_nome"] = "Carlos Titular"
+            return update_de_verdade(self, payload)
+
+        monkeypatch.setattr(_TabelaFake, "update", _a_area_responde_no_meio)
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/devolver", json={"motivo": MOTIVO})
+
+        assert resposta.status_code == 409, resposta.text
+        depois = _caso_no_banco(sb)
+        assert depois["status"] == "respondido", "o caso foi devolvido depois de a área ter respondido"
+        assert depois["prazo_area_em"] == prazo, "o relógio da área parou numa corrida perdida"
+        assert depois["respondida_em"] == t2, "a resposta recém-chegada foi apagada"
+        assert not any(m["estado_novo"] == "em_classificacao" for m in sb.tabelas["ouvidoria_movimentos"])
+        # A frase conta o que ACONTECEU: esta requisição não escreveu nada.
+        # Copiar a do ramo em que a RPC pode ter commitado ("a devolução pode já
+        # ter sido registrada") assustaria o responsável com um risco que este
+        # caminho não tem, e ele já ficou sem o link para conferir sozinho.
+        detalhe = resposta.json()["detail"]
+        assert "Nada foi alterado agora" in detalhe
+        assert "pode já ter sido registrada" not in detalhe

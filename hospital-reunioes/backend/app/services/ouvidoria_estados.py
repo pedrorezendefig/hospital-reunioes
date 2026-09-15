@@ -31,6 +31,12 @@ from datetime import datetime, timedelta
 # estado próprio de propósito: a fila, o Dossiê e a validação já sabem lidar
 # com quem espera o ouvidor, e um estado novo obrigaria todo relatório,
 # semáforo e contador a aprendê-lo.
+#
+# A issue #708 acrescenta `respondido -> em_classificacao`: o Redirecionamento
+# pelo ouvidor (ADR 0055). É a mesma volta da devolução, percebida pelo ouvidor
+# em vez da área, e ela vale também para o caso que a área errada já respondeu
+# ("isso é do Centro Médico" escrito no campo de resposta em vez de no link de
+# devolver). A origem `aguardando_area` já existia desde a #600.
 TRANSICOES: dict[str, frozenset[str]] = {
     "novo": frozenset({"em_classificacao"}),
     "em_classificacao": frozenset({"aguardando_area", "encerrado"}),
@@ -38,7 +44,7 @@ TRANSICOES: dict[str, frozenset[str]] = {
         {"respondido", "encerrado", "aguardando_area", "aguardando_manifestante", "em_classificacao"}
     ),
     "aguardando_manifestante": frozenset({"aguardando_area", "encerrado"}),
-    "respondido": frozenset({"encerrado", "aguardando_area"}),
+    "respondido": frozenset({"encerrado", "aguardando_area", "em_classificacao"}),
     "encerrado": frozenset({"aguardando_area"}),
 }
 
@@ -93,11 +99,35 @@ DESTINO_DA_DEVOLUCAO = "aguardando_area"
 # não pede motivo; a devolução vem daqui e pede.
 ORIGENS_DA_DEVOLUCAO = frozenset({"respondido", "aguardando_area"})
 
+# Para onde o Redirecionamento leva o caso, e de onde ele pode sair (issue
+# #708, ADR 0055). O par é o mesmo da devolução por insuficiência, mas na
+# direção contrária: ali o caso volta para a ÁREA com meio prazo, aqui ele
+# volta para a OUVIDORIA, que vai despachá-lo em outra área com prazo cheio.
+#
+# `aguardando_manifestante` fica fora de propósito (ADR 0055, decisão 3): o
+# relógio parado da pausa e o prazo cheio da área nova se embolariam na mesma
+# requisição, e o caminho é retomar antes.
+DESTINO_DO_REDIRECIONAMENTO = "em_classificacao"
+ORIGENS_DO_REDIRECIONAMENTO = frozenset({"aguardando_area", "respondido"})
+
 
 def e_devolucao(estado_atual: str, estado_novo: str) -> bool:
     """Se esta transição é a devolução por insuficiência. Quem chama usa isto
     para saber que precisa mexer no prazo e avisar a área."""
     return estado_novo == DESTINO_DA_DEVOLUCAO and estado_atual in ORIGENS_DA_DEVOLUCAO
+
+
+def e_redirecionamento(estado_atual: str, estado_novo: str) -> bool:
+    """Se esta transição tira o caso da área e o devolve à fila do ouvidor
+    (issue #708, ADR 0055).
+
+    Irmã de `e_devolucao`: quem chama usa isto para saber que precisa do motivo,
+    porque as duas voltas para `em_classificacao` são a MESMA porta de fundo se
+    a transição genérica as aceitar caladas. A Devolução à Ouvidoria não passa
+    por aqui (ela vem do portal do setor, sem login, e tem rota própria), mas o
+    ato do ouvidor passa, e é ele que esta função separa da transição sem
+    observação nenhuma."""
+    return estado_novo == DESTINO_DO_REDIRECIONAMENTO and estado_atual in ORIGENS_DO_REDIRECIONAMENTO
 
 
 def e_pausa(estado_atual: str, estado_novo: str) -> bool:
@@ -162,6 +192,7 @@ def validar_transicao(
     motivo_devolucao: str | None = None,
     motivo_reabertura: str | None = None,
     motivo_pausa: str | None = None,
+    motivo_redirecionamento: str | None = None,
 ) -> None:
     """Levanta se a transição não puder acontecer. Silêncio significa liberado."""
     if estado_novo not in ESTADOS:
@@ -198,6 +229,16 @@ def validar_transicao(
             # observação, e quem ler o caso meses depois vê o caso parar sem
             # saber o motivo (issue #335).
             raise DadosInsuficientesError("Parar o caso exige dizer o que falta do manifestante")
+        if e_redirecionamento(estado_atual, estado_novo) and not (motivo_redirecionamento or "").strip():
+            # Quarta guarda da mesma família, e a que fecha a porta de fundo
+            # que o ADR 0055 nomeia: a transição genérica aceitava um POST
+            # `aguardando_area -> em_classificacao` sem motivo, que tirava o
+            # caso da área sem parar o relógio, sem derrubar o link dela e sem
+            # deixar na trilha por quê. Com a aresta `respondido ->
+            # em_classificacao` aberta pela issue #708, seriam DUAS portas de
+            # fundo. A exigência vale para as duas origens, e é ela que obriga
+            # quem quer redirecionar a entrar pela rota do redirecionamento.
+            raise DadosInsuficientesError("Redirecionar o caso para outra área exige o motivo")
         if e_reabertura(estado_atual, estado_novo) and not (motivo_reabertura or "").strip():
             # Mesma guarda da devolução, pelo mesmo motivo: a reabertura tem
             # prazo novo e aviso ao setor, e a transição genérica do painel não
