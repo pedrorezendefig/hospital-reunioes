@@ -81,6 +81,12 @@ FALHAS_DO_POSTGREST = (APIError, HTTPError)
 # e esta diz que o link continua de pé e o problema é nosso.
 INSTABILIDADE = "O sistema está instável agora e o seu link continua valendo. Aguarde um instante e tente de novo."
 
+# O que o responsável da área ANTERIOR lê ao abrir o link velho depois de o
+# caso ter sido acionado em outra área (issue #707, ADR 0055). Ela existe
+# separada da frase do link usado porque as duas contam coisas diferentes: lá
+# alguém respondeu por este link, aqui o caso mudou de dono.
+LINK_REVOGADO = "Este caso foi encaminhado a outra área; este link não vale mais"
+
 
 def _indisponivel() -> HTTPException:
     """A recusa temporária do portal, sempre com o mesmo texto e o mesmo 503."""
@@ -105,6 +111,11 @@ def _carregar_caso(supabase, token: str, agora: dt.datetime) -> tuple[dict, dict
         ) from None
     except ouvidoria_setor_tokens.TokenExpiradoError:
         raise HTTPException(status_code=status.HTTP_410_GONE, detail="Este link expirou") from None
+    except ouvidoria_setor_tokens.TokenRevogadoError:
+        # 410 como as outras duas: o link existiu e acabou. A frase diz o que
+        # aconteceu sem dizer para qual área o caso foi, que é decisão da
+        # Ouvidoria e não assunto de quem já saiu do caso (ADR 0055).
+        raise HTTPException(status_code=status.HTTP_410_GONE, detail=LINK_REVOGADO) from None
     except FALHAS_DO_POSTGREST as exc:
         # Falha de leitura não é link acabado: o 404 e o 410 daqui de cima
         # mandariam o responsável conferir um endereço que está certo, ou

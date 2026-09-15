@@ -57,6 +57,7 @@ from app.services import (
     ouvidoria_relatorio,
     ouvidoria_respostas,
     ouvidoria_retencao,
+    ouvidoria_setor_tokens,
     ouvidoria_trilha,
     storage,
 )
@@ -3717,6 +3718,43 @@ async def validar_e_acionar(
             ),
         ) from exc
 
+    # Os links vivos do caso caem AQUI, antes de o email do acionamento novo
+    # emitir o dele (issue #707, ADR 0055). A ordem é a regra inteira: emitir
+    # primeiro derrubaria junto o link que acabou de sair para a área nova.
+    #
+    # Esta rota é a única porta que sai de `em_classificacao`, então ela cobre
+    # também o reacionamento depois de uma Devolução à Ouvidoria, que é por
+    # onde o buraco já existe hoje: o link do acionamento anterior e o de cada
+    # cobrança da área antiga voltavam a valer quando o caso retornava a
+    # `aguardando_area`, e a área errada respondia pelo caso da área certa.
+    #
+    # Falhar aqui é parar o despacho, e não seguir em silêncio: o email que
+    # sairia logo abaixo abre uma porta de escrita sem login para a área nova
+    # enquanto a antiga continua com a dela.
+    # `HTTPError` entra na tupla junto com `APIError` pelo motivo de sempre
+    # neste arquivo: timeout, conexão recusada e pool esgotado nascem ANTES de
+    # existir resposta HTTP, então não são `APIError` e escapariam crus. O 500
+    # genérico que o FastAPI devolveria não carrega a frase abaixo, que é a
+    # única coisa que este bloco entrega ao ouvidor, e a segunda tentativa dele
+    # bate na recusa "Este caso já está com a área", porque o caso transicionou.
+    try:
+        ouvidoria_setor_tokens.revogar_os_vivos(supabase, manifestacao_id, agora)
+    except (APIError, HTTPError) as exc:
+        # `code` só existe no `APIError`: lido direto, o log da falha de rede
+        # quebraria dentro do próprio tratamento de erro.
+        logger.error(
+            "Falha ao revogar os links do portal da manifestação %s (código %s)",
+            manifestacao_id,
+            getattr(exc, "code", None),
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=(
+                "O caso mudou de estado, mas os links da área anterior não foram derrubados e o setor não foi "
+                "notificado. Confira a manifestação no painel."
+            ),
+        ) from exc
+
     notificacao = ouvidoria_notificacoes.registrar(
         supabase,
         manifestacao_id=manifestacao_id,
@@ -3856,7 +3894,16 @@ async def reenviar_notificacao(
 
     entregue = ouvidoria_notificacoes.despachar(supabase, copia, agora, carregar_feriados(supabase))
     registrar_acesso(supabase, me, manifestacao_id, "reenviar_notificacao")
-    return {"id": copia["id"], "gatilho": copia["gatilho"], "entregue": entregue}
+    # O `motivo` acompanha o `entregue` desde a issue #707: nem toda recusa é do
+    # provedor, e nem toda recusa será tentada de novo. Sem ele a tela dizia as
+    # duas coisas de qualquer jeito, e o ouvidor reclicava o botão achando que
+    # insistia com um provedor que nunca foi chamado.
+    return {
+        "id": copia["id"],
+        "gatilho": copia["gatilho"],
+        "entregue": entregue,
+        "motivo": None if entregue else ouvidoria_notificacoes.motivo_da_falha(supabase, copia["id"]),
+    }
 
 
 def _recusa_da_cobranca(setor: str, responsaveis: list[dict], hoje: dt.date) -> str:

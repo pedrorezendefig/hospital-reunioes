@@ -422,7 +422,10 @@ class TestEnderecoForaDoLog:
         para quem escreve para FORA. Sem ela, o teste acima passaria com o log
         inteiro mudo. O acionamento do setor segue como estava, porque ali o
         endereço no log é o que responde a quem liga dizendo que não recebeu."""
-        banco = _BancoFake([_caso(status="aguardando_area")])
+        banco = _BancoFake([_caso(status="aguardando_area", setor="Recepcao")])
+        # Quem recebe link do portal responde pelo setor do caso (issue #707):
+        # sem o cadastro o despacho recusa e o log ficaria mudo por outro motivo.
+        banco.cadastrar_responsavel("joana@exemplo.com")
         banco.tabelas["ouvidoria_notificacoes"].append(
             {
                 "id": "n-1",

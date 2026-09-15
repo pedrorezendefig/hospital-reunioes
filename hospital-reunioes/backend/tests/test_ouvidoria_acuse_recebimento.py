@@ -294,6 +294,24 @@ class _BancoFake:
         self.update_quebra: dict[str, Exception] = {}
         self.leitura_quebra: dict[str, Exception] = {}
 
+    def cadastrar_responsavel(self, email: str, setor: str = "Recepcao", papel: str = "titular") -> None:
+        """Põe o destinatário no cadastro de quem responde pelo setor do caso.
+
+        Existe desde a issue #707: o link do portal do setor só é emitido para
+        quem responde pelo setor que está com o caso AGORA, então o dublê tem
+        que dizer quem é essa pessoa. Sem isso o despacho recusa antes de
+        chegar ao envio, e o teste de log mediria um email que não saiu."""
+        self.tabelas.setdefault("ouvidoria_setor_responsaveis", []).append(
+            {
+                "setor": setor,
+                "papel": papel,
+                "nome": "Quem responde pelo setor",
+                "email": email,
+                "vigencia_inicio": None,
+                "vigencia_fim": None,
+            }
+        )
+
     def table(self, nome: str):
         return _TabelaFake(self, nome)
 
@@ -315,6 +333,9 @@ def _caso(**overrides) -> dict:
         "anonimo": False,
         "gravidade": None,
         "status": "em_classificacao",
+        # O setor do caso decide para quem o link do portal pode ser emitido
+        # (issue #707), e todo caso tem a coluna preenchida na validação.
+        "setor": "Recepcao",
     }
     caso.update(overrides)
     return caso
@@ -540,6 +561,7 @@ class TestEnderecoForaDoLog:
         é o que responde "o email deste caso saiu?" quando alguém liga dizendo
         que não recebeu (issue #450)."""
         banco = _BancoFake([_caso(status="aguardando_area")])
+        banco.cadastrar_responsavel("joana@exemplo.com")
 
         registrado = self._despachar_sem_provedor(
             banco,

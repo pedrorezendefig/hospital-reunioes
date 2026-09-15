@@ -177,6 +177,9 @@ class TestAlertaDaNotificacaoInterna:
         diz qual caixa do setor o provedor está recusando."""
         banco = _BancoFake([_caso(status="aguardando_area")])
         banco.tabelas["participantes"] = [ADMIN_TECNICO]
+        # Quem recebe link do portal responde pelo setor do caso (issue #707):
+        # sem o cadastro não haveria envio, nem recusa do provedor para alertar.
+        banco.cadastrar_responsavel(EMAIL_DO_SETOR)
 
         _terceira_falha(
             banco,

@@ -657,11 +657,15 @@ export function Dossie({ protocolo, token }: DossieProps) {
         { method: "POST", headers: { Authorization: `Bearer ${token}` } }
       );
       if (res.ok) {
-        const { entregue } = await res.json();
+        const { entregue, motivo } = await res.json();
+        // O motivo vem do servidor quando o envio não saiu (issue #707). A
+        // frase fixa abaixo só vale para a recusa do provedor, e usá-la em
+        // toda recusa culpava o provedor por guardas que nem o chamaram, e
+        // prometia uma retentativa que não existe quando a linha vira falha.
         setAvisoReenvio(
           entregue
             ? `Reenviado para ${notificacao.destinatario_email}.`
-            : "O reenvio ficou na fila: o provedor de email recusou agora e o sistema tenta de novo."
+            : motivo || "O reenvio ficou na fila: o provedor de email recusou agora e o sistema tenta de novo."
         );
         await carregarNotificacoes();
       } else {

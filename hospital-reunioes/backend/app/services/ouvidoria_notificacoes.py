@@ -216,6 +216,12 @@ _CAMPOS_DO_EMAIL = (
 # os outros emails do caso a reaproveitam para dizer a mesma coisa.
 _SEM_EXTRATO = SEM_EXTRATO
 
+# O motivo que fica no registro quando o link não é emitido porque quem o
+# receberia já não responde pelo setor do caso (issue #707, ADR 0055). Segue a
+# prosa da recusa vizinha ("A área respondeu antes do envio"): diz o que
+# aconteceu e o que deixou de sair, para a Ouvidoria ler no caso e decidir.
+LINK_FORA_DA_AREA = "O destinatário não responde mais pelo setor do caso; link não enviado"
+
 # Paleta da estratificação visual (RN-34). Os hex são os da spec da Diretoria,
 # como default trocável: a paleta da casa ainda aguarda confirmação do DP, e
 # quando ela vier a troca é aqui, num lugar só.
@@ -1078,6 +1084,67 @@ def _carregar_manifestacao(supabase, manifestacao_id: str) -> dict | None:
     return result.data[0] if result.data else None
 
 
+def responde_pelo_setor_do_caso(supabase, notificacao: dict, manifestacao: dict) -> bool:
+    """O destinatário desta notificação PERTENCE ao cadastro do setor que está
+    com o caso AGORA (issue #707, ADR 0055).
+
+    A revogação do acionamento derruba os tokens que EXISTEM naquele instante,
+    e só. Ela não fecha a fábrica: o `destinatario_email` da notificação é
+    congelado no registro, e há três caminhos que emitem token DEPOIS, para o
+    email da área anterior. Uma cobrança retida pela janela comercial acorda
+    quando o caso já voltou a `aguardando_area` por outra área e passa pela
+    guarda de status; a decisão de prorrogação nem guarda de status tem, e sai
+    para quem pediu o prazo na área antiga; o reenvio manual copia o
+    destinatário da linha velha. Os três passam por aqui, que é o ponto onde o
+    link nasce.
+
+    A pergunta é de PERTENCIMENTO ao setor, e não de vigência hoje. A diferença
+    é a guarda inteira: o cadastro muda entre o REGISTRO e a ENTREGA por
+    desenho (o acionamento de sexta à noite espera a janela comercial de
+    segunda, e o provedor que falha devolve a linha à fila com 5, 15 e 45
+    minutos de espera). Perguntar por vigência descartaria o acionamento
+    legítimo quando a Diretoria troca o titular do MESMO setor no meio do
+    caminho: nem o titular antigo nem o novo receberiam, o caso ficaria em
+    `aguardando_area` com o prazo já correndo, e `falha` é terminal (o job só
+    relê `agendada`). Pegaria também a decisão de prorrogação de quem pediu o
+    prazo e saiu do papel antes da resposta, contra a regra escrita no
+    catálogo de gatilhos. Barrar o ex-titular que ficou no cadastro com
+    vigência vencida é higiene do cadastro, não trabalho desta fatia.
+
+    O que a issue #707 precisa continua de pé: a área ANTIGA não está no
+    cadastro do setor NOVO, então o link não nasce para ela.
+
+    Qualquer papel serve (titular, substituto, gestor). A cobrança de prazo
+    rompido fala com o substituto e o degrau da escada fala com o gestor:
+    peneirar por um destinatário único transformaria a guarda em
+    indisponibilidade da escada inteira.
+
+    A leitura do cadastro não tem `except`: falha de rede aqui devolve a
+    notificação à fila com backoff, pelo `try` de quem chama. É o certo, porque
+    lista vazia por timeout seria lida como "ninguém responde por este setor" e
+    mataria uma cobrança legítima.
+
+    Esta é a TERCEIRA leitura do cadastro de um setor no app, e as três são de
+    propósito: `carregar_responsaveis` (router) levanta 503 para quem chamou,
+    `ouvidoria_cobranca._carregar_destinatarios` devolve None para o job
+    decidir, e esta deixa a falha subir. O tratamento do erro é o que difere, e
+    é ele que não pode ser compartilhado. A quarta não deve nascer por
+    acidente."""
+    responsaveis = (
+        supabase.table("ouvidoria_setor_responsaveis")
+        .select("setor, papel, nome, email, vigencia_inicio, vigencia_fim")
+        .eq("setor", manifestacao.get("setor") or "")
+        .execute()
+    )
+    # Os dois lados normalizados: o cadastro é digitado à mão, e o email da
+    # linha foi copiado dele meses antes. "Carlos@HSM.br " e "carlos@hsm.br"
+    # são a mesma caixa de entrada, e a correção de caixa no cadastro não pode
+    # derrubar a cobrança de um caso já despachado.
+    do_setor = {(r.get("email") or "").strip().lower() for r in (responsaveis.data or [])}
+    alvo = (notificacao.get("destinatario_email") or "").strip().lower()
+    return bool(alvo) and alvo in do_setor
+
+
 _MONTADORES_DA_ESCADA = {
     GATILHO_RESPOSTA_DEVOLVIDA: montar_resposta_devolvida,
     GATILHO_CASO_REABERTO: montar_caso_reaberto,
@@ -1338,6 +1405,28 @@ def alertar_admin_tecnico(supabase, notificacao: dict) -> None:
     )
 
 
+def motivo_da_falha(supabase, notificacao_id: str) -> str | None:
+    """O `ultimo_erro` que o despacho gravou, ou None quando não há nenhum.
+
+    Existe porque o motivo só vivia na linha do banco (issue #707): a tela do
+    reenvio dizia "o provedor recusou e o sistema tenta de novo" para TODA
+    entrega que não saiu, inclusive as que nada têm a ver com o provedor e as
+    que não serão tentadas de novo. Quem chama já tem o `entregue`; o que
+    faltava era poder dizer POR QUE.
+
+    Falha de leitura devolve None, e a tela cai na frase padrão: o reenvio já
+    aconteceu (ou já não aconteceu), e derrubar a resposta agora por causa do
+    texto explicativo seria trocar uma informação que falta por um erro."""
+    try:
+        result = (
+            supabase.table("ouvidoria_notificacoes").select("ultimo_erro").eq("id", notificacao_id).limit(1).execute()
+        )
+    except Exception:  # noqa: BLE001
+        logger.warning("Falha ao ler o motivo da notificação %s", notificacao_id)
+        return None
+    return (result.data[0].get("ultimo_erro") if result.data else None) or None
+
+
 def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozenset[dt.date]) -> bool:
     """Tenta entregar uma notificação agendada. Devolve se saiu.
 
@@ -1365,6 +1454,17 @@ def despachar(supabase, notificacao: dict, agora: dt.datetime, feriados: frozens
                 notificacao["id"],
                 {"status": FALHA, "ultimo_erro": "A área respondeu antes do envio; cobrança não enviada"},
             )
+            return False
+        if notificacao["gatilho"] in GATILHOS_COM_PORTAL and not responde_pelo_setor_do_caso(
+            supabase, notificacao, manifestacao
+        ):
+            # O caso mudou de área (ou de responsável) entre o registro e a
+            # entrega. Emitir agora daria à área ANTIGA uma porta de escrita sem
+            # login para o caso da área certa, que é o buraco que a issue #707
+            # fecha (ADR 0055). A guarda de status logo acima não alcança isto:
+            # depois do reacionamento o caso está em `aguardando_area` de novo,
+            # e a decisão de prorrogação nem por ela passa.
+            _marcar(supabase, notificacao["id"], {"status": FALHA, "ultimo_erro": LINK_FORA_DA_AREA})
             return False
         link = _link_tokenizado(supabase, notificacao) if notificacao["gatilho"] in GATILHOS_COM_PORTAL else None
         assunto, html, texto = _montar(supabase, notificacao, manifestacao, agora, feriados, link=link)

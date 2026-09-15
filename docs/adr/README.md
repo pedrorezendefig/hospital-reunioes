@@ -20,6 +20,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0048](0048-devolucao-a-ouvidoria-volta-a-classificacao-e-t1-novo.md) | accepted | Devolução à Ouvidoria volta o caso à classificação, e o reacionamento carimba T1 novo |
 | [0051](0051-email-recebido-passa-por-triagem-antes-de-virar-manifestacao.md) | accepted | E-mail recebido em ouvidoria@ passa por triagem antes de virar manifestação |
 | [0052](0052-paciente-do-caso-viaja-para-a-area-no-caso-anonimo.md) | accepted | O Paciente do caso viaja para a área, inclusive no caso anônimo |
+| [0055](0055-redirecionamento-pelo-ouvidor-e-cadastro-de-responsaveis-pelo-ouvidor.md) | accepted | O ouvidor redireciona o caso para outra área num ato só, e passa a manter o cadastro de responsáveis |
 
 ## Tecnologia (Demandas Vitta x Hospital)
 
