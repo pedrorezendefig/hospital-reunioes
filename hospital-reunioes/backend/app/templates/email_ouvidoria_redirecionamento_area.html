@@ -1,0 +1,75 @@
+{% extends "email_base.html" %}
+
+{# O aviso à área ANTIGA de que o caso saiu dela (issue #709, PRD #706,
+   ADR 0055, decisão 4).
+
+   O email mais curto do módulo depois do acuse, e cada ausência aqui é uma
+   decisão escrita:
+
+   - SEM LINK. Nenhum, nem tokenizado nem do app. A issue #707 derrubou os
+     links da área antiga de propósito, e um botão aqui reabriria na fatia
+     seguinte o buraco que ela fechou. Quem recebe não responde mais pelo caso:
+     não há para onde mandá-lo.
+   - Sem o nome da área NOVA e sem o motivo: o ADR manda avisar "sem motivo,
+     sem dizer qual área". O montador nem recebe a manifestação, então o `setor`
+     do caso (que a esta altura já é o da área nova) não chega a este template.
+   - Sem faixa de gravidade e sem prazo: a faixa diz com que pressa agir, e a
+     mensagem inteira deste email é que não há o que fazer. O relógio da área
+     acabou de parar.
+   - Sem relato, sem resumo e sem extrato: a área antiga já recebeu tudo isso no
+     acionamento, e repetir agora espalharia o caso numa caixa de entrada que
+     perdeu o acesso a ele (RN-79). Por isso o email não muda no caso sigiloso
+     nem no anônimo.
+
+   O que sobra é o que a decisão 4 pede: o protocolo, a frase de encaminhado e a
+   notícia de que o link não vale mais, para ninguém descobrir isso no meio de
+   uma apuração. #}
+
+{% block header_subtitle %}Ouvidoria{% endblock %}
+
+{% block title %}Ouvidoria {{ protocolo }}: a demanda foi encaminhada a outra área - Hospital São Matheus{% endblock %}
+
+{% block body %}
+  {# O essencial acima da dobra (RN-35): protocolo e o setor que está sendo
+     liberado da demanda. O setor vem do `detalhe` congelado no ato, nunca do
+     caso. #}
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 24px;">
+        <p style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.8px;color:#94a3b8;margin:0 0 4px;">
+          Protocolo
+        </p>
+        <p style="font-size:20px;font-weight:700;color:#1e293b;line-height:1.3;margin:0 0 10px;">
+          {{ protocolo }}
+        </p>
+        <p style="font-size:13px;color:#334155;margin:0;">
+          Setor: <strong>{{ setor }}</strong>
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#475569;font-size:15px;margin:0 0 16px;">
+    Olá, <strong style="color:#1e293b;">{{ destinatario_nome }}</strong>!
+  </p>
+
+  <table width="100%" cellpadding="0" cellspacing="0" style="margin-bottom:20px;">
+    <tr>
+      <td style="background:#f8fafc;border:1px solid #e2e8f0;border-radius:10px;padding:16px 24px;">
+        <p style="font-size:14px;color:#334155;line-height:1.6;margin:0;">
+          A Ouvidoria encaminhou esta manifestação a outra área. <strong>Não é preciso responder.</strong>
+          A demanda do setor {{ setor }} sobre este protocolo está encerrada.
+        </p>
+      </td>
+    </tr>
+  </table>
+
+  <p style="color:#475569;font-size:14px;line-height:1.6;margin:0 0 20px;">
+    Os links que você recebeu para responder este caso não valem mais. Se você já tinha começado a apurar
+    alguma coisa, fale com a Ouvidoria informando o número do protocolo acima.
+  </p>
+
+  <p style="color:#94a3b8;font-size:12px;line-height:1.6;margin:0;text-align:center;">
+    Não responda a este email. O encaminhamento fica registrado na manifestação.
+  </p>
+{% endblock %}

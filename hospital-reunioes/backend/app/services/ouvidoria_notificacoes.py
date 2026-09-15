@@ -24,6 +24,9 @@ from __future__ import annotations
 import datetime as dt
 import logging
 
+from httpx import HTTPError
+from postgrest.exceptions import APIError
+
 from app.config import settings
 from app.services.email_service import ENDERECO_OMITIDO, _enviar_email, jinja_env
 from app.services.ouvidoria_blocos import (
@@ -95,6 +98,26 @@ GATILHO_ENCERRAMENTO_MANIFESTANTE = "encerramento_manifestante"
 # ato: o reacionamento troca `setor` no caso logo depois, e ler a coluna na
 # hora do envio faria o reenvio culpar a área errada.
 GATILHO_DEVOLVIDO_A_OUVIDORIA = "devolvido_a_ouvidoria"
+# Redirecionamento pelo ouvidor (issue #709, PRD #706, ADR 0055, decisão 4): o
+# caso saiu de uma área e entrou em outra, e a ANTIGA precisa saber que não
+# responde mais por ele. O único gatilho da casa cujo destinatário é, por
+# definição, alguém que já NÃO pertence ao setor do caso, e é isso que decide
+# tudo o que ele não é:
+#
+# - fora de `GATILHOS_COM_PORTAL`: a área antiga perdeu o acesso (a issue #707
+#   derrubou os links dela de propósito), então link tokenizado aqui reabriria
+#   na mesma requisição a porta que a fatia anterior fechou. De quebra, é a
+#   ausência desta tupla que mantém o aviso longe da guarda de pertencimento do
+#   `despachar`, que só pergunta pelo setor de quem VAI receber link;
+# - fora de `GATILHOS_QUE_COBRAM_A_AREA`: ele não cobra nada, e o caso já está
+#   em `aguardando_area` com OUTRA área quando o email sai. Na tupla, a guarda
+#   de status o descartaria em toda vez que o redirecionamento desse certo.
+#
+# O protocolo e o setor ANTIGO viajam no `detalhe`, congelados no ato pelo
+# `ouvidoria_redirecionamento.detalhe_do_aviso`: o `setor` do caso já é o da
+# área nova quando o email é montado, e é justamente o nome que este aviso não
+# pode dizer.
+GATILHO_REDIRECIONAMENTO_AREA = "redirecionamento_area"
 GATILHOS = (
     GATILHO_NOVA_DEMANDA,
     GATILHO_ALERTA_SEM_TITULAR,
@@ -111,6 +134,7 @@ GATILHOS = (
     GATILHO_ACUSAR_RECEBIMENTO,
     GATILHO_ENCERRAMENTO_MANIFESTANTE,
     GATILHO_DEVOLVIDO_A_OUVIDORIA,
+    GATILHO_REDIRECIONAMENTO_AREA,
 )
 
 # O que vai na coluna `destinatario_nome` (NOT NULL) quando quem manifestou não
@@ -902,6 +926,53 @@ def montar_devolvido_a_ouvidoria(
     return (f"Ouvidoria {protocolo}: o setor {setor_lido} devolveu o caso", html, texto)
 
 
+def montar_redirecionamento_area(destinatario_nome: str, detalhe: str | None) -> tuple[str, str, str]:
+    """Assunto, HTML e texto do aviso à área ANTIGA (issue #709, ADR 0055,
+    decisão 4): a demanda daquele protocolo saiu dela e não precisa de resposta.
+
+    A assinatura é a regra desta fatia, e por isso ela não recebe a
+    manifestação. Tudo o que o email mostra vem do `detalhe`, congelado no ato,
+    e o único caminho para o nome da área NOVA (o `setor` do caso, já
+    sobrescrito pelo acionamento da mesma requisição) simplesmente não chega
+    aqui. O ADR manda avisar "sem motivo, sem dizer qual área", e a forma mais
+    barata de cumprir isso é não ter a informação em mãos. Pelo mesmo desenho
+    não há gravidade (a faixa diz com que pressa agir, e aqui não há o que
+    fazer), nem prazo (o relógio da área acabou de parar), nem extrato, nem
+    relato: a área antiga já recebeu tudo isso no acionamento, e repetir agora
+    espalharia o caso de novo por uma caixa de entrada que perdeu o acesso a ele.
+
+    E não há link. Nenhum. A issue #707 existe para derrubar os links da área
+    antiga, e um botão aqui reabriria o buraco na fatia seguinte. O que o email
+    diz sobre link é que o dela não vale mais, que é o desperdício de trabalho
+    que a decisão 4 do ADR quer evitar.
+
+    `detalhe` ilegível levanta, e não vira email genérico: sem protocolo o aviso
+    não diz a que caso se refere, e a linha em falha, com o motivo visível no
+    Dossiê (issue #707), serve mais ao ouvidor do que um email mudo na caixa de
+    quem já não responde pelo caso."""
+    from app.services.email_constants import get_logo_data_uri
+    from app.services.ouvidoria_redirecionamento import protocolo_e_setor
+
+    protocolo, setor = protocolo_e_setor(detalhe)
+    if protocolo is None:
+        raise ValueError("Aviso de redirecionamento sem protocolo no detalhe")
+    setor_lido = setor or "a sua área"
+
+    html = jinja_env.get_template("email_ouvidoria_redirecionamento_area.html").render(
+        destinatario_nome=destinatario_nome,
+        protocolo=protocolo,
+        setor=setor_lido,
+        logo_base64=get_logo_data_uri(),
+    )
+    texto = (
+        f"Ola {destinatario_nome},\n\n"
+        f"A Ouvidoria encaminhou a manifestacao {protocolo} a outra area.\n"
+        f"Nao e preciso responder: a demanda do setor {setor_lido} sobre este protocolo esta encerrada.\n\n"
+        "Os links que voce recebeu para responder este caso nao valem mais.\n"
+    )
+    return (f"Ouvidoria {protocolo}: a demanda foi encaminhada a outra area", html, texto)
+
+
 def montar_acuse_recebimento(protocolo: str) -> tuple[str, str, str]:
     """Assunto, HTML e texto do acuse ao manifestante (issue #493, ADR 0042).
 
@@ -1077,6 +1148,108 @@ def status_da_ultima(supabase, manifestacao_id: str, gatilho: str) -> tuple[str 
     return (linhas[0].get("status") if linhas else None), True
 
 
+def destinatario_do_ultimo_acionamento(supabase, manifestacao_id: str) -> dict | None:
+    """Quem recebeu o acionamento mais recente deste caso: nome, email e papel,
+    ou None quando não há acionamento nenhum (issue #709).
+
+    É a linha do `nova_demanda`, e não o token do portal, embora os dois
+    carreguem o MESMO par. O token só nasce no despacho, e o despacho espera a
+    janela comercial: o acionamento de sexta à noite não tem token nenhum até
+    segunda de manhã, e ler dali deixaria sem aviso justamente a área que passou
+    o fim de semana achando que o caso era dela. A linha da notificação existe
+    desde o instante do acionamento, porque é ela que prova a cobrança
+    (ADR 0034, decisão 7).
+
+    A mais recente, e não a primeira: o reenvio manual nasce como linha nova, e
+    o que vale é a última tentativa.
+
+    Quem chama PRECISA chamar antes de acionar a área nova. O acionamento
+    registra o `nova_demanda` dela na mesma requisição, e depois disso "o último"
+    passa a ser a área que acabou de receber o caso.
+
+    Falha de leitura devolve None: o aviso é cortesia à área que perdeu o caso, e
+    o redirecionamento em si já aconteceu (ou vai acontecer) de qualquer jeito.
+    Derrubar o ato por causa dele seria transformar o aviso num motivo de
+    indisponibilidade."""
+    try:
+        result = (
+            supabase.table("ouvidoria_notificacoes")
+            .select("destinatario_nome, destinatario_email, papel_destinatario, criada_em")
+            .eq("manifestacao_id", manifestacao_id)
+            .eq("gatilho", GATILHO_NOVA_DEMANDA)
+            .order("criada_em", desc=True)
+            .limit(1)
+            .execute()
+        )
+    except (APIError, HTTPError) as exc:
+        logger.error(
+            "[Ouvidoria] Falha ao ler o destinatário do último acionamento da manifestação %s (código %s)",
+            manifestacao_id,
+            getattr(exc, "code", None),
+        )
+        return None
+    return result.data[0] if result.data else None
+
+
+def avisar_a_area_antiga(
+    supabase,
+    manifestacao_id: str,
+    *,
+    destinatario: dict | None,
+    detalhe: str,
+    agora: dt.datetime,
+    feriados: frozenset[dt.date],
+) -> dict | None:
+    """Registra e tenta entregar o aviso à área que perdeu o caso (issue #709).
+
+    Melhor esforço do começo ao fim, e isso é decisão, não descuido: quando esta
+    função roda, o caso JÁ saiu da área antiga e JÁ entrou na nova, com a trilha
+    imutável contando as duas coisas. Não há ato para desfazer nem segunda
+    chance para oferecer, e derrubar a resposta aqui só faria o ouvidor achar
+    que o redirecionamento falhou. É a mesma régua do aviso da Devolução à
+    Ouvidoria. O que fica, quando falha, é o log e a ausência da linha na lista
+    de notificações do caso, que o Dossiê mostra.
+
+    `destinatario` vem de fora, lido ANTES do acionamento da área nova: aqui
+    dentro, "o último acionamento" já seria o dela.
+
+    A gravidade NÃO entra na janela de envio, e a omissão é a regra do catálogo:
+    `quando_enviar` só adianta o email do caso crítico, e adiantar este seria
+    acordar de madrugada, por um caso grave, exatamente a pessoa que não tem
+    mais nada a fazer por ele (issue #709). O aviso espera o expediente como
+    qualquer não crítico."""
+    if not destinatario or not destinatario.get("destinatario_email"):
+        # A frase não afirma a CAUSA, e isso é a mesma doutrina do resto da
+        # fatia anterior: `destinatario_do_ultimo_acionamento` devolve None em
+        # dois casos diferentes (o caso não tem acionamento registrado, ou a
+        # leitura caiu), e daqui não dá para saber qual foi. Dizer "sem
+        # acionamento anterior" mandaria quem investiga procurar buraco de
+        # cadastro quando o PostgREST é que tinha caído. Quem separa os dois no
+        # log é a linha de erro da própria leitura, que só existe no segundo.
+        logger.warning(
+            "[Ouvidoria] A manifestação %s foi redirecionada e o aviso à área antiga não teve a quem ir "
+            "(sem acionamento registrado, ou a leitura dele falhou: a falha tem linha de erro própria)",
+            manifestacao_id,
+        )
+        return None
+    notificacao = registrar(
+        supabase,
+        manifestacao_id=manifestacao_id,
+        gatilho=GATILHO_REDIRECIONAMENTO_AREA,
+        destinatario_nome=destinatario.get("destinatario_nome") or "",
+        destinatario_email=destinatario["destinatario_email"],
+        papel_destinatario=destinatario.get("papel_destinatario"),
+        enviar_a_partir_de=quando_enviar(agora, None, feriados),
+        detalhe=detalhe,
+    )
+    if notificacao is None:
+        # `registrar` já logou o erro. Aqui o que importa é não seguir para o
+        # despacho com None na mão.
+        return None
+    despachar_agora_se_puder(supabase, notificacao, agora, feriados)
+    return notificacao
+
+
 def _carregar_manifestacao(supabase, manifestacao_id: str) -> dict | None:
     result = (
         supabase.table("ouvidoria_protocolos").select(_CAMPOS_DO_EMAIL).eq("id", manifestacao_id).limit(1).execute()
@@ -1208,6 +1381,11 @@ def _montar(
         # tramitação seguinte, ou um email mudo. A linha guarda o que foi dito
         # naquele ato, como a trilha imutável guarda (RN-64).
         return montar_encerramento_manifestante(manifestacao.get("protocolo") or "", notificacao.get("detalhe") or "")
+    if notificacao["gatilho"] == GATILHO_REDIRECIONAMENTO_AREA:
+        # Nem a manifestação, nem `agora`, nem os feriados: o aviso à área
+        # antiga não mostra prazo nenhum, e o `setor` do caso, aqui, já é o da
+        # área NOVA. Ver `montar_redirecionamento_area`.
+        return montar_redirecionamento_area(notificacao["destinatario_nome"], notificacao.get("detalhe"))
     if notificacao["gatilho"] == GATILHO_DEVOLVIDO_A_OUVIDORIA:
         # Sem prazo e sem calendário: o vencimento da área foi zerado pela
         # própria devolução, e o que este aviso pede é despacho, não resposta.

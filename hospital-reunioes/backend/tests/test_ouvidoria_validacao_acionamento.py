@@ -168,6 +168,17 @@ PRAZOS = [
 # O teto de linhas que uma resposta do PostgREST traz sem paginação.
 TETO_POSTGREST = 1000
 
+# O contador que dá a cada linha inserida um `criada_em` crescente, no lugar do
+# DEFAULT now() do banco. Ver o `setdefault` no `execute` do insert: sem ele,
+# `.order("criada_em", desc=True)` devolvia a linha mais ANTIGA.
+_criacoes = 0
+
+
+def _proxima_criacao() -> int:
+    global _criacoes
+    _criacoes += 1
+    return _criacoes
+
 
 class _TabelaFake:
     """Fake do PostgREST fiel no que importa: o select projeta só o que foi
@@ -238,6 +249,16 @@ class _TabelaFake:
             for n in novos:
                 linha = dict(n)
                 linha.setdefault("id", f"{self.nome}-{len(self.rows) + 1}")
+                # `criada_em` é DEFAULT now() no banco, e sem ele aqui toda
+                # linha nascia com a coluna vazia: `.order("criada_em",
+                # desc=True)` comparava "" com "" e devolvia a ordem de
+                # INSERÇÃO, ou seja, a mais ANTIGA no lugar da mais recente. O
+                # aviso à área antiga (issue #709) lê justamente "o último
+                # acionamento", e sem este carimbo o teste que prova que ele lê
+                # ANTES do acionamento da área nova passava verde dos dois
+                # jeitos. O valor é um contador, e não o relógio: precisa ser
+                # monotônico e legível, não realista.
+                linha.setdefault("criada_em", f"2026-01-01T00:00:00.{_proxima_criacao():09d}+00:00")
                 self.rows.append(linha)
                 gravados.append(dict(linha))
             return type("R", (), {"data": gravados})()
