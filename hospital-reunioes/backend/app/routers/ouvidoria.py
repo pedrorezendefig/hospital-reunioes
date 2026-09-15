@@ -80,6 +80,7 @@ from app.services.ouvidoria_estados import (
     dentro_da_janela_de_reincidencia,
     e_devolucao,
     e_pausa,
+    e_redirecionamento,
     e_retomada,
     entra_no_indicador_de_resolucao,
     entra_no_indicador_de_resposta_conclusiva,
@@ -1265,6 +1266,16 @@ async def transicionar_manifestacao(
     barrar_caso_apagado(caso, "movido de estado")
     estado_atual = caso["status"]
 
+    # A porta de fundo que o ADR 0055 nomeia, agora FECHADA (issue #708): tirar
+    # o caso da área é o Redirecionamento, que tem rota própria, e não uma
+    # transição genérica. Aceitá-la com motivo deixaria o caso fora da área com
+    # o relógio correndo, os links da área antiga vivos, o estouro consumado sem
+    # carimbo e a trilha sem o prefixo do ato. A recusa vem ANTES de
+    # `validar_transicao`, que continua exigindo o motivo nas duas arestas (é o
+    # que impede a RPC de ser porta de fundo por outro chamador).
+    if e_redirecionamento(estado_atual, pedido.estado):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=RECUSA_DA_TRANSICAO_GENERICA)
+
     try:
         validar_transicao(
             estado_atual,
@@ -1272,15 +1283,6 @@ async def transicionar_manifestacao(
             desfecho=pedido.desfecho,
             desfecho_descricao=pedido.desfecho_descricao,
             motivo_pausa=pedido.observacao,
-            # A observação também responde pelo motivo do redirecionamento
-            # (issue #708), como já responde pelo da pausa. Esta rota é a porta
-            # de fundo que o ADR 0055 nomeia: ela leva o caso de
-            # `aguardando_area` (e agora de `respondido`) para
-            # `em_classificacao` sem parar o relógio da área, sem derrubar os
-            # links dela e sem acionar ninguém. Continuar a aceitá-la é
-            # deliberado (o painel precisa da transição genérica), mas agora ela
-            # só passa DIZENDO POR QUÊ, e o que ela escreve fica na trilha.
-            motivo_redirecionamento=pedido.observacao,
         )
     except DadosInsuficientesError as exc:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
@@ -3552,6 +3554,16 @@ class AreaAcionavel:
     destinatario: Destinatario
     sigiloso: bool
     extrato: str
+    # O calendário e as células da tabela de prazos entram aqui porque eram as
+    # únicas leituras de banco que sobravam DEPOIS do ponto sem volta do
+    # redirecionamento: um soluço do PostgREST nelas estacionava o caso em
+    # `em_classificacao` por algo que dava para conferir junto com o resto
+    # (achado da review do PR #714). A conclusiva é `None` quando o caso já tem
+    # a data congelada, e é a MESMA condicional de antes: quem já tem, mantém
+    # (issue #601).
+    feriados: frozenset[dt.date]
+    prazo_da_area: Prazo
+    prazo_conclusivo: Prazo | None
 
 
 def conferir_o_acionamento(supabase, caso: dict, pedido: PedidoValidacao, hoje: dt.date) -> AreaAcionavel:
@@ -3602,7 +3614,20 @@ def conferir_o_acionamento(supabase, caso: dict, pedido: PedidoValidacao, hoje: 
             detail=recusa_de_setor_sem_responsavel(setor),
         )
 
-    return AreaAcionavel(setor=setor, destinatario=destinatario, sigiloso=sigiloso, extrato=extrato)
+    return AreaAcionavel(
+        setor=setor,
+        destinatario=destinatario,
+        sigiloso=sigiloso,
+        extrato=extrato,
+        feriados=carregar_feriados(supabase),
+        prazo_da_area=carregar_prazo_da_area(supabase, pedido.gravidade),
+        # A conclusiva só é lida quando vai ser usada, que é a condicional de
+        # sempre: caso que já tem prazo conclusivo não recalcula, e ler a célula
+        # dele seria uma ida ao banco para jogar fora.
+        prazo_conclusivo=(
+            carregar_prazo_conclusivo(supabase, pedido.gravidade) if not caso.get("prazo_conclusivo_em") else None
+        ),
+    )
 
 
 def recusa_de_setor_sem_responsavel(setor: str) -> str:
@@ -3642,8 +3667,11 @@ def acionar_a_area(
     manifestacao_id = caso["id"]
     setor = area.setor
     destinatario = area.destinatario
-    feriados = carregar_feriados(supabase)
-    vencimento = calcular_vencimento(agora, carregar_prazo_da_area(supabase, pedido.gravidade), feriados)
+    # Nada aqui lê a tabela de prazos nem o calendário: os dois vieram do
+    # `conferir_o_acionamento`, para nenhuma leitura de banco sobrar depois do
+    # ponto sem volta do redirecionamento (review do PR #714).
+    feriados = area.feriados
+    vencimento = calcular_vencimento(agora, area.prazo_da_area, feriados)
 
     # O prazo conclusivo do caso (D-10, RN-55), congelado aqui pelo mesmo
     # motivo do prazo da área: mudar a tabela de prazos amanhã não pode mover o
@@ -3681,8 +3709,8 @@ def acionar_a_area(
     entrada = ouvidoria_prorrogacao.entrada_da_manifestacao(caso)
     conclusivo_congelado = caso.get("prazo_conclusivo_em")
     vencimento_conclusivo = (
-        calcular_vencimento(entrada, carregar_prazo_conclusivo(supabase, pedido.gravidade), feriados)
-        if entrada is not None and not conclusivo_congelado
+        calcular_vencimento(entrada, area.prazo_conclusivo, feriados)
+        if entrada is not None and not conclusivo_congelado and area.prazo_conclusivo is not None
         else None
     )
 
@@ -3915,7 +3943,15 @@ def acionar_a_area(
 _CAMPOS_DO_REDIRECIONAMENTO = (
     "id, status, sigilo_reforcado, tipo_manifestacao, contato_em, data_abertura, "
     "prazo_conclusivo_em, setor, anonimizada_em, apagamento_pedido_em, "
-    "prazo_area_em, respondida_em, area_estourou_em"
+    # O relógio da área, que só esta porta para (a validação nunca parou
+    # relógio nenhum, ela sempre partiu de `em_classificacao`).
+    #
+    # `respondida_por_nome` entra junto com `respondida_em` porque as duas saem
+    # e voltam JUNTAS: o rollback devolve o par, e uma coluna fora deste select
+    # chegaria como `None` ao `parar`, que gravaria `None` de volta e apagaria
+    # em silêncio quem respondeu. É a armadilha que a issue #669 registrou, só
+    # que pela porta do desfazer.
+    "prazo_area_em, respondida_em, respondida_por_nome, area_estourou_em"
 )
 
 # A frase do caso que saiu da área antiga e não chegou à nova. Ela aponta o
@@ -3933,6 +3969,31 @@ FALHA_DEPOIS_DA_SAIDA = (
 SAIU_DA_AREA_NO_MEIO = (
     "Este caso saiu da fila da área durante o envio, então o redirecionamento não valeu por ele. "
     "Confira a manifestação no painel antes de tentar de novo."
+)
+
+# A recusa de redirecionar para a área que já está com o caso (decisão do Pedro
+# na review do PR #714). Ela aponta o ato previsto para cobrar de novo a MESMA
+# área, que dá meio prazo de propósito: sem a recusa, o redirecionamento seria o
+# caminho para dar prazo inteiro novo a quem já falhou, só escrevendo um motivo.
+RECUSA_DA_MESMA_AREA = (
+    "Este caso já está com essa área, então não há para onde redirecioná-lo. "
+    "Escolha outra área, ou use a devolução por insuficiência para cobrar de novo a mesma, "
+    "que recalcula o prazo em vez de dar um novo por inteiro."
+)
+
+# A recusa da rota genérica de transição nas duas arestas de saída para
+# `em_classificacao` (decisão do Pedro na review do PR #714).
+#
+# A porta existia antes desta fatia e nenhuma tela a usa (nem o Dossiê, que só
+# manda pausa e retomada, nem o modal de encerrar): o destino só era alcançável
+# por requisição montada à mão. Ela tirava o caso da área sem parar o relógio,
+# sem derrubar os links da área antiga, sem carimbar o estouro consumado e sem o
+# prefixo que o Dossiê usa para não contar o ato como devolução. Fechá-la fecha
+# junto o fato de a `observacao` desta rota não passar pela peneira dos textos
+# (sem invisível, sem travessão, teto), que a rota do redirecionamento aplica.
+RECUSA_DA_TRANSICAO_GENERICA = (
+    "Tirar o caso da área não é transição de estado: use o redirecionamento, "
+    "que exige o motivo, para o relógio da área antiga, derruba os links dela e aciona a área nova."
 )
 
 
@@ -4048,14 +4109,37 @@ def redirecionar_o_caso(supabase, me: dict, caso: dict, pedido: PedidoRedirecion
     # classificação por causa de um cadastro que dava para conferir antes.
     area = conferir_o_acionamento(supabase, caso, pedido, agora.astimezone(FUSO_HOSPITAL).date())
 
+    # Redirecionar é mudar de área, e a comparação é contra a grafia CANÔNICA
+    # que a taxonomia devolveu: sem ela, "recepcao" digitado à mão passaria por
+    # área diferente de "Recepcao" (issue #419).
+    #
+    # Sem esta recusa o ato viraria um jeito de dar prazo INTEIRO novo à mesma
+    # área escrevendo um motivo, contornando a devolução por insuficiência, que
+    # dá MEIO prazo de propósito (decisão do Pedro na review do PR #714).
+    if area.setor == caso.get("setor"):
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=RECUSA_DA_MESMA_AREA)
+
     # O setor antigo viaja CONGELADO na observação, porque o acionamento logo
     # abaixo sobrescreve `setor` no caso: lida meses depois, a trilha diria que
     # o caso saiu da área em que ele acabou de entrar.
     observacao = ouvidoria_redirecionamento.observacao_do_redirecionamento(caso.get("setor"), motivo)
 
+    # O estouro é decidido ANTES da parada, porque ele lê o `prazo_area_em` e o
+    # `respondida_em` que a parada vai apagar.
     estourou = ouvidoria_relogio_da_area.estouro_a_carimbar(caso, agora)
     try:
-        parado = ouvidoria_relogio_da_area.parar(supabase, manifestacao_id, caso, estourou)
+        # `limpar_a_resposta`: o ciclo da área anterior acabou, então o marco T2
+        # dela sai junto com o relógio. Sem isso, o caso que vem de `respondido`
+        # chega à área NOVA com a resposta da ERRADA carimbada, e
+        # `cumprimento_da_area` (que lê `respondida_em` como a resposta do ciclo
+        # corrente) devolve "cumprido" no primeiro instante da área nova e para
+        # sempre, mesmo que ela nunca responda. Quatro leitores mentiriam junto:
+        # o Dossiê, o portal do responsável, as pendências por área da Diretoria
+        # (`_esta_com_a_area`) e o tempo de resposta no ranking
+        # (`_minutos_de_resposta`, que calcularia fim antes do início). É a
+        # mesma limpeza da devolução por insuficiência e da reabertura por
+        # reincidência, pelo motivo escrito nas duas.
+        parado = ouvidoria_relogio_da_area.parar(supabase, manifestacao_id, caso, estourou, limpar_a_resposta=True)
     except (APIError, HTTPError) as exc:
         # `code` só existe no `APIError`: lido direto, o log da falha de rede
         # quebraria dentro do próprio tratamento de erro.
@@ -4071,6 +4155,19 @@ def redirecionar_o_caso(supabase, me: dict, caso: dict, pedido: PedidoRedirecion
                 "O caso continua com ela. Tente de novo em instantes."
             ),
         ) from exc
+    if parado is None:
+        # Nenhuma linha casou: o caso saiu do estado de origem entre a leitura e
+        # a parada (a área respondeu por um link vivo, a Ouvidoria pausou, outra
+        # sessão redirecionou). Parar aqui é obrigatório, e não zelo: a aresta
+        # que esta fatia abriu faz a RPC logo abaixo ACEITAR o caso que acabou
+        # de ser respondido, e seguir em frente mandaria à área nova um caso com
+        # o relógio da anterior correndo e a resposta recém-chegada intacta.
+        logger.warning(
+            "Redirecionamento abortado: a manifestação %s saiu de %s antes da parada do relógio",
+            manifestacao_id,
+            caso.get("status"),
+        )
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=SAIU_DA_AREA_NO_MEIO)
 
     try:
         supabase.rpc(
@@ -4114,6 +4211,13 @@ def redirecionar_o_caso(supabase, me: dict, caso: dict, pedido: PedidoRedirecion
         ) from exc
 
     # Daqui em diante o caso já saiu, e o movimento está na trilha imutável.
+    #
+    # Os DOIS `except` existem porque `acionar_a_area` não converte tudo o que
+    # pode falhar nele: o update da classificação e o `select` final do Dossiê
+    # não têm `except` nenhum, e a RPC de entrada pega só `APIError`. Um
+    # `ReadTimeout` ali escapava cru até o FastAPI, e o ouvidor recebia um 500
+    # sem corpo: nunca lia que o caso tinha saído da área antiga, e o caso
+    # ficava parado até alguém notar. O critério de aceite promete o contrário.
     try:
         return acionar_a_area(supabase, me, caso, pedido, area, agora, acao_no_log="redirecionamento")
     except HTTPException as exc:
@@ -4123,6 +4227,21 @@ def redirecionar_o_caso(supabase, me: dict, caso: dict, pedido: PedidoRedirecion
         raise HTTPException(
             status_code=exc.status_code,
             detail=f"{FALHA_DEPOIS_DA_SAIDA} O acionamento respondeu: {exc.detail}",
+        ) from exc
+    except Exception as exc:
+        # `Exception` e não a tupla do PostgREST: o que não pode acontecer é o
+        # ouvidor ficar sem a frase, e qualquer falha daqui para baixo deixa o
+        # caso no MESMO estado (fora da área antiga, em classificação, com o
+        # movimento gravado). O tipo não muda o que ele precisa fazer, então
+        # estreitar a captura só reabriria o buraco para o tipo seguinte.
+        logger.error(
+            "Falha não tratada no acionamento do redirecionamento da manifestação %s (%s)",
+            manifestacao_id,
+            type(exc).__name__,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=FALHA_DEPOIS_DA_SAIDA,
         ) from exc
 
 

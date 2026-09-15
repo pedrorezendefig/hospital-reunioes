@@ -556,6 +556,32 @@ async def devolver_a_ouvidoria(
         _devolver_o_link(supabase, vinculo, agora.isoformat())
         logger.error("Falha ao parar o relógio da área da manifestação %s", vinculo["manifestacao_id"])
         raise _indisponivel() from exc
+    if parado is None:
+        # O caso saiu de `aguardando_area` entre a leitura e esta escrita: a
+        # Ouvidoria o pausou, ou a área respondeu por outro link.
+        #
+        # Até a issue #708 este ramo não precisava de resposta própria, porque a
+        # RPC logo abaixo recusava sozinha todo estado que não fosse
+        # `aguardando_area`. Com a aresta `respondido -> em_classificacao`
+        # aberta, ela passa a ACEITAR o caso que acabou de ser respondido, e
+        # seguir em frente devolveria à Ouvidoria um caso com o relógio da área
+        # ainda correndo e com a resposta recém-chegada intacta.
+        #
+        # O link NÃO volta, pelo mesmo motivo do `responder` e do ramo em que a
+        # restauração não casa: o `GET` do portal não olha status nenhum, e um
+        # claim devolvido aqui reabriria a leitura do relato integral e da
+        # identificação de quem manifestou pelo resto dos 30 dias do token.
+        logger.warning(
+            "Devolução à Ouvidoria abortada: a manifestação %s saiu de aguardando_area antes da parada",
+            vinculo["manifestacao_id"],
+        )
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=(
+                "Este caso saiu da fila da área durante o envio, então este link não responde mais por ele. "
+                "A devolução pode já ter sido registrada: confirme com a Ouvidoria antes de enviar de novo."
+            ),
+        )
 
     try:
         supabase.rpc(

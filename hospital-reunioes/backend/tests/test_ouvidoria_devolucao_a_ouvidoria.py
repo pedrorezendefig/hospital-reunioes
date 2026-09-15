@@ -689,3 +689,47 @@ class TestDevolucaoAOuvidoriaEmCasoApagado:
 
         assert self._devolver(client, token).status_code == 200
         assert _caso_no_banco(sb)["status"] == "em_classificacao"
+
+
+class TestACorridaQueAArestaNovaDestrancou:
+    """A aresta `respondido -> em_classificacao` (issue #708) mudou o que
+    acontece quando a área RESPONDE entre a leitura do caso e a parada do
+    relógio, por outro link vivo do mesmo caso.
+
+    Antes dela, a RPC recusava sozinha: `respondido -> em_classificacao` não
+    existia no grafo, o rollback devolvia o prazo e o responsável lia 409. Com a
+    aresta aberta a RPC passa a ACEITAR, e sem guarda a devolução entraria com o
+    relógio da área nunca parado e a resposta recém-chegada intacta, num caso
+    que já não estava mais esperando a área.
+
+    Quem barra agora é o `parar` devolvendo None quando nenhuma linha casa. Este
+    teste é da rota PÚBLICA, sem login, e é ele que prova que a aresta nova não
+    abriu buraco no portal do setor."""
+
+    def test_a_devolucao_aborta_se_a_area_responder_antes_da_parada(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb, token = _portal_com_caso_na_area(monkeypatch, _nunca_envia_email_de_verdade)
+        prazo = _caso_no_banco(sb)["prazo_area_em"]
+        update_de_verdade = _TabelaFake.update
+        t2 = "2026-08-25T18:00:00+00:00"
+
+        def _a_area_responde_no_meio(self, payload):
+            if self.nome == "ouvidoria_protocolos" and payload.get("prazo_area_em", "?") is None:
+                caso = _caso_no_banco(sb)
+                if caso["status"] == "aguardando_area":
+                    # Outra requisição, pelo link de uma cobrança, acabou de
+                    # entrar com a resposta da área.
+                    caso["status"] = "respondido"
+                    caso["respondida_em"] = t2
+                    caso["respondida_por_nome"] = "Carlos Titular"
+            return update_de_verdade(self, payload)
+
+        monkeypatch.setattr(_TabelaFake, "update", _a_area_responde_no_meio)
+
+        resposta = client.post(f"/api/ouvidoria-setor/{token}/devolver", json={"motivo": MOTIVO})
+
+        assert resposta.status_code == 409, resposta.text
+        depois = _caso_no_banco(sb)
+        assert depois["status"] == "respondido", "o caso foi devolvido depois de a área ter respondido"
+        assert depois["prazo_area_em"] == prazo, "o relógio da área parou numa corrida perdida"
+        assert depois["respondida_em"] == t2, "a resposta recém-chegada foi apagada"
+        assert not any(m["estado_novo"] == "em_classificacao" for m in sb.tabelas["ouvidoria_movimentos"])

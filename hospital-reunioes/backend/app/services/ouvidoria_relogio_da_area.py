@@ -24,7 +24,7 @@ from __future__ import annotations
 
 import datetime as dt
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 from httpx import HTTPError
 from postgrest.exceptions import APIError
@@ -56,6 +56,11 @@ class RelogioParado:
     estado_de_origem: str
     prazo_anterior: object
     carimbo_a_restaurar: dict
+    # O par do `limpar_a_resposta`: as colunas do marco T2 com os valores que
+    # elas tinham, e só quando a ida as escreveu. Vazio para quem não pediu a
+    # limpeza, e é isso que mantém o rollback da Devolução à Ouvidoria com o
+    # mesmo payload de sempre (issue #708).
+    carimbo_da_resposta_a_restaurar: dict = field(default_factory=dict)
 
 
 def estouro_a_carimbar(caso: dict, agora: dt.datetime) -> dt.datetime | None:
@@ -74,9 +79,17 @@ def estouro_a_carimbar(caso: dict, agora: dt.datetime) -> dt.datetime | None:
     )
 
 
-def parar(supabase, manifestacao_id: str, caso: dict, estourou: dt.datetime | None) -> RelogioParado:
+def parar(
+    supabase,
+    manifestacao_id: str,
+    caso: dict,
+    estourou: dt.datetime | None,
+    *,
+    limpar_a_resposta: bool = False,
+) -> RelogioParado | None:
     """Zera o vencimento da área e os carimbos dos jobs de prazo, e grava o
-    estouro consumado quando houver. Devolve o que o desfazer precisa.
+    estouro consumado quando houver. Devolve o que o desfazer precisa, ou
+    **None quando nenhuma linha casou**.
 
     Os carimbos dos jobs saem junto porque sem eles o caso despachado depois
     ficaria fora da véspera, da cobrança e da escada para sempre: cada job pula
@@ -87,11 +100,51 @@ def parar(supabase, manifestacao_id: str, caso: dict, estourou: dt.datetime | No
     decidiu apagar: a devolução por insuficiência grava o mesmo campo sem
     filtro de status, e o `None` daqui apagaria o carimbo dela na corrida.
 
+    **`None` é recusa, não detalhe.** Nenhuma linha casada significa que o caso
+    saiu do estado de origem entre a leitura e esta escrita, e quem chama TEM
+    que parar aí. Até a issue #708 esse ramo não precisava de resposta: a RPC
+    logo adiante recusava sozinha, porque `respondido -> em_classificacao` não
+    existia no grafo. Com a aresta aberta, a RPC passa a aceitar, e seguir em
+    frente mandaria para a Ouvidoria (pela devolução do portal) ou para a área
+    nova (pelo redirecionamento) um caso cujo relógio nunca parou, carregando
+    junto a resposta que a área acabou de dar.
+
+    `limpar_a_resposta` é opt-in, e o padrão é não mexer no marco T2. Com ele, o
+    update também apaga `respondida_em` e `respondida_por_nome`, que é o que o
+    Redirecionamento a partir de `respondido` precisa: o ciclo daquela área
+    acabou, e a área NOVA não pode nascer com a resposta da anterior no lugar da
+    dela (`cumprimento_da_area` lê `respondida_em` como "a resposta do ciclo
+    CORRENTE" e diria "cumprido" para sempre). É a mesma limpeza que a devolução
+    por insuficiência e a reabertura por reincidência já fazem, pelo mesmo
+    motivo escrito lá.
+
+    `resposta_da_area` NÃO sai, como na devolução por insuficiência: o texto é a
+    resposta corrente que o ouvidor relê, a trilha guarda a cópia imutável dele
+    (uma por ciclo, issue #374) e o que mente é o MARCO, não o texto.
+
+    Sem o opt-in o payload é byte a byte o de antes desta issue, e é isso que
+    mantém a Devolução à Ouvidoria (rota pública, sem login) intocada.
+
     Levanta o erro do PostgREST para quem chamou: a resposta ao usuário é
     diferente em cada porta, e ela não mora aqui."""
     estado_de_origem = str(caso.get("status"))
     carimbo_do_estouro = {"area_estourou_em": estourou.isoformat()} if estourou else {}
-    parado = RelogioParado(
+    limpeza_da_resposta = {"respondida_em": None, "respondida_por_nome": None} if limpar_a_resposta else {}
+    result = (
+        supabase.table("ouvidoria_protocolos")
+        .update(
+            {"prazo_area_em": None}
+            | carimbo_do_estouro
+            | ouvidoria_prorrogacao.carimbos_a_zerar()
+            | limpeza_da_resposta
+        )
+        .eq("id", manifestacao_id)
+        .eq("status", estado_de_origem)
+        .execute()
+    )
+    if not result.data:
+        return None
+    return RelogioParado(
         estado_de_origem=estado_de_origem,
         prazo_anterior=caso.get("prazo_area_em"),
         # O desfazer nasce colado no fazer: o rollback devolve a coluna ao valor
@@ -99,15 +152,13 @@ def parar(supabase, manifestacao_id: str, caso: dict, estourou: dt.datetime | No
         # `except` de quem chama mandaria `None` para um caso cujo carimbo esta
         # requisição nunca tocou (issue #623).
         carimbo_a_restaurar={"area_estourou_em": caso.get("area_estourou_em")} if carimbo_do_estouro else {},
+        carimbo_da_resposta_a_restaurar={
+            "respondida_em": caso.get("respondida_em"),
+            "respondida_por_nome": caso.get("respondida_por_nome"),
+        }
+        if limpeza_da_resposta
+        else {},
     )
-    (
-        supabase.table("ouvidoria_protocolos")
-        .update({"prazo_area_em": None} | carimbo_do_estouro | ouvidoria_prorrogacao.carimbos_a_zerar())
-        .eq("id", manifestacao_id)
-        .eq("status", estado_de_origem)
-        .execute()
-    )
-    return parado
 
 
 def restaurar(supabase, manifestacao_id: str, parado: RelogioParado) -> bool:
@@ -128,11 +179,20 @@ def restaurar(supabase, manifestacao_id: str, parado: RelogioParado) -> bool:
     juntos, e desfazer meio par é pior que não desfazer nada: o caso ficaria com
     o prazo de volta e o carimbo do estouro gravado, e `cumprimento_da_area` lê
     o carimbo antes de tudo. Uma prorrogação aprovada depois nunca mais
-    conseguiria levar aquele caso a `cumprido` (issue #607)."""
+    conseguiria levar aquele caso a `cumprido` (issue #607).
+
+    O marco T2 volta pela mesma regra do carimbo do estouro: só quando a ida o
+    apagou. Sem esse par, o rollback do redirecionamento deixaria um caso
+    `respondido` sem T2, que é o mesmo meio-desfazer que a issue #623
+    corrigiu."""
     try:
         result = (
             supabase.table("ouvidoria_protocolos")
-            .update({"prazo_area_em": parado.prazo_anterior} | parado.carimbo_a_restaurar)
+            .update(
+                {"prazo_area_em": parado.prazo_anterior}
+                | parado.carimbo_a_restaurar
+                | parado.carimbo_da_resposta_a_restaurar
+            )
             .eq("id", manifestacao_id)
             .eq("status", parado.estado_de_origem)
             .execute()
