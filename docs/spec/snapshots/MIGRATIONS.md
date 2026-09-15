@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-15T00:44-0300 -->
+<!-- last_update: 2026-09-15T11:57-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -108,6 +108,7 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 104 | `104_tecnologia_conversa_espelhada.sql` | a Conversa espelhada na issue do GitHub | 0 | 1 | 0 | 0 |
 | 105 | `105_tecnologia_mencoes_da_correcao.sql` | quais mencoes entraram na ULTIMA correcao | 0 | 1 | 0 | 0 |
 | 106 | `106_ouvidoria_token_do_setor_revogado.sql` | o token do portal do setor pode ser REVOGADO | 0 | 1 | 0 | 0 |
+| 107 | `107_ouvidoria_redirecionamento_pelo_ouvidor.sql` | o Redirecionamento pelo ouvidor | 0 | 0 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 102 migrations.
+**Total:** 103 migrations.
