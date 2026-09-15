@@ -7,7 +7,9 @@
  * que decide para quem o email de acionamento vai: setor sem titular vigente
  * não é acionável e a demanda sobe ao gestor, com alerta à Diretoria.
  *
- * Só a Diretoria Executiva abre esta tela, a mesma régua da tabela de prazos.
+ * O Perfil da Ouvidoria inteiro abre esta tela (ADR 0055, decisão 5, issue
+ * #711): trocar a pessoa que responde por um setor é trabalho de quem opera a
+ * Ouvidoria. A tabela de prazos é que continua só da Diretoria.
  * O backend recusa de novo, para quem chamar a API direto.
  */
 
@@ -201,7 +203,7 @@ export default function ResponsaveisDaOuvidoriaPage() {
       <div className="p-4 md:p-8 max-w-3xl mx-auto">
         <div className="bg-white rounded-2xl border border-border shadow-premium p-10 text-center">
           <p className="text-slate-500 font-medium">
-            Só a Diretoria Executiva mantém o cadastro de responsáveis por setor.
+            Só a Ouvidoria mantém o cadastro de responsáveis por setor.
           </p>
           <Link href="/ouvidoria" className="text-primary text-sm font-semibold mt-3 inline-block">
             Voltar para a Ouvidoria

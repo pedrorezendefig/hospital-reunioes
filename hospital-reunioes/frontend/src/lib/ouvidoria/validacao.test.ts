@@ -37,10 +37,14 @@ describe("validação e acionamento (issue #325)", () => {
     expect(podeValidar("encerrado")).toBe(false);
   });
 
-  it("quem mantem o cadastro de responsaveis e a diretoria executiva", () => {
+  // ADR 0055, decisao 5 (issue #711): trocar quem responde por um setor deixou
+  // de passar pela Diretoria. A tabela de prazos e que continua so dela.
+  it("quem mantem o cadastro de responsaveis e o perfil da ouvidoria inteiro", () => {
+    expect(podeGerirResponsaveis("ouvidor")).toBe(true);
     expect(podeGerirResponsaveis("diretoria_executiva")).toBe(true);
-    expect(podeGerirResponsaveis("ouvidor")).toBe(false);
+    expect(podeGerirResponsaveis("secretaria")).toBe(false);
     expect(podeGerirResponsaveis(null)).toBe(false);
+    expect(podeGerirResponsaveis(undefined)).toBe(false);
   });
 });
 

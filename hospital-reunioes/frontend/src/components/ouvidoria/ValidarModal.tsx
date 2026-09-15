@@ -454,8 +454,8 @@ export function ValidarModal({
           <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
             <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
             <span>
-              Este setor não tem titular nem gestor cadastrado. Peça à Diretoria Executiva para
-              cadastrar o responsável antes de acionar.
+              Este setor não tem titular nem gestor cadastrado. Cadastre o responsável em
+              Responsáveis por setor antes de acionar.
             </span>
           </div>
         ) : semTitular ? (

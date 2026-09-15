@@ -1067,18 +1067,19 @@ class TestCadastroDeResponsaveis:
         cadastrados = {(r["papel"], r["email"]) for r in supabase.tabelas["ouvidoria_setor_responsaveis"]}
         assert cadastrados == {("titular", "carlos@hsm.br"), ("substituto", "bia@hsm.br")}
 
-    def test_ouvidor_le_o_cadastro_mas_nao_edita(self, monkeypatch):
+    def test_ouvidor_le_o_cadastro(self, monkeypatch):
         """O ouvidor trabalha com o cadastro e precisa enxergar quem responde
-        por cada setor; quem define os responsáveis é a Diretoria, como já
-        acontece com a tabela de prazos."""
+        por cada setor.
+
+        A escrita era da Diretoria quando este teste nasceu; desde a issue #711
+        (ADR 0055, decisão 5) ela é do Perfil da Ouvidoria inteiro, e quem prova
+        isso é `test_ouvidoria_responsaveis_pelo_ouvidor.py`."""
         client, _ = _client(monkeypatch, OUVIDOR)
 
         leitura = client.get("/api/ouvidoria/responsaveis")
-        escrita = client.post("/api/ouvidoria/responsaveis", json=NOVO_RESPONSAVEL)
 
         assert leitura.status_code == 200
         assert [r["email"] for r in leitura.json()["responsaveis"]] == ["carlos@hsm.br"]
-        assert escrita.status_code == 403
 
     @pytest.mark.parametrize("participante", [SECRETARIA, SUPER_ADMIN])
     def test_quem_esta_fora_da_ouvidoria_nao_ve_o_cadastro(self, monkeypatch, participante):
@@ -1980,10 +1981,10 @@ class TestCobrancaDoSetorPelaFila:
         assert r.status_code == 409, r.text
         detalhe = r.json()["detail"]
         assert "titular nem gestor vigente" in detalhe
-        # O cadastro de responsáveis é da Diretoria Executiva: o ouvidor que lê
-        # a recusa não tem a tela para consertar, e a frase precisa dizer de
-        # quem é o conserto em vez de mandá-lo cadastrar.
-        assert "Diretoria Executiva" in detalhe
+        # A frase mandava esperar a Diretoria Executiva porque o ouvidor não
+        # tinha a tela para consertar. Desde a issue #711 ele tem, então ela
+        # aponta o conserto: quem lê a recusa é quem pode fazê-lo.
+        assert "Responsáveis por setor" in detalhe
         assert _nunca_envia_email_de_verdade == []
         assert len(supabase.tabelas["ouvidoria_notificacoes"]) == notificacoes_antes
         assert len(supabase.tabelas["ouvidoria_setor_tokens"]) == tokens_antes
@@ -2003,7 +2004,7 @@ class TestCobrancaDoSetorPelaFila:
         detalhe = r.json()["detail"]
         assert "Carlos Titular" in detalhe
         assert "sem email" in detalhe
-        assert "Diretoria Executiva" in detalhe
+        assert "Responsáveis por setor" in detalhe
         assert "não responde mais" not in detalhe
         assert "titular nem gestor vigente" not in detalhe
         assert _nunca_envia_email_de_verdade == []
