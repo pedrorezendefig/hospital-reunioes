@@ -296,8 +296,10 @@ describe("a barra de atalhos numa linha só (RN-77, D-16)", () => {
 
     const nav = screen.getByRole("navigation", { name: /atalhos da ouvidoria/i });
     expect(within(nav).getByRole("link", { name: "Painel em tempo real" })).toBeTruthy();
+    // O cadastro de responsáveis passou a ser do Perfil da Ouvidoria inteiro
+    // (issue #711); a tabela de prazos continua só da Diretoria (RN-21).
+    expect(within(nav).getByRole("link", { name: "Responsáveis por setor" })).toBeTruthy();
     expect(within(nav).queryByRole("link", { name: "Tabela de prazos" })).toBeNull();
-    expect(within(nav).queryByRole("link", { name: "Responsáveis por setor" })).toBeNull();
   });
 
   it("quem está fora da Ouvidoria não vê barra de atalhos nenhuma", async () => {

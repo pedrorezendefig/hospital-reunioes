@@ -687,7 +687,9 @@ async def require_diretoria_executiva(
     com o prazo, quem o define é a Diretoria. Desde a issue #595 ele guarda
     também o apagamento do caso, que não é parâmetro nenhum, e é por isso que a
     frase da recusa deixou de falar em "parâmetros": ela nomeava um ato que não
-    era o que a pessoa tentou fazer."""
+    era o que a pessoa tentou fazer. Os responsáveis saíram daqui na issue #711
+    (ADR 0055, decisão 5): o cadastro é de quem opera a Ouvidoria, e o prazo
+    continua sendo da Diretoria."""
     me = await get_participante_for_user(current_user, supabase)
     barrar_desligado(me)
     if not me or me.get("perfil_ouvidoria") != "diretoria_executiva":
@@ -3100,6 +3102,29 @@ def exigir_papel_unico_vigente(
             )
 
 
+def registrar_no_audit(request: Request, supabase, me: dict, acao: str, responsavel: dict) -> None:
+    """O rastro de quem mexeu no cadastro de responsáveis (issue #711).
+
+    Nasceu quando o cadastro passou a ter dois donos (ADR 0055, decisão 5):
+    com só a Diretoria na porta, "quem trocou o titular" saía do perfil de quem
+    tinha a chave; com o ouvidor junto, a linha do banco sozinha não responde
+    mais. É a mesma tabela dos outros atos administrativos do app, e o
+    `log_action` engole a própria falha de propósito: perder o rastro é ruim,
+    recusar a troca de titular por causa dele seria pior.
+
+    O setor e o papel vão no `metadata` porque é o par que diz em qual cadeia
+    de cobrança e escalonamento o ato caiu."""
+    audit.log_action(
+        supabase,
+        actor=me,
+        action=acao,
+        target_type="responsavel_setor",
+        target_id=responsavel.get("id") or "",
+        metadata={campo: responsavel.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA if campo != "id"},
+        request=request,
+    )
+
+
 @router.get("/responsaveis")
 @limiter.limit("60/minute")
 async def listar_responsaveis(
@@ -3143,7 +3168,7 @@ async def listar_responsaveis(
 async def cadastrar_responsavel(
     request: Request,
     pedido: PedidoResponsavel,
-    me: dict = Depends(require_diretoria_executiva),
+    me: dict = Depends(require_perfil_ouvidoria),
     supabase=Depends(get_supabase_client),
 ):
     """Cadastra titular, substituto ou gestor de um setor."""
@@ -3166,6 +3191,7 @@ async def cadastrar_responsavel(
             detail="Não foi possível cadastrar o responsável",
         ) from exc
     row = result.data[0] if result.data else linha
+    registrar_no_audit(request, supabase, me, "OUVIDORIA_RESPONSAVEL_CREATE", row)
     _destravar_se_o_cadastro_melhorou(supabase, row)
     return {campo: row.get(campo) for campo in _CAMPOS_RESPONSAVEL_TUPLA}
 
@@ -3265,7 +3291,7 @@ async def editar_responsavel(
     request: Request,
     responsavel_id: str,
     pedido: EdicaoResponsavel,
-    me: dict = Depends(require_diretoria_executiva),
+    me: dict = Depends(require_perfil_ouvidoria),
     supabase=Depends(get_supabase_client),
 ):
     """Edita o cadastro. Encerrar a vigência aqui é o que faz a próxima demanda
@@ -3296,6 +3322,7 @@ async def editar_responsavel(
         ) from exc
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
+    registrar_no_audit(request, supabase, me, "OUVIDORIA_RESPONSAVEL_EDIT", result.data[0])
     # Reabrir uma vigência encerrada por engano é o outro caminho de corrigir o
     # cadastro, e destrava os casos do setor do mesmo jeito (issue #373).
     _destravar_se_o_cadastro_melhorou(supabase, result.data[0])
@@ -3307,7 +3334,7 @@ async def editar_responsavel(
 async def remover_responsavel(
     request: Request,
     responsavel_id: str,
-    me: dict = Depends(require_diretoria_executiva),
+    me: dict = Depends(require_perfil_ouvidoria),
     supabase=Depends(get_supabase_client),
 ):
     """Tira a pessoa do cadastro. Para guardar a história de quem respondeu
@@ -3327,6 +3354,7 @@ async def remover_responsavel(
     # que não aconteceu (issue #375, item 5).
     if not result.data:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Responsável não encontrado")
+    registrar_no_audit(request, supabase, me, "OUVIDORIA_RESPONSAVEL_DELETE", result.data[0])
 
 
 class PedidoClassificacao(BaseModel):

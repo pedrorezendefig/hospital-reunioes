@@ -174,11 +174,14 @@ export function descricaoDeDesfechoValida(descricao: string): boolean {
 }
 
 /**
- * Quem mantém o cadastro de responsáveis. Mesma régua da tabela de prazos: o
- * ouvidor trabalha com o cadastro, quem o define é a Diretoria Executiva.
+ * Quem mantém o cadastro de responsáveis: o Perfil da Ouvidoria inteiro (ADR
+ * 0055, decisão 5, issue #711). Trocar a pessoa que responde por um setor é
+ * trabalho de quem opera a Ouvidoria, e depender da Diretoria para isso parava
+ * a cobrança no meio. A tabela de prazos é que continua só da Diretoria
+ * (RN-21): lá o ouvidor trabalha com o prazo, quem o define é ela.
  */
 export function podeGerirResponsaveis(perfilOuvidoria: string | null | undefined): boolean {
-  return perfilOuvidoria === "diretoria_executiva";
+  return perfilOuvidoria === "ouvidor" || perfilOuvidoria === "diretoria_executiva";
 }
 
 export type PapelResponsavel = "titular" | "substituto" | "gestor";

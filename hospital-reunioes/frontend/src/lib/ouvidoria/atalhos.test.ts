@@ -16,8 +16,14 @@ function chaves(perfil: string | null | undefined) {
 }
 
 describe("quem vê cada atalho", () => {
-  it("o ouvidor vê o painel, a nota externa e os pontos de escuta", () => {
-    expect(chaves("ouvidor")).toEqual(["painel", "nota_externa", "pontos"]);
+  it("o ouvidor vê também a porta dos responsáveis por setor (issue #711)", () => {
+    expect(chaves("ouvidor")).toEqual(["painel", "nota_externa", "pontos", "responsaveis"]);
+  });
+
+  it("a tabela de prazos continua sendo a porta que só a diretoria vê", () => {
+    // RN-21: o ouvidor trabalha com o prazo, quem o define é a Diretoria. A
+    // decisão 5 do ADR 0055 abriu uma porta, não as duas.
+    expect(chaves("ouvidor")).not.toContain("prazos");
   });
 
   it("a diretoria executiva vê os cinco, na ordem do trabalho", () => {
