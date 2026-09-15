@@ -4062,6 +4062,10 @@ def acionar_a_area(
 _CAMPOS_DO_REDIRECIONAMENTO = (
     "id, status, sigilo_reforcado, tipo_manifestacao, contato_em, data_abertura, "
     "prazo_conclusivo_em, setor, anonimizada_em, apagamento_pedido_em, "
+    # O `protocolo` entrou com o aviso à área antiga (issue #709): ele viaja
+    # congelado no `detalhe` da notificação, junto com o setor de onde o caso
+    # saiu, porque é a linha (e não o caso) que o email do aviso lê.
+    "protocolo, "
     # O relógio da área, que só esta porta para (a validação nunca parou
     # relógio nenhum, ela sempre partiu de `em_classificacao`).
     #
@@ -4261,6 +4265,21 @@ def redirecionar_o_caso(supabase, me: dict, caso: dict, pedido: PedidoRedirecion
     # o caso saiu da área em que ele acabou de entrar.
     observacao = ouvidoria_redirecionamento.observacao_do_redirecionamento(caso.get("setor"), motivo)
 
+    # Quem vai receber o aviso da área ANTIGA, lido AQUI e não lá embaixo
+    # (issue #709). A ordem é a regra: `acionar_a_area` registra o `nova_demanda`
+    # da área nova na mesma requisição, e depois dele "o último acionamento"
+    # deste caso é o dela. Lido tarde, o aviso de que a demanda saiu iria para a
+    # área que acabou de recebê-la.
+    #
+    # A leitura fica antes de qualquer escrita de propósito: falha aqui devolve
+    # None e o redirecionamento segue sem o aviso, em vez de o aviso virar mais
+    # um jeito de o ato não acontecer.
+    #
+    # O `detalhe` também é montado agora, com o setor ANTIGO, pelo mesmo motivo
+    # da observação da trilha logo acima.
+    destinatario_da_area_antiga = ouvidoria_notificacoes.destinatario_do_ultimo_acionamento(supabase, manifestacao_id)
+    detalhe_do_aviso = ouvidoria_redirecionamento.detalhe_do_aviso(caso.get("protocolo"), caso.get("setor"))
+
     # O estouro é decidido ANTES da parada, porque ele lê o `prazo_area_em` e o
     # `respondida_em` que a parada vai apagar.
     estourou = ouvidoria_relogio_da_area.estouro_a_carimbar(caso, agora)
@@ -4364,7 +4383,7 @@ def redirecionar_o_caso(supabase, me: dict, caso: dict, pedido: PedidoRedirecion
     # (achado da rodada 2 de review do PR #714).
     andamento = AndamentoDoAcionamento()
     try:
-        return acionar_a_area(
+        dossie = acionar_a_area(
             supabase, me, caso, pedido, area, agora, acao_no_log="redirecionamento", andamento=andamento
         )
     except HTTPException as exc:
@@ -4395,6 +4414,25 @@ def redirecionar_o_caso(supabase, me: dict, caso: dict, pedido: PedidoRedirecion
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=_prefixo_da_falha(andamento),
         ) from exc
+
+    # A área antiga fica sabendo que não responde mais por este caso (issue
+    # #709, ADR 0055, decisão 4). Depois do acionamento, e não antes: o aviso só
+    # é verdade quando a área nova de fato recebeu o caso, e cada `except` acima
+    # é um caminho em que ela não recebeu.
+    #
+    # Melhor esforço, como o aviso da Devolução à Ouvidoria: aqui o caso já
+    # mudou de área duas vezes na trilha imutável, e não há ato a desfazer nem
+    # segunda tentativa a oferecer. Uma exceção deste bloco transformaria um
+    # redirecionamento que deu certo num 500 na tela do ouvidor.
+    ouvidoria_notificacoes.avisar_a_area_antiga(
+        supabase,
+        manifestacao_id,
+        destinatario=destinatario_da_area_antiga,
+        detalhe=detalhe_do_aviso,
+        agora=agora,
+        feriados=area.feriados,
+    )
+    return dossie
 
 
 def _prefixo_da_falha(andamento: AndamentoDoAcionamento) -> str:

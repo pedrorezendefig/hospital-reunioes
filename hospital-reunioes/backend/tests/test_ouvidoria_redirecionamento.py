@@ -292,7 +292,15 @@ class TestOCasoSaiDaAreaAntigaEEntraNaNova:
         assert resposta.status_code == 201, resposta.text
         acionamentos = _notificacoes(supabase, ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA)
         assert acionamentos[-1]["destinatario_email"] == EMAIL_DO_SETOR_NOVO
-        assert [e["destinatario"] for e in _nunca_envia_email_de_verdade] == [EMAIL_DO_SETOR_NOVO]
+        # A ordem é parte da asserção: a área nova é acionada primeiro, e só
+        # depois a antiga é avisada de que perdeu o caso (issue #709). O aviso
+        # à Recepção entrou nesta lista com aquela fatia, e o que este teste
+        # continua cobrando é que o ACIONAMENTO é o primeiro email e vai para a
+        # área nova.
+        assert [e["destinatario"] for e in _nunca_envia_email_de_verdade] == [
+            EMAIL_DO_SETOR_NOVO,
+            EMAIL_DA_RECEPCAO,
+        ]
         vivos = [t for t in _tokens(supabase) if t.get("revogado_em") is None]
         assert len(vivos) == 1, "sobrou link vivo da área antiga, ou o link da área nova nasceu revogado"
         assert vivos[0]["destinatario_email"] == EMAIL_DO_SETOR_NOVO

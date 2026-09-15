@@ -113,3 +113,44 @@ def observacao_do_redirecionamento(setor: str | None, motivo: str) -> str:
     corrente já não diria de onde o caso saiu. É a mesma razão pela qual a
     Devolução à Ouvidoria congela o setor na observação dela."""
     return f"{_PREFIXO} (de {setor or 'sem setor'}){_SEPARADOR}{motivo}"
+
+
+# O `detalhe` da notificação que avisa a área ANTIGA (issue #709, ADR 0055,
+# decisão 4). Ele guarda duas coisas e só: o protocolo e o setor de onde o caso
+# saiu. O motivo NÃO entra, e a ausência é a decisão: o aviso diz que a demanda
+# saiu, não por quê.
+#
+# O setor está aqui pela razão que decide a fatia inteira: o acionamento da área
+# nova, na MESMA requisição, sobrescreve `setor` no caso. Lido do caso na hora
+# do envio, o aviso diria à área antiga o nome da área NOVA, que é justamente o
+# que o ADR 0055 manda não dizer ("sem motivo, sem dizer qual área"). Congelado
+# aqui, o reenvio meses adiante manda a mesma frase que saiu no ato.
+#
+# O protocolo entra junto para a linha se bastar: é dela que o montador do email
+# lê tudo o que mostra, e é ela que o ouvidor vê no Dossiê.
+_PREFIXO_DO_AVISO = "Redirecionamento do protocolo"
+_SEPARADOR_DO_AVISO = ", setor "
+
+
+def detalhe_do_aviso(protocolo: str | None, setor: str | None) -> str:
+    """O `detalhe` da notificação `redirecionamento_area`, congelado no ato."""
+    return f"{_PREFIXO_DO_AVISO} {protocolo or ''}{_SEPARADOR_DO_AVISO}{setor or 'sem setor'}"
+
+
+def protocolo_e_setor(detalhe: str | None) -> tuple[str | None, str | None]:
+    """A frase acima de volta em duas partes, para o email mostrar cada uma no
+    campo dela. `(None, None)` quando o texto não é um `detalhe` desta fatia.
+
+    Texto que não começa pelo prefixo NÃO volta como setor, ao contrário do que
+    o módulo irmão faz com o motivo: aqui o segundo valor vira o nome de uma
+    área DENTRO de um email, e linha antiga (ou `detalhe` escrito por outro
+    caminho) não pode virar área inventada na caixa de entrada de quem acabou de
+    perder o caso. Quem chama trata o par vazio como erro, e a notificação fica
+    visível em falha em vez de sair errada."""
+    texto = (detalhe or "").strip()
+    if not texto.startswith(f"{_PREFIXO_DO_AVISO} "):
+        return None, None
+    protocolo, separador, setor = texto[len(_PREFIXO_DO_AVISO) + 1 :].partition(_SEPARADOR_DO_AVISO)
+    if not separador:
+        return None, None
+    return protocolo.strip() or None, setor.strip() or None
