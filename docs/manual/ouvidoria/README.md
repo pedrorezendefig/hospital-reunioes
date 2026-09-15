@@ -9,6 +9,11 @@ bash docs/manual/ouvidoria/publicar.sh            # publica
 bash docs/manual/ouvidoria/publicar.sh --dry-run  # só monta a pasta, não publica
 ```
 
+Os MP4 dos capítulos não ficam no git (`.gitignore` desta pasta) e cada deploy da Vercel
+é uma cópia nova: sem os arquivos aqui, o manual sobe com os quadros de vídeo quebrados.
+O script confere antes e para, dizendo quais faltam e o `curl` que baixa cada um do manual
+publicado. Baixe, e só então publique.
+
 Para abrir o `index.html` local sem publicar, copie os dois assets para cá primeiro:
 
 ```bash
