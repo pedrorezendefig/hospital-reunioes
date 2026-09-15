@@ -7,6 +7,20 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.134.0 - 2026-09-15 17:05 - o Perfil da Ouvidoria inteiro mantém o cadastro de responsáveis por setor
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `49a3b8d`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.134.0, `db: healthy`; frontend HTTP 200) · build 27s no backend, 273s no frontend
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/49a3b8d
+- Issues: [#711](https://github.com/pedrorezendefig/hospital-reunioes/issues/711) · PR [#718](https://github.com/pedrorezendefig/hospital-reunioes/pull/718) · PRD [#706](https://github.com/pedrorezendefig/hospital-reunioes/issues/706) · ADR 0055 · minor, feat
+- Migration: nenhuma. O rastro de quem mexe no cadastro foi para o `audit_log`, que existe desde a 018, justamente para não gastar migration aplicada à mão. A 108 segue sendo a última.
+- Nota: última fatia do PRD #706 (ADR 0055, decisão 5). As três rotas de escrita de `/responsaveis` e a guarda da tela trocaram `require_diretoria_executiva` por `require_perfil_ouvidoria`. A Tabela de prazos continua só da Diretoria (RN-21) e o super admin técnico segue fora (RN-40), as duas paredes provadas por teste parametrizado nas três rotas.
+- Nota: o critério de aceite pedia que o histórico de vigência registrasse o autor, e esse histórico nunca existiu: a tabela `ouvidoria_setor_responsaveis` (migration 068) não tem coluna de autor e não há tabela de histórico. A última consequência do ADR 0055 afirmava o contrário e foi corrigida em prosa no mesmo PR. O rastro virou `audit_log`, decisão do Pedro sobre a alternativa de coluna nova com migration manual.
+- Nota: o achado que mais valeu veio do code-review e não era bug de correção. As mensagens de falta de cadastro (a recusa da cobrança nos dois motivos e o aviso da modal de validação) mandavam esperar a Diretoria justamente no momento em que o ouvidor passou a poder resolver sozinho. Agora apontam a tela de Responsáveis por setor, e dois testes que assertavam "Diretoria Executiva" no detalhe passaram a assertar o marcador novo.
+- Nota: pendência conhecida, registrada na issue #719. A RLS do `audit_log` (migration 023) só libera leitura para super admin, e a RN-40 mantém o super admin fora da Ouvidoria: o rastro é gravado, mas ninguém da Ouvidoria o lê no app. O critério renegociado está cumprido; a promessa ao diretor ("a troca fica no histórico com o nome de quem mexeu") fica para a #719.
+- Nota: 15 mutantes mortos no backend e no front, incluindo dois no detector (a guarda da Diretoria passando a aceitar o ouvidor, que abriria os prazos junto, e o gate da Ouvidoria aceitando super admin, que derrubaria a RN-40), mais dois na mensagem de recusa.
+
 ## v0.133.0 - 2026-09-15 13:20 - a área que perdeu o caso é avisada, e o ouvidor redireciona pela fila e pelo Dossiê
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `a173716`
