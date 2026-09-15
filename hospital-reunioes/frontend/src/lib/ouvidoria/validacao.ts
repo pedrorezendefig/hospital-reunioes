@@ -311,6 +311,17 @@ export const LABEL_GATILHO: Record<string, string> = {
   // `resposta_devolvida` é a devolução no sentido contrário, da Ouvidoria para
   // a área, e as duas linhas são lidas em sequência no mesmo Dossiê.
   devolvido_a_ouvidoria: "Devolução à Ouvidoria pela área",
+  // O Redirecionamento (issue #710, ADR 0055): o ouvidor tirou o caso de uma
+  // área e o aciona em outra, e a ANTERIOR recebe um aviso curto de que não
+  // precisa mais responder. O rótulo diz o destinatário porque a mesma lista
+  // traz o `nova_demanda` da área nova, no mesmo instante: sem o "à área
+  // anterior", as duas linhas ficariam indistinguíveis. E não promete ato
+  // nenhum, porque a área anterior não tem o que responder.
+  //
+  // Sem esta entrada, o Dossiê mostraria a chave crua `redirecionamento_area`
+  // ao lado do botão Redirecionar, que é o que o `?? n.gatilho` faz com todo
+  // gatilho que a tela não conhece.
+  redirecionamento_area: "Aviso de redirecionamento à área anterior",
 };
 
 export interface Notificacao {

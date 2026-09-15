@@ -15,11 +15,22 @@
 import type { StatusManifestacao } from "./prazo";
 import { podeEncerrar, podeValidar } from "./validacao";
 
-export type ChaveDeAcao = "validar" | "cobrar" | "encerrar" | "arquivar" | "desarquivar" | "abrir";
+export type ChaveDeAcao =
+  | "validar"
+  | "cobrar"
+  | "redirecionar"
+  | "encerrar"
+  | "arquivar"
+  | "desarquivar"
+  | "abrir";
 
 export const ROTULO_ACAO: Record<ChaveDeAcao, string> = {
   validar: "Validar e acionar",
   cobrar: "Cobrar",
+  // O verbo do ato do ouvidor (ADR 0055, verbete Redirecionamento). Nunca
+  // "encaminhar": esse já é o nome do reacionamento do caso que a área
+  // devolveu, e os dois apareceriam no mesmo painel dizendo coisas diferentes.
+  redirecionar: "Redirecionar",
   encerrar: "Encerrar",
   // O vocabulário do Arquivo (issue #592, ADR 0047, verbete do CONTEXT.md).
   // Nunca "excluir" nem "deletar": arquivar esconde da lista e tem volta, e um
@@ -50,6 +61,20 @@ export function podeCobrar(status: StatusManifestacao): boolean {
 }
 
 /**
+ * Redirecionar é tirar o caso de uma área e acioná-lo em outra no mesmo ato
+ * (ADR 0055). Só cabe onde há área de onde tirar: o caso que está com ela e o
+ * que ela já respondeu (a área errada que responde "isso é do Centro Médico"
+ * em vez de devolver). Antes do despacho quem escolhe a área é a validação;
+ * caso pausado é retomado antes, e caso encerrado não tem para onde ir.
+ *
+ * Quem recusa de verdade é o servidor, com 409 e a frase que diz o que fazer
+ * antes. Aqui só não se oferece o caminho que terminaria em recusa.
+ */
+export function podeRedirecionar(status: StatusManifestacao): boolean {
+  return status === "aguardando_area" || status === "respondido";
+}
+
+/**
  * Toda ação que cabe no estado, na ordem em que a tela as oferece. Abrir fecha
  * a lista porque existe sempre, para qualquer estado, inclusive um que esta
  * tela ainda não conheça (issue #375).
@@ -57,6 +82,9 @@ export function podeCobrar(status: StatusManifestacao): boolean {
 const CABIMENTO: { chave: ChaveDeAcao; cabe: (status: StatusManifestacao) => boolean }[] = [
   { chave: "validar", cabe: podeValidar },
   { chave: "cobrar", cabe: podeCobrar },
+  // Junto das outras portas de despacho, e antes do encerramento: os três atos
+  // que mandam o caso adiante ficam agrupados, e a saída fica por último.
+  { chave: "redirecionar", cabe: podeRedirecionar },
   { chave: "encerrar", cabe: podeEncerrar },
   { chave: "arquivar", cabe: podeArquivar },
   { chave: "abrir", cabe: () => true },

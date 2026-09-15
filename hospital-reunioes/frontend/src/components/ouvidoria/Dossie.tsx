@@ -15,6 +15,7 @@ import {
   PauseCircle,
   PhoneCall,
   PlayCircle,
+  Replace,
   RotateCcw,
   RotateCw,
   Send,
@@ -58,6 +59,11 @@ import { descreverTempoDesdeOMarco, type EventoDaTrilha } from "@/lib/ouvidoria/
 import { avisosDeDegradacao, calendarioUtilFoiLido } from "@/lib/ouvidoria/painel";
 import { descreverNaturezaInformada } from "@/lib/ouvidoria/natureza-informada";
 import { devolucaoAOuvidoria } from "@/lib/ouvidoria/devolucao-a-ouvidoria";
+import { podeRedirecionar } from "@/lib/ouvidoria/acoes";
+import {
+  redirecionamentoDoEvento,
+  rotuloDoRedirecionamento,
+} from "@/lib/ouvidoria/redirecionamento";
 import { formatarEsperaUtil, type StatusManifestacao } from "@/lib/ouvidoria/prazo";
 import type { PedidoDeProrrogacao } from "@/lib/ouvidoria/setor";
 import {
@@ -299,6 +305,12 @@ export function Dossie({ protocolo, token }: DossieProps) {
   // (issue #476). Elas mudam o caso inteiro, então o que vem depois delas é
   // uma leitura nova, e não um remendo no que está na tela.
   const [validando, setValidando] = useState(false);
+  // O Redirecionamento (issue #710, ADR 0055). Abre a MESMA tela da validação,
+  // em modo próprio: os dois nunca cabem no mesmo caso (um parte de "em
+  // classificação" e o outro dos dois estados em que a área já tem o caso), e
+  // por isso um modal só serve aos dois.
+  const [redirecionando, setRedirecionando] = useState(false);
+  const [avisoDoRedirecionamento, setAvisoDoRedirecionamento] = useState<string | null>(null);
   const [encerrando, setEncerrando] = useState(false);
   const [recarga, setRecarga] = useState(0);
 
@@ -422,6 +434,7 @@ export function Dossie({ protocolo, token }: DossieProps) {
   useEffect(() => {
     setMotivoDaDevolucao("");
     setAvisoDevolucao(null);
+    setAvisoDoRedirecionamento(null);
     setMotivoDoManifestante("");
     setObservacaoDaTentativa("");
     setAvisoDoManifestante(null);
@@ -926,6 +939,22 @@ export function Dossie({ protocolo, token }: DossieProps) {
                 {devolucao ? "Encaminhar para outra área" : "Validar e acionar"}
               </button>
             )}
+            {/* Redirecionar (issue #710, ADR 0055). Fica ao lado das demais
+                ações do caso, no mesmo lugar em que o ouvidor já procura o
+                que fazer. Tom secundário: o próximo passo do caso que está
+                com a área continua sendo cobrar, e o do respondido, encerrar. */}
+            {podeRedirecionar(dossie.status) && (
+              <button
+                onClick={() => {
+                  setAvisoDoRedirecionamento(null);
+                  setRedirecionando(true);
+                }}
+                className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-semibold uppercase tracking-wide bg-white text-slate-700 border border-slate-300 hover:bg-slate-50 transition-colors"
+              >
+                <Replace className="w-3.5 h-3.5" />
+                Redirecionar
+              </button>
+            )}
             {podeEncerrar(dossie.status) && (
               <button
                 onClick={() => setEncerrando(true)}
@@ -940,11 +969,20 @@ export function Dossie({ protocolo, token }: DossieProps) {
       </header>
 
       <ValidarModal
-        manifestacao={validando ? dossie : null}
+        manifestacao={validando || redirecionando ? dossie : null}
         token={token}
         devolvidaPelaArea={devolucao?.setor ?? null}
-        onClose={() => setValidando(false)}
-        onAcionada={recarregarCaso}
+        modo={redirecionando ? "redirecionamento" : "acionamento"}
+        onClose={() => {
+          setValidando(false);
+          setRedirecionando(false);
+        }}
+        onAcionada={(aviso) => {
+          // `aviso` nulo é a falha que pode ter movido o caso no servidor:
+          // recarrega, sem anunciar um sucesso que não houve.
+          setAvisoDoRedirecionamento(aviso ?? null);
+          recarregarCaso();
+        }}
       />
 
       <EncerrarModal
@@ -966,6 +1004,21 @@ export function Dossie({ protocolo, token }: DossieProps) {
         </div>
       ) : dossie ? (
         <div className="space-y-5">
+          {/* O que o redirecionamento fez (issue #710). Carimbo do servidor
+              sem par na tela some em silêncio: sem esta frase, o Dossiê
+              recarregaria com a área nova no lugar da antiga e nada diria que
+              a área anterior foi avisada nem que o caso mudou de mãos por um
+              ato do ouvidor. `role="status"` porque é resposta a um clique. */}
+          {avisoDoRedirecionamento && (
+            <div
+              role="status"
+              className="flex items-start gap-2 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm"
+            >
+              <Replace className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>{avisoDoRedirecionamento}</span>
+            </div>
+          )}
+
           {dossie.sigilo_reforcado && (
             <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
               <Lock className="w-4 h-4 shrink-0 mt-0.5" />
@@ -1750,6 +1803,13 @@ export function Dossie({ protocolo, token }: DossieProps) {
               >
                 {movimentos.map((evento, indice) => {
                   const tempo = descreverTempoDesdeOMarco(evento, calendarioDaTrilhaConfiavel);
+                  // O Redirecionamento tem rótulo próprio (issue #710, ADR
+                  // 0055). Sem ele, o ato do ouvidor apareceria aqui com a
+                  // descrição genérica da transição ("Caso em classificação"),
+                  // do mesmo jeito que a Devolução à Ouvidoria, e a trilha
+                  // deixaria de contar quem tirou o caso da área.
+                  const redirecionado = redirecionamentoDoEvento(evento);
+                  const texto = redirecionado ? redirecionado.motivo : evento.texto;
                   return (
                     <li key={`${evento.ocorrido_em}-${indice}`} className="relative pl-4">
                       {/* O marcador cheio é dos quatro marcos do caso, que são
@@ -1764,10 +1824,14 @@ export function Dossie({ protocolo, token }: DossieProps) {
                       <p className="text-xs text-slate-500">
                         {formatarDataHora(evento.ocorrido_em)}, {evento.autor}
                       </p>
-                      <p className="text-sm text-slate-800">{evento.descricao}</p>
+                      <p className="text-sm text-slate-800">
+                        {redirecionado
+                          ? rotuloDoRedirecionamento(redirecionado.setor)
+                          : evento.descricao}
+                      </p>
                       {tempo && <p className="text-xs text-slate-500">{tempo}</p>}
-                      {evento.texto && (
-                        <p className="mt-1 text-sm text-slate-600 whitespace-pre-line">{evento.texto}</p>
+                      {texto && (
+                        <p className="mt-1 text-sm text-slate-600 whitespace-pre-line">{texto}</p>
                       )}
                     </li>
                   );

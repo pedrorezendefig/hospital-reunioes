@@ -82,15 +82,25 @@ describe("o que sobra vai para o menu (issue #495)", () => {
   });
 
   it("cobrar o setor não tira o encerramento do alcance do ouvidor", () => {
-    expect(acoesSecundariasDoStatus("aguardando_area")).toEqual(["encerrar", "abrir"]);
+    // Desde a issue #710 o menu do caso que está com a área abre com
+    // Redirecionar, antes do encerramento: os atos que mandam o caso adiante
+    // ficam juntos, e a saída fica por último.
+    expect(acoesSecundariasDoStatus("aguardando_area")).toEqual([
+      "redirecionar",
+      "encerrar",
+      "abrir",
+    ]);
   });
 
   it("no caso em classificação o encerramento sem apuração continua possível", () => {
     expect(acoesSecundariasDoStatus("em_classificacao")).toEqual(["encerrar", "abrir"]);
   });
 
-  it("o caso respondido guarda só o caminho do Dossiê", () => {
-    expect(acoesSecundariasDoStatus("respondido")).toEqual(["abrir"]);
+  it("o caso respondido guarda o redirecionamento e o caminho do Dossiê", () => {
+    // Era só "abrir" até a issue #710: a área que responde "isso é do Centro
+    // Médico" em vez de devolver deixava o ouvidor sem saída que não fosse
+    // encerrar e abrir outro protocolo.
+    expect(acoesSecundariasDoStatus("respondido")).toEqual(["redirecionar", "abrir"]);
   });
 
   it("a pausa mantém o encerramento por abandono à mão", () => {
@@ -153,9 +163,61 @@ describe("a lista dos arquivados oferece a volta (issue #592, ADR 0047)", () => 
   });
 });
 
+describe("o Redirecionamento na fila (issue #710, PRD #706, ADR 0055)", () => {
+  it("cabe no caso que está com a área e no que ela já respondeu", () => {
+    // Os dois estados em que existe uma área de onde tirar o caso: o que ela
+    // está apurando e o que ela respondeu dizendo que não é dela.
+    expect(acoesSecundariasDoStatus("aguardando_area")).toContain("redirecionar");
+    expect(acoesSecundariasDoStatus("respondido")).toContain("redirecionar");
+  });
+
+  it("não existe em nenhum outro estado", () => {
+    // O caso em classificação não está com área nenhuma (quem escolhe a área
+    // ali é a validação), o pausado é retomado antes e o encerrado não vai a
+    // lugar nenhum. O servidor recusa os três com 409 e a frase do que fazer
+    // antes; a tela não oferece o caminho.
+    const fora = ["novo", "em_classificacao", "aguardando_manifestante", "encerrado"] as const;
+    for (const status of fora) {
+      expect(acoesSecundariasDoStatus(status)).not.toContain("redirecionar");
+      expect(acaoPrimariaDoStatus(status)).not.toBe("redirecionar");
+    }
+  });
+
+  it("é secundária nos dois, e nunca a ação da linha", () => {
+    // O próximo passo do caso que está com a área continua sendo cobrar, e o
+    // do respondido, encerrar (RN-74). Redirecionar é a exceção, e exceção não
+    // ocupa o botão único da linha.
+    expect(acaoPrimariaDoStatus("aguardando_area")).toBe("cobrar");
+    expect(acaoPrimariaDoStatus("respondido")).toBe("encerrar");
+  });
+
+  it("no modo arquivados não aparece", () => {
+    // O arquivo é o que já acabou: oferecer ali um despacho para outra área
+    // desarquivaria o caso por um caminho que ninguém pediu.
+    expect(acoesSecundariasDoStatus("aguardando_area", true)).not.toContain("redirecionar");
+    expect(acoesSecundariasDoStatus("respondido", true)).not.toContain("redirecionar");
+  });
+
+  it("o verbo é Redirecionar, e não encaminhar", () => {
+    // "Encaminhar para outra área" já é o nome do reacionamento do caso que a
+    // ÁREA devolveu (issue #601): os dois no mesmo painel, com o mesmo verbo,
+    // fariam o ouvidor achar que são o mesmo ato.
+    expect(ROTULO_ACAO.redirecionar).toBe("Redirecionar");
+    expect(ROTULO_ACAO.redirecionar.toLowerCase()).not.toContain("encaminhar");
+  });
+});
+
 describe("os rótulos da fila", () => {
   it("toda ação tem nome escrito, para o botão nunca sair em branco", () => {
-    const chaves: ChaveDeAcao[] = ["validar", "cobrar", "encerrar", "arquivar", "desarquivar", "abrir"];
+    const chaves: ChaveDeAcao[] = [
+      "validar",
+      "cobrar",
+      "redirecionar",
+      "encerrar",
+      "arquivar",
+      "desarquivar",
+      "abrir",
+    ];
     for (const chave of chaves) {
       expect(ROTULO_ACAO[chave].length).toBeGreaterThan(0);
     }
