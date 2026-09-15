@@ -31,14 +31,24 @@ cp "$ASSETS/logo-hsm.png" "$ASSETS/fonts/HPSimplified_Rg.ttf" "$DESTINO"/
 # O parsing só entende `src="...mp4"`. Um src fora desse formato não seria
 # copiado NEM reportado: a trava falharia aberta, publicando um vídeo a menos e
 # saindo com sucesso, que é exatamente o que ela existe para impedir. Por isso o
-# piso de sanidade: quantos .mp4 o arquivo menciona tem que bater com quantos o
-# parsing reconheceu.
-MENCOES=$(grep -o '\.mp4' "$ORIGEM/index.html" | wc -l | tr -d ' ')
-BRUTOS=$(grep -oE 'src="[^"]+\.mp4"' "$ORIGEM/index.html" | sed 's/^src="//; s/"$//')
+# piso de sanidade: quantos .mp4 aparecem DENTRO de atributo tem que bater com
+# quantos o parsing reconheceu.
+#
+# A contagem é de `=` seguido do valor, e não da string `.mp4` solta: `.mp4` em
+# comentário HTML ou em prosa visível ("os vídeos são arquivos .mp4") não é src
+# nenhum, e contá-lo faria uma frase inocente do manual impedir toda
+# republicação, mandando a pessoa caçar um src quebrado que não existe.
+#
+# As três buscas ignoram a caixa. `grep -o '\.mp4'` e um parsing sensível a
+# maiúsculas deixariam `src="video.MP4"` escapar das DUAS contagens ao mesmo
+# tempo: o piso bateria e o vídeo sumiria do deploy, a mesma falha aberta de
+# antes com outra roupa.
+MENCOES=$(grep -oiE '=[[:space:]]*["'"'"'][^"'"'"']+\.mp4["'"'"']' "$ORIGEM/index.html" | wc -l | tr -d ' ')
+BRUTOS=$(grep -oiE 'src="[^"]+\.mp4"' "$ORIGEM/index.html" | sed 's/^[Ss][Rr][Cc]="//; s/"$//')
 RECONHECIDOS=$(printf '%s\n' "$BRUTOS" | grep -c . || true)
 if [ "$RECONHECIDOS" != "$MENCOES" ]; then
-  echo "o index.html menciona $MENCOES arquivos .mp4 e o parsing reconheceu $RECONHECIDOS." >&2
-  echo "algum src saiu do formato src=\"...\": conserte o parsing antes de publicar," >&2
+  echo "o index.html tem $MENCOES atributos apontando para .mp4 e o parsing reconheceu $RECONHECIDOS." >&2
+  echo "algum deles saiu do formato src=\"...\": conserte o parsing antes de publicar," >&2
   echo "senão o vídeo que escapou some do deploy sem ninguém avisar." >&2
   exit 1
 fi
