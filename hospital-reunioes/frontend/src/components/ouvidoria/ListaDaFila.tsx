@@ -24,6 +24,7 @@ import {
   CheckCircle2,
   FileText,
   MoreHorizontal,
+  Replace,
   Send,
 } from "lucide-react";
 
@@ -113,6 +114,10 @@ function Prazo({ m, classe }: { m: ManifestacaoIndice; classe: ClassePrazo }) {
 const ICONE_DA_ACAO: Record<ChaveDeAcao, typeof Send> = {
   validar: Send,
   cobrar: Send,
+  // Duas formas trocando de lugar, sem seta nem chevron: o ato é o caso mudar
+  // de área, e a seta inline no meio de um menu de texto é o que o painel
+  // evita em toda parte.
+  redirecionar: Replace,
   encerrar: CheckCircle2,
   arquivar: Archive,
   desarquivar: ArchiveRestore,
@@ -123,6 +128,10 @@ const ICONE_DA_ACAO: Record<ChaveDeAcao, typeof Send> = {
 const CLASSE_DA_ACAO: Record<ChaveDeAcao, string> = {
   validar: "bg-primary text-white hover:bg-primary/90",
   cobrar: "bg-amber-500 text-white hover:bg-amber-600",
+  // Nunca é a ação da linha (a primária de "aguardando área" é Cobrar e a de
+  // "respondido" é Encerrar), então a cor cheia aqui só existe para o dia em
+  // que o mapa de ações mudar de ideia e o botão nascer sem estilo nenhum.
+  redirecionar: "bg-slate-100 text-slate-700 hover:bg-slate-200",
   encerrar: "bg-emerald-600 text-white hover:bg-emerald-700",
   // O arquivo é organização da lista, e não ato sobre o caso: fica no tom
   // neutro do "abrir", e não numa cor de estado, que o olho lê como desfecho.
@@ -143,6 +152,7 @@ function Acao({
   onValidar,
   onEncerrar,
   onCobrar,
+  onRedirecionar,
   onArquivar,
   onDesarquivar,
   onEscolher,
@@ -154,6 +164,7 @@ function Acao({
   onValidar: (m: ManifestacaoIndice) => void;
   onEncerrar: (m: ManifestacaoIndice) => void;
   onCobrar: (m: ManifestacaoIndice) => void;
+  onRedirecionar: (m: ManifestacaoIndice) => void;
   onArquivar: (m: ManifestacaoIndice) => void;
   onDesarquivar: (m: ManifestacaoIndice) => void;
   onEscolher?: () => void;
@@ -177,6 +188,7 @@ function Acao({
   const acionar = {
     validar: onValidar,
     cobrar: onCobrar,
+    redirecionar: onRedirecionar,
     encerrar: onEncerrar,
     arquivar: onArquivar,
     desarquivar: onDesarquivar,
@@ -207,6 +219,7 @@ function MenuDeAcoes({
   onValidar,
   onEncerrar,
   onCobrar,
+  onRedirecionar,
   onArquivar,
   onDesarquivar,
 }: {
@@ -215,6 +228,7 @@ function MenuDeAcoes({
   onValidar: (m: ManifestacaoIndice) => void;
   onEncerrar: (m: ManifestacaoIndice) => void;
   onCobrar: (m: ManifestacaoIndice) => void;
+  onRedirecionar: (m: ManifestacaoIndice) => void;
   onArquivar: (m: ManifestacaoIndice) => void;
   onDesarquivar: (m: ManifestacaoIndice) => void;
 }) {
@@ -250,6 +264,7 @@ function MenuDeAcoes({
               onValidar={onValidar}
               onEncerrar={onEncerrar}
               onCobrar={onCobrar}
+              onRedirecionar={onRedirecionar}
               onArquivar={onArquivar}
               onDesarquivar={onDesarquivar}
               onEscolher={() => setAberto(false)}
@@ -272,6 +287,7 @@ function LinhaDaFila({
   onValidar,
   onEncerrar,
   onCobrar,
+  onRedirecionar,
   onArquivar,
   onDesarquivar,
 }: {
@@ -284,6 +300,7 @@ function LinhaDaFila({
   onValidar: (m: ManifestacaoIndice) => void;
   onEncerrar: (m: ManifestacaoIndice) => void;
   onCobrar: (m: ManifestacaoIndice) => void;
+  onRedirecionar: (m: ManifestacaoIndice) => void;
   onArquivar: (m: ManifestacaoIndice) => void;
   onDesarquivar: (m: ManifestacaoIndice) => void;
 }) {
@@ -411,6 +428,7 @@ function LinhaDaFila({
               onValidar={onValidar}
               onEncerrar={onEncerrar}
               onCobrar={onCobrar}
+              onRedirecionar={onRedirecionar}
               onArquivar={onArquivar}
               onDesarquivar={onDesarquivar}
               cobrando={cobranca?.fase === "enviando" || cobranca?.fase === "reenviada"}
@@ -423,6 +441,7 @@ function LinhaDaFila({
                 onValidar={onValidar}
                 onEncerrar={onEncerrar}
                 onCobrar={onCobrar}
+                onRedirecionar={onRedirecionar}
                 onArquivar={onArquivar}
                 onDesarquivar={onDesarquivar}
               />
@@ -449,6 +468,7 @@ export function ListaDaFila({
   onValidar,
   onEncerrar,
   onCobrar,
+  onRedirecionar,
   onArquivar,
   onDesarquivar,
 }: {
@@ -463,6 +483,7 @@ export function ListaDaFila({
   onValidar: (m: ManifestacaoIndice) => void;
   onEncerrar: (m: ManifestacaoIndice) => void;
   onCobrar: (m: ManifestacaoIndice) => void;
+  onRedirecionar: (m: ManifestacaoIndice) => void;
   onArquivar: (m: ManifestacaoIndice) => void;
   onDesarquivar: (m: ManifestacaoIndice) => void;
 }) {
@@ -480,6 +501,7 @@ export function ListaDaFila({
           onValidar={onValidar}
           onEncerrar={onEncerrar}
           onCobrar={onCobrar}
+          onRedirecionar={onRedirecionar}
           onArquivar={onArquivar}
           onDesarquivar={onDesarquivar}
         />

@@ -366,6 +366,56 @@ describe("a ação primária de cada estado, sempre visível (RN-74, D-06)", () 
   });
 });
 
+describe("redirecionar a partir da linha da fila (issue #710, PRD #706, ADR 0055)", () => {
+  it("o caso que está com a área oferece Redirecionar no menu, junto das demais", async () => {
+    // No mesmo lugar das outras ações secundárias, e não num botão próprio na
+    // linha: o próximo passo do caso que está com a área continua sendo cobrar.
+    montar([caso(7, "aguardando_area")]);
+    const linha = await linhaDe("2026-0007");
+
+    expect(within(linha).queryByRole("button", { name: "Redirecionar" })).toBeNull();
+
+    fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
+
+    expect(within(linha).getByRole("button", { name: "Redirecionar" })).toBeTruthy();
+    // Junto das demais, e não no lugar delas.
+    expect(within(linha).getByRole("button", { name: "Encerrar" })).toBeTruthy();
+  });
+
+  it("o caso respondido também oferece, que é o motivo de a porta existir", async () => {
+    // A área errada que responde "isso é do Centro Médico" em vez de devolver.
+    montar([caso(7, "respondido")]);
+    const linha = await linhaDe("2026-0007");
+    fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
+
+    expect(within(linha).getByRole("button", { name: "Redirecionar" })).toBeTruthy();
+  });
+
+  it("o caso em classificação não oferece: ali quem escolhe a área é a validação", async () => {
+    montar([caso(7, "em_classificacao")]);
+    const linha = await linhaDe("2026-0007");
+    fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
+
+    expect(within(linha).queryByRole("button", { name: "Redirecionar" })).toBeNull();
+  });
+
+  it("CONTRAPROVA: o clique abre a tela do redirecionamento, com o motivo obrigatório", async () => {
+    // Sem esta, o mutante que nunca abre a modal passaria: o item existiria no
+    // menu e o ato inteiro estaria indisponível a partir da fila.
+    montar([caso(7, "aguardando_area")]);
+    const linha = await linhaDe("2026-0007");
+    fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
+    fireEvent.click(within(linha).getByRole("button", { name: "Redirecionar" }));
+
+    await waitFor(() =>
+      expect(screen.getByText(/Redirecionar 2026-0007 para outra área/)).toBeTruthy()
+    );
+    expect(screen.getByLabelText(/Motivo do redirecionamento/)).toBeTruthy();
+    // E a área nasce em branco, e não na área que já tem o caso.
+    expect((screen.getByLabelText(/Área responsável/) as HTMLSelectElement).value).toBe("");
+  });
+});
+
 describe("cobrar é acordar o setor de novo (RN-74, issue #536)", () => {
   it("chama a rota que decide o destinatário no servidor, e só ela", async () => {
     montar([caso(7, "aguardando_area")]);

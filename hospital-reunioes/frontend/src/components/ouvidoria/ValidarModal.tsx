@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { AlertCircle, CheckCircle2, Loader2, Send, ShieldAlert } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
+import { confirmacaoDoRedirecionamento } from "@/lib/ouvidoria/redirecionamento";
 import {
   ehSigilosoPorNatureza,
   LABEL_TIPO,
@@ -49,8 +50,22 @@ interface ValidarModalProps {
    * pingue-pongue elas divergem.
    */
   devolvidaPelaArea?: string | null;
+  /**
+   * O ato que o ouvidor clicou (issue #710, ADR 0055). A mesma tela serve aos
+   * dois porque o Redirecionamento É a Validação e acionamento pré-preenchida,
+   * com a área em branco e o motivo obrigatório: o corpo que vai ao servidor é
+   * o mesmo, mais o `motivo`.
+   *
+   * Nasce em "acionamento", que é o ato que existia antes desta fatia.
+   */
+  modo?: "acionamento" | "redirecionamento";
   onClose: () => void;
-  onAcionada: () => void;
+  /**
+   * O ato deu certo e o que está na tela ficou velho. `aviso` é a frase de
+   * confirmação, quando o ato tem uma: quem chama a mostra na página, porque no
+   * sucesso o modal fecha e uma frase escrita aqui dentro sairia junto.
+   */
+  onAcionada: (aviso?: string) => void;
 }
 
 const CAMPO =
@@ -88,9 +103,11 @@ export function ValidarModal({
   manifestacao,
   token,
   devolvidaPelaArea = null,
+  modo = "acionamento",
   onClose,
   onAcionada,
 }: ValidarModalProps) {
+  const redirecionando = modo === "redirecionamento";
   const [tipo, setTipo] = useState<TipoManifestacao | "">("");
   const [categoria, setCategoria] = useState("");
   const [sigilo, setSigilo] = useState(false);
@@ -98,17 +115,32 @@ export function ValidarModal({
   const [gravidade, setGravidade] = useState<Gravidade | "">("");
   const [extrato, setExtrato] = useState("");
   const [observacao, setObservacao] = useState("");
+  // Por que o caso vai para outra área (issue #710). Obrigatório, e só existe
+  // no redirecionamento: ele é o que a trilha guarda para contar, meses depois,
+  // por que o caso saiu de onde estava.
+  const [motivo, setMotivo] = useState("");
   const [setores, setSetores] = useState<string[]>([]);
   const [responsaveis, setResponsaveis] = useState<Responsavel[]>([]);
   const [salvando, setSalvando] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  // O ato falhou de um jeito que pode ter movido o caso no servidor (issue
+  // #710). O redirecionamento tem um ponto sem volta: depois que o caso sai da
+  // área antiga, uma falha no acionamento da nova responde com a frase que
+  // manda conferir a manifestação no painel. Sem esta marca, o ouvidor fecharia
+  // o modal e continuaria olhando a tela de antes, que afirma um estado que já
+  // não existe.
+  const [conferirDepois, setConferirDepois] = useState(false);
 
   useEffect(() => {
     if (!manifestacao) return;
     setTipo(manifestacao.tipo_manifestacao ?? "");
     setCategoria(manifestacao.categoria || "");
     setSigilo(Boolean(manifestacao.sigilo_reforcado));
-    setSetor(manifestacao.setor || "");
+    // No redirecionamento a área nasce EM BRANCO (ADR 0055, decisão 1): o caso
+    // já está com uma, e trazê-la marcada faria do ato um clique de confirmar
+    // que manda o caso de volta para a mesma área errada. O servidor recusa
+    // isso com 409, mas a tela não pode oferecer o caminho.
+    setSetor(redirecionando ? "" : manifestacao.setor || "");
     // Gravidade e extrato vêm do que JÁ está gravado no caso (issue #601). No
     // primeiro despacho as duas colunas são nulas e os campos nascem em branco,
     // como sempre nasceram: o extrato não é preenchido com o resumo, porque
@@ -118,8 +150,10 @@ export function ValidarModal({
     setGravidade(gravidadeConhecida(manifestacao.gravidade));
     setExtrato(manifestacao.extrato_para_o_setor || "");
     setObservacao("");
+    setMotivo("");
     setErro(null);
-  }, [manifestacao]);
+    setConferirDepois(false);
+  }, [manifestacao, redirecionando]);
 
   // A taxonomia chega depois do reset acima, então a poda é aqui: caso do
   // canal aberto vem com o marcador "A definir", e acionar assim é 422
@@ -158,23 +192,44 @@ export function ValidarModal({
   // piso, e a tela não pode oferecer um caminho que o backend recusa com 409.
   const sigiloTravado = tipo !== "" && ehSigilosoPorNatureza(tipo);
   const sigiloFinal = sigiloTravado || sigilo;
-  const pronto = Boolean(tipo && setor.trim() && gravidade && extrato.trim()) && !salvando;
+  // O motivo entra na régua do botão só no redirecionamento, e é a única
+  // diferença de exigência entre os dois atos: ele é obrigatório lá (ADR 0055)
+  // e não existe aqui.
+  const pronto =
+    Boolean(tipo && setor.trim() && gravidade && extrato.trim() && (!redirecionando || motivo.trim())) &&
+    !salvando;
   // A tela se apresenta pelo ato que o ouvidor clicou (issue #601): quem veio
   // do botão "Encaminhar para outra área" precisa reconhecer onde chegou.
-  const titulo = manifestacao
-    ? devolvidaPelaArea
-      ? `Encaminhar ${manifestacao.protocolo} para outra área`
-      : `Validar e acionar ${manifestacao.protocolo}`
+  const nomeDoAto = redirecionando
+    ? "Redirecionar"
     : devolvidaPelaArea
-      ? "Encaminhar para outra área"
+      ? "Encaminhar"
       : "Validar e acionar";
+  const titulo = manifestacao
+    ? redirecionando || devolvidaPelaArea
+      ? `${nomeDoAto} ${manifestacao.protocolo} para outra área`
+      : `Validar e acionar ${manifestacao.protocolo}`
+    : redirecionando || devolvidaPelaArea
+      ? `${nomeDoAto} para outra área`
+      : "Validar e acionar";
+
+  /**
+   * A frase de fallback de cada ato. Só vale quando o servidor não respondeu
+   * nada legível (rede caída, corpo que não é JSON): toda recusa da API viaja
+   * na tela com o texto que o servidor mandou, porque é ele que diz a causa
+   * REAL e o que fazer antes de tentar de novo.
+   */
+  const falhaSemResposta = redirecionando
+    ? "Não foi possível redirecionar o caso agora. Confira a manifestação no painel antes de tentar de novo."
+    : "Não foi possível acionar a área. Tente novamente.";
 
   async function acionar() {
     if (!manifestacao || !token || !gravidade || !tipo) return;
     setSalvando(true);
     setErro(null);
     try {
-      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacao.id}/validar`, {
+      const rota = redirecionando ? "redirecionamentos" : "validar";
+      const res = await fetch(`/api/ouvidoria/manifestacoes/${manifestacao.id}/${rota}`, {
         method: "POST",
         headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -185,28 +240,63 @@ export function ValidarModal({
           gravidade,
           extrato_para_o_setor: extrato.trim(),
           observacao: observacao.trim() || null,
+          // O corpo do redirecionamento é o da validação mais o motivo
+          // (`PedidoRedirecionamento` herda de `PedidoValidacao`). O campo só
+          // viaja no ato que o exige: a rota de validar não o conhece.
+          ...(redirecionando ? { motivo } : {}),
         }),
       });
       if (res.ok) {
-        onAcionada();
+        onAcionada(redirecionando ? confirmacaoDoRedirecionamento(setor.trim()) : undefined);
         onClose();
         return;
       }
       const corpo = await res.json().catch(() => ({}));
-      setErro(corpo.detail || "Não foi possível acionar a área. Tente novamente.");
+      // A frase do servidor, e não uma frase fixa daqui. Cada recusa do
+      // redirecionamento diz uma coisa diferente e um próximo passo diferente
+      // (retomar o caso pausado, cadastrar responsável na área nova, escolher
+      // outra área, resumir o motivo, conferir a manifestação no painel), e uma
+      // frase genérica apagaria justamente o que o ouvidor precisa saber.
+      //
+      // O `typeof` é a rede do 422 do pydantic, que responde uma LISTA de erros
+      // de schema em vez de texto: jogada no JSX, ela quebraria a tela em cima
+      // de uma recusa.
+      setErro(typeof corpo.detail === "string" ? corpo.detail : falhaSemResposta);
+      // 5xx é o único degrau em que o caso pode ter se movido sem o ato ter
+      // terminado: as recusas de entrada, de estado e de permissão (403, 404,
+      // 409, 422) acontecem ANTES de qualquer escrita e deixam o caso como
+      // estava.
+      if (redirecionando && res.status >= 500) setConferirDepois(true);
     } catch {
-      setErro("Não foi possível acionar a área. Tente novamente.");
+      setErro(falhaSemResposta);
+      // Requisição que nem chegou a ter resposta: ninguém sabe se ela rodou no
+      // servidor, e o redirecionamento não é ato repetível às cegas.
+      if (redirecionando) setConferirDepois(true);
     } finally {
       setSalvando(false);
     }
   }
 
+  /**
+   * Fechar depois de uma falha que pode ter movido o caso recarrega o que está
+   * embaixo, sem frase de confirmação nenhuma: não houve sucesso a anunciar, e
+   * o que o ouvidor precisa é ver o caso como ele está agora.
+   */
+  function fechar() {
+    if (conferirDepois) onAcionada();
+    onClose();
+  }
+
   return (
     <AdminModal
       open={Boolean(manifestacao)}
-      onClose={onClose}
+      onClose={fechar}
       title={titulo}
-      description="O setor recebe o email de acionamento com o prazo assim que você confirmar."
+      description={
+        redirecionando
+          ? "A área nova recebe o email de acionamento com o prazo inteiro, e a anterior recebe um aviso curto de que não precisa mais responder."
+          : "O setor recebe o email de acionamento com o prazo assim que você confirmar."
+      }
       icon={<Send className="w-5 h-5" />}
       size="lg"
       scrollable
@@ -298,7 +388,36 @@ export function ValidarModal({
               trocar também vale, se você tem certeza de que a área estava certa.
             </p>
           )}
+          {redirecionando && manifestacao && (
+            <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
+              O caso está com {manifestacao.setor}. Escolha a área certa: a mesma área não vale, e
+              para cobrar de novo quem já respondeu o caminho é a devolução por insuficiência.
+            </p>
+          )}
         </div>
+
+        {/* O motivo fica logo abaixo da área porque é a explicação da escolha
+            que acabou de ser feita, e não um campo de rodapé (ADR 0055). Ele é
+            o que separa este ato da transição genérica: sem motivo, a trilha
+            registraria o caso saindo da área sem contar por quê. */}
+        {redirecionando && (
+          <div>
+            <label className={ROTULO} htmlFor="redirecionar-motivo">
+              Motivo do redirecionamento <span className="normal-case">(obrigatório)</span>
+            </label>
+            <textarea
+              id="redirecionar-motivo"
+              className={`${CAMPO} min-h-[70px]`}
+              value={motivo}
+              onChange={(e) => setMotivo(e.target.value)}
+              placeholder="Ex.: o caso é de conduta médica, e a Recepção não tem como apurar."
+            />
+            <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
+              Fica na trilha do caso, com o seu nome e a área de onde ele saiu. Não vai no aviso à
+              área anterior, que só diz que a demanda foi encaminhada a outra área.
+            </p>
+          </div>
+        )}
 
         {semNinguem ? (
           <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-red-50 border border-red-200 text-red-700 text-sm">
@@ -383,7 +502,7 @@ export function ValidarModal({
         <div className="flex items-center justify-end gap-2 pt-1">
           <button
             type="button"
-            onClick={onClose}
+            onClick={fechar}
             className="px-4 py-2 rounded-lg text-sm font-medium uppercase tracking-wide text-slate-600 hover:bg-slate-100 transition-colors"
           >
             Cancelar
@@ -399,7 +518,7 @@ export function ValidarModal({
             ) : (
               <CheckCircle2 className="w-4 h-4" />
             )}
-            Validar e acionar a área
+            {redirecionando ? "Redirecionar para a área nova" : "Validar e acionar a área"}
           </button>
         </div>
       </div>

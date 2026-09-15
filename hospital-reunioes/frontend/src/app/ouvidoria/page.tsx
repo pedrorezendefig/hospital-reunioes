@@ -2,7 +2,16 @@
 
 import { useEffect, useRef, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
-import { AlertCircle, Archive, CheckCircle2, Loader2, Lock, Megaphone, Plus } from "lucide-react";
+import {
+  AlertCircle,
+  Archive,
+  CheckCircle2,
+  Loader2,
+  Lock,
+  Megaphone,
+  Plus,
+  Replace,
+} from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { AtalhosDaOuvidoria } from "@/components/ouvidoria/AtalhosDaOuvidoria";
 import { NovaManifestacaoModal } from "@/components/ouvidoria/NovaManifestacaoModal";
@@ -39,6 +48,11 @@ export default function OuvidoriaPage() {
   const [hoje, setHoje] = useState<string | null>(null);
   const [registrando, setRegistrando] = useState(false);
   const [validando, setValidando] = useState<ManifestacaoIndice | null>(null);
+  // O caso que o ouvidor está mandando para outra área (issue #710, ADR 0055).
+  // Estado próprio, e não um modo do `validando`: os dois atos partem de
+  // estados diferentes do caso e abrem a mesma tela pedindo coisas diferentes.
+  const [redirecionando, setRedirecionando] = useState<ManifestacaoIndice | null>(null);
+  const [avisoDoRedirecionamento, setAvisoDoRedirecionamento] = useState<string | null>(null);
   const [encerrando, setEncerrando] = useState<ManifestacaoIndice | null>(null);
   // O que o servidor não conseguiu ler nesta carga (issue #449). Chega aqui
   // pelo marcador de novidade (issue #484): trilha fora do ar desenha uma fila
@@ -379,6 +393,18 @@ export default function OuvidoriaPage() {
   // que a área respondeu e que ele ainda não abriu. Sai da mesma lista que os
   // grupos, sem consumi-la: o caso destacado continua no grupo de estado dele.
   const aguardandoEncerramento = aguardandoSeuEncerramento(manifestacoes);
+
+  /**
+   * Abrir o redirecionamento apaga o aviso do anterior (issue #710).
+   *
+   * "Caso redirecionado para X" pendurado no topo enquanto o ouvidor escolhe a
+   * área do caso SEGUINTE fala de uma linha que já saiu da vista, e é a mesma
+   * regra dos avisos do arquivo: aviso velho é pior que nenhum.
+   */
+  function abrirRedirecionamento(m: ManifestacaoIndice) {
+    setAvisoDoRedirecionamento(null);
+    setRedirecionando(m);
+  }
   const emAndamento = manifestacoes.filter((m) => EM_ANDAMENTO.has(m.status)).length;
   const estourados = hoje
     ? manifestacoes.filter((m) => classificarPrazoDaManifestacao(m, hoje) === "estourado").length
@@ -499,6 +525,21 @@ export default function OuvidoriaPage() {
         </div>
       )}
 
+      {/* O que o redirecionamento fez (issue #710). Mesma forma dos avisos
+          acima, pela mesma razão: é resposta a um clique, e a linha que o
+          recebeu já voltou da recarga com a área nova. Sem esta frase, o
+          ouvidor veria o setor mudar sozinho e nada diria que a área anterior
+          foi avisada. */}
+      {avisoDoRedirecionamento && (
+        <div
+          role="status"
+          className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm"
+        >
+          <Replace className="w-4 h-4 shrink-0 mt-0.5" />
+          <span>{avisoDoRedirecionamento}</span>
+        </div>
+      )}
+
       {!loading && !semAcesso && !erroCarga && !podeAbrirDossie && manifestacoes.length > 0 && (
         <div className="flex items-start gap-2 mb-4 px-4 py-3 rounded-xl bg-slate-50 border border-slate-200 text-slate-600 text-sm">
           <Lock className="w-4 h-4 shrink-0 mt-0.5" />
@@ -544,6 +585,7 @@ export default function OuvidoriaPage() {
             podeAbrirDossie={podeAbrirDossie}
             cobrancas={cobrancas}
             onValidar={setValidando}
+            onRedirecionar={abrirRedirecionamento}
             onEncerrar={setEncerrando}
             onCobrar={cobrar}
             onArquivar={(m) => mudarOArquivo(m, "POST")}
@@ -649,6 +691,7 @@ export default function OuvidoriaPage() {
                   arquivados={arquivados}
                   cobrancas={cobrancas}
                   onValidar={setValidando}
+                  onRedirecionar={abrirRedirecionamento}
                   onEncerrar={setEncerrando}
                   onCobrar={cobrar}
                   onArquivar={(m) => mudarOArquivo(m, "POST")}
@@ -665,6 +708,21 @@ export default function OuvidoriaPage() {
         token={token}
         onClose={() => setValidando(null)}
         onAcionada={() => {
+          if (token) recarregar(token, arquivados);
+        }}
+      />
+
+      {/* O Redirecionamento (issue #710, ADR 0055). A mesma tela da validação,
+          em modo próprio: área em branco e motivo obrigatório. */}
+      <ValidarModal
+        manifestacao={redirecionando}
+        token={token}
+        modo="redirecionamento"
+        onClose={() => setRedirecionando(null)}
+        onAcionada={(aviso) => {
+          // `aviso` nulo é a falha que pode ter movido o caso: recarrega sem
+          // anunciar sucesso nenhum, porque não houve.
+          setAvisoDoRedirecionamento(aviso ?? null);
           if (token) recarregar(token, arquivados);
         }}
       />
