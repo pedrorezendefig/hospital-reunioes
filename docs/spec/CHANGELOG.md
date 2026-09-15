@@ -7,6 +7,23 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.131.0 - 2026-09-15 12:05 - o ouvidor move o caso de uma área para outra num clique, com motivo obrigatório
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `f1b3966`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.131.0, `db: healthy`; frontend HTTP 200)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f1b3966
+- Issues: [#708](https://github.com/pedrorezendefig/hospital-reunioes/issues/708) · PR [#714](https://github.com/pedrorezendefig/hospital-reunioes/pull/714) · PRD [#706](https://github.com/pedrorezendefig/hospital-reunioes/issues/706) · ADR 0055
+- Migration: `107_ouvidoria_redirecionamento_pelo_ouvidor.sql`, aplicada à mão no Studio ANTES do merge · minor, feat
+- Nota: a 107 é um `CREATE OR REPLACE` da função de transição com o corpo da 098 mais UMA aresta (`respondido -> em_classificacao`). Não é `SECURITY DEFINER`, e o par REVOKE/GRANT repete o da 095, 097 e 098.
+- Nota: o PR nasceu verde no CI e levou três rodadas de fix. O CI nunca reclamou de nada do que foi consertado. O achado mais caro: um caso `respondido` redirecionado chegava na área nova carregando o T2 da área errada, porque nada limpava `respondida_em`. A própria API devolvia `cumprimento: cumprido` no instante zero e continuava dizendo isso duas semanas depois do vencimento, porque `cumprimento_da_area` corta em `if respondida_em is not None`. O caso sumia das pendências por área da Diretoria, o ranking de tempo de resposta calculava fim antes do início, e a linha do tempo mostrava T2 antes de T1, tudo enquanto a cobrança por email continuava saindo. Era omissão e não decisão: as duas portas irmãs limpam de propósito, e o comentário de uma delas descreve exatamente esta falha.
+- Nota: a aresta nova fez a RPC aceitar o caminho, e com isso a Devolução à Ouvidoria (rota pública sem login, já em produção) podia entrar com o relógio da área nunca parado. Regressão introduzida pela aresta numa rota que já rodava. Verificado depois que em nenhum dos quatro estados alcançáveis da corrida um 200 virou 409.
+- Nota: `respondida_por_nome` estava fora do `select`, então o rollback gravava `None` em cima de quem respondeu, apagando o nome em silêncio.
+- Nota: a mensagem de falha afirmava estado que o código não conferiu e mandava o ouvidor no "Validar e acionar", que a API recusa com 409 nesse estado. A fronteira certa não é o marco T1 e sim a transição de entrada, porque entre as duas o caso está em `aguardando_area` com a área antiga e sem vencimento. O campo virou `o_caso_continua_em_classificacao`, que só é verdadeiro enquanto o código sabe, em vez de `saiu_da_classificacao`, que teria que mentir para acertar a frase.
+- Nota: duas vezes o par `except APIError` sem `HTTPError`, um deles pré-existente. Na rota de validação esses pontos viravam 500 sem corpo e agora respondem com frase.
+- Nota: duas decisões do Pedro entraram. A porta dos fundos foi fechada (a rota genérica do painel recusa as arestas de redirecionamento, o que de quebra impediu travessão cru de entrar na trilha imutável pela observação, ADR 0013), e redirecionar para a mesma área passou a ser recusado, porque o ato previsto para isso é a devolução por insuficiência, que dá meio prazo de propósito.
+- Nota: assimetria aceita e declarada, o rollback devolve o prazo mas não os carimbos dos jobs, herdada do `_restaurar_prazo` da devolução. Custa cobrança repetida, nunca cobrança perdida. 46 mutantes mortos. Prova do código novo em produção sem login: a rota nova devolve 401 e uma rota inexistente devolve 404.
+
 ## v0.130.0 - 2026-09-15 00:45 - os links da área antiga param de valer quando o ouvidor reaciona o caso em outra área
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `29da463`

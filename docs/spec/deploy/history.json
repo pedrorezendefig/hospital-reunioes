@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-15T12:05:00-03:00",
+      "sha": "f1b3966",
+      "app_version": "0.131.0",
+      "subject": "o ouvidor move o caso de uma area para outra num clique, com motivo obrigatorio",
+      "raw_subject": "feat(ouvidoria): rota de redirecionamento pelo ouvidor (#708) (#714)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "result": "healthy",
+      "duration_seconds": null,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "107_ouvidoria_redirecionamento_pelo_ouvidor.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda AFK, issue #708, segunda fatia do PRD #706 (ADR 0055). A migration 107 e um CREATE OR REPLACE da funcao de transicao com o corpo da 098 mais UMA aresta (respondido -> em_classificacao); nao e SECURITY DEFINER e o par REVOKE/GRANT repete o da 095/097/098. O PR nasceu verde no CI e levou TRES rodadas de fix; o CI nunca reclamou de nada do que foi consertado. Achado 1, o mais caro: caso `respondido` redirecionado chegava na area nova carregando o T2 da area ERRADA, porque nada limpava respondida_em. A propria API devolvia cumprimento=cumprido no instante zero, e continuava dizendo isso duas semanas depois do vencimento, porque cumprimento_da_area corta em `if respondida_em is not None`. O caso sumia das pendencias por area da Diretoria (_esta_com_a_area exige `not respondida_em`), o ranking de tempo de resposta calculava fim ANTES do inicio, e a linha do tempo mostrava T2 antes de T1, tudo enquanto a cobranca por email continuava saindo (os jobs nao leem respondida_em). Era omissao e nao decisao: as duas portas irmas (devolucao por insuficiencia e reabertura por reincidencia) limpam de proposito, e o comentario de uma delas descreve exatamente esta falha. Conserto com opt-in `limpar_a_resposta` em parar/restaurar, escolhido para que o payload da DEVOLUCAO (rota publica sem login) ficasse byte a byte identico. Achado 2: a aresta nova fez a RPC aceitar o caminho, e com isso a Devolucao a Ouvidoria (ja em producao) podia entrar com o relogio da area nunca parado. Regressao introduzida pela aresta numa rota que ja rodava, nao pelo redirecionamento. Verificado depois que em NENHUM dos quatro estados alcancaveis da corrida um 200 virou 409. Achado 3: respondida_por_nome fora do select fazia o rollback gravar None em cima de quem respondeu, apagando o nome em silencio. Achado 4: a mensagem de falha afirmava estado que o codigo nao conferiu e mandava o ouvidor no Validar e acionar, que a API recusa com 409 nesse estado; a fronteira certa nao e o marco T1 e sim a transicao de ENTRADA, porque entre as duas o caso esta em aguardando_area com a area ANTIGA e sem vencimento. O campo virou `o_caso_continua_em_classificacao` (so True enquanto o codigo SABE) em vez de `saiu_da_classificacao`, que teria que mentir para acertar a frase. Achado 5: DUAS vezes o par `except APIError` sem HTTPError, um deles pre-existente; na rota de VALIDACAO esses pontos viravam 500 sem corpo e agora respondem com frase. Decisoes do Pedro: porta dos fundos FECHADA (a rota generica do painel recusa as arestas de redirecionamento, o que de quebra impediu travessao cru de entrar na trilha imutavel pela observacao, ADR 0013), e redirecionar para a MESMA area RECUSADO (o ato previsto e a devolucao por insuficiencia, que da meio prazo de proposito). 46 mutantes mortos. Assimetria ACEITA e declarada: o rollback devolve o prazo mas nao os carimbos dos jobs, herdada do _restaurar_prazo da devolucao; custa cobranca repetida, nunca cobranca perdida. Item conhecido registrado: o postgrest-py transforma qualquer nao-2xx sem JSON de erro em APIError com code igual ao status HTTP, entao um 504 de proxy pode ter commitado e ser lido como falha; pre-existente e identico antes e depois. Prova do codigo novo em producao sem login: a rota nova devolve 401 e uma rota inexistente devolve 404."
+    },
+    {
       "at": "2026-09-15T00:45:00-03:00",
       "sha": "29da463",
       "app_version": "0.130.0",
@@ -1416,37 +1447,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 2 do PRD #468, fatia G sozinha (#476, PR #503). A revisao de codigo achou 2 must-fix, sendo um grave: trocar de caso pela URL deixava os botoes do caso anterior na tela, e validar ali dispararia email para o setor errado. Os dois corrigidos e reconfirmados. A revisao de seguranca fechou limpa, com a enumeracao de protocolo provada indistinguivel. APP_VERSION setado antes do merge desta vez, entao nao precisou de redeploy manual."
-    },
-    {
-      "at": "2026-09-01T15:35:00-03:00",
-      "sha": "959bb15",
-      "app_version": "0.90.0",
-      "subject": "A Ouvidoria ganha atalho no celular, o login devolve quem veio de um link e o prazo do caso passa a ser congelado na validacao",
-      "raw_subject": "feat(login): devolve ao destino original depois de autenticar (#502)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "091_ouvidoria_prazo_conclusivo.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 do PRD #468, 3 fatias num deploy so (#478 PR #500, #479 PR #501, #477 PR #502). O APP_VERSION foi gravado depois do build do webhook, entao o backend subiu marcando 0.89.0 e precisou de redeploy manual. Houve janela de 503 na troca do container, com o container novo ja saudavel por dentro."
     }
   ]
 }
