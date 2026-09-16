@@ -2088,6 +2088,14 @@ async def assistente_chat(
     com a mesma regra da tela (`produtos.filter(p => p.ativo)`), para o
     assistente nunca propor um Produto que a pessoa nao poderia escolher a mao.
     """
+    # O rascunho volta inteiro a cada turno e vai para o prompt: e o campo do
+    # corpo que os tetos de `messages` NAO cobriam. A recusa sai daqui, e nao de
+    # um `max_length` do pydantic, para a frase chegar legivel a tela (o
+    # `detail` do pydantic vem em lista, e a tela o mostra como JSON cru).
+    motivo = assistente_tecnologia.motivo_rascunho_grande(payload.rascunho)
+    if motivo:
+        _recusar(motivo)
+
     result = supabase.table(TABELA_PRODUTOS).select("*").order("ordem").execute()
     produtos = [{"id": p["id"], "nome": p.get("nome") or ""} for p in (result.data or []) if p.get("ativo")]
 

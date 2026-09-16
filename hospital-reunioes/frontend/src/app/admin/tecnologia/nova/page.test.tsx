@@ -118,6 +118,39 @@ describe("O gate da página", () => {
   });
 });
 
+describe("Sem sessão", () => {
+  it("a página diz o que aconteceu, em vez de virar um beco calado", async () => {
+    // O `useAuth` devolve `token: null` também quando o `getUser()` falha por
+    // rede, enquanto o `useCurrentParticipante` responde do cache de módulo: o
+    // gate passava, o assistente desenhava inteiro, o Produto vinha vazio,
+    // "Criar Demanda" ficava desabilitado para sempre e o chat respondia 401
+    // cru. Nenhuma frase dizia o que fazer.
+    sessao.token = null;
+    montar();
+
+    expect((await screen.findByRole("alert")).textContent).toContain("a sessão não está ativa");
+    expect(screen.queryByLabelText("Mensagem")).toBeNull();
+  });
+
+  it("enquanto a autenticação resolve, nenhum alarme aparece", async () => {
+    // O `useAuth` nasce com `{token: null, loading: true}`: acusar aqui
+    // piscaria o alerta vermelho em toda abertura de página com sessão boa.
+    sessao.token = null;
+    sessao.loading = true;
+    montar();
+
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("com sessão, nenhum alarme aparece", async () => {
+    // O par de presença: uma página que gritasse sempre passaria no primeiro.
+    montar();
+
+    await waitFor(() => expect(screen.getByLabelText("Mensagem")).toBeTruthy());
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
 describe("Prefiro preencher à mão", () => {
   it("troca o assistente pelo formulário de sempre, na mesma página", async () => {
     montar();

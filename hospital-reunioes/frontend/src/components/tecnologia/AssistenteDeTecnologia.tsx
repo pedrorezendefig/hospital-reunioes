@@ -25,8 +25,10 @@ import {
   AVISO_DE_IA,
   CONVERSA_NO_TETO,
   descricaoAoCriar,
+  LIMITE_DA_DESCRICAO,
   LIMITE_DA_MENSAGEM,
   LIMITE_DE_MENSAGENS,
+  LIMITE_DO_TITULO,
   MUITAS_MENSAGENS,
   gravarNaSessao,
   limparASessao,
@@ -76,6 +78,15 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
    * guardado antes de o efeito de ler chegar.
    */
   const leuDaSessao = useRef(false);
+  /**
+   * Qual conversa está valendo.
+   *
+   * "Descartar" começa outra, e o turno que estava no ar quando isso aconteceu
+   * não pode voltar escrevendo: sem este número, a resposta chegaria quatro
+   * segundos depois e traria de volta o fio e o rascunho que a pessoa acabou
+   * de jogar fora.
+   */
+  const conversaAtual = useRef(0);
   const fimDaLista = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
@@ -121,11 +132,28 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
   async function enviar() {
     const fala = texto.trim();
     if (!fala || conversando || noTeto) return;
+    const anteriores = messages;
     const historico: MensagemDoChat[] = [...messages, { role: "user", content: fala }];
+    const daConversa = conversaAtual.current;
     setMessages(historico);
     setTexto("");
     setErro(null);
     setConversando(true);
+
+    /**
+     * O turno que o servidor não aceitou VOLTA ATRÁS.
+     *
+     * Deixar a fala pendurada no fio e a caixa vazia é o pior dos dois mundos:
+     * a tela manda mandar de novo e não sobrou o que mandar, o modelo leria a
+     * mesma frase duas vezes se a pessoa redigitasse, e o turno que o servidor
+     * nunca viu teria queimado um dos quarenta lugares do teto.
+     */
+    function desfazerOTurno(motivo: string) {
+      setMessages(anteriores);
+      setTexto(fala);
+      setErro(motivo);
+      setConversando(false);
+    }
 
     let resposta: Response;
     try {
@@ -138,13 +166,14 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
       });
     } catch (e) {
       console.error("[admin/tecnologia] falha ao falar com o assistente", e);
-      setErro(FALHA_DE_CONEXAO);
-      setConversando(false);
+      desfazerOTurno(FALHA_DE_CONEXAO);
       return;
     }
+    // Descartaram enquanto este turno estava no ar: a resposta não é de
+    // conversa nenhuma, e escrevê-la ressuscitaria o que a pessoa jogou fora.
+    if (conversaAtual.current !== daConversa) return;
     if (!resposta.ok) {
-      setErro(resposta.status === 429 ? MUITAS_MENSAGENS : await motivoDaRecusa(resposta));
-      setConversando(false);
+      desfazerOTurno(resposta.status === 429 ? MUITAS_MENSAGENS : await motivoDaRecusa(resposta));
       return;
     }
     const corpo = (await resposta.json()) as RespostaDoChat;
@@ -189,11 +218,14 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
   }
 
   function descartar() {
+    // Começa outra conversa: o turno que estiver no ar deixa de ser de alguém.
+    conversaAtual.current += 1;
     limparASessao();
     setMessages([BOAS_VINDAS]);
     setRascunho(RASCUNHO_VAZIO);
     setTexto("");
     setErro(null);
+    setConversando(false);
   }
 
   function mudar(campo: Partial<RascunhoDaDemanda>) {
@@ -231,7 +263,8 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
             type="text"
             aria-label="Título"
             placeholder="O assistente escreve, você ajusta"
-            maxLength={200}
+            maxLength={LIMITE_DO_TITULO}
+            disabled={conversando}
             value={rascunho.titulo}
             onChange={(e) => mudar({ titulo: e.target.value })}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
@@ -243,6 +276,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
               onChange={(tipo) => mudar({ tipo: tipo as TipoDemanda })}
               options={TIPOS.map((t) => ({ value: t, label: TIPO_ROTULO[t] }))}
               placeholder="O assistente escolhe"
+              disabled={conversando}
             />
             {rascunho.tipo === null && (
               <p className="text-xs text-text-secondary sm:col-span-2">
@@ -255,12 +289,14 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
               onChange={(produto_id) => mudar({ produto_id })}
               options={produtosAtivos.map((p) => ({ value: p.id, label: p.nome }))}
               placeholder="Escolha o Produto"
+              disabled={conversando}
             />
             <Select
               label="Prioridade"
               value={rascunho.prioridade}
               onChange={(prioridade) => mudar({ prioridade: prioridade as PrioridadeDemanda })}
               options={PRIORIDADES.map((p) => ({ value: p, label: PRIORIDADE_ROTULO[p] }))}
+              disabled={conversando}
             />
             <div className="flex flex-col gap-1">
               <label htmlFor="prazo-do-rascunho" className="text-xs font-medium text-text-secondary">
@@ -269,6 +305,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
               <input
                 id="prazo-do-rascunho"
                 type="date"
+                disabled={conversando}
                 value={rascunho.prazo ?? ""}
                 onChange={(e) => mudar({ prazo: e.target.value || null })}
                 className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
@@ -278,11 +315,18 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
           <textarea
             aria-label="Descrição"
             rows={8}
+            maxLength={LIMITE_DA_DESCRICAO}
+            disabled={conversando}
             placeholder="A descrição vai tomando forma conforme vocês conversam"
             value={rascunho.descricao}
             onChange={(e) => mudar({ descricao: e.target.value })}
             className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white"
           />
+          {conversando && (
+            <p role="status" className="text-xs text-text-secondary">
+              O assistente está escrevendo aqui. Espere a resposta para ajustar à mão.
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"

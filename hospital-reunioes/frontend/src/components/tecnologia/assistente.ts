@@ -74,6 +74,17 @@ export const AVISO_DE_IA =
 export const LIMITE_DE_MENSAGENS = 40;
 export const LIMITE_DA_MENSAGEM = 5000;
 
+/**
+ * Os tetos dos dois campos de texto do Rascunho, iguais aos do backend.
+ *
+ * O rascunho volta inteiro no corpo de cada turno e entra no prompt: sem teto,
+ * os dois tetos acima protegeriam só a conversa, e o campo vizinho passaria
+ * megabytes ao provedor a dez chamadas por minuto. O título é o mesmo 200 do
+ * formulário de sempre.
+ */
+export const LIMITE_DO_TITULO = 200;
+export const LIMITE_DA_DESCRICAO = 5000;
+
 export const CONVERSA_NO_TETO =
   "Esta conversa chegou no limite. Crie a Demanda com o que já está no rascunho, ou descarte e comece outra.";
 

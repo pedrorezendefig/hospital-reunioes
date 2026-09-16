@@ -23,8 +23,10 @@ import {
   AVISO_DE_IA,
   CHAVE_DA_SESSAO,
   CONVERSA_NO_TETO,
+  LIMITE_DA_DESCRICAO,
   LIMITE_DA_MENSAGEM,
   LIMITE_DE_MENSAGENS,
+  LIMITE_DO_TITULO,
   MensagemDoChat,
   MUITAS_MENSAGENS,
   NAO_INFORMADO,
@@ -58,6 +60,12 @@ type Opcoes = {
   rascunhoDaResposta?: RascunhoDaDemanda;
   reply?: string;
   /**
+   * Segura a resposta do chat: o teste solta quando quiser, e entre o clique e
+   * a soltura a tela está com o turno EM VOO, que é onde moram as duas corridas
+   * (editar o rascunho e descartar a conversa).
+   */
+  segurarAResposta?: boolean;
+  /**
    * O corpo CRU da recusa, como cada camada do backend a escreve. Não é um
    * `{detail}` genérico de propósito: o `slowapi` responde `{error: ...}` e o
    * pydantic responde `detail` em LISTA, e um dublê que normalizasse os três
@@ -66,10 +74,17 @@ type Opcoes = {
   recusaDoChat?: { status: number; corpo: unknown };
 };
 
+let soltarAResposta: (() => void) | null = null;
+
 function servidor(opcoes: Opcoes) {
   return vi.fn(async (url: string, init?: RequestInit) => {
     const corpo = init?.body ? JSON.parse(String(init.body)) : undefined;
     chamadas.push({ url, metodo: init?.method ?? "GET", corpo });
+    if (url.endsWith("/assistente/chat") && opcoes.segurarAResposta) {
+      await new Promise<void>((resolve) => {
+        soltarAResposta = resolve;
+      });
+    }
     if (url.endsWith("/assistente/chat")) {
       if (opcoes.recusaDoChat) {
         return {
@@ -124,6 +139,7 @@ async function falar(texto: string) {
 beforeEach(() => {
   chamadas = [];
   criadas = [];
+  soltarAResposta = null;
   Element.prototype.scrollIntoView = vi.fn();
   window.sessionStorage.clear();
 });
@@ -214,6 +230,106 @@ describe("A conversa", () => {
   });
 });
 
+describe("O turno em voo", () => {
+  /** Manda uma fala e PARA com a resposta pendurada, sem esperar o fim. */
+  async function falarESegurar(texto: string) {
+    fireEvent.change(screen.getByLabelText("Mensagem"), { target: { value: texto } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() => expect(doChat().length).toBeGreaterThan(0));
+  }
+
+  it("os campos do rascunho travam enquanto o assistente escreve", async () => {
+    // A edição feita agora não caberia no corpo (já serializado) e seria
+    // apagada pela resposta: a pessoa perderia o que digitou sem rastro.
+    montar({ segurarAResposta: true });
+    await falarESegurar("a Ana tá estranha");
+
+    expect((screen.getByLabelText("Título") as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Descrição") as HTMLTextAreaElement).disabled).toBe(true);
+    expect(screen.getByText(/O assistente está escrevendo aqui/)).toBeTruthy();
+  });
+
+  it("com a resposta na mão, os campos voltam a aceitar edição", async () => {
+    // O par de presença: um painel travado desde sempre passaria no teste
+    // acima, e o critério de aceite manda editar à mão.
+    montar();
+    await falar("a Ana tá estranha");
+
+    await waitFor(() => expect((screen.getByLabelText("Título") as HTMLInputElement).disabled).toBe(false));
+    expect(screen.queryByText(/O assistente está escrevendo aqui/)).toBeNull();
+  });
+
+  it("descartar no meio do turno não é desfeito pela resposta que chega depois", async () => {
+    montar({ segurarAResposta: true });
+    await falarESegurar("a Ana tá estranha");
+
+    fireEvent.click(screen.getByRole("button", { name: /Descartar/ }));
+    soltarAResposta?.();
+
+    // A conversa descartada não volta, nem o rascunho que ela traria.
+    await waitFor(() => expect(screen.queryByText("a Ana tá estranha")).toBeNull());
+    expect(screen.queryByText("Entendi. Onde isso aconteceu?")).toBeNull();
+    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("");
+    expect(window.sessionStorage.getItem(CHAVE_DA_SESSAO)).toBeNull();
+  });
+
+  it("sem descartar, a resposta do mesmo turno entra normalmente", async () => {
+    // O par de presença: uma tela que jogasse fora TODA resposta passaria no
+    // teste acima.
+    montar({ segurarAResposta: true });
+    await falarESegurar("a Ana tá estranha");
+
+    soltarAResposta?.();
+
+    await waitFor(() => expect(screen.getByText("Entendi. Onde isso aconteceu?")).toBeTruthy());
+    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Ana não responde de madrugada");
+  });
+});
+
+describe("O turno recusado", () => {
+  it("volta atrás: a fala sai do fio e o texto volta para a caixa", async () => {
+    // Sem isso, a tela diz "mande de novo" e não sobrou o que mandar: a fala
+    // fica pendurada sem resposta, já gravada na sessão, e queimou um dos
+    // quarenta lugares do teto que o servidor nunca viu.
+    montar({ recusaDoChat: { status: 429, corpo: { error: "Rate limit exceeded: 10 per 1 minute" } } });
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() => expect((screen.getByLabelText("Mensagem") as HTMLTextAreaElement).value).toBe("a Ana tá estranha"));
+    expect(within(screen.getByRole("log")).queryByText("a Ana tá estranha")).toBeNull();
+    expect((await screen.findByRole("alert")).textContent).toBe(MUITAS_MENSAGENS);
+  });
+
+  it("a falha de rede volta atrás do mesmo jeito", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        chamadas.push({ url, metodo: "POST", corpo: undefined });
+        throw new Error("rede fora");
+      }),
+    );
+    render(
+      <AssistenteDeTecnologia token="tok" produtos={PRODUTOS} onCriada={(d, a) => criadas.push({ demanda: d, aviso: a })} />,
+    );
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() => expect((screen.getByLabelText("Mensagem") as HTMLTextAreaElement).value).toBe("a Ana tá estranha"));
+    expect(within(screen.getByRole("log")).queryByText("a Ana tá estranha")).toBeNull();
+  });
+
+  it("o turno aceito NÃO volta atrás", async () => {
+    // O par de presença dos dois acima: uma tela que nunca comitasse a fala
+    // passaria nos dois.
+    montar();
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() => expect(within(screen.getByRole("log")).getByText("a Ana tá estranha")).toBeTruthy());
+    expect((screen.getByLabelText("Mensagem") as HTMLTextAreaElement).value).toBe("");
+  });
+});
+
 describe("Os tetos do corpo", () => {
   /** Uma conversa já no teto, guardada na sessão para a tela montar em cima dela. */
   function conversaNoTeto() {
@@ -230,6 +346,15 @@ describe("Os tetos do corpo", () => {
     montar();
 
     expect((screen.getByLabelText("Mensagem") as HTMLTextAreaElement).maxLength).toBe(LIMITE_DA_MENSAGEM);
+  });
+
+  it("os campos do rascunho têm o par na tela dos tetos do servidor", () => {
+    // O rascunho volta inteiro no corpo de cada turno: sem estes dois, o 422 do
+    // servidor seria a primeira notícia de que o texto não cabia.
+    montar();
+
+    expect((screen.getByLabelText("Título") as HTMLInputElement).maxLength).toBe(LIMITE_DO_TITULO);
+    expect((screen.getByLabelText("Descrição") as HTMLTextAreaElement).maxLength).toBe(LIMITE_DA_DESCRICAO);
   });
 
   it("no teto de mensagens, a tela para de mandar e diz o que fazer", async () => {

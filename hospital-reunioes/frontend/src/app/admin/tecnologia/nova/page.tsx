@@ -24,6 +24,21 @@ import { isSuperAdmin } from "@/lib/auth";
 const SEM_ACESSO = "A aba Tecnologia é do Super admin. Fale com quem administra o aplicativo se você precisa entrar.";
 const SEM_PRODUTOS = "Não foi possível carregar os Produtos. Recarregue a página e tente de novo.";
 
+/**
+ * A frase de quando o `useAuth` não devolve token, a mesma do resto da aba
+ * (`TecnologiaModulo`, `QuadroDemandas`, `MinhaVez`, `Histórico`).
+ *
+ * Sem ela a página virava um beco calado: o `useAuth` devolve `token: null`
+ * tanto com a sessão acabada quanto com o `getUser()` falhando por rede, e o
+ * `useCurrentParticipante` responde do cache de módulo, então o gate passava,
+ * o assistente desenhava inteiro, o Produto vinha vazio, "Criar Demanda"
+ * ficava desabilitado para sempre e o chat respondia 401 cru. Ela NÃO manda
+ * entrar de novo, pelo mesmo motivo do módulo: a tela não distingue as duas
+ * causas, e recarregar serve para as duas.
+ */
+const SEM_SESSAO =
+  "Não foi possível abrir a Nova Demanda: a sessão não está ativa ou o servidor não respondeu. Tente recarregar a página.";
+
 export default function NovaDemandaPage() {
   const router = useRouter();
   const { token, loading: carregandoAuth } = useAuth();
@@ -41,7 +56,11 @@ export default function NovaDemandaPage() {
   const [avisoDeEmail, setAvisoDeEmail] = useState<{ texto: string; link: string } | null>(null);
 
   useEffect(() => {
-    if (carregandoAuth || !token) return;
+    if (carregandoAuth) return;
+    if (!token) {
+      setErro(SEM_SESSAO);
+      return;
+    }
     let vivo = true;
     fetch(`${BASE_TECNOLOGIA}/produtos`, { headers: { Authorization: `Bearer ${token}` } })
       .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
@@ -129,7 +148,7 @@ export default function NovaDemandaPage() {
             Ver a Demanda no Quadro
           </Link>
         </div>
-      ) : aMao ? (
+      ) : !token ? null : aMao ? (
         <FormularioNovaDemanda token={token} produtos={produtos} onCriada={aoCriar} />
       ) : (
         <AssistenteDeTecnologia token={token} produtos={produtos} onCriada={aoCriar} />

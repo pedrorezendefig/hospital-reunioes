@@ -35,11 +35,46 @@ logger = logging.getLogger(__name__)
 MARCA_INICIO_KIT = "--- início do kit ---"
 MARCA_FIM_KIT = "--- fim do kit ---"
 
+# A mesma cerca para as Demandas abertas.
+#
+# Nesta fatia o bloco chega vazio, mas ele nasce cercado porque o que vai
+# carrega-lo e titulo e Produto escritos por OUTRAS pessoas, e sem a cerca esse
+# texto entraria no prompt de quem esta conversando na coluna zero, no meio de
+# um documento cujas secoes sao exatamente linhas em maiusculas seguidas de
+# dois-pontos. Poe-la depois seria poe-la tarde.
+MARCA_INICIO_DEMANDAS = "--- início das Demandas abertas ---"
+MARCA_FIM_DEMANDAS = "--- fim das Demandas abertas ---"
+
 # A primeira linha de dentro da cerca e do backend, e nao do kit: e ela que faz
 # `recuar_continuacao` empurrar TODAS as linhas do material para a direita. Com
 # a primeira coluna sempre nossa, nenhuma linha escrita la dentro consegue
 # passar por marca de fim.
 TITULO_DO_KIT = "Material escrito pela Vitta sobre a plataforma:"
+TITULO_DAS_DEMANDAS = "Demandas que já estão abertas no Quadro:"
+
+# Os tetos dos dois campos de TEXTO do rascunho.
+#
+# Eles existem pelo mesmo motivo dos tetos de `messages`, e fechavam um buraco
+# que aqueles deixavam aberto: o rascunho volta inteiro no corpo de cada turno e
+# vai para o prompt em `json.dumps`, entao sem teto aqui o unico limite do que
+# chega ao provedor era o do corpo do app inteiro (100 MB), a dez chamadas por
+# minuto. Os outros quatro campos ja eram peneirados contra listas fechadas.
+#
+# O titulo e o mesmo 200 do formulario de sempre (`LIMITE_TITULO` do router). A
+# descricao e da ordem de uma fala do chat: o Roteiro por Tipo tem no maximo
+# cinco rotulos, e 5000 caracteres cabem folgados.
+LIMITE_DO_TITULO = 200
+LIMITE_DA_DESCRICAO = 5000
+
+# Duas frases, e nao uma, porque o codigo SABE qual dos dois campos estourou:
+# uma frase so mandaria encurtar o titulo de quem escreveu demais na descricao.
+MOTIVO_TITULO_GRANDE = (
+    f"O título do rascunho passou de {LIMITE_DO_TITULO} caracteres. Encurte o título e mande de novo."
+)
+MOTIVO_DESCRICAO_GRANDE = (
+    f"A descrição do rascunho passou de {LIMITE_DA_DESCRICAO} caracteres. "
+    "Encurte a descrição, ou crie a Demanda com o que já tem e siga o texto por lá."
+)
 
 SEM_DEMANDAS_ABERTAS = "(nenhuma)"
 SEM_PRODUTOS = "(nenhum Produto ativo)"
@@ -64,9 +99,14 @@ RASCUNHO_VAZIO: dict = {
 }
 
 
-def _cercar_kit(kit: str) -> str:
-    """O kit entre marcas, com todas as linhas recuadas."""
-    return "\n".join([MARCA_INICIO_KIT, recuar_continuacao(f"{TITULO_DO_KIT}\n{kit}"), MARCA_FIM_KIT])
+def _cercar(texto: str, *, titulo: str, inicio: str, fim: str) -> str:
+    """Um bloco de texto de gente entre marcas, com todas as linhas recuadas.
+
+    A primeira linha de dentro e o `titulo`, que e do backend: e ele que faz o
+    `recuar_continuacao` empurrar TODO o resto para a direita, e com a primeira
+    coluna sempre nossa nenhuma linha la dentro consegue passar por marca.
+    """
+    return "\n".join([inicio, recuar_continuacao(f"{titulo}\n{texto}"), fim])
 
 
 def _bloco_produtos(produtos: list[dict]) -> str:
@@ -89,8 +129,15 @@ def _bloco_demandas_abertas(demandas: list[dict]) -> str:
     )
 
 
-def _texto(valor, anterior: str) -> str:
-    return valor if isinstance(valor, str) else anterior
+def _texto(valor, anterior: str, teto: int) -> str:
+    """Texto que passa do teto volta ao anterior, como valor fora de lista.
+
+    Na entrada, a rota ja recusou o que passa do teto com frase de gente, entao
+    esta guarda nao chega a ser vista. Na saida do modelo ela e o que impede o
+    painel de ficar com uma descricao que o proprio turno seguinte recusaria:
+    guarda-corpo que vira beco nao e guarda-corpo.
+    """
+    return valor if isinstance(valor, str) and len(valor) <= teto else anterior
 
 
 def _da_lista(valor, lista: tuple[str, ...], anterior):
@@ -118,16 +165,42 @@ def _prazo_iso(valor) -> str | None:
         return None
 
 
-def rascunho_de_entrada(bruto) -> dict:
-    """O rascunho que chegou da tela, com o shape completo garantido."""
+def motivo_rascunho_grande(bruto) -> str | None:
+    """A frase de recusa quando o rascunho que chegou passa de um dos tetos.
+
+    Mora aqui, e nao num `max_length` do pydantic, pelo mesmo motivo do titulo
+    da Demanda (ver `DemandaCreatePayload`): o pydantic responde ANTES do router
+    e devolve `detail` em LISTA, que a tela mostra como JSON cru no alerta
+    vermelho. Devolvendo a frase, a recusa entra pela mesma porta do resto e
+    chega legivel.
+    """
+    if not isinstance(bruto, dict):
+        return None
+    titulo = bruto.get("titulo")
+    if isinstance(titulo, str) and len(titulo) > LIMITE_DO_TITULO:
+        return MOTIVO_TITULO_GRANDE
+    descricao = bruto.get("descricao")
+    if isinstance(descricao, str) and len(descricao) > LIMITE_DA_DESCRICAO:
+        return MOTIVO_DESCRICAO_GRANDE
+    return None
+
+
+def rascunho_de_entrada(bruto, *, ids_de_produto: set[str]) -> dict:
+    """O rascunho que chegou da tela, com o shape completo garantido.
+
+    O `produto_id` e peneirado contra os Produtos ATIVOS aqui tambem, e nao so
+    na saida do modelo: ele vem do cliente, entra no prompt junto com o resto do
+    rascunho, e um id que o app nao conhece nao tem o que fazer la.
+    """
     bruto = bruto if isinstance(bruto, dict) else {}
+    produto = bruto.get("produto_id")
     return {
-        "titulo": _texto(bruto.get("titulo"), ""),
+        "titulo": _texto(bruto.get("titulo"), "", LIMITE_DO_TITULO),
         "tipo": _da_lista(bruto.get("tipo"), TIPOS, None),
-        "produto_id": bruto.get("produto_id") if isinstance(bruto.get("produto_id"), str) else None,
+        "produto_id": produto if produto in ids_de_produto else None,
         "prioridade": _da_lista(bruto.get("prioridade"), PRIORIDADES, "normal"),
         "prazo": _prazo_iso(bruto.get("prazo")),
-        "descricao": _texto(bruto.get("descricao"), ""),
+        "descricao": _texto(bruto.get("descricao"), "", LIMITE_DA_DESCRICAO),
     }
 
 
@@ -147,12 +220,12 @@ def normalizar_rascunho(novo, atual: dict, *, ids_de_produto: set[str]) -> dict:
     novo = novo if isinstance(novo, dict) else {}
     produto = novo.get("produto_id")
     return {
-        "titulo": _texto(novo.get("titulo"), atual["titulo"]),
+        "titulo": _texto(novo.get("titulo"), atual["titulo"], LIMITE_DO_TITULO),
         "tipo": _da_lista(novo.get("tipo"), TIPOS, atual["tipo"]),
         "produto_id": produto if produto in ids_de_produto else atual["produto_id"],
         "prioridade": _da_lista(novo.get("prioridade"), PRIORIDADES, atual["prioridade"]),
         "prazo": _prazo_iso(novo["prazo"]) if "prazo" in novo else atual["prazo"],
-        "descricao": _texto(novo.get("descricao"), atual["descricao"]),
+        "descricao": _texto(novo.get("descricao"), atual["descricao"], LIMITE_DA_DESCRICAO),
     }
 
 
@@ -171,7 +244,8 @@ def conversar(
     `None` nesta fatia: o campo ja nasce no contrato para a tela e os testes
     nao mudarem quando o aviso de Demanda repetida entrar.
     """
-    atual = rascunho_de_entrada(rascunho)
+    ids_de_produto = {p["id"] for p in produtos}
+    atual = rascunho_de_entrada(rascunho, ids_de_produto=ids_de_produto)
 
     provider = ai_processor._llm_provider()
     if provider == "mock":
@@ -187,9 +261,14 @@ def conversar(
     )
     user_content = render_prompt(
         "assistente_tecnologia_user",
-        kit=_cercar_kit(kit),
+        kit=_cercar(kit, titulo=TITULO_DO_KIT, inicio=MARCA_INICIO_KIT, fim=MARCA_FIM_KIT),
         produtos=_bloco_produtos(produtos),
-        demandas_abertas=_bloco_demandas_abertas(demandas_abertas),
+        demandas_abertas=_cercar(
+            _bloco_demandas_abertas(demandas_abertas),
+            titulo=TITULO_DAS_DEMANDAS,
+            inicio=MARCA_INICIO_DEMANDAS,
+            fim=MARCA_FIM_DEMANDAS,
+        ),
         rascunho_atual=json.dumps(atual, indent=2, ensure_ascii=False),
         chat_history=chat_history,
         hoje_iso=hoje_iso,
@@ -217,11 +296,7 @@ def conversar(
         logger.error(f"Erro no Assistente de Tecnologia via {provider}: {e}")
         return {"reply": REPLY_ERRO, "rascunho": atual, "demanda_parecida": None}
 
-    saida = normalizar_rascunho(
-        parsed.get("rascunho"),
-        atual,
-        ids_de_produto={p["id"] for p in produtos},
-    )
+    saida = normalizar_rascunho(parsed.get("rascunho"), atual, ids_de_produto=ids_de_produto)
     # ADR 0013: o rascunho vira a descricao da Demanda, e ela nao tem travessao.
     return {
         "reply": sanitizar_travessao(parsed.get("reply", "")),
