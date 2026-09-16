@@ -3,7 +3,7 @@ title: Consultar o Espelho da Global Health
 description: Ver ao vivo o que a agenda online publica e descobrir por que a assistente não achou horário.
 prd: [385]
 draft: false
-papel: [Só admin, Secretária, Facilitador]
+papel: [Só admin, Secretária, Regular]
 sidebar:
   order: 12
 ---

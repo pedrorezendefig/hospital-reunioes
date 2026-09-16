@@ -23,8 +23,9 @@ que alguém falou numa reunião e o sistema não casou com ninguém do cadastro.
 3. Ao mesclar, busque a pessoa certa, confira os números da tela e escreva o
    **Motivo**. Reuniões, pendências, comentários, menções e avisos passam para
    ela, e a linha externa é apagada.
-4. Ao promover, preencha **Email**, **Cargo** e **Setor**, escreva o **Motivo**
-   e confirme. A mesma linha vira interna, então nada do histórico se move.
+4. Ao promover, preencha **Email** e **Cargo**, que são os obrigatórios, e
+   confirme. O **Setor** e o **Motivo (opcional)** ficam a seu critério. A
+   mesma linha vira interna, então nada do histórico se move.
 5. Depois de promover, gere a senha em **Resetar senha**: promover não entrega
    acesso.
 

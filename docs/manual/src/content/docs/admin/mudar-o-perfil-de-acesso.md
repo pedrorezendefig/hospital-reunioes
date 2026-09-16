@@ -31,6 +31,6 @@ hoje. É este campo, e não a Role, que decide o que a pessoa alcança no app.
 - **Você marcou Secretária e o Cargo sumiu:** é assim mesmo. Secretária é
   função de sistema, não de organograma, e por isso Cargo e Role deixam de ser
   pedidos.
-- **A pessoa virou Super Admin e mesmo assim não abre uma manifestação:** o
-  Super Admin não lê caso de ouvidoria. Isso é o **Acesso à Ouvidoria**, que se
-  concede à parte.
+- **A pessoa virou Super Admin e mesmo assim não abre uma manifestação:** ela
+  enxerga a lista da Ouvidoria, mas abrir o caso é o **Acesso à Ouvidoria**,
+  que se concede à parte.

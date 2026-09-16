@@ -11,7 +11,8 @@ sidebar:
 ## Quando usar
 
 Quando alguém vai cuidar de procedimentos ou de manifestações. Os dois acessos
-são independentes do Perfil de acesso: nem o Super Admin entra sem eles.
+são independentes do Perfil de acesso: nem o Super Admin abre a área de POPs
+nem o caso da Ouvidoria sem eles.
 
 ## Passo a passo
 
@@ -34,6 +35,6 @@ são independentes do Perfil de acesso: nem o Super Admin entra sem eles.
   real. Repita só o que falhou.
 - **A tela recusa com "Pessoa sem email cadastrado":** o acesso cria o login, e
   login precisa de endereço. Preencha o **Email** na mesma janela e salve.
-- **A pessoa entra na Ouvidoria e não vê caso nenhum:** confira se ela ficou
-  com **Ouvidor** e não com **Sem acesso**. A lista de casos completa é só
-  desses dois acessos.
+- **A pessoa vê a lista da Ouvidoria mas não abre nenhum caso:** a lista é de
+  toda a equipe de Reuniões; abrir o caso exige **Ouvidor** ou
+  **Diretoria Executiva**. Confira se ela não ficou em **Sem acesso**.

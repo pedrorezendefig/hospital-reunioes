@@ -29,10 +29,11 @@ senha é você, e ela aparece uma vez só.
 
 - **Você fechou a janela sem copiar:** a senha não aparece de novo. Repita o
   **Resetar senha**, que gera outra.
-- **A tela recusa com "Participante sem conta":** a pessoa está no cadastro mas
-  nunca teve login. Conceda a ela o **Acesso aos POPs** ou o **Acesso à
-  Ouvidoria** pelo botão de editar, que a conta nasce junto e a senha aparece
-  na hora.
+- **A tela recusa com "Participante sem email cadastrado":** a ficha está sem
+  endereço, e é o endereço que identifica a pessoa na entrada. Preencha o
+  **Email** pelo lápis, **Editar**, e repita. Quem nunca entrou na plataforma
+  não é problema: o próprio **Resetar senha** cria a conta dessa pessoa na
+  hora.
 - **A pessoa continua sem entrar depois de receber a senha:** confira se a
   ficha dela está com **Ativo** marcado. Quem está desligado é recusado na
   porta.

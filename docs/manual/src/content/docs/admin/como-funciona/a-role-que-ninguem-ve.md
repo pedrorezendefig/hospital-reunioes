@@ -32,13 +32,15 @@ não dá nem tira acesso a módulo nenhum.
 ## O pouco que sobrou
 
 Dizer que a Role não faz nada seria errado. Ela ainda é consultada em três
-situações, todas fora da área de Administração, e em todas o valor precisa ser
-`diretor`, `presidente` ou `gerente`:
+situações, todas fora da área de Administração, e cada uma aceita uma lista
+própria:
 
-- apagar de vez uma reunião que ainda está programada;
-- apagar a série inteira de uma reunião que se repete;
+- apagar de vez uma reunião que ainda está programada, com **diretor**,
+  **presidente** ou **gerente**;
+- apagar a série inteira de uma reunião que se repete, com os mesmos três;
 - cadastrar ou desligar uma pessoa pela porta antiga, fora do painel de
-  Usuários.
+  Usuários, e aqui são só **diretor** e **gerente**: quem é **presidente** é
+  recusado.
 
 O Super Admin passa por cima dessas três checagens, e a Secretária tem regra
 própria para reunião programada.
@@ -46,7 +48,8 @@ própria para reunião programada.
 ## O que isso significa na prática
 
 Ao cadastrar alguém, escolha a Role que corresponde à posição real da pessoa,
-porque ela ainda decide quem apaga reunião. Mas não conte com ela para dar
+porque ela ainda decide quem apaga reunião. O formulário começa em
+**coordenador**, que é justamente o único dos quatro que não apaga nada. Mas não conte com ela para dar
 acesso: isso é sempre o Perfil de acesso, ou os acessos de POPs e Ouvidoria.
 Para a Secretária, o campo nem aparece, porque a função dela é de sistema e não
 de organograma.

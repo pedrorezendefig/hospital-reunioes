@@ -33,7 +33,8 @@ ata, sem ninguém ter preenchido ficha. A lista marca essas linhas com
 ## Quem entra e o que alcança
 
 No menu da esquerda do app, o item **Admin** aparece para todo mundo que tem
-perfil, e não só para o Super Admin. O que muda é o que existe lá dentro.
+papel nas Reuniões, e não só para o Super Admin. O que muda é o que existe lá
+dentro.
 
 - **Super Admin** abre o painel em **Usuários** e vê as quatro seções.
 - **Secretária** e **Regular** abrem direto em **Dados do Atendimento**, o

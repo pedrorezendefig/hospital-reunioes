@@ -59,7 +59,15 @@ SENHA = "ManualAdmin2026!"
 # O termo que a busca da tela de Usuários recebe. Ele casa com o domínio de
 # email de toda pessoa de exemplo e com nenhuma pessoa real: é a peneira que
 # mantém dado de gente de verdade fora do print.
+#
+# O valor é carga, não enfeite. Vazio, a busca devolve a lista inteira; curto
+# demais ("a"), casa gente de verdade. Por isso ele é conferido em tempo de
+# execução por `_conferir_o_filtro` e travado no valor exato pelo teste.
 FILTRO_DE_EXEMPLO = "exemplo"
+
+# Abaixo disto o termo deixa de ser específico e passa a casar nome de gente
+# real. Quatro letras é o que separa "exemplo" de "a".
+MINIMO_DO_FILTRO = 4
 
 ENV_LOCAL = Path(__file__).resolve().parents[3] / "hospital-reunioes" / ".env"
 
@@ -84,6 +92,23 @@ def entrar(page: Page, base: str) -> None:
     page.wait_for_url(lambda url: "/login" not in url, timeout=30000)
 
 
+def _conferir_o_filtro() -> None:
+    """Recusa capturar quando o filtro deixou de ser uma peneira.
+
+    A guarda é de execução, e não só de teste, porque o dano é gravar um
+    arquivo: com o termo vazio a busca devolve a lista inteira, e o `.png` com
+    nome e email de gente do hospital já estaria escrito em disco quando
+    alguém fosse reparar. Falha fechada, antes de abrir a tela.
+    """
+    termo = FILTRO_DE_EXEMPLO.strip()
+    if len(termo) < MINIMO_DO_FILTRO:
+        raise SystemExit(
+            f"recusado: o filtro da busca é '{FILTRO_DE_EXEMPLO}', com menos de "
+            f"{MINIMO_DO_FILTRO} letras. Termo curto casa gente de verdade, e o "
+            "print da lista de Usuários sairia com nome e email reais."
+        )
+
+
 def _usuarios_filtrados(page: Page, base: str) -> None:
     """Abre a tela de Usuários já peneirada pelas pessoas de exemplo.
 
@@ -91,6 +116,7 @@ def _usuarios_filtrados(page: Page, base: str) -> None:
     filtrar existe um instante com a lista real na tela, e capturar nele seria
     publicar nome e email de gente do hospital.
     """
+    _conferir_o_filtro()
     page.goto(f"{base}/admin/usuarios", wait_until="networkidle")
     busca = page.get_by_placeholder("Buscar por nome ou email…")
     busca.wait_for()

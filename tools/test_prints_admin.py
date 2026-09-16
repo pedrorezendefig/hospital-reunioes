@@ -112,6 +112,66 @@ def test_semear_para_no_primeiro_passo_quando_o_banco_nao_e_local(tmp_path, monk
         roteiro.semear()
 
 
+def test_o_filtro_da_busca_e_o_termo_exato_que_so_casa_pessoa_de_exemplo():
+    """O valor do filtro, inteiro, e não um pedaço dele.
+
+    Este é o mutante que importa: com `FILTRO_DE_EXEMPLO = ""` a busca da tela
+    devolve a lista inteira e o print sai com nome e email de gente do
+    hospital. Um teste que só pergunte `FILTRO_DE_EXEMPLO in email`, ou que
+    procure o nome da constante no código, passa verde nesse mutante, porque
+    string vazia está contida em tudo e o nome continua escrito. Asserir o
+    valor inteiro é o que mata `""`, `"a"` e qualquer outro termo frouxo de
+    uma vez: trocar a peneira passa a exigir trocar esta linha, de propósito.
+    """
+    roteiro = carregar_roteiro()
+
+    assert roteiro.FILTRO_DE_EXEMPLO == "exemplo"
+
+
+@pytest.mark.parametrize("termo", ["", "   ", "a", "ex"])
+def test_a_guarda_recusa_capturar_com_filtro_frouxo(monkeypatch, termo):
+    """A defesa de execução, não só a de teste.
+
+    O teste acima trava o valor de hoje; esta guarda é o que protege quem
+    mexer no roteiro amanhã sem rodar a suíte. Ela roda antes de abrir a tela,
+    porque o dano é um arquivo gravado em disco.
+    """
+    roteiro = carregar_roteiro()
+    monkeypatch.setattr(roteiro, "FILTRO_DE_EXEMPLO", termo)
+
+    with pytest.raises(SystemExit) as erro:
+        roteiro._conferir_o_filtro()
+
+    assert "casa gente de verdade" in str(erro.value)
+
+
+def test_a_guarda_deixa_passar_o_filtro_de_verdade():
+    """O caminho bom continua passando, senão a guarda seria só um bloqueio."""
+    roteiro = carregar_roteiro()
+
+    roteiro._conferir_o_filtro()
+
+
+def test_a_captura_confere_o_filtro_antes_de_abrir_a_tela():
+    """A guarda está ligada no caminho que captura, e não só definida.
+
+    Guarda que existe e ninguém chama protege tanto quanto guarda que não
+    existe. O teste lê o corpo porque o que ele prova é uma chamada, e uma
+    chamada que não acontece não tem retorno para asserir.
+    """
+    import inspect
+
+    roteiro = carregar_roteiro()
+    corpo = inspect.getsource(roteiro._usuarios_filtrados)
+
+    assert "_conferir_o_filtro()" in corpo, (
+        "a guarda do filtro saiu do caminho da captura"
+    )
+    assert corpo.index("_conferir_o_filtro()") < corpo.index("page.goto"), (
+        "a guarda roda depois de abrir a tela: o print já teria sido possível"
+    )
+
+
 def test_toda_pessoa_de_exemplo_casa_com_o_filtro_da_busca():
     """A peneira que mantém gente real fora do print.
 
