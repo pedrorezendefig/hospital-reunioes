@@ -248,35 +248,59 @@ describe("Sidebar com o item Ajuda", () => {
     expect(hrefDaAjuda()).toBe("https://previa.manual.hsm/ouvidoria/");
   });
 
-  it("a Ajuda abre em outra aba, sem dar controle da aba de origem", () => {
+  // O `rel` vai inteiro na asserção, não por `toContain`. O `noreferrer` não é
+  // enfeite do `noopener`: o menu também é renderizado em rotas que carregam
+  // identificador na URL (/ouvidoria/m/[protocolo], /pops/[id]/elaboracao,
+  // /reunioes/[id], /admin/usuarios/[id]), e sem ele o clique na Ajuda entrega
+  // o protocolo da manifestação a um domínio externo pelo cabeçalho Referer.
+  it("a Ajuda abre em outra aba, sem passar a aba de origem nem o endereço atual", () => {
     render(<Sidebar />);
 
     const menu = screen.getByRole("navigation");
     const ajuda = within(menu).getByRole("link", { name: "Ajuda" });
     expect(ajuda.getAttribute("target")).toBe("_blank");
-    expect(ajuda.getAttribute("rel")).toContain("noopener");
+    expect(ajuda.getAttribute("rel")).toBe("noopener noreferrer");
   });
 
-  // O menu tem três montagens diferentes (padrão, Secretária e só POPs) e a
-  // Ajuda não pertence a nenhum módulo: ela tem que sobreviver às três.
+  // O menu tem três montagens diferentes e a Ajuda não pertence a nenhum
+  // módulo: ela tem que sobreviver às três. Cada caso confere a lista inteira
+  // de links do menu, e não só a presença da Ajuda, porque é a lista que prova
+  // que a montagem esperada foi a que rodou: um participante mal montado cairia
+  // noutra variante e o teste continuaria verde procurando só pela Ajuda.
   it.each([
     [
       "padrão",
       { access_profile: "regular", perfil_ouvidoria: "ouvidor" },
+      ["Dashboard", "Calendário", "Ouvidoria", "Admin", "Ajuda"],
     ],
-    ["Secretária", { access_profile: "secretaria" }],
-    ["só POPs", { access_profile: null, perfil_pop: "leitor" }],
-  ] as const)("a Ajuda aparece no menu %s", (_nome, papeis) => {
-    sessao.participante = {
-      id: "p1",
-      nome_completo: "Fulana de Tal",
-      email: "fulana@hsm",
-      ...papeis,
-    } as CurrentParticipante;
+    [
+      "Secretária",
+      { access_profile: "secretaria" },
+      ["Início", "Nova reunião", "Calendário", "Ouvidoria", "Admin", "Ajuda"],
+    ],
+    [
+      "só POPs",
+      { access_profile: null, perfil_pop: "leitor" },
+      ["POPs", "Ajuda"],
+    ],
+  ] as const)(
+    "no menu %s a Ajuda é o último item, e o resto do menu é o da variante",
+    (_nome, papeis, linksEsperados) => {
+      sessao.participante = {
+        id: "p1",
+        nome_completo: "Fulana de Tal",
+        email: "fulana@hsm",
+        ...papeis,
+      } as CurrentParticipante;
 
-    render(<Sidebar />);
+      render(<Sidebar />);
 
-    const menu = screen.getByRole("navigation");
-    expect(within(menu).getByRole("link", { name: "Ajuda" })).toBeTruthy();
-  });
+      const menu = screen.getByRole("navigation");
+      expect(
+        within(menu)
+          .getAllByRole("link")
+          .map((link) => link.textContent?.trim())
+      ).toEqual([...linksEsperados]);
+    }
+  );
 });
