@@ -47,6 +47,7 @@ Print que existe mas mostra tela velha é responsabilidade de quem mexe na tela:
 mudou o texto do botão, rode o roteiro do módulo e commite a imagem nova no
 mesmo PR.
 
-O inventário que acusa print referenciado e inexistente é da `/montar-manual`,
-que **ainda não existe no repositório** (fatia #737 do PRD #731). Até ela
-entrar, a conferência é olho no olho, no checklist do `SKILL.md`.
+O inventário que acusa print referenciado e inexistente é da `/montar-manual`
+(`python3 tools/inventario_manual.py --dir docs/manual`, lacuna
+`print-faltando`). Ele diz qual página aponta para qual imagem que não existe,
+e de que módulo é o roteiro que a refaz.

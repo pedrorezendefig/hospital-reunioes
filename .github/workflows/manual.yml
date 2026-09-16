@@ -14,10 +14,15 @@ on:
       - 'tools/lint_manual.py'
       - 'tools/checar_build_manual.py'
       - 'tools/checar_video_manual.py'
+      - 'tools/inventario_manual.py'
       - 'tools/test_lint_manual.py'
       - 'tools/test_checar_build_manual.py'
       - 'tools/test_checar_video_manual.py'
       - 'tools/test_publicar_manual.py'
+      - 'tools/test_inventario_manual.py'
+      - 'tools/test_skill_montar_manual.py'
+      - '.claude/skills/manual/SKILL.md'
+      - '.claude/skills/montar-manual/SKILL.md'
       - '.github/workflows/manual.yml'
   pull_request:
     branches: [main]
@@ -26,10 +31,15 @@ on:
       - 'tools/lint_manual.py'
       - 'tools/checar_build_manual.py'
       - 'tools/checar_video_manual.py'
+      - 'tools/inventario_manual.py'
       - 'tools/test_lint_manual.py'
       - 'tools/test_checar_build_manual.py'
       - 'tools/test_checar_video_manual.py'
       - 'tools/test_publicar_manual.py'
+      - 'tools/test_inventario_manual.py'
+      - 'tools/test_skill_montar_manual.py'
+      - '.claude/skills/manual/SKILL.md'
+      - '.claude/skills/montar-manual/SKILL.md'
       - '.github/workflows/manual.yml'
 
 jobs:
@@ -71,10 +81,17 @@ jobs:
       - name: Testes do lint, do conferidor e da publicação
         run: |
           pip install pytest
-          python -m pytest tools/test_lint_manual.py tools/test_checar_build_manual.py tools/test_checar_video_manual.py tools/test_publicar_manual.py -q
+          python -m pytest tools/test_lint_manual.py tools/test_checar_build_manual.py tools/test_checar_video_manual.py tools/test_publicar_manual.py tools/test_inventario_manual.py tools/test_skill_montar_manual.py -q
 
       - name: Lint do manual
         run: python3 tools/lint_manual.py --dir docs/manual/src/content/docs
+
+      - name: Inventário com cada lacuna num balde
+        # Não trava por lacuna (o passivo do manual é justamente o que a
+        # /montar-manual divide em terminais): trava quando a conta não fecha,
+        # com página fora dos cinco módulos ou varredura que não achou página
+        # nenhuma.
+        run: python3 tools/inventario_manual.py --dir docs/manual
 
       - name: Vídeo de tarefa com fonte versionada e MP4 fora do git
         # O MP4 não vem no clone (é regerável): o que o CI pode provar é que
