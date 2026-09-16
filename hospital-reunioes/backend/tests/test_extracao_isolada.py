@@ -275,16 +275,16 @@ def docx_honesto() -> bytes:
     return _docx_honesto()
 
 
-def _rlimit_as_funciona() -> bool:
-    """O macOS recusa `setrlimit(RLIMIT_AS)` com EINVAL para qualquer valor."""
-    sonda = (
-        "import sys;"
-        f"sys.path.insert(0, {os.path.dirname(os.path.abspath(extrator._CAMINHO_DO_FILHO))!r});"
-        "import transcricao_extractor_filho as f;"
-        "print(f.instalar_limite_de_enderecamento(2 * 1024 ** 3))"
-    )
-    p = subprocess.run([sys.executable, "-c", sonda], capture_output=True, timeout=60)
-    return p.stdout.decode().strip() == "True"
+def _plataforma_aplica_rlimit_as() -> bool:
+    """O macOS recusa `setrlimit(RLIMIT_AS)` com EINVAL para qualquer valor.
+
+    A decisão é da PLATAFORMA e não da nossa função de propósito. Perguntar a
+    `instalar_limite_de_enderecamento` daria ao código sob teste o poder de
+    desligar o próprio teste: um `return True` sem `setrlimit` nenhum passaria
+    pela guarda, e um `return False` mandaria o pytest pular. Aqui o Linux
+    (que é onde o app roda, e onde o CI roda) nunca pula.
+    """
+    return sys.platform.startswith("linux")
 
 
 def _rss_do_worker_em_bytes() -> int:
@@ -415,6 +415,17 @@ class TestEntradaLegitimaAtravessa:
         )
 
 
+def _pico_de_tempo_de_uma_leitura(dados: bytes) -> float:
+    """Quanto UMA leitura deste arquivo custa, medido na hora.
+
+    Um número fixo aqui envelheceria com a máquina do CI; o que importa é a
+    razão entre uma leitura e três, e a razão se mede no mesmo lugar.
+    """
+    t0 = time.monotonic()
+    _rodar_filho(".pdf", dados, extrator.LIMITE_DE_ENDERECAMENTO)
+    return time.monotonic() - t0
+
+
 def _rodar_filho(ext: str, dados: bytes, limite: int) -> subprocess.CompletedProcess:
     """Roda o processo filho de verdade, como o extrator o roda."""
     import tempfile
@@ -514,7 +525,28 @@ class TestAFraseQueAPessoaVe:
         assert "grande ou complexo demais" in frase
         assert "Não é defeito no arquivo" in frase
         assert ".txt" in frase, "a frase tem que dizer a saída, não só o problema"
-        assert "—" not in frase and "–" not in frase
+        for texto in (frase, extrator.MENSAGEM_FILA_CHEIA):
+            assert "—" not in texto and "–" not in texto
+
+    def test_quem_espera_vaga_demais_ouve_o_motivo_certo(self, client, monkeypatch):
+        """Fila cheia não é arquivo grande demais, e o conselho é oposto.
+
+        Dizer "divida o documento" a quem só pegou um momento movimentado manda
+        a pessoa mexer no arquivo que estava certo. As duas vagas aqui estão
+        ocupadas de verdade, e o prazo de espera é encolhido para o teste não
+        levar 45 segundos.
+        """
+        monkeypatch.setattr(extrator, "PRAZO_DA_EXTRACAO", 0.5)
+        tomadas = [extrator._vagas.acquire() for _ in range(extrator.VAGAS_DE_EXTRACAO)]
+        try:
+            r = _enviar(client, "ata.docx", _docx_honesto(200))
+        finally:
+            for _ in tomadas:
+                extrator._vagas.release()
+
+        assert r.status_code == 422
+        assert r.json()["detail"] == extrator.MENSAGEM_FILA_CHEIA
+        assert r.json()["detail"] != extrator.MENSAGEM_GRANDE_DEMAIS
 
     def test_pdf_escaneado_continua_com_a_frase_dele(self, client):
         """Recusa de conteúdo atravessa o processo filho com o texto intacto.
@@ -573,7 +605,7 @@ class TestAsGuardasDoIsolamento:
         sairia com `OK` e o limite teria virado enfeite. O controle logo abaixo
         prova que quem recusou foi o limite, e não o arquivo.
         """
-        if not _rlimit_as_funciona():
+        if not _plataforma_aplica_rlimit_as():
             pytest.skip(f"{sys.platform} nao aceita setrlimit(RLIMIT_AS); quem segura e o vigia de RSS")
 
         apertado = _rodar_filho(".docx", docx_honesto, limite=48 * 1024 * 1024)
@@ -582,6 +614,39 @@ class TestAsGuardasDoIsolamento:
         assert not apertado.stdout.startswith(b"OK"), "leu o arquivo apesar do limite de 48 MB"
         assert apertado.returncode != 0
         assert folgado.stdout.startswith(b"OK"), folgado.stderr.decode()[-400:]
+
+    async def test_uploads_simultaneos_nao_multiplicam_o_orcamento(self, app, pdf_honesto):
+        """Teto por filho não é teto da máquina.
+
+        O `@limiter.limit` das rotas conta requisições por MINUTO, não ao mesmo
+        tempo: dez uploads disparados juntos passam pelos "5/minute" e seriam dez
+        filhos de até 512 MB cada. Três leituras de 7,5 s entrando juntas contra
+        duas vagas têm que sair em duas rodadas, não em uma, e as três têm que
+        SAIR (fila que recusa vira indisponibilidade, não guarda).
+        """
+        import httpx
+
+        assert extrator.VAGAS_DE_EXTRACAO == 2, "este teste conta rodadas para duas vagas"
+        quantas = extrator.VAGAS_DE_EXTRACAO + 1
+
+        uma_so = _pico_de_tempo_de_uma_leitura(pdf_honesto)
+
+        transporte = httpx.ASGITransport(app=app)
+        async with httpx.AsyncClient(transport=transporte, base_url="http://teste", timeout=120) as ac:
+            rota = "/api/reunioes/R1/ata-guiada/extrair-documento"
+            t0 = time.monotonic()
+            respostas = await asyncio.gather(
+                *[
+                    ac.post(rota, files={"file": ("ata-longa.pdf", pdf_honesto, "application/pdf")})
+                    for _ in range(quantas)
+                ]
+            )
+            juntas = time.monotonic() - t0
+
+        assert all(r.status_code == 200 for r in respostas), [r.status_code for r in respostas]
+        assert juntas > uma_so * 1.4, (
+            f"as {quantas} leituras sairam em {juntas:.1f}s contra {uma_so:.1f}s de uma: as vagas nao seguraram nada"
+        )
 
     def test_o_teto_de_rss_fica_abaixo_do_limite_de_enderecamento(self):
         """Quem decide primeiro no caso normal é o vigia de RSS.

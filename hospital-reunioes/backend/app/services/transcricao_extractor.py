@@ -35,6 +35,7 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 
 from app.services import transcricao_extractor_filho as filho
@@ -85,6 +86,23 @@ INTERVALO_DE_VIGIA = 0.25
 # `RLIMIT_AS` e a rede para a alocacao unica e enorme que acontece entre duas
 # amostras do vigia (um `zlib.decompress` de gigabytes numa chamada so).
 LIMITE_DE_ENDERECAMENTO = 1280 * 1024 * 1024
+
+# Teto por filho nao e teto da maquina: N uploads simultaneos sao N filhos. O
+# `@limiter.limit` das rotas conta requisicoes POR MINUTO, e nao ao mesmo tempo,
+# entao dez uploads disparados juntos passam pelos "5/minute" e multiplicariam
+# o orcamento por dez. Com duas vagas o pior caso da extracao fica em 1 GB, que
+# e numero que se confere contra a memoria do container.
+#
+# Duas e folgado para o uso real (a extracao honesta mais cara medida leva 7,5 s,
+# e a de `.docx` 0,1 s): a terceira pessoa ESPERA uma vaga, nao leva recusa, e so
+# ouve "estou lendo outros documentos" se a fila nao andar dentro do prazo.
+VAGAS_DE_EXTRACAO = 2
+_vagas = threading.BoundedSemaphore(VAGAS_DE_EXTRACAO)
+
+MENSAGEM_FILA_CHEIA = (
+    "O sistema está lendo outros documentos neste momento e não conseguiu uma vaga "
+    "para o seu. Tente de novo em instantes."
+)
 
 MENSAGEM_GRANDE_DEMAIS = (
     "Este arquivo é grande ou complexo demais para ser lido. Não é defeito no arquivo: "
@@ -164,6 +182,10 @@ def _extrair_isolado(ext: str, file_bytes: bytes) -> str:
     escrevendo em pipe (o pai mandando 15 MB, o filho devolvendo o texto) um
     trava esperando o outro, e o vigia nunca chegaria a rodar.
     """
+    if not _vagas.acquire(timeout=PRAZO_DA_EXTRACAO):
+        logger.warning("Extracao isolada sem vaga apos %ss lendo %s", PRAZO_DA_EXTRACAO, ext)
+        raise ValueError(MENSAGEM_FILA_CHEIA)
+
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
         tmp.write(file_bytes)
         caminho = tmp.name
@@ -177,6 +199,7 @@ def _extrair_isolado(ext: str, file_bytes: bytes) -> str:
         )
         motivo, saida, erro = _acompanhar(proc)
     finally:
+        _vagas.release()
         try:
             os.unlink(caminho)
         except OSError:
