@@ -275,14 +275,17 @@ export function Sidebar({
 }
 
 // O endereço do Manual do usuário para a rota atual (PRD #731, ADR 0057,
-// decisão 11). O manual é um site à parte, com uma seção por módulo na mesma
-// ordem do menu, então quem escolhe a seção é o prefixo da rota. A base sai de
-// variável pública de ambiente (declarada sem barra no fim) para um ambiente
-// poder apontar para uma prévia; ausente ou vazia, vale o endereço de produção.
-function urlDoManual(pathname: string): string {
+// decisão 11 e a emenda de 16/09/2026). O manual é um site à parte, com uma
+// seção por módulo na mesma ordem do menu, então quem escolhe a seção é o
+// prefixo da rota. A base sai de variável pública de ambiente (declarada sem
+// barra no fim) para um ambiente poder apontar para uma prévia; ausente ou
+// vazia, vale o endereço definitivo do manual, que é o da Vercel: o domínio
+// próprio foi abandonado e não resolve.
+// Exportada porque a `AdminSidebar` monta o mesmo item Ajuda e a base do
+// endereço tem que ser decidida num lugar só.
+export function urlDoManual(pathname: string): string {
   const base =
-    process.env.NEXT_PUBLIC_MANUAL_URL ||
-    "https://manual.hospitalsaomatheus.cloud";
+    process.env.NEXT_PUBLIC_MANUAL_URL || "https://manual-hsm.vercel.app";
   return `${base}/${secaoDoManual(pathname)}/`;
 }
 

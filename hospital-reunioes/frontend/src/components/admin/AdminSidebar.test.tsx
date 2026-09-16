@@ -18,7 +18,13 @@
  * confere, no mesmo render, um item que a persona VÊ.
  */
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
@@ -122,5 +128,115 @@ describe.each([
     expect(within(menu).getByRole("link", { name: "Tecnologia" })).toBeTruthy();
     expect(within(menu).queryByRole("link", { name: "Utilitários" })).toBeNull();
     expect(within(menu).queryByText("Ferramentas")).toBeNull();
+  });
+});
+
+/**
+ * O item Ajuda no menu do Admin (ADR 0057, decisão 11).
+ *
+ * A `AppShell` troca a `Sidebar` por esta quando a pessoa entra no /admin, e
+ * até aqui só a `Sidebar` tinha o item Ajuda: a seção Admin do manual estava
+ * publicada e ninguém chegava nela pela barra. O teste ancora no href inteiro
+ * de propósito. Conferir só o fim ("termina em /admin/") deixaria passar uma
+ * base errada, e conferir só a base deixaria passar a seção errada.
+ *
+ * O `rel` vai inteiro na asserção, não por `toContain`. O `noreferrer` não é
+ * enfeite do `noopener`: este menu também é renderizado em rotas que carregam
+ * identificador na URL (/admin/usuarios/[id]), e sem ele o clique na Ajuda
+ * entrega o endereço atual a um domínio externo pelo cabeçalho Referer.
+ */
+describe.each([
+  ["desktop", "desktop" as const],
+  ["gaveta do celular", "drawer" as const],
+])("Item Ajuda na %s", (_rotulo, variant) => {
+  function ajudaDoMenu(): HTMLElement {
+    const menu = screen.getByRole("navigation");
+    return within(menu).getByRole("link", { name: "Ajuda" });
+  }
+
+  it("a Ajuda abre a seção Admin do manual", () => {
+    sessao.participante = pessoa("super_admin");
+
+    render(<AdminSidebar variant={variant} />);
+
+    expect(ajudaDoMenu().getAttribute("href")).toBe(
+      "https://manual-hsm.vercel.app/admin/",
+    );
+  });
+
+  it("a Ajuda abre em outra aba, sem passar a aba de origem nem o endereço atual", () => {
+    sessao.participante = pessoa("super_admin");
+
+    render(<AdminSidebar variant={variant} />);
+
+    const ajuda = ajudaDoMenu();
+    expect(ajuda.getAttribute("target")).toBe("_blank");
+    expect(ajuda.getAttribute("rel")).toBe("noopener noreferrer");
+  });
+
+  // Confere a lista inteira de links do menu, e não só a presença da Ajuda,
+  // porque é a lista que prova que a montagem esperada foi a que rodou: um
+  // participante mal montado cairia noutro recorte de seções e o teste
+  // continuaria verde procurando só pela Ajuda. Também é o que prende a Ajuda
+  // no fim da `<nav>`, depois de todas as seções.
+  it("quem não é super admin também tem a Ajuda, no fim do menu dele", () => {
+    sessao.participante = pessoa("secretaria");
+
+    render(<AdminSidebar variant={variant} />);
+
+    const menu = screen.getByRole("navigation");
+    expect(
+      within(menu)
+        .getAllByRole("link")
+        .map((link) => link.textContent?.trim()),
+    ).toEqual(["Dados do Atendimento", "Ajuda"]);
+  });
+
+  it("no menu do super admin a Ajuda é o último item", () => {
+    sessao.participante = pessoa("super_admin");
+
+    render(<AdminSidebar variant={variant} />);
+
+    const menu = screen.getByRole("navigation");
+    expect(
+      within(menu)
+        .getAllByRole("link")
+        .map((link) => link.textContent?.trim()),
+    ).toEqual([
+      "Usuários",
+      "Setores",
+      "Cargos",
+      "Tipos de Reunião",
+      "Dados do Atendimento",
+      "Tecnologia",
+      "Ajuda",
+    ]);
+  });
+});
+
+/**
+ * A gaveta do celular fecha ao clicar na Ajuda.
+ *
+ * Este teste mora fora do `describe.each` das duas variantes de propósito: a
+ * prop `onNavigate` é o que a `AppShell` passa **só** na gaveta, e é ela que
+ * fecha a gaveta depois do clique. Rodar isto no desktop provaria menos do que
+ * parece, porque lá a prop nem chega.
+ *
+ * Sem o clique de verdade, o item continuaria "coberto" por testes que leem
+ * href, target e rel e nunca tocam no `onClick`: apagar o `onClick` deixava a
+ * suíte inteira verde. A Ajuda abre em outra aba, então quem não fecha a gaveta
+ * deixa a pessoa voltando para o app com o menu por cima da tela.
+ */
+describe("A gaveta do celular e o item Ajuda", () => {
+  it("clicar na Ajuda avisa a casca para fechar a gaveta", () => {
+    sessao.participante = pessoa("super_admin");
+    const fecharAGaveta = vi.fn();
+
+    render(<AdminSidebar variant="drawer" onNavigate={fecharAGaveta} />);
+
+    const menu = screen.getByRole("navigation");
+    fireEvent.click(within(menu).getByRole("link", { name: "Ajuda" }));
+
+    expect(fecharAGaveta).toHaveBeenCalledTimes(1);
   });
 });

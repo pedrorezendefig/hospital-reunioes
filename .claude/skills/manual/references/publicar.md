@@ -17,7 +17,7 @@ Antes de chamar, rode também
 `python3 tools/checar_video_manual.py --dir docs/manual`: o `publicar.sh` acusa
 MP4 que falta, não composição que falta.
 
-Depois de publicar, registre o link (`https://manual.hospitalsaomatheus.cloud`)
+Depois de publicar, registre o link (`https://manual-hsm.vercel.app`)
 em comentário na issue ou no PRD que pediu a publicação, com `<!-- automacao -->`
 na primeira linha.
 

@@ -11,10 +11,12 @@ import {
   Building2,
   BadgeCheck,
   CalendarRange,
+  CircleHelp,
   Cpu,
   HeartPulse,
   LucideIcon,
 } from "lucide-react";
+import { urlDoManual } from "@/components/layout/Sidebar";
 
 type Item = { href: string; label: string; icon: LucideIcon };
 // somenteSuperAdmin: secoes que a sidebar esconde de secretaria/facilitador
@@ -121,6 +123,20 @@ export function AdminSidebar({
             })}
           </div>
         ))}
+
+        {/* A seção Admin do manual, em aba nova (ADR 0057, decisão 11). A
+            `AppShell` troca a `Sidebar` por esta dentro do /admin, então sem
+            este item não existe porta nenhuma para o manual aqui. */}
+        <a
+          href={urlDoManual(pathname)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onNavigate}
+          className="flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer text-text-secondary hover:bg-primary/5 hover:text-text"
+        >
+          <CircleHelp className="w-[18px] h-[18px]" strokeWidth={1.5} />
+          Ajuda
+        </a>
       </nav>
 
       <div className="p-4 border-t border-border">

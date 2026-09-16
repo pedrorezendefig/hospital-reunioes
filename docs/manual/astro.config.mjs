@@ -17,7 +17,7 @@ const modulos = [
 ];
 
 export default defineConfig({
-  site: "https://manual.hospitalsaomatheus.cloud",
+  site: "https://manual-hsm.vercel.app",
   integrations: [
     starlight({
       title: "Manual da plataforma",
