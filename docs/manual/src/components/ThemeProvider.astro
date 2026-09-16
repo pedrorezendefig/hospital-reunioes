@@ -1,0 +1,27 @@
+---
+/**
+ * Modo claro como padrão (ADR 0057, decisão 2).
+ *
+ * O Starlight abre em "auto", que fica escuro quando o sistema da pessoa está
+ * escuro, e o manual deixaria de parecer o app, que é claro. Quem escolher o
+ * tema no seletor continua mandando: só o estado inicial muda.
+ */
+import Default from "@astrojs/starlight/components/ThemeProvider.astro";
+---
+
+<Default />
+<script is:inline>
+  // A escolha fica guardada, e não só aplicada: o seletor de tema roda depois
+  // desta linha e devolveria a página para o escuro se aqui só mexesse no
+  // `data-theme`.
+  try {
+    let tema = localStorage.getItem("starlight-theme");
+    if (!tema) {
+      tema = "light";
+      localStorage.setItem("starlight-theme", tema);
+    }
+    if (tema === "light") document.documentElement.dataset.theme = "light";
+  } catch {
+    document.documentElement.dataset.theme = "light";
+  }
+</script>

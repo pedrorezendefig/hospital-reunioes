@@ -1,0 +1,81 @@
+name: Manual
+
+# O ci.yml ignora docs/** no trigger, então o Manual do usuário tem workflow
+# próprio: o lint do texto, o build do Starlight e a prova de que o que está em
+# draft não vai para o ar (ADR 0057, decisões 5 e 10).
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/manual/**'
+      - 'tools/lint_manual.py'
+      - 'tools/checar_build_manual.py'
+      - 'tools/test_lint_manual.py'
+      - 'tools/test_checar_build_manual.py'
+      - 'tools/test_publicar_manual.py'
+      - '.github/workflows/manual.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/manual/**'
+      - 'tools/lint_manual.py'
+      - 'tools/checar_build_manual.py'
+      - 'tools/test_lint_manual.py'
+      - 'tools/test_checar_build_manual.py'
+      - 'tools/test_publicar_manual.py'
+      - '.github/workflows/manual.yml'
+
+jobs:
+  manual:
+    name: Lint, build e draft fora do ar
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Lint travessão (docs/manual)
+        # Mesma trava do ci.yml para os templates do backend (ADR 0013). Os
+        # caracteres entram por \x{...} para não existir literal nenhum aqui.
+        run: |
+          if grep -rPln '[\x{2014}\x{2013}]' docs/manual/; then
+            echo "::error::Travessão (U+2014) ou meia-risca (U+2013) nos arquivos acima. Use vírgula, dois-pontos ou hífen (ADR 0013)."
+            exit 1
+          fi
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: ffmpeg (a publicação reencoda os vídeos para 720p)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Testes do lint, do conferidor e da publicação
+        run: |
+          pip install pytest
+          python -m pytest tools/test_lint_manual.py tools/test_checar_build_manual.py tools/test_publicar_manual.py -q
+
+      - name: Lint do manual
+        run: python3 tools/lint_manual.py --dir docs/manual/src/content/docs
+
+      - uses: pnpm/action-setup@v6
+        with:
+          version: 9
+      - uses: actions/setup-node@v6
+        with:
+          # Starlight 0.42 exige Node >= 22.12.
+          node-version: "22"
+          cache: "pnpm"
+          cache-dependency-path: docs/manual/pnpm-lock.yaml
+
+      - name: Instalar dependências do site
+        working-directory: docs/manual
+        run: pnpm install --frozen-lockfile
+
+      - name: Build do site
+        working-directory: docs/manual
+        run: pnpm build
+
+      - name: Draft fora do dist e da busca
+        run: python3 tools/checar_build_manual.py --dir docs/manual

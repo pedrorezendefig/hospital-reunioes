@@ -1,0 +1,53 @@
+---
+/**
+ * Molde da Página de tarefa (ADR 0057, decisão 4).
+ *
+ * Os selos de quem faz e o Vídeo de tarefa saem do frontmatter, desenhados
+ * aqui, para o Markdown de cada página ficar só com o texto: quando usar, passo
+ * a passo e se der errado. Página sem `papel` não é Página de tarefa (é Visão
+ * geral, Como funciona ou Novidades) e passa direto.
+ */
+import Default from "@astrojs/starlight/components/MarkdownContent.astro";
+
+const { entry } = Astro.locals.starlightRoute;
+const dados = entry.data as {
+  papel?: string[];
+  login?: boolean;
+  video?: string;
+};
+
+const papeis = dados.papel ?? [];
+const eTarefa = papeis.length > 0;
+// `login: false` é a tela que a pessoa abre por link ou QR, sem entrar no app.
+const selos = dados.login === false ? [...papeis, "Sem login"] : papeis;
+const modulo = entry.id.split("/")[0];
+
+function classeDoSelo(selo: string) {
+  if (selo === "Sem login") return "tarefa-selo tarefa-selo--sem-login";
+  if (selo === "Só admin") return "tarefa-selo tarefa-selo--admin";
+  return "tarefa-selo";
+}
+---
+
+{
+  eTarefa && (
+    <div class="tarefa-selos">
+      {selos.map((selo) => (
+        <span class={classeDoSelo(selo)}>{selo}</span>
+      ))}
+    </div>
+  )
+}
+{
+  eTarefa &&
+    (dados.video ? (
+      <div class="tarefa-video">
+        <video controls muted playsinline preload="metadata">
+          <source src={`/video/${modulo}/${dados.video}.mp4`} type="video/mp4" />
+        </video>
+      </div>
+    ) : (
+      <p class="tarefa-video-pendente">Vídeo em produção.</p>
+    ))
+}
+<Default><slot /></Default>

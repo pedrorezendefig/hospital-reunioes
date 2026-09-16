@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "/:caminho*",
+      "destination": "https://manual.hospitalsaomatheus.cloud/ouvidoria/",
+      "permanent": true
+    }
+  ]
+}
