@@ -1203,6 +1203,69 @@ describe("O aviso do anexo", () => {
   });
 });
 
+describe("O microfone aberto", () => {
+  it("trava o envio, e o botão de parar continua vivo", async () => {
+    // A classe é a mesma do Enter no meio da leitura do anexo: todo controle
+    // que só faz sentido fora de um turno respeita o mesmo `ocupado`. Sem
+    // `gravando` lá dentro, mandar pelo teclado durante a gravação começava o
+    // turno e o botão de PARAR ficava cinza enquanto a tela mandava clicar
+    // nele; com aquele turno chegando ao teto de mensagens, ele não reabilitava
+    // nunca mais e o microfone ficava aberto até alguém descartar a conversa.
+    plugarOMicrofone();
+    montar();
+
+    fireEvent.change(screen.getByLabelText("Mensagem"), { target: { value: "deixa, eu escrevo" } });
+    // O par de presença: com texto e sem gravação, o Enviar está vivo.
+    expect((screen.getByLabelText("Enviar") as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByLabelText("Gravar voz"));
+    await waitFor(() => expect(screen.getByLabelText("Parar de gravar")).toBeTruthy());
+
+    expect((screen.getByLabelText("Enviar") as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.keyDown(screen.getByLabelText("Mensagem"), { key: "Enter" });
+    expect(doChat()).toHaveLength(0);
+    // E o caminho de volta fica aberto: é ele que desliga o microfone.
+    expect((screen.getByLabelText("Parar de gravar") as HTMLButtonElement).disabled).toBe(false);
+  });
+
+  it("os dois botões de anexo também ficam travados enquanto grava", async () => {
+    plugarOMicrofone();
+    montar();
+    expect((screen.getByLabelText("Anexar documento") as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(screen.getByLabelText("Gravar voz"));
+    await waitFor(() => expect(screen.getByLabelText("Parar de gravar")).toBeTruthy());
+
+    expect((screen.getByLabelText("Anexar documento") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Anexar áudio") as HTMLButtonElement).disabled).toBe(true);
+  });
+});
+
+describe("O teto de taxa no anexo", () => {
+  it("o 429 diz para esperar, e não para trocar de arquivo", async () => {
+    // O `slowapi` responde `{"error": ...}` SEM `detail`, então a frase
+    // genérica sairia mandando "tente outro arquivo" quando a saída é esperar
+    // um minuto. É a mesma frase do turno, e não uma terceira.
+    montar({ recusaDoAnexo: { status: 429, corpo: { error: "Rate limit exceeded: 10 per 1 minute" } } });
+
+    escolher("Arquivo de documento", [arquivo("nota.pdf", 1000, "application/pdf")]);
+
+    await waitFor(() => expect(screen.getByText(MUITAS_MENSAGENS)).toBeTruthy());
+    expect(doChat()).toHaveLength(0);
+  });
+
+  it("o 429 da rota de voz fala a mesma língua", async () => {
+    // A outra porta de anexo passa pela mesma função, e um teste só provaria
+    // uma delas.
+    montar({ recusaDoAnexo: { status: 429, corpo: { error: "Rate limit exceeded" } } });
+
+    escolher("Arquivo de áudio", [arquivo("recado.mp3", 1000, "audio/mpeg")]);
+
+    await waitFor(() => expect(screen.getByText(MUITAS_MENSAGENS)).toBeTruthy());
+    expect(doChat()).toHaveLength(0);
+  });
+});
+
 describe("Mandar pelo teclado no meio de uma leitura", () => {
   it("o Enter não começa um turno enquanto o anexo está sendo lido, e o anexo chega", async () => {
     // O botão de mandar já está desabilitado aqui, mas o Enter da caixa não

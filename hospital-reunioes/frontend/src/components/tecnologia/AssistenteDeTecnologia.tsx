@@ -193,8 +193,22 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     onTexto: (transcrito) => void receberDoMicrofone(transcrito),
   });
 
-  /** A caixa inteira está ocupada: turno no ar, anexo sendo lido ou voz sendo transcrita. */
-  const ocupado = conversando || lendoOAnexo || transcrevendo;
+  /**
+   * A caixa está ocupada: turno no ar, anexo sendo lido, voz sendo transcrita
+   * ou microfone aberto.
+   *
+   * `gravando` está aqui, e não só no `disabled` dos dois botões de anexo, por
+   * causa da classe inteira: **todo controle que só faz sentido fora de um
+   * turno respeita o mesmo `ocupado`**. Sem isso, mandar pelo teclado no meio
+   * de uma gravação começava o turno, e o botão de PARAR de gravar (que também
+   * é desabilitado por `ocupado`) ficava cinza enquanto a tela mandava clicar
+   * nele; se aquele turno chegasse ao teto de mensagens, o botão não reabilitava
+   * nunca mais e o microfone ficava aberto até alguém descartar a conversa.
+   *
+   * O botão do microfone é a exceção, e é exceção por ser o caminho de VOLTA:
+   * enquanto grava, ele fica vivo sempre.
+   */
+  const ocupado = conversando || lendoOAnexo || transcrevendo || gravando;
 
   function autorizacao() {
     return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
@@ -657,7 +671,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
             <button
               type="button"
               onClick={() => (gravando ? pararGravacao() : iniciarGravacao())}
-              disabled={ocupado || noTeto}
+              disabled={!gravando && (ocupado || noTeto)}
               aria-label={gravando ? "Parar de gravar" : "Gravar voz"}
               title={gravando ? "Parar de gravar" : "Gravar voz"}
               className={`px-3 py-2 rounded-xl border text-text-secondary disabled:opacity-50 ${
@@ -669,7 +683,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
             <button
               type="button"
               onClick={() => escolherOAudio.current?.click()}
-              disabled={ocupado || noTeto || gravando}
+              disabled={ocupado || noTeto}
               aria-label="Anexar áudio"
               title="Anexar áudio"
               className="px-3 py-2 rounded-xl border border-border text-text-secondary hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
@@ -679,7 +693,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
             <button
               type="button"
               onClick={() => escolherODocumento.current?.click()}
-              disabled={ocupado || noTeto || gravando}
+              disabled={ocupado || noTeto}
               aria-label="Anexar documento"
               title="Anexar documento"
               className="px-3 py-2 rounded-xl border border-border text-text-secondary hover:border-primary hover:text-primary transition-colors disabled:opacity-50"

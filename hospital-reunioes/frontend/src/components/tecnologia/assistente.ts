@@ -491,7 +491,14 @@ async function mandarOArquivo<T>(
     console.error("[admin/tecnologia] falha ao mandar o anexo", e);
     return { aviso: FALHA_DE_CONEXAO };
   }
-  if (!resposta.ok) return { aviso: await motivoDoAnexo(resposta) };
+  // O 429 é distinguido aqui, como o `pedirOTurno` já fazia: o `slowapi`
+  // responde `{"error": ...}` SEM `detail`, então a frase genérica sairia
+  // mandando "tente outro arquivo" quando a saída é esperar um minuto. É a
+  // mesma frase do turno, e não uma terceira: a causa é a mesma, e o balde é
+  // por endereço, então o teto pode ter sido gasto por outra pessoa da casa.
+  if (!resposta.ok) {
+    return { aviso: resposta.status === 429 ? MUITAS_MENSAGENS : await motivoDoAnexo(resposta) };
+  }
   const corpo = await corpoValidado(resposta, valida);
   if (corpo === null) {
     console.error("[admin/tecnologia] a resposta do anexo não deu para usar");

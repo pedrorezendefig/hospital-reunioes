@@ -81,6 +81,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import re
 from datetime import UTC, date, datetime, timedelta
 from typing import NoReturn
 
@@ -2130,9 +2131,20 @@ MOTIVO_DOCUMENTO_FORA_DA_LISTA = (
 )
 
 
-# O nome do arquivo cabe numa linha de conversa, e nada mais: ele vai virar o
-# prefixo `[documento <nome>] ` de uma mensagem que a pessoa le.
-LIMITE_DO_NOME_DO_ARQUIVO = 120
+# O conjunto de caracteres que um nome de arquivo pode ter para virar prefixo.
+#
+# E uma LISTA DO QUE PODE, e nao uma lista do que nao pode. A primeira versao
+# desta limpeza tirava `[`, `]` e quebra de linha, que era o bastante para o
+# parser do prefixo nao quebrar, e so para isso: uma limpeza que protege o
+# parser nao e a mesma coisa que uma limpeza que protege quem LE o resultado.
+# Com a lista do que pode, o que nao foi pensado cai fora por padrao.
+_CARACTERES_DO_NOME = re.compile(r"[^0-9A-Za-zÀ-ÿ ._()+-]+")
+
+# O nome que sobra quando nao sobrou nada legivel (um nome so de ideogramas, de
+# emoji ou de pontuacao). Vazio ali dentro seria `[documento ] `, e o prefixo
+# com nome vazio nao e prefixo: a mensagem deixaria de ser cercada exatamente
+# no caso em que o nome era mais estranho.
+NOME_SEM_LETRAS = "arquivo"
 
 
 def _nome_para_a_tela(nome: str) -> str:
@@ -2147,8 +2159,16 @@ def _nome_para_a_tela(nome: str) -> str:
     Quem escolheu o nome do arquivo nao e necessariamente quem o anexou: ele
     veio no e-mail, no WhatsApp, no site de alguem. Por isso a limpeza e aqui,
     onde o nome nasce para a tela, e nao na tela, que e so mais um consumidor.
+
+    O teto vem do PARSER (`assistente_tecnologia.LIMITE_DO_NOME_DO_ARQUIVO`), e
+    nao de um numero escrito aqui: quem produz o nome e consumidor de quem o le,
+    e dois numeros para a mesma regra divergem calado.
     """
-    return " ".join(nome.replace("[", "").replace("]", "").split())[:LIMITE_DO_NOME_DO_ARQUIVO]
+    limpo = " ".join(_CARACTERES_DO_NOME.sub("", nome).split())[: assistente_tecnologia.LIMITE_DO_NOME_DO_ARQUIVO]
+    # Sem uma letra ou um numero nao sobrou nome, sobrou pontuacao: `[documento
+    # ] ` ou `[documento .] ` nao dizem nada a quem le, e o primeiro nem e
+    # prefixo (o parser cobra ao menos um caractere).
+    return limpo if any(c.isalnum() for c in limpo) else NOME_SEM_LETRAS
 
 
 def _motivo_documento_grande(teto: int) -> str:
