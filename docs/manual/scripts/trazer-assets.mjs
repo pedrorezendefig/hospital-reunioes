@@ -18,6 +18,10 @@ const copias = [
     resolve(assets, "fonts/HPSimplified_Rg.ttf"),
     resolve(raiz, "public/fonts/HPSimplified_Rg.ttf"),
   ],
+  // O favicon é a mesma logo: o Starlight só aceita o ícone servido de
+  // `public/`, e a identidade do hospital já está aqui. Sem esta cópia, toda
+  // página do site pede um `/favicon.svg` que nunca existiu no `dist`.
+  [resolve(assets, "logo-hsm.png"), resolve(raiz, "public/favicon.png")],
 ];
 
 for (const [origem, destino] of copias) {
