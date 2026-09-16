@@ -2,6 +2,36 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-16T00:05:00-03:00",
+      "sha": "e4db875",
+      "app_version": "0.136.0",
+      "subject": "Fundacao do site do Manual do usuario e o item Ajuda na sidebar, que abre a secao do modulo em que a pessoa esta",
+      "raw_subject": "feat(manual): fundacao do site do Manual do usuario (#743) + feat(frontend): item Ajuda na sidebar (#742)",
+      "scope": [
+        "frontend",
+        "docs",
+        "skills"
+      ],
+      "result": "healthy",
+      "duration_seconds": 239,
+      "services_touched": [
+        "frontend",
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 do PRD #731, duas fatias mergeadas em sequencia com um deploy so. O #743 nao toca a app: site Astro Starlight em docs/manual/, publicar.sh, dois conferidores em tools/ e um workflow novo no CI. As pastas legadas docs/manual/ouvidoria/ e docs/manual/tecnologia/ ficaram intocadas, ao lado do site. O #742 e a unica mudanca de app da onda: tres arquivos do frontend e a env var publica NEXT_PUBLIC_MANUAL_URL, opcional, com default https://manual.hospitalsaomatheus.cloud. Nada a criar no Coolify. O build do backend em 63d24609 (merge do #743) falhou por 'Failed to get installation token' do GitHub App, timeout transitorio da API do GitHub, nao por codigo: o build seguinte (e4db8759) passou e prod ficou em 0.136.0. Os dois gates de revisao acharam achado real, cada um em um PR. No #742, o teste do link externo asseria toContain('noopener') e sobrevivia a remocao do noreferrer, que e o que impede o protocolo da manifestacao de vazar no Referer a partir de /ouvidoria/m/[protocolo]. No #743, nenhum teste exercitava o main() dos dois conferidores, e e do returncode deles que o CI depende: trocar return 1 por return 0 em lint_manual.main() deixava travessao e jargao passarem com a suite verde, e o mesmo em checar_build_manual.main() desligava a unica prova de que pagina em draft nao vai para o ar. Os dois foram corrigidos com prova por mutacao. Achado que virou codigo: no content layer do Starlight o id de ouvidoria/index.md e 'ouvidoria', sem /index, entao o filtro startsWith('ouvidoria/') nao enxergava a Visao geral e o cartao da home ficava sem link mesmo com a pagina publicada; o filtro passou a aceitar id === pasta. FALTA ATO HUMANO: o site ainda nao esta no ar. O DNS que a Vercel pede e A, host manual, valor 76.76.21.21, e a zona de hospitalsaomatheus.cloud hoje e servida pela Cloudflare, nao pela Hostinger, entao o registro nasce la e sem proxy. A publicacao e 'bash docs/manual/publicar.sh', negada ao agente pelo classifier. Ate isso acontecer o item Ajuda abre uma aba vazia. O redirecionamento do manual-ouvidoria-hsm esta versionado em docs/manual/redirecionamento/ e NAO foi publicado de proposito: enquanto /ouvidoria/ for draft, publicar trocaria um manual que funciona por uma pagina nao encontrada. Ele sobe com a fatia #738."
+    },
+    {
       "at": "2026-09-15T18:32:00-03:00",
       "sha": "8890493",
       "app_version": "0.135.0",
@@ -1421,37 +1451,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 2 do PRD #470, que fecha as 4 fatias. Sem migration. A revisao independente pegou 6 problemas que o CI verde nao pegava, e os dois piores eram invisiveis: a fiacao do contador nao tinha teste nenhum (dava para apagar a ligacao inteira com o AppShell e a suite ficava 407/407 verde), e a contagem guardada em memoria pintava o primeiro quadro antes da guarda de perfil, mostrando o numero do ouvidor anterior para quem nao e da Ouvidoria, porque sair da conta nao recarrega a aba. Dois outros nasceram da propria correcao de reduzir a frequencia da rota, o que so apareceu porque a revisao rodou de novo depois do fix."
-    },
-    {
-      "at": "2026-09-02T11:05:00-03:00",
-      "sha": "e02e66a",
-      "app_version": "0.97.0",
-      "subject": "O ouvidor passa a ver na propria fila quais casos tem novidade, e o dossie ganha a linha do tempo do caso montada a partir da trilha de movimentos",
-      "raw_subject": "feat(ouvidoria): linha do tempo do caso, alimentada pela trilha de movimentos (#517)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 620,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "092_ouvidoria_visto_da_ouvidoria.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 do PRD #470, duas fatias em paralelo. A revisao independente pegou 4 problemas reais que o CI verde nao pegou: dois testes vacuo (um media o proprio fake, outro casava a frase num bloco antigo da mesma pagina) e duas leituras sem paginar que o teto de linhas do PostgREST cortaria em silencio. O backend precisou de um segundo deploy porque o APP_VERSION so foi sincronizado depois do primeiro container subir, e o /health le a variavel no startup."
     }
   ]
 }

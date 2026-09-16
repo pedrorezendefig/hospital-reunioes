@@ -7,6 +7,25 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.136.0 - 2026-09-16 00:05 - a fundação do site do Manual do usuário e o item Ajuda na sidebar
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e4db875`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.136.0, `db: healthy`; frontend HTTP 200 servindo `v0.136.0` no rodapé) · build 30s no backend, 239s no frontend
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e4db875
+- Issues: [#733](https://github.com/pedrorezendefig/hospital-reunioes/issues/733) · PR [#743](https://github.com/pedrorezendefig/hospital-reunioes/pull/743) · [#734](https://github.com/pedrorezendefig/hospital-reunioes/issues/734) · PR [#742](https://github.com/pedrorezendefig/hospital-reunioes/pull/742) · PRD [#731](https://github.com/pedrorezendefig/hospital-reunioes/issues/731) · ADR 0057 · minor, feat
+- Migration: nenhuma. O site do manual vive fora da app, em `docs/manual/`, e o item Ajuda é frontend puro com uma env var pública de build. A 109 segue sendo a última aplicada.
+- Nota: onda 1 do PRD #731, duas fatias mergeadas em sequência com um deploy só. O #743 não toca a aplicação: site Astro Starlight em `docs/manual/` (locale raiz pt-BR, tema do app, home com os cinco módulos, molde da Página de tarefa), `publicar.sh`, `tools/lint_manual.py`, `tools/checar_build_manual.py` e um workflow novo no CI. As pastas legadas `docs/manual/ouvidoria/` e `docs/manual/tecnologia/` ficaram intocadas, ao lado do site.
+- Nota: o #742 é a única mudança de app da onda, três arquivos do frontend. O item Ajuda abre a seção do manual do módulo em que a pessoa está, em aba nova, e o mapeamento sai da rota: `/ouvidoria*` e `/manifestacao` para ouvidoria, `/pops*` para pops, `/admin*` para admin, o resto para reuniões. Nasce a env var `NEXT_PUBLIC_MANUAL_URL`, opcional, com default `https://manual.hospitalsaomatheus.cloud`. Nada a criar no Coolify.
+- Nota: FALTA ATO HUMANO para o site entrar no ar. O DNS que a Vercel pede é `A`, host `manual`, valor `76.76.21.21`, e a zona de `hospitalsaomatheus.cloud` hoje é servida pela Cloudflare, não pela Hostinger, então o registro nasce lá e sem proxy. A publicação é `bash docs/manual/publicar.sh`, negada ao agente pelo classifier. Até isso acontecer, o item Ajuda abre uma aba vazia.
+- Nota: o redirecionamento do `manual-ouvidoria-hsm` está versionado em `docs/manual/redirecionamento/` e não foi publicado de propósito. Enquanto `/ouvidoria/` for Visão geral em draft, publicar trocaria um manual que funciona por uma página não encontrada. Ele sobe com a fatia #738.
+- Nota: cada gate de revisão achou um problema real, um em cada PR. No #742, o teste do link externo asseria `toContain("noopener")` e sobrevivia à remoção do `noreferrer`, que é justamente o que impede o protocolo da manifestação de vazar no `Referer` quando alguém clica em Ajuda a partir de `/ouvidoria/m/[protocolo]`. Virou `toBe("noopener noreferrer")`.
+- Nota: no #743, nenhum teste exercitava o `main()` dos dois conferidores, e é do `returncode` deles que o CI depende. Trocar `return 1` por `return 0` em `lint_manual.main()` deixava travessão e jargão passarem para o site com os 23 testes verdes, e o mesmo mutante em `checar_build_manual.main()` desligava a única prova de que página em draft não vai para o ar, que é a promessa central da decisão 5 do ADR 0057. Os dois ganharam teste por subprocesso, no molde do `test_publicar_manual.py` que o próprio PR já trazia.
+- Nota: achado que virou código. No content layer do Starlight o `id` de `ouvidoria/index.md` é `ouvidoria`, sem `/index`, então o filtro `startsWith("ouvidoria/")` não enxergava a Visão geral e o cartão da home continuava sem link mesmo com a página publicada. O filtro passou a aceitar `id === pasta`. A fatia #738 não vai tropeçar nisso.
+- Nota: corrigidos junto, achados dos revisores no `publicar.sh` e no CI. O laço dos vídeos lia o `src` cru do HTML sem aspas, então uma página com `src="../../algo.mp4"` fazia o `mv` gravar fora da pasta de publicação, e o repositório é público. O gate de travessão do workflow lia erro do `grep` (saída 2, por exemplo PCRE indisponível) como varredura limpa. `--pular-build` publicava de verdade sem lint, sem build e sem o conferidor de draft, e agora implica `--dry-run`.
+- Nota: o build do backend em `63d24609` (merge do #743) falhou por `Failed to get installation token` do GitHub App, timeout transitório da API do GitHub, não por código. O build seguinte, do merge do #742, passou e produção ficou em 0.136.0.
+- Nota: a onda 1 fecha as duas primeiras fatias do PRD #731. As fatias de conteúdo (#738 a #741) rodam em terminais próprios depois do `/montar-manual`, então o PRD segue aberto.
+
 ## v0.135.0 - 2026-09-15 18:30 - o registro manual da Ouvidoria aceita WhatsApp, Instagram, Reclame Aqui e Google
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `8890493`
