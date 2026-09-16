@@ -12,6 +12,22 @@ ainda não resolve: redirecionar para um endereço que não existe seria trocar 
 manual que funciona por uma página não encontrada. Quando o domínio subir, o
 destino muda aqui e o projeto é publicado de novo.
 
+## Por que sao duas regras
+
+O `/:caminho*` sozinho **nao pega a raiz**. Publicado assim, no dia 16/09/2026,
+`https://manual-ouvidoria-hsm.vercel.app/` devolveu 404 enquanto qualquer
+caminho mais fundo redirecionava com 308. A raiz e justamente o endereco do QR
+da apresentacao, ou seja, o caso que mais importa. Por isso o `vercel.json` tem
+uma regra explicita para `/` alem da geral. Ao mexer aqui, confira as duas:
+
+```bash
+curl -s -o /dev/null -w "raiz: %{http_code} -> %{redirect_url}\n" https://manual-ouvidoria-hsm.vercel.app/
+curl -s -o /dev/null -w "fundo: %{http_code} -> %{redirect_url}\n" https://manual-ouvidoria-hsm.vercel.app/qualquer-coisa
+```
+
+Codigo 200 na raiz tambem e sinal ruim: quer dizer que o manual antigo voltou a
+servir pagina em vez de redirecionar.
+
 ## Quando publicar
 
 **Só depois que `/ouvidoria/` existir publicada no site novo** (a fatia da
