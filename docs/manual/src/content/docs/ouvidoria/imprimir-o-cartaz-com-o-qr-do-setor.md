@@ -26,19 +26,17 @@ dizendo de onde a pessoa falou.
 6. Imprima em A5, que é meia folha, e cole. Para tirar de circulação, use
    **Aposentar**.
 
-![Tela de pontos de escuta, com o QR, o código e os botões de cada lugar](../../../assets/ouvidoria/pontos.png)
+![Tela de pontos de escuta, com o QR e os botões de cada lugar](../../../assets/ouvidoria/pontos.png)
 
 ![Cartaz A5 pronto para imprimir](../../../assets/ouvidoria/cartaz-pa.png)
 
 O endereço impresso nessa imagem é o da máquina de teste onde o print foi
-tirado. O cartaz gerado pelo sistema traz o endereço do hospital.
+tirado. O cartaz que sai do sistema traz o endereço do hospital.
 
 ## Se der errado
 
 - **Você aposentou e o cartaz continua na parede:** ele continua funcionando.
   Aposentar não apaga o cartaz nem muda o código: o formulário abre igual, só
   para de dizer de onde a pessoa está falando. **Reativar** desfaz.
-- **O endereço impresso não parece o do hospital:** cartaz gerado na máquina de
-  teste sai com o endereço de teste. Gere de novo pelo sistema.
 - **O setor do cartaz não é quem vai responder:** o cartaz diz de onde a pessoa
   falou. Quem responde é o setor que você escolhe ao classificar.

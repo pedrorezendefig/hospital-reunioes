@@ -23,9 +23,9 @@ sigiloso por natureza.
 
 ## Quem vê o quê
 
-- **Caso comum:** ouvidor e Diretoria veem tudo. Quem usa o resto da plataforma
-  lê na lista o protocolo, o setor, a situação, o prazo, a gravidade, o tipo, o
-  desfecho e **o resumo do caso**, e não abre a página dele. O setor responsável
+- **Caso comum:** ouvidor e Diretoria veem tudo. Quem tem papel nas Reuniões e
+  não é da Ouvidoria lê na lista o protocolo, o setor, a situação, o prazo, a
+  gravidade, o tipo, o desfecho e **o resumo do caso**, e não abre a página dele. O setor responsável
   recebe o resumo, o relato inteiro, a nota da Ouvidoria e quem falou.
 - **Caso sigiloso:** só ouvidor e Diretoria. O caso nem aparece na lista de quem
   está fora da Ouvidoria, e o setor recebe só a nota da Ouvidoria.

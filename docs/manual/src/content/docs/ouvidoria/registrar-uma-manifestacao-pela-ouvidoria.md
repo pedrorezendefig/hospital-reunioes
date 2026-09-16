@@ -12,7 +12,7 @@ sidebar:
 ## Quando usar
 
 Quando a pessoa não escreveu pelo formulário: ligou, veio ao balcão, mandou
-mensagem ou deixou uma avaliação na internet. Você digita o caso por ela.
+mensagem ou avaliou o hospital na internet.
 
 ## Passo a passo
 
@@ -25,7 +25,9 @@ mensagem ou deixou uma avaliação na internet. Você digita o caso por ela.
    Denúncia e relato de conduta nascem sigilosos; nos outros tipos, o resumo é
    público desde já.
 5. Cole em **Relato integral** o que a pessoa contou, inteiro e sem correção, e
-   preencha **Quem manifestou**, **Contato** e **Vínculo**.
+   preencha **Quem manifestou**, **Contato** e **Vínculo**. Do Google, do
+   Reclame Aqui ou do Instagram, o endereço da avaliação ou o @ vai no
+   **Contato**: não há campo próprio para ele.
 6. Junte os **Anexos** e clique em **Registrar manifestação**. O protocolo
    aparece na tela para você informar a quem falou.
 
@@ -36,13 +38,13 @@ mensagem ou deixou uma avaliação na internet. Você digita o caso por ela.
 ## Se der errado
 
 - **A tela pede para conferir os campos:** relato, tipo, setor e resumo são
-  obrigatórios, e a data do contato não pode estar no futuro.
-- **Você escreveu no Resumo algo que o hospital não deveria ler:** salvo, ele
-  vai para a lista de quem tem papel nas Reuniões, sem passar por classificação
-  nenhuma. Guarde o detalhe para o **Relato integral**, que não sai da
-  Ouvidoria. Veja [O que é sigiloso](/ouvidoria/como-funciona/o-que-e-sigiloso/).
+  obrigatórios, e a data não pode ser futura.
+- **Você escreveu no Resumo algo que o hospital não deveria ler:** salvo, ele vai
+  para a lista de quem tem papel nas Reuniões, sem classificação no meio. O
+  detalhe fica no **Relato integral**, que não sai da Ouvidoria. Veja
+  [O que é sigiloso](/ouvidoria/como-funciona/o-que-e-sigiloso/).
 - **Você marcou WhatsApp e o caso era da Ana:** WhatsApp é quando alguém do
-  hospital conversou e você digita agora. O que a Ana atendeu entra sozinho e
-  conta separado no relatório do mês.
+  hospital conversou e você digita agora; o que a Ana atendeu entra sozinho e
+  conta separado.
 - **O canal ficou errado:** ele é escolhido uma vez e não muda. Deixe escrito na
   **Observação da validação**, ao classificar.
