@@ -33,11 +33,11 @@ feito, anexa arquivo, pede mais prazo uma vez e devolve o caso que não é da á
 dele. Não vê a lista, não vê outros casos e não sabe o nome de quem falou em
 caso protegido.
 
-## Quem usa o resto da plataforma
+## Quem tem papel nas Reuniões e não tem acesso à Ouvidoria
 
-Login normal, sem acesso à Ouvidoria. Abre a lista e lê, de cada caso não
-sigiloso: protocolo, setor, situação, prazo, gravidade, tipo, desfecho e o
-resumo do caso. Não abre a página do caso, e não alcança o relato, a
+Abre a lista e lê, de cada caso não sigiloso: protocolo, setor, situação, prazo,
+gravidade, tipo, desfecho e o resumo do caso. Quem só cuida de POPs não entra
+nem na lista. Não abre a página do caso, e não alcança o relato, a
 identificação de quem falou, os anexos, a resposta da área nem o histórico.
 
 ## Quem administra a plataforma

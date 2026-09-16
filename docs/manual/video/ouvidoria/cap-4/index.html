@@ -612,7 +612,7 @@ const cel = (v, un, id) =>
   `<td><span class="celula"><span class="cx-n"${id ? ` id="${id}"` : ""}>${v}</span><span class="un">${un}</span></span></td>`;
 
 document.getElementById("scr-tabela").innerHTML = tela({
-  ativo: "ouvidoria", badge: 3, quem: "Pedro Rezende", email: "pmrdef@gmail.com",
+  ativo: "ouvidoria", badge: 3,
   dentro: `<div class="volta">${ic("setaesq", 9)} Painel da Ouvidoria</div>
     <h1>Tabela de prazos</h1>
     <div class="dek" data-layout-allow-overflow data-layout-allow-occlusion data-layout-allow-overlap style="max-width:640px">Prazos por gravidade, contados em calendário útil (segunda a sexta, 08h às 17h, sem feriados). A exceção é o acuse de recebimento, que corre em horas corridas, no relógio de parede. Alterar aqui vale para as validações novas: caso já despachado mantém o prazo que o setor recebeu.</div>

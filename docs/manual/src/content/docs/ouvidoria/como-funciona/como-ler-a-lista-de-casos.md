@@ -43,8 +43,8 @@ A Ouvidoria aparece na barra de baixo para quem tem acesso a ela.
 
 ## O que aparece para quem não é da Ouvidoria
 
-Quem entra na plataforma sem acesso à Ouvidoria também abre esta lista, e nela
-lê, de cada caso não sigiloso: o protocolo, o setor, a situação, o prazo, a
+Quem tem papel nas Reuniões e não tem acesso à Ouvidoria também abre esta lista,
+e nela lê, de cada caso não sigiloso: o protocolo, o setor, a situação, o prazo, a
 gravidade, o tipo, o desfecho quando o caso já encerrou e **o resumo**, que é a
 frase que descreve o caso. No computador, passar o mouse em cima mostra o resumo
 inteiro.
@@ -53,7 +53,12 @@ O que essa pessoa não alcança: o relato de quem falou, o nome e o contato dele
 os anexos, a resposta da área e o histórico. A página do caso também não abre
 para ela.
 
-Caso sigiloso não aparece nesta lista, nem para quem administra a plataforma.
-Enquanto você não classifica um caso, ele é tratado como sigiloso, então o
-resumo de um caso novo só sai da Ouvidoria quando você decide que ele não é
-denúncia nem relato de conduta.
+Caso sigiloso não aparece nesta lista, nem para quem administra a plataforma. O
+que decide isso é só o sigilo, nunca a situação do caso: um caso **Em
+classificação** aparece na lista de todo mundo se não for sigiloso.
+
+E o sigilo depende da porta de entrada. O caso que chega pelo formulário, pelo
+QR ou pela Ana nasce protegido, porque entra sem tipo, e sai da proteção quando
+você classifica. O caso que a Ouvidoria registra à mão nasce com o tipo já
+escolhido por você: se não for denúncia nem relato de conduta, ele já aparece
+para o hospital no instante em que você clica em **Registrar manifestação**.

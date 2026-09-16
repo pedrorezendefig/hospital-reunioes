@@ -25,8 +25,6 @@ esperando decisão, e quem decide é sempre o ouvidor.
 5. O bloco passa a mostrar a decisão com o seu nome e a data, e quem pediu recebe
    o e-mail mesmo que já tenha respondido.
 
-![Caso grave com um pedido de mais prazo esperando decisão](../../../assets/ouvidoria/caso-critico-prorrogacao.png)
-
 ## Se der errado
 
 - **O pedido chegou depois do vencimento:** não chega. Pedido fora do prazo é

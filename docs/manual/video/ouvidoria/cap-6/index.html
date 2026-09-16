@@ -684,7 +684,7 @@ const respLinha = (papel, nome, email, vig, id) =>
   </div>`;
 
 document.getElementById("scr-responsaveis").innerHTML = tela({
-  ativo: "ouvidoria", badge: 3, quem: "Pedro Rezende", email: "pmrdef@gmail.com",
+  ativo: "ouvidoria", badge: 3,
   dentro: `<div class="volta">${ic("setaesq", 9)} Ouvidoria</div>
     <h1>Responsáveis por setor</h1>
     <div class="dek" data-layout-allow-overflow data-layout-allow-occlusion data-layout-allow-overlap style="max-width:680px">O titular recebe o acionamento da Ouvidoria. Setor sem titular vigente não é acionável: a demanda sobe ao gestor da área e a Diretoria recebe o alerta.</div>
@@ -717,7 +717,7 @@ document.getElementById("scr-responsaveis").insertAdjacentHTML("beforeend",
    Cena 5 · Setor sem titular vigente sobe ao gestor
    ============================================================ */
 document.getElementById("scr-semtitular").innerHTML = tela({
-  ativo: "ouvidoria", badge: 3, quem: "Pedro Rezende", email: "pmrdef@gmail.com",
+  ativo: "ouvidoria", badge: 3,
   dentro: `<div class="volta">${ic("setaesq", 9)} Ouvidoria</div>
     <h1>Responsáveis por setor</h1>
     <div style="border:1px solid var(--app-border);border-radius:9px;background:#fff;margin-top:12px;overflow:hidden;box-shadow:0 8px 20px -12px rgba(0,0,0,.14);max-width:530px">

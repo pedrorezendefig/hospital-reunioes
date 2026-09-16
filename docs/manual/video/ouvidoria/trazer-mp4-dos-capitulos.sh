@@ -79,6 +79,12 @@ for n in 1 2 3 4 5 6 7; do
     echo "cap-$n: copiado de $COPIA"
   elif baixar "$NOVO/video/ouvidoria/cap-$n.mp4" "$alvo"; then
     echo "cap-$n: baixado do manual publicado"
+  elif [ "$n" = "4" ] || [ "$n" = "6" ]; then
+    # O manual antigo serve a gravação de 03/09, e no cap-4 e no cap-6 ela tem o
+    # nome e o email de uma pessoa real desenhados na barra de topo (issue #738,
+    # rodada 2 da revisão). A composição foi corrigida e os dois foram
+    # re-renderizados; baixar do antigo traria o vídeo com o dado de volta.
+    FALTANDO="$FALTANDO cap-$n"
   elif baixar "$ANTIGO/video-cap$n.mp4" "$alvo"; then
     echo "cap-$n: baixado do manual antigo"
   else
@@ -88,12 +94,13 @@ done
 
 if [ -n "$FALTANDO" ]; then
   echo "não consegui trazer:$FALTANDO" >&2
-  echo "as três origens falharam, e cada uma falha por um motivo diferente:" >&2
+  echo "as origens falharam, e cada uma falha por um motivo diferente:" >&2
   echo "  - a cópia local: passe --de <pasta> apontando para os cap-N.mp4;" >&2
   echo "  - o manual publicado: a seção Ouvidoria ainda não subiu com os vídeos;" >&2
   echo "  - o manual antigo: o endereço já redireciona, e download de HTML foi recusado." >&2
-  echo "a composição de cada capítulo está em docs/manual/video/ouvidoria/, e o" >&2
-  echo "último recurso é regerar, o que produz um vídeo novo, não o original:" >&2
+  echo "o cap-4 e o cap-6 nunca vêm do manual antigo: a gravação de lá mostra dados" >&2
+  echo "de uma pessoa real, e os dois foram re-renderizados sem eles." >&2
+  echo "a composição de cada capítulo está em docs/manual/video/ouvidoria/:" >&2
   echo "  npx --yes hyperframes@0.8.41 render --quality high -o <destino>" >&2
   exit 1
 fi

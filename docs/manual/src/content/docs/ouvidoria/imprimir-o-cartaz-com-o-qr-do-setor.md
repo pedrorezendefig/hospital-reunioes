@@ -30,6 +30,9 @@ dizendo de onde a pessoa falou.
 
 ![Cartaz A5 pronto para imprimir](../../../assets/ouvidoria/cartaz-pa.png)
 
+O endereço impresso nessa imagem é o da máquina de teste onde o print foi
+tirado. O cartaz gerado pelo sistema traz o endereço do hospital.
+
 ## Se der errado
 
 - **Você aposentou e o cartaz continua na parede:** ele continua funcionando.

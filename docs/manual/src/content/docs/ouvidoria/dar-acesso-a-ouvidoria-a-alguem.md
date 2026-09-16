@@ -23,8 +23,6 @@ separado.
    Executiva**.
 4. Salve. A concessão fica registrada.
 
-![Tela de usuários da área de administração](../../../assets/ouvidoria/admin-usuarios.png)
-
 ## Se der errado
 
 - **A pessoa ainda não entrou na plataforma:** pode conceder assim mesmo. O
