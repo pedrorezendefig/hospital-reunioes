@@ -255,6 +255,56 @@ _Evitar_: reescrever o valor na descrição da Demanda (duplica e apodrece); mos
 O fio de respostas dentro do card, com @menção a quem tem acesso à aba. É onde a decisão evolui; o botão **Copiar para IA** copia a Demanda inteira (título, tipo, produto, descrição e a Conversa até ali) em texto simples, pronto para colar numa IA. E-mail sai em três gatilhos: atribuição (inclui a criação), @menção e resposta nova numa Demanda de que você é o responsável. Numa Demanda com [Vínculo com o desenvolvimento], toda resposta é espelhada como comentário na issue (ADR 0054, decisão 4): a de quem tem login no GitHub leva o marcador de automação, a de quem não tem leva o marcador do revisor e acende `revisor-comentou`; nome civil nenhum sai (só `@login` ou o rótulo "Pessoa do hospital", inclusive nas @menções do texto), e a caixa de resposta avisa que a resposta é pública; corrigir a resposta nos 10 minutos edita o comentário; linhas automáticas nunca são espelhadas e nenhum comentário do GitHub volta para o fio.
 _Evitar_: e-mail por mudança de coluna; resumo diário; copiar sem a Conversa.
 
+**Assistente de Tecnologia**:
+O agente de IA que abre quando alguém da aba Tecnologia clica em "Nova Demanda" (decisão de 15/09/2026): numa tela dedicada, o diretor conversa por texto, voz, arquivo de texto, imagem ou áudio, e do outro lado o **Rascunho da Demanda** toma forma ao vivo, com os mesmos campos do formulário (título, tipo, produto, prioridade, descrição), todos editáveis à mão. O agente **nunca grava sozinho**: a Demanda só nasce no botão "Criar Demanda", pela mesma porta e com as mesmas regras de sempre (nasce Nova, com o dono do Produto), e o botão nunca é segurado por falta de informação. Ele conhece a casa pelo [Kit de conhecimento] e as Demandas abertas do Quadro: responde ali mesmo o que está escrito no kit, dizendo de onde tirou, e oferece registrar mesmo assim; o que não está no kit ele não responde, registra. Avisa quando já existe Demanda aberta sobre o mesmo assunto. Tudo que entra é **efêmero**: anexo, áudio e a própria conversa não persistem; o produto é a Demanda com a descrição no [Roteiro por Tipo]. Sem nome próprio: nome próprio compete com a Ana. O formulário antigo continua a um clique ("prefiro preencher à mão").
+_Evitar_: nome de persona; agente que cria Demanda sem clique humano; guardar a conversa na Conversa da Demanda ou em tabela própria; segurar a criação até o roteiro estar completo; responder de cabeça o que não está no kit.
+
+**Kit de conhecimento**:
+O conjunto de textos que o [Assistente de Tecnologia] recebe inteiro a cada conversa: um arquivo por Produto (Ana, Integração Ana x MV, Reuniões, Ouvidoria, POPs, Site, Infra) mais um sobre a própria aba Tecnologia. Escrito para o leitor diretor, em linguagem de uso, sem número de issue, label, nome de tabela ou vocabulário interno do repositório. Vive no código do backend e viaja no deploy; é um documento **curado por gente**, com regra própria de sincronia: mudou o comportamento de um módulo, o arquivo dele muda no mesmo PR (o [Manual] segue outra regra: página própria na fatia de manual do mesmo PRD, ADR 0057). Não é o glossário nem o manual copiados: é uma terceira escrita, para outro leitor.
+_Evitar_: mandar `CONTEXT.md` ou o manual em HTML ao modelo; busca vetorial; gerar o kit por script a partir do glossário; kit desatualizado (vira agente mentindo).
+
+**Roteiro por Tipo**:
+A forma da descrição que o [Assistente de Tecnologia] monta, em texto puro com rótulos fixos por [Tipo da Demanda]: Defeito (Onde, O que aconteceu, O que esperava, Quando, Como repetir), Novo e Ajuste (O que precisa, Por quê, Quem usa, Hoje é assim), Informação e Consultoria (Pergunta, Contexto, O que já sei), Terceiro (Quem de fora, O que falta dele). Só entra o que o diretor disse; rótulo sem resposta não aparece, e se ele criar antes de responder tudo, o rótulo sai como "não informado". Prioridade nasce Normal e só sobe se o diretor disser que é urgente; prazo só quando ele disser uma data de verdade. O roteiro é também a lista do que o agente ainda pergunta.
+_Evitar_: markdown na descrição; inventar prioridade ou prazo; rótulo preenchido com suposição do modelo.
+
+## Manual do usuário
+
+**Manual**:
+O site único de documentação da plataforma para quem usa o app no hospital (decisão de 15/09/2026, grilling; ADR 0057). Um endereço só, organizado **por módulo, na ordem do menu do app** (Primeiros passos, Reuniões e metas, Ouvidoria, POPs, Admin), e dentro de cada módulo uma [Visão geral do módulo], as [Páginas de tarefa], as páginas [Como funciona] e as [Novidades]. Publica **só o que está em produção**: o que ainda não subiu fica escrito, mas invisível, até o deploy. A aba Tecnologia fica fora (ferramenta da Diretoria com a Vitta). O app aponta para ele por um item **Ajuda** no menu, que abre a seção do módulo em que a pessoa está.
+_Evitar_: um manual por módulo em endereços separados; manual por papel (o papel é selo, não estrutura); selo "em desenvolvimento" ou "planejado" para o usuário; capítulo técnico (endpoint, gatilho de e-mail, variável) dentro do manual.
+
+**Página de tarefa**:
+A unidade do [Manual]: uma ação que alguém faz no app, com o título no infinitivo ("Registrar uma manifestação", "Assinar a ata"). Molde fixo e curto: **quando usar** (uma frase), **quem faz** (selos), o [Vídeo de tarefa], **passo a passo** (até 6 passos, print só quando a tela muda) e **se der errado** (2 a 4 situações). Tratamento "você", passos no imperativo, e a palavra é sempre a que aparece na tela. Cabe numa tela de celular; passou disso, são duas tarefas. Publica sem vídeo, com aviso "vídeo em produção".
+_Evitar_: "por que existe", histórico, conceito (isso é [Como funciona]); "o usuário deverá"; sinônimo inventado para o nome do botão.
+
+**Selo**:
+Marcação curta na [Página de tarefa] que diz quem faz (Ouvidoria, Gestor do setor, Facilitador, Secretária), **Só admin** para o que só o Super admin vê, e **Sem login** para as telas que a pessoa abre por link ou QR sem entrar no app (formulário público, portal do setor, aceite da Ata). Telas sem login moram dentro do módulo delas, com o selo, não numa seção à parte.
+
+**Visão geral do módulo**:
+A página de abertura de cada módulo do [Manual]: o que o módulo é em poucas linhas, as palavras que a pessoa vai ver o tempo todo, o caminho de ponta a ponta (o caminho de um caso, o caminho de uma Ata) e os vídeos de capítulo quando existem. É o único lugar do módulo onde conceito tem vez.
+
+**Como funciona**:
+Página de um tema do módulo que não é ação de ninguém, mas que a pessoa precisa entender para não estranhar o app ("Como o prazo é contado", "O que o sistema apaga sozinho"). Fica fora da lista de tarefas, no fim do módulo.
+
+**Novidades**:
+Página de cada módulo com **uma entrada por PRD entregue**, da mais nova para a mais antiga: título em linguagem de usuário, mês e ano do deploy, duas linhas do que mudou, o [Vídeo de percepção de valor] quando existe, e links para as [Páginas de tarefa] que nasceram ou mudaram.
+_Evitar_: uma entrada por deploy ou por fix (isso é o changelog, que é doc de engenharia).
+
+**Vídeo de tarefa**:
+O vídeo de 30 a 60 s de uma [Página de tarefa]: um exemplo único com dados de exemplo, do primeiro clique ao resultado, mudo, com legendas curtas, gerado com a mesma receita do [Vídeo de percepção de valor] e aprovado por gente antes de publicar. Regerável quando a tela muda. Não é gravação de tela com voz.
+_Evitar_: um vídeo por capítulo como unidade (obriga a assistir 90 s para achar 15); vídeo obrigatório para publicar a página.
+
+**Vídeo de percepção de valor**:
+O vídeo de uma entrega (PRD) feito para o diretor ver o sistema funcionando (ADR 0026, ADR 0045): a unidade é o que mudou, não a tarefa. No [Manual] ele entra em [Novidades], e serve de [Vídeo de tarefa] quando a entrega coincide com uma tarefa.
+
+**Roteiro de prints**:
+O script versionado, um por módulo, que abre o app local com dados de exemplo, navega e captura os prints que as páginas daquele módulo usam. Print do [Manual] é sempre tela real do app, nunca desenho; mudou a tela, roda o roteiro de novo.
+_Evitar_: print tirado à mão sem roteiro; quadro extraído do vídeo no lugar do print.
+
+**Fatia de manual**:
+A issue que todo PRD com tela ganha no fim, bloqueada pelas fatias de código: escreve ou muda as [Páginas de tarefa], roda o [Roteiro de prints], produz os [Vídeos de tarefa] e a entrada de [Novidades]. Nasce invisível e aparece no deploy do PRD. É o par do vídeo de divulgação: uma entrega, uma fatia de manual.
+_Evitar_: manual dentro do PR de código (a tela ainda não existe para o print); manual fora da fila de issues (some da cobrança).
+
 ## Diálogo de exemplo
 
 > **Dev:** Quando o Colaborador não loga, como ele resolve a Pendência?
