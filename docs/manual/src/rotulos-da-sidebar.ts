@@ -14,16 +14,17 @@ import type { StarlightRouteData } from "@astrojs/starlight/route-data";
 
 // Nome da pasta => rótulo no menu. Vale para qualquer módulo que tenha a
 // subpasta (hoje `ouvidoria` e `pops`).
-const rotulos: Record<string, string> = {
-  "como-funciona": "Como funciona",
-};
+//
+// Map, e não objeto literal: uma pasta chamada `constructor` ou `toString`
+// acharia coisa no prototype e viraria rótulo, e depurar isso custa caro.
+const rotulos = new Map<string, string>([["como-funciona", "Como funciona"]]);
 
 type Entrada = StarlightRouteData["sidebar"][number];
 
 function renomearGrupos(entradas: Entrada[]): void {
   for (const entrada of entradas) {
     if (entrada.type !== "group") continue;
-    const rotulo = rotulos[entrada.label];
+    const rotulo = rotulos.get(entrada.label);
     if (rotulo) entrada.label = rotulo;
     renomearGrupos(entrada.entries);
   }
