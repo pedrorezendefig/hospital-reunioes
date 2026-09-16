@@ -16,7 +16,6 @@ Algumas partes dependem de fornecedores, e isso importa quando alguma coisa para
 
 - **Assinatura digital** das atas e dos POPs, na ClickSign.
 - **Envio de e-mail.** Todo e-mail do sistema sai por um serviço de entrega de terceiros, com servidores fora do Brasil. Vale inclusive para os e-mails da Ouvidoria, e é por isso que o que viaja neles é uma lista fechada de informações, decidida uma vez, e não o relato inteiro do caso.
-- **Recebimento do e-mail da ouvidoria**, que chega ao aplicativo como uma cópia do que cai na caixa do hospital. A caixa original continua funcionando como sempre.
 - **Agenda online**, do lado da Ana.
 
 O hospital não opera servidor de e-mail próprio, e não há intenção de operar.

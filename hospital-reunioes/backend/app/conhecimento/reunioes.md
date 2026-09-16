@@ -31,7 +31,7 @@ Quando a assinatura não se completa (alguém recusa, ou o processo é cancelado
 
 ## O que ele não faz
 
-- Não grava a reunião: o áudio nunca entra no aplicativo, só o texto.
+- Não grava a reunião: o aplicativo não capta o que se fala na sala. O áudio que ele recebe é o ditado, quando o facilitador prefere falar a digitar na ata guiada: esse áudio sobe, é transcrito ali mesmo e descartado. Áudio nenhum fica guardado.
 - Não gera PDF da ata guiada, e não a manda para assinatura.
 - Não desfaz uma ata finalizada.
 

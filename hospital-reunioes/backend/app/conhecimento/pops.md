@@ -22,29 +22,25 @@ O conteúdo de um POP vive em versões, e cada versão percorre o mesmo caminho:
 
 Quem revisa ou quem valida pode devolver, com comentários, para quem elaborou. A devolução volta direto para quem devolveu, sem repassar por quem já tinha aprovado, e não existe limite de idas e vindas.
 
-Publicar exige assinatura digital das três pessoas do fluxo. A versão publicada é a que vale na Biblioteca; a anterior fica guardada para sempre, com o documento assinado, as datas e quem assinou. Uma versão nova pode estar sendo escrita enquanto a publicada segue valendo.
+Publicar exige assinatura digital das três pessoas do fluxo. O POP publicado entra na **Biblioteca**, organizado por setor, com o documento assinado para baixar e as datas de cada etapa do caminho que ele percorreu.
 
-## Validade e revisão periódica
+## O que ainda não está no aplicativo
 
-Cada POP tem uma periodicidade de revisão (três meses, seis meses, um ano ou dois anos), contada a partir da assinatura. Vencido o prazo, o POP passa pelo caminho inteiro de novo, mesmo que o conteúdo não mude: é exigência da própria qualidade.
+Três coisas já foram decididas e ainda não foram construídas. Quem procurar por elas hoje não vai achar tela nenhuma:
 
-Na Biblioteca, cada POP mostra em que pé está a validade: em dia, perto de vencer, ou com revisão pendente. POP vencido nunca sai da Biblioteca: ele continua lá, com o apontamento à vista, porque tirar o documento do ar é pior do que mostrá-lo vencido.
-
-## Treinamento
-
-Publicado o POP, o setor marca um treinamento, presencial ou por videoconferência, com um ministrante e uma pauta. O aplicativo gera a lista de presença já pronta, com os POPs, o código e a versão. Ela é impressa, assinada à mão, preenchida com as notas e devolvida por foto ou digitalização.
-
-O aplicativo lê o que está na folha e pré-preenche as notas, e uma pessoa confere antes de valer. Para fechar o registro é preciso a lista assinada com as notas e pelo menos uma foto do evento.
+- **A revisão periódica correndo sozinha.** Cada POP já escolhe, na criação, de quanto em quanto tempo deve ser revisto (três meses, seis meses, um ano ou dois anos), e o agente sugere esse prazo. O que não existe ainda é o aplicativo contar esse prazo, avisar quem precisa e reabrir o caminho sozinho. Hoje quem controla isso é o setor, fora do aplicativo.
+- **O sinal de validade na Biblioteca**, que mostraria qual POP está em dia, qual está perto de vencer e qual está com a revisão atrasada.
+- **Os treinamentos.** A tela existe com o aviso de que vêm depois. A lista de presença gerada pelo aplicativo, a leitura das notas da folha assinada e os indicadores por turma são parte dessa leva, e nada disso funciona hoje.
 
 ## O que ele não faz
 
 - Não publica POP sem as três assinaturas.
-- Não guarda nota por colaborador individualmente: nesta fase os indicadores são por turma.
-- Não aplica prova pelo aplicativo: a nota é a da lista de presença, dada pelo ministrante.
+- Não deixa ninguém editar o código do POP: ele nasce na criação e é travado.
+- Não decide sozinho a estrutura do procedimento: ele segue o modelo que foi anexado.
 
 ## O que costuma virar Demanda
 
 - POP saindo com estrutura diferente do modelo anexado (Defeito).
 - Setor novo, ou sigla errada no código de um setor (Ajuste).
-- Mudança na periodicidade, na nota mínima ou em quem assina (Decisão).
-- Indicador ou relatório novo no painel da diretoria (Novo).
+- Mudança em quem assina, ou nos prazos de revisão oferecidos (Decisão).
+- Treinamento, sinal de validade e relatório, que ainda não existem (Novo).

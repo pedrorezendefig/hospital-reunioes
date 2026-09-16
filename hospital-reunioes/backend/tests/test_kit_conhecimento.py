@@ -33,6 +33,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
+from app.services import assistente_tecnologia  # noqa: E402
 from app.services.conhecimento import CONHECIMENTO_DIR, carregar_kit  # noqa: E402
 
 MIGRATIONS_DIR = Path(__file__).parent.parent.parent / "supabase" / "migrations"
@@ -343,7 +344,16 @@ def _prompt_de_um_turno(monkeypatch) -> str:
 
 
 def _secoes_do_kit(prompt: str) -> dict[str, str]:
-    """O prompt fatiado pelos cabecalhos que o carregador escreve."""
+    """O prompt fatiado pelos cabecalhos que o carregador escreve.
+
+    O corte na marca de FIM do kit nao e detalhe. `tecnologia.md` e o ultimo em
+    ordem alfabetica, entao sem ele a fatia do ultimo arquivo engole tudo o que
+    vem depois no prompt (a cerca, os Produtos, as Demandas abertas, o rascunho,
+    a conversa e a data). Hoje isso ainda daria menos que o piso, mas a margem
+    cresce sozinha a cada Produto ativo e a cada Demanda aberta: seria uma
+    asserção que passa a medir o resto do prompt sem ninguem ter mexido nela.
+    """
+    prompt = prompt.split(assistente_tecnologia.MARCA_FIM_KIT)[0]
     secoes: dict[str, str] = {}
     atual: str | None = None
     for linha in prompt.splitlines():
@@ -375,6 +385,20 @@ class TestOitoArquivosNoPrompt:
         partir do disco dentro do turno, nao passado pelo teste."""
         assert arquivo in secoes
         assert len(secoes[arquivo].strip()) >= PISO_DE_TAMANHO
+
+    def test_o_fatiador_para_na_marca_de_fim_do_kit(self):
+        """Mutante no proprio detector: tirar o corte faz a fatia do ULTIMO
+        arquivo engolir o resto do prompt, e a asserção de tamanho acima passa
+        a medir a cerca, os Produtos e as Demandas em vez do material."""
+        prompt = "\n".join(
+            [
+                "    # tecnologia.md",
+                "    material do arquivo",
+                assistente_tecnologia.MARCA_FIM_KIT,
+                "o que vem depois do kit no prompt",
+            ]
+        )
+        assert "depois do kit" not in _secoes_do_kit(prompt)["tecnologia.md"]
 
     def test_o_fatiador_nao_inventa_secao(self):
         """Mutante no proprio detector: se `_secoes_do_kit` casasse qualquer
