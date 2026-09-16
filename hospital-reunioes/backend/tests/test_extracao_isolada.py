@@ -495,6 +495,21 @@ class TestAsDuasMortes:
         assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
         assert decorrido < 15, f"a rota levou {decorrido:.1f}s: o filho nao foi morto no prazo"
 
+    def test_o_vigia_de_rss_mata_sozinho_com_o_enderecamento_liberado(self, client, monkeypatch, docx_ataque):
+        """Isola o vigia do pai da outra guarda de memória.
+
+        No Linux o `RLIMIT_AS` costuma morder primeiro, e sem isto o vigia
+        passaria a viagem inteira sem ser cobrado lá (no macOS ele é o único, e
+        os dois testes acima o cobram). Com o endereçamento em 8 GB, o
+        `RLIMIT_AS` não tem como recusar nada: quem sobra é o vigia.
+        """
+        monkeypatch.setattr(extrator, "LIMITE_DE_ENDERECAMENTO", 8 * 1024 * 1024 * 1024)
+
+        r = _enviar(client, "proposta.docx", docx_ataque)
+
+        assert r.status_code == 422
+        assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
+
     def test_o_teto_de_memoria_mata_sem_ajuda_do_prazo(self, client, monkeypatch, pdf_ataque):
         """O oposto do teste acima, para provar que os dois são guardas distintas.
 
@@ -536,13 +551,18 @@ class TestAFraseQueAPessoaVe:
         ocupadas de verdade, e o prazo de espera é encolhido para o teste não
         levar 45 segundos.
         """
-        monkeypatch.setattr(extrator, "PRAZO_DA_EXTRACAO", 0.5)
-        tomadas = [extrator._vagas.acquire() for _ in range(extrator.VAGAS_DE_EXTRACAO)]
+        monkeypatch.setattr(extrator, "PRAZO_DA_FILA", 0.5)
+        # Com prazo, e nao `acquire()` seco: se uma vaga tiver vazado num teste
+        # anterior, este teste TEM que falhar dizendo isso, e nao ficar pendurado
+        # para sempre. Vaga presa e exatamente o defeito que ele existe para pegar.
+        tomadas = [extrator._vagas.acquire(timeout=10) for _ in range(extrator.VAGAS_DE_EXTRACAO)]
+        assert all(tomadas), "alguma vaga de extracao vazou antes deste teste"
         try:
             r = _enviar(client, "ata.docx", _docx_honesto(200))
         finally:
-            for _ in tomadas:
-                extrator._vagas.release()
+            for pegou in tomadas:
+                if pegou:
+                    extrator._vagas.release()
 
         assert r.status_code == 422
         assert r.json()["detail"] == extrator.MENSAGEM_FILA_CHEIA
@@ -597,19 +617,20 @@ class TestAsGuardasDoIsolamento:
         assert p.returncode == 0, p.stderr.decode()[-400:]
         assert p.stdout.decode().strip() == "[]"
 
-    def test_o_limite_e_instalado_antes_de_ler_o_arquivo(self, docx_honesto):
+    def test_o_limite_e_instalado_antes_de_importar_o_parser(self, pdf_honesto):
         """A ordem, cobrada pelo desfecho e não por inspeção.
 
-        Com 48 MB de endereçamento não existe leitura possível: nem o parser
-        sobe. Se o `setrlimit` acontecesse depois da extração, o mesmo arquivo
-        sairia com `OK` e o limite teria virado enfeite. O controle logo abaixo
-        prova que quem recusou foi o limite, e não o arquivo.
+        Medido no Linux: com 48 MB de endereçamento o `pdfplumber` nem importa
+        (`ImportError`), e com 64 MB ele lê o mesmo arquivo. Se o `setrlimit`
+        acontecesse depois do import, o arquivo sairia com `OK` sob os 48 MB e o
+        limite teria virado enfeite. O controle folgado logo abaixo prova que
+        quem recusou foi o limite, e não o arquivo.
         """
         if not _plataforma_aplica_rlimit_as():
             pytest.skip(f"{sys.platform} nao aceita setrlimit(RLIMIT_AS); quem segura e o vigia de RSS")
 
-        apertado = _rodar_filho(".docx", docx_honesto, limite=48 * 1024 * 1024)
-        folgado = _rodar_filho(".docx", docx_honesto, limite=extrator.LIMITE_DE_ENDERECAMENTO)
+        apertado = _rodar_filho(".pdf", pdf_honesto, limite=48 * 1024 * 1024)
+        folgado = _rodar_filho(".pdf", pdf_honesto, limite=extrator.LIMITE_DE_ENDERECAMENTO)
 
         assert not apertado.stdout.startswith(b"OK"), "leu o arquivo apesar do limite de 48 MB"
         assert apertado.returncode != 0

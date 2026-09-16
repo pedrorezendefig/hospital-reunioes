@@ -99,6 +99,13 @@ LIMITE_DE_ENDERECAMENTO = 1280 * 1024 * 1024
 VAGAS_DE_EXTRACAO = 2
 _vagas = threading.BoundedSemaphore(VAGAS_DE_EXTRACAO)
 
+# Esperar na fila e esperar a leitura sao coisas diferentes, e por isso o
+# orcamento e outro. Se a fila usasse o prazo da extracao, o pior caso de uma
+# requisicao seria 45 s de espera mais 45 s de leitura: um minuto e meio de
+# ampulheta, sem nada na tela explicando. Dez segundos cobrem duas rodadas de
+# `.docx` honesto e deixam o pior caso inteiro em 55 s.
+PRAZO_DA_FILA = 10.0
+
 MENSAGEM_FILA_CHEIA = (
     "O sistema está lendo outros documentos neste momento e não conseguiu uma vaga "
     "para o seu. Tente de novo em instantes."
@@ -182,15 +189,16 @@ def _extrair_isolado(ext: str, file_bytes: bytes) -> str:
     escrevendo em pipe (o pai mandando 15 MB, o filho devolvendo o texto) um
     trava esperando o outro, e o vigia nunca chegaria a rodar.
     """
-    if not _vagas.acquire(timeout=PRAZO_DA_EXTRACAO):
-        logger.warning("Extracao isolada sem vaga apos %ss lendo %s", PRAZO_DA_EXTRACAO, ext)
+    if not _vagas.acquire(timeout=PRAZO_DA_FILA):
+        logger.warning("Extracao isolada sem vaga apos %ss lendo %s", PRAZO_DA_FILA, ext)
         raise ValueError(MENSAGEM_FILA_CHEIA)
 
-    with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-        tmp.write(file_bytes)
-        caminho = tmp.name
-
+    caminho: str | None = None
     try:
+        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
+            tmp.write(file_bytes)
+            caminho = tmp.name
+
         proc = subprocess.Popen(
             [sys.executable, _CAMINHO_DO_FILHO, ext, caminho, str(LIMITE_DE_ENDERECAMENTO)],
             stdin=subprocess.DEVNULL,
@@ -199,11 +207,16 @@ def _extrair_isolado(ext: str, file_bytes: bytes) -> str:
         )
         motivo, saida, erro = _acompanhar(proc)
     finally:
+        # A gravacao do temporario fica DENTRO do try: com disco cheio ela
+        # levanta, e uma vaga que nao volta e pior que o erro que a prendeu.
+        # Duas vagas presas param a leitura de documento para sempre, sem log
+        # novo e sem jeito de reabrir a nao ser reiniciando o container.
         _vagas.release()
-        try:
-            os.unlink(caminho)
-        except OSError:
-            pass
+        if caminho is not None:
+            try:
+                os.unlink(caminho)
+            except OSError:
+                pass
 
     if motivo is not None:
         raise ValueError(MENSAGEM_GRANDE_DEMAIS)

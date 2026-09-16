@@ -108,6 +108,25 @@ def _responder(status: str, corpo: str) -> None:
     saida.flush()
 
 
+def foi_falta_de_memoria(erro: BaseException) -> bool:
+    """Se `MemoryError` aparece em qualquer elo da cadeia da exceção.
+
+    Medido no Linux: quando o `RLIMIT_AS` morde dentro do `pdfminer`, ele
+    engole o `MemoryError` e levanta `PdfminerException` com mensagem VAZIA. Um
+    `except MemoryError` seco não vê nada disso, e a pessoa que mandou um PDF
+    grande demais recebia "verifique se não está corrompido", que manda mexer no
+    arquivo errado. A cadeia (`__cause__`/`__context__`) guarda o motivo real.
+    """
+    visto = set()
+    atual: BaseException | None = erro
+    while atual is not None and id(atual) not in visto:
+        if isinstance(atual, MemoryError):
+            return True
+        visto.add(id(atual))
+        atual = atual.__cause__ or atual.__context__
+    return False
+
+
 def main(argv: list[str]) -> int:
     ext, caminho, limite = argv[1], argv[2], int(argv[3])
 
@@ -118,12 +137,15 @@ def main(argv: list[str]) -> int:
         with open(caminho, "rb") as arquivo:
             file_bytes = arquivo.read()
         texto = extrair(ext, file_bytes)
-    except MemoryError:
-        return SAIDA_SEM_MEMORIA
-    except ValueError as e:
-        _responder(STATUS_RECUSA, str(e))
-        return 0
-    except Exception as e:  # noqa: BLE001 - o pai traduz em frase para a tela
+    except Exception as e:  # noqa: BLE001 - o pai traduz cada desfecho em frase para a tela
+        # A ordem e a decisao: falta de memoria primeiro (porque ela se disfarca
+        # de erro de parser), depois a recusa que o nosso codigo escreveu, e so
+        # entao "nao deu para ler".
+        if foi_falta_de_memoria(e):
+            return SAIDA_SEM_MEMORIA
+        if isinstance(e, ValueError):
+            _responder(STATUS_RECUSA, str(e))
+            return 0
         print(f"{type(e).__name__}: {e}", file=sys.stderr)
         return 1
 
