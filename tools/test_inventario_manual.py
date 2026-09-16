@@ -58,6 +58,25 @@ Quem não tem conta passa a registrar a manifestação sozinho.
 """
 
 
+# O frontmatter como o molde da `/manual` manda escrever: valor e comentário na
+# mesma linha. É o que o terminal copia, então é o que o inventário tem que ler.
+TAREFA_COMO_O_MOLDE = """---
+title: Registrar uma manifestação pelo formulário
+description: Como contar uma reclamação para a Ouvidoria.
+prd: [731]                 # PRDs que criaram ou mudaram a página
+draft: true                # sai quando o PRD sobe para produção
+papel: [Qualquer pessoa]
+video: registrar-manifestacao-pelo-formulario
+---
+
+## Passo a passo
+
+![A tela do formulário](../../../assets/ouvidoria/formulario-publico.png)
+
+1. Clique em **Enviar manifestação**.
+"""
+
+
 def montar(raiz: Path) -> None:
     """Um manual sem lacuna: os cinco módulos, e a Ouvidoria escrita inteira."""
     conteudo = raiz / "src" / "content" / "docs"
@@ -163,6 +182,36 @@ def test_draft_de_prd_que_ainda_nao_subiu_nao_e_lacuna(tmp_path):
     assert tipos(inventario_sem, "ouvidoria") == []
 
 
+def test_draft_com_comentario_na_linha_ainda_e_draft(tmp_path):
+    """O molde da /manual escreve `draft: true  # sai quando o PRD sobe`."""
+    montar(tmp_path)
+    tarefa = (
+        tmp_path
+        / "src"
+        / "content"
+        / "docs"
+        / "ouvidoria"
+        / "registrar-manifestacao-pelo-formulario.md"
+    )
+    tarefa.write_text(TAREFA_COMO_O_MOLDE, encoding="utf-8")
+    inventario = inventario_manual.inventariar(tmp_path, {"ouvidoria": [731]})
+    assert tipos(inventario, "ouvidoria") == ["draft-entregue"]
+
+
+def test_prd_nao_sai_dos_numeros_do_comentario(tmp_path):
+    """`prd: [731]  # ... ADR 0057` não pode virar PRD #57 nem PRD #0."""
+    montar(tmp_path)
+    novidades = tmp_path / "src" / "content" / "docs" / "ouvidoria" / "novidades.md"
+    novidades.write_text(
+        NOVIDADES.replace("prd: [731]", "prd: [731]   # entregue no ADR 0057"),
+        encoding="utf-8",
+    )
+    inventario = inventario_manual.inventariar(tmp_path, {"ouvidoria": [731, 57]})
+    lacunas = [lacuna.detalhe for lacuna in inventario.modulos["ouvidoria"]]
+    assert len(lacunas) == 1
+    assert "#57" in lacunas[0]
+
+
 def test_pagina_fora_dos_cinco_modulos_nao_fecha_a_conta(tmp_path):
     """Sem módulo, não há terminal que feche a lacuna: a conta não fecha."""
     montar(tmp_path)
@@ -171,6 +220,16 @@ def test_pagina_fora_dos_cinco_modulos_nao_fecha_a_conta(tmp_path):
     (solta / "index.md").write_text(VISAO_GERAL, encoding="utf-8")
     inventario = inventario_manual.inventariar(tmp_path, {"ouvidoria": [731]})
     assert inventario.fora_de_balde == ["tecnologia/index.md"]
+
+
+def test_modulo_que_nao_existe_em_entregues_e_acusado(tmp_path):
+    """ "reuniões" e "pop" não são módulos: calar esconde PRD entregue."""
+    montar(tmp_path)
+    inventario = inventario_manual.inventariar(
+        tmp_path, {"reuniões": [706], "pop": [617], "ouvidoria": [731]}
+    )
+    assert sorted(inventario.entregues_desconhecidos) == ["pop", "reuniões"]
+    assert inventario.lacunas == []
 
 
 def rodar(
@@ -210,6 +269,25 @@ def test_manual_sem_pagina_nenhuma_sai_com_codigo_1(tmp_path):
     resultado = rodar(tmp_path)
     assert resultado.returncode == 1
     assert "varredura que não rodou" in resultado.stderr
+
+
+def test_entregues_com_modulo_que_nao_existe_sai_com_codigo_1(tmp_path):
+    montar(tmp_path)
+    entregues = tmp_path / "entregues.json"
+    entregues.write_text(json.dumps({"reuniões": [706]}), encoding="utf-8")
+    resultado = rodar(tmp_path, entregues)
+    assert resultado.returncode == 1
+    assert "reuniões" in resultado.stderr
+
+
+def test_entregues_malformado_explica_em_vez_de_subir_traceback(tmp_path):
+    montar(tmp_path)
+    entregues = tmp_path / "entregues.json"
+    entregues.write_text('{"ouvidoria": [731],}', encoding="utf-8")
+    resultado = rodar(tmp_path, entregues)
+    assert resultado.returncode == 1
+    assert "Traceback" not in resultado.stderr
+    assert "Inventário do Manual" in resultado.stderr
 
 
 def test_sem_a_lista_de_entregues_o_relatorio_diz_o_que_nao_conferiu(tmp_path):

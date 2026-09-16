@@ -9,6 +9,7 @@ aqui, que o que o prompt manda rodar existe (issue #737).
 from __future__ import annotations
 
 import re
+import subprocess
 import unicodedata
 from pathlib import Path
 
@@ -48,8 +49,7 @@ def test_descricao_cabe_no_teto():
 
 def test_todo_modo_da_manual_que_o_plano_chama_existe():
     citados = {
-        sem_acento(m.group(1))
-        for m in re.finditer(r"`/manual ([^`]+)`", TEXTO_MONTAR)
+        sem_acento(m.group(1)) for m in re.finditer(r"`/manual ([^`]+)`", TEXTO_MONTAR)
     }
     assert citados, "o plano precisa dizer que modo da /manual cada terminal roda"
     assert citados <= modos_declarados()
@@ -66,21 +66,68 @@ def test_o_checklist_que_o_prompt_manda_rodar_e_o_da_manual():
         assert comando in TEXTO_MONTAR, comando
 
 
-def test_todo_caminho_do_repo_que_o_plano_cita_existe():
-    """Pasta e script citados no prompt são os do repositório, não de memória."""
-    citados = {
-        m.group(1)
-        for m in re.finditer(
-            r"`?((?:tools|docs/manual|docs/spec)/[\w./<>-]+)", TEXTO_MONTAR
-        )
-    }
-    faltando = []
-    for caminho in sorted(citados):
-        if "<" in caminho:  # molde por módulo ou por slug, conferido pelo teste acima
-            continue
-        if not (RAIZ / caminho.rstrip("/.")).exists():
-            faltando.append(caminho)
-    assert faltando == []
+def ignorados(caminhos: list[str]) -> set[str]:
+    """Caminho que o repositório ignora de propósito (MP4 renderizado, dist)."""
+    if not caminhos:
+        return set()
+    saida = subprocess.run(
+        ["git", "check-ignore", "--stdin"],
+        input="\n".join(caminhos),
+        capture_output=True,
+        text=True,
+        cwd=RAIZ,
+    ).stdout
+    return {linha.strip() for linha in saida.splitlines() if linha.strip()}
+
+
+def test_todo_caminho_do_repo_que_as_skills_citam_existe():
+    """Pasta e script citados são os do repositório, não de memória.
+
+    Vale para as duas skills, references incluídas: é lá que a receita da
+    `/manual` chama os conferidores pelo nome, e renomear um sem mexer no texto
+    deixaria a receita mandando rodar script que não existe.
+    """
+    citados: set[str] = set()
+    for skill in ("manual", "montar-manual"):
+        for md in sorted((RAIZ / ".claude" / "skills" / skill).rglob("*.md")):
+            citados |= {
+                m.group(1)
+                for m in re.finditer(
+                    r"`?((?:tools|docs/manual|docs/spec)/[\w./<>-]+)",
+                    md.read_text(encoding="utf-8"),
+                )
+            }
+    # Molde por módulo ou por slug: quem confere esses é o teste dos modos.
+    # A barra final vai para o `check-ignore` como está citada: `public/video/`
+    # só casa o padrão do .gitignore com ela, porque a pasta nem existe no clone.
+    concretos = sorted(c.rstrip(".") for c in citados if "<" not in c)
+    fora_do_git = ignorados(concretos)
+    conferidos = [c.rstrip("/") for c in concretos if c not in fora_do_git]
+    # Piso de sanidade: sem ele, reescrever o texto de um jeito que a regex não
+    # reconhece deixaria este teste verde sobre lista vazia.
+    assert len(conferidos) >= 5
+    assert [c for c in conferidos if not (RAIZ / c).exists()] == []
+
+
+def prompt_gerado() -> str:
+    """O template do prompt que a skill manda o Pedro colar no terminal."""
+    blocos = re.findall(r"^```[a-z]*\n(.*?)^```", TEXTO_MONTAR, re.S | re.M)
+    prompts = [b for b in blocos if "/manual <modulo>" in b]
+    assert len(prompts) == 1, "o plano tem um template de prompt de terminal"
+    return prompts[0]
+
+
+def test_o_prompt_abre_o_worktree_antes_de_criar_branch():
+    """Branch criada na árvore principal é a colisão que esta skill evita."""
+    prompt = prompt_gerado()
+    assert prompt.index("worktree") < prompt.index("/pegar-issue")
+
+
+def test_o_prompt_manda_carimbar_o_prd_no_frontmatter_de_novidades():
+    """Sem o `prd:` no novidades.md, o inventário acusa a entrada que já existe."""
+    prompt = prompt_gerado()
+    linha = next(li for li in prompt.splitlines() if "Novidades" in li)
+    assert "prd:" in linha
 
 
 def test_os_cinco_modulos_do_plano_sao_os_da_manual():

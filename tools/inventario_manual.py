@@ -53,6 +53,9 @@ class Inventario:
     modulos: dict[str, list[Lacuna]] = field(default_factory=dict)
     paginas: dict[str, int] = field(default_factory=dict)
     fora_de_balde: list[str] = field(default_factory=list)
+    # Chave de `--entregues` que não é módulo (acento, singular, nome antigo).
+    # Ignorar em silêncio esconderia os PRDs entregues que ela carrega.
+    entregues_desconhecidos: list[str] = field(default_factory=list)
     entregues_informados: bool = True
 
     @property
@@ -60,8 +63,18 @@ class Inventario:
         return [lacuna for modulo in MODULOS for lacuna in self.modulos[modulo]]
 
 
+def _valor(campos: dict[str, str], chave: str) -> str:
+    """O valor do campo, sem o comentário que o molde da `/manual` põe na linha.
+
+    O molde escreve `draft: true   # sai quando o PRD sobe para produção`. Ler a
+    linha crua faria o `draft` nunca bater com "true" e o `prd` colher os
+    números do comentário ("ADR 0057" virando PRD #57).
+    """
+    return re.sub(r"\s+#.*$", "", campos.get(chave, "")).strip()
+
+
 def _prds(campos: dict[str, str]) -> list[int]:
-    return [int(n) for n in RE_NUMERO.findall(campos.get("prd", ""))]
+    return [int(n) for n in RE_NUMERO.findall(_valor(campos, "prd"))]
 
 
 def inventariar(
@@ -75,6 +88,9 @@ def inventariar(
         entregues_informados=entregues is not None,
     )
     entregues = entregues or {}
+    inventario.entregues_desconhecidos = [
+        modulo for modulo in entregues if modulo not in MODULOS
+    ]
     novidades: dict[str, list[int]] = {}
 
     for arquivo in sorted(conteudo.rglob("*.md*")):
@@ -120,7 +136,7 @@ def inventariar(
                 )
 
         for prd in _prds(campos):
-            if campos.get("draft") == "true" and prd in entregues.get(modulo, []):
+            if _valor(campos, "draft") == "true" and prd in entregues.get(modulo, []):
                 inventario.modulos[modulo].append(
                     Lacuna(
                         modulo,
@@ -140,7 +156,8 @@ def inventariar(
                         "prd-sem-novidades",
                         f"PRD #{prd} entregue e sem entrada em "
                         f"{modulo}/novidades.md. Quem já usa o módulo não fica "
-                        "sabendo do que mudou.",
+                        "sabendo do que mudou. A entrada conta quando o número "
+                        "está no `prd:` do frontmatter da página.",
                     )
                 )
 
@@ -198,12 +215,19 @@ def main() -> int:
 
     entregues = None
     if args.entregues:
-        entregues = {
-            modulo: [int(prd) for prd in prds]
-            for modulo, prds in json.loads(
-                Path(args.entregues).read_text(encoding="utf-8")
-            ).items()
-        }
+        try:
+            lido = json.loads(Path(args.entregues).read_text(encoding="utf-8"))
+            entregues = {
+                modulo: [int(prd) for prd in prds] for modulo, prds in lido.items()
+            }
+        except (OSError, ValueError, AttributeError, TypeError) as erro:
+            print(
+                f"Inventário do Manual: não consegui ler '{args.entregues}' "
+                f'({erro}). O formato é {{"<modulo>": [<PRD>, ...]}}, com os '
+                f"módulos {', '.join(MODULOS)}.",
+                file=sys.stderr,
+            )
+            return 1
 
     inventario = inventariar(raiz, entregues)
     print(formatar(inventario, raiz))
@@ -221,6 +245,15 @@ def main() -> int:
             "que a feche:\n"
             + "\n".join(f"  - {p}" for p in inventario.fora_de_balde)
             + f"\nOs módulos são {', '.join(MODULOS)} (ADR 0057, decisão 1).",
+            file=sys.stderr,
+        )
+        return 1
+    if inventario.entregues_desconhecidos:
+        print(
+            "Inventário do Manual: --entregues traz módulo que não existe:\n"
+            + "\n".join(f"  - {m}" for m in inventario.entregues_desconhecidos)
+            + "\nOs PRDs dessa chave não foram conferidos contra página nenhuma. "
+            f"Os módulos são {', '.join(MODULOS)} (ADR 0057, decisão 1).",
             file=sys.stderr,
         )
         return 1

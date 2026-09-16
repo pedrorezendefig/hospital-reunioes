@@ -21,8 +21,8 @@ on:
       - 'tools/test_publicar_manual.py'
       - 'tools/test_inventario_manual.py'
       - 'tools/test_skill_montar_manual.py'
-      - '.claude/skills/manual/SKILL.md'
-      - '.claude/skills/montar-manual/SKILL.md'
+      - '.claude/skills/manual/**'
+      - '.claude/skills/montar-manual/**'
       - '.github/workflows/manual.yml'
   pull_request:
     branches: [main]
@@ -38,8 +38,11 @@ on:
       - 'tools/test_publicar_manual.py'
       - 'tools/test_inventario_manual.py'
       - 'tools/test_skill_montar_manual.py'
-      - '.claude/skills/manual/SKILL.md'
-      - '.claude/skills/montar-manual/SKILL.md'
+      # `**` e não só o SKILL.md: as references citam os conferidores de
+      # tools/ pelo nome, e renomear um sem disparar o workflow deixaria a
+      # receita apontando para script que não existe mais.
+      - '.claude/skills/manual/**'
+      - '.claude/skills/montar-manual/**'
       - '.github/workflows/manual.yml'
 
 jobs:

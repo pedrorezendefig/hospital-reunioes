@@ -43,7 +43,7 @@ JSON
 python3 tools/inventario_manual.py --dir docs/manual --entregues <scratchpad>/entregues.json
 ```
 
-O inventário acusa, por módulo, quatro lacunas: `sem-video` (Página de tarefa sem Vídeo de tarefa), `print-faltando` (a página aponta para um print que não existe), `prd-sem-novidades` (PRD em produção sem entrada no `novidades.md` do módulo) e `draft-entregue` (página em `draft` de PRD que já está no ar). Ele **sai com código 1** quando a conta não fecha: página fora dos cinco módulos (sem terminal que a feche) ou nenhuma página encontrada (varredura que não rodou não pode passar por manual pronto). Nesse caso conserte antes de planejar.
+O inventário acusa, por módulo, quatro lacunas: `sem-video` (Página de tarefa sem Vídeo de tarefa), `print-faltando` (a página aponta para um print que não existe), `prd-sem-novidades` (PRD em produção cujo número não está no `prd:` do frontmatter do `novidades.md` do módulo, que é como o inventário conta a entrada) e `draft-entregue` (página em `draft` de PRD que já está no ar). Ele **sai com código 1** quando a conta não fecha: página fora dos cinco módulos (sem terminal que a feche) ou nenhuma página encontrada (varredura que não rodou não pode passar por manual pronto). Nesse caso conserte antes de planejar.
 
 Sem `--entregues` o relatório sai, mas declara que dois dos quatro tipos não foram conferidos. Não planeje em cima disso: a lista de PRDs entregues é o passo 1, não um extra.
 
@@ -85,7 +85,7 @@ Módulo que não coube no teto entra na rodada seguinte; o plano diz qual é e p
 
 Um prompt por terminal, gravado em `<scratchpad>/prompts-manual-<ddmm>.md` e impresso inteiro na resposta (o Pedro copia do celular).
 
-Cada prompt tem um **cabeçalho de leitura fora do bloco** (o Pedro lê antes de colar; a sessão recebe só o bloco, e a primeira linha colada precisa ser o comando):
+Cada prompt tem um **cabeçalho de leitura fora do bloco** (o Pedro lê antes de colar; a sessão recebe só o bloco):
 
 ```markdown
 ### Terminal <letra>: módulo <modulo> (issue #<N>)
@@ -95,16 +95,20 @@ Cada prompt tem um **cabeçalho de leitura fora do bloco** (o Pedro lê antes de
 **Por que vale a pena:** <2 ou 3 frases na língua do diretor: que dúvida do usuário do hospital para de chegar em você quando esta seção estiver no ar.>
 ```
 
-O bloco começa por `/pegar-issue <N>` quando o módulo tem Fatia de módulo aberta (é ela que faz o claim e a branch), ou direto por `/manual <modulo>` quando não tem issue. Template:
+O bloco **abre pelo worktree, nunca por um comando que cria branch**. `/pegar-issue` faz `git checkout -b`, e rodado na árvore principal, que é compartilhada, três terminais trocam a branch um debaixo do outro: é exatamente a colisão que esta skill existe para evitar. Por isso o worktree vem primeiro, e o claim, a branch e todo o resto acontecem **dentro** dele. Template:
 
 ```
-/pegar-issue <N>
+Terminal do módulo <modulo>. Antes de tocar em qualquer arquivo, entre num worktree próprio:
 
-Terminal do módulo <modulo>. Abra um worktree próprio antes de qualquer coisa:
-git worktree add ../hospital-issue-<N> -b docs/manual-<modulo>-<N> origin/main
-Trabalhe dentro dele e confira `git branch --show-current` antes de cada commit.
+git worktree add ../hospital-issue-<N> origin/main
 
-Depois do claim, rode `/manual <modulo>` e produza só o que está na lista abaixo.
+Abra a sessão dentro de ../hospital-issue-<N> (ou use o EnterWorktree) e faça tudo lá. NÃO rode git checkout -b na árvore principal: outros terminais estão trabalhando nela agora.
+
+Já dentro do worktree, nesta ordem:
+1. /pegar-issue <N>   (claim atômico e branch, criados aqui dentro)
+2. /manual <modulo>   (produz só o que está na lista abaixo)
+
+Confira `git branch --show-current` antes de cada commit.
 
 Pastas que você pode tocar, e nenhuma outra:
 - docs/manual/src/content/docs/<modulo>/
@@ -116,13 +120,14 @@ A produzir:
 - Páginas de tarefa que faltam: <lista, uma por linha, com o título no infinitivo>
 - Prints: <lista> (entram no Roteiro de prints do módulo, nunca recortados à mão)
 - Vídeos de tarefa: <lista de slugs> (composição em docs/manual/video/<modulo>/<slug>/)
-- Novidades: entrada do PRD #<N> com a data do deploy (history.json), não a de hoje
+- Novidades: entrada do PRD #<N> com a data do deploy (history.json), não a de hoje, E o número no frontmatter do novidades.md (prd: [<N>, ...]), senão o inventário continua acusando a entrada que você acabou de escrever
 - Draft a tirar: <páginas em draft cujo PRD já está em produção>
 
 Regras:
 - Página de coisa que já está no ar sai sem draft; página de PRD que ainda não subiu nasce em draft.
 - NÃO publique: nada de publicar.sh, /manual publicar ou vercel deploy. A publicação é um passo só, meu, depois dos merges.
 - Não toque no tema, no astro.config.mjs, na home, em tools/ nem na pasta de outro módulo. Outro terminal está mexendo neles agora.
+- O site do manual é docs/manual/src/content/docs/. As pastas docs/manual/ouvidoria/ e docs/manual/tecnologia/ são o manual antigo, de página única, e não são suas: não edite nada lá.
 - Antes de abrir o PR, os quatro comandos do checklist da /manual:
   python3 tools/lint_manual.py --dir docs/manual/src/content/docs
   python3 tools/checar_video_manual.py --dir docs/manual
