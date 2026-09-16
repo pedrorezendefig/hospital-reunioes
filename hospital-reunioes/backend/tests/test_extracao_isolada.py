@@ -29,10 +29,10 @@ from __future__ import annotations
 import asyncio
 import io
 import os
-import resource
 import struct
 import subprocess
 import sys
+import threading
 import time
 import zipfile
 import zlib
@@ -147,6 +147,18 @@ def _pdf_ascii85_em_cima_do_flate(megabytes_de_z: int = 17) -> bytes:
 def _pdf_sem_texto() -> bytes:
     """PDF válido cuja página só desenha uma linha. É o caso do escaneado sem OCR."""
     return _montar_pdf(b"0 0 m 100 100 l S", b"")
+
+
+def _pdf_que_faz_barulho(operadores: int = 200_000) -> bytes:
+    """PDF que não gasta memória nem tempo: gasta o CANAL DE ERRO.
+
+    `BMC` com operando sobrando faz o `pdfminer` emitir um aviso por operador
+    (são 36 pontos de log só no `pdfinterp.py`, vários dentro do laço do fluxo de
+    conteúdo). O filho fica pequeno e rápido; quem pagava era o pai, acumulando
+    `stderr` sem teto nenhum. Medido: 51 mil operadores produzem 3,2 MB de aviso
+    em 0,6 s, e quem escreve o arquivo escolhe quantos.
+    """
+    return _montar_pdf(b"0 BMC " * operadores, b"")
 
 
 def _montar_pdf(stream: bytes, filtros: bytes) -> bytes:
@@ -309,10 +321,60 @@ def _plataforma_aplica_rlimit_as() -> bool:
     return sys.platform.startswith("linux")
 
 
-def _rss_do_worker_em_bytes() -> int:
-    """Pico de RSS DESTE processo, que no app é o worker do uvicorn."""
-    bruto = resource.getrusage(resource.RUSAGE_SELF).ru_maxrss
-    return bruto if sys.platform == "darwin" else bruto * 1024
+# O quanto o worker pode crescer numa extracao que vai ser recusada. Medido: o
+# caminho bom fica em poucos MB (o arquivo de entrada, o corpo HTTP e o texto
+# que nao veio). O numero de antes, 200 MB, era frouxo o bastante para o mutante
+# que deixa 30 MB atravessarem passar batido.
+TETO_DO_CRESCIMENTO_DO_WORKER = 12 * 1024 * 1024
+
+
+def _filhos_lendo_documento() -> list[str]:
+    """Processos filhos DESTE processo que ainda estão rodando o extrator.
+
+    Quando o pai mata por prazo ele também colhe o processo, então a lista tem
+    que estar vazia assim que a rota responde. Com o filho vivo (ou zumbi por
+    falta de colheita), o `pgrep` o encontra.
+    """
+    saida = subprocess.run(
+        ["pgrep", "-P", str(os.getpid()), "-f", "transcricao_extractor_filho"],
+        capture_output=True,
+        timeout=10,
+    )
+    return [linha for linha in saida.stdout.decode().split() if linha]
+
+
+def _pico_do_worker_durante(chamada):
+    """Roda `chamada` amostrando o RSS deste processo, e devolve (resultado, pico).
+
+    O pico é medido, não inferido de `ru_maxrss`. A `ru_maxrss` é **marca
+    d'água**: ela nunca desce, então `depois - antes` tende a zero conforme a
+    sessão avança, e a asserção fica mais frouxa quanto mais teste rodou antes
+    dela. Ordem de teste virando rigor de teste é vácuo: o mutante que deixa 30
+    MB atravessarem sobrevive só porque um teste anterior já tinha subido a
+    marca. Aqui a amostragem é do RSS de agora, e o número é o mesmo em qualquer
+    ordem.
+    """
+    de_onde = os.getpid()
+    inicial = extrator._rss_em_bytes(de_onde) or 0
+    pico = inicial
+    parar = threading.Event()
+
+    def vigiar() -> None:
+        nonlocal pico
+        while not parar.is_set():
+            atual = extrator._rss_em_bytes(de_onde)
+            if atual is not None and atual > pico:
+                pico = atual
+            parar.wait(0.05)
+
+    vigia = threading.Thread(target=vigiar, daemon=True)
+    vigia.start()
+    try:
+        resultado = chamada()
+    finally:
+        parar.set()
+        vigia.join(timeout=5)
+    return resultado, pico - inicial
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -330,15 +392,13 @@ class TestOsDoisAtaquesMedidos:
         """
         assert len(pdf_ataque) < 100 * 1024, "o ataque cabe folgado no limite de upload"
 
-        pico_antes = _rss_do_worker_em_bytes()
         t0 = time.monotonic()
-        r = _enviar(client, "orcamento.pdf", pdf_ataque)
+        r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "orcamento.pdf", pdf_ataque))
         decorrido = time.monotonic() - t0
-        crescimento = _rss_do_worker_em_bytes() - pico_antes
 
         assert r.status_code == 422
         assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
-        assert crescimento < 200 * 1024 * 1024, (
+        assert crescimento < TETO_DO_CRESCIMENTO_DO_WORKER, (
             f"o worker cresceu {crescimento // (1024 * 1024)} MB: a extracao nao foi isolada"
         )
         assert decorrido < extrator.PRAZO_DA_EXTRACAO, "o teto de memoria tem que morder antes do prazo"
@@ -348,13 +408,11 @@ class TestOsDoisAtaquesMedidos:
         de zip para desarmar, o orçamento é do processo inteiro."""
         assert len(docx_ataque) < 1024 * 1024, "a bomba de XML cabe em menos de 1 MB no disco"
 
-        pico_antes = _rss_do_worker_em_bytes()
-        r = _enviar(client, "proposta.docx", docx_ataque)
-        crescimento = _rss_do_worker_em_bytes() - pico_antes
+        r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "proposta.docx", docx_ataque))
 
         assert r.status_code == 422
         assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
-        assert crescimento < 200 * 1024 * 1024, (
+        assert crescimento < TETO_DO_CRESCIMENTO_DO_WORKER, (
             f"o worker cresceu {crescimento // (1024 * 1024)} MB: a extracao nao foi isolada"
         )
 
@@ -396,15 +454,48 @@ class TestOsDoisAtaquesMedidos:
         gordo = _docx_de_muito_texto(20)
         assert len(gordo) < 200 * 1024, "o arquivo em si e pequeno, o texto e que e enorme"
 
-        pico_antes = _rss_do_worker_em_bytes()
-        r = _enviar(client, "ata-gorda.docx", gordo)
-        crescimento = _rss_do_worker_em_bytes() - pico_antes
+        r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "ata-gorda.docx", gordo))
 
         assert r.status_code == 422
         assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
-        assert crescimento < 40 * 1024 * 1024, (
+        assert crescimento < TETO_DO_CRESCIMENTO_DO_WORKER, (
             f"o worker cresceu {crescimento // (1024 * 1024)} MB: o texto entrou assim mesmo"
         )
+
+    def test_o_canal_de_erro_do_filho_tambem_tem_teto(self, client):
+        """O terceiro canal de volta, e o único que não tinha número nenhum.
+
+        O `stdout` tinha teto desde o começo. O `stderr` ia por `PIPE` e o pai
+        acumulava tudo com `communicate()` para usar 500 caracteres num log: o
+        filho escrevia e liberava, o pai guardava. É regressão contra a `main`,
+        onde o `logging` do app engolia esses avisos, e é o desfecho que a fatia
+        existe para impedir entrando pela porta de saída.
+        """
+        barulhento = _pdf_que_faz_barulho()
+        assert len(barulhento) < extrator.MAX_BYTES_BINARY, "o ataque passa pelo limite de upload"
+
+        t0 = time.monotonic()
+        r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "ruidoso.pdf", barulhento))
+        decorrido = time.monotonic() - t0
+
+        assert r.status_code == 422
+        assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
+        assert crescimento < TETO_DO_CRESCIMENTO_DO_WORKER, (
+            f"o worker cresceu {crescimento // (1024 * 1024)} MB: o ruido do filho entrou aqui"
+        )
+        assert decorrido < extrator.PRAZO_DA_EXTRACAO, "quem recusou tem que ser o teto do canal"
+
+    def test_ruido_pequeno_nao_morde(self, client):
+        """O par do teste acima: aviso de parser não é motivo de recusa.
+
+        Um PDF que emite alguns milhares de avisos e cabe no teto do canal
+        atravessa e recebe o desfecho pelo CONTEÚDO dele, não pelo barulho.
+        """
+        r = _enviar(client, "pouco-ruidoso.pdf", _pdf_que_faz_barulho(operadores=20_000))
+
+        assert r.status_code == 422
+        assert r.json()["detail"] != extrator.MENSAGEM_GRANDE_DEMAIS
+        assert "escaneado" in r.json()["detail"], "o desfecho tem que vir do conteudo"
 
     def test_worker_continua_atendendo_depois_dos_dois_ataques(self, client, pdf_ataque, docx_ataque):
         """O ponto da fatia em uma frase: quem morre é o filho.
@@ -532,13 +623,19 @@ class TestAsDuasMortes:
         miniatura fiel do ataque que queima CPU dentro do orçamento de memória.
         """
         monkeypatch.setattr(extrator, "PRAZO_DA_EXTRACAO", 1.0)
+        assert _filhos_lendo_documento() == [], "sobrou filho de um teste anterior"
 
         t0 = time.monotonic()
         r = _enviar(client, "ata-longa.pdf", pdf_honesto)
+        sobreviventes = _filhos_lendo_documento()
         decorrido = time.monotonic() - t0
 
         assert r.status_code == 422
         assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
+        # A asercao que importa, e a que faltava: o PROCESSO morreu. Soltar a
+        # requisicao e deixar o filho vivo passava a suite inteira, e e
+        # exatamente o que o `asyncio.wait_for` recusado no #751 entregaria.
+        assert sobreviventes == [], f"a requisicao voltou mas o filho continua vivo: {sobreviventes}"
         assert decorrido < 15, f"a rota levou {decorrido:.1f}s: o filho nao foi morto no prazo"
 
     def test_o_vigia_de_rss_mata_sozinho_com_o_enderecamento_liberado(self, client, monkeypatch, docx_ataque):
@@ -767,6 +864,77 @@ class TestAsGuardasDoIsolamento:
                 f"o {nome} honesto devolve {len(texto) // 1024} KB contra um teto de "
                 f"{extrator.TETO_DO_TEXTO_DEVOLVIDO // (1024 * 1024)} MB: folga pequena demais"
             )
+
+    def test_o_filho_nao_recebe_segredo_nenhum(self, client, monkeypatch, tmp_path):
+        """O processo que abre o arquivo hostil não vê as chaves do hospital.
+
+        O agravante não é teórico: o que o filho escreve no `stdout` **vira o
+        texto extraído e aparece na tela** de quem subiu o arquivo. Um parser
+        comprometido exfiltraria sem precisar de rede nenhuma.
+
+        Aqui o programa do filho é trocado por um que devolve o próprio ambiente,
+        e as chaves são plantadas no ambiente do PAI antes: sem isso o teste
+        estaria conferindo a ausência de algo que nunca esteve lá.
+        """
+        segredos = (
+            "SUPABASE_SERVICE_ROLE_KEY",
+            "OPENROUTER_API_KEY",
+            "CLICKSIGN_API_KEY",
+            "RESEND_API_KEY",
+            "GITHUB_INTEGRACAO_TOKEN",
+            "SMTP_PASSWORD",
+        )
+        for nome in segredos:
+            monkeypatch.setenv(nome, f"valor-plantado-em-{nome}")
+
+        dedo_duro = tmp_path / "filho_que_devolve_o_ambiente.py"
+        dedo_duro.write_text(
+            "import os, sys\nsys.stdout.buffer.write(b'OK\\n' + ' '.join(sorted(os.environ)).encode())\n"
+        )
+        monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(dedo_duro))
+
+        r = _enviar(client, "ata.docx", _docx_honesto(50))
+
+        assert r.status_code == 200, r.text
+        recebidas = set(r.json()["texto"].split())
+        assert recebidas & set(segredos) == set(), f"o filho recebeu {recebidas & set(segredos)}"
+        assert "PATH" in recebidas, "o minimo que o interpretador precisa continua indo"
+
+    def test_a_extracao_nao_disputa_thread_com_o_resto_do_app(self, client, monkeypatch):
+        """A leitura roda no executor DELA, não no que o `/health` usa.
+
+        O `/health` tem timeout de 2 s no executor default. Com a extração lá,
+        uma rajada de upload prendia as threads, o `/health` devolvia 503 e o
+        `HEALTHCHECK` do Dockerfile declarava o container doente: a guarda que
+        existe para não derrubar o app o derrubava por outra porta.
+
+        O que se observa é a thread onde a extração de fato correu, pela rota de
+        verdade. `to_thread` a poria numa thread `asyncio_*`, do executor de
+        todo mundo.
+        """
+        capturado: dict[str, str] = {}
+
+        def _espiar_o_nome_da_thread(filename: str, file_bytes: bytes):
+            capturado["thread"] = threading.current_thread().name
+            return "texto qualquer para a rota devolver", ".docx"
+
+        monkeypatch.setattr(extrator, "extrair_texto", _espiar_o_nome_da_thread)
+
+        r = _enviar(client, "ata.docx", b"conteudo")
+
+        assert r.status_code == 200, r.text
+        assert capturado["thread"].startswith("extracao"), (
+            f"a extracao correu em {capturado['thread']}, que e o executor compartilhado"
+        )
+
+    def test_o_executor_cabe_mais_gente_do_que_as_vagas(self):
+        """Quem passa das vagas tem que caber no executor para OUVIR a recusa.
+
+        Um executor do tamanho exato das vagas empurraria a espera para a fila
+        interna dele, que não tem prazo nem mensagem: a pessoa ficaria na
+        ampulheta sem nunca saber por quê.
+        """
+        assert extrator._EXECUTOR_DE_EXTRACAO._max_workers > extrator.VAGAS_DE_EXTRACAO
 
     def test_o_teto_de_rss_fica_abaixo_do_limite_de_enderecamento(self):
         """Quem decide primeiro no caso normal é o vigia de RSS.

@@ -39,6 +39,10 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/pops/{pop_id}/elaboracao", tags=["pops"])
 
+# Quantos Materiais de referência cabem numa requisição. Dez é o mesmo número
+# que o modal de transcrição das Reuniões já pratica na tela.
+MAX_MATERIAIS_POR_ENVIO = 10
+
 
 def _carregar_contexto(pop_id: str, actor: dict, supabase) -> tuple[dict, dict, dict]:
     """POP + Setor + Versão corrente, com as guardas comuns da elaboração:
@@ -230,7 +234,9 @@ async def persistir_fluxograma_svg(
 
 
 @router.post("/materiais", response_model=PopMateriaisUploadResponse)
+@limiter.limit("5/minute")
 async def enviar_materiais(
+    request: Request,
     pop_id: str,
     files: list[UploadFile] = File(...),
     actor: dict = Depends(require_perfil_pop(*PERFIS_POP)),
@@ -245,6 +251,17 @@ async def enviar_materiais(
     recusado (formato/tamanho) volta em `erros` com a mensagem do extractor —
     sem derrubar os válidos nem a tela.
     """
+    # A lista nao tinha teto, e a extracao passou a ser recurso compartilhado
+    # (issue #758): cada arquivo aqui pega uma das DUAS vagas globais, e uma
+    # requisicao com trinta arquivos compraria dezenas de minutos de ocupacao,
+    # parando junto a leitura de documento das Reunioes e da Ata Guiada. O teto
+    # e por requisicao; o `@limiter.limit` acima e por minuto.
+    if len(files) > MAX_MATERIAIS_POR_ENVIO:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Envie no máximo {MAX_MATERIAIS_POR_ENVIO} materiais por vez.",
+        )
+
     _pop, _setor, versao = _carregar_contexto(pop_id, actor, supabase)
     try:
         pops_dominio.exigir_estado_de_elaboracao(versao)

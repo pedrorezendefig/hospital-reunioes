@@ -465,6 +465,47 @@ class TestUploadMateriais:
         assert "Formato nao suportado" in body["erros"][0]["detail"]
         assert sb.tables["pops_materiais_referencia"] == []
 
+    def test_upload_com_arquivos_demais_e_recusado_antes_de_ler_qualquer_um(self):
+        """A lista não tinha teto, e a extração virou recurso compartilhado (#758).
+
+        Cada arquivo aqui pega uma das duas vagas globais de extração, então uma
+        requisição com dezenas de arquivos compraria dezenas de minutos de
+        ocupação e pararia junto a leitura de documento das Reuniões e da Ata
+        Guiada. A recusa é da requisição inteira, antes de ler o primeiro: ler
+        metade e recusar o resto já teria gasto a vaga.
+        """
+        from app.routers.pops.elaboracao import MAX_MATERIAIS_POR_ENVIO
+
+        sb = _sb()
+        client = _client_para(ELABORADOR, sb)
+        demais = [
+            (f"material-{i}.txt", b"Conteudo de referencia do procedimento.", "text/plain")
+            for i in range(MAX_MATERIAIS_POR_ENVIO + 1)
+        ]
+
+        res = _upload(client, *demais)
+
+        assert res.status_code == 400
+        assert str(MAX_MATERIAIS_POR_ENVIO) in res.json()["detail"]
+        assert sb.tables["pops_materiais_referencia"] == [], "nenhum arquivo podia ter sido lido"
+
+    def test_upload_no_teto_de_arquivos_continua_passando(self):
+        """O par: o teto novo não pode morder quem estava dentro dele."""
+        from app.routers.pops.elaboracao import MAX_MATERIAIS_POR_ENVIO
+
+        sb = _sb()
+        client = _client_para(ELABORADOR, sb)
+        no_limite = [
+            (f"material-{i}.txt", b"Conteudo de referencia do procedimento.", "text/plain")
+            for i in range(MAX_MATERIAIS_POR_ENVIO)
+        ]
+
+        res = _upload(client, *no_limite)
+
+        assert res.status_code == 200
+        assert res.json()["erros"] == []
+        assert len(sb.tables["pops_materiais_referencia"]) == MAX_MATERIAIS_POR_ENVIO
+
     def test_upload_tamanho_excedido_erro_claro(self):
         """CA: tamanho excedido → erro claro (limite do extractor: 5 MB para
         texto), sem persistir."""

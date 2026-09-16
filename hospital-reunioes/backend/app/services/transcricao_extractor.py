@@ -37,6 +37,7 @@ import sys
 import tempfile
 import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from app.services import transcricao_extractor_filho as filho
 
@@ -100,6 +101,24 @@ LIMITE_DE_ENDERECAMENTO = 1280 * 1024 * 1024
 # transcricao de reuniao nem material de POP alcanca.
 TETO_DO_TEXTO_DEVOLVIDO = 16 * 1024 * 1024
 
+# Todo canal de volta tem teto, e nao so o que devolve texto.
+#
+# O `stdout` ja tinha o numero acima, conferido pelo filho antes de escrever;
+# estes dois sao o teto do CANAL, conferido pelo vigia no tamanho do arquivo, e
+# valem inclusive para quem escreve no descritor por fora do Python.
+#
+# O `stderr` nao tinha numero nenhum, e isso era regressao contra a `main`: la o
+# `logging` do app engolia os avisos do `pdfminer` (36 pontos so no
+# `pdfinterp.py`, varios por operador dentro do laco do fluxo de conteudo), e
+# aqui eles viravam bytes acumulados no worker. Medido: um `.pdf` de 306 KB com
+# `"0 BMC "` repetido produz centenas de MB de aviso, com o filho parado.
+#
+# 4 MB de aviso e muito mais do que qualquer diagnostico util (o log guarda o
+# rabo, nao o todo) e muito menos do que faz diferenca na memoria do worker.
+TETO_DA_SAIDA_DO_FILHO = TETO_DO_TEXTO_DEVOLVIDO + 4096
+TETO_DO_ERRO_DO_FILHO = 4 * 1024 * 1024
+RABO_DO_ERRO_NO_LOG = 500
+
 # Teto por filho nao e teto da maquina: N uploads simultaneos sao N filhos. O
 # `@limiter.limit` das rotas conta requisicoes POR MINUTO, e nao ao mesmo tempo,
 # entao dez uploads disparados juntos passam pelos "5/minute" e multiplicariam
@@ -111,6 +130,24 @@ TETO_DO_TEXTO_DEVOLVIDO = 16 * 1024 * 1024
 # ouve "estou lendo outros documentos" se a fila nao andar dentro do prazo.
 VAGAS_DE_EXTRACAO = 2
 _vagas = threading.BoundedSemaphore(VAGAS_DE_EXTRACAO)
+
+# Executor PROPRIO, para a extracao nao disputar thread com o resto do app.
+#
+# O `/health` (`app/routers/health.py`) roda no executor default com timeout de
+# 2 s. Com a extracao tambem la, uma rajada de upload prendia as threads, o
+# `/health` estourava, devolvia 503 e o `HEALTHCHECK` do Dockerfile declarava o
+# container doente: a guarda que existe para nao derrubar o app o derrubava por
+# outra porta.
+#
+# Sao mais threads que vagas de proposito. A thread que passa das vagas fica
+# PARADA num semaforo, sem queimar CPU e por no maximo o prazo da fila, e e ela
+# que entrega a `MENSAGEM_FILA_CHEIA`. Um executor do tamanho exato das vagas
+# empurraria essa espera para a fila interna do executor, que nao tem prazo nem
+# mensagem: a pessoa ficaria na ampulheta sem nunca saber por que.
+_EXECUTOR_DE_EXTRACAO = ThreadPoolExecutor(
+    max_workers=VAGAS_DE_EXTRACAO * 8,
+    thread_name_prefix="extracao",
+)
 
 # Uma vaga so pode vagar quando a leitura em curso termina, e ela termina no
 # maximo no `PRAZO_DA_EXTRACAO`. Esperar MENOS que isso recusa gente que teria
@@ -166,86 +203,143 @@ def _rss_em_bytes(pid: int) -> int | None:
         return None
 
 
-def _acompanhar(proc: subprocess.Popen) -> tuple[str | None, bytes, bytes]:
-    """Espera o filho vigiando memoria e relogio.
+def _tamanho(caminho: str) -> int:
+    try:
+        return os.path.getsize(caminho)
+    except OSError:
+        return 0
 
-    Devolve (motivo_da_morte, stdout, stderr). `motivo_da_morte` e None quando o
-    filho terminou sozinho.
+
+def _ler_com_teto(caminho: str, teto: int) -> bytes:
+    """Le no maximo `teto` bytes. O `read()` seco aqui seria o furo de novo."""
+    try:
+        with open(caminho, "rb") as f:
+            return f.read(teto)
+    except OSError:
+        return b""
+
+
+def _ler_cauda(caminho: str, quantos: int) -> str:
+    """O fim do arquivo de erro, que e onde esta a falha que interessa."""
+    try:
+        with open(caminho, "rb") as f:
+            f.seek(max(0, _tamanho(caminho) - quantos))
+            return f.read(quantos).decode("utf-8", errors="replace")
+    except OSError:
+        return ""
+
+
+def _acompanhar(proc: subprocess.Popen, saida: str, erro: str) -> str | None:
+    """Espera o filho vigiando memoria, relogio e os DOIS canais de volta.
+
+    Devolve o motivo da morte, ou None quando o filho terminou sozinho.
+
+    O vigia mede o tamanho dos arquivos porque e ai que estao os canais: o que
+    o filho escreve vai para disco, nao para a memoria deste processo. Isso e o
+    que impede que o pai pague pelo que o filho produz. Um `communicate()` em
+    `PIPE` faz o contrario: acumula tudo aqui dentro, sem teto, e foi assim que
+    um PDF de 306 KB com aviso por operador fez o worker crescer 522 MB enquanto
+    o filho ficava parado em 239 MB.
     """
     limite_do_relogio = time.monotonic() + PRAZO_DA_EXTRACAO
     while True:
         try:
-            saida, erro = proc.communicate(timeout=INTERVALO_DE_VIGIA)
-            return None, saida, erro
+            proc.wait(timeout=INTERVALO_DE_VIGIA)
+            return None
         except subprocess.TimeoutExpired:
             pass
 
         rss = _rss_em_bytes(proc.pid)
         if rss is not None and rss > TETO_DE_MEMORIA_DO_FILHO:
             return _matar(proc, "memoria", rss)
+        if _tamanho(saida) > TETO_DA_SAIDA_DO_FILHO:
+            return _matar(proc, "saida", rss)
+        if _tamanho(erro) > TETO_DO_ERRO_DO_FILHO:
+            return _matar(proc, "ruido", rss)
         if time.monotonic() >= limite_do_relogio:
             return _matar(proc, "tempo", rss)
 
 
-def _matar(proc: subprocess.Popen, motivo: str, rss: int | None) -> tuple[str, bytes, bytes]:
+def _matar(proc: subprocess.Popen, motivo: str, rss: int | None) -> str:
     proc.kill()
-    saida, erro = proc.communicate()
+    proc.wait()
     logger.warning(
         "Extracao isolada morta por %s (pid %s, RSS %s MB)",
         motivo,
         proc.pid,
         round(rss / (1024 * 1024)) if rss is not None else "?",
     )
-    return motivo, saida, erro
+    return motivo
+
+
+def _ambiente_do_filho() -> dict[str, str]:
+    """O ambiente minimo que o parser precisa, e nada alem disso.
+
+    O filho abre o arquivo hostil. Herdar `os.environ` inteiro entrega a ele
+    `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`, `CLICKSIGN_API_KEY`,
+    `RESEND_API_KEY` e companhia, e o canal de volta dele vira TEXTO EXTRAIDO na
+    tela de quem subiu o arquivo: exfiltrar nao precisaria nem de rede. O parser
+    nao usa nenhuma dessas chaves.
+
+    A lista e de permissao, e nao de bloqueio, porque bloqueio esquece a chave
+    que nasce amanha.
+    """
+    permitidas = ("PATH", "LANG", "LC_ALL", "LC_CTYPE", "TMPDIR", "TEMP", "TMP")
+    ambiente = {nome: os.environ[nome] for nome in permitidas if nome in os.environ}
+    ambiente.setdefault("PATH", "/usr/local/bin:/usr/bin:/bin")
+    return ambiente
 
 
 def _extrair_isolado(ext: str, file_bytes: bytes) -> str:
-    """Le o arquivo num processo separado, com teto de memoria e prazo.
+    """Le o arquivo num processo separado, com teto de memoria, prazo e canais.
 
-    O arquivo vai por disco e nao por `stdin` de proposito: com os dois lados
-    escrevendo em pipe (o pai mandando 15 MB, o filho devolvendo o texto) um
-    trava esperando o outro, e o vigia nunca chegaria a rodar.
+    Tudo vai por disco e nao por `pipe` de proposito. Na entrada, porque com os
+    dois lados escrevendo em pipe um trava esperando o outro e o vigia nunca
+    rodaria. Na volta, porque `pipe` mais `communicate()` significa acumular no
+    worker, sem teto, exatamente o que a fatia existe para impedir.
     """
     if not _vagas.acquire(timeout=PRAZO_DA_FILA):
         logger.warning("Extracao isolada sem vaga apos %ss lendo %s", PRAZO_DA_FILA, ext)
         raise ValueError(MENSAGEM_FILA_CHEIA)
 
-    caminho: str | None = None
     try:
-        with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
-            tmp.write(file_bytes)
-            caminho = tmp.name
+        with tempfile.TemporaryDirectory(prefix="extracao-") as pasta:
+            entrada = os.path.join(pasta, f"entrada{ext}")
+            saida = os.path.join(pasta, "saida")
+            erro = os.path.join(pasta, "erro")
+            with open(entrada, "wb") as f:
+                f.write(file_bytes)
 
-        proc = subprocess.Popen(
-            # `-P` tira o diretorio do script do `sys.path`. Sem ele, o filho
-            # nasce com `app/services/` na frente do site-packages, e os
-            # modulos do projeto disputariam nome com qualquer import da cadeia
-            # do parser. Nao ha colisao hoje; a flag e para nao haver amanha.
-            [
-                sys.executable,
-                "-P",
-                _CAMINHO_DO_FILHO,
-                ext,
-                caminho,
-                str(LIMITE_DE_ENDERECAMENTO),
-                str(TETO_DO_TEXTO_DEVOLVIDO),
-            ],
-            stdin=subprocess.DEVNULL,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-        )
-        motivo, saida, erro = _acompanhar(proc)
+            with open(saida, "wb") as f_saida, open(erro, "wb") as f_erro:
+                proc = subprocess.Popen(
+                    # `-P` tira o diretorio do script do `sys.path`. Sem ele, o
+                    # filho nasce com `app/services/` na frente do site-packages,
+                    # e os modulos do projeto disputariam nome com qualquer
+                    # import da cadeia do parser.
+                    [
+                        sys.executable,
+                        "-P",
+                        _CAMINHO_DO_FILHO,
+                        ext,
+                        entrada,
+                        str(LIMITE_DE_ENDERECAMENTO),
+                        str(TETO_DO_TEXTO_DEVOLVIDO),
+                    ],
+                    stdin=subprocess.DEVNULL,
+                    stdout=f_saida,
+                    stderr=f_erro,
+                    env=_ambiente_do_filho(),
+                )
+                motivo = _acompanhar(proc, saida, erro)
+
+            bruto = b"" if motivo is not None else _ler_com_teto(saida, TETO_DA_SAIDA_DO_FILHO)
+            diagnostico = _ler_cauda(erro, RABO_DO_ERRO_NO_LOG)
     finally:
         # A gravacao do temporario fica DENTRO do try: com disco cheio ela
         # levanta, e uma vaga que nao volta e pior que o erro que a prendeu.
         # Duas vagas presas param a leitura de documento para sempre, sem log
         # novo e sem jeito de reabrir a nao ser reiniciando o container.
         _vagas.release()
-        if caminho is not None:
-            try:
-                os.unlink(caminho)
-            except OSError:
-                pass
 
     if motivo is not None:
         raise ValueError(MENSAGEM_GRANDE_DEMAIS)
@@ -268,7 +362,7 @@ def _extrair_isolado(ext: str, file_bytes: bytes) -> str:
         logger.warning("Extracao isolada morta pelo sinal %s lendo %s", -proc.returncode, ext)
         raise ValueError(MENSAGEM_GRANDE_DEMAIS)
 
-    cabecalho, _, corpo = saida.partition(b"\n")
+    cabecalho, _, corpo = bruto.partition(b"\n")
     status = cabecalho.decode("ascii", errors="replace")
 
     if proc.returncode == 0 and status == filho.STATUS_OK:
@@ -281,7 +375,7 @@ def _extrair_isolado(ext: str, file_bytes: bytes) -> str:
         "Extracao isolada de %s falhou (codigo %s): %s",
         ext,
         proc.returncode,
-        erro.decode("utf-8", errors="replace")[-500:],
+        diagnostico,
     )
     raise ValueError(f"Nao foi possivel ler o arquivo {ext}. Verifique se nao esta corrompido.")
 
@@ -334,14 +428,22 @@ def extrair_texto(filename: str, file_bytes: bytes) -> tuple[str, str]:
 
 
 async def extrair_texto_async(filename: str, file_bytes: bytes) -> tuple[str, str]:
-    """Mesma extracao, sem prender o event loop do unico worker.
+    """Mesma extracao, sem prender o event loop nem o executor de todo mundo.
 
     As rotas que chamam isto sao `async def`, e ate a #758 a leitura acontecia
     dentro do loop: um PDF de 25 segundos congelava a aplicacao inteira mesmo
     sem estourar memoria. O timeout tinha sido recusado no PR #751 com razao,
     porque `asyncio.wait_for` sobre `to_thread` nao cancela a thread e ela segue
     queimando CPU no executor compartilhado. Aqui a thread nao queima nada: ela
-    espera um `pipe` e, no prazo, MATA o processo que queima. E por isso que
-    mandar para thread so ficou seguro depois do isolamento.
+    espera o filho e, no prazo, MATA o processo que queima.
+
+    O `to_thread`, porem, usa o executor DEFAULT, que e o mesmo do `/health`
+    (`app/routers/health.py`, com timeout de 2 s). Uma rajada de upload prendia
+    threads de la e o `/health` estourava, devolvendo 503 e fazendo o
+    `HEALTHCHECK` do Dockerfile declarar o container doente: a guarda que existe
+    para nao derrubar o app derrubava o app por outra porta. Por isso a extracao
+    tem executor PROPRIO, do tamanho exato das vagas, e ninguem mais divide
+    thread com ela.
     """
-    return await asyncio.to_thread(extrair_texto, filename, file_bytes)
+    laco = asyncio.get_running_loop()
+    return await laco.run_in_executor(_EXECUTOR_DE_EXTRACAO, extrair_texto, filename, file_bytes)
