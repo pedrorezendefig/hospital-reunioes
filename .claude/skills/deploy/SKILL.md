@@ -557,6 +557,7 @@ Inserir nova entrada no início de `deploys[]` e truncar a 50:
   "subject": "<msg humana em pt-BR sem prefixo conventional>",
   "raw_subject": "<msg de commit original>",
   "scope": ["<service.id>", ...],
+  "prds": [<números dos PRDs que subiram neste deploy>],
   "result": "healthy|rolled-back|failed",
   "duration_seconds": <int>,
   "services_touched": [...],
@@ -568,6 +569,20 @@ Inserir nova entrada no início de `deploys[]` e truncar a 50:
 ```
 
 `subject` é versão humanizada; se inferência ficar pobre, usar `raw_subject` em ambos.
+
+**`prds` é campo, não prosa.** Antes de escrever a entrada, levante os PRDs que subiram neste deploy: cada PR mergeado desde o deploy anterior fecha uma issue, e a issue diz o pai dela na seção `## Pai`.
+
+```bash
+REPO=$(gh repo view --json nameWithOwner -q .nameWithOwner)
+ANTERIOR=$(python3 -c "import json;print(json.load(open('docs/spec/deploy/history.json'))['deploys'][0]['sha'])")
+for PR in $(git log --format=%s "$ANTERIOR"..HEAD | grep -oE '#[0-9]+' | tr -d '#' | sort -u); do
+  for ISSUE in $(gh pr view "$PR" --json closingIssuesReferences --jq '.closingIssuesReferences[].number' 2>/dev/null); do
+    gh issue view "$ISSUE" --json body --jq .body | sed -n '/^## Pai/,/^## /p' | grep -oE '#[0-9]+' | head -1
+  done
+done | tr -d '#' | sort -un
+```
+
+Lista vazia (fatia avulsa, deploy só de bookkeeping) vira `"prds": []`, e o Passo 9.6 não faz nada. O campo existe porque o número do PRD só vivia na prosa do `notes`: quem precisa dele (o Passo 9.6 e o inventário da `/montar-manual`) tinha que adivinhar por leitura. Continue citando o PRD no `notes` em prosa; o campo é o que máquina lê.
 
 #### 9.3 — (removido) Chronicles aposentados
 
@@ -629,6 +644,26 @@ Reportar ao usuário:
 ```
 CHANGELOG: <REPO_ROOT>/docs/spec/CHANGELOG.md (entrada nova no topo)
 ```
+
+#### 9.6 Manual do usuário: tirar o draft do que subiu
+
+O Manual só mostra o que está no ar: página de funcionalidade que ainda não subiu nasce em `draft: true` e some do site e da busca (ADR 0057, decisão 5). Quem apaga essa marca é este passo, com os `prds` que o 9.2 levantou:
+
+```bash
+for PRD in $(python3 -c "import json;print(*json.load(open('docs/spec/deploy/history.json'))['deploys'][0].get('prds', []))"); do
+  python3 tools/tirar_draft_manual.py --prd "$PRD"
+done
+```
+
+- **Sem página em draft daquele PRD, o passo é silencioso**: o script diz "nenhuma página em draft do PRD #N", não escreve nada e sai 0. É o caso normal (a maioria dos deploys não tem Fatia de manual).
+- **Mudou alguma página**, entra tudo no **mesmo commit e no mesmo push do bookkeeping** (9.1 a 9.5), e só então o site republica:
+
+  ```bash
+  bash docs/manual/publicar.sh
+  ```
+
+  O `publicar.sh` já roda lint, build, conferidor de draft, reencode dos MP4 e a trava de 90 MB; se ele parar, a página fica publicada no git e fora do ar, e o conserto é o erro que ele mostra (`.claude/skills/manual/references/publicar.md`). Não pule o passo com `--pular-build`.
+- Publicar **não** roda em `rollback`: voltar código não esconde página que já foi lida.
 
 ---
 
@@ -718,3 +753,4 @@ Usada no gate de migrations do ship (SAFE | DESTRUCTIVE). Padrões em `reference
 ## Relação com outras skills
 
 - Hooks PostToolUse não disparam esta skill — invocação sempre manual.
+- `/manual`: o Passo 9.6 tira o `draft` das páginas dos PRDs que subiram e chama o `docs/manual/publicar.sh`. É o único caminho automático de publicação do Manual; o `/manual publicar` é o mesmo script, quando o humano quer republicar sem deploy.

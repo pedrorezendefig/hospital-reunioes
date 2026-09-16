@@ -15,14 +15,24 @@ on:
       - 'tools/checar_build_manual.py'
       - 'tools/checar_video_manual.py'
       - 'tools/inventario_manual.py'
+      - 'tools/tirar_draft_manual.py'
       - 'tools/test_lint_manual.py'
       - 'tools/test_checar_build_manual.py'
       - 'tools/test_checar_video_manual.py'
       - 'tools/test_publicar_manual.py'
       - 'tools/test_inventario_manual.py'
       - 'tools/test_skill_montar_manual.py'
+      - 'tools/test_tirar_draft_manual.py'
+      - 'tools/test_skill_cadeia_manual.py'
+      - 'tools/test_setup_maquina_manual.py'
       - '.claude/skills/manual/**'
       - '.claude/skills/montar-manual/**'
+      - '.claude/skills/to-prd/**'
+      - '.claude/skills/to-issues/**'
+      - '.claude/skills/onda/**'
+      - '.claude/skills/deploy/**'
+      - '.claude/skills/setup-maquina/**'
+      - '.claude/skills/ask-pedro/**'
       - '.github/workflows/manual.yml'
   pull_request:
     branches: [main]
@@ -32,17 +42,31 @@ on:
       - 'tools/checar_build_manual.py'
       - 'tools/checar_video_manual.py'
       - 'tools/inventario_manual.py'
+      - 'tools/tirar_draft_manual.py'
       - 'tools/test_lint_manual.py'
       - 'tools/test_checar_build_manual.py'
       - 'tools/test_checar_video_manual.py'
       - 'tools/test_publicar_manual.py'
       - 'tools/test_inventario_manual.py'
       - 'tools/test_skill_montar_manual.py'
+      - 'tools/test_tirar_draft_manual.py'
+      - 'tools/test_skill_cadeia_manual.py'
+      - 'tools/test_setup_maquina_manual.py'
       # `**` e não só o SKILL.md: as references citam os conferidores de
       # tools/ pelo nome, e renomear um sem disparar o workflow deixaria a
       # receita apontando para script que não existe mais.
       - '.claude/skills/manual/**'
       - '.claude/skills/montar-manual/**'
+      # A cadeia que passou a conhecer o Manual (issue #735): o detector prova
+      # que a seção do PRD, o modo da /manual e o script de tools/ que elas
+      # mandam rodar existem. Sem o gatilho, a prova não roda justo no PR que
+      # renomeia um deles.
+      - '.claude/skills/to-prd/**'
+      - '.claude/skills/to-issues/**'
+      - '.claude/skills/onda/**'
+      - '.claude/skills/deploy/**'
+      - '.claude/skills/setup-maquina/**'
+      - '.claude/skills/ask-pedro/**'
       - '.github/workflows/manual.yml'
 
 jobs:
@@ -84,7 +108,7 @@ jobs:
       - name: Testes do lint, do conferidor e da publicação
         run: |
           pip install pytest
-          python -m pytest tools/test_lint_manual.py tools/test_checar_build_manual.py tools/test_checar_video_manual.py tools/test_publicar_manual.py tools/test_inventario_manual.py tools/test_skill_montar_manual.py -q
+          python -m pytest tools/test_lint_manual.py tools/test_checar_build_manual.py tools/test_checar_video_manual.py tools/test_publicar_manual.py tools/test_inventario_manual.py tools/test_skill_montar_manual.py tools/test_tirar_draft_manual.py tools/test_skill_cadeia_manual.py tools/test_setup_maquina_manual.py -q
 
       - name: Lint do manual
         run: python3 tools/lint_manual.py --dir docs/manual/src/content/docs

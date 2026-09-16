@@ -33,7 +33,7 @@ Tudo que está na árvore é código, doc viva, decisão ou material de comunica
 | `hospital-reunioes/` | O app | Ver seção abaixo | `backend/`, `frontend/`, `supabase/` | Onde o código mora |
 | `local/` | **Fora do git.** Insumo humano | PDFs, transcrições e dumps não podem ir para o GitHub | `insumos/<assunto>/` que cada máquina cria | Colocar aqui o que o hospital manda |
 | `tokens/` | Tokens da **máquina**, não do app | O `/deploy` e o `/ship` falam com o Coolify | `.env.example` (versionado) e `.env` (fora do git, permissão 600) | Preencher uma vez por máquina |
-| `tools/` | Ferramentas de repo | Gate de ADR no CI, painel local e exportação do fluxo | `lint_adr.py`; `workflow-dashboard/` (painel read-only das issues e do deploy); `instalar-fluxo/` (roteiro para instalar o fluxo em outro projeto, ADR 0053) | `python3 tools/workflow-dashboard/serve.py`; o prompt de 3 linhas está em `tools/instalar-fluxo/README.md` |
+| `tools/` | Ferramentas de repo | Gates de ADR e do Manual no CI, painel local e exportação do fluxo | `lint_adr.py`; os conferidores do Manual (`lint_manual.py`, `inventario_manual.py`, `checar_build_manual.py`, `checar_video_manual.py`, `tirar_draft_manual.py`), com o teste de cada um ao lado; `workflow-dashboard/` (painel read-only das issues e do deploy); `instalar-fluxo/` (roteiro para instalar o fluxo em outro projeto, ADR 0053) | `python3 tools/workflow-dashboard/serve.py`; o prompt de 3 linhas está em `tools/instalar-fluxo/README.md` |
 
 ## `docs/`
 
@@ -47,7 +47,7 @@ Tudo que está na árvore é código, doc viva, decisão ou material de comunica
 | `spec/CHANGELOG.md`, `spec/VERSIONING.md` | Linha do tempo dos deploys e regra de versão | Cada ship tem entrada | Versão, data, PR, ADRs | Ver o que subiu quando |
 | `pops/` | Glossário do contexto POPs | Segundo contexto de domínio (ADR 0007) | `CONTEXT.md` e `materiais-reais/` (POPs reais como referência) | Trabalhando em POPs |
 | `comunicacao/` | Material para o diretor e o usuário funcional | Vídeo e página nascem juntos por PRD (ADR 0045) | `<contexto>/<PRD>-<slug>/video/` (composição) e `index.html` (página); `_assets/` (uma fonte, um logo) | `/divulgar <PRD>`. MP4 fica fora do git |
-| `manual/` | Manual do usuário por módulo | Publicado na Vercel para o time interno | `ouvidoria/index.html`, `img/`, `README.md` (como publicar) | Ao entregar módulo novo |
+| `manual/` | O site do Manual do usuário | Quem trava numa tela abre a página da tarefa, vê um vídeo curto e faz (ADR 0057) | Site Astro Starlight: `src/content/docs/<modulo>/` (as páginas), `src/assets/<modulo>/` (prints), `video/<modulo>/` (composições dos Vídeos de tarefa), `prints/<modulo>.py` (Roteiro de prints), `publicar.sh`. As pastas `ouvidoria/` e `tecnologia/` são o manual antigo, de página única, até a migração | `/manual <módulo>` escreve a seção, `/manual publicar` publica; o `/deploy ship` republica sozinho quando a funcionalidade sobe |
 | `ARQUITETURA.md` | Visão de arquitetura | Um lugar para o desenho geral | Os 3 contextos, fluxos, blocos gerados pelo `/snapshot` | Primeira leitura técnica |
 
 ## `hospital-reunioes/` (o app)
@@ -71,7 +71,7 @@ Na sua máquina só existem tokens da máquina (`tokens/.env`: Coolify) e três 
 
 ## O fluxo, em uma linha por etapa
 
-1. Ideia: `/grill-with-docs` afia contra `CONTEXT.md` e ADRs. 2. `/to-prd` e `/to-issues` viram issues. 3. `/pegar-issue N` faz o claim e abre a branch. 4. `/tdd` escreve o teste primeiro. 5. `/ship` abre o PR, roda os 3 gates e pede o OK de merge. 6. O merge dispara o build no Coolify; `/deploy ship` acompanha e registra em `docs/spec/deploy/`. 7. Testa em produção. 8. `/divulgar` conta a entrega ao diretor.
+1. Ideia: `/grill-with-docs` afia contra `CONTEXT.md` e ADRs. 2. `/to-prd` e `/to-issues` viram issues. 3. `/pegar-issue N` faz o claim e abre a branch. 4. `/tdd` escreve o teste primeiro. 5. `/ship` abre o PR, roda os 3 gates e pede o OK de merge. 6. O merge dispara o build no Coolify; `/deploy ship` acompanha e registra em `docs/spec/deploy/`. 7. Testa em produção. 8. `/divulgar` conta a entrega ao diretor. 9. A Fatia de manual roda `/manual #PRD` e escreve a parte do Manual do usuário que a entrega criou; ela entra no ar no deploy seguinte, sem passo manual.
 
 ## Cobertura (o `/setup-maquina` confere esta lista)
 

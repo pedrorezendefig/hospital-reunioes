@@ -95,6 +95,7 @@ Quando todos os `N` do lote viraram PR verde (ou baixa), **pare** e apresente o 
 
 - Tabela: issue · PR# · status (verde / ready-for-human) · fatia.
 - Para os verdes, os PRs prontos para merge.
+- **Fatia de manual** (`docs: manual do PRD #N`, ADR 0057): o sub-agente roda `/manual #<PRD>` no lugar do `/tdd` e **para no draft de cada Vídeo de tarefa**. O caminho do MP4 do draft entra no comentário do PR e na tabela deste checkpoint: aprovar o vídeo é o mesmo gate humano do merge, não um segundo toque. Sem o OK, o PR não entra no lote. O comentário do agente no PR leva `<!-- automacao -->` na **primeira linha** (senão a label `revisor-comentou` acusa a própria onda e para a rodada seguinte).
 
 Peça o OK de merge com **AskUserQuestion citando os PR#** explicitamente: "pode seguir" genérico não basta, o gate é real. Ofereça: mergear o lote todo, um subconjunto, ou abortar a onda.
 

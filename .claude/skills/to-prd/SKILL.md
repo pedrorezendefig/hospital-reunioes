@@ -71,6 +71,16 @@ NÃO inclua caminhos de arquivo nem trechos de código — envelhecem rápido. E
 
 Lista de decisões de teste. Inclua: o que faz um bom teste (testar só comportamento externo, não detalhes de implementação), em quais **seams** os testes observam o comportamento (os acordados no passo 2), quais módulos serão testados, e exemplos análogos já existentes no código.
 
+## Manual: páginas que nascem ou mudam
+
+As páginas do Manual do usuário (`docs/manual/`) que esta entrega cria ou altera. É desta seção que a Fatia de manual tira o trabalho dela, então ela é lista, não promessa:
+
+- **Páginas de tarefa** (uma ação cada, título no infinitivo): qual nasce, qual muda e em que módulo (`primeiros-passos`, `reunioes`, `ouvidoria`, `pops`, `admin`).
+- **Como funciona**: o que a entrega muda no comportamento que não é ação de ninguém (como o prazo é contado, o que o sistema apaga sozinho).
+- **Novidades**: a entrada que este PRD gera no `novidades.md` do módulo, na língua do usuário.
+
+PRD que não toca tela nenhuma escreve **"Nenhuma: este PRD não muda tela"**. É o que diz ao `/to-issues` para não criar a Fatia de manual (ADR 0057, decisão 8).
+
 ## Fora de escopo
 
 O que está fora de escopo deste PRD.

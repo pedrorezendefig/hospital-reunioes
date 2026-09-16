@@ -46,6 +46,11 @@ bin_ok() { # nome conserto -> OK se está no PATH do shell; AVISO se só existe 
 chave_preenchida() { # arquivo chave -> 0 se existe, não está vazia e não é o placeholder do exemplo
   [ -f "$1" ] && grep -Eq "^$2=[^[:space:]]" "$1" && ! grep -Eq "^$2=(<PREENCHER>|\"\"|'')[[:space:]]*$" "$1"
 }
+versao_min() { # atual minima -> 0 se atual >= minima, comparando por número
+  # `sort -V` e não ordem alfabética: 22.9 vem depois de 22.12 no alfabeto e
+  # aprovaria um Node que não builda o site do Manual.
+  [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]
+}
 # ---------------------------------------------------------------- Nível 1
 titulo "Nível 1: pipeline (issues, tdd, PR)"
 bin_ok git "xcode-select --install"
@@ -176,10 +181,29 @@ fi
 
 # ---------------------------------------------------------------- Nível 4
 if [ "$NIVEL" -ge 4 ]; then
-titulo "Nível 4: divulgar (opcional)"
+titulo "Nível 4: divulgar e manual (opcional)"
 no_path_do_shell ffmpeg && ok "ffmpeg" || opc "ffmpeg" "brew install ffmpeg (se já instalou, adicione ao PATH do ~/.zshrc)"
 [ -d "/Applications/Google Chrome.app" ] && ok "Google Chrome" || opc "Google Chrome" "brew install --cask google-chrome"
 [ -d "$HOME/.claude/skills/hyperframes" ] && ok "skills globais hyperframes" || opc "skills globais hyperframes" "npx skills add heygen-com/hyperframes --all (skills globais, fora do repo; ver /divulgar)"
+# Site do Manual (ADR 0057): o Starlight 0.42 exige Node >= 22.12. Node velho
+# não é "opcional ausente", é build que quebra na hora de publicar.
+NODE_MIN=22.12
+if no_path_do_shell node; then
+  nodev="$(PATH="$PATH_SHELL" node -v 2>/dev/null)"; nodev="${nodev#v}"
+  if versao_min "$nodev" "$NODE_MIN"; then
+    ok "node >= $NODE_MIN (manual)" "v$nodev"
+  else
+    falta "node >= $NODE_MIN (manual)" "tem v$nodev; o site do Manual não builda: brew install node@22 e ponha no PATH do ~/.zshrc"
+  fi
+else
+  opc "node >= $NODE_MIN (manual)" "brew install node@22 (o site do Manual exige $NODE_MIN)"
+fi
+# Roteiro de prints do manual: Playwright em Python, com o Chromium baixado.
+if PATH="$PATH_SHELL" python3 -c "import playwright" >/dev/null 2>&1; then
+  ok "playwright (roteiro de prints)"
+else
+  opc "playwright (roteiro de prints)" "pip install playwright && python3 -m playwright install chromium"
+fi
 fi
 
 # ---------------------------------------------------------------- Mapa do repo
