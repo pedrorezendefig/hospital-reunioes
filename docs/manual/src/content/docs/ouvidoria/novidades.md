@@ -127,8 +127,8 @@ e em [Como o prazo é contado](/ouvidoria/como-funciona/como-o-prazo-e-contado/)
 
 ## Os atendimentos da Ana entram na plataforma
 
-Agosto de 2026. O que a assistente de WhatsApp atendia fora da plataforma passou
-a viver dentro dela, com o painel de ouvidoria e o protocolo gerado na chegada.
-Foi o primeiro passo do módulo.
+Agosto de 2026. O que a assistente de atendimento registrava fora da plataforma
+passou a viver dentro dela, com o painel de ouvidoria e o protocolo gerado na
+chegada. Foi o primeiro passo do módulo.
 
 Está em [Quem faz o quê](/ouvidoria/como-funciona/quem-faz-o-que/).
