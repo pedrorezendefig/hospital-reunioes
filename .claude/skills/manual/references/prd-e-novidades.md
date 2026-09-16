@@ -39,6 +39,10 @@ O que mudou, em duas ou três linhas, do ponto de vista de quem usa.
 Tarefas que mudaram: [Encaminhar para outra área](./encaminhar-para-outra-area/)
 ```
 
+- **O número do PRD entra no `prd:` do frontmatter da própria `novidades.md`**,
+  somado aos que já estavam lá. É por esse campo que o inventário da
+  `/montar-manual` sabe que a entrega foi contada: sem ele, a lacuna
+  `prd-sem-novidades` continua acusando a entrada que você acabou de escrever.
 - A **data é a do deploy**, lida do `docs/spec/deploy/history.json`, não a da
   issue nem a de hoje.
 - O **título é o valor entregue**, na língua do usuário, não o título do PRD.
