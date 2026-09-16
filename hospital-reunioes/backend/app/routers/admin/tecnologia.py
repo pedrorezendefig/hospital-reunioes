@@ -89,6 +89,8 @@ from supabase import Client
 from app.dependencies import get_supabase_client, require_super_admin, selecionar_participantes
 from app.limiter import limiter
 from app.models.tecnologia_schemas import (
+    AssistenteChatPayload,
+    AssistenteChatResponse,
     AtribuirPayload,
     ConversaLinhaResponse,
     DemandaCreatePayload,
@@ -106,12 +108,14 @@ from app.models.tecnologia_schemas import (
     TextoParaIaResponse,
     VincularPayload,
 )
-from app.services import github_client
+from app.services import assistente_tecnologia, github_client
+from app.services.conhecimento import carregar_kit
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
     AVISO_EMAIL_NAO_SAIU,
     ESTADOS_ABERTOS,
     ESTADOS_FECHADOS,
+    FUSO_HOSPITAL,
     MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO,
     MOTIVO_DONO_SEM_ACESSO,
     MOTIVO_MENCAO_SEM_ACESSO,
@@ -2055,3 +2059,47 @@ async def listar_historico(
         }
         for d in _com_nomes(supabase, fechadas, ator=ator)
     ]
+
+
+# ─── Assistente de Tecnologia (PRD #726, ADR 0056) ───────────────────────────
+
+# O mesmo teto dos outros chats do app. Ele e por ENDERECO, e nao por pessoa,
+# porque e assim que o `limiter` do app conta em todo lugar; o que ele protege
+# aqui e a cota do provedor de IA contra uma tela esquecida aberta.
+LIMITE_DO_ASSISTENTE = "10/minute"
+
+
+@router.post("/assistente/chat", response_model=AssistenteChatResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def assistente_chat(
+    request: Request,
+    payload: AssistenteChatPayload,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Um turno da conversa que monta a Demanda (ADR 0056, decisao 1).
+
+    NAO grava nada: devolve `{reply, rascunho, demanda_parecida}` para a tela
+    mostrar no painel. Quem cria continua sendo `POST /demandas`, no clique da
+    pessoa, com as mesmas guardas de sempre.
+
+    Os Produtos vao para o prompt e para a peneira do `produto_id`: so os
+    ATIVOS, exatamente os que o formulario oferece. O filtro roda em Python,
+    com a mesma regra da tela (`produtos.filter(p => p.ativo)`), para o
+    assistente nunca propor um Produto que a pessoa nao poderia escolher a mao.
+    """
+    result = supabase.table(TABELA_PRODUTOS).select("*").order("ordem").execute()
+    produtos = [{"id": p["id"], "nome": p.get("nome") or ""} for p in (result.data or []) if p.get("ativo")]
+
+    return assistente_tecnologia.conversar(
+        rascunho=payload.rascunho,
+        messages=[{"role": m.role, "content": m.content} for m in payload.messages],
+        kit=carregar_kit(),
+        produtos=produtos,
+        # Vazia por enquanto: o aviso de Demanda parecida e a fatia seguinte.
+        # A costura ja esta aqui para o prompt e o servico nao mudarem entao.
+        demandas_abertas=[],
+        # A data do HOSPITAL, e nao a do servidor: em UTC, das 21h a meia-noite
+        # de Sao Paulo o assistente entenderia "hoje" como o dia seguinte.
+        hoje_iso=datetime.now(FUSO_HOSPITAL).date().isoformat(),
+    )
