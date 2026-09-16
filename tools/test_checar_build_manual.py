@@ -296,3 +296,90 @@ def test_rotulo_cru_sai_com_codigo_1(tmp_path):
     resultado = rodar(tmp_path)
     assert resultado.returncode == 1
     assert "Conferidor do build do Manual falhou" in resultado.stderr
+
+
+# --- O casamento do rótulo não pode depender do literal `>nome<` -------------
+#
+# A primeira versão desta trava procurava a string `>como-funciona<` no HTML
+# inteiro. O mutante que trocava esse literal pelo nome pelado sobrevivia à
+# suíte, ou seja: a própria trava podia virar vácuo verde e ninguém descobria
+# até o nome cru aparecer na tela de novo. Hoje o rótulo é lido do elemento que
+# o Starlight usa para ele, e estas três formas, todas com o mesmo bug na tela,
+# escapavam do literal.
+
+FORMAS_QUE_O_LITERAL_PERDIA = [
+    # Espaço em volta do texto, que qualquer template indentado produz.
+    '<span class="group-label"><span class="large"> como-funciona </span></span>',
+    # Quebra de linha e indentação.
+    '<span class="group-label">\n  <span class="large">\n    como-funciona\n'
+    "  </span>\n</span>",
+    # Hífen escrito como entidade HTML.
+    '<span class="group-label"><span class="large">como&#45;funciona</span></span>',
+]
+
+
+def test_rotulo_e_lido_do_elemento_e_nao_do_literal():
+    for html in FORMAS_QUE_O_LITERAL_PERDIA:
+        assert checar_build_manual.rotulos_de_grupo(html) == ["como-funciona"]
+        # A prova de que o teste não é decorativo: o literal antigo passava
+        # batido em todas elas.
+        assert ">como-funciona<" not in html
+
+
+def test_rotulo_cru_com_espaco_em_volta_trava(tmp_path):
+    """O mesmo bug na tela, num HTML que o literal antigo deixava passar."""
+    dist = montar(tmp_path)
+    for pagina in dist.rglob("*.html"):
+        pagina.write_text(
+            '<html><head><link rel="icon" href="/favicon.png"/></head><body><nav>'
+            + FORMAS_QUE_O_LITERAL_PERDIA[0]
+            + "</nav></body></html>",
+            encoding="utf-8",
+        )
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "como-funciona" in problemas[0]
+    assert "rotulos-da-sidebar" in problemas[0]
+
+
+def test_rotulo_com_tag_no_meio_ainda_e_lido(tmp_path):
+    """`<span class="large">` é filho do rótulo hoje; pode virar outra coisa."""
+    html = (
+        '<span class="group-label astro-x" data-astro-cid-y>'
+        "<b>como</b>-<i>funciona</i></span>"
+    )
+    assert checar_build_manual.rotulos_de_grupo(html) == ["como-funciona"]
+
+
+def test_sem_nenhum_rotulo_de_grupo_trava(tmp_path):
+    """Vácuo: a sidebar tem um grupo por módulo em toda página do site.
+
+    Zero rótulo achado é varredura quebrada, não site sem grupo. Sem este
+    piso, esta trava ficaria verde sobre nada no dia em que o Starlight
+    mudasse o `group-label` de lugar, que é o defeito que este conferidor
+    existe para tirar do CI.
+    """
+    dist = montar(tmp_path)
+    for pagina in dist.rglob("*.html"):
+        pagina.write_text(
+            '<html><head><link rel="icon" href="/favicon.png"/></head>'
+            "<body><nav></nav></body></html>",
+            encoding="utf-8",
+        )
+    problemas = checar_build_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "nenhum rótulo de grupo achado" in problemas[0]
+
+
+def test_sem_rotulo_de_grupo_sai_com_codigo_1(tmp_path):
+    """O piso também precisa chegar ao returncode, que é o que o CI lê."""
+    dist = montar(tmp_path)
+    for pagina in dist.rglob("*.html"):
+        pagina.write_text(
+            '<html><head><link rel="icon" href="/favicon.png"/></head>'
+            "<body></body></html>",
+            encoding="utf-8",
+        )
+    resultado = rodar(tmp_path)
+    assert resultado.returncode == 1
+    assert "nenhum rótulo de grupo achado" in resultado.stderr

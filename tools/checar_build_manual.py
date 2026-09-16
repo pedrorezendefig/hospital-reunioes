@@ -27,6 +27,7 @@ import gzip
 import json
 import re
 import sys
+from html.parser import HTMLParser
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -73,6 +74,52 @@ def icones_declarados(html: str) -> set[str]:
         if any("icon" in parte for parte in rel.group(1).lower().split()):
             achados.add(href.group(1))
     return achados
+
+
+class ColetorDeRotulos(HTMLParser):
+    """Lê o texto de cada `<span class="group-label">` da sidebar.
+
+    Procurar o literal `>nome<` no HTML inteiro era frágil demais para servir
+    de trava: `>como-funciona </span>`, com um espaço, é o mesmo bug na tela e
+    passava batido. Aqui o rótulo é lido do elemento que o Starlight usa para
+    ele, com o texto normalizado, então espaço, quebra de linha, atributo a
+    mais e tag aninhada não escondem nada.
+    """
+
+    def __init__(self) -> None:
+        super().__init__(convert_charrefs=True)
+        self.rotulos: list[str] = []
+        self._aninhamento = 0
+        self._pedacos: list[str] = []
+
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
+        if tag != "span":
+            return
+        if self._aninhamento:
+            self._aninhamento += 1
+            return
+        classes = (dict(attrs).get("class") or "").split()
+        if "group-label" in classes:
+            self._aninhamento = 1
+            self._pedacos = []
+
+    def handle_endtag(self, tag: str) -> None:
+        if tag != "span" or not self._aninhamento:
+            return
+        self._aninhamento -= 1
+        if self._aninhamento == 0:
+            self.rotulos.append(" ".join("".join(self._pedacos).split()))
+
+    def handle_data(self, dados: str) -> None:
+        if self._aninhamento:
+            self._pedacos.append(dados)
+
+
+def rotulos_de_grupo(html: str) -> list[str]:
+    """Os rótulos dos grupos da sidebar, na ordem em que a página os mostra."""
+    coletor = ColetorDeRotulos()
+    coletor.feed(html)
+    return coletor.rotulos
 
 
 def pastas_que_viram_grupo(conteudo: Path) -> set[str]:
@@ -126,22 +173,34 @@ def checar_rotulos(conteudo: Path, dist: Path, paginas: list[Path]) -> list[str]
     nome da pasta, não de 49 vezes a mesma frase.
     """
     pastas = pastas_que_viram_grupo(conteudo)
-    if not pastas:
-        return []
+    problemas: list[str] = []
     onde: dict[str, list[str]] = {}
+    achou_algum_grupo = False
+
     for pagina in paginas:
-        html = pagina.read_text(encoding="utf-8")
-        for nome in sorted(pastas):
-            if f">{nome}<" in html:
-                onde.setdefault(nome, []).append(
-                    str(pagina.relative_to(dist))
-                )
-    return [
+        rotulos = rotulos_de_grupo(pagina.read_text(encoding="utf-8"))
+        achou_algum_grupo = achou_algum_grupo or bool(rotulos)
+        for rotulo in rotulos:
+            if rotulo in pastas:
+                onde.setdefault(rotulo, []).append(str(pagina.relative_to(dist)))
+
+    if not achou_algum_grupo:
+        # Piso de sanidade, o mesmo do ícone: a sidebar tem um grupo por módulo
+        # em toda página do site, então zero rótulo achado é varredura
+        # quebrada, não site sem grupo. Sem este piso, esta trava viraria vácuo
+        # verde no dia em que o Starlight mudasse o `group-label` de lugar.
+        problemas.append(
+            "nenhum rótulo de grupo achado no dist: a varredura não está "
+            "enxergando a sidebar."
+        )
+
+    problemas += [
         f"a sidebar mostra o nome cru da pasta '{nome}' em {len(paginas_com)} "
         f"página(s) do dist (ex.: {paginas_com[0]}). Dê um rótulo a ela em "
         "src/rotulos-da-sidebar.ts."
         for nome, paginas_com in sorted(onde.items())
     ]
+    return problemas
 
 
 def checar(raiz: Path) -> list[str]:
