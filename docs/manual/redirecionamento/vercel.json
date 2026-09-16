@@ -1,6 +1,11 @@
 {
   "redirects": [
     {
+      "source": "/",
+      "destination": "https://manual-hsm.vercel.app/ouvidoria/",
+      "permanent": true
+    },
+    {
       "source": "/:caminho*",
       "destination": "https://manual-hsm.vercel.app/ouvidoria/",
       "permanent": true
