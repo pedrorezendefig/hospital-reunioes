@@ -74,7 +74,7 @@ Uma ação atribuída a um responsável, com prazo e máquina de estados própri
 _Evitar_: tarefa, to-do, ação (use "ação" só para a linha da Ata que origina a Pendência).
 
 **Repactuação**:
-O ato de o Facilitador remarcar o prazo de uma Pendência. Gera uma **nova** Pendência e mantém a original no histórico (estado `REPACTUADA`). É o caso mais comum a partir de `ATRASADO`.
+O ato de o Facilitador remarcar o prazo de uma Pendência. **Não cria Pendência nova**: a mesma Pendência passa ao estado `REPACTUADA` e tem o prazo apagado, ficando "A repactuar" na tela até alguém marcar a data nova. É o caso mais comum a partir de `ATRASADO`.
 _Evitar_: adiamento, remarcação, prorrogação.
 
 ## Assinatura digital
@@ -92,7 +92,7 @@ _Evitar_: assinatura interna, aceite manual, ciência.
 Área nascida no ADR 0031 (14/ago/2026): o app vira a casa dos dados que alimentam a **Ana**, e ganha a primeira API de serviço para outro sistema.
 
 **Ana**:
-A agente de IA de atendimento e agendamento de pacientes via WhatsApp do mesmo hospital: produto irmão, com repo e roadmap próprios (`~/PedroDev/Ana`). Consome dados deste app pela [API da Ana]; não loga, não tem conta, não é usuária.
+A agente de IA de atendimento e agendamento de pacientes do mesmo hospital: produto irmão, com repo e roadmap próprios (`~/PedroDev/Ana`). **Ainda não atende no WhatsApp oficial do hospital**: aquele número segue no Kommo, com atendimento humano, e o canal vivo dela é um Telegram de teste, mais uma inbox de API (ADR 0034). Consome dados deste app pela [API da Ana]; não loga, não tem conta, não é usuária.
 _Evitar_: tratar a Ana como feature deste app (é cliente de serviço).
 
 **Dados do Atendimento**:
@@ -316,4 +316,4 @@ _Evitar_: manual dentro do PR de código (a tela ainda não existe para o print)
 > **Dev:** E se a reunião nem teve Transcrição — foi um bate-papo rápido?
 > **Facilitador:** Aí eu faço uma **Ata Guiada**: converso com o agente (ou dito por voz), ele monta um resumo e o quadro de ações perguntando quem faz o quê e até quando. Reviso e finalizo sem assinatura — mesmas Pendências, sem Transcrição nem PDF.
 > **Dev:** Se o prazo de uma Pendência estoura?
-> **Facilitador:** Vira ATRASADO. Normalmente eu faço uma Repactuação: o sistema cria uma Pendência nova com prazo novo e guarda a antiga no histórico.
+> **Facilitador:** Vira ATRASADO. Normalmente eu faço uma Repactuação: a mesma Pendência passa a REPACTUADA e fica sem prazo, até eu marcar a data nova.
