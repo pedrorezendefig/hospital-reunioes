@@ -23,8 +23,10 @@ const sessao = vi.hoisted(() => ({
   participante: null as CurrentParticipante | null,
 }));
 
+const rota = vi.hoisted(() => ({ atual: "/ouvidoria" }));
+
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/ouvidoria",
+  usePathname: () => rota.atual,
 }));
 
 vi.mock("@/hooks/useCurrentParticipante", () => ({
@@ -52,7 +54,9 @@ vi.mock("next/link", () => ({
 
 afterEach(() => {
   cleanup();
+  vi.unstubAllEnvs();
   sessao.participante = null;
+  rota.atual = "/ouvidoria";
 });
 
 describe("Sidebar na gaveta do celular", () => {
@@ -159,5 +163,120 @@ describe("a largura do sidebar é a que o orçamento da Ouvidoria supõe", () =>
     const aside = container.querySelector("aside");
     expect(aside).not.toBeNull();
     expect(aside!.className.split(/\s+/)).toContain(CSS_DO_ORCAMENTO.sidebar);
+  });
+});
+
+/**
+ * O item Ajuda do menu (issue #734, PRD #731, ADR 0057 decisão 11).
+ *
+ * O manual é um site à parte, então o endereço não passa pelo roteador do app:
+ * quem decide a seção é o prefixo da rota em que a pessoa está. O teste ancora
+ * no href inteiro de propósito. Conferir só o fim ("termina em /pops/") deixaria
+ * passar uma base errada, e conferir só a base deixaria passar a seção errada.
+ */
+describe("Sidebar com o item Ajuda", () => {
+  function hrefDaAjuda(): string {
+    const menu = screen.getByRole("navigation");
+    return within(menu)
+      .getByRole("link", { name: "Ajuda" })
+      .getAttribute("href")!;
+  }
+
+  it("na Ouvidoria a Ajuda abre a seção da Ouvidoria", () => {
+    rota.atual = "/ouvidoria";
+
+    render(<Sidebar />);
+
+    expect(hrefDaAjuda()).toBe(
+      "https://manual.hospitalsaomatheus.cloud/ouvidoria/"
+    );
+  });
+
+  it("o formulário de manifestação também cai na seção da Ouvidoria", () => {
+    rota.atual = "/manifestacao";
+
+    render(<Sidebar />);
+
+    expect(hrefDaAjuda()).toBe(
+      "https://manual.hospitalsaomatheus.cloud/ouvidoria/"
+    );
+  });
+
+  it("nos POPs a Ajuda abre a seção dos POPs", () => {
+    rota.atual = "/pops";
+
+    render(<Sidebar />);
+
+    expect(hrefDaAjuda()).toBe("https://manual.hospitalsaomatheus.cloud/pops/");
+  });
+
+  it("numa tela interna do Admin a Ajuda abre a seção do Admin", () => {
+    rota.atual = "/admin/usuarios";
+
+    render(<Sidebar />);
+
+    expect(hrefDaAjuda()).toBe("https://manual.hospitalsaomatheus.cloud/admin/");
+  });
+
+  it("fora dos módulos com seção própria a Ajuda cai em Reuniões e metas", () => {
+    rota.atual = "/dashboard";
+
+    render(<Sidebar />);
+
+    expect(hrefDaAjuda()).toBe(
+      "https://manual.hospitalsaomatheus.cloud/reunioes/"
+    );
+  });
+
+  // O `.env.example` promete que a variável vazia vale o padrão, e uma variável
+  // declarada sem valor no Coolify chega como string vazia, não como ausente.
+  it("variável do manual declarada vazia continua caindo no endereço de produção", () => {
+    vi.stubEnv("NEXT_PUBLIC_MANUAL_URL", "");
+
+    render(<Sidebar />);
+
+    expect(hrefDaAjuda()).toBe(
+      "https://manual.hospitalsaomatheus.cloud/ouvidoria/"
+    );
+  });
+
+  it("variável do manual preenchida troca a base do endereço", () => {
+    vi.stubEnv("NEXT_PUBLIC_MANUAL_URL", "https://previa.manual.hsm");
+
+    render(<Sidebar />);
+
+    expect(hrefDaAjuda()).toBe("https://previa.manual.hsm/ouvidoria/");
+  });
+
+  it("a Ajuda abre em outra aba, sem dar controle da aba de origem", () => {
+    render(<Sidebar />);
+
+    const menu = screen.getByRole("navigation");
+    const ajuda = within(menu).getByRole("link", { name: "Ajuda" });
+    expect(ajuda.getAttribute("target")).toBe("_blank");
+    expect(ajuda.getAttribute("rel")).toContain("noopener");
+  });
+
+  // O menu tem três montagens diferentes (padrão, Secretária e só POPs) e a
+  // Ajuda não pertence a nenhum módulo: ela tem que sobreviver às três.
+  it.each([
+    [
+      "padrão",
+      { access_profile: "regular", perfil_ouvidoria: "ouvidor" },
+    ],
+    ["Secretária", { access_profile: "secretaria" }],
+    ["só POPs", { access_profile: null, perfil_pop: "leitor" }],
+  ] as const)("a Ajuda aparece no menu %s", (_nome, papeis) => {
+    sessao.participante = {
+      id: "p1",
+      nome_completo: "Fulana de Tal",
+      email: "fulana@hsm",
+      ...papeis,
+    } as CurrentParticipante;
+
+    render(<Sidebar />);
+
+    const menu = screen.getByRole("navigation");
+    expect(within(menu).getByRole("link", { name: "Ajuda" })).toBeTruthy();
   });
 });

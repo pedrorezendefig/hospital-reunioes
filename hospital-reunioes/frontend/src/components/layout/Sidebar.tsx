@@ -16,6 +16,7 @@ import {
   ShieldCheck,
   BookOpenCheck,
   Target,
+  CircleHelp,
   type LucideIcon,
 } from "lucide-react";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
@@ -243,6 +244,17 @@ export function Sidebar({
 
       <nav className="flex-1 p-4 space-y-1 overflow-y-auto">
         {navItems.map((item) => renderItem(item, 0))}
+
+        <a
+          href={urlDoManual(pathname)}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={onNavigate}
+          className="flex items-center gap-3 mt-2 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer text-text-secondary hover:bg-primary/5 hover:text-text"
+        >
+          <CircleHelp className="w-[18px] h-[18px]" strokeWidth={1.5} />
+          Ajuda
+        </a>
       </nav>
     </>
   );
@@ -260,6 +272,26 @@ export function Sidebar({
       {content}
     </div>
   );
+}
+
+// O endereço do Manual do usuário para a rota atual (PRD #731, ADR 0057,
+// decisão 11). O manual é um site à parte, com uma seção por módulo na mesma
+// ordem do menu, então quem escolhe a seção é o prefixo da rota. A base sai de
+// variável pública de ambiente (declarada sem barra no fim) para um ambiente
+// poder apontar para uma prévia; ausente ou vazia, vale o endereço de produção.
+function urlDoManual(pathname: string): string {
+  const base =
+    process.env.NEXT_PUBLIC_MANUAL_URL ||
+    "https://manual.hospitalsaomatheus.cloud";
+  return `${base}/${secaoDoManual(pathname)}/`;
+}
+
+function secaoDoManual(pathname: string): string {
+  if (pathname.startsWith("/ouvidoria") || pathname === "/manifestacao")
+    return "ouvidoria";
+  if (pathname.startsWith("/pops")) return "pops";
+  if (pathname.startsWith("/admin")) return "admin";
+  return "reunioes";
 }
 
 // True se a rota atual cai sob algum link folha (recursivamente) da subárvore
