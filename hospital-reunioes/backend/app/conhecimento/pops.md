@@ -1,12 +1,12 @@
 # POPs
 
-POP é o Procedimento Operacional Padrão: o documento que diz como um procedimento do hospital deve ser feito, sempre do mesmo jeito. O módulo de POPs cuida do ciclo inteiro de um POP: escrever, revisar, validar, assinar, publicar e treinar a equipe.
+POP é o Procedimento Operacional Padrão: o documento que diz como um procedimento do hospital deve ser feito, sempre do mesmo jeito. O módulo de POPs cuida do caminho do documento: escrever, revisar, validar, assinar e publicar. O treinamento da equipe nos POPs publicados é a leva seguinte, e ainda não está no aplicativo.
 
 Ele mora no mesmo aplicativo das Reuniões, mas com gente própria: quem tem acesso aqui não enxerga reunião, ata nem pendência, e quem cuida das Reuniões não enxerga POP. Uma pessoa pode ter os dois acessos, e aí ela vê os dois.
 
 ## Quem participa
 
-Por acesso: a diretoria executiva e o gestor de qualidade enxergam todos os setores; o gerente enxerga os setores que ele gerencia; o coordenador enxerga o setor dele. Os colaboradores que executam o procedimento (técnicos, enfermeiros, ASG) não entram no aplicativo: eles são treinados e aparecem na lista de presença.
+Por acesso: a diretoria executiva e o gestor de qualidade enxergam todos os setores; o gerente enxerga os setores que ele gerencia; o coordenador enxerga o setor dele. Os colaboradores que executam o procedimento (técnicos, enfermeiros, ASG) não entram no aplicativo: eles leem o POP publicado e são treinados fora dele.
 
 Por POP, três pessoas são escolhidas na criação: quem elabora, quem revisa e quem valida. Elas não são o mesmo que o acesso: são designações daquele documento.
 
