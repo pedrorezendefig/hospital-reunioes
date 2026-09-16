@@ -43,11 +43,15 @@ def escrever_env(tmp_path: Path, url: str) -> Path:
     return env
 
 
+# Endereços de mentira de propósito: o repositório é público, e o que o teste
+# precisa provar é que a guarda recusa qualquer hostname que não seja o da
+# máquina, não qual é o endereço de verdade. O TLD `.invalid` é reservado pela
+# RFC 2606 para exemplo e nunca resolve.
 @pytest.mark.parametrize(
     "url",
     [
-        "https://db.hospitalsaomatheus.cloud",
-        "https://abcdefghij.supabase.co",
+        "https://db.exemplo.invalid",
+        "https://projeto.exemplo.invalid",
         "http://192.168.0.10:54321",
     ],
 )
@@ -90,7 +94,7 @@ def test_semear_para_no_primeiro_passo_quando_o_banco_nao_e_local(tmp_path, monk
     """A guarda roda antes de qualquer escrita: `_rest` nem chega a ser chamado."""
     roteiro = carregar_roteiro()
     monkeypatch.setattr(
-        roteiro, "ENV_LOCAL", escrever_env(tmp_path, "https://db.hospitalsaomatheus.cloud")
+        roteiro, "ENV_LOCAL", escrever_env(tmp_path, "https://db.exemplo.invalid")
     )
 
     def nao_deve_gravar(*args, **kwargs):

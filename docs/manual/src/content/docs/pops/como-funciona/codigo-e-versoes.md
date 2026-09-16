@@ -33,8 +33,9 @@ datas e os nomes de quem assinou.
 ## A periodicidade de revisão
 
 Na elaboração, escolhe-se de quanto em quanto tempo o POP deve ser revisto: 3
-meses, 6 meses, 1 ano ou 2 anos. A escolha fica gravada no POP e aparece na
-**Ficha do POP**, na Biblioteca, como "Revisão a cada 6 meses".
+meses, 6 meses, 1 ano ou 2 anos. A escolha fica gravada no POP e aparece em dois
+lugares: na **Ficha do POP**, na Biblioteca, como "Revisão a cada 6 meses", e no
+documento assinado, na identificação, na linha **Periodicidade de revisão**.
 
 **Hoje o sistema não faz conta com esse intervalo.** Ele não mostra data de
 próxima revisão, não muda a cor de nada, não avisa ninguém quando o prazo
