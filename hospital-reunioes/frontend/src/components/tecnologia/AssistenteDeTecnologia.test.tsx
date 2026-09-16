@@ -81,8 +81,10 @@ type Opcoes = {
    * rede: o corpo passava inteiro e quebrava lá dentro.
    */
   corpoForaDoContrato?: unknown;
-  /** A criação responde 200 com um corpo que o `json()` não consegue ler. */
+  /** A criação responde 201 com um corpo que o `json()` não consegue ler. */
   criacaoIlegivel?: boolean;
+  /** A criação responde 201 com um corpo que o `json()` LÊ e que não serve. */
+  corpoDaCriacaoForaDoContrato?: unknown;
   /**
    * O corpo CRU da recusa, como cada camada do backend a escreve. Não é um
    * `{detail}` genérico de propósito: o `slowapi` responde `{error: ...}` e o
@@ -134,6 +136,13 @@ function servidor(opcoes: Opcoes) {
           rascunho: opcoes.rascunhoDaResposta ?? RASCUNHO_DO_ASSISTENTE,
           demanda_parecida: null,
         }),
+      } as unknown as Response;
+    }
+    if ("corpoDaCriacaoForaDoContrato" in opcoes) {
+      return {
+        ok: true,
+        status: 201,
+        json: async () => opcoes.corpoDaCriacaoForaDoContrato,
       } as unknown as Response;
     }
     if (opcoes.criacaoIlegivel) {
@@ -370,15 +379,30 @@ describe("Propriedade 1: a tela destrava em todo caminho de saída", () => {
     ["rascunho pela metade", { reply: "oi", rascunho: {} }],
     ["reply que não é texto", { reply: 42, rascunho: RASCUNHO_DO_ASSISTENTE }],
   ])("200 fora do contrato (%s) destrava a tela e mostra o alarme", async (_nome, corpo) => {
-    montar({ corpoForaDoContrato: corpo });
-
+    /**
+     * O primeiro turno é BOM de propósito: ele enche o rascunho.
+     *
+     * A versão anterior deste teste asseverava que o Título continuava vazio
+     * depois do turno ruim, com um rascunho que já nascia vazio: o estado
+     * inicial fazia o trabalho que a asserção dizia fazer, e o mutante que
+     * zerasse o rascunho no ramo de erro passava batido. Agora a fixture nasce
+     * PREENCHIDA, e a asserção mede o que diz medir.
+     */
+    montar();
     await falar("a Ana tá estranha");
+    await waitFor(() =>
+      expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Ana não responde de madrugada"),
+    );
+
+    vi.stubGlobal("fetch", servidor({ corpoForaDoContrato: corpo }));
+    await falar("na verdade é o Vínculo");
 
     await waitFor(() => expect(painelTravado()).toBe(false));
     expect((await screen.findByRole("alert")).textContent).toBe(RESPOSTA_ILEGIVEL);
-    // O rascunho anterior sobrevive: corpo que não serve não vira rascunho
-    // meio preenchido.
-    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("");
+    // O rascunho do turno bom SOBREVIVE: corpo que não serve não vira rascunho
+    // meio preenchido, nem apaga o que já estava lá.
+    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Ana não responde de madrugada");
+    expect((screen.getByLabelText("Descrição") as HTMLTextAreaElement).value).toBe("Onde: no WhatsApp");
   });
 
   it("o corpo dentro do contrato passa", async () => {
@@ -695,6 +719,31 @@ describe("Criar Demanda", () => {
       expect((screen.getByRole("button", { name: "Criar Demanda" }) as HTMLButtonElement).disabled).toBe(true),
     );
     expect(criadas).toHaveLength(0);
+  });
+
+  it.each([
+    ["null", null],
+    ["sem id", { titulo: "Ana não responde" }],
+    ["lista", []],
+  ])("201 com corpo que lê e não serve (%s) também é sucesso sem confirmação", async (_nome, corpo) => {
+    // O buraco que sobrou da rodada 4: fechei o corpo que LEVANTA no `json()` e
+    // deixei aberto o corpo que faz parse e vem fora do contrato. Sem `id` não
+    // há para onde ir, e o cast dizia que havia.
+    montar({ corpoDaCriacaoForaDoContrato: corpo });
+    await falar("a Ana tá estranha");
+    await waitFor(() => expect((screen.getByLabelText("Título") as HTMLInputElement).value).not.toBe(""));
+
+    fireEvent.click(screen.getByRole("button", { name: "Criar Demanda" }));
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta.textContent).toContain(CRIADA_SEM_CONFIRMACAO);
+    await waitFor(() =>
+      expect((screen.getByRole("button", { name: "Criar Demanda" }) as HTMLButtonElement).disabled).toBe(true),
+    );
+    expect(criadas).toHaveLength(0);
+
+    fireEvent.click(screen.getByRole("button", { name: "Criar Demanda" }));
+    await waitFor(() => expect(criacoes()).toHaveLength(1));
   });
 
   it("depois do 201 sem confirmação, clicar de novo não cria uma segunda Demanda", async () => {

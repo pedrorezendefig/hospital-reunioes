@@ -18,6 +18,8 @@ import { useState } from "react";
 
 import { Select } from "@/components/ui/Select";
 
+import { corpoValidado, demandaCriadaValida } from "./assistente";
+
 import {
   BASE_TECNOLOGIA,
   Demanda,
@@ -42,6 +44,11 @@ type Props = {
    * precisa saber que o responsável não foi avisado.
    */
   onCriada: (demanda: Demanda, avisoDeEmail: string | null) => void;
+  /**
+   * Chamada quando o servidor aceitou (201) e a resposta não deu para usar: a
+   * Demanda existe, a confirmação é que se perdeu.
+   */
+  onCriadaSemConfirmacao: () => void;
 };
 
 const FORM_VAZIO = {
@@ -52,7 +59,7 @@ const FORM_VAZIO = {
   descricao: "",
 };
 
-export function FormularioNovaDemanda({ token, produtos, onCriada }: Props) {
+export function FormularioNovaDemanda({ token, produtos, onCriada, onCriadaSemConfirmacao }: Props) {
   const [form, setForm] = useState(FORM_VAZIO);
   const [erro, setErro] = useState<string | null>(null);
   const [salvando, setSalvando] = useState(false);
@@ -85,11 +92,24 @@ export function FormularioNovaDemanda({ token, produtos, onCriada }: Props) {
       setSalvando(false);
       return;
     }
-    // O corpo da resposta é a Demanda criada E o aviso de e-mail, e o corpo de
-    // uma `Response` só se lê uma vez: por isso não dá para chamar o
-    // `avisoPorEmail` aqui, que consumiria o mesmo corpo.
-    const criada = (await resposta.json()) as Demanda & { aviso_por_email?: unknown };
+    /**
+     * Mesma fronteira do assistente, e pelo mesmo motivo: o corpo da resposta é
+     * a Demanda criada E o aviso de e-mail, e ler por `as` era promessa não
+     * verificada. Com 201 e corpo que não dá para usar, a Demanda NASCEU e o
+     * que se perdeu foi a confirmação: quem avisa é a página, que troca o
+     * formulário pelo aviso e tira o botão da tela, em vez de reabilitá-lo para
+     * um segundo clique que nasceria a Demanda repetida.
+     *
+     * (O `avisoPorEmail` de `demandas.ts` não serve aqui: ele consome o mesmo
+     * corpo, e o corpo de uma `Response` só se lê uma vez.)
+     */
+    const criada = await corpoValidado(resposta, demandaCriadaValida);
     setSalvando(false);
+    if (criada === null) {
+      console.error("[admin/tecnologia] a resposta da criação não deu para usar");
+      onCriadaSemConfirmacao();
+      return;
+    }
     onCriada(criada, typeof criada.aviso_por_email === "string" ? criada.aviso_por_email : null);
   }
 

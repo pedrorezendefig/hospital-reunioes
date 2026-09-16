@@ -15,6 +15,11 @@ import { useRouter } from "next/navigation";
 import { AlertCircle, ArrowLeft, Lock } from "lucide-react";
 
 import { AssistenteDeTecnologia } from "@/components/tecnologia/AssistenteDeTecnologia";
+import {
+  corpoValidado,
+  CRIADA_SEM_CONFIRMACAO,
+  listaDeProdutosValida,
+} from "@/components/tecnologia/assistente";
 import { FormularioNovaDemanda } from "@/components/tecnologia/FormularioNovaDemanda";
 import { BASE_TECNOLOGIA, Demanda, linkDaDemanda, ProdutoDaEscolha, ROTA_TECNOLOGIA } from "@/components/tecnologia/demandas";
 import { useAuth } from "@/hooks/useAuth";
@@ -63,8 +68,17 @@ export default function NovaDemandaPage() {
     }
     let vivo = true;
     fetch(`${BASE_TECNOLOGIA}/produtos`, { headers: { Authorization: `Bearer ${token}` } })
-      .then((r) => (r.ok ? r.json() : Promise.reject(new Error(String(r.status)))))
-      .then((lista: ProdutoDaEscolha[]) => vivo && setProdutos(lista))
+      .then(async (r) => {
+        if (!r.ok) throw new Error(String(r.status));
+        // Mesma fronteira dos outros corpos desta tela. Sem ela, um corpo que
+        // não é lista chegava ao `setProdutos` sem reclamar e quebrava no
+        // RENDER seguinte, em `produtos.filter`: a página inteira sumia, e este
+        // `catch` não via nada, porque a falha acontecia fora da promessa.
+        const lista = await corpoValidado(r, listaDeProdutosValida);
+        if (lista === null) throw new Error("lista de Produtos fora do contrato");
+        return lista;
+      })
+      .then((lista) => vivo && setProdutos(lista))
       .catch((e) => {
         console.error("[admin/tecnologia] falha ao carregar os Produtos", e);
         if (vivo) setErro(SEM_PRODUTOS);
@@ -90,6 +104,18 @@ export default function NovaDemandaPage() {
   // depois deixaria a caixa de mensagem à mão de quem não é Super admin
   // durante as duas idas à rede do hook, que é justamente o que o gate existe
   // para impedir. O layout de `/admin` deixa entrar qualquer papel.
+  /**
+   * A Demanda nasceu e a resposta não deu para usar (201 sem confirmação).
+   *
+   * Reusa o mesmo aviso do e-mail que não saiu, que já é a faixa com link e já
+   * TIRA o formulário da tela: sem botão não há segundo clique, e a criação não
+   * tem chave de idempotência. A saída é o Quadro, porque o id do card vinha no
+   * corpo que não deu para usar.
+   */
+  const aoCriarSemConfirmacao = useCallback(() => {
+    setAvisoDeEmail({ texto: CRIADA_SEM_CONFIRMACAO, link: ROTA_TECNOLOGIA });
+  }, []);
+
   if (carregandoPerfil) {
     return <p className="max-w-2xl mx-auto px-6 py-16 text-center text-sm text-text-secondary">Carregando...</p>;
   }
@@ -149,7 +175,12 @@ export default function NovaDemandaPage() {
           </Link>
         </div>
       ) : !token ? null : aMao ? (
-        <FormularioNovaDemanda token={token} produtos={produtos} onCriada={aoCriar} />
+        <FormularioNovaDemanda
+          token={token}
+          produtos={produtos}
+          onCriada={aoCriar}
+          onCriadaSemConfirmacao={aoCriarSemConfirmacao}
+        />
       ) : (
         <AssistenteDeTecnologia token={token} produtos={produtos} onCriada={aoCriar} />
       )}

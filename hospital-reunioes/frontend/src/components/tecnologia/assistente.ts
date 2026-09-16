@@ -6,7 +6,7 @@
  * armazenamento de sessão. O que fala com a rede mora nos componentes.
  */
 
-import { BASE_TECNOLOGIA, PrioridadeDemanda, TipoDemanda } from "./demandas";
+import { BASE_TECNOLOGIA, Demanda, PrioridadeDemanda, ProdutoDaEscolha, TipoDemanda } from "./demandas";
 
 export const ROTA_ASSISTENTE = "/admin/tecnologia/nova";
 export const URL_DO_CHAT = `${BASE_TECNOLOGIA}/assistente/chat`;
@@ -109,6 +109,35 @@ export const RESPOSTA_ILEGIVEL =
   "O servidor respondeu algo que a tela não conseguiu ler. Sua mensagem continua na caixa: mande de novo.";
 
 /**
+ * A FRONTEIRA: ninguém nesta tela lê campo de corpo HTTP sem passar por aqui.
+ *
+ * Ela existe porque três rodadas de revisão mostraram que fechar o exemplo não
+ * fecha a classe: primeiro a rede ficou protegida e o corpo não, depois o corpo
+ * do chat ficou protegido e o da criação não. O problema não era esquecer um
+ * caminho, era não ter um lugar por onde todos passassem.
+ *
+ * Duas coisas que ela garante, e que `as` não garante:
+ *
+ * - **nunca levanta.** Corpo que não dá para ler e corpo que dá para ler mas
+ *   não serve saem pela MESMA porta (`null`), porque para quem está olhando são
+ *   o mesmo caso: a resposta chegou e não dá para usar;
+ * - **o que sai daqui foi conferido campo a campo** contra o que o consumidor
+ *   consome. `as` é promessa não verificada; `valida` é a verificação.
+ */
+export async function corpoValidado<T>(
+  resposta: Response,
+  valida: (corpo: unknown) => corpo is T,
+): Promise<T | null> {
+  let corpo: unknown;
+  try {
+    corpo = await resposta.json();
+  } catch {
+    return null;
+  }
+  return valida(corpo) ? corpo : null;
+}
+
+/**
  * A resposta do chat serve para a tela usar?
  *
  * Ela existe para a fronteira "nunca levanta" valer para o CORPO, e não só para
@@ -135,6 +164,42 @@ export function respostaDoChatValida(corpo: unknown): corpo is RespostaDoChat {
     (campos.tipo === null || typeof campos.tipo === "string") &&
     (campos.produto_id === null || typeof campos.produto_id === "string") &&
     (campos.prazo === null || typeof campos.prazo === "string")
+  );
+}
+
+/** O que a tela consome da Demanda recém-criada. */
+export type DemandaCriada = Demanda & { aviso_por_email?: unknown };
+
+/**
+ * A resposta da criação serve?
+ *
+ * O `id` é o que a tela consome de verdade: é com ele que ela monta o link do
+ * card. Sem `id` não há para onde ir, e chamar `onCriada` com ele faltando
+ * levaria a `/admin/tecnologia?demanda=undefined`.
+ */
+export function demandaCriadaValida(corpo: unknown): corpo is DemandaCriada {
+  if (typeof corpo !== "object" || corpo === null) return false;
+  return typeof (corpo as Record<string, unknown>).id === "string";
+}
+
+/**
+ * A lista de Produtos serve?
+ *
+ * Sem esta peneira, um corpo que não é lista chegava ao `setProdutos` sem
+ * reclamar e quebrava no RENDER seguinte, em `produtos.filter`: a página
+ * inteira sumia, e o `catch` do `fetch` não via nada, porque a falha acontecia
+ * fora da promessa.
+ */
+export function listaDeProdutosValida(corpo: unknown): corpo is ProdutoDaEscolha[] {
+  return (
+    Array.isArray(corpo) &&
+    corpo.every(
+      (p) =>
+        typeof p === "object" &&
+        p !== null &&
+        typeof (p as Record<string, unknown>).id === "string" &&
+        typeof (p as Record<string, unknown>).nome === "string",
+    )
   );
 }
 

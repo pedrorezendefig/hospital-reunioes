@@ -5,6 +5,9 @@ import {
   NAO_INFORMADO,
   podeCriar,
   RASCUNHO_VAZIO,
+  corpoValidado,
+  demandaCriadaValida,
+  listaDeProdutosValida,
   respostaDoChatValida,
   ROTEIRO_POR_TIPO,
 } from "./assistente";
@@ -142,5 +145,81 @@ describe("respostaDoChatValida", () => {
     ["prazo que não é texto nem nulo", { ...BOA, rascunho: { ...BOA.rascunho, prazo: 7 } }],
   ])("recusa %s", (_nome, corpo) => {
     expect(respostaDoChatValida(corpo)).toBe(false);
+  });
+});
+
+describe("demandaCriadaValida", () => {
+  it("aceita a Demanda com id", () => {
+    expect(demandaCriadaValida({ id: "d-1", titulo: "Ana" })).toBe(true);
+  });
+
+  it.each([
+    ["null", null],
+    ["lista", []],
+    ["sem id", { titulo: "Ana" }],
+    ["id que não é texto", { id: 7 }],
+  ])("recusa %s", (_nome, corpo) => {
+    expect(demandaCriadaValida(corpo)).toBe(false);
+  });
+});
+
+describe("listaDeProdutosValida", () => {
+  it("aceita a lista de Produtos", () => {
+    expect(listaDeProdutosValida([{ id: "p1", nome: "Ana", ativo: true }])).toBe(true);
+  });
+
+  it("aceita a lista vazia", () => {
+    // Nenhum Produto ativo é um estado possível, não um corpo quebrado.
+    expect(listaDeProdutosValida([])).toBe(true);
+  });
+
+  it.each([
+    ["null", null],
+    ["objeto", { produtos: [] }],
+    ["item nulo", [null]],
+    ["item sem id", [{ nome: "Ana" }]],
+    ["item sem nome", [{ id: "p1" }]],
+    ["item que é texto", ["Ana"]],
+  ])("recusa %s", (_nome, corpo) => {
+    expect(listaDeProdutosValida(corpo)).toBe(false);
+  });
+});
+
+describe("corpoValidado", () => {
+  /** Uma `Response` de mentira: só o `json()` importa aqui. */
+  function resposta(json: () => Promise<unknown>): Response {
+    return { ok: true, status: 200, json } as unknown as Response;
+  }
+
+  it("devolve o corpo quando ele passa pelo validador", async () => {
+    const corpo = await corpoValidado(resposta(async () => ({ id: "d-1" })), demandaCriadaValida);
+    expect(corpo).toEqual({ id: "d-1" });
+  });
+
+  it("devolve null quando o corpo não dá para ler", async () => {
+    const corpo = await corpoValidado(
+      resposta(async () => {
+        throw new SyntaxError("Unexpected token <");
+      }),
+      demandaCriadaValida,
+    );
+    expect(corpo).toBeNull();
+  });
+
+  it("devolve null quando o corpo lê e não serve", async () => {
+    // As duas causas saem pela MESMA porta de propósito: para quem está
+    // olhando, a resposta chegou e não dá para usar.
+    expect(await corpoValidado(resposta(async () => ({ titulo: "Ana" })), demandaCriadaValida)).toBeNull();
+  });
+
+  it("nunca levanta, nem com o `json()` explodindo", async () => {
+    await expect(
+      corpoValidado(
+        resposta(async () => {
+          throw new TypeError("network error");
+        }),
+        respostaDoChatValida,
+      ),
+    ).resolves.toBeNull();
   });
 });

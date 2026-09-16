@@ -43,19 +43,28 @@ const PRODUTOS = [
 ];
 
 let criadaComAviso: string | null = null;
+/** O corpo que o GET /produtos devolve. `undefined` = a lista boa. */
+let corpoDosProdutos: unknown;
+/** O corpo que o POST /demandas devolve. `undefined` = a Demanda boa. */
+let corpoDaCriacao: unknown;
 
 function montar() {
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
       if (url.endsWith("/produtos")) {
-        return { ok: true, status: 200, json: async () => PRODUTOS } as unknown as Response;
+        return {
+          ok: true,
+          status: 200,
+          json: async () => (corpoDosProdutos === undefined ? PRODUTOS : corpoDosProdutos),
+        } as unknown as Response;
       }
       if (url.endsWith("/demandas") && init?.method === "POST") {
         return {
           ok: true,
           status: 201,
-          json: async () => ({ id: "d-nova", aviso_por_email: criadaComAviso }),
+          json: async () =>
+            corpoDaCriacao === undefined ? { id: "d-nova", aviso_por_email: criadaComAviso } : corpoDaCriacao,
         } as unknown as Response;
       }
       return {
@@ -75,6 +84,8 @@ beforeEach(() => {
   perfil.loading = false;
   navegacao.empurrou = [];
   criadaComAviso = null;
+  corpoDosProdutos = undefined;
+  corpoDaCriacao = undefined;
   Element.prototype.scrollIntoView = vi.fn();
   window.sessionStorage.clear();
 });
@@ -151,6 +162,35 @@ describe("Sem sessão", () => {
   });
 });
 
+describe("A lista de Produtos", () => {
+  // Sem a fronteira, um corpo que não é lista chegava ao `setProdutos` sem
+  // reclamar e quebrava no RENDER seguinte, em `produtos.filter`: a página
+  // inteira sumia, e o `catch` do `fetch` não via nada.
+  it.each([
+    ["null", null],
+    ["objeto", { produtos: [] }],
+    ["item sem id", [{ nome: "Ana", ativo: true }]],
+    ["item que é texto", ["Ana"]],
+  ])("corpo fora do contrato (%s) vira aviso, e não página em branco", async (_nome, corpo) => {
+    corpoDosProdutos = corpo;
+    montar();
+
+    expect((await screen.findByRole("alert")).textContent).toContain("carregar os Produtos");
+    // A tela continua de pé: o assistente está lá, com a caixa de mensagem.
+    expect(screen.getByLabelText("Mensagem")).toBeTruthy();
+  });
+
+  it("a lista dentro do contrato chega à escolha de Produto", async () => {
+    // O par de presença: uma página que recusasse toda lista passaria nos
+    // quatro acima e deixaria a escolha de Produto sempre vazia.
+    montar();
+
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeNull());
+    fireEvent.click(screen.getByRole("combobox", { name: "Produto" }));
+    expect(within(screen.getByRole("listbox")).getByText("Ana")).toBeTruthy();
+  });
+});
+
 describe("Prefiro preencher à mão", () => {
   it("troca o assistente pelo formulário de sempre, na mesma página", async () => {
     montar();
@@ -190,6 +230,22 @@ describe("Depois que a Demanda nasce", () => {
     await criarPeloFormulario();
 
     await waitFor(() => expect(navegacao.empurrou).toEqual(["/admin/tecnologia?demanda=d-nova"]));
+  });
+
+  it("201 com corpo fora do contrato tira o formulário da tela, em vez de reabilitar o botão", async () => {
+    // A Demanda nasceu. Sem botão não há segundo clique, e a criação não tem
+    // chave de idempotência.
+    corpoDaCriacao = null;
+    montar();
+    await waitFor(() => expect(screen.getByRole("button", { name: /prefiro preencher à mão/ })).toBeTruthy());
+
+    await criarPeloFormulario();
+
+    const alerta = await screen.findByRole("alert");
+    expect(alerta.textContent).toContain("A Demanda foi criada");
+    expect(within(alerta).getByRole("link").getAttribute("href")).toBe("/admin/tecnologia");
+    expect(screen.queryByRole("button", { name: "Abrir Demanda" })).toBeNull();
+    expect(navegacao.empurrou).toEqual([]);
   });
 
   it("com aviso de e-mail, a tela NÃO navega sozinha: a frase se perderia", async () => {

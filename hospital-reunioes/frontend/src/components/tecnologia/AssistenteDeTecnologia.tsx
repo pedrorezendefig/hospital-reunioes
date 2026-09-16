@@ -25,7 +25,9 @@ import { Select } from "@/components/ui/Select";
 import {
   AVISO_DE_IA,
   CONVERSA_NO_TETO,
+  corpoValidado,
   CRIADA_SEM_CONFIRMACAO,
+  demandaCriadaValida,
   descricaoAoCriar,
   LIMITE_DA_DESCRICAO,
   LIMITE_DA_MENSAGEM,
@@ -175,21 +177,13 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     if (!resposta.ok) {
       return { erro: resposta.status === 429 ? MUITAS_MENSAGENS : await motivoDaRecusa(resposta) };
     }
-    let corpo: unknown;
-    try {
-      corpo = await resposta.json();
-    } catch (e) {
-      // Conexão que cai depois dos cabeçalhos e antes do corpo, ou um proxy que
-      // responde 200 com HTML. O servidor respondeu; o que não dá é para ler.
-      console.error("[admin/tecnologia] a resposta do assistente veio ilegível", e);
-      return { erro: RESPOSTA_ILEGIVEL };
-    }
-    // 200 que o `JSON.parse` aceita mas que não é `{reply, rascunho}`. Para
-    // quem está olhando é o mesmo caso do corpo ilegível, e por isso é a mesma
-    // frase: a resposta chegou e não dá para usar. O corpo só passa daqui se
-    // servir, e é isso que deixa `encerrarOTurno` sem leitura insegura.
-    if (!respostaDoChatValida(corpo)) {
-      console.error("[admin/tecnologia] a resposta do assistente veio fora do contrato");
+    // Corpo que não dá para ler (conexão que cai depois dos cabeçalhos, proxy
+    // devolvendo HTML) e corpo que dá para ler mas não é `{reply, rascunho}`
+    // saem os dois por aqui, como `null`: para quem está olhando é o mesmo
+    // caso. É isto que deixa `encerrarOTurno` sem leitura insegura.
+    const corpo = await corpoValidado(resposta, respostaDoChatValida);
+    if (corpo === null) {
+      console.error("[admin/tecnologia] a resposta do assistente não deu para usar");
       return { erro: RESPOSTA_ILEGIVEL };
     }
     return { corpo };
@@ -278,14 +272,12 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
       setCriando(false);
       return;
     }
-    let criada: Demanda & { aviso_por_email?: unknown };
-    try {
-      criada = (await resposta.json()) as Demanda & { aviso_por_email?: unknown };
-    } catch (e) {
+    const criada = await corpoValidado(resposta, demandaCriadaValida);
+    if (criada === null) {
       /**
        * A resposta foi 201: a Demanda NASCEU, com id, no Quadro, com o dono
-       * avisado. O que falhou foi ler o corpo, então o que a tela perdeu foi a
-       * confirmação, não a Demanda.
+       * avisado. O que falhou foi ler o corpo (ou ele veio sem o `id`), então o
+       * que a tela perdeu foi a confirmação, não a Demanda.
        *
        * Por isso este caminho NÃO é erro: ele fecha o botão em vez de
        * reabilitá-lo. A criação não tem chave de idempotência, e um segundo
@@ -293,7 +285,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
        * notificados. A sessão é limpa como no caminho de sucesso, que é o que
        * ele é, e a saída oferecida é o Quadro.
        */
-      console.error("[admin/tecnologia] a resposta da criação veio ilegível", e);
+      console.error("[admin/tecnologia] a resposta da criação não deu para usar");
       limparASessao();
       setCriadaSemConfirmacao(true);
       setErro(null);

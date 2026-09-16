@@ -29,10 +29,19 @@ const CRIADA = { id: "d-nova", titulo: "Encerrar conversas" } as unknown as Dema
 
 let chamadas: Chamada[] = [];
 let criadas: { demanda: Demanda; aviso: string | null }[] = [];
+let semConfirmacao = 0;
 
-function montar(opcoes: { recusa?: { status: number; detail: string }; avisoPorEmail?: string } = {}) {
+function montar(
+  opcoes: {
+    recusa?: { status: number; detail: string };
+    avisoPorEmail?: string;
+    /** 201 com um corpo que o `json()` não lê, ou que lê e não serve. */
+    corpoDoCriar?: "ilegivel" | unknown;
+  } = {},
+) {
   chamadas = [];
   criadas = [];
+  semConfirmacao = 0;
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
@@ -48,6 +57,18 @@ function montar(opcoes: { recusa?: { status: number; detail: string }; avisoPorE
           json: async () => ({ detail: opcoes.recusa!.detail }),
         } as unknown as Response;
       }
+      if (opcoes.corpoDoCriar === "ilegivel") {
+        return {
+          ok: true,
+          status: 201,
+          json: async () => {
+            throw new SyntaxError("Unexpected token < in JSON");
+          },
+        } as unknown as Response;
+      }
+      if ("corpoDoCriar" in opcoes) {
+        return { ok: true, status: 201, json: async () => opcoes.corpoDoCriar } as unknown as Response;
+      }
       return {
         ok: true,
         status: 201,
@@ -60,6 +81,9 @@ function montar(opcoes: { recusa?: { status: number; detail: string }; avisoPorE
       token="tok"
       produtos={PRODUTOS}
       onCriada={(demanda, aviso) => criadas.push({ demanda, aviso })}
+      onCriadaSemConfirmacao={() => {
+        semConfirmacao += 1;
+      }}
     />,
   );
 }
@@ -168,6 +192,38 @@ describe("Abrir uma Demanda", () => {
     await waitFor(() => expect(criadas).toHaveLength(1));
     expect(criadas[0].demanda.id).toBe("d-nova");
     expect(criadas[0].aviso).toBeNull();
+  });
+
+  // O mesmo bug do assistente, na tela ao lado: o corpo entrava por `as` e era
+  // desreferenciado sem ninguém conferir. 201 é sucesso, e quem avisa é a
+  // página, que TIRA o formulário da tela em vez de reabilitar o botão.
+  it.each([
+    ["corpo ilegível", "ilegivel"],
+    ["corpo null", null],
+    ["corpo sem id", { titulo: "Encerrar conversas" }],
+    ["corpo que é lista", []],
+  ])("201 com %s vira sucesso sem confirmação, e não entrega Demanda nenhuma", async (_nome, corpo) => {
+    montar({ corpoDoCriar: corpo });
+    preencher();
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
+
+    await waitFor(() => expect(semConfirmacao).toBe(1));
+    expect(criadas).toHaveLength(0);
+    // E não é recusa: o alerta vermelho do formulário fica calado.
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("o 201 dentro do contrato entrega a Demanda, e não avisa sem confirmação", async () => {
+    // O par de presença dos quatro acima: um formulário que sempre avisasse
+    // "sem confirmação" passaria neles.
+    montar();
+    preencher();
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
+
+    await waitFor(() => expect(criadas).toHaveLength(1));
+    expect(semConfirmacao).toBe(0);
   });
 
   it("o aviso de e-mail que não saiu viaja junto com a Demanda", async () => {
