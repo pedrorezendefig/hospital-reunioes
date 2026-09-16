@@ -12,7 +12,13 @@
  * menu deixaria a suíte verde e o super admin sem caminho nenhum no celular.
  */
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
@@ -295,4 +301,23 @@ describe("Sidebar com o item Ajuda", () => {
       ).toEqual([...linksEsperados]);
     }
   );
+
+  /**
+   * A dívida era herdada: o item Ajuda nasceu na issue #734 com
+   * `onClick={onNavigate}` e sem teste nenhum que clicasse nele, então apagar o
+   * `onClick` deixava a suíte verde. Só a gaveta recebe a prop da `AppShell`, e
+   * é ela que fecha a gaveta depois do clique. Como a Ajuda abre em outra aba,
+   * quem não fecha a gaveta deixa a pessoa voltando para o app com o menu por
+   * cima da tela.
+   */
+  it("na gaveta do celular, clicar na Ajuda avisa a casca para fechar", () => {
+    const fecharAGaveta = vi.fn();
+
+    render(<Sidebar variant="drawer" onNavigate={fecharAGaveta} />);
+
+    const menu = screen.getByRole("navigation");
+    fireEvent.click(within(menu).getByRole("link", { name: "Ajuda" }));
+
+    expect(fecharAGaveta).toHaveBeenCalledTimes(1);
+  });
 });

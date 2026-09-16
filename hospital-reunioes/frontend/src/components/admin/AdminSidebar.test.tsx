@@ -18,7 +18,13 @@
  * confere, no mesmo render, um item que a persona VÊ.
  */
 
-import { cleanup, render, screen, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
@@ -205,5 +211,32 @@ describe.each([
       "Tecnologia",
       "Ajuda",
     ]);
+  });
+});
+
+/**
+ * A gaveta do celular fecha ao clicar na Ajuda.
+ *
+ * Este teste mora fora do `describe.each` das duas variantes de propósito: a
+ * prop `onNavigate` é o que a `AppShell` passa **só** na gaveta, e é ela que
+ * fecha a gaveta depois do clique. Rodar isto no desktop provaria menos do que
+ * parece, porque lá a prop nem chega.
+ *
+ * Sem o clique de verdade, o item continuaria "coberto" por testes que leem
+ * href, target e rel e nunca tocam no `onClick`: apagar o `onClick` deixava a
+ * suíte inteira verde. A Ajuda abre em outra aba, então quem não fecha a gaveta
+ * deixa a pessoa voltando para o app com o menu por cima da tela.
+ */
+describe("A gaveta do celular e o item Ajuda", () => {
+  it("clicar na Ajuda avisa a casca para fechar a gaveta", () => {
+    sessao.participante = pessoa("super_admin");
+    const fecharAGaveta = vi.fn();
+
+    render(<AdminSidebar variant="drawer" onNavigate={fecharAGaveta} />);
+
+    const menu = screen.getByRole("navigation");
+    fireEvent.click(within(menu).getByRole("link", { name: "Ajuda" }));
+
+    expect(fecharAGaveta).toHaveBeenCalledTimes(1);
   });
 });
