@@ -33,6 +33,18 @@ Decisão do Pedro (15/set/2026, grilling). O hospital tem um manual só, o da Ou
 
 12. **Novidades por PRD.** Uma entrada por PRD entregue, com o vídeo de percepção quando existe e links para as tarefas que mudaram. Não é changelog.
 
+## Emenda a este ADR (16/set/2026, o domínio próprio foi abandonado)
+
+**Decisão 1, o endereço do manual.** A decisão nomeia `manual.hospitalsaomatheus.cloud` como o endereço do site, e a seção de consequências trata o DNS como ato humano pendente. O Pedro decidiu abandonar o domínio próprio: o endereço definitivo do Manual do usuário passa a ser **`https://manual-hsm.vercel.app`**, o alias de produção do projeto Vercel, sem variável de ambiente e sem DNS pendente.
+
+O que mudou desde a decisão original: o registro nunca foi criado. A zona de `hospitalsaomatheus.cloud` não é servida pela Hostinger, como a consequência supunha, e sim pela Cloudflare, então o ato humano não era o que estava escrito. Enquanto isso, o app já apontava para o domínio, que responde "endereço não encontrado", e o item Ajuda abria uma aba em branco para todo mundo. O custo do endereço bonito era o manual inacessível na tela, e o alias da Vercel já funciona. O `site:` do Astro, de onde saem as URLs canônicas e o mapa do site, passa a ser o mesmo endereço; ele apontava para um domínio que não resolve.
+
+A variável `NEXT_PUBLIC_MANUAL_URL` continua existindo, com o mesmo papel de sempre: apontar um ambiente para uma prévia. Só o valor padrão mudou. Voltar a ter domínio próprio um dia é decisão nova, e o caminho é o mesmo de qualquer troca de endereço: o padrão no app, o `site:` do Astro e um redirecionamento.
+
+**Decisão 11, por onde o app aponta.** A decisão diz "item Ajuda na sidebar", no singular, e a implementação pôs o item só na `Sidebar`. O app tem duas barras: a `AppShell` troca a `Sidebar` pela `AdminSidebar` quando a pessoa entra no /admin. A seção Admin do manual estava publicada e ninguém chegava nela pela barra, porque justamente lá a barra que tinha o item não é a que aparece. A decisão passa a valer para as duas barras, e cada uma abre a seção do lugar em que a pessoa está.
+
+As demais decisões ficam intactas.
+
 ## Consequências
 
 - `docs/manual/ouvidoria/` (página única) deixa de existir como está: vira a seção `ouvidoria/` do site, recortada em tarefas e "Como funciona". Nada do conteúdo se perde; o formato muda.
