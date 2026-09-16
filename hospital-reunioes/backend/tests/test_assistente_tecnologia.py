@@ -14,6 +14,7 @@ Tres costuras, tres blocos:
 
 from __future__ import annotations
 
+import contextlib
 import json
 import os
 import re
@@ -749,22 +750,134 @@ def _xml_de_word(paragrafos: int) -> str:
     return f'<?xml version="1.0" encoding="UTF-8"?><w:document><w:body>{corpo}</w:body></w:document>'
 
 
-def _pdf_com_stream(bruto: bytes) -> bytes:
-    """Um PDF de uma página cujo stream de conteúdo descomprime em `bruto`.
+def _pdf_com_filtro(filtro: bytes, fluxo: bytes) -> bytes:
+    """Um PDF de uma página cujo stream de conteúdo usa `filtro`.
 
     Uma página só de propósito: é a forma eficiente do ataque, e a que o teto
     do laço de páginas nunca alcança, porque não existe página seguinte para
     ele contar.
     """
-    comprimido = zlib.compress(bruto)
     corpo = b"%PDF-1.4\n"
     corpo += b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
     corpo += b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
     corpo += b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<<>>>>endobj\n"
-    corpo += b"4 0 obj<</Length " + str(len(comprimido)).encode() + b"/Filter/FlateDecode>>stream\n"
-    corpo += comprimido + b"\nendstream endobj\n"
+    corpo += b"4 0 obj<</Length " + str(len(fluxo)).encode() + b"/Filter" + filtro + b">>stream\n"
+    corpo += fluxo + b"\nendstream endobj\n"
     corpo += b"trailer<</Size 5/Root 1 0 R>>\n%%EOF\n"
     return corpo
+
+
+def _pdf_com_stream(bruto: bytes) -> bytes:
+    """O mesmo, com `/FlateDecode`, que é o caso da maioria dos testes."""
+    return _pdf_com_filtro(b"/FlateDecode", zlib.compress(bruto))
+
+
+def _fluxo_lzw(repeticoes: int) -> bytes:
+    """O fluxo LZW que faz a entrada da tabela crescer e depois a repete.
+
+    É a forma eficiente do ataque, e a que o revisor mediu: cada código da
+    segunda fase devolve a maior entrada que doze bits alcançam, e o
+    `LZWDecoder` ainda guarda uma entrada nova por código. Espelha a regra de
+    `nbits` do decodificador: 9 bits até a tabela ter 511 entradas, depois 10,
+    11 e 12.
+    """
+    bits: list[int] = []
+
+    def por(codigo: int, largura: int) -> None:
+        bits.extend((codigo >> i) & 1 for i in range(largura - 1, -1, -1))
+
+    tamanho, nbits = 258, 9
+    por(256, nbits)  # clear
+    por(65, nbits)  # a letra A
+    while tamanho < 4095:
+        por(tamanho, nbits)
+        tamanho += 1
+        if tamanho == 511:
+            nbits = 10
+        elif tamanho == 1023:
+            nbits = 11
+        elif tamanho == 2047:
+            nbits = 12
+    for _ in range(repeticoes):
+        por(4095, 12)
+
+    bits.extend([0] * ((-len(bits)) % 8))
+    saida = bytearray()
+    for i in range(0, len(bits), 8):
+        octeto = 0
+        for bit in bits[i : i + 8]:
+            octeto = (octeto << 1) | bit
+        saida.append(octeto)
+    return bytes(saida)
+
+
+def _fluxo_runlength(bruto: bytes) -> bytes:
+    """`bruto` como o `/RunLengthDecode` o escreve, em corridas literais."""
+    saida = bytearray()
+    for i in range(0, len(bruto), 128):
+        pedaco = bruto[i : i + 128]
+        saida.append(len(pedaco) - 1)
+        saida.extend(pedaco)
+    saida.append(128)  # fim dos dados
+    return bytes(saida)
+
+
+def _docx_com_cabecalho_mentiroso(tamanho: int) -> bytes:
+    """Um `.docx` que declara 100 bytes e entrega `tamanho` de deflate.
+
+    O número declarado é trocado nos DOIS lugares em que o zip o escreve: o
+    cabeçalho local e o diretório central. É o arquivo que passava pela
+    conferência da rodada 3, que somava o que estava escrito ali.
+    """
+    pacote = BytesIO()
+    with zipfile.ZipFile(pacote, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("word/document.xml", b"A" * tamanho)
+    bruto = bytearray(pacote.getvalue())
+    local = bruto.find(b"PK\x03\x04")
+    bruto[local + 22 : local + 26] = (100).to_bytes(4, "little")
+    central = bruto.find(b"PK\x01\x02")
+    bruto[central + 24 : central + 28] = (100).to_bytes(4, "little")
+    return bytes(bruto)
+
+
+def _quantas_vezes_o_envelope_pegou(monkeypatch, nome: str, pdf: bytes) -> int:
+    """Roda o PDF e conta quantas vezes a chamada passou pelo envelope instalado.
+
+    Espia o que ESTÁ no `pdfminer` agora, e não o que o nosso módulo exporta:
+    é essa a diferença entre provar que a instalação pegou e provar que a
+    atribuição aconteceu.
+    """
+    from pdfminer import pdftypes
+
+    instalado = getattr(pdftypes, nome)
+    vezes = {"quantas": 0}
+
+    if nome == "zlib":
+
+        def _decompress_espiado(*a, **kw):
+            vezes["quantas"] += 1
+            return instalado.decompress(*a, **kw)
+
+        monkeypatch.setattr(
+            pdftypes,
+            nome,
+            SimpleNamespace(
+                decompress=_decompress_espiado,
+                decompressobj=instalado.decompressobj,
+                error=instalado.error,
+            ),
+        )
+    else:
+
+        def _funcao_espiada(*a, **kw):
+            vezes["quantas"] += 1
+            return instalado(*a, **kw)
+
+        monkeypatch.setattr(pdftypes, nome, _funcao_espiada)
+
+    with contextlib.suppress(ValueError):
+        extrator.extrair_texto("comum.pdf", pdf)
+    return vezes["quantas"]
 
 
 def _pdf_falso(monkeypatch, *, paginas: int, chars_por_pagina: int) -> dict:
@@ -1347,3 +1460,206 @@ class TestOTetoDaAlocacao:
         MB."""
         pagina = b"BT /F1 12 Tf (uma linha de texto de verdade) Tj ET\n" * 20_000
         assert extrator._ZlibComTeto.decompress(zlib.compress(pagina)) == pagina
+
+
+# ─── Os filtros do pdfminer, triados uma vez ─────────────────────────────────
+#
+# Todo nome que o laco de `/Filter` do `pdfminer` chama, com o motivo de ele
+# precisar (ou nao) de envelope. O teste abaixo compara esta lista com o que o
+# laco de fato chama: filtro novo num upgrade aparece como nome novo e deixa a
+# suite VERMELHA, em vez de entrar calado sem teto.
+NOMES_DO_LACO_DE_FILTROS = {
+    # Os tres que descomprimem, e que por isso tem envelope.
+    "zlib": "envelopado por _ZlibComTeto (teto na saida)",
+    "lzwdecode": "envelopado por _lzw_com_teto (teto na saida, consumindo o gerador)",
+    "rldecode": "envelopado por _runlength_com_teto (teto na entrada: ele materializa de uma vez)",
+    # Os que NAO amplificam: a saida deles e menor que a entrada.
+    "ascii85decode": "nao amplifica: cinco caracteres viram quatro bytes",
+    "asciihexdecode": "nao amplifica: dois caracteres viram um byte",
+    # Amplifica, mas nao e alcancavel pela extracao de TEXTO: CCITT so aparece
+    # em XObject de imagem, e o `extract_text` nunca pede os bytes da imagem.
+    # Se um dia pedir, este filtro precisa de envelope.
+    "ccittfaxdecode": "so em XObject de imagem, que a extracao de texto nao decodifica",
+    # Passam adiante sem decodificar nada.
+    "LITERALS_DCT_DECODE": "passa direto (JPEG entregue como esta)",
+    "LITERALS_JBIG2_DECODE": "passa direto",
+    "LITERALS_JPX_DECODE": "passa direto",
+    "LITERAL_CRYPT": "levanta PDFNotImplementedError",
+    # Cai dentro do envelope, pelo `decompressobj` remendado.
+    "decompress_corrupted": "usa zlib.decompressobj, que passa por _DescompressorComTeto",
+    # Os literais que rotulam cada ramo, e o resto da funcao.
+    "LITERALS_FLATE_DECODE": "rotulo do ramo do Flate",
+    "LITERALS_LZW_DECODE": "rotulo do ramo do LZW",
+    "LITERALS_RUNLENGTH_DECODE": "rotulo do ramo do RunLength",
+    "LITERALS_ASCII85_DECODE": "rotulo do ramo do ASCII85",
+    "LITERALS_ASCIIHEX_DECODE": "rotulo do ramo do ASCIIHex",
+    "LITERALS_CCITTFAX_DECODE": "rotulo do ramo do CCITT",
+    "PDFException": "erro do modo STRICT",
+    "PDFNotImplementedError": "erro de filtro nao suportado",
+    "STRICT": "a opcao do pdfminer",
+    "settings": "modulo de opcoes",
+    "apply_png_predictor": "predictor, depois da descompressao",
+    "apply_tiff_predictor": "predictor, depois da descompressao",
+    "int_value": "leitura de parametro",
+    "decompress": "o zlib.decompress do ramo do Flate",
+    "error": "o zlib.error do except do ramo do Flate",
+    "attrs": "atributo do proprio stream",
+    "data": "atributo do proprio stream",
+    "rawdata": "atributo do proprio stream",
+    "decipher": "atributo do proprio stream",
+    "genno": "atributo do proprio stream",
+    "objid": "atributo do proprio stream",
+    "get": "leitura de parametro",
+    "get_filters": "metodo do proprio stream",
+    "str": "builtin, na mensagem do assert",
+}
+
+
+class TestOsFiltrosDoPdf:
+    """Todo filtro que DESCOMPRIME passa por envelope (issue #729, rodada 4).
+
+    A rodada 3 fechou o `/FlateDecode` e deixou os vizinhos abertos: um PDF de
+    35 KB com `/Filter/LZWDecode` levava o worker a 4,8 GB e 67 segundos, e a
+    recusa que saia era "PDF parece ser escaneado", ou seja, a pessoa lia uma
+    frase tranquila enquanto o app caia.
+
+    A pergunta certa nao e "quais filtros eu cobri", e sim "todo filtro que
+    descomprime passa por envelope". E ela precisa continuar valendo depois de
+    um upgrade do `pdfminer`, sem ninguem lembrar de perguntar.
+    """
+
+    def test_todo_filtro_que_descomprime_passa_por_envelope(self):
+        """O fecho da CLASSE. Filtro novo num upgrade deixa isto vermelho.
+
+        Le os nomes que o laco de `/Filter` chama de verdade, e cobra que cada
+        um ja tenha sido triado. Nome novo quer dizer ramo novo, e ramo novo
+        precisa da pergunta "isto descomprime?" respondida ANTES de o upgrade
+        chegar em producao.
+        """
+        from pdfminer import pdftypes
+
+        chamados = set(pdftypes.PDFStream.decode.__code__.co_names)
+        novos = chamados - set(NOMES_DO_LACO_DE_FILTROS)
+        assert not novos, f"nome novo no laço de filtros do pdfminer, triar antes de subir: {sorted(novos)}"
+
+    def test_os_tres_que_descomprimem_continuam_sendo_chamados_de_la(self):
+        """O outro lado: se o `pdfminer` parar de chamar um destes nomes, o
+        envelope daquele filtro virou peso morto e a guarda sumiu sem aviso."""
+        from pdfminer import pdftypes
+
+        chamados = set(pdftypes.PDFStream.decode.__code__.co_names)
+        assert {"zlib", "lzwdecode", "rldecode"} <= chamados
+
+    # ─── As espias: a instalacao PEGA, e nao so aconteceu ────────────────────
+    #
+    # `assert pdftypes.zlib is _ZlibComTeto` era tautologico: so falha se alguem
+    # apagar a linha da atribuicao, e continua VERDE se o `pdfminer` passar a
+    # resolver o simbolo de outro jeito (o revisor provou, trocando
+    # `zlib.decompress(data)` por `__import__("zlib").decompress(data)` la
+    # dentro). Estas tres rodam um PDF DE VERDADE, um por filtro, e cobram que a
+    # chamada passou pelo envelope.
+
+    def test_o_envelope_do_flate_e_de_fato_chamado(self, monkeypatch):
+        pdf = _pdf_com_filtro(b"/FlateDecode", zlib.compress(b"BT /F1 12 Tf (x) Tj ET\n" * 10))
+        assert _quantas_vezes_o_envelope_pegou(monkeypatch, "zlib", pdf) > 0
+
+    def test_o_envelope_do_lzw_e_de_fato_chamado(self, monkeypatch):
+        pdf = _pdf_com_filtro(b"/LZWDecode", _fluxo_lzw(10))
+        assert _quantas_vezes_o_envelope_pegou(monkeypatch, "lzwdecode", pdf) > 0
+
+    def test_o_envelope_do_runlength_e_de_fato_chamado(self, monkeypatch):
+        pdf = _pdf_com_filtro(b"/RunLengthDecode", _fluxo_runlength(b"BT /F1 12 Tf (x) Tj ET\n"))
+        assert _quantas_vezes_o_envelope_pegou(monkeypatch, "rldecode", pdf) > 0
+
+    # ─── LZW ────────────────────────────────────────────────────────────────
+
+    def test_lzw_acima_do_teto_e_recusado(self, monkeypatch):
+        """O caso medido pelo revisor: 35 KB de PDF, 4,8 GB de pico, 67s, e a
+        frase de "PDF escaneado" enquanto o app caía.
+
+        O teto e baixado no teste pelo mesmo motivo dos outros: com o teto de
+        verdade, o MUTANTE que tira o envelope passaria minutos derrubando a
+        maquina da bateria.
+        """
+        monkeypatch.setattr(extrator, "MAX_BYTES_STREAM_DO_PDF", 200_000)
+        bomba = _pdf_com_filtro(b"/LZWDecode", _fluxo_lzw(2_000))
+
+        assert len(bomba) < 100_000, "a bomba tem que ser pequena, senao o teto da ENTRADA a pegaria"
+        with pytest.raises(ValueError) as recusa:
+            extrator.extrair_texto("ataque.pdf", bomba)
+        assert recusa.value.args[0] == extrator.MOTIVO_PDF_GRANDE_DEMAIS
+
+    def test_lzw_de_tamanho_normal_atravessa_o_envelope(self):
+        """O par, com o teto DE VERDADE: PDF legítimo com LZW não pode virar
+        erro. Este é recusado por outro motivo (não tem texto extraível)."""
+        with pytest.raises(ValueError) as recusa:
+            extrator.extrair_texto("comum.pdf", _pdf_com_filtro(b"/LZWDecode", _fluxo_lzw(10)))
+        assert recusa.value.args[0] != extrator.MOTIVO_PDF_GRANDE_DEMAIS
+
+    # ─── RunLength ──────────────────────────────────────────────────────────
+
+    def test_o_teto_do_runlength_cabe_no_orcamento(self):
+        """O numero sai da conta, e nao de palpite: expansao maxima do FORMATO
+        vezes o custo de guardar cada byte como `int` numa lista."""
+        entrada = extrator.MAX_BYTES_ENTRADA_RUNLENGTH
+        alocado = entrada * extrator.EXPANSAO_MAXIMA_DO_RUNLENGTH * extrator.CUSTO_DO_INT_NA_LISTA
+        assert alocado <= extrator.ORCAMENTO_DA_EXTRACAO
+
+    def test_o_teto_do_runlength_nao_morde_stream_de_imagem_legitimo(self):
+        """O outro lado: um stream de RunLength de cem KB vira uns doze MB de
+        imagem, que e o tamanho de uma pagina digitalizada."""
+        assert extrator.MAX_BYTES_ENTRADA_RUNLENGTH >= 100 * 1024
+
+    def test_runlength_acima_do_teto_e_recusado(self, monkeypatch):
+        monkeypatch.setattr(extrator, "MAX_BYTES_ENTRADA_RUNLENGTH", 100)
+        bomba = _pdf_com_filtro(b"/RunLengthDecode", _fluxo_runlength(b"x" * 5_000))
+        with pytest.raises(ValueError) as recusa:
+            extrator.extrair_texto("ataque.pdf", bomba)
+        assert recusa.value.args[0] == extrator.MOTIVO_PDF_GRANDE_DEMAIS
+
+    def test_runlength_de_tamanho_normal_atravessa_o_envelope(self):
+        """O par, com o teto de verdade."""
+        with pytest.raises(ValueError) as recusa:
+            extrator.extrair_texto("comum.pdf", _pdf_com_filtro(b"/RunLengthDecode", _fluxo_runlength(b"texto")))
+        assert recusa.value.args[0] != extrator.MOTIVO_PDF_GRANDE_DEMAIS
+
+    # ─── O envelope do zlib nao engole argumento ────────────────────────────
+
+    def test_argumento_que_o_envelope_nao_conhece_levanta(self):
+        """Hoje o `pdfminer` chama `zlib.decompress(data)` sem `wbits`. Se um
+        dia chamar com ele, engolir o parametro faria o stream virar
+        `zlib.error`, cair no `decompress_corrupted` e terminar em `data = b""`:
+        PDF lido VAZIO, sem erro nenhum."""
+        with pytest.raises(TypeError):
+            extrator._ZlibComTeto.decompress(zlib.compress(b"oi"), -15)
+
+
+class TestOCabecalhoMentirosoDoDocx:
+    """O `.docx` que declara 100 bytes e entrega 300 MB (issue #729, rodada 4).
+
+    A rodada 3 conferia o `file_size` do cabecalho e afirmava, num comentario,
+    que o `zipfile` lia no maximo aquele tanto por membro. Nao le: o
+    `ZipExtFile.read(-1)` pede 1 GiB ao descompressor e so corta DEPOIS. Um
+    arquivo de 291 KB passava pela conferencia e gastava a memoria toda antes
+    do erro de CRC.
+    """
+
+    def test_cabecalho_que_mente_para_baixo_e_recusado(self):
+        mentiroso = _docx_com_cabecalho_mentiroso(300 * 1024 * 1024)
+
+        assert len(mentiroso) < 1024 * 1024, "o arquivo tem que ser pequeno, senao o teto da ENTRADA o pegaria"
+        with pytest.raises(ValueError) as recusa:
+            extrator.extrair_texto("mentiroso.docx", mentiroso)
+        assert recusa.value.args[0] == extrator.MOTIVO_XML_GRANDE_DEMAIS
+
+    def test_a_conferencia_le_o_membro_em_vez_de_acreditar_no_tamanho(self):
+        """A mesma coisa, na costura: com o `file_size` mentindo, a conferencia
+        tem que medir o que o membro vira DE VERDADE."""
+        with pytest.raises(ValueError):
+            extrator._conferir_xml_do_docx(_docx_com_cabecalho_mentiroso(300 * 1024 * 1024))
+
+    def test_docx_honesto_continua_passando(self):
+        """O par: a leitura nova nao pode recusar `.docx` de verdade."""
+        with pytest.raises(ValueError) as recusa:
+            extrator.extrair_texto("honesto.docx", _zip_com_texto(_xml_de_word(10)))
+        assert recusa.value.args[0] != extrator.MOTIVO_XML_GRANDE_DEMAIS
