@@ -44,6 +44,17 @@ Slices may be **HITL** or **AFK**. HITL slices require human interaction (archit
 
 Se nem os lotes conseguem fechar verde sozinhos, mantenha a sequência mas use uma integration branch compartilhada, com todas as issues bloqueando uma issue final de integrate-and-verify: o verde só é prometido lá.
 
+#### A Fatia de manual (todo PRD com tela)
+
+O PRD traz a seção **"Manual: páginas que nascem ou mudam"**. Quando ela lista alguma página (ou seja, sempre que o PRD mexe em tela), a **última** fatia é a Fatia de manual, e ela não é opcional (ADR 0057, decisão 8):
+
+- **Título:** `docs: manual do PRD #<PRD>`.
+- **Labels:** `type:docs` e `area:docs`, além de `ready-for-agent` e do tamanho.
+- **Bloqueada nativamente por todas as fatias de código** do PRD: a página precisa da tela pronta para o print e o vídeo, então ela roda depois, não no mesmo PR (é isto que emenda a regra "mesmo PR" do ADR 0056).
+- **Corpo:** manda rodar `/manual #<PRD>`, cita a seção "Manual" do PRD como a lista do que escrever e lembra que tudo nasce em `draft: true`, porque quem tira o draft é o `/deploy ship` quando a funcionalidade sobe.
+
+PRD cuja seção "Manual" diz "Nenhuma: este PRD não muda tela" não ganha esta fatia.
+
 ### 4. Quiz the user
 
 Apresente a divisão como uma **lista numerada em pt-BR**. Para cada fatia, mostre:

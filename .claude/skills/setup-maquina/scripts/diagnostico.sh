@@ -46,6 +46,11 @@ bin_ok() { # nome conserto -> OK se está no PATH do shell; AVISO se só existe 
 chave_preenchida() { # arquivo chave -> 0 se existe, não está vazia e não é o placeholder do exemplo
   [ -f "$1" ] && grep -Eq "^$2=[^[:space:]]" "$1" && ! grep -Eq "^$2=(<PREENCHER>|\"\"|'')[[:space:]]*$" "$1"
 }
+versao_min() { # atual minima -> 0 se atual >= minima, comparando por número
+  # `sort -V` e não ordem alfabética: 22.9 vem depois de 22.12 no alfabeto e
+  # aprovaria um Node que não builda o site do Manual.
+  [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]
+}
 # ---------------------------------------------------------------- Nível 1
 titulo "Nível 1: pipeline (issues, tdd, PR)"
 bin_ok git "xcode-select --install"
@@ -162,6 +167,24 @@ else
   falta "hospital-reunioes/.env existe" "printf '%s\\n' $ENV_MIN > hospital-reunioes/.env (três valores fictícios; nada real)"
 fi
 
+# O /deploy ship publica o Manual quando o deploy tira alguma página do draft
+# (Passo 9.6): o site é Starlight, buildado por `corepack pnpm@9` com Node >=
+# 22.12, e a publicação reencoda cada vídeo com ffmpeg. Por isso os três são
+# nível 2, o mesmo do deploy, e não opcionais.
+NODE_MIN=22.12
+if no_path_do_shell node; then
+  nodev="$(PATH="$PATH_SHELL" node -v 2>/dev/null)"; nodev="${nodev#v}"
+  if versao_min "$nodev" "$NODE_MIN"; then
+    ok "node >= $NODE_MIN (manual)" "v$nodev"
+  else
+    falta "node >= $NODE_MIN (manual)" "tem v$nodev; o site do Manual não builda: brew install node@22 e ponha no PATH do ~/.zshrc"
+  fi
+else
+  falta "node >= $NODE_MIN (manual)" "brew install node@22 (o /deploy ship publica o Manual e o site exige $NODE_MIN)"
+fi
+bin_ok corepack "npm i -g corepack (o site do Manual builda com corepack pnpm@9)"
+bin_ok ffmpeg "brew install ffmpeg (a publicação do Manual reencoda os vídeos)"
+
 fi
 
 # ---------------------------------------------------------------- Nível 3
@@ -169,17 +192,21 @@ if [ "$NIVEL" -ge 3 ]; then
 titulo "Nível 3: app local (opcional, hoje ninguém usa)"
 if tem_bin docker && docker ps >/dev/null 2>&1; then ok "docker no ar"; else opc "docker no ar" "instale o Docker Desktop e abra"; fi
 no_path_do_shell supabase && ok "supabase" || opc "supabase" "brew install supabase/tap/supabase (se já instalou, adicione ao PATH do ~/.zshrc)"
-no_path_do_shell node && ok "node" "$(node -v)" || opc "node 20+" "brew install node@22 (se já instalou, adicione ao PATH do ~/.zshrc)"
-no_path_do_shell corepack && ok "corepack" || opc "corepack" "npm i -g corepack (se já instalou, adicione ao PATH do ~/.zshrc)"
+# node e corepack são conferidos no nível 2: o deploy publica o Manual.
 [ -f "$APP/frontend/.env.local" ] && ok "frontend/.env.local" || opc "frontend/.env.local" "cp hospital-reunioes/frontend/.env.example hospital-reunioes/frontend/.env.local"
 fi
 
 # ---------------------------------------------------------------- Nível 4
 if [ "$NIVEL" -ge 4 ]; then
-titulo "Nível 4: divulgar (opcional)"
-no_path_do_shell ffmpeg && ok "ffmpeg" || opc "ffmpeg" "brew install ffmpeg (se já instalou, adicione ao PATH do ~/.zshrc)"
+titulo "Nível 4: produzir vídeo e print (opcional)"
 [ -d "/Applications/Google Chrome.app" ] && ok "Google Chrome" || opc "Google Chrome" "brew install --cask google-chrome"
 [ -d "$HOME/.claude/skills/hyperframes" ] && ok "skills globais hyperframes" || opc "skills globais hyperframes" "npx skills add heygen-com/hyperframes --all (skills globais, fora do repo; ver /divulgar)"
+# Roteiro de prints do manual: Playwright em Python, com o Chromium baixado.
+if PATH="$PATH_SHELL" python3 -c "import playwright" >/dev/null 2>&1; then
+  ok "playwright (roteiro de prints)"
+else
+  opc "playwright (roteiro de prints)" "pip install playwright && python3 -m playwright install chromium"
+fi
 fi
 
 # ---------------------------------------------------------------- Mapa do repo

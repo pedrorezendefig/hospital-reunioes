@@ -11,9 +11,9 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 ## Fluxo principal (planejar → desenvolver → entregar)
 
 1. **Planejar**: `/grill-with-docs` desafia o plano contra o domínio (uma pergunta por vez, recomendação destacada em cada decisão; atualiza `CONTEXT.md`/ADR via `domain-modeling`). Dúvida factual de serviço externo no meio do grilling → `/research` em background.
-2. **Especificar**: `/to-prd` vira PRD (1 issue `ready-for-agent`) → `/to-issues` quebra em fatias verticais com label `fatia:P/M/G`.
+2. **Especificar**: `/to-prd` vira PRD (1 issue `ready-for-agent`, com a seção "Manual: páginas que nascem ou mudam") → `/to-issues` quebra em fatias verticais com label `fatia:P/M/G` e, em PRD com tela, fecha com a **Fatia de manual** (`docs: manual do PRD #N`, bloqueada pelas fatias de código; ADR 0057).
 3. **Desenvolver**: `/pegar-issue <N>` (claim atômico + branch; sem argumento, lista a fila) → `/tdd` (red → green → refactor).
-4. **Entregar**: `/ship` (3 gates → merge humano → deploy). `/deploy` direto para operar produção sem PR novo (status, rollback, setup Coolify).
+4. **Entregar**: `/ship` (3 gates → merge humano → deploy). `/deploy` direto para operar produção sem PR novo (status, rollback, setup Coolify). No fim do `/deploy ship`, as páginas do Manual dos PRDs que subiram saem do `draft` e o site republica sozinho.
 
 ## Modo AFK
 
@@ -38,7 +38,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 
 ## Máquina nova
 
-- `/setup-maquina [--nivel N] [--env] [--mapa]`: diagnóstico de quem clonou (clone atualizado, binários, gh, plugins, Coolify, tokens) com o conserto ao lado e o item do 1Password de cada chave; `--mapa` explica cada pasta do repo pelo `README.md` da raiz e como se conectar a cada serviço. O app não roda local: nível 2 (deploy) é o alvo.
+- `/setup-maquina [--nivel N] [--env] [--mapa]`: diagnóstico de quem clonou (clone atualizado, binários, gh, plugins, Coolify, tokens) com o conserto ao lado e o item do 1Password de cada chave; `--mapa` explica cada pasta do repo pelo `README.md` da raiz e como se conectar a cada serviço. O app não roda local: nível 2 (deploy) é o alvo. Quem vai produzir ou publicar o Manual roda `--nivel 4`: ele confere Node >= 22.12 (o site não builda com menos), `ffmpeg` e Playwright.
 
 ## Travessia de sessões
 
@@ -51,6 +51,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 - ADRs: consuma só `status: accepted`; supersessão bidirecional travada pelo CI `lint-adr`.
 - Estado vive nas GitHub Issues + `docs/spec/deploy/*.json`; proibido criar docs paralelos de estado/processo.
 - Nada de travessão nem meia-risca em texto visível ao usuário (ADR 0013).
+- **O Manual só mostra o que está no ar** (ADR 0057): página de funcionalidade que ainda não subiu nasce em `draft`, e quem tira o draft é o `/deploy ship`, nunca a mão. A Fatia de manual roda depois das fatias de código, não no mesmo PR.
 
 ## Manutenção deste router
 

@@ -34,7 +34,7 @@ gh issue list --state closed --limit 100 --json number,title,labels,closedAt \
 python3 -c "import json;[print(d['at'][:10], d['app_version'], d['subject']) for d in json.load(open('docs/spec/deploy/history.json'))['deploys'][:20]]"
 ```
 
-O PRD só entra se **subiu**: a data do deploy está no `history.json`, e é ela que vira a data da entrada de Novidades (nunca a data da issue nem a de hoje). Grave o resultado no scratchpad:
+O PRD só entra se **subiu**: a data do deploy está no `history.json`, e é ela que vira a data da entrada de Novidades (nunca a data da issue nem a de hoje). Deploy registrado a partir da issue #735 traz o campo `prds` na entrada: leia dele, não do `notes` em prosa. Entrada antiga não tem o campo, e aí o PRD sai do `notes` mesmo, na mão. O que o `history.json` não diz é de que **módulo** é cada PRD: isso continua vindo da leitura do PRD. Grave o resultado no scratchpad:
 
 ```bash
 cat > <scratchpad>/entregues.json <<'JSON'
