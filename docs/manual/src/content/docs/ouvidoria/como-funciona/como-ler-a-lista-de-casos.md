@@ -43,6 +43,17 @@ A Ouvidoria aparece na barra de baixo para quem tem acesso a ela.
 
 ## O que aparece para quem não é da Ouvidoria
 
-Quem usa o resto da plataforma vê só o índice dos casos não sigilosos: número,
-setor, situação e prazo. O relato, o nome de quem falou e a resposta da área não
-aparecem, e caso sigiloso não aparece nem na lista.
+Quem entra na plataforma sem acesso à Ouvidoria também abre esta lista, e nela
+lê, de cada caso não sigiloso: o protocolo, o setor, a situação, o prazo, a
+gravidade, o tipo, o desfecho quando o caso já encerrou e **o resumo**, que é a
+frase que descreve o caso. No computador, passar o mouse em cima mostra o resumo
+inteiro.
+
+O que essa pessoa não alcança: o relato de quem falou, o nome e o contato dele,
+os anexos, a resposta da área e o histórico. A página do caso também não abre
+para ela.
+
+Caso sigiloso não aparece nesta lista, nem para quem administra a plataforma.
+Enquanto você não classifica um caso, ele é tratado como sigiloso, então o
+resumo de um caso novo só sai da Ouvidoria quando você decide que ele não é
+denúncia nem relato de conduta.

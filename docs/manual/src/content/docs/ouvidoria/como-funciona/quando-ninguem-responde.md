@@ -20,8 +20,6 @@ para uma pessoa diferente.
 4. **Dois dias úteis depois:** a Diretoria. Último degrau. Nenhum caso morre
    ignorado.
 
-![E-mail de cobrança de caso crítico](../../../../assets/ouvidoria/email-critico.png)
-
 ## A cobrança respeita o horário comercial
 
 Uma cobrança que nasce de madrugada espera a próxima abertura do expediente para

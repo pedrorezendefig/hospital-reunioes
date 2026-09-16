@@ -26,8 +26,6 @@ Esses números são o ponto de partida. O que vale é o que estiver na tela
 **Tabela de prazos**, e cada mudança guarda quem mudou, quando e de quanto para
 quanto.
 
-![Tela da tabela de prazos e dos feriados](../../../../assets/ouvidoria/prazos.png)
-
 ## O expediente
 
 Segunda a sexta, das 8h às 17h. A hora útil anda dentro desse período e para às

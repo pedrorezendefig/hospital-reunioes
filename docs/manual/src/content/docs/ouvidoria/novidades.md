@@ -81,7 +81,7 @@ Setembro de 2026. O caso passou a ter uma página com endereço próprio pelo n�
 do protocolo, e quem não estava logado voltou a cair nela depois de entrar. A
 Ouvidoria ganhou atalho no celular e os quatro marcos do caso na tela.
 
-Está em [Acompanhar o painel da Ouvidoria](/ouvidoria/acompanhar-o-painel-da-ouvidoria/).
+Está em [Como ler a lista de casos](/ouvidoria/como-funciona/como-ler-a-lista-de-casos/).
 
 ## O formulário honra o cartaz
 
@@ -89,7 +89,8 @@ Setembro de 2026. Quem abre o formulário pelo QR passou a poder dizer se traz u
 elogio, uma reclamação, uma sugestão ou um pedido de informação. É sugestão de
 quem manifesta, não classificação: quem classifica continua sendo o ouvidor.
 
-Está em [Imprimir o cartaz com o QR do setor](/ouvidoria/imprimir-o-cartaz-com-o-qr-do-setor/).
+Está em [Registrar uma manifestação pelo formulário](/ouvidoria/registrar-manifestacao-pelo-formulario/)
+e em [Imprimir o cartaz com o QR do setor](/ouvidoria/imprimir-o-cartaz-com-o-qr-do-setor/).
 
 ## A Diretoria passa a enxergar o todo
 

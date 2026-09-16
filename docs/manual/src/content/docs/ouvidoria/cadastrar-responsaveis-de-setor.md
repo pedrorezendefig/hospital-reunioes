@@ -27,8 +27,6 @@ responsabilidade por um setor. Setor sem titular vigente não é acionável.
 6. Para tirar alguém do papel, use **Encerrar vigência hoje**. Não apague: o
    histórico dos casos antigos aponta para quem respondia na época.
 
-![Tela de responsáveis por setor](../../../assets/ouvidoria/responsaveis.png)
-
 ## Se der errado
 
 - **O setor aparece com Sem titular vigente:** ele tem só gestor. O caso

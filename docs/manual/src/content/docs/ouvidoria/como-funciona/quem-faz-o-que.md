@@ -35,8 +35,10 @@ caso protegido.
 
 ## Quem usa o resto da plataforma
 
-Login normal, sem acesso à Ouvidoria. Vê só o índice dos casos não sigilosos:
-número, setor, situação e prazo. Não abre o caso.
+Login normal, sem acesso à Ouvidoria. Abre a lista e lê, de cada caso não
+sigiloso: protocolo, setor, situação, prazo, gravidade, tipo, desfecho e o
+resumo do caso. Não abre a página do caso, e não alcança o relato, a
+identificação de quem falou, os anexos, a resposta da área nem o histórico.
 
 ## Quem administra a plataforma
 

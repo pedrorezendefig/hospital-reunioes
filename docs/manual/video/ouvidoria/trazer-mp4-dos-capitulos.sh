@@ -5,49 +5,102 @@
 # migração do manual (issue #738): as composições vieram para
 # docs/manual/video/ouvidoria/cap-N/ e o MP4 continua fora do git, como manda a
 # decisão 3 do ADR 0057. Este script é o caminho de volta do arquivo para quem
-# clonou o repositório ou vai publicar.
+# clonou o repositório ou vai publicar. Rode antes de `docs/manual/publicar.sh`:
+# página publicada que exibe vídeo sem o arquivo trava a publicação de propósito.
 #
-# Rode antes de `bash docs/manual/publicar.sh`: página publicada que exibe
-# vídeo sem o arquivo trava a publicação de propósito.
+# ONDE ESTÁ O MASTER. O original 1080p não está em lugar nenhum do repositório:
+# a pasta da apresentação guarda uma cópia já reduzida a 720p e sem áudio (o
+# `gerar.py` apaga o original depois de reencodar), e por isso ela NÃO serve de
+# origem aqui, senão a publicação reencodaria em cima de uma derivada. O master
+# vive hoje em dois lugares: o manual antigo publicado, que este PR está
+# aposentando, e a cópia de trabalho desta entrega, que o `--de` aponta.
 #
-# Uso: bash docs/manual/video/ouvidoria/trazer-mp4-dos-capitulos.sh
+# DAQUI PARA A FRENTE o dono do master é o próprio site do manual: assim que a
+# seção Ouvidoria publicar com os vídeos, `$NOVO/video/ouvidoria/cap-N.mp4`
+# passa a ser a origem estável, e é ela que este script tenta primeiro. Por
+# isso a ordem importa na hora de publicar: **suba o site novo com os vídeos
+# antes de publicar o redirecionamento do endereço antigo**, senão o único
+# master que resta é a cópia local de quem estiver com ela na máquina.
+#
+# Uso:
+#   bash docs/manual/video/ouvidoria/trazer-mp4-dos-capitulos.sh [--de <pasta>]
+#
+#   --de <pasta>   pasta com uma cópia local dos sete (cap-N.mp4). Também pode
+#                  vir pela variável de ambiente CAPITULOS_DE.
 set -euo pipefail
 
 RAIZ="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../../.." && pwd)"
 DESTINO="$RAIZ/docs/manual/public/video/ouvidoria"
-# A cópia que a apresentação em pptx já baixou, quando ela existe nesta máquina.
-CACHE="$RAIZ/docs/comunicacao/ouvidoria/apresentacao/videos"
-# O manual antigo, enquanto ele ainda serve os arquivos. Quando o
-# redirecionamento de docs/manual/redirecionamento/ subir, este endereço passa a
-# responder com o site novo e deixa de servir MP4: a partir daí a origem é o
-# próprio site publicado.
+NOVO="https://manual-hsm.vercel.app"
 ANTIGO="https://manual-ouvidoria-hsm.vercel.app"
+COPIA="${CAPITULOS_DE:-}"
+
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --de) COPIA="$2"; shift ;;
+    *) echo "opção desconhecida: $1" >&2; exit 2 ;;
+  esac
+  shift
+done
+
+# MP4 de verdade tem "ftyp" a partir do quinto byte. Sem esta conferência, uma
+# página de erro ou um redirecionamento seguido até o HTML de outro site entram
+# na pasta com nome de vídeo, e a falha só aparece depois, no ffmpeg da
+# publicação, quando já não há mais de onde baixar.
+e_mp4() {
+  [ -f "$1" ] && [ "$(dd if="$1" bs=1 skip=4 count=4 2>/dev/null)" = "ftyp" ]
+}
+
+# `-f` (erro de HTTP falha), `--max-redirs 0` (redirecionamento não é download:
+# o endereço antigo passa a responder 308 para a home do manual novo assim que
+# o redirecionamento sobe) e conferência do que chegou antes de manter o
+# arquivo. Falha aqui é falha, não um HTML com nome de vídeo.
+baixar() {
+  local url="$1" alvo="$2"
+  curl -fsS --max-redirs 0 -o "$alvo.parcial" "$url" 2>/dev/null || { rm -f "$alvo.parcial"; return 1; }
+  if ! e_mp4 "$alvo.parcial"; then
+    rm -f "$alvo.parcial"
+    return 1
+  fi
+  mv "$alvo.parcial" "$alvo"
+}
 
 mkdir -p "$DESTINO"
 FALTANDO=""
 for n in 1 2 3 4 5 6 7; do
   alvo="$DESTINO/cap-$n.mp4"
-  if [ -f "$alvo" ]; then
+  if e_mp4 "$alvo"; then
     echo "cap-$n: já está aqui"
     continue
   fi
-  if [ -f "$CACHE/video-cap$n.mp4" ]; then
-    cp "$CACHE/video-cap$n.mp4" "$alvo"
-    echo "cap-$n: copiado da apresentação"
-    continue
-  fi
-  if curl -fsL -o "$alvo" "$ANTIGO/video-cap$n.mp4"; then
+  rm -f "$alvo"
+  if [ -n "$COPIA" ] && e_mp4 "$COPIA/cap-$n.mp4"; then
+    cp "$COPIA/cap-$n.mp4" "$alvo"
+    echo "cap-$n: copiado de $COPIA"
+  elif baixar "$NOVO/video/ouvidoria/cap-$n.mp4" "$alvo"; then
+    echo "cap-$n: baixado do manual publicado"
+  elif baixar "$ANTIGO/video-cap$n.mp4" "$alvo"; then
     echo "cap-$n: baixado do manual antigo"
   else
-    rm -f "$alvo"
     FALTANDO="$FALTANDO cap-$n"
   fi
 done
 
 if [ -n "$FALTANDO" ]; then
   echo "não consegui trazer:$FALTANDO" >&2
-  echo "a composição de cada um está em docs/manual/video/ouvidoria/, e o render é" >&2
+  echo "as três origens falharam, e cada uma falha por um motivo diferente:" >&2
+  echo "  - a cópia local: passe --de <pasta> apontando para os cap-N.mp4;" >&2
+  echo "  - o manual publicado: a seção Ouvidoria ainda não subiu com os vídeos;" >&2
+  echo "  - o manual antigo: o endereço já redireciona, e download de HTML foi recusado." >&2
+  echo "a composição de cada capítulo está em docs/manual/video/ouvidoria/, e o" >&2
+  echo "último recurso é regerar, o que produz um vídeo novo, não o original:" >&2
   echo "  npx --yes hyperframes@0.8.41 render --quality high -o <destino>" >&2
   exit 1
 fi
-echo "os sete capítulos estão em $DESTINO"
+
+echo
+echo "os sete capítulos estão em $DESTINO:"
+for n in 1 2 3 4 5 6 7; do
+  alvo="$DESTINO/cap-$n.mp4"
+  echo "  cap-$n.mp4  $(du -h "$alvo" | cut -f1)  $(file -b "$alvo")"
+done

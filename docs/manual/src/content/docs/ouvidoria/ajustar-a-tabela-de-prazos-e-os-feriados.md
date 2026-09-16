@@ -26,8 +26,6 @@ feriado novo no calendário do Rio. Ninguém mais mexe nesta tela.
    **Adicionar**.
 5. Para tirar um dia da lista, use **Remover**. Ele volta a contar como dia útil.
 
-![Tela da tabela de prazos e dos feriados](../../../assets/ouvidoria/prazos.png)
-
 ## Se der errado
 
 - **Um caso já encaminhado continua com o prazo antigo:** é assim mesmo. A

@@ -18,8 +18,9 @@ sigiloso por natureza.
 ## Quem vê o quê
 
 - **Caso comum:** ouvidor e Diretoria veem tudo. Quem usa o resto da plataforma
-  vê só o índice: número, setor, situação e prazo. O setor recebe o resumo, o
-  relato inteiro, a nota da Ouvidoria e quem falou.
+  lê na lista o protocolo, o setor, a situação, o prazo, a gravidade, o tipo, o
+  desfecho e **o resumo do caso**, e não abre a página dele. O setor responsável
+  recebe o resumo, o relato inteiro, a nota da Ouvidoria e quem falou.
 - **Caso sigiloso:** só ouvidor e Diretoria. O caso nem aparece na lista de quem
   está fora da Ouvidoria, e o setor recebe só a nota da Ouvidoria.
 - **Caso anônimo:** como o comum, mas sem os dados de quem falou. O setor recebe
@@ -29,6 +30,18 @@ sigiloso por natureza.
   não é o mesmo que poder ler denúncia.
 
 ![Denúncia anônima ainda não classificada](../../../../assets/ouvidoria/caso-denuncia-sigilosa.png)
+
+## O resumo é o que atravessa a parede
+
+No caso que entra pelo formulário ou pelo QR, o resumo não é escrito por
+ninguém: são as primeiras linhas do relato, do jeito que a pessoa escreveu, até
+200 caracteres. No caso que a Ouvidoria registra à mão, é o texto que o ouvidor
+escreve no campo **Resumo**.
+
+É esse texto que fica visível na lista para quem tem login e não é da Ouvidoria,
+assim que o caso deixa de ser sigiloso. Por isso o caso novo nasce protegido:
+tirar o sigilo de um caso que veio do formulário é decidir que o começo daquele
+relato pode ser lido pelo hospital.
 
 ## Tirar o sigilo é sempre um ato consciente
 
