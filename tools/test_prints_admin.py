@@ -142,7 +142,13 @@ def test_a_guarda_recusa_capturar_com_filtro_frouxo(monkeypatch, termo):
     with pytest.raises(SystemExit) as erro:
         roteiro._conferir_o_filtro()
 
-    assert "casa gente de verdade" in str(erro.value)
+    # A mensagem inteira, não um pedaço dela: asserir uma substring sobrevive a
+    # trocar a frase por outra que não diga qual termo foi barrado.
+    assert str(erro.value) == (
+        f"recusado: o filtro da busca é '{termo}', com menos de "
+        f"{roteiro.MINIMO_DO_FILTRO} letras. Termo curto casa gente de verdade, "
+        "e o print da lista de Usuários sairia com nome e email reais."
+    )
 
 
 def test_a_guarda_deixa_passar_o_filtro_de_verdade():
@@ -152,23 +158,158 @@ def test_a_guarda_deixa_passar_o_filtro_de_verdade():
     roteiro._conferir_o_filtro()
 
 
-def test_a_captura_confere_o_filtro_antes_de_abrir_a_tela():
-    """A guarda está ligada no caminho que captura, e não só definida.
+# --------------------------------------------------------------------------
+# A tela de mentira
+#
+# Ler o código-fonte da função prova que uma linha existe, não que ela roda, e
+# foi exatamente por aí que a primeira versão destes testes passou verde sobre
+# uma guarda desligada: asserir o NOME da constante não é asserir o USO dela.
+# Esta tela falsa registra o que o roteiro faz com ela, na ordem, e as
+# asserções passam a ser sobre comportamento.
+# --------------------------------------------------------------------------
+
+
+class _CampoFalso:
+    """Um elemento da tela falsa: anota o que recebe e devolve outro igual."""
+
+    def __init__(self, pagina: "_PaginaFalsa", quem: str):
+        self.pagina = pagina
+        self.quem = quem
+
+    def wait_for(self, **kwargs):
+        return self
+
+    def fill(self, valor):
+        self.pagina.passos.append(("digitou", self.quem, valor))
+
+    def click(self, **kwargs):
+        self.pagina.passos.append(("clicou", self.quem))
+
+    def locator(self, seletor):
+        return _CampoFalso(self.pagina, seletor)
+
+    def screenshot(self, path=None, **kwargs):
+        self.pagina.passos.append(("fotografou", str(path)))
+
+    def scroll_into_view_if_needed(self):
+        return self
+
+    @property
+    def first(self):
+        return self
+
+    @property
+    def last(self):
+        return self
+
+
+class _PaginaFalsa:
+    """A tela que o roteiro pensa estar dirigindo."""
+
+    def __init__(self, url: str = ""):
+        self.url = url
+        self.passos: list[tuple] = []
+
+    def goto(self, url, **kwargs):
+        self.passos.append(("abriu", url))
+        self.url = url
+
+    def get_by_placeholder(self, texto):
+        return _CampoFalso(self, texto)
+
+    def get_by_role(self, papel, name=None, **kwargs):
+        return _CampoFalso(self, f"{papel}:{name}")
+
+    def get_by_text(self, texto, **kwargs):
+        return _CampoFalso(self, texto)
+
+    def locator(self, seletor):
+        return _CampoFalso(self, seletor)
+
+    def wait_for_timeout(self, ms):
+        return None
+
+    def screenshot(self, path=None, **kwargs):
+        self.passos.append(("fotografou", str(path)))
+
+    def tipos(self) -> list[str]:
+        return [p[0] for p in self.passos]
+
+
+BASE_FALSA = "http://localhost:3000"
+
+
+def test_a_busca_recebe_o_filtro_de_exemplo_e_nao_outra_coisa():
+    """O que a busca recebe, e não o nome da constante escrito no arquivo.
+
+    Este é o mutante que sobreviveu à rodada anterior: trocar o uso por
+    `busca.fill("")` mantendo `FILTRO_DE_EXEMPLO` escrito em algum lugar do
+    arquivo passava verde, porque a asserção procurava o nome no código. Aqui
+    a asserção é sobre o valor que chegou ao campo.
+    """
+    roteiro = carregar_roteiro()
+    pagina = _PaginaFalsa()
+
+    roteiro._usuarios_filtrados(pagina, BASE_FALSA)
+
+    digitados = [passo for passo in pagina.passos if passo[0] == "digitou"]
+    assert digitados == [("digitou", "Buscar por nome ou email…", "exemplo")]
+
+
+def test_a_tela_nem_chega_a_abrir_com_filtro_frouxo(monkeypatch):
+    """A guarda roda antes do `goto`, e a prova é que nada aconteceu.
 
     Guarda que existe e ninguém chama protege tanto quanto guarda que não
-    existe. O teste lê o corpo porque o que ele prova é uma chamada, e uma
-    chamada que não acontece não tem retorno para asserir.
+    existe. Com a lista de passos vazia, a tela não foi aberta nem preenchida:
+    não houve instante nenhum com a lista real renderizada.
     """
-    import inspect
-
     roteiro = carregar_roteiro()
-    corpo = inspect.getsource(roteiro._usuarios_filtrados)
+    monkeypatch.setattr(roteiro, "FILTRO_DE_EXEMPLO", "")
+    pagina = _PaginaFalsa()
 
-    assert "_conferir_o_filtro()" in corpo, (
-        "a guarda do filtro saiu do caminho da captura"
+    with pytest.raises(SystemExit):
+        roteiro._usuarios_filtrados(pagina, BASE_FALSA)
+
+    assert pagina.passos == [], (
+        "a tela foi mexida antes de a guarda recusar o filtro"
     )
-    assert corpo.index("_conferir_o_filtro()") < corpo.index("page.goto"), (
-        "a guarda roda depois de abrir a tela: o print já teria sido possível"
+
+
+def test_o_painel_so_e_fotografado_depois_de_a_busca_ser_preenchida(tmp_path):
+    """A ordem que importa, medida no caminho inteiro da captura.
+
+    Entre abrir a tela e filtrar existe um instante com a lista real, e é esse
+    instante que não pode virar arquivo.
+    """
+    roteiro = carregar_roteiro()
+    pagina = _PaginaFalsa(url=BASE_FALSA)
+
+    roteiro.painel_de_administracao(pagina, BASE_FALSA, tmp_path)
+
+    tipos = pagina.tipos()
+    assert "fotografou" in tipos, "o painel não chegou a ser capturado"
+    assert tipos.index("digitou") < tipos.index("fotografou"), (
+        "o painel é fotografado antes de a busca ser preenchida: o print "
+        "sairia com nome e email de gente real"
+    )
+
+
+@pytest.mark.parametrize("captura", ["painel_de_administracao", "novo_usuario"])
+def test_toda_captura_passa_pelo_filtro(monkeypatch, tmp_path, captura):
+    """As duas funções de captura, e não só a que alguém lembrou de testar.
+
+    Uma captura nova que pule `_usuarios_filtrados` é a porta pela qual o
+    problema volta, e este teste a fecha para todas as que existem hoje.
+    """
+    roteiro = carregar_roteiro()
+    monkeypatch.setattr(roteiro, "FILTRO_DE_EXEMPLO", "")
+    pagina = _PaginaFalsa(url=BASE_FALSA)
+
+    with pytest.raises(SystemExit):
+        getattr(roteiro, captura)(pagina, BASE_FALSA, tmp_path)
+
+    assert "fotografou" not in pagina.tipos(), (
+        f"{captura} gravou um arquivo com o filtro da busca desligado"
     )
 
 
@@ -195,28 +336,3 @@ def test_toda_pessoa_de_exemplo_casa_com_o_filtro_da_busca():
             f"{email} não casa com o filtro '{roteiro.FILTRO_DE_EXEMPLO}': a "
             "pessoa sumiria do print, ou o filtro teria de ser afrouxado"
         )
-
-
-def test_a_captura_da_lista_filtra_antes_de_fotografar():
-    """A ordem importa: filtrar depois de capturar publica a lista real.
-
-    O teste lê o corpo da função porque o que ele protege é a ordem de duas
-    chamadas, e essa ordem não tem retorno para asserir. Um print da lista
-    inteira é dado pessoal de gente do hospital num repositório público.
-    """
-    import inspect
-
-    roteiro = carregar_roteiro()
-    corpo = inspect.getsource(roteiro.painel_de_administracao)
-
-    posicao_do_filtro = corpo.index("_usuarios_filtrados")
-    posicao_da_captura = corpo.index("screenshot")
-    assert posicao_do_filtro < posicao_da_captura, (
-        "a captura do painel acontece antes do filtro da busca: o print sairia "
-        "com nome e email de gente real"
-    )
-
-    filtro = inspect.getsource(roteiro._usuarios_filtrados)
-    assert "FILTRO_DE_EXEMPLO" in filtro, (
-        "a busca deixou de receber o filtro de exemplo"
-    )
