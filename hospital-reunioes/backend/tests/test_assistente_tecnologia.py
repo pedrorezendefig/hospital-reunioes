@@ -19,6 +19,7 @@ import os
 import re
 import sys
 import zipfile
+import zlib
 from dataclasses import dataclass
 from io import BytesIO
 from types import SimpleNamespace
@@ -729,6 +730,43 @@ def _zip_com_texto(texto: str) -> bytes:
     return pacote.getvalue()
 
 
+def _xml_de_word(paragrafos: int) -> str:
+    """XML de Word REALISTA, e não elemento vazio repetido.
+
+    A diferença importa para o número: `<a/>` comprime quase a zero e infla a
+    árvore, e é o que a bomba usa; parágrafo com `rPr`, `spacing`, `rsidR` e
+    prosa comprime na razão de um documento de verdade, que é o que o teto não
+    pode morder. Dá cerca de 350 bytes por parágrafo.
+    """
+    corpo = "".join(
+        f'<w:p w:rsidR="00{i:06X}" w:rsidRDefault="00{i:06X}"><w:pPr><w:spacing w:after="160" '
+        f'w:line="259" w:lineRule="auto"/><w:rPr><w:rFonts w:ascii="Calibri"/><w:sz w:val="22"/>'
+        f'</w:rPr></w:pPr><w:r><w:rPr><w:sz w:val="22"/></w:rPr><w:t xml:space="preserve">'
+        f"Parágrafo {i} da reunião, com prosa de tamanho parecido com o de uma fala transcrita."
+        f"</w:t></w:r></w:p>"
+        for i in range(paragrafos)
+    )
+    return f'<?xml version="1.0" encoding="UTF-8"?><w:document><w:body>{corpo}</w:body></w:document>'
+
+
+def _pdf_com_stream(bruto: bytes) -> bytes:
+    """Um PDF de uma página cujo stream de conteúdo descomprime em `bruto`.
+
+    Uma página só de propósito: é a forma eficiente do ataque, e a que o teto
+    do laço de páginas nunca alcança, porque não existe página seguinte para
+    ele contar.
+    """
+    comprimido = zlib.compress(bruto)
+    corpo = b"%PDF-1.4\n"
+    corpo += b"1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n"
+    corpo += b"2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+    corpo += b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 612 792]/Contents 4 0 R/Resources<<>>>>endobj\n"
+    corpo += b"4 0 obj<</Length " + str(len(comprimido)).encode() + b"/Filter/FlateDecode>>stream\n"
+    corpo += comprimido + b"\nendstream endobj\n"
+    corpo += b"trailer<</Size 5/Root 1 0 R>>\n%%EOF\n"
+    return corpo
+
+
 def _pdf_falso(monkeypatch, *, paginas: int, chars_por_pagina: int) -> dict:
     """Dubla o `pdfplumber` e CONTA quantas paginas foram lidas de fato.
 
@@ -1100,32 +1138,6 @@ class TestOTextoQueSai:
         saida nao pode recusar o que a porta de entrada aceita."""
         assert extrator.MAX_CHARS_EXTRAIDOS >= extrator.MAX_BYTES_TEXT
 
-    def test_o_teto_do_descomprimido_nao_morde_o_maior_binario_aceito(self):
-        """Um `.docx` de quinze megabytes cheio de imagem tem que passar."""
-        assert extrator.MAX_BYTES_DESCOMPRIMIDO > extrator.MAX_BYTES_BINARY
-
-    def test_zip_que_diz_que_vira_muito_e_recusado_antes_de_virar(self, monkeypatch):
-        """A conferencia e no CABECALHO do zip, antes de ler membro nenhum.
-
-        Ela basta: o `zipfile` do Python le no maximo `file_size` bytes por
-        membro e confere o CRC no fim, entao um cabecalho que mente da erro de
-        arquivo corrompido em vez de derramar memoria.
-        """
-        monkeypatch.setattr(extrator, "MAX_BYTES_DESCOMPRIMIDO", 100)
-        with pytest.raises(ValueError) as recusa:
-            extrator.extrair_texto("bomba.docx", _zip_com_texto("x" * 5000))
-        assert recusa.value.args[0] == extrator.MOTIVO_ZIP_GRANDE_DEMAIS
-
-    def test_zip_normal_passa_pela_conferencia(self, monkeypatch):
-        """O detector: uma conferencia que recusasse tudo passaria no teste de
-        cima e mataria todo `.docx` do hospital."""
-        monkeypatch.setattr(extrator, "MAX_BYTES_DESCOMPRIMIDO", 100_000)
-        # Chega ao docx2txt, que recusa por nao ser um .docx de verdade. O que
-        # se prova aqui e que a recusa NAO e a do teto.
-        with pytest.raises(ValueError) as recusa:
-            extrator.extrair_texto("comum.docx", _zip_com_texto("x" * 500))
-        assert recusa.value.args[0] != extrator.MOTIVO_ZIP_GRANDE_DEMAIS
-
     def test_o_laco_de_paginas_do_pdf_para_no_teto(self, monkeypatch):
         """Parar de LER e diferente de cortar depois de ter lido.
 
@@ -1159,3 +1171,179 @@ class TestOTextoQueSai:
 
         assert len(corpo["texto"]) <= 500
         assert corpo["texto"].endswith(extrator.AVISO_TRUNCADO)
+
+
+class TestOTetoDaAlocacao:
+    """O que o PARSER aloca, e nao o que entra nele (issue #729, rodada 3).
+
+    A regra que organiza a classe inteira, e que a rodada 2 aprendeu sozinha:
+    **o teto dos bytes que entram no parser nao e teto da memoria que o parser
+    aloca**. Sessenta megabytes de XML declarado viravam perto de um giga e
+    meio de arvore; um PDF de duzentos KB descomprimia sem teto nenhum.
+
+    Cada formato fecha onde da para fechar, e `TETO_POR_FORMATO` obriga o
+    proximo formato a dizer onde o dele morde.
+    """
+
+    def test_todo_formato_diz_onde_o_seu_teto_morde(self):
+        """O fecho da CLASSE, e nao dos dois exemplos desta rodada.
+
+        Formato novo em `SUPPORTED_EXTENSIONS` sem uma linha em
+        `TETO_POR_FORMATO` reprova aqui. E a pergunta "onde este formato aloca
+        sem teto?" passa a ser herdada, em vez de depender de alguem lembrar.
+        """
+        assert set(extrator.TETO_POR_FORMATO) == extrator.SUPPORTED_EXTENSIONS
+        assert all(texto.strip() for texto in extrator.TETO_POR_FORMATO.values())
+
+    # ─── .docx: o teto e do XML, conferido no cabecalho ──────────────────────
+
+    def test_o_teto_do_xml_cabe_no_orcamento_da_extracao(self):
+        """O numero do teto sai desta conta, e nao de um palpite: o teste fica
+        vermelho se alguem subir o teto sem subir o orcamento."""
+        alocado = extrator.MAX_BYTES_XML_DO_DOCX * extrator.EXPANSAO_DA_ARVORE_XML
+        assert alocado <= extrator.ORCAMENTO_DA_EXTRACAO
+
+    def test_o_teto_do_xml_nao_morde_o_maior_documento_legitimo(self):
+        """O outro lado, que e o risco desta rodada: documento grande e honesto
+        virando erro na cara do diretor.
+
+        A grandeza comparada e a CERTA: XML descomprimido contra XML
+        descomprimido. A rodada passada comparava o teto do descomprimido com o
+        teto do COMPRIMIDO, e por isso passaria com a folga zerada.
+        """
+        maior_legitimo = extrator.PARAGRAFOS_DE_UM_DOCUMENTO_LONGO * extrator.BYTES_DE_XML_POR_PARAGRAFO
+        assert extrator.MAX_BYTES_XML_DO_DOCX >= maior_legitimo * extrator.FOLGA_MINIMA_DO_TETO
+
+    def test_docx_de_texto_realista_atravessa(self, monkeypatch):
+        """E o mesmo, medido num arquivo de verdade em vez de numa conta.
+
+        Um `.docx` com o XML de um documento longo tem que passar pela
+        conferencia. Ele nao vira texto (o `docx2txt` recusa a moldura
+        incompleta), e o que se prova aqui e que a recusa NAO e a do teto.
+        """
+        xml = _xml_de_word(extrator.PARAGRAFOS_DE_UM_DOCUMENTO_LONGO)
+        with pytest.raises(ValueError) as recusa:
+            extrator.extrair_texto("longo.docx", _zip_com_texto(xml))
+        assert recusa.value.args[0] != extrator.MOTIVO_XML_GRANDE_DEMAIS
+
+    def test_docx_de_xml_inflado_e_recusado_antes_de_virar_arvore(self):
+        """A bomba de verdade: `<a/>` repetido comprime quase a zero.
+
+        O arquivo cabe em poucas centenas de KB e declara dezenas de megabytes
+        de XML, que no `ElementTree` viram mais de um giga. A conferencia e no
+        CABECALHO do zip, antes de ler membro nenhum: o `zipfile` le no maximo
+        `file_size` por membro e confere o CRC, entao cabecalho que mente da
+        arquivo corrompido em vez de derramar memoria.
+        """
+        inflado = "<a/>" * ((extrator.MAX_BYTES_XML_DO_DOCX // 4) + 1000)
+        bomba = _zip_com_texto(inflado)
+
+        assert len(bomba) < 1024 * 1024, "a bomba tem que ser pequena, senao o teto da ENTRADA a pegaria"
+        with pytest.raises(ValueError) as recusa:
+            extrator.extrair_texto("bomba.docx", bomba)
+        assert recusa.value.args[0] == extrator.MOTIVO_XML_GRANDE_DEMAIS
+
+    def test_imagem_no_docx_nao_conta_para_o_teto_do_xml(self):
+        """As imagens nao passam pelo `ElementTree`, entao nao disputam o
+        orcamento dele. Cobra-las junto apertaria o documento ilustrado sem
+        proteger nada, e o `.docx` de 14 MB de foto e legitimo.
+
+        A foto e MAIOR que o teto do XML de proposito: com a soma de tudo (que
+        e o que a rodada passada fazia) este arquivo seria recusado, e e isso
+        que o teste precisa distinguir. Bytes aleatorios, guardados sem
+        compressao, para o declarado ser o tamanho de verdade.
+        """
+        foto = os.urandom(extrator.MAX_BYTES_XML_DO_DOCX + 1024 * 1024)
+        pacote = BytesIO()
+        with zipfile.ZipFile(pacote, "w", zipfile.ZIP_DEFLATED) as z:
+            z.writestr("word/document.xml", _xml_de_word(10))
+            z.writestr("word/media/foto.jpeg", foto, compress_type=zipfile.ZIP_STORED)
+
+        with pytest.raises(ValueError) as recusa:
+            extrator.extrair_texto("ilustrado.docx", pacote.getvalue())
+        assert recusa.value.args[0] != extrator.MOTIVO_XML_GRANDE_DEMAIS
+
+    # ─── .pdf: o teto e do stream, cobrado onde a memoria e pedida ───────────
+
+    def test_o_teto_do_stream_esta_instalado_no_pdfminer(self):
+        """A guarda so vale instalada, e ela e instalada por efeito de import.
+
+        Um upgrade do `pdfminer` que mude o nome do modulo quebra ALTO, no
+        import; um que mude o ponto da chamada deixa este teste verde e o de
+        baixo vermelho, que e o que importa.
+        """
+        from pdfminer import pdftypes
+
+        assert pdftypes.zlib is extrator._ZlibComTeto
+
+    def test_o_teto_do_stream_cabe_no_orcamento_da_extracao(self):
+        """O numero do teto sai da mesma conta dos outros: um stream sozinho nao
+        pode passar do que a extracao inteira pode alocar."""
+        assert extrator.MAX_BYTES_STREAM_DO_PDF <= extrator.ORCAMENTO_DA_EXTRACAO
+
+    def test_stream_de_pdf_acima_do_teto_e_recusado(self, monkeypatch):
+        """Ponta a ponta, pelo `pdfplumber` de verdade.
+
+        O PDF, ao contrario do zip, nao declara em lugar nenhum o que os seus
+        streams viram: o `/Length` e o tamanho COMPRIMIDO. Nao ha cabecalho
+        para conferir antes, e varrer os bytes atras de `endstream` seria
+        evitavel por quem escreve o arquivo. Entao o teto mora no unico lugar
+        que o atacante nao controla: o ponto em que a memoria e pedida.
+
+        O teto e baixado no teste de proposito. Com o teto de verdade, a bomba
+        precisaria de 64 MB descomprimidos, e o teste do MUTANTE (o que tira a
+        guarda) passaria minutos descomprimindo e montando layout: bateria de
+        mutacao que nao termina nao prova nada.
+        """
+        monkeypatch.setattr(extrator, "MAX_BYTES_STREAM_DO_PDF", 100_000)
+        bomba = _pdf_com_stream(b"BT /F1 12 Tf (x) Tj ET\n" * 40_000)
+
+        assert len(bomba) < 100_000, "a bomba tem que ser pequena, senao o teto da ENTRADA a pegaria"
+        with pytest.raises(ValueError) as recusa:
+            extrator.extrair_texto("bomba.pdf", bomba)
+        assert recusa.value.args[0] == extrator.MOTIVO_PDF_GRANDE_DEMAIS
+
+    def test_pdf_de_stream_normal_atravessa_o_teto(self):
+        """O detector, com o teto DE VERDADE: um teto que recusasse todo PDF
+        passaria no teste de cima e mataria toda transcricao anexada nas
+        Reunioes. Este PDF e recusado por OUTRO motivo (nao tem texto
+        extraivel), e e isso que se cobra."""
+        with pytest.raises(ValueError) as recusa:
+            extrator.extrair_texto("comum.pdf", _pdf_com_stream(b"BT /F1 12 Tf (x) Tj ET\n" * 10))
+        assert recusa.value.args[0] != extrator.MOTIVO_PDF_GRANDE_DEMAIS
+
+    def test_a_recusa_do_stream_nao_culpa_o_arquivo_da_pessoa(self, monkeypatch):
+        """O `pdfplumber` embrulha o que sai do `pdfminer`, entao o tipo se
+        perde e a recusa saia com a frase de "arquivo corrompido": causa que o
+        codigo SABE distinguir, mandando a pessoa conferir o arquivo dela
+        quando o que houve foi um teto nosso."""
+        monkeypatch.setattr(extrator, "MAX_BYTES_STREAM_DO_PDF", 100_000)
+        with pytest.raises(ValueError) as recusa:
+            extrator.extrair_texto("bomba.pdf", _pdf_com_stream(b"BT /F1 12 Tf (x) Tj ET\n" * 40_000))
+        assert "corrompido" not in recusa.value.args[0].lower()
+
+    def test_o_caminho_de_dado_corrompido_tambem_para_no_teto(self, monkeypatch):
+        """A segunda porta do `pdfminer` para o `zlib`.
+
+        Quando o `zlib.decompress` levanta, ele tenta de novo byte a byte
+        (`decompress_corrupted`), com `decompressobj` e sem teto: um teto so no
+        primeiro caminho empurraria a bomba para o segundo, que e pior.
+        """
+        monkeypatch.setattr(extrator, "MAX_BYTES_STREAM_DO_PDF", 1000)
+        descompressor = extrator._ZlibComTeto.decompressobj()
+        with pytest.raises(extrator.StreamGrandeDemaisError):
+            descompressor.decompress(zlib.compress(b"A" * 5000))
+
+    def test_o_caminho_de_dado_corrompido_deixa_passar_o_que_cabe(self):
+        """O par: um descompressor que levantasse sempre passaria no teste de
+        cima e quebraria a leitura de PDF com dado levemente corrompido, que
+        hoje o `pdfminer` recupera."""
+        descompressor = extrator._ZlibComTeto.decompressobj()
+        assert descompressor.decompress(zlib.compress(b"conteudo pequeno")) == b"conteudo pequeno"
+
+    def test_o_teto_do_stream_nao_morde_conteudo_de_pagina_de_verdade(self):
+        """O par do teto de verdade: o conteudo de uma pagina de texto tem KB, e
+        a maior imagem que cabe num PDF de 15 MB, ja descomprimida, tem alguns
+        MB."""
+        pagina = b"BT /F1 12 Tf (uma linha de texto de verdade) Tj ET\n" * 20_000
+        assert extrator._ZlibComTeto.decompress(zlib.compress(pagina)) == pagina
