@@ -6,7 +6,14 @@
  * armazenamento de sessão. O que fala com a rede mora nos componentes.
  */
 
-import { BASE_TECNOLOGIA, Demanda, PrioridadeDemanda, ProdutoDaEscolha, TipoDemanda } from "./demandas";
+import {
+  BASE_TECNOLOGIA,
+  Demanda,
+  FALHA_DE_CONEXAO,
+  PrioridadeDemanda,
+  ProdutoDaEscolha,
+  TipoDemanda,
+} from "./demandas";
 
 export const ROTA_ASSISTENTE = "/admin/tecnologia/nova";
 export const URL_DO_CHAT = `${BASE_TECNOLOGIA}/assistente/chat`;
@@ -320,4 +327,194 @@ export function limparASessao(): void {
   } catch {
     // Nada a fazer: o que não foi gravado não precisa ser apagado.
   }
+}
+
+// ─── Falar e anexar (issue #729) ────────────────────────────────────────────
+//
+// Três entradas novas, e uma regra só: **toda entrada vira texto antes de
+// chegar ao chat**. O chat nunca recebe arquivo. O que chega lá é uma mensagem
+// da PESSOA, com a origem à mostra, e é essa marca que faz o backend cercar o
+// material como texto de gente, e não como instrução.
+
+/** A rota de transcrição que já existe (Reuniões, POPs, Ata Guiada). */
+export const URL_DA_TRANSCRICAO = "/api/transcricao/voz";
+export const URL_DA_EXTRACAO = `${BASE_TECNOLOGIA}/assistente/extrair-documento`;
+
+/**
+ * Os prefixos de origem (PRD #726, história 37).
+ *
+ * Eles são para a PESSOA ver o que o assistente recebeu, e são também o que o
+ * backend lê para cercar o material. Mudar um destes textos sem mudar o
+ * reconhecimento do outro lado tira a cerca em silêncio.
+ */
+export const PREFIXO_DE_AUDIO = "[áudio] ";
+
+export function prefixoDeDocumento(nome: string): string {
+  return `[documento ${nome}] `;
+}
+
+/**
+ * O que a mensagem diz quando o texto não coube inteiro.
+ *
+ * Um documento de cinco megabytes vira muito mais que os 5000 caracteres de
+ * uma mensagem, e o teto do corpo é do backend. Cortar calado mandaria meia
+ * verdade ao assistente sem ninguém saber; por isso o corte é DITO, dentro da
+ * própria mensagem, que é o que a pessoa lê na conversa.
+ */
+export const TEXTO_CORTADO = "\n(o texto é maior que isto: o resto ficou de fora)";
+
+/** A fala que uma entrada de fora vira, com a origem na frente e dentro do teto. */
+export function mensagemComOrigem(prefixo: string, texto: string): string {
+  const corpo = texto.trim();
+  const cabe = LIMITE_DA_MENSAGEM - prefixo.length;
+  if (corpo.length <= cabe) return `${prefixo}${corpo}`;
+  return `${prefixo}${corpo.slice(0, cabe - TEXTO_CORTADO.length)}${TEXTO_CORTADO}`;
+}
+
+// Os aceitos e os tetos, iguais aos do backend. Eles moram aqui para a recusa
+// acontecer ANTES de subir 25 MB por um cabo de hospital e voltar 413; o
+// backend continua sendo quem decide, e a frase dele aparece se ele recusar.
+export const AUDIOS_ACEITOS = [".mp3", ".m4a", ".ogg", ".wav", ".webm"];
+export const DOCUMENTOS_ACEITOS = [".pdf", ".docx", ".txt", ".md"];
+export const DOCUMENTOS_DE_TEXTO = [".txt", ".md"];
+
+export const LIMITE_DO_AUDIO = 25 * 1024 * 1024;
+export const LIMITE_DO_DOCUMENTO_TEXTO = 5 * 1024 * 1024;
+export const LIMITE_DO_DOCUMENTO_BINARIO = 15 * 1024 * 1024;
+
+export const AUDIO_FORA_DA_LISTA =
+  "Só dá para mandar áudio .mp3, .m4a, .ogg, .wav ou .webm. Converta o arquivo e tente de novo.";
+export const DOCUMENTO_FORA_DA_LISTA =
+  "Só dá para ler arquivo .pdf, .docx, .txt ou .md. Salve em um desses formatos e anexe de novo.";
+
+export const AUDIO_SEM_FALA = "Não identifiquei fala nesse áudio. Tente outro arquivo ou escreva o que aconteceu.";
+
+/** A frase de quando o servidor respondeu e o corpo do anexo não deu para ler. */
+export const ANEXO_ILEGIVEL =
+  "O servidor respondeu algo que a tela não conseguiu ler. Anexe de novo, ou escreva o que aconteceu.";
+
+export type ArquivoEscolhido = { name: string; size: number };
+
+export function extensaoDe(nome: string): string {
+  const ponto = nome.lastIndexOf(".");
+  return ponto < 0 ? "" : nome.slice(ponto).toLowerCase();
+}
+
+/**
+ * O teto do documento depende do formato, como no extrator do backend: texto
+ * puro vai a 5 MB e binário a 15 MB. Um teto único aqui discordaria do 413 de
+ * lá, e a tela recusaria o que o servidor aceita (ou o contrário).
+ */
+export function tetoDoDocumento(nome: string): number {
+  return DOCUMENTOS_DE_TEXTO.includes(extensaoDe(nome)) ? LIMITE_DO_DOCUMENTO_TEXTO : LIMITE_DO_DOCUMENTO_BINARIO;
+}
+
+function avisoDeTamanho(teto: number, saida: string): string {
+  return `O arquivo passou do limite de ${Math.round(teto / (1024 * 1024))} MB. ${saida}`;
+}
+
+/** O que impede este áudio de virar mensagem, ou `null` se nada impede. */
+export function avisoDoAudio(arquivo: ArquivoEscolhido): string | null {
+  if (!AUDIOS_ACEITOS.includes(extensaoDe(arquivo.name))) return AUDIO_FORA_DA_LISTA;
+  if (arquivo.size > LIMITE_DO_AUDIO) {
+    return avisoDeTamanho(LIMITE_DO_AUDIO, "Mande um trecho menor, ou escreva o que aconteceu.");
+  }
+  return null;
+}
+
+/** O que impede este documento de virar mensagem, ou `null` se nada impede. */
+export function avisoDoDocumento(arquivo: ArquivoEscolhido): string | null {
+  if (!DOCUMENTOS_ACEITOS.includes(extensaoDe(arquivo.name))) return DOCUMENTO_FORA_DA_LISTA;
+  const teto = tetoDoDocumento(arquivo.name);
+  if (arquivo.size > teto) return avisoDeTamanho(teto, "Anexe um arquivo menor, ou cole aqui o trecho que importa.");
+  return null;
+}
+
+/** O desfecho de uma entrada de fora: virou texto, ou virou aviso na conversa. */
+export type LeituraDoAnexo<T> = { corpo: T } | { aviso: string };
+
+export type TextoTranscrito = { texto: string };
+export type DocumentoExtraido = { texto: string; filename: string };
+
+export function transcricaoValida(corpo: unknown): corpo is TextoTranscrito {
+  return typeof corpo === "object" && corpo !== null && typeof (corpo as Record<string, unknown>).texto === "string";
+}
+
+/**
+ * O `filename` é cobrado porque é ELE que vira o prefixo de origem na conversa,
+ * e quem o entrega já limpo (sem colchete, sem quebra de linha) é o backend:
+ * usar o nome local em vez do que voltou seria pular essa limpeza.
+ */
+export function documentoExtraidoValido(corpo: unknown): corpo is DocumentoExtraido {
+  if (!transcricaoValida(corpo)) return false;
+  return typeof (corpo as Record<string, unknown>).filename === "string";
+}
+
+/**
+ * O motivo da recusa de um anexo, dito pelo servidor.
+ *
+ * Não é o `motivoDaRecusa` das Demandas porque o verbo de lá é "salvar", e aqui
+ * nada é salvo. O 413 também pode vir do proxy, sem corpo JSON nenhum, e a
+ * frase de saída precisa fazer sentido nesse caso: quem lê acabou de escolher
+ * um arquivo, e o que ela pode fazer é escolher outro.
+ */
+export async function motivoDoAnexo(resposta: Response): Promise<string> {
+  try {
+    const corpo = await resposta.json();
+    if (typeof corpo?.detail === "string") return corpo.detail;
+  } catch {
+    // Resposta sem corpo JSON (um 413 do proxy, um HTML de erro): sobra o status.
+  }
+  return `Não foi possível ler o arquivo (${resposta.status}). Tente outro arquivo, ou escreva o que aconteceu.`;
+}
+
+/**
+ * Manda o arquivo e devolve o DESFECHO. Nunca levanta.
+ *
+ * Mesma forma do `pedirOTurno`: rede fora, recusa do servidor e corpo que não
+ * dá para ler voltam como valor. Toda leitura de corpo daqui passa pela
+ * fronteira `corpoValidado`, com um validador do que o consumidor consome.
+ */
+async function mandarOArquivo<T>(
+  url: string,
+  campo: string,
+  arquivo: File,
+  token: string | null,
+  valida: (corpo: unknown) => corpo is T,
+): Promise<LeituraDoAnexo<T>> {
+  const form = new FormData();
+  form.append(campo, arquivo, arquivo.name);
+  let resposta: Response;
+  try {
+    resposta = await fetch(url, { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: form });
+  } catch (e) {
+    console.error("[admin/tecnologia] falha ao mandar o anexo", e);
+    return { aviso: FALHA_DE_CONEXAO };
+  }
+  if (!resposta.ok) return { aviso: await motivoDoAnexo(resposta) };
+  const corpo = await corpoValidado(resposta, valida);
+  if (corpo === null) {
+    console.error("[admin/tecnologia] a resposta do anexo não deu para usar");
+    return { aviso: ANEXO_ILEGIVEL };
+  }
+  return { corpo };
+}
+
+/**
+ * O áudio encaminhado vai à MESMA rota de voz, como blob. Sem rota nova.
+ *
+ * O hook de gravação não serve aqui: o que ele faz de próprio é tomar conta do
+ * microfone (permissão, MediaRecorder, soltar o aparelho ao sair da tela), e
+ * um arquivo que a pessoa escolheu não tem nada disso. O que os dois caminhos
+ * compartilham é a rota, não o ciclo de vida.
+ */
+export function transcreverArquivoDeAudio(
+  arquivo: File,
+  token: string | null,
+): Promise<LeituraDoAnexo<TextoTranscrito>> {
+  return mandarOArquivo(URL_DA_TRANSCRICAO, "audio", arquivo, token, transcricaoValida);
+}
+
+export function extrairODocumento(arquivo: File, token: string | null): Promise<LeituraDoAnexo<DocumentoExtraido>> {
+  return mandarOArquivo(URL_DA_EXTRACAO, "arquivo", arquivo, token, documentoExtraidoValido);
 }

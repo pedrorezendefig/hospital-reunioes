@@ -18,11 +18,17 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ToastProvider } from "@/components/ui/Toast";
+
 import { AssistenteDeTecnologia } from "./AssistenteDeTecnologia";
 import {
+  ANEXO_ILEGIVEL,
+  AUDIO_FORA_DA_LISTA,
+  AUDIO_SEM_FALA,
   AVISO_DE_IA,
   CHAVE_DA_SESSAO,
   CONVERSA_NO_TETO,
+  DOCUMENTO_FORA_DA_LISTA,
   LIMITE_DA_DESCRICAO,
   LIMITE_DA_MENSAGEM,
   LIMITE_DE_MENSAGENS,
@@ -38,7 +44,7 @@ import {
 } from "./assistente";
 import { Demanda, ProdutoDaEscolha } from "./demandas";
 
-type Chamada = { url: string; metodo: string; corpo: Record<string, unknown> | undefined };
+type Chamada = { url: string; metodo: string; corpo: Record<string, unknown> | undefined; arquivo?: string };
 
 const PRODUTOS: ProdutoDaEscolha[] = [
   { id: "prod-1", nome: "Ana", ativo: true },
@@ -92,14 +98,72 @@ type Opcoes = {
    * provaria um formato que o backend nunca emite.
    */
   recusaDoChat?: { status: number; corpo: unknown };
+  /** O que a rota de voz devolve como texto transcrito. */
+  transcricao?: string;
+  /** O que a rota de extração devolve como texto do documento. */
+  textoDoDocumento?: string;
+  /** A recusa da rota de voz ou da de extração, com o corpo cru daquela camada. */
+  recusaDoAnexo?: { status: number; corpo: unknown };
+  /** Um 200 da extração cujo corpo o `JSON.parse` aceita e que não serve. */
+  corpoDoAnexoForaDoContrato?: unknown;
+  /** Segura a resposta do anexo: entre o clique e a soltura a leitura está EM VOO. */
+  segurarOAnexo?: boolean;
 };
+
+let soltarOAnexo: (() => void) | null = null;
 
 let soltarAResposta: (() => void) | null = null;
 
 function servidor(opcoes: Opcoes) {
   return vi.fn(async (url: string, init?: RequestInit) => {
-    const corpo = init?.body ? JSON.parse(String(init.body)) : undefined;
-    chamadas.push({ url, metodo: init?.method ?? "GET", corpo });
+    // O anexo vai em `FormData`, e o turno em JSON: o dublê guarda o nome do
+    // arquivo num caso e o corpo no outro. `JSON.parse` de um FormData
+    // explodiria aqui dentro e a falha apareceria como "a tela não chamou".
+    const enviado = init?.body;
+    const forma = enviado instanceof FormData ? enviado : null;
+    const corpo = forma || !enviado ? undefined : JSON.parse(String(enviado));
+    const anexo = forma?.get("audio") ?? forma?.get("arquivo") ?? null;
+    chamadas.push({
+      url,
+      metodo: init?.method ?? "GET",
+      corpo,
+      arquivo: anexo instanceof File ? anexo.name : undefined,
+    });
+
+    if (url.endsWith("/transcricao/voz")) {
+      if (opcoes.segurarOAnexo) await new Promise<void>((resolve) => (soltarOAnexo = resolve));
+      if (opcoes.recusaDoAnexo) {
+        return {
+          ok: false,
+          status: opcoes.recusaDoAnexo.status,
+          json: async () => opcoes.recusaDoAnexo!.corpo,
+        } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ texto: opcoes.transcricao ?? "a Ana travou de madrugada" }),
+      } as unknown as Response;
+    }
+
+    if (url.endsWith("/assistente/extrair-documento")) {
+      if (opcoes.segurarOAnexo) await new Promise<void>((resolve) => (soltarOAnexo = resolve));
+      if (opcoes.recusaDoAnexo) {
+        return {
+          ok: false,
+          status: opcoes.recusaDoAnexo.status,
+          json: async () => opcoes.recusaDoAnexo!.corpo,
+        } as unknown as Response;
+      }
+      if ("corpoDoAnexoForaDoContrato" in opcoes) {
+        return { ok: true, status: 200, json: async () => opcoes.corpoDoAnexoForaDoContrato } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ texto: opcoes.textoDoDocumento ?? "a Ana travou de madrugada", filename: "nota.pdf" }),
+      } as unknown as Response;
+    }
     if (url.endsWith("/assistente/chat") && opcoes.segurarAResposta) {
       await new Promise<void>((resolve) => {
         soltarAResposta = resolve;
@@ -164,12 +228,16 @@ function servidor(opcoes: Opcoes) {
 
 function montar(opcoes: Opcoes = {}) {
   vi.stubGlobal("fetch", servidor(opcoes));
+  // O ToastProvider é o de verdade: o hook de gravação de voz avisa por toast
+  // quando a transcrição falha, e ele exige provider para existir.
   return render(
-    <AssistenteDeTecnologia
-      token="tok"
-      produtos={PRODUTOS}
-      onCriada={(demanda, aviso) => criadas.push({ demanda, aviso })}
-    />,
+    <ToastProvider>
+      <AssistenteDeTecnologia
+        token="tok"
+        produtos={PRODUTOS}
+        onCriada={(demanda, aviso) => criadas.push({ demanda, aviso })}
+      />
+    </ToastProvider>,
   );
 }
 
@@ -191,6 +259,7 @@ beforeEach(() => {
   chamadas = [];
   criadas = [];
   soltarAResposta = null;
+  soltarOAnexo = null;
   Element.prototype.scrollIntoView = vi.fn();
   window.sessionStorage.clear();
 });
@@ -568,7 +637,13 @@ describe("O turno recusado", () => {
       }),
     );
     render(
-      <AssistenteDeTecnologia token="tok" produtos={PRODUTOS} onCriada={(d, a) => criadas.push({ demanda: d, aviso: a })} />,
+      <ToastProvider>
+        <AssistenteDeTecnologia
+          token="tok"
+          produtos={PRODUTOS}
+          onCriada={(d, a) => criadas.push({ demanda: d, aviso: a })}
+        />
+      </ToastProvider>,
     );
 
     await falar("a Ana tá estranha");
@@ -869,5 +944,299 @@ describe("O painel do rascunho", () => {
     const rascunho = screen.getByLabelText("Título");
     const chat = screen.getByLabelText("Mensagem");
     expect(rascunho.compareDocumentPosition(chat) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+});
+
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Falar e anexar (issue #729)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// Três entradas novas e uma regra só: toda entrada vira TEXTO antes de chegar
+// ao chat. O chat nunca recebe arquivo, e o que aparece na conversa é sempre
+// uma mensagem da pessoa, com a origem à mostra.
+
+/**
+ * O gravador do navegador, falso.
+ *
+ * Ele existe para o teste exercitar o hook de gravação DE VERDADE (o mesmo da
+ * Ata Guiada), e não um dublê do hook: dublar o hook provaria que a tela sabe
+ * receber um texto, e não que o botão de microfone chega à rota de voz.
+ */
+class GravadorFalso {
+  static ultimo: GravadorFalso | null = null;
+  static isTypeSupported = () => true;
+  state = "inactive";
+  mimeType: string;
+  ondataavailable: ((e: { data: Blob }) => void) | null = null;
+  onstop: (() => void) | null = null;
+
+  constructor(_stream: unknown, opcoes?: { mimeType?: string }) {
+    this.mimeType = opcoes?.mimeType ?? "audio/webm";
+    GravadorFalso.ultimo = this;
+  }
+
+  start() {
+    this.state = "recording";
+  }
+
+  stop() {
+    this.state = "inactive";
+    this.ondataavailable?.({ data: new Blob(["bytes-de-audio"], { type: this.mimeType }) });
+    this.onstop?.();
+  }
+}
+
+function plugarOMicrofone() {
+  GravadorFalso.ultimo = null;
+  vi.stubGlobal("MediaRecorder", GravadorFalso);
+  Object.defineProperty(navigator, "mediaDevices", {
+    configurable: true,
+    value: { getUserMedia: async () => ({ getTracks: () => [{ stop: vi.fn() }] }) },
+  });
+}
+
+function arquivo(nome: string, tamanho: number, tipo = "application/octet-stream"): File {
+  const falso = new File(["x"], nome, { type: tipo });
+  // `File` de verdade calcula o `size` do conteúdo, e o teto que se quer provar
+  // é de megabytes: escrever 25 MB de string no jsdom seria pagar caro por um
+  // número. Só o `size` é forjado.
+  Object.defineProperty(falso, "size", { value: tamanho });
+  return falso;
+}
+
+function escolher(rotulo: string, arquivos: File[]) {
+  const entrada = screen.getByLabelText(rotulo) as HTMLInputElement;
+  fireEvent.change(entrada, { target: { files: arquivos } });
+}
+
+function paraVoz(): Chamada[] {
+  return chamadas.filter((c) => c.url.endsWith("/transcricao/voz"));
+}
+
+function paraExtracao(): Chamada[] {
+  return chamadas.filter((c) => c.url.endsWith("/assistente/extrair-documento"));
+}
+
+/** A última fala mandada ao assistente, como ela foi no corpo do turno. */
+function ultimaFala(): string {
+  const mensagens = doChat().at(-1)?.corpo?.messages as MensagemDoChat[];
+  return mensagens.at(-1)!.content;
+}
+
+describe("A voz gravada", () => {
+  it("vira mensagem com o prefixo de áudio e dispara o turno", async () => {
+    plugarOMicrofone();
+    montar({ transcricao: "a Ana tá travando de madrugada" });
+
+    fireEvent.click(screen.getByLabelText("Gravar voz"));
+    await waitFor(() => expect(GravadorFalso.ultimo).not.toBeNull());
+    fireEvent.click(screen.getByLabelText("Parar de gravar"));
+
+    // Foi pela rota de voz QUE JÁ EXISTE, e não por uma rota nova.
+    await waitFor(() => expect(paraVoz()).toHaveLength(1));
+    expect(paraVoz()[0].metodo).toBe("POST");
+    expect(paraVoz()[0].arquivo).toMatch(/^voz\./);
+
+    await waitFor(() => expect(doChat()).toHaveLength(1));
+    expect(ultimaFala()).toBe("[áudio] a Ana tá travando de madrugada");
+    // E a pessoa VÊ o que o assistente recebeu, na conversa.
+    expect(within(screen.getByRole("log")).getByText("[áudio] a Ana tá travando de madrugada")).toBeTruthy();
+  });
+
+  it("o chat nunca recebe arquivo: o corpo do turno é JSON com a fala dentro", async () => {
+    plugarOMicrofone();
+    montar({ transcricao: "a Ana tá travando" });
+
+    fireEvent.click(screen.getByLabelText("Gravar voz"));
+    await waitFor(() => expect(GravadorFalso.ultimo).not.toBeNull());
+    fireEvent.click(screen.getByLabelText("Parar de gravar"));
+
+    await waitFor(() => expect(doChat()).toHaveLength(1));
+    expect(doChat()[0].arquivo).toBeUndefined();
+    expect(doChat()[0].corpo?.rascunho).toBeDefined();
+  });
+});
+
+describe("O arquivo de áudio", () => {
+  it("vai à MESMA rota de voz e vira mensagem com o prefixo de áudio", async () => {
+    montar({ transcricao: "encaminhei o áudio do WhatsApp" });
+
+    escolher("Arquivo de áudio", [arquivo("recado.m4a", 2 * 1024 * 1024, "audio/mp4")]);
+
+    await waitFor(() => expect(paraVoz()).toHaveLength(1));
+    expect(paraVoz()[0].arquivo).toBe("recado.m4a");
+    await waitFor(() => expect(doChat()).toHaveLength(1));
+    expect(ultimaFala()).toBe("[áudio] encaminhei o áudio do WhatsApp");
+  });
+
+  it("áudio acima de 25 MB vira aviso na conversa, sem ir à rede e sem turno", async () => {
+    montar();
+
+    escolher("Arquivo de áudio", [arquivo("longo.mp3", 26 * 1024 * 1024, "audio/mpeg")]);
+
+    await waitFor(() => expect(within(screen.getByRole("log")).getByText(/25 MB/)).toBeTruthy());
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("áudio de formato fora da lista vira aviso, sem ir à rede e sem turno", async () => {
+    montar();
+
+    escolher("Arquivo de áudio", [arquivo("recado.aac", 1000, "audio/aac")]);
+
+    await waitFor(() => expect(screen.getByText(AUDIO_FORA_DA_LISTA)).toBeTruthy());
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("áudio sem fala vira aviso, e não uma mensagem só com o prefixo", async () => {
+    montar({ transcricao: "   " });
+
+    escolher("Arquivo de áudio", [arquivo("mudo.wav", 1000, "audio/wav")]);
+
+    await waitFor(() => expect(screen.getByText(AUDIO_SEM_FALA)).toBeTruthy());
+    expect(doChat()).toHaveLength(0);
+  });
+});
+
+describe("O documento", () => {
+  it("vira mensagem com o nome do arquivo e dispara o turno", async () => {
+    montar({ textoDoDocumento: "Relatório: a Ana caiu três vezes em setembro." });
+
+    escolher("Arquivo de documento", [arquivo("relatorio.pdf", 3 * 1024 * 1024, "application/pdf")]);
+
+    await waitFor(() => expect(paraExtracao()).toHaveLength(1));
+    expect(paraExtracao()[0].arquivo).toBe("relatorio.pdf");
+    await waitFor(() => expect(doChat()).toHaveLength(1));
+    // O nome é o que o SERVIDOR devolveu ("nota.pdf"), e não o do arquivo
+    // local: é lá que ele foi limpo do que quebraria o prefixo de origem.
+    expect(ultimaFala()).toBe("[documento nota.pdf] Relatório: a Ana caiu três vezes em setembro.");
+  });
+
+  it("documento acima do teto do formato vira aviso, sem ir à rede e sem turno", async () => {
+    montar();
+
+    escolher("Arquivo de documento", [arquivo("longo.txt", 6 * 1024 * 1024, "text/plain")]);
+
+    await waitFor(() => expect(within(screen.getByRole("log")).getByText(/5 MB/)).toBeTruthy());
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("documento de formato fora da lista vira aviso, sem ir à rede e sem turno", async () => {
+    montar();
+
+    escolher("Arquivo de documento", [arquivo("planilha.xlsx", 1000)]);
+
+    await waitFor(() => expect(screen.getByText(DOCUMENTO_FORA_DA_LISTA)).toBeTruthy());
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("recusa do servidor vira aviso com a frase DELE, e nenhum turno é mandado", async () => {
+    montar({ recusaDoAnexo: { status: 422, corpo: { detail: "PDF parece ser escaneado (sem texto extraivel)." } } });
+
+    escolher("Arquivo de documento", [arquivo("escaneado.pdf", 1000, "application/pdf")]);
+
+    await waitFor(() => expect(screen.getByText(/PDF parece ser escaneado/)).toBeTruthy());
+    expect(doChat()).toHaveLength(0);
+  });
+
+  it("corpo que o `json()` lê e que não serve vira aviso, e nenhum turno é mandado", async () => {
+    // A fronteira valendo para o CORPO, e não só para a rede: sem ela, um 200
+    // sem `texto` viraria a mensagem "[documento undefined] undefined".
+    montar({ corpoDoAnexoForaDoContrato: { arquivo: "nota.pdf" } });
+
+    escolher("Arquivo de documento", [arquivo("nota.pdf", 1000, "application/pdf")]);
+
+    await waitFor(() => expect(screen.getByText(ANEXO_ILEGIVEL)).toBeTruthy());
+    expect(doChat()).toHaveLength(0);
+  });
+
+  it("corpo sem o `filename` também não vira mensagem", async () => {
+    // O detector do teste de cima: uma peneira que cobrasse só o `texto`
+    // passaria lá e deixaria o prefixo de origem sair como "[documento
+    // undefined]", que é o prefixo que o backend NÃO reconhece para cercar.
+    montar({ corpoDoAnexoForaDoContrato: { texto: "a Ana travou" } });
+
+    escolher("Arquivo de documento", [arquivo("nota.pdf", 1000, "application/pdf")]);
+
+    await waitFor(() => expect(screen.getByText(ANEXO_ILEGIVEL)).toBeTruthy());
+    expect(doChat()).toHaveLength(0);
+  });
+});
+
+describe("O aviso do anexo", () => {
+  it("não entra no fio que vai ao assistente", async () => {
+    // Um aviso da TELA no meio das mensagens iria ao prompt no turno seguinte
+    // como se o assistente o tivesse dito.
+    montar();
+    escolher("Arquivo de documento", [arquivo("planilha.xlsx", 1000)]);
+    await waitFor(() => expect(screen.getByText(DOCUMENTO_FORA_DA_LISTA)).toBeTruthy());
+
+    await falar("deixa, eu escrevo");
+
+    const mandadas = doChat()[0].corpo?.messages as MensagemDoChat[];
+    expect(mandadas.some((m) => m.content.includes("Só dá para ler"))).toBe(false);
+    expect(mandadas.at(-1)!.content).toBe("deixa, eu escrevo");
+  });
+
+  it("o aviso que veio do SERVIDOR também não entra no fio", async () => {
+    // O par do teste acima, e a razão de ele existir: a recusa local e a
+    // recusa do servidor são o mesmo desfecho, e por um tempo eram dois
+    // lugares escrevendo o aviso. O de cima cobria só o primeiro.
+    montar({ recusaDoAnexo: { status: 422, corpo: { detail: "PDF parece ser escaneado." } } });
+    escolher("Arquivo de documento", [arquivo("escaneado.pdf", 1000, "application/pdf")]);
+    await waitFor(() => expect(screen.getByText(/PDF parece ser escaneado/)).toBeTruthy());
+
+    await falar("deixa, eu escrevo");
+
+    const mandadas = doChat()[0].corpo?.messages as MensagemDoChat[];
+    expect(mandadas.some((m) => m.content.includes("escaneado"))).toBe(false);
+  });
+
+  it("some quando o turno seguinte começa", async () => {
+    montar();
+    escolher("Arquivo de documento", [arquivo("planilha.xlsx", 1000)]);
+    await waitFor(() => expect(screen.getByText(DOCUMENTO_FORA_DA_LISTA)).toBeTruthy());
+
+    await falar("deixa, eu escrevo");
+
+    await waitFor(() => expect(screen.queryByText(DOCUMENTO_FORA_DA_LISTA)).toBeNull());
+  });
+});
+
+describe("Mandar pelo teclado no meio de uma leitura", () => {
+  it("o Enter não começa um turno enquanto o anexo está sendo lido, e o anexo chega", async () => {
+    // O botão de mandar já está desabilitado aqui, mas o Enter da caixa não
+    // passa por ele. Sem guarda, o turno do teclado saía primeiro e a fala do
+    // documento voltava para uma tela que já estava conversando: sumia calada.
+    montar({ segurarOAnexo: true, textoDoDocumento: "o que estava no PDF" });
+    escolher("Arquivo de documento", [arquivo("nota.pdf", 1000, "application/pdf")]);
+    await waitFor(() => expect(paraExtracao()).toHaveLength(1));
+
+    fireEvent.change(screen.getByLabelText("Mensagem"), { target: { value: "ah, e mais uma coisa" } });
+    fireEvent.keyDown(screen.getByLabelText("Mensagem"), { key: "Enter" });
+    expect(doChat()).toHaveLength(0);
+
+    soltarOAnexo!();
+
+    await waitFor(() => expect(doChat()).toHaveLength(1));
+    expect(ultimaFala()).toBe("[documento nota.pdf] o que estava no PDF");
+    // E o que a pessoa digitou continua na caixa, para ela mandar em seguida.
+    expect((screen.getByLabelText("Mensagem") as HTMLTextAreaElement).value).toBe("ah, e mais uma coisa");
+  });
+});
+
+describe("Descartar no meio de um anexo", () => {
+  it("o documento que voltar depois não ressuscita a conversa", async () => {
+    montar({ segurarOAnexo: true, textoDoDocumento: "texto de um pedido que foi jogado fora" });
+    escolher("Arquivo de documento", [arquivo("nota.pdf", 1000, "application/pdf")]);
+    await waitFor(() => expect(paraExtracao()).toHaveLength(1));
+
+    fireEvent.click(screen.getByRole("button", { name: /Descartar/ }));
+    soltarOAnexo!();
+
+    // Nada de turno, e a conversa segue com a fala de boas-vindas e nada mais.
+    await waitFor(() => expect(screen.getByLabelText("Mensagem")).toBeTruthy());
+    expect(doChat()).toHaveLength(0);
+    expect(within(screen.getByRole("log")).queryByText(/documento nota\.pdf/)).toBeNull();
   });
 });
