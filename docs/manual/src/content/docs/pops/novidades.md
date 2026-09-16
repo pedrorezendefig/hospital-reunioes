@@ -49,7 +49,7 @@ hora do cadastro. Agora ele se apoia no material que o Elaborador anexa:
 espelha a estrutura do modelo, mantém o conteúdo do original e sempre monta a
 seção de fluxograma, mesmo quando o documento antigo não tem uma.
 
-Tarefas que mudaram: [Elaborar o POP com o Consultor de POPs](../elaborar-o-pop-com-a-ia/)
+Tarefas que mudaram: [Elaborar o POP com o Consultor de POPs](../elaborar-o-pop-com-o-consultor-de-pops/)
 
 ## 12/06/2026 · A Gestão de POPs entra no ar
 

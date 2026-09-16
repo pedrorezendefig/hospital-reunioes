@@ -108,7 +108,7 @@ jobs:
       - name: Testes do lint, do conferidor e da publicação
         run: |
           pip install pytest
-          python -m pytest tools/test_lint_manual.py tools/test_checar_build_manual.py tools/test_checar_video_manual.py tools/test_publicar_manual.py tools/test_inventario_manual.py tools/test_skill_montar_manual.py tools/test_tirar_draft_manual.py tools/test_skill_cadeia_manual.py tools/test_setup_maquina_manual.py -q
+          python -m pytest tools/test_lint_manual.py tools/test_checar_build_manual.py tools/test_checar_video_manual.py tools/test_publicar_manual.py tools/test_inventario_manual.py tools/test_skill_montar_manual.py tools/test_tirar_draft_manual.py tools/test_skill_cadeia_manual.py tools/test_setup_maquina_manual.py tools/test_prints_pops.py -q
 
       - name: Lint do manual
         run: python3 tools/lint_manual.py --dir docs/manual/src/content/docs
