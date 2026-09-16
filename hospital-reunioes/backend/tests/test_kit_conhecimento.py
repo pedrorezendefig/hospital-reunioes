@@ -20,6 +20,7 @@ import json
 import os
 import re
 import sys
+import textwrap
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any
@@ -363,7 +364,16 @@ def _secoes_do_kit(prompt: str) -> dict[str, str]:
             secoes[atual] = ""
         elif atual is not None:
             secoes[atual] += linha + "\n"
-    return secoes
+    # Tira o recuo que o BACKEND pos, e so ele: `dedent` remove o branco comum
+    # a todas as linhas, entao o recuo interno do proprio texto (uma lista
+    # aninhada, por exemplo) sobrevive.
+    #
+    # Sem isto o piso mediria caractere que o arquivo nao tem. O recuo de
+    # `recuar_continuacao` acrescenta quatro caracteres por linha, o que da de
+    # +116 a +276 por arquivo neste kit: `site.md` cortado para 790 caracteres
+    # reprovaria no teste de disco e passaria aqui, e o piso estaria medindo a
+    # moldura em vez do material.
+    return {nome: textwrap.dedent(corpo) for nome, corpo in secoes.items()}
 
 
 class TestOitoArquivosNoPrompt:
@@ -399,6 +409,13 @@ class TestOitoArquivosNoPrompt:
             ]
         )
         assert "depois do kit" not in _secoes_do_kit(prompt)["tecnologia.md"]
+
+    def test_o_fatiador_devolve_o_texto_sem_o_recuo_do_backend(self):
+        """Mutante no proprio detector: tirar o `dedent` faz o piso contar
+        quatro caracteres de moldura por linha, e um arquivo curto demais passa
+        aqui por causa do recuo, nao do material."""
+        prompt = "    # site.md\n    uma linha\n    outra linha\n"
+        assert _secoes_do_kit(prompt)["site.md"] == "uma linha\noutra linha\n"
 
     def test_o_fatiador_nao_inventa_secao(self):
         """Mutante no proprio detector: se `_secoes_do_kit` casasse qualquer

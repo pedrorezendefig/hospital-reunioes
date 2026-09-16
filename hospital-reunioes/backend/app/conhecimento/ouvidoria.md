@@ -49,7 +49,6 @@ Arquivar é outra coisa: só tira da lista o caso que já foi encerrado, para or
 ## O que ele não faz
 
 - Não deixa o manifestante escolher área, tipo, gravidade nem sigilo.
-- Não responde automaticamente ao e-mail que chega na caixa da ouvidoria.
 - Não apaga linha de trilha: erro se conserta com registro novo, nunca apagando o anterior.
 - Não mede sozinho a nota do hospital no Google nem no Reclame Aqui: alguém abre as duas páginas e digita o que leu.
 
