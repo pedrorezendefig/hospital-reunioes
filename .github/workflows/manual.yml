@@ -11,20 +11,13 @@ on:
     branches: [main]
     paths:
       - 'docs/manual/**'
-      - 'tools/lint_manual.py'
-      - 'tools/checar_build_manual.py'
-      - 'tools/checar_video_manual.py'
-      - 'tools/inventario_manual.py'
-      - 'tools/tirar_draft_manual.py'
-      - 'tools/test_lint_manual.py'
-      - 'tools/test_checar_build_manual.py'
-      - 'tools/test_checar_video_manual.py'
-      - 'tools/test_publicar_manual.py'
-      - 'tools/test_inventario_manual.py'
-      - 'tools/test_skill_montar_manual.py'
-      - 'tools/test_tirar_draft_manual.py'
-      - 'tools/test_skill_cadeia_manual.py'
-      - 'tools/test_setup_maquina_manual.py'
+      # A pasta inteira, e não arquivo por arquivo: a lista explícita esquece.
+      # O `tools/test_prints_pops.py` nasceu fora dela, e um PR que mexesse só
+      # nele não acordaria este job, deixando o CI verde sobre nada. O curinga
+      # também pega o `tools/lint_adr.py`, que não é do manual: de propósito. O
+      # workflow passa a rodar às vezes sem precisar, e nunca deixa de rodar
+      # quando precisa. Errar para o lado de rodar demais é o lado seguro.
+      - 'tools/**'
       - '.claude/skills/manual/**'
       - '.claude/skills/montar-manual/**'
       - '.claude/skills/to-prd/**'
@@ -38,20 +31,8 @@ on:
     branches: [main]
     paths:
       - 'docs/manual/**'
-      - 'tools/lint_manual.py'
-      - 'tools/checar_build_manual.py'
-      - 'tools/checar_video_manual.py'
-      - 'tools/inventario_manual.py'
-      - 'tools/tirar_draft_manual.py'
-      - 'tools/test_lint_manual.py'
-      - 'tools/test_checar_build_manual.py'
-      - 'tools/test_checar_video_manual.py'
-      - 'tools/test_publicar_manual.py'
-      - 'tools/test_inventario_manual.py'
-      - 'tools/test_skill_montar_manual.py'
-      - 'tools/test_tirar_draft_manual.py'
-      - 'tools/test_skill_cadeia_manual.py'
-      - 'tools/test_setup_maquina_manual.py'
+      # Mesmo curinga da seção de push, pelo mesmo motivo.
+      - 'tools/**'
       # `**` e não só o SKILL.md: as references citam os conferidores de
       # tools/ pelo nome, e renomear um sem disparar o workflow deixaria a
       # receita apontando para script que não existe mais.
@@ -106,9 +87,13 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Testes do lint, do conferidor e da publicação
+        # `tools/` inteiro em vez da lista de arquivos: quem cria um conferidor
+        # novo ganha o teste dele no CI sem lembrar de editar este arquivo. O
+        # `--ignore` tira o painel local `tools/workflow-dashboard/`, que tem
+        # suíte própria, roda da própria pasta e nunca esteve neste job.
         run: |
           pip install pytest
-          python -m pytest tools/test_lint_manual.py tools/test_checar_build_manual.py tools/test_checar_video_manual.py tools/test_publicar_manual.py tools/test_inventario_manual.py tools/test_skill_montar_manual.py tools/test_tirar_draft_manual.py tools/test_skill_cadeia_manual.py tools/test_setup_maquina_manual.py tools/test_prints_pops.py -q
+          python -m pytest tools/ -q --ignore=tools/workflow-dashboard
 
       - name: Lint do manual
         run: python3 tools/lint_manual.py --dir docs/manual/src/content/docs

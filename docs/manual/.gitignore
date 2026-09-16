@@ -15,3 +15,4 @@ video/**/renders/
 # o `prebuild` traz os dois antes de cada build
 src/assets/logo-hsm.png
 public/fonts/
+public/favicon.png

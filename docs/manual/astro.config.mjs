@@ -26,6 +26,10 @@ export default defineConfig({
       // Locale raiz pt-BR, sem seletor de idioma (ADR 0057, decisão 2).
       defaultLocale: "root",
       locales: { root: { label: "Português", lang: "pt-BR" } },
+      // O padrão do Starlight é `/favicon.svg`, que nunca existiu aqui: toda
+      // página pedia um ícone ausente. O `prebuild` copia a logo do hospital
+      // para `public/favicon.png` e o site usa a identidade que já tem.
+      favicon: "/favicon.png",
       logo: {
         src: "./src/assets/logo-hsm.png",
         alt: "Hospital São Matheus",
@@ -38,6 +42,9 @@ export default defineConfig({
         // Modo claro como padrão; o seletor continua disponível.
         ThemeProvider: "./src/components/ThemeProvider.astro",
       },
+      // Reescreve o rótulo dos grupos que o `autogenerate` tira do nome da
+      // pasta, sem abrir mão da geração automática (veja o arquivo).
+      routeMiddleware: "./src/rotulos-da-sidebar.ts",
       pagination: false,
       lastUpdated: false,
       social: [],
