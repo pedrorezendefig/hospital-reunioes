@@ -13,8 +13,10 @@ on:
       - 'docs/manual/**'
       - 'tools/lint_manual.py'
       - 'tools/checar_build_manual.py'
+      - 'tools/checar_video_manual.py'
       - 'tools/test_lint_manual.py'
       - 'tools/test_checar_build_manual.py'
+      - 'tools/test_checar_video_manual.py'
       - 'tools/test_publicar_manual.py'
       - '.github/workflows/manual.yml'
   pull_request:
@@ -23,8 +25,10 @@ on:
       - 'docs/manual/**'
       - 'tools/lint_manual.py'
       - 'tools/checar_build_manual.py'
+      - 'tools/checar_video_manual.py'
       - 'tools/test_lint_manual.py'
       - 'tools/test_checar_build_manual.py'
+      - 'tools/test_checar_video_manual.py'
       - 'tools/test_publicar_manual.py'
       - '.github/workflows/manual.yml'
 
@@ -67,10 +71,15 @@ jobs:
       - name: Testes do lint, do conferidor e da publicação
         run: |
           pip install pytest
-          python -m pytest tools/test_lint_manual.py tools/test_checar_build_manual.py tools/test_publicar_manual.py -q
+          python -m pytest tools/test_lint_manual.py tools/test_checar_build_manual.py tools/test_checar_video_manual.py tools/test_publicar_manual.py -q
 
       - name: Lint do manual
         run: python3 tools/lint_manual.py --dir docs/manual/src/content/docs
+
+      - name: Vídeo de tarefa com fonte versionada e MP4 fora do git
+        # O MP4 não vem no clone (é regerável): o que o CI pode provar é que
+        # toda página que exibe vídeo tem a composição e o carimbo para regerar.
+        run: python3 tools/checar_video_manual.py --dir docs/manual
 
       - uses: pnpm/action-setup@v6
         with:
