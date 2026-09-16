@@ -97,6 +97,17 @@ export const CONVERSA_NO_TETO =
  */
 export const MUITAS_MENSAGENS = "Muitas mensagens em pouco tempo. Espere um minuto e mande de novo.";
 
+/**
+ * A frase de quando o servidor respondeu e o corpo não dá para ler.
+ *
+ * É causa diferente da rede fora, e o código distingue as duas: aqui a resposta
+ * chegou (uma conexão que caiu depois dos cabeçalhos, um proxy devolvendo HTML),
+ * então dizer "verifique a conexão" mandaria olhar o lugar errado. A frase diz o
+ * que a tela sabe e onde o texto ficou.
+ */
+export const RESPOSTA_ILEGIVEL =
+  "O servidor respondeu algo que a tela não conseguiu ler. Sua mensagem continua na caixa: mande de novo.";
+
 /** Os rótulos fixos de cada Tipo. Decisão não tem roteiro: é texto corrido. */
 export const ROTEIRO_POR_TIPO: Record<TipoDemanda, string[]> = {
   defeito: ["Onde", "O que aconteceu", "O que esperava", "Quando", "Como repetir"],

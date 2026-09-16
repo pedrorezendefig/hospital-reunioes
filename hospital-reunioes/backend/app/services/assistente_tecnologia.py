@@ -140,6 +140,16 @@ def _texto(valor, anterior: str, teto: int) -> str:
     return valor if isinstance(valor, str) and len(valor) <= teto else anterior
 
 
+def _produto(valor, ids_de_produto: set[str], anterior):
+    """Produto que o app nao conhece volta ao anterior.
+
+    O `isinstance` nao e enfeite: `valor in conjunto` levanta `TypeError` para
+    o que nao e hasheavel, e tanto o cliente (`{"produto_id": {}}`) quanto o
+    modelo escolhem esse tipo. Sem ele o turno morria em 500 generico.
+    """
+    return valor if isinstance(valor, str) and valor in ids_de_produto else anterior
+
+
 def _da_lista(valor, lista: tuple[str, ...], anterior):
     """Valor fora da lista fechada volta ao anterior (ADR 0008: o LLM conversa,
     o backend valida). Vale para Tipo e prioridade."""
@@ -197,7 +207,7 @@ def rascunho_de_entrada(bruto, *, ids_de_produto: set[str]) -> dict:
     return {
         "titulo": _texto(bruto.get("titulo"), "", LIMITE_DO_TITULO),
         "tipo": _da_lista(bruto.get("tipo"), TIPOS, None),
-        "produto_id": produto if produto in ids_de_produto else None,
+        "produto_id": _produto(produto, ids_de_produto, None),
         "prioridade": _da_lista(bruto.get("prioridade"), PRIORIDADES, "normal"),
         "prazo": _prazo_iso(bruto.get("prazo")),
         "descricao": _texto(bruto.get("descricao"), "", LIMITE_DA_DESCRICAO),
@@ -222,7 +232,7 @@ def normalizar_rascunho(novo, atual: dict, *, ids_de_produto: set[str]) -> dict:
     return {
         "titulo": _texto(novo.get("titulo"), atual["titulo"], LIMITE_DO_TITULO),
         "tipo": _da_lista(novo.get("tipo"), TIPOS, atual["tipo"]),
-        "produto_id": produto if produto in ids_de_produto else atual["produto_id"],
+        "produto_id": _produto(produto, ids_de_produto, atual["produto_id"]),
         "prioridade": _da_lista(novo.get("prioridade"), PRIORIDADES, atual["prioridade"]),
         "prazo": _prazo_iso(novo["prazo"]) if "prazo" in novo else atual["prazo"],
         "descricao": _texto(novo.get("descricao"), atual["descricao"], LIMITE_DA_DESCRICAO),

@@ -602,6 +602,26 @@ class TestServico:
         saida = assistente_tecnologia.rascunho_de_entrada(entrada, ids_de_produto={"prod-ouvidoria"})
         assert saida["produto_id"] is None
 
+    @pytest.mark.parametrize("nao_hasheavel", [{}, [], {"a": 1}])
+    def test_produto_que_nao_e_texto_nao_derruba_o_turno(self, nao_hasheavel, monkeypatch):
+        """`valor in conjunto` levanta `TypeError` para o que nao e hasheavel, e
+        o tipo quem escolhe e o cliente: sem a guarda, `{"produto_id": {}}` virava
+        500 generico pelo handler global, em vez de um turno normal."""
+        _stub_llm(monkeypatch, content=_resposta_do_modelo())
+        cliente = _montar(logado=_pessoa("p1"))
+        resposta = cliente.post(ROTA, json=_corpo(rascunho={"produto_id": nao_hasheavel}))
+        assert resposta.status_code == 200
+        assert resposta.json()["rascunho"]["produto_id"] == "prod-ouvidoria"
+
+    def test_produto_que_nao_e_texto_vindo_do_modelo_tambem_nao_derruba(self, monkeypatch):
+        """A mesma expressao existia nas duas pontas, e a do modelo e alimentada
+        por JSON de fora."""
+        _stub_llm(monkeypatch, content=_resposta_do_modelo(produto_id={}))
+        cliente = _montar(logado=_pessoa("p1"))
+        resposta = cliente.post(ROTA, json=_corpo(rascunho=RASCUNHO_CHEIO))
+        assert resposta.status_code == 200
+        assert resposta.json()["rascunho"]["produto_id"] == "prod-ouvidoria"
+
     def test_produto_ativo_que_a_tela_mandou_sobrevive(self):
         """O par do teste acima: uma peneira que zerasse tudo passaria nele."""
         entrada = {"produto_id": "prod-ouvidoria"}

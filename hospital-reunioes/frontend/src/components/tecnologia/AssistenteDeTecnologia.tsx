@@ -38,6 +38,7 @@ import {
   podeCriar,
   RASCUNHO_VAZIO,
   RascunhoDaDemanda,
+  RESPOSTA_ILEGIVEL,
   RespostaDoChat,
   TIPO_QUANDO_NAO_ESCOLHIDO,
   URL_DO_CHAT,
@@ -63,6 +64,19 @@ type Props = {
 };
 
 const BOAS_VINDAS: MensagemDoChat = { role: "assistant", content: PRIMEIRA_MENSAGEM };
+
+/** O que a tela precisa guardar de um turno para saber voltar atrás dele. */
+type TurnoEmVoo = {
+  /** O fio como estava ANTES da fala, para o rollback. */
+  anteriores: MensagemDoChat[];
+  /** O fio com a fala dentro, que é o que foi para o servidor. */
+  historico: MensagemDoChat[];
+  /** A fala, para devolver à caixa se o turno não valer. */
+  fala: string;
+};
+
+/** Como um turno termina. Só estes dois desfechos existem. */
+type DesfechoDoTurno = { erro: string } | { corpo: RespostaDoChat };
 
 export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
   const [messages, setMessages] = useState<MensagemDoChat[]>([BOAS_VINDAS]);
@@ -129,32 +143,16 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
   }
 
-  async function enviar() {
-    const fala = texto.trim();
-    if (!fala || conversando || noTeto) return;
-    const anteriores = messages;
-    const historico: MensagemDoChat[] = [...messages, { role: "user", content: fala }];
-    const daConversa = conversaAtual.current;
-    setMessages(historico);
-    setTexto("");
-    setErro(null);
-    setConversando(true);
-
-    /**
-     * O turno que o servidor não aceitou VOLTA ATRÁS.
-     *
-     * Deixar a fala pendurada no fio e a caixa vazia é o pior dos dois mundos:
-     * a tela manda mandar de novo e não sobrou o que mandar, o modelo leria a
-     * mesma frase duas vezes se a pessoa redigitasse, e o turno que o servidor
-     * nunca viu teria queimado um dos quarenta lugares do teto.
-     */
-    function desfazerOTurno(motivo: string) {
-      setMessages(anteriores);
-      setTexto(fala);
-      setErro(motivo);
-      setConversando(false);
-    }
-
+  /**
+   * Pede o turno ao servidor e devolve o DESFECHO. Nunca levanta.
+   *
+   * Ela não escreve estado nenhum de propósito: é a metade que fala com a rede,
+   * e a metade que escreve na tela é o `encerrarOTurno`. Todo caminho de saída
+   * daqui (rede fora, recusa do servidor, corpo que não dá para ler) volta como
+   * valor, e não como exceção, porque exceção escapando daqui era o que deixava
+   * `conversando` preso em `true` e congelava o painel inteiro.
+   */
+  async function pedirOTurno(historico: MensagemDoChat[]): Promise<DesfechoDoTurno> {
     let resposta: Response;
     try {
       resposta = await fetch(URL_DO_CHAT, {
@@ -166,20 +164,70 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
       });
     } catch (e) {
       console.error("[admin/tecnologia] falha ao falar com o assistente", e);
-      desfazerOTurno(FALHA_DE_CONEXAO);
-      return;
+      return { erro: FALHA_DE_CONEXAO };
     }
-    // Descartaram enquanto este turno estava no ar: a resposta não é de
-    // conversa nenhuma, e escrevê-la ressuscitaria o que a pessoa jogou fora.
-    if (conversaAtual.current !== daConversa) return;
     if (!resposta.ok) {
-      desfazerOTurno(resposta.status === 429 ? MUITAS_MENSAGENS : await motivoDaRecusa(resposta));
-      return;
+      return { erro: resposta.status === 429 ? MUITAS_MENSAGENS : await motivoDaRecusa(resposta) };
     }
-    const corpo = (await resposta.json()) as RespostaDoChat;
-    setMessages([...historico, { role: "assistant", content: corpo.reply }]);
-    setRascunho(corpo.rascunho);
+    try {
+      return { corpo: (await resposta.json()) as RespostaDoChat };
+    } catch (e) {
+      // Conexão que cai depois dos cabeçalhos e antes do corpo, ou um proxy que
+      // responde 200 com HTML. O servidor respondeu; o que não dá é para ler.
+      console.error("[admin/tecnologia] a resposta do assistente veio ilegível", e);
+      return { erro: RESPOSTA_ILEGIVEL };
+    }
+  }
+
+  /**
+   * O ÚNICO lugar que escreve o fim de um turno.
+   *
+   * Três coisas passam a valer por construção, e não por lembrança:
+   *
+   * 1. **a tela destrava sempre.** `conversando` volta a `false` aqui, e este é
+   *    o único caminho de volta do turno: não existe saída que esqueça de
+   *    destravar, porque não existe outra saída. (O turno descartado sai na
+   *    primeira linha, e quem descartou já destravou.)
+   * 2. **a guarda da conversa vem antes de QUALQUER escrita.** Ela é a primeira
+   *    linha, então nenhum ramo (nem o da rede, nem o da recusa, nem o do
+   *    corpo ilegível) consegue ressuscitar o que o "Descartar" jogou fora.
+   * 3. **o rollback não pisa no que a pessoa digitou.** Repor a fala só faz
+   *    sentido se a caixa continuar como ela a deixou; se ela escreveu outra
+   *    coisa enquanto esperava, o texto dela ganha.
+   */
+  function encerrarOTurno(daConversa: number, desfecho: DesfechoDoTurno, turno: TurnoEmVoo) {
+    if (conversaAtual.current !== daConversa) return;
+
+    if ("erro" in desfecho) {
+      // O turno que o servidor não aceitou VOLTA ATRÁS: deixar a fala pendurada
+      // no fio diria "mande de novo" sem ter o que mandar, faria o modelo ler a
+      // mesma frase duas vezes se a pessoa redigitasse, e teria queimado um dos
+      // quarenta lugares do teto que o servidor nunca viu.
+      setMessages(turno.anteriores);
+      setTexto((atual) => (atual.trim() ? atual : turno.fala));
+      setErro(desfecho.erro);
+    } else {
+      setMessages([...turno.historico, { role: "assistant", content: desfecho.corpo.reply }]);
+      setRascunho(desfecho.corpo.rascunho);
+    }
     setConversando(false);
+  }
+
+  async function enviar() {
+    const fala = texto.trim();
+    if (!fala || conversando || noTeto) return;
+    const turno: TurnoEmVoo = {
+      anteriores: messages,
+      historico: [...messages, { role: "user", content: fala }],
+      fala,
+    };
+    const daConversa = conversaAtual.current;
+    setMessages(turno.historico);
+    setTexto("");
+    setErro(null);
+    setConversando(true);
+
+    encerrarOTurno(daConversa, await pedirOTurno(turno.historico), turno);
   }
 
   async function criar() {
@@ -211,7 +259,17 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
       setCriando(false);
       return;
     }
-    const criada = (await resposta.json()) as Demanda & { aviso_por_email?: unknown };
+    let criada: Demanda & { aviso_por_email?: unknown };
+    try {
+      criada = (await resposta.json()) as Demanda & { aviso_por_email?: unknown };
+    } catch (e) {
+      // Mesma armadilha do turno, no outro botão: sem este `catch`, um corpo
+      // ilegível deixava `criando` preso em `true` e "Criar Demanda" morto.
+      console.error("[admin/tecnologia] a resposta da criação veio ilegível", e);
+      setErro(RESPOSTA_ILEGIVEL);
+      setCriando(false);
+      return;
+    }
     limparASessao();
     setCriando(false);
     onCriada(criada, typeof criada.aviso_por_email === "string" ? criada.aviso_por_email : null);

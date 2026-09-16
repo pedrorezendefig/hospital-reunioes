@@ -32,6 +32,7 @@ import {
   NAO_INFORMADO,
   RASCUNHO_VAZIO,
   RascunhoDaDemanda,
+  RESPOSTA_ILEGIVEL,
 } from "./assistente";
 import { Demanda, ProdutoDaEscolha } from "./demandas";
 
@@ -66,6 +67,15 @@ type Opcoes = {
    */
   segurarAResposta?: boolean;
   /**
+   * Como o turno segurado termina quando o teste o solta. `"ok"` é o padrão;
+   * `"rede"` faz o `fetch` rejeitar (conexão que morreu esperando) e
+   * `"ilegivel"` devolve 200 com um corpo que o `json()` não consegue ler
+   * (proxy respondendo HTML, conexão que cai depois dos cabeçalhos).
+   */
+  fimDoTurno?: "ok" | "rede" | "ilegivel";
+  /** A criação responde 200 com um corpo que o `json()` não consegue ler. */
+  criacaoIlegivel?: boolean;
+  /**
    * O corpo CRU da recusa, como cada camada do backend a escreve. Não é um
    * `{detail}` genérico de propósito: o `slowapi` responde `{error: ...}` e o
    * pydantic responde `detail` em LISTA, e um dublê que normalizasse os três
@@ -85,6 +95,18 @@ function servidor(opcoes: Opcoes) {
         soltarAResposta = resolve;
       });
     }
+    if (url.endsWith("/assistente/chat") && opcoes.fimDoTurno === "rede") {
+      throw new Error("rede fora");
+    }
+    if (url.endsWith("/assistente/chat") && opcoes.fimDoTurno === "ilegivel") {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => {
+          throw new SyntaxError("Unexpected token < in JSON");
+        },
+      } as unknown as Response;
+    }
     if (url.endsWith("/assistente/chat")) {
       if (opcoes.recusaDoChat) {
         return {
@@ -101,6 +123,15 @@ function servidor(opcoes: Opcoes) {
           rascunho: opcoes.rascunhoDaResposta ?? RASCUNHO_DO_ASSISTENTE,
           demanda_parecida: null,
         }),
+      } as unknown as Response;
+    }
+    if (opcoes.criacaoIlegivel) {
+      return {
+        ok: true,
+        status: 201,
+        json: async () => {
+          throw new SyntaxError("Unexpected token < in JSON");
+        },
       } as unknown as Response;
     }
     return {
@@ -286,6 +317,166 @@ describe("O turno em voo", () => {
   });
 });
 
+/**
+ * As tres propriedades do turno (issue #727, rodada 3 da revisao).
+ *
+ * Elas nao sao tres correcoes: sao o contrato do ponto unico de saida
+ * (`encerrarOTurno`). Cada bloco abaixo cobra uma, POR CAMINHO, porque foi
+ * justamente "esta valendo num caminho e nao no outro" que produziu duas safras
+ * de regressao no mesmo lugar.
+ */
+describe("Propriedade 1: a tela destrava em todo caminho de saída", () => {
+  async function falarESegurar(texto: string) {
+    fireEvent.change(screen.getByLabelText("Mensagem"), { target: { value: texto } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() => expect(doChat().length).toBeGreaterThan(0));
+  }
+
+  /** O painel inteiro, que é o que o `conversando` tranca. */
+  function painelTravado(): boolean {
+    return (screen.getByLabelText("Título") as HTMLInputElement).disabled;
+  }
+
+  it("corpo ilegível destrava a tela e mostra o alarme", async () => {
+    // É o caminho que congelava os seis campos e a frase "está escrevendo" para
+    // sempre, sem alerta nenhum: o teto novo virando indisponibilidade. A única
+    // saída era descartar a conversa ou recarregar a página.
+    montar({ fimDoTurno: "ilegivel" });
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() => expect(painelTravado()).toBe(false));
+    expect((await screen.findByRole("alert")).textContent).toBe(RESPOSTA_ILEGIVEL);
+    expect(screen.queryByText(/O assistente está escrevendo aqui/)).toBeNull();
+  });
+
+  it("rede fora destrava a tela", async () => {
+    montar({ fimDoTurno: "rede" });
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() => expect(painelTravado()).toBe(false));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+  });
+
+  it("recusa do servidor destrava a tela", async () => {
+    montar({ recusaDoChat: { status: 500, corpo: { detail: "Erro interno" } } });
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() => expect(painelTravado()).toBe(false));
+    expect(await screen.findByRole("alert")).toBeTruthy();
+  });
+
+  it("o turno que dá certo destrava", async () => {
+    // O par de presença dos três acima: uma tela que nunca travasse passaria
+    // em todos eles.
+    montar({ segurarAResposta: true });
+    await falarESegurar("a Ana tá estranha");
+    expect(painelTravado()).toBe(true);
+
+    soltarAResposta?.();
+
+    await waitFor(() => expect(painelTravado()).toBe(false));
+  });
+});
+
+describe("Propriedade 2: a guarda da conversa vem antes de qualquer escrita", () => {
+  async function conversarEDescartarNoMeio(opcoes: Opcoes) {
+    montar({ ...opcoes, segurarAResposta: true });
+    fireEvent.change(screen.getByLabelText("Mensagem"), { target: { value: "a Ana tá estranha" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() => expect(doChat().length).toBeGreaterThan(0));
+    fireEvent.click(screen.getByRole("button", { name: /Descartar/ }));
+    soltarAResposta?.();
+  }
+
+  it("pelo caminho da rede, a conversa descartada não ressuscita", async () => {
+    // O caminho que continuava aberto: o `catch` desfazia o turno sem olhar de
+    // quem ele era, ressuscitava o fio e o regravava na sessão, com um alerta
+    // vermelho de uma conversa que não existe mais.
+    await conversarEDescartarNoMeio({ fimDoTurno: "rede" });
+
+    await waitFor(() => expect(window.sessionStorage.getItem(CHAVE_DA_SESSAO)).toBeNull());
+    expect(within(screen.getByRole("log")).queryByText("a Ana tá estranha")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect((screen.getByLabelText("Título") as HTMLInputElement).disabled).toBe(false);
+  });
+
+  it("pelo caminho do corpo ilegível, também não", async () => {
+    await conversarEDescartarNoMeio({ fimDoTurno: "ilegivel" });
+
+    await waitFor(() => expect(window.sessionStorage.getItem(CHAVE_DA_SESSAO)).toBeNull());
+    expect(within(screen.getByRole("log")).queryByText("a Ana tá estranha")).toBeNull();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("pelo caminho da recusa, também não", async () => {
+    await conversarEDescartarNoMeio({ recusaDoChat: { status: 429, corpo: { error: "Rate limit exceeded" } } });
+
+    await waitFor(() => expect(window.sessionStorage.getItem(CHAVE_DA_SESSAO)).toBeNull());
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("a conversa viva escreve normalmente", async () => {
+    // O par de presença dos três acima: uma tela que jogasse fora TODA resposta
+    // passaria em todos eles.
+    montar({ segurarAResposta: true });
+    fireEvent.change(screen.getByLabelText("Mensagem"), { target: { value: "a Ana tá estranha" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() => expect(doChat().length).toBeGreaterThan(0));
+
+    soltarAResposta?.();
+
+    await waitFor(() => expect(screen.getByText("Entendi. Onde isso aconteceu?")).toBeTruthy());
+    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Ana não responde de madrugada");
+  });
+});
+
+describe("Propriedade 3: o rollback não pisa no que a pessoa digitou", () => {
+  it("o texto novo na caixa ganha da fala antiga", async () => {
+    // A caixa de mensagem NÃO trava durante o turno, e é o que se faz enquanto
+    // o assistente pensa: continuar escrevendo. Repor a fala por cima é a mesma
+    // perda silenciosa que motivou o primeiro must-fix, na outra caixa.
+    montar({ segurarAResposta: true, fimDoTurno: "rede" });
+    fireEvent.change(screen.getByLabelText("Mensagem"), { target: { value: "a Ana tá estranha" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() => expect(doChat().length).toBeGreaterThan(0));
+
+    fireEvent.change(screen.getByLabelText("Mensagem"), { target: { value: "na verdade é o Vínculo" } });
+    soltarAResposta?.();
+
+    await waitFor(() => expect(screen.queryByRole("alert")).toBeTruthy());
+    expect((screen.getByLabelText("Mensagem") as HTMLTextAreaElement).value).toBe("na verdade é o Vínculo");
+  });
+
+  it("com a caixa vazia, a fala volta", async () => {
+    // O par de presença: um rollback que nunca repusesse nada passaria no teste
+    // acima, e a pessoa leria "mande de novo" sem ter o que mandar.
+    montar({ fimDoTurno: "rede" });
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() =>
+      expect((screen.getByLabelText("Mensagem") as HTMLTextAreaElement).value).toBe("a Ana tá estranha"),
+    );
+  });
+
+  it("só espaço em branco na caixa não conta como texto novo", async () => {
+    montar({ segurarAResposta: true, fimDoTurno: "rede" });
+    fireEvent.change(screen.getByLabelText("Mensagem"), { target: { value: "a Ana tá estranha" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() => expect(doChat().length).toBeGreaterThan(0));
+
+    fireEvent.change(screen.getByLabelText("Mensagem"), { target: { value: "   " } });
+    soltarAResposta?.();
+
+    await waitFor(() =>
+      expect((screen.getByLabelText("Mensagem") as HTMLTextAreaElement).value).toBe("a Ana tá estranha"),
+    );
+  });
+});
+
 describe("O turno recusado", () => {
   it("volta atrás: a fala sai do fio e o texto volta para a caixa", async () => {
     // Sem isso, a tela diz "mande de novo" e não sobrou o que mandar: a fala
@@ -436,6 +627,24 @@ describe("Criar Demanda", () => {
 
     await waitFor(() => expect(criadas).toHaveLength(1));
     expect(criadas[0].demanda.id).toBe("d-nova");
+  });
+
+  it("corpo ilegível na criação destrava o botão e mostra o alarme", async () => {
+    // O mesmo buraco do turno, no outro botão: sem o `catch` em volta do
+    // `json()`, `criando` ficava preso em `true` e "Criar Demanda" morria, com
+    // o rascunho pronto na tela e nenhuma palavra dizendo o que houve.
+    montar({ criacaoIlegivel: true });
+    await falar("a Ana tá estranha");
+    await waitFor(() => expect((screen.getByLabelText("Título") as HTMLInputElement).value).not.toBe(""));
+
+    fireEvent.click(screen.getByRole("button", { name: "Criar Demanda" }));
+
+    expect((await screen.findByRole("alert")).textContent).toBe(RESPOSTA_ILEGIVEL);
+    await waitFor(() =>
+      expect((screen.getByRole("button", { name: "Criar Demanda" }) as HTMLButtonElement).disabled).toBe(false),
+    );
+    // E a Demanda NÃO foi entregue: o corpo era ilegível, então não há id.
+    expect(criadas).toHaveLength(0);
   });
 
   it("criar limpa o armazenamento de sessão", async () => {
