@@ -9,6 +9,9 @@ sidebar:
   order: 9
 ---
 
+O vídeo é o capítulo 4 do módulo, gravado na versão 0.109.0: ele mostra esta
+tarefa, não as mudanças que vieram depois.
+
 ## Quando usar
 
 Quando uma área pediu dias úteis a mais para responder. O caso mostra o pedido

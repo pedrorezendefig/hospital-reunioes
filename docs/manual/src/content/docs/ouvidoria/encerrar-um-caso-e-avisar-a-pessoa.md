@@ -9,6 +9,9 @@ sidebar:
   order: 13
 ---
 
+O vídeo é o capítulo 5 do módulo, gravado na versão 0.109.0: ele mostra esta
+tarefa, não as mudanças que vieram depois.
+
 ## Quando usar
 
 Quando a resposta da área resolve o caso, ou quando não há mais o que apurar. O

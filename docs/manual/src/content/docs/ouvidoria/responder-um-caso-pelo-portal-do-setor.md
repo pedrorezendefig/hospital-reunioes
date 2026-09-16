@@ -10,6 +10,9 @@ sidebar:
   order: 6
 ---
 
+O vídeo é o capítulo 3 do módulo, gravado na versão 0.109.0: ele mostra esta
+tarefa, não as mudanças que vieram depois.
+
 ## Quando usar
 
 Quando chega no seu e-mail uma **Demanda da Ouvidoria** para a sua área. O link
