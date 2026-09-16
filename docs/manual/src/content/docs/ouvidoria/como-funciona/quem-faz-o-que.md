@@ -45,11 +45,17 @@ identificação de quem falou, os anexos, a resposta da área nem o histórico.
 Dá e tira o acesso à Ouvidoria, e isso fica registrado. Recebe avisos técnicos,
 como falha de envio de e-mail. Não lê caso sigiloso e não edita histórico.
 
-## A Ana, no WhatsApp
+## A Ana, a assistente de atendimento
 
-Registra manifestação e consulta o andamento de um protocolo. Não classifica,
-não muda situação e não define desfecho, tipo ou sigilo. O palpite dela sobre a
-gravidade fica guardado à parte, marcado como palpite.
+Registra manifestação e consulta o andamento de um protocolo, por uma porta
+própria, com chave de serviço. Não classifica, não muda situação e não define
+desfecho, tipo ou sigilo. O palpite dela sobre a gravidade fica guardado à
+parte, marcado como palpite.
+
+A Ana **não atende o WhatsApp do hospital**: aquele número é de gente, e o que
+chega por ele entra pelo registro feito pela Ouvidoria. O canal em que a Ana
+conversa hoje ainda é de teste, e o dia em que ela assumir o WhatsApp é uma
+decisão que ainda não foi tomada.
 
 ## O que ninguém pode
 

@@ -35,14 +35,14 @@ setor responder, esperando o manifestante, respondido ou encerrado. Muda sozinha
 conforme o caso anda.
 
 Uma regra vale para tudo: nenhuma porta de entrada decide nada. Quem escreve
-pelo site, quem lê o QR na parede e a assistente do WhatsApp só registram o que
-aconteceu. O tipo, o setor, a gravidade e o sigilo são sempre escolha do
+pelo site, quem lê o QR na parede e a assistente de atendimento só registram o
+que aconteceu. O tipo, o setor, a gravidade e o sigilo são sempre escolha do
 ouvidor, depois de ler.
 
 ## O caminho de um caso, do começo ao fim
 
 1. **A pessoa conta o que aconteceu**, por uma das quatro portas: o formulário
-   na internet, o QR do cartaz, a Ana no WhatsApp ou o registro feito pela
+   na internet, o QR do cartaz, a conversa com a Ana ou o registro feito pela
    própria Ouvidoria. Ela recebe o protocolo na hora.
 2. **O ouvidor lê e encaminha.** Ele decide do que se trata, qual setor responde
    e o tamanho do problema. No mesmo clique, o setor recebe o e-mail com o prazo.
