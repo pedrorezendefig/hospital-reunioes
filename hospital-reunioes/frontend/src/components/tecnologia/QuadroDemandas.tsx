@@ -19,11 +19,13 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { AlertCircle, CalendarClock, Plus } from "lucide-react";
 
 import { Select } from "@/components/ui/Select";
 import { usePolling } from "@/hooks/usePolling";
 
+import { ROTA_ASSISTENTE } from "./assistente";
 import { DemandaModal } from "./DemandaModal";
 import { SeloDeEtapa } from "./SeloDeEtapa";
 import { TipoIcone } from "./TipoIcone";
@@ -47,7 +49,6 @@ import {
   motivoDaRecusa,
   PessoaDaAba,
   PRIORIDADE_ROTULO,
-  PRIORIDADES,
   PrioridadeDemanda,
   prazoLegivel,
   ProdutoDaEscolha,
@@ -57,7 +58,6 @@ import {
   textoDaIdade,
   TIPO_ROTULO,
   TIPOS,
-  TipoDemanda,
 } from "./demandas";
 
 type Props = {
@@ -134,14 +134,6 @@ const TODOS_OS_TIPOS = "Todos os tipos";
 const TODOS_OS_PRODUTOS = "Todos os Produtos";
 const TODOS_OS_RESPONSAVEIS = "Todos os responsáveis";
 
-const FORM_VAZIO = {
-  titulo: "",
-  tipo: "decisao" as TipoDemanda,
-  produto_id: "",
-  prioridade: "normal" as PrioridadeDemanda,
-  descricao: "",
-};
-
 export function QuadroDemandas({
   token,
   carregandoAuth,
@@ -155,8 +147,6 @@ export function QuadroDemandas({
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const [expandidas, setExpandidas] = useState<EstadoDemanda[]>([]);
-  const [abrindoForm, setAbrindoForm] = useState(false);
-  const [form, setForm] = useState(FORM_VAZIO);
   const [moverAberto, setMoverAberto] = useState<string | null>(null);
   const [abertaId, setAbertaId] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState<string | null>(null);
@@ -185,8 +175,8 @@ export function QuadroDemandas({
    *
    * A leitura que dá certo limpa o aviso, e é o que se quer quando o aviso é
    * dela. Mas trocar o filtro dispara uma leitura, e ela chegando depois de
-   * uma recusa de escrita apagaria o motivo: o formulário ficaria aberto,
-   * preenchido, e sem explicação nenhuma de por que a Demanda não foi criada.
+   * uma recusa de escrita apagaria o motivo: o card voltaria sozinho para a
+   * coluna de origem, sem explicação nenhuma de por que não se moveu.
    */
   const erroDeEscrita = useRef(false);
   /**
@@ -420,20 +410,6 @@ export function QuadroDemandas({
     return true;
   }
 
-  async function criarDemanda() {
-    const criada = await enviar(`${BASE_TECNOLOGIA}/demandas`, "POST", {
-      titulo: form.titulo,
-      tipo: form.tipo,
-      produto_id: form.produto_id,
-      prioridade: form.prioridade,
-      descricao: form.descricao,
-    });
-    if (criada) {
-      setForm(FORM_VAZIO);
-      setAbrindoForm(false);
-    }
-  }
-
   async function mover(demanda: Demanda, estado: EstadoDemanda) {
     setMoverAberto(null);
     await enviar(`${BASE_TECNOLOGIA}/demandas/${demanda.id}/mover`, "POST", { estado });
@@ -455,7 +431,6 @@ export function QuadroDemandas({
     mover(demanda, estado);
   }
 
-  const produtosAtivos = produtos.filter((p) => p.ativo);
   const filtrando = temFiltroAtivo(filtros);
   const aberta = demandas.find((d) => d.id === abertaId) ?? null;
   const agora = new Date();
@@ -574,14 +549,16 @@ export function QuadroDemandas({
         <p className="text-sm text-text-secondary">
           A Demanda nasce em Nova, com o dono do Produto como responsável.
         </p>
-        <button
-          type="button"
-          onClick={() => setAbrindoForm(!abrindoForm)}
+        {/* Vira link na issue #727: "Nova Demanda" abre o Assistente de
+            Tecnologia numa página própria (ADR 0056, decisão 5), e o
+            formulário de sempre fica a um clique de lá. */}
+        <Link
+          href={ROTA_ASSISTENTE}
           className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all"
         >
           <Plus className="w-4 h-4" />
           Nova Demanda
-        </button>
+        </Link>
       </div>
 
       <div className="rounded-xl border border-border bg-surface p-3 space-y-3">
@@ -640,57 +617,6 @@ export function QuadroDemandas({
           </div>
         )}
       </div>
-
-      {abrindoForm && (
-        <div className="rounded-xl border border-border bg-surface p-4 space-y-3">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-            <input
-              type="text"
-              aria-label="Título"
-              placeholder="O que precisa acontecer"
-              maxLength={200}
-              value={form.titulo}
-              onChange={(e) => setForm({ ...form, titulo: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white md:col-span-2"
-            />
-            <Select
-              label="Tipo"
-              value={form.tipo}
-              onChange={(tipo) => setForm({ ...form, tipo: tipo as TipoDemanda })}
-              options={TIPOS.map((t) => ({ value: t, label: TIPO_ROTULO[t] }))}
-            />
-            <Select
-              label="Produto"
-              value={form.produto_id}
-              onChange={(produto_id) => setForm({ ...form, produto_id })}
-              options={produtosAtivos.map((p) => ({ value: p.id, label: p.nome }))}
-              placeholder="Escolha o Produto"
-            />
-            <Select
-              label="Prioridade"
-              value={form.prioridade}
-              onChange={(prioridade) => setForm({ ...form, prioridade: prioridade as PrioridadeDemanda })}
-              options={PRIORIDADES.map((p) => ({ value: p, label: PRIORIDADE_ROTULO[p] }))}
-            />
-            <textarea
-              aria-label="Descrição"
-              rows={2}
-              placeholder="Contexto, se ajudar"
-              value={form.descricao}
-              onChange={(e) => setForm({ ...form, descricao: e.target.value })}
-              className="w-full px-3 py-2 text-sm border border-slate-200 rounded-lg outline-none focus:border-primary focus:ring-1 focus:ring-primary bg-white md:col-span-2"
-            />
-          </div>
-          <button
-            type="button"
-            onClick={criarDemanda}
-            disabled={!form.titulo.trim() || !form.produto_id}
-            className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-50"
-          >
-            Abrir Demanda
-          </button>
-        </div>
-      )}
 
       {carregando ? (
         <p className="text-sm text-text-secondary">Carregando Demandas...</p>

@@ -25,6 +25,7 @@ import { Profiler, useState } from "react";
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ROTA_ASSISTENTE } from "./assistente";
 import { QuadroDemandas } from "./QuadroDemandas";
 import {
   Demanda,
@@ -410,74 +411,18 @@ describe("O card", () => {
   });
 });
 
-describe("Abrir uma Demanda", () => {
-  async function abrirFormulario() {
-    fireEvent.click(await screen.findByRole("button", { name: /Nova Demanda/ }));
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Encerrar conversas" } });
-    fireEvent.click(screen.getByRole("combobox", { name: "Produto" }));
-    fireEvent.click(within(screen.getByRole("listbox")).getByText("Ana"));
-  }
-
-  it("manda título, tipo, Produto e prioridade Normal por padrão", async () => {
+describe("Nova Demanda", () => {
+  it("o botão leva ao Assistente de Tecnologia, e não abre formulário nenhum aqui", async () => {
+    // O formulário saiu do Quadro na issue #727: ele mora em
+    // `FormularioNovaDemanda`, atrás do "prefiro preencher à mão" da página
+    // nova. O par de ausência é o que impede este teste de passar com o
+    // formulário ainda aqui, calado.
     montar([]);
-    await abrirFormulario();
 
-    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
-
-    await waitFor(() => expect(escritas()).toHaveLength(1));
-    expect(escritas()[0]).toEqual({
-      url: "/api/admin/tecnologia/demandas",
-      metodo: "POST",
-      // Sem estado nem responsável: quem decide os dois é o backend, pelo
-      // Produto (a Demanda nasce em Nova, com o dono).
-      corpo: {
-        titulo: "Encerrar conversas",
-        tipo: "decisao",
-        produto_id: "prod-1",
-        prioridade: "normal",
-        descricao: "",
-      },
-    });
-  });
-
-  it("o campo Título não deixa passar de 200 caracteres", async () => {
-    // O backend recusa com frase de gente, mas quem cola um texto longo tem
-    // que ser barrado antes de clicar: é o limite do campo que evita a viagem.
-    montar([]);
-    fireEvent.click(await screen.findByRole("button", { name: /Nova Demanda/ }));
-
-    expect((screen.getByLabelText("Título") as HTMLInputElement).maxLength).toBe(200);
-  });
-
-  it("só oferece Produto ativo", async () => {
-    montar([]);
-    fireEvent.click(await screen.findByRole("button", { name: /Nova Demanda/ }));
-    fireEvent.click(screen.getByRole("combobox", { name: "Produto" }));
-
-    const opcoes = within(screen.getByRole("listbox")).getAllByRole("option");
-    expect(opcoes.map((o) => o.textContent)).toEqual(["Ana", "POPs"]);
-  });
-
-  it("a recusa do servidor chega ao Super admin", async () => {
-    const motivo = "Produto sem dono nao recebe Demanda nova: ela nasceria sem responsavel.";
-    montar([], { recusa: { status: 422, detail: motivo } });
-    await abrirFormulario();
-
-    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
-
-    expect((await screen.findByRole("alert")).textContent).toContain("Produto sem dono");
-  });
-
-  it("sem recusa, nenhum aviso aparece", async () => {
-    // O par de presença do teste acima: um `role="alert"` cravado na tela
-    // passaria naquele sozinho.
-    montar([]);
-    await abrirFormulario();
-
-    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
-
-    await waitFor(() => expect(escritas()).toHaveLength(1));
-    expect(screen.queryByRole("alert")).toBeNull();
+    const link = await screen.findByRole("link", { name: /Nova Demanda/ });
+    expect(link.getAttribute("href")).toBe(ROTA_ASSISTENTE);
+    expect(screen.queryByLabelText("Título")).toBeNull();
+    expect(screen.queryByRole("button", { name: "Abrir Demanda" })).toBeNull();
   });
 });
 
@@ -1319,17 +1264,6 @@ describe("A barra de filtros", () => {
       "Site antigo (inativo)",
     ]);
   });
-
-  it("o formulário de Demanda nova continua só com Produto ativo", async () => {
-    // O par do teste acima: filtrar é ler o histórico, abrir é escolher onde a
-    // Demanda nasce, e só a segunda cobra Produto ativo.
-    montar(CARDS);
-    fireEvent.click(await screen.findByRole("button", { name: /Nova Demanda/ }));
-    fireEvent.click(screen.getByRole("combobox", { name: "Produto" }));
-
-    const opcoes = within(screen.getByRole("listbox")).getAllByRole("option");
-    expect(opcoes.map((o) => o.textContent)).toEqual(["Ana", "POPs"]);
-  });
 });
 
 describe("Duas trocas de filtro em sequência", () => {
@@ -1503,10 +1437,9 @@ describe("Duas trocas de filtro em sequência", () => {
   });
 
   it("o Quadro que volta não apaga a recusa de uma escrita", async () => {
-    // Com o formulário aberto: trocar o filtro deixa um GET no ar, a escrita é
-    // recusada e escreve o alerta, e o GET chega depois. Se ele limpasse o
-    // erro, o formulário ficaria aberto, preenchido, e sem explicação nenhuma
-    // de por que a Demanda não foi criada.
+    // Trocar o filtro deixa um GET no ar, a escrita (mover) é recusada e
+    // escreve o alerta, e o GET chega depois. Se ele limpasse o erro, o card
+    // voltaria sozinho para a coluna de origem e ninguém saberia por quê.
     const pendentes = filaDeChamadas();
     render(<Anfitriao />);
 
@@ -1514,25 +1447,18 @@ describe("Duas trocas de filtro em sequência", () => {
     pendentes[0].responder([AJUSTE, DEFEITO]);
     await screen.findByText("Ajuste na Ana");
 
-    fireEvent.click(screen.getByRole("button", { name: /Nova Demanda/ }));
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Encerrar conversas" } });
-    fireEvent.click(screen.getByRole("combobox", { name: "Produto" }));
-    fireEvent.click(within(screen.getByRole("listbox")).getByText("Ana"));
+    fireEvent.click(screen.getByRole("button", { name: "Mover Ajuste na Ana" }));
+    fireEvent.click(within(cardDe("Ajuste na Ana")).getByRole("button", { name: "Aguardando" }));
+    await waitFor(() => expect(pendentes).toHaveLength(2));
+    pendentes[1].recusar(422, "Essa Demanda nao pode ir para Aguardando.");
+    expect((await screen.findByRole("alert")).textContent).toContain("nao pode ir para Aguardando");
 
     escolherTipo("Ajuste");
-    await waitFor(() => expect(pendentes).toHaveLength(2));
-
-    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
     await waitFor(() => expect(pendentes).toHaveLength(3));
-    pendentes[2].recusar(422, "Produto sem dono nao recebe Demanda nova.");
-    expect((await screen.findByRole("alert")).textContent).toContain("Produto sem dono");
-
-    pendentes[1].responder([AJUSTE]);
+    pendentes[2].responder([AJUSTE]);
     await deixarOReactProcessar();
 
-    expect(screen.getByRole("alert").textContent).toContain("Produto sem dono");
-    // O formulário continua aberto com o que foi digitado, ao lado do motivo.
-    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Encerrar conversas");
+    expect(screen.getByRole("alert").textContent).toContain("nao pode ir para Aguardando");
   });
 
   it("o Quadro que volta apaga, sim, o aviso da leitura anterior", async () => {
@@ -2101,21 +2027,6 @@ describe("A atualização sozinha", () => {
 
     expect(leiturasDoQuadro().length).toBeGreaterThan(antes);
   });
-
-  it("a atualização automática não apaga o que já foi digitado em Nova Demanda", async () => {
-    // O formulário NÃO pausa o relógio de propósito (ver `podeAtualizarSozinho`
-    // no componente): o que se cobra aqui é que ele não PRECISA pausar, porque
-    // a recarga não encosta no que a pessoa escreveu.
-    montar([demanda("d1", "Uma nova")]);
-    await screen.findByText("Uma nova");
-    fireEvent.click(screen.getByRole("button", { name: /Nova Demanda/ }));
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Rascunho que não pode sumir" } });
-
-    await passar(30_000);
-
-    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Rascunho que não pode sumir");
-    expect(leiturasDoQuadro().length).toBeGreaterThan(1);
-  });
 });
 
 /**
@@ -2127,24 +2038,21 @@ describe("A atualização sozinha", () => {
 describe("O aviso de que o e-mail não saiu", () => {
   const AVISO = "O que você fez está gravado, mas o aviso por e-mail não saiu.";
 
-  async function abrirDemanda() {
-    fireEvent.click(await screen.findByRole("button", { name: /Nova Demanda/ }));
-    fireEvent.change(screen.getByLabelText("Título"), { target: { value: "Encerrar conversas" } });
-    fireEvent.click(screen.getByRole("combobox", { name: "Produto" }));
-    fireEvent.click(within(screen.getByRole("listbox")).getByText("Ana"));
-    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
+  async function moverCard() {
+    fireEvent.click(await screen.findByRole("button", { name: "Mover Uma nova" }));
+    fireEvent.click(within(cardDe("Uma nova")).getByRole("button", { name: "Aguardando" }));
   }
 
-  it("chega à tela de quem abriu a Demanda, com a Demanda já criada", async () => {
-    montar([], { avisoPorEmail: AVISO });
-    await abrirDemanda();
+  it("chega à tela de quem escreveu pelo Quadro, com a escrita já valendo", async () => {
+    // O caminho do `enviar` do Quadro. A criação saiu daqui na issue #727 e o
+    // aviso dela é da página nova; o que resta neste componente é o mover.
+    montar([demanda("d1", "Uma nova")], { avisoPorEmail: AVISO });
+    await moverCard();
 
     const alerta = await screen.findByRole("alert");
     expect(alerta.textContent).toContain(AVISO);
-    // O aviso NÃO é recusa: o POST foi, e o formulário fechou como fecha
-    // quando dá certo.
-    expect(escritas().some((c) => c.metodo === "POST" && c.url.endsWith("/demandas"))).toBe(true);
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Abrir Demanda" })).toBeNull());
+    // O aviso NÃO é recusa: o POST foi.
+    expect(escritas().some((c) => c.metodo === "POST" && c.url.endsWith("/mover"))).toBe(true);
   });
 
   it("chega à tela de quem respondeu no fio, dentro do card", async () => {
@@ -2237,10 +2145,10 @@ describe("O aviso de que o e-mail não saiu", () => {
   it("sem aviso do servidor, a tela não inventa alarme", async () => {
     // A irmã de presença: sem ela, uma tela que mostrasse o alerta em toda
     // escrita passaria no teste acima.
-    montar([]);
-    await abrirDemanda();
+    montar([demanda("d1", "Uma nova")]);
+    await moverCard();
 
-    await waitFor(() => expect(screen.queryByRole("button", { name: "Abrir Demanda" })).toBeNull());
+    await waitFor(() => expect(escritas().some((c) => c.url.endsWith("/mover"))).toBe(true));
     expect(screen.queryByRole("alert")).toBeNull();
   });
 
@@ -2250,8 +2158,8 @@ describe("O aviso de que o e-mail não saiu", () => {
     // agora as leituras chegam sozinhas de 30 em 30 segundos.
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
-      montar([], { avisoPorEmail: AVISO });
-      await abrirDemanda();
+      montar([demanda("d1", "Uma nova")], { avisoPorEmail: AVISO });
+      await moverCard();
       expect((await screen.findByRole("alert")).textContent).toContain(AVISO);
 
       await act(async () => {

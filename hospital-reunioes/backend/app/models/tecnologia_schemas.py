@@ -344,3 +344,46 @@ class DemandaDoHistoricoResponse(DemandaResponse):
     fechada_em: str | None = None
     fechada_por_id: str | None = None
     fechada_por_nome: str | None = None
+
+
+# ─── Assistente de Tecnologia (PRD #726, ADR 0056) ───────────────────────────
+
+# Os dois tetos do corpo do chat. Sao do pydantic, e nao do router, porque aqui
+# nao ha frase de gente a preservar: um corpo com 200 mensagens ou com um texto
+# de 50 mil caracteres nao veio da tela, veio de um cliente que resolveu mandar
+# o que quisesse para uma rota que gasta token de LLM a cada chamada.
+LIMITE_DE_MENSAGENS = 40
+LIMITE_DA_MENSAGEM = 5000
+
+
+class AssistenteMensagem(BaseModel):
+    """Uma fala do historico. Espelha o `ChatMessageSchema` dos outros chats."""
+
+    role: Literal["user", "assistant"]
+    content: str = Field(..., max_length=LIMITE_DA_MENSAGEM)
+
+
+class AssistenteChatPayload(BaseModel):
+    """Corpo do POST /admin/tecnologia/assistente/chat.
+
+    Sem estado no servidor (ADR 0056, decisao 4): o rascunho e a conversa vivem
+    na aba do navegador e voltam inteiros a cada turno. O rascunho chega como
+    `dict` cru porque quem o peneira e o servico, contra as listas fechadas e
+    os Produtos ativos, e um `Literal` aqui recusaria com 422 o que a regra
+    manda apenas ignorar.
+    """
+
+    rascunho: dict = Field(default_factory=dict)
+    messages: list[AssistenteMensagem] = Field(..., min_length=1, max_length=LIMITE_DE_MENSAGENS)
+
+
+class AssistenteChatResponse(BaseModel):
+    """Resposta do turno: a fala, o rascunho novo e o aviso de Demanda parecida.
+
+    `demanda_parecida` e sempre `null` por enquanto: o campo nasce aqui para a
+    tela e os testes nao mudarem de forma quando o aviso entrar.
+    """
+
+    reply: str
+    rascunho: dict
+    demanda_parecida: dict | None = None
