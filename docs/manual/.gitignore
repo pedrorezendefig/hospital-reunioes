@@ -5,6 +5,8 @@ dist/
 
 # Video de tarefa renderizado (a composicao HyperFrames e a fonte versionada)
 public/video/
+# Saida padrao do render quando ninguem passa -o, como em docs/comunicacao
+video/**/renders/
 
 # Vinculo com o projeto da Vercel, como na /divulgar
 .vercel/

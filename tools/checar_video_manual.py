@@ -19,6 +19,10 @@ from lint_manual import ler_frontmatter  # noqa: E402
 
 RE_CARIMBO = re.compile(r'<script[^>]*id="manual-video-meta"[^>]*>(.*?)</script>', re.S)
 CAMPOS_DO_CARIMBO = ["modulo", "slug", "pagina", "app_version", "gerado_em"]
+# Pastas regeráveis: o que mora nelas não está no git e não é responsabilidade
+# de ninguém (o `renders/` é onde o HyperFrames larga o MP4 quando ninguém diz
+# o destino).
+FORA_DA_VARREDURA = {"node_modules", "dist", ".astro", "renders"}
 
 
 def checar(raiz: Path) -> list[str]:
@@ -54,6 +58,23 @@ def checar(raiz: Path) -> list[str]:
                 "versão do app o vídeo retrata (ADR 0057, decisão 3)."
             )
 
+        # Compor um vídeo novo começa copiando a pasta de um pronto, e o carimbo
+        # vem colado junto. Preenchido com os dados do vídeo antigo, ele passa
+        # por completo e mente sobre que tela o vídeo retrata.
+        esperado = {"modulo": modulo, "slug": slug, "pagina": str(relativo)}
+        divergentes = [
+            f"{campo}: '{carimbo[campo]}' no lugar de '{valor}'"
+            for campo, valor in esperado.items()
+            if carimbo.get(campo) and carimbo[campo] != valor
+        ]
+        if divergentes:
+            problemas.append(
+                f"video/{modulo}/{slug}/index.html: carimbo de outra página "
+                f"({'; '.join(divergentes)}). Copiar a pasta de uma composição "
+                "pronta traz o carimbo do vídeo antigo: troque os campos pelos "
+                "desta tarefa (ADR 0057, decisão 3)."
+            )
+
     for pasta in sorted((raiz / "video").glob("*/*")):
         if not pasta.is_dir():
             continue
@@ -64,7 +85,11 @@ def checar(raiz: Path) -> list[str]:
                 "`video` do frontmatter, ou apague a pasta."
             )
 
-    for rendido in sorted((raiz / "video").rglob("*.mp4")):
+    for rendido in sorted(raiz.rglob("*.mp4")):
+        if any(parte in FORA_DA_VARREDURA for parte in rendido.parts):
+            continue
+        if rendido.parent.parent == raiz / "public" / "video":
+            continue  # destino do render, fora do git pelo .gitignore do site
         problemas.append(
             f"{rendido.relative_to(raiz)}: MP4 dentro da árvore versionada. "
             "O vídeo renderizado mora em public/video/<modulo>/<slug>.mp4, que "

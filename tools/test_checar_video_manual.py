@@ -99,12 +99,62 @@ def test_carimbo_sem_a_versao_do_app_trava(tmp_path):
     assert "app_version" in problemas[0]
 
 
+def test_carimbo_de_outra_pagina_trava(tmp_path):
+    """Copiar pasta de composição pronta traz o carimbo do vídeo antigo junto."""
+    montar(
+        tmp_path,
+        carimbo={
+            **CARIMBO,
+            "modulo": "pops",
+            "slug": "aprovar-pop",
+            "pagina": "pops/aprovar-pop.md",
+        },
+    )
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "aprovar-pop" in problemas[0]
+
+
 def test_mp4_dentro_da_composicao_trava(tmp_path):
     """O MP4 é regerável e pesa: renderizar dentro da fonte incha o repositório."""
     montar(tmp_path, mp4_versionado=True)
     problemas = checar_video_manual.checar(tmp_path)
     assert len(problemas) == 1
     assert ".mp4" in problemas[0]
+
+
+def test_mp4_fora_da_pasta_de_video_trava(tmp_path):
+    """A árvore versionada inteira é sem MP4, não só docs/manual/video."""
+    montar(tmp_path)
+    (tmp_path / "src" / "assets" / "ouvidoria").mkdir(parents=True)
+    (tmp_path / "src" / "assets" / "ouvidoria" / "tour.mp4").write_bytes(b"x")
+    problemas = checar_video_manual.checar(tmp_path)
+    assert len(problemas) == 1
+    assert "tour.mp4" in problemas[0]
+
+
+def test_mp4_renderizado_em_public_video_passa(tmp_path):
+    """`public/video/` é o destino do render e está fora do git pelo .gitignore."""
+    montar(tmp_path)
+    rendido = tmp_path / "public" / "video" / "ouvidoria"
+    rendido.mkdir(parents=True)
+    (rendido / "registrar-manifestacao-pelo-formulario.mp4").write_bytes(b"x")
+    assert checar_video_manual.checar(tmp_path) == []
+
+
+def test_mp4_em_renders_passa(tmp_path):
+    """`renders/` é onde o HyperFrames larga o MP4 sozinho, e é git-ignored."""
+    montar(tmp_path)
+    sobra = (
+        tmp_path
+        / "video"
+        / "ouvidoria"
+        / "registrar-manifestacao-pelo-formulario"
+        / "renders"
+    )
+    sobra.mkdir(parents=True)
+    (sobra / "main.mp4").write_bytes(b"x")
+    assert checar_video_manual.checar(tmp_path) == []
 
 
 def test_composicao_que_pagina_nenhuma_exibe_trava(tmp_path):

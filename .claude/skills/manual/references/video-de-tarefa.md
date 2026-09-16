@@ -59,6 +59,10 @@ já tem o palco de 960x540 ampliado 2x, o celular, o dedo fantasma e os
 marcadores; as réplicas de tela interna do app estão nos capítulos em
 `docs/comunicacao/ouvidoria/manual-cap-*/video/`.
 
+**Copiou pasta? Troque o carimbo primeiro.** `modulo`, `slug` e `pagina` vêm
+colados do vídeo antigo, e o conferidor compara os três com a página que exibe
+o vídeo: carimbo do vizinho trava o CI.
+
 ```bash
 cd docs/manual/video/<modulo>/<slug>
 npx --yes hyperframes@0.8.41 check
