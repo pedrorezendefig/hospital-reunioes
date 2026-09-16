@@ -43,15 +43,18 @@ Nem todo mundo que aparece na plataforma precisa entrar nela.
   vai a assinatura, o email de assinar. Quem precisa aceitar uma ata ganha um
   link que abre a ata inteira sem pedir senha.
 
-As telas que abrem sem conta são poucas e todas chegam por link ou QR: o aceite
-da ata, o formulário da Ouvidoria e as telas em que uma área responde ou
-acompanha um caso da Ouvidoria. Neste manual elas levam o selo **Sem login**.
-Fora delas, tudo pede email e senha.
+Algumas telas são feitas para abrir sem conta, e todas chegam até você por um
+link ou por um QR: o aceite de uma ata, o formulário da Ouvidoria e as telas em
+que uma área responde um caso são as mais comuns. Neste manual elas levam o
+selo **Sem login**. A assinatura digital, de uma ata ou de um POP, nem é tela
+da plataforma: acontece no email do serviço que assina. Fora isso, a plataforma
+pede email e senha.
 
 ## O caminho do seu primeiro dia
 
-1. **Você recebe o email e a senha** de quem administra a plataforma. A senha
-   vem pronta e é para ser trocada.
+1. **Quem administra a plataforma cria a sua conta** e passa a você, em mãos, o
+   endereço de email do acesso e uma senha. A senha vem pronta e é para ser
+   trocada; nenhum email de boas-vindas chega para você.
 2. **Você entra** pelo endereço da plataforma, em
    [Entrar na plataforma](/primeiros-passos/entrar-na-plataforma/).
 3. **Você troca a senha** por uma que só você saiba, em

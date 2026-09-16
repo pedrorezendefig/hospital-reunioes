@@ -16,12 +16,12 @@ momento em que você assume o texto: depois de fechar, ele não volta atrás.
 ## Passo a passo
 
 1. Abra a reunião. O bloco **Validação Necessária** fica no fim da página.
-2. Leia a ata inteira. Clique em **Baixar PDF** para conferir o documento como
-   ele vai ficar.
+2. Leia a ata inteira. Clique em **Baixar PDF** para conferir o documento final.
 3. Confira a lista de **Participantes**. O X tira a pessoa da ata e da lista de
    quem vai assinar; o campo de busca acrescenta quem faltou.
 4. Para mudar o texto, clique em **Solicitar Correção** e diga o que muda. Ele
-   reescreve a discussão e o quadro, nunca a lista de participantes.
+   reescreve a narrativa, a discussão, o quadro e o objetivo, nunca a lista de
+   participantes.
 5. Escolha o desfecho: **Enviar para assinatura** ou
    **Finalizar sem assinatura**.
 6. Finalizando sem assinatura, confirme na janela: ela mostra quantas

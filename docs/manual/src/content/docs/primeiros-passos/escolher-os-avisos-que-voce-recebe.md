@@ -11,8 +11,7 @@ sidebar:
 ## Quando usar
 
 Quando você quer deixar registrado quais avisos interessam a você. Leia antes o
-fim da página: hoje a escolha fica guardada e os avisos continuam chegando do
-mesmo jeito.
+fim da página: a escolha fica guardada e os avisos continuam chegando.
 
 ## Passo a passo
 
@@ -22,18 +21,21 @@ mesmo jeito.
    - **Menções em comentários**, quando escrevem o seu nome com arroba.
    - **Prazos próximos**, quando uma pendência sua está perto de vencer.
    - **Novos comentários**, nas reuniões de que você participa.
-   - **Atribuição de pendências**, quando uma pendência passa a ser sua.
+   - **Atribuição de pendências**, quando uma delas passa a ser sua.
 4. Cada chave salva sozinha, no clique: não existe botão de salvar. Um aviso
    verde confirma **Preferências salvas!**.
 
 ## Se der errado
 
-- **Você desligou uma chave e o aviso continuou chegando:** é o que acontece
-  hoje. A plataforma guarda a sua escolha e não a consulta na hora de avisar,
-  então a chave desligada não silencia nada.
+- **Você desligou uma chave e o aviso continuou chegando:** a plataforma guarda
+  a sua escolha e não a consulta na hora de avisar, então a chave desligada não
+  silencia nada.
+- **A tela avisa Erro ao salvar preferências:** a chave fica como você deixou,
+  mas a escolha não foi guardada. Recarregue a página para ver o que vale, e
+  clique de novo.
 - **Você ligou Prazos próximos e nunca recebeu nada:** a plataforma não emite
   esse aviso. Quem acompanha prazo acompanha pelo cartão **Vencem em 3 dias**
   do painel, ou pelo filtro **Críticas** da lista de pendências.
 - **Você procurou preferência de email, ou escolheu o tema Escuro:** as abas
   **Email** e **Aparência** dizem na própria tela que essas duas coisas ainda
-  vêm, e que a escolha do tema já fica guardada.
+  vêm.
