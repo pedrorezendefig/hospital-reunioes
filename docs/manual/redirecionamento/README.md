@@ -4,8 +4,13 @@ O manual antigo da Ouvidoria vive no projeto `manual-ouvidoria-hsm` da Vercel
 (`https://manual-ouvidoria-hsm.vercel.app`), que é o endereço do QR da
 apresentação e dos links já espalhados. Quando a seção Ouvidoria do site novo
 estiver escrita, esse projeto deixa de servir a página e passa a redirecionar,
-em definitivo, para `/ouvidoria/` do site novo. O `vercel.json` ao lado é esse
-projeto inteiro.
+em definitivo, para `https://manual-hsm.vercel.app/ouvidoria/`. O `vercel.json`
+ao lado é esse projeto inteiro.
+
+O destino é o endereço `vercel.app` do site novo, e não o domínio próprio, que
+ainda não resolve: redirecionar para um endereço que não existe seria trocar um
+manual que funciona por uma página não encontrada. Quando o domínio subir, o
+destino muda aqui e o projeto é publicado de novo.
 
 ## Quando publicar
 
@@ -23,4 +28,4 @@ npx vercel@latest deploy --prod --yes
 ```
 
 Depois, abrir `https://manual-ouvidoria-hsm.vercel.app` e conferir que a página
-para em `https://manual.hospitalsaomatheus.cloud/ouvidoria/`.
+para em `https://manual-hsm.vercel.app/ouvidoria/`.

@@ -7,10 +7,10 @@
 Uso:
     uv run docs/comunicacao/ouvidoria/apresentacao/gerar.py [--sem-videos] [--saida ARQUIVO]
 
-O texto dos slides espelha docs/manual/ouvidoria/index.html. Os prints vêm de
-docs/manual/ouvidoria/img/. Os vídeos de capítulo vêm do manual publicado na
-Vercel (não ficam no git) e são baixados para apresentacao/videos/ na primeira
-execução. O .pptx gerado fica fora do git, como os MP4 (ADR 0044).
+O texto dos slides espelha a seção Ouvidoria do Manual do usuário. Os prints vêm
+de docs/manual/src/assets/ouvidoria/. Os vídeos de capítulo vêm do manual
+publicado na Vercel (não ficam no git) e são baixados para apresentacao/videos/
+na primeira execução. O .pptx gerado fica fora do git, como os MP4 (ADR 0044).
 """
 
 from __future__ import annotations
@@ -30,18 +30,23 @@ from pptx.util import Emu, Inches, Pt
 
 AQUI = Path(__file__).resolve().parent
 REPO = AQUI.parents[3]
-MANUAL_IMG = REPO / "docs/manual/ouvidoria/img"
+MANUAL_IMG = REPO / "docs/manual/src/assets/ouvidoria"
 # Telas que ainda não estão no manual publicado: prints tirados do app rodando
 # na versão desta apresentação.
 IMG_NOVA = AQUI / "img"
 LOGO = REPO / "docs/comunicacao/_assets/logo-hsm.png"
 MODELO = AQUI / "modelo.pptx"
 VIDEOS = AQUI / "videos"
-MANUAL_URL = "https://manual-ouvidoria-hsm.vercel.app"
+# O host do manual, de onde os vídeos de capítulo são baixados.
+MANUAL_URL = "https://manual-hsm.vercel.app"
+# O endereço que a pessoa lê no slide e que o QR abre. É a seção da Ouvidoria,
+# não a home dos cinco módulos: quem aponta a câmera para o cartaz deste deck
+# está numa apresentação da Ouvidoria e quer cair nela.
+MANUAL_LINK = f"{MANUAL_URL}/ouvidoria/"
 VERSAO_APP = "0.116.1"
 DATA = "setembro de 2026"
 
-# Design system do app (docs/manual/ouvidoria/index.html, variáveis CSS)
+# Design system do app (docs/manual/src/styles/tema.css, variáveis CSS)
 FONTE = "HP Simplified"
 AZUL = RGBColor(0x2B, 0x2E, 0x7E)
 AZUL_ESCURO = RGBColor(0x1A, 0x1C, 0x4E)
@@ -279,7 +284,7 @@ class Deck:
                 s.shapes.add_picture(str(poster), vx, vy, vw, vh)
             else:
                 retangulo(s, vx, vy, vw, vh, AZUL)
-            legenda = f"Vídeo do capítulo · {duracao} · em {MANUAL_URL}"
+            legenda = f"Vídeo do capítulo · {duracao} · em {MANUAL_LINK}"
         texto(s, vx, vy + vh + Inches(0.1), vw, Inches(0.4), legenda,
               tamanho=10, cor=VERDE, alinhamento=PP_ALIGN.CENTER)
         self.rodape(s, escuro=True)
@@ -960,8 +965,10 @@ def cap6(d: Deck):
         "O período tem fim inclusivo: quem sai no dia 31 ainda responde no dia 31. Apagar quebraria "
         "o histórico dos casos antigos.",
     ], tamanho=11, espaco=2)
-    imagem_ajustada(s, MANUAL_IMG / "responsaveis.png", Inches(6.6), y, Inches(6.15), Inches(4.7),
-                    legenda="O Centro Cirúrgico está \"sem titular vigente\": só gestor. Um caso para lá sobe direto.")
+    # O print de responsáveis por setor saiu do manual na issue #738: ele havia
+    # sido capturado com uma conta real, e o repositório é público. O slide fica
+    # sem a imagem até alguém recapturar a tela com o usuário de exemplo, pela
+    # receita de docs/manual/prints/ouvidoria.py.
     notas(s, "Pergunta para a plateia: quem é o titular do seu setor hoje? Quem é o substituto? Só "
              "a Diretoria cadastra. Se a área não sabe, é hora de acertar.")
 
@@ -1158,7 +1165,7 @@ def slide_fechamento(d: Deck, qr_path: Path):
         "o que você vê, avise a Ouvidoria: o manual é atualizado junto com o sistema.",
     ], tamanho=14, cor=BRANCO)
     retangulo(s, MARGEM, Inches(4.6), Inches(5.6), Inches(0.6), BRANCO)
-    texto(s, MARGEM, Inches(4.6), Inches(5.6), Inches(0.6), MANUAL_URL.replace("https://", ""),
+    texto(s, MARGEM, Inches(4.6), Inches(5.6), Inches(0.6), MANUAL_LINK.replace("https://", ""),
           tamanho=16, cor=AZUL_ESCURO, negrito=True, alinhamento=PP_ALIGN.CENTER,
           ancora=MSO_ANCHOR.MIDDLE)
     texto(s, MARGEM, Inches(5.5), Inches(7), Inches(0.4),
@@ -1185,8 +1192,12 @@ def baixar_videos():
         if not mp4.exists():
             print(f"baixando video-cap{i}.mp4 ...")
             original = VIDEOS / f"original-cap{i}.mp4"
-            urllib.request.urlretrieve(f"{MANUAL_URL}/video-cap{i}.mp4", original)
-            # 1080p vira 720p: o vídeo ocupa menos da metade do slide e o deck cai de 35 para uns 15 MB
+            urllib.request.urlretrieve(
+                f"{MANUAL_URL}/video/ouvidoria/cap-{i}.mp4", original
+            )
+            # Encolhe para 1280 de largura: o vídeo ocupa menos da metade do slide e o deck
+            # fica leve. O manual já publica em 720p, então aqui a conta costuma ser um
+            # reencode de mesma altura, mantido porque a origem pode voltar a ser maior.
             subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(original),
                             "-vf", "scale=1280:-2", "-c:v", "libx264", "-crf", "28",
                             "-preset", "slow", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
@@ -1200,7 +1211,7 @@ def baixar_videos():
 def gerar_qr(destino: Path):
     import qrcode
 
-    img = qrcode.make(MANUAL_URL, border=1)
+    img = qrcode.make(MANUAL_LINK, border=1)
     img.save(destino)
 
 

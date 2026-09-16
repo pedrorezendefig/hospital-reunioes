@@ -11,7 +11,7 @@ Hospital Reuniões é um app com três contextos de domínio (mapa em [`CONTEXT-
 
 - **Reuniões e Atas:** gravação → transcrição por IA → geração da Ata → assinatura digital → acompanhamento de Pendências. Glossário em [`CONTEXT.md`](../CONTEXT.md).
 - **POPs:** elaboração assistida, revisão, validação, assinatura e biblioteca de Procedimentos Operacionais Padrão, com fluxograma desenhado pelo sistema. Glossário em [`docs/pops/CONTEXT.md`](pops/CONTEXT.md).
-- **Ouvidoria:** manifestação (formulário público e QR por ponto de escuta), tramitação com prazos, portal do setor, relatórios; a agente Ana consome a API. Manual em [`docs/manual/ouvidoria/`](manual/ouvidoria/).
+- **Ouvidoria:** manifestação (formulário público e QR por ponto de escuta), tramitação com prazos, portal do setor, relatórios; a agente Ana consome a API. Manual em [`manual-hsm.vercel.app/ouvidoria/`](https://manual-hsm.vercel.app/ouvidoria/).
 
 - **Quem usa:** facilitadores e diretoria nas Reuniões; setores e ouvidor na Ouvidoria; elaboradores e validadores nos POPs. Colaboradores das Reuniões **não logam**: recebem e-mails da ClickSign e links diretos para suas pendências.
 - **Stack:** backend FastAPI (Python 3.12), frontend Next.js 15, banco Supabase self-hosted, deploy via Coolify (VPS Hostinger), PDF via WeasyPrint.

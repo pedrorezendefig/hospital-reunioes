@@ -96,7 +96,11 @@ while IFS= read -r caminho; do
   fi
   # 720p H.264 no lugar: vídeo que já é menor não cresce.
   temporario="$destino.720.mp4"
-  ffmpeg -y -loglevel error -i "$destino" \
+  # `-nostdin`: sem isto o ffmpeg lê do mesmo stdin do `read` deste laço e come a
+  # linha do vídeo seguinte. O `read` recebe um pedaço de caminho, não acha o
+  # arquivo, e o vídeo pulado sai do reencode em 1080p e ainda é acusado como
+  # inexistente. Os vídeos passavam alternados, um sim um não.
+  ffmpeg -nostdin -y -loglevel error -i "$destino" \
     -vf "scale=-2:'min(720,ih)'" -c:v libx264 -preset veryfast -crf 28 \
     -movflags +faststart -c:a aac -b:a 96k "$temporario"
   mv "$temporario" "$destino"

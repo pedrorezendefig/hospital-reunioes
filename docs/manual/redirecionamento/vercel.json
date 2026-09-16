@@ -2,7 +2,7 @@
   "redirects": [
     {
       "source": "/:caminho*",
-      "destination": "https://manual.hospitalsaomatheus.cloud/ouvidoria/",
+      "destination": "https://manual-hsm.vercel.app/ouvidoria/",
       "permanent": true
     }
   ]
