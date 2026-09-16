@@ -7,10 +7,10 @@
 Uso:
     uv run docs/comunicacao/ouvidoria/apresentacao/gerar.py [--sem-videos] [--saida ARQUIVO]
 
-O texto dos slides espelha docs/manual/ouvidoria/index.html. Os prints vêm de
-docs/manual/ouvidoria/img/. Os vídeos de capítulo vêm do manual publicado na
-Vercel (não ficam no git) e são baixados para apresentacao/videos/ na primeira
-execução. O .pptx gerado fica fora do git, como os MP4 (ADR 0044).
+O texto dos slides espelha a seção Ouvidoria do Manual do usuário. Os prints vêm
+de docs/manual/src/assets/ouvidoria/. Os vídeos de capítulo vêm do manual
+publicado na Vercel (não ficam no git) e são baixados para apresentacao/videos/
+na primeira execução. O .pptx gerado fica fora do git, como os MP4 (ADR 0044).
 """
 
 from __future__ import annotations
@@ -30,18 +30,18 @@ from pptx.util import Emu, Inches, Pt
 
 AQUI = Path(__file__).resolve().parent
 REPO = AQUI.parents[3]
-MANUAL_IMG = REPO / "docs/manual/ouvidoria/img"
+MANUAL_IMG = REPO / "docs/manual/src/assets/ouvidoria"
 # Telas que ainda não estão no manual publicado: prints tirados do app rodando
 # na versão desta apresentação.
 IMG_NOVA = AQUI / "img"
 LOGO = REPO / "docs/comunicacao/_assets/logo-hsm.png"
 MODELO = AQUI / "modelo.pptx"
 VIDEOS = AQUI / "videos"
-MANUAL_URL = "https://manual-ouvidoria-hsm.vercel.app"
+MANUAL_URL = "https://manual-hsm.vercel.app"
 VERSAO_APP = "0.116.1"
 DATA = "setembro de 2026"
 
-# Design system do app (docs/manual/ouvidoria/index.html, variáveis CSS)
+# Design system do app (docs/manual/src/styles/tema.css, variáveis CSS)
 FONTE = "HP Simplified"
 AZUL = RGBColor(0x2B, 0x2E, 0x7E)
 AZUL_ESCURO = RGBColor(0x1A, 0x1C, 0x4E)
@@ -1185,7 +1185,9 @@ def baixar_videos():
         if not mp4.exists():
             print(f"baixando video-cap{i}.mp4 ...")
             original = VIDEOS / f"original-cap{i}.mp4"
-            urllib.request.urlretrieve(f"{MANUAL_URL}/video-cap{i}.mp4", original)
+            urllib.request.urlretrieve(
+                f"{MANUAL_URL}/video/ouvidoria/cap-{i}.mp4", original
+            )
             # 1080p vira 720p: o vídeo ocupa menos da metade do slide e o deck cai de 35 para uns 15 MB
             subprocess.run(["ffmpeg", "-y", "-loglevel", "error", "-i", str(original),
                             "-vf", "scale=1280:-2", "-c:v", "libx264", "-crf", "28",

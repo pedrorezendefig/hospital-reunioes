@@ -127,7 +127,7 @@ Regras:
 - Página de coisa que já está no ar sai sem draft; página de PRD que ainda não subiu nasce em draft.
 - NÃO publique: nada de publicar.sh, /manual publicar ou vercel deploy. A publicação é um passo só, meu, depois dos merges.
 - Não toque no tema, no astro.config.mjs, na home, em tools/ nem na pasta de outro módulo. Outro terminal está mexendo neles agora.
-- O site do manual é docs/manual/src/content/docs/. As pastas docs/manual/ouvidoria/ e docs/manual/tecnologia/ são o manual antigo, de página única, e não são suas: não edite nada lá.
+- O site do manual é docs/manual/src/content/docs/. A pasta docs/manual/tecnologia/ é o manual antigo, de página única, e não é sua: não edite nada lá.
 - Antes de abrir o PR, os quatro comandos do checklist da /manual:
   python3 tools/lint_manual.py --dir docs/manual/src/content/docs
   python3 tools/checar_video_manual.py --dir docs/manual
