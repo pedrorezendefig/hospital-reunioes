@@ -11,9 +11,14 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+import tirar_draft_manual  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 SCRIPT = RAIZ / ".claude" / "skills" / "setup-maquina" / "scripts" / "diagnostico.sh"
@@ -45,7 +50,7 @@ def test_versao_e_comparada_por_numero_nao_por_texto():
     assert compara("20.11.1", NODE_MIN) != 0
 
 
-def diagnostico(tmp_path: Path, versao_do_node: str) -> str:
+def diagnostico(tmp_path: Path, versao_do_node: str, nivel: str = "4") -> str:
     """Roda o diagnóstico inteiro com um `node` de mentira no PATH."""
     falso = tmp_path / "bin"
     falso.mkdir(exist_ok=True)
@@ -54,7 +59,7 @@ def diagnostico(tmp_path: Path, versao_do_node: str) -> str:
     node.chmod(0o755)
     ambiente = dict(os.environ, PATH=f"{falso}:{os.environ['PATH']}")
     return subprocess.run(
-        ["bash", str(SCRIPT), "--nivel", "4"],
+        ["bash", str(SCRIPT), "--nivel", nivel],
         capture_output=True,
         text=True,
         env=ambiente,
@@ -87,9 +92,21 @@ def test_diagnostico_aceita_o_node_minimo(com_node_novo):
     assert "OK" in linha_do_node(com_node_novo)
 
 
-def test_o_nivel_do_manual_confere_ffmpeg_e_playwright(com_node_novo):
-    assert "ffmpeg" in com_node_novo
+def test_o_nivel_4_acrescenta_o_playwright_do_roteiro_de_prints(com_node_novo):
     assert "playwright" in com_node_novo.lower()
+
+
+def test_o_nivel_do_deploy_ja_exige_o_que_publica_o_manual(tmp_path):
+    """O `/deploy ship` publica o Manual: Node, corepack e ffmpeg são nível 2.
+
+    Deixá-los no nível 4 ("opcional") faria quem segue a skill deployar, tirar
+    o draft e travar no build, com a página fora do ar e fora do draft.
+    """
+    saida = diagnostico(tmp_path, "20.11.1", nivel="2")
+
+    assert "FALTA" in linha_do_node(saida)
+    assert "corepack" in saida
+    assert "ffmpeg" in saida
 
 
 def test_a_skill_e_o_script_falam_do_mesmo_node():
@@ -98,3 +115,6 @@ def test_a_skill_e_o_script_falam_do_mesmo_node():
     assert NODE_MIN in texto
     assert NODE_MIN in TEXTO
     assert re.search(r"Playwright", texto)
+    # O script e o conferidor do deploy comparam com o mesmo número: se um
+    # subir de versão sozinho, a máquina passa aqui e trava lá.
+    assert ".".join(str(n) for n in tirar_draft_manual.NODE_MIN) == NODE_MIN

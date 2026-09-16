@@ -63,7 +63,7 @@ class Inventario:
         return [lacuna for modulo in MODULOS for lacuna in self.modulos[modulo]]
 
 
-def _valor(campos: dict[str, str], chave: str) -> str:
+def valor_do_campo(campos: dict[str, str], chave: str) -> str:
     """O valor do campo, sem o comentário que o molde da `/manual` põe na linha.
 
     O molde escreve `draft: true   # sai quando o PRD sobe para produção`. Ler a
@@ -73,8 +73,8 @@ def _valor(campos: dict[str, str], chave: str) -> str:
     return re.sub(r"\s+#.*$", "", campos.get(chave, "")).strip()
 
 
-def _prds(campos: dict[str, str]) -> list[int]:
-    return [int(n) for n in RE_NUMERO.findall(_valor(campos, "prd"))]
+def prds_da_pagina(campos: dict[str, str]) -> list[int]:
+    return [int(n) for n in RE_NUMERO.findall(valor_do_campo(campos, "prd"))]
 
 
 def inventariar(
@@ -109,7 +109,7 @@ def inventariar(
         inventario.paginas[modulo] += 1
 
         if relativo.stem == "novidades":
-            novidades[modulo] = _prds(campos)
+            novidades[modulo] = prds_da_pagina(campos)
 
         if e_pagina_de_tarefa(relativo) and not campos.get("video"):
             inventario.modulos[modulo].append(
@@ -135,8 +135,10 @@ def inventariar(
                     )
                 )
 
-        for prd in _prds(campos):
-            if _valor(campos, "draft") == "true" and prd in entregues.get(modulo, []):
+        for prd in prds_da_pagina(campos):
+            if valor_do_campo(campos, "draft") == "true" and prd in entregues.get(
+                modulo, []
+            ):
                 inventario.modulos[modulo].append(
                     Lacuna(
                         modulo,

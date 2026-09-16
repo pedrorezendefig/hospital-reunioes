@@ -92,18 +92,38 @@ def linhas_de_manual(skill: str) -> list[str]:
 
 
 def test_todo_caminho_de_manual_que_a_cadeia_cita_existe():
-    """Script renomeado em `tools/` não pode sobreviver colado numa skill."""
+    """Script renomeado em `tools/` não pode sobreviver colado numa skill.
+
+    Vale também para a mensagem de erro do `tirar_draft_manual.py`: ela manda
+    renderizar o vídeo pela receita da `/manual`, e receita que mudou de nome
+    vira instrução para um arquivo que não existe, no meio de um deploy.
+    """
+    fontes = [texto(skill) for skill in CADEIA]
+    fontes.append(
+        (RAIZ / "tools" / "tirar_draft_manual.py").read_text(encoding="utf-8")
+    )
     citados: set[str] = set()
-    for skill in CADEIA:
+    for fonte in fontes:
         citados |= {
             m.group(1)
-            for m in re.finditer(r"((?:tools|docs/manual)/[\w./-]+)", texto(skill))
+            for m in re.finditer(
+                r"((?:tools|docs/manual|\.claude/skills)/[\w./-]+)", fonte
+            )
         }
     concretos = sorted(c.rstrip("./") for c in citados)
     # Piso de sanidade: sem ele, reescrever o texto de um jeito que a regex não
     # reconhece deixaria este teste verde sobre lista vazia.
-    assert len(concretos) >= 3, concretos
+    assert len(concretos) >= 6, concretos
     assert [c for c in concretos if not (RAIZ / c).exists()] == []
+
+
+def passo(numero: str) -> str:
+    """O texto de um passo do `/deploy`, do título dele até o próximo."""
+    achado = re.search(
+        rf"^#### {re.escape(numero)} .*?(?=^#### |^### )", texto("deploy"), re.S | re.M
+    )
+    assert achado, f"o /deploy não tem mais o Passo {numero}"
+    return achado.group(0)
 
 
 def test_o_deploy_chama_o_tirar_draft_com_opcao_que_existe():
@@ -113,17 +133,25 @@ def test_o_deploy_chama_o_tirar_draft_com_opcao_que_existe():
         capture_output=True,
         text=True,
     ).stdout
-    opcoes = set()
-    for linha in linhas_de_manual("deploy"):
-        if "tirar_draft_manual.py" in linha:
-            opcoes |= set(re.findall(r"(--[a-z-]+)", linha))
-    assert opcoes, "o Passo 9.6 precisa mostrar como se chama o script"
+    blocos = [
+        b
+        for b in re.findall(r"```bash\n(.*?)```", passo("9.6"), re.S)
+        if "tirar_draft_manual.py" in b
+    ]
+    assert len(blocos) == 1, "o Passo 9.6 mostra uma chamada do script"
+    opcoes = set(re.findall(r"(--[a-z-]+)", blocos[0]))
+    assert opcoes, "a chamada precisa mostrar as opções que o script recebe"
     assert [o for o in opcoes if o not in ajuda] == []
 
 
-def test_o_deploy_registra_o_prd_de_cada_deploy_no_history():
-    """Sem o campo, o passo do manual e o inventário voltam a garimpar prosa."""
-    assert '"prds"' in texto("deploy")
+def test_o_prd_do_deploy_e_campo_do_history_no_lugar_certo():
+    """O revisor conferiu o schema do 9.2 contra o history.json real: o campo
+    novo vale pela posição nele, não por aparecer solto em algum parágrafo."""
+    schema = re.search(r"```json\n(.*?)```", passo("9.2"), re.S).group(1)
+    chaves = re.findall(r'^\s*"(\w+)":', schema, re.M)
+    assert "prds" in chaves, "a entrada do history.json declara os PRDs do deploy"
+    assert chaves[chaves.index("scope") + 1] == "prds"
+    assert chaves[chaves.index("prds") + 1] == "result"
 
 
 def test_o_comentario_da_fatia_de_manual_nao_para_a_onda():
