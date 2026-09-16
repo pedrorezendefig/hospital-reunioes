@@ -561,7 +561,10 @@ class TestKit:
 
     def test_carregador_devolve_o_conteudo_com_o_nome_do_arquivo_como_cabecalho(self, texto):
         kit = carregar_kit()
-        assert kit.startswith("# tecnologia.md")
+        # Cabecalho em linha propria. Nao e `startswith`: a pasta tem outros
+        # arquivos e a ordem e alfabetica, entao `tecnologia.md` nao e o
+        # primeiro. O kit inteiro tem arquivo de teste proprio.
+        assert "\n# tecnologia.md\n" in kit
         assert texto.strip() in kit
 
     def test_sem_numero_de_issue(self, texto):

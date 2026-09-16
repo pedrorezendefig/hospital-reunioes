@@ -55,6 +55,16 @@ O PRD traz a seção **"Manual: páginas que nascem ou mudam"**. Quando ela list
 
 PRD cuja seção "Manual" diz "Nenhuma: este PRD não muda tela" não ganha esta fatia.
 
+#### O arquivo do kit (toda fatia que muda comportamento visível)
+
+O **Kit de conhecimento** (`hospital-reunioes/backend/app/conhecimento/`) é o que o Assistente de Tecnologia lê inteiro a cada conversa: um `.md` por Produto (Ana, Integração Ana x MV, Reuniões, Ouvidoria, POPs, Site, Infra) mais um da própria aba. Ele não é a fatia de manual: não tem fatia própria, porque não espera print nem tela pronta.
+
+Toda fatia que muda **comportamento visível** de um módulo lista, nos critérios de aceite, o arquivo do kit a atualizar **no mesmo PR** (ADR 0056, decisão 2):
+
+- [ ] O texto do Produto `<Ouvidoria>` no kit de conhecimento diz o comportamento novo.
+
+Escreva o nome do **Produto**, não o caminho do arquivo. Fatia que não muda o que o usuário vê (refactor, teste, infra de build) não ganha esse critério. Regra completa e o que não pode estar escrito num texto do kit: `docs/agents/domain.md`.
+
 ### 4. Quiz the user
 
 Apresente a divisão como uma **lista numerada em pt-BR**. Para cada fatia, mostre:
