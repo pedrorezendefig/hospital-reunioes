@@ -225,6 +225,28 @@ def _docx_com_membro_isca(megabytes_de_xml: int = 60) -> bytes:
 # ─── Os pares de presença, também arquivo de verdade ─────────────────────────
 
 
+def _docx_de_muito_texto(megabytes: int = 20) -> bytes:
+    """`.docx` honesto na estrutura e enorme na saída: 65 KB viram 20 MB de texto.
+
+    Não é bomba de memória: o filho lê isto com pico de 143 MB, folgado dentro
+    do teto dele. O dano seria na VOLTA, com os 20 MB atravessando inteiros para
+    dentro do worker. Escalando o mesmo arquivo, 326 KB devolvem 100 MB.
+    """
+    bloco = ("texto corrido de uma ata muito longa do hospital. " * 200).encode()
+    buf = io.BytesIO()
+    with zipfile.ZipFile(buf, "w", zipfile.ZIP_DEFLATED) as z:
+        z.writestr("[Content_Types].xml", b"<Types/>")
+        corpo = b"".join(
+            b"<w:p><w:r><w:t>" + bloco + b"</w:t></w:r></w:p>" for _ in range(megabytes * 1024 * 1024 // len(bloco))
+        )
+        z.writestr(
+            "word/document.xml",
+            b'<w:document xmlns:w="http://schemas.openxmlformats.org/wordprocessingml/2006/main">'
+            b"<w:body>" + corpo + b"</w:body></w:document>",
+        )
+    return buf.getvalue()
+
+
 def _pdf_honesto(paragrafos: int = 6000) -> bytes:
     from weasyprint import HTML
 
@@ -363,6 +385,27 @@ class TestOsDoisAtaquesMedidos:
             assert espera < 2.0, f"a requisicao curta esperou {espera:.1f}s pela longa"
             assert (await lenta).status_code == 200
 
+    def test_o_texto_devolvido_tambem_tem_teto(self, client):
+        """O terceiro caminho, que nenhum dos dois ataques acima usa.
+
+        O teto do filho protege o filho. Um `.docx` de 65 KB devolve 20 MB de
+        texto com pico de 143 MB, folgado DENTRO do teto: a leitura não é o
+        problema, a volta é. Sem teto de saída o isolamento protegeria a leitura
+        e entregaria a conta na porta, vezes o número de vagas.
+        """
+        gordo = _docx_de_muito_texto(20)
+        assert len(gordo) < 200 * 1024, "o arquivo em si e pequeno, o texto e que e enorme"
+
+        pico_antes = _rss_do_worker_em_bytes()
+        r = _enviar(client, "ata-gorda.docx", gordo)
+        crescimento = _rss_do_worker_em_bytes() - pico_antes
+
+        assert r.status_code == 422
+        assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
+        assert crescimento < 40 * 1024 * 1024, (
+            f"o worker cresceu {crescimento // (1024 * 1024)} MB: o texto entrou assim mesmo"
+        )
+
     def test_worker_continua_atendendo_depois_dos_dois_ataques(self, client, pdf_ataque, docx_ataque):
         """O ponto da fatia em uma frase: quem morre é o filho.
 
@@ -426,16 +469,18 @@ def _pico_de_tempo_de_uma_leitura(dados: bytes) -> float:
     return time.monotonic() - t0
 
 
-def _rodar_filho(ext: str, dados: bytes, limite: int) -> subprocess.CompletedProcess:
-    """Roda o processo filho de verdade, como o extrator o roda."""
+def _rodar_filho(ext: str, dados: bytes, limite: int, teto_do_texto: int | None = None) -> subprocess.CompletedProcess:
+    """Roda o processo filho de verdade, com os mesmos argumentos que o extrator passa."""
     import tempfile
 
+    if teto_do_texto is None:
+        teto_do_texto = extrator.TETO_DO_TEXTO_DEVOLVIDO
     with tempfile.NamedTemporaryFile(suffix=ext, delete=False) as tmp:
         tmp.write(dados)
         caminho = tmp.name
     try:
         return subprocess.run(
-            [sys.executable, extrator._CAMINHO_DO_FILHO, ext, caminho, str(limite)],
+            [sys.executable, "-P", extrator._CAMINHO_DO_FILHO, ext, caminho, str(limite), str(teto_do_texto)],
             capture_output=True,
             timeout=120,
         )
@@ -458,8 +503,9 @@ def _pico_do_filho(ext: str, dados: bytes) -> int:
         caminho = tmp.name
     medidor = (
         "import resource, subprocess, sys;"
-        f"subprocess.run([sys.executable, {extrator._CAMINHO_DO_FILHO!r}, {ext!r},"
-        f" {caminho!r}, {str(extrator.LIMITE_DE_ENDERECAMENTO)!r}], check=True,"
+        f"subprocess.run([sys.executable, '-P', {extrator._CAMINHO_DO_FILHO!r}, {ext!r},"
+        f" {caminho!r}, {str(extrator.LIMITE_DE_ENDERECAMENTO)!r},"
+        f" {str(extrator.TETO_DO_TEXTO_DEVOLVIDO)!r}], check=True,"
         " stdout=subprocess.DEVNULL);"
         "bruto = resource.getrusage(resource.RUSAGE_CHILDREN).ru_maxrss;"
         "print(bruto if sys.platform == 'darwin' else bruto * 1024)"
@@ -582,6 +628,27 @@ class TestAFraseQueAPessoaVe:
         assert detalhe != extrator.MENSAGEM_GRANDE_DEMAIS
         assert "escaneado" in detalhe
 
+    def test_filho_morto_por_sinal_de_fora_nao_vira_arquivo_corrompido(self, client, monkeypatch, tmp_path):
+        """O OOM killer do cgroup mata sem avisar, e a conta é de tamanho.
+
+        Um contêiner com menos memória que o `RLIMIT_AS`, ou uma alocação única
+        entre duas amostras do vigia, derruba o filho por sinal: código de saída
+        negativo, nenhum `MemoryError` para ler. Culpar o arquivo aqui repetiria,
+        por outra porta, o defeito do `MemoryError` que o `pdfminer` embrulha.
+
+        Aqui o programa do filho é trocado por um que se mata: não existe jeito
+        determinístico de fazer o kernel escolher o nosso processo. O caminho
+        testado continua sendo o da rota e o do pai de verdade.
+        """
+        suicida = tmp_path / "filho_morto_por_sinal.py"
+        suicida.write_text("import os, signal\nos.kill(os.getpid(), signal.SIGKILL)\n")
+        monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(suicida))
+
+        r = _enviar(client, "ata.docx", _docx_honesto(50))
+
+        assert r.status_code == 422
+        assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
+
     def test_arquivo_corrompido_continua_com_a_frase_dele(self, client):
         """Falha de leitura não pode virar "grande demais": são conselhos opostos."""
         r = _enviar(client, "quebrado.docx", b"PK\x03\x04isto nao e um zip de verdade")
@@ -668,6 +735,38 @@ class TestAsGuardasDoIsolamento:
         assert juntas > uma_so * 1.4, (
             f"as {quantas} leituras sairam em {juntas:.1f}s contra {uma_so:.1f}s de uma: as vagas nao seguraram nada"
         )
+
+    def test_a_espera_na_fila_cobre_uma_leitura_inteira(self):
+        """Esperar menos que uma leitura é recusar quem seria atendido.
+
+        Uma vaga só vaga quando a leitura em curso acaba, e ela acaba no máximo
+        no prazo da extração. Este número já foi 10 s e o CI derrubou: na máquina
+        de duas CPUs do runner, a terceira pessoa levava recusa com o arquivo
+        dela perfeitamente em ordem.
+        """
+        assert extrator.PRAZO_DA_FILA >= extrator.PRAZO_DA_EXTRACAO
+
+    def test_o_teto_do_texto_devolvido_cabe_dezesseis_vezes_o_maior_legitimo(self, pdf_honesto, docx_honesto):
+        """A folga do teto de saída, medida contra arquivo de verdade.
+
+        Sem isto o número viraria decoração: um teto abaixo do que a ata honesta
+        devolve recusaria a ata honesta, e um teto grande demais não guardaria
+        nada. O piso mede os dois legítimos; o topo é a conta que justificou o
+        número no comentário do módulo.
+        """
+        for nome, dados in (("pdf", pdf_honesto), ("docx", docx_honesto)):
+            saida = _rodar_filho(
+                f".{nome}",
+                dados,
+                limite=extrator.LIMITE_DE_ENDERECAMENTO,
+                teto_do_texto=extrator.TETO_DO_TEXTO_DEVOLVIDO,
+            )
+            assert saida.stdout.startswith(b"OK"), saida.stderr.decode()[-300:]
+            texto = saida.stdout.partition(b"\n")[2]
+            assert len(texto) * 16 <= extrator.TETO_DO_TEXTO_DEVOLVIDO, (
+                f"o {nome} honesto devolve {len(texto) // 1024} KB contra um teto de "
+                f"{extrator.TETO_DO_TEXTO_DEVOLVIDO // (1024 * 1024)} MB: folga pequena demais"
+            )
 
     def test_o_teto_de_rss_fica_abaixo_do_limite_de_enderecamento(self):
         """Quem decide primeiro no caso normal é o vigia de RSS.

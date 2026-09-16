@@ -37,6 +37,11 @@ STATUS_RECUSA = "RECUSA"
 # alocação nova (inclusive a da mensagem) pode falhar de novo.
 SAIDA_SEM_MEMORIA = 97
 
+# O texto extraído passou do que cabe atravessar de volta. Também sai por
+# código: o pai precisa saber disso ANTES de aceitar os bytes, porque aceitar
+# já é o dano.
+SAIDA_TEXTO_GRANDE_DEMAIS = 98
+
 MIN_PDF_TEXT_BYTES = 200
 
 
@@ -100,11 +105,11 @@ def extrair(ext: str, file_bytes: bytes) -> str:
     raise ValueError("Formato nao suportado.")
 
 
-def _responder(status: str, corpo: str) -> None:
+def _responder(status: str, corpo: bytes) -> None:
     """Primeira linha é o status, o resto é o corpo em UTF-8."""
     saida = sys.stdout.buffer
     saida.write(status.encode("ascii") + b"\n")
-    saida.write(corpo.encode("utf-8"))
+    saida.write(corpo)
     saida.flush()
 
 
@@ -128,7 +133,7 @@ def foi_falta_de_memoria(erro: BaseException) -> bool:
 
 
 def main(argv: list[str]) -> int:
-    ext, caminho, limite = argv[1], argv[2], int(argv[3])
+    ext, caminho, limite, teto_do_texto = argv[1], argv[2], int(argv[3]), int(argv[4])
 
     if not instalar_limite_de_enderecamento(limite):
         print(f"RLIMIT_AS indisponivel em {sys.platform}: quem segura e o vigia do pai", file=sys.stderr)
@@ -144,12 +149,21 @@ def main(argv: list[str]) -> int:
         if foi_falta_de_memoria(e):
             return SAIDA_SEM_MEMORIA
         if isinstance(e, ValueError):
-            _responder(STATUS_RECUSA, str(e))
+            _responder(STATUS_RECUSA, str(e).encode("utf-8"))
             return 0
         print(f"{type(e).__name__}: {e}", file=sys.stderr)
         return 1
 
-    _responder(STATUS_OK, texto)
+    corpo = texto.encode("utf-8")
+    if len(corpo) > teto_do_texto:
+        # O teto do filho protege o FILHO. Este aqui protege o pai: `.docx` de
+        # 326 KB devolve 100 MB de texto com pico de RSS que passa folgado pelo
+        # teto, e esses 100 MB atravessariam inteiros para dentro do worker,
+        # vezes o numero de vagas. Aqui eles nao saem daqui.
+        print(f"texto de {len(corpo)} bytes passa do teto de {teto_do_texto}", file=sys.stderr)
+        return SAIDA_TEXTO_GRANDE_DEMAIS
+
+    _responder(STATUS_OK, corpo)
     return 0
 
 

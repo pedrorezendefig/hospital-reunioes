@@ -87,6 +87,19 @@ INTERVALO_DE_VIGIA = 0.25
 # amostras do vigia (um `zlib.decompress` de gigabytes numa chamada so).
 LIMITE_DE_ENDERECAMENTO = 1280 * 1024 * 1024
 
+# O teto do filho protege o filho. Este protege o PAI, na volta.
+#
+# Medido: um `.docx` de 326 KB devolve 100 MB de texto com pico de RSS que passa
+# folgado pelo teto do filho, e esses 100 MB atravessariam inteiros para dentro
+# do worker (mais o custo do `.decode()`), vezes o numero de vagas. Sem este
+# numero, o isolamento protege a leitura e entrega a conta na porta de saida.
+#
+# 16 MB e dezesseis vezes o maior legitimo medido (o PDF honesto de 737 mil
+# caracteres devolve 0,72 MB de texto; o `.docx` de 19 mil paragrafos devolve
+# 0,80 MB, que e o maior) e fica na ordem de milhares de paginas, que nenhuma
+# transcricao de reuniao nem material de POP alcanca.
+TETO_DO_TEXTO_DEVOLVIDO = 16 * 1024 * 1024
+
 # Teto por filho nao e teto da maquina: N uploads simultaneos sao N filhos. O
 # `@limiter.limit` das rotas conta requisicoes POR MINUTO, e nao ao mesmo tempo,
 # entao dez uploads disparados juntos passam pelos "5/minute" e multiplicariam
@@ -99,12 +112,16 @@ LIMITE_DE_ENDERECAMENTO = 1280 * 1024 * 1024
 VAGAS_DE_EXTRACAO = 2
 _vagas = threading.BoundedSemaphore(VAGAS_DE_EXTRACAO)
 
-# Esperar na fila e esperar a leitura sao coisas diferentes, e por isso o
-# orcamento e outro. Se a fila usasse o prazo da extracao, o pior caso de uma
-# requisicao seria 45 s de espera mais 45 s de leitura: um minuto e meio de
-# ampulheta, sem nada na tela explicando. Dez segundos cobrem duas rodadas de
-# `.docx` honesto e deixam o pior caso inteiro em 55 s.
-PRAZO_DA_FILA = 10.0
+# Uma vaga so pode vagar quando a leitura em curso termina, e ela termina no
+# maximo no `PRAZO_DA_EXTRACAO`. Esperar MENOS que isso recusa gente que teria
+# sido atendida daqui a pouco, que e guarda-corpo virando indisponibilidade.
+#
+# Este numero ja foi 10 s, escolhido para encurtar o pior caso da requisicao, e
+# o CI derrubou: na maquina de duas CPUs do runner, duas leituras honestas em
+# paralelo passam de 10 s e a terceira pessoa levava recusa sem nada de errado
+# no arquivo dela. O preco de acertar isso e o pior caso somado, espera mais
+# leitura, e ele fica escrito aqui em vez de escondido.
+PRAZO_DA_FILA = PRAZO_DA_EXTRACAO
 
 MENSAGEM_FILA_CHEIA = (
     "O sistema está lendo outros documentos neste momento e não conseguiu uma vaga "
@@ -200,7 +217,19 @@ def _extrair_isolado(ext: str, file_bytes: bytes) -> str:
             caminho = tmp.name
 
         proc = subprocess.Popen(
-            [sys.executable, _CAMINHO_DO_FILHO, ext, caminho, str(LIMITE_DE_ENDERECAMENTO)],
+            # `-P` tira o diretorio do script do `sys.path`. Sem ele, o filho
+            # nasce com `app/services/` na frente do site-packages, e os
+            # modulos do projeto disputariam nome com qualquer import da cadeia
+            # do parser. Nao ha colisao hoje; a flag e para nao haver amanha.
+            [
+                sys.executable,
+                "-P",
+                _CAMINHO_DO_FILHO,
+                ext,
+                caminho,
+                str(LIMITE_DE_ENDERECAMENTO),
+                str(TETO_DO_TEXTO_DEVOLVIDO),
+            ],
             stdin=subprocess.DEVNULL,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
@@ -223,6 +252,20 @@ def _extrair_isolado(ext: str, file_bytes: bytes) -> str:
 
     if proc.returncode == filho.SAIDA_SEM_MEMORIA:
         logger.warning("Extracao isolada bateu no RLIMIT_AS lendo %s", ext)
+        raise ValueError(MENSAGEM_GRANDE_DEMAIS)
+
+    if proc.returncode == filho.SAIDA_TEXTO_GRANDE_DEMAIS:
+        logger.warning("Extracao isolada devolveria texto acima do teto lendo %s", ext)
+        raise ValueError(MENSAGEM_GRANDE_DEMAIS)
+
+    if proc.returncode is not None and proc.returncode < 0:
+        # Codigo negativo e sinal: o filho foi MORTO, nao terminou. Quem mata
+        # sem avisar e o OOM killer do cgroup (container com menos memoria que
+        # o `RLIMIT_AS`) ou o kernel numa alocacao unica entre duas amostras do
+        # vigia. Culpar o arquivo aqui seria repetir, por outra porta, o defeito
+        # do `MemoryError` que o `pdfminer` embrulha: mandar a pessoa conferir
+        # um arquivo que nao tem nada de errado.
+        logger.warning("Extracao isolada morta pelo sinal %s lendo %s", -proc.returncode, ext)
         raise ValueError(MENSAGEM_GRANDE_DEMAIS)
 
     cabecalho, _, corpo = saida.partition(b"\n")
