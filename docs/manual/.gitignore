@@ -1,0 +1,15 @@
+# Regeraveis: nada daqui precisa vir no clone
+node_modules/
+dist/
+.astro/
+
+# Video de tarefa renderizado (a composicao HyperFrames e a fonte versionada)
+public/video/
+
+# Vinculo com o projeto da Vercel, como na /divulgar
+.vercel/
+
+# Logo e fonte sao copia unica de docs/comunicacao/_assets (ADR 0044, decisao 4);
+# o `prebuild` traz os dois antes de cada build
+src/assets/logo-hsm.png
+public/fonts/

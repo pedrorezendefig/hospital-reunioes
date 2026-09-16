@@ -1,0 +1,158 @@
+/* Tema do Manual: o design system do app (ADR 0057, decisão 2).
+ *
+ * Os tokens são cópia do `globals.css` do frontend. Mudou lá, muda aqui: o
+ * manual segue o app, nunca inventa identidade. A fonte vem de
+ * docs/comunicacao/_assets pelo `prebuild`, sem dependência externa. */
+
+@font-face {
+  font-family: "HP Simplified";
+  src: url("/fonts/HPSimplified_Rg.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
+:root {
+  --hsm-navy: #2b2e7e;
+  --hsm-navy-claro: #3b6fb6;
+  --hsm-navy-escuro: #1a1c4e;
+  --hsm-texto: #1e293b;
+  --hsm-texto-suave: #64748b;
+  --hsm-borda: #e2e8f0;
+  --hsm-verde: #88d7a4;
+  --hsm-ambar: #ffc067;
+
+  --sl-font: "HP Simplified", system-ui, -apple-system, sans-serif;
+  --sl-color-accent: var(--hsm-navy);
+  --sl-color-accent-low: #d7d8ec;
+  --sl-color-accent-high: var(--hsm-navy-escuro);
+  --sl-color-text-accent: var(--hsm-navy);
+  --sl-nav-height: 4rem;
+}
+
+:root[data-theme="light"] {
+  --sl-color-bg: #ffffff;
+  --sl-color-bg-nav: #ffffff;
+  --sl-color-bg-sidebar: #ffffff;
+  --sl-color-text: var(--hsm-texto);
+  --sl-color-gray-1: var(--hsm-texto);
+  --sl-color-gray-2: var(--hsm-texto-suave);
+  --sl-color-gray-3: var(--hsm-texto-suave);
+  --sl-color-gray-5: var(--hsm-borda);
+  --sl-color-gray-6: #f8fafc;
+  --sl-color-hairline: var(--hsm-borda);
+  --sl-color-hairline-light: var(--hsm-borda);
+  --sl-color-accent-low: #e6e7f3;
+  --sl-color-accent: var(--hsm-navy);
+  --sl-color-accent-high: var(--hsm-navy-escuro);
+  --sl-color-text-accent: var(--hsm-navy);
+}
+
+:root[data-theme="dark"] {
+  --sl-color-accent-low: #23255c;
+  --sl-color-accent: var(--hsm-navy-claro);
+  --sl-color-accent-high: #c3d4ec;
+  --sl-color-text-accent: var(--hsm-navy-claro);
+}
+
+/* Radius corporativo do app (xl 6px, 2xl 8px, 3xl 12px). */
+.card,
+.sl-markdown-content img,
+.sl-markdown-content video {
+  border-radius: 8px;
+}
+
+.site-title img {
+  max-height: 2.2rem;
+}
+
+/* Molde da Página de tarefa: selos e vídeo, desenhados pelo tema. */
+.tarefa-selos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin-bottom: 1.2rem;
+}
+
+.tarefa-selo {
+  font-size: 0.8rem;
+  line-height: 1.6;
+  padding: 0.05rem 0.6rem;
+  border-radius: 9999px;
+  border: 1px solid var(--hsm-borda);
+  color: var(--hsm-navy);
+  background: #eef0f9;
+  white-space: nowrap;
+}
+
+.tarefa-selo--admin {
+  color: #7a4a00;
+  background: #fff3df;
+  border-color: #ffdca6;
+}
+
+.tarefa-selo--sem-login {
+  color: #165c33;
+  background: #e7f7ee;
+  border-color: #b9e6cb;
+}
+
+.tarefa-video {
+  margin-bottom: 1.4rem;
+}
+
+.tarefa-video video {
+  width: 100%;
+  border: 1px solid var(--hsm-borda);
+}
+
+.tarefa-video-pendente {
+  font-size: 0.85rem;
+  color: var(--hsm-texto-suave);
+  margin-bottom: 1.4rem;
+}
+
+/* Cartões de módulo da home. */
+.modulos {
+  display: grid;
+  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr));
+  margin-top: 2rem;
+}
+
+.modulo-card {
+  display: block;
+  padding: 1.1rem 1.2rem;
+  border: 1px solid var(--sl-color-gray-5);
+  border-radius: 8px;
+  text-decoration: none;
+  color: inherit;
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.08);
+}
+
+.modulo-card:hover {
+  border-color: var(--hsm-navy);
+}
+
+/* Módulo cuja seção ainda não tem página publicada: o cartão existe, mas não
+   promete um endereço que não existe. */
+.modulo-card--sem-link {
+  box-shadow: none;
+  background: var(--sl-color-gray-6);
+}
+
+.modulo-card--sem-link:hover {
+  border-color: var(--sl-color-gray-5);
+}
+
+.modulo-card strong {
+  display: block;
+  color: var(--sl-color-text-accent);
+  font-size: 1.1rem;
+  margin-bottom: 0.3rem;
+}
+
+.modulo-card span {
+  color: var(--sl-color-gray-2);
+  font-size: 0.95rem;
+}

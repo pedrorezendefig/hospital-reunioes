@@ -1,0 +1,21 @@
+{
+  "name": "manual-hsm",
+  "type": "module",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "prebuild": "node scripts/trazer-assets.mjs",
+    "predev": "node scripts/trazer-assets.mjs",
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "lint": "python3 ../../tools/lint_manual.py --dir src/content/docs"
+  },
+  "dependencies": {
+    "@astrojs/mdx": "^8.0.1",
+    "@astrojs/starlight": "^0.42.1",
+    "astro": "^7.3.2",
+    "sharp": "^0.34.4"
+  },
+  "packageManager": "pnpm@9.15.9"
+}
