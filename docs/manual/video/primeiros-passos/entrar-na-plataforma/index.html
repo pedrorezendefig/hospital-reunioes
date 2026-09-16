@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · Primeiros passos · Entrar na plataforma</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "primeiros-passos",
+ "slug": "entrar-na-plataforma",
+ "pagina": "primeiros-passos/entrar-na-plataforma.md",
+ "prd": 731,
+ "issues": [739],
+ "app_version": "0.137.0",
+ "gerado_em": "2026-09-16T16:00:00-03:00"
+}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* Mesmo palco das outras composições do manual: desenhado em 960x540 e
+     ampliado 2x, para os tamanhos do app saírem nítidos em 1080p. */
+  .palco { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #EEF1F6; }
+
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 78px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
+  .selo-abertura { margin-top: 40px; display: inline-flex; gap: 14px; }
+  .selo-abertura span { border: 2px solid var(--app-border); border-radius: 999px; padding: 10px 26px; font-size: 26px; font-weight: 700; color: var(--app-sec); }
+  .selo-abertura span.destaque { border-color: var(--navy); color: var(--navy); background: #F5F6FE; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  /* ===== janela de navegador ===== */
+  .janela { position: absolute; width: 520px; height: 330px; border-radius: 12px; background: #fff; box-shadow: 0 26px 60px -20px rgba(0,0,0,.42); overflow: hidden; border: 1px solid #D8DEE9; }
+  .barra { height: 20px; background: #E7EBF2; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid #D8DEE9; }
+  .barra i { width: 5px; height: 5px; border-radius: 50%; background: #C3CBD8; display: block; }
+  .barra .url { margin-left: 8px; flex: 1; height: 11px; border-radius: 6px; background: #fff; border: 1px solid #D8DEE9; font-size: 6.4px; color: #5A6273; display: flex; align-items: center; padding: 0 6px; }
+  .tela { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; display: flex; background: #fff; }
+
+  /* painel decorativo (só em tela larga, como no app) */
+  .painel { width: 46%; background: #F7F9FC; border-right: 1px solid var(--app-border); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 0 18px; text-align: center; }
+  .painel .caixa { background: rgba(255,255,255,.7); border: 1px solid #EDF1F7; border-radius: 14px; padding: 16px 22px; }
+  /* Um tom mais escuro que o secundário do app: sobre o cinza claro do painel
+     o #64748B do globals.css fica em 3.67:1, abaixo do piso de 4.5:1. */
+  .painel p { font-size: 8px; color: #5A6273; line-height: 1.55; max-width: 150px; }
+
+  /* formulário */
+  .form { flex: 1; display: flex; align-items: center; justify-content: center; padding: 0 26px; }
+  .form .caixa { width: 100%; max-width: 190px; }
+  .form h1 { font-size: 13px; font-weight: 700; color: var(--app-text); }
+  .form .dek { font-size: 7.4px; color: var(--app-sec); margin: 3px 0 14px; }
+  .form .lb { font-size: 7.4px; font-weight: 700; color: var(--app-text); margin-bottom: 4px; }
+  .campo { height: 22px; border: 1px solid var(--app-border); border-radius: 8px; display: flex; align-items: center; gap: 6px; padding: 0 8px; font-size: 7.6px; color: var(--app-text); background: #fff; }
+  .campo .ph { color: #6B7280; }
+  .campo .val { opacity: 0; }
+  .campo .olho { margin-left: auto; color: #AAB3C2; display: flex; }
+  .esqueci { font-size: 7px; color: var(--navy); text-align: right; margin-top: 4px; }
+  .entrar { margin-top: 12px; height: 24px; border-radius: 8px; background: linear-gradient(90deg, #2B2E7E, #1A1C4E); color: #fff; font-size: 8.4px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+  /* tela de destino */
+  .painel-dashboard { position: absolute; inset: 20px 0 0 0; background: #F7F9FC; display: none; opacity: 0; }
+  .pd-topo { height: 26px; background: #fff; border-bottom: 1px solid var(--app-border); display: flex; align-items: center; padding: 0 12px; gap: 8px; }
+  .pd-menu { position: absolute; left: 0; top: 26px; bottom: 0; width: 96px; background: #fff; border-right: 1px solid var(--app-border); padding: 10px 8px; }
+  .pd-menu div { font-size: 7px; color: var(--app-sec); padding: 4px 6px; border-radius: 6px; margin-bottom: 3px; }
+  .pd-menu div.on { background: #F0F1FB; color: var(--navy); font-weight: 700; }
+  .pd-corpo { position: absolute; left: 96px; right: 0; top: 26px; bottom: 0; padding: 14px; }
+  .pd-corpo h2 { font-size: 12px; font-weight: 700; color: var(--app-text); }
+  .pd-corpo p { font-size: 7.2px; color: var(--app-sec); margin-top: 3px; }
+  .pd-cards { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; margin-top: 12px; }
+  .pd-cards div { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; padding: 9px 8px; }
+  .pd-cards b { display: block; font-size: 13px; color: var(--navy); }
+  .pd-cards span { font-size: 6.4px; color: var(--app-sec); }
+
+  /* ===== dedo fantasma ===== */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+
+  /* ===== passo, do lado da janela ===== */
+  .passo { position: absolute; left: 626px; width: 300px; opacity: 0; }
+  .passo .n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
+  .passo h3 { font-size: 25px; line-height: 1.25; color: var(--navy); font-weight: 700; margin: 12px 0 8px; }
+  /* Um tom mais escuro que o secundário do app: legenda de vídeo é lida de
+     longe e precisa passar no contraste 4.5:1. */
+  .passo p { font-size: 17px; line-height: 1.5; color: #606F86; }
+  .passo b { color: var(--app-text); }
+  .marcador { position: absolute; border: 1.5px solid var(--navy); border-radius: 8px; box-shadow: 0 0 0 3px rgba(43,46,126,.14); opacity: 0; z-index: 30; }
+</style>
+</head>
+<body>
+
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="40" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Manual · Primeiros passos</div>
+    <h1 class="titulo" id="ab-titulo">Entrar na plataforma</h1>
+    <p class="sub" id="ab-sub">Do endereço no navegador à sua tela inicial.</p>
+    <div class="selo-abertura" id="ab-selos"><span class="destaque">Todo mundo</span></div>
+  </section>
+
+  <!-- 2 · A tarefa, passo a passo -->
+  <section id="c-tarefa" class="clip scene" data-start="4" data-duration="31" data-track-index="2">
+    <div class="palco" id="palco-tarefa"></div>
+  </section>
+
+  <!-- 3 · Fecho -->
+  <section id="c-fecho" class="clip scene slide" data-start="35" data-duration="5" data-track-index="3">
+    <div class="fecho-titulo" id="fc-titulo">Entrar na plataforma</div>
+    <div class="carimbo" id="fc-carimbo">Manual · retrata o app em v0.137.0 · gerado em 16/09/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da plataforma</div>
+  </section>
+
+</div>
+
+<script>
+/* Ícones no traço do app (mesma biblioteca das outras composições) */
+function ic(nome, s, cls) {
+  const P = {
+    email: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+    cadeado: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    olho: '<path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.87 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.87 0"/><circle cx="12" cy="12" r="3"/>'
+  };
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls || ""}" style="flex-shrink:0">${P[nome]}</svg>`;
+}
+
+function logo(w) {
+  const h = Math.round(w * 0.42);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 100 42" fill="none" style="flex-shrink:0">
+    <path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/>
+    <path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function marca(w, cor) {
+  return `${logo(w)}<div style="font-size:${Math.round(w*0.115)}px;font-weight:700;color:${cor || "#1E3A8A"};line-height:1.12;text-align:center;letter-spacing:.01em">HOSPITAL<br>SÃO MATHEUS</div>`;
+}
+
+const passo = (n, num, titulo, texto, topo) =>
+  `<div class="passo" id="${n}" style="top:${topo}px"><div class="n">${num}</div><h3>${titulo}</h3><p>${texto}</p></div>`;
+
+document.getElementById("palco-tarefa").innerHTML =
+  `<div style="position:absolute;inset:0;background:#EEF1F6"></div>
+  <div class="janela" data-layout-allow-overflow data-layout-allow-occlusion id="janela" style="left:56px;top:105px">
+    <div class="barra"><i></i><i></i><i></i><div class="url">plataforma do hospital</div></div>
+    <div class="tela" data-layout-allow-overflow data-layout-allow-occlusion id="tela-login">
+      <div class="painel">
+        <div class="caixa" style="display:flex;flex-direction:column;align-items:center;gap:4px">${marca(56)}</div>
+        <p>A plataforma de gestão do Hospital São Matheus: reuniões, POPs e Ouvidoria.</p>
+      </div>
+      <div class="form">
+        <div class="caixa">
+          <h1>Bem-vindo de volta</h1>
+          <div class="dek">Acesse a plataforma de gestão do hospital</div>
+          <div class="lb">Email</div>
+          <div class="campo" id="campo-email">
+            ${ic("email", 8)}
+            <span class="ph" id="email-ph">seu@email.com</span>
+            <span class="val" id="email-val">admin@hospital.com</span>
+          </div>
+          <div class="lb" style="margin-top:9px">Senha</div>
+          <div class="campo" id="campo-senha">
+            ${ic("cadeado", 8)}
+            <span class="ph" id="senha-ph">••••••••</span>
+            <span class="val" id="senha-val">••••••••••</span>
+            <span class="olho" id="olho">${ic("olho", 8)}</span>
+          </div>
+          <div class="esqueci">Esqueci minha senha</div>
+          <div class="entrar" id="entrar"><span id="entrar-txt">Entrar</span></div>
+        </div>
+      </div>
+    </div>
+    <div class="painel-dashboard" data-layout-allow-overflow data-layout-allow-occlusion id="tela-dashboard">
+      <div class="pd-topo">${marca(30)}</div>
+      <div class="pd-menu">
+        <div class="on">Reuniões e metas</div>
+        <div>Ouvidoria</div>
+        <div>POPs</div>
+        <div>Ajuda</div>
+      </div>
+      <div class="pd-corpo">
+        <h2>Olá, Administrador</h2>
+        <p>quarta-feira, 16 de setembro de 2026</p>
+        <div class="pd-cards">
+          <div><b>92%</b><span>Conformidade</span></div>
+          <div><b>4</b><span>Vencem em 3 dias</span></div>
+          <div><b>1</b><span>Atas Paradas</span></div>
+          <div><b>2</b><span>Aguardam Assinatura</span></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-email" style="left:336px;top:248px;width:200px;height:26px"></div>
+  <div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-senha" style="left:336px;top:292px;width:200px;height:26px"></div>
+  <div class="ghost" data-layout-allow-overlap data-layout-allow-occlusion id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>` +
+  passo("p1", 1, "Abra o endereço da plataforma", "A tela mostra <b>Bem-vindo de volta</b>. É a mesma no computador e no celular.", 130) +
+  passo("p2", 2, "Escreva o seu Email", "O mesmo endereço em que você recebe os avisos da plataforma.", 130) +
+  passo("p3", 3, "Escreva a sua Senha", "O olho no canto do campo mostra o que você digitou, para conferir antes de entrar.", 130) +
+  passo("p4", 4, "Clique em Entrar", "O botão fica <b>Entrando...</b> e você cai na sua tela inicial.", 130);
+
+/* ============================================================
+   Timeline: uma só, pausada, com tempos absolutos
+   ============================================================ */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const nota = (sel, t, ate) => { surge(sel, t, 14); some(sel, ate); };
+const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
+const move = (g, t, x, y, dx, dy) => {
+  tl.set(g, { x: x, y: y, opacity: 1 }, t);
+  tl.to(g, { x: dx, y: dy, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+};
+const aperta = (sel, t) => tl.to(sel, { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, t);
+const digita = (vazio, cheio, campo, t) => {
+  tl.to(vazio, { opacity: 0, duration: 0.15 }, t);
+  tl.to(cheio, { opacity: 1, duration: 0.22 }, t + 0.15);
+  if (campo) tl.to(campo, { borderColor: "#2B2E7E", duration: 0.2 }, t);
+};
+
+/* 1 · Abertura (0 a 4) */
+surge("#ab-eyebrow", 0.25, 22);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.5);
+surge("#ab-sub", 1.1, 22);
+surge("#ab-selos", 1.6, 18);
+
+/* 2 · A tarefa (4 a 35) */
+tl.fromTo("#janela", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 4.2);
+
+/* passo 1: a tela abre */
+nota("#p1", 4.9, 10.4);
+
+/* passo 2: o email */
+nota("#p2", 10.7, 16.4);
+tl.fromTo("#mk-email", { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, 11.0);
+move("#g1", 11.3, 470, 330, 400, 256);
+clique("#g1", 12.3);
+digita("#email-ph", "#email-val", "#campo-email", 12.6);
+tl.to("#mk-email", { opacity: 0, duration: 0.3 }, 14.6);
+
+/* passo 3: a senha */
+nota("#p3", 16.7, 23.2);
+tl.fromTo("#mk-senha", { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, 17.0);
+move("#g1", 17.3, 400, 256, 400, 300);
+clique("#g1", 18.3);
+digita("#senha-ph", "#senha-val", "#campo-senha", 18.6);
+tl.to("#olho", { color: "#2B2E7E", duration: 0.3 }, 20.4);
+tl.to("#mk-senha", { opacity: 0, duration: 0.3 }, 21.6);
+
+/* passo 4: entrar */
+nota("#p4", 23.5, 30.6);
+move("#g1", 23.9, 400, 300, 430, 349);
+clique("#g1", 24.9);
+aperta("#entrar", 24.9);
+tl.to("#entrar-txt", { opacity: 0, duration: 0.15 }, 25.1);
+tl.set("#entrar-txt", { innerText: "Entrando..." }, 25.3);
+tl.to("#entrar-txt", { opacity: 1, duration: 0.15 }, 25.35);
+tl.to("#g1", { opacity: 0, duration: 0.25 }, 25.6);
+tl.to("#tela-login", { opacity: 0, duration: 0.35 }, 26.6);
+tl.set("#tela-dashboard", { display: "block" }, 26.9);
+tl.to("#tela-dashboard", { opacity: 1, duration: 0.45 }, 26.95);
+
+/* 3 · Fecho (35 a 40) */
+surge("#fc-titulo", 35.3, 18);
+surge("#fc-carimbo", 35.8, 14);
+surge("#fc-org", 36.2, 12);
+
+window.__timelines.main = tl;
+</script>
+</body>
+</html>
