@@ -1,0 +1,50 @@
+---
+/**
+ * Os cartões da home, um por módulo, na ordem do menu do app.
+ *
+ * O cartão só vira link quando o módulo já tem alguma página publicada: enquanto
+ * a seção está sendo escrita, todas as páginas dela estão em `draft` e o
+ * endereço não existe. Um cartão que leva a uma página não encontrada é pior do
+ * que um cartão parado, e o link nasce sozinho quando a fatia do módulo sai do
+ * draft, sem ninguém lembrar de voltar aqui.
+ */
+import { getCollection } from "astro:content";
+
+interface Props {
+  modulos: { pasta: string; titulo: string; resumo: string }[];
+}
+
+const { modulos } = Astro.props;
+const paginas = await getCollection("docs");
+
+function destino(pasta: string) {
+  const doModulo = paginas
+    .filter((p) => p.id.startsWith(`${pasta}/`) && !p.data.draft)
+    .sort((a, b) => (a.data.sidebar?.order ?? 99) - (b.data.sidebar?.order ?? 99));
+  if (doModulo.length === 0) return null;
+  const primeira = doModulo[0]!;
+  return primeira.id.endsWith("/index")
+    ? `/${pasta}/`
+    : `/${primeira.id}/`;
+}
+
+const cartoes = modulos.map((m) => ({ ...m, href: destino(m.pasta) }));
+---
+
+<div class="modulos">
+  {
+    cartoes.map(({ titulo, resumo, href }) =>
+      href ? (
+        <a class="modulo-card" href={href}>
+          <strong>{titulo}</strong>
+          <span>{resumo}</span>
+        </a>
+      ) : (
+        <div class="modulo-card modulo-card--sem-link">
+          <strong>{titulo}</strong>
+          <span>{resumo}</span>
+        </div>
+      )
+    )
+  }
+</div>

@@ -134,6 +134,17 @@
   border-color: var(--hsm-navy);
 }
 
+/* Módulo cuja seção ainda não tem página publicada: o cartão existe, mas não
+   promete um endereço que não existe. */
+.modulo-card--sem-link {
+  box-shadow: none;
+  background: var(--sl-color-gray-6);
+}
+
+.modulo-card--sem-link:hover {
+  border-color: var(--sl-color-gray-5);
+}
+
 .modulo-card strong {
   display: block;
   color: var(--sl-color-text-accent);

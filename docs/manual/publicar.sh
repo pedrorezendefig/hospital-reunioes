@@ -80,10 +80,13 @@ if [ -n "$FALTANDO" ]; then
   exit 1
 fi
 
-TAMANHO_MB=$(( $(du -sk "$SAIDA" | cut -f1) / 1024 ))
+# A comparação é em KB, e não nos MB arredondados: dividir antes deixaria 90,9 MB
+# passar como 90 e a trava seria mais frouxa do que a mensagem promete.
+TAMANHO_KB=$(du -sk "$SAIDA" | cut -f1)
+TAMANHO_MB=$(( TAMANHO_KB / 1024 ))
 echo "== tamanho da publicação: ${TAMANHO_MB} MB (teto ${TETO_MB} MB)"
-if [ "$TAMANHO_MB" -gt "$TETO_MB" ]; then
-  echo "a pasta a publicar tem ${TAMANHO_MB} MB e o teto é ${TETO_MB} MB." >&2
+if [ "$TAMANHO_KB" -gt $(( TETO_MB * 1024 )) ]; then
+  echo "a pasta a publicar passou do teto: ${TAMANHO_KB} KB para um limite de ${TETO_MB} MB." >&2
   echo "o plano onde o site mora recusa acima de 100 MB: corte ou encurte vídeo antes de publicar." >&2
   exit 1
 fi

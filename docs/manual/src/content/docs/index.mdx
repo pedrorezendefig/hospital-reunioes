@@ -1,0 +1,39 @@
+---
+title: Manual da plataforma
+description: Como usar a plataforma do Hospital São Matheus, módulo por módulo.
+template: splash
+hero:
+  tagline: Escolha o módulo e ache a tela que você está usando agora.
+---
+
+import CartoesDeModulo from "../../components/CartoesDeModulo.astro";
+
+<CartoesDeModulo
+  modulos={[
+    {
+      pasta: "primeiros-passos",
+      titulo: "Primeiros passos",
+      resumo: "Entrar na plataforma, achar seu lugar no menu e ajustar seu perfil.",
+    },
+    {
+      pasta: "reunioes",
+      titulo: "Reuniões e metas",
+      resumo: "Agenda, ata, assinatura, pendências e as metas de cada setor.",
+    },
+    {
+      pasta: "ouvidoria",
+      titulo: "Ouvidoria",
+      resumo: "Registrar, classificar, responder e encerrar uma manifestação.",
+    },
+    {
+      pasta: "pops",
+      titulo: "POPs",
+      resumo: "Escrever, revisar, aprovar e publicar um procedimento do setor.",
+    },
+    {
+      pasta: "admin",
+      titulo: "Admin",
+      resumo: "Pessoas, setores, permissões e os ajustes que só o Super admin vê.",
+    },
+  ]}
+/>

@@ -1,6 +1,9 @@
 // @ts-check
 import { defineConfig } from "astro/config";
 import starlight from "@astrojs/starlight";
+// A home usa um componente para o cartão do módulo só virar link quando o
+// módulo tem página publicada, e componente em página só existe com MDX.
+import mdx from "@astrojs/mdx";
 
 // Seções na ordem do menu do app (ADR 0057, decisão 1). A aba Tecnologia fica
 // fora de propósito. Cada seção é gerada da árvore de pastas; a ordem dentro
@@ -43,5 +46,6 @@ export default defineConfig({
         items: [{ autogenerate: { directory: pasta } }],
       })),
     }),
+    mdx(),
   ],
 });

@@ -81,7 +81,22 @@ def test_saida_acima_de_90_mb_trava(tmp_path):
 
     resultado = publicar(saida)
     assert resultado.returncode == 1
-    assert "90 MB" in resultado.stdout + resultado.stderr
+    # A mensagem do erro, e nao "90 MB", que tambem sai na linha informativa do
+    # caminho feliz: asserir nela deixaria passar um mutante que apaga o aviso.
+    assert "passou do teto" in resultado.stdout + resultado.stderr
+
+
+def test_saida_logo_acima_do_teto_trava(tmp_path):
+    """90,5 MB: medir em MB arredondado leria 90 e deixaria publicar."""
+    saida = tmp_path / "publicar"
+    saida.mkdir()
+    (saida / "index.html").write_text("<html></html>", encoding="utf-8")
+    with open(saida / "quase.bin", "wb") as arquivo:
+        arquivo.write(b"\0" * ((90 * 1024 + 512) * 1024))
+
+    resultado = publicar(saida)
+    assert resultado.returncode == 1
+    assert "passou do teto" in resultado.stdout + resultado.stderr
 
 
 def test_saida_abaixo_do_teto_passa(tmp_path):
