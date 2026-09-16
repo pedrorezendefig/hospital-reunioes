@@ -2,6 +2,39 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-16T14:00:00-03:00",
+      "sha": "0964585",
+      "app_version": "0.137.0",
+      "subject": "O Assistente de Tecnologia monta a Demanda conversando, e a pessoa e quem grava",
+      "raw_subject": "feat(tecnologia): o Assistente monta a Demanda conversando, e a pessoa e quem grava (#744)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        726,
+        731
+      ],
+      "result": "healthy",
+      "duration_seconds": 420,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 do PRD #726 (issue #727). Cinco rodadas de revisao independente ate LIMPO nas duas lentes: 9 must-fix, e o que destravou foi trocar 'corrija estes dois' por varredura de toda leitura de corpo HTTP. O intervalo desde o deploy anterior carrega tambem tres merges de skills do PRD #731 (PRs #745, #746, #747) de outra sessao, que ja tinham buildado e nunca foram registrados aqui, por isso prds traz os dois numeros. O passo 9.6 rodou SO com --prd 726 (no-op, o #726 nao tem pagina de manual): o #731 tem seis paginas em draft e NAO esta concluido, entao tirar o draft dele publicaria secao que a outra sessao ainda esta escrevendo. Esse draft segue pendente e e dela."
+    },
+    {
       "at": "2026-09-16T00:05:00-03:00",
       "sha": "e4db875",
       "app_version": "0.136.0",
@@ -1422,35 +1455,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "3 fatias em paralelo, 3 PRs, 3 versoes (0.100.0, 0.101.0, 0.102.0), 1 deploy. O semaforo (#488) so pinta vermelho o vencido e o que vence hoje, e o ambar caiu de 2 dias uteis para 1. O tipo informacao (#490) fecha a promessa do cartaz do ponto de escuta: o formulario publico ja aceitava a natureza, mas na triagem o pedido de informacao virava reclamacao. A revisao independente segurou 3 achados reais que a auto-revisao do autor nao pegaria: o hoje congelado da fila, o teste de fuso sem guarda, e o TOPO=5 que passaria a esconder o tipo novo do relatorio da Diretoria."
-    },
-    {
-      "at": "2026-09-02T12:30:00-03:00",
-      "sha": "a49d0f1",
-      "app_version": "0.99.0",
-      "subject": "A fila do ouvidor ganha o bloco dos casos que so esperam o encerramento dele, e o menu passa a carregar o numero de casos com novidade",
-      "raw_subject": "feat(ouvidoria): contador de novidades no menu lateral e na barra inferior (#519)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 540,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 do PRD #470, que fecha as 4 fatias. Sem migration. A revisao independente pegou 6 problemas que o CI verde nao pegava, e os dois piores eram invisiveis: a fiacao do contador nao tinha teste nenhum (dava para apagar a ligacao inteira com o AppShell e a suite ficava 407/407 verde), e a contagem guardada em memoria pintava o primeiro quadro antes da guarda de perfil, mostrando o numero do ouvidor anterior para quem nao e da Ouvidoria, porque sair da conta nao recarrega a aba. Dois outros nasceram da propria correcao de reduzir a frequencia da rota, o que so apareceu porque a revisao rodou de novo depois do fix."
     }
   ]
 }

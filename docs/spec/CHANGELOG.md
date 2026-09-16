@@ -7,6 +7,17 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.137.0 - 2026-09-16 14:00 - o Assistente de Tecnologia monta a Demanda conversando, e a pessoa é quem grava
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `0964585`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.137.0, `db: healthy`; frontend HTTP 200) · build 65s no backend, 360s no frontend
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/0964585
+- Issues: [#727](https://github.com/pedrorezendefig/hospital-reunioes/issues/727) · PR [#744](https://github.com/pedrorezendefig/hospital-reunioes/pull/744) · PRD [#726](https://github.com/pedrorezendefig/hospital-reunioes/issues/726) · ADR 0056 · minor, feat
+- Migration: nenhuma, por decisão da fatia. A rota nova só lê `tecnologia_produtos`, e a Demanda continua nascendo em `POST /demandas` com o payload de hoje. A 109 segue sendo a última aplicada.
+- Nota: onda 1 do PRD #726. A tela `/admin/tecnologia/nova` deixa a Demanda nascer conversando, com rascunho ao vivo ao lado do chat e o formulário de sempre atrás do "prefiro preencher à mão". Cinco rodadas de revisão independente até LIMPO nas duas lentes, 9 must-fix no total. O que destravou foi trocar o pedido "corrija estes dois" por uma varredura de toda leitura de corpo de resposta HTTP no fluxo: ela achou cinco pontos, três abertos, dois dos quais nenhum revisor tinha citado. Prova por mutação em todas as rodadas, 12 mutantes mortos na última, conferidos de fora pelo revisor.
+- Pendências conhecidas, nenhuma alcançável pelo backend de hoje: `QuadroDemandas.tsx:248` e `useListaDeDemandas.ts:91` têm a mesma classe de leitura não validada e são anteriores a este PR; `tipo`/`prioridade` entram como texto qualquer e o erro resultante culpa a conexão, fechável em duas linhas.
+
 ## v0.136.0 - 2026-09-16 00:05 - a fundação do site do Manual do usuário e o item Ajuda na sidebar
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `e4db875`
