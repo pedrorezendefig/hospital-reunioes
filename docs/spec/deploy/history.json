@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-16T20:37:00-03:00",
+      "sha": "8dc5aa50",
+      "app_version": "0.137.1",
+      "subject": "O item Ajuda abre o Manual no endereco que existe, e o painel Admin ganha o dele",
+      "raw_subject": "fix(manual): o Manual do usuario abre no endereco que existe, e o Admin ganha o item Ajuda (#766)",
+      "scope": [
+        "frontend",
+        "docs"
+      ],
+      "prds": [
+        731
+      ],
+      "result": "healthy",
+      "duration_seconds": 300,
+      "services_touched": [
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": "0964585",
+      "notes": "Deploy fora de onda, pedido pelo humano depois que o PRD #731 fechou e o Manual foi publicado. O item Ajuda da sidebar apontava para manual.hospitalsaomatheus.cloud e abria ABA EM BRANCO para todos os usuarios: o registro DNS nunca foi criado (DNS_PROBE_FINISHED_NXDOMAIN, nao propagacao pendente), e a consequencia do ADR 0057 supunha zona na Hostinger quando ela e Cloudflare. O humano decidiu ABANDONAR o dominio proprio em 16/09/2026 em vez de criar o registro: o endereco definitivo do Manual passa a ser https://manual-hsm.vercel.app, sem env var e sem DNS pendente. O ADR 0057 foi emendado em prosa (decisao 1 e decisao 11), no padrao do 0054, sem apagar a decisao original; o lint_adr nao exige frontmatter para auto-emenda, porque o INVERSE so cobre ponteiro entre ADRs distintas. SEGUNDO DEFEITO, achado ao responder a pergunta do humano e nao por issue: o painel Admin NAO TINHA item Ajuda nenhum. A AppShell troca a Sidebar pela AdminSidebar em variant=admin, e a AdminSidebar nao tinha nenhuma referencia ao manual, entao o ramo 'admin' de secaoDoManual estava escrito e era INALCANCAVEL pela barra: a secao Admin do manual existia, publicada, sem porta. O site do Manual ja estava no ar quando este deploy saiu, entao o conserto do app fechou a ponte dos dois lados. O astro.config.mjs (site:) tambem trocou, que e de onde saem as canonicas e o sitemap-index.xml; sem republicar o site, o app aponta certo e o sitemap continua apontando para o dominio morto. LICAO DE TESTE, a mesma que se repetiu a onda inteira: o revisor achou que o criterio 'fecha a gaveta pelo onNavigate' estava marcado [x] SEM TESTE. O describe.each rodava a variante drawer e nunca passava a prop, entao os quatro testes da gaveta eram copia byte a byte dos quatro do desktop, e apagar o onClick deixava a suite 16/16 VERDE. Ao consertar, descobriu-se que a divida era maior: grep por onNavigate em *.test.tsx no frontend inteiro voltava VAZIO, nenhum teste tocava a prop. Foram presos os dois itens Ajuda (Sidebar e AdminSidebar), com mutantes INDEPENDENTES, cada um matando so o teste da sua barra, que e o que prova que um nao carrega o outro. Fica a divida: os demais itens de navegacao das duas barras seguem com onClick={onNavigate} sem teste. A varredura do dominio morto achou que ele so vivia em 7 pontos; o resto do repo ja usava manual-hsm.vercel.app por decisao tomada no inicio da onda. Sobraram 5 linhas em 3 arquivos, todas de proposito: CHANGELOG.md:30 e este history.json (registro factual de deploy, nao se reescreve), e tres no ADR 0057 (decisao 1, consequencia do DNS e a propria emenda, que precisa nomear o dominio para dizer qual foi abandonado). NEXT_PUBLIC_MANUAL_URL NAO existe no Coolify (o frontend lista quatro NEXT_PUBLIC_*, nenhuma de manual), entao o default novo do codigo vale sem concorrencia. A variavel continua existindo no codigo para apontar para previa. PROVA DE CODIGO NOVO NO AR, nao so restart: /api/health passou de 0.137.0 para 0.137.1, e o HTML servido pelo frontend traz o carimbo <!--v0.137.1_...-->, que o next.config.ts gera a partir de pkg.version em BUILD TIME (generateBuildId), ou seja, o bundle so pode ter vindo do commit que tem version 0.137.1, que e o mesmo commit que trocou o default do endereco. O /login nao serve prova direta do endereco porque nao renderiza a sidebar e os chunks dele nao a carregam. Corrida de bump resolvida por conversa entre sessoes: a sessao vizinha tinha #751 em 0.138.0 e #765 em 0.139.0, os dois em rascunho e longe do merge, e liberou o 0.137.1 passar na frente. Ela tambem lembrou de subir APP_VERSION antes do merge, o que evitou o gate de version match disparar rollback por motivo errado."
+    },
+    {
       "at": "2026-09-16T14:00:00-03:00",
       "sha": "0964585",
       "app_version": "0.137.0",

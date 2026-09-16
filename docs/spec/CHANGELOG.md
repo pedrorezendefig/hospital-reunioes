@@ -7,6 +7,21 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.137.1 - 2026-09-16 20:37 - o item Ajuda abre o Manual no endereço que existe, e o painel Admin ganha o dele
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `8dc5aa50`
+- Serviços: frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.137.1, `db: healthy`; HTML do frontend com o carimbo `v0.137.1`)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/8dc5aa50
+- PR [#766](https://github.com/pedrorezendefig/hospital-reunioes/pull/766) · PRD [#731](https://github.com/pedrorezendefig/hospital-reunioes/issues/731) · ADR 0057 (emendado) · patch, fix
+- Migration: nenhuma. A mudança é o default de uma URL no frontend, um item de menu novo e a emenda do ADR. A 109 segue sendo a última aplicada.
+- Nota: o item **Ajuda** da barra lateral apontava para `manual.hospitalsaomatheus.cloud` e abria **aba em branco para todos os usuários**. O registro DNS nunca foi criado (`DNS_PROBE_FINISHED_NXDOMAIN`, não é propagação pendente), e a consequência do ADR 0057 supunha a zona na Hostinger quando ela é Cloudflare. O Pedro decidiu **abandonar o domínio próprio** em vez de criar o registro: o endereço definitivo do Manual passa a ser `https://manual-hsm.vercel.app`, sem env var e sem DNS pendente.
+- Segundo defeito, achado ao responder a pergunta "esse link vai estar disponível no app?" e não por issue: **o painel Admin não tinha item Ajuda nenhum**. A `AppShell` troca a `Sidebar` pela `AdminSidebar` em `variant="admin"`, e a `AdminSidebar` não referenciava o manual, então o ramo `admin` de `secaoDoManual` estava escrito e era **inalcançável**: a seção Admin do manual existia, publicada, sem porta.
+- O `site:` do `astro.config.mjs` também trocou, que é de onde saem as URLs canônicas e o `sitemap-index.xml`. Sem republicar o site, o app aponta certo e o sitemap continua apontando para o domínio morto.
+- Lição de teste, a mesma que se repetiu a onda inteira: o critério "fecha a gaveta pelo `onNavigate`" estava marcado como feito **sem teste**. O `describe.each` rodava a variante `drawer` e nunca passava a prop, então os quatro testes da gaveta eram cópia byte a byte dos quatro do desktop, e apagar o `onClick` deixava a suíte 16/16 verde. Ao consertar, a dívida se mostrou maior: `grep` por `onNavigate` em `*.test.tsx` no frontend inteiro voltava vazio. Foram presos os dois itens Ajuda, com mutantes independentes, cada um matando só o teste da sua barra. Fica a dívida dos demais itens de navegação, ainda sem teste.
+- Prova de código novo no ar, não só restart: o HTML servido traz `<!--v0.137.1_...-->`, que o `next.config.ts` gera de `pkg.version` em **build time** (`generateBuildId`), então o bundle só pode ter vindo do commit que trocou o default. O `/login` não serve de prova direta porque não renderiza a sidebar e os chunks dele não a carregam.
+- Corrida de bump resolvida entre sessões: a sessão vizinha tinha PR #751 em 0.138.0 e #765 em 0.139.0, os dois em rascunho, e liberou o 0.137.1 passar na frente. Ela também lembrou de subir o `APP_VERSION` antes do merge, o que evitou o gate de version match disparar rollback por motivo errado.
+
 ## v0.137.0 - 2026-09-16 14:00 - o Assistente de Tecnologia monta a Demanda conversando, e a pessoa é quem grava
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `0964585`
