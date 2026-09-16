@@ -33,6 +33,8 @@ import {
   RASCUNHO_VAZIO,
   RascunhoDaDemanda,
   RESPOSTA_ILEGIVEL,
+  respostaDoChatValida,
+  CRIADA_SEM_CONFIRMACAO,
 } from "./assistente";
 import { Demanda, ProdutoDaEscolha } from "./demandas";
 
@@ -73,6 +75,12 @@ type Opcoes = {
    * (proxy respondendo HTML, conexão que cai depois dos cabeçalhos).
    */
   fimDoTurno?: "ok" | "rede" | "ilegivel";
+  /**
+   * Um 200 cujo corpo o `JSON.parse` ACEITA mas que não é `{reply, rascunho}`.
+   * É o buraco que sobrava quando a fronteira "nunca levanta" valia só para a
+   * rede: o corpo passava inteiro e quebrava lá dentro.
+   */
+  corpoForaDoContrato?: unknown;
   /** A criação responde 200 com um corpo que o `json()` não consegue ler. */
   criacaoIlegivel?: boolean;
   /**
@@ -97,6 +105,9 @@ function servidor(opcoes: Opcoes) {
     }
     if (url.endsWith("/assistente/chat") && opcoes.fimDoTurno === "rede") {
       throw new Error("rede fora");
+    }
+    if (url.endsWith("/assistente/chat") && "corpoForaDoContrato" in opcoes) {
+      return { ok: true, status: 200, json: async () => opcoes.corpoForaDoContrato } as unknown as Response;
     }
     if (url.endsWith("/assistente/chat") && opcoes.fimDoTurno === "ilegivel") {
       return {
@@ -348,6 +359,39 @@ describe("Propriedade 1: a tela destrava em todo caminho de saída", () => {
     await waitFor(() => expect(painelTravado()).toBe(false));
     expect((await screen.findByRole("alert")).textContent).toBe(RESPOSTA_ILEGIVEL);
     expect(screen.queryByText(/O assistente está escrevendo aqui/)).toBeNull();
+  });
+
+  // Os dois corpos que o revisor reproduziu: `null` congelava o painel (o
+  // `TypeError` saía do meio do encerramento) e `{}` apagava a PÁGINA no render
+  // seguinte, em `rascunho.titulo.trim()`.
+  it.each([
+    ["null", null],
+    ["objeto vazio", {}],
+    ["rascunho pela metade", { reply: "oi", rascunho: {} }],
+    ["reply que não é texto", { reply: 42, rascunho: RASCUNHO_DO_ASSISTENTE }],
+  ])("200 fora do contrato (%s) destrava a tela e mostra o alarme", async (_nome, corpo) => {
+    montar({ corpoForaDoContrato: corpo });
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() => expect(painelTravado()).toBe(false));
+    expect((await screen.findByRole("alert")).textContent).toBe(RESPOSTA_ILEGIVEL);
+    // O rascunho anterior sobrevive: corpo que não serve não vira rascunho
+    // meio preenchido.
+    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("");
+  });
+
+  it("o corpo dentro do contrato passa", async () => {
+    // O par de presença: uma fronteira que recusasse TODO corpo passaria nos
+    // quatro acima e deixaria o assistente mudo.
+    montar();
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() =>
+      expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("Ana não responde de madrugada"),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("rede fora destrava a tela", async () => {
@@ -629,22 +673,53 @@ describe("Criar Demanda", () => {
     expect(criadas[0].demanda.id).toBe("d-nova");
   });
 
-  it("corpo ilegível na criação destrava o botão e mostra o alarme", async () => {
-    // O mesmo buraco do turno, no outro botão: sem o `catch` em volta do
-    // `json()`, `criando` ficava preso em `true` e "Criar Demanda" morria, com
-    // o rascunho pronto na tela e nenhuma palavra dizendo o que houve.
+  it("201 com corpo ilegível é sucesso sem confirmação, e fecha a porta da duplicata", async () => {
+    // A Demanda NASCEU: o servidor respondeu 201 e o que falhou foi ler o
+    // corpo. Dizer "mande de novo" empurraria para o pior desfecho, porque
+    // `POST /demandas` não tem chave de idempotência e o segundo clique
+    // nasceria a Demanda repetida, com dois donos notificados.
     montar({ criacaoIlegivel: true });
     await falar("a Ana tá estranha");
     await waitFor(() => expect((screen.getByLabelText("Título") as HTMLInputElement).value).not.toBe(""));
 
     fireEvent.click(screen.getByRole("button", { name: "Criar Demanda" }));
 
-    expect((await screen.findByRole("alert")).textContent).toBe(RESPOSTA_ILEGIVEL);
+    const alerta = await screen.findByRole("alert");
+    expect(alerta.textContent).toContain(CRIADA_SEM_CONFIRMACAO);
+    // A frase do chat não serve aqui: lá o desfecho foi ruim, aqui foi bom.
+    expect(alerta.textContent).not.toContain(RESPOSTA_ILEGIVEL);
+    // A saída oferecida é o Quadro.
+    expect(within(alerta).getByRole("link").getAttribute("href")).toBe("/admin/tecnologia");
+    // E o botão FECHA, em vez de reabilitar.
     await waitFor(() =>
-      expect((screen.getByRole("button", { name: "Criar Demanda" }) as HTMLButtonElement).disabled).toBe(false),
+      expect((screen.getByRole("button", { name: "Criar Demanda" }) as HTMLButtonElement).disabled).toBe(true),
     );
-    // E a Demanda NÃO foi entregue: o corpo era ilegível, então não há id.
     expect(criadas).toHaveLength(0);
+  });
+
+  it("depois do 201 sem confirmação, clicar de novo não cria uma segunda Demanda", async () => {
+    montar({ criacaoIlegivel: true });
+    await falar("a Ana tá estranha");
+    await waitFor(() => expect((screen.getByLabelText("Título") as HTMLInputElement).value).not.toBe(""));
+    fireEvent.click(screen.getByRole("button", { name: "Criar Demanda" }));
+    await screen.findByRole("alert");
+    expect(criacoes()).toHaveLength(1);
+
+    fireEvent.click(screen.getByRole("button", { name: "Criar Demanda" }));
+
+    await waitFor(() => expect(criacoes()).toHaveLength(1));
+  });
+
+  it("a criação que dá certo não mostra o aviso de sem confirmação", async () => {
+    // O par de presença dos dois acima: um aviso cravado na tela passaria neles.
+    montar();
+    await falar("a Ana tá estranha");
+    await waitFor(() => expect((screen.getByLabelText("Título") as HTMLInputElement).value).not.toBe(""));
+
+    fireEvent.click(screen.getByRole("button", { name: "Criar Demanda" }));
+
+    await waitFor(() => expect(criadas).toHaveLength(1));
+    expect(screen.queryByText(CRIADA_SEM_CONFIRMACAO)).toBeNull();
   });
 
   it("criar limpa o armazenamento de sessão", async () => {

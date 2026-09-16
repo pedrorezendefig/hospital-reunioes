@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 
-import { descricaoAoCriar, NAO_INFORMADO, podeCriar, RASCUNHO_VAZIO, ROTEIRO_POR_TIPO } from "./assistente";
+import {
+  descricaoAoCriar,
+  NAO_INFORMADO,
+  podeCriar,
+  RASCUNHO_VAZIO,
+  respostaDoChatValida,
+  ROTEIRO_POR_TIPO,
+} from "./assistente";
 import { TIPOS } from "./demandas";
 
 describe("Roteiro por Tipo", () => {
@@ -95,5 +102,45 @@ describe("O rascunho vazio", () => {
 
   it("nasce com prioridade Normal", () => {
     expect(RASCUNHO_VAZIO.prioridade).toBe("normal");
+  });
+});
+
+describe("respostaDoChatValida", () => {
+  const BOA = {
+    reply: "Entendi.",
+    rascunho: {
+      titulo: "Ana não responde",
+      tipo: "defeito",
+      produto_id: "prod-1",
+      prioridade: "normal",
+      prazo: null,
+      descricao: "Onde: no WhatsApp",
+    },
+  };
+
+  it("aceita o contrato inteiro", () => {
+    expect(respostaDoChatValida(BOA)).toBe(true);
+  });
+
+  it("aceita os campos que podem ser nulos", () => {
+    expect(respostaDoChatValida({ ...BOA, rascunho: { ...BOA.rascunho, tipo: null, produto_id: null } })).toBe(true);
+  });
+
+  // Os quatro primeiros são os corpos que quebravam a tela: `null` levantava no
+  // meio do encerramento e congelava o painel, e os outros chegavam ao render.
+  it.each([
+    ["null", null],
+    ["lista", []],
+    ["objeto vazio", {}],
+    ["sem rascunho", { reply: "oi" }],
+    ["rascunho pela metade", { reply: "oi", rascunho: {} }],
+    ["rascunho nulo", { reply: "oi", rascunho: null }],
+    ["reply que não é texto", { ...BOA, reply: 42 }],
+    ["titulo que não é texto", { ...BOA, rascunho: { ...BOA.rascunho, titulo: 42 } }],
+    ["descricao ausente", { ...BOA, rascunho: { ...BOA.rascunho, descricao: undefined } }],
+    ["prioridade ausente", { ...BOA, rascunho: { ...BOA.rascunho, prioridade: undefined } }],
+    ["prazo que não é texto nem nulo", { ...BOA, rascunho: { ...BOA.rascunho, prazo: 7 } }],
+  ])("recusa %s", (_nome, corpo) => {
+    expect(respostaDoChatValida(corpo)).toBe(false);
   });
 });

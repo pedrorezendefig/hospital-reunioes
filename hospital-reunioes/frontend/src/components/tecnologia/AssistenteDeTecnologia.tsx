@@ -17,6 +17,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Bot, ChevronDown, Loader2, Send, Trash2 } from "lucide-react";
 
 import { Select } from "@/components/ui/Select";
@@ -24,6 +25,7 @@ import { Select } from "@/components/ui/Select";
 import {
   AVISO_DE_IA,
   CONVERSA_NO_TETO,
+  CRIADA_SEM_CONFIRMACAO,
   descricaoAoCriar,
   LIMITE_DA_DESCRICAO,
   LIMITE_DA_MENSAGEM,
@@ -40,6 +42,7 @@ import {
   RascunhoDaDemanda,
   RESPOSTA_ILEGIVEL,
   RespostaDoChat,
+  respostaDoChatValida,
   TIPO_QUANDO_NAO_ESCOLHIDO,
   URL_DO_CHAT,
 } from "./assistente";
@@ -52,6 +55,7 @@ import {
   PRIORIDADES,
   PrioridadeDemanda,
   ProdutoDaEscolha,
+  ROTA_TECNOLOGIA,
   TIPO_ROTULO,
   TIPOS,
   TipoDemanda,
@@ -84,6 +88,8 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
   const [texto, setTexto] = useState("");
   const [conversando, setConversando] = useState(false);
   const [criando, setCriando] = useState(false);
+  /** A Demanda nasceu e a tela não conseguiu ler a resposta (ver `criar`). */
+  const [criadaSemConfirmacao, setCriadaSemConfirmacao] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
   const [rascunhoAberto, setRascunhoAberto] = useState(true);
   /**
@@ -169,14 +175,24 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     if (!resposta.ok) {
       return { erro: resposta.status === 429 ? MUITAS_MENSAGENS : await motivoDaRecusa(resposta) };
     }
+    let corpo: unknown;
     try {
-      return { corpo: (await resposta.json()) as RespostaDoChat };
+      corpo = await resposta.json();
     } catch (e) {
       // Conexão que cai depois dos cabeçalhos e antes do corpo, ou um proxy que
       // responde 200 com HTML. O servidor respondeu; o que não dá é para ler.
       console.error("[admin/tecnologia] a resposta do assistente veio ilegível", e);
       return { erro: RESPOSTA_ILEGIVEL };
     }
+    // 200 que o `JSON.parse` aceita mas que não é `{reply, rascunho}`. Para
+    // quem está olhando é o mesmo caso do corpo ilegível, e por isso é a mesma
+    // frase: a resposta chegou e não dá para usar. O corpo só passa daqui se
+    // servir, e é isso que deixa `encerrarOTurno` sem leitura insegura.
+    if (!respostaDoChatValida(corpo)) {
+      console.error("[admin/tecnologia] a resposta do assistente veio fora do contrato");
+      return { erro: RESPOSTA_ILEGIVEL };
+    }
+    return { corpo };
   }
 
   /**
@@ -196,6 +212,9 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
    *    coisa enquanto esperava, o texto dela ganha.
    */
   function encerrarOTurno(daConversa: number, desfecho: DesfechoDoTurno, turno: TurnoEmVoo) {
+    // Nenhuma linha daqui para baixo pode levantar: o corpo foi validado na
+    // fronteira, então `desfecho.corpo.reply` e `.rascunho` são leitura segura.
+    // Era essa a brecha que restava, e ela não se fecha por ordem de linha.
     if (conversaAtual.current !== daConversa) return;
 
     if ("erro" in desfecho) {
@@ -263,10 +282,21 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     try {
       criada = (await resposta.json()) as Demanda & { aviso_por_email?: unknown };
     } catch (e) {
-      // Mesma armadilha do turno, no outro botão: sem este `catch`, um corpo
-      // ilegível deixava `criando` preso em `true` e "Criar Demanda" morto.
+      /**
+       * A resposta foi 201: a Demanda NASCEU, com id, no Quadro, com o dono
+       * avisado. O que falhou foi ler o corpo, então o que a tela perdeu foi a
+       * confirmação, não a Demanda.
+       *
+       * Por isso este caminho NÃO é erro: ele fecha o botão em vez de
+       * reabilitá-lo. A criação não tem chave de idempotência, e um segundo
+       * clique nasceria a Demanda de novo, repetida no Quadro e com dois donos
+       * notificados. A sessão é limpa como no caminho de sucesso, que é o que
+       * ele é, e a saída oferecida é o Quadro.
+       */
       console.error("[admin/tecnologia] a resposta da criação veio ilegível", e);
-      setErro(RESPOSTA_ILEGIVEL);
+      limparASessao();
+      setCriadaSemConfirmacao(true);
+      setErro(null);
       setCriando(false);
       return;
     }
@@ -284,6 +314,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     setTexto("");
     setErro(null);
     setConversando(false);
+    setCriadaSemConfirmacao(false);
   }
 
   function mudar(campo: Partial<RascunhoDaDemanda>) {
@@ -292,6 +323,18 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
 
   return (
     <div className="grid lg:grid-cols-[1fr_minmax(360px,420px)] gap-6 items-start">
+      {criadaSemConfirmacao && (
+        <div
+          role="alert"
+          className="lg:col-span-2 flex flex-wrap items-center gap-3 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm"
+        >
+          <span>{CRIADA_SEM_CONFIRMACAO}</span>
+          <Link href={ROTA_TECNOLOGIA} className="font-semibold underline">
+            Ver no Quadro
+          </Link>
+        </div>
+      )}
+
       {erro && (
         <p
           role="alert"
@@ -389,7 +432,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
             <button
               type="button"
               onClick={criar}
-              disabled={criando || !podeCriar(rascunho)}
+              disabled={criando || criadaSemConfirmacao || !podeCriar(rascunho)}
               className="px-4 py-2 rounded-xl bg-primary text-white text-sm font-semibold disabled:opacity-50"
             >
               Criar Demanda

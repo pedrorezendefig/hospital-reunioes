@@ -108,6 +108,50 @@ export const MUITAS_MENSAGENS = "Muitas mensagens em pouco tempo. Espere um minu
 export const RESPOSTA_ILEGIVEL =
   "O servidor respondeu algo que a tela não conseguiu ler. Sua mensagem continua na caixa: mande de novo.";
 
+/**
+ * A resposta do chat serve para a tela usar?
+ *
+ * Ela existe para a fronteira "nunca levanta" valer para o CORPO, e não só para
+ * a rede. Sem ela, um 200 que o `JSON.parse` aceita mas que não é
+ * `{reply, rascunho}` passava direto e quebrava lá dentro, onde já não há quem
+ * pegue: corpo `null` levantava no meio do encerramento e congelava o painel, e
+ * corpo `{}` chegava ao render e apagava a página em `rascunho.titulo.trim()`.
+ *
+ * O que ela cobra é exatamente o que o painel consome, campo a campo. Corpo que
+ * não passa não vira rascunho meio preenchido: vira desfecho de erro, e o
+ * rascunho anterior, que é o que tem valor na tela, sobrevive.
+ */
+export function respostaDoChatValida(corpo: unknown): corpo is RespostaDoChat {
+  if (typeof corpo !== "object" || corpo === null) return false;
+  const resposta = corpo as Record<string, unknown>;
+  if (typeof resposta.reply !== "string") return false;
+  const rascunho = resposta.rascunho;
+  if (typeof rascunho !== "object" || rascunho === null) return false;
+  const campos = rascunho as Record<string, unknown>;
+  return (
+    typeof campos.titulo === "string" &&
+    typeof campos.descricao === "string" &&
+    typeof campos.prioridade === "string" &&
+    (campos.tipo === null || typeof campos.tipo === "string") &&
+    (campos.produto_id === null || typeof campos.produto_id === "string") &&
+    (campos.prazo === null || typeof campos.prazo === "string")
+  );
+}
+
+/**
+ * A frase de quando a Demanda NASCEU e a resposta não deu para ler.
+ *
+ * Ela é própria, e não a do chat, porque aqui o desfecho foi BOM: o servidor
+ * respondeu 201, a Demanda está no Quadro com id e dono avisado. Dizer "mande
+ * de novo" seria empurrar para o pior desfecho possível, porque a criação não
+ * tem chave de idempotência e o segundo clique nasceria uma Demanda repetida,
+ * com dois donos notificados. Por isso o botão fecha junto com esta frase, e a
+ * saída oferecida é o Quadro.
+ */
+export const CRIADA_SEM_CONFIRMACAO =
+  "A Demanda foi criada, mas a resposta do servidor não deu para ler, então não dá para abri-la daqui. " +
+  "Não crie de novo: confira no Quadro.";
+
 /** Os rótulos fixos de cada Tipo. Decisão não tem roteiro: é texto corrido. */
 export const ROTEIRO_POR_TIPO: Record<TipoDemanda, string[]> = {
   defeito: ["Onde", "O que aconteceu", "O que esperava", "Quando", "Como repetir"],
