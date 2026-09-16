@@ -102,10 +102,13 @@ def _da_lista(valor, lista: tuple[str, ...], anterior):
 def _prazo_iso(valor) -> str | None:
     """Prazo so em ISO valido; qualquer outra coisa e LIMPA, nao preservada.
 
-    Preservar o prazo anterior seria pior do que limpar: a data e o campo que o
-    prompt manda so preencher quando a pessoa disser uma data de verdade, e uma
-    data velha sobrevivendo a uma correcao ("esquece o prazo") viraria
-    compromisso que ninguem assumiu.
+    Limpar, e nao preservar, e o certo para o valor que CHEGOU errado: a data e
+    o campo que o prompt manda so preencher quando a pessoa disser uma data de
+    verdade, e uma data velha sobrevivendo a uma correcao ("esquece o prazo")
+    viraria compromisso que ninguem assumiu.
+
+    Isto vale para o prazo que veio. O prazo que NAO veio e outro caso, e quem
+    decide e `normalizar_rascunho`.
     """
     if not isinstance(valor, str) or not valor.strip():
         return None
@@ -133,7 +136,13 @@ def normalizar_rascunho(novo, atual: dict, *, ids_de_produto: set[str]) -> dict:
 
     Campo que nao veio, ou veio com valor que o app nao conhece, volta ao valor
     ANTERIOR: e isso que faz a correcao escrita a mao sobreviver a um turno em
-    que o modelo se distraiu. A excecao e o prazo (ver `_prazo_iso`).
+    que o modelo se distraiu.
+
+    O prazo tem os dois casos separados, e a diferenca importa: a pessoa digita
+    a data no campo, manda a mensagem seguinte, e o modelo, que nao tinha nada
+    a dizer sobre prazo, simplesmente omite a chave. Tratar a omissao como
+    "limpe" apagaria a data dela sem aviso. Entao: chave AUSENTE preserva;
+    chave PRESENTE com lixo (ou nula) limpa, que e o pedido explicito.
     """
     novo = novo if isinstance(novo, dict) else {}
     produto = novo.get("produto_id")
@@ -142,7 +151,7 @@ def normalizar_rascunho(novo, atual: dict, *, ids_de_produto: set[str]) -> dict:
         "tipo": _da_lista(novo.get("tipo"), TIPOS, atual["tipo"]),
         "produto_id": produto if produto in ids_de_produto else atual["produto_id"],
         "prioridade": _da_lista(novo.get("prioridade"), PRIORIDADES, atual["prioridade"]),
-        "prazo": _prazo_iso(novo.get("prazo")),
+        "prazo": _prazo_iso(novo["prazo"]) if "prazo" in novo else atual["prazo"],
         "descricao": _texto(novo.get("descricao"), atual["descricao"]),
     }
 

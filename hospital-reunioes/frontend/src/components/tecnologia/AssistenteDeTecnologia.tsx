@@ -23,7 +23,11 @@ import { Select } from "@/components/ui/Select";
 
 import {
   AVISO_DE_IA,
+  CONVERSA_NO_TETO,
   descricaoAoCriar,
+  LIMITE_DA_MENSAGEM,
+  LIMITE_DE_MENSAGENS,
+  MUITAS_MENSAGENS,
   gravarNaSessao,
   limparASessao,
   lerDaSessao,
@@ -107,6 +111,8 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
   }, [messages, conversando]);
 
   const produtosAtivos = produtos.filter((p) => p.ativo);
+  /** A próxima mensagem estouraria o teto do corpo, e o 422 chegaria como JSON cru. */
+  const noTeto = messages.length >= LIMITE_DE_MENSAGENS;
 
   function autorizacao() {
     return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
@@ -114,7 +120,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
 
   async function enviar() {
     const fala = texto.trim();
-    if (!fala || conversando) return;
+    if (!fala || conversando || noTeto) return;
     const historico: MensagemDoChat[] = [...messages, { role: "user", content: fala }];
     setMessages(historico);
     setTexto("");
@@ -137,7 +143,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
       return;
     }
     if (!resposta.ok) {
-      setErro(await motivoDaRecusa(resposta));
+      setErro(resposta.status === 429 ? MUITAS_MENSAGENS : await motivoDaRecusa(resposta));
       setConversando(false);
       return;
     }
@@ -238,6 +244,11 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
               options={TIPOS.map((t) => ({ value: t, label: TIPO_ROTULO[t] }))}
               placeholder="O assistente escolhe"
             />
+            {rascunho.tipo === null && (
+              <p className="text-xs text-text-secondary sm:col-span-2">
+                Sem Tipo escolhido, a Demanda nasce como {TIPO_ROTULO[TIPO_QUANDO_NAO_ESCOLHIDO]}.
+              </p>
+            )}
             <Select
               label="Produto"
               value={rascunho.produto_id ?? ""}
@@ -329,7 +340,9 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
             <textarea
               aria-label="Mensagem"
               rows={1}
-              placeholder="Escreva aqui"
+              maxLength={LIMITE_DA_MENSAGEM}
+              disabled={noTeto}
+              placeholder={noTeto ? "Conversa no limite" : "Escreva aqui"}
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
               onKeyDown={(e) => {
@@ -343,13 +356,18 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
             <button
               type="button"
               onClick={enviar}
-              disabled={conversando || !texto.trim()}
+              disabled={conversando || noTeto || !texto.trim()}
               aria-label="Enviar"
               className="px-3 py-2 rounded-xl bg-primary text-white disabled:opacity-50"
             >
               <Send className="w-4 h-4" />
             </button>
           </div>
+          {noTeto && (
+            <p role="status" className="mt-1.5 text-xs text-amber-700">
+              {CONVERSA_NO_TETO}
+            </p>
+          )}
           <p className="mt-1.5 text-xs text-slate-400">{AVISO_DE_IA}</p>
         </div>
       </section>

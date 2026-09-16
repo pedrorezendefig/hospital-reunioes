@@ -67,7 +67,15 @@ export default function NovaDemandaPage() {
     [router],
   );
 
-  if (!carregandoPerfil && !isSuperAdmin(participante)) {
+  // Enquanto o perfil não chegou, a tela NÃO é desenhada. Desenhar e esconder
+  // depois deixaria a caixa de mensagem à mão de quem não é Super admin
+  // durante as duas idas à rede do hook, que é justamente o que o gate existe
+  // para impedir. O layout de `/admin` deixa entrar qualquer papel.
+  if (carregandoPerfil) {
+    return <p className="max-w-2xl mx-auto px-6 py-16 text-center text-sm text-text-secondary">Carregando...</p>;
+  }
+
+  if (!isSuperAdmin(participante)) {
     return (
       <div className="max-w-2xl mx-auto px-6 py-16 text-center space-y-3">
         <Lock className="w-8 h-8 mx-auto text-text-secondary" />

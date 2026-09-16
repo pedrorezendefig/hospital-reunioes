@@ -63,6 +63,29 @@ export const PRIMEIRA_MENSAGEM =
 export const AVISO_DE_IA =
   "O que você escreve aqui é lido por uma inteligência artificial, como nas atas. Evite dados de paciente.";
 
+/**
+ * Os dois tetos do corpo do chat, iguais aos do backend.
+ *
+ * Eles moram aqui porque o backend recusa com 422 do pydantic, cujo `detail`
+ * vem em LISTA e chegaria à tela como JSON cru dentro do alerta vermelho. E
+ * são alcançáveis pelo canal de verdade: vinte idas e voltas de conversa
+ * normal passam das quarenta mensagens. Um teto sem par na tela é um beco.
+ */
+export const LIMITE_DE_MENSAGENS = 40;
+export const LIMITE_DA_MENSAGEM = 5000;
+
+export const CONVERSA_NO_TETO =
+  "Esta conversa chegou no limite. Crie a Demanda com o que já está no rascunho, ou descarte e comece outra.";
+
+/**
+ * A frase do teto de taxa.
+ *
+ * Ela é escrita aqui, e não lida da resposta, porque o `slowapi` devolve
+ * `{"error": "Rate limit exceeded: ..."}` (sem `detail`, e em inglês), e o
+ * leitor desta tela lê português e precisa saber o que fazer: esperar.
+ */
+export const MUITAS_MENSAGENS = "Muitas mensagens em pouco tempo. Espere um minuto e mande de novo.";
+
 /** Os rótulos fixos de cada Tipo. Decisão não tem roteiro: é texto corrido. */
 export const ROTEIRO_POR_TIPO: Record<TipoDemanda, string[]> = {
   defeito: ["Onde", "O que aconteceu", "O que esperava", "Quando", "Como repetir"],

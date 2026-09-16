@@ -342,6 +342,29 @@ class TestTurno:
         assert corpo["rascunho"]["produto_id"] == "prod-ouvidoria"
         assert corpo["rascunho"]["descricao"] == "Onde: no app"
 
+    def test_prazo_escrito_a_mao_sobrevive_ao_turno_que_nao_fala_dele(self, monkeypatch):
+        """A data que a pessoa digitou no campo nao some porque o modelo, que
+        nao tinha nada a dizer sobre prazo, omitiu a chave.
+
+        O par do `test_prazo_invalido_e_limpo`: um deles cobra que a chave
+        PRESENTE com lixo limpe, o outro que a chave AUSENTE preserve. Uma
+        implementacao so com `.get("prazo")` passa no primeiro e morre aqui.
+        """
+        _stub_llm(monkeypatch, content=json.dumps({"reply": "ok", "rascunho": {"titulo": "Ana de madrugada"}}))
+        cliente = _montar(logado=_pessoa("p1"))
+        rascunho = {**RASCUNHO_CHEIO, "prazo": "2026-10-01"}
+        corpo = cliente.post(ROTA, json=_corpo(rascunho=rascunho)).json()
+        assert corpo["rascunho"]["prazo"] == "2026-10-01"
+
+    def test_prazo_nulo_explicito_limpa(self, monkeypatch):
+        """Mandar `prazo: null` e pedido, nao omissao: o modelo esta dizendo
+        que a data caiu."""
+        _stub_llm(monkeypatch, content=_resposta_do_modelo(prazo=None))
+        cliente = _montar(logado=_pessoa("p1"))
+        rascunho = {**RASCUNHO_CHEIO, "prazo": "2026-10-01"}
+        corpo = cliente.post(ROTA, json=_corpo(rascunho=rascunho)).json()
+        assert corpo["rascunho"]["prazo"] is None
+
     def test_resposta_que_nao_e_json_devolve_o_rascunho_anterior(self, monkeypatch):
         _stub_llm(monkeypatch, content="desculpa, não consegui")
         cliente = _montar(logado=_pessoa("p1"))

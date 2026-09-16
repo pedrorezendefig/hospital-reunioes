@@ -19,7 +19,18 @@ import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-li
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { AssistenteDeTecnologia } from "./AssistenteDeTecnologia";
-import { AVISO_DE_IA, CHAVE_DA_SESSAO, NAO_INFORMADO, RASCUNHO_VAZIO, RascunhoDaDemanda } from "./assistente";
+import {
+  AVISO_DE_IA,
+  CHAVE_DA_SESSAO,
+  CONVERSA_NO_TETO,
+  LIMITE_DA_MENSAGEM,
+  LIMITE_DE_MENSAGENS,
+  MensagemDoChat,
+  MUITAS_MENSAGENS,
+  NAO_INFORMADO,
+  RASCUNHO_VAZIO,
+  RascunhoDaDemanda,
+} from "./assistente";
 import { Demanda, ProdutoDaEscolha } from "./demandas";
 
 type Chamada = { url: string; metodo: string; corpo: Record<string, unknown> | undefined };
@@ -46,7 +57,13 @@ type Opcoes = {
   /** O rascunho que a rota do chat devolve. */
   rascunhoDaResposta?: RascunhoDaDemanda;
   reply?: string;
-  recusaDoChat?: { status: number; detail: string };
+  /**
+   * O corpo CRU da recusa, como cada camada do backend a escreve. Não é um
+   * `{detail}` genérico de propósito: o `slowapi` responde `{error: ...}` e o
+   * pydantic responde `detail` em LISTA, e um dublê que normalizasse os três
+   * provaria um formato que o backend nunca emite.
+   */
+  recusaDoChat?: { status: number; corpo: unknown };
 };
 
 function servidor(opcoes: Opcoes) {
@@ -58,7 +75,7 @@ function servidor(opcoes: Opcoes) {
         return {
           ok: false,
           status: opcoes.recusaDoChat.status,
-          json: async () => ({ detail: opcoes.recusaDoChat!.detail }),
+          json: async () => opcoes.recusaDoChat!.corpo,
         } as unknown as Response;
       }
       return {
@@ -165,12 +182,26 @@ describe("A conversa", () => {
     expect(messages[0].role).toBe("assistant");
   });
 
-  it("a recusa do servidor chega a quem está conversando", async () => {
-    montar({ recusaDoChat: { status: 429, detail: "Muitas mensagens em pouco tempo. Espere um minuto." } });
+  it("o teto de taxa vira frase de gente, e não o inglês do slowapi", async () => {
+    // O `slowapi` responde `{"error": "Rate limit exceeded: ..."}`, sem
+    // `detail`: passando pelo `motivoDaRecusa`, a pessoa leria "Não foi
+    // possível salvar (429)", verbo errado para um chat e sem dizer o que
+    // fazer.
+    montar({ recusaDoChat: { status: 429, corpo: { error: "Rate limit exceeded: 10 per 1 minute" } } });
 
     await falar("a Ana tá estranha");
 
-    expect((await screen.findByRole("alert")).textContent).toContain("Muitas mensagens");
+    expect((await screen.findByRole("alert")).textContent).toBe(MUITAS_MENSAGENS);
+  });
+
+  it("a recusa que o servidor explica é a dele que a pessoa lê", async () => {
+    // O par do teste acima: uma tela que respondesse a MESMA frase a toda
+    // recusa passaria naquele sozinha.
+    montar({ recusaDoChat: { status: 422, corpo: { detail: "O rascunho chegou sem nada dentro." } } });
+
+    await falar("a Ana tá estranha");
+
+    expect((await screen.findByRole("alert")).textContent).toContain("sem nada dentro");
   });
 
   it("sem recusa, nenhum aviso vermelho aparece", async () => {
@@ -180,6 +211,52 @@ describe("A conversa", () => {
 
     await waitFor(() => expect((screen.getByLabelText("Título") as HTMLInputElement).value).not.toBe(""));
     expect(screen.queryByRole("alert")).toBeNull();
+  });
+});
+
+describe("Os tetos do corpo", () => {
+  /** Uma conversa já no teto, guardada na sessão para a tela montar em cima dela. */
+  function conversaNoTeto() {
+    const messages: MensagemDoChat[] = Array.from({ length: LIMITE_DE_MENSAGENS }, (_, i) => ({
+      role: i % 2 === 0 ? "assistant" : "user",
+      content: `fala ${i}`,
+    }));
+    window.sessionStorage.setItem(CHAVE_DA_SESSAO, JSON.stringify({ messages, rascunho: RASCUNHO_VAZIO }));
+  }
+
+  it("a caixa de mensagem não deixa passar do teto de caracteres", () => {
+    // O 422 do pydantic traz `detail` em LISTA, e o alerta mostraria JSON cru:
+    // quem cola um texto longo tem que ser barrado antes da viagem.
+    montar();
+
+    expect((screen.getByLabelText("Mensagem") as HTMLTextAreaElement).maxLength).toBe(LIMITE_DA_MENSAGEM);
+  });
+
+  it("no teto de mensagens, a tela para de mandar e diz o que fazer", async () => {
+    conversaNoTeto();
+    montar();
+
+    await waitFor(() => expect((screen.getByLabelText("Mensagem") as HTMLTextAreaElement).disabled).toBe(true));
+    expect(screen.getByText(CONVERSA_NO_TETO)).toBeTruthy();
+    expect((screen.getByRole("button", { name: "Enviar" }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it("uma mensagem antes do teto, a conversa segue normalmente", async () => {
+    // O par de presença: uma tela travada desde sempre passaria no teste acima.
+    const messages: MensagemDoChat[] = Array.from({ length: LIMITE_DE_MENSAGENS - 1 }, (_, i) => ({
+      role: i % 2 === 0 ? "assistant" : "user",
+      content: `fala ${i}`,
+    }));
+    window.sessionStorage.setItem(CHAVE_DA_SESSAO, JSON.stringify({ messages, rascunho: RASCUNHO_VAZIO }));
+    montar();
+
+    await waitFor(() => expect((screen.getByLabelText("Mensagem") as HTMLTextAreaElement).disabled).toBe(false));
+    expect(screen.queryByText(CONVERSA_NO_TETO)).toBeNull();
+
+    await falar("a última que cabe");
+
+    // O corpo sai com 40 mensagens cravadas, que é o que o backend aceita.
+    expect((doChat()[0].corpo?.messages as unknown[]).length).toBe(LIMITE_DE_MENSAGENS);
   });
 });
 
@@ -306,6 +383,24 @@ describe("O painel do rascunho", () => {
 
     const opcoes = within(screen.getByRole("listbox")).getAllByRole("option");
     expect(opcoes.map((o) => o.textContent)).toEqual(["Ana", "POPs"]);
+  });
+
+  it("sem Tipo escolhido, a tela diz com que Tipo a Demanda vai nascer", async () => {
+    // O botão libera com título e Produto, e a rota de criação exige um Tipo:
+    // quem cria sem conversar precisa LER qual vai, em vez de descobrir no
+    // card depois.
+    montar();
+
+    expect(screen.getByText(/nasce como Informação/)).toBeTruthy();
+  });
+
+  it("com Tipo escolhido, a frase some", async () => {
+    // O par do teste acima: uma frase cravada na tela passaria naquele.
+    montar();
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() => expect(screen.queryByText(/nasce como Informação/)).toBeNull());
   });
 
   it("vem antes do chat no DOM, que é o que o põe no topo no celular", () => {

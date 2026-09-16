@@ -95,6 +95,19 @@ describe("O gate da página", () => {
     expect(screen.queryByLabelText("Mensagem")).toBeNull();
   });
 
+  it("enquanto o perfil não chegou, a tela não desenha o assistente", () => {
+    // O hook nasce carregando e leva duas idas à rede. Desenhar e esconder
+    // depois deixaria a caixa de mensagem à mão de quem não é Super admin
+    // justamente na janela que o gate existe para fechar, e o layout de
+    // `/admin` deixa entrar qualquer papel.
+    perfil.loading = true;
+    perfil.participante = null;
+    montar();
+
+    expect(screen.queryByLabelText("Mensagem")).toBeNull();
+    expect(screen.queryByText(/Sem acesso à aba Tecnologia/)).toBeNull();
+  });
+
   it("o Super admin alcança", () => {
     // O par de presença: uma página que recusasse todo mundo passaria no teste
     // acima sozinha.
