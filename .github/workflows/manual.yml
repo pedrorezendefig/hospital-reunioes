@@ -38,8 +38,10 @@ jobs:
       - name: Lint travessão (docs/manual)
         # Mesma trava do ci.yml para os templates do backend (ADR 0013). Os
         # caracteres entram por \x{...} para não existir literal nenhum aqui.
+        # `-I` pula arquivo binário: os prints .png do manual antigo casam a
+        # sequência de bytes por acaso e travariam o CI por nada.
         run: |
-          if grep -rPln '[\x{2014}\x{2013}]' docs/manual/; then
+          if grep -rIPln '[\x{2014}\x{2013}]' docs/manual/ --exclude-dir=node_modules --exclude-dir=dist; then
             echo "::error::Travessão (U+2014) ou meia-risca (U+2013) nos arquivos acima. Use vírgula, dois-pontos ou hífen (ADR 0013)."
             exit 1
           fi
