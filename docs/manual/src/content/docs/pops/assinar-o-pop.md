@@ -30,9 +30,10 @@ que você recebe da ClickSign.
 ## Se der errado
 
 - **O email não chegou:** confirme com o Superadmin se o seu endereço está
-  certo no cadastro. É para ele que o documento é enviado.
+  certo no cadastro, porque é para ele que o documento sai. Corrigir o cadastro
+  não faz o documento ser enviado de novo.
 - **Você é a mesma pessoa em dois papéis do POP:** você assina uma vez só. O
   sistema não pede duas assinaturas da mesma pessoa.
 - **Todo mundo assinou e o POP continua Em Assinatura:** a mudança de estado
-  chega alguns instantes depois da última assinatura. Se demorar muito, avise o
-  Superadmin: reenviar o documento ainda não é coisa que se faça pela tela.
+  chega alguns instantes depois da última assinatura. Se demorar muito, avise
+  quem cuida da plataforma: reenviar o documento não tem botão em tela nenhuma.

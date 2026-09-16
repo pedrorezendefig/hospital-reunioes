@@ -30,8 +30,13 @@ import sys
 import urllib.error
 import urllib.request
 from pathlib import Path
+from typing import TYPE_CHECKING
 
-from playwright.sync_api import Page, sync_playwright
+# O Playwright só é preciso para capturar: `--semear` e a guarda que protege o
+# banco rodam sem ele, e é isso que deixa o teste da guarda importar este
+# arquivo numa máquina sem navegador instalado.
+if TYPE_CHECKING:
+    from playwright.sync_api import Page
 
 # Tela de trabalho sentada: POPs se usa no computador, não no corredor.
 COMPUTADOR = {"width": 1440, "height": 900}
@@ -515,6 +520,8 @@ def main() -> int:
     saida = Path(args.saida)
     saida.mkdir(parents=True, exist_ok=True)
     escolhidos = [args.escolhido] if args.escolhido else sorted(PRINTS)
+
+    from playwright.sync_api import sync_playwright
 
     with sync_playwright() as p:
         navegador = p.chromium.launch()

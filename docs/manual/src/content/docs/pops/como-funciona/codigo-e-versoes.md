@@ -33,8 +33,13 @@ datas e os nomes de quem assinou.
 ## A periodicidade de revisão
 
 Na elaboração, escolhe-se de quanto em quanto tempo o POP deve ser revisto: 3
-meses, 6 meses, 1 ano ou 2 anos. A contagem começa na assinatura.
+meses, 6 meses, 1 ano ou 2 anos. A escolha fica gravada no POP e aparece na
+**Ficha do POP**, na Biblioteca, como "Revisão a cada 6 meses".
 
-Vencido o prazo, o procedimento continua na Biblioteca e continua acessível. O
-que muda é que ele passa a pedir uma revisão, e revisar significa abrir uma
-Versão nova, ainda que o conteúdo não mude nada.
+**Hoje o sistema não faz conta com esse intervalo.** Ele não mostra data de
+próxima revisão, não muda a cor de nada, não avisa ninguém quando o prazo
+passa. O campo diz de quanto em quanto tempo o hospital combinou revisar aquele
+procedimento, e acompanhar isso é trabalho de quem cuida da qualidade.
+
+Rever um POP significa abrir uma Versão nova, que percorre o caminho inteiro de
+novo, ainda que o conteúdo não mude nada.
