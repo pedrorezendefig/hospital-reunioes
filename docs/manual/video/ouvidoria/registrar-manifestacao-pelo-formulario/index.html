@@ -1,0 +1,287 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · Ouvidoria · Registrar uma manifestação pelo formulário</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "ouvidoria",
+ "slug": "registrar-manifestacao-pelo-formulario",
+ "pagina": "ouvidoria/registrar-manifestacao-pelo-formulario.md",
+ "prd": 731,
+ "issues": [736],
+ "app_version": "0.136.0",
+ "gerado_em": "2026-09-16T00:20:00-03:00"
+}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* Palco desenhado em 960x540 e ampliado 2x, como nas outras composições:
+     os tamanhos do app cabem em px pequenos e saem nítidos em 1080p. */
+  .palco { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #EEF1F6; }
+
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 78px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
+  .selo-abertura { margin-top: 40px; display: inline-flex; gap: 14px; }
+  .selo-abertura span { border: 2px solid var(--app-border); border-radius: 999px; padding: 10px 26px; font-size: 26px; font-weight: 700; color: var(--app-sec); }
+  .selo-abertura span.destaque { border-color: var(--navy); color: var(--navy); background: #F5F6FE; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  /* ===== celular ===== */
+  .fone { position: absolute; width: 244px; height: 496px; border-radius: 26px; background: #fff; border: 5px solid #12141d; box-shadow: 0 26px 60px -20px rgba(0,0,0,.5); overflow: hidden; }
+  .fone .tela { position: absolute; inset: 0; overflow: hidden; background: #fff; }
+  .fone .rolo { position: absolute; left: 0; top: 0; width: 100%; }
+
+  .pub { padding: 12px 13px 16px; background: #fff; }
+  .pub .marca { display: flex; flex-direction: column; align-items: center; gap: 3px; margin-bottom: 9px; }
+  .pub h1 { font-size: 13px; font-weight: 700; color: #0F172A; text-align: center; }
+  .pub .dek { font-size: 7.8px; color: var(--app-sec); text-align: center; line-height: 1.5; margin: 4px 0 10px; }
+  .pub .cartao { border: 1px solid var(--app-border); border-radius: 9px; padding: 10px 11px; }
+  .pub .lb { font-size: 8px; font-weight: 700; color: #334155; margin: 9px 0 4px; }
+  .pub .lb span { font-weight: 400; color: #667083; }
+  .nat { display: grid; grid-template-columns: 1fr 1fr; gap: 5px; }
+  .nat div { border: 1px solid var(--app-border); border-radius: 7px; padding: 7px 4px; text-align: center; font-size: 8.4px; font-weight: 700; color: #334155; background: #fff; }
+  .pub .nota { font-size: 6.6px; color: #667083; margin-top: 4px; line-height: 1.45; }
+  .pub .ta { min-height: 66px; border: 1px solid var(--app-border); border-radius: 7px; padding: 7px 8px; font-size: 8px; line-height: 1.55; color: #334155; }
+  .pub .cont { font-size: 6.6px; color: #667083; text-align: right; margin-top: 3px; }
+  .pub .anon { display: flex; gap: 5px; align-items: flex-start; margin: 9px 0; border: 1px solid transparent; border-radius: 7px; padding: 4px 5px; }
+  .pub .anon .qd { width: 8px; height: 8px; border-radius: 2px; border: 1.3px solid #94A3B8; flex-shrink: 0; margin-top: 1px; }
+  .pub .anon b { font-size: 7.6px; color: #334155; }
+  .pub .anon p { font-size: 6.6px; color: #667083; margin-top: 1px; line-height: 1.4; }
+  .pub .inp { height: 20px; border: 1px solid var(--app-border); border-radius: 7px; display: flex; align-items: center; padding: 0 8px; font-size: 8px; color: #334155; }
+  .pub .enviar { margin-top: 11px; height: 24px; border-radius: 7px; background: #8286BC; color: #fff; font-size: 8.6px; font-weight: 700; display: flex; align-items: center; justify-content: center; gap: 5px; }
+  .pub .rod { font-size: 6.4px; color: #667083; text-align: center; margin-top: 6px; line-height: 1.45; }
+
+  .recibo { padding: 26px 16px; display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; }
+  .recibo .ok { width: 40px; height: 40px; border-radius: 50%; background: #ECFDF3; color: #15803D; display: flex; align-items: center; justify-content: center; }
+  .recibo h2 { font-size: 12px; font-weight: 700; color: #0F172A; }
+  .recibo p { font-size: 8px; color: var(--app-sec); line-height: 1.55; }
+  .recibo .cx { border: 1px solid var(--app-border); background: #F8FAFC; border-radius: 9px; padding: 10px 20px; width: 100%; }
+  .recibo .cx .k { font-size: 6.8px; font-weight: 700; letter-spacing: .1em; text-transform: uppercase; color: #667083; }
+  .recibo .cx .p { font-family: ui-monospace, Menlo, monospace; font-size: 19px; font-weight: 700; color: #0F172A; margin-top: 3px; }
+
+  /* ===== dedo fantasma ===== */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+
+  /* ===== passo, do lado do celular ===== */
+  .passo { position: absolute; left: 356px; width: 542px; opacity: 0; }
+  .passo .n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
+  .passo h3 { font-size: 25px; line-height: 1.25; color: var(--navy); font-weight: 700; margin: 12px 0 8px; }
+  /* Um tom mais escuro que o secundário do app: o texto do passo é legenda de
+     vídeo, lida de longe, e precisa passar no contraste 4.5:1. */
+  .passo p { font-size: 17px; line-height: 1.5; color: #606F86; }
+  .passo b { color: var(--app-text); }
+  .marcador { position: absolute; border: 1.5px solid var(--navy); border-radius: 8px; box-shadow: 0 0 0 3px rgba(43,46,126,.14); opacity: 0; z-index: 30; }
+</style>
+</head>
+<body>
+
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="42" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Manual · Ouvidoria</div>
+    <h1 class="titulo" id="ab-titulo">Registrar uma manifestação pelo formulário</h1>
+    <p class="sub" id="ab-sub">Do relato ao protocolo, na mesma tela.</p>
+    <div class="selo-abertura" id="ab-selos"><span class="destaque">Qualquer pessoa</span><span>Sem login</span></div>
+  </section>
+
+  <!-- 2 · A tarefa, passo a passo, no celular -->
+  <section id="c-tarefa" class="clip scene" data-start="4" data-duration="33" data-track-index="2">
+    <div class="palco" id="palco-tarefa"></div>
+  </section>
+
+  <!-- 3 · Fecho -->
+  <section id="c-fecho" class="clip scene slide" data-start="37" data-duration="5" data-track-index="3">
+    <div class="fecho-titulo" id="fc-titulo">Registrar uma manifestação pelo formulário</div>
+    <div class="carimbo" id="fc-carimbo">Manual · retrata o app em v0.136.0 · gerado em 16/09/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da plataforma</div>
+  </section>
+
+</div>
+
+<script>
+/* Ícones no traço do app (mesma biblioteca das outras composições) */
+function ic(nome, s, cls) {
+  const P = {
+    checkc: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+    aviao: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+    pessoa: '<circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 0 0-16 0"/>'
+  };
+  return `<svg width="${s}" height="${s}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="${cls || ""}" style="flex-shrink:0">${P[nome]}</svg>`;
+}
+
+function logo(w) {
+  const h = Math.round(w * 0.42);
+  return `<svg width="${w}" height="${h}" viewBox="0 0 100 42" fill="none" style="flex-shrink:0">
+    <path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/>
+    <path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/>
+  </svg>`;
+}
+
+function marca(w, cor) {
+  return `${logo(w)}<div style="font-size:${Math.round(w*0.115)}px;font-weight:700;color:${cor || "#1E3A8A"};line-height:1.12;text-align:center;letter-spacing:.01em">HOSPITAL<br>SÃO MATHEUS</div>`;
+}
+
+const RELATO = "Fui muito bem atendida na recepção da Farmácia hoje de manhã. A atendente explicou com calma como retirar o medicamento e ainda conferiu a receita comigo. Queria registrar o elogio.";
+
+const passo = (n, num, titulo, texto, topo) =>
+  `<div class="passo" id="${n}" style="top:${topo}px"><div class="n">${num}</div><h3>${titulo}</h3><p>${texto}</p></div>`;
+
+document.getElementById("palco-tarefa").innerHTML =
+  `<div style="position:absolute;inset:0;background:#EEF1F6"></div>
+  <div class="fone" data-layout-allow-overflow data-layout-allow-occlusion id="fone" style="left:66px;top:22px">
+    <div class="tela" data-layout-allow-overflow data-layout-allow-occlusion>
+      <div class="rolo" data-layout-allow-overflow data-layout-allow-occlusion id="rolo">
+        <div class="pub" data-layout-allow-overflow data-layout-allow-occlusion>
+          <div class="marca">${marca(56)}</div>
+          <h1>Ouvidoria</h1>
+          <div class="dek">Reclamação, elogio ou sugestão: conte para a gente e receba seu protocolo na hora.</div>
+          <div class="cartao">
+            <div class="lb">O que você quer registrar? <span>(opcional)</span></div>
+            <div class="nat"><div id="nat-elogio">Elogio</div><div>Reclamação</div><div>Sugestão</div><div>Informação</div></div>
+            <div class="nota">Não precisa escolher. A Ouvidoria confirma isso ao ler seu relato.</div>
+            <div class="lb">O que aconteceu?</div>
+            <div class="ta" id="ta" style="position:relative">
+              <div id="ta-vazio" style="color:#667083">Conte com suas palavras o que você quer registrar: uma reclamação, um elogio ou uma sugestão.</div>
+              <div id="ta-cheio" style="position:absolute;left:8px;right:8px;top:7px;opacity:0">${RELATO}</div>
+            </div>
+            <div class="cont"><span id="cont-0">0 / 10000</span><span id="cont-1" style="display:none">181 / 10000</span></div>
+            <div class="anon" id="anon"><div class="qd"></div><div><b>Quero registrar de forma anônima.</b><p>Sem identificação não conseguimos dar retorno individual a você.</p></div></div>
+            <div class="lb">Seu nome <span>(opcional)</span></div>
+            <div class="inp" id="nome"><span id="nome-t" style="opacity:0">Marina Alves</span></div>
+            <div class="lb">Telefone ou email <span>(opcional)</span></div>
+            <div class="inp" id="contato"><span id="contato-t" style="opacity:0">marina.alves@exemplo.com</span></div>
+            <div class="nota">É por aqui que a Ouvidoria fala com você sobre este caso.</div>
+            <div class="enviar" id="enviar">${ic("aviao", 10)} Enviar manifestação</div>
+            <div class="rod">Ao enviar, você recebe o número do protocolo nesta tela.</div>
+          </div>
+        </div>
+      </div>
+      <div class="recibo" id="recibo" style="position:absolute;inset:0;background:#fff;display:none;opacity:0">
+        <div class="ok">${ic("checkc", 22)}</div>
+        <h2>Manifestação registrada</h2>
+        <p>A Ouvidoria já recebeu o seu relato e vai analisar.</p>
+        <div class="cx"><div class="k">Protocolo</div><div class="p">2026-0042</div></div>
+        <p>Guarde este número. É por ele que a Ouvidoria acompanha o seu caso.</p>
+      </div>
+    </div>
+  </div>
+  <div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-natureza" style="left:92px;top:174px;width:192px;height:62px"></div>
+  <div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-anon" style="left:92px;top:350px;width:192px;height:48px"></div>
+  <div class="ghost" data-layout-allow-overlap data-layout-allow-occlusion id="g1">${ic("pessoa", 0)}<svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>` +
+  passo("p1", 1, "Abra o formulário", "Pelo QR do cartaz do setor ou pelo link do site do hospital. Você não precisa de conta nem de senha.", 60) +
+  passo("p2", 2, "Escolha o que você quer registrar", "<b>Elogio</b>, <b>Reclamação</b>, <b>Sugestão</b> ou <b>Informação</b>. Este passo é opcional: a Ouvidoria confirma isso ao ler o seu relato.", 60) +
+  passo("p3", 3, "Conte o que aconteceu", "Escreva com as suas palavras em <b>O que aconteceu?</b>. Este é o único campo obrigatório.", 60) +
+  passo("p4", 4, "Decida se quer se identificar", "Marque <b>Quero registrar de forma anônima</b> para não se identificar. Sem identificação, a Ouvidoria não tem como dar retorno a você.", 60) +
+  passo("p5", 5, "Preencha nome e contato", "<b>Seu nome</b> e <b>Telefone ou email</b>. É por aí que a Ouvidoria fala com você sobre este caso.", 60) +
+  passo("p6", 6, "Envie e guarde o protocolo", "Clique em <b>Enviar manifestação</b>. O número do protocolo aparece nesta mesma tela.", 60);
+
+/* ============================================================
+   Timeline: uma só, pausada, com tempos absolutos
+   ============================================================ */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const nota = (sel, t, ate) => { surge(sel, t, 14); some(sel, ate); };
+const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
+const move = (g, t, x, y, dx, dy) => {
+  tl.set(g, { x: x, y: y, opacity: 1 }, t);
+  tl.to(g, { x: dx, y: dy, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+};
+const aperta = (sel, t) => tl.to(sel, { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, t);
+const digita = (vazio, cheio, campo, t) => {
+  tl.to(vazio, { opacity: 0, duration: 0.15 }, t);
+  tl.to(cheio, { opacity: 1, duration: 0.22 }, t + 0.15);
+  if (campo) tl.to(campo, { borderColor: "#2B2E7E", duration: 0.2 }, t);
+};
+
+/* 1 · Abertura (0 a 4) */
+surge("#ab-eyebrow", 0.25, 22);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.5);
+surge("#ab-sub", 1.1, 22);
+surge("#ab-selos", 1.6, 18);
+
+/* 2 · A tarefa (4 a 37) */
+tl.fromTo("#fone", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 4.2);
+
+/* passo 1: a tela abre */
+nota("#p1", 4.9, 8.6);
+
+/* passo 2: escolher a natureza */
+nota("#p2", 8.9, 13.4);
+tl.fromTo("#mk-natureza", { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, 9.2);
+move("#g1", 9.6, 210, 230, 132, 182);
+clique("#g1", 10.6);
+tl.to("#nat-elogio", { borderColor: "#2B2E7E", backgroundColor: "#F5F6FE", color: "#2B2E7E", duration: 0.3 }, 10.7);
+tl.to("#mk-natureza", { opacity: 0, duration: 0.3 }, 11.4);
+
+/* passo 3: o relato */
+nota("#p3", 13.7, 19.0);
+move("#g1", 13.9, 132, 182, 150, 285);
+clique("#g1", 14.8);
+digita("#ta-vazio", "#ta-cheio", "#ta", 15.0);
+tl.set("#cont-0", { display: "none" }, 15.5);
+tl.set("#cont-1", { display: "inline" }, 15.5);
+tl.to("#enviar", { backgroundColor: "#2B2E7E", duration: 0.4 }, 16.2);
+tl.to("#g1", { opacity: 0, duration: 0.25 }, 16.6);
+
+/* passo 4: identificar-se ou não */
+nota("#p4", 19.3, 24.0);
+tl.fromTo("#mk-anon", { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, 19.8);
+tl.to("#anon", { borderColor: "#2B2E7E", duration: 0.35 }, 19.8);
+tl.to("#anon", { borderColor: "rgba(0,0,0,0)", duration: 0.35 }, 22.6);
+tl.to("#mk-anon", { opacity: 0, duration: 0.3 }, 22.6);
+
+/* passo 5: nome e contato */
+nota("#p5", 24.3, 28.6);
+tl.to("#rolo", { y: -74, duration: 0.9, ease: "power2.inOut" }, 24.6);
+tl.to("#nome-t", { opacity: 1, duration: 0.3 }, 25.8);
+tl.to("#contato-t", { opacity: 1, duration: 0.3 }, 26.6);
+
+/* passo 6: enviar e guardar o protocolo */
+nota("#p6", 28.9, 36.2);
+move("#g1", 29.2, 232, 500, 150, 438);
+clique("#g1", 30.1);
+aperta("#enviar", 30.1);
+tl.to("#rolo", { opacity: 0, duration: 0.3 }, 30.5);
+tl.to("#g1", { opacity: 0, duration: 0.25 }, 30.5);
+tl.set("#recibo", { display: "flex" }, 30.8);
+tl.to("#recibo", { opacity: 1, duration: 0.45 }, 30.85);
+
+/* 3 · Fecho (37 a 42) */
+surge("#fc-titulo", 37.3, 18);
+surge("#fc-carimbo", 37.8, 14);
+surge("#fc-org", 38.2, 12);
+
+window.__timelines.main = tl;
+</script>
+</body>
+</html>
