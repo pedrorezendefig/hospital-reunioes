@@ -29,8 +29,8 @@ aparece no seu menu.
 colegas abrem a mesma plataforma e veem menus diferentes, e isso é esperado.
 
 **Participante** é toda pessoa cadastrada, com conta ou sem conta. Quem é
-citado numa reunião ou fica responsável por uma pendência não precisa ter
-conta: recebe o que é dele por email, com um link direto.
+citado numa reunião ou fica responsável por uma ação não precisa ter conta para
+aparecer na plataforma.
 
 ## Quem entra e quem não entra
 
@@ -38,12 +38,15 @@ Nem todo mundo que aparece na plataforma precisa entrar nela.
 
 - **Quem entra** é quem conduz o trabalho: Facilitador, Secretária, quem cuida
   da Gestão de POPs, quem cuida da Ouvidoria e o Super admin.
-- **Quem não entra** é quem só é citado ou fica responsável por alguma coisa.
-  Essa pessoa recebe o email da assinatura, o link do aceite da ata ou o link
-  da pendência dela, e resolve por ali, sem conta e sem senha.
+- **Quem não entra** é quem só é citado numa reunião ou fica responsável por
+  uma ação. Essa pessoa recebe o convite da reunião por email e, quando a ata
+  vai a assinatura, o email de assinar. Quem precisa aceitar uma ata ganha um
+  link que abre a ata inteira sem pedir senha.
 
-Se você recebeu um link por email e ele abriu direto, sem pedir senha, é por
-isso: aquela tela é feita para ser aberta sem entrar na plataforma.
+As telas que abrem sem conta são poucas e todas chegam por link ou QR: o aceite
+da ata, o formulário da Ouvidoria e as telas em que uma área responde ou
+acompanha um caso da Ouvidoria. Neste manual elas levam o selo **Sem login**.
+Fora delas, tudo pede email e senha.
 
 ## O caminho do seu primeiro dia
 

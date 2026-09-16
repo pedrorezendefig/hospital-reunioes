@@ -3,7 +3,7 @@ title: Mover as pendências no kanban
 description: Arrastar o cartão de uma coluna para outra e mudar o estado num gesto.
 prd: [731]
 draft: false
-papel: [Facilitador, Secretária]
+papel: [Facilitador]
 sidebar:
   order: 10
 ---

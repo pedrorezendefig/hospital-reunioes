@@ -3,7 +3,7 @@ title: Acompanhar as pendências na lista
 description: Filtrar, ler e mudar o estado das pendências numa tabela só.
 prd: [731]
 draft: false
-papel: [Facilitador, Secretária]
+papel: [Facilitador]
 sidebar:
   order: 9
 ---
@@ -19,7 +19,7 @@ esta semana, o que está com cada setor.
 2. Abra **Filtros Dinâmicos** e escolha o recorte: **Facilitador**, o
    **Status**, ou um intervalo em **A partir de** e **Até**.
 3. Para ver só o que aperta, ligue **Críticas**: ficam as que vencem em até
-   três dias.
+   três dias e todas as atrasadas, de qualquer data.
 4. Leia a tabela: **Ação / Tarefa**, **Responsável**, **Setor**, **Reunião**,
    **Prazo** e **Status**.
 5. Para mudar o estado, clique no selo colorido da coluna **Status** e escolha

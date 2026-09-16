@@ -22,7 +22,8 @@ cancelada.
 aprova e envia para assinatura. É ele que entra na plataforma.
 
 **Participante** é quem foi chamado para a reunião. Nem todo participante entra
-na plataforma: muitos só recebem email e link.
+na plataforma: quem não tem conta recebe o convite da reunião por email e, se
+tiver que assinar a ata, o email da assinatura.
 
 **Transcrição** é o texto do que foi falado na reunião. É o que você anexa para
 a ata sair pronta.
@@ -36,8 +37,10 @@ conversa com o assistente da plataforma.
 **Pendência** é cada ação do quadro da ata virada compromisso de alguém, com
 responsável e prazo. É ela que aparece na lista, no quadro e nas cobranças.
 
-**Repactuação** é remarcar o prazo de uma pendência. A nova nasce e a antiga
-fica no histórico, marcada como **Repactuada**.
+**Repactuada** é o estado de quem perdeu o prazo combinado e vai receber outro.
+Marcar uma pendência como Repactuada apaga a data dela, e a data nova você
+escreve na mesma pendência. É a mesma linha o tempo todo, com o histórico de
+comentários intacto.
 
 ## Dois caminhos para a mesma ata
 

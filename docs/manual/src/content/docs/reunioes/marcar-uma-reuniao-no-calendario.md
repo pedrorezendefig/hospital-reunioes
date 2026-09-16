@@ -10,28 +10,27 @@ sidebar:
 
 ## Quando usar
 
-Quando a reunião já tem data e você quer reservá-la e avisar quem vai. Quem
-marca reunião para outra pessoa conduzir usa
+Quando a reunião já tem data e você quer reservá-la e avisar quem vai. Para
+marcar a reunião de outra pessoa, use
 [Marcar a reunião de um facilitador](/reunioes/marcar-a-reuniao-de-um-facilitador/).
 
 ## Passo a passo
 
-1. No menu, abra **Reuniões e metas** e clique em **Calendário**.
+1. No menu, clique em **Calendário**. Quem conduz reuniões acha ele dentro do
+   grupo **Reuniões e metas**; na Secretaria ele fica solto no menu.
 2. Clique no dia em que a reunião vai acontecer. A janela **Agendar Reunião**
    abre já com a data preenchida.
 3. Escreva o **Título** e confira a **Data**. Em **Tipo**, escolha
    **Diretoria**, **Gerencial**, **Coordenação**, **Mensal** ou
    **Extraordinária**.
-4. Em **Horário da Reunião**, escolha a hora de início. Em **Pauta (opcional)**,
-   escreva o que vai ser tratado.
+4. Em **Horário da Reunião**, escolha a hora de início, e escreva o que vai ser
+   tratado em **Pauta (opcional)**.
 5. Em **Participantes**, procure cada pessoa em **Buscar participante...** e
    clique no nome para incluir.
 6. Clique em **Agendar Reunião**. Os participantes recebem o convite por email
    assim que ela é salva.
 
-Se a reunião se repete toda semana ou a cada quinze dias, abra a reunião
-recém-criada, clique em **Recorrência**, depois em **Configurar**, e a
-plataforma cria as próximas com os mesmos detalhes.
+Reunião que se repete: abra ela e use **Recorrência**, depois **Configurar**.
 
 ## Se der errado
 

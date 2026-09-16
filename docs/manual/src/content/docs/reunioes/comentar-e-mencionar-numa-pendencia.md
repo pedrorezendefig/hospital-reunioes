@@ -3,7 +3,7 @@ title: Comentar e mencionar numa pendência
 description: Registrar o andamento na própria pendência e chamar alguém pelo nome.
 prd: [731]
 draft: false
-papel: [Facilitador, Secretária]
+papel: [Facilitador]
 sidebar:
   order: 11
 ---

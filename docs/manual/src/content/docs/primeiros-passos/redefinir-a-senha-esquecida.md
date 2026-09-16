@@ -34,6 +34,6 @@ ninguém precisa gerar senha nova para você.
   certo e tente de novo.
 - **A tela mostra Link inválido:** o aviso explica que o link expirou ou já foi
   usado. Clique em **Solicitar novo link** e repita o pedido.
-- **A tela recusa a senha:** ela avisa **A senha deve ter no mínimo 8
-  caracteres** ou **As senhas não coincidem**. Escreva uma senha mais longa, ou
-  repita a mesma nos dois campos.
+- **A tela recusa a senha:** ela avisa **A senha deve ter pelo menos 8
+  caracteres.** ou **As senhas não coincidem. Verifique e tente novamente.**
+  Escreva uma senha mais longa, ou repita a mesma nos dois campos.

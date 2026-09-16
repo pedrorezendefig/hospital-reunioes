@@ -23,13 +23,17 @@ enxerga mais de umas coisas e menos de outras.
 
 ## O que ela não vê
 
-A Secretária não monta ata. Quando ela abre uma reunião, vê a agenda e os
-participantes, e as seções da ata ficam escondidas.
+A Secretária não monta ata nem acompanha pendência. Quando ela abre uma
+reunião, vê a agenda e os participantes, e as seções da ata ficam escondidas.
 
 - Não anexa transcrição.
 - Não inicia a Ata Guiada. A tela avisa **Sem acesso à Ata Guiada** e explica
   que a montagem da ata é do Facilitador.
 - Não aprova, não envia para assinatura e não finaliza sem assinatura.
+- **Não vê pendência nenhuma**, nem na lista, nem no quadro, nem o painel de
+  desempenho. O menu dela não tem o grupo **Reuniões e metas**, e o servidor
+  recusa o acesso mesmo por link direto.
+- **Não comenta nem menciona** numa pendência, pelo mesmo motivo.
 - Não tem **Dashboard**: o menu dela abre em **Início**.
 
 ## Por que a divisão é essa
@@ -37,7 +41,7 @@ participantes, e as seções da ata ficam escondidas.
 A ata é o documento pelo qual o Facilitador responde. Quem prepara a reunião
 cuida do que vem antes (data, sala, pessoas, pauta) e do que precisa ser
 corrigido depois (participante que faltou, nome errado). Quem conduziu é quem
-assume o que ficou escrito.
+assume o que ficou escrito, e quem cobra o que saiu dali.
 
 ## E o Super admin
 
