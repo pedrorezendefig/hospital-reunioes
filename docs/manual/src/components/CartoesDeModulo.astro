@@ -18,14 +18,15 @@ const { modulos } = Astro.props;
 const paginas = await getCollection("docs");
 
 function destino(pasta: string) {
+  // O `id` do Starlight é o endereço da página, não o caminho do arquivo: a
+  // Visão geral (`<modulo>/index.md`) tem `id` igual ao nome da pasta, sem
+  // `/index`. Sem o primeiro caso, um módulo cuja única página publicada fosse
+  // a Visão geral ficaria com o cartão sem link para sempre.
   const doModulo = paginas
-    .filter((p) => p.id.startsWith(`${pasta}/`) && !p.data.draft)
+    .filter((p) => (p.id === pasta || p.id.startsWith(`${pasta}/`)) && !p.data.draft)
     .sort((a, b) => (a.data.sidebar?.order ?? 99) - (b.data.sidebar?.order ?? 99));
   if (doModulo.length === 0) return null;
-  const primeira = doModulo[0]!;
-  return primeira.id.endsWith("/index")
-    ? `/${pasta}/`
-    : `/${primeira.id}/`;
+  return `/${doModulo[0]!.id}/`;
 }
 
 const cartoes = modulos.map((m) => ({ ...m, href: destino(m.pasta) }));

@@ -41,8 +41,19 @@ jobs:
         # `-I` pula arquivo binário: os prints .png do manual antigo casam a
         # sequência de bytes por acaso e travariam o CI por nada.
         run: |
-          if grep -rIPln '[\x{2014}\x{2013}]' docs/manual/ --exclude-dir=node_modules --exclude-dir=dist; then
+          set +e
+          grep -rIPln '[\x{2014}\x{2013}]' docs/manual/ --exclude-dir=node_modules --exclude-dir=dist
+          STATUS=$?
+          set -e
+          # O grep sai 0 quando acha, 1 quando não acha e 2 quando falha (regex
+          # inválida, PCRE sem UTF, caminho que sumiu). Sem separar o 2, o passo
+          # ficaria verde sobre uma varredura que não rodou.
+          if [ "$STATUS" -eq 0 ]; then
             echo "::error::Travessão (U+2014) ou meia-risca (U+2013) nos arquivos acima. Use vírgula, dois-pontos ou hífen (ADR 0013)."
+            exit 1
+          fi
+          if [ "$STATUS" -ne 1 ]; then
+            echo "::error::A varredura de travessão falhou (grep saiu $STATUS). Conserte a varredura antes de seguir."
             exit 1
           fi
 

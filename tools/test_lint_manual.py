@@ -8,6 +8,7 @@ literal deles.
 
 from __future__ import annotations
 
+import subprocess
 import sys
 from pathlib import Path
 
@@ -15,6 +16,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 import lint_manual  # noqa: E402
 
+LINT = Path(__file__).resolve().parent / "lint_manual.py"
 TRAVESSAO = "\u2014"
 MEIA_RISCA = "\u2013"
 
@@ -128,7 +130,9 @@ def test_pagina_de_tarefa_sem_prd_trava(tmp_path):
     )
     erros, _ = lint_manual.checar(tmp_path / "src" / "content" / "docs")
     assert len(erros) == 1
-    assert "prd" in erros[0]
+    # O marcador inteiro: a cauda fixa da mensagem cita os quatro nomes, entao
+    # procurar so "prd" passaria com a lista de faltantes errada.
+    assert "frontmatter sem prd" in erros[0]
 
 
 def test_pagina_de_tarefa_sem_papel_trava(tmp_path):
@@ -139,7 +143,7 @@ def test_pagina_de_tarefa_sem_papel_trava(tmp_path):
     )
     erros, _ = lint_manual.checar(tmp_path / "src" / "content" / "docs")
     assert len(erros) == 1
-    assert "papel" in erros[0]
+    assert "frontmatter sem papel" in erros[0]
 
 
 def test_pagina_de_tarefa_sem_draft_trava(tmp_path):
@@ -150,7 +154,7 @@ def test_pagina_de_tarefa_sem_draft_trava(tmp_path):
     )
     erros, _ = lint_manual.checar(tmp_path / "src" / "content" / "docs")
     assert len(erros) == 1
-    assert "draft" in erros[0]
+    assert "frontmatter sem draft" in erros[0]
 
 
 def test_visao_geral_do_modulo_nao_precisa_de_papel(tmp_path):
@@ -199,3 +203,34 @@ def test_pagina_de_tarefa_longa_avisa_sem_travar(tmp_path):
     assert erros == []
     assert len(avisos) == 1
     assert "250" in avisos[0]
+
+
+def rodar(pasta: Path) -> subprocess.CompletedProcess[str]:
+    """O lint como o CI chama: pela linha de comando, olhando o código de saída."""
+    return subprocess.run(
+        [sys.executable, str(LINT), "--dir", str(pasta)],
+        capture_output=True,
+        text=True,
+    )
+
+
+def test_pagina_ruim_sai_com_codigo_1(tmp_path):
+    escrever(
+        tmp_path,
+        "ouvidoria/registrar-manifestacao.md",
+        PAGINA_VALIDA.replace("pelo telefone.", f"pelo telefone {TRAVESSAO} sempre."),
+    )
+    resultado = rodar(tmp_path / "src" / "content" / "docs")
+    assert resultado.returncode == 1
+    assert "Lint do Manual falhou" in resultado.stderr
+
+
+def test_site_limpo_sai_com_codigo_0(tmp_path):
+    escrever(tmp_path, "ouvidoria/registrar-manifestacao.md", PAGINA_VALIDA)
+    resultado = rodar(tmp_path / "src" / "content" / "docs")
+    assert resultado.returncode == 0, resultado.stderr
+
+
+def test_pasta_inexistente_sai_com_codigo_1(tmp_path):
+    resultado = rodar(tmp_path / "nao-existe")
+    assert resultado.returncode == 1

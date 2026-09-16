@@ -152,3 +152,31 @@ def test_video_que_a_pagina_usa_e_nao_existe_trava(tmp_path):
     resultado = publicar(saida)
     assert resultado.returncode == 1
     assert "sumido.mp4" in resultado.stdout + resultado.stderr
+
+
+def test_video_apontando_para_fora_da_publicacao_trava(tmp_path):
+    """O `src` vem do HTML: sem a recusa, o reencode gravaria fora da pasta."""
+    saida = tmp_path / "publicar"
+    saida.mkdir()
+    (saida / "index.html").write_text(
+        '<video><source src="../../fora.mp4"></video>', encoding="utf-8"
+    )
+
+    resultado = publicar(saida)
+    assert resultado.returncode == 1
+    assert "para fora da publicação" in resultado.stdout + resultado.stderr
+
+
+def test_pular_build_nao_publica_mesmo_sem_dry_run(tmp_path):
+    """Sem lint, build e conferidor, o script monta e para: não sobe nada."""
+    saida = tmp_path / "publicar"
+    saida.mkdir()
+    (saida / "index.html").write_text("<html></html>", encoding="utf-8")
+
+    resultado = subprocess.run(
+        ["bash", str(PUBLICAR), "--pular-build", "--saida", str(saida)],
+        capture_output=True,
+        text=True,
+    )
+    assert resultado.returncode == 0, resultado.stderr
+    assert "nada publicado" in resultado.stdout

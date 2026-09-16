@@ -32,6 +32,13 @@ while [ $# -gt 0 ]; do
   shift
 done
 
+# Pular o build é pular o lint, o build e o conferidor de draft: os três guardas
+# do que vai para o ar. Quem passa esta flag monta, confere e para; publicar uma
+# saída que ninguém checou sobe página com travessão, jargão ou draft no ar.
+if [ -n "$PULAR_BUILD" ]; then
+  DRY_RUN=1
+fi
+
 if [ -z "$PULAR_BUILD" ]; then
   echo "== lint do manual"
   python3 "$RAIZ/tools/lint_manual.py" --dir "$SITE/src/content/docs"
@@ -42,6 +49,14 @@ if [ -z "$PULAR_BUILD" ]; then
   echo "== conferindo o que ficou em draft"
   python3 "$RAIZ/tools/checar_build_manual.py" --dir "$SITE"
 
+  # A pasta de montagem é apagada a cada publicação. Um `--saida ~/Documents`
+  # digitado errado apagaria a pasta inteira, então só destino inexistente ou
+  # que já é uma montagem (tem index.html na raiz) pode ser apagado.
+  if [ -e "$SAIDA" ] && [ ! -f "$SAIDA/index.html" ]; then
+    echo "a pasta de saída '$SAIDA' existe e não parece uma montagem do manual." >&2
+    echo "aponte --saida para uma pasta nova ou apague a atual à mão." >&2
+    exit 1
+  fi
   rm -rf "$SAIDA"
   mkdir -p "$SAIDA"
   cp -R "$SITE/dist/." "$SAIDA/"
@@ -55,7 +70,19 @@ fi
 echo "== vídeos"
 VIDEOS=$(grep -rhoiE 'src="[^"]+\.mp4"' "$SAIDA" --include="*.html" | sed 's/^[Ss][Rr][Cc]="//; s/"$//' | sort -u || true)
 FALTANDO=""
-for caminho in $VIDEOS; do
+# `while read`, e não `for` sem aspas: o caminho vem do HTML, e o repositório é
+# público. Sem isto, um `src` com espaço quebra em dois, um `src` com `*` vira
+# glob, e `src="../../algo.mp4"` faria o `mv` gravar fora da pasta que vai ser
+# publicada. Caminho com `..` é recusado, não consertado.
+while IFS= read -r caminho; do
+  [ -n "$caminho" ] || continue
+  case "$caminho" in
+    *..*)
+      echo "vídeo com caminho para fora da publicação: $caminho" >&2
+      echo "use um endereço que comece na raiz do site, como /video/<modulo>/<slug>.mp4" >&2
+      exit 1
+      ;;
+  esac
   destino="$SAIDA/${caminho#/}"
   if [ ! -f "$destino" ]; then
     origem=$(find "$RAIZ/docs/comunicacao" -name "$(basename "$caminho")" -type f | head -1)
@@ -73,7 +100,9 @@ for caminho in $VIDEOS; do
     -vf "scale=-2:'min(720,ih)'" -c:v libx264 -preset veryfast -crf 28 \
     -movflags +faststart -c:a aac -b:a 96k "$temporario"
   mv "$temporario" "$destino"
-done
+done <<EOF
+$VIDEOS
+EOF
 if [ -n "$FALTANDO" ]; then
   echo "vídeo que a página usa e não existe nem em docs/comunicacao:$FALTANDO" >&2
   echo "renderize a composição do vídeo antes de publicar." >&2
