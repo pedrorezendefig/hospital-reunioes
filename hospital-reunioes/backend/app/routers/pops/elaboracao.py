@@ -33,7 +33,7 @@ from app.models.pops_schemas import (
 )
 from app.routers.pops.versao_view import montar_versao_response, nomes_designados
 from app.services import audit, pops_dominio, pops_email_service, storage
-from app.services.transcricao_extractor import CONTENT_TYPE_BY_EXT, extrair_texto
+from app.services.transcricao_extractor import CONTENT_TYPE_BY_EXT, extrair_texto_async
 
 logger = logging.getLogger(__name__)
 
@@ -257,7 +257,7 @@ async def enviar_materiais(
         filename = file.filename or ""
         file_bytes = await file.read()
         try:
-            texto, extensao = extrair_texto(filename, file_bytes)
+            texto, extensao = await extrair_texto_async(filename, file_bytes)
         except ValueError as e:
             erros.append(PopMaterialUploadErro(filename=filename, detail=str(e)))
             continue

@@ -1133,11 +1133,11 @@ async def anexar_transcricao(
     if allowed_ids is not None and id_reuniao not in allowed_ids:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
-    from app.services.transcricao_extractor import extrair_texto
+    from app.services.transcricao_extractor import extrair_texto_async
 
     file_bytes = await file.read()
     try:
-        texto_extraido, extensao = extrair_texto(file.filename or "", file_bytes)
+        texto_extraido, extensao = await extrair_texto_async(file.filename or "", file_bytes)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -1198,11 +1198,11 @@ async def upload_transcricao(
     if is_secretaria(me):
         raise HTTPException(status_code=403, detail="Secretária não tem acesso a atas")
 
-    from app.services.transcricao_extractor import extrair_texto
+    from app.services.transcricao_extractor import extrair_texto_async
 
     file_bytes = await file.read()
     try:
-        texto_extraido, extensao = extrair_texto(file.filename or "", file_bytes)
+        texto_extraido, extensao = await extrair_texto_async(file.filename or "", file_bytes)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
@@ -1788,11 +1788,11 @@ async def extrair_documento_apoio(
             detail="A Ata Guiada só é montada enquanto a Reunião está PROGRAMADA",
         )
 
-    from app.services.transcricao_extractor import extrair_texto
+    from app.services.transcricao_extractor import extrair_texto_async
 
     file_bytes = await file.read()
     try:
-        texto, extensao = extrair_texto(file.filename or "", file_bytes)
+        texto, extensao = await extrair_texto_async(file.filename or "", file_bytes)
     except ValueError as e:
         raise HTTPException(status_code=422, detail=str(e))
 
