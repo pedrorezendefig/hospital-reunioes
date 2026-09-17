@@ -110,9 +110,10 @@ leva `papel`.
   `references/prints.md`.
 - **Fluxograma de caminho** só em Visão geral e em Como funciona com estados
   ou desvios, um por página: fonte Mermaid em `docs/manual/fluxogramas/`, SVG
-  gerado pelo script do site em `src/assets/<modulo>/fluxo-<slug>.svg` (o
-  gerador nasce no prompt 07 de `docs/prompts/`, que registra aqui o comando).
-  Nunca em Página de tarefa.
+  gerado pelo script do site em `src/assets/<modulo>/fluxo-<slug>.svg`
+  (`node docs/manual/scripts/gerar-fluxogramas.mjs`, ou
+  `node docs/manual/scripts/gerar-fluxogramas.mjs --so <modulo>/<slug>` para
+  refazer um só). Nunca em Página de tarefa.
 - **Vídeo de tarefa**: composição HyperFrames versionada em
   `docs/manual/video/<modulo>/<slug>/`, MP4 fora do git, 30 a 60 s, mudo, com
   carimbo de geração. Vai a draft e **só o Pedro aprova**; o render final vem

@@ -1,11 +1,16 @@
 ---
 /**
- * Molde da Página de tarefa (ADR 0057, decisão 4).
+ * Molde da Página de tarefa (ADR 0057, decisões 2 e 4).
  *
  * Os selos de quem faz e o Vídeo de tarefa saem do frontmatter, desenhados
  * aqui, para o Markdown de cada página ficar só com o texto: quando usar, passo
  * a passo e se der errado. Página sem `papel` não é Página de tarefa (é Visão
  * geral, Como funciona ou Novidades) e passa direto.
+ *
+ * O corpo da Página de tarefa vai dentro de `.tarefa-corpo`, que é onde o tema
+ * numera os passos com o número grande e acomoda o Print de passo dentro do
+ * item da lista (emenda de 17/09/2026, decisão 2). Nada disso aparece no
+ * Markdown da página.
  */
 import Default from "@astrojs/starlight/components/MarkdownContent.astro";
 
@@ -39,15 +44,29 @@ function classeDoSelo(selo: string) {
   )
 }
 {
-  eTarefa &&
-    (dados.video ? (
-      <div class="tarefa-video">
-        <video controls muted playsinline preload="metadata">
-          <source src={`/video/${modulo}/${dados.video}.mp4`} type="video/mp4" />
-        </video>
-      </div>
-    ) : (
-      <p class="tarefa-video-pendente">Vídeo em produção.</p>
-    ))
+  /* Página sem vídeo publica sem dizer nada (emenda de 17/09/2026 à decisão 4):
+     o aviso "Vídeo em produção" era recado de produção na tela do usuário. A
+     lacuna continua cobrada pelo inventário da /montar-manual.
+
+     A capa é o primeiro quadro do MP4, gerada pelo `publicar.sh`. No `pnpm dev`
+     ela não existe, e o navegador simplesmente ignora um `poster` que não
+     carrega. */
 }
-<Default><slot /></Default>
+{
+  eTarefa && dados.video && (
+    <div class="tarefa-video">
+      <video
+        controls
+        muted
+        playsinline
+        preload="metadata"
+        poster={`/video/${modulo}/${dados.video}.jpg`}
+      >
+        <source src={`/video/${modulo}/${dados.video}.mp4`} type="video/mp4" />
+      </video>
+    </div>
+  )
+}
+<div class={eTarefa ? "tarefa-corpo" : undefined}>
+  <Default><slot /></Default>
+</div>

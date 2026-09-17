@@ -8,6 +8,14 @@ sempre o que o gerador produz: nunca editado à mão.
 Só entra fluxograma em Visão geral (`index.md`, "O caminho de ponta a ponta")
 e em Como funciona que descreve estados ou desvios. Nunca em Página de tarefa.
 
-O gerador e o tema de cores (`tema.json`, cores do `globals.css` do app)
-nascem no prompt `docs/prompts/07-tema-didatico.md`; os desenhos, no
-`09-fluxogramas.md`.
+Para gerar, da raiz do repositório:
+
+```bash
+node docs/manual/scripts/gerar-fluxogramas.mjs
+node docs/manual/scripts/gerar-fluxogramas.mjs --so <modulo>/<slug>
+```
+
+O gerador chama o mermaid-cli por `npx` com versão fixa (ele traz um navegador
+inteiro e não entra no `package.json`), veste o desenho com o `tema.json`
+(cores do `globals.css` do app) e recusa rótulo com travessão ou meia-risca. Os
+desenhos em si nascem no prompt `docs/prompts/09-fluxogramas.md`.
