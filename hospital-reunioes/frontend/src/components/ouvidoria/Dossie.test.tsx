@@ -15,7 +15,7 @@
  * para o que se quer provar.
  */
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { SUGESTAO_NAO_E_CLASSIFICACAO } from "@/lib/ouvidoria/natureza-informada";
@@ -183,5 +183,94 @@ describe("o Dossiê e o Paciente do caso (issue #666)", () => {
     expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
     expect(valorDaLinha("Paciente")).toBe("Maria Souza");
     expect(valorDaLinha("Quem manifestou")).toBe("Manifestação anônima");
+  });
+});
+
+/**
+ * O aviso do relato em nome de outra pessoa sem o nome do paciente
+ * (issue #662, PRD #659, ADR 0052 decisão 5).
+ *
+ * É o ponto mais barato de pegar o caso: antes de o ouvidor acionar e a área
+ * devolver por "não achei o atendimento". Sinalização pura, sem bloqueio.
+ *
+ * A frase é escrita AQUI por extenso, e não importada do componente: um teste
+ * que compara a tela com a própria constante do componente segue verde quando
+ * alguém derruba o "não" da frase ou a reescreve inteira.
+ */
+const AVISO_DO_ACOMPANHANTE_SEM_PACIENTE =
+  "Relato em nome de outra pessoa sem o nome do paciente. Confirme com o manifestante antes de acionar.";
+
+describe("o Dossiê e o aviso do acompanhante sem nome do paciente (issue #662)", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("acende o aviso quando o relato é sobre outra pessoa e ninguém disse o nome do paciente", async () => {
+    montarComDossie(
+      dossie({
+        manifestante_vinculo: "acompanhante",
+        paciente_nome: null,
+        paciente_referencia: "Leito 12, dia 9",
+      })
+    );
+
+    expect(await screen.findByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeTruthy();
+  });
+
+  it("acompanhante que disse o nome do paciente não acende o aviso", async () => {
+    montarComDossie(dossie({ manifestante_vinculo: "acompanhante", paciente_nome: "Maria Souza" }));
+
+    // Espera o caso chegar antes de afirmar a ausência: sem isto o teste
+    // passaria só porque a tela ainda estava carregando.
+    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+    expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
+  });
+
+  it("relato sobre o próprio manifestante não acende o aviso", async () => {
+    // "Sobre mim" grava o vínculo `paciente` e descarta o paciente do caso:
+    // não ter nome ali é o normal, e não uma falta.
+    montarComDossie(dossie({ manifestante_vinculo: "paciente", paciente_nome: null }));
+
+    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+    expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
+  });
+
+  it("nenhum outro vínculo acende o aviso, nem o vínculo não informado", async () => {
+    // O vínculo nulo é o caso do QR enviado por uma aba aberta antes da versão
+    // que pergunta "sobre quem" (issue #666): silêncio não é "outra pessoa".
+    for (const vinculo of ["colaborador", "terceiro", "outro", null]) {
+      montarComDossie(dossie({ manifestante_vinculo: vinculo, paciente_nome: null }));
+
+      expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+      expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
+
+      cleanup();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("CONTRAPROVA: o aviso não trava nada, o ouvidor aciona a área mesmo assim", async () => {
+    // Sem esta, um mutante que trocasse o aviso por um bloqueio passaria: a
+    // frase estaria na tela e o ato estaria indisponível.
+    montarComDossie(
+      dossie({
+        status: "em_classificacao",
+        manifestante_vinculo: "acompanhante",
+        paciente_nome: null,
+      })
+    );
+
+    await screen.findByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE);
+    const botao = screen.getByText("Validar e acionar");
+    expect((botao.closest("button") as HTMLButtonElement).disabled).toBe(false);
+
+    fireEvent.click(botao);
+
+    await waitFor(() => expect(screen.getByText(/Validar e acionar 2026-0012/)).toBeTruthy());
   });
 });

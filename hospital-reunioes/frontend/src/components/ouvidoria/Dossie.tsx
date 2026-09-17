@@ -1045,6 +1045,24 @@ export function Dossie({ protocolo, token }: DossieProps) {
             </div>
           )}
 
+          {/* Relato em nome de outra pessoa sem o nome do paciente (issue #662,
+              ADR 0052 decisão 5). Fica ao lado do "Cadastro incompleto" porque
+              é a mesma família: o caso chegou faltando o que a área vai
+              precisar. Só sinaliza, e de propósito: quem decide se aciona
+              assim mesmo é o ouvidor, e o botão continua ali. Amarelo, e não
+              azul, porque aqui há algo a CONFIRMAR com o manifestante antes de
+              o caso seguir, enquanto o cadastro incompleto se resolve na
+              própria validação. */}
+          {dossie.manifestante_vinculo === "acompanhante" && !dossie.paciente_nome && (
+            <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+              <span>
+                Relato em nome de outra pessoa sem o nome do paciente. Confirme com o
+                manifestante antes de acionar.
+              </span>
+            </div>
+          )}
+
           {/* A Devolução à Ouvidoria (issue #601, ADR 0048). Fica no topo dos
               blocos porque é o que o ouvidor tem a FAZER agora: o caso voltou
               para a fila dele esperando um despacho novo, e o motivo é o que
