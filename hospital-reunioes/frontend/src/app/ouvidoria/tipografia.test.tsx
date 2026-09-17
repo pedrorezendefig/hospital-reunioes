@@ -197,6 +197,16 @@ function linhaDe(protocolo: string): HTMLElement {
   return linha;
 }
 
+/**
+ * O painel do menu de ações da linha (issue #777). Ele sai por portal no
+ * `body` desde que o `overflow-hidden` dos cards da fila passou a recortá-lo,
+ * então procurar item de menu dentro da linha acha nada, sempre, e a asserção
+ * passa a valer vazio. O gatilho continua na linha; só o painel viaja.
+ */
+function menuDe(protocolo: string): HTMLElement {
+  return screen.getByLabelText(`Ações da manifestação ${protocolo}`);
+}
+
 /* ------------------------------------------------------------------ */
 /* O Dossiê                                                            */
 /* ------------------------------------------------------------------ */
@@ -395,7 +405,7 @@ describe("os rótulos curtos vão para caixa alta (RN-76)", () => {
     const linha = linhaDe("2026-0002");
     fireEvent.click(within(linha).getByRole("button", { name: /mais ações/i }));
 
-    const abrir = within(linha).getByRole("link", { name: /abrir manifestação/i });
+    const abrir = within(menuDe("2026-0002")).getByRole("link", { name: /abrir manifestação/i });
     expect(saiEmCaixaAlta(abrir)).toBe(true);
   });
 
