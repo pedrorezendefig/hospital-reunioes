@@ -1,0 +1,8 @@
+flowchart TD
+    A[O Facilitador fecha a ata] -->|Finalizar sem assinatura| B[Todas nascem na hora,<br/>Reunião Aprovada]
+    A -->|Enviar para assinatura| C[Aguardando assinatura]
+    C -->|assina ou aceita pelo link| D[Nascem as ações<br/>de quem firmou]
+    C -->|o Facilitador assina| E[Nascem também as<br/>de quem não assina]
+    D --> F[O documento fecha]
+    E --> F
+    F -->|nasce todo o resto| G[Assinada]

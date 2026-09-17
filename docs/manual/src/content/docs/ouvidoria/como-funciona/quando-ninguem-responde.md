@@ -11,6 +11,8 @@ A cobrança não depende de ninguém abrir tela. O sistema varre os casos aberto
 cada dez minutos e sobe uma escada de quatro degraus. Cada degrau é um e-mail
 para uma pessoa diferente.
 
+![A escada de cobrança, do lembrete ao titular até a Diretoria](../../../../assets/ouvidoria/fluxo-quando-ninguem-responde.svg)
+
 1. **Um dia útil antes de vencer:** lembrete para o titular. Ainda dá tempo de
    responder sem estourar nada.
 2. **No vencimento, sem resposta:** cobrança para o titular e para o substituto.

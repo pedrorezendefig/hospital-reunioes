@@ -52,6 +52,8 @@ pede email e senha.
 
 ## O caminho do seu primeiro dia
 
+![Os cinco passos do primeiro dia, da conta criada aos avisos](../../../assets/primeiros-passos/fluxo-caminho.svg)
+
 1. **Quem administra a plataforma cria a sua conta** e passa a você, em mãos, o
    endereço de email do acesso e uma senha. A senha vem pronta e é para ser
    trocada; nenhum email de boas-vindas chega para você.

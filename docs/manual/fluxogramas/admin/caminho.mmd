@@ -1,0 +1,8 @@
+flowchart TD
+    A[Cadastrar em Novo Usuário,<br/>com o Perfil de acesso] -->|Resetar senha| B[Entregar a senha<br/>em mãos]
+    B --> C[A pessoa entra<br/>e troca a senha]
+    C --> D{Vai cuidar de POPs<br/>ou da Ouvidoria?}
+    D -->|sim| E[Conceder Acesso aos POPs<br/>ou Acesso à Ouvidoria]
+    D -->|não| F[A pessoa usa o que<br/>o perfil dela abre]
+    E --> F
+    F -->|a pessoa sai do hospital| G[Desmarcar Ativo]

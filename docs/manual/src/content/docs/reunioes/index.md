@@ -61,6 +61,8 @@ E, no fim, dois desfechos possíveis:
 
 ## O caminho de uma ata, de ponta a ponta
 
+![O caminho da ata, de Programada até as pendências no painel](../../../assets/reunioes/fluxo-caminho.svg)
+
 1. **Alguém marca a reunião.** O Facilitador marca pelo
    [Calendário](/reunioes/marcar-uma-reuniao-no-calendario/); a Secretária
    marca pela tela dela, em

@@ -41,6 +41,8 @@ ouvidor, depois de ler.
 
 ## O caminho de um caso, do começo ao fim
 
+![O caminho do caso, das quatro portas de entrada até Encerrada](../../../assets/ouvidoria/fluxo-caminho.svg)
+
 1. **A pessoa conta o que aconteceu**, por uma das quatro portas: o formulário
    na internet, o QR do cartaz, a conversa com a Ana ou o registro feito pela
    própria Ouvidoria. Ela recebe o protocolo na hora.

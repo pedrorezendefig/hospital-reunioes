@@ -1,0 +1,7 @@
+flowchart TD
+    A[O Validador clica<br/>em Aprovar validação] --> B[O sistema monta o documento<br/>e manda por email]
+    B --> C[Em Assinatura,<br/>conteúdo travado]
+    C -->|as três assinam| D[Publicado]
+    D --> E[Biblioteca, com o<br/>documento assinado]
+    A -->|falta email de alguém| F[Em Assinatura,<br/>sem documento enviado]
+    F -->|o reenvio é feito fora da tela| B
