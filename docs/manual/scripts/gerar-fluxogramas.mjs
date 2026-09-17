@@ -31,8 +31,10 @@ const TEMA = join(FONTES, "tema.json");
 // versão é decisão de quem regera todos os SVG e olha cada um.
 const MERMAID_CLI = "@mermaid-js/mermaid-cli@11.17.0";
 
-const TRAVESSAO = "—";
-const MEIA_RISCA = "–";
+// Por ponto de código, e não pelo caractere: a varredura do CI do Manual passa
+// por docs/manual/ inteiro, arquivo de código incluído, e o literal aqui
+// travaria justo a varredura que este script existe para ajudar.
+const TRACOS = [0x2014, 0x2013].map((c) => String.fromCharCode(c));
 
 /** Todos os `<modulo>/<slug>.mmd` da pasta de fontes. */
 function desenhos() {
@@ -63,7 +65,7 @@ function gerar({ modulo, slug }) {
   // que o usuário vê. Rótulo com esse traço sai daqui travando, e não meia hora
   // depois, num lint que ninguém liga ao desenho.
   const svg = readFileSync(saida, "utf8");
-  if (svg.includes(TRAVESSAO) || svg.includes(MEIA_RISCA)) {
+  if (TRACOS.some((traco) => svg.includes(traco))) {
     rmSync(saida);
     throw new Error(
       `${modulo}/${slug}.mmd: travessão ou meia-risca no texto do desenho. ` +
