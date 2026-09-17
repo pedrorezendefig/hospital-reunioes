@@ -193,13 +193,19 @@ CARTAZ = {
 }
 
 
+# Sentinela para "a chave NÃO vai no JSON", que é diferente de mandá-la nula: a
+# página velha simplesmente não conhece o campo, e é esse envio que a rota
+# precisa aceitar (issue #666).
+_AUSENTE = object()
+
+
 def _payload(**overrides) -> dict:
-    # `sobre` entra no payload padrão porque a resposta é obrigatória desde a
-    # issue #666: sem ela o canal devolve 422, e todo teste deste arquivo que
-    # não fala de paciente mandaria um envio que a rota recusa.
+    # `sobre` entra no payload padrão porque é o que o formulário manda desde a
+    # issue #666: assim todo teste deste arquivo exercita o envio real, e quem
+    # quiser o envio da página velha passa `sobre=_AUSENTE`.
     payload = {"relato": RELATO, "sobre": "mim"}
     payload.update(overrides)
-    return payload
+    return {chave: valor for chave, valor in payload.items() if valor is not _AUSENTE}
 
 
 class TestProtocoloNaTela:
@@ -978,11 +984,15 @@ class TestPacienteDoCaso:
             ("mim", True, "paciente", None, None),
             ("outra_pessoa", False, "acompanhante", "Maria Souza", "Leito 12, dia 9"),
             ("outra_pessoa", True, "acompanhante", "Maria Souza", "Leito 12, dia 9"),
+            # A página velha, que não conhece a pergunta: entra sem vínculo e
+            # sem paciente, como todo caso anterior a esta fatia.
+            (_AUSENTE, False, None, None, None),
+            (_AUSENTE, True, None, None, None),
         ],
     )
     def test_o_que_chega_ao_banco_em_cada_combinacao(self, sobre, anonimo, vinculo, paciente_nome, paciente_referencia):
         """A tabela `sobre` x `anonimo` x campos preenchidos, conferida no
-        insert: os quatro envios mandam paciente, e só dois o gravam."""
+        insert: os seis envios mandam paciente, e só dois o gravam."""
         client, banco = _make_app()
 
         r = client.post(
@@ -1071,21 +1081,62 @@ class TestPacienteDoCaso:
         assert r.status_code == 201, r.text
         assert banco.rows[0]["paciente_nome"] == "Maria Souza"
 
-    def test_envio_sem_sobre_e_recusado(self):
-        """A resposta é obrigatória (ADR 0052, decisão 2), e a recusa é a mesma
-        da natureza fora da lista: 422 antes de tocar o banco."""
+    def test_envio_da_pagina_velha_e_aceito_e_entra_sem_vinculo(self):
+        """A obrigatoriedade mora na TELA, não aqui, e a assimetria é decisão
+        humana no checkpoint da onda, contra a letra do critério de aceite da
+        #666 (que pede 422 para `sobre` ausente).
+
+        Quem abriu o formulário antes do deploy continua com o bundle antigo na
+        aba até recarregar, e o merge sobe backend e frontend juntos, com o
+        backend pronto primeiro. Recusar este envio fecharia o canal de denúncia
+        para quem está parado na frente do cartaz escrevendo devagar.
+
+        O caso entra sem vínculo, que é o estado de todo caso anterior a esta
+        fatia, e o Dossiê já o desenha como "Não informado"."""
         client, banco = _make_app()
 
         r = client.post("/api/ouvidoria/publico/manifestacoes", json={"relato": RELATO})
 
-        assert r.status_code == 422
-        assert banco.inserts == []
+        assert r.status_code == 201, r.text
+        assert r.json()["protocolo"]
+        gravado = banco.rows[0]
+        assert gravado["manifestante_vinculo"] is None
+        assert gravado["paciente_nome"] is None
+        assert gravado["paciente_referencia"] is None
+
+    def test_a_pagina_velha_com_todo_o_resto_preenchido_tambem_passa(self):
+        """O envio da página velha não é só `{"relato": ...}`: ela manda nome,
+        contato, natureza e o código do cartaz. Nenhum desses campos pode virar
+        recusa por tabela, e o caso continua nascendo sem vínculo."""
+        client, banco = _make_app(_BancoFake(pontos=[CARTAZ]))
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(
+                sobre=_AUSENTE,
+                nome="Joana da Silva",
+                contato="joana@exemplo.com",
+                natureza_informada="reclamacao",
+                p="AB2CD3",
+            ),
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = banco.rows[0]
+        assert gravado["manifestante_vinculo"] is None
+        assert gravado["manifestante_nome"] == "Joana da Silva"
+        assert gravado["natureza_informada"] == "reclamacao"
+        assert gravado["canal"] == "qr"
 
     @pytest.mark.parametrize("sobre", ["paciente", "acompanhante", "MIM", "outra pessoa", "", "  "])
     def test_sobre_fora_da_lista_fechada_e_recusado(self, sobre):
         """Dois valores, e nada mais: o canal público não escolhe vínculo por
         texto livre. `paciente` e `acompanhante` são os vínculos GRAVADOS, e
-        aceitá-los aqui deixaria o cliente escrever direto na coluna."""
+        aceitá-los aqui deixaria o cliente escrever direto na coluna.
+
+        A tolerância da ausência (teste acima) é só para a página velha, que não
+        manda o campo. Campo PRESENTE e inválido continua 422: string vazia e
+        espaço em branco não são página velha, são requisição montada na mão."""
         client, banco = _make_app()
 
         r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(sobre=sobre))
