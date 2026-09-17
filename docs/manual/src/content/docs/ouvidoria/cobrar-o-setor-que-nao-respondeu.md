@@ -19,13 +19,14 @@ de você, fora dessa escada.
 
 1. Na lista, ache a linha do caso. O vencimento em vermelho ou os carimbos
    **Estourado** e **Vence hoje** mostram o que está apertando.
+
+   ![Linha do caso vencido com o botão Cobrar](../../../assets/ouvidoria/fila-cobrar.png)
+
 2. Clique em **Cobrar**.
 3. Espere a confirmação. A tela mostra **Acionamento reenviado** com o nome de
    quem recebeu.
 4. Se o envio não sair na hora, a tela diz que o reenvio ficou na fila: o sistema
    tenta de novo sozinho.
-
-![A lista de casos da Ouvidoria](../../../assets/ouvidoria/fila.png)
 
 ## Se der errado
 

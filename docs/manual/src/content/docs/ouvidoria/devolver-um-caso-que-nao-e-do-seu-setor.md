@@ -20,8 +20,14 @@ dela.
 
 1. Abra o caso pelo link do e-mail da Ouvidoria.
 2. Embaixo dos dois botões, clique no link **Este caso não é do meu setor?**.
+
+   ![Link de devolver embaixo dos dois botões](../../../assets/ouvidoria/portal-devolver.png)
+
 3. Responda a **Por que este caso não é da sua área?** dizendo por que ele não é
    seu. Se souber de quem é, escreva também.
+
+   ![Campo do motivo e o botão de devolver](../../../assets/ouvidoria/portal-devolver-formulario.png)
+
 4. Clique em **Devolver à Ouvidoria**.
 5. A tela confirma o caso devolvido. Você não precisa fazer mais nada: o ouvidor
    encaminha para a área certa.

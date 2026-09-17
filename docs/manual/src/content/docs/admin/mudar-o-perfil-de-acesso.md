@@ -17,8 +17,14 @@ hoje. É este campo, e não a Role, que decide o que a pessoa alcança no app.
 ## Passo a passo
 
 1. Em **Usuários**, ache a pessoa e clique no lápis, **Editar**.
+
+   ![Linha da pessoa com o lápis e o escudo](../../../assets/admin/usuarios-perfil-de-acesso.png)
+
 2. No alto, em **Perfil de acesso**, escolha uma das três opções. A frase
    embaixo de cada uma diz o que ela alcança.
+
+   ![Formulário com as três opções de perfil](../../../assets/admin/editar-perfil-de-acesso.png)
+
 3. Se quiser, escreva o **Motivo da alteração**, que fica guardado.
 4. Clique em **Salvar**. Aparece **Usuário atualizado**.
 5. Para dar ou tirar o Super Admin sem abrir o formulário, use os ícones de

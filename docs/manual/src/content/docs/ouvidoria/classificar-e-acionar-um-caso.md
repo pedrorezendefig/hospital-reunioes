@@ -20,7 +20,13 @@ trabalhar: nada aciona uma área sozinho.
 ## Passo a passo
 
 1. Abra o caso, leia o relato inteiro e clique em **Validar e acionar**.
+
+   ![Página do caso com o botão Validar e acionar](../../../assets/ouvidoria/caso-validar.png)
+
 2. Escolha o **Tipo da manifestação**. É o tipo que faz o caso nascer sigiloso.
+
+   ![Janela de classificar e acionar preenchida](../../../assets/ouvidoria/validar-modal.png)
+
 3. Escolha a **Área responsável**. Setor sem titular vigente sobe ao gestor, e a
    tela avisa; sem titular e sem gestor, o acionamento é recusado.
 4. Escolha a **Gravidade**. Cada degrau vem explicado na tela, e é ela que
@@ -29,8 +35,6 @@ trabalhar: nada aciona uma área sozinho.
    suas palavras.
 6. Clique em **Validar e acionar a área**. O prazo é calculado e congelado, e o
    responsável recebe o e-mail na hora.
-
-![Formulário de classificar e acionar](../../../assets/ouvidoria/validar-modal.png)
 
 ## Se der errado
 

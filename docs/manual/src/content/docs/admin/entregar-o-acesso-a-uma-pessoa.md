@@ -18,11 +18,24 @@ senha é você, e ela aparece uma vez só.
 ## Passo a passo
 
 1. Em **Usuários**, ache a pessoa pela busca **Buscar por nome ou email**.
+
+   ![Busca da lista e o ícone de chave na linha](../../../assets/admin/usuarios-resetar-senha.png)
+
 2. Na linha dela, clique no ícone de chave, **Resetar senha**.
 3. Escreva o **Motivo**. Ele é obrigatório e fica guardado.
+
+   ![Janela que pede o motivo do reset](../../../assets/admin/resetar-senha-motivo.png)
+
+:::caution[A senha aparece uma vez só]
+A senha não volta a aparecer depois que você fechar a janela.
+:::
+
 4. Clique em **Resetar senha**.
 5. Abre a janela **Senha gerada**, com o aviso "Copie agora: esta senha não
    será exibida novamente". Clique em **Copiar**.
+
+   ![Janela Senha gerada com o botão Copiar](../../../assets/admin/senha-gerada.png)
+
 6. Entregue a senha à pessoa por um caminho seguro e peça que ela troque no
    primeiro acesso. Depois clique em **Fechar**.
 

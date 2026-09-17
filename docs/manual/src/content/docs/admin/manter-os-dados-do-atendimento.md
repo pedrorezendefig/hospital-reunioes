@@ -23,10 +23,16 @@ sem os botões de edição.
 
 1. Na barra da esquerda, em **Atendimento**, clique em
    **Dados do Atendimento**.
+
+   ![Tabelas do atendimento e os ícones da linha](../../../assets/admin/dados-do-atendimento.png)
+
 2. Escolha a tabela na fileira de botões: **Consultas particulares**,
    **Exames** ou **Estimativas de cirurgias**.
 3. Para incluir, clique em **Nova consulta particular**, **Novo exame** ou
    **Nova estimativa de cirurgia**. Os campos com estrela são obrigatórios.
+
+   ![Formulário de nova consulta particular](../../../assets/admin/nova-consulta-particular.png)
+
 4. Para corrigir, clique no lápis, **Editar**, na linha do registro.
 5. Escreva em **Observações para a Ana** o que a assistente deve falar junto do
    valor. Na cirurgia, o **Aviso obrigatório da Ana** é obrigatório e sempre

@@ -18,8 +18,14 @@ pessoa.
 ## Passo a passo
 
 1. Na barra da esquerda, em **Taxonomia**, clique em **Setores**.
+
+   ![Lista de setores com o botão Novo setor](../../../assets/admin/setores.png)
+
 2. Clique em **Novo setor**, no alto à direita.
 3. Escreva o **Nome**, até 200 letras, e clique em **Criar**.
+
+   ![Janela com o campo Nome preenchido](../../../assets/admin/novo-setor.png)
+
 4. Para corrigir, clique no lápis, **Editar**, na linha do setor.
 5. Para tirar um setor de circulação sem apagar nada, clique no ícone de caixa,
    **Arquivar**, e confirme. A coluna **Status** passa a **Arquivado**.

@@ -18,6 +18,9 @@ responsabilidade por um setor. Setor sem titular vigente não é acionável.
 
 1. Na Ouvidoria, abra o atalho **Responsáveis**, que leva a **Responsáveis por
    setor**.
+
+   ![Tela de responsáveis por setor com o cadastro](../../../assets/ouvidoria/responsaveis.png)
+
 2. Em **Cadastrar responsável**, escolha o **Setor**.
 3. Escolha o **Papel**: **Titular** recebe o acionamento, **Substituto** entra na
    cobrança quando o prazo estoura, **Gestor da área** recebe quando o setor está

@@ -19,8 +19,16 @@ mensagem ou avaliou o hospital na internet.
 ## Passo a passo
 
 1. Na Ouvidoria, clique em **Nova manifestação**.
+
+   ![Lista da Ouvidoria com o botão Nova manifestação](../../../assets/ouvidoria/fila-nova-manifestacao.png)
+
 2. Confira o **Canal de origem**. A janela abre em **WhatsApp**: registrando um
    telefonema, troque antes de salvar.
+
+   ![Janela de nova manifestação preenchida](../../../assets/ouvidoria/nova-manifestacao-modal.png)
+
+   ![As opções de canal de origem abertas](../../../assets/ouvidoria/canal-de-origem.png)
+
 3. Preencha **Data e hora do contato** com a hora real em que a pessoa falou. O
    prazo conta a partir dali.
 4. Escolha o **Tipo da manifestação** e o **Setor**, e escreva o **Resumo**.
@@ -32,10 +40,6 @@ mensagem ou avaliou o hospital na internet.
    **Contato**: não há campo próprio para ele.
 6. Junte os **Anexos** e clique em **Registrar manifestação**. O protocolo
    aparece na tela para você informar a quem falou.
-
-![Formulário de nova manifestação](../../../assets/ouvidoria/nova-manifestacao-modal.png)
-
-![As opções de canal de origem](../../../assets/ouvidoria/canal-de-origem.png)
 
 ## Se der errado
 

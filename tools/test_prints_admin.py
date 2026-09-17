@@ -140,7 +140,7 @@ def test_a_guarda_recusa_capturar_com_filtro_frouxo(monkeypatch, termo):
     monkeypatch.setattr(roteiro, "FILTRO_DE_EXEMPLO", termo)
 
     with pytest.raises(SystemExit) as erro:
-        roteiro._conferir_o_filtro()
+        roteiro._conferir_o_filtro(termo)
 
     # A mensagem inteira, não um pedaço dela: asserir uma substring sobrevive a
     # trocar a frase por outra que não diga qual termo foi barrado.
@@ -155,7 +155,10 @@ def test_a_guarda_deixa_passar_o_filtro_de_verdade():
     """O caminho bom continua passando, senão a guarda seria só um bloqueio."""
     roteiro = carregar_roteiro()
 
-    roteiro._conferir_o_filtro()
+    roteiro._conferir_o_filtro(roteiro.FILTRO_DE_EXEMPLO)
+    # O print de uma linha só peneira pelo email inteiro de uma pessoa de
+    # exemplo, e esse termo também é um filtro legítimo.
+    roteiro._conferir_o_filtro("helena.castro@exemplo.local")
 
 
 # --------------------------------------------------------------------------
@@ -185,7 +188,7 @@ class _CampoFalso:
     def click(self, **kwargs):
         self.pagina.passos.append(("clicou", self.quem))
 
-    def locator(self, seletor):
+    def locator(self, seletor, **kwargs):
         return _CampoFalso(self.pagina, seletor)
 
     def screenshot(self, path=None, **kwargs):
@@ -193,6 +196,35 @@ class _CampoFalso:
 
     def scroll_into_view_if_needed(self):
         return self
+
+    def bounding_box(self):
+        # Uma caixa qualquer, longe da borda: o balão precisa de um retângulo
+        # para calcular a posição, e o que este teste mede não é a posição.
+        return {"x": 400.0, "y": 200.0, "width": 180.0, "height": 40.0}
+
+    def element_handle(self, **kwargs):
+        return self
+
+    def filter(self, **kwargs):
+        return self
+
+    def nth(self, indice):
+        return self
+
+    def count(self):
+        return 1
+
+    def get_by_text(self, texto, **kwargs):
+        return _CampoFalso(self.pagina, texto)
+
+    def get_by_role(self, papel, name=None, **kwargs):
+        return _CampoFalso(self.pagina, f"{papel}:{name}")
+
+    def select_option(self, **kwargs):
+        return None
+
+    def evaluate(self, script, *args):
+        return None
 
     @property
     def first(self):
@@ -214,19 +246,30 @@ class _PaginaFalsa:
         self.passos.append(("abriu", url))
         self.url = url
 
-    def get_by_placeholder(self, texto):
-        return _CampoFalso(self, texto)
-
     def get_by_role(self, papel, name=None, **kwargs):
         return _CampoFalso(self, f"{papel}:{name}")
 
     def get_by_text(self, texto, **kwargs):
         return _CampoFalso(self, texto)
 
-    def locator(self, seletor):
+    def locator(self, seletor, **kwargs):
         return _CampoFalso(self, seletor)
 
+    def get_by_placeholder(self, texto, **kwargs):
+        return _CampoFalso(self, texto)
+
     def wait_for_timeout(self, ms):
+        return None
+
+    def evaluate(self, script, *args):
+        # O balão e o `sem_foco` conversam com a página por `evaluate`. A tela
+        # falsa não desenha nada: o que este teste mede é a ORDEM dos passos.
+        return None
+
+    def set_viewport_size(self, tamanho):
+        return None
+
+    def keyboard(self):
         return None
 
     def screenshot(self, path=None, **kwargs):
@@ -336,3 +379,128 @@ def test_toda_pessoa_de_exemplo_casa_com_o_filtro_da_busca():
             f"{email} não casa com o filtro '{roteiro.FILTRO_DE_EXEMPLO}': a "
             "pessoa sumiria do print, ou o filtro teria de ser afrouxado"
         )
+
+
+def test_a_guarda_recusa_termo_que_nao_e_de_exemplo():
+    """Tamanho não basta: o que separa exemplo de gente real é o domínio.
+
+    Um print de uma linha só peneira pelo email inteiro da pessoa. "Helena
+    Castro" tem letras de sobra e passaria por qualquer regra de tamanho, e
+    ainda assim casaria uma Helena de verdade da lista do hospital. A segunda
+    exigência da guarda é o domínio `exemplo.local`, e este teste é o que a
+    mantém: removê-la faz este caso passar batido.
+    """
+    roteiro = carregar_roteiro()
+
+    with pytest.raises(SystemExit) as erro:
+        roteiro._conferir_o_filtro("Helena Castro")
+
+    assert str(erro.value) == (
+        "recusado: o filtro da busca é 'Helena Castro', que não contém "
+        f"'{roteiro.FILTRO_DE_EXEMPLO}'. Só o domínio das pessoas de exemplo "
+        "mantém gente do hospital fora do print."
+    )
+
+
+def _capturas_da_lista_de_usuarios() -> list[str]:
+    """As funções de captura que abrem a tela de Usuários, lidas do roteiro.
+
+    A lista é derivada, e não escrita à mão: captura nova que use a lista de
+    Usuários entra neste teste sozinha, e é justamente a captura nova que
+    esquece a peneira.
+    """
+    fonte = ROTEIRO.read_text(encoding="utf-8")
+    nomes = []
+    for bloco in fonte.split("\ndef ")[1:]:
+        nome = bloco.split("(", 1)[0]
+        corpo = bloco.split("\ndef ", 1)[0]
+        if nome.startswith("_"):
+            continue
+        if "_usuarios_filtrados(" in corpo:
+            nomes.append(nome)
+    return nomes
+
+
+def test_a_lista_de_capturas_da_tela_de_usuarios_nao_esta_vazia():
+    """Sem esta linha, o teste de baixo passaria verde sobre zero capturas."""
+    assert len(_capturas_da_lista_de_usuarios()) >= 8
+
+
+@pytest.mark.parametrize("captura", _capturas_da_lista_de_usuarios())
+def test_nenhuma_captura_fotografa_a_lista_antes_de_filtrar(tmp_path, captura):
+    """A ordem, medida em toda captura que abre a tela de Usuários.
+
+    Entre abrir a tela e digitar a busca existe um instante com a lista real do
+    hospital renderizada, e é esse instante que não pode virar arquivo. O teste
+    é sobre a ORDEM dos passos, e não sobre o termo: as capturas de uma linha
+    só peneiram pelo email da pessoa de exemplo, e nenhuma delas usa o valor
+    padrão.
+    """
+    roteiro = carregar_roteiro()
+    pagina = _PaginaFalsa(url=BASE_FALSA)
+
+    getattr(roteiro, captura)(pagina, BASE_FALSA, tmp_path)
+
+    tipos = pagina.tipos()
+    assert "fotografou" in tipos, f"{captura} não chegou a capturar nada"
+    assert tipos.index("digitou") < tipos.index("fotografou"), (
+        f"{captura} fotografa antes de a busca ser preenchida: o print sairia "
+        "com nome e email de gente real"
+    )
+
+
+@pytest.mark.parametrize("captura", _capturas_da_lista_de_usuarios())
+def test_toda_captura_da_lista_peneira_por_endereco_de_exemplo(captura):
+    """O termo que cada captura usa passa pela guarda.
+
+    A guarda roda em execução; este teste roda na suíte, e pega o dia em que
+    alguém trocar o termo de uma captura por um nome solto.
+    """
+    roteiro = carregar_roteiro()
+    fonte = ROTEIRO.read_text(encoding="utf-8")
+    bloco = fonte.split(f"\ndef {captura}(", 1)[1].split("\ndef ", 1)[0]
+    chamada = bloco.split("_usuarios_filtrados(", 1)[1].split(")", 1)[0]
+    if "EMAIL_DE[" in chamada:
+        pessoa = chamada.split('EMAIL_DE["', 1)[1].split('"', 1)[0]
+        roteiro._conferir_o_filtro(roteiro.EMAIL_DE[pessoa])
+    else:
+        roteiro._conferir_o_filtro(roteiro.FILTRO_DE_EXEMPLO)
+
+
+@pytest.mark.parametrize("onde", ["direita", "abaixo", "", "ACIMA"])
+def test_o_balao_recusa_posicao_que_o_roteiro_nao_desenha(onde):
+    """Posição escrita errado viraria balão no canto de cima à esquerda.
+
+    O balão é a única marcação permitida no print, e ele aponta o elemento do
+    passo: uma posição que o desenho não conhece tem que estourar na hora, e
+    não cair num padrão silencioso.
+    """
+    roteiro = carregar_roteiro()
+
+    with pytest.raises(ValueError):
+        roteiro.balao(_PaginaFalsa(), _CampoFalso(_PaginaFalsa(), "x"), 1, onde)
+
+
+def test_a_conta_de_exemplo_da_senha_e_desligada_pelo_id_dela(monkeypatch):
+    """O print da senha mostra uma senha de verdade, gerada para gente que não
+    existe. Ela não fica de pé depois da captura, e o desligamento é pelo id da
+    pessoa de exemplo: um `PATCH` sem filtro desligaria o hospital inteiro.
+    """
+    roteiro = carregar_roteiro()
+    chamadas = []
+    monkeypatch.setattr(
+        roteiro, "_credenciais_locais", lambda: ("http://127.0.0.1:54351", "chave")
+    )
+    monkeypatch.setattr(
+        roteiro,
+        "_rest",
+        lambda url, chave, caminho, metodo="GET", corpo=None, prefer=None: chamadas.append(
+            (caminho, metodo, corpo)
+        ),
+    )
+
+    roteiro._desativar_pessoa_da_senha()
+
+    assert chamadas == [
+        (f"participantes?id=eq.{roteiro.PESSOA_DA_SENHA[0]}", "PATCH", {"ativo": False})
+    ]

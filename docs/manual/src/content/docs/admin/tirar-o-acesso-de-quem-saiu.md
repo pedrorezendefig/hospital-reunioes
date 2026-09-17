@@ -18,7 +18,17 @@ em atas, pendências e assinaturas, e o histórico precisa continuar de pé.
 ## Passo a passo
 
 1. Em **Usuários**, ache a pessoa e clique no lápis, **Editar**.
+
+   ![Linha da pessoa e a coluna Ativo da lista](../../../assets/admin/usuarios-desligar.png)
+
+:::caution[A pessoa perde o acesso na hora]
+Ao salvar, a conta de entrada é fechada e a sessão que ela tiver aberta cai em minutos.
+:::
+
 2. Desmarque **Ativo**.
+
+   ![Ficha com a caixa Ativo e o motivo](../../../assets/admin/editar-desligar.png)
+
 3. Escreva o **Motivo da alteração** e clique em **Salvar**.
 4. Confira na lista: a coluna **Ativo** passa a mostrar **Inativo**. A conta de
    entrada é fechada no mesmo ato, e a sessão que ela tiver aberta cai em

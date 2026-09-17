@@ -19,14 +19,23 @@ que alguém falou numa reunião e o sistema não casou com ninguém do cadastro.
 
 1. Em **Usuários**, ache a linha com o selo **EXTERNO** e clique no ícone
    laranja de caminhos que se juntam, **Resolver externo**.
+
+   ![Linha com o selo EXTERNO e o ícone laranja](../../../assets/admin/usuarios-externo.png)
+
 2. Escolha **Mesclar com interno** quando for a mesma pessoa que já existe, ou
    **Promover a interno** quando for gente nova.
+
+   ![Janela com as opções mesclar e promover](../../../assets/admin/resolver-externo.png)
+
 3. Ao mesclar, busque a pessoa certa, confira os números da tela e escreva o
    **Motivo**. Reuniões, pendências, comentários, menções e avisos passam para
    ela, e a linha externa é apagada.
 4. Ao promover, preencha **Email** e **Cargo**, que são os obrigatórios, e
    confirme. O **Setor** e o **Motivo (opcional)** ficam a seu critério. A
    mesma linha vira interna, então nada do histórico se move.
+
+   ![Formulário de promover a interno preenchido](../../../assets/admin/promover-a-interno.png)
+
 5. Depois de promover, gere a senha em **Resetar senha**: promover não entrega
    acesso.
 

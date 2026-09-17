@@ -20,13 +20,17 @@ O painel atualiza sozinho e é a mesma fonte dos números do relatório.
 ## Passo a passo
 
 1. Na Ouvidoria, abra o atalho **Painel**, que leva a **Painel em tempo real**.
+
+   ![Barra de atalhos da Ouvidoria com o Painel](../../../assets/ouvidoria/fila-painel.png)
+
 2. Comece por **Críticos abertos**: risco à vida, à segurança ou à imagem.
+
+   ![Painel da Ouvidoria em tempo real](../../../assets/ouvidoria/painel.png)
+
 3. Veja **Já venceu** e **Vence hoje** para saber o que cobrar hoje.
 4. Olhe **Próximos vencimentos** para se antecipar ao que vence depois.
 5. Desça até **Vencidos por área** para ver quais setores estão devendo, com o
    nome de quem responde por eles.
-
-![Painel da Ouvidoria em tempo real](../../../assets/ouvidoria/painel.png)
 
 ## Se der errado
 

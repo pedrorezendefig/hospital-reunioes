@@ -18,16 +18,20 @@ esta tela.
 ## Passo a passo
 
 1. Na barra da esquerda, em **Pessoas**, clique em **Usuários**.
+
+   ![Lista de Usuários com o botão Novo Usuário](../../../assets/admin/usuarios-cadastrar.png)
+
 2. Clique em **Novo Usuário**, no alto à direita.
 3. Escolha o **Perfil de acesso**: **Regular**, **Secretária** ou
    **Super Admin**. Cada opção traz embaixo o que ela alcança.
+
+   ![Formulário de novo usuário preenchido](../../../assets/admin/novo-usuario.png)
+
 4. Preencha **Nome completo** e **Email**, obrigatórios. O email não se repete.
 5. Preencha **Cargo** e, se quiser, **Setor** e **Área**. Os campos sugerem o
    que já existe e aceitam texto novo.
 6. Em **Role (cargo hospitalar)**, escolha a posição real da pessoa, e então
    clique em **Criar**. Aparece **Usuário criado com sucesso**.
-
-![Formulário Novo usuário com o perfil de acesso, o nome, o email e o cargo preenchidos](../../../assets/admin/novo-usuario.png)
 
 A pessoa ainda **não consegue entrar**: a ficha existe, a senha não. O passo
 seguinte é [Entregar o acesso a uma pessoa](../entregar-o-acesso-a-uma-pessoa/).

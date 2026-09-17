@@ -21,12 +21,21 @@ esta: Secretária, Regular e Super Admin. Aqui ninguém edita nada.
 ## Passo a passo
 
 1. Em **Dados do Atendimento**, clique no botão **Espelho da Global Health**.
+
+   ![Botão Espelho da Global Health na fileira](../../../assets/admin/dados-do-atendimento-espelho.png)
+
 2. Clique em **Atualizar** para buscar a lista fresca. Nada fica gravado: é uma
    janela, não um caderno.
+
+   ![Espelho aberto com a lista de especialidades](../../../assets/admin/espelho-da-global-health.png)
+
 3. Clique numa especialidade. Abrem **Convênios aceitos** e
    **Profissionais disponíveis** dela.
 4. Clique num convênio para ver os planos, e num plano para abrir os
    **Horários livres**.
+
+   ![Lista de convênios aceitos da especialidade](../../../assets/admin/espelho-convenios.png)
+
 5. Sem especialidade, convênio e plano escolhidos, a consulta de horário nem é
    feita. Escolha os três antes de concluir que não há vaga.
 6. Para restringir a um médico, use a lista **Médico**, que começa em

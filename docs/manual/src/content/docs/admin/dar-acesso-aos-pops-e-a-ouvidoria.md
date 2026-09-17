@@ -22,8 +22,14 @@ Setores da pessoa: [Dar acesso à Gestão de POPs](/pops/dar-acesso-a-gestao-de-
 
 1. Em **Usuários**, ache a pessoa e clique no lápis, **Editar**. Os dois blocos
    só aparecem ao editar, nunca ao criar.
+
+   ![Linha da pessoa com o lápis de editar](../../../assets/admin/usuarios-acessos.png)
+
 2. Em **Acesso aos POPs**, escolha **Superadmin**, **Gestor de Qualidade**,
    **Gerente** ou **Coordenador**. **Sem acesso** revoga.
+
+   ![Blocos de acesso aos POPs e à Ouvidoria](../../../assets/admin/editar-acessos.png)
+
 3. Em **Acesso à Ouvidoria**, escolha **Ouvidor** ou **Diretoria Executiva**.
    **Sem acesso** revoga.
 4. Escreva o **Motivo da alteração** e clique em **Salvar**.

@@ -18,18 +18,20 @@ dizendo de onde a pessoa falou.
 ## Passo a passo
 
 1. Na Ouvidoria, abra o atalho **Pontos**, que leva a **Pontos de escuta**.
+
+   ![Tela de pontos de escuta com o QR de cada lugar](../../../assets/ouvidoria/pontos.png)
+
 2. Em **Novo ponto de escuta**, escolha o **Setor**.
 3. Escreva em **Onde o cartaz vai ficar** um nome curto: "Sala de espera".
 4. Clique em **Criar cartaz**. O sistema sorteia um código de seis caracteres,
    sem as letras e os números que se confundem ao digitar.
 5. Clique em **Cartaz A5** para baixar o cartaz pronto, com a logo, o QR grande
    e o endereço por extenso. Para uma arte própria, **PNG** baixa só o código.
+
+   ![Cartaz A5 pronto para imprimir](../../../assets/ouvidoria/cartaz-pa.png)
+
 6. Imprima em A5, que é meia folha, e cole. Para tirar de circulação, use
    **Aposentar**.
-
-![Tela de pontos de escuta, com o QR e os botões de cada lugar](../../../assets/ouvidoria/pontos.png)
-
-![Cartaz A5 pronto para imprimir](../../../assets/ouvidoria/cartaz-pa.png)
 
 O endereço embaixo do QR é o do hospital, e é ele que a pessoa digita quando a
 câmera não lê o código.

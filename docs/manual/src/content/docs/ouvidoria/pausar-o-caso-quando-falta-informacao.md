@@ -18,6 +18,9 @@ consulta, o nome de quem atendeu, um documento. Pausar é parar o relógio da
 ## Passo a passo
 
 1. Abra o caso e vá ao bloco **Manifestante**.
+
+   ![Bloco Manifestante com o botão de parar o prazo](../../../assets/ouvidoria/caso-pausar.png)
+
 2. Escreva o que falta do manifestante. O texto é obrigatório e fica na trilha
    do caso.
 3. Clique em **Parar: falta dado do manifestante**. O prazo da área para de

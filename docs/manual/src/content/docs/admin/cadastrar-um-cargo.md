@@ -18,8 +18,14 @@ pena escrevê-lo do jeito que o hospital fala.
 ## Passo a passo
 
 1. Na barra da esquerda, em **Taxonomia**, clique em **Cargos**.
+
+   ![Lista de cargos com o botão Novo cargo](../../../assets/admin/cargos.png)
+
 2. Clique em **Novo cargo**, no alto à direita.
 3. Escreva o **Nome**, até 200 letras, e clique em **Criar**.
+
+   ![Janela com o campo Nome preenchido](../../../assets/admin/novo-cargo.png)
+
 4. Para corrigir, clique no lápis, **Editar**, na linha do cargo.
 5. Para tirar da lista sem apagar, clique no ícone de caixa, **Arquivar**, e
    confirme.

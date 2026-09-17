@@ -24,8 +24,14 @@ aqui.
 Ela mantém uma lista, com a mesma mecânica de **Setores** e **Cargos**:
 
 1. Na barra da esquerda, em **Taxonomia**, clique em **Tipos de Reunião**.
+
+   ![Lista de tipos de reunião com busca e filtro](../../../assets/admin/tipos-de-reuniao.png)
+
 2. **Novo tipo de reunião** cria um item, com o **Nome** até 200 letras como
    único campo.
+
+   ![Janela com o campo Nome preenchido](../../../assets/admin/novo-tipo-de-reuniao.png)
+
 3. O lápis, **Editar**, corrige o nome e permite desmarcar **Ativo**.
 4. O ícone de caixa, **Arquivar**, tira o item da lista de ativos, e
    **Reativar** o traz de volta. Não existe apagar.

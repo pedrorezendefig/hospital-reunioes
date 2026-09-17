@@ -21,6 +21,9 @@ esperando decisão, e quem decide é sempre o ouvidor.
 
 1. Abra o caso. O bloco **Prorrogação de prazo** mostra quem pediu, quantos dias
    úteis e até quando o prazo iria.
+
+   ![Bloco do pedido de prazo com Aprovar e Negar](../../../assets/ouvidoria/caso-prorrogacao.png)
+
 2. Leia a justificativa que a área escreveu.
 3. Escreva o motivo da decisão, se quiser. Ele é opcional e vai no e-mail ao
    setor.

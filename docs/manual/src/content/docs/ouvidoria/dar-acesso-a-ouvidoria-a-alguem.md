@@ -20,7 +20,13 @@ separado.
 ## Passo a passo
 
 1. Na área de administração, abra a tela de usuários e edite a pessoa.
+
+   ![Linha da pessoa na lista de usuários](../../../assets/ouvidoria/usuarios-acesso-ouvidoria.png)
+
 2. Vá até **Acesso à Ouvidoria**.
+
+   ![Ficha com o bloco Acesso à Ouvidoria](../../../assets/ouvidoria/editar-acesso-ouvidoria.png)
+
 3. Escolha um dos três valores: **Sem acesso**, **Ouvidor** ou **Diretoria
    Executiva**.
 4. Salve. A concessão fica registrada.
