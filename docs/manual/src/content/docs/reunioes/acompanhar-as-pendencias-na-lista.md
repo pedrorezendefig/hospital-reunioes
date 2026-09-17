@@ -4,6 +4,7 @@ description: Filtrar, ler e mudar o estado das pendências numa tabela só.
 prd: [731]
 draft: false
 papel: [Facilitador]
+video: acompanhar-as-pendencias-na-lista
 sidebar:
   order: 9
 ---

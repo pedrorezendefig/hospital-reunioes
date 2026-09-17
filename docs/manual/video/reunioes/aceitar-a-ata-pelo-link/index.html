@@ -1,0 +1,292 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · Reuniões e metas · Aceitar a ata pelo link</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "reunioes",
+ "slug": "aceitar-a-ata-pelo-link",
+ "pagina": "reunioes/aceitar-a-ata-pelo-link.md",
+ "prd": [
+  272
+ ],
+ "issues": [],
+ "app_version": "0.142.1",
+ "gerado_em": "2026-09-17T16:00:00-03:00"
+}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* Palco desenhado em 960x540 e ampliado 2x, para os tamanhos do app saírem
+     nítidos em 1080p. Mesma régua das outras composições do Manual. */
+  .palco { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #EEF1F6; }
+
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 72px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
+  .selo-abertura { margin-top: 40px; display: inline-flex; gap: 14px; }
+  .selo-abertura span { border: 2px solid var(--app-border); border-radius: 999px; padding: 10px 26px; font-size: 26px; font-weight: 700; color: var(--app-sec); }
+  .selo-abertura span.destaque { border-color: var(--navy); color: var(--navy); background: #F5F6FE; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  /* ===== janela de navegador ===== */
+  .janela { position: absolute; left: 36px; top: 72px; width: 570px; height: 400px; border-radius: 12px; background: #fff; box-shadow: 0 26px 60px -20px rgba(0,0,0,.42); overflow: hidden; border: 1px solid #D8DEE9; }
+  .barra { height: 20px; background: #E7EBF2; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid #D8DEE9; }
+  .barra i { width: 5px; height: 5px; border-radius: 50%; background: #C3CBD8; display: block; }
+  .barra .url { margin-left: 8px; flex: 1; height: 11px; border-radius: 6px; background: #fff; border: 1px solid #D8DEE9; font-size: 6.4px; color: #5A6273; display: flex; align-items: center; padding: 0 6px; }
+  .tela { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; background: #F7F9FC; overflow: hidden; }
+
+  /* ===== moldura do app: topo + menu lateral ===== */
+  .app-topo { position: absolute; left: 0; right: 0; top: 0; height: 24px; background: #fff; border-bottom: 1px solid var(--app-border); display: flex; align-items: center; justify-content: space-between; padding: 0 9px; }
+  .app-topo .marca { display: flex; align-items: center; gap: 4px; }
+  .app-topo .direita { display: flex; align-items: center; gap: 6px; color: #94A3B8; }
+  .app-topo .avatar { width: 13px; height: 13px; border-radius: 50%; background: #E8EAF7; color: var(--navy); font-size: 6px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .app-menu { position: absolute; left: 0; top: 24px; bottom: 0; width: 92px; background: #fff; border-right: 1px solid var(--app-border); padding: 7px 6px; }
+  .mi { display: flex; align-items: center; gap: 5px; font-size: 6.6px; color: #56606F; padding: 3.5px 5px; border-radius: 5px; margin-bottom: 2px; }
+  .mi.grupo { justify-content: space-between; }
+  .mi.on { background: rgba(43,46,126,.05); color: var(--navy); font-weight: 700; }
+  .mi.ativo { background: rgba(43,46,126,.08); color: var(--navy); font-weight: 700; }
+  .submenu { margin: 2px 0 2px 8px; padding-left: 5px; border-left: 1.5px solid rgba(226,232,240,.8); }
+  .submenu .mi { font-size: 6.2px; padding: 3px 5px; }
+  .app-corpo { position: absolute; left: 92px; right: 0; top: 24px; bottom: 0; padding: 11px 12px; overflow: hidden; }
+
+  /* ===== tipografia de conteúdo ===== */
+  .h-pag { font-size: 11.5px; font-weight: 700; color: #0F172A; }
+  /* Um tom mais escuro que o secundário do app: em vídeo, lido de longe, o
+     #64748B do globals.css não chega nos 4.5:1 exigidos. */
+  .dek { font-size: 6.4px; color: #56606F; margin-top: 1.5px; }
+  .cartao { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; }
+
+  .btn { display: inline-flex; align-items: center; gap: 4px; font-size: 7px; font-weight: 700; border-radius: 7px; padding: 5px 9px; }
+  .btn-cheio { background: linear-gradient(90deg, #2B2E7E, #1A1C4E); color: #fff; }
+  .btn-indigo { background: linear-gradient(90deg, #4F46E5, #4338CA); color: #fff; }
+  .btn-vazado { border: 1.4px solid rgba(43,46,126,.3); color: var(--navy); background: #fff; }
+  .btn-claro { border: 1px solid var(--app-border); color: #475569; background: #fff; }
+  .btn-ambar { background: #FEF3C7; color: #92400E; }
+  .btn-verde { background: linear-gradient(90deg, #15803D, #14532D); color: #fff; }
+
+  .campo { position: relative; height: 19px; border: 1px solid var(--app-border); border-radius: 7px; display: flex; align-items: center; gap: 5px; padding: 0 7px; font-size: 6.8px; color: var(--app-text); background: #fff; }
+  .campo .ph { color: #626D80; }
+  /* O valor digitado ocupa o mesmo lugar do placeholder, sem empurrar layout. */
+  .campo .val { position: absolute; left: 7px; right: 7px; opacity: 0; color: var(--app-text); white-space: nowrap; overflow: hidden; }
+  .campo .val.com-icone { left: 19px; }
+  .lb { font-size: 6.6px; font-weight: 700; color: #475569; margin-bottom: 3px; }
+
+  .selo { display: inline-flex; align-items: center; gap: 2.5px; border-radius: 999px; padding: 2px 6px; font-size: 5.8px; font-weight: 700; }
+
+  /* ===== dedo fantasma ===== */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+
+  /* ===== legenda de passo, do lado da janela ===== */
+  .passo { position: absolute; left: 626px; width: 300px; opacity: 0; }
+  .passo .n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
+  .passo h3 { font-size: 24px; line-height: 1.25; color: var(--navy); font-weight: 700; margin: 12px 0 8px; }
+  /* Um tom mais escuro que o secundário do app: legenda de vídeo é lida de
+     longe e precisa passar no contraste 4.5:1. */
+  .passo p { font-size: 16.5px; line-height: 1.5; color: #556076; }
+  .passo b { color: var(--app-text); }
+  .marcador { position: absolute; border: 1.5px solid var(--navy); border-radius: 7px; box-shadow: 0 0 0 3px rgba(43,46,126,.14); opacity: 0; z-index: 30; }
+
+  /* ===== rodapé do carimbo, em toda cena com o app ===== */
+  .rodape-v { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font-size: 9.5px; color: #5C6676; letter-spacing: .04em; }
+</style>
+</head>
+<body>
+
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="41" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Manual · Reuniões e metas</div>
+    <h1 class="titulo" id="ab-titulo">Aceitar a ata pelo link</h1>
+    <p class="sub" id="ab-sub">Ler a ata e firmar os seus compromissos sem entrar na plataforma.</p>
+    <div class="selo-abertura" id="ab-selos"><span class="destaque">Participante</span></div>
+  </section>
+
+  <!-- 2 · A tarefa, passo a passo -->
+  <section id="c-tarefa" class="clip scene" data-start="4" data-duration="32" data-track-index="2">
+    <div class="palco" id="palco-tarefa"></div>
+  </section>
+
+  <!-- 3 · Fecho -->
+  <section id="c-fecho" class="clip scene slide" data-start="36" data-duration="5" data-track-index="3">
+    <div class="fecho-titulo" id="fc-titulo">Aceitar a ata pelo link</div>
+    <div class="carimbo" id="fc-carimbo">Manual · retrata o app em v0.142.1 · gerado em 17/09/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da plataforma</div>
+  </section>
+
+</div>
+
+<script>
+document.getElementById("palco-tarefa").innerHTML =
+  `<div style="position:absolute;inset:0;background:#EEF1F6"></div><div class="janela" data-layout-allow-overflow data-layout-allow-occlusion id="janela"><div class="barra"><i></i><i></i><i></i><div class="url">link do email · aceite da ata</div></div><div data-layout-allow-overlap class="tela" data-layout-allow-overflow data-layout-allow-occlusion id="tela-aceite" style="background:#F8FAFC"><div data-layout-allow-overlap style="position:absolute;inset:0;padding:8px 40px;overflow:hidden"><div data-layout-allow-overlap style="display:flex;justify-content:center;margin-bottom:6px"><div data-layout-allow-overlap style="display:flex;align-items:center;gap:4px"><svg width="22" height="9" viewBox="0 0 100 42" fill="none" style="flex-shrink:0"><path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/><path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/></svg><span data-layout-allow-overlap style="font-size:6px;font-weight:700;color:#1E3A8A;line-height:1.1">HOSPITAL<br>SÃO MATHEUS</span></div></div><div data-layout-allow-overlap class="cartao" style="padding:7px 9px"><div data-layout-allow-overlap style="font-size:5px;text-transform:uppercase;letter-spacing:.12em;font-weight:700;color:#626D80">Ata de reunião para aceite</div><div data-layout-allow-overlap style="font-size:9.5px;font-weight:700;color:#0F172A;margin-top:1.5px">Reunião Gerencial, setembro 2026</div><div data-layout-allow-overlap style="font-size:6.2px;color:#64748B;margin-top:1.5px">Gerencial · 16 de setembro de 2026 · 09:00</div><div data-layout-allow-overlap id="ac-aviso" style="margin-top:5px;display:flex;align-items:flex-start;gap:3px;background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:4px 5px;font-size:5.8px;color:#92400E;line-height:1.5"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg><span data-layout-allow-overlap>Olá, <b>Marina Alves</b>. A coleta de assinaturas digitais desta ata foi encerrada. Leia o conteúdo abaixo e registre o seu aceite no final da página.</span></div></div><div data-layout-allow-overlap class="cartao" id="ac-pauta" style="padding:6px 9px;margin-top:5px"><div data-layout-allow-overlap style="display:flex;align-items:center;gap:4px;margin-bottom:3px"><span data-layout-allow-overlap style="color:#626D80"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg></span><span data-layout-allow-overlap style="font-size:7px;font-weight:700;color:#0F172A">Pauta da Reunião</span></div><div data-layout-allow-overlap style="font-size:6.2px;color:#475569;line-height:1.5">Fechar as metas do trimestre e revisar as pendências abertas.</div></div><div data-layout-allow-overlap class="cartao" id="ac-discussao" style="padding:6px 9px;margin-top:5px"><div data-layout-allow-overlap style="display:flex;align-items:center;gap:4px;margin-bottom:3px"><span data-layout-allow-overlap style="color:#626D80"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 20a8 8 0 1 0-6.4-3.2L4 20l3.2-1.6A8 8 0 0 0 12 20"/></svg></span><span data-layout-allow-overlap style="font-size:7px;font-weight:700;color:#0F172A">Discussão dos Pontos (2)</span></div><div data-layout-allow-overlap style="border-left:2px solid rgba(43,46,126,.4);background:#F8FAFC;border-radius:0 6px 6px 0;padding:4px 6px"><div data-layout-allow-overlap style="font-size:6px;font-weight:700;color:#2B2E7E">4.1 Escala da enfermagem</div><div data-layout-allow-overlap style="font-size:5.8px;color:#475569;margin-top:2px;line-height:1.45">A escala atual deixa o plantão da madrugada curto.</div><div data-layout-allow-overlap style="margin-top:3px;background:#ECFEFF;border-left:1.6px solid #06B6D4;border-radius:0 4px 4px 0;padding:2.5px 4px;font-size:5.6px"><b style="color:#155E75">Decisão:</b> <span data-layout-allow-overlap style="color:#334155">revisar a escala até o fim do mês.</span></div></div></div><div data-layout-allow-overlap class="cartao" id="ac-quadro" style="padding:6px 9px;margin-top:5px"><div data-layout-allow-overlap style="display:flex;align-items:center;gap:4px"><span data-layout-allow-overlap style="color:#626D80"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg></span><span data-layout-allow-overlap style="font-size:7px;font-weight:700;color:#0F172A">Quadro de Atribuições (2 ações)</span></div><div data-layout-allow-overlap style="margin-top:3px"><div data-layout-allow-overlap style="display:flex;align-items:center;gap:5px;padding:4px 0;border-top:1px solid #F1F5F9"><span data-layout-allow-overlap style="flex:1;font-size:6.2px;color:#334155">Apresentar a escala nova da enfermagem</span><span data-layout-allow-overlap style="font-size:5.8px;color:#64748B;width:54px">Marina Alves</span><span data-layout-allow-overlap style="font-size:5.8px;color:#64748B;width:38px;text-align:right">30/09/2026</span></div><div data-layout-allow-overlap style="display:flex;align-items:center;gap:5px;padding:4px 0;border-top:1px solid #F1F5F9"><span data-layout-allow-overlap style="flex:1;font-size:6.2px;color:#334155">Fechar a compra do oxímetro</span><span data-layout-allow-overlap style="font-size:5.8px;color:#64748B;width:54px">Rafael Nunes</span><span data-layout-allow-overlap style="font-size:5.8px;color:#64748B;width:38px;text-align:right">25/09/2026</span></div></div></div><div data-layout-allow-overlap class="cartao" id="ac-caixa" style="padding:7px 9px;margin-top:5px"><div data-layout-allow-overlap style="display:flex;align-items:flex-start;gap:5px"><span data-layout-allow-overlap id="ac-check" style="width:8px;height:8px;border:1.4px solid #CBD5E1;border-radius:2.5px;flex-shrink:0;margin-top:1px;display:flex;align-items:center;justify-content:center;color:#fff"><span data-layout-allow-overlap id="ac-check-on" data-layout-allow-overlap style="opacity:0"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M20 6 9 17l-5-5"/></svg></span></span><span data-layout-allow-overlap style="font-size:6.4px;color:#475569;line-height:1.5">Li a ata completa acima e aceito os compromissos registrados sob minha responsabilidade.</span></div><div data-layout-allow-overlap class="btn" id="ac-botao" style="width:100%;justify-content:center;margin-top:6px;background:linear-gradient(90deg,#2B2E7E,#3B6FB6);color:#fff;opacity:.5"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg>Li e aceito</div><div data-layout-allow-overlap style="font-size:5.2px;color:#626D80;text-align:center;margin-top:4px">O aceite é registrado uma única vez e cria as suas pendências imediatamente.</div></div></div></div><div class="tela" data-layout-allow-overlap data-layout-allow-overflow data-layout-allow-occlusion id="ok-tela-aceite-ok" style="opacity:0;background:#F8FAFC;display:flex;align-items:center;justify-content:center"><div class="cartao" style="width:250px;border-color:#A7F3D0;padding:22px 16px;text-align:center"><div style="color:#10B981;display:flex;justify-content:center;margin-bottom:6px"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></div><div style="font-size:10px;font-weight:700;color:#0F172A">Aceite registrado</div><div style="font-size:6.6px;color:#475569;margin-top:5px;line-height:1.55">Obrigado, Marina Alves. Seu compromisso com as ações desta ata foi firmado e suas pendências já entraram no acompanhamento.</div></div></div></div><div class="rodape-v">Manual · retrata o app em v0.142.1 · gerado em 17/09/2026</div><div class="ghost" data-layout-allow-overlap data-layout-allow-occlusion id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>` +
+  `<div class="passo" id="p1" style="top:150px"><div class="n">1</div><h3>Abra o link do email</h3><p>A tela mostra <b>Ata de reunião para aceite</b>. Você não precisa de conta nem de senha.</p></div><div class="passo" id="p2" style="top:150px"><div class="n">2</div><h3>No aviso amarelo do alto, confira o seu nome</h3><p>É ele que diz de quem é este aceite.</p></div><div class="passo" id="p3" style="top:150px"><div class="n">3</div><h3>Leia a ata</h3><p><b>Pauta da Reunião</b>, <b>Discussão dos Pontos</b> e o quadro com as ações e os prazos.</p></div><div class="passo" id="p4" style="top:150px"><div class="n">4</div><h3>Veja quais ações estão no seu nome</h3><p>São essas que viram compromisso seu.</p></div><div class="passo" id="p5" style="top:150px"><div class="n">5</div><h3>Marque a frase de confirmação</h3><p>Sem ela marcada, o botão <b>Li e aceito</b> continua apagado.</p></div><div class="passo" id="p6" style="top:150px"><div class="n">6</div><h3>Clique em Li e aceito</h3><p>A tela responde <b>Aceite registrado</b> e as suas pendências entram no acompanhamento na hora.</p></div>`;
+
+/* ============================================================
+   Timeline: uma só, pausada, com tempos absolutos
+   ============================================================ */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const nota = (sel, t, ate) => { surge(sel, t, 14); some(sel, ate); };
+const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
+const move = (g, t, x, y, dx, dy) => {
+  tl.set(g, { x: x, y: y, opacity: 1 }, t);
+  tl.to(g, { x: dx, y: dy, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+};
+const aperta = (sel, t) => tl.to(sel, { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, t);
+const mostra = (sel, t) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, t);
+const esconde = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.3 }, t);
+/* Campo do app: o placeholder dá lugar ao valor, e a borda acende. */
+const digita = (base, t) => {
+  tl.to(base + "-ph", { opacity: 0, duration: 0.15 }, t);
+  tl.to(base + "-val", { opacity: 1, duration: 0.22 }, t + 0.15);
+  tl.to(base, { borderColor: "#2B2E7E", duration: 0.2 }, t);
+};
+/* Troca o texto de um rótulo no meio do passo (Lembrar → Enviado). */
+const troca = (sel, texto, t) => {
+  tl.to(sel, { opacity: 0, duration: 0.12 }, t);
+  tl.set(sel, { innerText: texto }, t + 0.13);
+  tl.to(sel, { opacity: 1, duration: 0.12 }, t + 0.14);
+};
+/* Acende a borda de um bloco (coluna de destino, cartão em foco). */
+const acende = (sel, t, cor) => tl.to(sel, { borderColor: cor || "#2B2E7E", duration: 0.25 }, t);
+
+/* ── Ancoragem ao elemento, em vez de coordenada escrita à mão ──────────────
+   O marcador nasce DENTRO do alvo e o dedo lê a posição do alvo no palco:
+   assim nenhum dos dois pode apontar o campo de cima. Medidas por offset*,
+   que ignoram o scale(2) do palco e não dependem da fonte ter carregado. */
+const PALCO = document.getElementById("palco-tarefa");
+function xy(el) {
+  let x = 0, y = 0, n = el;
+  while (n && n !== PALCO) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+  return { x: x, y: y, w: el.offsetWidth, h: el.offsetHeight };
+}
+/* Cria o marcador colado no alvo e devolve o seletor dele. */
+function marcaEm(idAlvo) {
+  const jaTem = document.getElementById("mk-" + idAlvo);
+  if (jaTem) return "#mk-" + idAlvo;   // dois passos no mesmo alvo reusam o marcador
+  const el = document.getElementById(idAlvo);
+  const antes = getComputedStyle(el).position;
+  if (antes === "static") el.style.position = "relative";
+  const m = document.createElement("div");
+  m.className = "marcador";
+  m.id = "mk-" + idAlvo;
+  m.setAttribute("data-layout-allow-overlap", "");
+  m.setAttribute("data-layout-allow-occlusion", "");
+  // Alvo de ícone é pequeno: sem folga maior o contorno some na tela.
+  const folga = (el.offsetWidth < 16 || el.offsetHeight < 16) ? 5 : 3;
+  m.style.cssText = `position:absolute;left:${-folga}px;top:${-folga}px;right:${-folga}px;bottom:${-folga}px`;
+  el.appendChild(m);
+  return "#mk-" + idAlvo;
+}
+/* Ponto que o dedo toca: o centro do alvo, descontando a ponta do cursor. */
+function ponto(idAlvo) {
+  const r = xy(document.getElementById(idAlvo));
+  return { x: r.x + r.w / 2 - 5, y: r.y + r.h / 2 - 3 };
+}
+/* Encosta um flutuante (menu, lista de nomes) embaixo do alvo que o abre.
+   Vira filho do alvo, como o marcador: medida nenhuma pode errar o lugar. */
+function abaixoDe(idFlutuante, idAlvo, dx) {
+  const alvo = document.getElementById(idAlvo);
+  const f = document.getElementById(idFlutuante);
+  if (getComputedStyle(alvo).position === "static") alvo.style.position = "relative";
+  alvo.appendChild(f);
+  f.style.left = (dx || 0) + "px";
+  f.style.top = "calc(100% + 3px)";
+}
+/* O dedo sai de `de` e toca `para`, com marcador e pulso no compasso do passo.
+   Sem `de`, entra pela borda de baixo do palco. */
+function toca(t, para, de) {
+  const a = ponto(para);
+  const b = de ? ponto(de) : { x: a.x + 34, y: Math.min(a.y + 70, 458) };
+  const mk = marcaEm(para);
+  mostra(mk, t);
+  move("#g1", t + 0.15, b.x, b.y, a.x, a.y);
+  clique("#g1", t + 1.05);
+  return mk;
+}
+
+/* 1 · Abertura */
+surge("#ab-eyebrow", 0.25, 22);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.5);
+surge("#ab-sub", 1.1, 22);
+surge("#ab-selos", 1.6, 18);
+
+/* 2 · A tarefa */
+tl.fromTo("#janela", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 4.20);
+nota('#p1', 4.90, 9.55);
+nota('#p2', 9.90, 14.55);
+nota('#p3', 14.90, 19.55);
+nota('#p4', 19.90, 24.55);
+nota('#p5', 24.90, 29.55);
+nota('#p6', 29.90, 34.55);
+
+
+/* passo 1: a tela do aceite */
+mostra(marcaEm("ac-aviso"), 7.9);
+
+/* passo 2: o nome no aviso */
+esconde("#mk-ac-aviso", 13.5);
+
+/* passo 3: pauta e discussão */
+mostra(marcaEm("ac-pauta"), 15.4);
+mostra(marcaEm("ac-discussao"), 16.5);
+esconde("#mk-ac-pauta", 19.2);
+esconde("#mk-ac-discussao", 19.2);
+
+/* passo 4: o quadro de ações */
+mostra(marcaEm("ac-quadro"), 20.4);
+esconde("#mk-ac-quadro", 24.2);
+
+/* passo 5: marcar a frase */
+toca(25.3, "ac-check");
+tl.to("#ac-check", { background: "#2B2E7E", borderColor: "#2B2E7E", duration: 0.2 }, 26.5);
+tl.to("#ac-check-on", { opacity: 1, duration: 0.2 }, 26.6);
+tl.to("#ac-botao", { opacity: 1, duration: 0.3 }, 26.7);
+esconde("#mk-ac-check", 28.3);
+
+/* passo 6: aceitar */
+toca(30.2, "ac-botao", "ac-check");
+aperta("#ac-botao", 31.3);
+esconde("#mk-ac-botao", 31.9);
+tl.to("#g1", { opacity: 0, duration: 0.2 }, 32.0);
+tl.to("#ok-tela-aceite-ok", { opacity: 1, duration: 0.25 }, 32.2);
+
+
+/* 3 · Fecho */
+surge("#fc-titulo", 36.30, 18);
+surge("#fc-carimbo", 36.80, 14);
+surge("#fc-org", 37.20, 12);
+
+window.__timelines.main = tl;
+</script>
+</body>
+</html>

@@ -1,0 +1,316 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · Reuniões e metas · Mover as pendências no kanban</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "reunioes",
+ "slug": "mover-as-pendencias-no-kanban",
+ "pagina": "reunioes/mover-as-pendencias-no-kanban.md",
+ "prd": [
+  731
+ ],
+ "issues": [],
+ "app_version": "0.142.1",
+ "gerado_em": "2026-09-17T16:00:00-03:00"
+}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* Palco desenhado em 960x540 e ampliado 2x, para os tamanhos do app saírem
+     nítidos em 1080p. Mesma régua das outras composições do Manual. */
+  .palco { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #EEF1F6; }
+
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 72px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
+  .selo-abertura { margin-top: 40px; display: inline-flex; gap: 14px; }
+  .selo-abertura span { border: 2px solid var(--app-border); border-radius: 999px; padding: 10px 26px; font-size: 26px; font-weight: 700; color: var(--app-sec); }
+  .selo-abertura span.destaque { border-color: var(--navy); color: var(--navy); background: #F5F6FE; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  /* ===== janela de navegador ===== */
+  .janela { position: absolute; left: 36px; top: 72px; width: 570px; height: 400px; border-radius: 12px; background: #fff; box-shadow: 0 26px 60px -20px rgba(0,0,0,.42); overflow: hidden; border: 1px solid #D8DEE9; }
+  .barra { height: 20px; background: #E7EBF2; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid #D8DEE9; }
+  .barra i { width: 5px; height: 5px; border-radius: 50%; background: #C3CBD8; display: block; }
+  .barra .url { margin-left: 8px; flex: 1; height: 11px; border-radius: 6px; background: #fff; border: 1px solid #D8DEE9; font-size: 6.4px; color: #5A6273; display: flex; align-items: center; padding: 0 6px; }
+  .tela { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; background: #F7F9FC; overflow: hidden; }
+
+  /* ===== moldura do app: topo + menu lateral ===== */
+  .app-topo { position: absolute; left: 0; right: 0; top: 0; height: 24px; background: #fff; border-bottom: 1px solid var(--app-border); display: flex; align-items: center; justify-content: space-between; padding: 0 9px; }
+  .app-topo .marca { display: flex; align-items: center; gap: 4px; }
+  .app-topo .direita { display: flex; align-items: center; gap: 6px; color: #94A3B8; }
+  .app-topo .avatar { width: 13px; height: 13px; border-radius: 50%; background: #E8EAF7; color: var(--navy); font-size: 6px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+  .app-menu { position: absolute; left: 0; top: 24px; bottom: 0; width: 92px; background: #fff; border-right: 1px solid var(--app-border); padding: 7px 6px; }
+  .mi { display: flex; align-items: center; gap: 5px; font-size: 6.6px; color: #56606F; padding: 3.5px 5px; border-radius: 5px; margin-bottom: 2px; }
+  .mi.grupo { justify-content: space-between; }
+  .mi.on { background: rgba(43,46,126,.05); color: var(--navy); font-weight: 700; }
+  .mi.ativo { background: rgba(43,46,126,.08); color: var(--navy); font-weight: 700; }
+  .submenu { margin: 2px 0 2px 8px; padding-left: 5px; border-left: 1.5px solid rgba(226,232,240,.8); }
+  .submenu .mi { font-size: 6.2px; padding: 3px 5px; }
+  .app-corpo { position: absolute; left: 92px; right: 0; top: 24px; bottom: 0; padding: 11px 12px; overflow: hidden; }
+
+  /* ===== tipografia de conteúdo ===== */
+  .h-pag { font-size: 11.5px; font-weight: 700; color: #0F172A; }
+  /* Um tom mais escuro que o secundário do app: em vídeo, lido de longe, o
+     #64748B do globals.css não chega nos 4.5:1 exigidos. */
+  .dek { font-size: 6.4px; color: #56606F; margin-top: 1.5px; }
+  .cartao { background: #fff; border: 1px solid var(--app-border); border-radius: 9px; }
+
+  .btn { display: inline-flex; align-items: center; gap: 4px; font-size: 7px; font-weight: 700; border-radius: 7px; padding: 5px 9px; }
+  .btn-cheio { background: linear-gradient(90deg, #2B2E7E, #1A1C4E); color: #fff; }
+  .btn-indigo { background: linear-gradient(90deg, #4F46E5, #4338CA); color: #fff; }
+  .btn-vazado { border: 1.4px solid rgba(43,46,126,.3); color: var(--navy); background: #fff; }
+  .btn-claro { border: 1px solid var(--app-border); color: #475569; background: #fff; }
+  .btn-ambar { background: #FEF3C7; color: #92400E; }
+  .btn-verde { background: linear-gradient(90deg, #15803D, #14532D); color: #fff; }
+
+  .campo { position: relative; height: 19px; border: 1px solid var(--app-border); border-radius: 7px; display: flex; align-items: center; gap: 5px; padding: 0 7px; font-size: 6.8px; color: var(--app-text); background: #fff; }
+  .campo .ph { color: #626D80; }
+  /* O valor digitado ocupa o mesmo lugar do placeholder, sem empurrar layout. */
+  .campo .val { position: absolute; left: 7px; right: 7px; opacity: 0; color: var(--app-text); white-space: nowrap; overflow: hidden; }
+  .campo .val.com-icone { left: 19px; }
+  .lb { font-size: 6.6px; font-weight: 700; color: #475569; margin-bottom: 3px; }
+
+  .selo { display: inline-flex; align-items: center; gap: 2.5px; border-radius: 999px; padding: 2px 6px; font-size: 5.8px; font-weight: 700; }
+
+  /* ===== dedo fantasma ===== */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+
+  /* ===== legenda de passo, do lado da janela ===== */
+  .passo { position: absolute; left: 626px; width: 300px; opacity: 0; }
+  .passo .n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
+  .passo h3 { font-size: 24px; line-height: 1.25; color: var(--navy); font-weight: 700; margin: 12px 0 8px; }
+  /* Um tom mais escuro que o secundário do app: legenda de vídeo é lida de
+     longe e precisa passar no contraste 4.5:1. */
+  .passo p { font-size: 16.5px; line-height: 1.5; color: #556076; }
+  .passo b { color: var(--app-text); }
+  .marcador { position: absolute; border: 1.5px solid var(--navy); border-radius: 7px; box-shadow: 0 0 0 3px rgba(43,46,126,.14); opacity: 0; z-index: 30; }
+
+  /* ===== rodapé do carimbo, em toda cena com o app ===== */
+  .rodape-v { position: absolute; left: 0; right: 0; bottom: 8px; text-align: center; font-size: 9.5px; color: #5C6676; letter-spacing: .04em; }
+</style>
+</head>
+<body>
+
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="41" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Manual · Reuniões e metas</div>
+    <h1 class="titulo" id="ab-titulo">Mover as pendências no kanban</h1>
+    <p class="sub" id="ab-sub">Arrastar o cartão de uma coluna para outra e mudar o estado num gesto.</p>
+    <div class="selo-abertura" id="ab-selos"><span class="destaque">Facilitador</span></div>
+  </section>
+
+  <!-- 2 · A tarefa, passo a passo -->
+  <section id="c-tarefa" class="clip scene" data-start="4" data-duration="32" data-track-index="2">
+    <div class="palco" id="palco-tarefa"></div>
+  </section>
+
+  <!-- 3 · Fecho -->
+  <section id="c-fecho" class="clip scene slide" data-start="36" data-duration="5" data-track-index="3">
+    <div class="fecho-titulo" id="fc-titulo">Mover as pendências no kanban</div>
+    <div class="carimbo" id="fc-carimbo">Manual · retrata o app em v0.142.1 · gerado em 17/09/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da plataforma</div>
+  </section>
+
+</div>
+
+<script>
+document.getElementById("palco-tarefa").innerHTML =
+  `<div style="position:absolute;inset:0;background:#EEF1F6"></div><div class="janela" data-layout-allow-overflow data-layout-allow-occlusion id="janela"><div class="barra"><i></i><i></i><i></i><div class="url">plataforma do hospital · pendências</div></div><div class="tela" data-layout-allow-overflow data-layout-allow-occlusion id="tela-kanban"><div class="app-topo"><div class="marca"><svg width="22" height="9" viewBox="0 0 100 42" fill="none" style="flex-shrink:0"><path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/><path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/></svg><span style="font-size:6.2px;font-weight:700;color:#1E3A8A;line-height:1.1">HOSPITAL<br>SÃO MATHEUS</span></div><div class="direita"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.41 5.956-2.738 7.326"/></svg><div class="avatar">A</div></div></div><div class="app-menu"><div class="mi grupo on" id="mi-grupo"><div style="display:flex;align-items:center;gap:5px"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/></svg>Reuniões e metas</div><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m6 9 6 6 6-6"/></svg></div><div class="submenu"><div class="mi" id="mi-dashboard"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect width="7" height="9" x="3" y="3" rx="1"/><rect width="7" height="5" x="14" y="3" rx="1"/><rect width="7" height="9" x="14" y="12" rx="1"/><rect width="7" height="5" x="3" y="16" rx="1"/></svg>Dashboard</div><div class="mi" id="mi-calendario"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/></svg>Calendário</div><div class="mi grupo ativo" id="mi-pendencias"><div style="display:flex;align-items:center;gap:5px"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Pendências</div><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m6 9 6 6 6-6"/></svg></div><div class="submenu"><div class="mi" id="mi-lista"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>Lista</div><div class="mi ativo" id="mi-kanban"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>Kanban</div></div></div><div class="mi" style="margin-top:3px"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m3 11 18-5v12L3 14v-3z"/><path d="M11.6 16.8a3 3 0 1 1-5.8-1.6"/></svg>Ouvidoria</div><div class="mi"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M12 21V7"/><path d="m16 12 2 2 4-4"/><path d="M22 6V4a1 1 0 0 0-1-1h-5a4 4 0 0 0-4 4 4 4 0 0 0-4-4H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h6a3 3 0 0 1 3 3 3 3 0 0 1 3-3h6a1 1 0 0 0 1-1v-1.3"/></svg>POPs</div><div class="mi"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></svg>Admin</div><div class="mi"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg>Ajuda</div></div><div class="app-corpo"><div style="display:flex;align-items:flex-start;justify-content:space-between"><div><div class="h-pag">Pendências</div><div class="dek">Acompanhamento dinâmico hierárquico e por setor</div></div><div style="display:flex;background:#fff;border:1px solid #E2E8F0;border-radius:7px;padding:1.5px;gap:1.5px"><span style="color:#626D80;font-size:5.8px;font-weight:700;padding:2.5px 6px;display:inline-flex;align-items:center;gap:3px"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect x="3" y="5" width="6" height="6" rx="1"/><path d="m3 17 2 2 4-4"/><path d="M13 6h8"/><path d="M13 12h8"/><path d="M13 18h8"/></svg>Lista</span><span style="background:rgba(43,46,126,.08);color:#2B2E7E;font-size:5.8px;font-weight:700;padding:2.5px 6px;border-radius:5px;display:inline-flex;align-items:center;gap:3px"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><rect width="7" height="7" x="3" y="3" rx="1"/><rect width="7" height="7" x="14" y="3" rx="1"/><rect width="7" height="7" x="14" y="14" rx="1"/><rect width="7" height="7" x="3" y="14" rx="1"/></svg>Kanban</span></div></div><div class="cartao" id="k-filtros" style="padding:5px 8px;margin-top:7px;display:flex;align-items:center;gap:4px"><svg width="7" height="7" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#475569;"><polygon points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"/></svg><span style="font-size:6.4px;font-weight:700;color:#475569">Filtros Dinâmicos</span></div><div style="display:flex;gap:5px;margin-top:7px"><div id="col-pendente" style="width:73px;flex-shrink:0;border:1px solid #F1F5F9;border-radius:8px;background:#F8FAFC80;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;align-items:center;justify-content:space-between;padding:3.5px 5px;background:#FFC067"><span style="display:flex;align-items:center;gap:2.5px;color:#fff;font-size:5.6px;font-weight:700"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Pendente</span><span style="background:rgba(255,255,255,.22);color:#fff;font-size:5px;font-weight:700;border-radius:999px;padding:0.5px 4px" id="conta-pendente">2</span></div><div style="flex:1;padding:4px"><div class="cartao" style="padding:4px 5px;margin-bottom:3px;box-shadow:0 2px 6px -2px rgba(0,0,0,.1)"><div style="font-size:5.8px;color:#334155;line-height:1.35">Apresentar a escala nova da enfermagem</div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:3px"><span style="font-size:5.2px;color:#64748B">Marina Alves</span><span style="font-size:5.2px;color:#626D80">30/09/2026</span></div></div><div id="cartao-origem" class="cartao" style="padding:4px 5px;margin-bottom:3px;box-shadow:0 2px 6px -2px rgba(0,0,0,.1)"><div style="font-size:5.8px;color:#334155;line-height:1.35">Fechar a compra do oxímetro</div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:3px"><span style="font-size:5.2px;color:#64748B">Rafael Nunes</span><span style="font-size:5.2px;color:#626D80">25/09/2026</span></div></div></div></div><div id="col-em_progresso" style="width:73px;flex-shrink:0;border:1px solid #F1F5F9;border-radius:8px;background:#F8FAFC80;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;align-items:center;justify-content:space-between;padding:3.5px 5px;background:#7CC2F2"><span style="display:flex;align-items:center;gap:2.5px;color:#fff;font-size:5.6px;font-weight:700"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Em Progresso</span><span style="background:rgba(255,255,255,.22);color:#fff;font-size:5px;font-weight:700;border-radius:999px;padding:0.5px 4px" id="conta-em_progresso">0</span></div><div style="flex:1;padding:4px"><div id="vazio-em_progresso" style="height:22px;border:1.4px dashed #CBD5E1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:5.4px;color:#626D80">Solte aqui</div><div id="cartao-solto" data-layout-allow-overlap style="opacity:0;margin-top:-22px"><div class="cartao" style="padding:4px 5px;margin-bottom:3px;box-shadow:0 2px 6px -2px rgba(0,0,0,.1)"><div style="font-size:5.8px;color:#334155;line-height:1.35">Fechar a compra do oxímetro</div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:3px"><span style="font-size:5.2px;color:#64748B">Rafael Nunes</span><span style="font-size:5.2px;color:#626D80">25/09/2026</span></div></div></div></div></div><div id="col-atrasado" style="width:73px;flex-shrink:0;border:1px solid #F1F5F9;border-radius:8px;background:#F8FAFC80;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;align-items:center;justify-content:space-between;padding:3.5px 5px;background:#FC9D9D"><span style="display:flex;align-items:center;gap:2.5px;color:#fff;font-size:5.6px;font-weight:700"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/></svg>Atrasado</span><span style="background:rgba(255,255,255,.22);color:#fff;font-size:5px;font-weight:700;border-radius:999px;padding:0.5px 4px" id="conta-atrasado">1</span></div><div style="flex:1;padding:4px"><div class="cartao" style="padding:4px 5px;margin-bottom:3px;box-shadow:0 2px 6px -2px rgba(0,0,0,.1)"><div style="font-size:5.8px;color:#334155;line-height:1.35">Revisar o fluxo de alta hospitalar</div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:3px"><span style="font-size:5.2px;color:#64748B">Helena Duarte</span><span style="font-size:5.2px;color:#626D80">10/09/2026</span></div></div></div></div><div id="col-concluido" style="width:73px;flex-shrink:0;border:1px solid #F1F5F9;border-radius:8px;background:#F8FAFC80;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;align-items:center;justify-content:space-between;padding:3.5px 5px;background:#88D7A4"><span style="display:flex;align-items:center;gap:2.5px;color:#fff;font-size:5.6px;font-weight:700"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M20 6 9 17l-5-5"/></svg>Concluido</span><span style="background:rgba(255,255,255,.22);color:#fff;font-size:5px;font-weight:700;border-radius:999px;padding:0.5px 4px" id="conta-concluido">0</span></div><div style="flex:1;padding:4px"><div id="vazio-concluido" style="height:22px;border:1.4px dashed #CBD5E1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:5.4px;color:#626D80">Solte aqui</div></div></div><div id="col-cancelado" style="width:73px;flex-shrink:0;border:1px solid #F1F5F9;border-radius:8px;background:#F8FAFC80;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;align-items:center;justify-content:space-between;padding:3.5px 5px;background:#94a3b8"><span style="display:flex;align-items:center;gap:2.5px;color:#fff;font-size:5.6px;font-weight:700"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><circle cx="12" cy="12" r="10"/><path d="m15 9-6 6"/><path d="m9 9 6 6"/></svg>Cancelado</span><span style="background:rgba(255,255,255,.22);color:#fff;font-size:5px;font-weight:700;border-radius:999px;padding:0.5px 4px" id="conta-cancelado">0</span></div><div style="flex:1;padding:4px"><div id="vazio-cancelado" style="height:22px;border:1.4px dashed #CBD5E1;border-radius:6px;display:flex;align-items:center;justify-content:center;font-size:5.4px;color:#626D80">Solte aqui</div></div></div><div id="col-repactuada" style="width:73px;flex-shrink:0;border:1px solid #F1F5F9;border-radius:8px;background:#F8FAFC80;overflow:hidden;display:flex;flex-direction:column"><div style="display:flex;align-items:center;justify-content:space-between;padding:3.5px 5px;background:#C084FC"><span style="display:flex;align-items:center;gap:2.5px;color:#fff;font-size:5.6px;font-weight:700"><svg width="6" height="6" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/></svg>Repactuada</span><span style="background:rgba(255,255,255,.22);color:#fff;font-size:5px;font-weight:700;border-radius:999px;padding:0.5px 4px" id="conta-repactuada">1</span></div><div style="flex:1;padding:4px"><div class="cartao" style="padding:4px 5px;margin-bottom:3px;box-shadow:0 2px 6px -2px rgba(0,0,0,.1)"><div style="font-size:5.8px;color:#334155;line-height:1.35">Levantar o custo do novo contrato</div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:3px"><span style="font-size:5.2px;color:#64748B">Marina Alves</span><span style="font-size:5.2px;color:#626D80">A repactuar</span></div></div></div></div></div></div><div id="cartao-arrastado" data-layout-allow-overlap style="position:absolute;left:150px;top:196px;width:73px;opacity:0;z-index:35;padding:0 4px"><div class="cartao" style="padding:4px 5px;margin-bottom:3px;box-shadow:0 2px 6px -2px rgba(0,0,0,.1)"><div style="font-size:5.8px;color:#334155;line-height:1.35">Fechar a compra do oxímetro</div><div style="display:flex;align-items:center;justify-content:space-between;margin-top:3px"><span style="font-size:5.2px;color:#64748B">Rafael Nunes</span><span style="font-size:5.2px;color:#626D80">25/09/2026</span></div></div></div></div></div><div class="rodape-v">Manual · retrata o app em v0.142.1 · gerado em 17/09/2026</div><div class="ghost" data-layout-allow-overlap data-layout-allow-occlusion id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>` +
+  `<div class="passo" id="p1" style="top:150px"><div class="n">1</div><h3>Abra Pendências, depois Kanban</h3><p>No menu, dentro do grupo <b>Reuniões e metas</b>.</p></div><div class="passo" id="p2" style="top:150px"><div class="n">2</div><h3>Confira as seis colunas</h3><p>Sempre nesta ordem: <b>Pendente</b>, <b>Em Progresso</b>, <b>Atrasado</b>, <b>Concluido</b>, <b>Cancelado</b> e <b>Repactuada</b>.</p></div><div class="passo" id="p3" style="top:150px"><div class="n">3</div><h3>Se o quadro estiver cheio, recorte</h3><p>Abra <b>Filtros Dinâmicos</b> e escolha responsável, facilitador ou intervalo de prazo.</p></div><div class="passo" id="p4" style="top:150px"><div class="n">4</div><h3>Arraste o cartão para a coluna nova</h3><p>A coluna que está vazia mostra <b>Solte aqui</b>, esperando o cartão.</p></div><div class="passo" id="p5" style="top:150px"><div class="n">5</div><h3>Solte</h3><p>O estado muda na hora, e a lista mostra a mesma mudança.</p></div><div class="passo" id="p6" style="top:150px"><div class="n">6</div><h3>Para ver o conteúdo inteiro, clique no cartão</h3><p>Em vez de arrastar. Nenhuma coluna é terminal: dá para arrastar de volta.</p></div>`;
+
+/* ============================================================
+   Timeline: uma só, pausada, com tempos absolutos
+   ============================================================ */
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const nota = (sel, t, ate) => { surge(sel, t, 14); some(sel, ate); };
+const clique = (g, t) => tl.fromTo(`${g} .pulse`, { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
+const move = (g, t, x, y, dx, dy) => {
+  tl.set(g, { x: x, y: y, opacity: 1 }, t);
+  tl.to(g, { x: dx, y: dy, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+};
+const aperta = (sel, t) => tl.to(sel, { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, t);
+const mostra = (sel, t) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, t);
+const esconde = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.3 }, t);
+/* Campo do app: o placeholder dá lugar ao valor, e a borda acende. */
+const digita = (base, t) => {
+  tl.to(base + "-ph", { opacity: 0, duration: 0.15 }, t);
+  tl.to(base + "-val", { opacity: 1, duration: 0.22 }, t + 0.15);
+  tl.to(base, { borderColor: "#2B2E7E", duration: 0.2 }, t);
+};
+/* Troca o texto de um rótulo no meio do passo (Lembrar → Enviado). */
+const troca = (sel, texto, t) => {
+  tl.to(sel, { opacity: 0, duration: 0.12 }, t);
+  tl.set(sel, { innerText: texto }, t + 0.13);
+  tl.to(sel, { opacity: 1, duration: 0.12 }, t + 0.14);
+};
+/* Acende a borda de um bloco (coluna de destino, cartão em foco). */
+const acende = (sel, t, cor) => tl.to(sel, { borderColor: cor || "#2B2E7E", duration: 0.25 }, t);
+
+/* ── Ancoragem ao elemento, em vez de coordenada escrita à mão ──────────────
+   O marcador nasce DENTRO do alvo e o dedo lê a posição do alvo no palco:
+   assim nenhum dos dois pode apontar o campo de cima. Medidas por offset*,
+   que ignoram o scale(2) do palco e não dependem da fonte ter carregado. */
+const PALCO = document.getElementById("palco-tarefa");
+function xy(el) {
+  let x = 0, y = 0, n = el;
+  while (n && n !== PALCO) { x += n.offsetLeft; y += n.offsetTop; n = n.offsetParent; }
+  return { x: x, y: y, w: el.offsetWidth, h: el.offsetHeight };
+}
+/* Cria o marcador colado no alvo e devolve o seletor dele. */
+function marcaEm(idAlvo) {
+  const jaTem = document.getElementById("mk-" + idAlvo);
+  if (jaTem) return "#mk-" + idAlvo;   // dois passos no mesmo alvo reusam o marcador
+  const el = document.getElementById(idAlvo);
+  const antes = getComputedStyle(el).position;
+  if (antes === "static") el.style.position = "relative";
+  const m = document.createElement("div");
+  m.className = "marcador";
+  m.id = "mk-" + idAlvo;
+  m.setAttribute("data-layout-allow-overlap", "");
+  m.setAttribute("data-layout-allow-occlusion", "");
+  // Alvo de ícone é pequeno: sem folga maior o contorno some na tela.
+  const folga = (el.offsetWidth < 16 || el.offsetHeight < 16) ? 5 : 3;
+  m.style.cssText = `position:absolute;left:${-folga}px;top:${-folga}px;right:${-folga}px;bottom:${-folga}px`;
+  el.appendChild(m);
+  return "#mk-" + idAlvo;
+}
+/* Ponto que o dedo toca: o centro do alvo, descontando a ponta do cursor. */
+function ponto(idAlvo) {
+  const r = xy(document.getElementById(idAlvo));
+  return { x: r.x + r.w / 2 - 5, y: r.y + r.h / 2 - 3 };
+}
+/* Encosta um flutuante (menu, lista de nomes) embaixo do alvo que o abre.
+   Vira filho do alvo, como o marcador: medida nenhuma pode errar o lugar. */
+function abaixoDe(idFlutuante, idAlvo, dx) {
+  const alvo = document.getElementById(idAlvo);
+  const f = document.getElementById(idFlutuante);
+  if (getComputedStyle(alvo).position === "static") alvo.style.position = "relative";
+  alvo.appendChild(f);
+  f.style.left = (dx || 0) + "px";
+  f.style.top = "calc(100% + 3px)";
+}
+/* O dedo sai de `de` e toca `para`, com marcador e pulso no compasso do passo.
+   Sem `de`, entra pela borda de baixo do palco. */
+function toca(t, para, de) {
+  const a = ponto(para);
+  const b = de ? ponto(de) : { x: a.x + 34, y: Math.min(a.y + 70, 458) };
+  const mk = marcaEm(para);
+  mostra(mk, t);
+  move("#g1", t + 0.15, b.x, b.y, a.x, a.y);
+  clique("#g1", t + 1.05);
+  return mk;
+}
+
+/* 1 · Abertura */
+surge("#ab-eyebrow", 0.25, 22);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.5);
+surge("#ab-sub", 1.1, 22);
+surge("#ab-selos", 1.6, 18);
+
+/* 2 · A tarefa */
+tl.fromTo("#janela", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 4.20);
+nota('#p1', 4.90, 9.55);
+nota('#p2', 9.90, 14.55);
+nota('#p3', 14.90, 19.55);
+nota('#p4', 19.90, 24.55);
+nota('#p5', 24.90, 29.55);
+nota('#p6', 29.90, 34.55);
+
+
+/* passo 1: o menu */
+toca(5.3, "mi-kanban");
+esconde("#mk-mi-kanban", 8.3);
+
+/* passo 2: as seis colunas, na ordem */
+tl.to("#g1", { opacity: 0, duration: 0.2 }, 10.1);
+mostra(marcaEm("col-pendente"), 10.4);
+mostra(marcaEm("col-em_progresso"), 10.8);
+mostra(marcaEm("col-atrasado"), 11.2);
+mostra(marcaEm("col-concluido"), 11.6);
+mostra(marcaEm("col-cancelado"), 12.0);
+mostra(marcaEm("col-repactuada"), 12.4);
+esconde("#mk-col-pendente", 14.2);
+esconde("#mk-col-em_progresso", 14.2);
+esconde("#mk-col-atrasado", 14.2);
+esconde("#mk-col-concluido", 14.2);
+esconde("#mk-col-cancelado", 14.2);
+esconde("#mk-col-repactuada", 14.2);
+
+/* passo 3: os filtros */
+toca(15.3, "k-filtros");
+esconde("#mk-k-filtros", 18.3);
+
+/* passo 4: o arrasto, do cartão em Pendente até a coluna vazia */
+tl.to("#g1", { opacity: 0, duration: 0.2 }, 20.0);
+mostra(marcaEm("vazio-em_progresso"), 20.3);
+(function () {
+  const de = ponto("cartao-origem");
+  const ate = ponto("vazio-em_progresso");
+  tl.set("#cartao-arrastado", { opacity: 0, x: de.x - 32, y: de.y - 16 }, 20.9);
+  tl.set("#g1", { opacity: 1, x: de.x, y: de.y }, 20.9);
+  tl.to("#cartao-arrastado", { opacity: 0.95, duration: 0.25 }, 21.1);
+  // o lugar de origem se fecha, como no app quando o cartão é levantado
+  tl.to("#cartao-origem", { opacity: 0, duration: 0.2 }, 21.15);
+  tl.to("#cartao-arrastado", { x: ate.x - 32, y: ate.y - 16, duration: 1.3, ease: "power2.inOut" }, 21.5);
+  tl.to("#g1", { x: ate.x, y: ate.y - 8, duration: 1.3, ease: "power2.inOut" }, 21.5);
+})();
+acende("#col-em_progresso", 22.3, "#7CC2F2");
+
+/* passo 5: ao soltar, o cartão entra na coluna e as duas contas mudam */
+tl.to("#cartao-arrastado", { opacity: 0, duration: 0.2 }, 25.3);
+tl.to("#vazio-em_progresso", { opacity: 0, duration: 0.2 }, 25.3);
+mostra("#cartao-solto", 25.5);
+clique("#g1", 25.4);
+troca("#conta-pendente", "1", 25.6);
+troca("#conta-em_progresso", "1", 25.6);
+tl.to("#g1", { opacity: 0, duration: 0.2 }, 26.1);
+esconde("#mk-vazio-em_progresso", 25.3);
+
+/* passo 6: clicar no cartão em vez de arrastar */
+toca(30.3, "cartao-solto");
+esconde("#mk-cartao-solto", 33.3);
+tl.to("#g1", { opacity: 0, duration: 0.25 }, 33.5);
+
+
+/* 3 · Fecho */
+surge("#fc-titulo", 36.30, 18);
+surge("#fc-carimbo", 36.80, 14);
+surge("#fc-org", 37.20, 12);
+
+window.__timelines.main = tl;
+</script>
+</body>
+</html>

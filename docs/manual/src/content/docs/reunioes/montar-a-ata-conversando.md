@@ -4,6 +4,7 @@ description: Registrar uma reunião que não teve transcrição, conversando com
 prd: [47, 75]
 draft: false
 papel: [Facilitador]
+video: montar-a-ata-conversando
 sidebar:
   order: 5
 ---
