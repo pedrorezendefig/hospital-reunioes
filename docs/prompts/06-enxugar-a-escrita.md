@@ -1,7 +1,8 @@
 # Enxugar a escrita do Manual
 
-**Depois dos quatro de vídeo estarem mergeados**, nunca em paralelo: este mexe no
-texto das mesmas páginas que os outros estão ilustrando.
+**Por último, depois dos quatro de vídeo, do 07, dos três de prints (08) e do 09
+estarem mergeados**, nunca em paralelo: este mexe no texto das mesmas páginas
+que os outros estão ilustrando.
 
 Nenhum vídeo, nenhuma página nova. É a passada de qualidade na escrita das 86
 páginas, para o Manual ficar enxuto e soar como uma voz só.
@@ -36,7 +37,7 @@ O QUE PROCURAR, em ordem de valor
 
 3. GORDURA. Frase que repete o que a anterior disse, "Quando usar" que parafraseia o título, passo que descreve o óbvio da tela, ressalva que já está no "Se der errado". O teto do lint é 250 palavras por página e três já passam dele por bom motivo (carregam avisos que valem mais que o número): não corte aviso para caber no teto.
 
-4. SOM DE TEXTO GERADO. Contraste "não é X, mas Y", fecho de uma linha resumindo o que acabou de ser dito, tríade forçada, abertura encenada, palavra inflada. A /humanizer tem a lista.
+4. SOM DE TEXTO GERADO. Contraste "não é X, mas Y", fecho de uma linha resumindo o que acabou de ser dito, tríade forçada, abertura encenada, palavra inflada. A /humanizer tem a lista. Três cacoetes já foram contados numa leitura das 86 páginas e são o que mais se repete: "é assim mesmo" (em 8 páginas), "de propósito" e "surpreende quem chega agora" (em 6), e "não é X: é Y" (em 3). Cada ocorrência vira a afirmação direta do que acontece, sem apagar o aviso que ela carregava. Fora isso, o texto já é humano: não reescreva o que não tem cacoete.
 
 5. TÍTULO NO INFINITIVO nas Páginas de tarefa, e o mesmo título na página, na sidebar e no vídeo que a ilustra.
 
@@ -47,6 +48,7 @@ O QUE NÃO TOCAR
 - Os avisos de limite (o que o app não faz, o cadastro sem efeito, a tela sem botão). Eles custaram rodadas de revisão para nascer certos.
 - hospital-reunioes/, tools/, astro.config.mjs, manual.yml, publicar.sh, rotulos-da-sidebar.ts.
 - Os vídeos e as composições.
+- As imagens (prints com balão, fluxogramas) e os blocos `:::caution`: eles acabaram de entrar pelos prompts 07 a 09. O texto de dentro do callout pode ser enxugado como qualquer frase; a linha da imagem e a existência do callout não se mexem.
 
 TIPOGRAFIA
 Travessão (U+2014) e meia-risca (U+2013) são proibidos em tudo que o usuário vê. O CI varre a pasta inteira. Use vírgula, dois-pontos, parênteses ou ponto.

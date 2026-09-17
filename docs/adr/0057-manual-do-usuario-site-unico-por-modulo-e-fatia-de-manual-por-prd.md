@@ -45,6 +45,24 @@ A variável `NEXT_PUBLIC_MANUAL_URL` continua existindo, com o mesmo papel de se
 
 As demais decisões ficam intactas.
 
+## Emenda a este ADR (17/set/2026, a camada didática: print de passo, fluxograma de caminho e aviso)
+
+Decisão do Pedro (grilling de 17/09/2026, com a recomendação seguida em todas as perguntas). O Manual estava no ar com 86 páginas, o molde certo e o texto já humano, mas 39 das 57 Páginas de tarefa não tinham nenhuma imagem, 48 exibiam "Vídeo em produção" e nenhuma página tinha fluxograma nem aviso destacado. Quem lê no celular, sem som e com pressa, não dá play: olha a figura. Esta emenda acrescenta a camada visual que o leitor leigo precisa e fixa como ela se produz.
+
+**Decisão 4, a Página de tarefa ganha uma segunda camada obrigatória.** O Vídeo de tarefa continua a unidade de "ver a fazer". Ao lado dele, toda Página de tarefa leva **um print por mudança de tela, com balão numerado igual ao número do passo**, colocado logo abaixo do passo que ele ilustra. Passos que acontecem na mesma tela dividem um print com vários balões; a regra é "por tela", não "por passo". O print continua sendo tela real do app (decisão 7): o balão é desenhado pelo próprio Roteiro de prints por cima da tela, antes da captura, nunca em editor de imagem. O aviso "Vídeo em produção" sai da tela do usuário; a página sem vídeo publica sem dizer nada, e a lacuna continua no inventário da `/montar-manual`. Rejeitado: print como camada principal e vídeo só para tarefa com movimento (o ADR já decidiu vídeo por tarefa e a campanha de 48 vídeos estava pronta; o que custa caro no vídeo, a réplica, não se aproveita no print, que é barato); balão desenhado à mão (envelhece e não regera); quadro do vídeo no lugar do print (já rejeitado na decisão 7).
+
+**Decisão 13, fluxograma de caminho.** Fluxograma entra **só onde há caminho ou estado**: nas cinco Visões gerais, ilustrando "O caminho de ponta a ponta", e nas páginas de Como funciona que descrevem estados ou desvios. No máximo um por página, com as palavras da tela e do glossário. A fonte é texto versionado (`docs/manual/fluxogramas/<modulo>/<slug>.mmd`, sintaxe Mermaid), o SVG é gerado por script do site em `src/assets/<modulo>/fluxo-<slug>.svg` com as cores do app, e a página aponta para o SVG como aponta para um print. Não confundir com o fluxograma do POP, que é seção do documento gerado pelo app. Rejeitado: Mermaid renderizado no build (exige navegador no build da Vercel e muda o pipeline por causa de oito imagens); SVG desenhado à mão pelo agente (cada um sai diferente e não regera); fluxograma em Página de tarefa (a tarefa é linear, o print de passo cobre).
+
+**Decisão 14, aviso destacado.** O aviso do que é irreversível ou do que a pessoa precisa saber antes de clicar ("Finalizar sem assinatura não tem volta", "a senha aparece uma vez só") vira um callout do Starlight (`:::caution[Título]`) no corpo da Página de tarefa, no máximo um por página, colocado antes do passo que dispara a ação. "Se der errado" continua lista, como está. Rejeitado: callout em toda ressalva (vira ruído e o leitor para de ler).
+
+**Decisão 2, o tema desenha o passo.** O tema do site passa a numerar os passos das Páginas de tarefa com número grande e a acomodar a figura dentro do item da lista, e o vídeo ganha capa (`poster`) gerada pelo `publicar.sh` a partir do primeiro quadro do MP4. Nenhuma dessas mudanças toca o Markdown das páginas.
+
+**Decisão 10, o lint.** O texto alternativo das imagens deixa de contar no teto de 250 palavras: ninguém lê o `alt`, e três prints por página empurrariam toda tarefa para o aviso.
+
+**Produção.** A camada didática é uma segunda campanha de prompts em `docs/prompts/` (07 a 09), na mesma mecânica dos vídeos: um worktree por terminal, um terminal por módulo, teto de três terminais de print (o app local e o banco são compartilhados), o tema sozinho e antes de todos, os fluxogramas em paralelo com os prints porque não tocam Página de tarefa, e o 06 (enxugar a escrita) por último, porque mexe no texto de todas. Humanização separada foi rejeitada: o texto já é humano, e os três cacoetes encontrados ("é assim mesmo", "de propósito", "não é X: é Y") entram no 06.
+
+As demais decisões ficam intactas.
+
 ## Consequências
 
 - `docs/manual/ouvidoria/` (página única) deixa de existir como está: vira a seção `ouvidoria/` do site, recortada em tarefas e "Como funciona". Nada do conteúdo se perde; o formato muda.

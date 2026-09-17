@@ -56,19 +56,30 @@ draft: true                # sai quando o PRD sobe para produção
 papel: [Ouvidoria]         # quem faz: Ouvidoria, Gestor do setor, Facilitador,
                            # Secretária, Só admin, Qualquer pessoa
 login: false               # só na tela aberta por link ou QR, sem entrar no app
-video: <slug do vídeo>     # ausente = a página mostra "Vídeo em produção"
+video: <slug do vídeo>     # ausente = a página publica sem vídeo, sem aviso
 sidebar:
   order: 2
 ---
 
 ## Quando usar
 ## Passo a passo
-![<o que o print mostra>](../../../assets/<modulo>/<print>.png)
+1. Clique em **Novo Usuário**.
+   ![<o que o print mostra>](../../../assets/<modulo>/<print>.png)
+2. Preencha ...
+
+:::caution[Não tem volta]
+<o aviso, uma ou duas frases, antes do passo que dispara a ação>
+:::
+
+3. Clique em **Criar**.
 ## Se der errado
 ```
 
 Selo e vídeo são desenhados pelo tema a partir do frontmatter: **não repita
-isso no Markdown**.
+isso no Markdown**. O Print de passo fica **dentro do item da lista**, com três
+espaços de recuo, logo abaixo do passo que ele ilustra: é assim que o tema o
+acomoda sob o número grande. O Aviso destacado é no máximo um por página e só
+para o irreversível.
 
 As outras páginas do módulo: `index.md` é a Visão geral (as palavras que a
 pessoa vê o tempo todo e o caminho de ponta a ponta), o grupo `como-funciona/`
@@ -83,7 +94,11 @@ leva `papel`.
 - **Até 6 passos numerados.** Passou disso, a tarefa é outra.
 - **"Se der errado" no fim**, em até 3 casos, cada um começando pelo que a
   pessoa vê: "**O botão está apagado:** o relato está vazio."
-- **Teto de 250 palavras** por Página de tarefa (o lint avisa acima disso).
+- **Um Print de passo por mudança de tela**, com balão numerado igual ao
+  passo; passos na mesma tela dividem um print. Página de tarefa sem nenhuma
+  imagem está incompleta.
+- **Teto de 250 palavras** por Página de tarefa (o lint avisa acima disso; o
+  texto alternativo das imagens não conta).
 - **Sem travessão e sem meia-risca** (ADR 0013) e sem jargão em texto visível:
   a lista que trava está em `tools/lint_manual.py`.
 
@@ -91,7 +106,13 @@ leva `papel`.
 
 - **Print** é tela real do app local, capturada pelo Roteiro de prints do
   módulo (`docs/manual/prints/<modulo>.py`, Playwright). Print novo entra no
-  roteiro, nunca à mão. Receita em `references/prints.md`.
+  roteiro, nunca à mão; o balão numerado também é do roteiro. Receita em
+  `references/prints.md`.
+- **Fluxograma de caminho** só em Visão geral e em Como funciona com estados
+  ou desvios, um por página: fonte Mermaid em `docs/manual/fluxogramas/`, SVG
+  gerado pelo script do site em `src/assets/<modulo>/fluxo-<slug>.svg` (o
+  gerador nasce no prompt 07 de `docs/prompts/`, que registra aqui o comando).
+  Nunca em Página de tarefa.
 - **Vídeo de tarefa**: composição HyperFrames versionada em
   `docs/manual/video/<modulo>/<slug>/`, MP4 fora do git, 30 a 60 s, mudo, com
   carimbo de geração. Vai a draft e **só o Pedro aprova**; o render final vem

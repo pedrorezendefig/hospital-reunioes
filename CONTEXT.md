@@ -274,8 +274,20 @@ O site único de documentação da plataforma para quem usa o app no hospital (d
 _Evitar_: um manual por módulo em endereços separados; manual por papel (o papel é selo, não estrutura); selo "em desenvolvimento" ou "planejado" para o usuário; capítulo técnico (endpoint, gatilho de e-mail, variável) dentro do manual.
 
 **Página de tarefa**:
-A unidade do [Manual]: uma ação que alguém faz no app, com o título no infinitivo ("Registrar uma manifestação", "Assinar a ata"). Molde fixo e curto: **quando usar** (uma frase), **quem faz** (selos), o [Vídeo de tarefa], **passo a passo** (até 6 passos, print só quando a tela muda) e **se der errado** (2 a 4 situações). Tratamento "você", passos no imperativo, e a palavra é sempre a que aparece na tela. Cabe numa tela de celular; passou disso, são duas tarefas. Publica sem vídeo, com aviso "vídeo em produção".
-_Evitar_: "por que existe", histórico, conceito (isso é [Como funciona]); "o usuário deverá"; sinônimo inventado para o nome do botão.
+A unidade do [Manual]: uma ação que alguém faz no app, com o título no infinitivo ("Registrar uma manifestação", "Assinar a ata"). Molde fixo e curto: **quando usar** (uma frase), **quem faz** (selos), o [Vídeo de tarefa], **passo a passo** (até 6 passos, com um [Print de passo] por mudança de tela e no máximo um [Aviso destacado]) e **se der errado** (2 a 4 situações). Tratamento "você", passos no imperativo, e a palavra é sempre a que aparece na tela. Cabe numa tela de celular; passou disso, são duas tarefas. Publica sem vídeo, sem dizer nada na tela: a lacuna fica no inventário (emenda de 17/09/2026 ao ADR 0057).
+_Evitar_: "por que existe", histórico, conceito (isso é [Como funciona]); "o usuário deverá"; sinônimo inventado para o nome do botão; aviso "vídeo em produção" na tela do usuário.
+
+**Print de passo**:
+A imagem que fica logo abaixo de um passo da [Página de tarefa]: a tela real do app, capturada pelo [Roteiro de prints], com **balões numerados** desenhados pelo próprio roteiro por cima da tela, cada balão com o número do passo que ele ilustra. Um por **mudança de tela**, não por passo: passos na mesma tela dividem um print com vários balões. O texto alternativo é curto e não conta no teto de palavras.
+_Evitar_: balão desenhado em editor de imagem (não regera quando a tela muda); um print por passo na mesma tela; seta ou destaque que não seja o balão numerado.
+
+**Aviso destacado**:
+O callout (`:::caution[Título]`) que uma [Página de tarefa] pode ter, no máximo um, antes do passo que dispara uma ação sem volta ou que a pessoa precisa saber antes de clicar ("Finalizar sem assinatura não tem volta", "a senha aparece uma vez só"). "Se der errado" continua lista.
+_Evitar_: callout em toda ressalva; callout em [Como funciona] ou em [Visão geral do módulo].
+
+**Fluxograma de caminho**:
+O desenho do caminho ou dos estados de um tema, só em [Visão geral do módulo] ("O caminho de ponta a ponta") e em [Como funciona] que descreve estados ou desvios, no máximo um por página, com as palavras da tela e do glossário. Fonte em texto versionado (`docs/manual/fluxogramas/<modulo>/<slug>.mmd`), SVG gerado por script do site com as cores do app. Não é o fluxograma do POP, que é seção do documento gerado pelo app.
+_Evitar_: fluxograma em [Página de tarefa] (a tarefa é linear, o [Print de passo] cobre); SVG desenhado à mão; renderização no build.
 
 **Selo**:
 Marcação curta na [Página de tarefa] que diz quem faz (Ouvidoria, Gestor do setor, Facilitador, Secretária), **Só admin** para o que só o Super admin vê, e **Sem login** para as telas que a pessoa abre por link ou QR sem entrar no app (formulário público, portal do setor, aceite da Ata). Telas sem login moram dentro do módulo delas, com o selo, não numa seção à parte.
@@ -298,8 +310,8 @@ _Evitar_: um vídeo por capítulo como unidade (obriga a assistir 90 s para acha
 O vídeo de uma entrega (PRD) feito para o diretor ver o sistema funcionando (ADR 0026, ADR 0045): a unidade é o que mudou, não a tarefa. No [Manual] ele entra em [Novidades], e serve de [Vídeo de tarefa] quando a entrega coincide com uma tarefa.
 
 **Roteiro de prints**:
-O script versionado, um por módulo, que abre o app local com dados de exemplo, navega e captura os prints que as páginas daquele módulo usam. Print do [Manual] é sempre tela real do app, nunca desenho; mudou a tela, roda o roteiro de novo.
-_Evitar_: print tirado à mão sem roteiro; quadro extraído do vídeo no lugar do print.
+O script versionado, um por módulo, que abre o app local com dados de exemplo, navega e captura os prints que as páginas daquele módulo usam, desenhando os balões numerados do [Print de passo] por cima da tela antes de capturar. Print do [Manual] é sempre tela real do app, nunca desenho; mudou a tela, roda o roteiro de novo.
+_Evitar_: print tirado à mão sem roteiro; quadro extraído do vídeo no lugar do print; balão fora do roteiro.
 
 **Fatia de manual**:
 A issue que todo PRD com tela ganha no fim, bloqueada pelas fatias de código: escreve ou muda as [Páginas de tarefa], roda o [Roteiro de prints], produz os [Vídeos de tarefa] e a entrada de [Novidades]. Nasce invisível e aparece no deploy do PRD. É o par do vídeo de divulgação: uma entrega, uma fatia de manual.
