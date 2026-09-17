@@ -2,6 +2,40 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-17T19:56:00-03:00",
+      "sha": "f7e6e92e",
+      "app_version": "0.143.0",
+      "subject": "O QR pergunta de quem e o relato e o Dossie mostra o paciente",
+      "raw_subject": "feat(ouvidoria): o QR pergunta de quem é o relato e o Dossiê mostra o paciente (#666) (#792)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        659
+      ],
+      "result": "healthy",
+      "duration_seconds": 420,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "110_ouvidoria_paciente_do_caso.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 do PRD #659 (ADR 0052). Migration 110 aplicada a mao no Studio ANTES do merge, sha256 7fc8fc43 conferido contra o bloco do corpo do PR. DECISAO DE CHECKPOINT que diverge do criterio de aceite escrito: o campo `sobre` do canal publico e OBRIGATORIO NA TELA e TOLERANTE NO BACKEND (ausencia grava vinculo nulo, valor presente e invalido segue 422). Motivo: o merge dispara os dois webhooks juntos e o backend fica pronto antes do frontend, entao 422 por ausencia derrubaria o canal de denuncia na janela de deploy e em toda aba aberta por quem escaneou o QR. Consequencia aceita: manifestacao enviada por pagina velha entra sem vinculo e nao e recuperavel depois (os campos nao tem endpoint de edicao). Registrado no comentario 5721986254 da issue #666. Fumaca segura feita sem criar manifestacao: POST com sobre invalido devolve 422 citando o campo, o que prova o codigo novo; a tolerancia (POST sem a chave sobre) NAO foi provada em prod porque criaria manifestacao real no canal publico. Pendencias declaradas no COMMENT da migration: a Retencao ainda nao varre as duas colunas (#665) e o paciente ainda nao viaja para a area (#664). ATENCAO: outra sessao mergeou #789, #790, #791 e #793 durante este ship, com o semaforo pego por esta sessao."
+    },
+    {
       "at": "2026-09-17T12:25:00-03:00",
       "sha": "41b9223",
       "app_version": "0.142.1",
@@ -1434,37 +1468,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "1 fatia, 1 PR, 3 rodadas de revisao, 4 must-fix. Fecha o PRD #471 com 9 de 9. O achado que mais rende: o teste da barra mentiu TRES vezes de tres jeitos, cada versao mais esperta e cada uma com uma porta (substring, depois primeiro casamento com .find(), agora exatamente um cancelador). A familia do erro ficou escrita no comentario da funcao. O orcamento de largura media uma tela que nao existe, ignorando o sidebar de 256px, e ficava verde afirmando que cabia algo que transbordava 200px. Com o numero certo a barra nao cabia no md e foi para o lg, o que expos um gatilho de 20px de alvo virando a unica navegacao do tablet."
-    },
-    {
-      "at": "2026-09-02T19:55:00-03:00",
-      "sha": "7b67455",
-      "app_version": "0.106.0",
-      "subject": "Onda 3 do PRD #471: a fila no celular e o aviso de encerramento ao manifestante",
-      "raw_subject": "feat(ouvidoria): aviso de encerramento ao manifestante (#545)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 350,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "096_ouvidoria_aviso_encerramento.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "2 fatias, 2 PRs, 1 versao (as duas pediram 0.106.0 e o bump identico casou no merge), 1 deploy. A revisao segurou 3 must-fix, e o pior foi de privacidade em duas camadas. Primeiro: o campo desfecho_descricao, registro INTERNO do ouvidor desde sempre, passou a sair por email ao manifestante sem a tela avisar, entao nome de terceiro e medida disciplinar sairiam do hospital escritos por quem achava que fazia nota interna. Segundo: a retencao de 5 anos apagava o Dossie mas deixava nome e email pessoal nas notificacoes, amarrados ao mesmo caso, entao a anonimizacao nao anonimizava. Esse segundo tem raiz na #493 e ja estava no codigo em producao, mas sem dado vazado, porque o job so roda 5 anos depois do T3 e o modulo entrou este ano. Achado colateral: sem fixture de rede, 4 testes desciam ao SMTP real com credencial do .env."
     }
   ]
 }

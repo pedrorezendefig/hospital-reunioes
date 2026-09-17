@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.143.0 - 2026-09-17 19:56 - o QR pergunta de quem é o relato e o Dossiê mostra o paciente
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `f7e6e92`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (420s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f7e6e92
+
 ## v0.142.1 - 2026-09-17 12:25 - a primeira fala do assistente conta que dá para falar, anexar e mandar print
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `41b9223`
