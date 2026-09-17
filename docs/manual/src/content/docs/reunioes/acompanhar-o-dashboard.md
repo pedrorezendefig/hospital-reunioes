@@ -4,6 +4,7 @@ description: Ler num relance o que está vencendo, o que está parado e como cad
 prd: [731]
 draft: false
 papel: [Facilitador]
+video: acompanhar-o-dashboard
 sidebar:
   order: 12
 ---

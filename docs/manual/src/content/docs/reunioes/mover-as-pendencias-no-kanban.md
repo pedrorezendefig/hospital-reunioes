@@ -4,6 +4,7 @@ description: Arrastar o cartão de uma coluna para outra e mudar o estado num ge
 prd: [731]
 draft: false
 papel: [Facilitador]
+video: mover-as-pendencias-no-kanban
 sidebar:
   order: 10
 ---

@@ -4,6 +4,7 @@ description: Conferir o que o assistente escreveu, corrigir o que precisar e fec
 prd: [731]
 draft: false
 papel: [Facilitador]
+video: revisar-e-aprovar-a-ata
 sidebar:
   order: 6
 ---

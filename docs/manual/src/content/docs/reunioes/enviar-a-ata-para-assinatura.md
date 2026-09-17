@@ -4,6 +4,7 @@ description: Mandar a ata para a assinatura digital e acompanhar quem já assino
 prd: [272]
 draft: false
 papel: [Facilitador]
+video: enviar-a-ata-para-assinatura
 sidebar:
   order: 7
 ---
