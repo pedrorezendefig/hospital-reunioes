@@ -1,15 +1,24 @@
 # Enxugar a escrita do Manual
 
-**Depois dos três primeiros**, nunca em paralelo: este mexe no texto das mesmas
-páginas que os outros estão ilustrando.
+**Depois dos quatro de vídeo estarem mergeados**, nunca em paralelo: este mexe no
+texto das mesmas páginas que os outros estão ilustrando.
 
 Nenhum vídeo, nenhuma página nova. É a passada de qualidade na escrita das 86
 páginas, para o Manual ficar enxuto e soar como uma voz só.
 
-Copie o bloco inteiro e cole num terminal do Claude Code, na raiz do repositório.
+Copie o bloco inteiro e cole num terminal do Claude Code aberto DENTRO do worktree deste prompt. O [README](README.md) ensina a criar o worktree e a ordem de tudo.
 
 ```
 Enxugue a escrita do Manual do usuário do repo pedrorezendefig/hospital-reunioes. São 86 páginas em docs/manual/src/content/docs/, escritas por quatro sessões diferentes em paralelo. O trabalho é fazer soarem como uma voz só, sem perder informação.
+
+ONDE VOCÊ ESTÁ
+Você está num git worktree próprio, na branch docs/enxugar-a-escrita, criado a partir de origin/main. Este roda sozinho, mas a árvore principal costuma estar numa branch antiga, por isso o worktree. Antes de qualquer coisa, confira:
+  git branch --show-current      (tem que devolver docs/enxugar-a-escrita)
+  git rev-parse --show-toplevel  (tem que ser a pasta deste worktree, NUNCA /Users/pedrorezende/PedroDev/Hospital)
+Se qualquer um dos dois devolver outra coisa, PARE e reporte. Nunca mude de branch, nunca saia deste worktree, nunca toque na árvore principal.
+
+O worktree nasce sem node_modules. Seu primeiro comando de trabalho é:
+  cd docs/manual && corepack pnpm@9 install --frozen-lockfile && cd ../..
 
 NÃO É PARA REESCREVER. O conteúdo foi conferido contra o código, revisado em até três rodadas por página e auditado contra o site publicado. Toda afirmação que está lá foi verificada. Você está cortando gordura e alinhando voz, não repensando o que a página diz. Se achar que uma afirmação está errada, PARE e reporte em vez de corrigir: mudar fato exige conferir no código, e isso é outro trabalho.
 
@@ -55,12 +64,14 @@ python3 tools/checar_build_manual.py --dir docs/manual
 python3 -m pytest tools/ -q --ignore=tools/workflow-dashboard
 
 O PR
-/ship "docs(manual): enxugar a escrita e alinhar a voz das cinco secoes" --no-merge --skip-review
+/ship "docs(manual): enxugar a escrita e alinhar a voz das cinco secoes" --no-merge --skip-review --no-bump
+
+Quando o /ship avisar que a branch atual não é a main, confirme e siga: a branch docs/enxugar-a-escrita é a sua, criada de propósito para este terminal. Não use --from-diff, não crie branch a partir de outra coisa que não seja a atual.
 
 NÃO PUBLIQUE e não mergeie. Todo comentário em PR começa com <!-- automacao --> na primeira linha.
 
 GIT SAFETY
-Proibido git checkout --, git reset --hard e git stash drop em arquivo alheio. Confira `git branch --show-current` antes de cada commit.
+Proibido git checkout --, git reset --hard e git stash drop em arquivo alheio. Confira `git branch --show-current` antes de cada commit: tem que devolver docs/enxugar-a-escrita.
 
 REPORTE NO FIM
 Quantas palavras saíram por seção, quais apelidos você unificou e qual venceu, o que você quis mudar e não mudou por ser fato e não escrita, e qualquer contradição que apareceu ao uniformizar.

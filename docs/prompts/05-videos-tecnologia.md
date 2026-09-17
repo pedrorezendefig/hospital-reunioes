@@ -45,7 +45,7 @@ tela que ainda vai mudar.
 
 ## Prompt para a leitura (a): vídeo de percepção
 
-Copie o bloco e cole num terminal do Claude Code, na raiz do repositório.
+Copie o bloco e cole num terminal do Claude Code. Fora da campanha dos quatro terminais: roda sozinho, num worktree próprio (`git worktree add /Users/pedrorezende/PedroDev/Hospital/.worktrees/video-tecnologia -b docs/video-tecnologia origin/main`), a qualquer momento depois que o #726 fechar.
 
 ```
 Produza o Vídeo de percepção de valor da área de Tecnologia do app do Hospital São Matheus, no repo pedrorezendefig/hospital-reunioes.

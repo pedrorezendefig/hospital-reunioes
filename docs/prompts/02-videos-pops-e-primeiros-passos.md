@@ -2,12 +2,21 @@
 
 **14 vídeos**, 10 de POPs e 4 de Primeiros passos. POPs tem cerca de 7 telas
 distintas; Primeiros passos já tem dois vídeos prontos que servem de molde. Roda
-em paralelo com o 01 e o 03.
+em paralelo com o 01, o 03 e o 04.
 
-Copie o bloco inteiro e cole num terminal do Claude Code, na raiz do repositório.
+Copie o bloco inteiro e cole num terminal do Claude Code aberto DENTRO do worktree deste prompt. O [README](README.md) ensina a criar o worktree e a ordem de tudo.
 
 ```
 Produza os 14 Vídeos de tarefa que faltam nas seções "POPs" (10) e "Primeiros passos" (4) do Manual do usuário, no repo pedrorezendefig/hospital-reunioes.
+
+ONDE VOCÊ ESTÁ
+Você está num git worktree próprio, na branch docs/videos-pops-e-primeiros-passos, criado a partir de origin/main. Outros terminais trabalham AO MESMO TEMPO em worktrees irmãos. Antes de qualquer coisa, confira:
+  git branch --show-current      (tem que devolver docs/videos-pops-e-primeiros-passos)
+  git rev-parse --show-toplevel  (tem que ser a pasta deste worktree, NUNCA /Users/pedrorezende/PedroDev/Hospital)
+Se qualquer um dos dois devolver outra coisa, PARE e reporte. Nunca mude de branch, nunca saia deste worktree, nunca toque na árvore principal.
+
+O worktree nasce sem node_modules. Seu primeiro comando de trabalho é:
+  cd docs/manual && corepack pnpm@9 install --frozen-lockfile && cd ../..
 
 LEIA PRIMEIRO, NESTA ORDEM
 1. .claude/skills/manual/references/video-de-tarefa.md, que é a receita: especificação, roteiro fixo, formato do carimbo e os gates.
@@ -30,7 +39,9 @@ O carimbo vive em TRÊS lugares por composição, e os três precisam bater:
 - o script manual-video-meta no head (os cinco campos que o conferidor cobra);
 - o carimbo visível do fecho;
 - o rodapé da tela desenhada (.rodape-v), que aparece em toda cena com o app.
-Use app_version 0.137.1, que é o que produção serve, e a data de hoje.
+Em app_version use a versão que produção serve NA HORA em que você carimba, lida assim:
+  curl -s https://app.hospitalsaomatheus.cloud/api/health | python3 -c 'import sys,json; print(json.load(sys.stdin)["version"])'
+Não copie de outro vídeo nem de memória: a versão muda com os deploys. Em gerado_em, a data de hoje.
 
 A EXCEÇÃO AUTORIZADA PELO PEDRO, QUE MUDA O GATE 3
 NÃO pare no draft esperando OK humano. Renderize direto em --quality high e siga.
@@ -66,16 +77,16 @@ ONDE OS ARQUIVOS FICAM
 - composição, versionada: docs/manual/video/pops/<slug>/ e docs/manual/video/primeiros-passos/<slug>/
 - MP4, gitignorado: docs/manual/public/video/pops/<slug>.mp4 e .../primeiros-passos/<slug>.mp4
 - a página passa a exibir pelo frontmatter `video: <slug>`
-- AO TERMINAR cada vídeo, copie o MP4 final para /Users/pedrorezende/PedroDev/Hospital/local/manual-video-masters/pops/ ou .../primeiros-passos/ (caminho absoluto, fora do git). É a cópia durável de onde a publicação tira, e sem ela o vídeo não chega ao ar.
+- AO TERMINAR cada vídeo, copie o MP4 final para /Users/pedrorezende/PedroDev/Hospital/local/manual-video-masters/pops/ ou .../primeiros-passos/ (caminho absoluto, fora do git). É a cópia durável de onde a publicação tira: o public/video/ deste worktree é gitignorado e some quando o worktree for apagado. Sem a cópia o vídeo não chega ao ar.
 
 O QUE NÃO FAZER
-- Não toque em docs/manual/astro.config.mjs, .github/workflows/manual.yml, docs/manual/src/rotulos-da-sidebar.ts, docs/manual/publicar.sh nem em tools/: outros dois terminais rodam em paralelo.
+- Não toque em docs/manual/astro.config.mjs, .github/workflows/manual.yml, docs/manual/src/rotulos-da-sidebar.ts, docs/manual/publicar.sh nem em tools/: outros três terminais rodam em paralelo em worktrees irmãos.
 - Não toque em nenhum módulo que não seja pops/ e primeiros-passos/.
 - Não edite hospital-reunioes/. Ler o código é obrigatório; editar é proibido.
 - NÃO PUBLIQUE: nada de publicar.sh, /manual publicar ou vercel deploy. A publicação é um passo único no fim, com os três terminais fechados.
 - Não mergeie.
 - Não regere os 9 vídeos que já existem, inclusive o entrar-na-plataforma do seu módulo.
-- Render UM DE CADA VEZ, nunca em paralelo: a máquina está com três terminais.
+- Render UM DE CADA VEZ, nunca em paralelo: a máquina está com quatro terminais renderizando.
 
 ANTES DO PR, TODOS EM 0
 python3 tools/lint_manual.py --dir docs/manual/src/content/docs
@@ -85,12 +96,14 @@ python3 tools/checar_build_manual.py --dir docs/manual
 python3 -m pytest tools/ -q --ignore=tools/workflow-dashboard
 
 O PR
-/ship "docs(manual): videos de tarefa das secoes POPs e Primeiros passos" --no-merge --skip-review
+/ship "docs(manual): videos de tarefa das secoes POPs e Primeiros passos" --no-merge --skip-review --no-bump
+
+Quando o /ship avisar que a branch atual não é a main, confirme e siga: a branch docs/videos-pops-e-primeiros-passos é a sua, criada de propósito para este terminal. Não use --from-diff, não crie branch a partir de outra coisa que não seja a atual.
 
 Todo comentário seu em issue ou PR começa com <!-- automacao --> na PRIMEIRA linha, senão a label revisor-comentou acusa a própria automação.
 
 GIT SAFETY
-Proibido git checkout --, git reset --hard e git stash drop em arquivo que não seja seu. Confira `git branch --show-current` antes de cada commit: o working tree é compartilhado.
+Proibido git checkout --, git reset --hard e git stash drop em arquivo que não seja seu. Confira `git branch --show-current` antes de cada commit: tem que devolver docs/videos-pops-e-primeiros-passos.
 
 REPORTE NO FIM
 Quantas réplicas desenhou e quais telas, quantos vídeos saíram, o que a auto-revisão de frames pegou e você corrigiu, o que ficou de fora e por quê, e qualquer afirmação de página que você descobriu ser falsa ao conferir no código.
