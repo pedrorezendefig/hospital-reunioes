@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.140.0 - 2026-09-17 00:30 - um texto por Produto no Kit de conhecimento, e falar e anexar no Assistente
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `97e5f00`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (620s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/97e5f00
+
 ## v0.139.0 - 2026-09-16 22:35 - a leitura de documento passa a rodar num processo separado
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `e04738f`

@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-17T00:30:00-03:00",
+      "sha": "97e5f00",
+      "app_version": "0.140.0",
+      "subject": "Um texto por Produto no Kit de conhecimento, e falar e anexar no Assistente de Tecnologia",
+      "raw_subject": "feat(tecnologia): falar e anexar no Assistente, com a origem à mostra na conversa (#751)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        726
+      ],
+      "result": "healthy",
+      "duration_seconds": 620,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 0 do PRD #726, os dois rascunhos que esperavam desde o deploy anterior: PR #750 (#728, kit de conhecimento, sem bump) e PR #751 (#729, voz e anexo, com o bump). Merge na ordem, um deploy so. O #750 passou por leitura dos sete textos por sub-agente no papel do diretor: 15 afirmacoes que o codigo nao sustentava, e a revisao do delta reprovou 4 frases NOVAS que trocavam um erro por outro (motivo da repactuacao que nao existe, perfil de POPs errado, relatorio da Ouvidoria que nao para com a IA, ata guiada omitida da lista de dependencias). O #751 teve 1 must-fix real: a tabela de cinco separadores de linha divergia do splitlines do proprio detector, e cinco separadores vazavam a cerca do prompt; virou join(splitlines()) no gargalo _cercar, que cobre as tres cercas. Dois achados fora de escopo viraram issue em vez de emenda: #769 (a recusa do acionamento diz ao ouvidor que o relato original nao sai, e ele sai desde o ADR 0041) e #770 (a cerca do Copiar para IA nao normaliza separador vindo de issue de repositorio publico). Faltam as fatias #730 e #732 para fechar o PRD."
+    },
+    {
       "at": "2026-09-16T22:35:00-03:00",
       "sha": "e04738f",
       "app_version": "0.139.0",
@@ -1429,35 +1461,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "2 issues (#464 PR 538, #520 PR 537). A 095 foi aplicada a mao no Studio ANTES do merge e provada por curl: chave anon devolve 401 com SQLSTATE 42501 do Postgres, enquanto chave invalida devolve 401 Unauthorized do gateway. O script de fumaca reprovava o conserto correto por esperar 403; corrigido para decidir pelo SQLSTATE."
-    },
-    {
-      "at": "2026-09-02T16:43:00-03:00",
-      "sha": "3cd1500",
-      "app_version": "0.103.1",
-      "subject": "Onda de 2: e-mail de quem tem login abre o caso, e o teto da paginacao passa a contar linhas",
-      "raw_subject": "fix(ouvidoria): teto da paginacao em linhas e leituras administrativas paginadas (#533)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "2 issues numa onda com fila fixada pelo humano (#515 PR 527, #448 PR 533). O #448 rendeu mais que a issue pedia: a revisao independente achou que o teto novo, do jeito que nasceu, trocava um bug de memoria por indisponibilidade. Duas leituras que TINHAM onde carimbar estavam levantando, e uma delas era alcancavel pelo formulario publico sem login, o que fazia do guarda-corpo uma porta de negacao de servico. Na rodada 2 apareceu o pior modo de falha do projeto: o carimbo chegava a tela e sumia, porque o frontend descartava token desconhecido em silencio, e o painel mostraria numero menor com cara de contado. O silencio deixou de ser o default: SILENCIADAS diz por escrito quem e calado de proposito, o resto sai com texto generico que nomeia a leitura. Keyset recusado com motivo escrito, por decisao do humano na abertura da onda. Corrida de bump com sessao paralela: a main pulou de 0.102.0 para 0.102.3 no meio, os dois PRs foram rebaseados com re-bump sequencial."
     }
   ]
 }
