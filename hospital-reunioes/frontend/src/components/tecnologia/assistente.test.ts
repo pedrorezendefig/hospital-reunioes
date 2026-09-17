@@ -5,6 +5,7 @@ import {
   avisoDaImagem,
   avisoDoAudio,
   avisoDoDocumento,
+  conversaTevePrint,
   descricaoAoCriar,
   DOCUMENTO_FORA_DA_LISTA,
   IMAGEM_FORA_DA_LISTA,
@@ -383,10 +384,47 @@ describe("A peneira do print (issue #730)", () => {
     expect(avisoDaImagem({ name: "tela.png", size: LIMITE_DA_IMAGEM })).toBeNull();
   });
 
+  it("arquivo que viola as DUAS regras ouve a do formato, como no backend", () => {
+    // A ordem das duas guardas é contrato, e não gosto: a rota peneira a
+    // extensão ANTES de olhar o tamanho, então um `.gif` de 6 MB leva 422 de
+    // formato lá. Com a ordem invertida aqui, a tela diria "passou do limite de
+    // 5 MB" e o servidor diria "só dá para ler .png, .jpg, .jpeg ou .webp"
+    // sobre o mesmo arquivo: é a classe de bug que a #729 combateu.
+    expect(avisoDaImagem({ name: "animada.gif", size: LIMITE_DA_IMAGEM + 1 })).toBe(IMAGEM_FORA_DA_LISTA);
+  });
+
   it("o prefixo do print não leva nome de arquivo", () => {
     // O nome de um print é "Captura de tela 2026-09-17 às 14.02.11.png", que não
     // diz nada a quem lê a conversa. `[print] ` seco é origem que o backend
     // reconhece e cerca (`PREFIXO_DE_ORIGEM` aceita rótulo sem nome).
     expect(mensagemComOrigem(PREFIXO_DE_PRINT, "A tela de login com erro")).toBe("[print] A tela de login com erro");
+  });
+});
+
+describe("A conversa teve print? (rodada 2 do PR #771)", () => {
+  it("fala da pessoa com o prefixo de print conta", () => {
+    expect(conversaTevePrint([{ role: "user", content: "[print] a tela de login" }])).toBe(true);
+  });
+
+  it("conversa sem print não conta, nem com as outras duas origens", () => {
+    // O detector: um `true` fixo passaria no teste de cima e poria o aviso de
+    // dado de paciente em toda conversa, inclusive nas que nunca viram imagem.
+    expect(conversaTevePrint([{ role: "user", content: "a Ana travou ontem" }])).toBe(false);
+    expect(conversaTevePrint([{ role: "user", content: "[áudio] a Ana travou" }])).toBe(false);
+    expect(conversaTevePrint([{ role: "user", content: "[documento nota.pdf] a Ana travou" }])).toBe(false);
+    expect(conversaTevePrint([])).toBe(false);
+  });
+
+  it("fala do assistente não conta, nem repetindo o prefixo", () => {
+    // O que interessa é o que entrou de FORA. Se contasse, o modelo repetindo
+    // "[print] ..." na resposta acenderia o aviso sem print nenhum.
+    expect(conversaTevePrint([{ role: "assistant", content: "[print] a tela de login" }])).toBe(false);
+  });
+
+  it("o prefixo tem que estar no COMEÇO da fala", () => {
+    // É o mesmo critério do `PREFIXO_DE_ORIGEM` do backend (`^\[...`), que é
+    // quem cerca o material: alguém citando "[print]" no meio de uma frase
+    // digitada não trouxe imagem nenhuma.
+    expect(conversaTevePrint([{ role: "user", content: "eu ia mandar um [print] mas desisti" }])).toBe(false);
   });
 });

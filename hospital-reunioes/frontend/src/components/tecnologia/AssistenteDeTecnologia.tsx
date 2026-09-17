@@ -38,6 +38,8 @@ import {
   AUDIO_SEM_FALA,
   AUDIOS_ACEITOS,
   AVISO_DE_IA,
+  AVISO_DO_PRINT,
+  conversaTevePrint,
   avisoDaImagem,
   avisoDoAudio,
   avisoDoDocumento,
@@ -616,6 +618,14 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
           {conversando && (
             <p role="status" className="text-xs text-text-secondary">
               O assistente está escrevendo aqui. Espere a resposta para ajustar à mão.
+            </p>
+          )}
+          {conversaTevePrint(messages) && (
+            <p
+              role="status"
+              className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs"
+            >
+              {AVISO_DO_PRINT}
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">

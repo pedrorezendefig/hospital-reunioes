@@ -26,6 +26,7 @@ import {
   AUDIO_FORA_DA_LISTA,
   AUDIO_SEM_FALA,
   AVISO_DE_IA,
+  AVISO_DO_PRINT,
   CHAVE_DA_SESSAO,
   CONVERSA_NO_TETO,
   DOCUMENTO_FORA_DA_LISTA,
@@ -42,6 +43,7 @@ import {
   RascunhoDaDemanda,
   RESPOSTA_ILEGIVEL,
   respostaDoChatValida,
+  TEXTO_CORTADO,
   CRIADA_SEM_CONFIRMACAO,
 } from "./assistente";
 import { Demanda, ProdutoDaEscolha } from "./demandas";
@@ -1437,6 +1439,23 @@ describe("O print", () => {
     expect(doChat()).toHaveLength(0);
   });
 
+  it("descrição maior que o teto da mensagem entra cortada, e o corte é DITO", async () => {
+    // Paridade com o caminho do documento, e o teste é NA TELA, não na função
+    // pura: o que pode sumir é a passagem por `mensagemComOrigem` aqui dentro, e
+    // uma interpolação crua no lugar dela manda 10 mil caracteres ao servidor,
+    // que responde 422 do pydantic com `detail` em LISTA, e a tela mostra JSON
+    // cru dentro do alerta vermelho.
+    montar({ descricaoDoPrint: "x".repeat(LIMITE_DA_MENSAGEM * 2) });
+
+    escolher("Arquivo de print", [arquivo("tela.png", 1000, "image/png")]);
+
+    await waitFor(() => expect(doChat()).toHaveLength(1));
+    const fala = ultimaFala();
+    expect(fala.length).toBeLessThanOrEqual(LIMITE_DA_MENSAGEM);
+    expect(fala).toContain(TEXTO_CORTADO);
+    expect(fala.startsWith("[print] ")).toBe(true);
+  });
+
   it("o botão de anexar print trava enquanto a leitura de um anexo está em voo", async () => {
     // A mesma regra dos outros dois: a caixa fica travada até o anexo virar
     // mensagem ou aviso, senão dois turnos saem por cima um do outro.
@@ -1447,5 +1466,61 @@ describe("O print", () => {
     await waitFor(() => expect((screen.getByLabelText("Anexar print") as HTMLButtonElement).disabled).toBe(true));
     soltarOAnexo!();
     await waitFor(() => expect((screen.getByLabelText("Anexar print") as HTMLButtonElement).disabled).toBe(false));
+  });
+});
+
+describe("O aviso de dado de paciente quando a conversa teve print", () => {
+  // A descrição do print alcança, por caminho de código, o corpo de uma issue de
+  // repositório PÚBLICO (`corpo_da_issue_nova`, no clique de "Levar para
+  // desenvolvimento"). O aviso não é controle, é o mesmo argumento da cerca: a
+  // barreira em código é a issue #772. O que ele faz é chegar no único momento em
+  // que quem lê ainda pode agir, com a descrição na tela e editável.
+
+  it("aparece depois de um print, junto de onde se clica em Criar Demanda", async () => {
+    montar({ descricaoDoPrint: "A tela de internação, com o aviso 'leito indisponível'." });
+
+    escolher("Arquivo de print", [arquivo("tela.png", 1000, "image/png")]);
+
+    await waitFor(() => expect(doChat()).toHaveLength(1));
+    await waitFor(() => expect(screen.getByText(AVISO_DO_PRINT)).toBeTruthy());
+  });
+
+  it("não aparece numa conversa sem print", async () => {
+    // O detector: um aviso fixo passaria no teste de cima e viraria paisagem em
+    // toda conversa, inclusive nas que nunca viram imagem. Aviso que aparece
+    // sempre não avisa nada.
+    montar();
+
+    await falar("a Ana travou ontem de madrugada");
+
+    expect(screen.queryByText(AVISO_DO_PRINT)).toBeNull();
+  });
+
+  it("não aparece com áudio nem com documento anexado", async () => {
+    // O par do detector acima pelo outro lado: as outras duas origens também
+    // trazem texto de fora, mas o que vai para a issue pública transcrito de uma
+    // tela de hospital é o print.
+    montar({ textoDoDocumento: "Relatório: a Ana caiu três vezes." });
+
+    escolher("Arquivo de documento", [arquivo("relatorio.pdf", 1000, "application/pdf")]);
+
+    await waitFor(() => expect(doChat()).toHaveLength(1));
+    expect(screen.queryByText(AVISO_DO_PRINT)).toBeNull();
+  });
+
+  it("NÃO bloqueia a criação: o botão continua vivo e a Demanda nasce", async () => {
+    // Guarda-corpo que vira beco não é guarda-corpo. A decisão de criar continua
+    // sendo de quem está olhando a descrição.
+    montar({ descricaoDoPrint: "A tela de internação, com o aviso 'leito indisponível'." });
+
+    escolher("Arquivo de print", [arquivo("tela.png", 1000, "image/png")]);
+    await waitFor(() => expect(screen.getByText(AVISO_DO_PRINT)).toBeTruthy());
+
+    const criar = screen.getByRole("button", { name: "Criar Demanda" }) as HTMLButtonElement;
+    expect(criar.disabled).toBe(false);
+    fireEvent.click(criar);
+
+    await waitFor(() => expect(criacoes()).toHaveLength(1));
+    expect(criadas).toHaveLength(1);
   });
 });

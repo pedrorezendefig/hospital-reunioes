@@ -583,3 +583,40 @@ export function avisoDaImagem(arquivo: ArquivoEscolhido): string | null {
 export function descreverAImagem(arquivo: File, token: string | null): Promise<LeituraDoAnexo<TextoTranscrito>> {
   return mandarOArquivo(URL_DA_IMAGEM, "imagem", arquivo, token, transcricaoValida);
 }
+
+/**
+ * A conversa teve print?
+ *
+ * Só fala da PESSOA conta, e só com o prefixo no começo: é o mesmo critério do
+ * `PREFIXO_DE_ORIGEM` do backend, que é quem cerca o material. Fala do
+ * assistente não conta nem se começar com o texto do prefixo, porque o que
+ * interessa é o que entrou de fora, não o que o modelo escreveu de volta.
+ */
+export function conversaTevePrint(messages: MensagemDoChat[]): boolean {
+  return messages.some((m) => m.role === "user" && m.content.startsWith(PREFIXO_DE_PRINT));
+}
+
+/**
+ * O aviso que quem vai criar a Demanda lê quando a conversa teve print.
+ *
+ * Ele existe porque a descrição do print chega, por caminho de código, ao corpo
+ * de uma issue de repositório PÚBLICO: descrição do modelo, mensagem na
+ * conversa, `rascunho.descricao`, coluna `descricao` da Demanda, e daí
+ * `corpo_da_issue_nova` no clique de "Levar para desenvolvimento". O projeto já
+ * tirou de propósito o nome civil de um funcionário desse corpo (rodada de
+ * segurança do PR #688), e um print de tela de hospital pode trazer o nome de um
+ * paciente transcrito.
+ *
+ * **Isto não é controle**, e o projeto sabe a diferença: é o mesmo argumento da
+ * cerca do prompt. A barreira em código entre a descrição de origem print e a
+ * issue pública é a issue #772, que precisa de decisão do diretor. O que o aviso
+ * faz é chegar no único momento em que quem lê ainda pode agir: a descrição está
+ * na tela, editável, e o clique de criar ainda não aconteceu.
+ *
+ * Ele **não bloqueia** a criação. Guarda-corpo que vira beco não é guarda-corpo,
+ * e a decisão de criar continua sendo de quem está olhando.
+ */
+export const AVISO_DO_PRINT =
+  "Esta conversa teve print. O texto do rascunho pode ir para um registro público quando a Vitta levar a " +
+  "Demanda para desenvolvimento: confira que não ficou nome de paciente, número de prontuário nem leito na " +
+  "descrição antes de criar.";

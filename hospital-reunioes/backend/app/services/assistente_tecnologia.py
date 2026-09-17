@@ -451,7 +451,12 @@ def descrever_imagem(*, imagem: bytes, extensao: str) -> str | None:
     em frase de gente e a rota.
 
     A `extensao` e peneirada pela rota contra `TIPOS_DE_IMAGEM`, que e a tabela
-    usada aqui: quem chega com outra e programa, nao arquivo.
+    usada aqui: quem chega com outra e PROGRAMA, nao arquivo, e por isso o
+    `KeyError` dela sobe cru em vez de virar `None`. Dentro do `try` fica so a
+    chamada ao provedor e a leitura da resposta: com a montagem do payload la
+    dentro, um erro nosso saia pela tela como "nao deu para ler esse print
+    agora", que e frase de provedor fora do ar, e o bug ficava escondido atras
+    de uma frase que manda a pessoa tentar de novo para sempre.
     """
     provider = ai_processor._llm_provider()
     if provider == "mock":
@@ -461,7 +466,8 @@ def descrever_imagem(*, imagem: bytes, extensao: str) -> str | None:
     client, model, extra = ai_processor._get_llm()
     ai_processor._log_llm_call("assistente-tecnologia/print", provider, model)
 
-    dados = base64.b64encode(imagem).decode("ascii")
+    url_da_imagem = f"data:{TIPOS_DE_IMAGEM[extensao]};base64,{base64.b64encode(imagem).decode('ascii')}"
+    instrucao = load_prompt("assistente_tecnologia_imagem")
     try:
         response = client.chat.completions.create(
             model=model,
@@ -469,11 +475,8 @@ def descrever_imagem(*, imagem: bytes, extensao: str) -> str | None:
                 {
                     "role": "user",
                     "content": [
-                        {"type": "text", "text": load_prompt("assistente_tecnologia_imagem")},
-                        {
-                            "type": "image_url",
-                            "image_url": {"url": f"data:{TIPOS_DE_IMAGEM[extensao]};base64,{dados}"},
-                        },
+                        {"type": "text", "text": instrucao},
+                        {"type": "image_url", "image_url": {"url": url_da_imagem}},
                     ],
                 }
             ],

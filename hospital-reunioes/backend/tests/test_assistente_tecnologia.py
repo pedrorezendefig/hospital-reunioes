@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import re
 import sys
@@ -1134,9 +1135,12 @@ class TestDescreverImagem:
         assert resposta.json() == {"texto": "A tela de login da Ana, com o aviso vermelho 'senha inválida'."}
 
     def test_quem_nao_e_super_admin_leva_403(self, monkeypatch):
-        _stub_llm(monkeypatch, content="qualquer coisa")
+        llm = _stub_llm(monkeypatch, content="qualquer coisa")
         cliente = _montar(logado=_pessoa("p2", super_admin=False))
         assert cliente.post(DESCREVER, files=_imagem("tela.png")).status_code == 403
+        # Paridade com os outros dois caminhos de recusa: quem nao passa no gate
+        # nao gasta uma chamada paga de visao antes de ouvir 403.
+        assert llm.calls == []
 
     @pytest.mark.parametrize("nome", ["tela.png", "tela.jpg", "tela.jpeg", "tela.webp"])
     def test_as_quatro_extensoes_passam(self, nome, monkeypatch):
@@ -1171,7 +1175,13 @@ class TestDescreverImagem:
         cliente = _montar(logado=_pessoa("p1"))
         resposta = cliente.post(DESCREVER, files=_imagem("tela.png", b"x" * (5 * 1024 * 1024 + 1)))
         assert resposta.status_code == 413
-        assert "5 MB" in resposta.json()["detail"]
+        # A frase e a do router, como nos outros dois desfechos de recusa, e nao
+        # uma substring: `"5 MB" in detail` passa tambem para "15 MB", que e
+        # exatamente o numero do OUTRO teto do assistente (o do documento
+        # binario). E o teto citado e UM, e e o que vale: a lista completa dos
+        # numeros da frase e o que distingue 5 de 15, coisa que substring nao faz.
+        assert resposta.json()["detail"] == tecnologia_router.MOTIVO_IMAGEM_GRANDE
+        assert re.findall(r"\d+ MB", tecnologia_router.MOTIVO_IMAGEM_GRANDE) == ["5 MB"]
         assert llm.calls == []
 
     def test_imagem_no_teto_passa(self, monkeypatch):
@@ -1276,13 +1286,57 @@ class TestDescreverImagem:
         assert resposta.json()["detail"] == tecnologia_router.MOTIVO_PRINT_ILEGIVEL
 
     def test_travessao_da_descricao_e_sanitizado(self, monkeypatch):
-        """ADR 0013: a descricao entra na conversa e vira descricao de Demanda."""
-        _stub_llm(monkeypatch, content="A tela de login — com erro.")
+        """ADR 0013: a descricao entra na conversa e vira descricao de Demanda.
+
+        A assercao e o TEXTO INTEIRO esperado, e nao a ausencia do caractere:
+        `"—" not in texto` fica verde para um `texto.replace("—", "")`, que faz o
+        caractere desaparecer e entrega "A tela de login  com erro." a conversa,
+        sem a virgula que o sanitizador poe no lugar. Asserir o marcador presente
+        mata os dois mutantes com uma linha (a familia do "(endereco omitido)").
+        """
+        _stub_llm(monkeypatch, content="A tela de login — com erro, e o campo – vazio.")
         cliente = _montar(logado=_pessoa("p1"))
         texto = cliente.post(DESCREVER, files=_imagem("tela.png")).json()["texto"]
-        assert "—" not in texto
-        assert "–" not in texto
-        assert "A tela de login" in texto
+        assert texto == "A tela de login, com erro, e o campo, vazio."
+
+    def test_a_descricao_nao_entra_no_log(self, caplog):
+        """A terceira perna do "nada persiste", e a que nao tinha detector.
+
+        Storage e banco tem o `test_descrever_nao_grava_nada`; o log nao tinha
+        nada. Com PII em jogo (a descricao e transcrita de uma tela de hospital),
+        um `{texto}` no lugar do `{len(texto)} chars` publica a descricao inteira
+        no log do container, que e o lugar onde ela ficaria depois de a
+        requisicao acabar.
+
+        O modo MOCK basta, e e de proposito: o texto que a rota devolve e o que
+        ela loga vem do mesmo lugar, e sem provedor nenhum o teste nao depende do
+        duble. A varredura e em TODO registro, de qualquer nivel, inclusive o
+        `logger.warning` do modo mock.
+        """
+        cliente = _montar(logado=_pessoa("p1"))
+        with caplog.at_level(logging.DEBUG):
+            resposta = cliente.post(DESCREVER, files=_imagem("tela.png"))
+
+        texto = resposta.json()["texto"]
+        assert resposta.status_code == 200
+        assert texto, "sem texto na resposta o teste nao prova nada"
+        registrado = "\n".join(r.getMessage() for r in caplog.records)
+        assert texto not in registrado, "a descricao do print apareceu no log"
+
+    def test_extensao_que_a_rota_nao_peneirou_sobe_como_erro_de_programa(self, monkeypatch):
+        """O limite do `try` do servico, provado no servico.
+
+        `TIPOS_DE_IMAGEM[extensao]` fica FORA do `try`: uma extensao que a rota
+        nao peneirou e bug NOSSO, e vira-la em `None` a transformaria no 502 "nao
+        deu para ler esse print agora", que e frase de provedor fora do ar e
+        manda a pessoa tentar de novo para sempre por um erro que nao e dela nem
+        do provedor.
+        """
+        llm = _stub_llm(monkeypatch, content="a tela do sistema")
+        with pytest.raises(KeyError):
+            assistente_tecnologia.descrever_imagem(imagem=b"bytes de um print", extensao=".bmp")
+        # E o dinheiro nao foi gasto antes de o bug aparecer.
+        assert llm.calls == []
 
     def test_descrever_nao_grava_nada(self, monkeypatch):
         """ADR 0056, decisao 4: a imagem e efemera. O produto e a Demanda."""
@@ -1337,3 +1391,103 @@ class TestDescreverImagem:
         assert any("pergunte" in f.lower() for f in frases), (
             "nenhuma frase sobre print manda perguntar em vez de completar"
         )
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 9. O prompt do print e a precedencia do dado pessoal (rodada 2 do PR #771)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# A descricao do print alcanca, por caminho de codigo e sem malicia nenhuma, o
+# corpo de uma issue de repositorio PUBLICO: descricao -> `[print] ...` na
+# conversa -> `rascunho.descricao` -> coluna `descricao` da Demanda ->
+# `corpo_da_issue_nova` -> `criar_issue`. O projeto ja tirou de proposito o nome
+# civil de um FUNCIONARIO desse corpo (docstring de `corpo_da_issue_nova`,
+# rodada de seguranca do PR #688), e um print de tela de hospital pode trazer o
+# nome de um PACIENTE transcrito.
+#
+# **Prompt nao e controle** (e o proprio argumento da cerca): a barreira em
+# codigo entre a descricao e o corpo da issue e a issue #772. O que este bloco
+# cobra e o minimo honesto que cabe aqui: que a instrucao pare de se
+# CONTRADIZER. A versao anterior mandava transcrever "palavra por palavra ...
+# toda mensagem de erro" numa regra e nao transcrever dado de paciente em outra,
+# e quem desempatava era o modelo, a 0.2 de temperatura, sem verificacao depois.
+
+
+def _regras_do_prompt(prompt: str) -> list[str]:
+    """As linhas de regra do prompt, que e como ele e escrito (lista numerada)."""
+    return [linha.strip() for linha in prompt.splitlines() if linha.strip()]
+
+
+class TestPromptDoPrint:
+    @pytest.fixture
+    def prompt(self) -> str:
+        from app.services.prompt_loader import load_prompt
+
+        return load_prompt("assistente_tecnologia_imagem")
+
+    def test_a_literalidade_e_so_do_texto_tecnico(self, prompt):
+        """A ordem de transcrever palavra por palavra vem COM escopo.
+
+        Mutante que isto mata: voltar a formulacao antiga ("Transcreva os textos
+        visiveis que importam, palavra por palavra: o titulo da tela, o nome do
+        campo com problema e toda mensagem de erro"), que manda transcrever tudo
+        o que importa e deixa o modelo decidir se o nome do paciente importa.
+        """
+        literais = [r for r in _regras_do_prompt(prompt) if "palavra por palavra" in r.lower()]
+        assert len(literais) == 1, f"a literalidade aparece em {len(literais)} regras, e precisa de uma so"
+        assert "técnico" in literais[0].lower(), (
+            "a regra da literalidade nao diz que ela vale so para o texto tecnico da tela"
+        )
+
+    def test_o_dado_pessoal_nao_e_transcrito_e_a_propria_proibicao_diz_o_que_por_no_lugar(self, prompt):
+        """Proibir sem dizer o que fazer no lugar deixa o modelo escolher entre
+        transcrever e apagar a linha inteira. A regra manda deixar MARCADOR.
+
+        A cobranca e na REGRA DA PROIBICAO, e nao em qualquer regra que fale de
+        dado pessoal: a primeira versao deste teste aceitava o marcador vindo da
+        regra do desempate, e tirar o marcador de onde a proibicao esta ficava
+        verde. Quem proibe e quem tem que dizer o que fazer no lugar, ali mesmo.
+        """
+        proibicoes = [r for r in _regras_do_prompt(prompt) if "não é transcrito" in r.lower()]
+        assert proibicoes, "o prompt nao proibe transcrever dado pessoal"
+        assert all("(dado pessoal omitido)" in r for r in proibicoes), (
+            "a regra que proibe nao diz o que escrever no lugar do trecho"
+        )
+
+    def test_o_conflito_entre_as_duas_regras_tem_desempate_escrito(self, prompt):
+        """A regra que faltava, e a razao desta rodada.
+
+        Mensagem de erro com o nome do paciente dentro faz as duas regras
+        colidirem. Sem desempate escrito, quem decide e o modelo. A assercao
+        cobra as duas coisas na MESMA regra (que ha colisao, e quem vence), para
+        um prompt que falasse de colisao num lugar e de precedencia em outro,
+        sobre outra coisa, nao passar.
+        """
+        colisoes = [r for r in _regras_do_prompt(prompt) if "colid" in r.lower() or "conflito" in r.lower()]
+        assert colisoes, "o prompt nao diz o que fazer quando transcrever e proteger colidem"
+        assert any("vence" in r.lower() for r in colisoes), "a regra da colisao nao diz qual das duas vence"
+        # E quem vence e a do dado pessoal, nao a da literalidade: a regra do
+        # desempate manda transcrever a parte tecnica e OMITIR o resto.
+        assert any("(dado pessoal omitido)" in r for r in colisoes), (
+            "o desempate nao manda omitir o dado pessoal na linha em que as duas colidem"
+        )
+
+    def test_a_ordem_de_precedencia_esta_dita_e_o_dado_pessoal_vem_antes(self, prompt):
+        """A precedencia e afirmada no texto E confirmada pela ordem das regras.
+
+        Uma regra 1 de dado pessoal com a literalidade escrita antes dela seria a
+        mesma contradicao com outra roupa: o modelo le de cima para baixo.
+        """
+        regras = _regras_do_prompt(prompt)
+        assert any("precedência" in r.lower() for r in regras), (
+            "o prompt nao diz que as regras estao em ordem de precedencia"
+        )
+        pessoal = next(i for i, r in enumerate(regras) if "dado pessoal" in r.lower())
+        literal = next(i for i, r in enumerate(regras) if "palavra por palavra" in r.lower())
+        assert pessoal < literal, "a regra da literalidade vem antes da do dado pessoal"
+
+    def test_o_prompt_do_print_nao_tem_travessao(self, prompt):
+        """ADR 0013 vale para o que a gente escreve, e nao so para o que a IA
+        devolve: o prompt e texto nosso."""
+        assert "—" not in prompt
+        assert "–" not in prompt
