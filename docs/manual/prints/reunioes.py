@@ -623,7 +623,7 @@ def semear() -> None:
         f"notificacoes?referencia_id=eq.{PENDENCIA_COM_COMENTARIO}&tipo=eq.MENCAO",
         "DELETE",
     )
-    descricao = dict((p[0], p[1]) for p in PENDENCIAS)[PENDENCIA_COM_COMENTARIO]
+    descricao = {p[0]: p[1] for p in PENDENCIAS}[PENDENCIA_COM_COMENTARIO]
     _rest(
         "comentarios_pendencias",
         "POST",
@@ -1164,7 +1164,7 @@ COMPUTADOR_LISTA = {"width": 1680, "height": 900}
 
 # A pendência que os prints da janela de detalhe abrem: é a que o semear
 # mantém sem comentário nenhum, para o print do histórico vazio existir.
-PENDENCIA_LIMPA = dict((p[0], p[1]) for p in PENDENCIAS)[PENDENCIA_SEM_COMENTARIO]
+PENDENCIA_LIMPA = {p[0]: p[1] for p in PENDENCIAS}[PENDENCIA_SEM_COMENTARIO]
 
 
 def _bloco_da_tabela(page: Page):

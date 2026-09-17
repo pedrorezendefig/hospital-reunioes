@@ -314,7 +314,7 @@ def test_a_guarda_da_arroba_barra_quem_nao_e_pessoa_de_exemplo():
 def test_a_guarda_da_arroba_deixa_passar_so_gente_de_exemplo():
     """As iniciais do avatar saem no mesmo texto e não identificam ninguém."""
     roteiro = carregar_roteiro()
-    _, nome, _, cargo, setor, _, _ = roteiro.PESSOAS[3]
+    _, nome, _, _, setor, _, _ = roteiro.PESSOAS[3]
     lista = ListaDaArroba(f"LB\n{nome}\n{setor}")
 
     roteiro._exigir_so_pessoas_de_exemplo(lista, "mencao-na-pendencia")
@@ -396,3 +396,26 @@ def test_o_comentario_de_exemplo_menciona_quem_o_print_do_sino_mostra(monkeypatc
     assert comentario[0]["mencoes"] == [roteiro.FACILITADORA[0]]
     assert aviso[0]["destinatario_id"] == roteiro.FACILITADORA[0]
     assert aviso[0]["tipo"] == "MENCAO"
+
+
+def test_nenhum_outro_roteiro_usa_os_identificadores_deste():
+    """O banco local é um só, e cada módulo do manual tem o seu roteiro.
+
+    Dois roteiros com o mesmo identificador de pessoa fazem o `--semear` de um
+    trocar o nome, o e-mail e o perfil das pessoas do outro. Quem rodasse os
+    cinco em sequência acabaria com a Facilitadora virando ouvidora, e o
+    roteiro daqui pararia na tela vazia, sem dizer por quê.
+    """
+    roteiro = carregar_roteiro()
+    meus = {pessoa[0] for pessoa in roteiro.PESSOAS}
+    prints = ROTEIRO.parent
+
+    for outro in sorted(prints.glob("*.py")):
+        if outro.name == ROTEIRO.name:
+            continue
+        fonte = outro.read_text(encoding="utf-8")
+        repetidos = sorted(pid for pid in meus if f'"{pid}"' in fonte)
+        assert not repetidos, (
+            f"{outro.name} usa {', '.join(repetidos)}, que é de gente deste "
+            "roteiro: semear os dois sobrescreve as pessoas de um dos módulos"
+        )
