@@ -17,13 +17,14 @@ você pediu ou não resolve o caso. O caso volta para a mesma área.
 ## Passo a passo
 
 1. Abra o caso e leia o bloco **Resposta da área**.
+
+   ![Resposta da área e o campo do motivo da devolução](../../../assets/ouvidoria/caso-respondido.png)
+
 2. Escreva o motivo da devolução. Ele é obrigatório e vai inteiro no e-mail ao
    setor.
 3. Clique em **Devolver por insuficiência**.
 4. A área recebe um link novo e volta a ter metade do prazo da gravidade,
    contada de agora.
-
-![Página de um caso já respondido pelo setor](../../../assets/ouvidoria/caso-respondido.png)
 
 ## Se der errado
 

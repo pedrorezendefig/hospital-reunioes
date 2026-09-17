@@ -20,9 +20,19 @@ encerramento é o que tira o caso da fila e o que avisa quem falou.
 ## Passo a passo
 
 1. Abra o caso e clique em **Encerrar**.
+
+   ![Página do caso com o botão Encerrar](../../../assets/ouvidoria/caso-encerrar.png)
+
 2. Escolha o **Desfecho**: **Procedente**, **Improcedente**, **Parcialmente
    procedente**, **Sem condições de apuração** ou **Sem retorno do
    manifestante**.
+
+   ![Janela de encerramento com o desfecho escolhido](../../../assets/ouvidoria/encerrar-modal.png)
+
+:::caution[Este texto sai do hospital]
+O desfecho vai por e-mail a quem manifestou, junto do protocolo.
+:::
+
 3. Escreva o **Desfecho para o manifestante**. Leia o aviso acima do campo: esse
    texto sai do hospital por e-mail.
 4. Escreva para a pessoa, em linguagem simples, sem nome de colaborador, sem
@@ -30,7 +40,7 @@ encerramento é o que tira o caso da fila e o que avisa quem falou.
 5. Clique em **Encerrar caso**. O caso grava o desfecho e sai da fila de
    tramitação.
 
-![E-mail que avisa quem manifestou que a apuração terminou](../../../assets/ouvidoria/email-encerramento.png)
+   ![E-mail que avisa que a apuração terminou](../../../assets/ouvidoria/email-encerramento.png)
 
 ## Se der errado
 

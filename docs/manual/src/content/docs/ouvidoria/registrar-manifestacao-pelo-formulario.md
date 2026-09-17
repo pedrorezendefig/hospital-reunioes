@@ -19,6 +19,9 @@ site do hospital.
 ## Passo a passo
 
 1. Abra o formulário. A tela mostra **Ouvidoria** no alto.
+
+   ![Formulário da Ouvidoria preenchido no celular](../../../assets/ouvidoria/formulario-publico.png)
+
 2. Escolha **Elogio**, **Reclamação**, **Sugestão** ou **Informação**. Não
    precisa escolher: a Ouvidoria confirma isso ao ler o seu relato.
 3. Conte o que houve em **O que aconteceu?**, com as suas palavras.
@@ -27,8 +30,6 @@ site do hospital.
    com você sobre este caso.
 6. Clique em **Enviar manifestação**. O número do protocolo aparece nesta
    mesma tela: guarde ele.
-
-![Formulário da Ouvidoria preenchido com um elogio, no celular](../../../assets/ouvidoria/formulario-publico.png)
 
 ## Se der errado
 

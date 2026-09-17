@@ -58,11 +58,22 @@ O print que fica sob um passo leva **balões numerados** com o número do passo,
 desenhados pelo roteiro por cima da tela real, antes da captura. É a única
 marcação permitida: nada de seta, retângulo ou destaque à mão.
 
-- O roteiro tem um helper `balao(page, seletor, numero)` que injeta, no DOM da
-  página, um círculo de 28 px (navy do app, número branco, HP Simplified)
-  ancorado no canto superior esquerdo do elemento, 6 px para fora dele, com
+- O roteiro tem um helper `balao(page, seletor, numero, onde)` que injeta, no
+  DOM da página, um círculo de 28 px (navy do app, número branco, HP
+  Simplified) encostado no elemento, 6 px para fora dele, com
   `pointer-events: none` e `z-index` acima de tudo. Vários balões na mesma tela
   são várias chamadas antes de um `capturar`.
+- `onde` é de que lado o balão encosta: `esquerda` (o padrão) para campo, botão
+  e rótulo; `acima` para o ícone de uma fileira de ícones, onde a esquerda já é
+  o ícone vizinho; `acima-inicio` para a célula larga com o texto à esquerda,
+  como o cabeçalho de uma coluna. Sem espaço à esquerda na tela, o balão sobe
+  sozinho: sobreposto ao canto ele comeria a primeira letra do rótulo.
+- O balão nasce dentro do bloco que rola junto com o elemento. Num modal que
+  rola por dentro, um balão preso à página escorrega do alvo assim que o balão
+  seguinte rola o corpo, e o print sai apontando o campo de baixo.
+- Formulário mais alto do que a tela: aumente a altura da JANELA antes de
+  abrir o modal, em vez de escolher entre mostrar o alto e mostrar o fim. É a
+  mesma tela num monitor maior, e nenhum balão fica de fora.
 - O seletor aponta o elemento que o passo cita (o botão **Novo Usuário**, o
   campo **Email**). Balão em cima de elemento errado é o mesmo defeito do
   marcador errado no vídeo: olhe cada imagem depois de gerar.

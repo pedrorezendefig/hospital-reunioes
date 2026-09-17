@@ -18,10 +18,16 @@ caso dos relatórios.
 
 1. Na lista, na linha de um caso encerrado, clique em **Arquivar**. É o botão
    da própria linha, à direita.
+
+   ![Grupo Encerrada com o botão Arquivar da linha](../../../assets/ouvidoria/fila-arquivar.png)
+
 2. Confirme. O caso sai da lista e continua contando nos números.
 3. Para limpar de uma vez, use **Arquivar todos os encerrados**, no cabeçalho do
    grupo **Encerrada**.
 4. Para rever o que foi guardado, ligue o filtro **Arquivados**.
+
+   ![Lista de arquivados com o botão Desarquivar](../../../assets/ouvidoria/fila-arquivados.png)
+
 5. Para trazer um caso de volta, clique em **Desarquivar**, o botão da linha
    na lista de arquivados.
 

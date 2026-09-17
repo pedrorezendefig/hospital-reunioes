@@ -19,8 +19,14 @@ pedido vale uma vez por caso e precisa ser feito antes do vencimento.
 
 1. Abra o caso pelo link do e-mail da Ouvidoria.
 2. Vá até **Precisa de mais prazo?**, no fim da tela, e leia as regras.
+
+   ![Bloco Precisa de mais prazo com as regras](../../../assets/ouvidoria/portal-prorrogacao.png)
+
 3. Clique em **Solicitar prorrogação de prazo**.
 4. Preencha **Quantos dias úteis a mais?**.
+
+   ![Formulário do pedido de prorrogação preenchido](../../../assets/ouvidoria/portal-prorrogacao-formulario.png)
+
 5. Explique em **Por que o setor precisa de mais prazo?** o que impede a
    resposta no prazo atual. A Ouvidoria lê essa justificativa para decidir.
 6. Clique em **Enviar pedido**. A tela passa a mostrar que a Ouvidoria ainda não

@@ -17,6 +17,9 @@ feriado novo no calendário do Rio. Ninguém mais mexe nesta tela.
 ## Passo a passo
 
 1. Na Ouvidoria, abra o atalho **Prazos**, que leva a **Tabela de prazos**.
+
+   ![Tabela de prazos e a lista de feriados](../../../assets/ouvidoria/prazos.png)
+
 2. A tabela cruza os quatro marcos (**Acuse de recebimento**, **Triagem da
    ouvidoria**, **Resposta da área** e **Resposta conclusiva**) com as quatro
    gravidades.

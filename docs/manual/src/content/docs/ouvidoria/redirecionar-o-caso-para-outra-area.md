@@ -17,8 +17,14 @@ resposta ou já respondido. Não é preciso esperar a área devolver.
 ## Passo a passo
 
 1. Abra o caso, ou use o menu da linha na lista, e clique em **Redirecionar**.
+
+   ![Página do caso com o botão Redirecionar](../../../assets/ouvidoria/caso-redirecionar.png)
+
 2. A janela abre preenchida com o tipo, a gravidade e o extrato que você já
    tinha escrito.
+
+   ![Janela de redirecionamento já preenchida](../../../assets/ouvidoria/redirecionar-modal.png)
+
 3. Escolha a **Área responsável** certa. A mesma área não vale.
 4. Escreva o **Motivo do redirecionamento**. Ele é obrigatório e fica na trilha
    do caso, com o seu nome e a área de onde ele saiu.

@@ -21,7 +21,13 @@ vale para aquele caso, para você, e não abre de novo depois da resposta.
 ## Passo a passo
 
 1. Abra o e-mail e toque no botão que leva ao caso. Não há senha nem cadastro.
+
+   ![E-mail de demanda da Ouvidoria com o botão do caso](../../../assets/ouvidoria/email-demanda.png)
+
 2. Olhe a gravidade e o **Prazo de resposta**, no alto da tela.
+
+   ![Tela de quem responde, no celular](../../../assets/ouvidoria/portal-setor-mobile.png)
+
 3. Leia os textos do caso na ordem em que aparecem, terminando na **NOTA DA
    OUVIDORIA**, que é o que a Ouvidoria pede que você apure.
 4. Escreva em **O que foi feito** o que a área fez para corrigir. O motivo do
@@ -29,8 +35,6 @@ vale para aquele caso, para você, e não abre de novo depois da resposta.
 5. Use **Anexar arquivos** para imagem, PDF, áudio ou documento de até 20 MB.
 6. Clique em **Responder à Ouvidoria**. A tela confirma que a resposta ficou
    registrada.
-
-![A tela de quem responde, no celular](../../../assets/ouvidoria/portal-setor-mobile.png)
 
 ## Se der errado
 
