@@ -427,7 +427,9 @@ def test_a_lista_de_capturas_da_tela_de_usuarios_nao_esta_vazia():
 
 
 @pytest.mark.parametrize("captura", _capturas_da_lista_de_usuarios())
-def test_nenhuma_captura_fotografa_a_lista_antes_de_filtrar(tmp_path, captura):
+def test_nenhuma_captura_fotografa_a_lista_antes_de_filtrar(
+    monkeypatch, tmp_path, captura
+):
     """A ordem, medida em toda captura que abre a tela de Usuários.
 
     Entre abrir a tela e digitar a busca existe um instante com a lista real do
@@ -435,8 +437,14 @@ def test_nenhuma_captura_fotografa_a_lista_antes_de_filtrar(tmp_path, captura):
     é sobre a ORDEM dos passos, e não sobre o termo: as capturas de uma linha
     só peneiram pelo email da pessoa de exemplo, e nenhuma delas usa o valor
     padrão.
+
+    O que fala com o banco fica de fora: o CI não tem o `.env` local, e a
+    ordem dos passos na tela não depende dele. Sem isto o teste passa na
+    máquina de quem escreveu e quebra no CI.
     """
     roteiro = carregar_roteiro()
+    monkeypatch.setattr(roteiro, "_ativar_pessoa_da_senha", lambda: None)
+    monkeypatch.setattr(roteiro, "_desativar_pessoa_da_senha", lambda: None)
     pagina = _PaginaFalsa(url=BASE_FALSA)
 
     getattr(roteiro, captura)(pagina, BASE_FALSA, tmp_path)
