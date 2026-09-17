@@ -34,6 +34,7 @@ Uso: python3 docs/manual/prints/ouvidoria.py [--base http://localhost:3000]
 from __future__ import annotations
 
 import argparse
+import re
 import subprocess
 import sys
 import textwrap
@@ -53,7 +54,30 @@ BASE_DO_APP_EM_PRODUCAO = "https://app.hospitalsaomatheus.cloud"
 
 # O que não pode aparecer num print publicado: o endereço da máquina de quem
 # capturou. Um cartaz impresso com isto é papel na parede que não abre.
-ENDERECOS_LOCAIS = ("localhost", "127.0.0.1", "0.0.0.0")
+#
+# A guarda responde sobre "endereço local", e não sobre três strings: casar
+# `localhost` e parar ali deixaria passar o `[::1]` do IPv6, a forma curta
+# `127.1`, o `192.168.` de um notebook na rede do hospital, o `.local` do
+# Bonjour e um `LOCALHOST` em caixa alta. Por isso são padrões, comparados sem
+# caixa.
+#
+# E são padrões com forma de endereço, não pedaços soltos: o manual fala em
+# "10.000 caracteres" e em preço com milhar, e um `10.` cru travaria a captura
+# de um print correto. Faixa privada só casa com os quatro octetos.
+ENDERECOS_LOCAIS = (
+    r"\blocalhost\b",
+    r"\b127\.0\.0\.1\b",
+    r"\b127\.1\b",
+    r"\b0\.0\.0\.0\b",
+    r"\[::1\]",
+    r"\b192\.168\.\d{1,3}\.\d{1,3}\b",
+    r"\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
+    r"\b172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}\b",
+    r"\.local\b",
+    r"\.internal\b",
+    r"\.test\b",
+)
+RE_ENDERECO_LOCAL = re.compile("|".join(ENDERECOS_LOCAIS), re.IGNORECASE)
 
 RELATO_DE_EXEMPLO = (
     "Fui muito bem atendida na recepção da Farmácia hoje de manhã. "
@@ -69,7 +93,14 @@ PONTO_DE_EXEMPLO = {
     "ponto": "Sala de espera",
 }
 PROTOCOLO_DE_EXEMPLO = "2026-0007"
-DESFECHO_DE_EXEMPLO = "procedente"
+# O desfecho é o texto que o ouvidor escreve PARA a pessoa, em linguagem simples
+# (RN-64). O código interno do enum, `procedente`, é o que o próprio montador do
+# e-mail proíbe por escrito ("`procedente` não é português",
+# `ouvidoria_notificacoes.py:1026`), e era ele que estava no print publicado.
+DESFECHO_DE_EXEMPLO = (
+    "Apuramos o que você relatou com a equipe responsável e corrigimos o "
+    "atendimento no mesmo dia. Obrigado por avisar a Ouvidoria."
+)
 
 
 class EnderecoLocalNoPrint(Exception):
@@ -83,7 +114,7 @@ def exigir_endereco_de_producao(texto_visivel: str, nome: str) -> None:
     frontend citam localhost em desenvolvimento sem que nada disso apareça na
     imagem, e travar neles faria a guarda gritar em todo print do app local.
     """
-    achados = [e for e in ENDERECOS_LOCAIS if e in texto_visivel]
+    achados = sorted({m.group(0) for m in RE_ENDERECO_LOCAL.finditer(texto_visivel)})
     if achados:
         raise EnderecoLocalNoPrint(
             f"{nome}: o print mostra {', '.join(achados)}. O manual é público e "

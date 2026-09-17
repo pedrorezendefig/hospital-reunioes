@@ -30,8 +30,8 @@ dizendo de onde a pessoa falou.
 
 ![Cartaz A5 pronto para imprimir](../../../assets/ouvidoria/cartaz-pa.png)
 
-O endereço impresso nessa imagem é o da máquina de teste onde o print foi
-tirado. O cartaz que sai do sistema traz o endereço do hospital.
+O endereço embaixo do QR é o do hospital, e é ele que a pessoa digita quando a
+câmera não lê o código.
 
 ## Se der errado
 

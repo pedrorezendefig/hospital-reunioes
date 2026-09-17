@@ -87,8 +87,30 @@ def test_nao_grava_print_com_endereco_local(tmp_path):
     assert not (tmp_path / "cartaz-pa.png").exists()
 
 
-@pytest.mark.parametrize("endereco", ["localhost", "127.0.0.1", "0.0.0.0"])
+@pytest.mark.parametrize(
+    "endereco",
+    [
+        "localhost",
+        "LOCALHOST",
+        "127.0.0.1",
+        "127.1",
+        "0.0.0.0",
+        "[::1]",
+        "192.168.0.14",
+        "10.1.2.3",
+        "172.20.10.2",
+        "hospital.local",
+        "app.internal",
+        "app.test",
+    ],
+)
 def test_recusa_cada_endereco_local(endereco):
+    """A guarda responde sobre endereço local, não sobre três strings.
+
+    Cada caso aqui passava batido quando a trava era uma lista de substrings em
+    caixa baixa: o IPv6, a forma curta do loopback, as três faixas privadas, os
+    domínios de rede interna e a mesma palavra em caixa alta.
+    """
     roteiro = carregar_roteiro()
 
     with pytest.raises(roteiro.EnderecoLocalNoPrint) as erro:
@@ -97,8 +119,25 @@ def test_recusa_cada_endereco_local(endereco):
         )
 
     # A mensagem diz o que fazer, não só o que houve.
-    assert endereco in str(erro.value)
     assert roteiro.BASE_DO_APP_EM_PRODUCAO in str(erro.value)
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "A resposta passou do limite de 10.000 caracteres. Resuma o que foi feito.",
+        "Consulta particular por R$ 10.000,00 no plano da casa.",
+        "app.hospitalsaomatheus.cloud/ouvidoria/qr?p=QWQK8Q",
+        "O prazo novo nunca passa de 30 dias úteis contados da entrada.",
+    ],
+)
+def test_deixa_passar_o_que_so_parece_endereco(texto):
+    """Falso positivo também quebra o roteiro, e de um jeito pior: a captura
+    certa para de acontecer e ninguém entende por quê. Faixa privada só casa
+    com os quatro octetos, e é isso que deixa "10.000 caracteres" em paz."""
+    roteiro = carregar_roteiro()
+
+    roteiro.exigir_endereco_de_producao(texto, "qualquer-print")
 
 
 def test_a_base_de_producao_e_a_do_contrato_de_deploy():

@@ -19,9 +19,8 @@ protocolo e nada do conteúdo.
 ![E-mail que avisa que a apuração terminou](../../../../assets/ouvidoria/email-encerramento.png)
 
 O segundo sai quando o ouvidor encerra. Traz o protocolo, o desfecho em
-linguagem simples e o caminho para voltar a falar. O endereço que aparece nessa
-imagem é o da máquina de teste onde o print foi tirado; no e-mail de verdade sai
-o endereço do hospital.
+linguagem simples e o caminho para voltar a falar, que é o endereço do
+formulário no site do hospital.
 
 ## Por que os dois contam tão pouco
 

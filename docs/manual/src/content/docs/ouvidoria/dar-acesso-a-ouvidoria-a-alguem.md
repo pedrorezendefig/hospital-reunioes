@@ -9,8 +9,7 @@ sidebar:
   order: 16
 ---
 
-O vídeo é o capítulo 6 do módulo, gravado na versão 0.109.0: ele mostra esta
-tarefa, não as mudanças que vieram depois.
+O vídeo é o capítulo 6 do módulo, regravado na versão 0.137.1.
 
 ## Quando usar
 
