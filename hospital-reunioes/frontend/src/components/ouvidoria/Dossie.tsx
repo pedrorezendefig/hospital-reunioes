@@ -195,6 +195,26 @@ interface DossieProps {
   token: string | null;
 }
 
+/**
+ * Os canais que PERGUNTAM o nome do paciente (issue #662).
+ *
+ * `qr` e `site` são o canal aberto, o único fluxo que hoje carimba
+ * `paciente_nome` (issue #666). O Registro manual do ouvidor (sete canais) e a
+ * API da Ana gravam o vínculo `acompanhante` sem nunca pedir o paciente: lá,
+ * "sem o nome do paciente" é o estado permanente, e o aviso ficaria aceso para
+ * sempre num caso onde não existe tela para apagá-lo. Pior: mandaria o ouvidor
+ * confirmar com o manifestante a ligação que ele mesmo acabou de atender.
+ * Guarda-corpo que vira ruído treina o olho a ignorar o banner, e aí ele
+ * também para de funcionar no caso do QR, que é o que a issue quer pegar.
+ *
+ * A issue #663 dá os dois campos do paciente ao Registro manual. Quando ela
+ * subir, os sete canais manuais (`telefone`, `presencial`, `email`,
+ * `whatsapp`, `instagram`, `reclame_aqui`, `google`) passam a ter onde
+ * carimbar e entram nesta lista. A Ana fica fora enquanto o payload dela não
+ * tiver os campos (fora do escopo do PRD #659).
+ */
+const CANAIS_QUE_PERGUNTAM_O_PACIENTE = ["qr", "site"];
+
 function formatarDataHora(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", {
     day: "2-digit",
@@ -1045,24 +1065,6 @@ export function Dossie({ protocolo, token }: DossieProps) {
             </div>
           )}
 
-          {/* Relato em nome de outra pessoa sem o nome do paciente (issue #662,
-              ADR 0052 decisão 5). Fica ao lado do "Cadastro incompleto" porque
-              é a mesma família: o caso chegou faltando o que a área vai
-              precisar. Só sinaliza, e de propósito: quem decide se aciona
-              assim mesmo é o ouvidor, e o botão continua ali. Amarelo, e não
-              azul, porque aqui há algo a CONFIRMAR com o manifestante antes de
-              o caso seguir, enquanto o cadastro incompleto se resolve na
-              própria validação. */}
-          {dossie.manifestante_vinculo === "acompanhante" && !dossie.paciente_nome && (
-            <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
-              <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-              <span>
-                Relato em nome de outra pessoa sem o nome do paciente. Confirme com o
-                manifestante antes de acionar.
-              </span>
-            </div>
-          )}
-
           {/* A Devolução à Ouvidoria (issue #601, ADR 0048). Fica no topo dos
               blocos porque é o que o ouvidor tem a FAZER agora: o caso voltou
               para a fila dele esperando um despacho novo, e o motivo é o que
@@ -1108,6 +1110,37 @@ export function Dossie({ protocolo, token }: DossieProps) {
               </div>
             </div>
           )}
+
+          {/* Relato em nome de outra pessoa sem o nome do paciente (issue #662,
+              ADR 0052 decisão 5). Fica DEPOIS da devolução: a devolução é a
+              tarefa do ouvidor agora, e este aviso é contexto do caso. Só
+              sinaliza, e de propósito: quem decide se aciona assim mesmo é o
+              ouvidor, e o botão continua ali. Amarelo, e não o azul do
+              "Cadastro incompleto", porque aqui há algo a CONFIRMAR com o
+              manifestante antes de o caso seguir, enquanto o cadastro
+              incompleto se resolve na própria validação.
+
+              `podeValidar` pela mesma razão do aviso de trilha ilegível logo
+              abaixo: "confirme antes de acionar" só é um pedido enquanto há o
+              que acionar. E não perde o caso que originou o PRD, porque a área
+              que devolve por "não achei o atendimento" manda o caso de volta
+              para `em_classificacao`, e o aviso reacende na hora em que o
+              ouvidor decide de novo.
+
+              O nome é aparado antes de julgar: espaço em branco é nome nenhum,
+              e o aviso fala do nome que falta, não da coluna que é nula. */}
+          {CANAIS_QUE_PERGUNTAM_O_PACIENTE.includes(dossie.canal ?? "") &&
+            dossie.manifestante_vinculo === "acompanhante" &&
+            !dossie.paciente_nome?.trim() &&
+            podeValidar(dossie.status) && (
+              <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  Relato em nome de outra pessoa sem o nome do paciente. Confirme com o
+                  manifestante antes de acionar.
+                </span>
+              </div>
+            )}
 
           {/* A trilha carrega a devolução, então trilha ilegível é informação
               FALTANDO na decisão de despachar, e não silêncio (issue #601). O

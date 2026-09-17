@@ -240,23 +240,71 @@ describe("o Dossiê e o aviso do acompanhante sem nome do paciente (issue #662)"
     expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
   });
 
-  it("nenhum outro vínculo acende o aviso, nem o vínculo não informado", async () => {
-    // O vínculo nulo é o caso do QR enviado por uma aba aberta antes da versão
-    // que pergunta "sobre quem" (issue #666): silêncio não é "outra pessoa".
-    for (const vinculo of ["colaborador", "terceiro", "outro", null]) {
+  // O vínculo nulo é o caso do QR enviado por uma aba aberta antes da versão
+  // que pergunta "sobre quem" (issue #666): silêncio não é "outra pessoa".
+  it.each(["colaborador", "terceiro", "outro", null])(
+    "o vínculo %s não acende o aviso",
+    async (vinculo) => {
       montarComDossie(dossie({ manifestante_vinculo: vinculo, paciente_nome: null }));
 
       expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
       expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
-
-      cleanup();
-      vi.unstubAllGlobals();
     }
+  );
+
+  // Nome em branco é nome nenhum. Nenhum dos três estados é produzível hoje
+  // além do nulo (o canal público apara e converte vazio em nulo), mas sem a
+  // string vazia aqui o mutante que troca `!paciente_nome` por
+  // `paciente_nome == null` sobrevive, e sem os espaços sobrevive o que come
+  // o `.trim()`.
+  it.each([null, "", "   "])(
+    "nome do paciente %o é nome nenhum, e o aviso acende",
+    async (nome) => {
+      montarComDossie(dossie({ manifestante_vinculo: "acompanhante", paciente_nome: nome }));
+
+      expect(await screen.findByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeTruthy();
+    }
+  );
+
+  it("canal que não pergunta o paciente fica em silêncio", async () => {
+    // O Registro manual do ouvidor grava o vínculo `acompanhante` e não tem
+    // campo de paciente (a issue #663 é que dá). Aceso ali, o aviso não teria
+    // onde ser apagado, e mandaria o ouvidor confirmar com o manifestante a
+    // ligação que ele mesmo acabou de atender.
+    montarComDossie(
+      dossie({
+        canal: "telefone",
+        canal_setor: null,
+        manifestante_vinculo: "acompanhante",
+        paciente_nome: null,
+      })
+    );
+
+    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+    expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
+  });
+
+  it("caso encerrado fica em silêncio: não há mais o que acionar", async () => {
+    // "Confirme antes de acionar" num caso encerrado manda fazer o que não
+    // existe mais. O fato continua legível na linha "Paciente: Não informado".
+    montarComDossie(
+      dossie({
+        status: "encerrado",
+        manifestante_vinculo: "acompanhante",
+        paciente_nome: null,
+      })
+    );
+
+    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+    expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
   });
 
   it("CONTRAPROVA: o aviso não trava nada, o ouvidor aciona a área mesmo assim", async () => {
     // Sem esta, um mutante que trocasse o aviso por um bloqueio passaria: a
-    // frase estaria na tela e o ato estaria indisponível.
+    // frase estaria na tela e o ato estaria indisponível. A prova é o clique
+    // que abre a modal do acionamento, e não o atributo `disabled`: o botão
+    // nunca o recebe, então afirmar `disabled === false` seria verdade até no
+    // mundo em que o botão inteiro sumiu.
     montarComDossie(
       dossie({
         status: "em_classificacao",
@@ -266,10 +314,8 @@ describe("o Dossiê e o aviso do acompanhante sem nome do paciente (issue #662)"
     );
 
     await screen.findByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE);
-    const botao = screen.getByText("Validar e acionar");
-    expect((botao.closest("button") as HTMLButtonElement).disabled).toBe(false);
 
-    fireEvent.click(botao);
+    fireEvent.click(screen.getByText("Validar e acionar"));
 
     await waitFor(() => expect(screen.getByText(/Validar e acionar 2026-0012/)).toBeTruthy());
   });
