@@ -227,6 +227,25 @@ CAMPOS_DO_DOSSIE: dict[str, str | None] = {
     # anônimo é este. Nenhuma estatística o lê, então apagar não custa
     # relatório nenhum, e o `canal_setor` (área inteira) segue preservado.
     "canal_ponto": None,
+    # O Paciente do caso (issue #665, PRD #659, ADR 0052 decisão 6). Nome de
+    # pessoa e uma pista curta do atendimento (data, setor ou leito), escritos
+    # por quem manifestou quando o relato é sobre outra pessoa. É dado pessoal
+    # de TERCEIRO, e é por isso que sai: o anonimato do manifestante nunca os
+    # zerou (o anonimato protege quem fala), então sem esta linha o único
+    # apagamento que os alcançaria não existia. A referência carrega leito e
+    # data, que reidentificam pelo mesmo mecanismo do `canal_ponto` acima.
+    #
+    # DIVERGÊNCIA CONHECIDA com o banco de produção: o `COMMENT ON COLUMN` das
+    # duas colunas, escrito pela migration 110 e já aplicado, diz que a
+    # Retenção "ainda nao varre" e que a varredura chega na issue #665. A
+    # partir desta fatia isso está desatualizado. Migration aplicada é
+    # imutável (o hash do arquivo é a prova do que rodou no banco), então a
+    # correção dos dois textos sai na migration da issue #664, que reescreve
+    # de uma vez as duas pendências que o comentário cita. Até lá, o `\d+` da
+    # tabela em produção descreve uma pendência já fechada; quem decide é esta
+    # lista, não o comentário.
+    "paciente_nome": None,
+    "paciente_referencia": None,
 }
 
 # `resumo` é NOT NULL com CHECK anti-vazio desde a migration 063: não pode ir a
@@ -328,6 +347,43 @@ CAMPOS_ESTATISTICOS: tuple[str, ...] = (
     "apagamento_pedido_por",
     "apagamento_motivo",
 )
+
+# O que a política preserva SEM ser estatística (issue #665). A separação em
+# duas listas cobria o que sai e o que os relatórios contam, e deixava de fora
+# a coluna que não é nem uma coisa nem outra: ela simplesmente sobrevivia, e o
+# silêncio lia igual a "preservada de propósito" e a "ninguém decidiu". Foi
+# esse silêncio que deixou o Paciente do caso vivo depois do apagamento.
+#
+# Nenhuma destas carrega texto livre nem identificação de quem manifestou:
+#   - `natureza_informada` é a escolha de um toque no formulário público
+#     (migration 090), lista fechada de quatro palavras. É sugestão de quem
+#     manifestou, não classificação, e por isso nenhum relatório a conta;
+#   - `prazo_conclusivo_em` é o vencimento congelado no despacho (091);
+#   - `vista_pela_ouvidoria_em` é o visto global do posto no caso (092);
+#   - `acuse_recebimento_em`, `acuse_sem_contato_em`, `encerramento_avisado_em`
+#     e `encerramento_sem_contato_em` são os pares exclusivos que dizem se o
+#     aviso ao manifestante saiu ou se não havia contato (094 e 096). O
+#     carimbo diz que um email saiu, e não para quem: o endereço mora em
+#     `manifestante_contato`, que sai com o Dossiê.
+#
+# A lista não muda o que o código faz (o update só toca no Dossiê): ela existe
+# para o teste de completude poder afirmar que TODA coluna da tabela está de um
+# lado ou do outro, e para a próxima coluna nova não escapar em silêncio.
+CAMPOS_PRESERVADOS_SEM_METRICA: tuple[str, ...] = (
+    "natureza_informada",
+    "prazo_conclusivo_em",
+    "vista_pela_ouvidoria_em",
+    "acuse_recebimento_em",
+    "acuse_sem_contato_em",
+    "encerramento_avisado_em",
+    "encerramento_sem_contato_em",
+)
+
+# As três colunas que não entram na escolha entre sair e ficar, por natureza:
+# `id` é a identidade da linha; `resumo` o apagamento REESCREVE em vez de
+# zerar, porque é NOT NULL com CHECK anti-vazio (migration 063), e o texto some
+# do mesmo jeito; `anonimizada_em` é o carimbo do próprio ato.
+CAMPOS_FORA_DA_ESCOLHA: tuple[str, ...] = ("id", "resumo", "anonimizada_em")
 
 # O que o job precisa do caso para decidir e anonimizar.
 _CAMPOS_DA_RETENCAO = "id, status, encerrada_em, anonimizada_em"
