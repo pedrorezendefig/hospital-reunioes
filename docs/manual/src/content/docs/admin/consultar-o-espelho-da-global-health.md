@@ -4,6 +4,7 @@ description: Ver ao vivo o que a agenda online publica e descobrir por que a ass
 prd: [385]
 draft: false
 papel: [Secretária, Regular]
+video: consultar-o-espelho-da-global-health
 sidebar:
   order: 12
 ---

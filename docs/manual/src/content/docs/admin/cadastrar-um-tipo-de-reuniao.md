@@ -4,6 +4,7 @@ description: O que a tela de Tipos de Reunião faz, e por que ela não muda a es
 prd: [731]
 draft: false
 papel: [Só admin]
+video: cadastrar-um-tipo-de-reuniao
 sidebar:
   order: 10
 ---

@@ -4,6 +4,7 @@ description: Desligar alguém sem apagar o histórico, e quando apagar a ficha d
 prd: [731]
 draft: false
 papel: [Só admin]
+video: tirar-o-acesso-de-quem-saiu
 sidebar:
   order: 6
 ---

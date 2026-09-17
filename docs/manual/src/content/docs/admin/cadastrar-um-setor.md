@@ -4,6 +4,7 @@ description: Manter a lista de setores que aparece pronta na ficha das pessoas e
 prd: [731]
 draft: false
 papel: [Só admin]
+video: cadastrar-um-setor
 sidebar:
   order: 8
 ---

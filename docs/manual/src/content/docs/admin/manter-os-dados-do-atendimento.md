@@ -4,6 +4,7 @@ description: Atualizar os preços, preparos e estimativas que a assistente usa p
 prd: [287]
 draft: false
 papel: [Secretária]
+video: manter-os-dados-do-atendimento
 sidebar:
   order: 11
 ---

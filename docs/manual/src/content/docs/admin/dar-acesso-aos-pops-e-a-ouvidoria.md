@@ -4,6 +4,7 @@ description: Conceder ou revogar os dois acessos que não dependem do perfil de 
 prd: [731]
 draft: false
 papel: [Só admin]
+video: dar-acesso-aos-pops-e-a-ouvidoria
 sidebar:
   order: 5
 ---
