@@ -4,6 +4,7 @@ description: Como reenviar o acionamento para quem responde pela área hoje, sem
 prd: [317, 318]
 draft: false
 papel: [Ouvidoria]
+video: cobrar-o-setor-que-nao-respondeu
 sidebar:
   order: 10
 ---

@@ -4,6 +4,7 @@ description: Como fazer a pessoa que voltou a reclamar do mesmo continuar no pro
 prd: [318]
 draft: false
 papel: [Ouvidoria]
+video: reabrir-um-caso-por-reincidencia
 sidebar:
   order: 19
 ---
