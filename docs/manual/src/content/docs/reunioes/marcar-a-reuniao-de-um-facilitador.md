@@ -18,6 +18,8 @@ reunião do calendário, com um campo a mais: quem conduz.
 
 1. No menu, clique em **Nova reunião**. A tela abre em
    **Marcar nova reunião**.
+   ![Tela Marcar nova reunião preenchida, com o campo Facilitador](../../../assets/reunioes/marcar-nova-reuniao.png)
+
 2. Escreva o **Título**, escolha a **Data** e preencha **Início** e
    **Término**.
 3. Em **Tipo**, escolha **Diretoria**, **Gerencial**, **Coordenação**,

@@ -18,6 +18,8 @@ retrato geral em vez da lista item a item.
 
 1. No menu, abra **Reuniões e metas** e clique em **Dashboard**. A tela abre
    com **Olá** e o seu nome.
+   ![Painel com os quatro números do alto e os dois gráficos](../../../assets/reunioes/dashboard.png)
+
 2. Leia os quatro números do alto, todos clicáveis: **Conformidade**,
    **Vencem em 3 dias**, **Atas Paradas** e **Aguardam Assinatura**.
 3. Clique em **Vencem em 3 dias** para cair na lista de pendências já filtrada

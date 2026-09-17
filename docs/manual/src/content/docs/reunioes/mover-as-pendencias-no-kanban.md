@@ -18,6 +18,8 @@ vez". O quadro mostra a mesma coisa da lista, distribuída em colunas.
 
 1. No menu, abra **Reuniões e metas**, depois **Pendências**, depois
    **Kanban**.
+   ![Quadro com as seis colunas e os cartões de cada estado](../../../assets/reunioes/kanban.png)
+
 2. Confira as seis colunas, sempre na mesma ordem: **Pendente**,
    **Em Progresso**, **Atrasado**, **Concluido**, **Cancelado** e
    **Repactuada**.

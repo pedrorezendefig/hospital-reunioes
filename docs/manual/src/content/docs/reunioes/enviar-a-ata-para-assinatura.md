@@ -18,6 +18,8 @@ reunião com transcrição; a Ata Guiada não passa por aqui.
 
 1. Abra a reunião em **Validação Necessária** e confira o documento em
    **Baixar PDF**.
+   ![Bloco Validação Necessária, com Baixar PDF e Enviar para assinatura](../../../assets/reunioes/enviar-para-assinatura.png)
+
 2. Clique em **Enviar para assinatura**. Cada pessoa da ata recebe o email de
    assinatura.
 3. A reunião passa a mostrar **Aguardando assinatura digital**, com a conta de

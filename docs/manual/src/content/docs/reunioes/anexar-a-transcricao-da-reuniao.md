@@ -17,13 +17,22 @@ faz a ata nascer completa, com discussão, decisões e o quadro de ações.
 ## Passo a passo
 
 1. Abra a reunião pelo **Calendário**, clicando no cartão dela.
+
+   ![Cartão da reunião no calendário, no dia dela](../../../assets/reunioes/calendario-cartao-da-reuniao.png)
 2. Desça até o bloco **Transcrição**.
+
+   ![Bloco Transcrição com o botão de anexar o arquivo](../../../assets/reunioes/bloco-transcricao.png)
 3. Clique em **Anexar Transcrição e Processar com IA** e escolha o arquivo.
    Valem os formatos `.txt`, `.md`, `.pdf` e `.docx`.
 4. Espere. O bloco passa a mostrar **A IA está processando a transcrição...**,
    e a reunião fica em **Processando IA**.
+
+   ![Aviso de que o assistente está lendo a transcrição](../../../assets/reunioes/transcricao-processando.png)
 5. Recarregue a página em instantes. A ata aparece escrita, pronta para você
    revisar.
+
+   ![Discussão dos pontos escrita pelo assistente, com as decisões](../../../assets/reunioes/ata-escrita.png)
+
 
 Se a reunião nem chegou a ser marcada, dá para começar pela transcrição: no
 **Calendário**, clique em **Importar Transcrição**, preencha título, data e
