@@ -14,7 +14,7 @@
  * copiado, o botão novo de amanhã nasceria só num deles.
  */
 
-import { useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertCircle,
@@ -29,6 +29,8 @@ import {
 } from "lucide-react";
 
 import { useFecharFlutuante } from "@/hooks/useFecharFlutuante";
+import { ModalPortal } from "@/components/ui/ModalPortal";
+import { posicaoDoFlutuante } from "@/lib/flutuante";
 import { ALTURA_DE_TOQUE, ALVO_DE_TOQUE } from "@/lib/toque";
 import {
   ROTULO_ACAO,
@@ -212,6 +214,14 @@ function Acao({
 /**
  * O menu do que sobra. Fecha ao clicar fora e no Escape, como o resto dos
  * flutuantes da casa (`components/ui/MultiSelect`).
+ *
+ * O painel sai por portal no `body`, e não `absolute` dentro da linha
+ * (issue #777). Os dois cards que desenham a fila fecham em `overflow-hidden`
+ * para clipar os filhos ao canto arredondado, e recorte acontece antes do
+ * empilhamento: o menu do caso destacado no topo sumia inteiro atrás do bloco
+ * de baixo, e nenhum `z-index` desfazia isso. Tirar o `overflow-hidden` de lá
+ * não era saída, porque é ele que arredonda o cabeçalho colorido do grupo e a
+ * linha de fundo vermelho do prazo estourado.
  */
 function MenuDeAcoes({
   m,
@@ -234,44 +244,91 @@ function MenuDeAcoes({
 }) {
   const [aberto, setAberto] = useState(false);
   const caixa = useRef<HTMLDivElement>(null);
-  useFecharFlutuante(aberto, caixa, () => setAberto(false));
+  const painel = useRef<HTMLDivElement>(null);
+  const gatilho = useRef<HTMLButtonElement>(null);
+  const [posicao, setPosicao] = useState<{ top: number; left: number } | null>(null);
+  useFecharFlutuante(aberto, caixa, () => setAberto(false), painel);
+
+  // A medida sai de um ref de callback, e não de um efeito: o painel nasce
+  // dentro do portal, que só entrega conteúdo depois de montar, e um efeito
+  // preso ao `aberto` correria antes de haver nó para medir. O callback roda
+  // no commit, antes da pintura, então o painel nunca aparece no canto.
+  const medir = useCallback((no: HTMLDivElement | null) => {
+    painel.current = no;
+    if (!no || !gatilho.current) return;
+    const alvo = gatilho.current.getBoundingClientRect();
+    setPosicao(
+      posicaoDoFlutuante(
+        { top: alvo.top, bottom: alvo.bottom, right: alvo.right },
+        { altura: no.offsetHeight, largura: no.offsetWidth },
+        { altura: window.innerHeight, largura: window.innerWidth }
+      )
+    );
+  }, []);
+
+  // Preso à janela, o painel não acompanha a linha que o abriu: rolando a fila
+  // ele ficaria parado no ar, apontando para outro caso. A captura é o que
+  // alcança a rolagem do `main`, que é onde esta tela rola de verdade.
+  useEffect(() => {
+    if (!aberto) return;
+    const fechar = () => setAberto(false);
+    window.addEventListener("scroll", fechar, true);
+    return () => window.removeEventListener("scroll", fechar, true);
+  }, [aberto]);
+
+  function alternar() {
+    setPosicao(null);
+    setAberto((antes) => !antes);
+  }
 
   return (
     <div className="relative" ref={caixa}>
       <button
+        ref={gatilho}
         type="button"
         aria-haspopup="true"
         aria-expanded={aberto}
         aria-label={`Mais ações da manifestação ${m.protocolo}`}
-        onClick={() => setAberto((antes) => !antes)}
+        onClick={alternar}
         className={`inline-flex items-center justify-center shrink-0 rounded-lg text-slate-500 hover:bg-slate-100 transition-colors ${ALVO_DE_TOQUE} md:w-8 md:h-8`}
       >
         <MoreHorizontal className="w-4 h-4" />
       </button>
       {aberto && (
-        // Sem `role="menu"` de propósito: um menu ARIA espera filhos
-        // `menuitem`, e o papel explícito apagaria o que estas ações são de
-        // verdade, um botão e um link (issue #476). Agrupar e nomear basta.
-        <div
-          aria-label={`Ações da manifestação ${m.protocolo}`}
-          className="absolute right-0 top-9 z-20 min-w-[13rem] py-1 rounded-xl border border-border bg-white shadow-premium"
-        >
-          {acoes.map((chave) => (
-            <Acao
-              key={chave}
-              chave={chave}
-              m={m}
-              onValidar={onValidar}
-              onEncerrar={onEncerrar}
-              onCobrar={onCobrar}
-              onRedirecionar={onRedirecionar}
-              onArquivar={onArquivar}
-              onDesarquivar={onDesarquivar}
-              onEscolher={() => setAberto(false)}
-              className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 ${ALTURA_DE_TOQUE}`}
-            />
-          ))}
-        </div>
+        <ModalPortal>
+          {/* Sem `role="menu"` de propósito: um menu ARIA espera filhos
+              `menuitem`, e o papel explícito apagaria o que estas ações são de
+              verdade, um botão e um link (issue #476). Agrupar e nomear basta. */}
+          <div
+            ref={medir}
+            aria-label={`Ações da manifestação ${m.protocolo}`}
+            style={{
+              top: posicao?.top ?? 0,
+              left: posicao?.left ?? 0,
+              // A medida chega no mesmo commit, então este estado não é pintado.
+              // Fica como rede: painel visível no canto superior esquerdo seria
+              // pior que painel que demora um quadro.
+              visibility: posicao ? undefined : "hidden",
+            }}
+            className="fixed z-50 min-w-[13rem] py-1 rounded-xl border border-border bg-white shadow-premium"
+          >
+            {acoes.map((chave) => (
+              <Acao
+                key={chave}
+                chave={chave}
+                m={m}
+                onValidar={onValidar}
+                onEncerrar={onEncerrar}
+                onCobrar={onCobrar}
+                onRedirecionar={onRedirecionar}
+                onArquivar={onArquivar}
+                onDesarquivar={onDesarquivar}
+                onEscolher={() => setAberto(false)}
+                className={`flex w-full items-center gap-2 px-3 py-2 text-left text-sm text-slate-700 hover:bg-slate-50 ${ALTURA_DE_TOQUE}`}
+              />
+            ))}
+          </div>
+        </ModalPortal>
       )}
     </div>
   );
