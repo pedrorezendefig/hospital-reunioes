@@ -36,7 +36,7 @@ fim da página: a escolha fica guardada e os avisos continuam chegando.
   clique de novo.
 - **Você ligou Prazos próximos e nunca recebeu nada:** a plataforma não emite
   esse aviso. Quem acompanha prazo acompanha pelo cartão **Vencem em 3 dias**
-  do painel, ou pelo filtro **Críticas** da lista de pendências.
+  do painel, que abre a lista de pendências já só com as críticas.
 - **Você procurou preferência de email, ou escolheu o tema Escuro:** as abas
   **Email** e **Aparência** dizem na própria tela que essas duas coisas ainda
   vêm.
