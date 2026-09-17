@@ -33,7 +33,7 @@ from app.services.tecnologia import (
     TIPOS,
     recuar_continuacao,
 )
-from app.services.tecnologia_vinculo import ETAPA_REGISTRADA, ETAPA_ROTULO
+from app.services.tecnologia_vinculo import ETAPA_ROTULO
 from app.utils.text_sanitizer import sanitizar_estrutura, sanitizar_travessao
 
 logger = logging.getLogger(__name__)
@@ -126,7 +126,6 @@ MOTIVO_DESCRICAO_GRANDE = (
 )
 
 SEM_DEMANDAS_ABERTAS = "(nenhuma)"
-SEM_RESPONSAVEL = "(sem responsável)"
 SEM_PRODUTOS = "(nenhum Produto ativo)"
 SEM_CONVERSA = "(a conversa ainda não começou)"
 
@@ -251,17 +250,27 @@ def _linha_da_demanda(d: dict) -> str:
     devolve em `demanda_parecida`, e é contra ele que o backend confere. Os
     outros campos vêm no rótulo que a pessoa lê na tela (`Defeito`, e não
     `defeito`), porque o modelo fala com o diretor, e ele não lê valor de banco.
+
+    **São os cinco campos do ADR 0056, decisão 5, e o nome do responsável não é
+    um deles.** Ele é o único dado pessoal do cabeçalho, e sairia daqui para um
+    provedor de fora a cada turno. O modelo também não precisa dele para julgar
+    semelhança: quem diz que a Demanda já está sendo tratada é o estado e a
+    Etapa. O nome continua na FAIXA da tela, que a rota remonta a partir do
+    banco: a pessoa vê quem responde pela Demanda, e o nome não sai de casa.
     """
+    # Os padrões dos campos são de quem MONTA o resumo, e não daqui: a rota já
+    # resolve a Etapa ausente para `registrada`, como as outras rotas da aba
+    # fazem. Um segundo padrão aqui seria a mesma regra escrita duas vezes, e
+    # nenhum dos dois lados ficaria provado, porque um cobriria o outro.
     estado = str(d.get("estado") or "")
-    etapa = str(d.get("etapa") or ETAPA_REGISTRADA)
+    etapa = str(d.get("etapa") or "")
     tipo = str(d.get("tipo") or "")
     return (
-        f"- identificador {d.get('id', '')}: {d.get('titulo') or ''} "
+        f"- identificador {str(d.get('id') or '')}: {d.get('titulo') or ''} "
         f"(Tipo: {TIPO_ROTULO.get(tipo, tipo)}; "
         f"Produto: {d.get('produto_nome') or SEM_PRODUTO}; "
         f"estado: {ESTADO_ROTULO.get(estado, estado)}; "
-        f"Etapa: {ETAPA_ROTULO.get(etapa, etapa)}; "
-        f"responsável: {d.get('responsavel_nome') or SEM_RESPONSAVEL})"
+        f"Etapa: {ETAPA_ROTULO.get(etapa, etapa)})"
     )
 
 
@@ -271,7 +280,8 @@ def _bloco_demandas_abertas(demandas: list[dict]) -> str:
     Só o cabeçalho de cada uma (nunca a Conversa nem a descrição, ADR 0056): o
     prompt não carrega o fio inteiro de nada, e a descrição de uma Demanda pode
     ter dado pessoal transcrito de um print. Quem faz esse corte é a rota, que
-    monta o resumo; aqui ele é apenas respeitado, campo a campo.
+    monta o resumo; aqui ele é apenas respeitado, campo a campo, e o nome do
+    responsável, que vem no resumo para a faixa da tela, para neste gargalo.
     """
     if not demandas:
         return SEM_DEMANDAS_ABERTAS
@@ -297,7 +307,9 @@ def demanda_parecida_da_lista(valor, demandas: list[dict]) -> dict | None:
         return None
     escolhido = valor.strip()
     for d in demandas:
-        if str(d.get("id")) == escolhido:
+        # O mesmo fallback que o bloco escreve (`str(... or "")`): dois lados da
+        # mesma comparação com defaults diferentes casariam a string "None".
+        if str(d.get("id") or "") == escolhido:
             return {
                 "id": escolhido,
                 "titulo": d.get("titulo") or "",

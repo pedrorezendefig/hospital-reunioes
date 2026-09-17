@@ -377,19 +377,32 @@ class AssistenteChatPayload(BaseModel):
     messages: list[AssistenteMensagem] = Field(..., min_length=1, max_length=LIMITE_DE_MENSAGENS)
 
 
+class AssistenteDemandaParecida(BaseModel):
+    """O aviso de Demanda parecida, como a faixa da tela o consome (issue #732).
+
+    Ele e um MODELO, e nao um `dict`, porque o recorte de quatro campos e o que
+    mantem a descricao (que pode ter dado pessoal transcrito de um print) fora
+    de uma resposta que a tela mostra antes de a pessoa abrir a Demanda. Com
+    `dict`, o corte dependia de quem produz; aqui ele e estrutural: campo que
+    nao esta escrito abaixo nao sai desta rota, venha de onde vier.
+    """
+
+    id: str
+    titulo: str
+    estado: str
+    responsavel_nome: str | None = None
+
+
 class AssistenteChatResponse(BaseModel):
     """Resposta do turno: a fala, o rascunho novo e o aviso de Demanda parecida.
 
     `demanda_parecida` vem preenchida quando o assistente reconhece o pedido
-    como o mesmo assunto de uma Demanda ABERTA do Quadro (issue #732), e carrega
-    so o que a faixa da tela mostra: `{id, titulo, estado, responsavel_nome}`. A
-    descricao nao entra, porque ela pode ter dado pessoal transcrito de um print
-    e a faixa aparece antes de a pessoa abrir a Demanda.
+    como o mesmo assunto de uma Demanda ABERTA do Quadro (issue #732).
     """
 
     reply: str
     rascunho: dict
-    demanda_parecida: dict | None = None
+    demanda_parecida: AssistenteDemandaParecida | None = None
 
 
 class AssistenteDocumentoResponse(BaseModel):

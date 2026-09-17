@@ -1709,4 +1709,49 @@ describe("A faixa de Demanda parecida", () => {
     expect(bloco.textContent).toContain("sem responsável");
     expect(bloco.textContent).not.toContain("null");
   });
+
+  it("aviso com título que não é texto não vira faixa", async () => {
+    // Sem esta conferência, um `titulo: 42` vira faixa e a tela escreve `42`
+    // como título de uma Demanda de verdade.
+    montar({ demandaParecida: { ...PARECIDA, titulo: 42 } });
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() => expect(screen.getByText(RESPOSTA_ILEGIVEL)).toBeTruthy());
+    expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull();
+  });
+
+  it("a Demanda ignorada volta a aparecer na conversa seguinte", async () => {
+    // O par do "Descartar limpa a faixa": lá se prova que ela some, aqui que a
+    // lista de ignoradas some junto. Sem isto, `setParecida(null)` sozinho
+    // passaria no teste de cima e a pessoa nunca mais veria aquele aviso.
+    montar({ demandaParecida: PARECIDA });
+
+    await falar("a Ana tá estranha");
+    await faixa();
+    fireEvent.click(screen.getByRole("button", { name: IGNORAR_A_PARECIDA }));
+    await waitFor(() => expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull());
+
+    fireEvent.click(screen.getByRole("button", { name: /Descartar/ }));
+    await falar("a Ana tá estranha de novo");
+
+    const bloco = await faixa();
+    expect(bloco.textContent).toContain("A Ana não responde de madrugada");
+  });
+
+  it("o aviso do turno descartado não ressuscita a faixa", async () => {
+    // A invariante da #729 aplicada ao estado novo: a guarda da conversa vem
+    // antes de QUALQUER escrita de `encerrarOTurno`, e `setParecida` é uma.
+    montar({ demandaParecida: PARECIDA, segurarAResposta: true });
+
+    fireEvent.change(screen.getByLabelText("Mensagem"), { target: { value: "a Ana tá estranha" } });
+    fireEvent.click(screen.getByRole("button", { name: "Enviar" }));
+    await waitFor(() => expect(doChat().length).toBeGreaterThan(0));
+
+    fireEvent.click(screen.getByRole("button", { name: /Descartar/ }));
+    soltarAResposta?.();
+
+    await waitFor(() => expect(screen.queryByText("a Ana tá estranha")).toBeNull());
+    expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull();
+  });
 });
