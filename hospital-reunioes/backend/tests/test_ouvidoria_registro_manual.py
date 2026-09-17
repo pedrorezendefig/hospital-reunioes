@@ -329,6 +329,128 @@ class TestAnonimato:
         assert gravado["relato_integral"].startswith("Cheguei as 8h"), "O relato não se perde no anonimato"
 
 
+class TestPacienteDoCaso:
+    """O paciente do caso no registro manual (issue #663, PRD #659, ADR 0052).
+
+    O ouvidor que atende o telefonema anota de quem é o caso: o nome do
+    paciente e uma pista do atendimento (data, setor ou leito). Os dois são
+    opcionais, porque quem ligou nem sempre sabe dizer, e o registro do
+    telefonema não pode travar por dado que a pessoa não deu."""
+
+    def test_o_nome_e_a_referencia_digitados_pelo_ouvidor_chegam_ao_banco(self, monkeypatch):
+        """História 14 do PRD: o caso do telefonema fica igual ao do QR."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes",
+            json={**REGISTRO, "paciente_nome": "Maria Souza", "paciente_referencia": "Leito 12, dia 09/09"},
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["paciente_nome"] == "Maria Souza"
+        assert gravado["paciente_referencia"] == "Leito 12, dia 09/09"
+
+    def test_registro_sem_os_campos_do_paciente_continua_valendo(self, monkeypatch):
+        """História 15 do PRD: o telefonema entra mesmo sem o paciente, e as
+        duas colunas nascem nulas, não em branco."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes", json=REGISTRO)
+
+        assert r.status_code == 201, r.text
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["paciente_nome"] is None
+        assert gravado["paciente_referencia"] is None
+
+    def test_campo_do_paciente_em_branco_vira_ausencia(self, monkeypatch):
+        """O ouvidor clica no campo, não digita nada e sai: isso é ausência de
+        dado, e o Dossiê tem que ler "Não informado", não uma string vazia."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes",
+            json={**REGISTRO, "paciente_nome": "   ", "paciente_referencia": ""},
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["paciente_nome"] is None
+        assert gravado["paciente_referencia"] is None
+
+    def test_espaco_em_volta_do_nome_do_paciente_e_aparado(self, monkeypatch):
+        """O que vai para a área é o nome, não o que sobrou da colagem."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, "paciente_nome": "  Maria Souza  "})
+
+        assert supabase.tabelas["ouvidoria_protocolos"][0]["paciente_nome"] == "Maria Souza"
+
+    def test_caso_anonimo_registrado_a_mao_preserva_o_paciente(self, monkeypatch):
+        """Decisão 3 do ADR 0052: o anonimato protege QUEM MANIFESTA. O
+        paciente é outra pessoa, e sem ele o caso do acompanhante anônimo chega
+        inútil à área. Nome e contato de quem ligou continuam apagados."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes",
+            json={
+                **REGISTRO,
+                "anonimo": True,
+                "paciente_nome": "Maria Souza",
+                "paciente_referencia": "Leito 12, dia 09/09",
+            },
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["paciente_nome"] == "Maria Souza"
+        assert gravado["paciente_referencia"] == "Leito 12, dia 09/09"
+        assert gravado["manifestante_nome"] is None
+        assert gravado["manifestante_contato"] is None
+
+    def test_o_paciente_volta_na_resposta_do_registro(self, monkeypatch):
+        """A tela do ouvidor abre o Dossiê com o que a rota devolveu: campo que
+        não volta aqui some da janela logo depois de ele digitar."""
+        client, _ = _client(monkeypatch, OUVIDOR)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes",
+            json={**REGISTRO, "paciente_nome": "Maria Souza", "paciente_referencia": "Leito 12"},
+        )
+
+        assert r.json()["paciente_nome"] == "Maria Souza"
+        assert r.json()["paciente_referencia"] == "Leito 12"
+
+    @pytest.mark.parametrize("campo", ["paciente_nome", "paciente_referencia"])
+    def test_texto_alem_do_teto_e_recusado_antes_de_gravar(self, monkeypatch, campo):
+        """Os dois campos são pista para a área achar o atendimento, não
+        segunda via do relato: o mesmo teto de 200 do nome e do contato."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, campo: "M" * 201})
+
+        assert r.status_code == 422
+        assert supabase.tabelas["ouvidoria_protocolos"] == []
+
+    def test_o_vinculo_escolhido_pelo_ouvidor_nao_descarta_o_paciente(self, monkeypatch):
+        """Diverge do canal público de propósito. Lá, "Sobre mim" descarta o
+        paciente porque a própria pessoa respondeu que o relato é dela. Aqui
+        quem digita é o ouvidor, o vínculo continua sendo a lista de cinco do
+        PRD, e os dois campos ficam sempre na tela: apagar em silêncio o que ele
+        anotou do telefonema seria perder dado sem avisar ninguém."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        client.post(
+            "/api/ouvidoria/manifestacoes",
+            json={**REGISTRO, "manifestante_vinculo": "paciente", "paciente_nome": "Maria Souza"},
+        )
+
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["manifestante_vinculo"] == "paciente"
+        assert gravado["paciente_nome"] == "Maria Souza"
+
+
 class TestSigiloReforcado:
     """Denúncia e relato de conduta nascem sigilosos (ADR 0034, decisão 1) e
     seguem as regras de acesso da fatia de fundação. Quem diz o que o caso é
