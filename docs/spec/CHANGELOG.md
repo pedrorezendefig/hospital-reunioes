@@ -7,6 +7,18 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.139.0 - 2026-09-16 22:35 - a leitura de documento passa a rodar num processo separado
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e04738f`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (`/api/health` em 0.139.0, `db: healthy`; frontend HTTP 200 servindo `0.139.0`) · build 476s no backend, 307s no frontend
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e04738f
+- Issues: [#758](https://github.com/pedrorezendefig/hospital-reunioes/issues/758) · PR [#765](https://github.com/pedrorezendefig/hospital-reunioes/pull/765) · minor, feat
+- Migration: nenhuma. A fatia move a extração para outro processo e não toca schema. A 109 segue sendo a última aplicada.
+- Nota: `.pdf` e `.docx` passam a ser lidos num processo separado, com teto de memória e prazo, e o processo morre sem levar o worker junto. Nasceu de quatro rodadas de revisão do PR #751, em que cada rodada fechava um filtro e a seguinte achava o próximo. O número que decidiu a arquitetura: o PDF **honesto** de 234 KB custava 1.465 MB de pico, a mesma ordem do ataque (1.584 MB), então não existia teto capaz de separar os dois; com `page.close()` por página o mesmo texto sai com 51 MB.
+- Corrigido de quebra, já em produção e nunca notado: as quatro rotas de transcrição chamavam o extrator **dentro do event loop**, então 7,5 segundos congelavam o app inteiro sem estourar memória nenhuma.
+- A versão `0.138.0` não existe de propósito: ela está carimbada no PR #751, em rascunho, e o salto faz a colisão virar conflito visível na rebase em vez de bump engolido em silêncio.
+
 ## v0.137.1 - 2026-09-16 20:37 - o item Ajuda abre o Manual no endereço que existe, e o painel Admin ganha o dele
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `8dc5aa50`

@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-16T22:35:00-03:00",
+      "sha": "e04738f",
+      "app_version": "0.139.0",
+      "subject": "A leitura de documento passa a rodar num processo separado, com teto de memoria e prazo",
+      "raw_subject": "feat(extracao): ler .pdf e .docx num processo separado, com teto de memoria e prazo (#765)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        731
+      ],
+      "result": "healthy",
+      "duration_seconds": 560,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 do PRD #726, primeira metade. A issue #758 NAO tem PRD pai: ela nasceu das revisoes do PR #751, quando ficou claro que envelope por filtro e conserto exemplo a exemplo dentro do processo que serve o app inteiro. O campo prds traz [731] porque o intervalo carrega tambem o PR #767 (achados da auditoria daquele PRD, de outra sessao), que nao foi registrado no deploy v0.137.1 dela. O passo 9.6 rodou e deu no-op: o #731 fechou e a outra sessao ja publicou o Manual. Tres fatias seguem em rascunho e bloqueadas atras desta: #729 (PR #751, que rebaseia por cima e tem 0.138.0 a re-bumpar), #730 e #732. O PR #750 (kit de conhecimento) esta verde e LIMPO em rascunho, esperando a leitura humana dos sete textos, e nao bumpa versao de proposito."
+    },
+    {
       "at": "2026-09-16T20:37:00-03:00",
       "sha": "8dc5aa50",
       "app_version": "0.137.1",
@@ -1426,66 +1458,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "2 issues numa onda com fila fixada pelo humano (#515 PR 527, #448 PR 533). O #448 rendeu mais que a issue pedia: a revisao independente achou que o teto novo, do jeito que nasceu, trocava um bug de memoria por indisponibilidade. Duas leituras que TINHAM onde carimbar estavam levantando, e uma delas era alcancavel pelo formulario publico sem login, o que fazia do guarda-corpo uma porta de negacao de servico. Na rodada 2 apareceu o pior modo de falha do projeto: o carimbo chegava a tela e sumia, porque o frontend descartava token desconhecido em silencio, e o painel mostraria numero menor com cara de contado. O silencio deixou de ser o default: SILENCIADAS diz por escrito quem e calado de proposito, o resto sai com texto generico que nomeia a leitura. Keyset recusado com motivo escrito, por decisao do humano na abertura da onda. Corrida de bump com sessao paralela: a main pulou de 0.102.0 para 0.102.3 no meio, os dois PRs foram rebaseados com re-bump sequencial."
-    },
-    {
-      "at": "2026-09-02T15:47:00-03:00",
-      "sha": "8a519ec",
-      "app_version": "0.102.3",
-      "subject": "Onda 1: token e corpo de aviso fora do log, tracos CJK na pseudonimizacao",
-      "raw_subject": "fix(seguranca): mascara o token do path antes de gravar a linha de request no log (#530)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "3 issues numa onda (#466 PR 528, #460 PR 531, #465 PR 530). O #530 desligou o access log do uvicorn no Dockerfile e no compose: o IP do cliente saiu do log do container junto. APP_VERSION setada com o build ja rodando nao pega; precisou redeploy manual do backend."
-    },
-    {
-      "at": "2026-09-02T14:05:00-03:00",
-      "sha": "f2ed543",
-      "app_version": "0.102.0",
-      "subject": "Onda 1 do PRD #471: identidade nova, semaforo de prazo recalibrado e o tipo informacao na classificacao",
-      "raw_subject": "feat(ouvidoria): tipo informacao entra na classificação (#524)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 296,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "093_ouvidoria_tipo_informacao.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "3 fatias em paralelo, 3 PRs, 3 versoes (0.100.0, 0.101.0, 0.102.0), 1 deploy. O semaforo (#488) so pinta vermelho o vencido e o que vence hoje, e o ambar caiu de 2 dias uteis para 1. O tipo informacao (#490) fecha a promessa do cartaz do ponto de escuta: o formulario publico ja aceitava a natureza, mas na triagem o pedido de informacao virava reclamacao. A revisao independente segurou 3 achados reais que a auto-revisao do autor nao pegaria: o hoje congelado da fila, o teste de fuso sem guarda, e o TOPO=5 que passaria a esconder o tipo novo do relatorio da Diretoria."
     }
   ]
 }
