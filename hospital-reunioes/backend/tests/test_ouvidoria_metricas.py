@@ -1318,7 +1318,7 @@ class TestReguaDoPeriodoNaoDependeDoFusoDoBanco:
         supabase = _SupabaseFake(casos=[], relogio_do_banco=relogio_do_banco)
         resposta = _client_publico(monkeypatch, supabase).post(
             "/api/ouvidoria/publico/manifestacoes",
-            json={"relato": self.RELATO, "anonimo": True},
+            json={"relato": self.RELATO, "sobre": "mim", "anonimo": True},
         )
         assert resposta.status_code == 201, resposta.text
         return supabase

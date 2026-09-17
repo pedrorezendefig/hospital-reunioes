@@ -506,6 +506,11 @@ _CAMPOS_DOSSIE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "manifestante_nome",
     "manifestante_contato",
     "manifestante_vinculo",
+    # O Paciente do caso (issue #666, migration 110). Fica ao lado do
+    # manifestante porque é a outra pessoa do caso, e no Dossiê, e não no
+    # índice: é dado pessoal de terceiro, atrás do mesmo gate do relato.
+    "paciente_nome",
+    "paciente_referencia",
     "anonimo",
     "sigilo_reforcado",
     "dados_incompletos",

@@ -23,11 +23,76 @@ export const NATUREZAS_INFORMADAS: { valor: NaturezaInformada; rotulo: string }[
   { valor: "informacao", rotulo: "Informação" },
 ];
 
+/**
+ * De quem é o relato (issue #666, ADR 0052, decisão 2).
+ *
+ * São duas palavras da TELA, e não os vínculos que o caso grava: quem responde
+ * "Sobre mim" entra como `paciente` e quem responde "Sobre outra pessoa" entra
+ * como `acompanhante`, e essa tradução é do servidor. Manter as duas grafias
+ * separadas é o que impede o canal público de escrever vínculo direto.
+ */
+export type SobreQuem = "mim" | "outra_pessoa";
+
+export const SOBRE_QUEM: { valor: SobreQuem; rotulo: string }[] = [
+  { valor: "mim", rotulo: "Sobre mim" },
+  { valor: "outra_pessoa", rotulo: "Sobre outra pessoa" },
+];
+
+/**
+ * O que a tela diz quando falta a única resposta obrigatória do formulário.
+ * Mora aqui porque é a régua do botão desabilitado, e não decoração da página.
+ */
+export const FALTA_DIZER_SOBRE_QUEM = 'Responda "Este relato é sobre quem?" para enviar.';
+
+/**
+ * O aviso abaixo do nome do paciente. A segunda frase só aparece para quem
+ * pediu anonimato: "Acompanhante da Maria, leito 12" às vezes entrega quem
+ * falou, e a pessoa decide isso sabendo (ADR 0052, consequências).
+ *
+ * A frase do anonimato cita os DOIS campos. Quem mais reidentifica é a
+ * referência do atendimento, e não o nome: foi por leito cruzado com a data que
+ * o caso anônimo deixou de gravar o ponto do cartaz (issue #375, migration
+ * 084). Avisar só sobre o nome deixaria a escolha consciente pela metade.
+ */
+export const AVISO_SEM_NOME_DO_PACIENTE =
+  "Sem o nome do paciente, o hospital não consegue achar o atendimento.";
+export const AVISO_PACIENTE_PODE_IDENTIFICAR =
+  "O nome do paciente e a referência do atendimento podem indicar quem manifestou.";
+
+/**
+ * As duas recusas definitivas do envio, separadas de propósito (issue #666).
+ *
+ * `400` é recusa de forma do envio (o honeypot). `422` é o servidor recusando o
+ * formato do payload, e a causa mais provável é esta página estar velha depois
+ * de um deploy, não o texto de quem manifestou. Dizer "reescreva o relato" nos
+ * dois casos manda a pessoa repetir o que nunca vai passar, num canal sem login
+ * e sem segunda porta.
+ */
+export const RECUSA_DO_ENVIO =
+  "Não foi possível registrar sua manifestação. Recarregue a página e tente de novo.";
+export const ENVIO_RECUSADO_PELA_PAGINA =
+  "Não foi possível registrar sua manifestação com os dados desta página. Copie o que você escreveu, recarregue a página e envie de novo.";
+
+export function avisoDoPaciente(anonimo: boolean): string {
+  return anonimo
+    ? `${AVISO_SEM_NOME_DO_PACIENTE} ${AVISO_PACIENTE_PODE_IDENTIFICAR}`
+    : AVISO_SEM_NOME_DO_PACIENTE;
+}
+
 export interface FormularioPublico {
   relato: string;
   nome: string;
   contato: string;
   anonimo: boolean;
+  /**
+   * A resposta a "Este relato é sobre quem?", ou nada enquanto a pessoa não
+   * respondeu. É a única resposta obrigatória do formulário: sem ela o envio
+   * nem sai, e o servidor devolveria 422.
+   */
+  sobre: SobreQuem | null;
+  /** O Paciente do caso. Opcional, e só existe em "Sobre outra pessoa". */
+  pacienteNome?: string;
+  pacienteReferencia?: string;
   /**
    * O código do cartaz que a pessoa leu, vindo do QR pela URL. Nulo no
    * formulário do site.
@@ -48,6 +113,9 @@ export interface EnvioPublico {
   contato?: string;
   p?: string;
   natureza_informada?: NaturezaInformada;
+  sobre?: SobreQuem;
+  paciente_nome?: string;
+  paciente_referencia?: string;
 }
 
 /**
@@ -80,6 +148,19 @@ export function montarEnvio(form: FormularioPublico): EnvioPublico {
   // Quem não escolheu natureza não manda campo nenhum: o caso entra sem
   // sugestão, que é o normal.
   if (form.natureza) envio.natureza_informada = form.natureza;
+  if (form.sobre) envio.sobre = form.sobre;
+  // O paciente só acompanha quem disse que o relato é sobre outra pessoa. Quem
+  // respondeu "Sobre mim" e tinha digitado antes de trocar a resposta não leva
+  // paciente nenhum, pelo mesmo motivo que o anônimo não leva identificação.
+  //
+  // O anonimato NÃO entra nesta conta: quem ele protege é quem fala, e o
+  // paciente é outra pessoa (ADR 0052, decisão 3).
+  if (form.sobre === "outra_pessoa") {
+    const pacienteNome = form.pacienteNome?.trim();
+    const pacienteReferencia = form.pacienteReferencia?.trim();
+    if (pacienteNome) envio.paciente_nome = pacienteNome;
+    if (pacienteReferencia) envio.paciente_referencia = pacienteReferencia;
+  }
   return envio;
 }
 

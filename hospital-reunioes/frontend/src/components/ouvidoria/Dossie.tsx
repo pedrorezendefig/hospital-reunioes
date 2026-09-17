@@ -103,6 +103,12 @@ export interface Dossie {
   manifestante_nome: string | null;
   manifestante_contato: string | null;
   manifestante_vinculo: string | null;
+  // O Paciente do caso (issue #666, ADR 0052): a outra pessoa do caso, quando
+  // quem manifestou disse que o relato é sobre outra pessoa. Opcional no tipo
+  // pelo mesmo motivo dos marcos: um frontend servido enquanto o backend ainda
+  // é o da versão anterior apenas mostra as linhas em branco.
+  paciente_nome?: string | null;
+  paciente_referencia?: string | null;
   anonimo: boolean;
   sigilo_reforcado: boolean;
   dados_incompletos: boolean;
@@ -1131,6 +1137,14 @@ export function Dossie({ protocolo, token }: DossieProps) {
             <Linha rotulo="Quem manifestou" valor={identificacao} />
             <Linha rotulo="Contato" valor={dossie.manifestante_contato || "Não informado"} />
             <Linha rotulo="Vínculo" valor={dossie.manifestante_vinculo || "Não informado"} />
+            {/* A outra pessoa do caso (issue #666, ADR 0052): fica ao lado de
+                quem manifestou porque é ali que o ouvidor lê o caso inteiro,
+                antes de acionar a área. */}
+            <Linha rotulo="Paciente" valor={dossie.paciente_nome || "Não informado"} />
+            <Linha
+              rotulo="Referência do atendimento"
+              valor={dossie.paciente_referencia || "Não informado"}
+            />
             <Linha rotulo="Setor" valor={dossie.setor} />
             <Linha rotulo="Tipo" valor={rotuloDoTipo(dossie.tipo_manifestacao)} />
             <Linha rotulo="Rótulo do caso" valor={dossie.categoria} />

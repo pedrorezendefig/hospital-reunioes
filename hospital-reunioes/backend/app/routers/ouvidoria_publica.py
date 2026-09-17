@@ -63,6 +63,13 @@ _DETALHE_FALHA = "Não foi possível registrar sua manifestação agora. Tente n
 # participante logado aqui: `autor_id` fica nulo e o rótulo diz de onde veio.
 AUTOR_CANAL_ABERTO = "Canal aberto"
 
+# A resposta a "Este relato é sobre quem?" e o vínculo que ela grava (issue
+# #666, ADR 0052, decisão 2). Duas grafias porque são duas coisas: `sobre` é a
+# palavra da tela pública, num canal que não escolhe vínculo por texto livre, e
+# o vínculo é o vocabulário do caso, que o ouvidor já lê no Dossiê e escolhe na
+# lista de cinco do registro manual. O canal aberto alcança dois dos cinco.
+VINCULO_POR_SOBRE: dict[str, str] = {"mim": "paciente", "outra_pessoa": "acompanhante"}
+
 
 def _limpar(valor: str | None) -> str | None:
     """Vazio é ausência, não conteúdo: espaço em branco (ou travessão sozinho,
@@ -151,6 +158,29 @@ class ManifestacaoPublica(BaseModel):
     # tipo, estado nem sigilo. Opcional de propósito: ninguém precisa se
     # classificar para falar.
     natureza_informada: str | None = Field(default=None, max_length=20)
+    # De quem é o relato (issue #666, ADR 0052, decisão 2). O que é gravado é o
+    # VÍNCULO (`VINCULO_POR_SOBRE`), e não esta palavra.
+    #
+    # OBRIGATÓRIO NA TELA, TOLERADO AQUI, e a assimetria é deliberada (decisão
+    # humana no checkpoint da onda, contra a letra do critério de aceite da
+    # #666, que pede 422 para ausente). O formulário exige a resposta: o botão
+    # de enviar fica desabilitado até a pessoa responder. Mas quem já estava com
+    # a PÁGINA ABERTA quando o deploy subiu continua com o bundle antigo até
+    # recarregar (o Next serve JS hasheado), e o merge dispara os dois webhooks
+    # juntos, com o backend ficando pronto antes do frontend. Recusar a ausência
+    # aqui fecharia o canal de denúncia justamente para quem está parado na
+    # frente do cartaz escrevendo devagar, que é o caso de uso desta fatia.
+    #
+    # Ausente grava vínculo nulo, que é o estado de todo caso anterior a esta
+    # fatia e que o Dossiê já desenha como "Não informado". Valor PRESENTE e
+    # fora da lista continua 422: payload velho passa, payload malformado não.
+    sobre: str | None = Field(default=None, max_length=20)
+    # O Paciente do caso: nome e uma pista curta do atendimento (data, setor ou
+    # leito). Os dois são opcionais de propósito, e o mesmo teto de 200 do nome
+    # e do contato vale aqui: é pista para a área achar o atendimento, não
+    # segunda via do relato.
+    paciente_nome: str | None = Field(default=None, max_length=200)
+    paciente_referencia: str | None = Field(default=None, max_length=200)
     # Honeypot: campo escondido no formulário, que pessoa nenhuma preenche.
     assunto_alternativo: str | None = Field(default=None, max_length=200)
 
@@ -166,10 +196,32 @@ class ManifestacaoPublica(BaseModel):
             raise ValueError("conte o que aconteceu para registrarmos sua manifestação")
         return valor.strip()
 
-    @field_validator("nome", "contato")
+    @field_validator("nome", "contato", "paciente_nome", "paciente_referencia")
     @classmethod
     def opcional_vazio_e_ausencia(cls, valor: str | None) -> str | None:
         return _limpar(valor)
+
+    @field_validator("sobre")
+    @classmethod
+    def sobre_da_lista_fechada(cls, valor: str | None) -> str | None:
+        """Dois valores, e nada mais, quando o campo VEM.
+
+        Ausente é a página velha de quem abriu o formulário antes do deploy, e
+        passa (o caso entra sem vínculo, como todo caso anterior a esta fatia).
+        Valor presente e fora da lista é recusa com 422, como a natureza fora da
+        lista: o canal público não escreve vínculo por texto livre, e string
+        vazia também não é resposta. Os vínculos gravados (`paciente`,
+        `acompanhante`) de propósito NÃO são aceitos aqui, para o cliente não
+        alcançar a coluna diretamente.
+
+        A régua não é aparada de propósito: `_limpar` transformaria `"   "` em
+        ausência, e espaço em branco chegando neste campo é requisição montada
+        na mão, não página velha."""
+        if valor is None:
+            return None
+        if valor not in VINCULO_POR_SOBRE:
+            raise ValueError("diga se o relato é sobre você ou sobre outra pessoa")
+        return valor
 
     @field_validator("natureza_informada")
     @classmethod
@@ -266,6 +318,22 @@ async def registrar_manifestacao_publica(
     nome = None if manifestacao.anonimo else manifestacao.nome
     contato = None if manifestacao.anonimo else manifestacao.contato
 
+    # De quem é o relato (ADR 0052). Duas leituras que andam juntas e que é
+    # fácil confundir:
+    #
+    # * quem diz que o relato é sobre SI não tem paciente de terceiro, então os
+    #   campos são descartados mesmo que cheguem preenchidos, como o anonimato
+    #   descarta a identificação acima;
+    # * o anonimato NÃO toca no paciente. Quem o anonimato protege é quem fala,
+    #   e o paciente é outra pessoa (decisão 3). Zerar os dois juntos devolveria
+    #   à área o caso que ela não acha, que é o problema que originou o PRD.
+    # Sem resposta (página velha), o caso entra sem vínculo e sem paciente,
+    # exatamente como todo caso do canal aberto entrava antes desta fatia.
+    vinculo = VINCULO_POR_SOBRE[manifestacao.sobre] if manifestacao.sobre else None
+    e_sobre_outra_pessoa = vinculo == VINCULO_POR_SOBRE["outra_pessoa"]
+    paciente_nome = manifestacao.paciente_nome if e_sobre_outra_pessoa else None
+    paciente_referencia = manifestacao.paciente_referencia if e_sobre_outra_pessoa else None
+
     # Canal QR só quando o código resolve um Ponto de escuta ATIVO. Setor e
     # ponto saem do CADASTRO, e é isso que fecha a porta do texto arbitrário: o
     # cliente manda um código de seis caracteres, e nada mais (ADR 0036).
@@ -297,6 +365,11 @@ async def registrar_manifestacao_publica(
         "natureza_informada": manifestacao.natureza_informada,
         "manifestante_nome": nome,
         "manifestante_contato": contato,
+        # O vínculo derivado da resposta obrigatória: o canal QR deixa de entrar
+        # com "Vínculo: Não informado" no Dossiê (issue #666).
+        "manifestante_vinculo": vinculo,
+        "paciente_nome": paciente_nome,
+        "paciente_referencia": paciente_referencia,
         "anonimo": manifestacao.anonimo,
         # Anônimo não é caso incompleto: não há o que completar, é escolha de
         # quem manifestou. Identificação pela metade, sim.

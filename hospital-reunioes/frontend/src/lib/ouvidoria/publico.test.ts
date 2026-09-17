@@ -1,5 +1,16 @@
 import { describe, expect, it } from "vitest";
-import { NATUREZAS_INFORMADAS, montarEnvio, relatoEstaVazio } from "./publico";
+import {
+  AVISO_PACIENTE_PODE_IDENTIFICAR,
+  AVISO_SEM_NOME_DO_PACIENTE,
+  ENVIO_RECUSADO_PELA_PAGINA,
+  FALTA_DIZER_SOBRE_QUEM,
+  NATUREZAS_INFORMADAS,
+  RECUSA_DO_ENVIO,
+  SOBRE_QUEM,
+  avisoDoPaciente,
+  montarEnvio,
+  relatoEstaVazio,
+} from "./publico";
 
 describe("relatoEstaVazio", () => {
   it("recusa relato vazio ou só com espaços antes de gastar a ida ao servidor", () => {
@@ -26,6 +37,7 @@ describe("montarEnvio", () => {
       contato: "maria@exemplo.com",
       anonimo: false,
       p: null,
+      sobre: "mim",
       natureza: null,
     });
 
@@ -41,6 +53,7 @@ describe("montarEnvio", () => {
       contato: "maria@exemplo.com",
       anonimo: true,
       p: null,
+      sobre: "mim",
       natureza: null,
     });
 
@@ -58,6 +71,7 @@ describe("montarEnvio", () => {
       contato: "",
       anonimo: false,
       p: "AB2CD3",
+      sobre: "mim",
       natureza: null,
     }) as unknown as Record<string, unknown>;
 
@@ -72,6 +86,7 @@ describe("montarEnvio", () => {
       contato: "",
       anonimo: false,
       p: null,
+      sobre: "mim",
       natureza: null,
     });
 
@@ -93,6 +108,7 @@ describe("o envio com o código do cartaz (issue #378, ADR 0036)", () => {
       contato: "",
       anonimo: false,
       p: "AB2CD3",
+      sobre: "mim",
       natureza: null,
     });
 
@@ -108,6 +124,7 @@ describe("o envio com o código do cartaz (issue #378, ADR 0036)", () => {
       contato: "",
       anonimo: false,
       p: null,
+      sobre: "mim",
       natureza: null,
     });
 
@@ -121,6 +138,7 @@ describe("o envio com o código do cartaz (issue #378, ADR 0036)", () => {
       contato: "",
       anonimo: false,
       p: "   ",
+      sobre: "mim",
       natureza: null,
     });
 
@@ -136,6 +154,7 @@ describe("o envio com o código do cartaz (issue #378, ADR 0036)", () => {
       contato: "joana@exemplo.com",
       anonimo: true,
       p: "AB2CD3",
+      sobre: "mim",
       natureza: null,
     });
 
@@ -169,6 +188,7 @@ describe("a natureza informada pelo manifestante (issue #473, RN-88)", () => {
       contato: "",
       anonimo: false,
       p: null,
+      sobre: "mim",
       natureza: "elogio",
     });
 
@@ -184,6 +204,7 @@ describe("a natureza informada pelo manifestante (issue #473, RN-88)", () => {
       contato: "",
       anonimo: false,
       p: null,
+      sobre: "mim",
       natureza: null,
     });
 
@@ -197,10 +218,165 @@ describe("a natureza informada pelo manifestante (issue #473, RN-88)", () => {
       contato: "",
       anonimo: true,
       p: null,
+      sobre: "mim",
       natureza: "sugestao",
     });
 
     expect(envio.natureza_informada).toBe("sugestao");
     expect(envio.anonimo).toBe(true);
+  });
+});
+
+describe("o Paciente do caso no envio (issue #666, ADR 0052)", () => {
+  it("oferece as duas respostas da pergunta, com Sobre mim primeiro", () => {
+    // A ordem é a da tela: a maioria de quem lê o QR fala de si, e o caminho
+    // mais curto fica na frente.
+    expect(SOBRE_QUEM.map((s) => s.valor)).toEqual(["mim", "outra_pessoa"]);
+    expect(SOBRE_QUEM.map((s) => s.rotulo)).toEqual(["Sobre mim", "Sobre outra pessoa"]);
+  });
+
+  it("leva a resposta escolhida, e não o vínculo que ela grava", () => {
+    // Quem traduz `outra_pessoa` em `acompanhante` é o servidor: o canal
+    // público não escreve vínculo.
+    const envio = montarEnvio({
+      relato: "Minha mãe esperou duas horas.",
+      nome: "",
+      contato: "",
+      anonimo: false,
+      p: null,
+      sobre: "outra_pessoa",
+      natureza: null,
+    });
+
+    expect(envio.sobre).toBe("outra_pessoa");
+    expect(envio).not.toHaveProperty("manifestante_vinculo");
+  });
+
+  it("leva o nome do paciente e a referência do atendimento", () => {
+    const envio = montarEnvio({
+      relato: "Minha mãe esperou duas horas.",
+      nome: "",
+      contato: "",
+      anonimo: false,
+      p: null,
+      sobre: "outra_pessoa",
+      pacienteNome: "Maria Souza",
+      pacienteReferencia: "Leito 12, dia 9",
+      natureza: null,
+    });
+
+    expect(envio.paciente_nome).toBe("Maria Souza");
+    expect(envio.paciente_referencia).toBe("Leito 12, dia 9");
+  });
+
+  it("caso anônimo continua levando o paciente, e não a identificação de quem falou", () => {
+    // A decisão que separa as duas pessoas do caso (ADR 0052, decisão 3): o
+    // anonimato protege quem fala, e o paciente é outra pessoa.
+    const envio = montarEnvio({
+      relato: "Minha mãe esperou duas horas.",
+      nome: "Joana da Silva",
+      contato: "joana@exemplo.com",
+      anonimo: true,
+      p: null,
+      sobre: "outra_pessoa",
+      pacienteNome: "Maria Souza",
+      pacienteReferencia: "Leito 12, dia 9",
+      natureza: null,
+    });
+
+    expect(envio).not.toHaveProperty("nome");
+    expect(envio).not.toHaveProperty("contato");
+    expect(envio.paciente_nome).toBe("Maria Souza");
+    expect(envio.paciente_referencia).toBe("Leito 12, dia 9");
+  });
+
+  it("quem respondeu Sobre mim não leva paciente nenhum", () => {
+    // O campo some da tela ao trocar a resposta, e o que foi digitado antes não
+    // pode viajar escondido.
+    const envio = montarEnvio({
+      relato: "Esperei duas horas.",
+      nome: "",
+      contato: "",
+      anonimo: false,
+      p: null,
+      sobre: "mim",
+      pacienteNome: "Maria Souza",
+      pacienteReferencia: "Leito 12, dia 9",
+      natureza: null,
+    });
+
+    expect(envio).not.toHaveProperty("paciente_nome");
+    expect(envio).not.toHaveProperty("paciente_referencia");
+  });
+
+  it("campo do paciente em branco é omitido em vez de virar string vazia", () => {
+    const envio = montarEnvio({
+      relato: "Minha mãe esperou duas horas.",
+      nome: "",
+      contato: "",
+      anonimo: false,
+      p: null,
+      sobre: "outra_pessoa",
+      pacienteNome: "   ",
+      pacienteReferencia: "",
+      natureza: null,
+    });
+
+    expect(envio).not.toHaveProperty("paciente_nome");
+    expect(envio).not.toHaveProperty("paciente_referencia");
+  });
+
+  it("apara o nome do paciente antes de mandar", () => {
+    const envio = montarEnvio({
+      relato: "Minha mãe esperou duas horas.",
+      nome: "",
+      contato: "",
+      anonimo: false,
+      p: null,
+      sobre: "outra_pessoa",
+      pacienteNome: "  Maria Souza  ",
+      natureza: null,
+    });
+
+    expect(envio.paciente_nome).toBe("Maria Souza");
+  });
+
+  it("o aviso do campo ganha a frase do anonimato só para quem pediu anonimato", () => {
+    expect(avisoDoPaciente(false)).toBe(AVISO_SEM_NOME_DO_PACIENTE);
+    expect(avisoDoPaciente(true)).toContain(AVISO_SEM_NOME_DO_PACIENTE);
+    expect(avisoDoPaciente(true)).toContain(AVISO_PACIENTE_PODE_IDENTIFICAR);
+    expect(avisoDoPaciente(false)).not.toContain(AVISO_PACIENTE_PODE_IDENTIFICAR);
+  });
+
+  it("diz as frases exatas que a issue escreveu palavra por palavra", () => {
+    // O LITERAL, e não a constante comparada com ela mesma: sem isto, derrubar
+    // o "não" do primeiro aviso inverte o sentido da frase para quem lê o QR e
+    // a suíte inteira continua verde. A frase é o entregável.
+    expect(AVISO_SEM_NOME_DO_PACIENTE).toBe(
+      "Sem o nome do paciente, o hospital não consegue achar o atendimento."
+    );
+    // A referência do atendimento entra aqui de propósito: leito e data
+    // reidentificam mais que o nome (issue #375, migration 084).
+    expect(AVISO_PACIENTE_PODE_IDENTIFICAR).toBe(
+      "O nome do paciente e a referência do atendimento podem indicar quem manifestou."
+    );
+    expect(FALTA_DIZER_SOBRE_QUEM).toBe('Responda "Este relato é sobre quem?" para enviar.');
+  });
+
+  it("a recusa do envio nunca manda reescrever o relato", () => {
+    // O canal público não tem segunda porta: mandar a pessoa reescrever o que
+    // ela escreveu, quando a causa é o formato do envio, é fazê-la repetir o
+    // que nunca vai passar até desistir (issue #666).
+    expect(ENVIO_RECUSADO_PELA_PAGINA).toBe(
+      "Não foi possível registrar sua manifestação com os dados desta página. " +
+        "Copie o que você escreveu, recarregue a página e envie de novo."
+    );
+    expect(RECUSA_DO_ENVIO).toBe(
+      "Não foi possível registrar sua manifestação. Recarregue a página e tente de novo."
+    );
+    for (const mensagem of [ENVIO_RECUSADO_PELA_PAGINA, RECUSA_DO_ENVIO]) {
+      expect(mensagem).not.toContain("Reescreva");
+      expect(mensagem).not.toContain("relato");
+    }
   });
 });

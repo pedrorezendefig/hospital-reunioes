@@ -624,7 +624,9 @@ class TestManifestacaoQueNasceDoCartaz:
         supabase = _SupabaseFake(pontos=[_ponto()])
         client = self._client_publico(supabase)
 
-        r = client.post("/api/ouvidoria/publico/manifestacoes", json={"relato": self.RELATO, "p": "AB2CD3"})
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes", json={"relato": self.RELATO, "sobre": "mim", "p": "AB2CD3"}
+        )
 
         assert r.status_code == 201, r.text
         gravado = supabase.tabelas["ouvidoria_protocolos"][0]
@@ -638,7 +640,9 @@ class TestManifestacaoQueNasceDoCartaz:
         supabase = _SupabaseFake(pontos=[_ponto(ativo=False)])
         client = self._client_publico(supabase)
 
-        r = client.post("/api/ouvidoria/publico/manifestacoes", json={"relato": self.RELATO, "p": "AB2CD3"})
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes", json={"relato": self.RELATO, "sobre": "mim", "p": "AB2CD3"}
+        )
 
         assert r.status_code == 201, r.text
         gravado = supabase.tabelas["ouvidoria_protocolos"][0]
@@ -651,7 +655,9 @@ class TestManifestacaoQueNasceDoCartaz:
         supabase = _SupabaseFake()
         client = self._client_publico(supabase)
 
-        r = client.post("/api/ouvidoria/publico/manifestacoes", json={"relato": self.RELATO, "p": "ZZ9YY8"})
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes", json={"relato": self.RELATO, "sobre": "mim", "p": "ZZ9YY8"}
+        )
 
         assert r.status_code == 201, r.text
         assert supabase.tabelas["ouvidoria_protocolos"][0]["canal"] == "site"
@@ -664,7 +670,7 @@ class TestManifestacaoQueNasceDoCartaz:
 
         r = client.post(
             "/api/ouvidoria/publico/manifestacoes",
-            json={"relato": self.RELATO, "setor": "Recepção", "ponto": "Poltrona 12"},
+            json={"relato": self.RELATO, "sobre": "mim", "setor": "Recepção", "ponto": "Poltrona 12"},
         )
 
         assert r.status_code == 201, r.text
@@ -681,7 +687,7 @@ class TestManifestacaoQueNasceDoCartaz:
 
         r = client.post(
             "/api/ouvidoria/publico/manifestacoes",
-            json={"relato": self.RELATO, "p": "AB2CD3", "anonimo": True},
+            json={"relato": self.RELATO, "sobre": "mim", "p": "AB2CD3", "anonimo": True},
         )
 
         assert r.status_code == 201, r.text

@@ -193,10 +193,19 @@ CARTAZ = {
 }
 
 
+# Sentinela para "a chave NÃO vai no JSON", que é diferente de mandá-la nula: a
+# página velha simplesmente não conhece o campo, e é esse envio que a rota
+# precisa aceitar (issue #666).
+_AUSENTE = object()
+
+
 def _payload(**overrides) -> dict:
-    payload = {"relato": RELATO}
+    # `sobre` entra no payload padrão porque é o que o formulário manda desde a
+    # issue #666: assim todo teste deste arquivo exercita o envio real, e quem
+    # quiser o envio da página velha passa `sobre=_AUSENTE`.
+    payload = {"relato": RELATO, "sobre": "mim"}
     payload.update(overrides)
-    return payload
+    return {chave: valor for chave, valor in payload.items() if valor is not _AUSENTE}
 
 
 class TestProtocoloNaTela:
@@ -952,3 +961,300 @@ class TestMigration090:
     def test_a_migration_e_reaplicavel(self):
         ddl = self._ddl()
         assert "if not exists" in ddl
+
+
+class TestPacienteDoCaso:
+    """De quem é o relato, e quem é o paciente (issue #666, PRD #659, ADR 0052).
+
+    Quem lê o QR muitas vezes é acompanhante em nome de um paciente. O
+    formulário passa a perguntar isso com resposta obrigatória, e o que a
+    pessoa responde vira o vínculo do caso mais dois dados opcionais do
+    paciente.
+
+    A regra que mais importa aqui é a que separa duas pessoas: `anonimo`
+    protege QUEM MANIFESTA, e o paciente é outra pessoa (ADR 0052, decisão 3).
+    Zerar o paciente junto com o nome do manifestante devolveria à área o caso
+    que ela não acha, que é o problema que originou o PRD.
+    """
+
+    @pytest.mark.parametrize(
+        ("sobre", "anonimo", "vinculo", "paciente_nome", "paciente_referencia"),
+        [
+            ("mim", False, "paciente", None, None),
+            ("mim", True, "paciente", None, None),
+            ("outra_pessoa", False, "acompanhante", "Maria Souza", "Leito 12, dia 9"),
+            ("outra_pessoa", True, "acompanhante", "Maria Souza", "Leito 12, dia 9"),
+            # A página velha, que não conhece a pergunta: entra sem vínculo e
+            # sem paciente, como todo caso anterior a esta fatia.
+            (_AUSENTE, False, None, None, None),
+            (_AUSENTE, True, None, None, None),
+        ],
+    )
+    def test_o_que_chega_ao_banco_em_cada_combinacao(self, sobre, anonimo, vinculo, paciente_nome, paciente_referencia):
+        """A tabela `sobre` x `anonimo` x campos preenchidos, conferida no
+        insert: os seis envios mandam paciente, e só dois o gravam."""
+        client, banco = _make_app()
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(
+                sobre=sobre,
+                anonimo=anonimo,
+                paciente_nome="Maria Souza",
+                paciente_referencia="Leito 12, dia 9",
+            ),
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = banco.rows[0]
+        assert gravado["manifestante_vinculo"] == vinculo
+        assert gravado["paciente_nome"] == paciente_nome
+        assert gravado["paciente_referencia"] == paciente_referencia
+
+    def test_anonimo_preserva_o_paciente_e_continua_zerando_o_manifestante(self):
+        """As duas pessoas do caso, no mesmo envio: o anonimato apaga quem
+        falou e não apaga de quem se falou (ADR 0052, decisão 3).
+
+        É o teste que derruba o mutante que trata o paciente como identificação
+        do manifestante."""
+        client, banco = _make_app()
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(
+                sobre="outra_pessoa",
+                anonimo=True,
+                nome="Joana da Silva",
+                contato="joana@exemplo.com",
+                paciente_nome="Maria Souza",
+                paciente_referencia="Leito 12, dia 9",
+            ),
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = banco.rows[0]
+        assert gravado["manifestante_nome"] is None
+        assert gravado["manifestante_contato"] is None
+        assert gravado["paciente_nome"] == "Maria Souza"
+        assert gravado["paciente_referencia"] == "Leito 12, dia 9"
+
+    def test_sobre_mim_descarta_o_paciente_que_venha_no_envio(self):
+        """Quem diz que o relato é sobre si não tem paciente de terceiro. O
+        campo chegar assim mesmo é engano do formulário ou requisição montada na
+        mão, e o que a pessoa respondeu vence."""
+        client, banco = _make_app()
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(sobre="mim", paciente_nome="Maria Souza", paciente_referencia="Leito 12"),
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = banco.rows[0]
+        assert gravado["paciente_nome"] is None
+        assert gravado["paciente_referencia"] is None
+
+    @pytest.mark.parametrize("vazio", ["", "   ", "\n\t "])
+    def test_campo_do_paciente_em_branco_vira_nulo(self, vazio):
+        """Padrão anti-vazio da casa: string de espaço faria o Dossiê parecer
+        preenchido, e o ouvidor cobraria um dado que ninguém deu."""
+        client, banco = _make_app()
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(sobre="outra_pessoa", paciente_nome=vazio, paciente_referencia=vazio),
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = banco.rows[0]
+        assert gravado["paciente_nome"] is None
+        assert gravado["paciente_referencia"] is None
+
+    def test_o_paciente_e_aparado_antes_de_gravar(self):
+        client, banco = _make_app()
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(sobre="outra_pessoa", paciente_nome="  Maria Souza  "),
+        )
+
+        assert r.status_code == 201, r.text
+        assert banco.rows[0]["paciente_nome"] == "Maria Souza"
+
+    def test_envio_da_pagina_velha_e_aceito_e_entra_sem_vinculo(self):
+        """A obrigatoriedade mora na TELA, não aqui, e a assimetria é decisão
+        humana no checkpoint da onda, contra a letra do critério de aceite da
+        #666 (que pede 422 para `sobre` ausente).
+
+        Quem abriu o formulário antes do deploy continua com o bundle antigo na
+        aba até recarregar, e o merge sobe backend e frontend juntos, com o
+        backend pronto primeiro. Recusar este envio fecharia o canal de denúncia
+        para quem está parado na frente do cartaz escrevendo devagar.
+
+        O caso entra sem vínculo, que é o estado de todo caso anterior a esta
+        fatia, e o Dossiê já o desenha como "Não informado"."""
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json={"relato": RELATO})
+
+        assert r.status_code == 201, r.text
+        assert r.json()["protocolo"]
+        gravado = banco.rows[0]
+        assert gravado["manifestante_vinculo"] is None
+        assert gravado["paciente_nome"] is None
+        assert gravado["paciente_referencia"] is None
+
+    def test_a_pagina_velha_com_todo_o_resto_preenchido_tambem_passa(self):
+        """O envio da página velha não é só `{"relato": ...}`: ela manda nome,
+        contato, natureza e o código do cartaz. Nenhum desses campos pode virar
+        recusa por tabela, e o caso continua nascendo sem vínculo."""
+        client, banco = _make_app(_BancoFake(pontos=[CARTAZ]))
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(
+                sobre=_AUSENTE,
+                nome="Joana da Silva",
+                contato="joana@exemplo.com",
+                natureza_informada="reclamacao",
+                p="AB2CD3",
+            ),
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = banco.rows[0]
+        assert gravado["manifestante_vinculo"] is None
+        assert gravado["manifestante_nome"] == "Joana da Silva"
+        assert gravado["natureza_informada"] == "reclamacao"
+        assert gravado["canal"] == "qr"
+
+    @pytest.mark.parametrize("sobre", ["paciente", "acompanhante", "MIM", "outra pessoa", "", "  "])
+    def test_sobre_fora_da_lista_fechada_e_recusado(self, sobre):
+        """Dois valores, e nada mais: o canal público não escolhe vínculo por
+        texto livre. `paciente` e `acompanhante` são os vínculos GRAVADOS, e
+        aceitá-los aqui deixaria o cliente escrever direto na coluna.
+
+        A tolerância da ausência (teste acima) é só para a página velha, que não
+        manda o campo. Campo PRESENTE e inválido continua 422: string vazia e
+        espaço em branco não são página velha, são requisição montada na mão."""
+        client, banco = _make_app()
+
+        r = client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(sobre=sobre))
+
+        assert r.status_code == 422
+        assert banco.inserts == []
+
+    def test_paciente_comprido_demais_e_recusado(self):
+        """Os dois campos são pista curta (data, setor ou leito), no mesmo teto
+        de 200 do nome e do contato. Relato inteiro colado aqui não vira segunda
+        via do documento do caso."""
+        client, _banco = _make_app()
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(sobre="outra_pessoa", paciente_nome="M" * 201),
+        )
+
+        assert r.status_code == 422
+
+    def test_o_paciente_nao_mexe_na_regra_de_dados_incompletos(self):
+        """`dados_incompletos` fala da identificação de quem manifestou, e só
+        dela (ADR 0034). Nome do paciente não completa o Dossiê de ninguém."""
+        client, banco = _make_app()
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(sobre="outra_pessoa", paciente_nome="Maria Souza"),
+        )
+
+        assert r.status_code == 201, r.text
+        assert banco.rows[0]["dados_incompletos"] is True
+
+    def test_o_caso_do_paciente_continua_sem_tipo_e_sigiloso(self):
+        """A pergunta sobre quem é o relato não classifica nada (ADR 0052,
+        decisão 2): o caso do canal aberto continua nascendo sem tipo e
+        fail-closed."""
+        client, banco = _make_app()
+
+        r = client.post(
+            "/api/ouvidoria/publico/manifestacoes",
+            json=_payload(sobre="outra_pessoa", paciente_nome="Maria Souza"),
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = banco.rows[0]
+        assert "tipo_manifestacao" not in banco.inserts[0]
+        assert gravado["sigilo_reforcado"] is True
+        assert gravado["status"] == "em_classificacao"
+
+    def test_o_sobre_nao_vira_coluna_do_caso(self):
+        """O que fica gravado é o vínculo, que é o vocabulário do domínio. Uma
+        coluna `sobre` ao lado seria a mesma informação em duas grafias, e o
+        banco recusaria a coluna que não existe."""
+        client, banco = _make_app()
+
+        client.post("/api/ouvidoria/publico/manifestacoes", json=_payload(sobre="outra_pessoa"))
+
+        assert "sobre" not in banco.inserts[0]
+
+
+class TestMigration110:
+    """As duas colunas do Paciente do caso no banco (issue #666, ADR 0052)."""
+
+    def _ddl(self) -> str:
+        caminho = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "supabase",
+            "migrations",
+            "110_ouvidoria_paciente_do_caso.sql",
+        )
+        with open(caminho, encoding="utf-8") as f:
+            return f.read().lower()
+
+    def test_as_duas_colunas_nascem_anulaveis_na_tabela_do_protocolo(self):
+        ddl = self._ddl()
+        assert "alter table ouvidoria_protocolos" in ddl
+        assert "add column if not exists paciente_nome" in ddl
+        assert "add column if not exists paciente_referencia" in ddl
+        # Sem NOT NULL: informar é opcional, e nenhum caso já gravado informou.
+        #
+        # A busca é no COMANDO, e não no arquivo inteiro: a prosa acima dele
+        # explica por que a coluna é anulável, e quebraria este teste no dia em
+        # que escrevesse "NOT NULL" para dizer justamente que não usou.
+        comando = ddl.split("alter table ouvidoria_protocolos", 1)[1].split(";", 1)[0]
+        assert "not null" not in comando
+
+    def test_a_migration_nao_promete_guarda_que_ainda_nao_existe(self):
+        """O comentário de coluna é o que o próximo dev lê no `\\d+` da tabela,
+        e corrigi-lo depois pede outra migration.
+
+        Esta fatia grava dado pessoal de terceiro SEM as duas guardas que o ADR
+        0052 promete: a Retenção não varre as colunas (issue #665) e o paciente
+        ainda não viaja para a área (issue #664). O texto tem que dizer isso no
+        estado real, senão o banco documenta uma guarda que não existe e o
+        apagamento pela Diretoria carimba `anonimizada_em` deixando o nome e o
+        leito de um paciente vivos."""
+        ddl = self._ddl()
+        assert "ainda nao varre" in ddl, "o comentário precisa dizer que a Retenção não varre ainda"
+        assert "#665" in ddl, "o comentário precisa citar a issue que fará a varredura"
+        assert "#664" in ddl, "o comentário precisa citar a issue que leva o paciente à área"
+
+    def test_as_colunas_carregam_a_regra_no_comentario(self):
+        """Quem for mexer nelas precisa ler que são dado de TERCEIRO e que o
+        anonimato do manifestante não as apaga, sem ter de achar esta issue."""
+        ddl = self._ddl()
+        assert "comment on column ouvidoria_protocolos.paciente_nome" in ddl
+        assert "comment on column ouvidoria_protocolos.paciente_referencia" in ddl
+
+    def test_a_migration_e_reaplicavel(self):
+        assert "if not exists" in self._ddl()
+
+    def test_a_migration_nao_toca_em_mais_nada(self):
+        """Fundação é só coluna nova: nenhum backfill, nenhuma tabela nova,
+        nenhum CHECK reescrito. Linha a mais aqui é linha que o humano aplica no
+        Studio de produção sem ninguém ter pedido."""
+        ddl = self._ddl()
+        for proibido in ("update ", "create table", "drop ", "insert into"):
+            assert proibido not in ddl, proibido
