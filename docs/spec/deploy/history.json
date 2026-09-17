@@ -2,6 +2,37 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-17T12:25:00-03:00",
+      "sha": "41b9223",
+      "app_version": "0.142.1",
+      "subject": "A primeira fala do assistente conta que da para falar, anexar e mandar print",
+      "raw_subject": "fix(tecnologia): a primeira mensagem do assistente diz como mandar as coisas (#775) (#776)",
+      "scope": [
+        "frontend"
+      ],
+      "prds": [
+        726
+      ],
+      "result": "healthy",
+      "duration_seconds": 350,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 3, e ela existe porque a auditoria do PRD #726 (ADR 0029) reprovou a historia 4 contra producao depois do deploy da v0.142.0. A primeira mensagem do assistente dizia o que ele faz e nao dizia como mandar as coisas: nasceu na fatia #727, quando so havia texto, e nem a #729 (voz, audio, documento) nem a #730 (print) voltaram nela. E costura entre fatias, que e o ponto cego que a auditoria existe para pegar; nenhum teste de fatia acusaria. A saida foi decidida pela automacao por instrucao da sessao: fatia #775 aberta com criterios cravados, pendurada no PRD, rodada como onda 3, e o PRD voltou a fechar sozinho. Entrou junto a mesma correcao na lede do manual da aba Tecnologia, que listava tres entradas e omitia anexar audio desde a #729. O gate pegou um teste que ficava verde sobre nada (laco sobre lista que, vazia, nao assere coisa nenhuma), terceira aparicao dessa familia nesta sessao."
+    },
+    {
       "at": "2026-09-17T11:36:00-03:00",
       "sha": "75d58f4",
       "app_version": "0.142.0",
@@ -1434,37 +1465,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "2 fatias, 2 PRs, 1 versao (as duas pediram 0.106.0 e o bump identico casou no merge), 1 deploy. A revisao segurou 3 must-fix, e o pior foi de privacidade em duas camadas. Primeiro: o campo desfecho_descricao, registro INTERNO do ouvidor desde sempre, passou a sair por email ao manifestante sem a tela avisar, entao nome de terceiro e medida disciplinar sairiam do hospital escritos por quem achava que fazia nota interna. Segundo: a retencao de 5 anos apagava o Dossie mas deixava nome e email pessoal nas notificacoes, amarrados ao mesmo caso, entao a anonimizacao nao anonimizava. Esse segundo tem raiz na #493 e ja estava no codigo em producao, mas sem dado vazado, porque o job so roda 5 anos depois do T3 e o modulo entrou este ano. Achado colateral: sem fixture de rede, 4 testes desciam ao SMTP real com credencial do .env."
-    },
-    {
-      "at": "2026-09-02T18:20:00-03:00",
-      "sha": "ad4bfec",
-      "app_version": "0.105.0",
-      "subject": "Onda 2 do PRD #471: o 406 do console, a fila em linha de dois niveis e o acuse de recebimento ao manifestante",
-      "raw_subject": "feat(ouvidoria): acuse de recebimento ao manifestante na abertura (#535)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 195,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "094_ouvidoria_acuse_recebimento.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "3 fatias, 3 PRs, 3 versoes (0.103.7, 0.104.0, 0.105.0), 1 deploy. A revisao independente segurou 9 must-fix, e os quatro piores nao apareceriam em auto-revisao: a rota publica virando amplificador de email com logo e DKIM do hospital, o email pessoal do manifestante casado com o protocolo no log de producao, um POST na rota aberta podendo travar o app inteiro por 30s, e a cobranca da fila reenviando o relato integral mais um token novo do portal para o titular que ja saiu do setor. O SEG-2 fechou em duas etapas: a primeira rodada tirou o endereco do log de sucesso e deixou no de FALHA, que e o pior porque sai em ERROR e o gatilho e email digitado errado, nao ataque. So foi pego porque o revisor refez a prova em vez de ler o commit."
     }
   ]
 }
