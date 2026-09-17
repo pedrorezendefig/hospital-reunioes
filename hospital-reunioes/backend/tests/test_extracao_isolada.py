@@ -485,6 +485,63 @@ class TestOsDoisAtaquesMedidos:
         )
         assert decorrido < extrator.PRAZO_DA_EXTRACAO, "quem recusou tem que ser o teto do canal"
 
+    def test_o_canal_de_saida_tem_teto_mesmo_com_filho_que_nao_para_de_escrever(self, client, monkeypatch, tmp_path):
+        """O teto do texto vive no filho, que mede antes de escrever. Esta é a rede.
+
+        O programa do filho é trocado porque a propriedade sob teste é o que o
+        PAI faz diante de um filho que escreve demais, e o filho de verdade não
+        escreve demais por construção. Sem esta rede, um filho que passasse a
+        escrever sem medir voltaria a despejar tudo no worker, e o teto do texto
+        teria virado promessa em vez de guarda.
+        """
+        tagarela = tmp_path / "filho_que_nao_para_de_falar.py"
+        tagarela.write_text(
+            "import sys, time\n"
+            "sys.stdout.buffer.write(b'OK\\n')\n"
+            "bloco = b'x' * (1024 * 1024)\n"
+            "while True:\n"
+            "    sys.stdout.buffer.write(bloco)\n"
+            "    sys.stdout.buffer.flush()\n"
+            "    time.sleep(0.1)\n"
+        )
+        monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(tagarela))
+
+        t0 = time.monotonic()
+        r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "ata.docx", b"tanto faz"))
+        decorrido = time.monotonic() - t0
+
+        assert r.status_code == 422
+        assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
+        assert crescimento < TETO_DO_CRESCIMENTO_DO_WORKER, (
+            f"o worker cresceu {crescimento // (1024 * 1024)} MB esperando o filho falante"
+        )
+        # Sem esta linha o teste nao distingue as duas mortes: o prazo tambem
+        # mata este filho, so que 45 s depois e com o arquivo em gigabytes.
+        # A frase na tela e a mesma nos dois casos, e foi por isso que o mutante
+        # do teto do canal sobreviveu na primeira versao deste teste.
+        assert decorrido < 10, f"levou {decorrido:.1f}s: quem matou foi o prazo, nao o teto do canal"
+
+    def test_o_pai_le_a_saida_com_teto_mesmo_quando_o_vigia_nao_teve_tempo(self, client, monkeypatch, tmp_path):
+        """A corrida entre a escrita e a amostra do vigia.
+
+        Um filho que despeja tudo e SAI entre duas amostras nunca é visto pelo
+        vigia: o processo já terminou quando ele olha. Quem decide, aí, é a
+        leitura do arquivo, e um `read()` seco traria tudo para o worker. É o
+        mesmo erro de "medir depois de alocar" que a rodada 3 do #751 pegou no
+        LZW, numa porta diferente.
+        """
+        apressado = tmp_path / "filho_que_despeja_e_sai.py"
+        apressado.write_text("import sys\nsys.stdout.buffer.write(b'OK\\n' + b'x' * (40 * 1024 * 1024))\n")
+        monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(apressado))
+
+        r = _enviar(client, "ata.docx", b"tanto faz")
+
+        assert r.status_code == 200, r.text
+        recebido = len(r.json()["texto"])
+        assert recebido <= extrator.TETO_DA_SAIDA_DO_FILHO, (
+            f"o pai aceitou {recebido // (1024 * 1024)} MB de um filho que escreveu 40 MB"
+        )
+
     def test_ruido_pequeno_nao_morde(self, client):
         """O par do teste acima: aviso de parser não é motivo de recusa.
 
