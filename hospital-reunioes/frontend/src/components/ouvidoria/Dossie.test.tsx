@@ -120,3 +120,68 @@ describe("o Dossiê e a natureza informada pelo manifestante (issue #474)", () =
     });
   });
 });
+
+/**
+ * O Paciente do caso na tela do ouvidor (issue #666, PRD #659, ADR 0052).
+ *
+ * As duas linhas ficam ao lado de "Quem manifestou", "Contato" e "Vínculo": é
+ * o bloco onde o ouvidor lê o caso inteiro antes de acionar. O teste asserta o
+ * VALOR na linha certa, e não a presença do texto na página: "Maria Souza"
+ * solto passaria com o nome caindo em qualquer outro lugar, e "Não informado"
+ * solto casaria com a linha do contato.
+ */
+describe("o Dossiê e o Paciente do caso (issue #666)", () => {
+  beforeEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  function valorDaLinha(rotulo: string): string {
+    return screen.getByText(rotulo).nextElementSibling?.textContent ?? "";
+  }
+
+  it("mostra o nome do paciente e a referência do atendimento", async () => {
+    montarComDossie(
+      dossie({
+        manifestante_vinculo: "acompanhante",
+        paciente_nome: "Maria Souza",
+        paciente_referencia: "Leito 12, dia 9",
+      })
+    );
+
+    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+    expect(valorDaLinha("Paciente")).toBe("Maria Souza");
+    expect(valorDaLinha("Referência do atendimento")).toBe("Leito 12, dia 9");
+  });
+
+  it("caso sem paciente informado desenha as duas linhas com Não informado", async () => {
+    // A linha existe sempre: o ouvidor precisa saber que o campo está vazio,
+    // e não que ele não existe.
+    montarComDossie(dossie({ paciente_nome: null, paciente_referencia: null }));
+
+    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+    expect(valorDaLinha("Paciente")).toBe("Não informado");
+    expect(valorDaLinha("Referência do atendimento")).toBe("Não informado");
+  });
+
+  it("o caso anônimo mostra o paciente e segue sem identificar quem manifestou", async () => {
+    // A decisão 3 do ADR 0052 desenhada: são duas pessoas, e o anonimato é de
+    // uma só.
+    montarComDossie(
+      dossie({
+        anonimo: true,
+        manifestante_nome: null,
+        manifestante_vinculo: "acompanhante",
+        paciente_nome: "Maria Souza",
+      })
+    );
+
+    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+    expect(valorDaLinha("Paciente")).toBe("Maria Souza");
+    expect(valorDaLinha("Quem manifestou")).toBe("Manifestação anônima");
+  });
+});

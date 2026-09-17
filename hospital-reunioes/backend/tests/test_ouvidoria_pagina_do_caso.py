@@ -492,3 +492,37 @@ class TestCarimboDoApagamento:
 
         assert por_protocolo["anonimizada_em"] is None
         assert por_id["anonimizada_em"] is None
+
+
+class TestPacienteDoCasoNoDossie:
+    """O Paciente do caso chega à tela do ouvidor (issue #666, ADR 0052).
+
+    A tupla de leitura do Dossiê é a fronteira real: o `_TabelaFake` projeta só
+    as colunas pedidas, como o PostgREST. Coluna gravada e fora da tupla é dado
+    que existe no banco e que o ouvidor nunca vê, que foi o que aconteceu com a
+    natureza informada (issue #474) e com a origem do cartaz (issue #375).
+    """
+
+    def test_o_dossie_devolve_o_paciente_e_a_referencia_do_atendimento(self, monkeypatch):
+        caso = _manifestacao(paciente_nome="Maria Souza", paciente_referencia="Leito 12, dia 9")
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([caso]))
+
+        r = _abrir(client, "2026-0007")
+
+        assert r.status_code == 200, r.text
+        corpo = r.json()
+        assert corpo["paciente_nome"] == "Maria Souza"
+        assert corpo["paciente_referencia"] == "Leito 12, dia 9"
+
+    def test_o_caso_sem_paciente_devolve_os_campos_nulos(self, monkeypatch):
+        """Nulo é a resposta certa, e não campo ausente: a tela desenha as duas
+        linhas sempre, com "Não informado" no vazio."""
+        caso = _manifestacao(paciente_nome=None, paciente_referencia=None)
+        client, _ = _client(monkeypatch, OUVIDOR, _SupabaseFake([caso]))
+
+        r = _abrir(client, "2026-0007")
+
+        assert r.status_code == 200, r.text
+        corpo = r.json()
+        assert corpo["paciente_nome"] is None
+        assert corpo["paciente_referencia"] is None

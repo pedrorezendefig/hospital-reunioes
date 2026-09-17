@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { NATUREZAS_INFORMADAS, montarEnvio, relatoEstaVazio } from "./publico";
+import {
+  AVISO_PACIENTE_PODE_IDENTIFICAR,
+  AVISO_SEM_NOME_DO_PACIENTE,
+  NATUREZAS_INFORMADAS,
+  SOBRE_QUEM,
+  avisoDoPaciente,
+  montarEnvio,
+  relatoEstaVazio,
+} from "./publico";
 
 describe("relatoEstaVazio", () => {
   it("recusa relato vazio ou só com espaços antes de gastar a ida ao servidor", () => {
@@ -26,6 +34,7 @@ describe("montarEnvio", () => {
       contato: "maria@exemplo.com",
       anonimo: false,
       p: null,
+      sobre: "mim",
       natureza: null,
     });
 
@@ -41,6 +50,7 @@ describe("montarEnvio", () => {
       contato: "maria@exemplo.com",
       anonimo: true,
       p: null,
+      sobre: "mim",
       natureza: null,
     });
 
@@ -58,6 +68,7 @@ describe("montarEnvio", () => {
       contato: "",
       anonimo: false,
       p: "AB2CD3",
+      sobre: "mim",
       natureza: null,
     }) as unknown as Record<string, unknown>;
 
@@ -72,6 +83,7 @@ describe("montarEnvio", () => {
       contato: "",
       anonimo: false,
       p: null,
+      sobre: "mim",
       natureza: null,
     });
 
@@ -93,6 +105,7 @@ describe("o envio com o código do cartaz (issue #378, ADR 0036)", () => {
       contato: "",
       anonimo: false,
       p: "AB2CD3",
+      sobre: "mim",
       natureza: null,
     });
 
@@ -108,6 +121,7 @@ describe("o envio com o código do cartaz (issue #378, ADR 0036)", () => {
       contato: "",
       anonimo: false,
       p: null,
+      sobre: "mim",
       natureza: null,
     });
 
@@ -121,6 +135,7 @@ describe("o envio com o código do cartaz (issue #378, ADR 0036)", () => {
       contato: "",
       anonimo: false,
       p: "   ",
+      sobre: "mim",
       natureza: null,
     });
 
@@ -136,6 +151,7 @@ describe("o envio com o código do cartaz (issue #378, ADR 0036)", () => {
       contato: "joana@exemplo.com",
       anonimo: true,
       p: "AB2CD3",
+      sobre: "mim",
       natureza: null,
     });
 
@@ -169,6 +185,7 @@ describe("a natureza informada pelo manifestante (issue #473, RN-88)", () => {
       contato: "",
       anonimo: false,
       p: null,
+      sobre: "mim",
       natureza: "elogio",
     });
 
@@ -184,6 +201,7 @@ describe("a natureza informada pelo manifestante (issue #473, RN-88)", () => {
       contato: "",
       anonimo: false,
       p: null,
+      sobre: "mim",
       natureza: null,
     });
 
@@ -197,10 +215,133 @@ describe("a natureza informada pelo manifestante (issue #473, RN-88)", () => {
       contato: "",
       anonimo: true,
       p: null,
+      sobre: "mim",
       natureza: "sugestao",
     });
 
     expect(envio.natureza_informada).toBe("sugestao");
     expect(envio.anonimo).toBe(true);
+  });
+});
+
+describe("o Paciente do caso no envio (issue #666, ADR 0052)", () => {
+  it("oferece as duas respostas da pergunta, com Sobre mim primeiro", () => {
+    // A ordem é a da tela: a maioria de quem lê o QR fala de si, e o caminho
+    // mais curto fica na frente.
+    expect(SOBRE_QUEM.map((s) => s.valor)).toEqual(["mim", "outra_pessoa"]);
+    expect(SOBRE_QUEM.map((s) => s.rotulo)).toEqual(["Sobre mim", "Sobre outra pessoa"]);
+  });
+
+  it("leva a resposta escolhida, e não o vínculo que ela grava", () => {
+    // Quem traduz `outra_pessoa` em `acompanhante` é o servidor: o canal
+    // público não escreve vínculo.
+    const envio = montarEnvio({
+      relato: "Minha mãe esperou duas horas.",
+      nome: "",
+      contato: "",
+      anonimo: false,
+      p: null,
+      sobre: "outra_pessoa",
+      natureza: null,
+    });
+
+    expect(envio.sobre).toBe("outra_pessoa");
+    expect(envio).not.toHaveProperty("manifestante_vinculo");
+  });
+
+  it("leva o nome do paciente e a referência do atendimento", () => {
+    const envio = montarEnvio({
+      relato: "Minha mãe esperou duas horas.",
+      nome: "",
+      contato: "",
+      anonimo: false,
+      p: null,
+      sobre: "outra_pessoa",
+      pacienteNome: "Maria Souza",
+      pacienteReferencia: "Leito 12, dia 9",
+      natureza: null,
+    });
+
+    expect(envio.paciente_nome).toBe("Maria Souza");
+    expect(envio.paciente_referencia).toBe("Leito 12, dia 9");
+  });
+
+  it("caso anônimo continua levando o paciente, e não a identificação de quem falou", () => {
+    // A decisão que separa as duas pessoas do caso (ADR 0052, decisão 3): o
+    // anonimato protege quem fala, e o paciente é outra pessoa.
+    const envio = montarEnvio({
+      relato: "Minha mãe esperou duas horas.",
+      nome: "Joana da Silva",
+      contato: "joana@exemplo.com",
+      anonimo: true,
+      p: null,
+      sobre: "outra_pessoa",
+      pacienteNome: "Maria Souza",
+      pacienteReferencia: "Leito 12, dia 9",
+      natureza: null,
+    });
+
+    expect(envio).not.toHaveProperty("nome");
+    expect(envio).not.toHaveProperty("contato");
+    expect(envio.paciente_nome).toBe("Maria Souza");
+    expect(envio.paciente_referencia).toBe("Leito 12, dia 9");
+  });
+
+  it("quem respondeu Sobre mim não leva paciente nenhum", () => {
+    // O campo some da tela ao trocar a resposta, e o que foi digitado antes não
+    // pode viajar escondido.
+    const envio = montarEnvio({
+      relato: "Esperei duas horas.",
+      nome: "",
+      contato: "",
+      anonimo: false,
+      p: null,
+      sobre: "mim",
+      pacienteNome: "Maria Souza",
+      pacienteReferencia: "Leito 12, dia 9",
+      natureza: null,
+    });
+
+    expect(envio).not.toHaveProperty("paciente_nome");
+    expect(envio).not.toHaveProperty("paciente_referencia");
+  });
+
+  it("campo do paciente em branco é omitido em vez de virar string vazia", () => {
+    const envio = montarEnvio({
+      relato: "Minha mãe esperou duas horas.",
+      nome: "",
+      contato: "",
+      anonimo: false,
+      p: null,
+      sobre: "outra_pessoa",
+      pacienteNome: "   ",
+      pacienteReferencia: "",
+      natureza: null,
+    });
+
+    expect(envio).not.toHaveProperty("paciente_nome");
+    expect(envio).not.toHaveProperty("paciente_referencia");
+  });
+
+  it("apara o nome do paciente antes de mandar", () => {
+    const envio = montarEnvio({
+      relato: "Minha mãe esperou duas horas.",
+      nome: "",
+      contato: "",
+      anonimo: false,
+      p: null,
+      sobre: "outra_pessoa",
+      pacienteNome: "  Maria Souza  ",
+      natureza: null,
+    });
+
+    expect(envio.paciente_nome).toBe("Maria Souza");
+  });
+
+  it("o aviso do campo ganha a frase do anonimato só para quem pediu anonimato", () => {
+    expect(avisoDoPaciente(false)).toBe(AVISO_SEM_NOME_DO_PACIENTE);
+    expect(avisoDoPaciente(true)).toContain(AVISO_SEM_NOME_DO_PACIENTE);
+    expect(avisoDoPaciente(true)).toContain(AVISO_PACIENTE_PODE_IDENTIFICAR);
+    expect(avisoDoPaciente(false)).not.toContain(AVISO_PACIENTE_PODE_IDENTIFICAR);
   });
 });

@@ -948,7 +948,7 @@ class TestOsTresCaminhosDeCriacao:
 
         r = client.post(
             "/api/ouvidoria/publico/manifestacoes",
-            json={"relato": RELATO, "nome": "Joana da Silva", "contato": "joana@exemplo.com"},
+            json={"relato": RELATO, "sobre": "mim", "nome": "Joana da Silva", "contato": "joana@exemplo.com"},
         )
 
         assert r.status_code == 201
@@ -984,7 +984,7 @@ class TestOsTresCaminhosDeCriacao:
 
         r = client.post(
             "/api/ouvidoria/publico/manifestacoes",
-            json={"relato": RELATO, "anonimo": True, "contato": "joana@exemplo.com"},
+            json={"relato": RELATO, "sobre": "mim", "anonimo": True, "contato": "joana@exemplo.com"},
         )
 
         assert r.status_code == 201
@@ -1014,7 +1014,7 @@ class TestFalhaDoAcuseNaoDerrubaAManifestacao:
 
         r = client.post(
             "/api/ouvidoria/publico/manifestacoes",
-            json={"relato": RELATO, "contato": "joana@exemplo.com"},
+            json={"relato": RELATO, "sobre": "mim", "contato": "joana@exemplo.com"},
         )
 
         assert r.status_code == 201

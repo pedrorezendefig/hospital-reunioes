@@ -13,10 +13,14 @@ import { useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2, Loader2, MapPin, Send } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import {
+  FALTA_DIZER_SOBRE_QUEM,
   NATUREZAS_INFORMADAS,
+  SOBRE_QUEM,
+  avisoDoPaciente,
   montarEnvio,
   relatoEstaVazio,
   type NaturezaInformada,
+  type SobreQuem,
 } from "@/lib/ouvidoria/publico";
 
 interface Recibo {
@@ -74,6 +78,12 @@ function FormularioPublico() {
   // A natureza que a pessoa marcou (issue #473, RN-88). Começa sem escolha e
   // pode voltar a ficar sem: é sugestão dela, não obrigação.
   const [natureza, setNatureza] = useState<NaturezaInformada | null>(null);
+  // De quem é o relato (issue #666, ADR 0052). Começa sem resposta e, ao
+  // contrário da natureza, não volta a ficar sem: é a única resposta
+  // obrigatória do formulário.
+  const [sobre, setSobre] = useState<SobreQuem | null>(null);
+  const [pacienteNome, setPacienteNome] = useState("");
+  const [pacienteReferencia, setPacienteReferencia] = useState("");
   const [nome, setNome] = useState("");
   const [contato, setContato] = useState("");
   const [anonimo, setAnonimo] = useState(false);
@@ -83,10 +93,14 @@ function FormularioPublico() {
   const [recibo, setRecibo] = useState<Recibo | null>(null);
 
   const vazio = relatoEstaVazio(relato);
+  // O aviso só aparece quando ele é o que de fato falta: dizer "responda sobre
+  // quem" com o relato ainda em branco mandaria a pessoa olhar para o campo
+  // errado.
+  const faltaDizerSobreQuem = !vazio && !sobre;
 
   async function handleEnviar(evento: React.FormEvent) {
     evento.preventDefault();
-    if (vazio || enviando) return;
+    if (vazio || !sobre || enviando) return;
     setEnviando(true);
     setErro(null);
     try {
@@ -94,7 +108,17 @@ function FormularioPublico() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          ...montarEnvio({ relato, nome, contato, anonimo, p: codigoDoCartaz, natureza }),
+          ...montarEnvio({
+            relato,
+            nome,
+            contato,
+            anonimo,
+            p: codigoDoCartaz,
+            natureza,
+            sobre,
+            pacienteNome,
+            pacienteReferencia,
+          }),
           assunto_alternativo: armadilha,
         }),
       });
@@ -228,6 +252,78 @@ function FormularioPublico() {
         </p>
       </div>
 
+      {/* De quem é o relato (issue #666, ADR 0052, decisão 2). Vem logo depois
+          do relato, enquanto a pessoa ainda está pensando no caso, e antes da
+          caixa de anonimato: o anonimato é sobre quem fala, e aqui ela ainda
+          está dizendo de quem fala. */}
+      <div className="space-y-1.5">
+        <p id="rotulo-sobre" className="block text-sm font-semibold text-slate-700">
+          Este relato é sobre quem?
+        </p>
+        <div role="group" aria-labelledby="rotulo-sobre" className="grid grid-cols-2 gap-2">
+          {SOBRE_QUEM.map(({ valor, rotulo }) => {
+            const escolhido = sobre === valor;
+            return (
+              <button
+                key={valor}
+                type="button"
+                aria-pressed={escolhido}
+                // Clicar no que já está marcado NÃO desmarca, ao contrário da
+                // natureza: a resposta é obrigatória, e voltar ao nada só
+                // travaria o envio sem a pessoa entender por quê.
+                onClick={() => setSobre(valor)}
+                className={`rounded-xl border px-3 py-4 text-base font-semibold transition-colors ${
+                  escolhido
+                    ? "border-primary bg-primary/10 text-primary"
+                    : "border-border bg-white text-slate-600 hover:border-primary/40"
+                }`}
+              >
+                {rotulo}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* O Paciente do caso. Os dois campos são opcionais: o canal aberto nunca
+          barra o envio por dado faltando. E eles continuam aqui com "anônimo"
+          marcado (decisão 3), porque quem o anonimato protege é quem fala. */}
+      {sobre === "outra_pessoa" && (
+        <div className="space-y-4">
+          <div className="space-y-1.5">
+            <label htmlFor="paciente-nome" className="block text-sm font-semibold text-slate-700">
+              Nome do paciente <span className="font-normal text-slate-400">(opcional)</span>
+            </label>
+            <input
+              id="paciente-nome"
+              type="text"
+              value={pacienteNome}
+              onChange={(e) => setPacienteNome(e.target.value)}
+              maxLength={200}
+              className="w-full rounded-xl border border-border px-3 py-2.5 text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+            <p className="text-xs text-slate-400">{avisoDoPaciente(anonimo)}</p>
+          </div>
+          <div className="space-y-1.5">
+            <label
+              htmlFor="paciente-referencia"
+              className="block text-sm font-semibold text-slate-700"
+            >
+              Quando ou onde foi o atendimento (data, setor ou leito){" "}
+              <span className="font-normal text-slate-400">(opcional)</span>
+            </label>
+            <input
+              id="paciente-referencia"
+              type="text"
+              value={pacienteReferencia}
+              onChange={(e) => setPacienteReferencia(e.target.value)}
+              maxLength={200}
+              className="w-full rounded-xl border border-border px-3 py-2.5 text-base text-slate-800 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:border-primary"
+            />
+          </div>
+        </div>
+      )}
+
       <label className="flex items-start gap-2.5 cursor-pointer select-none">
         <input
           type="checkbox"
@@ -300,9 +396,13 @@ function FormularioPublico() {
         </div>
       )}
 
+      {faltaDizerSobreQuem && (
+        <p className="text-sm text-slate-500 text-center">{FALTA_DIZER_SOBRE_QUEM}</p>
+      )}
+
       <button
         type="submit"
-        disabled={vazio || enviando}
+        disabled={vazio || !sobre || enviando}
         className="w-full flex items-center justify-center gap-2 rounded-xl bg-primary px-4 py-3 text-base font-semibold text-white shadow-premium transition-colors hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed"
       >
         {enviando ? (
