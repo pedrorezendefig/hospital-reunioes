@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-17T00:32-0300 -->
+<!-- last_update: 2026-09-17T09:43-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -320,6 +320,7 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | POST | `/admin/tecnologia/assistente/chat` | Um turno da conversa que monta a Demanda (ADR 0056, decisao 1). | ✅ |
+| POST | `/admin/tecnologia/assistente/descrever-imagem` | O print anexado vira descricao, e a imagem some (ADR 0056, decisao 4). | ✅ |
 | POST | `/admin/tecnologia/assistente/extrair-documento` | O documento anexado vira texto, e o texto some (ADR 0056, decisao 4). | ✅ |
 | GET | `/admin/tecnologia/demandas` | As Demandas do Quadro, com os filtros da PRD. | ✅ |
 | POST | `/admin/tecnologia/demandas` | Abre uma Demanda: ela nasce em `nova`, com o dono do Produto. | ✅ |
@@ -376,4 +377,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 220 endpoints em 30 routers · 94% exigem auth.
+**Totais:** 221 endpoints em 30 routers · 94% exigem auth.
