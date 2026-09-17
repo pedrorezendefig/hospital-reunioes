@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-17T09:42:00-03:00",
+      "sha": "7503809",
+      "app_version": "0.141.0",
+      "subject": "O print de tela vira descricao no Assistente de Tecnologia",
+      "raw_subject": "feat(tecnologia): print de tela vira descrição no Assistente (#730) (#771)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        726
+      ],
+      "result": "healthy",
+      "duration_seconds": 330,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 do PRD #726, fatia #730. Rota descrever-imagem com o mesmo cliente e modelo do chat, tipo pela extensao, prefixo [print], nada gravado no servidor. Tres rodadas de correcao. A revisao de seguranca achou que a descricao do print alcanca o corpo de uma issue de repositorio PUBLICO sem controle em codigo no caminho, com precedente contrario ja escrito no repo (o PR #688 tirou nome civil de funcionario do mesmo corpo por decisao do diretor). Neste PR entrou so o que cabia na fatia: o prompt deixou de se contradizer e passou a valer para dado pessoal de qualquer natureza, com clausula da duvida, e a tela avisa antes de criar a Demanda. Prompt e aviso nao sao controle: a barreira em codigo e a issue #772, com tres saidas escritas e a escolha marcada como decisao do diretor. A #773 registra que a chamada ao provedor prende o event loop, o que pode derrubar o health check e disparar rollback de um deploy bom. Sete testes frouxos foram apertados, entre eles o do log, que ficava verde sobre nada sem piso de captura. Falta a fatia #732 para fechar o PRD."
+    },
+    {
       "at": "2026-09-17T00:30:00-03:00",
       "sha": "97e5f00",
       "app_version": "0.140.0",
@@ -1430,37 +1462,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PRs #526 (issue #508), #529 (#512) e #532 (#509). Revisao independente achou 7 must-fix reais, todos com teste vacuo: o cache tinha uma segunda porta (cacheOnNavigation) fora do service worker; o navegador conta CRLF onde a tela conta LF, quebrando o teto E o piso; e a compensacao do timeout apagava resposta de caso ja transicionado. Devolver o claim reabria a LEITURA do relato (a guarda de estado so cobre a escrita): fechado com devolucao condicional. Prova em prod: o sw.js servido nao menciona mais o swe-worker."
-    },
-    {
-      "at": "2026-09-02T17:35:00-03:00",
-      "sha": "72cf541",
-      "app_version": "0.103.3",
-      "subject": "Onda 2: gate do token orfao em agendar e editar reuniao, e REVOKE das RPCs da Ouvidoria",
-      "raw_subject": "fix(ouvidoria): revoga o EXECUTE das RPCs das roles anon e authenticated (#537)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "095_ouvidoria_revoke_rpc_anon.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "2 issues (#464 PR 538, #520 PR 537). A 095 foi aplicada a mao no Studio ANTES do merge e provada por curl: chave anon devolve 401 com SQLSTATE 42501 do Postgres, enquanto chave invalida devolve 401 Unauthorized do gateway. O script de fumaca reprovava o conserto correto por esperar 403; corrigido para decidir pelo SQLSTATE."
     }
   ]
 }
