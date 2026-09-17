@@ -2,8 +2,8 @@
  * Registro manual da manifestação (issue #321, ADR 0034).
  *
  * O que o formulário do ouvidor monta antes de mandar para a API. A regra do
- * anonimato mora aqui, e não no JSX: apagar nome e contato é decisão de
- * domínio, não detalhe de tela.
+ * anonimato mora aqui, e não no JSX: apagar nome e contato (e preservar o
+ * Paciente do caso, issue #663) é decisão de domínio, não detalhe de tela.
  */
 
 import type { TipoManifestacao } from "./taxonomia";
@@ -66,6 +66,10 @@ export interface FormularioRegistro {
   manifestanteNome: string;
   manifestanteContato: string;
   manifestanteVinculo: string;
+  /** O Paciente do caso: quem foi atendido, quando o relato é de outra pessoa. */
+  pacienteNome: string;
+  /** Uma pista curta do atendimento: data, setor ou leito. */
+  pacienteReferencia: string;
   anonimo: boolean;
 }
 
@@ -81,6 +85,8 @@ export interface RegistroManual {
   manifestante_nome: string | null;
   manifestante_contato: string | null;
   manifestante_vinculo: string | null;
+  paciente_nome: string | null;
+  paciente_referencia: string | null;
   anonimo: boolean;
 }
 
@@ -106,6 +112,11 @@ export function montarRegistro(form: FormularioRegistro): RegistroManual {
     manifestante_nome: identificado ? textoOuNulo(form.manifestanteNome) : null,
     manifestante_contato: identificado ? textoOuNulo(form.manifestanteContato) : null,
     manifestante_vinculo: identificado ? textoOuNulo(form.manifestanteVinculo) : null,
+    // O paciente NÃO segue o anonimato (issue #663, ADR 0052, decisão 3): quem
+    // se protege é quem manifesta, e o paciente é outra pessoa. Sem ele, o caso
+    // do acompanhante anônimo chega inútil à área.
+    paciente_nome: textoOuNulo(form.pacienteNome),
+    paciente_referencia: textoOuNulo(form.pacienteReferencia),
     anonimo: form.anonimo,
   };
 }
