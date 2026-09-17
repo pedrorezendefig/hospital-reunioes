@@ -80,7 +80,7 @@ const ABERTURA_NA_TELA =
 
 /** As quatro entradas que a caixa aceita, ditas na abertura. */
 const AS_QUATRO_ENTRADAS = [
-  "escrever",
+  "Dá para escrever",
   "falar no microfone",
   "anexar um áudio ou um documento",
   "mandar um print da tela",
@@ -358,6 +358,8 @@ describe("A conversa", () => {
 
     const aberturaRenderizada = screen.getByRole("log").querySelector("p")?.textContent ?? "";
 
+    // O piso do laço: sem ele, uma lista vazia passaria verde sem asserir nada.
+    expect(AS_QUATRO_ENTRADAS).toHaveLength(4);
     for (const entrada of AS_QUATRO_ENTRADAS) {
       expect(aberturaRenderizada).toContain(entrada);
     }
