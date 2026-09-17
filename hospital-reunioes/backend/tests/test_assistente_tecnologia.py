@@ -77,15 +77,34 @@ class _TableQuery:
         self._rows = rows
         self._escritas = escritas
         self._eq: dict[str, Any] = {}
+        self._in: dict[str, list] = {}
+        self._order: list[str] = []
+        self._range: tuple[int, int] | None = None
 
     def select(self, *_a, **_kw):
         return self
 
-    def order(self, *_a, **_kw):
+    def order(self, coluna=None, **_kw):
+        if coluna is not None:
+            self._order.append(coluna)
+        return self
+
+    def range(self, inicio, fim):
+        """A leitura das Demandas abertas e PAGINADA (`ler_tudo`, issue #732).
+
+        Sem este recorte o dublê devolveria a lista inteira em toda pagina e o
+        `ler_paginado` giraria ate o teto de mil linhas: a fatia passaria a ser
+        provada contra um laco infinito, e nao contra a leitura.
+        """
+        self._range = (inicio, fim)
         return self
 
     def eq(self, coluna, valor):
         self._eq[coluna] = valor
+        return self
+
+    def in_(self, coluna, valores):
+        self._in[coluna] = list(valores)
         return self
 
     # As quatro portas de ESCRITA do PostgREST. Elas existem no dublê para que
@@ -108,10 +127,19 @@ class _TableQuery:
         self._escritas.append((self._nome, "delete", None))
         return self
 
+    def _casa(self, linha: dict) -> bool:
+        if not all(linha.get(c) == v for c, v in self._eq.items()):
+            return False
+        return all(linha.get(c) in v for c, v in self._in.items())
+
     def execute(self):
-        return _Result(
-            data=[dict(linha) for linha in self._rows if all(linha.get(c) == v for c, v in self._eq.items())]
-        )
+        casadas = [dict(linha) for linha in self._rows if self._casa(linha)]
+        for coluna in reversed(self._order):
+            casadas.sort(key=lambda linha, c=coluna: (linha.get(c) is None, linha.get(c)))
+        if self._range is not None:
+            inicio, fim = self._range
+            casadas = casadas[inicio : fim + 1]
+        return _Result(data=casadas)
 
 
 class _SupabaseMock:
@@ -183,7 +211,13 @@ PRODUTO_ATIVO = {"id": "prod-ouvidoria", "nome": "Ouvidoria", "ativo": True, "or
 PRODUTO_INATIVO = {"id": "prod-morto", "nome": "Produto Aposentado", "ativo": False, "ordem": 2, "dono_id": "p1"}
 
 
-def _montar_com_supabase(*, logado: dict, produtos: list[dict] | None = None) -> tuple[TestClient, _SupabaseMock]:
+def _montar_com_supabase(
+    *,
+    logado: dict,
+    produtos: list[dict] | None = None,
+    demandas: list[dict] | None = None,
+    pessoas: list[dict] | None = None,
+) -> tuple[TestClient, _SupabaseMock]:
     """O cliente e o dublê do banco, para quem precisa olhar o que foi gravado."""
     app = FastAPI()
     app.state.limiter = limiter
@@ -192,8 +226,9 @@ def _montar_com_supabase(*, logado: dict, produtos: list[dict] | None = None) ->
 
     sb = _SupabaseMock(
         tabelas={
-            "participantes": [logado],
+            "participantes": [logado, *(pessoas or [])],
             "tecnologia_produtos": list(produtos if produtos is not None else [PRODUTO_ATIVO]),
+            "tecnologia_demandas": list(demandas or []),
         }
     )
 
@@ -205,8 +240,14 @@ def _montar_com_supabase(*, logado: dict, produtos: list[dict] | None = None) ->
     return TestClient(app), sb
 
 
-def _montar(*, logado: dict, produtos: list[dict] | None = None) -> TestClient:
-    cliente, _ = _montar_com_supabase(logado=logado, produtos=produtos)
+def _montar(
+    *,
+    logado: dict,
+    produtos: list[dict] | None = None,
+    demandas: list[dict] | None = None,
+    pessoas: list[dict] | None = None,
+) -> TestClient:
+    cliente, _ = _montar_com_supabase(logado=logado, produtos=produtos, demandas=demandas, pessoas=pessoas)
     return cliente
 
 
@@ -589,6 +630,233 @@ class TestCercaDasDemandas:
         assert assistente_tecnologia.MARCA_INICIO_DEMANDAS in enviado
         assert assistente_tecnologia.MARCA_FIM_DEMANDAS in enviado
         assert assistente_tecnologia.SEM_DEMANDAS_ABERTAS in enviado
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4b. A Demanda parecida (issue #732)
+# ═══════════════════════════════════════════════════════════════════════════
+
+# O responsavel de uma Demanda aberta, com nome distinto do resto do arquivo:
+# se ele aparecer no prompt, veio da leitura do Quadro, e nao de outra fixture.
+RESPONSAVEL = {**_pessoa("p9"), "nome_completo": "Marina do Suporte"}
+
+# O que NAO pode viajar para o prompt: a descricao de uma Demanda pode carregar
+# dado pessoal transcrito de um print (PRD #726, ADR 0056). O texto e distinto
+# para o teste medir a ausencia DELE, e nao de uma palavra qualquer.
+DESCRICAO_COM_DADO_PESSOAL = "Onde: a paciente Joaquina Ferreira ligou às 3h e o telefone dela é 11 90000-0000"
+TEXTO_DA_CONVERSA = "resposta da Vitta com o CPF da paciente"
+
+DEMANDA_ABERTA = {
+    "id": "dem-aberta",
+    "titulo": "A Ana não responde de madrugada",
+    "tipo": "defeito",
+    "produto_id": "prod-ouvidoria",
+    "estado": "em_andamento",
+    "etapa": "em_desenvolvimento",
+    "responsavel_id": "p9",
+    "descricao": DESCRICAO_COM_DADO_PESSOAL,
+    "criado_em": "2026-09-01T10:00:00Z",
+}
+
+DEMANDA_CONCLUIDA = {
+    "id": "dem-concluida",
+    "titulo": "Relatório mensal que ninguém abre",
+    "tipo": "ajuste",
+    "produto_id": "prod-ouvidoria",
+    "estado": "concluida",
+    "etapa": "entregue",
+    "responsavel_id": "p9",
+    "descricao": "já resolvida",
+    "criado_em": "2026-08-01T10:00:00Z",
+}
+
+DEMANDA_CANCELADA = {**DEMANDA_CONCLUIDA, "id": "dem-cancelada", "titulo": "Ideia abandonada", "estado": "cancelada"}
+
+# A chave que o modelo simplesmente NAO devolveu, que e caso diferente de
+# devolver `null`: os dois tem que sair pelo mesmo lugar.
+_AUSENTE = object()
+
+
+def _resposta_com_parecida(valor) -> str:
+    """A resposta do modelo apontando (ou nao) uma Demanda parecida."""
+    corpo: dict = {"reply": "Já tem uma parecida.", "rascunho": RASCUNHO_CHEIO}
+    if valor is not _AUSENTE:
+        corpo["demanda_parecida"] = valor
+    return json.dumps(corpo, ensure_ascii=False)
+
+
+class TestDemandasAbertasNoPrompt:
+    """A rota LE o Quadro e entrega ao servico o cabecalho de cada Demanda
+    aberta. O que ela NAO entrega importa tanto quanto: a descricao e a Conversa
+    ficam de fora (ADR 0056)."""
+
+    def _prompt(self, monkeypatch, *, demandas, conversas=None) -> str:
+        llm = _stub_llm(monkeypatch, content=_resposta_do_modelo())
+        cliente, sb = _montar_com_supabase(logado=_pessoa("p1"), demandas=demandas, pessoas=[RESPONSAVEL])
+        if conversas:
+            sb.tabelas["tecnologia_conversas"] = list(conversas)
+        cliente.post(ROTA, json=_corpo())
+        return llm.prompt_de_usuario
+
+    def _bloco(self, monkeypatch, *, demandas) -> str:
+        """So o que esta DENTRO da cerca das Demandas abertas.
+
+        Medir o prompt inteiro aqui seria medir o vizinho: o kit fala de
+        "Defeito", de "Ouvidoria" e de "Em desenvolvimento", e um mutante que
+        apagasse o campo do bloco continuaria verde por causa do texto do kit.
+        """
+        enviado = self._prompt(monkeypatch, demandas=demandas)
+        dentro = enviado.split(assistente_tecnologia.MARCA_INICIO_DEMANDAS)[1]
+        return dentro.split(assistente_tecnologia.MARCA_FIM_DEMANDAS)[0]
+
+    def test_o_cabecalho_da_demanda_aberta_entra_inteiro(self, monkeypatch):
+        """Mutante: tirar um campo do resumo da rota, ou do bloco do servico."""
+        bloco = self._bloco(monkeypatch, demandas=[DEMANDA_ABERTA])
+        for pedaco in (
+            "dem-aberta",
+            "A Ana não responde de madrugada",
+            # Os rotulos que a pessoa le, e nao o valor do banco: e por eles que
+            # o assistente conta ao diretor onde a Demanda esta.
+            "Defeito",
+            "Ouvidoria",
+            "Em andamento",
+            "Em desenvolvimento",
+            "Marina do Suporte",
+        ):
+            assert pedaco in bloco, pedaco
+
+    def test_a_descricao_da_demanda_nao_viaja_para_o_prompt(self, monkeypatch):
+        """O que chega ao provedor nao tem a descricao, fim a fim.
+
+        Quem faz o corte e o resumo da rota, e o mutante que mata esta linha
+        esta no teste vizinho (`test_o_que_a_rota_entrega_ao_servico...`): aqui
+        se mede o DESFECHO, la se mede a fronteira. Os dois ficam, porque um
+        corte sem desfecho provado e uma promessa.
+
+        O piso e a primeira asserção: sem ela, este teste ficaria verde tambem
+        numa rota que parou de ler o Quadro, que e o modo de falha vizinho.
+        """
+        enviado = self._prompt(monkeypatch, demandas=[DEMANDA_ABERTA])
+        assert "A Ana não responde de madrugada" in enviado
+        assert DESCRICAO_COM_DADO_PESSOAL not in enviado
+        assert "Joaquina Ferreira" not in enviado
+
+    def test_o_que_a_rota_entrega_ao_servico_tem_so_o_cabecalho(self, monkeypatch):
+        """Mutante: acrescentar um campo ao resumo da rota (a descricao).
+
+        O corte de privacidade e o RESUMO, e nao a formatacao do prompt: um
+        campo a mais aqui nao apareceria no bloco de hoje, e viajaria calado no
+        dia em que o bloco passasse a escrever mais alguma coisa. Por isso o
+        teste mede o que atravessa a fronteira, e nao so o que sai dela.
+        """
+        capturado: dict[str, list[dict]] = {}
+        de_verdade = assistente_tecnologia.conversar
+
+        def espiao(**kwargs):
+            capturado["demandas"] = kwargs["demandas_abertas"]
+            return de_verdade(**kwargs)
+
+        monkeypatch.setattr(assistente_tecnologia, "conversar", espiao)
+        cliente = _montar(logado=_pessoa("p1"), demandas=[DEMANDA_ABERTA], pessoas=[RESPONSAVEL])
+        cliente.post(ROTA, json=_corpo())
+
+        assert [set(d) for d in capturado["demandas"]] == [
+            {"id", "titulo", "tipo", "produto_nome", "estado", "etapa", "responsavel_nome"}
+        ]
+
+    def test_a_conversa_da_demanda_nao_viaja_para_o_prompt(self, monkeypatch):
+        enviado = self._prompt(
+            monkeypatch,
+            demandas=[DEMANDA_ABERTA],
+            conversas=[{"demanda_id": "dem-aberta", "linha": 1, "texto": TEXTO_DA_CONVERSA, "autor_id": "p9"}],
+        )
+        assert "A Ana não responde de madrugada" in enviado
+        assert TEXTO_DA_CONVERSA not in enviado
+
+    @pytest.mark.parametrize("fechada", [DEMANDA_CONCLUIDA, DEMANDA_CANCELADA])
+    def test_demanda_fechada_nao_entra(self, fechada, monkeypatch):
+        """Mutante: trocar `ESTADOS_ABERTOS` por `ESTADOS` na leitura da rota."""
+        enviado = self._prompt(monkeypatch, demandas=[DEMANDA_ABERTA, fechada])
+        assert "dem-aberta" in enviado
+        assert fechada["id"] not in enviado
+        assert fechada["titulo"] not in enviado
+
+    def test_sem_demanda_aberta_o_bloco_diz_que_nao_ha_nenhuma(self, monkeypatch):
+        enviado = self._prompt(monkeypatch, demandas=[DEMANDA_CONCLUIDA])
+        assert assistente_tecnologia.SEM_DEMANDAS_ABERTAS in enviado
+
+    def test_quem_nao_e_super_admin_nao_leva_demanda_nenhuma_ao_provedor(self, monkeypatch):
+        """O recorte de quem VE o Quadro e o mesmo do assistente: o gate barra
+        antes de qualquer leitura, e nada da Demanda sai do app."""
+        llm = _stub_llm(monkeypatch, content=_resposta_do_modelo())
+        cliente = _montar(logado=_pessoa("p2", super_admin=False), demandas=[DEMANDA_ABERTA], pessoas=[RESPONSAVEL])
+        assert cliente.post(ROTA, json=_corpo()).status_code == 403
+        assert llm.calls == []
+
+    def test_o_prompt_de_sistema_manda_apontar_a_demanda_do_mesmo_assunto(self):
+        """O detector tambem tem mutante: apagar a secao do prompt de sistema."""
+        from app.services.prompt_loader import load_prompt
+
+        sistema = load_prompt("assistente_tecnologia_system")
+        assert "demanda_parecida" in sistema
+        assert "mesmo assunto" in sistema
+
+
+class TestDemandaParecidaConferida:
+    """O id que o modelo devolve e conferido contra a lista que ELE recebeu."""
+
+    def _resposta(self, monkeypatch, valor, *, demandas=None) -> dict:
+        _stub_llm(monkeypatch, content=_resposta_com_parecida(valor))
+        cliente = _montar(
+            logado=_pessoa("p1"),
+            demandas=demandas if demandas is not None else [DEMANDA_ABERTA],
+            pessoas=[RESPONSAVEL],
+        )
+        return cliente.post(ROTA, json=_corpo()).json()
+
+    def test_id_fora_da_lista_vira_nulo(self, monkeypatch):
+        """Mutante: devolver o que o modelo mandou sem conferir a lista."""
+        assert self._resposta(monkeypatch, "dem-inventada")["demanda_parecida"] is None
+
+    def test_id_de_demanda_fechada_vira_nulo(self, monkeypatch):
+        """A Concluida nem chega ao modelo; se ele a apontar mesmo assim, o
+        backend nao a ressuscita."""
+        corpo = self._resposta(monkeypatch, "dem-concluida", demandas=[DEMANDA_ABERTA, DEMANDA_CONCLUIDA])
+        assert corpo["demanda_parecida"] is None
+
+    @pytest.mark.parametrize("lixo", [None, 7, {"id": "dem-aberta"}, ["dem-aberta"], "", _AUSENTE])
+    def test_valor_que_nao_e_identificador_vira_nulo(self, lixo, monkeypatch):
+        assert self._resposta(monkeypatch, lixo)["demanda_parecida"] is None
+
+    def test_os_campos_vem_do_banco_e_nao_do_que_o_modelo_escreveu(self, monkeypatch):
+        """Mutante: montar a resposta com o que o modelo devolveu.
+
+        O modelo manda so o identificador; titulo, estado e responsavel sao
+        lidos do Quadro. Um caminho que copiasse o que ele escreveu deixaria a
+        faixa da tela dizer o que o modelo inventou sobre uma Demanda real.
+        """
+        corpo = self._resposta(monkeypatch, "dem-aberta")
+        assert corpo["demanda_parecida"] == {
+            "id": "dem-aberta",
+            "titulo": "A Ana não responde de madrugada",
+            "estado": "em_andamento",
+            "responsavel_nome": "Marina do Suporte",
+        }
+
+    def test_a_faixa_nao_carrega_a_descricao(self, monkeypatch):
+        """A faixa vai para a TELA: o que ela leva e cabecalho, nunca o texto
+        que pode ter dado pessoal transcrito de um print."""
+        parecida = self._resposta(monkeypatch, "dem-aberta")["demanda_parecida"]
+        assert set(parecida) == {"id", "titulo", "estado", "responsavel_nome"}
+
+    def test_o_modo_mock_nao_aponta_demanda_nenhuma(self):
+        cliente = _montar(logado=_pessoa("p1"), demandas=[DEMANDA_ABERTA], pessoas=[RESPONSAVEL])
+        assert cliente.post(ROTA, json=_corpo()).json()["demanda_parecida"] is None
+
+    def test_provedor_fora_do_ar_nao_aponta_demanda_nenhuma(self, monkeypatch):
+        _stub_llm(monkeypatch, exc=RuntimeError("502"))
+        cliente = _montar(logado=_pessoa("p1"), demandas=[DEMANDA_ABERTA], pessoas=[RESPONSAVEL])
+        assert cliente.post(ROTA, json=_corpo()).json()["demanda_parecida"] is None
 
 
 # ═══════════════════════════════════════════════════════════════════════════

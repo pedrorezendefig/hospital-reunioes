@@ -380,8 +380,11 @@ class AssistenteChatPayload(BaseModel):
 class AssistenteChatResponse(BaseModel):
     """Resposta do turno: a fala, o rascunho novo e o aviso de Demanda parecida.
 
-    `demanda_parecida` e sempre `null` por enquanto: o campo nasce aqui para a
-    tela e os testes nao mudarem de forma quando o aviso entrar.
+    `demanda_parecida` vem preenchida quando o assistente reconhece o pedido
+    como o mesmo assunto de uma Demanda ABERTA do Quadro (issue #732), e carrega
+    so o que a faixa da tela mostra: `{id, titulo, estado, responsavel_nome}`. A
+    descricao nao entra, porque ela pode ter dado pessoal transcrito de um print
+    e a faixa aparece antes de a pessoa abrir a Demanda.
     """
 
     reply: str

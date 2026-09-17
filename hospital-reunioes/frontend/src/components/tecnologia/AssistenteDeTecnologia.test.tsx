@@ -22,6 +22,7 @@ import { ToastProvider } from "@/components/ui/Toast";
 
 import { AssistenteDeTecnologia } from "./AssistenteDeTecnologia";
 import {
+  ABRIR_A_PARECIDA,
   ANEXO_ILEGIVEL,
   AUDIO_FORA_DA_LISTA,
   AUDIO_SEM_FALA,
@@ -29,7 +30,9 @@ import {
   AVISO_DO_PRINT,
   CHAVE_DA_SESSAO,
   CONVERSA_NO_TETO,
+  DEMANDA_PARECIDA_TITULO,
   DOCUMENTO_FORA_DA_LISTA,
+  IGNORAR_A_PARECIDA,
   IMAGEM_FORA_DA_LISTA,
   LIMITE_DA_DESCRICAO,
   LIMITE_DA_MENSAGEM,
@@ -46,7 +49,7 @@ import {
   TEXTO_CORTADO,
   CRIADA_SEM_CONFIRMACAO,
 } from "./assistente";
-import { Demanda, ProdutoDaEscolha } from "./demandas";
+import { Demanda, demandaIdDaUrl, ProdutoDaEscolha } from "./demandas";
 
 type Chamada = {
   url: string;
@@ -128,6 +131,14 @@ type Opcoes = {
   corpoDoAnexoForaDoContrato?: unknown;
   /** Segura a resposta do anexo: entre o clique e a soltura a leitura está EM VOO. */
   segurarOAnexo?: boolean;
+  /** O `demanda_parecida` que todo turno devolve (issue #732). */
+  demandaParecida?: unknown;
+  /**
+   * Um `demanda_parecida` por turno, em ordem. Turno além da lista devolve
+   * `null`, que é o que o backend manda quando não há Demanda parecida: é assim
+   * que o teste vê a faixa SUMIR quando o assunto muda.
+   */
+  demandaParecidaPorTurno?: unknown[];
 };
 
 let soltarOAnexo: (() => void) | null = null;
@@ -232,13 +243,17 @@ function servidor(opcoes: Opcoes) {
           json: async () => opcoes.recusaDoChat!.corpo,
         } as unknown as Response;
       }
+      // O aviso é por TURNO: `demandaParecidaPorTurno` dá um valor a cada
+      // chamada, e é isso que deixa o teste ver a faixa aparecer e sumir.
+      const lista = opcoes.demandaParecidaPorTurno;
+      const daVez = lista ? (lista[doChat().length - 1] ?? null) : (opcoes.demandaParecida ?? null);
       return {
         ok: true,
         status: 200,
         json: async () => ({
           reply: opcoes.reply ?? "Entendi. Onde isso aconteceu?",
           rascunho: opcoes.rascunhoDaResposta ?? RASCUNHO_DO_ASSISTENTE,
-          demanda_parecida: null,
+          demanda_parecida: daVez,
         }),
       } as unknown as Response;
     }
@@ -1522,5 +1537,176 @@ describe("O aviso de dado de paciente quando a conversa teve print", () => {
 
     await waitFor(() => expect(criacoes()).toHaveLength(1));
     expect(criadas).toHaveLength(1);
+  });
+});
+
+/**
+ * A faixa de Demanda parecida (issue #732).
+ *
+ * Quem escolhe a Demanda é o assistente e quem confere o identificador contra o
+ * Quadro é o backend: aqui se prova o que a tela faz com o que chegou, e o que
+ * ela NÃO faz (barrar a criação).
+ */
+describe("A faixa de Demanda parecida", () => {
+  const PARECIDA = {
+    id: "dem-7",
+    titulo: "A Ana não responde de madrugada",
+    estado: "em_andamento",
+    responsavel_nome: "Marina do Suporte",
+  };
+
+  const OUTRA = { ...PARECIDA, id: "dem-9", titulo: "O relatório mensal demora" };
+
+  /** A faixa como um bloco, para as asserções olharem o texto que ela mostra. */
+  async function faixa(): Promise<HTMLElement> {
+    const titulo = await screen.findByText(DEMANDA_PARECIDA_TITULO);
+    return titulo.closest("div[role='status']") as HTMLElement;
+  }
+
+  it("mostra o título, o estado por extenso e o responsável da Demanda apontada", async () => {
+    montar({ demandaParecida: PARECIDA });
+
+    await falar("a Ana tá estranha");
+
+    const bloco = await faixa();
+    expect(bloco.textContent).toContain("A Ana não responde de madrugada");
+    // "Em andamento", e não `em_andamento`: o rótulo é o mesmo do resto da aba.
+    expect(bloco.textContent).toContain("Em andamento");
+    expect(bloco.textContent).toContain("Marina do Suporte");
+  });
+
+  it("'Abrir essa' leva ao endereço que o Quadro já usa para abrir o card", async () => {
+    montar({ demandaParecida: PARECIDA });
+
+    await falar("a Ana tá estranha");
+
+    const link = screen.getByRole("link", { name: ABRIR_A_PARECIDA });
+    const href = link.getAttribute("href") ?? "";
+    expect(href).toBe("/admin/tecnologia?demanda=dem-7");
+    // Os dois lados do MESMO formato: o que a faixa escreve é o que o Quadro lê.
+    expect(demandaIdDaUrl(href.slice(href.indexOf("?")))).toBe("dem-7");
+  });
+
+  it("não aparece quando o turno não aponta Demanda nenhuma", async () => {
+    // O detector: uma faixa fixa passaria no teste de cima e viraria paisagem em
+    // toda conversa, inclusive nas que não têm Demanda parecida.
+    montar();
+
+    await falar("a Ana tá estranha");
+
+    expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull();
+  });
+
+  it("some quando o turno seguinte não aponta mais aquela Demanda", async () => {
+    montar({ demandaParecidaPorTurno: [PARECIDA] });
+
+    await falar("a Ana tá estranha");
+    expect(await faixa()).toBeTruthy();
+
+    await falar("na verdade é outra coisa");
+
+    await waitFor(() => expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull());
+  });
+
+  it("'Ignorar' esconde a faixa daquela Demanda", async () => {
+    montar({ demandaParecida: PARECIDA });
+
+    await falar("a Ana tá estranha");
+    expect(await faixa()).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: IGNORAR_A_PARECIDA }));
+
+    await waitFor(() => expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull());
+  });
+
+  it("a Demanda ignorada não volta no turno seguinte", async () => {
+    montar({ demandaParecida: PARECIDA });
+
+    await falar("a Ana tá estranha");
+    await faixa();
+    fireEvent.click(screen.getByRole("button", { name: IGNORAR_A_PARECIDA }));
+    await waitFor(() => expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull());
+
+    await falar("é isso mesmo");
+
+    await waitFor(() => expect(doChat()).toHaveLength(2));
+    expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull();
+  });
+
+  it("ignorar uma Demanda não esconde a faixa de OUTRA", async () => {
+    // O "Ignorar" é por id, e não um interruptor da faixa: se o assunto virar
+    // outro e o assistente apontar outra Demanda, ela tem que aparecer.
+    montar({ demandaParecidaPorTurno: [PARECIDA, OUTRA] });
+
+    await falar("a Ana tá estranha");
+    await faixa();
+    fireEvent.click(screen.getByRole("button", { name: IGNORAR_A_PARECIDA }));
+    await waitFor(() => expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull());
+
+    await falar("agora é sobre o relatório");
+
+    const bloco = await faixa();
+    expect(bloco.textContent).toContain("O relatório mensal demora");
+    expect(screen.getByRole("link", { name: ABRIR_A_PARECIDA }).getAttribute("href")).toBe(
+      "/admin/tecnologia?demanda=dem-9",
+    );
+  });
+
+  it("NÃO bloqueia a criação: com a faixa à vista o botão continua vivo e a Demanda nasce", async () => {
+    // A faixa avisa, não barra. Guarda-corpo que vira beco não é guarda-corpo.
+    montar({ demandaParecida: PARECIDA });
+
+    await falar("a Ana tá estranha");
+    await faixa();
+
+    const criar = screen.getByRole("button", { name: "Criar Demanda" }) as HTMLButtonElement;
+    expect(criar.disabled).toBe(false);
+    fireEvent.click(criar);
+
+    await waitFor(() => expect(criacoes()).toHaveLength(1));
+    expect(criadas).toHaveLength(1);
+  });
+
+  it("'Descartar' começa outra conversa sem a faixa", async () => {
+    montar({ demandaParecida: PARECIDA });
+
+    await falar("a Ana tá estranha");
+    await faixa();
+
+    fireEvent.click(screen.getByRole("button", { name: /Descartar/ }));
+
+    expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull();
+  });
+
+  it("aviso com estado fora da lista fechada não vira faixa, e o turno não passa", async () => {
+    // O `estado` é o que indexa o rótulo: um valor de fora deixaria a faixa
+    // dizer `em_progresso` para quem lê "Em andamento" em toda a aba. Ele sai
+    // pela mesma porta de qualquer corpo que não serve, e o rascunho sobrevive.
+    montar({ demandaParecida: { ...PARECIDA, estado: "em_progresso" } });
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() => expect(screen.getByText(RESPOSTA_ILEGIVEL)).toBeTruthy());
+    expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull();
+    expect((screen.getByLabelText("Título") as HTMLInputElement).value).toBe("");
+  });
+
+  it("aviso sem identificador não vira faixa", async () => {
+    montar({ demandaParecida: { ...PARECIDA, id: "" } });
+
+    await falar("a Ana tá estranha");
+
+    await waitFor(() => expect(screen.getByText(RESPOSTA_ILEGIVEL)).toBeTruthy());
+    expect(screen.queryByText(DEMANDA_PARECIDA_TITULO)).toBeNull();
+  });
+
+  it("Demanda sem responsável aparece sem 'com null' na frase", async () => {
+    montar({ demandaParecida: { ...PARECIDA, responsavel_nome: null } });
+
+    await falar("a Ana tá estranha");
+
+    const bloco = await faixa();
+    expect(bloco.textContent).toContain("sem responsável");
+    expect(bloco.textContent).not.toContain("null");
   });
 });

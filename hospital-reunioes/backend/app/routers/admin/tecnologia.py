@@ -2080,6 +2080,47 @@ async def listar_historico(
 LIMITE_DO_ASSISTENTE = "10/minute"
 
 
+def _resumo_das_demandas_abertas(supabase: Client, *, nomes_de_produto: dict[str, str]) -> list[dict]:
+    """O cabeçalho de cada Demanda ABERTA, e nada além dele (issue #732).
+
+    Este é o corte de privacidade da fatia, e ele mora aqui de propósito: a
+    descrição de uma Demanda pode carregar dado pessoal transcrito de um print,
+    e a Conversa carrega o fio inteiro. Nenhum dos dois é lido. O que sai daqui
+    é o que o card já mostra na coluna, e é isso que vai ao prompt.
+
+    Fechadas ficam de fora por `ESTADOS_ABERTOS`, a mesma lista positiva que o
+    Quadro e o "Minha vez" usam: a Demanda Concluída não é mais assunto aberto,
+    e propor que o diretor vá até ela seria mandá-lo para o Histórico.
+
+    O recorte de quem vê é o do Quadro, e não um novo: a rota inteira é de Super
+    admin, e o Quadro mostra a esse mesmo Super admin todas as Demandas. Uma
+    leitura própria aqui, com outra regra, seria um segundo escopo para manter
+    em sincronia com o primeiro.
+    """
+    abertas = _demandas_filtradas(
+        supabase,
+        estados=ESTADOS_ABERTOS,
+        tipo=None,
+        produto_id=None,
+        responsavel_id=None,
+    )
+    nomes_de_pessoa = _nomes_de_participantes(
+        supabase, {d["responsavel_id"] for d in abertas if d.get("responsavel_id")}
+    )
+    return [
+        {
+            "id": str(d.get("id") or ""),
+            "titulo": d.get("titulo") or "",
+            "tipo": d.get("tipo") or "",
+            "produto_nome": nomes_de_produto.get(d.get("produto_id")),
+            "estado": d.get("estado") or "",
+            "etapa": d.get("etapa") or ETAPA_REGISTRADA,
+            "responsavel_nome": nomes_de_pessoa.get(d.get("responsavel_id")),
+        }
+        for d in abertas
+    ]
+
+
 @router.post("/assistente/chat", response_model=AssistenteChatResponse)
 @limiter.limit(LIMITE_DO_ASSISTENTE)
 async def assistente_chat(
@@ -2108,16 +2149,19 @@ async def assistente_chat(
         _recusar(motivo)
 
     result = supabase.table(TABELA_PRODUTOS).select("*").order("ordem").execute()
-    produtos = [{"id": p["id"], "nome": p.get("nome") or ""} for p in (result.data or []) if p.get("ativo")]
+    todos_os_produtos = list(result.data or [])
+    produtos = [{"id": p["id"], "nome": p.get("nome") or ""} for p in todos_os_produtos if p.get("ativo")]
+    # O nome do Produto sai da lista INTEIRA, e nao so dos ativos: uma Demanda
+    # aberta pode pertencer a um Produto aposentado, e ela continua no Quadro.
+    # Com o mapa so dos ativos, essa Demanda chegaria ao prompt sem Produto.
+    nomes_de_produto = {p["id"]: p.get("nome") or "" for p in todos_os_produtos}
 
     return assistente_tecnologia.conversar(
         rascunho=payload.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in payload.messages],
         kit=carregar_kit(),
         produtos=produtos,
-        # Vazia por enquanto: o aviso de Demanda parecida e a fatia seguinte.
-        # A costura ja esta aqui para o prompt e o servico nao mudarem entao.
-        demandas_abertas=[],
+        demandas_abertas=_resumo_das_demandas_abertas(supabase, nomes_de_produto=nomes_de_produto),
         # A data do HOSPITAL, e nao a do servidor: em UTC, das 21h a meia-noite
         # de Sao Paulo o assistente entenderia "hoje" como o dia seguinte.
         hoje_iso=datetime.now(FUSO_HOSPITAL).date().isoformat(),
