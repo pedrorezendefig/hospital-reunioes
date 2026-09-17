@@ -33,6 +33,8 @@ const VAZIO: FormularioRegistro = {
   manifestanteNome: "",
   manifestanteContato: "",
   manifestanteVinculo: "",
+  pacienteNome: "",
+  pacienteReferencia: "",
   anonimo: false,
 };
 
@@ -437,6 +439,41 @@ export function NovaManifestacaoModal({
               </div>
             </div>
           )}
+
+          {/* O Paciente do caso (issue #663, ADR 0052). Fica FORA do bloco do
+              anonimato de propósito: quem o anonimato protege é quem
+              manifesta, e o paciente é outra pessoa. Sem ele, o caso do
+              acompanhante anônimo chega à área sem como achar o atendimento. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={ROTULO} htmlFor="paciente-nome">
+                Nome do paciente <span className="normal-case">(opcional)</span>
+              </label>
+              <input
+                id="paciente-nome"
+                className={CAMPO}
+                maxLength={200}
+                value={form.pacienteNome}
+                onChange={(e) => alterar("pacienteNome", e.target.value)}
+                placeholder="De quem é o caso, quando o relato é sobre outra pessoa"
+              />
+            </div>
+            <div>
+              {/* O rótulo é o mesmo do Dossiê, e curto porque sai em caixa
+                  alta (RN-76, D-19): a pergunta inteira vive no placeholder. */}
+              <label className={ROTULO} htmlFor="paciente-referencia">
+                Referência do atendimento <span className="normal-case">(opcional)</span>
+              </label>
+              <input
+                id="paciente-referencia"
+                className={CAMPO}
+                maxLength={200}
+                value={form.pacienteReferencia}
+                onChange={(e) => alterar("pacienteReferencia", e.target.value)}
+                placeholder="Quando ou onde foi: data, setor ou leito"
+              />
+            </div>
+          </div>
 
           <div>
             <label className={ROTULO} htmlFor="anexos">

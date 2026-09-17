@@ -819,6 +819,14 @@ class RegistroManual(BaseModel):
     manifestante_nome: str | None = None
     manifestante_contato: str | None = None
     manifestante_vinculo: Literal["paciente", "acompanhante", "colaborador", "terceiro", "outro"] | None = None
+    # O Paciente do caso (issue #663, ADR 0052, decisão 1): o nome de quem foi
+    # atendido e uma pista curta do atendimento (data, setor ou leito). Os dois
+    # são opcionais, porque quem liga nem sempre sabe dizer, e o registro do
+    # telefonema não pode travar por dado que a pessoa não deu. O mesmo teto de
+    # 200 do nome e do contato: é pista para a área achar o atendimento, não
+    # segunda via do relato.
+    paciente_nome: str | None = Field(default=None, max_length=200)
+    paciente_referencia: str | None = Field(default=None, max_length=200)
     anonimo: bool = False
     sigilo_reforcado: bool = False
 
@@ -854,6 +862,16 @@ class RegistroManual(BaseModel):
             return None
         valor = sanitizar_travessao(valor).strip()
         return valor or None
+
+    @field_validator("paciente_nome", "paciente_referencia")
+    @classmethod
+    def paciente_limpo(cls, valor: str | None) -> str | None:
+        """Campo em branco é ausência de dado, não string vazia: o Dossiê lê
+        "Não informado" no vazio, e o que o ouvidor abriu sem digitar não pode
+        virar um paciente sem nome no banco."""
+        if valor is None:
+            return None
+        return sanitizar_travessao(valor).strip() or None
 
     @field_validator("contato_em")
     @classmethod
@@ -905,6 +923,11 @@ async def registrar_manifestacao(
         "manifestante_nome": nome,
         "manifestante_contato": contato,
         "manifestante_vinculo": None if anonimo else registro.manifestante_vinculo,
+        # O paciente NÃO segue o anonimato, e a assimetria é a decisão 3 do ADR
+        # 0052: quem se protege é quem manifesta. O paciente é outra pessoa, e
+        # sem ele o caso do acompanhante anônimo chega inútil à área.
+        "paciente_nome": registro.paciente_nome,
+        "paciente_referencia": registro.paciente_referencia,
         "anonimo": anonimo,
         "sigilo_reforcado": registro.sigilo_reforcado or nasce_sigilosa(registro.tipo_manifestacao),
         # O ouvidor preencheu o formulário inteiro: só fica incompleta a que se
