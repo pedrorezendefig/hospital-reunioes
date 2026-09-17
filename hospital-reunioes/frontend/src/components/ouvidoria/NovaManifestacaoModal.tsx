@@ -13,6 +13,7 @@ import {
   type CanalManual,
   type FormularioRegistro,
 } from "@/lib/ouvidoria/registro";
+import { AVISO_PACIENTE_PODE_IDENTIFICAR } from "@/lib/ouvidoria/publico";
 import {
   LABEL_TIPO,
   TIPOS_MANIFESTACAO,
@@ -167,7 +168,7 @@ export function NovaManifestacaoModal({
       if (!res.ok) {
         setErro(
           res.status === 422
-            ? "Confira os campos: relato, tipo, setor e resumo são obrigatórios, e a data do contato não pode estar no futuro."
+            ? "Confira os campos: relato, tipo, setor e resumo são obrigatórios, a data do contato não pode estar no futuro, e o nome do paciente e a referência do atendimento têm no máximo 200 caracteres."
             : "Não foi possível registrar a manifestação. Tente novamente."
         );
         setSalvando(false);
@@ -473,6 +474,17 @@ export function NovaManifestacaoModal({
                 placeholder="Quando ou onde foi: data, setor ou leito"
               />
             </div>
+            {/* A contrapartida que o ADR 0052 escreve nas consequências: o
+                paciente e o leito às vezes entregam quem falou, e quem decide
+                sabendo é quem preenche. No canal público quem lê é a própria
+                pessoa; aqui é o ouvidor, que digita em nome dela e é quem tem
+                como perguntar antes. A frase é a mesma do formulário público,
+                importada de lá: uma frase, um lugar. */}
+            {form.anonimo && (
+              <p className="sm:col-span-2 text-xs text-amber-700 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
+                {AVISO_PACIENTE_PODE_IDENTIFICAR}
+              </p>
+            )}
           </div>
 
           <div>

@@ -16,7 +16,6 @@ sigiloso (fail-closed), e quem abaixa é o ouvidor ao classificar.
 
 import datetime as dt
 import logging
-import re
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
@@ -35,7 +34,7 @@ from app.services.ouvidoria_taxonomia import (
     casar_setor,
     nasce_sigilosa,
 )
-from app.utils.text_sanitizer import sanitizar_travessao
+from app.utils.text_sanitizer import sanitizar_travessao, texto_ou_nulo
 
 logger = logging.getLogger(__name__)
 
@@ -71,14 +70,12 @@ AUTOR_CANAL_ABERTO = "Canal aberto"
 VINCULO_POR_SOBRE: dict[str, str] = {"mim": "paciente", "outra_pessoa": "acompanhante"}
 
 
-def _limpar(valor: str | None) -> str | None:
-    """Vazio é ausência, não conteúdo: espaço em branco (ou travessão sozinho,
-    que a sanitização deixa em pontuação) entra como NULL, em vez de fazer o
-    Dossiê parecer preenchido."""
-    if valor is None:
-        return None
-    valor = sanitizar_travessao(valor).strip()
-    return valor if re.search(r"\w", valor) else None
+# Vazio é ausência, não conteúdo: espaço em branco (ou travessão sozinho, que a
+# sanitização deixa em pontuação) entra como NULL, em vez de fazer o Dossiê
+# parecer preenchido. A regra saiu daqui para o utilitário da casa na issue
+# #663, quando o registro manual passou a gravar os mesmos campos opcionais: o
+# nome local fica porque é como o canal público a chama em quatro lugares.
+_limpar = texto_ou_nulo
 
 
 def _resumir(relato: str) -> str:
