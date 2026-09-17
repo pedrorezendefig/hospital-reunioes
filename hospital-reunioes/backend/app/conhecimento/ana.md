@@ -22,7 +22,7 @@ Editou no aplicativo, vale na conversa seguinte. Não existe fila nem espera par
 
 ## O que ela resolve sozinha e o que passa para uma pessoa
 
-A Ana responde sozinha, do começo ao fim e a qualquer hora, o que o paciente pergunta sobre consulta e exame particular: valor, preparo e diferencial. Marcar, não: quando chega a hora de agendar, ela entrega a conversa para uma pessoa do hospital concluir. A Ana marcar consulta já foi decidido e ainda não está construído, e depende da Integração Ana x MV. Cirurgia, procedimento e negociação de valor sempre passam para uma pessoa do hospital: ela explica o que sabe, junta o que já apurou na conversa e entrega o atendimento.
+A Ana responde sozinha, do começo ao fim e a qualquer hora, o que o paciente pergunta sobre consulta e exame particular: valor, preparo e diferencial. Marcar, não: quando chega a hora de agendar, ela entrega a conversa para uma pessoa do hospital concluir. A Ana marcar consulta depende da Integração Ana x MV, que é caminho decidido e ainda não construído; o que ela vai poder marcar sozinha quando a integração entrar ainda não foi decidido. Cirurgia, procedimento e negociação de valor sempre passam para uma pessoa do hospital: ela explica o que sabe, junta o que já apurou na conversa e entrega o atendimento.
 
 Quando ela não consegue resolver, ela também passa para uma pessoa, em vez de insistir ou inventar.
 

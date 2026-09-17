@@ -16,7 +16,7 @@ Uma reunião tem no máximo uma ata, por um dos dois caminhos.
 
 Os nomes citados na reunião são casados com o cadastro de pessoas do hospital. Quem está no cadastro vira responsável de verdade e passa a ser cobrado; quem é de fora fica só como nome, sem cobrança. Quando o agente não tem certeza de quem é, ele pergunta.
 
-Cada ação combinada vira uma pendência, com responsável e prazo, e desde o primeiro segundo ela é cobrada de verdade: aparece no painel, vence e atrasa. Prazo estourado vira atrasado, e o caminho normal é repactuar: a mesma pendência fica sem prazo, marcada como a repactuar, até alguém marcar a data nova. A troca fica registrada com o motivo que quem mexeu escreveu.
+Cada ação combinada vira uma pendência, com responsável e prazo, e desde o primeiro segundo ela é cobrada de verdade: aparece no painel, vence e atrasa. Prazo estourado vira atrasado, e o caminho normal é repactuar: a mesma pendência fica sem prazo, marcada como a repactuar, até alguém marcar a data nova.
 
 ## Assinar ou finalizar sem assinar
 

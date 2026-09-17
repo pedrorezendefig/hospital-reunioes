@@ -6,7 +6,7 @@ Ele mora no mesmo aplicativo das Reuniões, mas com gente própria: quem tem ace
 
 ## Quem participa
 
-Por acesso: quem administra o aplicativo e o gestor de qualidade enxergam todos os setores; o gerente enxerga os setores que ele gerencia; o coordenador enxerga o setor dele. Os colaboradores que executam o procedimento (técnicos, enfermeiros, ASG) não entram no aplicativo: eles leem o POP publicado e são treinados fora dele.
+Por acesso, e o acesso aqui é próprio do módulo: quem administra o módulo de POPs e o gestor de qualidade enxergam todos os setores; o gerente enxerga os setores que ele gerencia; o coordenador enxerga o setor dele. Os colaboradores que executam o procedimento (técnicos, enfermeiros, ASG) não entram no aplicativo: eles leem o POP publicado e são treinados fora dele.
 
 Por POP, três pessoas são escolhidas na criação: quem elabora, quem revisa e quem valida. Elas não são o mesmo que o acesso: são designações daquele documento.
 

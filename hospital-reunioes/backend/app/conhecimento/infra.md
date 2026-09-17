@@ -17,7 +17,7 @@ Algumas partes dependem de fornecedores, e isso importa quando alguma coisa para
 - **Assinatura digital** das atas e dos POPs, na ClickSign.
 - **Envio de e-mail.** Todo e-mail do sistema sai por um serviço de entrega de terceiros, com servidores fora do Brasil. Vale inclusive para os e-mails da Ouvidoria, e o que viaja neles é uma lista fechada de informações, decidida uma vez: no caso comum estão nela o resumo, o relato integral e o nome de quem manifestou; em caso anônimo ou sigiloso sai só a nota da ouvidoria.
 - **Agenda online**, do lado da Ana e também do aplicativo: é dela que vem o espelho da agenda na tela de Dados do Atendimento.
-- **Inteligência artificial.** Um serviço de fora escreve a ata por transcrição, elabora o POP, sugere o relatório da Ouvidoria e responde o assistente desta aba. Quando ele para, essas funções param, e o resto do aplicativo continua.
+- **Inteligência artificial.** Um serviço único de fora está atrás de tudo que o aplicativo escreve ou entende com inteligência artificial: a ata por transcrição, a conversa da ata guiada, o ditado por voz que vira texto, a elaboração do POP e o assistente desta aba. Quando ele para, essas funções param. O relatório da Ouvidoria é o caso à parte: os números são medidos pelo aplicativo e saem do mesmo jeito, e o que depende dele ali é só a seção de sugestões de ação corretiva da edição mensal, que sai com um aviso no lugar quando ela não vem. Fora essa lista, nenhuma parte do aplicativo depende dele.
 
 O hospital não opera servidor de e-mail próprio, e não há intenção de operar.
 
