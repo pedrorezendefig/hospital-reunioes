@@ -18,8 +18,14 @@ este bloco.
 ## Passo a passo
 
 1. No menu da esquerda, clique em **POPs**.
+
+   ![Item POPs no menu da esquerda](../../../assets/pops/menu-pops.png)
 2. Role até o bloco **Setores** e clique em **Novo Setor**.
+
+   ![Bloco Setores com o botao Novo Setor e o lapis](../../../assets/pops/setores.png)
 3. Em **Nome**, escolha um setor já conhecido na lista ou digite um novo.
+
+   ![Janela Novo Setor com Nome, Sigla e Salvar](../../../assets/pops/novo-setor.png)
 4. Confira a **Sigla**. Ela vem sugerida a partir do nome, sai sempre em
    maiúsculas e é a base do Código dos POPs daquele Setor.
 5. Clique em **Salvar**.

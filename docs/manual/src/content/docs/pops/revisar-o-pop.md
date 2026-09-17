@@ -17,16 +17,20 @@ com você. Enquanto ela estiver em **Em Revisão**, ninguém mais mexe no texto.
 ## Passo a passo
 
 1. No menu da esquerda, clique em **POPs**.
+
+   ![Menu com POPs e o botao Revisar na linha do POP](../../../assets/pops/gestao-de-pops-revisar.png)
 2. Na linha do POP, clique em **Revisar**. No alto da tela aparece
    **Revisão técnica**.
 3. Leia o documento inteiro, da Identificação ao fluxograma.
+
+   ![Leitura da Versao com os botoes de aprovar e devolver](../../../assets/pops/versao-em-revisao.png)
 4. Se estiver tudo certo, clique em **Aprovar revisão** e confirme em
    **Aprovar**. A Versão segue para o Validador, que recebe um email.
 5. Se faltar alguma coisa, clique em **Devolver com comentários**.
 6. Escreva o que precisa ser ajustado e clique em **Devolver**. O Elaborador
    recebe o comentário com o seu nome e a hora.
 
-![Leitura da Versão em revisão, com os botões Devolver com comentários e Aprovar revisão](../../../assets/pops/versao-em-revisao.png)
+   ![Janela da devolucao com o campo Motivo](../../../assets/pops/devolver-com-comentarios.png)
 
 ## Se der errado
 

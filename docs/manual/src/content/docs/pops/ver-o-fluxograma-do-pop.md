@@ -19,15 +19,17 @@ a seção de fluxograma, e ela também sai no documento assinado.
 
 1. Abra o POP: **Elaborar**, se ele é seu para escrever, ou **Revisar**,
    **Validar** ou **Ver**.
+
+   ![Botoes que abrem o POP na linha da lista](../../../assets/pops/gestao-de-pops-abrir.png)
 2. Role até a seção **Fluxograma**. O desenho já abre inteiro na tela.
+
+   ![Secao de fluxograma com o desenho e os botoes de zoom](../../../assets/pops/fluxograma.png)
 3. Para enxergar um passo de perto, use o botão de mais ou role o dedo sobre o
    desenho. Arraste para andar pelo caminho.
 4. Para voltar a ver o desenho inteiro, clique no botão de **Ajustar à tela**.
 5. Clique em **PNG** para salvar uma imagem, por exemplo para um treinamento.
 6. Clique em **SVG** quando precisar de uma imagem que não perde qualidade ao
    ampliar.
-
-![Seção de fluxograma da Versão, com o caminho principal e o desvio ao lado](../../../assets/pops/fluxograma.png)
 
 ## Se der errado
 

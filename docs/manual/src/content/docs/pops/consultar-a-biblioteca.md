@@ -18,16 +18,22 @@ tem POP assinado pelas três pessoas responsáveis.
 ## Passo a passo
 
 1. No menu da esquerda, clique em **POPs**.
+
+   ![Item POPs no menu da esquerda](../../../assets/pops/menu-pops.png)
 2. No cartão **Biblioteca**, clique para abrir.
+
+   ![Cartao Biblioteca na tela de Gestao de POPs](../../../assets/pops/cartao-biblioteca.png)
 3. Procure o Setor: os POPs aparecem agrupados por Setor, com a sigla ao lado
    do nome.
+
+   ![Biblioteca com um POP da Farmacia e a versao](../../../assets/pops/biblioteca.png)
 4. Na linha do procedimento, veja a **Versão** que está valendo e a data em
    **Publicado em**.
 5. Clique na linha para abrir a **Ficha do POP**, com as datas de cada etapa e
    os nomes do Elaborador, do Revisor e do Validador.
 6. Clique em **Baixar PDF assinado** para guardar ou imprimir o documento.
 
-![Biblioteca com um POP publicado da Farmácia, agrupado por Setor](../../../assets/pops/biblioteca.png)
+   ![Ficha do POP com datas, responsaveis e o botao de baixar](../../../assets/pops/ficha-do-pop.png)
 
 ## Se der errado
 
