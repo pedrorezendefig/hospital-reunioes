@@ -17,16 +17,25 @@ momento em que você assume o texto: depois de fechar, ele não volta atrás.
 ## Passo a passo
 
 1. Abra a reunião. O bloco **Validação Necessária** fica no fim da página.
+
+   ![Reunião em Validação Necessária, com os três botões de desfecho](../../../assets/reunioes/validacao-necessaria.png)
 2. Leia a ata inteira. Clique em **Baixar PDF** para conferir o documento final.
 3. Confira a lista de **Participantes**. O X tira a pessoa da ata e da lista de
    quem vai assinar; o campo de busca acrescenta quem faltou.
 4. Para mudar o texto, clique em **Solicitar Correção** e diga o que muda. Ele
    reescreve a narrativa, a discussão, o quadro e o objetivo, nunca a lista de
    participantes.
+:::caution[Finalizar sem assinatura não tem volta]
+As pendências nascem na hora e assinar depois não existe.
+:::
+
 5. Escolha o desfecho: **Enviar para assinatura** ou
    **Finalizar sem assinatura**.
 6. Finalizando sem assinatura, confirme na janela: ela mostra quantas
    pendências vão nascer.
+
+   ![Janela de confirmação com a conta das pendências que vão nascer](../../../assets/reunioes/finalizar-sem-assinatura.png)
+
 
 ## Se der errado
 

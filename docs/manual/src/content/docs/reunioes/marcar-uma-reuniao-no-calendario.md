@@ -14,15 +14,23 @@ sidebar:
 Quando a reunião já tem data e você quer reservá-la e avisar quem vai. Ela
 nasce com quem marcou no comando.
 
+:::caution[Quem marca vira o facilitador]
+A reunião nasce com quem clicou aqui no comando da ata.
+:::
+
 ## Passo a passo
 
 1. No menu, clique em **Calendário**. Quem conduz reuniões acha ele dentro do
    grupo **Reuniões e metas**; na Secretaria ele fica solto.
+
+   ![Calendário de reuniões aberto no mês](../../../assets/reunioes/calendario.png)
 2. Clique no dia da reunião. A janela **Agendar Reunião** abre com a data
    preenchida.
 3. Escreva o **Título** e confira a **Data**. Em **Tipo**, escolha
    **Diretoria**, **Gerencial**, **Coordenação**, **Mensal** ou
    **Extraordinária**.
+
+   ![Janela Agendar Reunião preenchida com título, horário e participantes](../../../assets/reunioes/agendar-reuniao.png)
 4. Em **Horário da Reunião**, escolha a hora de início, e escreva a
    **Pauta (opcional)**.
 5. Em **Participantes**, procure cada pessoa em **Buscar participante...** e

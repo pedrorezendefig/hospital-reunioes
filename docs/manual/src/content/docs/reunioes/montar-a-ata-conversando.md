@@ -19,10 +19,17 @@ Esta ata termina sem assinatura digital.
 ## Passo a passo
 
 1. Abra a reunião **Programada** pelo **Calendário**.
+
+   ![Cartão da reunião no calendário, no dia dela](../../../assets/reunioes/calendario-cartao-da-reuniao.png)
 2. No bloco **Ata Guiada**, clique em **Iniciar Ata Guiada**. A ata em branco
    fica à esquerda e o **Assistente da Ata** à direita.
+
+   ![Bloco Ata Guiada com o botão de iniciar](../../../assets/reunioes/bloco-ata-guiada.png)
 3. Conte o que foi tratado, ou clique em **Ditar por voz** e fale. O texto cai
    no campo para você revisar.
+
+   ![Tela da Ata Guiada, com a ata de um lado e o assistente do outro](../../../assets/reunioes/ata-guiada.png)
+
 4. Responda o que ele perguntar. Ele insiste em duas coisas: quem faz cada ação
    e até quando.
 5. Para mudar um trecho pronto, use **Apontar para esta seção**; para dar

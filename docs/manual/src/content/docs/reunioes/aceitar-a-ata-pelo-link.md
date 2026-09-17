@@ -20,6 +20,8 @@ hospital. Você não precisa de conta nem de senha.
 ## Passo a passo
 
 1. Abra o link do email. A tela mostra **Ata de reunião para aceite**.
+   ![Tela de aceite da ata, com o aviso, a ata e o botão](../../../assets/reunioes/aceite-pelo-link.png)
+
 2. No aviso amarelo do alto, confira o seu nome.
 3. Leia a ata: **Pauta da Reunião**, **Discussão dos Pontos** e o quadro com as
    ações e os prazos.
