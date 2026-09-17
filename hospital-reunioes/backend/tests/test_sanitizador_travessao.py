@@ -7,7 +7,7 @@ no hífen comum de palavra composta. Os literais com os tracinhos longos abaixo
 são entradas de teste deliberadas.
 """
 
-from app.utils.text_sanitizer import sanitizar_estrutura, sanitizar_travessao
+from app.utils.text_sanitizer import sanitizar_estrutura, sanitizar_travessao, texto_ou_nulo
 
 
 class TestSanitizarTravessao:
@@ -80,3 +80,34 @@ class TestSanitizarEstrutura:
 
     def test_string_simples(self):
         assert sanitizar_estrutura("a — b") == "a, b"
+
+
+class TestTextoOuNulo:
+    """A régua do campo opcional de texto (issue #663).
+
+    Era a `_limpar` privada do canal público e virou utilitário da casa quando o
+    registro manual do ouvidor passou a gravar os mesmos campos: as duas portas
+    escrevem `paciente_nome` e `paciente_referencia`, e quem lê é um leitor só.
+    Promete três coisas, e cada teste aqui cobre uma delas.
+    """
+
+    def test_apara_as_pontas(self):
+        assert texto_ou_nulo("  Maria Souza  ") == "Maria Souza"
+
+    def test_espaco_em_branco_e_ausencia(self):
+        assert texto_ou_nulo("   ") is None
+
+    def test_pontuacao_sozinha_e_ausencia(self):
+        """O hífen que alguém digita para dizer "não perguntei" não é conteúdo.
+
+        Gravado, ele faria o Dossiê parar de mostrar "Não informado" e apagaria
+        o aviso de relato em nome de outra pessoa sem o nome do paciente."""
+        assert texto_ou_nulo("-") is None
+        assert texto_ou_nulo("...") is None
+
+    def test_travessao_no_meio_do_texto_e_sanitizado(self):
+        """Tipografia da casa (ADR 0013) antes de o valor virar coluna: o campo
+        aparece no Dossiê e no email ao setor. O travessão sozinho já cairia
+        pela régua da pontuação, então quem distingue as duas versões desta
+        função é o travessão ENTRE palavras."""
+        assert texto_ou_nulo("Maria — leito 12") == "Maria, leito 12"
