@@ -1,23 +1,23 @@
 # INTEGRACOES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-09T19:46-0300 -->
+<!-- last_update: 2026-09-16T22:33-0300 -->
 
 Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Coolify (não no git).
 
 ## OpenRouter
 **Pra que serve:** LLM único — atas, correções, extração e transcrição via openai/gpt-5.4-mini (configurável via LLM_MODEL)
-**Onde aparece no código:** `app/services/ai_processor.py`, `app/services/transcricao_service.py`
+**Onde aparece no código:** `app/services/ai_processor.py`, `app/services/transcricao_extractor.py`, `app/services/transcricao_service.py`
 **Secret/env primária:** `OPENROUTER_API_KEY`
 
 ## ClickSign
 **Pra que serve:** Assinatura digital de atas (sandbox em dev, app em prod)
-**Onde aparece no código:** `app/routers/pops/assinatura.py`, `app/routers/pops/revisao.py`, `app/routers/admin/legacy.py`
+**Onde aparece no código:** `app/services/transcricao_extractor.py`
 **Secret/env primária:** `CLICKSIGN_API_KEY`
 **Variáveis relacionadas:** `CLICKSIGN_BASE_URL`, `CLICKSIGN_WEBHOOK_SECRET`
 
 ## Resend
 **Pra que serve:** Emails transacionais e SMTP do Supabase Auth
-**Onde aparece no código:** `app/config.py`, `app/services/email_service.py`, `app/services/tecnologia_email.py`
+**Onde aparece no código:** `app/config.py`, `app/services/transcricao_extractor.py`, `app/services/email_service.py`
 **Secret/env primária:** `RESEND_API_KEY`
 **Variáveis relacionadas:** `RESEND_FROM_EMAIL`
 
