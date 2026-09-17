@@ -6,22 +6,32 @@ Roda em paralelo com os outros dois de prints e com o 09, **depois** do 07 merge
 e dos quatro de vídeo mergeados. Cada um no seu worktree, todos contra o mesmo
 app local: o README diz o que subir antes.
 
-Copie o bloco inteiro e cole num terminal do Claude Code aberto DENTRO do worktree deste prompt. O [README](README.md) ensina a criar o worktree e a ordem de tudo.
+Copie o bloco inteiro e cole num terminal do Claude Code aberto na raiz do repositório (`/Users/pedrorezende/PedroDev/Hospital`). A sessão cria o worktree sozinha; você não roda git. O [README](README.md) diz a ordem de tudo.
 
 ```
 Produza os Prints de passo das Páginas de tarefa da seção "Reuniões e metas" do Manual do usuário, no repo pedrorezendefig/hospital-reunioes: em toda Página de tarefa, um print por mudança de tela, com balão numerado igual ao passo, tirado pelo Roteiro de prints do módulo.
 
-ONDE VOCÊ ESTÁ
-Você está num git worktree próprio, na branch docs/prints-reunioes, criado a partir de origin/main. Outros terminais trabalham AO MESMO TEMPO em worktrees irmãos, contra o MESMO app local e o MESMO banco local. Antes de qualquer coisa, confira:
-  git branch --show-current      (tem que devolver docs/prints-reunioes)
-  git rev-parse --show-toplevel  (tem que ser a pasta deste worktree, NUNCA /Users/pedrorezende/PedroDev/Hospital)
-Se qualquer um dos dois devolver outra coisa, PARE e reporte. Nunca mude de branch, nunca saia deste worktree, nunca toque na árvore principal.
+ONDE VOCÊ ESTÁ E ONDE VAI TRABALHAR
+Você foi aberto na árvore principal do repositório, /Users/pedrorezende/PedroDev/Hospital, que costuma estar numa branch antiga e é compartilhada com outros terminais abertos AO MESMO TEMPO. Você NÃO trabalha nela. Seu primeiro ato é criar um worktree próprio, a partir de origin/main, e entrar nele:
+  git -C /Users/pedrorezende/PedroDev/Hospital fetch origin --prune
+  git -C /Users/pedrorezende/PedroDev/Hospital worktree add /Users/pedrorezende/PedroDev/Hospital/.worktrees/prints-reunioes -b docs/prints-reunioes origin/main
+  cd /Users/pedrorezende/PedroDev/Hospital/.worktrees/prints-reunioes
+Se a branch ou a pasta já existirem de uma tentativa anterior deste mesmo prompt: veja com `gh pr list --head docs/prints-reunioes --state all` se o PR dela já foi mergeado ou fechado. Se foi, remova os restos (git -C /Users/pedrorezende/PedroDev/Hospital worktree remove --force /Users/pedrorezende/PedroDev/Hospital/.worktrees/prints-reunioes; git -C /Users/pedrorezende/PedroDev/Hospital branch -D docs/prints-reunioes) e crie de novo. Se o PR ainda estiver aberto, PARE e reporte: alguém pode estar trabalhando nela.
 
-O worktree nasce sem node_modules. Seu primeiro comando de trabalho é:
+A pasta de trabalho persiste entre os seus comandos, mas confira antes de cada commit:
+  git branch --show-current      (tem que devolver docs/prints-reunioes)
+  git rev-parse --show-toplevel  (tem que devolver /Users/pedrorezende/PedroDev/Hospital/.worktrees/prints-reunioes, NUNCA /Users/pedrorezende/PedroDev/Hospital)
+Se qualquer um dos dois devolver outra coisa, PARE e reporte. Nunca mude de branch, nunca edite arquivo fora do worktree, nunca toque na árvore principal. Ao terminar, não remova o worktree: a próxima rodada deste prompt sabe lidar com ele.
+
+O worktree nasce sem node_modules. Seu primeiro comando de trabalho dentro dele é:
   cd docs/manual && corepack pnpm@9 install --frozen-lockfile && cd ../..
-Depois confira que o app local responde (o Pedro subiu a stack antes de abrir os terminais):
+O worktree também nasce sem o .env local do app, que é gitignorado e mora na árvore principal. Copie (é leitura da árvore principal, não edição):
+  cp /Users/pedrorezende/PedroDev/Hospital/hospital-reunioes/.env hospital-reunioes/.env
+Depois confira que o app local responde:
   curl -s http://localhost:3000 -o /dev/null -w "%{http_code}\n"
-Se não responder 200, PARE e reporte. NÃO rode apply.sh, supabase stop/start nem docker: a stack é compartilhada com os outros terminais, e reiniciar derruba o roteiro deles no meio.
+Se responder 200, NÃO toque na stack: ela é compartilhada com os outros terminais, e reiniciar derruba o roteiro deles no meio. Se NÃO responder, quem sobe é o primeiro terminal que pegar a trava, e só ele:
+  mkdir /tmp/hospital-app-subindo
+Se o mkdir falhar porque a pasta já existe, outro terminal está subindo: espere, testando o curl a cada 30 segundos, até dar 200, e siga sem subir nada. Se o mkdir passou, a trava é sua: rode `(cd /Users/pedrorezende/PedroDev/Hospital/hospital-reunioes && supabase start)` (o banco local é um só, e mora na árvore principal) e depois `bash .claude/skills/atualizar-app/scripts/apply.sh` de dentro do SEU worktree (o script constrói a stack com o código de onde ele está, e o seu worktree é a origin/main atual). Espere o curl dar 200 e remova a trava com `rmdir /tmp/hospital-app-subindo`. Se passar de 15 minutos sem o app subir, reporte em vez de forçar.
 
 LEIA PRIMEIRO, NESTA ORDEM
 1. .claude/skills/manual/SKILL.md e references/prints.md: o molde da Página de tarefa (o print fica DENTRO do item da lista, recuado três espaços) e a receita do balão numerado.

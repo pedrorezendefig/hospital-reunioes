@@ -7,18 +7,24 @@ que os outros estão ilustrando.
 Nenhum vídeo, nenhuma página nova. É a passada de qualidade na escrita das 86
 páginas, para o Manual ficar enxuto e soar como uma voz só.
 
-Copie o bloco inteiro e cole num terminal do Claude Code aberto DENTRO do worktree deste prompt. O [README](README.md) ensina a criar o worktree e a ordem de tudo.
+Copie o bloco inteiro e cole num terminal do Claude Code aberto na raiz do repositório (`/Users/pedrorezende/PedroDev/Hospital`). A sessão cria o worktree sozinha; você não roda git. O [README](README.md) diz a ordem de tudo.
 
 ```
 Enxugue a escrita do Manual do usuário do repo pedrorezendefig/hospital-reunioes. São 86 páginas em docs/manual/src/content/docs/, escritas por quatro sessões diferentes em paralelo. O trabalho é fazer soarem como uma voz só, sem perder informação.
 
-ONDE VOCÊ ESTÁ
-Você está num git worktree próprio, na branch docs/enxugar-a-escrita, criado a partir de origin/main. Este roda sozinho, mas a árvore principal costuma estar numa branch antiga, por isso o worktree. Antes de qualquer coisa, confira:
-  git branch --show-current      (tem que devolver docs/enxugar-a-escrita)
-  git rev-parse --show-toplevel  (tem que ser a pasta deste worktree, NUNCA /Users/pedrorezende/PedroDev/Hospital)
-Se qualquer um dos dois devolver outra coisa, PARE e reporte. Nunca mude de branch, nunca saia deste worktree, nunca toque na árvore principal.
+ONDE VOCÊ ESTÁ E ONDE VAI TRABALHAR
+Você foi aberto na árvore principal do repositório, /Users/pedrorezende/PedroDev/Hospital, que costuma estar numa branch antiga e é compartilhada com outros terminais abertos AO MESMO TEMPO. Você NÃO trabalha nela. Seu primeiro ato é criar um worktree próprio, a partir de origin/main, e entrar nele:
+  git -C /Users/pedrorezende/PedroDev/Hospital fetch origin --prune
+  git -C /Users/pedrorezende/PedroDev/Hospital worktree add /Users/pedrorezende/PedroDev/Hospital/.worktrees/enxugar-a-escrita -b docs/enxugar-a-escrita origin/main
+  cd /Users/pedrorezende/PedroDev/Hospital/.worktrees/enxugar-a-escrita
+Se a branch ou a pasta já existirem de uma tentativa anterior deste mesmo prompt: veja com `gh pr list --head docs/enxugar-a-escrita --state all` se o PR dela já foi mergeado ou fechado. Se foi, remova os restos (git -C /Users/pedrorezende/PedroDev/Hospital worktree remove --force /Users/pedrorezende/PedroDev/Hospital/.worktrees/enxugar-a-escrita; git -C /Users/pedrorezende/PedroDev/Hospital branch -D docs/enxugar-a-escrita) e crie de novo. Se o PR ainda estiver aberto, PARE e reporte: alguém pode estar trabalhando nela.
 
-O worktree nasce sem node_modules. Seu primeiro comando de trabalho é:
+A pasta de trabalho persiste entre os seus comandos, mas confira antes de cada commit:
+  git branch --show-current      (tem que devolver docs/enxugar-a-escrita)
+  git rev-parse --show-toplevel  (tem que devolver /Users/pedrorezende/PedroDev/Hospital/.worktrees/enxugar-a-escrita, NUNCA /Users/pedrorezende/PedroDev/Hospital)
+Se qualquer um dos dois devolver outra coisa, PARE e reporte. Nunca mude de branch, nunca edite arquivo fora do worktree, nunca toque na árvore principal. Ao terminar, não remova o worktree: a próxima rodada deste prompt sabe lidar com ele.
+
+O worktree nasce sem node_modules. Seu primeiro comando de trabalho dentro dele é:
   cd docs/manual && corepack pnpm@9 install --frozen-lockfile && cd ../..
 
 NÃO É PARA REESCREVER. O conteúdo foi conferido contra o código, revisado em até três rodadas por página e auditado contra o site publicado. Toda afirmação que está lá foi verificada. Você está cortando gordura e alinhando voz, não repensando o que a página diz. Se achar que uma afirmação está errada, PARE e reporte em vez de corrigir: mudar fato exige conferir no código, e isso é outro trabalho.

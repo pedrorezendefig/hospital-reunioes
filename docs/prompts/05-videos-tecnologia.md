@@ -45,10 +45,17 @@ tela que ainda vai mudar.
 
 ## Prompt para a leitura (a): vídeo de percepção
 
-Copie o bloco e cole num terminal do Claude Code. Fora da campanha dos quatro terminais: roda sozinho, num worktree próprio (`git worktree add /Users/pedrorezende/PedroDev/Hospital/.worktrees/video-tecnologia -b docs/video-tecnologia origin/main`), a qualquer momento depois que o #726 fechar.
+Copie o bloco e cole num terminal do Claude Code aberto na raiz do repositório (`/Users/pedrorezende/PedroDev/Hospital`). Fora da campanha: roda sozinho, a qualquer momento depois que o #726 fechar. A sessão cria o próprio worktree (branch docs/video-tecnologia, pasta .worktrees/video-tecnologia, a partir de origin/main) antes de qualquer outra coisa, e trabalha só nele: você não roda git.
 
 ```
 Produza o Vídeo de percepção de valor da área de Tecnologia do app do Hospital São Matheus, no repo pedrorezendefig/hospital-reunioes.
+
+ONDE VOCÊ ESTÁ E ONDE VAI TRABALHAR
+Você foi aberto na árvore principal, /Users/pedrorezende/PedroDev/Hospital, que costuma estar numa branch antiga e é compartilhada. Você NÃO trabalha nela. Primeiro ato:
+  git -C /Users/pedrorezende/PedroDev/Hospital fetch origin --prune
+  git -C /Users/pedrorezende/PedroDev/Hospital worktree add /Users/pedrorezende/PedroDev/Hospital/.worktrees/video-tecnologia -b docs/video-tecnologia origin/main
+  cd /Users/pedrorezende/PedroDev/Hospital/.worktrees/video-tecnologia
+Se branch ou pasta já existirem de uma tentativa anterior com PR mergeado ou fechado (confira com gh pr list --head docs/video-tecnologia --state all), remova os restos e crie de novo; se o PR estiver aberto, PARE e reporte. Antes de cada commit, `git branch --show-current` tem que devolver docs/video-tecnologia e `git rev-parse --show-toplevel` a pasta do worktree. Nunca toque na árvore principal.
 
 ANTES DE COMEÇAR, CONFIRA O QUE JÁ ESTÁ ENTREGUE
 Leia os três PRDs e diga qual deles o vídeo vai cobrir antes de escrever roteiro:
