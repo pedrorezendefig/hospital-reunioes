@@ -16,12 +16,14 @@ caso dos relatórios.
 
 ## Passo a passo
 
-1. Na lista, abra o menu da linha de um caso encerrado e escolha **Arquivar**.
+1. Na lista, na linha de um caso encerrado, clique em **Arquivar**. É o botão
+   da própria linha, à direita.
 2. Confirme. O caso sai da lista e continua contando nos números.
 3. Para limpar de uma vez, use **Arquivar todos os encerrados**, no cabeçalho do
    grupo **Encerrada**.
 4. Para rever o que foi guardado, ligue o filtro **Arquivados**.
-5. Para trazer um caso de volta, use **Desarquivar** no menu da linha.
+5. Para trazer um caso de volta, clique em **Desarquivar**, o botão da linha
+   na lista de arquivados.
 
 ## Se der errado
 
