@@ -16,7 +16,8 @@ momento em que você assume o texto: depois de fechar, ele não volta atrás.
 
 ## Passo a passo
 
-1. Abra a reunião. O bloco **Validação Necessária** fica no fim da página.
+1. Abra a reunião. O bloco **Validação Necessária** fica no alto, logo
+   abaixo dos cartões **Data**, **Horário**, **Tipo** e **Ações**.
 
    ![Reunião em Validação Necessária, com os três botões de desfecho](../../../assets/reunioes/validacao-necessaria.png)
 2. Leia a ata inteira. Clique em **Baixar PDF** para conferir o documento final.
