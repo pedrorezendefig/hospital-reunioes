@@ -18,7 +18,18 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AudioLines, Bot, ChevronDown, Loader2, Mic, Paperclip, Send, Square, Trash2 } from "lucide-react";
+import {
+  AudioLines,
+  Bot,
+  ChevronDown,
+  Image as ImageIcon,
+  Loader2,
+  Mic,
+  Paperclip,
+  Send,
+  Square,
+  Trash2,
+} from "lucide-react";
 
 import { Select } from "@/components/ui/Select";
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
@@ -27,15 +38,20 @@ import {
   AUDIO_SEM_FALA,
   AUDIOS_ACEITOS,
   AVISO_DE_IA,
+  AVISO_DO_PRINT,
+  conversaTevePrint,
+  avisoDaImagem,
   avisoDoAudio,
   avisoDoDocumento,
   CONVERSA_NO_TETO,
   corpoValidado,
   CRIADA_SEM_CONFIRMACAO,
   demandaCriadaValida,
+  descreverAImagem,
   descricaoAoCriar,
   DOCUMENTOS_ACEITOS,
   extrairODocumento,
+  IMAGENS_ACEITAS,
   LIMITE_DA_DESCRICAO,
   LIMITE_DA_MENSAGEM,
   LIMITE_DE_MENSAGENS,
@@ -47,8 +63,10 @@ import {
   lerDaSessao,
   MensagemDoChat,
   PREFIXO_DE_AUDIO,
+  PREFIXO_DE_PRINT,
   prefixoDeDocumento,
   PRIMEIRA_MENSAGEM,
+  PRINT_SEM_LEITURA,
   podeCriar,
   RASCUNHO_VAZIO,
   RascunhoDaDemanda,
@@ -144,6 +162,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
   const fimDaLista = useRef<HTMLDivElement | null>(null);
   const escolherOAudio = useRef<HTMLInputElement | null>(null);
   const escolherODocumento = useRef<HTMLInputElement | null>(null);
+  const escolherAImagem = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const guardado = lerDaSessao();
@@ -392,6 +411,26 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     });
   }
 
+  /**
+   * O print anexado vira a DESCRIÇÃO que o servidor leu da imagem (issue #730).
+   *
+   * Ele entra como mais um desfecho de entrada, e não como um caminho próprio:
+   * a descrição é texto de fora, igual à transcrição e ao documento, e segue
+   * pela mesma porta (`mandarAFala`, via `encerrarAEntrada`). A imagem nunca
+   * chega ao chat, e não é guardada em lugar nenhum.
+   *
+   * Descrição em branco vira aviso, e não uma mensagem só com o prefixo: o
+   * backend já recusa isso com 502, e esta é a rede de baixo.
+   */
+  function anexarAImagem(arquivo: File) {
+    return anexar(avisoDaImagem(arquivo), async () => {
+      const leitura = await descreverAImagem(arquivo, token);
+      if ("aviso" in leitura) return leitura;
+      const descricao = leitura.corpo.texto.trim();
+      return descricao ? { fala: mensagemComOrigem(PREFIXO_DE_PRINT, descricao) } : { aviso: PRINT_SEM_LEITURA };
+    });
+  }
+
   /** O input de arquivo é zerado sempre: senão escolher o MESMO arquivo de novo não dispara nada. */
   function aoEscolher(evento: React.ChangeEvent<HTMLInputElement>, usar: (arquivo: File) => Promise<void>) {
     const arquivo = evento.target.files?.[0];
@@ -581,6 +620,14 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
               O assistente está escrevendo aqui. Espere a resposta para ajustar à mão.
             </p>
           )}
+          {conversaTevePrint(messages) && (
+            <p
+              role="status"
+              className="px-3 py-2 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-xs"
+            >
+              {AVISO_DO_PRINT}
+            </p>
+          )}
           <div className="flex flex-wrap items-center gap-2">
             <button
               type="button"
@@ -666,6 +713,14 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
             accept={DOCUMENTOS_ACEITOS.join(",")}
             onChange={(e) => aoEscolher(e, anexarODocumento)}
           />
+          <input
+            ref={escolherAImagem}
+            type="file"
+            className="hidden"
+            aria-label="Arquivo de print"
+            accept={IMAGENS_ACEITAS.join(",")}
+            onChange={(e) => aoEscolher(e, anexarAImagem)}
+          />
 
           <div className="flex gap-2">
             <button
@@ -699,6 +754,16 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
               className="px-3 py-2 rounded-xl border border-border text-text-secondary hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
             >
               <Paperclip className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => escolherAImagem.current?.click()}
+              disabled={ocupado || noTeto}
+              aria-label="Anexar print"
+              title="Anexar print"
+              className="px-3 py-2 rounded-xl border border-border text-text-secondary hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+            >
+              <ImageIcon className="w-4 h-4" />
             </button>
             <textarea
               aria-label="Mensagem"

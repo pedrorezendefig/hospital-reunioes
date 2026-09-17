@@ -400,3 +400,16 @@ class AssistenteDocumentoResponse(BaseModel):
 
     texto: str
     filename: str
+
+
+class AssistenteImagemResponse(BaseModel):
+    """Resposta do POST /admin/tecnologia/assistente/descrever-imagem.
+
+    So o texto, e nao o nome do arquivo como na extracao: o prefixo de origem do
+    print e `[print] ` seco, sem nome. O nome de um print e "Captura de tela
+    2026-09-17 as 14.02.11.png", que nao diz nada a quem le a conversa, e a
+    imagem nao e guardada em lugar nenhum para alguem querer achar depois
+    (ADR 0056, decisao 4).
+    """
+
+    texto: str

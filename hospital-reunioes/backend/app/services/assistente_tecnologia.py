@@ -17,6 +17,7 @@ O cliente do LLM vem por `ai_processor` de proposito, pelo MODULO e nao por
 
 from __future__ import annotations
 
+import base64
 import json
 import logging
 import re
@@ -122,6 +123,33 @@ SEM_CONVERSA = "(a conversa ainda não começou)"
 
 REPLY_MOCK = "[MOCK] Recebi sua mensagem. Montar a Demanda conversando exige a IA configurada."
 REPLY_ERRO = "Desculpe, houve um erro ao processar sua mensagem. Tente novamente."
+
+# ─── O print de tela (issue #730) ────────────────────────────────────────────
+#
+# A primeira chamada MULTIMODAL do app (ADR 0056, decisao 4).
+
+# As imagens que o assistente le, e o TIPO de cada uma.
+#
+# A tabela mora aqui, e nao na rota, porque quem precisa do tipo e quem monta o
+# payload: a rota so peneira o nome do arquivo, contra esta mesma tabela. Duas
+# listas para a mesma regra divergiriam calado (o 422 recusando o que o payload
+# saberia rotular, ou o contrario).
+#
+# O tipo vem da EXTENSAO, nunca do `content-type` que o cliente declarou, pela
+# mesma razao do Anexo da Manifestacao (ADR 0034): o cabecalho e escrito do lado
+# de la e pode mentir.
+TIPOS_DE_IMAGEM: dict[str, str] = {
+    ".png": "image/png",
+    ".jpg": "image/jpeg",
+    ".jpeg": "image/jpeg",
+    ".webp": "image/webp",
+}
+
+# 5 MB. Print de tela cheia em PNG num monitor grande nao passa de dois; o que
+# passa disto e foto de celular de um monitor, que e outro problema.
+LIMITE_DA_IMAGEM = 5 * 1024 * 1024
+
+DESCRICAO_MOCK = "[MOCK] Recebi o print. Ler a imagem exige a IA configurada."
 
 # O rascunho vazio: os campos do formulario de hoje, mais o prazo.
 #
@@ -402,3 +430,63 @@ def conversar(
         "rascunho": sanitizar_estrutura(saida),
         "demanda_parecida": None,
     }
+
+
+def descrever_imagem(*, imagem: bytes, extensao: str) -> str | None:
+    """O que aparece no print, em uma descricao. `None` quando nao deu para ler.
+
+    **Mesmo cliente e mesma `LLM_MODEL` do chat** (ADR 0056): o modelo de
+    producao le imagem, e um cliente proprio para visao seria uma segunda
+    configuracao para manter em sincronia com a primeira, que ninguem lembraria
+    de mexer no dia em que a chave ou o modelo mudassem.
+
+    A imagem vai em BASE64 no proprio corpo da chamada, como conteudo
+    multimodal, e nao como texto nem como endereco: nada e gravado (ADR 0056,
+    decisao 4), entao nao ha URL para dar ao provedor, e mandar os bytes num
+    campo de texto seria o modelo respondendo sobre uma tela que nunca viu.
+
+    `None` e o desfecho de "o provedor nao respondeu, ou respondeu vazio". Ele
+    nao vira descricao vazia porque um `[print] ` seco na conversa mandaria o
+    assistente adivinhar o que a pessoa nunca mostrou. Quem traduz esse `None`
+    em frase de gente e a rota.
+
+    A `extensao` e peneirada pela rota contra `TIPOS_DE_IMAGEM`, que e a tabela
+    usada aqui: quem chega com outra e PROGRAMA, nao arquivo, e por isso o
+    `KeyError` dela sobe cru em vez de virar `None`. Dentro do `try` fica so a
+    chamada ao provedor e a leitura da resposta: com a montagem do payload la
+    dentro, um erro nosso saia pela tela como "nao deu para ler esse print
+    agora", que e frase de provedor fora do ar, e o bug ficava escondido atras
+    de uma frase que manda a pessoa tentar de novo para sempre.
+    """
+    provider = ai_processor._llm_provider()
+    if provider == "mock":
+        logger.warning("Modo MOCK ativo para o print do Assistente de Tecnologia (sem chave LLM)")
+        return DESCRICAO_MOCK
+
+    client, model, extra = ai_processor._get_llm()
+    ai_processor._log_llm_call("assistente-tecnologia/print", provider, model)
+
+    url_da_imagem = f"data:{TIPOS_DE_IMAGEM[extensao]};base64,{base64.b64encode(imagem).decode('ascii')}"
+    instrucao = load_prompt("assistente_tecnologia_imagem")
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {
+                    "role": "user",
+                    "content": [
+                        {"type": "text", "text": instrucao},
+                        {"type": "image_url", "image_url": {"url": url_da_imagem}},
+                    ],
+                }
+            ],
+            temperature=0.2,
+            **extra,
+        )
+        texto = (response.choices[0].message.content or "").strip()
+    except Exception as e:
+        logger.error(f"Erro ao descrever o print via {provider}: {e}")
+        return None
+
+    # ADR 0013: a descricao entra na conversa e pode virar descricao de Demanda.
+    return sanitizar_travessao(texto) if texto else None

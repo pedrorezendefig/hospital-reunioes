@@ -94,6 +94,7 @@ from app.models.tecnologia_schemas import (
     AssistenteChatPayload,
     AssistenteChatResponse,
     AssistenteDocumentoResponse,
+    AssistenteImagemResponse,
     AtribuirPayload,
     ConversaLinhaResponse,
     DemandaCreatePayload,
@@ -2230,3 +2231,67 @@ async def assistente_extrair_documento(
 
     logger.info(f"Documento lido para o Assistente por {_ator['id']}: {extensao}, {len(texto)} chars")
     return {"texto": texto, "filename": _nome_para_a_tela(nome)}
+
+
+# A lista de extensoes e o teto vem do SERVICO, que e quem manda a imagem ao
+# modelo: e ele que precisa do tipo de cada extensao, e duas copias da regra
+# divergiriam calado (o 413 recusando o que o payload saberia rotular).
+MOTIVO_IMAGEM_FORA_DA_LISTA = (
+    "Só dá para ler print .png, .jpg, .jpeg ou .webp. Salve a imagem em um desses formatos e anexe de novo."
+)
+
+MOTIVO_IMAGEM_GRANDE = (
+    f"O print passou do limite de {assistente_tecnologia.LIMITE_DA_IMAGEM // (1024 * 1024)} MB. "
+    "Anexe uma imagem menor, ou escreva o que aparece na tela."
+)
+
+# A frase de quando a imagem chegou inteira e a LEITURA nao aconteceu: provedor
+# fora do ar, resposta vazia.
+#
+# Ela e separada das duas de cima porque a saida e outra: quem levou 422 ou 413
+# tem que trocar de arquivo, e quem leva esta pode mandar o MESMO print de novo.
+# Ela tambem nao culpa a imagem, porque o codigo nao sabe se o problema era ela.
+MOTIVO_PRINT_ILEGIVEL = "Não deu para ler esse print agora. Tente de novo, ou escreva o que aparece na tela."
+
+
+@router.post("/assistente/descrever-imagem", response_model=AssistenteImagemResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def assistente_descrever_imagem(
+    request: Request,
+    imagem: UploadFile = File(...),
+    _ator: dict = Depends(require_super_admin),
+):
+    """O print anexado vira descricao, e a imagem some (ADR 0056, decisao 4).
+
+    A primeira chamada MULTIMODAL do app. Nao grava NADA: nem storage, nem
+    tabela, nem log com o conteudo. O que a tela faz com o que sai daqui e
+    escrever uma mensagem da PESSOA com o prefixo `[print] `, que e o que a
+    deixa ver o que o assistente enxergou e o que faz o material entrar cercado
+    no prompt do turno seguinte.
+
+    O tipo da imagem vem da EXTENSAO, e nunca do `content-type` do cliente
+    (mesma regra do Anexo da Manifestacao, ADR 0034): o cabecalho e escrito do
+    lado de la.
+    """
+    extensao = os.path.splitext(imagem.filename or "")[1].lower()
+    if extensao not in assistente_tecnologia.TIPOS_DE_IMAGEM:
+        # Antes de ler os bytes, como na extracao: nao ha por que trazer um
+        # video de 40 MB a memoria para recusa-lo pelo nome.
+        _recusar(MOTIVO_IMAGEM_FORA_DA_LISTA)
+
+    conteudo = await imagem.read()
+    if len(conteudo) > assistente_tecnologia.LIMITE_DA_IMAGEM:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=MOTIVO_IMAGEM_GRANDE,
+        )
+
+    texto = assistente_tecnologia.descrever_imagem(imagem=conteudo, extensao=extensao)
+    if texto is None:
+        # O servico nao levanta: ele devolve `None` para "nao deu para ler", e
+        # quem escreve a frase e a rota. 502, e nao 422: o arquivo estava bom, e
+        # quem leva este codigo pode mandar o MESMO print de novo.
+        raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_PRINT_ILEGIVEL)
+
+    logger.info(f"Print lido para o Assistente por {_ator['id']}: {extensao}, {len(texto)} chars")
+    return {"texto": texto}
