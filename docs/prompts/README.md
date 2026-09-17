@@ -20,7 +20,12 @@ tarefa, 48 publicam com o aviso "Vídeo em produção".
 | [03-videos-ouvidoria.md](03-videos-ouvidoria.md) | Ouvidoria | 12 | Etapa 2, em paralelo |
 | [04-videos-admin.md](04-videos-admin.md) | Admin | 11 | Etapa 2, em paralelo |
 | [05-videos-tecnologia.md](05-videos-tecnologia.md) | Tecnologia | a decidir | Fora da campanha |
-| [06-enxugar-a-escrita.md](06-enxugar-a-escrita.md) | os cinco | nenhum | Etapa 4, sozinho |
+| [06-enxugar-a-escrita.md](06-enxugar-a-escrita.md) | os cinco | nenhum | Por último, sozinho (Etapa C da segunda campanha) |
+| [07-tema-didatico.md](07-tema-didatico.md) | o site (tema, capa, gerador de fluxograma, lint) | nenhum | Segunda campanha, Etapa A, sozinho |
+| [08-prints-reunioes.md](08-prints-reunioes.md) | Reuniões e metas | 11 páginas com print | Etapa B, em paralelo |
+| [08-prints-pops-e-primeiros-passos.md](08-prints-pops-e-primeiros-passos.md) | POPs, Primeiros passos | 15 páginas com print | Etapa B, em paralelo |
+| [08-prints-ouvidoria-e-admin.md](08-prints-ouvidoria-e-admin.md) | Ouvidoria, Admin | 31 páginas com print | Etapa B, em paralelo |
+| [09-fluxogramas.md](09-fluxogramas.md) | os cinco (Visão geral e Como funciona) | até 10 fluxogramas | Etapa B, em paralelo |
 
 Os quatro de vídeo rodam **em paralelo, um por terminal, cada um no seu
 worktree**: cada um mexe só nas pastas do seu módulo e nenhum toca arquivo
@@ -29,8 +34,10 @@ sete composições prontas para reusar e o Admin tem cerca de quatro telas para
 onze tarefas. Ouvidoria e Admin são terminais separados porque a auto-revisão de
 frames olha imagem por imagem, e 23 vídeos numa sessão só estouram o contexto.
 
-O 06 roda **depois** dos quatro mergeados, porque mexe no texto das mesmas
-páginas. O 05 não faz parte da campanha: é uma decisão sua, explicada no arquivo.
+O 06 roda **por último**, depois de tudo mergeado, porque mexe no texto das
+mesmas páginas. O 05 não faz parte da campanha: é uma decisão sua, explicada no
+arquivo. Os prompts 07 a 09 são a **segunda campanha**, a camada didática
+(print de passo com balão, fluxograma, aviso, capa), descrita mais abaixo.
 
 ## O passo a passo, do começo até o site no ar
 
@@ -170,6 +177,85 @@ um passo só, da árvore principal, com todos os PRs mergeados.
    propósito: se travar, faltou MP4 no passo 2.
 5. Abra <https://manual-hsm.vercel.app>, entre numa página de cada módulo e
    confira que o vídeo toca e o carimbo do fecho traz a versão certa.
+
+## A segunda campanha: a camada didática
+
+Decisão de 17/09/2026 (emenda ao ADR 0057): o Manual tinha o molde certo e o
+texto já humano, mas 39 das 57 Páginas de tarefa não tinham nenhuma imagem e
+nenhuma página tinha fluxograma. Quem lê no celular, sem som, não dá play: olha
+a figura. A segunda campanha põe **um print por mudança de tela, com balão
+numerado igual ao passo**, em toda Página de tarefa; um **fluxograma de
+caminho** em cada Visão geral e no Como funciona que descreve estados; um
+**aviso destacado** onde a ação não tem volta; e a **capa** do vídeo.
+
+O que cada prompt toca, para os paralelos não colidirem:
+
+| Prompt | Toca | Não toca |
+|---|---|---|
+| 07 | tema, componente da página, `publicar.sh`, lint, gerador de fluxograma | qualquer página |
+| 08 (x3) | Páginas de tarefa do seu módulo (corpo), `prints/<modulo>.py`, `src/assets/<modulo>/` | frontmatter, `index.md`, `como-funciona/`, `novidades.md` |
+| 09 | `index.md` e `como-funciona/` dos cinco, `fluxogramas/`, `src/assets/*/fluxo-*.svg` | Páginas de tarefa |
+| 06 | texto de todas | imagens, callouts, frontmatter |
+
+### Etapa A: o 07, sozinho
+
+Pode rodar enquanto os quatro de vídeo (01 a 04) ainda estão abertos: nenhum
+deles toca tema, componente, `publicar.sh` ou `tools/`. Não pode rodar junto
+com 08, 09 ou 06.
+
+```bash
+cd /Users/pedrorezende/PedroDev/Hospital && git fetch origin
+git worktree add /Users/pedrorezende/PedroDev/Hospital/.worktrees/tema-didatico -b docs/tema-didatico origin/main
+cd /Users/pedrorezende/PedroDev/Hospital/.worktrees/tema-didatico && claude
+```
+
+Cole o bloco do `07`. Revise o PR (dois screenshots e um SVG de prova vêm no
+relatório), mergeie e remova o worktree como na Etapa 3.
+
+### Etapa B: três de prints e o de fluxogramas, em paralelo
+
+**Só depois** do 07 e dos quatro de vídeo mergeados (os 08 inserem imagem nas
+mesmas páginas em que os vídeos preencheram o frontmatter; com os dois
+mergeados antes, ninguém pisa em ninguém).
+
+Antes de abrir os terminais, suba o app local **uma vez**, porque os três de
+prints capturam contra ele ao mesmo tempo e nenhum deles pode reiniciá-lo:
+
+```bash
+cd /Users/pedrorezende/PedroDev/Hospital/hospital-reunioes && supabase start
+cd /Users/pedrorezende/PedroDev/Hospital && bash .claude/skills/atualizar-app/scripts/apply.sh
+curl -s http://localhost:3000 -o /dev/null -w "%{http_code}\n"   # esperado: 200
+```
+
+Depois os quatro worktrees:
+
+```bash
+cd /Users/pedrorezende/PedroDev/Hospital && git fetch origin
+git worktree add /Users/pedrorezende/PedroDev/Hospital/.worktrees/prints-reunioes -b docs/prints-reunioes origin/main
+git worktree add /Users/pedrorezende/PedroDev/Hospital/.worktrees/prints-pops-e-primeiros-passos -b docs/prints-pops-e-primeiros-passos origin/main
+git worktree add /Users/pedrorezende/PedroDev/Hospital/.worktrees/prints-ouvidoria-e-admin -b docs/prints-ouvidoria-e-admin origin/main
+git worktree add /Users/pedrorezende/PedroDev/Hospital/.worktrees/fluxogramas -b docs/fluxogramas origin/main
+```
+
+Um terminal em cada, `claude`, e o bloco correspondente (`08-prints-reunioes`
+em `prints-reunioes`, e assim por diante; `09` em `fluxogramas`). Os três de
+prints semeiam dados de exemplo no mesmo banco local, cada um os do seu módulo,
+sem apagar os dos outros. O de Reuniões é o mais caro: o roteiro dele nasce do
+zero.
+
+Revise os quatro PRs (as imagens aparecem no diff do GitHub), mergeie na ordem
+que quiser e remova os worktrees. Se dois PRs conflitarem, é porque um deles
+tocou arquivo que não era dele: o relatório de cada um diz o que tocou.
+
+### Etapa C: o 06, sozinho, por último
+
+Igual à Etapa 4 acima. Ele ganhou os três cacoetes que a leitura das 86
+páginas encontrou e a instrução de não mexer nas imagens e nos callouts.
+
+### Etapa D: publicar
+
+Igual à Etapa 5 acima. O `publicar.sh` passou a gerar a capa de cada vídeo
+junto do reencode; o passo 2 (trazer os MP4 dos masters) continua obrigatório.
 
 ## O que decide o custo
 

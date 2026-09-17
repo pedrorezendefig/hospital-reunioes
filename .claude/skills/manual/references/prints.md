@@ -51,3 +51,25 @@ O inventário que acusa print referenciado e inexistente é da `/montar-manual`
 (`python3 tools/inventario_manual.py --dir docs/manual`, lacuna
 `print-faltando`). Ele diz qual página aponta para qual imagem que não existe,
 e de que módulo é o roteiro que a refaz.
+
+## O balão numerado (Print de passo)
+
+O print que fica sob um passo leva **balões numerados** com o número do passo,
+desenhados pelo roteiro por cima da tela real, antes da captura. É a única
+marcação permitida: nada de seta, retângulo ou destaque à mão.
+
+- O roteiro tem um helper `balao(page, seletor, numero)` que injeta, no DOM da
+  página, um círculo de 28 px (navy do app, número branco, HP Simplified)
+  ancorado no canto superior esquerdo do elemento, 6 px para fora dele, com
+  `pointer-events: none` e `z-index` acima de tudo. Vários balões na mesma tela
+  são várias chamadas antes de um `capturar`.
+- O seletor aponta o elemento que o passo cita (o botão **Novo Usuário**, o
+  campo **Email**). Balão em cima de elemento errado é o mesmo defeito do
+  marcador errado no vídeo: olhe cada imagem depois de gerar.
+- Um print por **mudança de tela**: se os passos 2, 3 e 4 preenchem o mesmo
+  formulário, é um print com os balões 2, 3 e 4. O passo que abre uma janela
+  ou muda de página ganha print novo.
+- O nome do arquivo diz a tela, não o passo: `novo-usuario.png`, e não
+  `passo-3.png`, porque a mesma imagem serve a mais de um passo.
+- Tela de dentro do app sai em computador (1440x900, escala 2, como os roteiros já fazem); tela que nasce
+  do QR ou do link no celular sai em celular (390x844), como já era.
