@@ -2101,10 +2101,12 @@ MOTIVO_QUADRO_ILEGIVEL = "Não foi possível ler as Demandas abertas para o Assi
 # nada do assistente a usa. Trazê-la para a memória do processo a cada turno
 # seria pagar por um dado que o código logo em seguida descarta.
 #
-# `criado_em` entra porque é por ele que a leitura ORDENA, e é a ordem que
-# sustenta o teto abaixo ("as mais recentes"). Sem a coluna, o corte escolheria
-# N Demandas quaisquer e ninguém veria diferença.
-COLUNAS_DA_DEMANDA_PARA_O_ASSISTENTE = "id, titulo, tipo, produto_id, estado, etapa, responsavel_id, criado_em"
+# `criado_em` também não entra, embora seja por ele que a leitura ORDENA: o
+# PostgREST ordena por coluna que não foi selecionada (é o mesmo motivo pelo
+# qual `id` não está no `COLUNAS_DO_FIO_PARA_MENCAO`), então a ordem que
+# sustenta o teto abaixo não custa a coluna. Pô-la aqui era trazer um dado que
+# ninguém lê, e um campo que nenhum teste consegue cobrar.
+COLUNAS_DA_DEMANDA_PARA_O_ASSISTENTE = "id, titulo, tipo, produto_id, estado, etapa, responsavel_id"
 
 # O teto de Demandas que entram no prompt, e por que existe um.
 #

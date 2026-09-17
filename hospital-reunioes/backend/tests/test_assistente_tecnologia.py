@@ -90,12 +90,20 @@ class _TableQuery:
         self._in: dict[str, list] = {}
         self._order: list[str] = []
         self._range: tuple[int, int] | None = None
+        self._colunas: list[str] | None = None
 
     def select(self, colunas="*", *_a, **_kw):
         # O que se PEDE ao banco fica registrado: o corte de colunas do
         # Assistente (issue #732) e uma decisao sobre a consulta, e so da para
         # medi-la aqui, na borda.
         self._leituras.append((self._nome, colunas))
+        # E o que se pede e o que se RECEBE. Um dublê que registrasse o `select`
+        # e devolvesse a linha inteira mediria uma coisa e deixaria o codigo
+        # fazer outra: apagar uma coluna da lista tirava o campo do prompt em
+        # producao e a suite continuava verde, porque o dado chegava assim
+        # mesmo. A projecao e o que faz cada teste de conteudo virar detector da
+        # lista de colunas, sem teste novo nenhum.
+        self._colunas = None if colunas == "*" else [c.strip() for c in colunas.split(",") if c.strip()]
         return self
 
     def order(self, coluna=None, **_kw):
@@ -158,6 +166,10 @@ class _TableQuery:
         if self._range is not None:
             inicio, fim = self._range
             casadas = casadas[inicio : fim + 1]
+        # A ordenacao acontece ANTES da projecao, como no PostgREST: da para
+        # ordenar por coluna que nao foi selecionada.
+        if self._colunas is not None:
+            casadas = [{c: linha[c] for c in self._colunas if c in linha} for linha in casadas]
         return _Result(data=casadas)
 
 
