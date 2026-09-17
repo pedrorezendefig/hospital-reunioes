@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import re
 import sys
 
 import pytest
@@ -34,6 +35,13 @@ ENCERRADA_HA_DOIS_ANOS = "2024-08-26T12:00:00+00:00"
 # A resposta que a área digitou no portal do setor. Ela viaja inteira para a
 # trilha (issue #374) e é servida pela rota do histórico de respostas.
 RESPOSTA_DA_AREA = "Falamos com a paciente Joana da Silva no telefone 11 99999-0000 e pedimos desculpas."
+
+# O Paciente do caso (migration 110, ADR 0052): quem manifestou é o
+# acompanhante, e estes dois dados são de OUTRA pessoa. Nomes distintos dos de
+# quem manifestou de propósito: um teste que procurasse só "Joana" passaria com
+# o paciente inteiro de pé.
+PACIENTE = "Maria Aparecida de Souza"
+PACIENTE_REFERENCIA = "Leito 12 da Clinica Medica, 01/08/2020"
 
 
 def _manifestacao(numero: int = 7, **overrides) -> dict:
@@ -118,6 +126,10 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         # #375 decisão 5): cruzado com o registro de atendimento daquele dia
         # naquele lugar, ele reidentifica quem manifestou.
         "canal_ponto": "Poltrona 12 do saguao",
+        # O Paciente do caso (migration 110, ADR 0052): dado de TERCEIRO, e o
+        # anonimato de quem manifesta não o zera. Quem o apaga é a retenção.
+        "paciente_nome": PACIENTE,
+        "paciente_referencia": PACIENTE_REFERENCIA,
         "anonimizada_em": None,
     }
     row.update(overrides)
@@ -511,6 +523,38 @@ class TestDossieApagado:
         assert supabase.caso()["canal_setor"] == "Recepcao"
         assert supabase.caso()["canal"] == "telefone"
 
+    def test_o_paciente_do_caso_sai_junto_com_o_dossie(self):
+        """Nome e referência do Paciente do caso (issue #665, ADR 0052 decisão
+        6) são dado pessoal de TERCEIRO: quem manifestou é o acompanhante, e o
+        anonimato dele nunca zerou estas colunas. A retenção é o único
+        apagamento que as alcança, e até esta fatia ela não as alcançava: o
+        caso saía carimbado de anonimizado com o nome e o leito de um paciente
+        de pé no banco."""
+        supabase = _SupabaseFake()
+        # O update carimba `None` em toda coluna da lista, exista ela antes ou
+        # não: sem o valor no banco ANTES do ato, o "ficou nulo" de baixo
+        # passaria com a lista vazia.
+        assert supabase.caso()["paciente_nome"] == PACIENTE
+        assert supabase.caso()["paciente_referencia"] == PACIENTE_REFERENCIA
+
+        ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        caso = supabase.caso()
+        assert caso["paciente_nome"] is None
+        assert caso["paciente_referencia"] is None
+        # O leito e a data reidentificam pelo mesmo mecanismo do `canal_ponto`,
+        # então a referência não pode sobrar em canto nenhum da linha.
+        assert "Maria" not in _todo_o_texto(caso)
+        assert "Leito 12" not in _todo_o_texto(caso)
+
+    def test_o_paciente_nao_entra_na_lista_do_que_os_relatorios_preservam(self):
+        """As duas colunas estão do lado certo do contrato: o paciente nunca
+        vira estatística (PRD #659, história 24). A afirmação é sobre a lista
+        porque é ela que a próxima fatia lê para decidir."""
+        for campo in ("paciente_nome", "paciente_referencia"):
+            assert campo in ouvidoria_retencao.CAMPOS_DO_DOSSIE, f"{campo} não entrou na lista do que sai"
+            assert campo not in ouvidoria_retencao.CAMPOS_ESTATISTICOS, f"{campo} entrou na lista do que fica"
+
     def test_nenhum_rastro_do_manifestante_sobra_em_tabela_nenhuma(self):
         """A varredura completa: manifestação, trilha, tentativas de contato,
         prorrogação e anexos. Um único lugar que guarde o nome derruba isto."""
@@ -751,6 +795,11 @@ class TestQuemNaoEhTocado:
         assert anonimizadas == 0
         assert supabase.caso() == antes
         assert supabase.escritas == []
+        # A igualdade acima já cobre a linha inteira. Esta linha existe para o
+        # terceiro critério da issue #665 ser achável pelo nome: caso fora do
+        # prazo mantém o Paciente do caso, que é dado de terceiro mas continua
+        # sendo dado de um caso vivo.
+        assert supabase.caso()["paciente_nome"] == PACIENTE
 
     def test_caso_encerrado_sem_o_marco_do_encerramento_fica_intacto(self):
         """Sem `encerrada_em` não há como afirmar que os cinco anos passaram:
@@ -1254,3 +1303,110 @@ class TestDestinoDasOutrasTabelas:
         # parágrafo não diz o destino desta tabela nenhuma.
         trecho = doc[doc.index("ouvidoria_relatorios") :]
         assert "preserv" in trecho.lower()
+
+
+# Palavras que abrem linha num `CREATE TABLE` sem serem nome de coluna.
+_NAO_SAO_COLUNAS = frozenset({"primary", "unique", "check", "foreign", "constraint", "exclude"})
+
+# Onde toda decisão de retenção sobre uma coluna do caso pode estar.
+_AS_QUATRO_LISTAS = (
+    "CAMPOS_DO_DOSSIE",
+    "CAMPOS_ESTATISTICOS",
+    "CAMPOS_PRESERVADOS_SEM_METRICA",
+    "CAMPOS_FORA_DA_ESCOLHA",
+)
+
+
+class TestNenhumaColunaDoCasoFicaSemDecisao:
+    """O mesmo cobrador do teste acima, um nível abaixo: por COLUNA.
+
+    A retenção é lista de exclusão, e o módulo promete por escrito que cada
+    coluna nova precisa de uma decisão consciente. Só que ninguém conferia, e a
+    promessa falhou na primeira vez que foi posta à prova: as duas colunas do
+    Paciente do caso nasceram na migration 110 e ficaram fora das duas listas,
+    vivas depois de um apagamento que carimbava `anonimizada_em` atestando o
+    contrário (issue #665).
+
+    Este teste liga a tabela REAL, lida das migrations, às listas do módulo:
+    coluna que nasce sem classificação derruba o CI, e quem a criou decide
+    antes de subir em vez de descobrir cinco anos depois."""
+
+    def _colunas_da_tabela(self) -> set[str]:
+        """As colunas de `ouvidoria_protocolos`, lidas do único lugar que manda
+        no banco: as migrations aplicadas."""
+        pasta = os.path.join(os.path.dirname(__file__), "..", "..", "supabase", "migrations")
+        colunas: set[str] = set()
+        removidas: set[str] = set()
+        for arquivo in sorted(os.listdir(pasta)):
+            if not arquivo.endswith(".sql"):
+                continue
+            with open(os.path.join(pasta, arquivo), encoding="utf-8") as f:
+                bruto = f.read()
+            # Sem os comentários de linha: a prosa das migrations cita nome de
+            # coluna o tempo todo, e lê-la aqui inventaria coluna que não existe.
+            sql = "\n".join(linha.split("--")[0] for linha in bruto.splitlines())
+            for corpo in re.findall(r"alter\s+table\s+ouvidoria_protocolos(.*?);", sql, re.S | re.I):
+                colunas.update(
+                    achado.group(1).lower()
+                    for achado in re.finditer(r"add\s+column(?:\s+if\s+not\s+exists)?\s+([a-z_]+)", corpo, re.I)
+                )
+                removidas.update(
+                    achado.group(1).lower()
+                    for achado in re.finditer(r"drop\s+column(?:\s+if\s+exists)?\s+([a-z_]+)", corpo, re.I)
+                )
+            for corpo in re.findall(
+                r"create\s+table(?:\s+if\s+not\s+exists)?\s+ouvidoria_protocolos\s*\((.*?)\n\);", sql, re.S | re.I
+            ):
+                for linha in corpo.splitlines():
+                    nome = re.match(r"([a-z_]+)\s+[A-Za-z]", linha.strip())
+                    if nome and nome.group(1).lower() not in _NAO_SAO_COLUNAS:
+                        colunas.add(nome.group(1).lower())
+        return colunas - removidas
+
+    def test_a_leitura_das_migrations_acha_a_tabela_inteira(self):
+        """O detector antes do detectado: um parser que voltasse vazio faria o
+        teste de baixo passar sobre nada, que é o jeito preferido de um teste de
+        completude morrer em silêncio."""
+        colunas = self._colunas_da_tabela()
+
+        assert len(colunas) >= 55, f"a leitura das migrations achou só {len(colunas)} colunas"
+        # Uma coluna de cada era da tabela: a original, o Dossiê, a retenção, o
+        # apagamento pela Diretoria e a mais nova.
+        for esperada in ("protocolo", "relato_integral", "anonimizada_em", "apagamento_motivo", "paciente_nome"):
+            assert esperada in colunas, f"a leitura das migrations perdeu a coluna {esperada}"
+
+    def test_toda_coluna_da_tabela_esta_de_um_lado_ou_do_outro(self):
+        decididas = (
+            set(ouvidoria_retencao.CAMPOS_DO_DOSSIE)
+            | set(ouvidoria_retencao.CAMPOS_ESTATISTICOS)
+            | set(ouvidoria_retencao.CAMPOS_PRESERVADOS_SEM_METRICA)
+            | set(ouvidoria_retencao.CAMPOS_FORA_DA_ESCOLHA)
+        )
+
+        sem_decisao = sorted(self._colunas_da_tabela() - decididas)
+
+        assert not sem_decisao, (
+            f"colunas de ouvidoria_protocolos sem decisão de retenção: {sem_decisao}. "
+            "Escolha uma lista para cada: CAMPOS_DO_DOSSIE (sai no apagamento), "
+            "CAMPOS_ESTATISTICOS (os relatórios contam) ou CAMPOS_PRESERVADOS_SEM_METRICA "
+            "(fica, e nenhum relatório lê). Coluna com dado de quem manifestou, ou de "
+            "terceiro, sai."
+        )
+
+    def test_nenhuma_lista_nomeia_coluna_que_nao_existe(self):
+        """O outro lado da mesma conferência: nome errado numa lista é decisão
+        que não vale para linha nenhuma, e ninguém perceberia."""
+        colunas = self._colunas_da_tabela()
+        for lista in _AS_QUATRO_LISTAS:
+            for campo in getattr(ouvidoria_retencao, lista):
+                assert campo in colunas, f"{lista} nomeia {campo}, que não é coluna de ouvidoria_protocolos"
+
+    def test_nenhuma_coluna_esta_em_duas_listas_ao_mesmo_tempo(self):
+        """Sair e ficar ao mesmo tempo não é decisão: é duas fatias lendo a
+        mesma coluna de jeitos opostos."""
+        listas = {nome: set(getattr(ouvidoria_retencao, nome)) for nome in _AS_QUATRO_LISTAS}
+        nomes = sorted(listas)
+        for i, uma in enumerate(nomes):
+            for outra in nomes[i + 1 :]:
+                repetidas = sorted(listas[uma] & listas[outra])
+                assert not repetidas, f"{repetidas} está em {uma} e em {outra}"

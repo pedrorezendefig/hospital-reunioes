@@ -1226,20 +1226,39 @@ class TestMigration110:
         comando = ddl.split("alter table ouvidoria_protocolos", 1)[1].split(";", 1)[0]
         assert "not null" not in comando
 
-    def test_a_migration_nao_promete_guarda_que_ainda_nao_existe(self):
-        """O comentário de coluna é o que o próximo dev lê no `\\d+` da tabela,
-        e corrigi-lo depois pede outra migration.
+    def test_o_estado_real_das_duas_guardas_prometidas_pelo_adr_0052(self):
+        """O `COMMENT ON COLUMN` da 110 nasceu dizendo que as duas guardas do
+        ADR 0052 ainda não existiam, e citando as issues que as fariam. Ele
+        continua dizendo isso no banco, e vai continuar: migration aplicada é
+        imutável, o hash do arquivo é a prova do que rodou no Studio, e corrigir
+        o texto pede migration nova.
 
-        Esta fatia grava dado pessoal de terceiro SEM as duas guardas que o ADR
-        0052 promete: a Retenção não varre as colunas (issue #665) e o paciente
-        ainda não viaja para a área (issue #664). O texto tem que dizer isso no
-        estado real, senão o banco documenta uma guarda que não existe e o
-        apagamento pela Diretoria carimba `anonimizada_em` deixando o nome e o
-        leito de um paciente vivos."""
-        ddl = self._ddl()
-        assert "ainda nao varre" in ddl, "o comentário precisa dizer que a Retenção não varre ainda"
-        assert "#665" in ddl, "o comentário precisa citar a issue que fará a varredura"
-        assert "#664" in ddl, "o comentário precisa citar a issue que leva o paciente à área"
+        Então o marcador se muda para cá, onde ele acompanha a verdade. Estado
+        real, nesta linha do tempo:
+
+          - a RETENÇÃO VARRE as duas colunas (issue #665, já feita). O
+            comentário no banco diz que não, e está desatualizado;
+          - o PACIENTE AINDA NÃO VIAJA para a área (issue #664, aberta). Nem o
+            email de acionamento nem a tela do responsável selecionam as
+            colunas, e a guarda do sigilo reforçado da decisão 4 não existe.
+
+        Quem fizer a #664 vira as duas asserções de baixo e escreve, na mesma
+        migration, os dois `COMMENT ON COLUMN` corrigidos de uma vez: aí o
+        banco e o código voltam a dizer a mesma coisa."""
+        from app.routers.ouvidoria_setor import _CAMPOS_DO_PORTAL
+        from app.services.ouvidoria_notificacoes import _CAMPOS_DO_EMAIL
+        from app.services.ouvidoria_retencao import CAMPOS_DO_DOSSIE
+
+        for coluna in ("paciente_nome", "paciente_referencia"):
+            assert coluna in CAMPOS_DO_DOSSIE, f"a Retenção parou de varrer {coluna}"
+            assert coluna not in _CAMPOS_DO_EMAIL, (
+                f"{coluna} passou a viajar no email: é a issue #664 chegando. Atualize este "
+                "teste e escreva na migration dela os dois COMMENT ON COLUMN corrigidos."
+            )
+            assert coluna not in _CAMPOS_DO_PORTAL, (
+                f"{coluna} passou a viajar para a tela do responsável: é a issue #664 chegando. "
+                "Atualize este teste e escreva na migration dela os dois COMMENT ON COLUMN corrigidos."
+            )
 
     def test_as_colunas_carregam_a_regra_no_comentario(self):
         """Quem for mexer nelas precisa ler que são dado de TERCEIRO e que o
