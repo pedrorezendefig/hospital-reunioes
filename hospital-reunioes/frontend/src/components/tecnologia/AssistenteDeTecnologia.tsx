@@ -35,6 +35,7 @@ import { Select } from "@/components/ui/Select";
 import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
 
 import {
+  ABRIR_A_PARECIDA,
   AUDIO_SEM_FALA,
   AUDIOS_ACEITOS,
   AVISO_DE_IA,
@@ -46,10 +47,14 @@ import {
   CONVERSA_NO_TETO,
   corpoValidado,
   CRIADA_SEM_CONFIRMACAO,
+  DEMANDA_PARECIDA_SAIDA,
+  DEMANDA_PARECIDA_TITULO,
+  DemandaParecida,
   demandaCriadaValida,
   descreverAImagem,
   descricaoAoCriar,
   DOCUMENTOS_ACEITOS,
+  IGNORAR_A_PARECIDA,
   extrairODocumento,
   IMAGENS_ACEITAS,
   LIMITE_DA_DESCRICAO,
@@ -73,6 +78,7 @@ import {
   RESPOSTA_ILEGIVEL,
   RespostaDoChat,
   respostaDoChatValida,
+  SEM_RESPONSAVEL_NA_PARECIDA,
   TIPO_QUANDO_NAO_ESCOLHIDO,
   transcreverArquivoDeAudio,
   URL_DO_CHAT,
@@ -80,7 +86,9 @@ import {
 import {
   BASE_TECNOLOGIA,
   Demanda,
+  ESTADO_ROTULO,
   FALHA_DE_CONEXAO,
+  linkDaDemanda,
   motivoDaRecusa,
   PRIORIDADE_ROTULO,
   PRIORIDADES,
@@ -141,6 +149,21 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
    * dito.
    */
   const [aviso, setAviso] = useState<string | null>(null);
+  /**
+   * A Demanda aberta que o último turno reconheceu como o mesmo assunto.
+   *
+   * Ela vem do turno, e não de uma busca da tela: quem escolhe é o assistente,
+   * e quem confere o identificador contra o Quadro é o backend.
+   */
+  const [parecida, setParecida] = useState<DemandaParecida | null>(null);
+  /**
+   * Os ids que a pessoa mandou ignorar, até o fim DESTA conversa.
+   *
+   * O "Ignorar" some com a faixa daquela Demanda, e não com a faixa em geral:
+   * se o assunto virar outro e o assistente apontar outra Demanda, ela precisa
+   * aparecer. Some tudo no "Descartar", que é onde a conversa acaba.
+   */
+  const [ignoradas, setIgnoradas] = useState<string[]>([]);
   /** Um anexo está sendo lido: a caixa fica travada até virar mensagem ou aviso. */
   const [lendoOAnexo, setLendoOAnexo] = useState(false);
   const [rascunhoAberto, setRascunhoAberto] = useState(true);
@@ -304,6 +327,10 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     } else {
       setMessages([...turno.historico, { role: "assistant", content: desfecho.corpo.reply }]);
       setRascunho(desfecho.corpo.rascunho);
+      // O aviso é do TURNO: o turno que não aponta nenhuma Demanda tira a faixa
+      // da tela. Deixá-la pendurada faria a pessoa ler, sobre o assunto novo,
+      // um aviso que o assistente já não está dando.
+      setParecida(desfecho.corpo.demanda_parecida ?? null);
     }
     setConversando(false);
   }
@@ -507,11 +534,16 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     setConversando(false);
     setLendoOAnexo(false);
     setCriadaSemConfirmacao(false);
+    setParecida(null);
+    setIgnoradas([]);
   }
 
   function mudar(campo: Partial<RascunhoDaDemanda>) {
     setRascunho({ ...rascunho, ...campo });
   }
+
+  /** A faixa só aparece para a Demanda que a pessoa ainda não mandou ignorar. */
+  const parecidaAVista = parecida && !ignoradas.includes(parecida.id) ? parecida : null;
 
   return (
     <div className="grid lg:grid-cols-[1fr_minmax(360px,420px)] gap-6 items-start">
@@ -534,6 +566,36 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
         >
           {erro}
         </p>
+      )}
+
+      {/* A faixa de Demanda parecida vem ACIMA do rascunho (issue #732): ela é
+          sobre o pedido que está sendo montado, e quem a lê ainda pode desistir
+          de criar. Ela avisa e não barra: "Criar Demanda" segue habilitado. */}
+      {parecidaAVista && (
+        <div
+          role="status"
+          className="lg:col-span-2 flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 text-sm"
+        >
+          <span className="min-w-0">
+            <b>{DEMANDA_PARECIDA_TITULO}</b> {parecidaAVista.titulo}
+            {" ("}
+            {ESTADO_ROTULO[parecidaAVista.estado]}
+            {", com "}
+            {parecidaAVista.responsavel_nome || SEM_RESPONSAVEL_NA_PARECIDA}
+            {"). "}
+            {DEMANDA_PARECIDA_SAIDA}
+          </span>
+          <Link href={linkDaDemanda(parecidaAVista.id, "")} className="font-semibold underline">
+            {ABRIR_A_PARECIDA}
+          </Link>
+          <button
+            type="button"
+            onClick={() => setIgnoradas([...ignoradas, parecidaAVista.id])}
+            className="px-3 py-1.5 rounded-lg border border-amber-300 text-amber-900 hover:bg-amber-100 transition-colors"
+          >
+            {IGNORAR_A_PARECIDA}
+          </button>
+        </div>
       )}
 
       {/* Rascunho: primeiro no DOM, e por isso no TOPO no celular. */}

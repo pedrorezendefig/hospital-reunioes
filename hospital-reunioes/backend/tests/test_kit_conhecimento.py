@@ -271,6 +271,8 @@ class _TableQuery:
     def __init__(self, rows: list[dict]):
         self._rows = rows
         self._eq: dict[str, Any] = {}
+        self._in: dict[str, list] = {}
+        self._range: tuple[int, int] | None = None
 
     def select(self, *_a, **_kw):
         return self
@@ -282,8 +284,29 @@ class _TableQuery:
         self._eq[coluna] = valor
         return self
 
+    def in_(self, coluna, valores):
+        self._in[coluna] = list(valores)
+        return self
+
+    def range(self, inicio, fim):
+        """A leitura das Demandas abertas do Assistente e PAGINADA (issue #732).
+
+        Sem o recorte o dublê devolveria a lista inteira em toda pagina e o
+        `ler_paginado` giraria ate o teto de mil linhas.
+        """
+        self._range = (inicio, fim)
+        return self
+
+    def _casa(self, linha: dict) -> bool:
+        if not all(linha.get(c) == v for c, v in self._eq.items()):
+            return False
+        return all(linha.get(c) in v for c, v in self._in.items())
+
     def execute(self):
-        casam = [dict(linha) for linha in self._rows if all(linha.get(c) == v for c, v in self._eq.items())]
+        casam = [dict(linha) for linha in self._rows if self._casa(linha)]
+        if self._range is not None:
+            inicio, fim = self._range
+            casam = casam[inicio : fim + 1]
         return SimpleNamespace(data=casam)
 
 

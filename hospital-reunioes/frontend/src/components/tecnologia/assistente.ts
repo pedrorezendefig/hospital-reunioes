@@ -9,6 +9,8 @@
 import {
   BASE_TECNOLOGIA,
   Demanda,
+  EstadoDemanda,
+  ESTADOS,
   FALHA_DE_CONEXAO,
   PrioridadeDemanda,
   ProdutoDaEscolha,
@@ -45,11 +47,26 @@ export const RASCUNHO_VAZIO: RascunhoDaDemanda = {
 
 export type MensagemDoChat = { role: "user" | "assistant"; content: string };
 
+/**
+ * A Demanda ABERTA que o assistente reconheceu como o mesmo assunto (issue #732).
+ *
+ * São quatro campos, e é de propósito que a descrição não esteja entre eles: a
+ * faixa aparece antes de a pessoa abrir a Demanda, e a descrição de uma Demanda
+ * pode carregar dado pessoal transcrito de um print. O que a faixa mostra é o
+ * mesmo cabeçalho que o card já mostra na coluna do Quadro.
+ */
+export type DemandaParecida = {
+  id: string;
+  titulo: string;
+  estado: EstadoDemanda;
+  responsavel_nome: string | null;
+};
+
 export type RespostaDoChat = {
   reply: string;
   rascunho: RascunhoDaDemanda;
-  /** Sempre `null` por enquanto: o aviso de Demanda parecida é a fatia seguinte. */
-  demanda_parecida: unknown | null;
+  /** A Demanda aberta do mesmo assunto, ou `null` quando não há nenhuma. */
+  demanda_parecida: DemandaParecida | null;
 };
 
 /**
@@ -69,6 +86,19 @@ export const PRIMEIRA_MENSAGEM =
  */
 export const AVISO_DE_IA =
   "O que você escreve aqui é lido por uma inteligência artificial, como nas atas. Evite dados de paciente.";
+
+/**
+ * A faixa de Demanda parecida (issue #732).
+ *
+ * Ela AVISA, não barra: "Criar Demanda" continua liberado com ela à vista, e o
+ * texto diz isso, porque uma faixa que parecesse proibição faria a pessoa parar
+ * na frente de um botão que funciona.
+ */
+export const DEMANDA_PARECIDA_TITULO = "Já existe uma Demanda aberta sobre isso:";
+export const DEMANDA_PARECIDA_SAIDA = "Você pode abrir essa, ou criar a sua assim mesmo.";
+export const ABRIR_A_PARECIDA = "Abrir essa";
+export const IGNORAR_A_PARECIDA = "Ignorar";
+export const SEM_RESPONSAVEL_NA_PARECIDA = "sem responsável";
 
 /**
  * Os dois tetos do corpo do chat, iguais aos do backend.
@@ -157,10 +187,36 @@ export async function corpoValidado<T>(
  * não passa não vira rascunho meio preenchido: vira desfecho de erro, e o
  * rascunho anterior, que é o que tem valor na tela, sobrevive.
  */
+/**
+ * O aviso de Demanda parecida serve para a faixa?
+ *
+ * O `estado` é conferido contra a lista FECHADA, e não só contra `string`,
+ * porque é com ele que a faixa indexa o `ESTADO_ROTULO`: um valor de fora
+ * deixaria a faixa dizer `em_andamento` para quem lê "Em andamento" em toda a
+ * aba. Conferir o tipo e escrever o rótulo são a mesma decisão, e ela mora
+ * aqui, uma vez.
+ *
+ * `null` (nenhuma Demanda parecida) sai por `true`: é o caso comum, e quem
+ * consome já trata a ausência.
+ */
+export function demandaParecidaValida(valor: unknown): valor is DemandaParecida | null {
+  if (valor === null || valor === undefined) return true;
+  if (typeof valor !== "object") return false;
+  const parecida = valor as Record<string, unknown>;
+  return (
+    typeof parecida.id === "string" &&
+    parecida.id.trim().length > 0 &&
+    typeof parecida.titulo === "string" &&
+    (ESTADOS as readonly string[]).includes(parecida.estado as string) &&
+    (parecida.responsavel_nome === null || typeof parecida.responsavel_nome === "string")
+  );
+}
+
 export function respostaDoChatValida(corpo: unknown): corpo is RespostaDoChat {
   if (typeof corpo !== "object" || corpo === null) return false;
   const resposta = corpo as Record<string, unknown>;
   if (typeof resposta.reply !== "string") return false;
+  if (!demandaParecidaValida(resposta.demanda_parecida)) return false;
   const rascunho = resposta.rascunho;
   if (typeof rascunho !== "object" || rascunho === null) return false;
   const campos = rascunho as Record<string, unknown>;

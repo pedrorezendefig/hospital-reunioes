@@ -6,7 +6,7 @@
 <title>Tecnologia · Manual do Quadro de Demandas</title>
 <meta name="description" content="Manual da aba Tecnologia da Plataforma de Gestão do Hospital São Matheus: como registrar um pedido, como ele vira desenvolvimento, como o app acompanha sozinho a Etapa e o que muda, e como a entrega volta para a mão de quem pediu.">
 <meta name="manual-gerado-em" content="2026-09-11">
-<meta name="manual-versao-do-app" content="0.129.3">
+<meta name="manual-versao-do-app" content="0.142.0">
 <style>
   @font-face{font-family:"HP Simplified";src:url("HPSimplified_Rg.ttf") format("truetype");font-weight:400;font-display:swap}
   :root{
@@ -203,7 +203,7 @@
     <img class="top-logo" src="logo-hsm.png" alt="Hospital São Matheus">
     <div class="top-t">Plataforma de Gestão<small>Manual do módulo · Tecnologia</small></div>
     <button class="menu-btn" id="menuBtn" type="button">Sumário</button>
-    <div class="top-s"><span class="pulse"></span> app v0.129.3 · 11/09/2026</div>
+    <div class="top-s"><span class="pulse"></span> app v0.142.0 · 17/09/2026</div>
   </div>
 </header>
 
@@ -215,7 +215,7 @@
   <a href="#onde"><span class="n">1</span>Onde fica e quem entra</a>
   <div class="sub"><a href="#produtos">Os Produtos e os donos</a><a href="#separacao">Nada disso toca as Pendências</a></div>
   <a href="#pedido"><span class="n">2</span>Registrar o pedido</a>
-  <div class="sub"><a href="#tipos">Os sete tipos</a><a href="#prioridade">Prioridade, prazo e idade</a></div>
+  <div class="sub"><a href="#assistente">Conversar com o assistente</a><a href="#tipos">Os sete tipos</a><a href="#prioridade">Prioridade, prazo e idade</a></div>
   <a href="#quadro"><span class="n">3</span>O Quadro e o movimento</a>
   <a href="#conversa"><span class="n">4</span>A Conversa dentro do card</a>
   <div class="sub"><a href="#mencao">A @menção e os dez minutos</a><a href="#copiar">Copiar para IA e Copiar link</a></div>
@@ -243,7 +243,7 @@
   </div>
   <div class="stamp">
     <span>Feito para <b>as cinco pessoas com acesso</b></span>
-    <span>App na versão <b>0.129.3</b></span>
+    <span>App na versão <b>0.142.0</b></span>
     <span>Leitura de <b>20 minutos</b></span>
     <span>Com <b>demonstrações em vídeo</b></span>
   </div>
@@ -385,6 +385,29 @@
     <div class="pes"><span><b>Tipo</b> Decisão</span> <span><b>Responsável</b> Diretor do Hospital</span> <span><b>Prioridade</b> Alta</span></div>
   </div>
   <p style="font-size:14px;color:var(--color-text-secondary);max-width:76ch">O card mostra, sem abrir: o símbolo do tipo, o título, o Produto, o responsável, a prioridade e a idade.</p>
+
+  <h3 id="assistente">Conversar com o assistente, em vez de preencher</h3>
+  <p class="lede"><b>Nova Demanda</b> abre uma conversa, e não o formulário. Você conta o que precisa do jeito que vier, escrevendo, falando, anexando um documento ou mandando um print da tela, e o <b>Rascunho da Demanda</b> se monta ao lado, à vista. Nada é criado enquanto você não clicar em <b>Criar Demanda</b>. Quem prefere o formulário de sempre tem o atalho "prefiro preencher à mão" no alto da tela.</p>
+
+  <figure>
+    <img src="img/assistente.png" alt="A tela da Nova Demanda: o Rascunho da Demanda de um lado, a conversa com o assistente do outro, e uma faixa amarela no alto avisando que já existe uma Demanda aberta sobre o mesmo assunto.">
+  </figure>
+
+  <div class="grid3">
+    <div class="card">
+      <h4>Responde do kit ou registra</h4>
+      <p>Se a sua pergunta tem resposta no material que a Vitta escreveu sobre a plataforma, ele responde ali mesmo e diz de onde tirou. Se não tem, ele não responde de cabeça: diz que não sabe e monta a Demanda para a Vitta responder.</p>
+    </div>
+    <div class="card">
+      <h4>Pergunta pouco</h4>
+      <p>No máximo três perguntas na conversa inteira, uma de cada vez. Depois disso ele monta o que dá com o que tem. Qualquer campo do rascunho pode ser corrigido à mão, e o que você escreveu fica.</p>
+    </div>
+    <div class="card">
+      <h4>Avisa quando o assunto já existe</h4>
+      <p>Ele enxerga as Demandas abertas do Quadro. Quando o seu pedido é o mesmo assunto de uma delas, a faixa aparece acima do rascunho com o título, a coluna e o responsável: <b>Abrir essa</b> leva ao card, <b>Ignorar</b> some com o aviso. Criar assim mesmo continua liberado.</p>
+    </div>
+  </div>
+  <p>Do Quadro ele só recebe o cabeçalho de cada Demanda aberta: título, tipo, Produto, coluna e Etapa. O nome do responsável não vai junto, embora a faixa mostre: quem aparece na tela é lido do Quadro na hora. A descrição e a Conversa de dentro dos cards também não vão, e as Demandas Concluídas e Canceladas não entram. O que você escreve na caixa é lido por uma inteligência artificial, como nas atas: evite dado de paciente.</p>
 
   <h3 id="tipos">Os sete tipos, e quando cada um é o certo</h3>
   <p class="lede">A lista é fechada de propósito: sete tipos, cada um com o seu símbolo no card. Escolher o tipo certo é o que faz o filtro valer alguma coisa depois, e é o tipo que decide como o pedido entra no desenvolvimento (capítulo 5).</p>
@@ -820,7 +843,7 @@ Abrir a Demanda: https://app.hospitalsaomatheus.cloud/admin/tecnologia?demanda=.
 </section>
 
 <footer>
-  <p>Manual do módulo de Tecnologia · Plataforma de Gestão do Hospital São Matheus · atualizado em 11/09/2026 · mostra o sistema na versão 0.129.3. Se alguma coisa aqui não bater com o que você vê na tela, avise: o manual é atualizado junto com o sistema.</p>
+  <p>Manual do módulo de Tecnologia · Plataforma de Gestão do Hospital São Matheus · atualizado em 17/09/2026 · mostra o sistema na versão 0.142.0. Se alguma coisa aqui não bater com o que você vê na tela, avise: o manual é atualizado junto com o sistema.</p>
 </footer>
 
 </div>

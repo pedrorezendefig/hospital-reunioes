@@ -1880,12 +1880,19 @@ def _demandas_filtradas(
     tipo: str | None,
     produto_id: str | None,
     responsavel_id: str | None,
+    colunas: str = "*",
 ) -> list[dict]:
     """As Demandas de um grupo de estados, com os filtros compartilhados da aba.
 
     Os tres filtros sao os MESMOS do Quadro (issue #639), e valem nas tres abas
     de proposito: uma aba que os ignorasse mostraria uma lista que contradiz os
     campos preenchidos logo acima dela.
+
+    `colunas` e o que se PEDE ao banco, e o default e o `*` de sempre: as duas
+    abas de lista mostram o card inteiro. Quem le um recorte passa a lista, como
+    o `COLUNAS_DO_FIO_PARA_MENCAO` ja faz com a Conversa, e pelo mesmo motivo:
+    a descricao vai a 5000 caracteres por Demanda, e quem so precisa do
+    cabecalho nao tem por que trazer isso para a memoria do processo.
 
     A ordem sai do banco por `criado_em` crescente, e e ela que sustenta o "mais
     velha primeiro" das duas abas. O desempate por `id` e o que o recorte em
@@ -1899,7 +1906,7 @@ def _demandas_filtradas(
     """
 
     def consulta():
-        query = supabase.table(TABELA_DEMANDAS).select("*").in_("estado", list(estados))
+        query = supabase.table(TABELA_DEMANDAS).select(colunas).in_("estado", list(estados))
         for coluna, valor in (("tipo", tipo), ("produto_id", produto_id), ("responsavel_id", responsavel_id)):
             if valor:
                 query = query.eq(coluna, valor)
@@ -2080,6 +2087,102 @@ async def listar_historico(
 LIMITE_DO_ASSISTENTE = "10/minute"
 
 
+# O que o log diz quando o Quadro não pôde ser lido no meio de um turno.
+#
+# É marcador, e não frase de gente: ele não chega a tela nenhuma (o turno segue
+# como se não houvesse Demanda aberta). Mora numa constante porque é por ele que
+# o teste prova que a degradação é a que está escrita, e não um erro engolido.
+MOTIVO_QUADRO_ILEGIVEL = "Não foi possível ler as Demandas abertas para o Assistente de Tecnologia"
+
+# As colunas que o cabeçalho da Demanda precisa, e nenhuma a mais.
+#
+# `descricao` fica de fora por decisão, e não por descuido: ela vai a 5000
+# caracteres, pode carregar dado pessoal transcrito de um print (ADR 0056) e
+# nada do assistente a usa. Trazê-la para a memória do processo a cada turno
+# seria pagar por um dado que o código logo em seguida descarta.
+#
+# `criado_em` também não entra, embora seja por ele que a leitura ORDENA: o
+# PostgREST ordena por coluna que não foi selecionada (é o mesmo motivo pelo
+# qual `id` não está no `COLUNAS_DO_FIO_PARA_MENCAO`), então a ordem que
+# sustenta o teto abaixo não custa a coluna. Pô-la aqui era trazer um dado que
+# ninguém lê, e um campo que nenhum teste consegue cobrar.
+COLUNAS_DA_DEMANDA_PARA_O_ASSISTENTE = "id, titulo, tipo, produto_id, estado, etapa, responsavel_id"
+
+# O teto de Demandas que entram no prompt, e por que existe um.
+#
+# Esta é a única entrada do prompt que cresce com o USO do app: o kit é curado,
+# os Produtos são meia dúzia e a conversa tem teto próprio. Sem um número aqui,
+# o custo e a demora de cada turno sobem junto com o Quadro, e ninguém percebe
+# até doer. A paginação tem teto, mas o dela é de 100.000 linhas: é proteção
+# contra leitura truncada, não tamanho de prompt.
+#
+# São as 50 mais RECENTES, e não as 50 mais velhas, porque a pergunta que o
+# bloco responde é "o que eu estou pedindo agora já foi pedido?", e assunto
+# repetido costuma ser assunto de agora. Cinquenta linhas de cabeçalho são da
+# ordem de 7 mil caracteres, uma fração do kit, e o Quadro de hoje cabe inteiro
+# nelas.
+TETO_DE_DEMANDAS_NO_PROMPT = 50
+
+
+def _resumo_das_demandas_abertas(supabase: Client, *, nomes_de_produto: dict[str, str]) -> list[dict]:
+    """O cabeçalho das Demandas ABERTAS mais recentes, e nada além dele (#732).
+
+    Este é o corte de privacidade da fatia, e ele mora aqui de propósito: a
+    descrição de uma Demanda pode carregar dado pessoal transcrito de um print,
+    e a Conversa carrega o fio inteiro. Nenhum dos dois é lido: a descrição fica
+    de fora já do `select` (`COLUNAS_DA_DEMANDA_PARA_O_ASSISTENTE`), e a Conversa
+    mora em outra tabela, que este caminho não abre.
+
+    Fechadas ficam de fora por `ESTADOS_ABERTOS`, a mesma lista positiva que o
+    Quadro e o "Minha vez" usam: a Demanda Concluída não é mais assunto aberto,
+    e propor que o diretor vá até ela seria mandá-lo para o Histórico.
+
+    O recorte de quem vê é o do Quadro, e não um novo: a rota inteira é de Super
+    admin, e o Quadro mostra a esse mesmo Super admin todas as Demandas. Uma
+    leitura própria aqui, com outra regra, seria um segundo escopo para manter
+    em sincronia com o primeiro.
+
+    **Leitura que falha vira lista vazia, e o turno segue.** O aviso de Demanda
+    parecida é o enfeite; registrar o pedido é o serviço. Um timeout do
+    PostgREST aqui derrubaria a conversa inteira, quando o pior que pode
+    acontecer é o assistente ficar sem a lista, que é exatamente como ele viveu
+    até a fatia anterior. Guarda-corpo que vira beco não é guarda-corpo.
+    """
+    try:
+        abertas = _demandas_filtradas(
+            supabase,
+            estados=ESTADOS_ABERTOS,
+            tipo=None,
+            produto_id=None,
+            responsavel_id=None,
+            colunas=COLUNAS_DA_DEMANDA_PARA_O_ASSISTENTE,
+        )
+        # O corte é no FIM porque a ordem do banco é `criado_em` crescente: as
+        # mais recentes são as últimas.
+        abertas = abertas[-TETO_DE_DEMANDAS_NO_PROMPT:]
+        nomes_de_pessoa = _nomes_de_participantes(
+            supabase, {d["responsavel_id"] for d in abertas if d.get("responsavel_id")}
+        )
+    except Exception:
+        # `except APIError` nao pegaria o `httpx.HTTPError` que o timeout do
+        # PostgREST sobe cru, e aqui qualquer falha tem o mesmo desfecho: o
+        # turno acontece sem a lista de Demandas parecidas.
+        logger.exception(MOTIVO_QUADRO_ILEGIVEL)
+        return []
+    return [
+        {
+            "id": str(d.get("id") or ""),
+            "titulo": d.get("titulo") or "",
+            "tipo": d.get("tipo") or "",
+            "produto_nome": nomes_de_produto.get(d.get("produto_id")),
+            "estado": d.get("estado") or "",
+            "etapa": d.get("etapa") or ETAPA_REGISTRADA,
+            "responsavel_nome": nomes_de_pessoa.get(d.get("responsavel_id")),
+        }
+        for d in abertas
+    ]
+
+
 @router.post("/assistente/chat", response_model=AssistenteChatResponse)
 @limiter.limit(LIMITE_DO_ASSISTENTE)
 async def assistente_chat(
@@ -2108,16 +2211,19 @@ async def assistente_chat(
         _recusar(motivo)
 
     result = supabase.table(TABELA_PRODUTOS).select("*").order("ordem").execute()
-    produtos = [{"id": p["id"], "nome": p.get("nome") or ""} for p in (result.data or []) if p.get("ativo")]
+    todos_os_produtos = list(result.data or [])
+    produtos = [{"id": p["id"], "nome": p.get("nome") or ""} for p in todos_os_produtos if p.get("ativo")]
+    # O nome do Produto sai da lista INTEIRA, e nao so dos ativos: uma Demanda
+    # aberta pode pertencer a um Produto aposentado, e ela continua no Quadro.
+    # Com o mapa so dos ativos, essa Demanda chegaria ao prompt sem Produto.
+    nomes_de_produto = {p["id"]: p.get("nome") or "" for p in todos_os_produtos}
 
     return assistente_tecnologia.conversar(
         rascunho=payload.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in payload.messages],
         kit=carregar_kit(),
         produtos=produtos,
-        # Vazia por enquanto: o aviso de Demanda parecida e a fatia seguinte.
-        # A costura ja esta aqui para o prompt e o servico nao mudarem entao.
-        demandas_abertas=[],
+        demandas_abertas=_resumo_das_demandas_abertas(supabase, nomes_de_produto=nomes_de_produto),
         # A data do HOSPITAL, e nao a do servidor: em UTC, das 21h a meia-noite
         # de Sao Paulo o assistente entenderia "hoje" como o dia seguinte.
         hoje_iso=datetime.now(FUSO_HOSPITAL).date().isoformat(),
