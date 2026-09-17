@@ -1,15 +1,31 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  AUDIO_FORA_DA_LISTA,
+  avisoDoAudio,
+  avisoDoDocumento,
   descricaoAoCriar,
+  DOCUMENTO_FORA_DA_LISTA,
+  documentoExtraidoValido,
+  LIMITE_DA_MENSAGEM,
+  LIMITE_DO_AUDIO,
+  LIMITE_DO_DOCUMENTO_BINARIO,
+  LIMITE_DO_DOCUMENTO_TEXTO,
+  mensagemComOrigem,
+  motivoDoAnexo,
   NAO_INFORMADO,
   podeCriar,
+  PREFIXO_DE_AUDIO,
+  prefixoDeDocumento,
   RASCUNHO_VAZIO,
   corpoValidado,
   demandaCriadaValida,
   listaDeProdutosValida,
   respostaDoChatValida,
   ROTEIRO_POR_TIPO,
+  TEXTO_CORTADO,
+  tetoDoDocumento,
+  transcricaoValida,
 } from "./assistente";
 import { TIPOS } from "./demandas";
 
@@ -221,5 +237,120 @@ describe("corpoValidado", () => {
         respostaDoChatValida,
       ),
     ).resolves.toBeNull();
+  });
+});
+
+// ─── Falar e anexar (issue #729) ────────────────────────────────────────────
+
+describe("O prefixo de origem", () => {
+  it("põe a origem na frente do que foi transcrito ou extraído", () => {
+    expect(mensagemComOrigem(PREFIXO_DE_AUDIO, "a Ana travou")).toBe("[áudio] a Ana travou");
+    expect(mensagemComOrigem(prefixoDeDocumento("nota.pdf"), "a Ana travou")).toBe("[documento nota.pdf] a Ana travou");
+  });
+
+  it("o texto que cabe vai inteiro, sem aviso de corte", () => {
+    // O par do teste de baixo: um corte que valesse sempre passaria lá e
+    // mutilaria toda transcrição de dez segundos.
+    const mensagem = mensagemComOrigem(PREFIXO_DE_AUDIO, "x".repeat(LIMITE_DA_MENSAGEM - 200));
+    expect(mensagem.length).toBeLessThanOrEqual(LIMITE_DA_MENSAGEM);
+    expect(mensagem).not.toContain(TEXTO_CORTADO);
+  });
+
+  it("o texto grande demais entra cortado, e o corte é DITO", () => {
+    // O teto da mensagem é do backend (422 do pydantic, `detail` em lista, que
+    // chegaria como JSON cru ao alerta). Um documento de duas páginas passa
+    // dele. Cortar calado mandaria meia verdade ao assistente sem ninguém
+    // saber: a mensagem é o que a pessoa lê na conversa, e ela diz o corte.
+    const mensagem = mensagemComOrigem(prefixoDeDocumento("longo.pdf"), "x".repeat(LIMITE_DA_MENSAGEM * 2));
+    expect(mensagem.length).toBeLessThanOrEqual(LIMITE_DA_MENSAGEM);
+    expect(mensagem).toContain(TEXTO_CORTADO);
+    expect(mensagem.startsWith("[documento longo.pdf] ")).toBe(true);
+  });
+});
+
+describe("A peneira do arquivo", () => {
+  it("aceita os cinco formatos de áudio, em qualquer caixa de letra", () => {
+    for (const ext of [".mp3", ".m4a", ".ogg", ".wav", ".webm"]) {
+      expect(avisoDoAudio({ name: `voz${ext}`, size: 1000 })).toBeNull();
+      expect(avisoDoAudio({ name: `VOZ${ext.toUpperCase()}`, size: 1000 })).toBeNull();
+    }
+  });
+
+  it("recusa formato de áudio fora da lista", () => {
+    expect(avisoDoAudio({ name: "voz.aac", size: 1000 })).toBe(AUDIO_FORA_DA_LISTA);
+    expect(avisoDoAudio({ name: "semponto", size: 1000 })).toBe(AUDIO_FORA_DA_LISTA);
+  });
+
+  it("recusa áudio acima de 25 MB, dizendo o limite", () => {
+    const aviso = avisoDoAudio({ name: "voz.mp3", size: LIMITE_DO_AUDIO + 1 });
+    expect(aviso).toContain("25 MB");
+    // E o de 25 MB cravados passa: o par que impede um `>=` disfarçado.
+    expect(avisoDoAudio({ name: "voz.mp3", size: LIMITE_DO_AUDIO })).toBeNull();
+  });
+
+  it("aceita os quatro formatos de documento", () => {
+    for (const ext of [".pdf", ".docx", ".txt", ".md"]) {
+      expect(avisoDoDocumento({ name: `nota${ext}`, size: 1000 })).toBeNull();
+    }
+  });
+
+  it("recusa formato de documento fora da lista", () => {
+    expect(avisoDoDocumento({ name: "planilha.xlsx", size: 1000 })).toBe(DOCUMENTO_FORA_DA_LISTA);
+  });
+
+  it("o teto do documento depende do formato, como no extrator do backend", () => {
+    // Um teto único discordaria do 413 de lá: a tela recusaria o PDF de seis
+    // megabytes que o servidor aceita, ou deixaria subir o .txt de dez.
+    expect(tetoDoDocumento("nota.txt")).toBe(LIMITE_DO_DOCUMENTO_TEXTO);
+    expect(tetoDoDocumento("nota.md")).toBe(LIMITE_DO_DOCUMENTO_TEXTO);
+    expect(tetoDoDocumento("nota.pdf")).toBe(LIMITE_DO_DOCUMENTO_BINARIO);
+    expect(tetoDoDocumento("nota.docx")).toBe(LIMITE_DO_DOCUMENTO_BINARIO);
+
+    expect(avisoDoDocumento({ name: "nota.txt", size: 6 * 1024 * 1024 })).toContain("5 MB");
+    expect(avisoDoDocumento({ name: "nota.pdf", size: 6 * 1024 * 1024 })).toBeNull();
+    expect(avisoDoDocumento({ name: "nota.pdf", size: 16 * 1024 * 1024 })).toContain("15 MB");
+  });
+});
+
+describe("A fronteira do corpo do anexo", () => {
+  it("a transcrição só passa com `texto` em texto", () => {
+    expect(transcricaoValida({ texto: "a Ana travou" })).toBe(true);
+    expect(transcricaoValida({ texto: 42 })).toBe(false);
+    expect(transcricaoValida({})).toBe(false);
+    expect(transcricaoValida(null)).toBe(false);
+  });
+
+  it("o documento extraído cobra também o `filename`", () => {
+    // O `filename` é o que vira o prefixo de origem na conversa, e é o backend
+    // que o entrega limpo: sem ele não há prefixo, e sem prefixo não há cerca.
+    expect(documentoExtraidoValido({ texto: "a Ana travou", filename: "nota.pdf" })).toBe(true);
+    expect(documentoExtraidoValido({ texto: "a Ana travou" })).toBe(false);
+    expect(documentoExtraidoValido({ filename: "nota.pdf" })).toBe(false);
+  });
+
+  it("o motivo da recusa é o do servidor quando ele diz um", async () => {
+    const resposta = { status: 413, json: async () => ({ detail: "O arquivo passou do limite de 5 MB." }) };
+    expect(await motivoDoAnexo(resposta as Response)).toBe("O arquivo passou do limite de 5 MB.");
+  });
+
+  it("recusa sem corpo JSON (um 413 do proxy) vira frase de gente, não JSON cru", async () => {
+    const resposta = {
+      status: 413,
+      json: async () => {
+        throw new SyntaxError("Unexpected token <");
+      },
+    };
+    const motivo = await motivoDoAnexo(resposta as unknown as Response);
+    expect(motivo).toContain("413");
+    expect(motivo).toContain("arquivo");
+  });
+
+  it("`detail` em LISTA não chega cru à tela", async () => {
+    // É o formato do 422 do pydantic, e foi ele que já chegou como JSON cru ao
+    // alerta vermelho uma vez.
+    const resposta = { status: 422, json: async () => ({ detail: [{ loc: ["body"], msg: "x" }] }) };
+    const motivo = await motivoDoAnexo(resposta as unknown as Response);
+    expect(motivo).not.toContain("loc");
+    expect(motivo).toContain("422");
   });
 });

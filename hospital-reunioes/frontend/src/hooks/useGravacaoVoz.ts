@@ -102,8 +102,13 @@ export function useGravacaoVoz({ getToken, onTexto }: UseGravacaoVozOpts): Grava
           toast("Não foi possível transcrever o áudio. Digite manualmente.", "error");
           return;
         }
-        const data = (await res.json()) as { texto?: string };
-        const texto = (data?.texto ?? "").trim();
+        // O corpo é CONFERIDO, e não prometido por `as`: a rota devolve
+        // `{texto}`, mas quem responde pode ser um proxy no meio do caminho, e
+        // um `texto` que não é texto quebraria no `.trim()` daqui. Corpo fora
+        // do contrato vira texto vazio, que já tem desfecho logo abaixo.
+        const corpo: unknown = await res.json();
+        const vindo = (corpo as { texto?: unknown } | null)?.texto;
+        const texto = typeof vindo === "string" ? vindo.trim() : "";
         if (!texto) {
           toast("Não identifiquei fala no áudio. Tente de novo ou digite manualmente.", "info");
           return;

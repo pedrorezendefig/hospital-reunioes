@@ -281,10 +281,16 @@ def _ambiente_do_filho() -> dict[str, str]:
     """O ambiente minimo que o parser precisa, e nada alem disso.
 
     O filho abre o arquivo hostil. Herdar `os.environ` inteiro entrega a ele
-    `SUPABASE_SERVICE_ROLE_KEY`, `OPENROUTER_API_KEY`, `CLICKSIGN_API_KEY`,
-    `RESEND_API_KEY` e companhia, e o canal de volta dele vira TEXTO EXTRAIDO na
-    tela de quem subiu o arquivo: exfiltrar nao precisaria nem de rede. O parser
-    nao usa nenhuma dessas chaves.
+    todas as chaves de servico do aplicativo (banco, IA, assinatura, e-mail), e
+    o canal de volta dele vira TEXTO EXTRAIDO na tela de quem subiu o arquivo:
+    exfiltrar nao precisaria nem de rede. O parser nao usa chave nenhuma.
+
+    As chaves nao sao NOMEADAS aqui de proposito, nem para dar exemplo: o
+    `/snapshot` varre o codigo por nome de variavel de ambiente para dizer onde
+    cada integracao mora, e um nome de chave citado nesta prosa fazia o
+    `INTEGRACOES.md` apontar aquela integracao para este arquivo, em vez dos
+    modulos que a usam de verdade. Quem quiser a lista exata, ela esta em
+    `config.py`, que e onde as chaves sao lidas.
 
     A lista e de permissao, e nao de bloqueio, porque bloqueio esquece a chave
     que nasce amanha.

@@ -18,26 +18,36 @@
 
 import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { Bot, ChevronDown, Loader2, Send, Trash2 } from "lucide-react";
+import { AudioLines, Bot, ChevronDown, Loader2, Mic, Paperclip, Send, Square, Trash2 } from "lucide-react";
 
 import { Select } from "@/components/ui/Select";
+import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
 
 import {
+  AUDIO_SEM_FALA,
+  AUDIOS_ACEITOS,
   AVISO_DE_IA,
+  avisoDoAudio,
+  avisoDoDocumento,
   CONVERSA_NO_TETO,
   corpoValidado,
   CRIADA_SEM_CONFIRMACAO,
   demandaCriadaValida,
   descricaoAoCriar,
+  DOCUMENTOS_ACEITOS,
+  extrairODocumento,
   LIMITE_DA_DESCRICAO,
   LIMITE_DA_MENSAGEM,
   LIMITE_DE_MENSAGENS,
   LIMITE_DO_TITULO,
+  mensagemComOrigem,
   MUITAS_MENSAGENS,
   gravarNaSessao,
   limparASessao,
   lerDaSessao,
   MensagemDoChat,
+  PREFIXO_DE_AUDIO,
+  prefixoDeDocumento,
   PRIMEIRA_MENSAGEM,
   podeCriar,
   RASCUNHO_VAZIO,
@@ -46,6 +56,7 @@ import {
   RespostaDoChat,
   respostaDoChatValida,
   TIPO_QUANDO_NAO_ESCOLHIDO,
+  transcreverArquivoDeAudio,
   URL_DO_CHAT,
 } from "./assistente";
 import {
@@ -84,6 +95,15 @@ type TurnoEmVoo = {
 /** Como um turno termina. Só estes dois desfechos existem. */
 type DesfechoDoTurno = { erro: string } | { corpo: RespostaDoChat };
 
+/**
+ * Como uma entrada de FORA termina. Só estes dois desfechos existem.
+ *
+ * Ou o que entrou virou uma fala pronta (com a origem na frente), ou virou um
+ * aviso na conversa e nada foi mandado. Não há terceiro caminho: é o que
+ * impede uma entrada nova de virar um segundo escritor do fio.
+ */
+type DesfechoDaEntrada = { aviso: string } | { fala: string };
+
 export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
   const [messages, setMessages] = useState<MensagemDoChat[]>([BOAS_VINDAS]);
   const [rascunho, setRascunho] = useState<RascunhoDaDemanda>(RASCUNHO_VAZIO);
@@ -93,6 +113,18 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
   /** A Demanda nasceu e a tela não conseguiu ler a resposta (ver `criar`). */
   const [criadaSemConfirmacao, setCriadaSemConfirmacao] = useState(false);
   const [erro, setErro] = useState<string | null>(null);
+  /**
+   * O aviso do que a pessoa acabou de anexar e não deu certo.
+   *
+   * Ele é próprio, e não o `erro` do topo, porque é uma resposta ao clique que
+   * ela deu na caixa de mensagem, e é ali embaixo que ela está olhando. Ele
+   * também NÃO entra em `messages`: uma linha de aviso da tela no meio do fio
+   * iria junto para o prompt no turno seguinte, como se o assistente a tivesse
+   * dito.
+   */
+  const [aviso, setAviso] = useState<string | null>(null);
+  /** Um anexo está sendo lido: a caixa fica travada até virar mensagem ou aviso. */
+  const [lendoOAnexo, setLendoOAnexo] = useState(false);
   const [rascunhoAberto, setRascunhoAberto] = useState(true);
   /**
    * O primeiro render já leu a sessão? Enquanto não leu, nada é gravado: o
@@ -110,6 +142,8 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
    */
   const conversaAtual = useRef(0);
   const fimDaLista = useRef<HTMLDivElement | null>(null);
+  const escolherOAudio = useRef<HTMLInputElement | null>(null);
+  const escolherODocumento = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     const guardado = lerDaSessao();
@@ -146,6 +180,35 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
   const produtosAtivos = produtos.filter((p) => p.ativo);
   /** A próxima mensagem estouraria o teto do corpo, e o 422 chegaria como JSON cru. */
   const noTeto = messages.length >= LIMITE_DE_MENSAGENS;
+
+  /**
+   * O microfone, o mesmo hook da Ata Guiada e do chat de POPs.
+   *
+   * O que ele entrega é TEXTO, já transcrito, e o texto entra como a fala da
+   * pessoa com a origem na frente. A tela não guarda o áudio em lugar nenhum, e
+   * o hook também não: os bytes vivem em memória e somem (ADR 0056, decisão 4).
+   */
+  const { gravando, transcrevendo, iniciarGravacao, pararGravacao, abortarGravacao } = useGravacaoVoz({
+    getToken: () => token,
+    onTexto: (transcrito) => void receberDoMicrofone(transcrito),
+  });
+
+  /**
+   * A caixa está ocupada: turno no ar, anexo sendo lido, voz sendo transcrita
+   * ou microfone aberto.
+   *
+   * `gravando` está aqui, e não só no `disabled` dos dois botões de anexo, por
+   * causa da classe inteira: **todo controle que só faz sentido fora de um
+   * turno respeita o mesmo `ocupado`**. Sem isso, mandar pelo teclado no meio
+   * de uma gravação começava o turno, e o botão de PARAR de gravar (que também
+   * é desabilitado por `ocupado`) ficava cinza enquanto a tela mandava clicar
+   * nele; se aquele turno chegasse ao teto de mensagens, o botão não reabilitava
+   * nunca mais e o microfone ficava aberto até alguém descartar a conversa.
+   *
+   * O botão do microfone é a exceção, e é exceção por ser o caminho de VOLTA:
+   * enquanto grava, ele fica vivo sempre.
+   */
+  const ocupado = conversando || lendoOAnexo || transcrevendo || gravando;
 
   function autorizacao() {
     return { Authorization: `Bearer ${token}`, "Content-Type": "application/json" };
@@ -226,8 +289,15 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     setConversando(false);
   }
 
-  async function enviar() {
-    const fala = texto.trim();
+  /**
+   * A ÚNICA porta de entrada de um turno.
+   *
+   * Digitar, falar no microfone, encaminhar um áudio e anexar um documento
+   * terminam todos aqui, com uma fala pronta. As entradas de fora não ganharam
+   * um segundo caminho até o servidor: elas ganharam um jeito de virar fala, e
+   * o turno continua sendo montado, mandado e encerrado num lugar só.
+   */
+  async function mandarAFala(fala: string) {
     if (!fala || conversando || noTeto) return;
     const turno: TurnoEmVoo = {
       anteriores: messages,
@@ -236,11 +306,97 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     };
     const daConversa = conversaAtual.current;
     setMessages(turno.historico);
-    setTexto("");
     setErro(null);
+    setAviso(null);
     setConversando(true);
 
     encerrarOTurno(daConversa, await pedirOTurno(turno.historico), turno);
+  }
+
+  async function enviar() {
+    const fala = texto.trim();
+    // `ocupado`, e não só `conversando`: o botão de mandar já está desabilitado
+    // enquanto um anexo é lido, mas o Enter da caixa chega aqui direto. Sem
+    // esta guarda, mandar pelo teclado no meio de uma leitura começava um turno,
+    // e a fala do anexo voltava para uma tela que já estava conversando e era
+    // engolida calada.
+    if (!fala || ocupado || noTeto) return;
+    setTexto("");
+    await mandarAFala(fala);
+  }
+
+  /**
+   * O ÚNICO lugar que escreve o fim de uma entrada de fora.
+   *
+   * Mesma forma do `encerrarOTurno`, e pelo mesmo motivo: a guarda da conversa
+   * é a primeira linha, então um anexo que voltou depois do "Descartar" não
+   * ressuscita nada; e a caixa destrava aqui, que é o único caminho de volta.
+   * O que a entrada produz é uma FALA, e a fala segue pela porta de sempre.
+   */
+  async function encerrarAEntrada(daConversa: number, desfecho: DesfechoDaEntrada) {
+    if (conversaAtual.current !== daConversa) return;
+    setLendoOAnexo(false);
+    if ("aviso" in desfecho) {
+      setAviso(desfecho.aviso);
+      return;
+    }
+    await mandarAFala(desfecho.fala);
+  }
+
+  /** O texto que voltou da rota de voz, do microfone ou do arquivo escolhido. */
+  function falaDoAudio(transcrito: string): DesfechoDaEntrada {
+    return transcrito.trim()
+      ? { fala: mensagemComOrigem(PREFIXO_DE_AUDIO, transcrito) }
+      : { aviso: AUDIO_SEM_FALA };
+  }
+
+  async function receberDoMicrofone(transcrito: string) {
+    await encerrarAEntrada(conversaAtual.current, falaDoAudio(transcrito));
+  }
+
+  /**
+   * A parte que as duas entradas por arquivo compartilham: peneira, rede, desfecho.
+   *
+   * A recusa local (tamanho, tipo) sai pela MESMA porta da recusa do servidor,
+   * e não por um `setAviso` próprio: ela é o mesmo desfecho, e ter dois lugares
+   * escrevendo o aviso era ter dois lugares para esquecer a mesma regra.
+   */
+  async function anexar(recusa: string | null, ler: () => Promise<DesfechoDaEntrada>): Promise<void> {
+    const daConversa = conversaAtual.current;
+    if (recusa) {
+      // Tamanho e tipo são recusados SEM ida à rede e sem turno: a pessoa
+      // escolheu o arquivo errado, e o que ela precisa é saber disso agora.
+      await encerrarAEntrada(daConversa, { aviso: recusa });
+      return;
+    }
+    setAviso(null);
+    setLendoOAnexo(true);
+    await encerrarAEntrada(daConversa, await ler());
+  }
+
+  function anexarOAudio(arquivo: File) {
+    return anexar(avisoDoAudio(arquivo), async () => {
+      const leitura = await transcreverArquivoDeAudio(arquivo, token);
+      return "aviso" in leitura ? leitura : falaDoAudio(leitura.corpo.texto);
+    });
+  }
+
+  function anexarODocumento(arquivo: File) {
+    return anexar(avisoDoDocumento(arquivo), async () => {
+      const leitura = await extrairODocumento(arquivo, token);
+      if ("aviso" in leitura) return leitura;
+      // O nome vem do SERVIDOR, e não do arquivo local: é lá que ele foi limpo
+      // do que quebraria o prefixo de origem (colchete, quebra de linha) e com
+      // ele a cerca que faz o documento entrar no prompt como texto de gente.
+      return { fala: mensagemComOrigem(prefixoDeDocumento(leitura.corpo.filename), leitura.corpo.texto) };
+    });
+  }
+
+  /** O input de arquivo é zerado sempre: senão escolher o MESMO arquivo de novo não dispara nada. */
+  function aoEscolher(evento: React.ChangeEvent<HTMLInputElement>, usar: (arquivo: File) => Promise<void>) {
+    const arquivo = evento.target.files?.[0];
+    evento.target.value = "";
+    if (arquivo) void usar(arquivo);
   }
 
   async function criar() {
@@ -300,12 +456,17 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
   function descartar() {
     // Começa outra conversa: o turno que estiver no ar deixa de ser de alguém.
     conversaAtual.current += 1;
+    // E o microfone para junto, descartando o áudio: uma gravação que
+    // continuasse voltaria como mensagem numa conversa que já não existe.
+    abortarGravacao();
     limparASessao();
     setMessages([BOAS_VINDAS]);
     setRascunho(RASCUNHO_VAZIO);
     setTexto("");
     setErro(null);
+    setAviso(null);
     setConversando(false);
+    setLendoOAnexo(false);
     setCriadaSemConfirmacao(false);
   }
 
@@ -469,17 +630,82 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
               Pensando...
             </p>
           )}
+          {(lendoOAnexo || transcrevendo) && (
+            <p role="status" className="flex items-center gap-2 text-xs text-slate-400">
+              <Loader2 className="w-3.5 h-3.5 animate-spin" />
+              Lendo o que você mandou...
+            </p>
+          )}
+          {aviso && (
+            <p
+              role="status"
+              className="mr-auto max-w-[85%] px-3 py-2 rounded-2xl bg-amber-50 border border-amber-200 text-amber-800 text-sm"
+            >
+              {aviso}
+            </p>
+          )}
           <div ref={fimDaLista} />
         </div>
 
         <div className="px-5 py-3 border-t border-slate-100 flex-shrink-0">
+          {/* Escolher arquivo é o input nativo, escondido: o que a pessoa vê é o
+              botão ao lado da caixa, no mesmo tamanho dos outros. */}
+          <input
+            ref={escolherOAudio}
+            type="file"
+            className="hidden"
+            aria-label="Arquivo de áudio"
+            accept={AUDIOS_ACEITOS.join(",")}
+            onChange={(e) => aoEscolher(e, anexarOAudio)}
+          />
+          <input
+            ref={escolherODocumento}
+            type="file"
+            className="hidden"
+            aria-label="Arquivo de documento"
+            accept={DOCUMENTOS_ACEITOS.join(",")}
+            onChange={(e) => aoEscolher(e, anexarODocumento)}
+          />
+
           <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => (gravando ? pararGravacao() : iniciarGravacao())}
+              disabled={!gravando && (ocupado || noTeto)}
+              aria-label={gravando ? "Parar de gravar" : "Gravar voz"}
+              title={gravando ? "Parar de gravar" : "Gravar voz"}
+              className={`px-3 py-2 rounded-xl border text-text-secondary disabled:opacity-50 ${
+                gravando ? "border-red-300 bg-red-50 text-red-600" : "border-border hover:border-primary hover:text-primary"
+              } transition-colors`}
+            >
+              {gravando ? <Square className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
+            </button>
+            <button
+              type="button"
+              onClick={() => escolherOAudio.current?.click()}
+              disabled={ocupado || noTeto}
+              aria-label="Anexar áudio"
+              title="Anexar áudio"
+              className="px-3 py-2 rounded-xl border border-border text-text-secondary hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+            >
+              <AudioLines className="w-4 h-4" />
+            </button>
+            <button
+              type="button"
+              onClick={() => escolherODocumento.current?.click()}
+              disabled={ocupado || noTeto}
+              aria-label="Anexar documento"
+              title="Anexar documento"
+              className="px-3 py-2 rounded-xl border border-border text-text-secondary hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+            >
+              <Paperclip className="w-4 h-4" />
+            </button>
             <textarea
               aria-label="Mensagem"
               rows={1}
               maxLength={LIMITE_DA_MENSAGEM}
               disabled={noTeto}
-              placeholder={noTeto ? "Conversa no limite" : "Escreva aqui"}
+              placeholder={noTeto ? "Conversa no limite" : "Escreva, fale ou anexe"}
               value={texto}
               onChange={(e) => setTexto(e.target.value)}
               onKeyDown={(e) => {
@@ -493,13 +719,18 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
             <button
               type="button"
               onClick={enviar}
-              disabled={conversando || noTeto || !texto.trim()}
+              disabled={ocupado || noTeto || !texto.trim()}
               aria-label="Enviar"
               className="px-3 py-2 rounded-xl bg-primary text-white disabled:opacity-50"
             >
               <Send className="w-4 h-4" />
             </button>
           </div>
+          {gravando && (
+            <p role="status" className="mt-1.5 text-xs text-red-600">
+              Gravando. Clique no quadrado para parar e mandar.
+            </p>
+          )}
           {noTeto && (
             <p role="status" className="mt-1.5 text-xs text-amber-700">
               {CONVERSA_NO_TETO}

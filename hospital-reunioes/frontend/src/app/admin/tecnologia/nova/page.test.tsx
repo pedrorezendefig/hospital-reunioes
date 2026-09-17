@@ -13,6 +13,8 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { ToastProvider } from "@/components/ui/Toast";
+
 import NovaDemandaPage from "./page";
 
 const sessao = vi.hoisted(() => ({ token: "tok" as string | null, loading: false }));
@@ -74,7 +76,14 @@ function montar() {
       } as unknown as Response;
     }),
   );
-  return render(<NovaDemandaPage />);
+  // O ToastProvider é de verdade, e não um dublê: o assistente usa o hook de
+  // gravação de voz, que avisa por toast quando a transcrição falha, e um hook
+  // que exige provider precisa de uma tela que prove que ele o tem.
+  return render(
+    <ToastProvider>
+      <NovaDemandaPage />
+    </ToastProvider>,
+  );
 }
 
 beforeEach(() => {

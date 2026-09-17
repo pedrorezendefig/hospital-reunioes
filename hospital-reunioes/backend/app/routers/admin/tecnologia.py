@@ -80,10 +80,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import re
 from datetime import UTC, date, datetime, timedelta
 from typing import NoReturn
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, UploadFile, status
 from supabase import Client
 
 from app.dependencies import get_supabase_client, require_super_admin, selecionar_participantes
@@ -91,6 +93,7 @@ from app.limiter import limiter
 from app.models.tecnologia_schemas import (
     AssistenteChatPayload,
     AssistenteChatResponse,
+    AssistenteDocumentoResponse,
     AtribuirPayload,
     ConversaLinhaResponse,
     DemandaCreatePayload,
@@ -185,6 +188,13 @@ from app.services.tecnologia_vinculo import (
     texto_do_diretor,
     texto_levou_para_desenvolvimento,
     texto_movimento_etapa,
+)
+from app.services.transcricao_extractor import (
+    FORMATOS_DE_TEXTO_PURO,
+    MAX_BYTES_BINARY,
+    MAX_BYTES_TEXT,
+    SUPPORTED_EXTENSIONS,
+    extrair_texto_async,
 )
 
 logger = logging.getLogger(__name__)
@@ -2111,3 +2121,112 @@ async def assistente_chat(
         # de Sao Paulo o assistente entenderia "hoje" como o dia seguinte.
         hoje_iso=datetime.now(FUSO_HOSPITAL).date().isoformat(),
     )
+
+
+# A lista de extensoes e os dois tetos vem do EXTRATOR, e nao sao escritos de
+# novo aqui: e o mesmo modulo que le o arquivo depois, e duas copias da regra
+# divergiriam calado (o 413 recusaria o que o 422 aceitaria, ou o contrario).
+MOTIVO_DOCUMENTO_FORA_DA_LISTA = (
+    "Só dá para ler arquivo .pdf, .docx, .txt ou .md. Salve em um desses formatos e anexe de novo."
+)
+
+
+# O conjunto de caracteres que um nome de arquivo pode ter para virar prefixo.
+#
+# E uma LISTA DO QUE PODE, e nao uma lista do que nao pode. A primeira versao
+# desta limpeza tirava `[`, `]` e quebra de linha, que era o bastante para o
+# parser do prefixo nao quebrar, e so para isso: uma limpeza que protege o
+# parser nao e a mesma coisa que uma limpeza que protege quem LE o resultado.
+# Com a lista do que pode, o que nao foi pensado cai fora por padrao.
+_CARACTERES_DO_NOME = re.compile(r"[^0-9A-Za-zÀ-ÿ ._()+-]+")
+
+# O nome que sobra quando nao sobrou nada legivel (um nome so de ideogramas, de
+# emoji ou de pontuacao). Vazio ali dentro seria `[documento ] `, e o prefixo
+# com nome vazio nao e prefixo: a mensagem deixaria de ser cercada exatamente
+# no caso em que o nome era mais estranho.
+NOME_SEM_LETRAS = "arquivo"
+
+
+def _nome_para_a_tela(nome: str) -> str:
+    """O nome do arquivo como ele pode virar PREFIXO DE ORIGEM na conversa.
+
+    A tela escreve `[documento <nome>] ` na frente do texto extraido, e o
+    servico reconhece esse prefixo para CERCAR o que veio de fora. Um nome com
+    `]` ou com quebra de linha dentro quebraria o prefixo, e ai o texto do
+    documento entraria no prompt SEM cerca, na coluna zero, que e exatamente o
+    que a cerca existe para impedir.
+
+    Quem escolheu o nome do arquivo nao e necessariamente quem o anexou: ele
+    veio no e-mail, no WhatsApp, no site de alguem. Por isso a limpeza e aqui,
+    onde o nome nasce para a tela, e nao na tela, que e so mais um consumidor.
+
+    O teto vem do PARSER (`assistente_tecnologia.LIMITE_DO_NOME_DO_ARQUIVO`), e
+    nao de um numero escrito aqui: quem produz o nome e consumidor de quem o le,
+    e dois numeros para a mesma regra divergem calado.
+    """
+    limpo = " ".join(_CARACTERES_DO_NOME.sub("", nome).split())[: assistente_tecnologia.LIMITE_DO_NOME_DO_ARQUIVO]
+    # Sem uma letra ou um numero nao sobrou nome, sobrou pontuacao: `[documento
+    # ] ` ou `[documento .] ` nao dizem nada a quem le, e o primeiro nem e
+    # prefixo (o parser cobra ao menos um caractere).
+    return limpo if any(c.isalnum() for c in limpo) else NOME_SEM_LETRAS
+
+
+def _motivo_documento_grande(teto: int) -> str:
+    """A frase do 413, com o teto que valeu para AQUELE arquivo.
+
+    Ela diz o numero porque os dois tetos sao diferentes (5 MB para texto, 15 MB
+    para PDF e DOCX): uma frase generica mandaria encurtar sem dizer para quanto,
+    e quem esta do outro lado nao tem como adivinhar qual dos dois o pegou.
+    """
+    return (
+        f"O arquivo passou do limite de {teto // (1024 * 1024)} MB. "
+        "Anexe um arquivo menor, ou cole no chat o trecho que importa."
+    )
+
+
+@router.post("/assistente/extrair-documento", response_model=AssistenteDocumentoResponse)
+@limiter.limit(LIMITE_DO_ASSISTENTE)
+async def assistente_extrair_documento(
+    request: Request,
+    arquivo: UploadFile = File(...),
+    _ator: dict = Depends(require_super_admin),
+):
+    """O documento anexado vira texto, e o texto some (ADR 0056, decisao 4).
+
+    Nao grava NADA: nem storage, nem tabela, nem log com o conteudo. O que a
+    tela faz com o que sai daqui e escrever uma mensagem da PESSOA, com o nome
+    do arquivo a mostra, e mandar o turno; o produto continua sendo a Demanda.
+
+    Por que ela existe, ja que o extrator e o mesmo das Reunioes: as rotas de
+    la gravam a transcricao na reuniao e vivem atras do gate de Reunioes. Esta
+    e Super admin, nao grava, e devolve o texto para quem o anexou.
+    """
+    nome = arquivo.filename or ""
+    extensao = os.path.splitext(nome)[1].lower()
+    if extensao not in SUPPORTED_EXTENSIONS:
+        # Antes de ler os bytes: nao ha por que trazer 40 MB de .zip a memoria
+        # para recusa-lo pelo nome.
+        _recusar(MOTIVO_DOCUMENTO_FORA_DA_LISTA)
+
+    conteudo = await arquivo.read()
+    teto = MAX_BYTES_TEXT if extensao in FORMATOS_DE_TEXTO_PURO else MAX_BYTES_BINARY
+    if len(conteudo) > teto:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=_motivo_documento_grande(teto),
+        )
+
+    try:
+        # `pdfplumber` num PDF de quinze megabytes segura o event loop (uvicorn
+        # roda com um worker so), como a transcricao de voz ja fazia. E o
+        # executor tem que ser o DELA (#758), nao o default do loop: com a
+        # extracao no executor de todo mundo, uma rajada de upload prendia as
+        # threads do `/health` e o HEALTHCHECK declarava o container doente.
+        texto, _ = await extrair_texto_async(nome, conteudo)
+    except ValueError as e:
+        # A frase e do EXTRATOR: PDF escaneado, arquivo vazio, docx corrompido.
+        # Quem sabe o que houve e quem tentou ler, e a rota nao inventa causa.
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=str(e)) from e
+
+    logger.info(f"Documento lido para o Assistente por {_ator['id']}: {extensao}, {len(texto)} chars")
+    return {"texto": texto, "filename": _nome_para_a_tela(nome)}

@@ -387,3 +387,16 @@ class AssistenteChatResponse(BaseModel):
     reply: str
     rascunho: dict
     demanda_parecida: dict | None = None
+
+
+class AssistenteDocumentoResponse(BaseModel):
+    """Resposta do POST /admin/tecnologia/assistente/extrair-documento.
+
+    O `filename` volta junto com o texto porque e ele que vira o prefixo de
+    origem da mensagem na tela (`[documento nota.pdf] `): quem escolheu o
+    arquivo precisa VER, na conversa, qual arquivo o assistente leu. Nada aqui
+    e gravado: o arquivo vira texto e some (ADR 0056, decisao 4).
+    """
+
+    texto: str
+    filename: str
