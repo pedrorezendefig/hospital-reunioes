@@ -73,10 +73,15 @@ export type RespostaDoChat = {
  * A primeira fala, escrita na tela e não pedida ao modelo: ela precisa estar
  * lá antes de qualquer ida à rede, senão quem abre a página encara uma caixa
  * vazia sem saber o que fazer.
+ *
+ * Ela diz também COMO mandar (issue #775): os quatro botões ao lado da caixa
+ * são só ícones, e o placeholder para em "anexe" sem dizer que print e
+ * documento valem. Quem nunca passou o mouse nos ícones não descobre sozinho.
  */
 export const PRIMEIRA_MENSAGEM =
   "Oi. Me conta o que você precisa, do jeito que vier: o que aconteceu, o que você queria, " +
-  "ou a dúvida que ficou. Eu vou montando o pedido aqui do lado e você confere antes de criar.";
+  "ou a dúvida que ficou. Dá para escrever, falar no microfone, anexar um áudio ou um documento " +
+  "e mandar um print da tela. Eu vou montando o pedido aqui do lado e você confere antes de criar.";
 
 /**
  * O aviso fixo sob a caixa de mensagem.

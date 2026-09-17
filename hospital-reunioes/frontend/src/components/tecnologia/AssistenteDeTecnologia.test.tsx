@@ -67,6 +67,25 @@ type Chamada = {
 /** Os campos de arquivo que as três rotas de anexo declaram. */
 const CAMPOS_DE_ARQUIVO = ["audio", "arquivo", "imagem"];
 
+/**
+ * A fala de abertura como a tela mostra, escrita aqui à mão de propósito
+ * (issue #775): comparar o que foi renderizado com a constante importada
+ * provaria só que ela é igual a si mesma, e uma abertura que perdesse as
+ * entradas passaria dos dois lados ao mesmo tempo.
+ */
+const ABERTURA_NA_TELA =
+  "Oi. Me conta o que você precisa, do jeito que vier: o que aconteceu, o que você queria, " +
+  "ou a dúvida que ficou. Dá para escrever, falar no microfone, anexar um áudio ou um documento " +
+  "e mandar um print da tela. Eu vou montando o pedido aqui do lado e você confere antes de criar.";
+
+/** As quatro entradas que a caixa aceita, ditas na abertura. */
+const AS_QUATRO_ENTRADAS = [
+  "escrever",
+  "falar no microfone",
+  "anexar um áudio ou um documento",
+  "mandar um print da tela",
+];
+
 const PRODUTOS: ProdutoDaEscolha[] = [
   { id: "prod-1", nome: "Ana", ativo: true },
   { id: "prod-2", nome: "POPs", ativo: true },
@@ -331,7 +350,17 @@ describe("A conversa", () => {
     montar();
 
     expect(screen.getByText(AVISO_DE_IA)).toBeTruthy();
-    expect(within(screen.getByRole("log")).getAllByText(/Me conta o que você precisa/)).toHaveLength(1);
+    expect(within(screen.getByRole("log")).getAllByText(ABERTURA_NA_TELA)).toHaveLength(1);
+  });
+
+  it("a fala de abertura diz que dá para escrever, falar, anexar e mandar print", () => {
+    montar();
+
+    const aberturaRenderizada = screen.getByRole("log").querySelector("p")?.textContent ?? "";
+
+    for (const entrada of AS_QUATRO_ENTRADAS) {
+      expect(aberturaRenderizada).toContain(entrada);
+    }
   });
 
   it("a resposta do chat atualiza o rascunho", async () => {
