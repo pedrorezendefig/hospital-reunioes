@@ -3,6 +3,7 @@ title: Anexar o material de referência
 description: Subir o POP antigo, a norma ou o artigo que o Consultor de POPs vai usar para escrever.
 prd: [76, 231]
 draft: false
+video: anexar-o-material-de-referencia
 papel: [Elaborador]
 sidebar:
   order: 4

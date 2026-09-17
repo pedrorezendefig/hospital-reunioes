@@ -3,6 +3,7 @@ title: Ver o fluxograma do POP
 description: Enxergar o caminho do procedimento desenhado, dar zoom e baixar a imagem.
 prd: [210, 232]
 draft: false
+video: ver-o-fluxograma-do-pop
 papel: [Elaborador, Revisor, Validador]
 sidebar:
   order: 9

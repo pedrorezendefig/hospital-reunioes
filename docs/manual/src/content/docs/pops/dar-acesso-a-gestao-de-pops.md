@@ -3,6 +3,7 @@ title: Dar acesso à Gestão de POPs
 description: Conceder o perfil de POPs a uma pessoa, escolher os Setores dela e revogar quando sair.
 prd: [76]
 draft: false
+video: dar-acesso-a-gestao-de-pops
 papel: [Superadmin]
 sidebar:
   order: 11

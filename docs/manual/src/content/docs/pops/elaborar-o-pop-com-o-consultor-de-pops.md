@@ -3,6 +3,7 @@ title: Elaborar o POP com o Consultor de POPs
 description: Escrever o procedimento conversando com o assistente e enviar a versão final para a revisão.
 prd: [76, 187, 231]
 draft: false
+video: elaborar-o-pop-com-o-consultor-de-pops
 papel: [Elaborador]
 sidebar:
   order: 5

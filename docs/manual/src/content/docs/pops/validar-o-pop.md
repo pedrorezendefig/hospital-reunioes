@@ -3,6 +3,7 @@ title: Validar o POP
 description: Dar a aprovação final da Versão, que segue direto para a assinatura digital.
 prd: [76]
 draft: false
+video: validar-o-pop
 papel: [Validador]
 sidebar:
   order: 7

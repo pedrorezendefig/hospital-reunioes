@@ -3,6 +3,7 @@ title: Ver o seu perfil
 description: Conferir os seus dados de cadastro e o resumo do que está com você.
 prd: [731]
 draft: false
+video: ver-o-seu-perfil
 papel: [Todo mundo]
 sidebar:
   order: 5

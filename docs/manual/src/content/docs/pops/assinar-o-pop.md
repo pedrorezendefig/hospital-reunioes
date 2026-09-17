@@ -3,6 +3,7 @@ title: Assinar o POP
 description: Assinar digitalmente o documento pelo email, o último passo antes de o POP entrar na Biblioteca.
 prd: [76]
 draft: false
+video: assinar-o-pop
 papel: [Elaborador, Revisor, Validador]
 login: false
 sidebar:

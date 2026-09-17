@@ -3,6 +3,7 @@ title: Consultar a Biblioteca
 description: Achar a versão oficial de um procedimento e baixar o documento assinado.
 prd: [76]
 draft: false
+video: consultar-a-biblioteca
 papel: [Superadmin, Gestor de Qualidade, Gerente, Coordenador]
 sidebar:
   order: 2
