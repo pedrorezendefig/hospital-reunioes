@@ -18,18 +18,24 @@ escreve as seções.
 ## Passo a passo
 
 1. Na tela **Gestão de POPs**, clique em **Elaborar** na linha do seu POP.
+
+   ![Botao Elaborar na linha do POP](../../../assets/pops/gestao-de-pops-elaborar.png)
 2. Conte como o procedimento funciona na prática, no campo
    **Descreva o procedimento, passo a passo...**. Para falar em vez de digitar,
    clique no microfone.
+
+   ![Documento a esquerda e o Consultor de POPs a direita](../../../assets/pops/elaboracao.png)
 3. Para pedir mudança numa parte específica, clique no alvo ao lado do título
    da seção e escreva. A conversa passa a falar só daquela seção.
 4. Escolha a **Periodicidade de revisão** no alto da tela. O Consultor de POPs
    sugere uma, e a decisão é sua.
 5. Confira o documento inteiro, inclusive o fluxograma.
+
+:::caution[A versão sai da sua mão]
+Aprovar a versão final tira o POP da sua mão e manda ao Revisor.
+:::
 6. Clique em **Aprovar versão final** e confirme em **Aprovar e enviar**. A
    Versão vai para o Revisor, que recebe um email.
-
-![Tela de elaboração com o documento à esquerda e o Consultor de POPs à direita](../../../assets/pops/elaboracao.png)
 
 ## Se der errado
 

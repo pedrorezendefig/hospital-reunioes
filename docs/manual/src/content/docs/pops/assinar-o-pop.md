@@ -25,6 +25,8 @@ que você recebe da ClickSign.
 4. Assine. Cada pessoa assina uma vez, no próprio email, e a ordem não importa.
 5. Acompanhe o estado na tela **Gestão de POPs**: enquanto falta alguém, ele
    fica **Em Assinatura**.
+
+   ![Lista com um POP Em Assinatura e outro Publicado](../../../assets/pops/gestao-de-pops-assinatura.png)
 6. Assinaram os três, o POP passa a **Publicado** e aparece na Biblioteca com o
    documento assinado.
 

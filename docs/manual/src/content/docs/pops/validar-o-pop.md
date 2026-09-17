@@ -18,15 +18,25 @@ mais edição.
 ## Passo a passo
 
 1. No menu da esquerda, clique em **POPs**.
+
+   ![Menu com POPs e o botao Validar na linha do POP](../../../assets/pops/gestao-de-pops-validar.png)
 2. Na linha do POP, clique em **Validar**. No alto da tela aparece
    **Validação final**.
 3. Leia o documento e, se houver, a tarja com as devoluções anteriores.
+
+   ![Leitura da Versao com os botoes da validacao](../../../assets/pops/versao-em-validacao.png)
+
+:::caution[Aprovar aqui não tem volta]
+A validação aprovada manda o documento para a assinatura e trava o conteúdo.
+:::
 4. Estando de acordo, clique em **Aprovar validação** e confirme em
    **Aprovar**.
 5. A Versão passa para **Em Assinatura** e o documento sai por email para o
    Elaborador, o Revisor e você assinarem.
 6. Se ainda faltar algo, clique em **Devolver com comentários**, escreva o
    motivo e clique em **Devolver**.
+
+   ![Janela da devolucao com o campo Motivo](../../../assets/pops/devolver-com-comentarios.png)
 
 ## Se der errado
 

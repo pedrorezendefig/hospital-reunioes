@@ -1,7 +1,8 @@
-"""Testes das guardas do Roteiro de prints de POPs.
+"""Testes das guardas do Roteiro de prints de Primeiros passos.
 
-O roteiro do módulo POPs (`docs/manual/prints/pops.py`) não só lê tela: o
-`--semear` cria login, concede perfil e grava POPs. O que separa isso de um
+O roteiro do módulo Primeiros passos (`docs/manual/prints/primeiros-passos.py`)
+não só lê tela: o `--semear` cria o login e o cadastro da pessoa de exemplo que
+entra na plataforma. O que separa isso de um
 banco que não é o de desenvolvimento são as três linhas de
 `_credenciais_locais`, que leem o `.env` e recusam toda URL que não seja
 `127.0.0.1` ou `localhost`. É essa recusa que estes testes provam, com o
@@ -19,9 +20,9 @@ from pathlib import Path
 
 import pytest
 
-MODULO = "pops"
+MODULO = "primeiros-passos"
 ROTEIRO = (
-    Path(__file__).resolve().parents[1] / "docs" / "manual" / "prints" / f"{MODULO}.py"
+    Path(__file__).resolve().parents[1] / "docs" / "manual" / "prints" / "primeiros-passos.py"
 )
 
 
@@ -31,7 +32,7 @@ def carregar_roteiro():
     Ele vive em `docs/manual/prints/`, fora de qualquer pacote, e não importa o
     Playwright no topo justamente para caber aqui.
     """
-    spec = importlib.util.spec_from_file_location("roteiro_prints_pops", ROTEIRO)
+    spec = importlib.util.spec_from_file_location("roteiro_prints_primeiros_passos", ROTEIRO)
     modulo = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = modulo
     spec.loader.exec_module(modulo)
@@ -161,10 +162,10 @@ class AlvoDublê:
 
 def test_grava_print_quando_o_texto_esta_limpo(tmp_path):
     roteiro = carregar_roteiro()
-    pagina = PaginaDublê("Gestão de POPs · seu perfil: Superadmin")
-    alvo = tmp_path / "gestao-de-pops.png"
+    pagina = PaginaDublê("Bem-vindo de volta · Acesse a plataforma")
+    alvo = tmp_path / "tela-de-entrada.png"
 
-    roteiro.capturar(pagina, alvo, "gestao-de-pops", clip={"x": 0})
+    roteiro.capturar(pagina, alvo, "tela-de-entrada", clip={"x": 0})
 
     assert len(pagina.chamadas) == 1
     assert pagina.chamadas[0]["path"] == str(alvo)
@@ -173,14 +174,14 @@ def test_grava_print_quando_o_texto_esta_limpo(tmp_path):
 
 def test_nao_grava_print_com_endereco_local(tmp_path):
     roteiro = carregar_roteiro()
-    pagina = PaginaDublê("Abra http://localhost:3000/pops para ver a lista")
+    pagina = PaginaDublê("Abra http://localhost:3000/login para entrar")
 
     with pytest.raises(roteiro.EnderecoLocalNoPrint):
-        roteiro.capturar(pagina, tmp_path / "gestao-de-pops.png", "gestao-de-pops")
+        roteiro.capturar(pagina, tmp_path / "tela-de-entrada.png", "tela-de-entrada")
 
     # O que importa não é a exceção, é o print não ter sido gravado.
     assert pagina.chamadas == []
-    assert not (tmp_path / "gestao-de-pops.png").exists()
+    assert not (tmp_path / "tela-de-entrada.png").exists()
 
 
 @pytest.mark.parametrize(
@@ -232,11 +233,11 @@ def test_recusa_rede_interna_dentro_de_uma_url(endereco):
     [
         # O caso que a campanha de prints trouxe: todo dado de exemplo do
         # manual é `@exemplo.local`, e travar nele pararia a captura certa.
-        "marina.alves@exemplo.local",
-        "Rafael Pimenta · rafael.pimenta@exemplo.local · Gerente",
+        "paula.nogueira@exemplo.local",
+        "Paula Nogueira · paula.nogueira@exemplo.local · Qualidade",
         "A resposta passou do limite de 10.000 caracteres.",
         "O prazo novo nunca passa de 30 dias úteis contados da entrada.",
-        "https://app.hospitalsaomatheus.cloud/pops",
+        "https://app.hospitalsaomatheus.cloud/login",
     ],
 )
 def test_deixa_passar_o_que_so_parece_endereco(texto):
@@ -288,10 +289,10 @@ def test_a_folga_do_quadro_e_aplicada_antes_da_captura(tmp_path):
     print cortado, por isso o dublê registra o que valia no momento da captura.
     """
     roteiro = carregar_roteiro()
-    pagina = PaginaDublê("Setores · Unidades do organograma")
+    pagina = PaginaDublê("Configurações · Segurança")
     alvo = AlvoDublê()
 
-    roteiro.capturar(pagina, tmp_path / "setores.png", "setores", alvo=alvo)
+    roteiro.capturar(pagina, tmp_path / "meu-perfil.png", "meu-perfil", alvo=alvo)
 
     assert alvo.chamadas[0]["folga_no_momento"] == roteiro.FOLGA_DO_BALAO
     assert pagina.chamadas == [], "o quadro foi pedido e a janela inteira foi gravada"

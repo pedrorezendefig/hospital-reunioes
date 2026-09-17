@@ -21,13 +21,25 @@ Ouvidoria: [Dar acesso aos POPs e à Ouvidoria](/admin/dar-acesso-aos-pops-e-a-o
 ## Passo a passo
 
 1. No menu da esquerda, clique em **POPs** e role até **Acesso ao POPs**.
+
+   ![Item POPs no menu da esquerda](../../../assets/pops/menu-pops.png)
 2. Clique em **Conceder perfil** e busque a pessoa por nome ou email.
+
+   ![Bloco Acesso ao POPs com as pessoas e os icones de acao](../../../assets/pops/acesso-ao-pops.png)
 3. Escolha o **Perfil**: **Superadmin**, **Gestor de Qualidade**, **Gerente** ou
    **Coordenador**. Clique em **Conceder**.
+
+   ![Janela Conceder perfil POP com o campo Perfil](../../../assets/pops/conceder-perfil.png)
+
+:::caution[A senha aparece uma vez só]
+A senha de quem ainda não entrava aparece uma vez. Copie antes de fechar.
+:::
 4. Se a pessoa ainda não entrava na plataforma, a senha aparece uma única vez.
    Copie e entregue a ela antes de fechar em **Entendi**.
 5. Clique no prédio, na linha da pessoa, para marcar os **Setores da pessoa**, e
    salve. É isso que decide quais POPs ela enxerga.
+
+   ![Janela Setores da pessoa com as caixas marcadas](../../../assets/pops/setores-da-pessoa.png)
 6. Para tirar o acesso, clique no ícone de pessoa com o sinal de menos e
    confirme.
 

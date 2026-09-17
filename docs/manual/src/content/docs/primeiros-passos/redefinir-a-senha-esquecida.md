@@ -17,15 +17,19 @@ ninguém precisa gerar senha nova para você.
 ## Passo a passo
 
 1. Na tela de entrada, clique em **Esqueci minha senha**.
+
+   ![Link Esqueci minha senha abaixo do campo de senha](../../../assets/primeiros-passos/link-esqueci-minha-senha.png)
 2. Escreva o seu **Email** e clique em **Enviar link de redefinição**.
+
+   ![Tela Esqueci minha senha com o email preenchido](../../../assets/primeiros-passos/esqueci-minha-senha.png)
 3. A tela responde **Verifique seu email**. Abra a sua caixa de entrada e
    clique no link que chegou.
+
+   ![Tela Verifique seu email depois do pedido](../../../assets/primeiros-passos/verifique-seu-email.png)
 4. O link abre a tela **Redefinir senha**. Escreva a **Nova senha**, com pelo
    menos 8 caracteres, e repita em **Confirmar nova senha**.
 5. Clique em **Redefinir senha**. A tela mostra
    **Senha redefinida com sucesso!** e leva você de volta para a entrada.
-
-![Tela Esqueci minha senha, com o campo de email e o botão de enviar](../../../assets/primeiros-passos/esqueci-minha-senha.png)
 
 ## Se der errado
 

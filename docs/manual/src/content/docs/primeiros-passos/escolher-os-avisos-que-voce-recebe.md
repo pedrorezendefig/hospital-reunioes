@@ -17,7 +17,11 @@ fim da página: a escolha fica guardada e os avisos continuam chegando.
 ## Passo a passo
 
 1. Clique no seu nome, no alto da tela à direita, e escolha **Configurações**.
+
+   ![Menu do seu nome com o item Configuracoes](../../../assets/primeiros-passos/menu-do-usuario-configuracoes.png)
 2. Na coluna **Pessoal**, clique em **Notificações**.
+
+   ![Aba Notificacoes com as quatro chaves](../../../assets/primeiros-passos/configuracoes-notificacoes.png)
 3. Ligue ou desligue cada chave:
    - **Menções em comentários**, quando escrevem o seu nome com arroba.
    - **Prazos próximos**, quando uma pendência sua está perto de vencer.

@@ -18,9 +18,13 @@ o Código e avisa quem vai escrever.
 ## Passo a passo
 
 1. No menu da esquerda, clique em **POPs**.
+
+   ![Menu com POPs e o botao Criar novo POP](../../../assets/pops/gestao-de-pops-criar.png)
 2. Em **POPs do meu escopo**, clique em **Criar novo POP**.
 3. Escolha o **Setor** e a **Criticidade** (CRÍTICA, ALTA ou MÉDIA). O
    **Nome do POP** já vem sugerido e você pode trocar.
+
+   ![Formulario Criar novo POP preenchido](../../../assets/pops/criar-novo-pop.png)
 4. Escolha as três pessoas: **Elaborador**, **Revisor** e **Validador**.
 5. Ajuste **Prazo de elaboração (dias úteis)**, **Prazo de revisão (dias)** e a
    **Periodicidade de revisão**. Preencha a **Base normativa** se o

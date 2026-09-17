@@ -18,10 +18,14 @@ com você.
 ## Passo a passo
 
 1. Clique no seu nome, no alto da tela à direita.
+
+   ![Menu do seu nome com o item Meu Perfil](../../../assets/primeiros-passos/menu-do-usuario-perfil.png)
 2. Escolha **Meu Perfil**. No celular, o mesmo atalho fica em **Perfil**, na
    barra de baixo.
 3. O cartão de cima mostra o seu nome, o seu cargo e o selo **Ativo**, com
    **E-mail**, **Setor**, **Area** e **ID**.
+
+   ![Cartao do perfil com email, setor, area e identificador](../../../assets/primeiros-passos/meu-perfil.png)
 4. Em **Resumo de Atividade** estão os quatro números do seu trabalho:
    **Reunioes**, **Pendencias Ativas**, **Concluidas** e **No Prazo**.
 

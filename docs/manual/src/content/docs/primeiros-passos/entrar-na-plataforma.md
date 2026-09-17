@@ -18,13 +18,13 @@ sempre que você tiver saído da sua conta.
 
 1. Abra o endereço da plataforma no navegador. A tela mostra
    **Bem-vindo de volta**.
+
+   ![Tela de entrada com os campos Email e Senha](../../../assets/primeiros-passos/tela-de-entrada.png)
 2. Escreva o seu **Email**.
 3. Escreva a sua **Senha**. O olho no canto direito do campo mostra o que você
    digitou, para conferir antes de entrar.
 4. Clique em **Entrar**. O botão fica **Entrando...** enquanto a plataforma
    confere.
-
-![Tela de entrada da plataforma, com os campos Email e Senha](../../../assets/primeiros-passos/tela-de-entrada.png)
 
 Quem entra pela primeira vez cai no **Dashboard** ou no **Início**, conforme o
 perfil de acesso. A Secretária cai em **Início**; quem só cuida de

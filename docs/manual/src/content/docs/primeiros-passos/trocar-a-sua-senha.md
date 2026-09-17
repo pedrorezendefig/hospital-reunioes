@@ -19,7 +19,11 @@ A plataforma não obriga essa troca: ela é sua iniciativa.
 ## Passo a passo
 
 1. Clique no seu nome, no alto da tela à direita, e escolha **Configurações**.
+
+   ![Menu do seu nome com o item Configuracoes](../../../assets/primeiros-passos/menu-do-usuario-configuracoes.png)
 2. Na coluna **Pessoal**, clique em **Segurança**.
+
+   ![Aba Seguranca com os dois campos de senha](../../../assets/primeiros-passos/configuracoes-seguranca.png)
 3. Escreva a **Nova senha**, com pelo menos 8 caracteres.
 4. Repita a mesma senha em **Confirmar nova senha**.
 5. Clique em **Alterar senha**. Um aviso verde confirma
