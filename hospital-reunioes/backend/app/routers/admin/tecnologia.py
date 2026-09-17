@@ -194,7 +194,7 @@ from app.services.transcricao_extractor import (
     MAX_BYTES_BINARY,
     MAX_BYTES_TEXT,
     SUPPORTED_EXTENSIONS,
-    extrair_texto,
+    extrair_texto_async,
 )
 
 logger = logging.getLogger(__name__)
@@ -2218,8 +2218,11 @@ async def assistente_extrair_documento(
 
     try:
         # `pdfplumber` num PDF de quinze megabytes segura o event loop (uvicorn
-        # roda com um worker so), como a transcricao de voz ja fazia.
-        texto, _ = await asyncio.to_thread(extrair_texto, nome, conteudo)
+        # roda com um worker so), como a transcricao de voz ja fazia. E o
+        # executor tem que ser o DELA (#758), nao o default do loop: com a
+        # extracao no executor de todo mundo, uma rajada de upload prendia as
+        # threads do `/health` e o HEALTHCHECK declarava o container doente.
+        texto, _ = await extrair_texto_async(nome, conteudo)
     except ValueError as e:
         # A frase e do EXTRATOR: PDF escaneado, arquivo vazio, docx corrompido.
         # Quem sabe o que houve e quem tentou ler, e a rota nao inventa causa.

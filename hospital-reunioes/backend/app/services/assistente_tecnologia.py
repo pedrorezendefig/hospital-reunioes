@@ -92,6 +92,14 @@ PREFIXO_DE_ORIGEM = re.compile(
     r"^\[(?P<rotulo>áudio|print|documento)(?: (?P<nome>[^\]\n]{1," + str(LIMITE_DO_NOME_DO_ARQUIVO) + r"}))?\]\s"
 )
 
+# Todo separador de linha que NAO seja `\n` vira `\n` antes da cerca.
+#
+# O recuo de dentro da cerca e feito por `split("\n")` (`recuar_continuacao`):
+# um `\r`, `\x0b`, `\x0c` ou `\x85` no meio do material nao vira linha para ele
+# e escapa do recuo, mas vira linha para quem LE o prompt. Era por ali que a
+# marca de fim conseguia voltar para a coluna zero.
+SEPARADORES_DE_LINHA = str.maketrans({"\r": "\n", "\x0b": "\n", "\x0c": "\n", "\x85": "\n"})
+
 # Os tetos dos dois campos de TEXTO do rascunho.
 #
 # Eles existem pelo mesmo motivo dos tetos de `messages`, e fechavam um buraco
@@ -173,6 +181,7 @@ def _linha_da_conversa(mensagem: dict) -> str:
         return f"{quem}: {conteudo}"
     nome = origem.group("nome")
     dentro = f"{ROTULO_DO_NOME} {nome}\n{conteudo[origem.end() :]}" if nome else conteudo[origem.end() :]
+    dentro = dentro.translate(SEPARADORES_DE_LINHA)
     return "\n".join(
         [
             f"{quem}: [{origem.group('rotulo')}]",
