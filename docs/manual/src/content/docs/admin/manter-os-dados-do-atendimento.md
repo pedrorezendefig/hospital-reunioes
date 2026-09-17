@@ -3,7 +3,7 @@ title: Manter os Dados do Atendimento
 description: Atualizar os preços, preparos e estimativas que a assistente usa para responder ao paciente.
 prd: [287]
 draft: false
-papel: [Só admin, Secretária]
+papel: [Secretária]
 sidebar:
   order: 11
 ---
@@ -13,6 +13,10 @@ sidebar:
 Sempre que um preço particular mudar, um exame novo passar a ser oferecido ou o
 preparo de um exame for alterado. O que você grava aqui vale na resposta
 seguinte da assistente, sem espera.
+
+Esta é a única tela da área de administração que não é só do Super Admin: quem
+edita é a Secretária, e o Super Admin também. Quem tem perfil Regular abre e lê,
+sem os botões de edição.
 
 ## Passo a passo
 

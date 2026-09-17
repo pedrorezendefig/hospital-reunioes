@@ -19,6 +19,14 @@ Lista `<select>`: o menu nativo do sistema não sai na captura. Antes do
 screenshot, transforme o campo em lista visível (`el.size = <n>`) e recorte a
 área dele.
 
+**Endereço impresso.** O app local monta cartaz, QR e e-mail com a base do
+`FRONTEND_URL` dele, que é `http://localhost:3000`. Um cartaz com esse endereço
+vai para a parede do hospital e não abre para ninguém, e foi isso que a
+auditoria do PRD #731 encontrou publicado. O que a base do endereço muda é o
+documento, não a tela, então o cartaz e o e-mail são montados aqui pelo código
+do próprio app, num processo à parte, com a base de produção. O resto continua
+saindo do navegador contra o app local.
+
 Uso: python3 docs/manual/prints/ouvidoria.py [--base http://localhost:3000]
      [--saida docs/manual/src/assets/ouvidoria] [--print <nome>]
 """
@@ -26,15 +34,50 @@ Uso: python3 docs/manual/prints/ouvidoria.py [--base http://localhost:3000]
 from __future__ import annotations
 
 import argparse
+import re
+import subprocess
 import sys
+import textwrap
 from pathlib import Path
-
-from playwright.sync_api import Page, sync_playwright
 
 # Celular primeiro: o formulário público nasce do QR do cartaz, e é assim que a
 # pessoa vê a tela. O dobro de escala deixa o texto legível no print.
 CELULAR = {"width": 390, "height": 844}
 ESCALA = 2
+
+# A base do app em produção. Não é chute nem o endereço do manual: é o domínio
+# do frontend no contrato de deploy (`docs/spec/deploy/project.json`, serviço
+# `frontend`), o mesmo que o CORS do backend libera
+# (`docs/spec/snapshots/ESTRUTURA.md`: "CORS travado no domínio do frontend
+# (app.hospitalsaomatheus.cloud, via frontend_url)").
+BASE_DO_APP_EM_PRODUCAO = "https://app.hospitalsaomatheus.cloud"
+
+# O que não pode aparecer num print publicado: o endereço da máquina de quem
+# capturou. Um cartaz impresso com isto é papel na parede que não abre.
+#
+# A guarda responde sobre "endereço local", e não sobre três strings: casar
+# `localhost` e parar ali deixaria passar o `[::1]` do IPv6, a forma curta
+# `127.1`, o `192.168.` de um notebook na rede do hospital, o `.local` do
+# Bonjour e um `LOCALHOST` em caixa alta. Por isso são padrões, comparados sem
+# caixa.
+#
+# E são padrões com forma de endereço, não pedaços soltos: o manual fala em
+# "10.000 caracteres" e em preço com milhar, e um `10.` cru travaria a captura
+# de um print correto. Faixa privada só casa com os quatro octetos.
+ENDERECOS_LOCAIS = (
+    r"\blocalhost\b",
+    r"\b127\.0\.0\.1\b",
+    r"\b127\.1\b",
+    r"\b0\.0\.0\.0\b",
+    r"\[::1\]",
+    r"\b192\.168\.\d{1,3}\.\d{1,3}\b",
+    r"\b10\.\d{1,3}\.\d{1,3}\.\d{1,3}\b",
+    r"\b172\.(?:1[6-9]|2\d|3[01])\.\d{1,3}\.\d{1,3}\b",
+    r"\.local\b",
+    r"\.internal\b",
+    r"\.test\b",
+)
+RE_ENDERECO_LOCAL = re.compile("|".join(ENDERECOS_LOCAIS), re.IGNORECASE)
 
 RELATO_DE_EXEMPLO = (
     "Fui muito bem atendida na recepção da Farmácia hoje de manhã. "
@@ -42,8 +85,107 @@ RELATO_DE_EXEMPLO = (
     "conferiu a receita comigo. Queria registrar o elogio."
 )
 
+# Dados de exemplo do cartaz publicado no manual, os mesmos do capítulo 1 em
+# vídeo: o que muda de um cartaz para outro é só o cadastro por trás do código.
+PONTO_DE_EXEMPLO = {
+    "codigo": "QWQK8Q",
+    "setor": "Pronto Atendimento",
+    "ponto": "Sala de espera",
+}
+PROTOCOLO_DE_EXEMPLO = "2026-0007"
+# O desfecho é o texto que o ouvidor escreve PARA a pessoa, em linguagem simples
+# (RN-64). O código interno do enum, `procedente`, é o que o próprio montador do
+# e-mail proíbe por escrito ("`procedente` não é português",
+# `ouvidoria_notificacoes.py:1026`), e era ele que estava no print publicado.
+DESFECHO_DE_EXEMPLO = (
+    "Apuramos o que você relatou com a equipe responsável e corrigimos o "
+    "atendimento no mesmo dia. Obrigado por avisar a Ouvidoria."
+)
 
-def formulario_publico(page: Page, base: str, saida: Path) -> None:
+
+class EnderecoLocalNoPrint(Exception):
+    """O print ia para o manual com o endereço da máquina de quem capturou."""
+
+
+def exigir_endereco_de_producao(texto_visivel: str, nome: str) -> None:
+    """Recusa a captura quando o que a pessoa lê no print traz endereço local.
+
+    Olha o texto visível, e não o HTML: o `__NEXT_DATA__` e os chunks do
+    frontend citam localhost em desenvolvimento sem que nada disso apareça na
+    imagem, e travar neles faria a guarda gritar em todo print do app local.
+    """
+    achados = sorted({m.group(0) for m in RE_ENDERECO_LOCAL.finditer(texto_visivel)})
+    if achados:
+        raise EnderecoLocalNoPrint(
+            f"{nome}: o print mostra {', '.join(achados)}. O manual é público e "
+            "o cartaz vai para a parede: monte o documento com "
+            f"{BASE_DO_APP_EM_PRODUCAO} antes de capturar."
+        )
+
+
+def capturar(page, caminho: Path, nome: str, **kwargs) -> None:
+    """Confere o texto visível e só então grava a imagem.
+
+    A guarda vive aqui, no caminho por onde todo print passa, e não em cada
+    função: print novo nasce protegido sem ninguém lembrar de chamar nada.
+    """
+    exigir_endereco_de_producao(page.inner_text("body"), nome)
+    page.screenshot(path=str(caminho), **kwargs)
+
+
+def _python_do_backend() -> str:
+    """O interpretador que tem as dependências do app (jinja, segno).
+
+    O `.venv` do backend não é versionado, então num worktree novo ele não
+    existe: nesse caso vale o da árvore principal, que é o mesmo código.
+    """
+    raiz = Path(__file__).resolve().parents[3]
+    candidatos = [
+        raiz / "hospital-reunioes" / "backend" / ".venv" / "bin" / "python",
+        Path.home() / "PedroDev" / "Hospital" / "hospital-reunioes" / "backend" / ".venv" / "bin" / "python",
+    ]
+    for candidato in candidatos:
+        if candidato.is_file():
+            return str(candidato)
+    raise SystemExit(
+        "não achei o Python do backend (.venv). Rode `uv sync` em "
+        "hospital-reunioes/backend ou capture a partir da árvore principal."
+    )
+
+
+def _montar_no_app(expressao: str) -> str:
+    """Roda o código do app num processo à parte, com a base de produção.
+
+    O documento (cartaz e e-mail) é montado pelo mesmo template que o app usa,
+    sem tocar no backend que está de pé: o que muda é só o `FRONTEND_URL` deste
+    processo. As outras variáveis existem porque o `Settings` exige o conjunto
+    inteiro para carregar, e nenhuma delas entra no documento.
+    """
+    raiz = Path(__file__).resolve().parents[3]
+    codigo = textwrap.dedent(
+        f"""
+        import os, sys
+        os.environ["FRONTEND_URL"] = "{BASE_DO_APP_EM_PRODUCAO}"
+        os.environ["CLICKSIGN_BASE_URL"] = "https://app.clicksign.com"
+        os.environ.setdefault("SUPABASE_URL", "http://127.0.0.1:54321")
+        os.environ.setdefault("SUPABASE_SERVICE_ROLE_KEY", "sem-uso-neste-render")
+        os.environ.setdefault("SUPABASE_ANON_KEY", "sem-uso-neste-render")
+        sys.path.insert(0, {str(raiz / "hospital-reunioes" / "backend")!r})
+        sys.stdout.write({expressao})
+        """
+    )
+    saida = subprocess.run(
+        [_python_do_backend(), "-c", codigo],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if saida.returncode != 0:
+        raise SystemExit(f"o app não montou o documento:\n{saida.stderr[-2000:]}")
+    return saida.stdout
+
+
+def formulario_publico(page, base: str, saida: Path) -> None:
     """A tela que o QR do cartaz abre, preenchida como uma pessoa preencheria."""
     page.goto(f"{base}/manifestacao", wait_until="networkidle")
     page.get_by_role("button", name="Elogio").click()
@@ -53,13 +195,63 @@ def formulario_publico(page: Page, base: str, saida: Path) -> None:
     # Sem foco em campo nenhum: o anel de foco no print vira instrução falsa
     # ("clique aqui") na hora que a pessoa lê a página.
     page.get_by_role("heading", name="Ouvidoria").click()
-    page.screenshot(path=str(saida / "formulario-publico.png"), full_page=True)
+    capturar(page, saida / "formulario-publico.png", "formulario-publico", full_page=True)
 
 
-PRINTS = {"formulario-publico": formulario_publico}
+def cartaz_pa(page, base: str, saida: Path) -> None:
+    """O cartaz A5, do mesmo template que vira o PDF da gráfica."""
+    html = _montar_no_app(
+        "__import__('app.services.ouvidoria_pontos', fromlist=['x'])"
+        f".html_do_cartaz({PONTO_DE_EXEMPLO!r})"
+    )
+    # O template é A5 com margem de 14mm (`@page`), medida que o navegador
+    # ignora: a largura sai daí e a altura é cortada no rodapé do cartaz, senão
+    # o print leva junto a metade em branco da folha.
+    page.set_viewport_size({"width": 840, "height": 1188})
+    page.set_content(html, wait_until="networkidle")
+    fim = page.evaluate(
+        "document.querySelector('.rodape').getBoundingClientRect().bottom"
+    )
+    capturar(
+        page,
+        saida / "cartaz-pa.png",
+        "cartaz-pa",
+        clip={"x": 0, "y": 0, "width": 840, "height": round(fim) + 40},
+    )
+
+
+def email_encerramento(page, base: str, saida: Path) -> None:
+    """O aviso de encerramento, como chega na caixa de quem manifestou."""
+    html = _montar_no_app(
+        "__import__('app.services.ouvidoria_notificacoes', fromlist=['x'])"
+        f".montar_encerramento_manifestante({PROTOCOLO_DE_EXEMPLO!r}, {DESFECHO_DE_EXEMPLO!r})[1]"
+    )
+    # O e-mail é a tabela de 560 de largura do `email_base.html`, centrada num
+    # fundo que se estica: o corte para no fim do cartão para o print não virar
+    # um retângulo cinza com um e-mail no alto.
+    page.set_viewport_size({"width": 720, "height": 900})
+    page.set_content(html, wait_until="networkidle")
+    fim = page.evaluate(
+        "document.querySelector('table table').getBoundingClientRect().bottom"
+    )
+    capturar(
+        page,
+        saida / "email-encerramento.png",
+        "email-encerramento",
+        clip={"x": 0, "y": 0, "width": 720, "height": round(fim) + 32},
+    )
+
+
+PRINTS = {
+    "formulario-publico": formulario_publico,
+    "cartaz-pa": cartaz_pa,
+    "email-encerramento": email_encerramento,
+}
 
 
 def main() -> int:
+    from playwright.sync_api import sync_playwright
+
     ap = argparse.ArgumentParser()
     ap.add_argument("--base", default="http://localhost:3000")
     ap.add_argument("--saida", default="docs/manual/src/assets/ouvidoria")

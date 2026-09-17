@@ -16,8 +16,8 @@
  "issues": [
   574
  ],
- "app_version": "0.109.0",
- "gerado_em": "2026-09-03T21:00:00-03:00"
+ "app_version": "0.137.1",
+ "gerado_em": "2026-09-16T21:00:00-03:00"
 }
 </script>
 <style>
@@ -481,7 +481,7 @@
   <!-- 7 · Fecho -->
   <section id="c-fecho" class="clip scene slide" data-start="54" data-duration="4" data-track-index="7">
     <div class="fecho-titulo" id="fc-titulo">Cadastros e perfis</div>
-    <div class="carimbo" id="fc-carimbo">Capítulo 6 · retrata o app em v0.109.0 · gerado em 03/09/2026</div>
+    <div class="carimbo" id="fc-carimbo">Capítulo 6 · retrata o app em v0.137.1 · gerado em 16/09/2026</div>
     <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da Ouvidoria</div>
   </section>
 
@@ -603,7 +603,7 @@ const linhaFila = (o) =>
 /* Tela interna do app, com a casca em volta */
 function tela(op) {
   return `<div class="app">${casca(op.ativo, op.badge, op.quem, op.email, op.dentro)}</div>
-    <div class="rodape-v">v0.109.0</div>`;
+    <div class="rodape-v">v0.137.1</div>`;
 }
 /* ============================================================
    Cena 2 · O Super Admin concede o Acesso à Ouvidoria
@@ -644,7 +644,7 @@ document.getElementById("scr-perfil").insertAdjacentHTML("beforeend",
   </div>
   <div class="ghost" data-layout-allow-overlap data-layout-allow-occlusion id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>
   <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="pf-n1" style="left:34px;top:110px;max-width:220px">O Perfil da Ouvidoria é um eixo próprio, separado do perfil de Reuniões e do de POPs</div>
-  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="pf-n2" style="left:730px;top:180px;max-width:200px">Dois valores só: ouvidor e diretoria executiva</div>
+  <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="pf-n2" style="left:730px;top:180px;max-width:200px">Dois perfis: ouvidor e diretoria executiva</div>
   <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="pf-n3" style="left:730px;top:300px;max-width:200px">Só o Super Admin concede, e a concessão fica registrada</div>
   <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="pf-n4" style="left:34px;top:300px;max-width:220px">Nem o próprio Super Admin lê o dossiê sigiloso sem este acesso</div>`);
 
@@ -709,7 +709,7 @@ document.getElementById("scr-responsaveis").innerHTML = tela({
 });
 document.getElementById("scr-responsaveis").insertAdjacentHTML("beforeend",
   `<div class="ghost" data-layout-allow-overlap data-layout-allow-occlusion id="g2"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>
-   <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="rp-n1" style="left:200px;top:466px;max-width:430px">Só a diretoria executiva cadastra responsável. O ouvidor não</div>
+   <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="rp-n1" style="left:200px;top:466px;max-width:430px">Ouvidor e diretoria executiva mantêm o cadastro</div>
    <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="rp-n2" style="left:200px;top:466px;max-width:450px">Três papéis: titular, substituto e gestor da área, cada um com sua vigência</div>
    <div class="anot" data-layout-allow-overlap data-layout-allow-occlusion id="rp-n3" style="left:200px;top:466px;max-width:470px">O fim é inclusivo: quem sai no dia 31 ainda responde no dia 31</div>`);
 

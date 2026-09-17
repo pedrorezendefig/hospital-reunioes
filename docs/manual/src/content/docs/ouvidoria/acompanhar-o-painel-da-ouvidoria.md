@@ -9,6 +9,9 @@ sidebar:
   order: 21
 ---
 
+O vídeo é o capítulo 7 do módulo, gravado na versão 0.109.0: ele mostra esta
+tarefa, não as mudanças que vieram depois.
+
 ## Quando usar
 
 No começo do dia, e sempre que precisar saber onde a Ouvidoria está apertada.

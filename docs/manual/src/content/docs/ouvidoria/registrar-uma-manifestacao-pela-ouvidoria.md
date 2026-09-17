@@ -9,6 +9,8 @@ sidebar:
   order: 3
 ---
 
+O vídeo é o capítulo 1 do módulo, regravado na versão 0.137.1.
+
 ## Quando usar
 
 Quando a pessoa não escreveu pelo formulário: ligou, veio ao balcão, mandou

@@ -14,6 +14,9 @@ Quando alguém vai cuidar de procedimentos ou de manifestações. Os dois acesso
 são independentes do Perfil de acesso: nem o Super Admin abre a área de POPs
 nem o caso da Ouvidoria sem eles.
 
+O acesso aos POPs também se concede pela própria área de POPs, onde ficam os
+Setores da pessoa: [Dar acesso à Gestão de POPs](/pops/dar-acesso-a-gestao-de-pops/).
+
 ## Passo a passo
 
 1. Em **Usuários**, ache a pessoa e clique no lápis, **Editar**. Os dois blocos

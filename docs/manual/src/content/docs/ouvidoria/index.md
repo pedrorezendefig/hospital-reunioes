@@ -57,8 +57,9 @@ cobrar quem já foi acionado e avisar quem precisa saber.
 
 ## Os sete vídeos do módulo
 
-Sete vídeos curtos, sem narração, atuados nas telas de verdade. Eles retratam o
-sistema na versão 0.109.0 e continuam valendo como visão de conjunto.
+Sete vídeos curtos, sem narração, atuados nas telas de verdade. O capítulo 1 e o
+capítulo 6 foram regravados na versão 0.137.1, a que está no ar. Os outros cinco
+retratam a versão 0.109.0 e continuam valendo como visão de conjunto.
 
 ### 1. Por onde o caso chega
 

@@ -3,7 +3,7 @@ title: Consultar o Espelho da Global Health
 description: Ver ao vivo o que a agenda online publica e descobrir por que a assistente não achou horário.
 prd: [385]
 draft: false
-papel: [Só admin, Secretária, Regular]
+papel: [Secretária, Regular]
 sidebar:
   order: 12
 ---
@@ -13,6 +13,9 @@ sidebar:
 Quando alguém reclama que a assistente não ofereceu horário, não aceitou um
 convênio ou não achou o médico. O Espelho mostra o que a agenda online publica
 agora, e quase sempre a resposta está aqui.
+
+O Espelho fica dentro dos Dados do Atendimento, então quem abre aquela tela abre
+esta: Secretária, Regular e Super Admin. Aqui ninguém edita nada.
 
 ## Passo a passo
 

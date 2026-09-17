@@ -14,6 +14,9 @@ Quando alguém vai elaborar, revisar ou validar POPs e ainda não entra na área
 Conceder o perfil a quem não tem conta cria o acesso dela na hora. Só o
 Superadmin vê este bloco.
 
+O mesmo acesso também se concede pela área de administração, junto com o da
+Ouvidoria: [Dar acesso aos POPs e à Ouvidoria](/admin/dar-acesso-aos-pops-e-a-ouvidoria/).
+
 ## Passo a passo
 
 1. No menu da esquerda, clique em **POPs** e role até **Acesso ao POPs**.

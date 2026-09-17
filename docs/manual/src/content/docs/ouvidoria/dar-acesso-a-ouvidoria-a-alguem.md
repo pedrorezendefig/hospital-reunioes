@@ -9,6 +9,8 @@ sidebar:
   order: 16
 ---
 
+O vídeo é o capítulo 6 do módulo, regravado na versão 0.137.1.
+
 ## Quando usar
 
 Quando alguém passa a trabalhar na Ouvidoria, ou deixa de trabalhar. Ter acesso
@@ -25,8 +27,11 @@ separado.
 
 ## Se der errado
 
-- **A pessoa ainda não entrou na plataforma:** pode conceder assim mesmo. O
-  acesso fica reservado esperando o primeiro login.
+- **A pessoa ainda não entrou na plataforma:** a concessão cria o login dela na
+  hora, e a senha aparece uma única vez na tela. Copie e entregue antes de
+  fechar. Sem e-mail cadastrado a tela recusa, porque o login precisa de
+  endereço. O passo a passo completo está em
+  [Dar acesso aos POPs e à Ouvidoria](/admin/dar-acesso-aos-pops-e-a-ouvidoria/).
 - **Você administra o sistema e não consegue abrir um caso sigiloso:** é de
   propósito. Cuidar do sistema não é o mesmo que poder ler denúncia.
 - **Alguém saiu do hospital:** quem é desligado perde o acesso junto, sem
