@@ -22,7 +22,7 @@ Editou no aplicativo, vale na conversa seguinte. Não existe fila nem espera par
 
 ## O que ela resolve sozinha e o que passa para uma pessoa
 
-A Ana resolve sozinha consulta e exame particular, do começo ao fim, a qualquer hora. Cirurgia, procedimento e negociação de valor sempre passam para uma pessoa do hospital: ela explica o que sabe, junta o que já apurou na conversa e entrega o atendimento.
+A Ana responde sozinha, do começo ao fim e a qualquer hora, o que o paciente pergunta sobre consulta e exame particular: valor, preparo e diferencial. Marcar, não: quando chega a hora de agendar, ela entrega a conversa para uma pessoa do hospital concluir. A Ana marcar consulta já foi decidido e ainda não está construído, e depende da Integração Ana x MV. Cirurgia, procedimento e negociação de valor sempre passam para uma pessoa do hospital: ela explica o que sabe, junta o que já apurou na conversa e entrega o atendimento.
 
 Quando ela não consegue resolver, ela também passa para uma pessoa, em vez de insistir ou inventar.
 
@@ -32,7 +32,7 @@ Quando o paciente reclama, elogia ou quer registrar alguma coisa, a Ana abre uma
 
 O número é gerado pelo aplicativo, nunca pela Ana: ela copia o que recebeu. Se o registro falhar, ela não cita número nenhum.
 
-A Ana registra, mas não classifica. Quem decide o tipo, a gravidade e a área responsável é o ouvidor, depois. Por isso o caso que chega por ela nasce sem classificação, e sem classificação ele é tratado como sigiloso até o ouvidor olhar.
+A Ana registra, mas não classifica. Quem decide o tipo, a gravidade e a área responsável é o ouvidor, depois. Por isso o caso que chega por ela nasce sem tipo e sem gravidade, e sem tipo ele é tratado como sigiloso até o ouvidor olhar. A área pode chegar preenchida, com o que a Ana escreveu: ali ela vale como sugestão, e é o ouvidor que a confere na validação.
 
 ## Dados do paciente
 

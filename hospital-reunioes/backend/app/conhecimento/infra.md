@@ -1,6 +1,6 @@
 # Infra
 
-Infra é tudo que faz os sistemas ficarem de pé: os servidores onde o aplicativo roda, o banco onde os dados moram, os endereços na internet, os e-mails que o sistema envia e as cópias de segurança. Ninguém do hospital abre uma tela de Infra; o sinal de que ela está bem é o resto funcionando.
+Infra é tudo que faz os sistemas ficarem de pé: os servidores onde o aplicativo roda, o banco onde os dados moram, os endereços na internet e os e-mails que o sistema envia. Ninguém do hospital abre uma tela de Infra; o sinal de que ela está bem é o resto funcionando.
 
 Ela é um Produto da aba Tecnologia para que problema de disponibilidade, de acesso e de endereço tenha onde ser registrado, em vez de virar Demanda do módulo que por acaso estava aberto na hora.
 
@@ -15,8 +15,9 @@ O banco de dados e o login dos usuários rodam no mesmo servidor, instalados e m
 Algumas partes dependem de fornecedores, e isso importa quando alguma coisa para:
 
 - **Assinatura digital** das atas e dos POPs, na ClickSign.
-- **Envio de e-mail.** Todo e-mail do sistema sai por um serviço de entrega de terceiros, com servidores fora do Brasil. Vale inclusive para os e-mails da Ouvidoria, e é por isso que o que viaja neles é uma lista fechada de informações, decidida uma vez, e não o relato inteiro do caso.
-- **Agenda online**, do lado da Ana.
+- **Envio de e-mail.** Todo e-mail do sistema sai por um serviço de entrega de terceiros, com servidores fora do Brasil. Vale inclusive para os e-mails da Ouvidoria, e o que viaja neles é uma lista fechada de informações, decidida uma vez: no caso comum estão nela o resumo, o relato integral e o nome de quem manifestou; em caso anônimo ou sigiloso sai só a nota da ouvidoria.
+- **Agenda online**, do lado da Ana e também do aplicativo: é dela que vem o espelho da agenda na tela de Dados do Atendimento.
+- **Inteligência artificial.** Um serviço de fora escreve a ata por transcrição, elabora o POP, sugere o relatório da Ouvidoria e responde o assistente desta aba. Quando ele para, essas funções param, e o resto do aplicativo continua.
 
 O hospital não opera servidor de e-mail próprio, e não há intenção de operar.
 

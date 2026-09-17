@@ -16,7 +16,7 @@ Uma reunião tem no máximo uma ata, por um dos dois caminhos.
 
 Os nomes citados na reunião são casados com o cadastro de pessoas do hospital. Quem está no cadastro vira responsável de verdade e passa a ser cobrado; quem é de fora fica só como nome, sem cobrança. Quando o agente não tem certeza de quem é, ele pergunta.
 
-Cada ação combinada vira uma pendência, com responsável e prazo, e desde o primeiro segundo ela é cobrada de verdade: aparece no painel, vence e atrasa. Prazo estourado vira atrasado, e o caminho normal é repactuar: nasce uma pendência nova com prazo novo, e a antiga fica no histórico, em vez de sumir.
+Cada ação combinada vira uma pendência, com responsável e prazo, e desde o primeiro segundo ela é cobrada de verdade: aparece no painel, vence e atrasa. Prazo estourado vira atrasado, e o caminho normal é repactuar: a mesma pendência fica sem prazo, marcada como a repactuar, até alguém marcar a data nova. A troca fica registrada com o motivo que quem mexeu escreveu.
 
 ## Assinar ou finalizar sem assinar
 
@@ -27,13 +27,15 @@ Depois de revisar a ata, o facilitador escolhe um de dois caminhos, e os dois s�
 
 Não existe "assinar depois": escolhido o caminho, ele vale.
 
-Quando a assinatura não se completa (alguém recusa, ou o processo é cancelado), quem faltava recebe um e-mail com link, lê a ata inteira e clica em "li e aceito". Esse aceite vale como o "assinou" dele e faz nascer as pendências dele, mas não é assinatura digital: a formalidade continua sendo só do caminho da assinatura.
+Quando a assinatura não se completa (alguém recusa, ou o processo é cancelado), quem faltava e ficou com alguma ação recebe um e-mail com link, lê a ata inteira e clica em "li e aceito". Esse aceite vale como o "assinou" dele e faz nascer as pendências dele, mas não é assinatura digital: a formalidade continua sendo só do caminho da assinatura.
+
+A coleta de assinaturas também tem prazo: são 30 dias. Vencido o prazo, a ata é finalizada com as assinaturas que tiver, a tela mostra quantos de quantos assinaram, e as pendências que faltavam nascem nesse momento.
 
 ## O que ele não faz
 
 - Não grava a reunião: o aplicativo não capta o que se fala na sala. O áudio que ele recebe é o ditado, quando o facilitador prefere falar a digitar na ata guiada: esse áudio sobe, é transcrito ali mesmo e descartado. Áudio nenhum fica guardado.
 - Não gera PDF da ata guiada, e não a manda para assinatura.
-- Não desfaz uma ata finalizada.
+- Não desfaz uma ata finalizada pelo caminho normal: quem administra o aplicativo consegue apagar ou corrigir uma ata já finalizada, com motivo obrigatório e registro de quem fez, e isso é exceção pedida caso a caso, não botão de uso corrente.
 
 ## O que costuma virar Demanda
 

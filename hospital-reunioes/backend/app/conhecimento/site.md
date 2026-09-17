@@ -12,7 +12,7 @@ Ninguém precisa de acesso ao aplicativo do hospital para usar o site, e ningué
 
 ## O que já está ligado ao aplicativo
 
-O caminho da Ouvidoria. O site é uma das portas previstas para o paciente chegar ao formulário público de manifestação, o mesmo formulário para onde apontam os QR dos cartazes espalhados pelo hospital: o caso que chega por um cartaz traz o código daquele ponto, e o que chega sem código nenhum é carimbado como vindo do site. Quem abre o formulário por qualquer caminho que não seja o QR também entra como site, então esse número não mede visita ao site. Quem manifesta por ali recebe o número do protocolo na tela, e o caso entra na Ouvidoria como qualquer outro, sem área definida, esperando o ouvidor classificar.
+O caminho da Ouvidoria. O site é uma das portas previstas para o paciente chegar ao formulário público de manifestação, o mesmo formulário para onde apontam os QR dos cartazes espalhados pelo hospital: o caso que chega por um cartaz traz o setor daquele cartaz, e o código do ponto quando quem manifestou não pediu anonimato; o que chega sem código nenhum é carimbado como vindo do site. Quem abre o formulário por qualquer caminho que não seja o QR também entra como site, então esse número não mede visita ao site. Quem manifesta por ali recebe o número do protocolo na tela, e o caso entra na Ouvidoria como qualquer outro, sem área definida, esperando o ouvidor classificar.
 
 Fora esse caminho, o site e o aplicativo não trocam informação.
 
