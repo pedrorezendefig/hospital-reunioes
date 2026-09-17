@@ -4,6 +4,7 @@ description: Como dizer quem responde por cada área, com papel e período de vi
 prd: [317, 706]
 draft: false
 papel: [Ouvidoria]
+video: cadastrar-responsaveis-de-setor
 sidebar:
   order: 15
 ---

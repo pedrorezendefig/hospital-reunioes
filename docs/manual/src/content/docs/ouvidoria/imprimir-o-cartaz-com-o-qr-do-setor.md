@@ -4,6 +4,7 @@ description: Como cadastrar um ponto de escuta e sair com o cartaz A5 pronto par
 prd: [317, 467]
 draft: false
 papel: [Ouvidoria]
+video: imprimir-o-cartaz-com-o-qr-do-setor
 sidebar:
   order: 4
 ---

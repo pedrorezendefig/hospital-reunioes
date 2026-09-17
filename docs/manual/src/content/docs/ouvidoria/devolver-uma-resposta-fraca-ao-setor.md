@@ -4,6 +4,7 @@ description: Como mandar o caso de volta para a mesma √°rea quando a resposta n√
 prd: [318]
 draft: false
 papel: [Ouvidoria]
+video: devolver-uma-resposta-fraca-ao-setor
 sidebar:
   order: 11
 ---

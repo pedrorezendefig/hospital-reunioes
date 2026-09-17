@@ -4,6 +4,7 @@ description: Como registrar a nota que o hospital tem fora dele, para o relatór
 prd: [319]
 draft: false
 papel: [Ouvidoria]
+video: lancar-a-nota-do-google-e-do-reclame-aqui
 sidebar:
   order: 20
 ---
