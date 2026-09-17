@@ -19,8 +19,10 @@ esta semana, o que está com cada setor.
 1. No menu, abra **Reuniões e metas**, depois **Pendências**, depois **Lista**.
 2. Abra **Filtros Dinâmicos** e escolha o recorte: **Facilitador**, o
    **Status**, ou um intervalo em **A partir de** e **Até**.
-3. Para ver só o que aperta, ligue **Críticas**: ficam as que vencem em até
-   três dias e todas as atrasadas, de qualquer data.
+3. Para ver só o que aperta, venha do **Dashboard** pelo cartão
+   **Vencem em 3 dias**: a lista abre com o selo **Críticas** ligado, só com as
+   que vencem em até três dias e todas as atrasadas. Clicar no selo desliga o
+   recorte; não existe botão para ligá-lo por aqui.
 4. Leia a tabela: **Ação / Tarefa**, **Responsável**, **Setor**, **Reunião**,
    **Prazo** e **Status**.
 5. Para mudar o estado, clique no selo colorido da coluna **Status** e escolha
