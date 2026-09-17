@@ -4,18 +4,24 @@
 prontas (cap-1 a cap-7) com réplicas de quase toda tela do módulo. Roda em
 paralelo com o 01, o 02 e o 04.
 
-Copie o bloco inteiro e cole num terminal do Claude Code aberto DENTRO do worktree deste prompt. O [README](README.md) ensina a criar o worktree e a ordem de tudo.
+Copie o bloco inteiro e cole num terminal do Claude Code aberto na raiz do repositório (`/Users/pedrorezende/PedroDev/Hospital`). A sessão cria o worktree sozinha; você não roda git. O [README](README.md) diz a ordem de tudo.
 
 ```
 Produza os 12 Vídeos de tarefa que faltam na seção "Ouvidoria" do Manual do usuário, no repo pedrorezendefig/hospital-reunioes.
 
-ONDE VOCÊ ESTÁ
-Você está num git worktree próprio, na branch docs/videos-ouvidoria, criado a partir de origin/main. Outros terminais trabalham AO MESMO TEMPO em worktrees irmãos. Antes de qualquer coisa, confira:
-  git branch --show-current      (tem que devolver docs/videos-ouvidoria)
-  git rev-parse --show-toplevel  (tem que ser a pasta deste worktree, NUNCA /Users/pedrorezende/PedroDev/Hospital)
-Se qualquer um dos dois devolver outra coisa, PARE e reporte. Nunca mude de branch, nunca saia deste worktree, nunca toque na árvore principal.
+ONDE VOCÊ ESTÁ E ONDE VAI TRABALHAR
+Você foi aberto na árvore principal do repositório, /Users/pedrorezende/PedroDev/Hospital, que costuma estar numa branch antiga e é compartilhada com outros terminais abertos AO MESMO TEMPO. Você NÃO trabalha nela. Seu primeiro ato é criar um worktree próprio, a partir de origin/main, e entrar nele:
+  git -C /Users/pedrorezende/PedroDev/Hospital fetch origin --prune
+  git -C /Users/pedrorezende/PedroDev/Hospital worktree add /Users/pedrorezende/PedroDev/Hospital/.worktrees/videos-ouvidoria -b docs/videos-ouvidoria origin/main
+  cd /Users/pedrorezende/PedroDev/Hospital/.worktrees/videos-ouvidoria
+Se a branch ou a pasta já existirem de uma tentativa anterior deste mesmo prompt: veja com `gh pr list --head docs/videos-ouvidoria --state all` se o PR dela já foi mergeado ou fechado. Se foi, remova os restos (git -C /Users/pedrorezende/PedroDev/Hospital worktree remove --force /Users/pedrorezende/PedroDev/Hospital/.worktrees/videos-ouvidoria; git -C /Users/pedrorezende/PedroDev/Hospital branch -D docs/videos-ouvidoria) e crie de novo. Se o PR ainda estiver aberto, PARE e reporte: alguém pode estar trabalhando nela.
 
-O worktree nasce sem node_modules. Seu primeiro comando de trabalho é:
+A pasta de trabalho persiste entre os seus comandos, mas confira antes de cada commit:
+  git branch --show-current      (tem que devolver docs/videos-ouvidoria)
+  git rev-parse --show-toplevel  (tem que devolver /Users/pedrorezende/PedroDev/Hospital/.worktrees/videos-ouvidoria, NUNCA /Users/pedrorezende/PedroDev/Hospital)
+Se qualquer um dos dois devolver outra coisa, PARE e reporte. Nunca mude de branch, nunca edite arquivo fora do worktree, nunca toque na árvore principal. Ao terminar, não remova o worktree: a próxima rodada deste prompt sabe lidar com ele.
+
+O worktree nasce sem node_modules. Seu primeiro comando de trabalho dentro dele é:
   cd docs/manual && corepack pnpm@9 install --frozen-lockfile && cd ../..
 
 LEIA PRIMEIRO, NESTA ORDEM
