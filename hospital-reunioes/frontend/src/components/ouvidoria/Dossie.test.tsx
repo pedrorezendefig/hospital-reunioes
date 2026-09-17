@@ -210,17 +210,26 @@ describe("o Dossiê e o aviso do acompanhante sem nome do paciente (issue #662)"
     vi.unstubAllGlobals();
   });
 
-  it("acende o aviso quando o relato é sobre outra pessoa e ninguém disse o nome do paciente", async () => {
-    montarComDossie(
-      dossie({
-        manifestante_vinculo: "acompanhante",
-        paciente_nome: null,
-        paciente_referencia: "Leito 12, dia 9",
-      })
-    );
+  // Os dois canais que perguntam o paciente, e não só o `qr` da fixture:
+  // `site` é o ramo PADRÃO do canal aberto ("qr" if origem else "site"), o que
+  // entra quando não há cartaz resolvido. Sem ele aqui, apagar "site" da
+  // constante do componente deixaria a suíte verde e o aviso mudo em metade do
+  // canal aberto.
+  it.each(["qr", "site"])(
+    "o caso do canal %s acende o aviso quando o relato é sobre outra pessoa e ninguém disse o nome do paciente",
+    async (canal) => {
+      montarComDossie(
+        dossie({
+          canal,
+          manifestante_vinculo: "acompanhante",
+          paciente_nome: null,
+          paciente_referencia: "Leito 12, dia 9",
+        })
+      );
 
-    expect(await screen.findByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeTruthy();
-  });
+      expect(await screen.findByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeTruthy();
+    }
+  );
 
   it("acompanhante que disse o nome do paciente não acende o aviso", async () => {
     montarComDossie(dossie({ manifestante_vinculo: "acompanhante", paciente_nome: "Maria Souza" }));
@@ -266,38 +275,55 @@ describe("o Dossiê e o aviso do acompanhante sem nome do paciente (issue #662)"
     }
   );
 
-  it("canal que não pergunta o paciente fica em silêncio", async () => {
-    // O Registro manual do ouvidor grava o vínculo `acompanhante` e não tem
-    // campo de paciente (a issue #663 é que dá). Aceso ali, o aviso não teria
-    // onde ser apagado, e mandaria o ouvidor confirmar com o manifestante a
-    // ligação que ele mesmo acabou de atender.
-    montarComDossie(
-      dossie({
-        canal: "telefone",
-        canal_setor: null,
-        manifestante_vinculo: "acompanhante",
-        paciente_nome: null,
-      })
-    );
+  // O Registro manual do ouvidor (`telefone` e os outros seis) e a API da Ana
+  // gravam o vínculo `acompanhante` e não têm campo de paciente. Aceso ali, o
+  // aviso não teria onde ser apagado, e mandaria o ouvidor confirmar com o
+  // manifestante a ligação que ele mesmo acabou de atender.
+  //
+  // QUANDO ESTE TESTE FICAR VERMELHO: a issue #663 dá os dois campos do
+  // paciente ao Registro manual, e quem subir aquela fatia acrescenta os sete
+  // canais manuais a `CANAIS_QUE_PERGUNTAM_O_PACIENTE`. A reação certa então é
+  // MOVER `telefone` daqui para a varredura de acendimento lá em cima (e
+  // acrescentar o caso do telefone COM nome do paciente, que continua em
+  // silêncio), nunca apagar este teste. A Ana segue aqui enquanto o payload
+  // dela não tiver os campos: ela é a prova de que a guarda é uma lista de
+  // quem pergunta, e não uma exceção para o telefone.
+  it.each(["telefone", "ana"])(
+    "o canal %s não pergunta o paciente, e fica em silêncio",
+    async (canal) => {
+      montarComDossie(
+        dossie({
+          canal,
+          canal_setor: null,
+          manifestante_vinculo: "acompanhante",
+          paciente_nome: null,
+        })
+      );
 
-    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
-    expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
-  });
+      expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+      expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
+    }
+  );
 
-  it("caso encerrado fica em silêncio: não há mais o que acionar", async () => {
-    // "Confirme antes de acionar" num caso encerrado manda fazer o que não
-    // existe mais. O fato continua legível na linha "Paciente: Não informado".
-    montarComDossie(
-      dossie({
-        status: "encerrado",
-        manifestante_vinculo: "acompanhante",
-        paciente_nome: null,
-      })
-    );
+  // Os dois status que faltam ao aviso, e `aguardando_area` é o que importa:
+  // é onde `podeValidar` e `podeEncerrar` discordam, então sem ele o mutante
+  // que troca um helper pelo outro sobrevive e faz o aviso voltar a aparecer
+  // no caso que já está com a área. `encerrado` fecha a ponta de cima.
+  it.each(["aguardando_area", "encerrado"])(
+    "o caso %s fica em silêncio: não há mais o que acionar",
+    async (status) => {
+      montarComDossie(
+        dossie({
+          status,
+          manifestante_vinculo: "acompanhante",
+          paciente_nome: null,
+        })
+      );
 
-    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
-    expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
-  });
+      expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+      expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
+    }
+  );
 
   it("CONTRAPROVA: o aviso não trava nada, o ouvidor aciona a área mesmo assim", async () => {
     // Sem esta, um mutante que trocasse o aviso por um bloqueio passaria: a
