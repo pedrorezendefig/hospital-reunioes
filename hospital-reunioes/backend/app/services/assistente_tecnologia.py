@@ -92,14 +92,6 @@ PREFIXO_DE_ORIGEM = re.compile(
     r"^\[(?P<rotulo>áudio|print|documento)(?: (?P<nome>[^\]\n]{1," + str(LIMITE_DO_NOME_DO_ARQUIVO) + r"}))?\]\s"
 )
 
-# Todo separador de linha que NAO seja `\n` vira `\n` antes da cerca.
-#
-# O recuo de dentro da cerca e feito por `split("\n")` (`recuar_continuacao`):
-# um `\r`, `\x0b`, `\x0c` ou `\x85` no meio do material nao vira linha para ele
-# e escapa do recuo, mas vira linha para quem LE o prompt. Era por ali que a
-# marca de fim conseguia voltar para a coluna zero.
-SEPARADORES_DE_LINHA = str.maketrans({"\r": "\n", "\x0b": "\n", "\x0c": "\n", "\x85": "\n"})
-
 # Os tetos dos dois campos de TEXTO do rascunho.
 #
 # Eles existem pelo mesmo motivo dos tetos de `messages`, e fechavam um buraco
@@ -148,12 +140,27 @@ RASCUNHO_VAZIO: dict = {
 
 
 def _cercar(texto: str, *, titulo: str, inicio: str, fim: str) -> str:
-    """Um bloco de texto de gente entre marcas, com todas as linhas recuadas.
+    r"""Um bloco de texto de gente entre marcas, com todas as linhas recuadas.
 
     A primeira linha de dentro e o `titulo`, que e do backend: e ele que faz o
     `recuar_continuacao` empurrar TODO o resto para a direita, e com a primeira
     coluna sempre nossa nenhuma linha la dentro consegue passar por marca.
+
+    **Todo separador de linha vira `\n` antes do recuo.** O recuo e feito por
+    `split("\n")` (`recuar_continuacao`), e o Python reconhece DEZ separadores:
+    um `\r`, `\x0c`, `\x1e` ou `\u2028` no meio do material nao vira linha para
+    o `split` e escapa do recuo, mas vira linha para quem LE o prompt, e era por
+    ali que a marca de fim voltava para a coluna zero. A normalizacao usa o
+    proprio `splitlines()` de proposito, e nao uma tabela de caracteres: uma
+    tabela e enumeracao, e enumeracao divergiu do criterio de quem le assim que
+    foi escrita.
+
+    A normalizacao mora AQUI, e nao em quem chama, porque as tres cercas do
+    prompt (a conversa, o kit e as Demandas abertas) passam por este gargalo.
+    Consertar so a da conversa deixaria a proxima fatia que injetar texto de
+    banco nas Demandas (#732) redescobrir o mesmo furo.
     """
+    texto = "\n".join(texto.splitlines())
     return "\n".join([inicio, recuar_continuacao(f"{titulo}\n{texto}"), fim])
 
 
@@ -181,7 +188,6 @@ def _linha_da_conversa(mensagem: dict) -> str:
         return f"{quem}: {conteudo}"
     nome = origem.group("nome")
     dentro = f"{ROTULO_DO_NOME} {nome}\n{conteudo[origem.end() :]}" if nome else conteudo[origem.end() :]
-    dentro = dentro.translate(SEPARADORES_DE_LINHA)
     return "\n".join(
         [
             f"{quem}: [{origem.group('rotulo')}]",
