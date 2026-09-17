@@ -26,6 +26,8 @@ tarefa, 48 publicam com o aviso "Vídeo em produção".
 | [08-prints-pops-e-primeiros-passos.md](08-prints-pops-e-primeiros-passos.md) | POPs, Primeiros passos | 15 páginas com print | Etapa B, em paralelo |
 | [08-prints-ouvidoria-e-admin.md](08-prints-ouvidoria-e-admin.md) | Ouvidoria, Admin | 31 páginas com print | Etapa B, em paralelo |
 | [09-fluxogramas.md](09-fluxogramas.md) | os cinco (Visão geral e Como funciona) | até 10 fluxogramas | Etapa B, em paralelo |
+| [11-acertos-antes-do-06.md](11-acertos-antes-do-06.md) | os cinco (afirmações erradas, prints refeitos com a stack na main) | 2 páginas ganham print | Etapa B.5, depois dos quatro da Etapa B, antes do 06 |
+| [12-video-arquivar-ouvidoria.md](12-video-arquivar-ouvidoria.md) | Ouvidoria | 1 vídeo | Etapa B.5, em paralelo com o 11 |
 | [10-publicar.md](10-publicar.md) | o site inteiro | nenhum | Etapa 5, sozinho, por último, na árvore principal |
 
 Os quatro de vídeo rodam **em paralelo, um por terminal, cada um no seu
@@ -158,6 +160,15 @@ o roteiro dele nasce do zero.
 Revise os quatro PRs (as imagens aparecem no diff do GitHub) e mergeie na ordem
 que quiser. Se dois PRs conflitarem, é porque um deles
 tocou arquivo que não era dele: o relatório de cada um diz o que tocou.
+
+### Etapa B.5: os acertos que a Etapa B apontou (11 e 12, em paralelo)
+
+Os relatórios dos quatro PRs da Etapa B deixaram pontas: afirmações que a
+tela desmente (o 08 para na página em vez de corrigir), duas páginas de
+Reuniões sem print por isso, o vídeo de Arquivar que o 03 deixou de fora, e
+todos os prints tirados de uma stack local antiga, sem o item Ajuda no menu.
+Dois terminais na raiz, ao mesmo tempo: cole o `11` num e o `12` no outro.
+Revise e mergeie os dois antes do 06.
 
 ### Etapa C: o 06, sozinho, por último
 
