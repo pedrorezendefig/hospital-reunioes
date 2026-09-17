@@ -50,15 +50,17 @@ que está com você.
 
 1. Alguém cria o POP, escolhe o Setor e as três pessoas. A Versão nasce em
    **A Elaborar**.
-2. O Elaborador anexa os materiais que já existem, conversa com o Consultor de
-   POPs e clica em **Aprovar versão final**. A Versão vai para **Em Revisão**.
-3. O Revisor lê e clica em **Aprovar revisão** ou **Devolver com comentários**.
-4. O Validador faz o mesmo em **Em Validação**.
-5. Aprovada a validação, a Versão vai para **Em Assinatura** e as três pessoas
+2. O Elaborador anexa os materiais que já existem e conversa com o Consultor de
+   POPs. Na primeira conversa, a Versão passa para **Em Elaboração**.
+3. Com o texto pronto, o Elaborador clica em **Aprovar versão final**. A Versão
+   vai para **Em Revisão**.
+4. O Revisor lê e clica em **Aprovar revisão** ou **Devolver com comentários**.
+5. O Validador faz o mesmo em **Em Validação**.
+6. Aprovada a validação, a Versão vai para **Em Assinatura** e as três pessoas
    recebem o documento para assinar por email.
-6. Com as três assinaturas, a Versão fica **Publicado** e aparece na
+7. Com as três assinaturas, a Versão fica **Publicado** e aparece na
    Biblioteca.
 
-A qualquer momento uma devolução volta a Versão para o Elaborador, com o
+A qualquer momento uma devolução volta a Versão para **Em Elaboração**, com o
 comentário de quem devolveu. Depois da correção, ela retorna direto para quem
 devolveu, sem repetir a etapa anterior.

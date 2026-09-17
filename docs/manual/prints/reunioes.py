@@ -459,6 +459,23 @@ PENDENCIAS = [
     ("MANP07", "Comprar carrinho de emergência para a Farmácia", "P922", 14, "CANCELADO", "Carrinho recebido e conferido"),
 ]
 
+# O comentário de exemplo e a menção que ele gera. Ele mora numa pendência só
+# (MANP06), e as duas telas que precisam do histórico vazio usam outra: sem
+# isso, o print do passo que mostra "Sem rastros de atividade." envelheceria na
+# primeira vez que este roteiro rodasse.
+PENDENCIA_COM_COMENTARIO = "MANP06"
+PENDENCIA_SEM_COMENTARIO = "MANP01"
+AUTOR_DO_COMENTARIO = "P922"
+MENCIONADO = FACILITADORA[0]
+# As duas pendências que os prints da Lista citam pelo nome, e não pela ordem:
+# a tabela ordena pelo prazo, e prender um balão à "primeira linha" faria o
+# print apontar outra pendência assim que uma data virasse.
+PENDENCIA_ATRASADA = "Publicar o relatório de indicadores do trimestre"
+COMENTARIO_DE_EXEMPLO = (
+    "@Renata Fontes o setor de compras pediu o parecer técnico antes de "
+    "renovar. Consegue olhar esta semana?"
+)
+
 
 def semear() -> None:
     """As pessoas, as duas reuniões de exemplo e as pendências dos seis estados."""
@@ -596,6 +613,44 @@ def semear() -> None:
             "PATCH",
             {"token_hash": token_hash, "usado_em": None},
         )
+
+    # O comentário com menção e o aviso que ele acende no sino. Os dois são
+    # apagados e refeitos a cada semeadura: sem isso o histórico cresceria uma
+    # linha por rodada e o sino acumularia avisos, e os dois prints mudariam
+    # sozinhos de uma captura para a outra.
+    _rest(f"comentarios_pendencias?id_acao=eq.{PENDENCIA_COM_COMENTARIO}", "DELETE")
+    _rest(
+        f"notificacoes?referencia_id=eq.{PENDENCIA_COM_COMENTARIO}&tipo=eq.MENCAO",
+        "DELETE",
+    )
+    descricao = {p[0]: p[1] for p in PENDENCIAS}[PENDENCIA_COM_COMENTARIO]
+    _rest(
+        "comentarios_pendencias",
+        "POST",
+        [
+            {
+                "id_acao": PENDENCIA_COM_COMENTARIO,
+                "autor_id": AUTOR_DO_COMENTARIO,
+                "autor_nome": por_id[AUTOR_DO_COMENTARIO],
+                "conteudo": COMENTARIO_DE_EXEMPLO,
+                "mencoes": [MENCIONADO],
+            }
+        ],
+    )
+    _rest(
+        "notificacoes",
+        "POST",
+        [
+            {
+                "destinatario_id": MENCIONADO,
+                "tipo": "MENCAO",
+                "titulo": f"{por_id[AUTOR_DO_COMENTARIO]} mencionou você",
+                "mensagem": f"Menção em: {descricao[:80]}",
+                "referencia_id": PENDENCIA_COM_COMENTARIO,
+                "lida": False,
+            }
+        ],
+    )
 
     print("dados de exemplo do módulo Reuniões e metas prontos.")
 
@@ -1100,6 +1155,248 @@ def aceite_pelo_link(page: Page, base: str, saida: Path) -> None:
     limpar_baloes(page)
 
 
+# A tabela da Lista é mais larga do que a área de trabalho de 1440: a coluna
+# com a lupa que abre a pendência fica fora da tela e a pessoa só chega nela
+# rolando de lado. O print abre uma janela mais larga, como o do quadro, para a
+# linha aparecer inteira, com a lupa que o passo manda clicar.
+COMPUTADOR_LISTA = {"width": 1680, "height": 900}
+
+
+# A pendência que os prints da janela de detalhe abrem: é a que o semear
+# mantém sem comentário nenhum, para o print do histórico vazio existir.
+PENDENCIA_LIMPA = {p[0]: p[1] for p in PENDENCIAS}[PENDENCIA_SEM_COMENTARIO]
+
+
+def _bloco_da_tabela(page: Page):
+    """O cartão branco que envolve a tabela da Lista."""
+    return page.locator("table").locator(
+        "xpath=ancestor::div[contains(@class,'rounded-2xl')][1]"
+    )
+
+
+def capturar_faixa(page, caminho: Path, nome: str, de, ate, margem: int = 24) -> None:
+    """Captura a faixa que vai do alto de um elemento ao pé de outro.
+
+    O recorte de um bloco só não serve quando o balão do passo está fora dele:
+    o selo que o Dashboard liga fica acima da tabela, e recortar a tabela
+    deixaria o balão de fora do print que ele explica.
+    """
+    alto = de.bounding_box()
+    baixo = ate.bounding_box()
+    if alto is None or baixo is None:
+        raise SystemExit(f"{nome}: a faixa não está na tela para ser recortada.")
+    rolagem_x = page.evaluate("window.scrollX")
+    rolagem_y = page.evaluate("window.scrollY")
+    x = max(0, min(alto["x"], baixo["x"]) + rolagem_x - margem)
+    y = max(0, alto["y"] + rolagem_y - margem)
+    direita = max(alto["x"] + alto["width"], baixo["x"] + baixo["width"]) + rolagem_x
+    capturar(
+        page,
+        caminho,
+        nome,
+        full_page=True,
+        clip={
+            "x": x,
+            "y": y,
+            "width": direita - x + margem,
+            "height": baixo["y"] + baixo["height"] + rolagem_y - y + margem,
+        },
+    )
+
+
+def _linha_da_pendencia(page: Page, descricao: str):
+    """A linha da tabela da pendência, pelo texto da Ação / Tarefa."""
+    return page.locator("tbody tr").filter(has_text=descricao).first
+
+
+def _lupa_da_linha(page: Page, descricao: str):
+    """A lupa no fim da linha: é ela que abre a pendência, e não a linha."""
+    return _linha_da_pendencia(page, descricao).get_by_role(
+        "button", name="Abrir detalhes da pendência"
+    )
+
+
+def _abrir_lista(page: Page, base: str, sufixo: str = "") -> None:
+    entrar(page, base, FACILITADORA[2])
+    page.set_viewport_size(COMPUTADOR_LISTA)
+    page.goto(f"{base}/pendencias{sufixo}", wait_until="networkidle")
+    page.get_by_role("heading", name="Pendências").first.wait_for()
+    page.get_by_text("Ação / Tarefa").wait_for()
+    page.wait_for_timeout(2000)
+
+
+def pendencias_lista(page: Page, base: str, saida: Path) -> None:
+    """A Lista inteira: o item do menu, os filtros, as colunas e a lupa."""
+    _abrir_lista(page, base)
+    balao(page, _menu(page, "Lista"), 1)
+    balao(page, page.get_by_text("Filtros Dinâmicos"), 2)
+    balao(page, page.get_by_text("Ação / Tarefa"), 4)
+    balao(page, _lupa_da_linha(page, PENDENCIA_ATRASADA), 6)
+    page.evaluate("window.scrollTo(0, 0)")
+    capturar(page, saida / "pendencias-lista.png", "pendencias-lista", full_page=True)
+    limpar_baloes(page)
+
+
+def pendencias_criticas(page: Page, base: str, saida: Path) -> None:
+    """A Lista como o Dashboard a abre: com o selo Críticas ligado.
+
+    O selo não existe na tela vazia: ele nasce do recorte que o cartão
+    "Vencem em 3 dias" passa no endereço, e é assim que a pessoa chega nele.
+    """
+    _abrir_lista(page, base, "?criticas=true")
+    selo = page.get_by_role("button", name="Críticas")
+    selo.wait_for()
+    balao(page, selo, 3)
+    page.evaluate("window.scrollTo(0, 0)")
+    capturar_faixa(
+        page,
+        saida / "pendencias-criticas.png",
+        "pendencias-criticas",
+        selo,
+        _bloco_da_tabela(page),
+    )
+    limpar_baloes(page)
+
+
+def pendencias_status(page: Page, base: str, saida: Path) -> None:
+    """A lista de estados que o selo da coluna Status abre.
+
+    O roteiro abre o menu e não escolhe nada: escolher mudaria de verdade o
+    estado da pendência de exemplo, e o próximo print sairia de outra tela.
+    """
+    _abrir_lista(page, base)
+    linha = _linha_da_pendencia(page, PENDENCIA_ATRASADA)
+    selo = linha.get_by_role("button", name="Alterar status")
+    selo.click()
+    page.get_by_role("button", name="Repactuada").first.wait_for()
+    page.wait_for_timeout(500)
+    balao(page, selo, 5)
+    capturar_bloco(
+        page, saida / "pendencias-status.png", "pendencias-status", _bloco_da_tabela(page), margem=0
+    )
+    limpar_baloes(page)
+
+
+def abrir_a_pendencia(page: Page, base: str, saida: Path) -> None:
+    """A lupa no fim da linha, que é por onde a pendência abre.
+
+    A linha inteira não abre nada (o `<tr>` da tabela não tem clique), então o
+    balão deste passo fica no botão, e não na linha.
+    """
+    _abrir_lista(page, base)
+    balao(page, _lupa_da_linha(page, PENDENCIA_LIMPA), 1)
+    capturar_bloco(
+        page, saida / "abrir-a-pendencia.png", "abrir-a-pendencia", _bloco_da_tabela(page), margem=0
+    )
+    limpar_baloes(page)
+
+
+def _abrir_detalhe(page: Page, base: str, descricao: str):
+    """Abre a pendência e devolve a janela de detalhe."""
+    _abrir_lista(page, base)
+    _lupa_da_linha(page, descricao).click()
+    janela = page.locator("div.bg-white.rounded-2xl.shadow-premium").last
+    page.get_by_text("Mencione equipe com @").wait_for()
+    page.wait_for_timeout(1200)
+    return janela
+
+
+def comentario_na_pendencia(page: Page, base: str, saida: Path) -> None:
+    """A janela da pendência: o histórico ainda vazio e a caixa de escrever."""
+    janela = _abrir_detalhe(page, base, PENDENCIA_LIMPA)
+    balao(page, page.get_by_text("Sem rastros de atividade."), 2)
+    balao(page, page.get_by_placeholder("Escreva algo... (@ para menção)"), 3)
+    # A janela é recortada dois pixels para dentro: a captura do elemento em
+    # escala 2 leva junto uma tira da tela de trás, e ela aparece no print como
+    # um rabisco no rodapé.
+    capturar_bloco(
+        page,
+        saida / "comentario-na-pendencia.png",
+        "comentario-na-pendencia",
+        janela,
+        margem=-2,
+    )
+    limpar_baloes(page)
+
+
+def _exigir_so_pessoas_de_exemplo(page: Page, nome: str) -> None:
+    """Recusa a captura quando a lista da arroba mostra gente de verdade.
+
+    Mencionável é todo super admin do banco, e o banco local tem as contas
+    reais de quem trabalha no sistema. O filtro da arroba é que mantém a lista
+    nas pessoas de exemplo, e esta guarda é quem percebe quando ele deixa de
+    bastar, em vez de o nome de alguém sair no manual público.
+    """
+    lista = page.locator("div.absolute.bottom-full")
+    if lista.count() == 0:
+        raise SystemExit(f"{nome}: a lista da arroba não abriu.")
+    # As iniciais do avatar saem no mesmo texto do nome e não identificam
+    # ninguém: a guarda olha as linhas que são nome e setor.
+    mostrados = [
+        linha.strip()
+        for linha in lista.first.inner_text().splitlines()
+        if linha.strip() and not re.fullmatch(r"[A-ZÀ-Ý]{1,3}", linha.strip())
+    ]
+    de_exemplo = {n for _, n, *_ in PESSOAS} | {
+        s for _, _, _, _, s, _, _ in PESSOAS if s
+    } | {c for _, _, _, c, _, _, _ in PESSOAS if c}
+    intrusos = sorted(set(mostrados) - de_exemplo)
+    if intrusos:
+        raise SystemExit(
+            f"{nome}: a lista da arroba mostra {', '.join(intrusos)}, que não é "
+            "gente de exemplo. O manual é público: aperte o filtro da arroba."
+        )
+
+
+def mencao_na_pendencia(page: Page, base: str, saida: Path) -> None:
+    """A lista de nomes que a arroba abre, e o botão que envia.
+
+    O comentário fica escrito e NÃO é enviado: enviar deixaria um rastro na
+    pendência de exemplo, e o print do passo anterior, que mostra o histórico
+    vazio, sairia errado na rodada seguinte.
+    """
+    janela = _abrir_detalhe(page, base, PENDENCIA_LIMPA)
+    caixa = page.get_by_placeholder("Escreva algo... (@ para menção)")
+    caixa.click()
+    # O filtro vai até onde só as pessoas de exemplo casam: "@Lu" ainda pega
+    # gente de verdade do banco local, que é super admin e por isso aparece em
+    # toda pendência.
+    caixa.type("Combinado na reunião. @Lucia", delay=40)
+    page.get_by_role("button", name="Luciana Braga").first.wait_for()
+    page.wait_for_timeout(500)
+    _exigir_so_pessoas_de_exemplo(page, "mencao-na-pendencia")
+    balao(page, page.get_by_role("button", name="Luciana Braga").first, 4)
+    balao(page, janela.locator("button.bg-primary").last, 5)
+    capturar_bloco(
+        page, saida / "mencao-na-pendencia.png", "mencao-na-pendencia", janela, margem=-2
+    )
+    limpar_baloes(page)
+
+
+def sino_da_mencao(page: Page, base: str, saida: Path) -> None:
+    """O aviso da menção no sino de quem foi chamado pelo nome.
+
+    Quem aparece logada é a pessoa mencionada: o comentário de exemplo é de
+    outra pessoa, semeado com a menção, e é ele que acende este aviso.
+    """
+    _abrir_lista(page, base)
+    sino = page.get_by_role("button", name="Notificações")
+    sino.click()
+    page.get_by_text("mencionou você").first.wait_for()
+    page.wait_for_timeout(800)
+    balao(page, sino, 6)
+    # O aviso abre por cima da tela, fora da caixa do sino: recortar só o sino
+    # devolveria um print do ícone, sem a frase que o passo manda ler.
+    capturar_faixa(
+        page,
+        saida / "sino-da-mencao.png",
+        "sino-da-mencao",
+        sino,
+        page.locator("div.absolute.right-0.mt-2").first,
+    )
+    limpar_baloes(page)
+
+
 PRINTS: dict = {
     "calendario": calendario,
     "agendar-reuniao": agendar_reuniao,
@@ -1116,6 +1413,13 @@ PRINTS: dict = {
     "dashboard": dashboard,
     "kanban": kanban,
     "aceite-pelo-link": aceite_pelo_link,
+    "pendencias-lista": pendencias_lista,
+    "pendencias-criticas": pendencias_criticas,
+    "pendencias-status": pendencias_status,
+    "abrir-a-pendencia": abrir_a_pendencia,
+    "comentario-na-pendencia": comentario_na_pendencia,
+    "mencao-na-pendencia": mencao_na_pendencia,
+    "sino-da-mencao": sino_da_mencao,
 }
 
 
