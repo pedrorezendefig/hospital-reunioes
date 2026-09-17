@@ -1312,6 +1312,13 @@ class TestDescreverImagem:
         ela loga vem do mesmo lugar, e sem provedor nenhum o teste nao depende do
         duble. A varredura e em TODO registro, de qualquer nivel, inclusive o
         `logger.warning` do modo mock.
+
+        **A assercao de ausencia vem com PISO** (mesmo desenho do
+        `test_email_corpo_fora_do_log.py`): sem ele, uma captura que nao pegasse
+        nada (propagacao desligada, nivel, nome de logger) deixava o teste verde
+        sem ter olhado para registro nenhum, e apagar a linha do `logger.info`
+        tambem. O piso e o MARCADOR PRESENTE: a linha que a rota escreve existe,
+        e o que ela diz do texto e a CONTAGEM.
         """
         cliente = _montar(logado=_pessoa("p1"))
         with caplog.at_level(logging.DEBUG):
@@ -1321,6 +1328,10 @@ class TestDescreverImagem:
         assert resposta.status_code == 200
         assert texto, "sem texto na resposta o teste nao prova nada"
         registrado = "\n".join(r.getMessage() for r in caplog.records)
+        # O piso: a linha do print foi capturada, e ela fala do texto pelo
+        # tamanho. Sem estas duas, a linha de baixo passa sobre log vazio.
+        assert "Print lido para o Assistente" in registrado, "nenhum registro do print foi capturado"
+        assert f"{len(texto)} chars" in registrado, "o registro do print nao diz o tamanho do texto"
         assert texto not in registrado, "a descricao do print apareceu no log"
 
     def test_extensao_que_a_rota_nao_peneirou_sobe_como_erro_de_programa(self, monkeypatch):
@@ -1452,6 +1463,31 @@ class TestPromptDoPrint:
         assert proibicoes, "o prompt nao proibe transcrever dado pessoal"
         assert all("(dado pessoal omitido)" in r for r in proibicoes), (
             "a regra que proibe nao diz o que escrever no lugar do trecho"
+        )
+
+    def test_a_proibicao_nao_fecha_o_escopo_em_dado_de_saude(self, prompt):
+        """O escopo da proibicao, e nao um termo novo na lista dela.
+
+        A primeira versao da regra terminava em "qualquer outra informacao **de
+        saude**", e o caso canonico desta fatia passava por fora: a tela de LOGIN
+        (a fixture dos testes desta rota e "A tela de login da Ana"), onde o
+        rotulo que a regra da literalidade manda transcrever vem preenchido com o
+        e-mail de uma pessoa. E-mail, login, matricula e carteirinha nao sao dado
+        de saude.
+
+        O que se cobra sao as duas pecas que fazem a lista NAO ser exaustiva, que
+        e a diferenca de comportamento que importa: a regra diz que vale para dado
+        pessoal de qualquer natureza, e manda tratar como dado pessoal o trecho
+        DUVIDOSO. Uma lista maior sem essas duas voltaria a ser uma enumeracao,
+        que divergiu do criterio de quem le assim que foi escrita.
+        """
+        proibicoes = [r for r in _regras_do_prompt(prompt) if "não é transcrito" in r.lower()]
+        assert proibicoes, "o prompt nao proibe transcrever dado pessoal"
+        assert any("qualquer natureza" in r.lower() and "não só de saúde" in r.lower() for r in proibicoes), (
+            "a proibicao nao diz que vale para dado pessoal de qualquer natureza, e nao so de saude"
+        )
+        assert any("na dúvida" in r.lower() for r in proibicoes), (
+            "a proibicao nao diz o que fazer com o trecho duvidoso, entao a lista dela e exaustiva"
         )
 
     def test_o_conflito_entre_as_duas_regras_tem_desempate_escrito(self, prompt):
