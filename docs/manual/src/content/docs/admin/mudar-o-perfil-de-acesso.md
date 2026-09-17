@@ -4,6 +4,7 @@ description: Trocar entre Regular, Secretária e Super Admin, e usar o atalho do
 prd: [731]
 draft: false
 papel: [Só admin]
+video: mudar-o-perfil-de-acesso
 sidebar:
   order: 4
 ---

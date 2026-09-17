@@ -4,6 +4,7 @@ description: Manter a lista de cargos que identifica cada pessoa nas telas do ap
 prd: [731]
 draft: false
 papel: [Só admin]
+video: cadastrar-um-cargo
 sidebar:
   order: 9
 ---

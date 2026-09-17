@@ -1,0 +1,309 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · Admin · Cadastrar um cargo</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "admin",
+ "slug": "cadastrar-um-cargo",
+ "pagina": "admin/cadastrar-um-cargo.md",
+ "prd": [
+  731
+ ],
+ "issues": [],
+ "app_version": "0.142.1",
+ "gerado_em": "2026-09-17T16:00:00-03:00"
+}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* Mesmo palco das outras composicoes do Manual: desenhado em 960x540 e
+     ampliado 2x, para os tamanhos do app sairem nitidos em 1080p. */
+  .palco { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #EEF1F6; }
+
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 74px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1620px; margin: 34px 0 30px; }
+  .sub { font-size: 34px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
+  .selo-abertura { margin-top: 40px; display: inline-flex; gap: 14px; }
+  .selo-abertura span { border: 2px solid var(--app-border); border-radius: 999px; padding: 10px 26px; font-size: 26px; font-weight: 700; color: #5A6273; }
+  .selo-abertura span.destaque { border-color: var(--navy); color: var(--navy); background: #F5F6FE; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: #5A6273; }
+  .fecho-org { font-size: 26px; color: #5A6273; margin-top: 16px; }
+
+  /* ===== casca do app: barra da esquerda + topo ===== */
+  .app { position: absolute; left: 0; top: 0; width: 960px; height: 442px; display: flex; background: #F8FAFC; overflow: hidden; }
+  .side { width: 152px; flex-shrink: 0; background: #fff; border-right: 1px solid #EEF2F7; display: flex; flex-direction: column; }
+  .side .marca { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 7px 0 9px; border-bottom: 1px solid #EEF2F7; }
+  .side .titulo-barra { padding: 9px 12px 3px; font-size: 7px; font-weight: 700; color: #5A6273; letter-spacing: .09em; text-transform: uppercase; }
+  .side nav { flex: 1; padding: 0 9px; display: flex; flex-direction: column; gap: 1px; }
+  /* Um tom mais escuro que o cinza do app: sobre o branco da barra o
+     secundario original fica em 3.77:1, abaixo do piso de 4.5:1. */
+  .side .grupo { padding: 6px 7px 2px; font-size: 6.4px; font-weight: 700; color: #5A6273; letter-spacing: .09em; text-transform: uppercase; }
+  .side a { display: flex; align-items: center; gap: 7px; padding: 5px 8px; border-radius: 7px; font-size: 8.4px; color: #5A6273; }
+  .side a.on { background: #EEF0FB; color: var(--navy); font-weight: 700; border-left: 2px solid var(--navy); padding-left: 6px; }
+  .side .pe { padding: 8px 9px; border-top: 1px solid #EEF2F7; }
+  .side .pe a { font-size: 8px; }
+
+  .main { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+  .top { height: 34px; background: #F8FAFC; border-bottom: 1px solid #E2E8F0; display: flex; align-items: center; gap: 10px; padding: 0 14px; flex-shrink: 0; }
+  .top .busca { width: 132px; height: 18px; border: 1px solid var(--app-border); border-radius: 7px; background: #fff; display: flex; align-items: center; gap: 5px; padding: 0 7px; font-size: 7.4px; color: #5A6273; }
+  .top .quem { margin-left: auto; display: flex; align-items: center; gap: 7px; }
+  .top .quem .tx { text-align: right; }
+  .top .quem .tx b { display: block; font-size: 7.8px; color: var(--app-text); }
+  .top .quem .tx span { font-size: 6.8px; color: #5A6273; }
+  .top .quem .av { width: 18px; height: 18px; border-radius: 50%; background: var(--navy-dark); color: #fff; font-size: 8px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+  .conteudo { flex: 1; padding: 13px 18px; position: relative; overflow: hidden; }
+  .rodape-v { position: absolute; right: 18px; bottom: 7px; font-size: 6.6px; color: #5A6273; }
+
+  /* cabecalho de pagina */
+  .pg-topo { display: flex; align-items: center; justify-content: space-between; margin-bottom: 11px; }
+  .pg-topo .esq { display: flex; align-items: center; gap: 7px; }
+  .pg-topo .ii { width: 22px; height: 22px; border-radius: 8px; background: #EEF0FB; color: var(--navy); display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .pg-topo h1 { font-size: 14px; font-weight: 700; color: var(--app-text); line-height: 1.15; }
+  .pg-topo .dek { font-size: 7.4px; color: #5A6273; margin-top: 1px; }
+  .btn-primario { display: inline-flex; align-items: center; gap: 5px; padding: 5px 11px; border-radius: 9px; background: linear-gradient(90deg, #2B2E7E, #3B6FB6); color: #fff; font-size: 8px; font-weight: 700; box-shadow: 0 5px 12px -6px rgba(43,46,126,.6); }
+
+  /* cartao de tabela */
+  .cartao-tab { background: #fff; border: 1px solid var(--app-border); border-radius: 12px; box-shadow: 0 8px 20px -14px rgba(0,0,0,.18); overflow: hidden; }
+  .barra-filtros { padding: 8px 10px; border-bottom: 1px solid #F1F5F9; background: #FBFCFE; display: flex; gap: 7px; align-items: center; }
+  .campo-busca { position: relative; flex: 1; min-width: 0; height: 19px; border: 1px solid var(--app-border); border-radius: 7px; background: #fff; display: flex; align-items: center; gap: 5px; padding: 0 7px; font-size: 7.4px; color: var(--app-text); }
+  /* O exemplo e o valor ocupam o mesmo lugar: quando um some, o outro fica
+     onde o texto digitado ficaria de verdade, encostado a esquerda. */
+  .campo-busca .ph, .campo-busca .val, .campo-busca #us-campo-busca-fixa { position: absolute; left: 19px; top: 50%; transform: translateY(-50%); }
+  .campo-busca .ph { color: #5A6273; }
+  .campo-busca .val { opacity: 0; }
+  .seletor { height: 19px; border: 1px solid var(--app-border); border-radius: 7px; background: #fff; display: flex; align-items: center; gap: 5px; padding: 0 7px; font-size: 7.4px; color: var(--app-text); white-space: nowrap; }
+  .seletor .cinza { color: #5A6273; }
+  .seletor .ph, .seletor .val { position: absolute; }
+  .seletor .ph { color: #5A6273; }
+  .seletor .val { opacity: 0; color: var(--app-text); }
+
+  table.tab { width: 100%; border-collapse: collapse; }
+  table.tab th { text-align: left; font-size: 6.4px; font-weight: 700; color: #5A6273; letter-spacing: .07em; text-transform: uppercase; padding: 6px 8px; background: #F8FAFC; border-bottom: 1px solid #F1F5F9; }
+  table.tab td { font-size: 7.6px; color: #4B5768; padding: 6px 8px; border-bottom: 1px solid #F5F7FA; vertical-align: middle; }
+  table.tab tr:last-child td { border-bottom: 0; }
+  table.tab td.nome { color: var(--navy); font-weight: 700; }
+  .etq { display: inline-flex; align-items: center; gap: 3px; padding: 1.5px 5px; border-radius: 5px; font-size: 6.8px; font-weight: 700; }
+  .etq.verde { background: #ECFDF5; color: #047857; }
+  .etq.cinza { background: #F1F5F9; color: #5A6273; }
+  .etq.indigo { background: #EEF0FB; color: #3730A3; }
+  .etq.ambar { background: #FFFBEB; color: #B45309; border: 1px solid #FDE68A; }
+  .etq.navy { background: transparent; color: var(--navy); }
+  .acoes { display: flex; align-items: center; gap: 2px; }
+  .acao { width: 15px; height: 15px; border-radius: 5px; display: flex; align-items: center; justify-content: center; color: #5A6273; }
+  .acao.ambar { color: #B45309; }
+  .acao.navy { color: var(--navy); }
+  .rodape-tab { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border-top: 1px solid #F1F5F9; background: #FBFCFE; font-size: 6.8px; color: #5A6273; }
+  .botao-pag { border: 1px solid var(--app-border); border-radius: 6px; background: #fff; padding: 2px 7px; font-size: 6.8px; color: #5A6273; }
+
+  /* abas de tabela (Dados do Atendimento) */
+  .abas { display: flex; gap: 5px; margin-bottom: 9px; flex-wrap: wrap; }
+  .aba { border: 1px solid var(--app-border); background: #fff; border-radius: 9px; padding: 4px 10px; font-size: 7.6px; color: #5A6273; }
+  .aba.on { background: #EEF0FB; border-color: #C2C6EC; color: var(--navy); font-weight: 700; }
+
+  /* ===== janela flutuante (modal) ===== */
+  .veu { position: absolute; left: 0; top: 0; width: 960px; height: 442px; background: rgba(15,23,42,.36); opacity: 0; }
+  .modal { position: absolute; background: #fff; border-radius: 12px; box-shadow: 0 26px 60px -18px rgba(0,0,0,.44); overflow: hidden; opacity: 0; }
+  .modal-h { display: flex; align-items: flex-start; gap: 8px; padding: 10px 14px; border-bottom: 1px solid #F1F5F9; }
+  .modal-h .ii { width: 20px; height: 20px; border-radius: 7px; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .modal-h h3 { font-size: 11px; font-weight: 700; color: #0F172A; }
+  .modal-h p { font-size: 7.2px; color: #5A6273; margin-top: 2px; line-height: 1.4; }
+  .modal-b { padding: 11px 14px; }
+  .modal-f { display: flex; align-items: center; justify-content: flex-end; gap: 7px; padding: 9px 14px; border-top: 1px solid #F1F5F9; background: #FBFCFE; }
+  .btn-sec { border: 1px solid var(--app-border); background: #fff; border-radius: 7px; padding: 4px 10px; font-size: 7.6px; color: #4B5768; }
+  .btn-ok { border-radius: 7px; padding: 4px 11px; font-size: 7.6px; font-weight: 700; color: #fff; background: linear-gradient(90deg, #2B2E7E, #3B6FB6); }
+  .apagado { opacity: .55; }
+  .btn-ambar { border-radius: 7px; padding: 4px 11px; font-size: 7.6px; font-weight: 700; color: #fff; background: #B45309; }
+
+  .rot { font-size: 6.6px; font-weight: 700; color: #5A6273; letter-spacing: .06em; text-transform: uppercase; margin-bottom: 3px; }
+  .rot .obg { color: #DC2626; }
+  .campo { position: relative; height: 20px; border: 1px solid var(--app-border); border-radius: 7px; background: #fff; display: flex; align-items: center; padding: 0 7px; font-size: 7.6px; color: var(--app-text); }
+  .campo .ph, .campo .val { position: absolute; left: 7px; top: 50%; transform: translateY(-50%); }
+  .campo .ph { color: #5A6273; }
+  .campo .val { opacity: 0; }
+  .area { position: relative; min-height: 30px; border: 1px solid var(--app-border); border-radius: 7px; background: #fff; padding: 4px 7px; font-size: 7.4px; color: var(--app-text); line-height: 1.4; }
+  .area .ph, .area .val { position: absolute; left: 7px; top: 4px; right: 7px; }
+  .area .ph { color: #5A6273; }
+  .area .val { opacity: 0; }
+  .linha2 { display: grid; grid-template-columns: 1fr 1fr; gap: 9px; }
+  .marca-cx { display: inline-flex; align-items: center; gap: 5px; font-size: 7.6px; color: #4B5768; }
+  .cx { width: 9px; height: 9px; border-radius: 3px; border: 1px solid #94A3B8; background: #fff; display: flex; align-items: center; justify-content: center; color: #fff; }
+  .cx.on { background: var(--navy); border-color: var(--navy); }
+  .cx .tique { opacity: 1; }
+  .aviso-cx { border-radius: 8px; padding: 6px 9px; font-size: 7.2px; line-height: 1.45; display: flex; gap: 6px; }
+  .aviso-cx.ambar { background: #FFFBEB; border: 1px solid #FDE68A; color: #92400E; }
+  .aviso-cx.navy { background: #F5F6FE; border: 1px solid #DDDFF6; color: #2B2E7E; }
+
+  /* escolha de perfil, tres cartoes */
+  .tres { display: grid; grid-template-columns: repeat(3, 1fr); gap: 6px; }
+  .opcao { border: 1px solid var(--app-border); border-radius: 8px; padding: 6px 7px; }
+  .opcao.on { border-color: var(--navy); background: #F7F8FE; }
+  .opcao .cab { display: flex; align-items: center; gap: 5px; }
+  .opcao .bolinha { position: relative; width: 8px; height: 8px; border-radius: 50%; border: 1.5px solid #94A3B8; flex-shrink: 0; }
+  .opcao .ponto { position: absolute; left: 1px; top: 1px; width: 3px; height: 3px; border-radius: 50%; background: var(--navy); opacity: 0; }
+  .opcao.on .bolinha { border-color: var(--navy); }
+  .opcao.on .ponto { opacity: 1; }
+  .opcao b { font-size: 8px; color: #334155; }
+  .opcao p { font-size: 6.6px; color: #5A6273; line-height: 1.4; margin-top: 3px; }
+
+  /* aviso que a plataforma mostra no canto (mensagem de sucesso) */
+  .toast { position: absolute; right: 12px; bottom: 24px; min-width: 176px; background: #ECFDF5; border: 1px solid #A7F3D0; border-radius: 12px; box-shadow: 0 16px 34px -18px rgba(0,0,0,.3); display: flex; align-items: center; gap: 7px; padding: 7px 10px; font-size: 7.8px; font-weight: 700; color: #065F46; opacity: 0; }
+  .toast .ii { color: #059669; }
+
+  /* ===== faixa do passo, embaixo da tela ===== */
+  .faixa { position: absolute; left: 0; top: 442px; width: 960px; height: 98px; background: #fff; border-top: 1px solid var(--app-border); }
+  .passo { position: absolute; left: 0; top: 0; width: 960px; height: 98px; display: flex; align-items: center; gap: 15px; padding: 0 30px; opacity: 0; }
+  .passo .n { width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 15px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+  .passo .tx { min-width: 0; }
+  .passo h3 { font-size: 14px; line-height: 1.2; color: var(--navy); font-weight: 700; }
+  /* Um tom mais escuro que o secundario do app: legenda de video e lida de
+     longe e precisa passar no contraste 4.5:1. */
+  .passo p { font-size: 10.6px; line-height: 1.45; color: #5A6273; margin-top: 3px; }
+  .passo b { color: var(--app-text); }
+
+  /* ===== dedo fantasma e marcador ===== */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 30px; height: 30px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+  .marcador { position: absolute; border: 1.4px solid var(--navy); border-radius: 7px; box-shadow: 0 0 0 3px rgba(43,46,126,.14); opacity: 0; z-index: 30; }
+
+  .camada { overflow: hidden; }
+</style>
+</head>
+<body>
+
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="40.4" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4.0" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Manual · Admin</div>
+    <h1 class="titulo" id="ab-titulo">Cadastrar um cargo</h1>
+    <p class="sub" id="ab-sub">O texto que identifica cada pessoa nas telas da plataforma.</p>
+    <div class="selo-abertura" id="ab-selos"><span class="destaque">Só admin</span></div>
+  </section>
+
+  <!-- 2 · A tarefa, passo a passo -->
+  <section id="c-tarefa" class="clip scene" data-start="4.0" data-duration="31.4" data-track-index="2">
+    <div class="palco" id="palco-tarefa" data-layout-allow-overflow data-layout-allow-occlusion><div class="camada" id="camada-a" data-layout-allow-overflow data-layout-allow-occlusion style="position:absolute;left:0;top:0;width:960px;height:442px;opacity:1"><div data-layout-allow-overlap class="app" data-layout-allow-overflow data-layout-allow-occlusion data-layout-allow-overlap id="a-app"><div data-layout-allow-overlap class="side"><div data-layout-allow-overlap class="marca"><svg width="44" height="18" viewBox="0 0 100 42" fill="none" style="flex-shrink:0"><path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/><path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/></svg><div data-layout-allow-overlap style="font-size:5px;font-weight:700;color:#2B2E7E;line-height:1.12;text-align:center;letter-spacing:.01em">HOSPITAL<br>SÃO MATHEUS</div></div><div data-layout-allow-overlap class="titulo-barra">Administração</div><nav data-layout-allow-overlap><div data-layout-allow-overlap class="grupo">Pessoas</div><a data-layout-allow-overlap class="" id="a-barra-usuarios"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span data-layout-allow-overlap>Usuários</span></a><div data-layout-allow-overlap class="grupo">Taxonomia</div><a data-layout-allow-overlap class="" id="a-barra-setores"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg><span data-layout-allow-overlap>Setores</span></a><a data-layout-allow-overlap class="on" id="a-barra-cargos"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/></svg><span data-layout-allow-overlap>Cargos</span></a><a data-layout-allow-overlap class="" id="a-barra-tipos"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 2v4"/><path d="M17 14h-6"/><path d="M13 18H7"/></svg><span data-layout-allow-overlap>Tipos de Reunião</span></a><div data-layout-allow-overlap class="grupo">Atendimento</div><a data-layout-allow-overlap class="" id="a-barra-dados"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></svg><span data-layout-allow-overlap>Dados do Atendimento</span></a><a data-layout-allow-overlap style="margin-top:6px"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg><span data-layout-allow-overlap>Ajuda</span></a></nav><div data-layout-allow-overlap class="pe"><a data-layout-allow-overlap><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span data-layout-allow-overlap>Voltar ao app</span></a></div></div><div data-layout-allow-overlap class="main"><div data-layout-allow-overlap class="top"><div data-layout-allow-overlap class="busca"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span data-layout-allow-overlap>Buscar...</span></div><div data-layout-allow-overlap class="quem"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#5A6273" ><path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.4 13.92 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.4 5.92-2.74 7.33"/></svg><div data-layout-allow-overlap style="width:1px;height:14px;background:#E2E8F0"></div><div data-layout-allow-overlap class="tx"><b data-layout-allow-overlap>Administrador</b><span data-layout-allow-overlap>admin@hospital.com</span></div><div data-layout-allow-overlap class="av">A</div></div></div><div data-layout-allow-overlap class="conteudo" data-layout-allow-overflow data-layout-allow-occlusion data-layout-allow-overlap><div data-layout-allow-overlap class="pg-topo"><div data-layout-allow-overlap class="esq"><div data-layout-allow-overlap class="ii"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/></svg></div><div data-layout-allow-overlap><h1 data-layout-allow-overlap>Cargos</h1><div data-layout-allow-overlap class="dek">Taxonomia de cargos da organização</div></div></div><div data-layout-allow-overlap class="btn-primario" id="a-tx-botao-novo"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M5 12h14"/><path d="M12 5v14"/></svg><span data-layout-allow-overlap>Novo cargo</span></div></div><div data-layout-allow-overlap class="cartao-tab"><div data-layout-allow-overlap class="barra-filtros"><div data-layout-allow-overlap class="campo-busca"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span data-layout-allow-overlap class="ph">Buscar cargo...</span></div><div data-layout-allow-overlap class="seletor" id="a-tx-filtro">Apenas ativos<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#5A6273" ><path d="m6 9 6 6 6-6"/></svg></div></div><table data-layout-allow-overlap class="tab"><thead data-layout-allow-overlap><tr data-layout-allow-overlap><th data-layout-allow-overlap>Nome</th><th data-layout-allow-overlap style="width:96px">Status</th><th data-layout-allow-overlap style="width:132px">Atualizado</th><th data-layout-allow-overlap style="width:60px">Ações</th></tr></thead><tbody data-layout-allow-overlap><tr data-layout-allow-overlap><td data-layout-allow-overlap class="nome" id="a-tx-nome-1">Analista de Faturamento</td><td data-layout-allow-overlap><span data-layout-allow-overlap class="etq verde" id="a-tx-status-1">Ativo</span></td><td data-layout-allow-overlap style="color:#5A6273;font-size:7px">02/09/2026 08:50</td><td data-layout-allow-overlap><div data-layout-allow-overlap class="acoes"><span data-layout-allow-overlap class="acao" id="a-tx-lapis-1"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M21.17 6.81a1 1 0 0 0-3.98-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></svg></span><span data-layout-allow-overlap class="acao" id="a-tx-caixa-1"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></span></div></td></tr><tr data-layout-allow-overlap><td data-layout-allow-overlap class="nome" id="a-tx-nome-2">Coordenadora de Enfermagem</td><td data-layout-allow-overlap><span data-layout-allow-overlap class="etq verde" id="a-tx-status-2">Ativo</span></td><td data-layout-allow-overlap style="color:#5A6273;font-size:7px">27/08/2026 15:12</td><td data-layout-allow-overlap><div data-layout-allow-overlap class="acoes"><span data-layout-allow-overlap class="acao" id="a-tx-lapis-2"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M21.17 6.81a1 1 0 0 0-3.98-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></svg></span><span data-layout-allow-overlap class="acao" id="a-tx-caixa-2"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></span></div></td></tr><tr data-layout-allow-overlap><td data-layout-allow-overlap class="nome" id="a-tx-nome-3">Gerente Administrativo</td><td data-layout-allow-overlap><span data-layout-allow-overlap class="etq verde" id="a-tx-status-3">Ativo</span></td><td data-layout-allow-overlap style="color:#5A6273;font-size:7px">10/08/2026 09:33</td><td data-layout-allow-overlap><div data-layout-allow-overlap class="acoes"><span data-layout-allow-overlap class="acao" id="a-tx-lapis-3"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M21.17 6.81a1 1 0 0 0-3.98-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></svg></span><span data-layout-allow-overlap class="acao" id="a-tx-caixa-3"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></span></div></td></tr></tbody></table></div><div data-layout-allow-overlap class="rodape-v">v0.142.1</div></div></div></div><div class="veu" id="a-veu-novo" data-layout-allow-overlap data-layout-allow-occlusion></div><div class="modal" id="a-modal-novo" data-layout-allow-overflow data-layout-allow-occlusion data-layout-allow-overlap style="left:330px;top:120px;width:300px"><div class="modal-h"><div><h3>Novo cargo</h3></div></div><div class="modal-b"><div><div class="rot">Nome</div><div class="campo" id="a-campo-nome"><span class="ph" id="a-campo-nome-ph">Ex: Administrativo</span><span class="val" id="a-campo-nome-val">Técnica de Radiologia</span></div></div></div><div class="modal-f"><span class="btn-sec">Cancelar</span><span class="btn-ok apagado" id="a-modal-criar">Criar</span></div></div></div><div class="camada" id="camada-b" data-layout-allow-overflow data-layout-allow-occlusion style="position:absolute;left:0;top:0;width:960px;height:442px;opacity:0"><div data-layout-allow-overlap class="app" data-layout-allow-overflow data-layout-allow-occlusion data-layout-allow-overlap id="b-app"><div data-layout-allow-overlap class="side"><div data-layout-allow-overlap class="marca"><svg width="44" height="18" viewBox="0 0 100 42" fill="none" style="flex-shrink:0"><path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/><path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/></svg><div data-layout-allow-overlap style="font-size:5px;font-weight:700;color:#2B2E7E;line-height:1.12;text-align:center;letter-spacing:.01em">HOSPITAL<br>SÃO MATHEUS</div></div><div data-layout-allow-overlap class="titulo-barra">Administração</div><nav data-layout-allow-overlap><div data-layout-allow-overlap class="grupo">Pessoas</div><a data-layout-allow-overlap class="" id="b-barra-usuarios"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span data-layout-allow-overlap>Usuários</span></a><div data-layout-allow-overlap class="grupo">Taxonomia</div><a data-layout-allow-overlap class="" id="b-barra-setores"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg><span data-layout-allow-overlap>Setores</span></a><a data-layout-allow-overlap class="on" id="b-barra-cargos"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/></svg><span data-layout-allow-overlap>Cargos</span></a><a data-layout-allow-overlap class="" id="b-barra-tipos"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 2v4"/><path d="M17 14h-6"/><path d="M13 18H7"/></svg><span data-layout-allow-overlap>Tipos de Reunião</span></a><div data-layout-allow-overlap class="grupo">Atendimento</div><a data-layout-allow-overlap class="" id="b-barra-dados"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></svg><span data-layout-allow-overlap>Dados do Atendimento</span></a><a data-layout-allow-overlap style="margin-top:6px"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg><span data-layout-allow-overlap>Ajuda</span></a></nav><div data-layout-allow-overlap class="pe"><a data-layout-allow-overlap><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span data-layout-allow-overlap>Voltar ao app</span></a></div></div><div data-layout-allow-overlap class="main"><div data-layout-allow-overlap class="top"><div data-layout-allow-overlap class="busca"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span data-layout-allow-overlap>Buscar...</span></div><div data-layout-allow-overlap class="quem"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#5A6273" ><path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.4 13.92 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.4 5.92-2.74 7.33"/></svg><div data-layout-allow-overlap style="width:1px;height:14px;background:#E2E8F0"></div><div data-layout-allow-overlap class="tx"><b data-layout-allow-overlap>Administrador</b><span data-layout-allow-overlap>admin@hospital.com</span></div><div data-layout-allow-overlap class="av">A</div></div></div><div data-layout-allow-overlap class="conteudo" data-layout-allow-overflow data-layout-allow-occlusion data-layout-allow-overlap><div data-layout-allow-overlap class="pg-topo"><div data-layout-allow-overlap class="esq"><div data-layout-allow-overlap class="ii"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/></svg></div><div data-layout-allow-overlap><h1 data-layout-allow-overlap>Cargos</h1><div data-layout-allow-overlap class="dek">Taxonomia de cargos da organização</div></div></div><div data-layout-allow-overlap class="btn-primario" id="b-tx-botao-novo"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M5 12h14"/><path d="M12 5v14"/></svg><span data-layout-allow-overlap>Novo cargo</span></div></div><div data-layout-allow-overlap class="cartao-tab"><div data-layout-allow-overlap class="barra-filtros"><div data-layout-allow-overlap class="campo-busca"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span data-layout-allow-overlap class="ph">Buscar cargo...</span></div><div data-layout-allow-overlap class="seletor" id="b-tx-filtro">Apenas ativos<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#5A6273" ><path d="m6 9 6 6 6-6"/></svg></div></div><table data-layout-allow-overlap class="tab"><thead data-layout-allow-overlap><tr data-layout-allow-overlap><th data-layout-allow-overlap>Nome</th><th data-layout-allow-overlap style="width:96px">Status</th><th data-layout-allow-overlap style="width:132px">Atualizado</th><th data-layout-allow-overlap style="width:60px">Ações</th></tr></thead><tbody data-layout-allow-overlap><tr data-layout-allow-overlap><td data-layout-allow-overlap class="nome" id="b-tx-nome-1">Analista de Faturamento</td><td data-layout-allow-overlap><span data-layout-allow-overlap class="etq verde" id="b-tx-status-1">Ativo</span></td><td data-layout-allow-overlap style="color:#5A6273;font-size:7px">02/09/2026 08:50</td><td data-layout-allow-overlap><div data-layout-allow-overlap class="acoes"><span data-layout-allow-overlap class="acao" id="b-tx-lapis-1"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M21.17 6.81a1 1 0 0 0-3.98-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></svg></span><span data-layout-allow-overlap class="acao" id="b-tx-caixa-1"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></span></div></td></tr><tr data-layout-allow-overlap><td data-layout-allow-overlap class="nome" id="b-tx-nome-2">Coordenadora de Enfermagem</td><td data-layout-allow-overlap><span data-layout-allow-overlap class="etq verde" id="b-tx-status-2">Ativo</span></td><td data-layout-allow-overlap style="color:#5A6273;font-size:7px">27/08/2026 15:12</td><td data-layout-allow-overlap><div data-layout-allow-overlap class="acoes"><span data-layout-allow-overlap class="acao" id="b-tx-lapis-2"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M21.17 6.81a1 1 0 0 0-3.98-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></svg></span><span data-layout-allow-overlap class="acao" id="b-tx-caixa-2"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></span></div></td></tr><tr data-layout-allow-overlap><td data-layout-allow-overlap class="nome" id="b-tx-nome-3">Gerente Administrativo</td><td data-layout-allow-overlap><span data-layout-allow-overlap class="etq verde" id="b-tx-status-3">Ativo</span></td><td data-layout-allow-overlap style="color:#5A6273;font-size:7px">10/08/2026 09:33</td><td data-layout-allow-overlap><div data-layout-allow-overlap class="acoes"><span data-layout-allow-overlap class="acao" id="b-tx-lapis-3"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M21.17 6.81a1 1 0 0 0-3.98-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></svg></span><span data-layout-allow-overlap class="acao" id="b-tx-caixa-3"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></span></div></td></tr><tr data-layout-allow-overlap><td data-layout-allow-overlap class="nome" id="b-tx-nome-4">Técnica de Radiologia</td><td data-layout-allow-overlap><span data-layout-allow-overlap class="etq verde" id="b-tx-status-4">Ativo</span></td><td data-layout-allow-overlap style="color:#5A6273;font-size:7px">17/09/2026 10:24</td><td data-layout-allow-overlap><div data-layout-allow-overlap class="acoes"><span data-layout-allow-overlap class="acao" id="b-tx-lapis-4"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M21.17 6.81a1 1 0 0 0-3.98-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></svg></span><span data-layout-allow-overlap class="acao" id="b-tx-caixa-4"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8"/><path d="M10 12h4"/></svg></span></div></td></tr></tbody></table></div><div data-layout-allow-overlap class="rodape-v">v0.142.1</div></div></div></div><div class="toast" id="b-toast"><span class="ii"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/></svg></span><span>Novo cargo criado</span></div></div><div class="camada" id="camada-c" data-layout-allow-overflow data-layout-allow-occlusion style="position:absolute;left:0;top:0;width:960px;height:442px;opacity:0"><div data-layout-allow-overlap class="app" data-layout-allow-overflow data-layout-allow-occlusion data-layout-allow-overlap id="c-app"><div data-layout-allow-overlap class="side"><div data-layout-allow-overlap class="marca"><svg width="44" height="18" viewBox="0 0 100 42" fill="none" style="flex-shrink:0"><path d="M8 40 A24 24 0 0 1 56 40" stroke="#3B6FB6" stroke-width="6" stroke-linecap="round"/><path d="M44 40 A24 24 0 0 1 92 40" stroke="#1E3A8A" stroke-width="6" stroke-linecap="round"/></svg><div data-layout-allow-overlap style="font-size:5px;font-weight:700;color:#2B2E7E;line-height:1.12;text-align:center;letter-spacing:.01em">HOSPITAL<br>SÃO MATHEUS</div></div><div data-layout-allow-overlap class="titulo-barra">Administração</div><nav data-layout-allow-overlap><div data-layout-allow-overlap class="grupo">Pessoas</div><a data-layout-allow-overlap class="" id="c-barra-usuarios"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg><span data-layout-allow-overlap>Usuários</span></a><div data-layout-allow-overlap class="grupo">Taxonomia</div><a data-layout-allow-overlap class="" id="c-barra-setores"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M6 22V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v18Z"/><path d="M6 12H4a2 2 0 0 0-2 2v6a2 2 0 0 0 2 2h2"/><path d="M18 9h2a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-2"/><path d="M10 6h4"/><path d="M10 10h4"/><path d="M10 14h4"/><path d="M10 18h4"/></svg><span data-layout-allow-overlap>Setores</span></a><a data-layout-allow-overlap class="on" id="c-barra-cargos"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/></svg><span data-layout-allow-overlap>Cargos</span></a><a data-layout-allow-overlap class="" id="c-barra-tipos"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M16 2v4"/><path d="M3 10h18"/><path d="M8 2v4"/><path d="M17 14h-6"/><path d="M13 18H7"/></svg><span data-layout-allow-overlap>Tipos de Reunião</span></a><div data-layout-allow-overlap class="grupo">Atendimento</div><a data-layout-allow-overlap class="" id="c-barra-dados"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M19 14c1.49-1.46 3-3.21 3-5.5A5.5 5.5 0 0 0 16.5 3c-1.76 0-3 .5-4.5 2-1.5-1.5-2.74-2-4.5-2A5.5 5.5 0 0 0 2 8.5c0 2.3 1.5 4.05 3 5.5l7 7Z"/><path d="M3.22 13H9.5l.5-1 2 4.5 2-7 1.5 3.5h5.27"/></svg><span data-layout-allow-overlap>Dados do Atendimento</span></a><a data-layout-allow-overlap style="margin-top:6px"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/></svg><span data-layout-allow-overlap>Ajuda</span></a></nav><div data-layout-allow-overlap class="pe"><a data-layout-allow-overlap><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="m12 19-7-7 7-7"/><path d="M19 12H5"/></svg><span data-layout-allow-overlap>Voltar ao app</span></a></div></div><div data-layout-allow-overlap class="main"><div data-layout-allow-overlap class="top"><div data-layout-allow-overlap class="busca"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span data-layout-allow-overlap>Buscar...</span></div><div data-layout-allow-overlap class="quem"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#5A6273" ><path d="M10.27 21a2 2 0 0 0 3.46 0"/><path d="M3.26 15.33A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.67C19.4 13.92 18 12.5 18 8A6 6 0 0 0 6 8c0 4.5-1.4 5.92-2.74 7.33"/></svg><div data-layout-allow-overlap style="width:1px;height:14px;background:#E2E8F0"></div><div data-layout-allow-overlap class="tx"><b data-layout-allow-overlap>Administrador</b><span data-layout-allow-overlap>admin@hospital.com</span></div><div data-layout-allow-overlap class="av">A</div></div></div><div data-layout-allow-overlap class="conteudo" data-layout-allow-overflow data-layout-allow-occlusion data-layout-allow-overlap><div data-layout-allow-overlap class="pg-topo"><div data-layout-allow-overlap class="esq"><div data-layout-allow-overlap class="ii"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M3.85 8.62a4 4 0 0 1 4.78-4.77 4 4 0 0 1 6.74 0 4 4 0 0 1 4.78 4.78 4 4 0 0 1 0 6.74 4 4 0 0 1-4.77 4.78 4 4 0 0 1-6.75 0 4 4 0 0 1-4.78-4.77 4 4 0 0 1 0-6.76Z"/><path d="m9 12 2 2 4-4"/></svg></div><div data-layout-allow-overlap><h1 data-layout-allow-overlap>Cargos</h1><div data-layout-allow-overlap class="dek">Taxonomia de cargos da organização</div></div></div><div data-layout-allow-overlap class="btn-primario" id="c-tx-botao-novo"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M5 12h14"/><path d="M12 5v14"/></svg><span data-layout-allow-overlap>Novo cargo</span></div></div><div data-layout-allow-overlap class="cartao-tab"><div data-layout-allow-overlap class="barra-filtros"><div data-layout-allow-overlap class="campo-busca"><svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg><span data-layout-allow-overlap class="ph">Buscar cargo...</span></div><div data-layout-allow-overlap class="seletor" id="c-tx-filtro">Apenas arquivados<svg width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0;color:#5A6273" ><path d="m6 9 6 6 6-6"/></svg></div></div><table data-layout-allow-overlap class="tab"><thead data-layout-allow-overlap><tr data-layout-allow-overlap><th data-layout-allow-overlap>Nome</th><th data-layout-allow-overlap style="width:96px">Status</th><th data-layout-allow-overlap style="width:132px">Atualizado</th><th data-layout-allow-overlap style="width:60px">Ações</th></tr></thead><tbody data-layout-allow-overlap><tr data-layout-allow-overlap><td data-layout-allow-overlap class="nome" id="c-tx-nome-1">Técnica de Radiologia</td><td data-layout-allow-overlap><span data-layout-allow-overlap class="etq cinza" id="c-tx-status-1">Arquivado</span></td><td data-layout-allow-overlap style="color:#5A6273;font-size:7px">17/09/2026 10:33</td><td data-layout-allow-overlap><div data-layout-allow-overlap class="acoes"><span data-layout-allow-overlap class="acao" id="c-tx-lapis-1"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><path d="M21.17 6.81a1 1 0 0 0-3.98-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/></svg></span><span data-layout-allow-overlap class="acao" id="c-tx-caixa-1"><svg width="9" height="9" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0" ><rect width="20" height="5" x="2" y="3" rx="1"/><path d="M4 8v11a2 2 0 0 0 2 2h2"/><path d="M20 8v11a2 2 0 0 1-2 2h-2"/><path d="m9 15 3-3 3 3"/><path d="M12 12v9"/></svg></span></div></td></tr></tbody></table></div><div data-layout-allow-overlap class="rodape-v">v0.142.1</div></div></div></div></div><div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-a-barra-cargos" style="left:6.5px;top:141.7px;width:138.0px;height:25.0px"></div><div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-a-campo-nome" style="left:341.5px;top:171.5px;width:277.0px;height:25.0px"></div><div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-a-modal-criar" style="left:576.8px;top:213.5px;width:41.7px;height:22.0px"></div><div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-a-tx-botao-novo" style="left:867.6px;top:47.5px;width:76.9px;height:25.0px"></div><div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-b-tx-caixa-4" style="left:903.5px;top:228.6px;width:20.0px;height:20.0px"></div><div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-b-tx-lapis-4" style="left:886.5px;top:228.6px;width:20.0px;height:20.0px"></div><div class="faixa"><div class="passo" id="p1"><div class="n">1</div><div class="tx"><h3>Abra Cargos na barra da esquerda</h3><p>Em <b>Taxonomia</b>, clique em <b>Cargos</b>. A lista abre com o que já existe.</p></div></div><div class="passo" id="p2"><div class="n">2</div><div class="tx"><h3>Clique em Novo cargo</h3><p>O botão fica no alto à direita, e abre a janela de cadastro.</p></div></div><div class="passo" id="p3"><div class="n">3</div><div class="tx"><h3>Escreva o Nome e clique em Criar</h3><p><b>Nome</b> é o único campo, aceita até 200 letras, e o botão <b>Criar</b> só liga depois que você escreve.</p></div></div><div class="passo" id="p4"><div class="n">4</div><div class="tx"><h3>Para corrigir, clique no lápis</h3><p>O lápis, <b>Editar</b>, na linha do cargo, abre a mesma janela com o nome de hoje.</p></div></div><div class="passo" id="p5"><div class="n">5</div><div class="tx"><h3>Para tirar da lista sem apagar, clique na caixa</h3><p><b>Arquivar</b> pede confirmação e a coluna <b>Status</b> passa a <b>Arquivado</b>. O filtro <b>Apenas arquivados</b> acha quem saiu, e <b>Reativar</b> traz de volta.</p></div></div></div><div class="ghost" data-layout-allow-overlap data-layout-allow-occlusion id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div></div>
+  </section>
+
+  <!-- 3 · Fecho -->
+  <section id="c-fecho" class="clip scene slide" data-start="35.4" data-duration="5.0" data-track-index="3">
+    <div class="fecho-titulo" id="fc-titulo">Cadastrar um cargo</div>
+    <div class="carimbo" id="fc-carimbo">Manual · retrata o app em v0.142.1 · gerado em 17/09/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da plataforma</div>
+  </section>
+
+</div>
+
+<script>
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const aparece = (sel, t, d) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: d === undefined ? 0.3 : d, ease: "power1.out", ...IR }, t);
+const clique = (t) => tl.fromTo("#g1 .pulse", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.3, duration: 0.42, ease: "power1.out", ...IR }, t);
+const move = (t, x, y, dx, dy) => {
+  tl.set('#g1', { x: x, y: y, opacity: 1 }, t);
+  tl.to('#g1', { x: dx, y: dy, duration: 0.6, ease: 'power2.inOut' }, t + 0.15);
+};
+const aperta = (sel, t) => tl.to(sel, { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, t);
+const digita = (campo, t) => {
+  tl.to(campo + '-ph', { opacity: 0, duration: 0.15 }, t);
+  tl.to(campo + '-val', { opacity: 1, duration: 0.22 }, t + 0.15);
+  tl.to(campo, { borderColor: '#2B2E7E', duration: 0.2 }, t);
+};
+/* 1 · Abertura */
+surge('#ab-eyebrow', 0.25, 22);
+tl.fromTo('#ab-titulo', { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: 'power3.out', ...IR }, 0.5);
+surge('#ab-sub', 1.1, 22);
+surge('#ab-selos', 1.6, 18);
+/* 2 · A tarefa */
+tl.fromTo('#palco-tarefa', { opacity: 0 }, { opacity: 1, duration: 0.45, ease: 'power2.out', ...IR }, 4.15);
+/* passo 1 */
+surge('#p1', 4.9, 12);
+some('#p1', 10.0);
+aparece('#mk-a-barra-cargos', 5.4);
+move(5.5, 71.5, 192.2, 71.5, 152.2);
+clique(6.25);
+tl.to('#mk-a-barra-cargos', { opacity: 0, duration: 0.28 }, 8.5);
+/* passo 2 */
+surge('#p2', 10.3, 12);
+some('#p2', 15.4);
+aparece('#mk-a-tx-botao-novo', 10.8);
+move(10.9, 71.5, 152.2, 902.1, 58.0);
+clique(11.65);
+tl.to('#mk-a-tx-botao-novo', { opacity: 0, duration: 0.28 }, 13.3);
+aparece('#a-veu-novo', 12.9, 0.3);
+aparece('#a-modal-novo', 13.0, 0.35);
+tl.to('#g1', { opacity: 0, duration: 0.25 }, 13.5);
+/* passo 3 */
+surge('#p3', 15.7, 12);
+some('#p3', 22.8);
+aparece('#mk-a-campo-nome', 16.1);
+move(16.200000000000003, 476.0, 222.0, 476.0, 182.0);
+clique(16.95);
+tl.to('#mk-a-campo-nome', { opacity: 0, duration: 0.28 }, 18.7);
+digita('#a-campo-nome', 17.2);
+tl.to('#a-modal-criar', { opacity: 1, duration: 0.25 }, 17.6);
+aparece('#mk-a-modal-criar', 19.1);
+move(19.200000000000003, 476.0, 182.0, 593.6, 222.5);
+clique(19.95);
+tl.to('#mk-a-modal-criar', { opacity: 0, duration: 0.28 }, 20.7);
+aperta('#a-modal-criar', 20.0);
+some('#a-modal-novo', 20.6);
+some('#a-veu-novo', 20.7);
+tl.to('#g1', { opacity: 0, duration: 0.25 }, 20.8);
+tl.set('#camada-a', { opacity: 0 }, 20.9);
+tl.set('#camada-b', { opacity: 1 }, 20.9);
+aparece('#b-toast', 21.5, 0.35);
+/* passo 4 */
+surge('#p4', 23.1, 12);
+some('#p4', 28.2);
+some('#b-toast', 23.3);
+aparece('#mk-b-tx-lapis-4', 23.8);
+move(23.900000000000002, 892.5, 276.6, 892.5, 236.6);
+clique(24.65);
+tl.to('#mk-b-tx-lapis-4', { opacity: 0, duration: 0.28 }, 26.9);
+/* passo 5 */
+surge('#p5', 28.5, 12);
+some('#p5', 34.6);
+aparece('#mk-b-tx-caixa-4', 29.0);
+move(29.1, 892.5, 236.6, 909.5, 236.6);
+clique(29.85);
+tl.to('#mk-b-tx-caixa-4', { opacity: 0, duration: 0.28 }, 31.7);
+tl.to('#g1', { opacity: 0, duration: 0.25 }, 31.9);
+tl.set('#camada-b', { opacity: 0 }, 32.1);
+tl.set('#camada-c', { opacity: 1 }, 32.1);
+/* 3 · Fecho */
+surge('#fc-titulo', 35.2, 18);
+surge('#fc-carimbo', 35.7, 14);
+surge('#fc-org', 36.1, 12);
+window.__timelines.main = tl;
+</script>
+</body>
+</html>

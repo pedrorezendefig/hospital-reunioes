@@ -4,6 +4,7 @@ description: Gerar a senha de quem foi cadastrado e entregá-la, porque a plataf
 prd: [731]
 draft: false
 papel: [Só admin]
+video: entregar-o-acesso-a-uma-pessoa
 sidebar:
   order: 3
 ---
