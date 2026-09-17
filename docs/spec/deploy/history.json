@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-17T11:36:00-03:00",
+      "sha": "75d58f4",
+      "app_version": "0.142.0",
+      "subject": "O assistente conhece o Quadro e avisa quando ja existe Demanda parecida",
+      "raw_subject": "feat(tecnologia): o assistente conhece o Quadro e avisa Demanda parecida (#732) (#774)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        726
+      ],
+      "result": "healthy",
+      "duration_seconds": 430,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 do PRD #726, ultima fatia (#732), que fecha o PRD. O assistente le as Demandas abertas e avisa parecida, com Abrir essa e Ignorar, mais o capitulo do assistente no manual da aba Tecnologia (pagina HTML unica: o ADR 0057 decisao 1 deixa a Tecnologia fora do site Starlight, entao nao ha draft a tirar). Tres rodadas de revisao. Duas decisoes do orquestrador mudaram o desenho: o nome do responsavel saiu do que vai ao prompt, porque o ADR 0056 decisao 5 enumera cinco campos e o sexto era o unico dado pessoal indo ao provedor externo a cada turno (a faixa segue mostrando o nome, remontado do banco, e o criterio de aceite da issue foi corrigido com registro); e a descricao deixou de ser LIDA do banco, nao so omitida do prompt. O corte de campos virou contrato tipado, provado por execucao. A leitura do Quadro passou a degradar em vez de derrubar o turno, com httpx.HTTPError junto do APIError. Um mutante teria quebrado a feature em silencio: o duble de banco devolvia a linha inteira, entao apagar titulo da lista de colunas passava verde e em producao tiraria o titulo de toda Demanda; o duble passou a projetar e seis mutantes de coluna morrem. Ficam abertas as issues #769, #770, #772 e #773, achadas pelas revisoes desta onda e fora do escopo das fatias."
+    },
+    {
       "at": "2026-09-17T09:42:00-03:00",
       "sha": "7503809",
       "app_version": "0.141.0",
@@ -1433,35 +1465,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "3 fatias, 3 PRs, 3 versoes (0.103.7, 0.104.0, 0.105.0), 1 deploy. A revisao independente segurou 9 must-fix, e os quatro piores nao apareceriam em auto-revisao: a rota publica virando amplificador de email com logo e DKIM do hospital, o email pessoal do manifestante casado com o protocolo no log de producao, um POST na rota aberta podendo travar o app inteiro por 30s, e a cobranca da fila reenviando o relato integral mais um token novo do portal para o titular que ja saiu do setor. O SEG-2 fechou em duas etapas: a primeira rodada tirou o endereco do log de sucesso e deixou no de FALHA, que e o pior porque sai em ERROR e o gatilho e email digitado errado, nao ataque. So foi pego porque o revisor refez a prova em vez de ler o commit."
-    },
-    {
-      "at": "2026-09-02T17:55:00-03:00",
-      "sha": "323bc23",
-      "app_version": "0.103.6",
-      "subject": "Onda 1 do portal do setor: cache do aparelho, teto da resposta e timeout do banco",
-      "raw_subject": "fix(ouvidoria): timeout do PostgREST não derruba o portal do setor (#532)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PRs #526 (issue #508), #529 (#512) e #532 (#509). Revisao independente achou 7 must-fix reais, todos com teste vacuo: o cache tinha uma segunda porta (cacheOnNavigation) fora do service worker; o navegador conta CRLF onde a tela conta LF, quebrando o teto E o piso; e a compensacao do timeout apagava resposta de caso ja transicionado. Devolver o claim reabria a LEITURA do relato (a guarda de estado so cobre a escrita): fechado com devolucao condicional. Prova em prod: o sw.js servido nao menciona mais o swe-worker."
     }
   ]
 }

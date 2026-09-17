@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.142.0 - 2026-09-17 11:36 - o assistente conhece o Quadro e avisa quando já existe Demanda parecida
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `75d58f4`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (430s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/75d58f4
+
 ## v0.141.0 - 2026-09-17 09:42 - o print de tela vira descrição no Assistente de Tecnologia
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `7503809`
