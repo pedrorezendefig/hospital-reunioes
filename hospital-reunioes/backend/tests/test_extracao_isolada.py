@@ -34,6 +34,7 @@ import subprocess
 import sys
 import threading
 import time
+import uuid
 import zipfile
 import zlib
 
@@ -521,26 +522,45 @@ class TestOsDoisAtaquesMedidos:
         # do teto do canal sobreviveu na primeira versao deste teste.
         assert decorrido < 10, f"levou {decorrido:.1f}s: quem matou foi o prazo, nao o teto do canal"
 
-    def test_o_pai_le_a_saida_com_teto_mesmo_quando_o_vigia_nao_teve_tempo(self, client, monkeypatch, tmp_path):
-        """A corrida entre a escrita e a amostra do vigia.
+    def test_o_filho_que_despeja_e_sai_e_recusado_em_vez_de_cortado(self, client, monkeypatch, tmp_path):
+        """A corrida entre a escrita e a amostra do vigia, e o que se faz com ela.
 
         Um filho que despeja tudo e SAI entre duas amostras nunca é visto pelo
         vigia: o processo já terminou quando ele olha. Quem decide, aí, é a
-        leitura do arquivo, e um `read()` seco traria tudo para o worker. É o
-        mesmo erro de "medir depois de alocar" que a rodada 3 do #751 pegou no
-        LZW, numa porta diferente.
+        conferência do tamanho antes de ler, e ela **recusa**.
+
+        Cortar no teto e devolver 200 seria pior que recusar: a Ata ou a Demanda
+        nasceria de um texto incompleto que PARECE completo, e ninguém seria
+        avisado. É o único desfecho desta fatia que não apareceria na tela de
+        ninguém, e por isso não existe.
         """
         apressado = tmp_path / "filho_que_despeja_e_sai.py"
         apressado.write_text("import sys\nsys.stdout.buffer.write(b'OK\\n' + b'x' * (40 * 1024 * 1024))\n")
         monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(apressado))
 
+        r, crescimento = _pico_do_worker_durante(lambda: _enviar(client, "ata.docx", b"tanto faz"))
+
+        assert r.status_code == 422
+        assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
+        assert crescimento < TETO_DO_CRESCIMENTO_DO_WORKER, (
+            f"o worker cresceu {crescimento // (1024 * 1024)} MB de um filho que escreveu 40 MB"
+        )
+
+    def test_texto_que_cabe_no_teto_volta_inteiro(self, client, monkeypatch, tmp_path):
+        """O par da recusa acima: quem cabe atravessa inteiro, sem corte nenhum.
+
+        Sem este teste, recusar tudo passaria igual, e a guarda contra o
+        truncamento silencioso teria virado truncamento em 100% dos casos.
+        """
+        quase_no_teto = extrator.TETO_DA_SAIDA_DO_FILHO - 4096
+        farto = tmp_path / "filho_que_fala_muito_mas_cabe.py"
+        farto.write_text(f"import sys\nsys.stdout.buffer.write(b'OK\\n' + b'x' * {quase_no_teto})\n")
+        monkeypatch.setattr(extrator, "_CAMINHO_DO_FILHO", str(farto))
+
         r = _enviar(client, "ata.docx", b"tanto faz")
 
         assert r.status_code == 200, r.text
-        recebido = len(r.json()["texto"])
-        assert recebido <= extrator.TETO_DA_SAIDA_DO_FILHO, (
-            f"o pai aceitou {recebido // (1024 * 1024)} MB de um filho que escreveu 40 MB"
-        )
+        assert len(r.json()["texto"]) == quase_no_teto, "o texto que cabia voltou cortado"
 
     def test_ruido_pequeno_nao_morde(self, client):
         """O par do teste acima: aviso de parser não é motivo de recusa.
@@ -933,6 +953,13 @@ class TestAsGuardasDoIsolamento:
         e as chaves são plantadas no ambiente do PAI antes: sem isso o teste
         estaria conferindo a ausência de algo que nunca esteve lá.
         """
+        # A chave de nome sorteado é o que separa lista de PERMISSÃO de lista de
+        # bloqueio. Afirmar só a ausência dos seis conhecidos deixa passar uma
+        # `_ambiente_do_filho` reescrita como denylist desses seis, e a denylist
+        # é justamente o que falha com a chave que nasce amanhã. Nenhuma lista de
+        # bloqueio plausível conhece este nome, porque ele não existia antes
+        # desta execução.
+        chave_de_amanha = f"SEGREDO_QUE_NASCEU_AGORA_{uuid.uuid4().hex.upper()}"
         segredos = (
             "SUPABASE_SERVICE_ROLE_KEY",
             "OPENROUTER_API_KEY",
@@ -940,6 +967,7 @@ class TestAsGuardasDoIsolamento:
             "RESEND_API_KEY",
             "GITHUB_INTEGRACAO_TOKEN",
             "SMTP_PASSWORD",
+            chave_de_amanha,
         )
         for nome in segredos:
             monkeypatch.setenv(nome, f"valor-plantado-em-{nome}")
@@ -955,6 +983,7 @@ class TestAsGuardasDoIsolamento:
         assert r.status_code == 200, r.text
         recebidas = set(r.json()["texto"].split())
         assert recebidas & set(segredos) == set(), f"o filho recebeu {recebidas & set(segredos)}"
+        assert chave_de_amanha not in recebidas, "uma lista de bloqueio passaria aqui; a de permissao nao"
         assert "PATH" in recebidas, "o minimo que o interpretador precisa continua indo"
 
     def test_a_extracao_nao_disputa_thread_com_o_resto_do_app(self, client, monkeypatch):
@@ -1012,14 +1041,46 @@ class TestAsGuardasDoIsolamento:
         assert extrator.FORMATOS_DE_TEXTO_PURO == {".txt", ".md"}
         assert extrator.FORMATOS_DE_TEXTO_PURO < extrator.SUPPORTED_EXTENSIONS
 
-    def test_o_arquivo_temporario_do_filho_nao_fica_para_tras(self, client, docx_honesto):
-        """O conteúdo do upload passa pelo disco para chegar no filho. Passa, não fica."""
+    def test_o_temporario_do_filho_nao_fica_para_tras(self, client, docx_honesto):
+        """O conteúdo do upload passa pelo disco para chegar no filho. Passa, não fica.
+
+        O glob olha `extracao-*`, que é a PASTA de hoje. A versão anterior deste
+        teste procurava `*.docx` na raiz do tempdir, que era onde o arquivo
+        morava antes de a rodada 2 mover tudo para uma pasta por extração: o
+        teste continuou verde apontando para o lugar antigo, e com a limpeza
+        removida ele seguia passando enquanto 23 pastas ficavam no disco.
+
+        A pergunta que faltou fazer, e que vale para todo teste desta fatia: o
+        CAMINHO que ele observa ainda é o caminho que o código usa.
+        """
         import glob
         import tempfile
 
-        antes = set(glob.glob(os.path.join(tempfile.gettempdir(), "*.docx")))
+        def _pastas_de_extracao() -> set[str]:
+            return set(glob.glob(os.path.join(tempfile.gettempdir(), "extracao-*")))
+
+        antes = _pastas_de_extracao()
         r = _enviar(client, "ata-longa.docx", docx_honesto)
-        depois = set(glob.glob(os.path.join(tempfile.gettempdir(), "*.docx")))
+        depois = _pastas_de_extracao()
 
         assert r.status_code == 200
         assert depois == antes, f"sobrou no disco: {depois - antes}"
+
+    def test_o_temporario_some_tambem_quando_o_filho_e_morto(self, client, monkeypatch, pdf_honesto):
+        """O caminho de limpeza que importa é o que roda quando algo dá errado.
+
+        Passar e limpar é o caso fácil. Morto no meio de uma escrita, com o
+        arquivo aberto, é onde a pasta ficaria para trás.
+        """
+        import glob
+        import tempfile
+
+        monkeypatch.setattr(extrator, "PRAZO_DA_EXTRACAO", 1.0)
+        padrao = os.path.join(tempfile.gettempdir(), "extracao-*")
+        antes = set(glob.glob(padrao))
+
+        r = _enviar(client, "ata-longa.pdf", pdf_honesto)
+
+        assert r.status_code == 422
+        assert r.json()["detail"] == extrator.MENSAGEM_GRANDE_DEMAIS
+        assert set(glob.glob(padrao)) == antes, "a pasta ficou depois da morte por prazo"

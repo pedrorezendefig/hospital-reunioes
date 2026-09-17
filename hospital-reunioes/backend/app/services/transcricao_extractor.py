@@ -210,11 +210,16 @@ def _tamanho(caminho: str) -> int:
         return 0
 
 
-def _ler_com_teto(caminho: str, teto: int) -> bytes:
-    """Le no maximo `teto` bytes. O `read()` seco aqui seria o furo de novo."""
+def _ler(caminho: str) -> bytes:
+    """Le o arquivo inteiro, e so e chamado depois que o tamanho foi conferido.
+
+    Nao tem teto proprio de proposito: teto aqui seria CORTE, e corte silencioso
+    e o unico desfecho que nao aparece na tela de ninguem. Quem decide e a
+    conferencia do tamanho, antes, e ela recusa em vez de cortar.
+    """
     try:
         with open(caminho, "rb") as f:
-            return f.read(teto)
+            return f.read()
     except OSError:
         return b""
 
@@ -332,7 +337,15 @@ def _extrair_isolado(ext: str, file_bytes: bytes) -> str:
                 )
                 motivo = _acompanhar(proc, saida, erro)
 
-            bruto = b"" if motivo is not None else _ler_com_teto(saida, TETO_DA_SAIDA_DO_FILHO)
+            if motivo is None and _tamanho(saida) > TETO_DA_SAIDA_DO_FILHO:
+                # O filho despejou e SAIU entre duas amostras do vigia, entao o
+                # vigia nunca o viu. Cortar aqui e devolver 200 seria pior que
+                # recusar: a Ata ou a Demanda nasceria de um texto incompleto
+                # que parece completo, e ninguem seria avisado. Documento que
+                # volta pela metade em silencio e o unico desfecho que nao
+                # aparece na tela de ninguem.
+                motivo = "saida"
+            bruto = b"" if motivo is not None else _ler(saida)
             diagnostico = _ler_cauda(erro, RABO_DO_ERRO_NO_LOG)
     finally:
         # A gravacao do temporario fica DENTRO do try: com disco cheio ela
@@ -442,8 +455,10 @@ async def extrair_texto_async(filename: str, file_bytes: bytes) -> tuple[str, st
     threads de la e o `/health` estourava, devolvendo 503 e fazendo o
     `HEALTHCHECK` do Dockerfile declarar o container doente: a guarda que existe
     para nao derrubar o app derrubava o app por outra porta. Por isso a extracao
-    tem executor PROPRIO, do tamanho exato das vagas, e ninguem mais divide
-    thread com ela.
+    tem executor PROPRIO, e ninguem mais divide thread com ela. Ele e MAIOR que
+    o numero de vagas de proposito: quem passa das vagas fica parado no semaforo
+    e e assim que ouve a `MENSAGEM_FILA_CHEIA`. O porque do tamanho esta na
+    definicao do executor.
     """
     laco = asyncio.get_running_loop()
     return await laco.run_in_executor(_EXECUTOR_DE_EXTRACAO, extrair_texto, filename, file_bytes)
