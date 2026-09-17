@@ -3,6 +3,7 @@ title: Gerir os Setores de POP
 description: Cadastrar e editar as unidades do organograma cuja sigla forma o Código dos POPs.
 prd: [76]
 draft: false
+video: gerir-os-setores-de-pop
 papel: [Superadmin]
 sidebar:
   order: 10

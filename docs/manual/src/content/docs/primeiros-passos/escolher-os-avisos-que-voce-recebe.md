@@ -3,6 +3,7 @@ title: Escolher os avisos que você recebe
 description: Registrar quais avisos você quer receber, e o que a escolha faz hoje.
 prd: [731]
 draft: false
+video: escolher-os-avisos-que-voce-recebe
 papel: [Todo mundo]
 sidebar:
   order: 6

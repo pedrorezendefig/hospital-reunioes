@@ -1,0 +1,1027 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=1920, height=1080" />
+<title>Manual · POPs · Gerir os Setores de POP</title>
+<script src="https://cdn.jsdelivr.net/npm/gsap@3.14.2/dist/gsap.min.js" integrity="sha384-sG0Hv1tP1lZCk9KQmrIbY/XNwi+OY84GQqhMscbnsoBFqAz8KNCil1kvfL3Hbbk2" crossorigin="anonymous"></script>
+<script type="application/json" id="manual-video-meta">
+{
+ "modulo": "pops",
+ "slug": "gerir-os-setores-de-pop",
+ "pagina": "pops/gerir-os-setores-de-pop.md",
+ "prd": 76,
+ "issues": [],
+ "app_version": "0.142.1",
+ "gerado_em": "2026-09-17T16:00:00-03:00"
+}
+</script>
+<style>
+  @font-face {
+    font-family: "HP Simplified";
+    src: url("assets/fonts/HPSimplified_Rg.ttf") format("truetype");
+    font-weight: 400;
+    font-style: normal;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1920px; height: 1080px; overflow: hidden; background: #fff; }
+  body { font-family: "HP Simplified", system-ui, sans-serif; }
+
+  :root {
+    --navy: #2B2E7E; --navy-light: #3B6FB6; --navy-dark: #1A1C4E;
+    --app-text: #1E293B; --app-sec: #64748B; --app-border: #E2E8F0;
+  }
+
+  #root { position: relative; width: 1920px; height: 1080px; overflow: hidden; }
+  .scene { position: absolute; inset: 0; background: #fff; overflow: hidden; }
+
+  /* Mesmo palco das outras composições do manual: desenhado em 960x540 e
+     ampliado 2x, para os tamanhos do app saírem nítidos em 1080p. */
+  .palco { position: relative; width: 960px; height: 540px; transform: scale(2); transform-origin: top left; font-size: 12px; color: var(--app-text); background: #EEF1F6; }
+
+  .slide { display: flex; flex-direction: column; align-items: center; justify-content: center; text-align: center; padding: 0 160px; }
+  .eyebrow { font-size: 26px; letter-spacing: .22em; text-transform: uppercase; color: var(--navy-light); font-weight: 700; }
+  .titulo { font-size: 78px; line-height: 1.12; color: var(--navy); font-weight: 700; max-width: 1560px; margin: 34px 0 30px; }
+  .sub { font-size: 36px; color: var(--app-sec); max-width: 1420px; line-height: 1.5; }
+  .selo-abertura { margin-top: 40px; display: inline-flex; gap: 14px; flex-wrap: wrap; justify-content: center; }
+  .selo-abertura span { border: 2px solid var(--app-border); border-radius: 999px; padding: 10px 26px; font-size: 26px; font-weight: 700; color: var(--app-sec); }
+  .selo-abertura span.destaque { border-color: var(--navy); color: var(--navy); background: #F5F6FE; }
+
+  .fecho-titulo { font-size: 52px; color: var(--navy); font-weight: 700; margin-bottom: 40px; }
+  .carimbo { font-size: 30px; color: var(--app-sec); }
+  .fecho-org { font-size: 26px; color: #64748B; margin-top: 16px; }
+
+  /* ===== janela de navegador ===== */
+  .janela { position: absolute; width: 520px; height: 330px; border-radius: 10px; background: #fff; box-shadow: 0 26px 60px -20px rgba(0,0,0,.42); overflow: hidden; border: 1px solid #D8DEE9; }
+  .barra { height: 20px; background: #E7EBF2; display: flex; align-items: center; gap: 4px; padding: 0 8px; border-bottom: 1px solid #D8DEE9; }
+  .barra i { width: 5px; height: 5px; border-radius: 50%; background: #C3CBD8; display: block; }
+  .barra .url { margin-left: 8px; flex: 1; height: 11px; border-radius: 6px; background: #fff; border: 1px solid #D8DEE9; font-size: 6.4px; color: #5A6273; display: flex; align-items: center; padding: 0 6px; }
+  .tela { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; background: #fff; overflow: hidden; }
+
+  /* ===== shell do app: barra lateral + topo ===== */
+  .sb { position: absolute; left: 0; top: 0; bottom: 0; width: 84px; background: #fff; border-right: 1px solid var(--app-border); display: flex; flex-direction: column; }
+  .sb-logo { padding: 5px 0; border-bottom: 1px solid var(--app-border); display: flex; justify-content: center; }
+  .sb-logo img { width: 50px; height: 28px; display: block; }
+  .sb-nav { padding: 6px; }
+  .sb-item { display: flex; align-items: center; gap: 4px; font-size: 6.2px; color: var(--app-sec); padding: 3px 4px; border-radius: 3px; margin-bottom: 2px; }
+  .sb-item.on { background: rgba(43,46,126,.07); color: var(--navy); font-weight: 700; }
+  .sb-item.ajuda { margin-top: 5px; }
+
+  .hd { position: absolute; left: 84px; right: 0; top: 0; height: 22px; background: #F8FAFC; border-bottom: 1px solid var(--app-border); display: flex; align-items: center; padding: 0 8px; }
+  .hd-busca { width: 74px; height: 11px; border-radius: 3px; background: #fff; border: 1px solid var(--app-border); font-size: 5.4px; color: #6B7280; display: flex; align-items: center; padding: 0 5px; gap: 3px; }
+  .hd-dir { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+  .hd-div { width: 1px; height: 11px; background: var(--app-border); }
+  .hd-user { display: flex; align-items: center; gap: 4px; padding: 2px; border-radius: 3px; }
+  .hd-user .nm { text-align: right; }
+  .hd-user .nm b { display: block; font-size: 5.8px; color: #334155; font-weight: 700; }
+  .hd-user .nm span { display: block; font-size: 5px; color: #64748B; }
+  .hd-user .av { width: 13px; height: 13px; border-radius: 50%; background: linear-gradient(135deg, #2B2E7E, #1A1C4E); color: #fff; font-size: 6.4px; font-weight: 700; display: flex; align-items: center; justify-content: center; }
+
+  .mn { position: absolute; left: 84px; right: 0; top: 22px; bottom: 0; background: #fff; overflow: hidden; }
+  .mn-in { position: absolute; left: 0; right: 0; top: 0; padding: 9px; }
+
+  /* menu do usuário */
+  .menu-user { position: absolute; width: 62px; background: #fff; border: 1px solid var(--app-border); border-radius: 5px; box-shadow: 0 10px 24px -8px rgba(0,0,0,.28); padding: 3px; opacity: 0; z-index: 25; }
+  .menu-user div { display: flex; align-items: center; gap: 4px; font-size: 5.8px; color: #475569; padding: 3px 4px; border-radius: 3px; }
+  .menu-user div.sair { color: #DC2626; border-top: 1px solid #F1F5F9; margin-top: 2px; padding-top: 4px; }
+
+  /* ===== blocos genéricos do app ===== */
+  .pg-cab { display: flex; align-items: center; gap: 5px; margin-bottom: 9px; }
+  .pg-cab .ic { width: 15px; height: 15px; border-radius: 4px; background: rgba(43,46,126,.1); color: var(--navy); display: flex; align-items: center; justify-content: center; }
+  .pg-cab h1 { font-size: 10.5px; font-weight: 700; color: var(--app-text); }
+  .pg-cab p { font-size: 5.8px; color: var(--app-sec); margin-top: 1px; }
+
+  .bl-cab { display: flex; align-items: center; justify-content: space-between; margin-bottom: 5px; }
+  .bl-cab .esq { display: flex; align-items: center; gap: 4px; }
+  .bl-cab h2 { font-size: 8.2px; font-weight: 700; color: var(--app-text); }
+  .bl-cab p { font-size: 5.4px; color: var(--app-sec); margin-top: 1px; }
+
+  .btn-pri { display: inline-flex; align-items: center; gap: 3px; padding: 3.5px 7px; border-radius: 5px; background: linear-gradient(90deg, #2B2E7E, #3B6FB6); color: #fff; font-size: 6.2px; font-weight: 700; box-shadow: 0 3px 7px -3px rgba(43,46,126,.6); }
+  .btn-sec { display: inline-flex; align-items: center; gap: 3px; padding: 3.5px 7px; border-radius: 5px; border: 1px solid var(--app-border); color: #475569; font-size: 6.2px; font-weight: 600; background: #fff; }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 3px; margin-bottom: 6px; }
+  .chip { padding: 2.5px 5px; border-radius: 999px; background: #F1F5F9; color: #475569; font-size: 5.4px; font-weight: 700; }
+  .chip.on { background: var(--navy); color: #fff; }
+
+  .tb { border: 1px solid var(--app-border); border-radius: 6px; overflow: hidden; background: #fff; }
+  .tb .th, .tb .tr { display: flex; align-items: center; padding: 0 6px; }
+  .tb .th { height: 15px; background: #F8FAFC; border-bottom: 1px solid var(--app-border); }
+  .tb .th span { font-size: 5.2px; font-weight: 700; color: #64748B; text-transform: uppercase; letter-spacing: .04em; }
+  .tb .tr { height: 21px; border-bottom: 1px solid #F1F5F9; font-size: 5.6px; color: var(--app-text); }
+  .tb .tr:last-child { border-bottom: none; }
+  .tb .tr.sel { background: rgba(43,46,126,.05); }
+
+  .tag { display: inline-flex; padding: 1px 4px; border-radius: 3px; font-size: 5px; font-weight: 700; white-space: nowrap; }
+  .tag-cod { background: rgba(43,46,126,.1); color: var(--navy); }
+  .tag-cri { background: #FEE2E2; color: #B91C1C; }
+  .tag-alt { background: #FFEDD5; color: #C2410C; }
+  .tag-med { background: #FEF9C3; color: #A16207; }
+  .tag-rev { background: #FEF3C7; color: #B45309; }
+  .tag-ela { background: #DBEAFE; color: #1D4ED8; }
+  .tag-val { background: #F3E8FF; color: #7E22CE; }
+  .tag-ass { background: #E0E7FF; color: #4338CA; }
+  .tag-pub { background: #D1FAE5; color: #047857; }
+  .tag-neu { background: #F1F5F9; color: #475569; }
+
+  .mini-btn { display: inline-flex; align-items: center; gap: 2px; padding: 2px 4px; border-radius: 3px; font-size: 5px; font-weight: 700; white-space: nowrap; }
+  .mini-pri { background: rgba(43,46,126,.1); color: var(--navy); }
+  .mini-neu { background: #F1F5F9; color: #475569; }
+
+  .card { background: #fff; border: 1px solid var(--app-border); border-radius: 6px; padding: 7px; box-shadow: 0 3px 8px -5px rgba(0,0,0,.18); }
+  .card h2 { font-size: 7px; font-weight: 700; color: var(--app-text); margin-top: 3px; }
+  .card p { font-size: 5.4px; color: var(--app-sec); margin-top: 2px; line-height: 1.45; }
+
+  /* ===== modal ===== */
+  .backdrop { position: absolute; left: 0; right: 0; top: 20px; bottom: 0; background: rgba(0,0,0,.4); opacity: 0; z-index: 18; }
+  .modal { position: absolute; background: #fff; border-radius: 7px; box-shadow: 0 20px 44px -14px rgba(0,0,0,.42); padding: 9px; opacity: 0; z-index: 20; }
+  .modal h3 { font-size: 8.2px; font-weight: 700; color: var(--app-text); }
+  .modal .dek { font-size: 5.2px; color: var(--app-sec); margin-top: 1px; }
+  .lb { font-size: 5.6px; font-weight: 600; color: var(--app-text); margin-bottom: 2px; }
+  .campo { height: 14px; border: 1px solid var(--app-border); border-radius: 4px; display: flex; align-items: center; gap: 4px; padding: 0 5px; font-size: 5.6px; color: var(--app-text); background: #fff; }
+  .campo .ph { color: #6B7280; }
+  /* O valor digitado ocupa o mesmo canto do texto de exemplo: o campo
+     preenchido fica alinhado à esquerda, como no app. */
+  .campo .txt { position: relative; flex: 1; min-width: 0; }
+  .campo .val { position: absolute; left: 0; top: 0; right: 0; opacity: 0; }
+  .campo .seta { margin-left: auto; color: #6B7280; display: flex; }
+  .mrow { display: flex; gap: 6px; }
+  .mrow > div { flex: 1; }
+  .mfoot { display: flex; justify-content: flex-end; gap: 4px; margin-top: 8px; }
+
+  /* aviso verde (toast) */
+  .toast { position: absolute; right: 6px; bottom: 6px; padding: 4px 7px; border-radius: 4px; background: #ECFDF5; border: 1px solid #A7F3D0; color: #047857; font-size: 5.8px; font-weight: 700; opacity: 0; z-index: 22; box-shadow: 0 6px 16px -8px rgba(0,0,0,.25); }
+
+  /* ===== dedo fantasma ===== */
+  .ghost { position: absolute; left: 0; top: 0; z-index: 40; opacity: 0; }
+  .ghost .pulse { position: absolute; left: -7px; top: -7px; width: 34px; height: 34px; border-radius: 50%; background: rgba(43,46,126,.28); opacity: 0; }
+
+  /* ===== passo, do lado da janela ===== */
+  .passo { position: absolute; left: 626px; width: 300px; opacity: 0; }
+  .passo .n { display: inline-flex; align-items: center; justify-content: center; width: 30px; height: 30px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 16px; font-weight: 700; }
+  .passo h3 { font-size: 25px; line-height: 1.25; color: var(--navy); font-weight: 700; margin: 12px 0 8px; }
+  /* Um tom mais escuro que o secundário do app: legenda de vídeo é lida de
+     longe e precisa passar no contraste 4.5:1. */
+  .passo p { font-size: 17px; line-height: 1.5; color: #606F86; }
+  .passo b { color: var(--app-text); }
+  .marcador { position: absolute; border: 1.5px solid var(--navy); border-radius: 5px; box-shadow: 0 0 0 3px rgba(43,46,126,.14); opacity: 0; z-index: 30; }
+
+  /* carimbo de versão no rodapé da tela desenhada */
+  .rodape-v { position: absolute; right: 26px; bottom: 10px; font-size: 7.2px; color: #5D677A; }
+</style>
+</head>
+<body>
+
+<div id="root" data-composition-id="main" data-start="0" data-width="1920" data-height="1080" data-duration="42.6" data-fps="30">
+
+  <!-- 1 · Abertura -->
+  <section id="c-abertura" class="clip scene slide" data-start="0" data-duration="4" data-track-index="1">
+    <div class="eyebrow" id="ab-eyebrow">Manual · POPs</div>
+    <h1 class="titulo" id="ab-titulo">Gerir os Setores de POP</h1>
+    <p class="sub" id="ab-sub">Cadastrar e editar as unidades cuja sigla forma o Código dos POPs.</p>
+    <div class="selo-abertura" id="ab-selos"><span class="destaque">Superadmin</span></div>
+  </section>
+
+  <!-- 2 · A tarefa, passo a passo -->
+  <section id="c-tarefa" class="clip scene" data-start="4" data-duration="33.6" data-track-index="2">
+    <div class="palco" id="palco-tarefa"></div>
+  </section>
+
+  <!-- 3 · Fecho -->
+  <section id="c-fecho" class="clip scene slide" data-start="37.6" data-duration="5.0" data-track-index="3">
+    <div class="fecho-titulo" id="fc-titulo">Gerir os Setores de POP</div>
+    <div class="carimbo" id="fc-carimbo">Manual · retrata o app em v0.142.1 · gerado em 17/09/2026</div>
+    <div class="fecho-org" id="fc-org">Hospital São Matheus · Manual da plataforma</div>
+  </section>
+
+</div>
+
+<script>
+
+function ic(nome, s, cor) {
+  const P = {
+    email: '<rect width="20" height="16" x="2" y="4" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+    cadeado: '<rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/>',
+    olho: '<path d="M2.06 12.35a1 1 0 0 1 0-.7 10.75 10.75 0 0 1 19.87 0 1 1 0 0 1 0 .7 10.75 10.75 0 0 1-19.87 0"/><circle cx="12" cy="12" r="3"/>',
+    busca: '<circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/>',
+    sino: '<path d="M10.268 21a2 2 0 0 0 3.464 0"/><path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326"/>',
+    livro: '<path d="M12 21V7"/><path d="m16 12 2 2 4-4"/><path d="M22 6V4a1 1 0 0 0-1-1h-5a4 4 0 0 0-4 4 4 4 0 0 0-4-4H3a1 1 0 0 0-1 1v13a1 1 0 0 0 1 1h6a3 3 0 0 1 3 3 3 3 0 0 1 3-3h6a1 1 0 0 0 1-1v-1.3"/>',
+    estante: '<path d="M16 6 4 8"/><path d="m3 3 1 18"/><rect width="4" height="18" x="7" y="3" rx="1"/><path d="M12 3h4a1 1 0 0 1 1 1v16a1 1 0 0 1-1 1h-4"/>',
+    formacao: '<path d="M21.42 10.922a1 1 0 0 0-.019-1.838L12.83 5.18a2 2 0 0 0-1.66 0L2.6 9.08a1 1 0 0 0 0 1.832l8.57 3.908a2 2 0 0 0 1.66 0z"/><path d="M22 10v6"/><path d="M6 12.5V16a6 3 0 0 0 12 0v-3.5"/>',
+    arquivo: '<path d="M15 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7Z"/><path d="M14 2v4a2 2 0 0 0 2 2h4"/>',
+    predio: '<rect width="16" height="20" x="4" y="2" rx="2"/><path d="M9 22v-4h6v4"/><path d="M8 6h.01M16 6h.01M12 6h.01M12 10h.01M12 14h.01M16 10h.01M16 14h.01M8 10h.01M8 14h.01"/>',
+    pessoas: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>',
+    maispessoa: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
+    menospessoa: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 11h-6"/>',
+    mais: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+    lapis: '<path d="M21.174 6.812a1 1 0 0 0-3.986-3.987L3.842 16.174a2 2 0 0 0-.5.83l-1.321 4.352a.5.5 0 0 0 .623.622l4.353-1.32a2 2 0 0 0 .83-.497z"/>',
+    check: '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
+    volta: '<path d="M9 14 4 9l5-5"/><path d="M4 9h10.5a5.5 5.5 0 0 1 5.5 5.5a5.5 5.5 0 0 1-5.5 5.5H11"/>',
+    baixar: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" x2="12" y1="15" y2="3"/>',
+    brilho: '<path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z"/>',
+    robo: '<path d="M12 8V4H8"/><rect width="16" height="12" x="4" y="8" rx="2"/><path d="M2 14h2"/><path d="M20 14h2"/><path d="M15 13v2"/><path d="M9 13v2"/>',
+    enviar: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+    clipe: '<path d="m16 6-8.414 8.586a2 2 0 0 0 2.829 2.829l8.414-8.586a4 4 0 1 0-5.657-5.657l-8.379 8.551a6 6 0 1 0 8.485 8.485l8.379-8.551"/>',
+    micro: '<path d="M12 19v3"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><rect x="9" y="2" width="6" height="13" rx="3"/>',
+    alvo: '<circle cx="12" cy="12" r="10"/><line x1="22" x2="18" y1="12" y2="12"/><line x1="6" x2="2" y1="12" y2="12"/><line x1="12" x2="12" y1="6" y2="2"/><line x1="12" x2="12" y1="22" y2="18"/>',
+    relogio: '<path d="M12 6v6l4 2"/><circle cx="12" cy="12" r="10"/>',
+    escudo: '<path d="M20 13c0 5-3.5 7.5-7.66 8.95a1 1 0 0 1-.67-.01C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.24-2.72a1.17 1.17 0 0 1 1.52 0C14.51 3.81 17 5 19 5a1 1 0 0 1 1 1z"/>',
+    paleta: '<circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 0 1 1.668-1.668h1.996c3.051 0 5.555-2.503 5.555-5.554C21.965 6.012 17.461 2 12 2z"/>',
+    engrenagem: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
+    pessoa: '<path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>',
+    sair: '<path d="m16 17 5-5-5-5"/><path d="M21 12H9"/><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/>',
+    seta: '<path d="m6 9 6 6 6-6"/>',
+    setad: '<path d="m9 18 6-6-6-6"/>',
+    mapa: '<path d="M20 10c0 4.993-5.539 10.193-7.399 11.799a1 1 0 0 1-1.202 0C9.539 20.193 4 14.993 4 10a8 8 0 0 1 16 0"/><circle cx="12" cy="10" r="3"/>',
+    hash: '<line x1="4" x2="20" y1="9" y2="9"/><line x1="4" x2="20" y1="15" y2="15"/><line x1="10" x2="8" y1="3" y2="21"/><line x1="16" x2="14" y1="3" y2="21"/>',
+    lista: '<rect x="8" y="2" width="8" height="4" rx="1"/><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><path d="M12 11h4"/><path d="M12 16h4"/><path d="M8 11h.01"/><path d="M8 16h.01"/>',
+    raio: '<path d="M4 14a1 1 0 0 1-.78-1.63l9.9-10.2a.5.5 0 0 1 .86.46l-1.92 6.02A1 1 0 0 0 13 10h7a1 1 0 0 1 .78 1.63l-9.9 10.2a.5.5 0 0 1-.86-.46l1.92-6.02A1 1 0 0 0 11 14z"/>',
+    checkc: '<path d="M21.801 10A10 10 0 1 1 17 3.335"/><path d="m9 11 3 3L22 4"/>',
+    alvo2: '<circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="6"/><circle cx="12" cy="12" r="2"/>',
+    ajuda: '<circle cx="12" cy="12" r="10"/><path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/><path d="M12 17h.01"/>',
+    aviso: '<path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3"/><path d="M12 9v4"/><path d="M12 17h.01"/>',
+    chave: '<path d="m15.5 7.5 2.3 2.3a1 1 0 0 0 1.4 0l2.1-2.1a1 1 0 0 0 0-1.4L19 4"/><path d="m21 2-9.6 9.6"/><circle cx="7.5" cy="15.5" r="5.5"/>',
+    zoommais: '<circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="11" x2="11" y1="8" y2="14"/><line x1="8" x2="14" y1="11" y2="11"/>',
+    zoommenos: '<circle cx="11" cy="11" r="8"/><line x1="21" x2="16.65" y1="21" y2="16.65"/><line x1="8" x2="14" y1="11" y2="11"/>',
+    ajustar: '<path d="M8 3H5a2 2 0 0 0-2 2v3"/><path d="M21 8V5a2 2 0 0 0-2-2h-3"/><path d="M3 16v3a2 2 0 0 0 2 2h3"/><path d="M16 21h3a2 2 0 0 0 2-2v-3"/>',
+    imagem: '<rect width="18" height="18" x="3" y="3" rx="2" ry="2"/><circle cx="9" cy="9" r="2"/><path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>',
+    fechar: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+    caneta: '<path d="M12 20h9"/><path d="M16.376 3.622a1 1 0 0 1 3.002 3.002L7.368 18.635a2 2 0 0 1-.855.506l-2.872.838a.5.5 0 0 1-.62-.62l.838-2.872a2 2 0 0 1 .506-.854z"/>'
+  };
+  return '<svg width="' + s + '" height="' + s + '" viewBox="0 0 24 24" fill="none" stroke="' + (cor || "currentColor") + '" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="flex-shrink:0">' + P[nome] + '</svg>';
+}
+
+
+const passo = (n, num, titulo, texto, topo) =>
+  `<div class="passo" id="${n}" style="top:${topo}px"><div class="n">${num}</div><h3>${titulo}</h3><p>${texto}</p></div>`;
+
+
+/* Barra lateral e topo do app: a moldura de toda tela interna. */
+function shell(conteudo, ativo, opc) {
+  opc = opc || {};
+  const item = (nome, icone, chave) =>
+    `<div class="sb-item${ativo === chave ? " on" : ""}"${opc.alvos && opc.alvos[chave] ? ` data-alvo="${opc.alvos[chave]}"` : ""}>${ic(icone, 7)}<span>${nome}</span></div>`;
+  return `
+    <div class="sb">
+      <div class="sb-logo"><img src="assets/logo-hsm.png" alt="Hospital São Matheus" /></div>
+      <div class="sb-nav">
+        ${item("Reuniões e metas", "lista", "reunioes")}
+        ${item("Ouvidoria", "mapa", "ouvidoria")}
+        ${item("POPs", "livro", "pops")}
+        <div class="sb-item ajuda">${ic("ajuda", 7)}<span>Ajuda</span></div>
+      </div>
+    </div>
+    <div class="hd">
+      <div class="hd-busca">${ic("busca", 5)}<span>Buscar...</span></div>
+      <div class="hd-dir">
+        ${ic("sino", 7, "#64748B")}
+        <div class="hd-div"></div>
+        <div class="hd-user" data-alvo="user">
+          <div class="nm"><b>Administrador</b><span>admin@hospital.com</span></div>
+          <div class="av">A</div>
+        </div>
+      </div>
+    </div>
+    <div class="mn"><div class="mn-in" id="mn-in">${conteudo}</div></div>`;
+}
+
+
+const POPS_LINHAS = [
+  { cod: "HSM_CTI-001", nome: "Higienização das Mãos", setor: "CTI", cri: "CRÍTICA", cls: "tag-cri",
+    ver: "v1.0", est: "Em Revisão", ecls: "tag-rev", ela: "Ana Duarte", acao: "Revisar" },
+  { cod: "HSM_FAR-002", nome: "Dispensação de Medicamentos", setor: "FAR", cri: "ALTA", cls: "tag-alt",
+    ver: "v1.0", est: "Em Elaboração", ecls: "tag-ela", ela: "Carlos Prado", acao: "Elaborar" },
+  { cod: "HSM_CC-003", nome: "Checklist de Cirurgia Segura", setor: "CC", cri: "CRÍTICA", cls: "tag-cri",
+    ver: "v1.0", est: "Em Validação", ecls: "tag-val", ela: "Marina Alves", acao: "Validar" },
+];
+
+const CL = { cod: 48, nome: 104, setor: 24, cri: 40, est: 64, ela: 52, ac: 74 };
+
+function tabelaPops(acaoDaLinha, alvos) {
+  alvos = alvos || {};
+  const th = `<div class="th">
+      <span style="width:${CL.cod}px">Código</span>
+      <span style="width:${CL.nome}px">Nome</span>
+      <span style="width:${CL.setor}px">Setor</span>
+      <span style="width:${CL.cri}px">Criticidade</span>
+      <span style="width:${CL.est}px">Estado</span>
+      <span style="width:${CL.ela}px">Elaborador</span>
+      <span style="width:${CL.ac}px"></span>
+    </div>`;
+  const linhas = POPS_LINHAS.map((base, i) => {
+    const r = alvos.estados && alvos.estados[i] ? { ...base, ...alvos.estados[i] } : base;
+    const acao = acaoDaLinha ? acaoDaLinha(r, i) : "";
+    return `<div class="tr">
+      <span style="width:${CL.cod}px"><span class="tag tag-cod">${r.cod}</span></span>
+      <span style="width:${CL.nome}px;font-weight:600">${r.nome}</span>
+      <span style="width:${CL.setor}px;color:#64748B">${r.setor}</span>
+      <span style="width:${CL.cri}px"><span class="tag ${r.cls}">${r.cri}</span></span>
+      <span style="width:${CL.est}px" data-alvo="estado-linha-${i}"><span class="tag ${r.ecls}">${r.ver} · ${r.est}</span></span>
+      <span style="width:${CL.ela}px;color:#64748B">${r.ela}</span>
+      <span style="width:${CL.ac}px;display:flex;gap:2px;justify-content:flex-end">${acao}</span>
+    </div>`;
+  }).join("");
+  const nova = alvos.linhaNova
+    ? `<div class="tr" id="linha-nova" style="opacity:0">
+        <span style="width:${CL.cod}px"><span class="tag tag-cod">HSM_CTI-002</span></span>
+        <span style="width:${CL.nome}px;font-weight:600">Higienização das Mãos</span>
+        <span style="width:${CL.setor}px;color:#64748B">CTI</span>
+        <span style="width:${CL.cri}px"><span class="tag tag-cri">CRÍTICA</span></span>
+        <span style="width:${CL.est}px"><span class="tag tag-neu">v1.0 · A Elaborar</span></span>
+        <span style="width:${CL.ela}px;color:#64748B">Ana Duarte</span>
+        <span style="width:${CL.ac}px;display:flex;gap:2px;justify-content:flex-end"><span class="mini-btn mini-neu">Papéis</span></span>
+      </div>`
+    : "";
+  return `<div class="tb">${th}${linhas}${nova}</div>`;
+}
+
+/* A página /pops: cabeçalho, POPs do meu escopo, cartões e (para o Superadmin)
+   os blocos Setores e Acesso ao POPs mais abaixo. */
+function conteudoPops(opc) {
+  opc = opc || {};
+  const acao = opc.acaoDaLinha || ((r, i) => {
+    const etapa = `<span class="mini-btn mini-pri"${i === (opc.linhaAlvo === undefined ? -1 : opc.linhaAlvo) ? ' data-alvo="acao-linha"' : ""}>${r.acao}</span>`;
+    return `<span class="mini-btn mini-neu">Papéis</span>${etapa}`;
+  });
+  return `
+    <div class="pg-cab">
+      <div class="ic">${ic("livro", 9)}</div>
+      <div>
+        <h1>Gestão de POPs</h1>
+        <p>Procedimentos Operacionais Padrão do HSM · seu perfil: Superadmin</p>
+      </div>
+    </div>
+
+    <div class="bl-cab">
+      <div class="esq">${ic("arquivo", 8, "#2B2E7E")}
+        <div><h2>POPs do meu escopo</h2><p>Código travado pelo sistema · Versão 1.0 nasce em A Elaborar</p></div>
+      </div>
+      <div class="btn-pri" data-alvo="criar-novo-pop">${ic("mais", 6)}Criar novo POP</div>
+    </div>
+    <div class="chips">
+      <span class="chip on">Todos</span><span class="chip">A Elaborar</span><span class="chip">Em Elaboração</span>
+      <span class="chip">Em Revisão</span><span class="chip">Em Validação</span><span class="chip">Em Assinatura</span>
+      <span class="chip">Publicado</span>
+    </div>
+    ${tabelaPops(acao, { linhaNova: opc.linhaNova, estados: opc.estados })}
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-top:8px">
+      <div class="card" data-alvo="cartao-biblioteca">
+        ${ic("estante", 8, "#2B2E7E")}
+        <h2>Biblioteca</h2>
+        <p>Repositório oficial dos POPs publicados, por Setor, com o PDF assinado.</p>
+      </div>
+      <div class="card" style="opacity:.75">
+        ${ic("formacao", 8, "#2B2E7E")}
+        <h2>Treinamentos</h2>
+        <p>Capacitação da equipe nos POPs publicados (em breve).</p>
+      </div>
+    </div>
+
+    <div style="margin-top:9px">
+      <div class="bl-cab">
+        <div class="esq">${ic("predio", 8, "#2B2E7E")}
+          <div><h2>Setores</h2><p>Unidades do organograma. A sigla trava o código dos POPs (HSM_SIGLA-NNN)</p></div>
+        </div>
+        <div class="btn-pri" data-alvo="novo-setor">${ic("mais", 6)}Novo Setor</div>
+      </div>
+      <div class="tb">
+        <div class="th"><span style="width:250px">Nome</span><span style="width:90px">Sigla</span><span style="width:60px"></span></div>
+        <div class="tr"><span style="width:250px;font-weight:600">Centro de Terapia Intensiva</span>
+          <span style="width:90px"><span class="tag tag-cod">CTI</span></span>
+          <span style="width:60px;display:flex;justify-content:flex-end;color:#6B7280"><span data-alvo="lapis-setor" style="display:flex">${ic("lapis", 7)}</span></span></div>
+        <div class="tr"><span style="width:250px;font-weight:600">Farmácia</span>
+          <span style="width:90px"><span class="tag tag-cod">FAR</span></span>
+          <span style="width:60px;display:flex;justify-content:flex-end;color:#6B7280">${ic("lapis", 7)}</span></div>
+        ${opc.setorNovo ? `<div class="tr" id="setor-novo" style="opacity:0"><span style="width:250px;font-weight:600">Centro Cirúrgico</span>
+          <span style="width:90px"><span class="tag tag-cod">CC</span></span>
+          <span style="width:60px;display:flex;justify-content:flex-end;color:#6B7280">${ic("lapis", 7)}</span></div>` : ""}
+      </div>
+    </div>
+
+    <div style="margin-top:9px">
+      <div class="bl-cab">
+        <div class="esq">${ic("pessoas", 8, "#2B2E7E")}
+          <div><h2>Acesso ao POPs</h2><p>Perfis do contexto POPs e vínculos de Setor. Conceder a quem não loga cria o acesso.</p></div>
+        </div>
+        <div class="btn-pri" data-alvo="conceder-perfil">${ic("maispessoa", 6)}Conceder perfil</div>
+      </div>
+      <div class="tb">
+        <div class="th"><span style="width:180px">Nome</span><span style="width:110px">Perfil POP</span><span style="width:70px">Login</span><span style="width:46px"></span></div>
+        <div class="tr" data-alvo="linha-pessoa">
+          <span style="width:180px"><b style="font-weight:600">Marina Alves</b><span style="display:block;font-size:5px;color:#64748B">marina.alves@exemplo.local</span></span>
+          <span style="width:110px"><span class="campo" style="height:11px;width:66px;font-size:5.2px">Coordenador${ic("seta", 6)}</span></span>
+          <span style="width:70px"><span class="tag tag-pub">Ativo</span></span>
+          <span style="width:46px;display:flex;gap:3px;justify-content:flex-end;color:#6B7280">
+            ${ic("predio", 7)}${ic("menospessoa", 7)}</span>
+        </div>
+        <div class="tr">
+          <span style="width:180px"><b style="font-weight:600">Carlos Prado</b><span style="display:block;font-size:5px;color:#64748B">carlos.prado@exemplo.local</span></span>
+          <span style="width:110px"><span class="campo" style="height:11px;width:66px;font-size:5.2px">Gerente${ic("seta", 6)}</span></span>
+          <span style="width:70px"><span class="tag tag-pub">Ativo</span></span>
+          <span style="width:46px;display:flex;gap:3px;justify-content:flex-end;color:#6B7280">
+            ${ic("predio", 7)}${ic("menospessoa", 7)}</span>
+        </div>
+        ${opc.pessoaNova ? `<div class="tr" id="pessoa-nova" style="opacity:0">
+          <span style="width:180px"><b style="font-weight:600">Helena Braga</b><span style="display:block;font-size:5px;color:#6B7280">helena.braga@exemplo.local</span></span>
+          <span style="width:110px"><span class="campo" style="height:11px;width:66px;font-size:5.2px">Gerente${ic("seta", 6)}</span></span>
+          <span style="width:70px"><span class="tag tag-pub">Ativo</span></span>
+          <span style="width:46px;display:flex;gap:3px;justify-content:flex-end;color:#6B7280">
+            <span data-alvo="botao-predio" style="display:flex">${ic("predio", 7)}</span><span data-alvo="botao-revogar" style="display:flex">${ic("menospessoa", 7)}</span></span>
+        </div>` : ""}
+      </div>
+    </div>`;
+}
+
+
+function conteudoBiblioteca(opc) {
+  opc = opc || {};
+  const grupo = (titulo, linhas, marcado) => `
+    <div style="margin-bottom:8px">
+      <h2 style="font-size:5.4px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.06em;padding:0 2px;margin-bottom:3px"${marcado ? ' data-alvo="grupo-setor"' : ""}>${titulo}</h2>
+      <div class="tb">
+        <div class="th"><span style="width:60px">Código</span><span style="width:140px">Procedimento</span>
+          <span style="width:40px">Versão</span><span style="width:56px">Criticidade</span>
+          <span style="width:62px">Publicado em</span><span style="width:40px"></span></div>
+        ${linhas}
+      </div>
+    </div>`;
+  const linha = (cod, nome, ver, cri, cls, data, alvos) => `
+    <div class="tr"${alvos && alvos.linha ? ` data-alvo="${alvos.linha}"` : ""}>
+      <span style="width:60px;font-weight:700;font-size:5.2px">${cod}</span>
+      <span style="width:140px;font-weight:600">${nome}</span>
+      <span style="width:40px;color:#64748B"${alvos && alvos.versao ? ` data-alvo="${alvos.versao}"` : ""}>v${ver}</span>
+      <span style="width:56px"><span class="tag ${cls}">${cri}</span></span>
+      <span style="width:62px;color:#334155"${alvos && alvos.data ? ` data-alvo="${alvos.data}"` : ""}>${data}</span>
+      <span style="width:40px;display:flex;gap:3px;justify-content:flex-end;color:#6B7280">${ic("arquivo", 7)}${ic("baixar", 7)}</span>
+    </div>`;
+  return `
+    <div class="pg-cab">
+      <div class="ic">${ic("estante", 9)}</div>
+      <div>
+        <h1>Biblioteca</h1>
+        <p>POPs publicados: a versão oficial e assinada de cada procedimento, por Setor.</p>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:3px;font-size:5.6px;color:#64748B;font-weight:600">${ic("volta", 7)}Gestão de POPs</div>
+    </div>
+    ${opc.comCTI
+      ? grupo("Centro de Terapia Intensiva · CTI",
+              linha("HSM_CTI-001", "Higienização das Mãos", "1.0", "CRÍTICA", "tag-cri", "17/09/2026",
+                    { linha: "linha-publicada" }))
+      : ""}
+    ${grupo("Centro Cirúrgico · CC", linha("HSM_CC-003", "Checklist de Cirurgia Segura", "1.0", "CRÍTICA", "tag-cri", "12/09/2026"))}
+    ${grupo("Farmácia · FAR",
+      linha("HSM_FAR-001", "Recebimento de Medicamentos", "1.0", "ALTA", "tag-alt", "05/09/2026",
+            { linha: "linha-pop", versao: "col-versao", data: "col-publicado" }) +
+      linha("HSM_FAR-004", "Descarte de Resíduos", "2.0", "MÉDIA", "tag-med", "01/09/2026"), true)}`;
+}
+
+/* Ficha do POP (modal da Biblioteca). */
+function fichaPop() {
+  const item = (rot, val) => `<li style="display:flex;justify-content:space-between;gap:6px;font-size:5.4px;margin-bottom:3px"><span style="color:#64748B">${rot}</span><span style="font-weight:600;color:#1E293B">${val}</span></li>`;
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start">
+      <div>
+        <p style="font-size:5.2px;font-weight:700;color:#64748B">HSM_FAR-001</p>
+        <h3>Recebimento de Medicamentos</h3>
+        <div class="dek">Farmácia · FAR · v1.0 · ALTA · Revisão a cada 1 ano</div>
+      </div>
+      <span style="color:#6B7280">${ic("fechar", 7)}</span>
+    </div>
+    <div class="mrow" style="margin-top:7px">
+      <div style="background:#F8FAFC;border:1px solid #F1F5F9;border-radius:5px;padding:6px">
+        <h4 style="font-size:5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Datas de cada etapa</h4>
+        <ul>${item("Criação do POP", "18/08/2026")}${item("Elaboração concluída", "26/08/2026")}${item("Revisão aprovada", "30/08/2026")}${item("Validação aprovada", "02/09/2026")}${item("Publicado (todas as assinaturas)", "05/09/2026")}</ul>
+      </div>
+      <div style="background:#F8FAFC;border:1px solid #F1F5F9;border-radius:5px;padding:6px">
+        <h4 style="font-size:5px;font-weight:700;color:#64748B;text-transform:uppercase;letter-spacing:.05em;margin-bottom:4px">Responsáveis</h4>
+        <ul>${item("Elaborador", "Carlos Prado")}${item("Revisor", "Ana Duarte")}${item("Validador", "Marina Alves")}</ul>
+      </div>
+    </div>
+    <div class="mfoot">
+      <div class="btn-pri" data-alvo="baixar-pdf">${ic("baixar", 6)}Baixar PDF assinado</div>
+    </div>`;
+}
+
+
+/* Cabeçalho das telas cheias (elaboração e leitura da Versão). */
+function cabecalhoCheio(eyebrow, icone, acoes, alvoAcao) {
+  return `
+    <div style="position:absolute;left:0;right:0;top:0;height:24px;background:rgba(255,255,255,.92);border-bottom:1px solid #F1F5F9;display:flex;align-items:center;padding:0 9px;gap:6px;z-index:5">
+      <span style="color:#6B7280">${ic("volta", 7)}</span>
+      <div>
+        <div style="display:flex;align-items:center;gap:2px;color:#2B2E7E">${ic(icone, 6)}
+          <span style="font-size:5px;font-weight:700;text-transform:uppercase;letter-spacing:.06em">${eyebrow}</span></div>
+        <div style="font-size:7.4px;font-weight:700;color:#0F172A">HSM_CTI-001<span style="color:#6B7280;font-weight:400"> · Higienização das Mãos</span></div>
+      </div>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:4px">${acoes}</div>
+    </div>`;
+}
+
+const BTN_VERDE = (texto, alvo) =>
+  `<span class="btn-pri" style="background:linear-gradient(90deg,#15803D,#14532D)"${alvo ? ` data-alvo="${alvo}"` : ""}>${ic("check", 6)}${texto}</span>`;
+const BTN_AMBAR = (texto, alvo) =>
+  `<span style="display:inline-flex;align-items:center;gap:3px;padding:3.5px 7px;border-radius:5px;border:1px solid #FCD34D;background:#FFFBEB;color:#92400E;font-size:6.2px;font-weight:700"${alvo ? ` data-alvo="${alvo}"` : ""}>${ic("volta", 6)}${texto}</span>`;
+
+/* Seção do documento (POP vivo). */
+function secaoPop(num, titulo, corpo, opc) {
+  opc = opc || {};
+  return `
+    <div style="background:#fff;border:1px solid ${opc.ativa ? "rgba(43,46,126,.4)" : "#E2E8F0"};border-radius:6px;margin-bottom:5px;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:5px;padding:4px 7px;border-bottom:1px solid #F8FAFC">
+        <h2 style="font-size:6.4px;font-weight:700;color:${opc.vazia ? "#6B7280" : "#0F172A"}">${num}. ${titulo}</h2>
+        <span style="color:${opc.ativa ? "#2B2E7E" : "#6B7280"};display:flex"${opc.alvoAlvo ? ` data-alvo="${opc.alvoAlvo}"` : ""}>${ic("alvo", 7)}</span>
+      </div>
+      <div style="padding:5px 7px;font-size:5.4px;color:#475569;line-height:1.5">${corpo}</div>
+    </div>`;
+}
+
+function identificacaoPop() {
+  const dl = (rot, val) => `<div><dt style="font-size:4.4px;font-weight:700;color:#6B7280;text-transform:uppercase;letter-spacing:.06em">${rot}</dt><dd style="font-size:5.4px;color:#334155">${val}</dd></div>`;
+  return `
+    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:6px;margin-bottom:5px;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:5px;padding:4px 7px;border-bottom:1px solid #F8FAFC">
+        <div style="width:11px;height:11px;border-radius:3px;background:rgba(43,46,126,.1);color:#2B2E7E;display:flex;align-items:center;justify-content:center">${ic("arquivo", 7)}</div>
+        <div><h2 style="font-size:6.4px;font-weight:700;color:#0F172A">1. Identificação</h2>
+          <p style="font-size:4.6px;color:#6B7280">Preenchida pelo sistema (código travado).</p></div>
+      </div>
+      <div style="padding:5px 7px">
+        <p style="font-size:7px;font-weight:700;color:#0F172A;margin-bottom:4px">Higienização das Mãos</p>
+        <dl style="display:grid;grid-template-columns:repeat(3,1fr);gap:3px 8px">
+          ${dl("Código", "HSM_CTI-001")}${dl("Setor", "Centro de Terapia Intensiva (CTI)")}${dl("Versão", "v1.0")}
+          ${dl("Data de criação", "10/09/2026")}${dl("Criticidade", "CRÍTICA")}${dl("Base normativa", "RDC 63/2011")}
+          ${dl("Elaborador", "Ana Duarte")}${dl("Revisor", "Carlos Prado")}${dl("Validador", "Marina Alves")}
+        </dl>
+      </div>
+    </div>`;
+}
+
+/* Barra da Periodicidade de revisão, no alto do documento. */
+function barraPeriodicidade(valorId) {
+  return `
+    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:5px 7px;display:flex;align-items:center;gap:6px;margin-bottom:5px">
+      <div style="display:flex;align-items:center;gap:3px;color:#334155">${ic("relogio", 7, "#2B2E7E")}
+        <span style="font-size:5.8px;font-weight:700">Periodicidade de revisão</span></div>
+      <span style="display:inline-flex;align-items:center;gap:2px;padding:1.5px 4px;border-radius:999px;background:rgba(43,46,126,.1);color:#2B2E7E;font-size:5px;font-weight:600">${ic("brilho", 5)}Agente sugere: 1 ano</span>
+      <div style="margin-left:auto;display:flex;align-items:center;gap:3px">
+        <span style="font-size:5px;color:#6B7280">Escolha final</span>
+        <span class="campo" style="height:12px;width:62px;font-size:5.4px" data-alvo="periodicidade">
+          <span class="ph" id="${valorId}-ph">Selecione</span><span class="val" id="${valorId}-val">1 ano</span>${ic("seta", 6)}</span>
+      </div>
+    </div>`;
+}
+
+/* Painel do Consultor de POPs. */
+function painelConsultor(opc) {
+  opc = opc || {};
+  const materiais = opc.materiais
+    ? `<div id="materiais" style="padding:0 6px 3px;opacity:${opc.materiaisVisiveis ? 1 : 0}">
+         <div style="display:flex;align-items:center;gap:3px;padding:2.5px 4px;border-radius:4px;background:rgba(43,46,126,.05);border:1px solid rgba(43,46,126,.2);margin-bottom:2px" data-alvo="etiqueta-1">
+           ${ic("arquivo", 6, "#2B2E7E")}<span style="font-size:5px;color:#334155;flex:1">POP-Higienizacao-2019.pdf</span>
+           <span style="color:#6B7280" data-alvo="x-etiqueta">${ic("fechar", 5)}</span></div>
+         <div style="display:flex;align-items:center;gap:3px;padding:2.5px 4px;border-radius:4px;background:rgba(43,46,126,.05);border:1px solid rgba(43,46,126,.2)">
+           ${ic("arquivo", 6, "#2B2E7E")}<span style="font-size:5px;color:#334155;flex:1">RDC-63-2011.pdf</span>
+           <span style="color:#6B7280">${ic("fechar", 5)}</span></div>
+       </div>`
+    : "";
+  const arranque = opc.arranque
+    ? `<div id="arranque" style="padding:0 6px 3px;opacity:${opc.arranqueVisivel ? 1 : 0}">
+         <div style="display:flex;align-items:center;gap:3px;padding:3.5px 5px;border-radius:5px;border:1px solid rgba(43,46,126,.3);background:rgba(43,46,126,.05);color:#2B2E7E;font-size:5.2px;font-weight:600" data-alvo="botao-arranque">
+           ${ic("brilho", 6)}Elaborar a nova versão a partir do material anexado</div>
+       </div>`
+    : "";
+  return `
+    <div style="position:absolute;right:9px;top:33px;bottom:9px;width:152px;background:#fff;border:1px solid rgba(43,46,126,.3);border-radius:7px;display:flex;flex-direction:column;overflow:hidden">
+      <div style="display:flex;align-items:center;gap:4px;padding:5px 7px;border-bottom:1px solid #F1F5F9">
+        <div style="width:11px;height:11px;border-radius:3px;background:rgba(43,46,126,.1);color:#2B2E7E;display:flex;align-items:center;justify-content:center">${ic("robo", 7)}</div>
+        <div><h3 style="font-size:5.8px;font-weight:700;color:#0F172A">Consultor de POPs</h3>
+          <p style="font-size:4.6px;color:#6B7280">Boas práticas ONA / JCI</p></div>
+      </div>
+      <div style="flex:1;padding:6px;overflow:hidden">
+        <div style="display:flex;gap:4px;margin-bottom:5px">
+          <div style="width:9px;height:9px;border-radius:3px;background:#F1F5F9;color:#6B7280;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ic("robo", 6)}</div>
+          <div style="padding:4px 5px;border-radius:5px;border-top-left-radius:2px;background:#F8FAFC;border:1px solid #F1F5F9;font-size:5px;color:#475569;line-height:1.5">
+            Vamos elaborar este POP juntos. Me conte como o procedimento funciona na prática.</div>
+        </div>
+        <div id="resposta" style="display:flex;gap:4px;opacity:0">
+          <div style="width:9px;height:9px;border-radius:3px;background:#F1F5F9;color:#6B7280;display:flex;align-items:center;justify-content:center;flex-shrink:0">${ic("robo", 6)}</div>
+          <div style="padding:4px 5px;border-radius:5px;border-top-left-radius:2px;background:#F8FAFC;border:1px solid #F1F5F9;font-size:5px;color:#475569;line-height:1.5">
+            Escrevi o Objetivo e o Passo a passo. Confira ao lado e me diga o que ajustar.</div>
+        </div>
+      </div>
+      ${materiais}
+      ${arranque}
+      <div style="padding:5px 6px;border-top:1px solid #F1F5F9;display:flex;gap:3px">
+        <div class="campo" style="flex:1;height:${opc.campoAlto ? 26 : 14}px;font-size:5px;background:#F8FAFC;align-items:flex-start;padding-top:${opc.campoAlto ? 4 : 0}px" data-alvo="campo-conversa">
+          <span class="ph" id="conversa-ph"${opc.campoAlto ? ' style="line-height:1.4"' : ""}>Descreva o procedimento, passo a passo...</span>
+          <span class="val" id="conversa-val" style="font-size:4.6px;line-height:1.4">${opc.textoDigitado || "A equipe higieniza as mãos antes e depois de cada contato."}</span></div>
+        <div class="btn-sec" style="padding:3px 4px" data-alvo="botao-clipe">${ic("clipe", 6)}</div>
+        <div class="btn-sec" style="padding:3px 4px" data-alvo="botao-microfone">${ic("micro", 6)}</div>
+        <div class="btn-pri" style="padding:3px 4px" data-alvo="botao-enviar">${ic("enviar", 6)}</div>
+      </div>
+    </div>`;
+}
+
+/* Tela cheia de elaboração: documento à esquerda, Consultor de POPs à direita. */
+function telaElaboracao(opc) {
+  opc = opc || {};
+  return `
+    <div style="position:absolute;inset:0;background:#F8FAFC">
+      ${cabecalhoCheio("Elaboração de POP", "brilho", BTN_VERDE("Aprovar versão final", "aprovar-final"))}
+      <div style="position:absolute;left:9px;top:33px;bottom:9px;right:170px;overflow:hidden" data-alvo="documento-ela">
+        ${barraPeriodicidade("per")}
+        ${identificacaoPop()}
+        ${secaoPop(2, "Objetivo", '<span id="s2-vazio" style="color:#6B7280;font-style:italic">Esta seção toma forma conforme a conversa com o agente.</span><span id="s2-cheio" style="opacity:0;position:absolute;left:7px;right:7px">Padronizar a higienização das mãos para reduzir a transmissão de microrganismos na assistência ao paciente.</span>', { vazia: true, alvoAlvo: "alvo-secao" })}
+        ${secaoPop(3, "Passo a passo", "Molhar as mãos, aplicar o sabonete líquido, friccionar por 40 a 60 segundos, enxaguar e secar com papel toalha.")}
+        ${secaoPop(4, "Fluxograma", '<span style="color:#6B7280;font-style:italic">O fluxograma toma forma conforme a conversa com o agente.</span>')}
+      </div>
+      ${painelConsultor(opc)}
+    </div>`;
+}
+
+
+/* Tela cheia de leitura da Versão: mesma renderização do documento, com os
+   botões da etapa de quem está lendo. */
+function telaVersao(etapa) {
+  const eyebrow = etapa === "revisao" ? "Revisão técnica" : etapa === "validacao" ? "Validação final" : "Leitura da Versão";
+  const rotuloAprovar = etapa === "revisao" ? "Aprovar revisão" : "Aprovar validação";
+  const estado = etapa === "revisao" ? "v1.0 · Em Revisão" : "v1.0 · Em Validação";
+  const acoes = `<span class="tag tag-neu" style="font-size:5.2px;padding:2px 5px;border-radius:999px">${estado}</span>`
+    + BTN_AMBAR("Devolver com comentários", "devolver") + BTN_VERDE(rotuloAprovar, "aprovar");
+  const tarja = etapa === "validacao"
+    ? `<div style="background:#FFFBEB;border:1px solid #FDE68A;border-radius:6px;padding:5px 7px;margin-bottom:5px">
+         <div style="display:flex;align-items:center;gap:3px;color:#92400E;font-size:5.6px;font-weight:700">${ic("volta", 6)}Devoluções anteriores</div>
+         <p style="font-size:5px;color:#92400E;margin-top:2px;line-height:1.5">Carlos Prado · 12/09/2026 14:20 · Faltou citar o tempo de fricção no passo 3.</p>
+       </div>`
+    : "";
+  return `
+    <div style="position:absolute;inset:0;background:#F8FAFC">
+      ${cabecalhoCheio(eyebrow, "livro", acoes)}
+      <div style="position:absolute;left:60px;right:60px;top:33px;bottom:9px;overflow:hidden" data-alvo="documento">
+        ${tarja}
+        ${identificacaoPop()}
+        ${secaoPop(2, "Objetivo", "Padronizar a higienização das mãos para reduzir a transmissão de microrganismos na assistência ao paciente.")}
+        ${secaoPop(3, "Passo a passo", "Molhar as mãos, aplicar o sabonete líquido, friccionar por 40 a 60 segundos, enxaguar e secar com papel toalha.")}
+      </div>
+    </div>`;
+}
+
+/* Caixa de confirmação (aprovar) e de devolução (com o motivo obrigatório). */
+function caixaConfirma(titulo, descricao, rotulo, alvo) {
+  return `
+    <h3>${titulo}</h3>
+    <div class="dek" style="line-height:1.5;margin-top:3px">${descricao}</div>
+    <div class="mfoot"><span class="btn-sec">Cancelar</span>
+      <span class="btn-pri" style="background:linear-gradient(90deg,#15803D,#14532D)"${alvo ? ` data-alvo="${alvo}"` : ""}>${rotulo}</span></div>`;
+}
+
+function caixaDevolve() {
+  return `
+    <h3>Devolver à elaboração?</h3>
+    <div class="dek" style="line-height:1.5;margin-top:3px">A Versão volta ao Elaborador com os seus comentários e, no reenvio, retorna direto para você.</div>
+    <div style="margin-top:6px">
+      <div class="campo" style="height:30px;align-items:flex-start;padding:4px 5px" data-alvo="campo-motivo">
+        <span class="ph" id="motivo-ph" style="line-height:1.5">O que precisa ser ajustado? (registrado com seu nome e horário)</span>
+        <span class="val" id="motivo-val" style="line-height:1.5">Inclua o tempo de fricção no passo 3, de 40 a 60 segundos.</span>
+      </div>
+    </div>
+    <div class="mfoot"><span class="btn-sec">Cancelar</span>
+      <span class="btn-pri" style="background:linear-gradient(90deg,#DC2626,#B91C1C)" data-alvo="botao-devolver">Devolver</span></div>`;
+}
+
+
+/* O fluxograma desenhado pelo app: caixas do caminho principal e o desvio. */
+function desenhoFluxograma() {
+  const cx = 150;
+  const cxa = (t, x, y, w, h, tipo) => {
+    const fundo = tipo === "dec" ? "#FFF7ED" : tipo === "fim" ? "#ECFDF5" : "#EEF2FF";
+    const borda = tipo === "dec" ? "#FDBA74" : tipo === "fim" ? "#6EE7B7" : "#A5B4FC";
+    const raio = tipo === "fim" ? 12 : 4;
+    return `<g><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${raio}" fill="${fundo}" stroke="${borda}" stroke-width="1.4"/>
+      <text x="${x + w / 2}" y="${y + h / 2 + 3}" text-anchor="middle" font-size="8" fill="#1E293B" font-family="HP Simplified, sans-serif">${t}</text></g>`;
+  };
+  const seta = (x1, y1, x2, y2, rot) => `<g><path d="M${x1} ${y1} L${x2} ${y2}" stroke="#6B7280" stroke-width="1.2" fill="none"/>
+    <path d="M${x2} ${y2} l-3 -4 l6 0 z" fill="#6B7280" transform="rotate(${rot || 0} ${x2} ${y2})"/>
+    </g>`;
+  return `<svg viewBox="0 0 300 240" width="300" height="240" xmlns="http://www.w3.org/2000/svg">
+    ${cxa("Início", cx - 34, 6, 68, 20, "fim")}
+    ${seta(cx, 26, cx, 42, 180)}
+    ${cxa("Molhar as mãos", cx - 56, 42, 112, 20)}
+    ${seta(cx, 62, cx, 78, 180)}
+    ${cxa("Aplicar sabonete", cx - 56, 78, 112, 20)}
+    ${seta(cx, 98, cx, 114, 180)}
+    ${cxa("Friccionou 40s?", cx - 56, 114, 112, 20, "dec")}
+    ${seta(cx, 134, cx, 150, 180)}
+    ${cxa("Enxaguar e secar", cx - 56, 150, 112, 20)}
+    ${seta(cx, 170, cx, 186, 180)}
+    ${cxa("Fim", cx - 34, 186, 68, 20, "fim")}
+    <path d="M${cx + 56} 124 L${cx + 86} 124 L${cx + 86} 88 L${cx + 56} 88" stroke="#6B7280" stroke-width="1.2" fill="none"/>
+    <path d="M${cx + 56} 88 l4 -3 l0 6 z" fill="#6B7280"/>
+    <text x="${cx + 90} " y="108" font-size="7" fill="#64748B" font-family="HP Simplified, sans-serif">não</text>
+  </svg>`;
+}
+
+/* Seção Fluxograma dentro do documento, com a barra de zoom e de download. */
+function secaoFluxograma() {
+  return `
+    <div style="background:#fff;border:1px solid #E2E8F0;border-radius:6px;overflow:hidden">
+      <div style="display:flex;align-items:center;justify-content:space-between;gap:5px;padding:4px 7px;border-bottom:1px solid #F8FAFC">
+        <h2 style="font-size:6.4px;font-weight:700;color:#0F172A" data-alvo="titulo-fluxograma">4. Fluxograma</h2>
+        <span style="color:#6B7280;display:flex">${ic("alvo", 7)}</span>
+      </div>
+      <div style="padding:5px 7px">
+        <div style="display:flex;align-items:center;gap:3px;margin-bottom:4px">
+          <div style="display:flex;align-items:center;gap:2px;border:1px solid #E2E8F0;border-radius:4px;background:#fff;padding:1px;color:#64748B">
+            <span style="padding:2px" data-alvo="zoom-menos">${ic("zoommenos", 7)}</span>
+            <span style="font-size:5.2px;font-weight:600;color:#64748B;min-width:16px;text-align:center" id="zoom-num">100%</span>
+            <span style="padding:2px" data-alvo="zoom-mais">${ic("zoommais", 7)}</span>
+            <span style="padding:2px" data-alvo="ajustar-tela">${ic("ajustar", 7)}</span>
+          </div>
+          <div style="margin-left:auto;display:flex;gap:3px">
+            <span class="btn-sec" style="padding:2.5px 5px;font-size:5.2px" data-alvo="botao-png">${ic("imagem", 6)}PNG</span>
+            <span class="btn-sec" style="padding:2.5px 5px;font-size:5.2px" data-alvo="botao-svg">${ic("baixar", 6)}SVG</span>
+          </div>
+        </div>
+        <div style="position:relative;overflow:hidden;border:1px solid #E2E8F0;border-radius:5px;background:rgba(248,250,252,.6);height:152px">
+          <div id="palco-fluxo" style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center">
+            <div id="fluxo-desenho" style="transform:scale(0.62);transform-origin:center center">${desenhoFluxograma()}</div>
+          </div>
+          <span style="position:absolute;bottom:2px;right:4px;font-size:4.4px;color:#6B7280">Role para dar zoom, arraste para mover</span>
+        </div>
+        <p style="font-size:4.6px;color:#6B7280;margin-top:3px">HSM_CTI-001 · Higienização das Mãos</p>
+      </div>
+    </div>`;
+}
+
+
+/* A assinatura acontece fora da plataforma, no email: esta é a caixa de
+   entrada de quem assina, e depois o documento aberto pelo link. */
+function telaCaixaDeEntrada() {
+  const msg = (remetente, assunto, hora, marcada, naoLida) => `
+    <div class="tr" style="height:24px;align-items:flex-start;padding-top:4px${marcada ? ";background:rgba(43,46,126,.05)" : ""}"${marcada ? ' data-alvo="email-clicksign"' : ""}>
+      <span style="width:96px;font-weight:${naoLida ? 700 : 400};color:#334155">${remetente}</span>
+      <span style="width:250px">
+        <b style="font-weight:${naoLida ? 700 : 400};color:#0F172A">${assunto}</b>
+      </span>
+      <span style="width:48px;text-align:right;color:#64748B;font-size:5px">${hora}</span>
+    </div>`;
+  return `
+    <div style="position:absolute;inset:0;background:#fff;padding:9px">
+      <div style="display:flex;align-items:center;gap:5px;margin-bottom:7px">
+        <div style="width:13px;height:13px;border-radius:4px;background:#F1F5F9;color:#64748B;display:flex;align-items:center;justify-content:center">${ic("email", 8)}</div>
+        <div><h1 style="font-size:9px;font-weight:700;color:#0F172A">Caixa de entrada</h1>
+          <p style="font-size:5.4px;color:#64748B">O seu email, fora da plataforma</p></div>
+      </div>
+      <div class="tb">
+        ${msg("Equipe do hospital", "Resumo semanal de pendências", "09:12")}
+        ${msg("ClickSign", "Documento para assinar: HSM_CTI-001 Higienizacao das Maos v1.0", "08:47", true, true)}
+        ${msg("Agenda", "Reunião da Qualidade às 15h", "07:30")}
+      </div>
+    </div>`;
+}
+
+/* O documento aberto pelo link da mensagem, na tela da ClickSign. */
+function telaDocumentoAssinatura(assinado) {
+  return `
+    <div style="position:absolute;inset:0;background:#F1F5F9;padding:9px;display:flex;gap:7px">
+      <div style="flex:1;background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:8px;overflow:hidden">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:1px solid #E2E8F0;padding-bottom:5px;margin-bottom:5px">
+          <div data-alvo="cabecalho-documento">
+            <p style="font-size:5.6px;font-weight:700;color:#2B2E7E">HSM_CTI-001</p>
+            <h2 style="font-size:8px;font-weight:700;color:#0F172A">Higienização das Mãos</h2>
+            <p style="font-size:5.2px;color:#64748B">Versão 1.0 · Centro de Terapia Intensiva</p>
+          </div>
+          <img src="assets/logo-hsm.png" alt="" style="width:40px;height:23px" />
+        </div>
+        <p style="font-size:5.2px;color:#475569;line-height:1.6">1. Identificação<br/>2. Objetivo: padronizar a higienização das mãos para reduzir a transmissão de microrganismos.<br/>3. Passo a passo: molhar as mãos, aplicar o sabonete líquido, friccionar por 40 a 60 segundos.<br/>4. Fluxograma</p>
+        <div style="margin-top:6px;border:1px dashed #6B7280;border-radius:5px;padding:5px;font-size:5px;color:#6B7280">Fluxograma do procedimento</div>
+      </div>
+      <div style="width:120px;background:#fff;border:1px solid #E2E8F0;border-radius:6px;padding:7px">
+        <p style="font-size:5.2px;color:#64748B;line-height:1.5">Assine o documento para concluir a sua parte.</p>
+        <div style="margin-top:6px;border:1px solid #E2E8F0;border-radius:5px;padding:5px;text-align:center">
+          <p style="font-size:4.6px;color:#6B7280">Sua assinatura</p>
+          <p id="assinatura-feita" style="opacity:0;font-size:8px;color:#1E293B;margin-top:2px">Ana Duarte</p>
+        </div>
+        <div style="margin-top:6px;display:flex;justify-content:center">
+          <span class="btn-pri" style="padding:4px 10px" data-alvo="botao-assinar">${ic("caneta", 6)}Assinar</span>
+        </div>
+        <p id="assinatura-ok" style="opacity:0;margin-top:6px;font-size:5.2px;color:#047857;font-weight:700;text-align:center">Assinatura concluída</p>
+      </div>
+    </div>`;
+}
+
+
+/* O formulário Novo Setor. */
+function modalSetor() {
+  return `
+    <div style="display:flex;justify-content:space-between;align-items:center">
+      <h3>Novo Setor</h3><span style="color:#94A3B8">${ic("fechar", 7)}</span>
+    </div>
+    <div style="margin-top:7px">
+      <div class="lb">Nome</div>
+      <div class="campo" data-alvo="campo-nome-setor"><span class="ph" id="nome-setor-ph">Selecione ou digite</span><span class="val" id="nome-setor-val">Centro Cirúrgico</span></div>
+    </div>
+    <div style="margin-top:6px">
+      <div class="lb">Sigla</div>
+      <div class="campo" data-alvo="campo-sigla"><span class="ph" id="sigla-ph">Ex.: CTI</span><span class="val" id="sigla-val">CC</span></div>
+      <p style="font-size:4.8px;color:#64748B;margin-top:2px">Base do código travado dos POPs deste Setor (HSM_SIGLA-NNN).</p>
+    </div>
+    <div class="mfoot"><span class="btn-sec">Cancelar</span>
+      <span class="btn-pri" data-alvo="botao-salvar-setor">Salvar</span></div>`;
+}
+
+
+/* Posições calculadas uma vez, no carregamento: o marcador e o dedo saem da
+   medida real do elemento, e não de coordenada escrita à mão. */
+const C = {};
+function medir() {
+  const palco = document.getElementById("palco-tarefa");
+  const base = palco.getBoundingClientRect();
+  /* Telas que nascem escondidas também precisam ser medidas: mostramos todas
+     por um instante (elas se sobrepõem no mesmo espaço) e devolvemos o estado. */
+  const ocultos = Array.from(palco.querySelectorAll("[data-medir-oculto]"));
+  const antes = ocultos.map((e) => e.style.display);
+  ocultos.forEach((e) => { e.style.display = "block"; });
+  palco.querySelectorAll("[data-alvo]").forEach((el) => {
+    const r = el.getBoundingClientRect();
+    const l = (r.left - base.left) / 2;
+    const t = (r.top - base.top) / 2;
+    const w = r.width / 2;
+    const h = r.height / 2;
+    C[el.dataset.alvo] = { l, t, w, h, x: l + w / 2, y: t + h / 2 };
+  });
+  palco.querySelectorAll("[data-marca]").forEach((m) => {
+    const c = C[m.dataset.marca];
+    if (!c) return;
+    const f = parseFloat(m.dataset.folga || "2");
+    m.style.left = c.l - f + "px";
+    m.style.top = c.t - f + "px";
+    m.style.width = c.w + f * 2 + "px";
+    m.style.height = c.h + f * 2 + "px";
+  });
+  ocultos.forEach((e, i) => { e.style.display = antes[i]; });
+  /* Texto de exemplo e valor digitado empilhados no mesmo canto do campo. */
+  palco.querySelectorAll(".campo").forEach((c) => {
+    const ph = c.querySelector(".ph"), val = c.querySelector(".val");
+    if (!ph || !val || ph.parentNode.classList.contains("txt")) return;
+    const w = document.createElement("span");
+    w.className = "txt";
+    ph.parentNode.insertBefore(w, ph);
+    w.appendChild(ph);
+    w.appendChild(val);
+  });
+  /* Camadas que cobrem a tela de propósito (modal, véu, aviso, menu). */
+  palco.querySelectorAll(".modal, .backdrop, .toast, .menu-user").forEach((e) => {
+    e.setAttribute("data-layout-allow-overlap", "");
+    e.setAttribute("data-layout-allow-occlusion", "");
+    e.querySelectorAll("*").forEach((x) => {
+      x.setAttribute("data-layout-allow-overlap", "");
+      x.setAttribute("data-layout-allow-occlusion", "");
+    });
+  });
+}
+
+/* A ponta da seta do dedo fica a (3.5, 2.1) do canto do elemento. */
+const PX = 3.5, PY = 2.1;
+const em = (alvo, ox, oy) => [C[alvo].x - PX + (ox || 0), C[alvo].y - PY + (oy || 0)];
+/* Move o dedo de um alvo (ou par de coordenadas) para outro. */
+function anda(g, t, de, para) {
+  const a = Array.isArray(de) ? de : em(de);
+  const b = Array.isArray(para) ? para : em(para);
+  move(g, t, a[0], a[1], b[0], b[1]);
+}
+/* Medir de novo quando imagens e fontes terminarem de carregar: o quadro
+   renderizado é sempre o estado final, e o marcador acompanha. */
+window.addEventListener("load", medir);
+const FORA = [470, 340];
+
+
+document.getElementById("palco-tarefa").innerHTML =
+  `<div style="position:absolute;inset:0;background:#EEF1F6"></div>
+  <div class="janela" data-layout-allow-overflow data-layout-allow-occlusion id="janela" style="left:56px;top:105px">
+    <div class="barra"><i></i><i></i><i></i><div class="url" id="url-barra">plataforma do hospital</div></div>
+    <div class="tela" data-layout-allow-overflow data-layout-allow-occlusion id="tela-pops">${shell(conteudoPops({ setorNovo: true }), "pops", { alvos: { pops: "menu-pops" } })}</div>
+    <div class="backdrop" id="bd"></div>
+    <div class="modal" data-layout-allow-overflow data-layout-allow-occlusion id="setor" style="left:150px;top:80px;width:220px">${modalSetor()}</div>
+    <div class="toast" id="toast">Setor criado</div>
+  </div>
+  <div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-menu" data-marca="menu-pops" data-folga="2"></div>
+  <div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-novo" data-marca="novo-setor" data-folga="2"></div>
+  <div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-nome" data-marca="campo-nome-setor" data-folga="2"></div>
+  <div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-sigla" data-marca="campo-sigla" data-folga="2"></div>
+  <div class="marcador" data-layout-allow-overlap data-layout-allow-occlusion id="mk-lapis" data-marca="lapis-setor" data-folga="2"></div>
+  <div class="ghost" data-layout-allow-overlap data-layout-allow-occlusion id="g1"><svg width="17" height="17" viewBox="0 0 24 24" fill="#16181d" stroke="#fff" stroke-width="1.4"><path d="M5 3l14 8-6 1.6L9.6 19z"/></svg><div class="pulse"></div></div>
+  <div class="rodape-v">v0.142.1</div>` +
+  passo("p1", 1, "No menu da esquerda, clique em POPs", "Sem Setor cadastrado não há Código. Só o Superadmin vê este bloco.", 120) +
+  passo("p2", 2, "Role até o bloco Setores e clique em Novo Setor", "Ele fica abaixo da lista de POPs e dos cartões.", 120) +
+  passo("p3", 3, "Em Nome, escolha da lista ou digite um novo", "A lista traz os setores já conhecidos no hospital.", 120) +
+  passo("p4", 4, "Confira a Sigla", "Ela vem sugerida do nome, sai sempre em maiúsculas e é a base do Código.", 120) +
+  passo("p5", 5, "Clique em Salvar", "O Setor entra na lista e já pode receber POPs.", 120) +
+  passo("p6", 6, "Para corrigir, clique no lápis", "Na linha do Setor. Ajuste e salve; os Códigos já criados não mudam.", 120);
+
+medir();
+
+
+window.__timelines = window.__timelines || {};
+const tl = gsap.timeline({ paused: true });
+const IR = { immediateRender: false };
+const surge = (sel, t, y) => tl.fromTo(sel, { opacity: 0, y: y === undefined ? 8 : y }, { opacity: 1, y: 0, duration: 0.4, ease: "power2.out", ...IR }, t);
+const some = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const nota = (sel, t, ate) => { surge(sel, t, 14); some(sel, ate); };
+const clique = (g, t) => tl.fromTo(g + " .pulse", { opacity: 0.9, scale: 0.4 }, { opacity: 0, scale: 1.25, duration: 0.42, ease: "power1.out", ...IR }, t);
+const move = (g, t, x, y, dx, dy) => {
+  tl.set(g, { x: x, y: y, opacity: 1 }, t);
+  tl.to(g, { x: dx, y: dy, duration: 0.7, ease: "power2.inOut" }, t + 0.2);
+};
+const some_dedo = (g, t) => tl.to(g, { opacity: 0, duration: 0.25 }, t);
+const aperta = (sel, t) => tl.to(sel, { scale: 0.97, duration: 0.1, yoyo: true, repeat: 1 }, t);
+const digita = (vazio, cheio, campo, t) => {
+  tl.to(vazio, { opacity: 0, duration: 0.15 }, t);
+  tl.to(cheio, { opacity: 1, duration: 0.22 }, t + 0.15);
+  if (campo) tl.to(campo, { borderColor: "#2B2E7E", duration: 0.2 }, t);
+};
+const marca_on = (sel, t) => tl.fromTo(sel, { opacity: 0 }, { opacity: 1, duration: 0.3, ...IR }, t);
+const marca_off = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.3 }, t);
+const abre = (sel, t) => tl.fromTo(sel, { opacity: 0, scale: 0.97 }, { opacity: 1, scale: 1, duration: 0.35, ease: "power2.out", ...IR }, t);
+const fecha = (sel, t) => tl.to(sel, { opacity: 0, duration: 0.25 }, t);
+const rola = (sel, t, y) => tl.to(sel, { y: y, duration: 0.7, ease: "power2.inOut" }, t);
+const toast = (sel, t, ate) => { tl.fromTo(sel, { opacity: 0, y: 6 }, { opacity: 1, y: 0, duration: 0.35, ease: "power2.out", ...IR }, t); tl.to(sel, { opacity: 0, duration: 0.3 }, ate); };
+const troca = (sai, entra, t) => {
+  tl.to(sai, { opacity: 0, duration: 0.3 }, t);
+  tl.set(sai, { display: "none" }, t + 0.3);
+  tl.set(entra, { display: "block" }, t + 0.32);
+  tl.fromTo(entra, { opacity: 0 }, { opacity: 1, duration: 0.35, ...IR }, t + 0.34);
+};
+
+
+/* 1 · Abertura */
+surge("#ab-eyebrow", 0.25, 22);
+tl.fromTo("#ab-titulo", { opacity: 0, y: 28 }, { opacity: 1, y: 0, duration: 0.7, ease: "power3.out", ...IR }, 0.5);
+surge("#ab-sub", 1.1, 22);
+surge("#ab-selos", 1.6, 18);
+
+/* 2 · A tarefa */
+
+/* A página rola 196px até o bloco Setores; os marcadores de lá acompanham. */
+tl.set(["#mk-novo", "#mk-lapis"], { y: -196 }, 4.0);
+tl.fromTo("#janela", { opacity: 0, y: 20 }, { opacity: 1, y: 0, duration: 0.5, ease: "power2.out", ...IR }, 4.2);
+
+/* 1 · o menu */
+nota("#p1", 4.9, 9.9);
+marca_on("#mk-menu", 5.2);
+anda("#g1", 5.5, FORA, "menu-pops");
+clique("#g1", 6.5);
+marca_off("#mk-menu", 9.700000000000001);
+some_dedo("#g1", 9.700000000000001);
+
+/* 2 · rolar até Setores e criar */
+nota("#p2", 10.3, 15.299999999999999);
+rola("#mn-in", 10.600000000000001, -196);
+marca_on("#mk-novo", 11.600000000000001);
+anda("#g1", 11.9, FORA, em("novo-setor", 0, -196));
+clique("#g1", 12.9);
+marca_off("#mk-novo", 13.200000000000001);
+tl.to("#bd", { opacity: 1, duration: 0.3 }, 13.200000000000001);
+abre("#setor", 13.3);
+some_dedo("#g1", 13.3);
+
+/* 3 · o Nome */
+nota("#p3", 15.7, 20.700000000000003);
+marca_on("#mk-nome", 16.0);
+digita("#nome-setor-ph", "#nome-setor-val", null, 16.599999999999998);
+marca_off("#mk-nome", 20.6);
+
+/* 4 · a Sigla */
+nota("#p4", 21.1, 26.1);
+marca_on("#mk-sigla", 21.400000000000002);
+digita("#sigla-ph", "#sigla-val", null, 22.0);
+marca_off("#mk-sigla", 26.0);
+
+/* 5 · salvar */
+nota("#p5", 26.5, 31.5);
+anda("#g1", 26.9, FORA, "botao-salvar-setor");
+clique("#g1", 27.9);
+aperta("#setor", 27.9);
+some_dedo("#g1", 28.3);
+fecha("#setor", 28.4);
+tl.to("#bd", { opacity: 0, duration: 0.3 }, 28.5);
+tl.to("#setor-novo", { opacity: 1, duration: 0.4 }, 28.6);
+toast("#toast", 28.9, 31.299999999999997);
+
+/* 6 · o lápis */
+nota("#p6", 31.9, 36.8);
+marca_on("#mk-lapis", 32.3);
+anda("#g1", 32.6, FORA, em("lapis-setor", 0, -196));
+clique("#g1", 33.6);
+marca_off("#mk-lapis", 36.3);
+some_dedo("#g1", 36.3);
+
+
+/* 3 · Fecho */
+surge("#fc-titulo", 37.9, 18);
+surge("#fc-carimbo", 38.4, 14);
+surge("#fc-org", 38.800000000000004, 12);
+
+window.__timelines.main = tl;
+</script>
+</body>
+</html>
