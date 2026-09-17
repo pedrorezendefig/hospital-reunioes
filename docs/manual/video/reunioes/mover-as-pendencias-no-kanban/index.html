@@ -273,7 +273,7 @@ esconde("#mk-col-repactuada", 14.2);
 toca(15.3, "k-filtros");
 esconde("#mk-k-filtros", 18.3);
 
-/* passo 4: o arrasto — o cartão sai de Pendente e vai até a coluna vazia */
+/* passo 4: o arrasto, do cartão em Pendente até a coluna vazia */
 tl.to("#g1", { opacity: 0, duration: 0.2 }, 20.0);
 mostra(marcaEm("vazio-em_progresso"), 20.3);
 (function () {
@@ -289,7 +289,7 @@ mostra(marcaEm("vazio-em_progresso"), 20.3);
 })();
 acende("#col-em_progresso", 22.3, "#7CC2F2");
 
-/* passo 5: soltar — o cartão entra na coluna e as duas contas mudam */
+/* passo 5: ao soltar, o cartão entra na coluna e as duas contas mudam */
 tl.to("#cartao-arrastado", { opacity: 0, duration: 0.2 }, 25.3);
 tl.to("#vazio-em_progresso", { opacity: 0, duration: 0.2 }, 25.3);
 mostra("#cartao-solto", 25.5);
