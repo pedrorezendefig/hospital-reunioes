@@ -104,6 +104,13 @@ while IFS= read -r caminho; do
     -vf "scale=-2:'min(720,ih)'" -c:v libx264 -preset veryfast -crf 28 \
     -movflags +faststart -c:a aac -b:a 96k "$temporario"
   mv "$temporario" "$destino"
+  # Capa do vídeo (ADR 0057, emenda de 17/09/2026, decisão 2): o primeiro quadro
+  # vira `<mesmo caminho>.jpg`, que é para onde o `poster` do <video> aponta.
+  # Sem ela o leitor encara um retângulo preto até dar play, e quem lê no
+  # celular não dá play. A capa entra no mesmo dist, então já conta na trava de
+  # tamanho logo abaixo.
+  ffmpeg -nostdin -y -loglevel error -i "$destino" -frames:v 1 -q:v 3 \
+    "${destino%.mp4}.jpg"
 done <<EOF
 $VIDEOS
 EOF
@@ -113,6 +120,8 @@ if [ -n "$FALTANDO" ]; then
   exit 1
 fi
 
+# O que vai para o ar, vídeo e capa incluídos: o `du` mede a pasta inteira depois
+# do reencode, então a capa de cada MP4 já está contada aqui.
 # A comparação é em KB, e não nos MB arredondados: dividir antes deixaria 90,9 MB
 # passar como 90 e a trava seria mais frouxa do que a mensagem promete.
 TAMANHO_KB=$(du -sk "$SAIDA" | cut -f1)

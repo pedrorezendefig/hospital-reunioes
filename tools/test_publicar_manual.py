@@ -51,6 +51,27 @@ def altura(video: Path) -> int:
     return int(saida.stdout.strip())
 
 
+def codec(arquivo: Path) -> str:
+    saida = subprocess.run(
+        [
+            "ffprobe",
+            "-v",
+            "error",
+            "-select_streams",
+            "v:0",
+            "-show_entries",
+            "stream=codec_name",
+            "-of",
+            "csv=p=0",
+            str(arquivo),
+        ],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return saida.stdout.strip()
+
+
 def gravar_video(destino: Path, altura_em_pixels: int) -> None:
     destino.parent.mkdir(parents=True, exist_ok=True)
     subprocess.run(
@@ -180,3 +201,47 @@ def test_pular_build_nao_publica_mesmo_sem_dry_run(tmp_path):
     )
     assert resultado.returncode == 0, resultado.stderr
     assert "nada publicado" in resultado.stdout
+
+
+@sem_ffmpeg
+def test_video_ganha_a_capa_do_primeiro_quadro(tmp_path):
+    """A capa é o `poster` do <video>: sem ela, o leitor encara um retângulo
+    preto até dar play, e quem lê no celular não dá play (ADR 0057, emenda de
+    17/09/2026, decisão 2). Ela vai para o mesmo dist, então o `du` da trava de
+    tamanho já a conta.
+    """
+    saida = tmp_path / "publicar"
+    saida.mkdir()
+    video = saida / "video" / "ouvidoria" / "registrar.mp4"
+    gravar_video(video, 1080)
+    (saida / "index.html").write_text(
+        '<video poster="/video/ouvidoria/registrar.jpg">'
+        '<source src="/video/ouvidoria/registrar.mp4"></video>',
+        encoding="utf-8",
+    )
+
+    resultado = publicar(saida)
+    assert resultado.returncode == 0, resultado.stderr
+    capa = saida / "video" / "ouvidoria" / "registrar.jpg"
+    assert capa.is_file()
+    # JPEG de verdade, e da altura do vídeo já reencodado: gerar a capa antes do
+    # reencode a deixaria em 1080, com um peso que a trava de tamanho conta e
+    # ninguém pediu.
+    assert codec(capa) == "mjpeg"
+    assert altura(capa) == 720
+
+
+@sem_ffmpeg
+def test_video_sem_reencode_tambem_ganha_capa(tmp_path):
+    """Vídeo que já é pequeno passa pelo mesmo caminho e sai com capa."""
+    saida = tmp_path / "publicar"
+    saida.mkdir()
+    video = saida / "video" / "ouvidoria" / "curto.mp4"
+    gravar_video(video, 360)
+    (saida / "index.html").write_text(
+        '<video><source src="/video/ouvidoria/curto.mp4"></video>', encoding="utf-8"
+    )
+
+    resultado = publicar(saida)
+    assert resultado.returncode == 0, resultado.stderr
+    assert codec(saida / "video" / "ouvidoria" / "curto.jpg") == "mjpeg"

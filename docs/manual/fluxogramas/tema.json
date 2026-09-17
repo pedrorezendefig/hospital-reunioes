@@ -1,0 +1,34 @@
+{
+  "theme": "base",
+  "themeVariables": {
+    "fontFamily": "\"HP Simplified\", system-ui, -apple-system, sans-serif",
+    "fontSize": "15px",
+    "background": "#FFFFFF",
+    "primaryColor": "#EEF0F9",
+    "primaryBorderColor": "#2B2E7E",
+    "primaryTextColor": "#1E293B",
+    "secondaryColor": "#FFFFFF",
+    "secondaryBorderColor": "#64748B",
+    "secondaryTextColor": "#1E293B",
+    "tertiaryColor": "#FFFFFF",
+    "tertiaryBorderColor": "#E2E8F0",
+    "tertiaryTextColor": "#1E293B",
+    "lineColor": "#64748B",
+    "textColor": "#1E293B",
+    "mainBkg": "#EEF0F9",
+    "nodeBorder": "#2B2E7E",
+    "nodeTextColor": "#1E293B",
+    "clusterBkg": "#FFFFFF",
+    "clusterBorder": "#E2E8F0",
+    "edgeLabelBackground": "#FFFFFF",
+    "titleColor": "#2B2E7E"
+  },
+  "flowchart": {
+    "curve": "basis",
+    "htmlLabels": false,
+    "padding": 12,
+    "nodeSpacing": 40,
+    "rankSpacing": 48,
+    "useMaxWidth": true
+  }
+}

@@ -84,6 +84,19 @@ def texto_visivel(texto: str) -> str:
     return texto
 
 
+# O alternativo de uma imagem (`![assim](...)`) é texto que o leitor de tela lê,
+# nunca texto que alguém lê na página. Ele continua valendo para a varredura de
+# jargão, e sai só da contagem: com três Prints de passo, o alternativo sozinho
+# empurraria toda Página de tarefa para o aviso de teto (ADR 0057, emenda de
+# 17/09/2026, decisão 10).
+RE_ALT = re.compile(r"!\[[^\]]*\]")
+
+
+def texto_contado(visivel: str) -> str:
+    """O texto que conta no teto: o visível, sem o alternativo das imagens."""
+    return RE_ALT.sub(" ", visivel)
+
+
 # Páginas de módulo que não são Página de tarefa: a Visão geral, as Novidades e
 # o grupo Como funciona. Elas não têm quem faz, então não levam selo.
 RESERVADOS = {"index", "novidades"}
@@ -139,7 +152,7 @@ def checar(pasta: Path) -> tuple[list[str], list[str]]:
             )
 
         if e_pagina_de_tarefa(relativo):
-            palavras = len(visivel.split())
+            palavras = len(texto_contado(visivel).split())
             if palavras > TETO_DE_PALAVRAS:
                 avisos.append(
                     f"{nome}: {palavras} palavras, acima do teto de "

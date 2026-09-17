@@ -234,3 +234,59 @@ def test_site_limpo_sai_com_codigo_0(tmp_path):
 def test_pasta_inexistente_sai_com_codigo_1(tmp_path):
     resultado = rodar(tmp_path / "nao-existe")
     assert resultado.returncode == 1
+
+
+FRONTMATTER_DE_TAREFA = """---
+title: Registrar uma manifestação
+description: Como abrir um caso na Ouvidoria.
+prd: [731]
+draft: false
+papel: [Ouvidoria]
+---
+
+"""
+
+
+def test_alternativo_da_imagem_nao_conta_no_teto(tmp_path):
+    """240 palavras de texto e 30 de alternativo: ninguém lê o `alt`.
+
+    Com três Prints de passo por página, o alternativo sozinho empurraria toda
+    Página de tarefa para o aviso (ADR 0057, emenda de 17/09/2026, decisão 10).
+    """
+    alt = " ".join(["figura"] * 30)
+    escrever(
+        tmp_path,
+        "ouvidoria/registrar-manifestacao.md",
+        FRONTMATTER_DE_TAREFA
+        + " ".join(["palavra"] * 240)
+        + f"\n\n![{alt}](../../../assets/ouvidoria/painel.png)\n",
+    )
+    erros, avisos = lint_manual.checar(tmp_path / "src" / "content" / "docs")
+    assert erros == []
+    assert avisos == []
+
+
+def test_as_mesmas_30_palavras_no_corpo_avisam(tmp_path):
+    """Mutação da fixture: o que muda é estar no `alt`, não o total de palavras."""
+    escrever(
+        tmp_path,
+        "ouvidoria/registrar-manifestacao.md",
+        FRONTMATTER_DE_TAREFA + " ".join(["palavra"] * 270) + "\n",
+    )
+    erros, avisos = lint_manual.checar(tmp_path / "src" / "content" / "docs")
+    assert erros == []
+    assert len(avisos) == 1
+    assert "270 palavras" in avisos[0]
+
+
+def test_jargao_dentro_do_alternativo_continua_travando(tmp_path):
+    """O leitor de tela lê o `alt`: sai da contagem, não da varredura de jargão."""
+    escrever(
+        tmp_path,
+        "ouvidoria/registrar-manifestacao.md",
+        PAGINA_VALIDA
+        + "\n![Tela do endpoint da Ouvidoria](../../../assets/ouvidoria/painel.png)\n",
+    )
+    erros, _ = lint_manual.checar(tmp_path / "src" / "content" / "docs")
+    assert len(erros) == 1
+    assert "endpoint" in erros[0]
