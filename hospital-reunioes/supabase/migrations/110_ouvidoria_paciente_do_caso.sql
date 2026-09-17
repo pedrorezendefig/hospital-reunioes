@@ -26,9 +26,26 @@
 -- DADO PESSOAL DE TERCEIRO, e e isso que muda a leitura das duas colunas: quem
 -- o anonimato protege e QUEM MANIFESTA, e o paciente e outra pessoa (ADR 0052,
 -- decisao 3). Marcar "anonimo" zera nome e contato do manifestante e NAO zera
--- estas colunas. Em compensacao, elas sao varridas pela Retencao junto com o
--- resto do Dossie (decisao 6) e nao viajam para a area no sigilo reforcado
--- (decisao 4).
+-- estas colunas.
+--
+-- ATENCAO, ESTADO REAL NA DATA DESTA MIGRATION (fatia de fundacao, issue #666):
+-- as duas guardas que o ADR 0052 promete para estas colunas AINDA NAO EXISTEM
+-- no codigo, e sao fatias proprias do PRD #659:
+--
+--   * a RETENCAO NAO VARRE estas colunas. `CAMPOS_DO_DOSSIE`, em
+--     app/services/ouvidoria_retencao.py, e lista fechada, e coluna que nao
+--     esta nela sobrevive tanto ao cron dos cinco anos quanto a porta
+--     antecipada da Diretoria (que carimba `anonimizada_em` mesmo assim).
+--     Enquanto a issue #665 nao subir, o nome e o leito de um paciente
+--     sobrevivem ao apagamento do resto do Dossie;
+--   * a GUARDA DO CASO PROTEGIDO nao existe porque o paciente ainda nao viaja
+--     para lugar nenhum: `_CAMPOS_DO_EMAIL` (ouvidoria_notificacoes.py) e
+--     `_CAMPOS_DO_PORTAL` (ouvidoria_setor.py) continuam sem estas colunas, e
+--     e a issue #664 que leva o paciente a area com a regra da decisao 4
+--     (comum e anonimo levam, sigilo reforcado nao leva).
+--
+-- Quem for mexer aqui depois da #664 e da #665 atualiza este bloco: comentario
+-- de coluna que promete guarda inexistente e pior que comentario nenhum.
 --
 -- Nenhuma tabela nova nasce aqui: nada de RLS a ligar, e as policies de
 -- ouvidoria_protocolos seguem valendo para a linha inteira, colunas novas
@@ -40,7 +57,7 @@ ALTER TABLE ouvidoria_protocolos
   ADD COLUMN IF NOT EXISTS paciente_referencia TEXT;
 
 COMMENT ON COLUMN ouvidoria_protocolos.paciente_nome IS
-  'Nome do Paciente do caso, quando quem manifestou disse que o relato e sobre outra pessoa (issue #666, ADR 0052). Dado pessoal de TERCEIRO: o anonimato do manifestante NAO apaga esta coluna, porque o anonimato protege quem fala e o paciente e outra pessoa. NULL significa que ninguem informou, o que e opcional de proposito. Nasce com o caso e nao e editavel depois, como o resto da identificacao.';
+  'Nome do Paciente do caso, quando quem manifestou disse que o relato e sobre outra pessoa (issue #666, ADR 0052). Dado pessoal de TERCEIRO: o anonimato do manifestante NAO apaga esta coluna, porque o anonimato protege quem fala e o paciente e outra pessoa. NULL significa que ninguem informou, o que e opcional de proposito. Nasce com o caso e nao e editavel depois, como o resto da identificacao. PENDENTE nesta fatia: a Retencao AINDA NAO varre esta coluna (nem o cron dos cinco anos nem a porta antecipada da Diretoria), e ela PASSARA a varrer na issue #665; o paciente tambem ainda nao viaja para a area, e a guarda do sigilo reforcado da decisao 4 chega na issue #664.';
 
 COMMENT ON COLUMN ouvidoria_protocolos.paciente_referencia IS
-  'Quando ou onde foi o atendimento do Paciente do caso: data, setor ou leito, em texto curto (issue #666, ADR 0052). Serve para a area distinguir o paciente de outros com o mesmo nome e achar o atendimento sem devolver o caso. Mesma regra da coluna paciente_nome: opcional, dado de terceiro, preservada no caso anonimo e varrida pela Retencao.';
+  'Quando ou onde foi o atendimento do Paciente do caso: data, setor ou leito, em texto curto (issue #666, ADR 0052). Serve para a area distinguir o paciente de outros com o mesmo nome e achar o atendimento sem devolver o caso. Mesma regra da coluna paciente_nome: opcional, dado de terceiro e preservada no caso anonimo, com as mesmas duas pendencias (a Retencao ainda nao a varre, issue #665; o paciente ainda nao viaja para a area, issue #664). Cuidado extra na hora de varrer: leito e data reidentificam quem manifestou, foi por isso que a migration 084 tirou o canal_ponto do caso anonimo.';

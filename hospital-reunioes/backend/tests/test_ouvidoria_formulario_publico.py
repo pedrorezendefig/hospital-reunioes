@@ -1168,7 +1168,27 @@ class TestMigration110:
         assert "add column if not exists paciente_nome" in ddl
         assert "add column if not exists paciente_referencia" in ddl
         # Sem NOT NULL: informar é opcional, e nenhum caso já gravado informou.
-        assert "not null" not in ddl
+        #
+        # A busca é no COMANDO, e não no arquivo inteiro: a prosa acima dele
+        # explica por que a coluna é anulável, e quebraria este teste no dia em
+        # que escrevesse "NOT NULL" para dizer justamente que não usou.
+        comando = ddl.split("alter table ouvidoria_protocolos", 1)[1].split(";", 1)[0]
+        assert "not null" not in comando
+
+    def test_a_migration_nao_promete_guarda_que_ainda_nao_existe(self):
+        """O comentário de coluna é o que o próximo dev lê no `\\d+` da tabela,
+        e corrigi-lo depois pede outra migration.
+
+        Esta fatia grava dado pessoal de terceiro SEM as duas guardas que o ADR
+        0052 promete: a Retenção não varre as colunas (issue #665) e o paciente
+        ainda não viaja para a área (issue #664). O texto tem que dizer isso no
+        estado real, senão o banco documenta uma guarda que não existe e o
+        apagamento pela Diretoria carimba `anonimizada_em` deixando o nome e o
+        leito de um paciente vivos."""
+        ddl = self._ddl()
+        assert "ainda nao varre" in ddl, "o comentário precisa dizer que a Retenção não varre ainda"
+        assert "#665" in ddl, "o comentário precisa citar a issue que fará a varredura"
+        assert "#664" in ddl, "o comentário precisa citar a issue que leva o paciente à área"
 
     def test_as_colunas_carregam_a_regra_no_comentario(self):
         """Quem for mexer nelas precisa ler que são dado de TERCEIRO e que o

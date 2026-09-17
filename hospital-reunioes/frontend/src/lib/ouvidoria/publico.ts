@@ -48,11 +48,30 @@ export const FALTA_DIZER_SOBRE_QUEM = 'Responda "Este relato é sobre quem?" par
  * O aviso abaixo do nome do paciente. A segunda frase só aparece para quem
  * pediu anonimato: "Acompanhante da Maria, leito 12" às vezes entrega quem
  * falou, e a pessoa decide isso sabendo (ADR 0052, consequências).
+ *
+ * A frase do anonimato cita os DOIS campos. Quem mais reidentifica é a
+ * referência do atendimento, e não o nome: foi por leito cruzado com a data que
+ * o caso anônimo deixou de gravar o ponto do cartaz (issue #375, migration
+ * 084). Avisar só sobre o nome deixaria a escolha consciente pela metade.
  */
 export const AVISO_SEM_NOME_DO_PACIENTE =
   "Sem o nome do paciente, o hospital não consegue achar o atendimento.";
 export const AVISO_PACIENTE_PODE_IDENTIFICAR =
-  "O nome do paciente pode indicar quem manifestou.";
+  "O nome do paciente e a referência do atendimento podem indicar quem manifestou.";
+
+/**
+ * As duas recusas definitivas do envio, separadas de propósito (issue #666).
+ *
+ * `400` é recusa de forma do envio (o honeypot). `422` é o servidor recusando o
+ * formato do payload, e a causa mais provável é esta página estar velha depois
+ * de um deploy, não o texto de quem manifestou. Dizer "reescreva o relato" nos
+ * dois casos manda a pessoa repetir o que nunca vai passar, num canal sem login
+ * e sem segunda porta.
+ */
+export const RECUSA_DO_ENVIO =
+  "Não foi possível registrar sua manifestação. Recarregue a página e tente de novo.";
+export const ENVIO_RECUSADO_PELA_PAGINA =
+  "Não foi possível registrar sua manifestação com os dados desta página. Copie o que você escreveu, recarregue a página e envie de novo.";
 
 export function avisoDoPaciente(anonimo: boolean): string {
   return anonimo

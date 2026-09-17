@@ -13,8 +13,10 @@ import { useSearchParams } from "next/navigation";
 import { AlertCircle, CheckCircle2, Loader2, MapPin, Send } from "lucide-react";
 import { Logo } from "@/components/ui/Logo";
 import {
+  ENVIO_RECUSADO_PELA_PAGINA,
   FALTA_DIZER_SOBRE_QUEM,
   NATUREZAS_INFORMADAS,
+  RECUSA_DO_ENVIO,
   SOBRE_QUEM,
   avisoDoPaciente,
   montarEnvio,
@@ -128,12 +130,28 @@ function FormularioPublico() {
         );
         return;
       }
-      if (res.status === 422 || res.status === 400) {
-        // Recusa definitiva: pedir para "tentar de novo em instantes" mandaria
-        // a pessoa repetir algo que nunca vai passar.
-        setErro(
-          "Não conseguimos ler sua manifestação. Reescreva o relato com palavras e envie de novo."
-        );
+      if (res.status === 400) {
+        // Recusa de forma do envio (é aqui que cai o honeypot). Recusa
+        // definitiva: pedir para "tentar de novo em instantes" mandaria a
+        // pessoa repetir algo que nunca vai passar.
+        setErro(RECUSA_DO_ENVIO);
+        return;
+      }
+      if (res.status === 422) {
+        // O servidor recusou o FORMATO do envio, e a tela não sabe por quê.
+        //
+        // A causa mais provável não é o texto: é esta página estar velha
+        // depois de um deploy. O bundle do Next é hasheado, então quem abriu o
+        // formulário antes da subida continua com o código antigo na aba até
+        // recarregar, e o caso de uso desta página é exatamente alguém parado
+        // na frente do cartaz escrevendo devagar.
+        //
+        // Por isso a mensagem NÃO manda reescrever o relato (issue #666): num
+        // canal sem login e sem segunda porta, culpar a palavra de quem
+        // manifestou por uma causa que o código não distingue faz a pessoa
+        // reescrever para sempre e desistir. Ela diz o que de fato destrava, e
+        // pede para copiar antes, porque recarregar limpa o formulário.
+        setErro(ENVIO_RECUSADO_PELA_PAGINA);
         return;
       }
       if (!res.ok) {

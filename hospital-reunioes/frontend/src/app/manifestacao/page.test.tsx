@@ -21,7 +21,10 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
-import { FALTA_DIZER_SOBRE_QUEM, avisoDoPaciente } from "@/lib/ouvidoria/publico";
+// A constante entra só na asserção de AUSÊNCIA (procurar um literal que não
+// está na tela não prova que a frase certa sumiu, prova que aquele literal não
+// está lá). Toda asserção de PRESENÇA usa o texto exato que a pessoa lê.
+import { FALTA_DIZER_SOBRE_QUEM } from "@/lib/ouvidoria/publico";
 import ManifestacaoPage from "./page";
 
 vi.mock("next/navigation", () => ({
@@ -192,7 +195,10 @@ describe("a pergunta de quem é o relato (issue #666)", () => {
     escrever("Minha mãe esperou duas horas na recepção.");
 
     expect(botaoDeEnviar().disabled).toBe(true);
-    expect(screen.getByText(FALTA_DIZER_SOBRE_QUEM)).toBeTruthy();
+    // O literal que a pessoa lê, e não a constante: procurar pela constante é
+    // procurar exatamente o que a página acabou de renderizar, e qualquer
+    // reescrita da frase passaria batido.
+    expect(screen.getByText('Responda "Este relato é sobre quem?" para enviar.')).toBeTruthy();
   });
 
   it("respondida a pergunta, o aviso some e o envio libera", () => {
@@ -223,7 +229,9 @@ describe("a pergunta de quem é o relato (issue #666)", () => {
 
     expect(campoDoPaciente()).toBeTruthy();
     expect(campoDaReferencia()).toBeTruthy();
-    expect(screen.getByText(avisoDoPaciente(false))).toBeTruthy();
+    expect(
+      screen.getByText("Sem o nome do paciente, o hospital não consegue achar o atendimento.")
+    ).toBeTruthy();
   });
 
   it("os campos do paciente continuam na tela com anônimo marcado, e o aviso cresce", () => {
@@ -237,7 +245,12 @@ describe("a pergunta de quem é o relato (issue #666)", () => {
 
     expect(campoDoPaciente()).toBeTruthy();
     expect(campoDaReferencia()).toBeTruthy();
-    expect(screen.getByText(avisoDoPaciente(true))).toBeTruthy();
+    expect(
+      screen.getByText(
+        "Sem o nome do paciente, o hospital não consegue achar o atendimento. " +
+          "O nome do paciente e a referência do atendimento podem indicar quem manifestou."
+      )
+    ).toBeTruthy();
     // A identificação de quem fala, essa some: são duas pessoas diferentes.
     expect(screen.queryByLabelText(/Seu nome/)).toBeNull();
   });
@@ -308,5 +321,71 @@ describe("a pergunta de quem é o relato (issue #666)", () => {
       "true"
     );
     expect(botaoDeEnviar().disabled).toBe(false);
+  });
+});
+
+/**
+ * O que a tela diz quando o servidor recusa o envio (issue #666).
+ *
+ * `sobre` é obrigatório no backend, então uma aba aberta antes do deploy manda
+ * um payload que o servidor novo recusa com 422. O bundle do Next é hasheado e
+ * a aba segue no código velho até recarregar, e o caso de uso desta página é
+ * alguém parado na frente do cartaz escrevendo devagar. A mensagem não pode
+ * culpar o relato: num canal sem login e sem segunda porta, mandar reescrever é
+ * mandar repetir o que nunca vai passar.
+ */
+describe("a recusa do envio na tela do formulário (issue #666)", () => {
+  function responderCom(status: number) {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => ({ ok: false, status, json: async () => ({}) }) as Response)
+    );
+  }
+
+  async function enviar() {
+    render(<ManifestacaoPage />);
+    escrever("Minha mãe esperou duas horas na recepção.");
+    responderSobreQuem("Sobre mim");
+    fireEvent.click(botaoDeEnviar());
+  }
+
+  it("o 422 pede para recarregar, e nunca para reescrever o relato", async () => {
+    responderCom(422);
+
+    await enviar();
+
+    expect(
+      await screen.findByText(
+        "Não foi possível registrar sua manifestação com os dados desta página. " +
+          "Copie o que você escreveu, recarregue a página e envie de novo."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText(/Reescreva o relato/)).toBeNull();
+  });
+
+  it("o 400 tem mensagem própria, e também não culpa o relato", async () => {
+    responderCom(400);
+
+    await enviar();
+
+    expect(
+      await screen.findByText(
+        "Não foi possível registrar sua manifestação. Recarregue a página e tente de novo."
+      )
+    ).toBeTruthy();
+    expect(screen.queryByText(/Reescreva o relato/)).toBeNull();
+  });
+
+  it("o texto do relato continua na tela depois da recusa", async () => {
+    // A pessoa precisa conseguir copiar o que escreveu antes de recarregar, que
+    // é o que a mensagem manda fazer.
+    responderCom(422);
+
+    await enviar();
+
+    await screen.findByText(/Copie o que você escreveu/);
+    expect((screen.getByLabelText("O que aconteceu?") as HTMLTextAreaElement).value).toBe(
+      "Minha mãe esperou duas horas na recepção."
+    );
   });
 });

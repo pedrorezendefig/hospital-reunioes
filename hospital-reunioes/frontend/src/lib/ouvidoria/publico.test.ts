@@ -2,7 +2,10 @@ import { describe, expect, it } from "vitest";
 import {
   AVISO_PACIENTE_PODE_IDENTIFICAR,
   AVISO_SEM_NOME_DO_PACIENTE,
+  ENVIO_RECUSADO_PELA_PAGINA,
+  FALTA_DIZER_SOBRE_QUEM,
   NATUREZAS_INFORMADAS,
+  RECUSA_DO_ENVIO,
   SOBRE_QUEM,
   avisoDoPaciente,
   montarEnvio,
@@ -343,5 +346,37 @@ describe("o Paciente do caso no envio (issue #666, ADR 0052)", () => {
     expect(avisoDoPaciente(true)).toContain(AVISO_SEM_NOME_DO_PACIENTE);
     expect(avisoDoPaciente(true)).toContain(AVISO_PACIENTE_PODE_IDENTIFICAR);
     expect(avisoDoPaciente(false)).not.toContain(AVISO_PACIENTE_PODE_IDENTIFICAR);
+  });
+
+  it("diz as frases exatas que a issue escreveu palavra por palavra", () => {
+    // O LITERAL, e não a constante comparada com ela mesma: sem isto, derrubar
+    // o "não" do primeiro aviso inverte o sentido da frase para quem lê o QR e
+    // a suíte inteira continua verde. A frase é o entregável.
+    expect(AVISO_SEM_NOME_DO_PACIENTE).toBe(
+      "Sem o nome do paciente, o hospital não consegue achar o atendimento."
+    );
+    // A referência do atendimento entra aqui de propósito: leito e data
+    // reidentificam mais que o nome (issue #375, migration 084).
+    expect(AVISO_PACIENTE_PODE_IDENTIFICAR).toBe(
+      "O nome do paciente e a referência do atendimento podem indicar quem manifestou."
+    );
+    expect(FALTA_DIZER_SOBRE_QUEM).toBe('Responda "Este relato é sobre quem?" para enviar.');
+  });
+
+  it("a recusa do envio nunca manda reescrever o relato", () => {
+    // O canal público não tem segunda porta: mandar a pessoa reescrever o que
+    // ela escreveu, quando a causa é o formato do envio, é fazê-la repetir o
+    // que nunca vai passar até desistir (issue #666).
+    expect(ENVIO_RECUSADO_PELA_PAGINA).toBe(
+      "Não foi possível registrar sua manifestação com os dados desta página. " +
+        "Copie o que você escreveu, recarregue a página e envie de novo."
+    );
+    expect(RECUSA_DO_ENVIO).toBe(
+      "Não foi possível registrar sua manifestação. Recarregue a página e tente de novo."
+    );
+    for (const mensagem of [ENVIO_RECUSADO_PELA_PAGINA, RECUSA_DO_ENVIO]) {
+      expect(mensagem).not.toContain("Reescreva");
+      expect(mensagem).not.toContain("relato");
+    }
   });
 });
