@@ -119,7 +119,7 @@ from app.services.ouvidoria_taxonomia import (
     resolver_sigilo,
 )
 from app.services.paginacao import ler_paginado, ler_tudo
-from app.utils.text_sanitizer import sanitizar_travessao
+from app.utils.text_sanitizer import sanitizar_travessao, texto_ou_nulo
 
 # O T0 é hora de relógio de parede do hospital: o ouvidor digita "14/08 16h50"
 # pensando em Brasília, e a persistência é em UTC.
@@ -866,12 +866,21 @@ class RegistroManual(BaseModel):
     @field_validator("paciente_nome", "paciente_referencia")
     @classmethod
     def paciente_limpo(cls, valor: str | None) -> str | None:
-        """Campo em branco é ausência de dado, não string vazia: o Dossiê lê
-        "Não informado" no vazio, e o que o ouvidor abriu sem digitar não pode
-        virar um paciente sem nome no banco."""
-        if valor is None:
-            return None
-        return sanitizar_travessao(valor).strip() or None
+        """A MESMA régua do canal público (`texto_ou_nulo`), e de propósito.
+
+        As duas portas gravam a mesma coluna, e quem lê depois é um leitor só:
+        o Dossiê, que desenha "Não informado" no vazio, e o aviso de relato em
+        nome de outra pessoa sem o nome do paciente (issue #662), que apaga
+        quando a coluna tem qualquer coisa. Um hífen sozinho digitado para
+        dizer "não perguntei" apagaria esse aviso e faria o caso parecer
+        resolvido: aqui ele vira ausência, como já vira no canal público.
+
+        Ela é mais estrita que a de `manifestante_nome` e `manifestante_contato`
+        logo acima, que só apara. Essa diferença é herdada, não escolhida nesta
+        fatia: quem escreve o nome do manifestante é o mesmo ouvidor, e mudar a
+        régua dele não é assunto do Paciente do caso.
+        """
+        return texto_ou_nulo(valor)
 
     @field_validator("contato_em")
     @classmethod

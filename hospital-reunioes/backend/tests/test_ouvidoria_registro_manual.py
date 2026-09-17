@@ -433,6 +433,79 @@ class TestPacienteDoCaso:
         assert r.status_code == 422
         assert supabase.tabelas["ouvidoria_protocolos"] == []
 
+    @pytest.mark.parametrize("digitado", ["-", "...", "  .  "])
+    @pytest.mark.parametrize("campo", ["paciente_nome", "paciente_referencia"])
+    def test_pontuacao_sozinha_no_campo_do_paciente_e_ausencia(self, monkeypatch, campo, digitado):
+        """O ouvidor digita um hífen para dizer "não perguntei". Isso é ausência
+        de dado, e a régua é a MESMA do canal público: sem caractere de palavra,
+        a coluna fica nula.
+
+        Não é preciosismo de aparo. O Dossiê desenha "Não informado" pela coluna
+        vazia, e o aviso de relato em nome de outra pessoa sem o nome do
+        paciente (issue #662) apaga quando a coluna tem qualquer coisa: um
+        hífen gravado como conteúdo faria o caso parecer resolvido."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post("/api/ouvidoria/manifestacoes", json={**REGISTRO, campo: digitado})
+
+        assert r.status_code == 201, r.text
+        assert supabase.tabelas["ouvidoria_protocolos"][0][campo] is None
+
+    def test_anonimo_que_fala_de_si_grava_o_paciente_que_o_ouvidor_digitou(self, monkeypatch):
+        """A combinação perigosa, pinada: anônimo com vínculo `paciente`.
+
+        Quem liga, conta o próprio caso e pede anonimato pode ter o próprio nome
+        digitado em "Nome do paciente" pelo ouvidor, para a área achar o
+        atendimento. A coluna viaja para a área inclusive no caso anônimo
+        (decisão 4 do ADR 0052), então este é o caso que expõe quem se protegeu.
+
+        O backend NÃO decide por ele: a guarda é a tela, que avisa o ouvidor que
+        o paciente e a referência podem indicar quem manifestou (mesmo aviso do
+        canal público, testado em `paciente-do-caso.test.tsx`). Descartar aqui
+        pelo vínculo não fecharia o buraco, porque o vínculo pode ficar em "Não
+        informado", e apagaria em silêncio o que o ouvidor anotou.
+
+        O teste existe para o dia em que alguém quiser mudar isso: é aqui que a
+        decisão está escrita, com o estado real do banco."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes",
+            json={**REGISTRO, "anonimo": True, "manifestante_vinculo": "paciente", "paciente_nome": "Joana da Silva"},
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["paciente_nome"] == "Joana da Silva"
+        assert gravado["manifestante_nome"] is None
+        # O vínculo é zerado pelo anonimato (comportamento anterior a esta
+        # fatia): depois do insert ninguém distingue "anônimo acompanhante" de
+        # "anônimo falando de si".
+        assert gravado["manifestante_vinculo"] is None
+
+    def test_caso_sigiloso_registrado_a_mao_grava_o_paciente_normalmente(self, monkeypatch):
+        """Denúncia nasce com sigilo reforçado, e o paciente é gravado do mesmo
+        jeito: o sigilo não muda o que o ouvidor anota, muda o que SAI para a
+        área, e essa guarda é da #664. Pinado aqui para a fatia da guarda mexer
+        no caminho de saída sabendo o que encontra no banco."""
+        client, supabase = _client(monkeypatch, OUVIDOR)
+
+        r = client.post(
+            "/api/ouvidoria/manifestacoes",
+            json={
+                **REGISTRO,
+                "tipo_manifestacao": "denuncia",
+                "paciente_nome": "Maria Souza",
+                "paciente_referencia": "Leito 12",
+            },
+        )
+
+        assert r.status_code == 201, r.text
+        gravado = supabase.tabelas["ouvidoria_protocolos"][0]
+        assert gravado["sigilo_reforcado"] is True
+        assert gravado["paciente_nome"] == "Maria Souza"
+        assert gravado["paciente_referencia"] == "Leito 12"
+
     def test_o_vinculo_escolhido_pelo_ouvidor_nao_descarta_o_paciente(self, monkeypatch):
         """Diverge do canal público de propósito. Lá, "Sobre mim" descarta o
         paciente porque a própria pessoa respondeu que o relato é dela. Aqui
