@@ -1,0 +1,10 @@
+flowchart TD
+    A[Programada] -->|anexa a transcrição| B[O assistente<br/>escreve a ata]
+    A -->|conversa com o assistente| C[Ata Guiada]
+    B --> D[Validação Necessária]
+    C --> D
+    D -->|Enviar para assinatura| E[Aguardando assinatura]
+    D -->|Finalizar sem assinatura| F[Aprovada]
+    E -->|as assinaturas chegam| G[Assinada]
+    F --> H[Pendências no painel]
+    G --> H

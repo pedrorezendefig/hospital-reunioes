@@ -46,6 +46,8 @@ que está com você.
 
 ## O caminho de ponta a ponta
 
+![O caminho da Versão, de A Elaborar até Publicado](../../../assets/pops/fluxo-caminho.svg)
+
 1. Alguém cria o POP, escolhe o Setor e as três pessoas. A Versão nasce em
    **A Elaborar**.
 2. O Elaborador anexa os materiais que já existem, conversa com o Consultor de

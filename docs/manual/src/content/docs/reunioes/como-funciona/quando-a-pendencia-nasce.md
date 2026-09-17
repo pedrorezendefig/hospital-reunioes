@@ -22,6 +22,8 @@ com o prazo correndo e podendo virar **Atrasado**.
 
 ## Os quatro momentos
 
+![Os momentos em que a pendência nasce, com e sem assinatura](../../../../assets/reunioes/fluxo-quando-a-pendencia-nasce.svg)
+
 1. **Alguém assina no ClickSign.** Nascem as ações daquela pessoa, e só elas.
 2. **O Facilitador assina.** Além das dele, nascem as ações de responsáveis que
    não estão na lista de quem assina. A assinatura de quem conduziu a reunião

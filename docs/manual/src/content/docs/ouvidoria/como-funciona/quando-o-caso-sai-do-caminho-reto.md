@@ -10,6 +10,8 @@ sidebar:
 Nem todo caso anda em linha reta. O sistema já entende seis desvios, e nenhum
 deles apaga o que já aconteceu.
 
+![As situações em que o caso volta ou muda de situação](../../../../assets/ouvidoria/fluxo-quando-o-caso-sai-do-caminho-reto.svg)
+
 ## A área precisa de mais tempo
 
 Ela pede pelo próprio link, com justificativa e quantos dias precisa. Vale uma

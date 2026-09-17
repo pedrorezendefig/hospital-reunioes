@@ -60,6 +60,8 @@ No pé da barra, **Voltar ao app** devolve você ao painel de reuniões.
 
 ## O caminho de ponta a ponta de uma pessoa nova
 
+![O caminho de uma pessoa nova, do cadastro à saída](../../../assets/admin/fluxo-caminho.svg)
+
 1. Cadastre a pessoa em **Novo Usuário**, com o Perfil de acesso dela.
 2. Gere a senha em **Resetar senha** e entregue a ela. Antes disso, ela não
    entra.

@@ -1,0 +1,9 @@
+flowchart TD
+    A[Aguardando área] -->|um dia útil antes de vencer| B[Lembrete ao titular]
+    B -->|no vencimento, sem resposta| C[Cobrança ao titular<br/>e ao substituto]
+    C -->|um dia útil depois| D[Aviso ao gestor da área]
+    D -->|dois dias úteis depois| E[Aviso à Diretoria]
+    B --> F[Respondida]
+    C --> F
+    D --> F
+    E --> F

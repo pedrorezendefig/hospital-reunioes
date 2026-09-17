@@ -1,0 +1,10 @@
+flowchart TD
+    A[Em classificação] -->|o ouvidor aciona| B[Aguardando área]
+    B -->|a área responde| C[Respondida]
+    C -->|a Ouvidoria encerra| D[Encerrada]
+    B -->|não é da área| A
+    B -->|falta informação| E[Aguardando manifestante]
+    E -->|a pessoa responde| B
+    E -->|a pessoa some| D
+    C -->|resposta fraca| B
+    D -->|reincidência| B

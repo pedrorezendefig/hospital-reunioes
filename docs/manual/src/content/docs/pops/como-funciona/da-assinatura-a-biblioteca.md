@@ -9,6 +9,8 @@ sidebar:
 
 ## O envio é automático
 
+![Da validação à Biblioteca, e onde a Versão fica parada](../../../../assets/pops/fluxo-da-assinatura-a-biblioteca.svg)
+
 Não existe botão de "enviar para assinatura". No instante em que o Validador
 clica em **Aprovar validação**, o sistema monta o documento oficial da Versão e
 o envia para as três pessoas do POP assinarem por email.

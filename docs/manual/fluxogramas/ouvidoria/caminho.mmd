@@ -1,0 +1,7 @@
+flowchart TD
+    A[A pessoa conta o que aconteceu<br/>pelo formulário, pelo QR,<br/>pela Ana ou pela Ouvidoria] -->|protocolo na hora| B[Em classificação]
+    B -->|o ouvidor valida e aciona| C[Aguardando área]
+    C -->|o setor conta o que fez| D[Respondida]
+    D -->|a Ouvidoria avisa a pessoa| E[Encerrada]
+    C -->|o prazo se aproxima| F[O sistema cobra sozinho]
+    F --> C

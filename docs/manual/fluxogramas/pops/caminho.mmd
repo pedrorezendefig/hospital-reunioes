@@ -1,0 +1,8 @@
+flowchart TD
+    A[A Elaborar] -->|conversa com o Consultor de POPs| B[Em Elaboração]
+    B -->|Aprovar versão final| C[Em Revisão]
+    C -->|Aprovar revisão| D[Em Validação]
+    D -->|Aprovar validação| E[Em Assinatura]
+    E -->|as três assinaturas| F[Publicado]
+    C -->|Devolver com comentários| B
+    D -->|Devolver com comentários| B
