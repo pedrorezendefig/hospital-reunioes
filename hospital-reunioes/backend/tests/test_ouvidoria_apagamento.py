@@ -75,6 +75,13 @@ GRAVADOS_PELO_PROPRIO_ATO = (
 RELATO = "Joana da Silva, RG 12.345.678, esperou tres horas na recepcao."
 RESPOSTA_DA_AREA = "Falamos com a paciente Joana da Silva no telefone 11 99999-0000."
 
+# O Paciente do caso (migration 110, ADR 0052): quem manifestou é o
+# acompanhante, e estes dois dados são de OUTRA pessoa. Nomes distintos dos de
+# quem manifestou de propósito: um teste que procurasse só "Joana" passaria com
+# o paciente inteiro de pé.
+PACIENTE = "Maria Aparecida de Souza"
+PACIENTE_REFERENCIA = "Leito 12 da Clinica Medica, 14/08/2026"
+
 
 @pytest.fixture(autouse=True)
 def _reset_rate_limiter():
@@ -136,6 +143,10 @@ def _caso(numero: int = 7, **overrides) -> dict:
         "manifestante_nome": "Joana da Silva",
         "manifestante_contato": "(31) 99999-0000",
         "manifestante_vinculo": "acompanhante",
+        # O Paciente do caso: o vínculo acima diz que quem falou é
+        # acompanhante, e estes dois são o dado de terceiro que veio junto.
+        "paciente_nome": PACIENTE,
+        "paciente_referencia": PACIENTE_REFERENCIA,
         "anonimo": False,
         "dados_incompletos": False,
         "classificacao_ia": None,
@@ -667,6 +678,32 @@ class TestOAtoDeApagar:
         tudo = _todo_o_texto(supabase)
         assert "Joana" not in tudo
         assert "99999-0000" not in tudo
+
+    def test_o_paciente_do_caso_sai_pela_porta_antecipada(self, monkeypatch):
+        """A porta da Diretoria e o cron dos cinco anos leem a MESMA lista de
+        colunas, e é por isso que este teste existe do lado de cá também: até a
+        issue #665 ela não tinha as duas colunas do Paciente do caso, e esta
+        porta era a pior das duas. O cron só alcança caso de cinco anos; aqui a
+        Diretoria apaga hoje, responde 200 e carimba `anonimizada_em`, atestando
+        um apagamento que deixava o nome e o leito de um paciente no banco."""
+        client, supabase = _client(monkeypatch, _caso_com_todos_os_registros())
+        # O update carimba `None` em toda coluna da lista, exista ela antes ou
+        # não: sem o valor no banco ANTES do ato, o "ficou nulo" de baixo
+        # passaria com a lista vazia.
+        assert supabase.caso()["paciente_nome"] == PACIENTE
+        assert supabase.caso()["paciente_referencia"] == PACIENTE_REFERENCIA
+
+        r = _apagar(client)
+
+        assert r.status_code == 200, r.text
+        caso = supabase.caso()
+        assert caso["paciente_nome"] is None
+        assert caso["paciente_referencia"] is None
+        # E o carimbo que atesta o ato só vale se o dado saiu mesmo.
+        assert caso["anonimizada_em"]
+        tudo = _todo_o_texto(supabase)
+        assert "Maria" not in tudo
+        assert "Leito 12" not in tudo
 
     def test_o_carimbo_do_apagamento_vem_por_ultimo(self, monkeypatch):
         """A ordem que sobrevive a uma falha no meio: o movimento da trilha
