@@ -525,3 +525,61 @@ export function transcreverArquivoDeAudio(
 export function extrairODocumento(arquivo: File, token: string | null): Promise<LeituraDoAnexo<DocumentoExtraido>> {
   return mandarOArquivo(URL_DA_EXTRACAO, "arquivo", arquivo, token, documentoExtraidoValido);
 }
+
+// ─── O print de tela (issue #730) ───────────────────────────────────────────
+//
+// A quarta entrada, pela mesma regra das três: a imagem vira TEXTO antes de
+// chegar ao chat. O que o chat recebe é uma mensagem da pessoa com a origem à
+// mostra; a imagem não vai a lugar nenhum além da rota que a descreve, e lá ela
+// não é guardada (ADR 0056, decisão 4).
+
+export const URL_DA_IMAGEM = `${BASE_TECNOLOGIA}/assistente/descrever-imagem`;
+
+/**
+ * A origem do print, sem nome de arquivo.
+ *
+ * O nome de um print é "Captura de tela 2026-09-17 às 14.02.11.png", que não diz
+ * nada a quem lê a conversa (o do documento diz: alguém o batizou). O rótulo
+ * seco é origem que o backend reconhece e cerca: o `PREFIXO_DE_ORIGEM` de lá
+ * aceita rótulo sem nome exatamente por isso.
+ */
+export const PREFIXO_DE_PRINT = "[print] ";
+
+// Os aceitos e o teto, iguais aos do backend, pela mesma razão dos outros dois:
+// a recusa acontece ANTES de subir a imagem por um cabo de hospital e voltar
+// 413. Quem decide continua sendo o backend, e a frase dele é a que aparece.
+export const IMAGENS_ACEITAS = [".png", ".jpg", ".jpeg", ".webp"];
+export const LIMITE_DA_IMAGEM = 5 * 1024 * 1024;
+
+export const IMAGEM_FORA_DA_LISTA =
+  "Só dá para ler print .png, .jpg, .jpeg ou .webp. Salve a imagem em um desses formatos e anexe de novo.";
+
+/**
+ * A frase de quando a descrição voltou em branco.
+ *
+ * O backend já recusa a descrição vazia com 502, então esta frase é a rede de
+ * baixo, e não o caminho de todo dia: um `[print] ` seco na conversa mandaria o
+ * assistente adivinhar o que a pessoa nunca mostrou. Mesmo papel do
+ * `AUDIO_SEM_FALA` no áudio mudo.
+ */
+export const PRINT_SEM_LEITURA = "Não consegui ler esse print. Mande outro, ou escreva o que aparece na tela.";
+
+/** O que impede este print de virar mensagem, ou `null` se nada impede. */
+export function avisoDaImagem(arquivo: ArquivoEscolhido): string | null {
+  if (!IMAGENS_ACEITAS.includes(extensaoDe(arquivo.name))) return IMAGEM_FORA_DA_LISTA;
+  if (arquivo.size > LIMITE_DA_IMAGEM) {
+    return avisoDeTamanho(LIMITE_DA_IMAGEM, "Anexe uma imagem menor, ou escreva o que aparece na tela.");
+  }
+  return null;
+}
+
+/**
+ * O print vai à rota que o descreve, e o que volta é TEXTO.
+ *
+ * O validador é o da transcrição, e não um próprio: o que o consumidor consome
+ * aqui é exatamente um `texto`, como na voz. O print não tem `filename` a
+ * cobrar, porque o prefixo dele não leva nome.
+ */
+export function descreverAImagem(arquivo: File, token: string | null): Promise<LeituraDoAnexo<TextoTranscrito>> {
+  return mandarOArquivo(URL_DA_IMAGEM, "imagem", arquivo, token, transcricaoValida);
+}

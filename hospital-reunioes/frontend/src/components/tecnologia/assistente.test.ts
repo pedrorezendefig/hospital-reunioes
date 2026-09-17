@@ -2,10 +2,14 @@ import { describe, expect, it } from "vitest";
 
 import {
   AUDIO_FORA_DA_LISTA,
+  avisoDaImagem,
   avisoDoAudio,
   avisoDoDocumento,
   descricaoAoCriar,
   DOCUMENTO_FORA_DA_LISTA,
+  IMAGEM_FORA_DA_LISTA,
+  LIMITE_DA_IMAGEM,
+  PREFIXO_DE_PRINT,
   documentoExtraidoValido,
   LIMITE_DA_MENSAGEM,
   LIMITE_DO_AUDIO,
@@ -352,5 +356,37 @@ describe("A fronteira do corpo do anexo", () => {
     const motivo = await motivoDoAnexo(resposta as unknown as Response);
     expect(motivo).not.toContain("loc");
     expect(motivo).toContain("422");
+  });
+});
+
+describe("A peneira do print (issue #730)", () => {
+  it("aceita os quatro formatos de imagem, em qualquer caixa de letra", () => {
+    for (const ext of [".png", ".jpg", ".jpeg", ".webp"]) {
+      expect(avisoDaImagem({ name: `tela${ext}`, size: 1000 })).toBeNull();
+      expect(avisoDaImagem({ name: `TELA${ext.toUpperCase()}`, size: 1000 })).toBeNull();
+    }
+  });
+
+  it("recusa formato de imagem fora da lista", () => {
+    // `.gif` e `.heic` são os dois que chegam de verdade e que o modelo não lê
+    // por esta rota; sem ponto nenhum no nome também não é print.
+    expect(avisoDaImagem({ name: "tela.gif", size: 1000 })).toBe(IMAGEM_FORA_DA_LISTA);
+    expect(avisoDaImagem({ name: "foto.heic", size: 1000 })).toBe(IMAGEM_FORA_DA_LISTA);
+    expect(avisoDaImagem({ name: "semponto", size: 1000 })).toBe(IMAGEM_FORA_DA_LISTA);
+  });
+
+  it("recusa print acima de 5 MB, dizendo o limite", () => {
+    const aviso = avisoDaImagem({ name: "tela.png", size: LIMITE_DA_IMAGEM + 1 });
+    expect(aviso).toContain("5 MB");
+    // E o de 5 MB cravados passa: o par que impede um `>=` disfarçado, e que
+    // mantém a tela concordando com o 413 do backend em vez de recusar antes.
+    expect(avisoDaImagem({ name: "tela.png", size: LIMITE_DA_IMAGEM })).toBeNull();
+  });
+
+  it("o prefixo do print não leva nome de arquivo", () => {
+    // O nome de um print é "Captura de tela 2026-09-17 às 14.02.11.png", que não
+    // diz nada a quem lê a conversa. `[print] ` seco é origem que o backend
+    // reconhece e cerca (`PREFIXO_DE_ORIGEM` aceita rótulo sem nome).
+    expect(mensagemComOrigem(PREFIXO_DE_PRINT, "A tela de login com erro")).toBe("[print] A tela de login com erro");
   });
 });

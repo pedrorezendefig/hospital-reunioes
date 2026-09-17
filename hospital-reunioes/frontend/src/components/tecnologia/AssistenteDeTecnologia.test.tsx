@@ -29,6 +29,7 @@ import {
   CHAVE_DA_SESSAO,
   CONVERSA_NO_TETO,
   DOCUMENTO_FORA_DA_LISTA,
+  IMAGEM_FORA_DA_LISTA,
   LIMITE_DA_DESCRICAO,
   LIMITE_DA_MENSAGEM,
   LIMITE_DE_MENSAGENS,
@@ -36,6 +37,7 @@ import {
   MensagemDoChat,
   MUITAS_MENSAGENS,
   NAO_INFORMADO,
+  PRINT_SEM_LEITURA,
   RASCUNHO_VAZIO,
   RascunhoDaDemanda,
   RESPOSTA_ILEGIVEL,
@@ -44,7 +46,21 @@ import {
 } from "./assistente";
 import { Demanda, ProdutoDaEscolha } from "./demandas";
 
-type Chamada = { url: string; metodo: string; corpo: Record<string, unknown> | undefined; arquivo?: string };
+type Chamada = {
+  url: string;
+  metodo: string;
+  corpo: Record<string, unknown> | undefined;
+  arquivo?: string;
+  /**
+   * O campo do `FormData` em que o arquivo foi. Ele é guardado porque é
+   * contrato: cada rota do backend declara o nome do seu (`audio`, `arquivo`,
+   * `imagem`), e mandar no campo errado é 422 com `detail` em lista.
+   */
+  campo?: string;
+};
+
+/** Os campos de arquivo que as três rotas de anexo declaram. */
+const CAMPOS_DE_ARQUIVO = ["audio", "arquivo", "imagem"];
 
 const PRODUTOS: ProdutoDaEscolha[] = [
   { id: "prod-1", nome: "Ana", ativo: true },
@@ -102,6 +118,8 @@ type Opcoes = {
   transcricao?: string;
   /** O que a rota de extração devolve como texto do documento. */
   textoDoDocumento?: string;
+  /** O que a rota do print devolve como descrição da imagem. */
+  descricaoDoPrint?: string;
   /** A recusa da rota de voz ou da de extração, com o corpo cru daquela camada. */
   recusaDoAnexo?: { status: number; corpo: unknown };
   /** Um 200 da extração cujo corpo o `JSON.parse` aceita e que não serve. */
@@ -122,12 +140,14 @@ function servidor(opcoes: Opcoes) {
     const enviado = init?.body;
     const forma = enviado instanceof FormData ? enviado : null;
     const corpo = forma || !enviado ? undefined : JSON.parse(String(enviado));
-    const anexo = forma?.get("audio") ?? forma?.get("arquivo") ?? null;
+    const campo = CAMPOS_DE_ARQUIVO.find((c) => forma?.get(c) instanceof File);
+    const anexo = campo ? forma?.get(campo) : null;
     chamadas.push({
       url,
       metodo: init?.method ?? "GET",
       corpo,
       arquivo: anexo instanceof File ? anexo.name : undefined,
+      campo,
     });
 
     if (url.endsWith("/transcricao/voz")) {
@@ -162,6 +182,24 @@ function servidor(opcoes: Opcoes) {
         ok: true,
         status: 200,
         json: async () => ({ texto: opcoes.textoDoDocumento ?? "a Ana travou de madrugada", filename: "nota.pdf" }),
+      } as unknown as Response;
+    }
+    if (url.endsWith("/assistente/descrever-imagem")) {
+      if (opcoes.segurarOAnexo) await new Promise<void>((resolve) => (soltarOAnexo = resolve));
+      if (opcoes.recusaDoAnexo) {
+        return {
+          ok: false,
+          status: opcoes.recusaDoAnexo.status,
+          json: async () => opcoes.recusaDoAnexo!.corpo,
+        } as unknown as Response;
+      }
+      if ("corpoDoAnexoForaDoContrato" in opcoes) {
+        return { ok: true, status: 200, json: async () => opcoes.corpoDoAnexoForaDoContrato } as unknown as Response;
+      }
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ texto: opcoes.descricaoDoPrint ?? "A tela de login da Ana, com erro" }),
       } as unknown as Response;
     }
     if (url.endsWith("/assistente/chat") && opcoes.segurarAResposta) {
@@ -1018,6 +1056,10 @@ function paraExtracao(): Chamada[] {
   return chamadas.filter((c) => c.url.endsWith("/assistente/extrair-documento"));
 }
 
+function paraODescritor(): Chamada[] {
+  return chamadas.filter((c) => c.url.endsWith("/assistente/descrever-imagem"));
+}
+
 /** A última fala mandada ao assistente, como ela foi no corpo do turno. */
 function ultimaFala(): string {
   const mensagens = doChat().at(-1)?.corpo?.messages as MensagemDoChat[];
@@ -1228,7 +1270,7 @@ describe("O microfone aberto", () => {
     expect((screen.getByLabelText("Parar de gravar") as HTMLButtonElement).disabled).toBe(false);
   });
 
-  it("os dois botões de anexo também ficam travados enquanto grava", async () => {
+  it("os botões de anexo também ficam travados enquanto grava", async () => {
     plugarOMicrofone();
     montar();
     expect((screen.getByLabelText("Anexar documento") as HTMLButtonElement).disabled).toBe(false);
@@ -1238,6 +1280,7 @@ describe("O microfone aberto", () => {
 
     expect((screen.getByLabelText("Anexar documento") as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByLabelText("Anexar áudio") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Anexar print") as HTMLButtonElement).disabled).toBe(true);
   });
 });
 
@@ -1301,5 +1344,108 @@ describe("Descartar no meio de um anexo", () => {
     await waitFor(() => expect(screen.getByLabelText("Mensagem")).toBeTruthy());
     expect(doChat()).toHaveLength(0);
     expect(within(screen.getByRole("log")).queryByText(/documento nota\.pdf/)).toBeNull();
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════════
+// O print de tela (issue #730)
+// ═══════════════════════════════════════════════════════════════════════════
+//
+// A quarta entrada, e a mesma regra das outras três: a imagem vira TEXTO antes
+// de chegar ao chat. O que aparece na conversa é uma mensagem da pessoa com
+// `[print] ` na frente, que é o que a deixa conferir o que o assistente
+// enxergou e o que faz o backend cercar a descrição como material de fora.
+
+describe("O print", () => {
+  it("vira mensagem com o prefixo de print e dispara o turno", async () => {
+    montar({ descricaoDoPrint: "A tela de login da Ana, com o aviso 'senha inválida'." });
+
+    escolher("Arquivo de print", [arquivo("tela.png", 800 * 1024, "image/png")]);
+
+    await waitFor(() => expect(paraODescritor()).toHaveLength(1));
+    expect(paraODescritor()[0].metodo).toBe("POST");
+    expect(paraODescritor()[0].arquivo).toBe("tela.png");
+    // No campo que a rota declara: no campo errado o backend responde 422 com
+    // `detail` em lista, que é o que chega como JSON cru ao aviso.
+    expect(paraODescritor()[0].campo).toBe("imagem");
+
+    await waitFor(() => expect(doChat()).toHaveLength(1));
+    expect(ultimaFala()).toBe("[print] A tela de login da Ana, com o aviso 'senha inválida'.");
+    // E a pessoa VÊ na conversa o que o assistente recebeu (PRD #726, história 37).
+    expect(
+      within(screen.getByRole("log")).getByText("[print] A tela de login da Ana, com o aviso 'senha inválida'."),
+    ).toBeTruthy();
+  });
+
+  it("o chat nunca recebe a imagem: o corpo do turno é JSON com a descrição dentro", async () => {
+    montar({ descricaoDoPrint: "A tela de login" });
+
+    escolher("Arquivo de print", [arquivo("tela.png", 1000, "image/png")]);
+
+    await waitFor(() => expect(doChat()).toHaveLength(1));
+    expect(doChat()[0].arquivo).toBeUndefined();
+    expect(doChat()[0].corpo?.rascunho).toBeDefined();
+  });
+
+  it("print acima de 5 MB vira aviso na conversa, sem ir à rede e sem turno", async () => {
+    montar();
+
+    escolher("Arquivo de print", [arquivo("tela.png", 6 * 1024 * 1024, "image/png")]);
+
+    await waitFor(() => expect(within(screen.getByRole("log")).getByText(/5 MB/)).toBeTruthy());
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("imagem de formato fora da lista vira aviso, sem ir à rede e sem turno", async () => {
+    montar();
+
+    escolher("Arquivo de print", [arquivo("animada.gif", 1000, "image/gif")]);
+
+    await waitFor(() => expect(screen.getByText(IMAGEM_FORA_DA_LISTA)).toBeTruthy());
+    expect(chamadas).toHaveLength(0);
+  });
+
+  it("recusa do servidor vira aviso com a frase DELE, e nenhum turno é mandado", async () => {
+    montar({
+      recusaDoAnexo: { status: 502, corpo: { detail: "Não deu para ler esse print agora. Tente de novo." } },
+    });
+
+    escolher("Arquivo de print", [arquivo("tela.png", 1000, "image/png")]);
+
+    await waitFor(() => expect(screen.getByText(/Não deu para ler esse print agora/)).toBeTruthy());
+    expect(doChat()).toHaveLength(0);
+  });
+
+  it("corpo que o `json()` lê e que não serve vira aviso, e nenhum turno é mandado", async () => {
+    // Sem a fronteira, um 200 sem `texto` viraria a mensagem "[print] undefined".
+    montar({ corpoDoAnexoForaDoContrato: { descricao: "a tela de login" } });
+
+    escolher("Arquivo de print", [arquivo("tela.png", 1000, "image/png")]);
+
+    await waitFor(() => expect(screen.getByText(ANEXO_ILEGIVEL)).toBeTruthy());
+    expect(doChat()).toHaveLength(0);
+  });
+
+  it("descrição em branco vira aviso, e não uma mensagem só com o prefixo", async () => {
+    // Mesmo caso do áudio sem fala: `[print] ` seco mandaria o assistente
+    // adivinhar o que a pessoa nunca mostrou.
+    montar({ descricaoDoPrint: "   " });
+
+    escolher("Arquivo de print", [arquivo("tela.png", 1000, "image/png")]);
+
+    await waitFor(() => expect(screen.getByText(PRINT_SEM_LEITURA)).toBeTruthy());
+    expect(doChat()).toHaveLength(0);
+  });
+
+  it("o botão de anexar print trava enquanto a leitura de um anexo está em voo", async () => {
+    // A mesma regra dos outros dois: a caixa fica travada até o anexo virar
+    // mensagem ou aviso, senão dois turnos saem por cima um do outro.
+    montar({ segurarOAnexo: true });
+
+    escolher("Arquivo de print", [arquivo("tela.png", 1000, "image/png")]);
+
+    await waitFor(() => expect((screen.getByLabelText("Anexar print") as HTMLButtonElement).disabled).toBe(true));
+    soltarOAnexo!();
+    await waitFor(() => expect((screen.getByLabelText("Anexar print") as HTMLButtonElement).disabled).toBe(false));
   });
 });
