@@ -25,7 +25,7 @@ import {
   screen,
   within,
 } from "@testing-library/react";
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { CurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { AdminSidebar } from "./AdminSidebar";
@@ -34,8 +34,12 @@ const sessao = vi.hoisted(() => ({
   participante: null as CurrentParticipante | null,
 }));
 
+// A tela aberta. O padrão é a de Usuários; o teste da marcação do item ativo
+// abre uma tela da Central.
+const rota = vi.hoisted(() => ({ atual: "/admin/usuarios" }));
+
 vi.mock("next/navigation", () => ({
-  usePathname: () => "/admin/usuarios",
+  usePathname: () => rota.atual,
 }));
 
 vi.mock("@/hooks/useCurrentParticipante", () => ({
@@ -70,9 +74,155 @@ function pessoa(access_profile: "super_admin" | "secretaria" | "regular"): Curre
   };
 }
 
+// O cenário de todos os testes é o de FORA de produção, onde a Central de
+// Comando já aparece (ADR 0058, decisão 8). Os testes de produção trocam o
+// ambiente na mão, e cada teste volta ao original no fim.
+beforeEach(() => {
+  vi.stubEnv("NEXT_PUBLIC_ENVIRONMENT", "development");
+});
+
 afterEach(() => {
   cleanup();
   sessao.participante = null;
+  rota.atual = "/admin/usuarios";
+  vi.unstubAllEnvs();
+});
+
+/** Os links do menu, na ordem em que aparecem. */
+function linksDoMenu(): (string | undefined)[] {
+  const menu = screen.getByRole("navigation");
+  return within(menu)
+    .getAllByRole("link")
+    .map((link) => link.textContent?.trim());
+}
+
+/**
+ * A seção Central de Comando (issue #814, PRD #809, ADR 0058).
+ *
+ * Só Super admin vê, entre Atendimento e Tecnologia, com os quatro itens que
+ * funcionam. O gate de verdade é o `require_super_admin` do router da Central
+ * (`test_central_de_comando_visao_geral.py`) e o guard do `layout.tsx` da
+ * seção; aqui se prova a metade do menu.
+ *
+ * A seção nasce DORMENTE: em produção ela não é montada para ninguém, até a
+ * fatia que liga a Central (issue #827) tirar a condição.
+ */
+describe.each([
+  ["desktop", "desktop" as const],
+  ["gaveta do celular", "drawer" as const],
+])("Seção Central de Comando na %s", (_rotulo, variant) => {
+  it("Super admin vê a seção com os quatro itens, cada um na sua tela", () => {
+    sessao.participante = pessoa("super_admin");
+
+    render(<AdminSidebar variant={variant} />);
+
+    const menu = screen.getByRole("navigation");
+    expect(within(menu).getByText("Central de Comando")).toBeTruthy();
+    const destinos = ["Visão Geral", "Objetivos", "Dados do Google", "Instagram"].map(
+      (nome) => within(menu).getByRole("link", { name: nome }).getAttribute("href"),
+    );
+    expect(destinos).toEqual([
+      "/admin/central-de-comando/visao-geral",
+      "/admin/central-de-comando/objetivos",
+      "/admin/central-de-comando/dados-do-google",
+      "/admin/central-de-comando/instagram",
+    ]);
+  });
+
+  it("a seção fica entre Atendimento e Tecnologia", () => {
+    sessao.participante = pessoa("super_admin");
+
+    render(<AdminSidebar variant={variant} />);
+
+    const links = linksDoMenu();
+    const atendimento = links.indexOf("Dados do Atendimento");
+    const tecnologia = links.indexOf("Tecnologia");
+    expect(links.slice(atendimento + 1, tecnologia)).toEqual([
+      "Visão Geral",
+      "Objetivos",
+      "Dados do Google",
+      "Instagram",
+    ]);
+  });
+
+  it("secretária não vê a seção, e continua vendo o que é dela", () => {
+    sessao.participante = pessoa("secretaria");
+
+    render(<AdminSidebar variant={variant} />);
+
+    const menu = screen.getByRole("navigation");
+    expect(within(menu).getByRole("link", { name: "Dados do Atendimento" })).toBeTruthy();
+    expect(within(menu).queryByText("Central de Comando")).toBeNull();
+    expect(within(menu).queryByRole("link", { name: "Visão Geral" })).toBeNull();
+  });
+
+  it("facilitador não vê a seção, e continua vendo o que é dele", () => {
+    sessao.participante = pessoa("regular");
+
+    render(<AdminSidebar variant={variant} />);
+
+    const menu = screen.getByRole("navigation");
+    expect(within(menu).getByRole("link", { name: "Dados do Atendimento" })).toBeTruthy();
+    expect(within(menu).queryByText("Central de Comando")).toBeNull();
+    expect(within(menu).queryByRole("link", { name: "Instagram" })).toBeNull();
+  });
+
+  it("em produção a seção não é montada nem para o Super admin, que segue vendo o resto", () => {
+    vi.stubEnv("NEXT_PUBLIC_ENVIRONMENT", "production");
+    sessao.participante = pessoa("super_admin");
+
+    render(<AdminSidebar variant={variant} />);
+
+    const menu = screen.getByRole("navigation");
+    expect(within(menu).queryByText("Central de Comando")).toBeNull();
+    expect(within(menu).queryByRole("link", { name: "Visão Geral" })).toBeNull();
+    expect(within(menu).getByRole("link", { name: "Tecnologia" })).toBeTruthy();
+  });
+
+  // O padrão é o ambiente mais restrito, como no backend (issue #450): só um
+  // ambiente conhecido fora de produção mostra a Central. Uma build de produção
+  // que perdesse a variável, ou que a recebesse digitada de outro jeito, não
+  // mostra a seção antes da hora.
+  it.each(["", "prod", "Production", "producao"])(
+    "com NEXT_PUBLIC_ENVIRONMENT=%j vale produção: a seção fica de fora",
+    (valor) => {
+      vi.stubEnv("NEXT_PUBLIC_ENVIRONMENT", valor);
+      sessao.participante = pessoa("super_admin");
+
+      render(<AdminSidebar variant={variant} />);
+
+      const menu = screen.getByRole("navigation");
+      expect(within(menu).queryByText("Central de Comando")).toBeNull();
+      expect(within(menu).getByRole("link", { name: "Tecnologia" })).toBeTruthy();
+    },
+  );
+
+  it.each(["development", "ci", "staging"])(
+    "no ambiente %s, que não é produção, a seção aparece",
+    (valor) => {
+      vi.stubEnv("NEXT_PUBLIC_ENVIRONMENT", valor);
+      sessao.participante = pessoa("super_admin");
+
+      render(<AdminSidebar variant={variant} />);
+
+      const menu = screen.getByRole("navigation");
+      expect(within(menu).getByText("Central de Comando")).toBeTruthy();
+    },
+  );
+
+  it("o item da tela aberta fica marcado, e só ele", () => {
+    rota.atual = "/admin/central-de-comando/dados-do-google";
+    sessao.participante = pessoa("super_admin");
+
+    render(<AdminSidebar variant={variant} />);
+
+    const menu = screen.getByRole("navigation");
+    const marcados = within(menu)
+      .getAllByRole("link")
+      .filter((link) => link.getAttribute("aria-current") === "page")
+      .map((link) => link.textContent?.trim());
+    expect(marcados).toEqual(["Dados do Google"]);
+  });
 });
 
 describe.each([
@@ -178,7 +328,9 @@ describe.each([
   // porque é a lista que prova que a montagem esperada foi a que rodou: um
   // participante mal montado cairia noutro recorte de seções e o teste
   // continuaria verde procurando só pela Ajuda. Também é o que prende a Ajuda
-  // no fim da `<nav>`, depois de todas as seções.
+  // no fim da `<nav>`, depois de todas as seções. Roda fora de produção, onde a
+  // Central de Comando existe (issue #814): a lista igual à de antes é a prova
+  // de que a seção nova não vaza para a secretária.
   it("quem não é super admin também tem a Ajuda, no fim do menu dele", () => {
     sessao.participante = pessoa("secretaria");
 
@@ -192,6 +344,8 @@ describe.each([
     ).toEqual(["Dados do Atendimento", "Ajuda"]);
   });
 
+  // A seção Central de Comando (issue #814) entra entre Atendimento e
+  // Tecnologia, e a Ajuda continua no fim (ADR 0058, decisão 1).
   it("no menu do super admin a Ajuda é o último item", () => {
     sessao.participante = pessoa("super_admin");
 
@@ -208,6 +362,10 @@ describe.each([
       "Cargos",
       "Tipos de Reunião",
       "Dados do Atendimento",
+      "Visão Geral",
+      "Objetivos",
+      "Dados do Google",
+      "Instagram",
       "Tecnologia",
       "Ajuda",
     ]);

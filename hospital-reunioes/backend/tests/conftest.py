@@ -61,6 +61,12 @@ import socket
 
 import pytest
 
+# O apoio dos testes da Central de Comando (issue #814): o Google de mentira e a
+# service account de mentira, como fixtures que qualquer arquivo pede pelo nome.
+# Plugin, e não fixture escrita aqui, para este arquivo continuar sendo o da
+# trava. Nenhuma fixture de lá é `autouse`, e nenhuma liga ou desliga a trava.
+pytest_plugins = ("central_de_comando_apoio",)
+
 # Escape hatch, no estilo da lista `EXCECOES` do guard de leitura direta
 # (issue #492): isenção é por ARQUIVO, escrita à mão aqui. Nenhuma fixture
 # desliga a trava (ver decisão 3 no topo), então esta lista é a única porta

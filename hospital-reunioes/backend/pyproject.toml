@@ -27,6 +27,11 @@ dependencies = [
     "segno>=1.6.1",
     "lxml>=5.0.0",
     "httpx>=0.27.0",
+    # Credencial da service account do Google Analytics (Central de Comando,
+    # ADR 0058). Só a assinatura do JWT: a chamada à GA4 Data API sai pelo
+    # httpx, como toda API externa da casa. Python puro, sem gRPC nem protobuf
+    # na imagem, que é o que a biblioteca oficial do GA4 traria.
+    "google-auth>=2.40.0",
     "apscheduler>=3.10.4",
     "python-jose[cryptography]>=3.3.0",
     "bcrypt>=4.2.0",

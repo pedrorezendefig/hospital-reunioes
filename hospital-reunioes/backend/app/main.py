@@ -32,6 +32,7 @@ from app.routers import (
     transcricao,
     webhooks,
 )
+from app.routers.admin import central_de_comando as admin_central_de_comando
 from app.routers.admin import dados_atendimento as admin_dados_atendimento
 from app.routers.admin import espelho_global_health as admin_espelho_global_health
 from app.routers.admin import super_admins as admin_super_admins
@@ -122,6 +123,8 @@ app.include_router(admin_taxonomia.router, prefix=settings.api_prefix)
 app.include_router(admin_tecnologia.router, prefix=settings.api_prefix)
 app.include_router(admin_dados_atendimento.router, prefix=settings.api_prefix)
 app.include_router(admin_espelho_global_health.router, prefix=settings.api_prefix)
+# Central de Comando (ADR 0058): só Super admin, gate no próprio router.
+app.include_router(admin_central_de_comando.router, prefix=settings.api_prefix)
 app.include_router(pops_pops.router, prefix=settings.api_prefix)
 app.include_router(pops_biblioteca.router, prefix=settings.api_prefix)
 app.include_router(pops_elaboracao.router, prefix=settings.api_prefix)

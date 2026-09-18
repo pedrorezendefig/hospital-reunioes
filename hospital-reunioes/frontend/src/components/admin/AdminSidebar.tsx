@@ -5,23 +5,35 @@ import { usePathname } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { isSuperAdmin } from "@/lib/auth";
+import { centralDeComandoNoMenu } from "@/lib/central-de-comando/dormente";
 import {
   Users,
   ArrowLeft,
   Building2,
   BadgeCheck,
   CalendarRange,
+  Camera,
+  ChartLine,
   CircleHelp,
   Cpu,
   HeartPulse,
+  LayoutDashboard,
   LucideIcon,
+  Target,
 } from "lucide-react";
 import { urlDoManual } from "@/components/layout/Sidebar";
 
 type Item = { href: string; label: string; icon: LucideIcon };
 // somenteSuperAdmin: secoes que a sidebar esconde de secretaria/facilitador
 // (o backend segue sendo o gate real, com 403 nas rotas de super admin).
-type Section = { label: string; items: Item[]; somenteSuperAdmin?: boolean };
+// dormente: secao que so entra fora de producao, ate a fatia que a liga
+// (Central de Comando, ADR 0058, decisao 8).
+type Section = {
+  label: string;
+  items: Item[];
+  somenteSuperAdmin?: boolean;
+  dormente?: boolean;
+};
 
 const SECTIONS: Section[] = [
   {
@@ -53,6 +65,37 @@ const SECTIONS: Section[] = [
     ],
   },
   {
+    // Os numeros do Site e do Instagram (ADR 0058). Cada tela no seu endereco:
+    // a Visao Geral tem caminho proprio, e nao a raiz da secao, porque o item
+    // ativo e decidido por prefixo e a raiz acenderia em todas as telas.
+    label: "Central de Comando",
+    somenteSuperAdmin: true,
+    // A issue #827 tira esta linha e liga a secao em producao.
+    dormente: true,
+    items: [
+      {
+        href: "/admin/central-de-comando/visao-geral",
+        label: "Visão Geral",
+        icon: LayoutDashboard,
+      },
+      {
+        href: "/admin/central-de-comando/objetivos",
+        label: "Objetivos",
+        icon: Target,
+      },
+      {
+        href: "/admin/central-de-comando/dados-do-google",
+        label: "Dados do Google",
+        icon: ChartLine,
+      },
+      {
+        href: "/admin/central-de-comando/instagram",
+        label: "Instagram",
+        icon: Camera,
+      },
+    ],
+  },
+  {
     label: "Tecnologia",
     somenteSuperAdmin: true,
     items: [{ href: "/admin/tecnologia", label: "Tecnologia", icon: Cpu }],
@@ -72,7 +115,9 @@ export function AdminSidebar({
   const { participante } = useCurrentParticipante();
   const superAdmin = isSuperAdmin(participante);
   const sections = SECTIONS.filter(
-    (s) => superAdmin || !s.somenteSuperAdmin,
+    (s) =>
+      (superAdmin || !s.somenteSuperAdmin) &&
+      (!s.dormente || centralDeComandoNoMenu()),
   );
 
   const content = (
@@ -107,6 +152,7 @@ export function AdminSidebar({
                   key={item.href}
                   href={item.href}
                   onClick={onNavigate}
+                  aria-current={isActive ? "page" : undefined}
                   className={`flex items-center gap-3 px-3 py-2 rounded-xl text-sm font-medium transition-all duration-200 cursor-pointer ${
                     isActive
                       ? "bg-primary/10 text-primary border-l-[3px] border-primary pl-2.5"

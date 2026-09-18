@@ -1,6 +1,6 @@
 from pathlib import Path
 
-from pydantic import model_validator
+from pydantic import ValidationInfo, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # Aponta para hospital-reunioes/.env independente de onde o processo é iniciado
@@ -84,6 +84,36 @@ class Settings(BaseSettings):
     # aceita tudo", que é a porta aberta com aparência de guarda.
     github_webhook_secret: str = ""
 
+    # Central de Comando (ADR 0058): os números do Site e do Instagram, só para
+    # Super admin. Todas as variáveis da Central moram aqui desde a primeira
+    # fatia do PRD #809, para as fatias paralelas não disputarem este arquivo.
+    #
+    # A Central nasce DORMENTE: tudo vazio, e vazio quer dizer funcionalidade
+    # desligada com erro honesto de configuração (503), nunca número zero nem
+    # lista vazia. As credenciais só entram no Coolify na última fatia, a que
+    # liga a Central em produção (ADR 0058, decisão 8).
+    #
+    # Google Analytics 4: o número da propriedade e o JSON inteiro da chave da
+    # service account (papel Leitor na propriedade). A base da API fica fixa no
+    # provedor (`services/central_de_comando/provedor_google.py`), não aqui.
+    ga4_property_id: str = ""
+    google_application_credentials_json: str = ""
+    # Os eventos que o Site dispara no clique para falar com o hospital
+    # (Contatos gerados). Os padrões são os que o Site publica hoje.
+    ga4_evento_whatsapp: str = "wa_click"
+    ga4_evento_fale_conosco: str = "generate_lead"
+    # Instagram: o token de longa duração e o id da conta profissional. O token
+    # expira e é renovado à mão, como na Central antiga.
+    instagram_access_token: str = ""
+    instagram_business_account_id: str = ""
+    # Conector MCP (ADR 0058, decisões 3 e 4): o emissor do WorkOS AuthKit, o
+    # JWKS dele (vazio = `<emissor>/oauth2/jwks`) e o endereço do recurso, que é
+    # a audiência do token. Quem conecta é quem é Super admin: a lista de
+    # e-mails em variável do app antigo não existe aqui.
+    mcp_auth_issuer: str = ""
+    mcp_auth_jwks_uri: str = ""
+    mcp_resource_url: str = ""
+
     # Email (Resend)
     resend_api_key: str = ""
     resend_from_email: str = "noreply@hospitalsaomatheus.cloud"
@@ -113,6 +143,18 @@ class Settings(BaseSettings):
     # RESEND_API_KEY pode apagar esta (issue #450). Quem roda local declara
     # ENVIRONMENT=development no .env, como os dois .env.example mostram.
     environment: str = "production"
+
+    @field_validator("ga4_evento_whatsapp", "ga4_evento_fale_conosco", mode="before")
+    @classmethod
+    def evento_de_contato_vazio_vale_o_padrao(cls, valor: object, info: ValidationInfo) -> object:
+        """A linha vazia do `.env.example`, copiada para o `.env`, vale o padrão.
+
+        Um nome de evento vazio não é "sem evento": é um filtro que não casa com
+        nada, e o canal apareceria sem clique nenhum, em silêncio.
+        """
+        if valor is None or (isinstance(valor, str) and not valor.strip()):
+            return cls.model_fields[info.field_name].default
+        return valor.strip() if isinstance(valor, str) else valor
 
     @model_validator(mode="after")
     def validate_environment(self) -> "Settings":
