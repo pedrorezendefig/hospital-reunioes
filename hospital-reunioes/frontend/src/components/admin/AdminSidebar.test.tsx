@@ -179,19 +179,36 @@ describe.each([
     expect(within(menu).getByRole("link", { name: "Tecnologia" })).toBeTruthy();
   });
 
-  it("sem a variável de ambiente vale produção: a seção fica de fora", () => {
-    // O padrão é o ambiente mais restrito, como no backend (issue #450): uma
-    // build de produção que perdesse a variável não mostra a Central antes da
-    // hora.
-    vi.stubEnv("NEXT_PUBLIC_ENVIRONMENT", "");
-    sessao.participante = pessoa("super_admin");
+  // O padrão é o ambiente mais restrito, como no backend (issue #450): só um
+  // ambiente conhecido fora de produção mostra a Central. Uma build de produção
+  // que perdesse a variável, ou que a recebesse digitada de outro jeito, não
+  // mostra a seção antes da hora.
+  it.each(["", "prod", "Production", "producao"])(
+    "com NEXT_PUBLIC_ENVIRONMENT=%j vale produção: a seção fica de fora",
+    (valor) => {
+      vi.stubEnv("NEXT_PUBLIC_ENVIRONMENT", valor);
+      sessao.participante = pessoa("super_admin");
 
-    render(<AdminSidebar variant={variant} />);
+      render(<AdminSidebar variant={variant} />);
 
-    const menu = screen.getByRole("navigation");
-    expect(within(menu).queryByText("Central de Comando")).toBeNull();
-    expect(within(menu).getByRole("link", { name: "Tecnologia" })).toBeTruthy();
-  });
+      const menu = screen.getByRole("navigation");
+      expect(within(menu).queryByText("Central de Comando")).toBeNull();
+      expect(within(menu).getByRole("link", { name: "Tecnologia" })).toBeTruthy();
+    },
+  );
+
+  it.each(["development", "ci", "staging"])(
+    "no ambiente %s, que não é produção, a seção aparece",
+    (valor) => {
+      vi.stubEnv("NEXT_PUBLIC_ENVIRONMENT", valor);
+      sessao.participante = pessoa("super_admin");
+
+      render(<AdminSidebar variant={variant} />);
+
+      const menu = screen.getByRole("navigation");
+      expect(within(menu).getByText("Central de Comando")).toBeTruthy();
+    },
+  );
 
   it("o item da tela aberta fica marcado, e só ele", () => {
     rota.atual = "/admin/central-de-comando/dados-do-google";
