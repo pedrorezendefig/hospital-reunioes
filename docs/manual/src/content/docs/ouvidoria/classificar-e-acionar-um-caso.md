@@ -9,8 +9,8 @@ sidebar:
   order: 5
 ---
 
-O vídeo é o capítulo 2 do módulo, gravado na versão 0.109.0: ele mostra esta
-tarefa, não as mudanças que vieram depois.
+O vídeo é o capítulo 2 do módulo, gravado na versão 0.109.0: o que mudou
+depois não aparece nele.
 
 ## Quando usar
 
@@ -34,15 +34,14 @@ trabalhar: nada aciona uma área sozinho.
 5. Escreva o **Extrato para o setor**: o que a área precisa resolver, com as
    suas palavras.
 6. Clique em **Validar e acionar a área**. O prazo é calculado e congelado, e o
-   responsável recebe o e-mail na hora.
+   responsável recebe o email na hora.
 
 ## Se der errado
 
-- **O acionamento não sai:** falta o **Extrato para o setor**. É a única coisa
-  que a área recebe explicando o que apurar, porque o relato de quem falou não
-  sai daqui.
-- **Nada veio preenchido pela Ana nem pelo que a pessoa marcou:** é assim mesmo.
-  O palpite dos dois fica à parte e nunca vira classificação.
+- **O acionamento não sai:** falta o **Extrato para o setor**. É o único texto
+  que a área recebe: o relato de quem falou não sai daqui.
+- **Nada veio preenchido pela Ana nem pelo que a pessoa marcou:** o palpite
+  dos dois fica à parte e nunca vira classificação.
 - **A caixa de sigilo reforçado não desmarca:** o tipo escolhido é sigiloso por
   natureza. Você eleva o sigilo de um caso, nunca tira o de uma denúncia.
 - **Desmarcar o sigilo mostra o resumo ao hospital:** sem ele, quem tem papel nas

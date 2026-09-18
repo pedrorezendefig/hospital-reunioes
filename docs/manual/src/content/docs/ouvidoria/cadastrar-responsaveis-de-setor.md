@@ -37,5 +37,5 @@ responsabilidade por um setor. Setor sem titular vigente não é acionável.
   encaminhado para lá sobe direto ao gestor, e a Diretoria é avisada.
 - **A área não aparece na hora de acionar:** o setor está sem titular e sem
   gestor. Cadastre um dos dois e volte a acionar.
-- **A pessoa saiu no dia 31 e ainda recebe caso no dia 31:** é assim mesmo. O fim
-  da vigência é inclusivo.
+- **A pessoa saiu no dia 31 e ainda recebe caso no dia 31:** o fim da vigência
+  é inclusivo, e o dia 31 ainda conta.

@@ -49,8 +49,8 @@ mensagem ou avaliou o hospital na internet.
   para a lista de quem tem papel nas Reuniões, sem classificação no meio. O
   detalhe fica no **Relato integral**, que não sai da Ouvidoria. Veja
   [O que é sigiloso](/ouvidoria/como-funciona/o-que-e-sigiloso/).
-- **Você marcou WhatsApp e o caso era da Ana:** o WhatsApp do hospital é
-  atendido por gente, e é você quem digita depois. O que a Ana atendeu entra
-  sozinho, pelo canal dela, e conta separado.
+- **Você marcou WhatsApp e o caso era da Ana:** o que a Ana atendeu entra
+  sozinho, pelo canal dela, e conta separado. O WhatsApp do hospital é atendido
+  por gente, e é você quem digita.
 - **O canal ficou errado:** ele é escolhido uma vez e não muda. Deixe escrito na
   **Observação da validação**, ao classificar.

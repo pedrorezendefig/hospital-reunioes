@@ -18,7 +18,7 @@ dela.
 
 ## Passo a passo
 
-1. Abra o caso pelo link do e-mail da Ouvidoria.
+1. Abra o caso pelo link do email da Ouvidoria.
 2. Embaixo dos dois botões, clique no link **Este caso não é do meu setor?**.
 
    ![Link de devolver embaixo dos dois botões](../../../assets/ouvidoria/portal-devolver.png)
@@ -38,5 +38,5 @@ dela.
   resposta. Caso já respondido ou já devolvido não devolve de novo.
 - **Você devolveu por engano:** fale com a Ouvidoria citando o protocolo. O
   ouvidor consegue encaminhar o caso de volta para a sua área.
-- **O link não abre mais depois de devolver:** é assim mesmo. Se o caso voltar
-  para você, a Ouvidoria manda um link novo.
+- **O link não abre mais depois de devolver:** ele morre na devolução. Se o
+  caso voltar para você, a Ouvidoria manda um link novo.
