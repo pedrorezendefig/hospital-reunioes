@@ -35,12 +35,12 @@ from datetime import date
 from typing import Any
 
 import httpx
-import jwt
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from google.auth import jwt as jwt_do_google
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -194,10 +194,11 @@ class GoogleFalso:
         )
 
     def _token_valido(self, token: str) -> bool:
-        """O que a GA4 confere: assinatura da service account e o escopo."""
+        """O que a GA4 confere: assinatura da service account, validade e o
+        escopo. Assinatura de outra chave, token vencido ou lixo: recusado."""
         try:
-            claims = jwt.decode(token, self._chave_publica, algorithms=["RS256"], options={"verify_aud": False})
-        except jwt.PyJWTError:
+            claims = jwt_do_google.decode(token, certs=self._chave_publica, verify=True)
+        except ValueError:
             return False
         return claims.get("iss") == EMAIL_DA_SERVICE_ACCOUNT and ESCOPO_DE_LEITURA in claims.get("scope", "").split()
 
@@ -206,7 +207,11 @@ class GoogleFalso:
 def google(monkeypatch, chave_rsa) -> GoogleFalso:
     """Troca só o transporte do `httpx.Client`: o cliente de verdade monta o
     pedido, e a resposta vem do Google de mentira."""
-    falso = GoogleFalso(chave_rsa.public_key(), VISITANTES_NA_GA4)
+    chave_publica = chave_rsa.public_key().public_bytes(
+        serialization.Encoding.PEM,
+        serialization.PublicFormat.SubjectPublicKeyInfo,
+    )
+    falso = GoogleFalso(chave_publica, VISITANTES_NA_GA4)
     cliente_de_verdade = httpx.Client
 
     def _cliente(*args, **kwargs):
@@ -638,10 +643,11 @@ class TestSoSuperAdmin:
         assert _montar(None).request(metodo, caminho).status_code == 401
 
     @pytest.mark.parametrize("metodo,caminho", ROTAS)
-    def test_super_admin_passa(self, metodo, caminho):
+    def test_super_admin_passa_pelo_gate(self, metodo, caminho):
         """O par de presença: sem ele, um 403 cravado em toda rota passaria
-        pelos dois testes de cima."""
-        assert _montar(SUPER_ADMIN).request(metodo, caminho).status_code == 200
+        pelos dois testes de cima. O que se mede é o gate: rota de fatia
+        seguinte que exija corpo pode responder 422 aqui, nunca 401 ou 403."""
+        assert _montar(SUPER_ADMIN).request(metodo, caminho).status_code not in (401, 403)
 
     def test_super_admin_desligado_leva_403(self):
         """Sessão viva de quem foi desligado não abre os números (issue #309)."""
