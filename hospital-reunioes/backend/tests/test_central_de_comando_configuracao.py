@@ -54,6 +54,15 @@ EVENTOS_DE_CONTATO = {
 
 TODAS = CHAVES_SEM_PADRAO + tuple(EVENTOS_DE_CONTATO)
 
+# As que são segredo. Variável de build vira ARG no Dockerfile e fica gravada no
+# histórico da imagem: o contrato diz a quem cola no Coolify que estas são só
+# de Runtime.
+SEGREDOS = ("GOOGLE_APPLICATION_CREDENTIALS_JSON", "INSTAGRAM_ACCESS_TOKEN")
+
+# Os ambientes em que a seção dormente da Central aparece no menu (espelho de
+# `FORA_DE_PRODUCAO` em `frontend/src/lib/central-de-comando/dormente.ts`).
+AMBIENTES_QUE_MOSTRAM_A_CENTRAL = ("development", "ci", "staging")
+
 
 def _settings(**valores) -> Settings:
     """Um `Settings` que não lê o `.env` da máquina: o teste diz o que existe."""
@@ -76,10 +85,14 @@ def _chaves_do_env_example(caminho: Path) -> dict[str, str]:
     return chaves
 
 
-def _env_keys_do_backend() -> dict:
+def _servico(sid: str) -> dict:
     contrato = json.loads((REPO / "docs" / "spec" / "deploy" / "project.json").read_text(encoding="utf-8"))
-    (backend,) = [s for s in contrato["services"] if s["id"] == "backend"]
-    return backend["env_keys"]
+    (servico,) = [s for s in contrato["services"] if s["id"] == sid]
+    return servico
+
+
+def _env_keys_do_backend() -> dict:
+    return _servico("backend")["env_keys"]
 
 
 class TestNoSettings:
@@ -140,3 +153,40 @@ class TestNoContratoDeDeploy:
         (item,) = [i for i in env_keys["runtime_optional"] if i["name"] == chave]
 
         assert item["purpose"].strip()
+
+    @pytest.mark.parametrize("chave", SEGREDOS)
+    def test_segredo_da_central_e_so_de_runtime(self, chave):
+        env_keys = _env_keys_do_backend()
+        (item,) = [i for i in env_keys["runtime_optional"] if i["name"] == chave]
+
+        assert "só Runtime, nunca Build Variable" in item["purpose"]
+        assert chave not in {i["name"] for i in env_keys["build_time"]}
+
+
+class TestDormenciaNaProducao:
+    """A Central dormente depende de a `NEXT_PUBLIC_ENVIRONMENT` de produção
+    não ser um dos ambientes que mostram a seção. A asserção de produção do
+    `/deploy` (gate 2.6) trava isso no contrato, e aceita o valor de hoje em
+    produção, que é vazio."""
+
+    @staticmethod
+    def _assercao() -> dict:
+        (item,) = [a for a in _servico("frontend")["prod_only_assertions"] if a["key"] == "NEXT_PUBLIC_ENVIRONMENT"]
+        return item
+
+    def test_e_uma_assercao_por_regex(self):
+        assert self._assercao()["comparison"] == "regex"
+
+    @pytest.mark.parametrize("valor", ["", "production"])
+    def test_producao_vazia_ou_production_passa(self, valor):
+        assert re.search(self._assercao()["value"], valor)
+
+    @pytest.mark.parametrize("valor", AMBIENTES_QUE_MOSTRAM_A_CENTRAL)
+    def test_ambiente_que_mostra_a_central_reprova_em_producao(self, valor):
+        assert not re.search(self._assercao()["value"], valor)
+
+    def test_o_contrato_diz_que_ela_controla_a_dormencia(self):
+        (item,) = [i for i in _servico("frontend")["env_keys"]["build_time"] if i["name"] == "NEXT_PUBLIC_ENVIRONMENT"]
+
+        assert "dormência" in item["purpose"]
+        assert "ADR 0058" in item["purpose"]
