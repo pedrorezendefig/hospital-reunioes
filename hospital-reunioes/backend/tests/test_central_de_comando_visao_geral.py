@@ -345,7 +345,10 @@ class TestGoogleFalhou:
             (erro_da_ga4(429, "RESOURCE_EXHAUSTED", "Exhausted property tokens."), "Tente de novo"),
             (httpx.Response(200, content=b"<html>proxy</html>"), "ilegível"),
             (httpx.Response(200, json=["nao", "e", "relatorio"]), "fora do formato"),
-            (httpx.Response(200, json={"rows": [{"dimensionValues": []}]}), "fora do formato"),
+            (
+                httpx.Response(200, json={"kind": "analyticsData#runReport", "rows": [{"dimensionValues": []}]}),
+                "fora do formato",
+            ),
         ],
         ids=["500", "503", "429", "html", "lista", "linha-sem-metrica"],
     )
@@ -357,6 +360,22 @@ class TestGoogleFalhou:
         assert resposta.status_code == 502
         assert trecho in resposta.json()["detail"]
         assert "visitantes" not in resposta.json()
+
+    @pytest.mark.parametrize(
+        "corpo",
+        [{}, {"rowCount": 0}, {"rows": []}, {"kind": "analyticsData#runRealtimeReport"}],
+        ids=["vazio", "so-contagem", "linhas-vazias", "outro-kind"],
+    )
+    def test_resposta_que_nao_e_relatorio_da_ga4_nunca_vira_zero(self, google_falso, corpo):
+        """Um `{}` de proxy ou de página de erro não é "ninguém veio": só o
+        relatório da GA4 (`kind` "analyticsData#runReport") sem `rows` é o zero
+        honesto. O resto é resposta fora do formato, 502."""
+        google_falso.forcar = httpx.Response(200, json=corpo)
+
+        resposta = _visao_geral("28d")
+
+        assert resposta.status_code == 502
+        assert "fora do formato" in resposta.json()["detail"]
 
     @pytest.mark.parametrize(
         ("falha", "trecho"),
@@ -416,7 +435,10 @@ class TestPrimeiraMetrica:
         assert resposta.json()["visitantes"] == {"atual": 0, "anterior": 0, "variacao": None}
 
     def test_valor_que_nao_e_numero_vira_zero_e_nunca_nan(self, google_falso):
-        google_falso.forcar = httpx.Response(200, json={"rows": [{"metricValues": [{"value": "(not set)"}]}]})
+        google_falso.forcar = httpx.Response(
+            200,
+            json={"kind": "analyticsData#runReport", "rows": [{"metricValues": [{"value": "(not set)"}]}]},
+        )
 
         resposta = _visao_geral("28d")
 

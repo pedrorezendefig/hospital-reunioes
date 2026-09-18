@@ -62,6 +62,11 @@ ESCOPO_DE_LEITURA = "https://www.googleapis.com/auth/analytics.readonly"
 # que tela pendurada (padrão da casa: connect menor).
 _TIMEOUT = httpx.Timeout(10.0, connect=3.0)
 
+# A assinatura do relatório da GA4: toda resposta do `runReport` traz este
+# `kind`, fixo. É ele que distingue "a GA4 respondeu que não há linha" (zero de
+# verdade) de um `{}` de proxy ou de página de erro, que não é resposta nenhuma.
+_KIND_DO_RELATORIO = "analyticsData#runReport"
+
 _FALTA_CONFIGURAR = (
     "A Central de Comando ainda não está ligada ao Google Analytics: falta configurar {faltando} no "
     "backend. Enquanto isso, nenhum número do Site é mostrado."
@@ -130,7 +135,9 @@ def _primeira_metrica(relatorio: dict) -> float:
     """O primeiro valor de métrica do relatório (relatório sem dimensão).
 
     Sem linha nenhuma é zero: a GA4 omite `rows` quando o intervalo não tem
-    dado, e isso é resposta, não falha. Valor que não é número finito também é
+    dado, e isso é resposta, não falha. Só vale porque o `_relatorio` já
+    conferiu que a resposta É um relatório da GA4 (o `kind`): um `{}` de proxy
+    nunca chega aqui para virar zero. Valor que não é número finito também é
     zero, como na Central antiga (`firstMetric`): anomalia da GA4 nunca chega à
     tela como "NaN". Linha sem o campo de métrica, essa sim, é resposta fora do
     formato.
@@ -261,6 +268,9 @@ def _relatorio(corpo: dict) -> dict:
         logger.error("[CentralGoogle] corpo ilegível no runReport")
         raise GoogleError("O Google Analytics devolveu uma resposta ilegível.") from exc
 
-    if not isinstance(relatorio, dict):
+    if not isinstance(relatorio, dict) or relatorio.get("kind") != _KIND_DO_RELATORIO:
+        # Sem o `kind`, o corpo pode ser um `{}` de proxy ou de página de erro,
+        # e "sem linha" nele viraria um zero que ninguém mediu.
+        logger.error("[CentralGoogle] runReport respondeu sem o kind do relatório da GA4")
         raise GoogleError("O Google Analytics devolveu uma resposta fora do formato esperado.")
     return relatorio
