@@ -29,7 +29,7 @@ sair. A exceção é o caso crítico, que sai na hora, a qualquer hora.
 ## Se o email falha, o sistema tenta de novo
 
 Com espera crescente entre as tentativas. Na terceira falha, o caso é marcado
-como falha de envio e quem cuida do sistema é avisado.
+como falha de envio e quem cuida da plataforma é avisado.
 
 ## A escada confere se há alguém no degrau
 
