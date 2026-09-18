@@ -23,21 +23,24 @@ export const SEM_SESSAO =
 /**
  * Como a resposta do backend chega à tela:
  *
- * - `nao-configurado`: 503, falta configurar a fonte no backend;
- * - `falhou`: a fonte (ou o backend) respondeu erro.
+ * - `nao-configurado`: 503 COM a frase do backend no `detail`, que é como o
+ *   router da Central diz que falta configurar a fonte;
+ * - `falhou`: todo o resto, inclusive o 503 cru de um proxy no meio de um
+ *   deploy, que não é falta de configuração nenhuma.
  *
- * Nos dois casos a frase é a do servidor, que sabe o que houve. A tela não
- * inventa causa, e nunca troca o erro por um zero.
+ * A frase mostrada é a do servidor, que sabe o que houve. A tela não inventa
+ * causa, e nunca troca o erro por um zero.
  */
 export type Recusa = { tipo: "nao-configurado" | "falhou"; mensagem: string };
 
 export async function lerRecusa(resposta: Response): Promise<Recusa> {
-  const tipo = resposta.status === 503 ? "nao-configurado" : "falhou";
+  let frase: string | null = null;
   try {
     const corpo = await resposta.json();
-    if (typeof corpo?.detail === "string") return { tipo, mensagem: corpo.detail };
+    if (typeof corpo?.detail === "string") frase = corpo.detail;
   } catch {
     // Resposta sem corpo JSON: sobra o status.
   }
-  return { tipo, mensagem: `O servidor respondeu ${resposta.status}.` };
+  if (resposta.status === 503 && frase) return { tipo: "nao-configurado", mensagem: frase };
+  return { tipo: "falhou", mensagem: frase ?? `O servidor respondeu ${resposta.status}.` };
 }

@@ -185,6 +185,21 @@ describe("Visão Geral: a honestidade do dado", () => {
     expect(screen.queryByText(/últimos 28 dias/)).toBeNull();
   });
 
+  it("um 503 sem a frase do backend (proxy fora do ar) não vira falta de configuração", async () => {
+    // Só o backend sabe dizer que falta configurar, e ele diz com a frase no
+    // `detail`. Um 503 cru do proxy, no meio de um deploy, é falha comum.
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response("<html>Service Unavailable</html>", { status: 503 })),
+    );
+
+    render(<VisaoGeral periodo="28d" />);
+
+    expect(await screen.findByText(/Não foi possível buscar os números do Site/)).toBeTruthy();
+    expect(screen.getByText("O servidor respondeu 503.")).toBeTruthy();
+    expect(screen.queryByText("Sem ligação com o Google Analytics")).toBeNull();
+  });
+
   it("com o Google fora (502), diz que não conseguiu buscar e não mostra número", async () => {
     servidor(502, { detail: "O Google Analytics não respondeu no tempo esperado." });
 

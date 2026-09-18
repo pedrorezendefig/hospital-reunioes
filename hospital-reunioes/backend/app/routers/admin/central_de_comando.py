@@ -43,7 +43,12 @@ router = APIRouter(
 
 
 async def _do_google(funcao, *args):
-    """Roda uma leitura que depende do Google e traduz a falha em HTTP honesto."""
+    """Roda uma leitura que depende do Google e traduz a falha em HTTP honesto.
+
+    Envolve a tela inteira: uma falha do Google vira 502 ou 503 do payload
+    todo, e não de um bloco só. Vale até a #821, que passa a usar status por
+    bloco.
+    """
     try:
         return await anyio.to_thread.run_sync(funcao, *args)
     except provedor_google.GoogleNaoConfiguradoError as exc:

@@ -11,8 +11,11 @@
  * o Ao vivo, o contexto do número, o Instagram num relance, os Objetivos em
  * foco e "O que vem por aí") no mesmo molde, abaixo do que já existe.
  *
- * Honestidade do dado: sem credencial (503) ou com a fonte fora (502), a tela
- * diz o que houve com a frase do servidor e não desenha número nenhum.
+ * Honestidade do dado: sem credencial (503 com a frase do backend) ou com a
+ * fonte fora (502), a tela diz o que houve com a frase do servidor e não
+ * desenha número nenhum. Hoje isso vale para a tela INTEIRA: o backend
+ * responde um status só para o payload todo, e um aviso substitui todos os
+ * blocos. Vale até a #821, que passa a usar status por bloco.
  */
 
 import { useEffect, useState } from "react";
