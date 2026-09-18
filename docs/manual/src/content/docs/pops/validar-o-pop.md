@@ -12,8 +12,7 @@ sidebar:
 ## Quando usar
 
 Quando o Revisor aprovou e você recebeu o email avisando. A validação é a
-última conferência antes de o documento ir para assinatura: depois dela não há
-mais edição.
+última conferência antes de o documento ir para assinatura.
 
 ## Passo a passo
 
