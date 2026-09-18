@@ -30,6 +30,14 @@ cd "$REPO_ROOT" || exit 2   # gh resolve o repositório pelo cwd
 PATH_SHELL="$PATH"
 export PATH="$HOME/.local/bin:$HOME/.npm-global/bin:/opt/homebrew/bin:/Applications/Docker.app/Contents/Resources/bin:$PATH"
 
+# Windows (Git Bash): o venv põe o python em Scripts/, o Pango vem do MSYS2 e o conserto é winget.
+WIN=0; case "$(uname -s)" in MINGW*|MSYS*|CYGWIN*) WIN=1 ;; esac
+VENV_PY="$APP/backend/.venv/bin/python"
+[ "$WIN" -eq 1 ] && VENV_PY="$APP/backend/.venv/Scripts/python.exe"
+MSYS_BIN="${WEASYPRINT_DLL_DIRECTORIES:-C:/msys64/mingw64/bin}"
+PANGO_WIN="winget install MSYS2.MSYS2; C:/msys64/usr/bin/bash -lc 'pacman -S --noconfirm mingw-w64-x86_64-pango'; setx WEASYPRINT_DLL_DIRECTORIES C:\\msys64\\mingw64\\bin"
+so() { [ "$WIN" -eq 1 ] && printf '%s' "$2" || printf '%s' "$1"; }   # conserto macOS | conserto Windows
+
 ok()    { printf '  OK     %-34s %s\n' "$1" "${2:-}"; }
 falta() { printf '  FALTA  %-34s %s\n' "$1" "${2:-}"; FALHAS=$((FALHAS+1)); }
 aviso() { printf '  AVISO  %-34s %s\n' "$1" "${2:-}"; }
@@ -92,6 +100,7 @@ plugin_habilitado() { # id -> 0 se enabledPlugins[id] == true em algum settings 
   return 1
 }
 while read -r id; do
+  id="${id%$'\r'}"   # core.autocrlf no Windows grava a lista em CRLF
   [ -n "$id" ] || continue
   nome="${id%%@*}"
   if [ -f "$PLUG" ] && jq -e --arg p "$id" '(.plugins[$p] // []) | length > 0' "$PLUG" >/dev/null 2>&1; then
@@ -127,21 +136,29 @@ else
   falta "tokens/.env existe" "cp tokens/.env.example tokens/.env e preencher (references/chaves.md)"
 fi
 
+PY_INST="$(so "brew install python@3.12" "winget install Python.Python.3.12")"
 if no_path_do_shell python3; then
   py="$(PATH="$PATH_SHELL" command -v python3)"
   pyv="$("$py" -c 'import sys;print(f"{sys.version_info[0]}.{sys.version_info[1]}")' 2>/dev/null || echo 0)"
-  if [ "${pyv%%.*}" -lt 3 ] || [ "${pyv#*.}" -lt 9 ]; then
-    falta "python3" "tem $pyv; o snapshot precisa de 3.9+: brew install python@3.12"
+  if [ "$pyv" = 0 ] && case "$py" in *WindowsApps*) true ;; *) false ;; esac; then
+    # O python.org não instala python3.exe; sobra o atalho da Microsoft Store, que não roda nada.
+    falta "python3" "é o atalho da Microsoft Store; copie python.exe como python3.exe na pasta do Python (ou $PY_INST)"
+  elif [ "${pyv%%.*}" -lt 3 ] || [ "${pyv#*.}" -lt 9 ]; then
+    falta "python3" "tem $pyv; o snapshot precisa de 3.9+: $PY_INST"
   else
     ok "python3" "$pyv em $py"
   fi
 else
-  bin_ok python3 "brew install python@3.12"
+  bin_ok python3 "$PY_INST"
 fi
-bin_ok uv "curl -LsSf https://astral.sh/uv/install.sh | sh"
-[ -x "$APP/backend/.venv/bin/python" ] && ok "backend/.venv" || falta "backend/.venv" "(cd hospital-reunioes/backend && uv sync)"
-[ -f /opt/homebrew/lib/libpango-1.0.dylib ] || [ -f /usr/local/lib/libpango-1.0.dylib ] \
-  && ok "pango (WeasyPrint)" || falta "pango (WeasyPrint)" "brew install pango cairo gdk-pixbuf libffi"
+bin_ok uv "$(so "curl -LsSf https://astral.sh/uv/install.sh | sh" "winget install astral-sh.uv")"
+[ -x "$VENV_PY" ] && ok "backend/.venv" || falta "backend/.venv" "(cd hospital-reunioes/backend && uv sync)"
+if [ "$WIN" -eq 1 ]; then
+  [ -f "$MSYS_BIN/libpango-1.0-0.dll" ] && ok "pango (WeasyPrint)" "$MSYS_BIN" || falta "pango (WeasyPrint)" "$PANGO_WIN"
+else
+  [ -f /opt/homebrew/lib/libpango-1.0.dylib ] || [ -f /usr/local/lib/libpango-1.0.dylib ] \
+    && ok "pango (WeasyPrint)" || falta "pango (WeasyPrint)" "brew install pango cairo gdk-pixbuf libffi"
+fi
 
 # Só três valores, todos fictícios (os mesmos do CI): bastam para o snapshot importar o app.
 ENVF="$APP/.env"
@@ -153,12 +170,13 @@ if [ -f "$ENVF" ]; then
     chave_preenchida "$ENVF" "$k" && ok ".env: $k" "preenchida" \
       || falta ".env: $k" "valor fictício basta: echo '$par' >> hospital-reunioes/.env"
   done
-  if [ -x "$APP/backend/.venv/bin/python" ]; then
-    # Mesmo comando e mesmo ambiente do snapshot do /deploy ship (no macOS ele injeta este DYLD no filho).
-    if erro="$(cd "$APP/backend" && DYLD_FALLBACK_LIBRARY_PATH="${DYLD_FALLBACK_LIBRARY_PATH:-/opt/homebrew/lib}" .venv/bin/python -c "import app.main" 2>&1 >/dev/null)"; then
+  if [ -x "$VENV_PY" ]; then
+    # Mesmo comando e mesmo ambiente do snapshot do /deploy ship (ele injeta no filho o DYLD
+    # no macOS e o WEASYPRINT_DLL_DIRECTORIES no Windows).
+    if erro="$(cd "$APP/backend" && DYLD_FALLBACK_LIBRARY_PATH="${DYLD_FALLBACK_LIBRARY_PATH:-/opt/homebrew/lib}" WEASYPRINT_DLL_DIRECTORIES="$MSYS_BIN" "$VENV_PY" -c "import app.main" 2>&1 >/dev/null)"; then
       ok "app importa (snapshot vai funcionar)"
     elif printf '%s' "$erro" | grep -qiE 'libgobject|libpango|cairo|gdk'; then
-      falta "app importa" "o WeasyPrint não acha o Pango: brew install pango cairo gdk-pixbuf libffi"
+      falta "app importa" "o WeasyPrint não acha o Pango: $(so "brew install pango cairo gdk-pixbuf libffi" "$PANGO_WIN")"
     else
       falta "app importa" "$(printf '%s' "$erro" | tail -1 | cut -c1-120)"
     fi
