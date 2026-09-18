@@ -9,8 +9,8 @@ sidebar:
 
 Esta seção cobre o ciclo inteiro de uma reunião do hospital: marcar no
 calendário, registrar o que foi tratado, fechar a ata e acompanhar o que cada
-pessoa se comprometeu a fazer. O que a plataforma persegue não é o documento:
-é o compromisso que sai dele.
+pessoa se comprometeu a fazer. O que interessa à plataforma é o compromisso
+que sai do documento.
 
 ## As palavras que você vai ver o tempo todo
 
@@ -44,8 +44,7 @@ comentários intacto.
 
 ## Dois caminhos para a mesma ata
 
-A reunião não escolhe entre "formal" e "informal" no cadastro: a escolha é na
-hora de fechar a ata.
+Você escolhe o caminho na hora de fechar a ata, não no cadastro.
 
 - **Com transcrição:** você anexa o texto da reunião, o assistente monta a ata
   completa, gera o documento e ela pode ir para assinatura digital.
@@ -85,8 +84,8 @@ E, no fim, dois desfechos possíveis:
    [Kanban](/reunioes/mover-as-pendencias-no-kanban/) e no
    [Dashboard](/reunioes/acompanhar-o-dashboard/).
 
-Uma coisa surpreende quem chega agora: a pendência **não espera** a ata inteira
-ficar pronta. Quem assina primeiro já solta as pendências dele. Isso está em
+A pendência **não espera** a ata inteira ficar pronta: quem assina primeiro já
+solta as pendências dele. Isso está em
 [Quando a pendência nasce](/reunioes/como-funciona/quando-a-pendencia-nasce/).
 
 ## E as metas?

@@ -14,8 +14,8 @@ sidebar:
 
 Quando você recebeu por email um link para aceitar uma ata. Isso acontece
 quando a coleta de assinaturas digitais daquela ata foi encerrada e ainda
-faltava você. Não é assinatura digital: é o seu aceite, registrado pelo próprio
-hospital. Você não precisa de conta nem de senha.
+faltava você. É o seu aceite, registrado pelo próprio hospital, sem assinatura
+digital. Você não precisa de conta nem de senha.
 
 ## Passo a passo
 
