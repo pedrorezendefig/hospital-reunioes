@@ -7,13 +7,13 @@ sidebar:
   order: 20
 ---
 
-## A porta é larga, a sala é pequena
+## Quem vê o item Admin
 
 O item **Admin** no menu da esquerda aparece para qualquer pessoa com papel nas
 Reuniões, e não só para o Super Admin. Quem só tem o acesso aos POPs ou o da
-Ouvidoria não vê o item. Isso confunde, e é de
-propósito: a área de Administração guarda uma tela que o hospital inteiro
-precisa, os **Dados do Atendimento**.
+Ouvidoria não vê o item. Ele aparece para tanta gente porque a área de
+Administração guarda uma tela que o hospital inteiro precisa, os
+**Dados do Atendimento**.
 
 Quem clica em **Admin** cai em lugares diferentes:
 
@@ -21,8 +21,8 @@ Quem clica em **Admin** cai em lugares diferentes:
 - **Secretária** e **Regular** abrem direto em **Dados do Atendimento**, o
   único item que existe na barra deles.
 
-Se você vê o item **Admin** e lá dentro só encontra uma tela, não é falha: é o
-seu perfil.
+Se você vê o item **Admin** e lá dentro só encontra uma tela, o seu perfil é
+Secretária ou Regular.
 
 ## Os três perfis de acesso
 
@@ -42,7 +42,7 @@ concedidos um a um, na ficha da pessoa, e valem sozinhos.
 Nos POPs a separação é limpa: sem o **Acesso aos POPs**, ninguém abre a área
 de procedimentos, seja qual for o Perfil de acesso.
 
-Na Ouvidoria a linha passa em outro lugar, e vale saber onde. Quem tem papel
+Na Ouvidoria a linha passa em outro lugar. Quem tem papel
 nas Reuniões, o Super Admin incluído, **abre a lista de casos** e lê o
 protocolo, o setor, a situação, o prazo, a gravidade, o tipo, o desfecho e o
 resumo de cada caso não sigiloso. O que exige **Ouvidor** ou
