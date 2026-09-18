@@ -30,6 +30,12 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0054](0054-demanda-vinculada-a-issue-etapa-derivada-e-revisor-no-app.md) | accepted | Demanda vinculada a issue do GitHub: Etapa derivada, comentário do diretor espelhado e a bola volta a quem pediu (emenda 0020) |
 | [0056](0056-assistente-de-tecnologia-rascunho-confirmado-kit-proprio.md) | accepted | Assistente de Tecnologia: rascunho confirmado por gente, kit próprio embarcado, responde do kit ou registra |
 
+## Central de Comando (números do ecossistema digital)
+
+| ADR | Status | Título |
+|---|---|---|
+| [0058](0058-central-de-comando-migra-para-dentro-do-app.md) | accepted | Central de Comando migra para dentro do app do hospital, só para Super admin, com o servidor portado para o FastAPI (emenda 0057) |
+
 ## Reuniões e Atas
 
 | ADR | Status | Título |
