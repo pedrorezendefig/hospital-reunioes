@@ -267,10 +267,80 @@ _Evitar_: mandar `CONTEXT.md` ou o manual em HTML ao modelo; busca vetorial; ger
 A forma da descrição que o [Assistente de Tecnologia] monta, em texto puro com rótulos fixos por [Tipo da Demanda]: Defeito (Onde, O que aconteceu, O que esperava, Quando, Como repetir), Novo e Ajuste (O que precisa, Por quê, Quem usa, Hoje é assim), Informação e Consultoria (Pergunta, Contexto, O que já sei), Terceiro (Quem de fora, O que falta dele). Só entra o que o diretor disse; rótulo sem resposta não aparece, e se ele criar antes de responder tudo, o rótulo sai como "não informado". Prioridade nasce Normal e só sobe se o diretor disser que é urgente; prazo só quando ele disser uma data de verdade. O roteiro é também a lista do que o agente ainda pergunta.
 _Evitar_: markdown na descrição; inventar prioridade ou prazo; rótulo preenchido com suposição do modelo.
 
+## Central de Comando (números do ecossistema digital)
+
+**Central de Comando**:
+O lugar da diretoria para acompanhar, e no futuro operar, o ecossistema digital do hospital, em português claro e na identidade do app. Hoje são os **números**: o site (Google Analytics) e o Instagram, sempre somente leitura. O que ainda não existe (Blog, Editor do Site, Mapa de Calor, Google Ads) aparece como [O que vem por aí], nunca como item de menu vazio. Vive na área de Administração, numa seção própria do menu, e **só o Super admin vê**, sem eixo de permissão próprio: quem precisa ver precisa ser Super admin (mesma troca da aba Tecnologia, ADR 0050). Princípio que atravessa tudo: **honestidade do dado**, o que não é medido aparece como não medido, nunca como zero nem como número inventado.
+_Evitar_: "dashboard de marketing", "BI"; definir a Central como somente leitura (os números são, o Blog não será); `perfil_central` ou qualquer papel novo só para ela; número estimado no lugar de dado que a fonte não entrega.
+
+**O que vem por aí**:
+O bloco no pé da Visão Geral da [Central de Comando] que conta à diretoria o que ainda vai nascer ali, em linguagem de leigo. É o único lugar onde funcionalidade futura aparece: o menu só lista o que funciona.
+_Evitar_: item de menu "em breve"; tela inteira só para dizer que algo não existe; prometer data.
+
+**Site**:
+O site institucional do hospital no domínio oficial, fonte dos números do Google na [Central de Comando]. É um só: a distinção antiga entre "Site Oficial" e "Site Novo" morreu quando o novo assumiu o domínio.
+_Evitar_: "Site Novo", "Site Oficial (atual)"; confundir com o app (o app é de uso interno, o Site é público).
+
+**Visitantes**:
+Quantas **pessoas diferentes** acessaram o [Site] no período; a mesma pessoa em várias idas conta uma vez. É o número-manchete da Central e bate de propósito com os "usuários ativos" que o Google mostra por padrão, para quem for conferir.
+_Evitar_: "acessos", "usuários", "sessões" como sinônimo.
+
+**Visita**:
+Uma **ida** ao [Site]. Um Visitante pode ter várias Visitas. Só aparece onde a conta é por ida.
+_Evitar_: somar Visitas e chamar de Visitantes; "sessão" na tela.
+
+**Área do site**:
+Um grupo de páginas do [Site] que fala de um mesmo serviço do hospital (Maternidade, Emergência 24h, Centro de Imagem, Centro Médico, Laboratório), somadas para dizer qual parte do site atrai mais gente. O agrupamento é interpretação da Central: o Google só conhece páginas soltas. Catálogo fechado; só entra serviço que tem página própria. O número fala do **site**, não da procura real pelo serviço.
+_Evitar_: "Braço" (jargão do manual de marca, nome antigo); chamar de [Setor] ou ligar à taxonomia de Setores (Setor é o organograma de quem trabalha no hospital, inclui quem não tem página; nome igual é coincidência, não vínculo); ler o ranking como demanda do serviço.
+
+**Origem do público**:
+De onde veio quem chegou ao [Site]: busca, acesso direto, redes sociais, indicação de outro site. Sempre com o qualificador "do público".
+_Evitar_: "origem" solto ou "canal" (o [Canal de origem] é da Ouvidoria e diz por onde a manifestação chegou, outro assunto).
+
+**Não identificado** / **Outros**:
+Os dois rótulos gentis para o que o Google não classificou: "Não identificado" para origem desconhecida, "Outros" para a soma das fatias pequenas. A tela nunca mostra o termo técnico cru da fonte.
+_Evitar_: `(not set)`, `(other)`, "desconhecido".
+
+**Contatos gerados**:
+Quantas vezes alguém, no [Site], clicou para falar com o hospital (WhatsApp, Fale Conosco). Cada canal de contato tem um estado honesto: **medido**, **em construção** (o Site ainda não avisa quando acontece) ou **não medido**.
+_Evitar_: chamar de agendamento ou de lead; mostrar zero para canal que não é medido.
+
+**Ao vivo**:
+Quantas pessoas estão no [Site] **neste momento**. É o único número em tempo real da Central; vem de uma fonte separada e se renova sozinho a cada poucos segundos.
+_Evitar_: confundir com [Atualizar agora]; guardar esse número.
+
+**Atualizar agora**:
+A ação que manda a Central buscar números novos na hora, sem esperar a renovação automática de hora em hora. Vale para os números de tendência, não para o [Ao vivo]. Se a fonte falhar, a tela mantém o último número bom e avisa que não conseguiu atualizar.
+_Evitar_: zerar a tela quando a fonte falha; esconder de quando é o número.
+
+**Alcance**:
+Quantas **contas diferentes** viram o conteúdo do Instagram do hospital no período. É o "Visitantes" do Instagram: conta pessoas.
+_Evitar_: "impressões"; somar com [Visualizações].
+
+**Visualizações**:
+Quantas **vezes** o conteúdo do Instagram foi exibido no período; a mesma pessoa conta várias vezes. É a "Visita" do Instagram.
+_Evitar_: "impressões"; tratar como pessoas.
+
+**Seguidores**:
+Total de contas que seguem o perfil **agora**. É estoque, não fluxo: não muda ao trocar o período. O que varia por período é o **crescimento** (quem chegou menos quem saiu).
+_Evitar_: variação percentual de Seguidores por período (o que se compara é o crescimento).
+
+**Interações**:
+A soma de curtidas, comentários, salvamentos e compartilhamentos no período. É o número-manchete do engajamento e o critério das [Principais publicações]. O lado "pessoas" do mesmo assunto são as **Contas que engajaram**.
+_Evitar_: "engajamento" como número único sem dizer se são ações ou pessoas.
+
+**Principais publicações**:
+As publicações permanentes (imagem, carrossel, Reels, vídeo) com mais [Interações] no período.
+_Evitar_: "top posts"; incluir Stories.
+
+**Objetivo**:
+Uma direção que a diretoria quer para o ecossistema digital ("Crescer no Instagram", "Gerar mais contatos"), vista por uma lente própria: os números que importam para ela e **sugestões** que sempre dizem o porquê, ou seja, qual dado as disparou. Catálogo fechado; Objetivo sem dado ainda aparece como em construção. Não tem alvo numérico.
+_Evitar_: chamar de meta (o app já usa "metas" no menu de Reuniões, e "Meta" é também o nome da empresa dona do Instagram: nesta seção a empresa não é citada, diz-se "Instagram"); sugestão sem o dado que a justifica.
+
 ## Manual do usuário
 
 **Manual**:
-O site único de documentação da plataforma para quem usa o app no hospital (decisão de 15/09/2026, grilling; ADR 0057). Um endereço só, organizado **por módulo, na ordem do menu do app** (Primeiros passos, Reuniões e metas, Ouvidoria, POPs, Admin), e dentro de cada módulo uma [Visão geral do módulo], as [Páginas de tarefa], as páginas [Como funciona] e as [Novidades]. Publica **só o que está em produção**: o que ainda não subiu fica escrito, mas invisível, até o deploy. A aba Tecnologia fica fora (ferramenta da Diretoria com a Vitta). O app aponta para ele por um item **Ajuda** no menu, que abre a seção do módulo em que a pessoa está.
+O site único de documentação da plataforma para quem usa o app no hospital (decisão de 15/09/2026, grilling; ADR 0057). Um endereço só, organizado **por módulo, na ordem do menu do app** (Primeiros passos, Reuniões e metas, Ouvidoria, POPs, Admin), e dentro de cada módulo uma [Visão geral do módulo], as [Páginas de tarefa], as páginas [Como funciona] e as [Novidades]. Publica **só o que está em produção**: o que ainda não subiu fica escrito, mas invisível, até o deploy. A aba Tecnologia fica fora (ferramenta da Diretoria com a Vitta), e a [Central de Comando] também (só o Super admin vê, e é leitura, não tarefa; ADR 0058). O app aponta para ele por um item **Ajuda** no menu, que abre a seção do módulo em que a pessoa está.
 _Evitar_: um manual por módulo em endereços separados; manual por papel (o papel é selo, não estrutura); selo "em desenvolvimento" ou "planejado" para o usuário; capítulo técnico (endpoint, gatilho de e-mail, variável) dentro do manual.
 
 **Página de tarefa**:
