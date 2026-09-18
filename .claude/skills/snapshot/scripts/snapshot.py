@@ -196,6 +196,8 @@ def _introspect_routes_runtime(routers_dir: Path) -> list[dict] | None:
 
     tentativas: list[list[str]] = []
     venv_python = backend_dir / ".venv" / "bin" / "python"
+    if sys.platform == "win32":
+        venv_python = backend_dir / ".venv" / "Scripts" / "python.exe"
     if venv_python.exists():
         tentativas.append([str(venv_python), str(helper)])
     if shutil.which("uv"):
@@ -208,6 +210,9 @@ def _introspect_routes_runtime(routers_dir: Path) -> list[dict] | None:
     env = dict(os.environ)
     if sys.platform == "darwin":
         env.setdefault("DYLD_FALLBACK_LIBRARY_PATH", "/opt/homebrew/lib")
+    elif sys.platform == "win32":
+        # No Windows o Pango vem do MSYS2 (docs/onboarding/claude-setup.md, seção Windows).
+        env.setdefault("WEASYPRINT_DLL_DIRECTORIES", r"C:\msys64\mingw64\bin")
 
     erro = ""
     for cmd in tentativas:
