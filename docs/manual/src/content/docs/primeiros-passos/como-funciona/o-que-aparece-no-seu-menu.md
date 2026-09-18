@@ -52,6 +52,6 @@ esquerda: eles estão no seu nome, no alto da tela à direita.
 
 ## Quando falta alguma coisa
 
-Se o item que você precisa não está lá, não é problema de navegador nem de
-tela pequena: é o seu acesso. Peça a quem administra a plataforma para conferir
-qual dos três acessos falta para você.
+Item que falta no menu é acesso que falta, não problema de navegador nem de
+tela pequena. Peça a quem administra a plataforma para conferir qual dos três
+acessos falta para você.

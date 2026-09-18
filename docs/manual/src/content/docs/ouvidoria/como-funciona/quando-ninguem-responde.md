@@ -8,7 +8,7 @@ sidebar:
 ---
 
 A cobrança não depende de ninguém abrir tela. O sistema varre os casos abertos a
-cada dez minutos e sobe uma escada de quatro degraus. Cada degrau é um e-mail
+cada dez minutos e sobe uma escada de quatro degraus. Cada degrau é um email
 para uma pessoa diferente.
 
 ![A escada de cobrança, do lembrete ao titular até a Diretoria](../../../../assets/ouvidoria/fluxo-quando-ninguem-responde.svg)
@@ -19,20 +19,19 @@ para uma pessoa diferente.
    A ausência de uma pessoa não trava o caso.
 3. **Um dia útil depois:** o gestor da área. Deixa de ser assunto do setor e
    vira assunto da gestão.
-4. **Dois dias úteis depois:** a Diretoria. Último degrau. Nenhum caso morre
-   ignorado.
+4. **Dois dias úteis depois:** a Diretoria. É o último degrau.
 
 ## A cobrança respeita o horário comercial
 
 Uma cobrança que nasce de madrugada espera a próxima abertura do expediente para
 sair. A exceção é o caso crítico, que sai na hora, a qualquer hora.
 
-## Se o e-mail falha, o sistema tenta de novo
+## Se o email falha, o sistema tenta de novo
 
 Com espera crescente entre as tentativas. Na terceira falha, o caso é marcado
-como falha de envio e quem cuida do sistema é avisado.
+como falha de envio e quem cuida da plataforma é avisado.
 
-## A escada é honesta
+## A escada confere se há alguém no degrau
 
 Antes de subir um degrau, o sistema olha se existe alguém naquele degrau. Se não
 existe, o caso sai da varredura com o carimbo de que não há a quem escalar, em

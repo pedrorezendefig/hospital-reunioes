@@ -11,11 +11,10 @@ sidebar:
 
 ## Quando usar
 
-Quando a reunião já tem data e você quer reservá-la e avisar quem vai. Ela
-nasce com quem marcou no comando.
+Quando a reunião já tem data e você quer reservá-la e avisar quem vai.
 
 :::caution[Quem marca vira o facilitador]
-A reunião nasce com quem clicou aqui no comando da ata.
+Quem agenda por aqui vira o facilitador da reunião e responde pela ata.
 :::
 
 ## Passo a passo

@@ -11,9 +11,8 @@ sidebar:
 
 ## Quando usar
 
-Quando o POP está com você para escrever. A tela tem o documento à esquerda,
-que vai tomando forma, e o **Consultor de POPs** à direita, que pergunta e
-escreve as seções.
+Quando o POP está com você para escrever. O documento fica à esquerda e o
+**Consultor de POPs** à direita, perguntando e escrevendo as seções.
 
 ## Passo a passo
 

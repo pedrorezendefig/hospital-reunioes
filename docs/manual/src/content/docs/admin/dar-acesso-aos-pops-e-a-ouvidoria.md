@@ -15,8 +15,8 @@ Quando alguém vai cuidar de procedimentos ou de manifestações. Os dois acesso
 são independentes do Perfil de acesso: nem o Super Admin abre a área de POPs
 nem o caso da Ouvidoria sem eles.
 
-O acesso aos POPs também se concede pela própria área de POPs, onde ficam os
-Setores da pessoa: [Dar acesso à Gestão de POPs](/pops/dar-acesso-a-gestao-de-pops/).
+O acesso aos POPs também se concede pela própria área de POPs:
+[Dar acesso à Gestão de POPs](/pops/dar-acesso-a-gestao-de-pops/).
 
 ## Passo a passo
 
@@ -40,7 +40,7 @@ Setores da pessoa: [Dar acesso à Gestão de POPs](/pops/dar-acesso-a-gestao-de-
 
 ## Se der errado
 
-- **O toast diz que parte dos dados foi salva e o acesso falhou:** os três
+- **A tela avisa que parte dos dados foi salva e o acesso falhou:** os três
   blocos são gravados um a um. O que passou ficou, e a lista já mostra o estado
   real. Repita só o que falhou.
 - **A tela recusa com "Pessoa sem email cadastrado":** o acesso cria o login, e

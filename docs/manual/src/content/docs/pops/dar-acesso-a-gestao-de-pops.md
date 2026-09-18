@@ -34,8 +34,8 @@ Ouvidoria: [Dar acesso aos POPs e à Ouvidoria](/admin/dar-acesso-aos-pops-e-a-o
 :::caution[A senha aparece uma vez só]
 A senha de quem ainda não entrava aparece uma vez. Copie antes de fechar.
 :::
-4. Se a pessoa ainda não entrava na plataforma, a senha aparece uma única vez.
-   Copie e entregue a ela antes de fechar em **Entendi**.
+4. Se a pessoa ainda não entrava na plataforma, copie a senha e entregue a ela
+   antes de fechar em **Entendi**.
 5. Clique no prédio, na linha da pessoa, para marcar os **Setores da pessoa**, e
    salve. É isso que decide quais POPs ela enxerga.
 
