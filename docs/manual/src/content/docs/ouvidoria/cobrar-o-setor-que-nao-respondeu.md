@@ -35,7 +35,7 @@ de você, fora dessa escada.
   [Cadastrar responsáveis de setor](/ouvidoria/cadastrar-responsaveis-de-setor/)
   e cobre de novo.
 - **O titular do setor mudou:** a cobrança vai para quem responde hoje, não para
-  quem recebeu o e-mail original.
+  quem recebeu o email original.
 - **A área respondeu e o caso continua na lista:** ele sai da fila de tramitação
   no encerramento, não na resposta. Veja
   [Encerrar um caso e avisar a pessoa](/ouvidoria/encerrar-um-caso-e-avisar-a-pessoa/).

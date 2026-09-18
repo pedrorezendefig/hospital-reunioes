@@ -21,7 +21,7 @@ caso original volta a andar, e não nasce protocolo novo.
    ![Bloco Manifestante do caso encerrado](../../../assets/ouvidoria/caso-reabrir.png)
 
 2. Escreva o que o manifestante trouxe de volta. O texto é obrigatório e vai no
-   e-mail ao setor.
+   email ao setor.
 3. Clique em **Reabrir por reincidência**.
 4. O caso fica marcado como reincidência, sai do arquivo e volta para a área com
    o prazo inteiro da gravidade.

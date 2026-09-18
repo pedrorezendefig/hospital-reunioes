@@ -10,17 +10,17 @@ sidebar:
   order: 6
 ---
 
-O vídeo é o capítulo 3 do módulo, gravado na versão 0.109.0: ele mostra esta
-tarefa, não as mudanças que vieram depois.
+O vídeo é o capítulo 3 do módulo, gravado na versão 0.109.0: o que mudou
+depois não aparece nele.
 
 ## Quando usar
 
-Quando chega no seu e-mail uma **Demanda da Ouvidoria** para a sua área. O link
+Quando chega no seu email uma **Demanda da Ouvidoria** para a sua área. O link
 vale para aquele caso, para você, e não abre de novo depois da resposta.
 
 ## Passo a passo
 
-1. Abra o e-mail e toque no botão que leva ao caso. Não há senha nem cadastro.
+1. Abra o email e toque no botão que leva ao caso. Não há senha nem cadastro.
 
    ![E-mail de demanda da Ouvidoria com o botão do caso](../../../assets/ouvidoria/email-demanda.png)
 

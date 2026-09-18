@@ -9,8 +9,8 @@ sidebar:
   order: 21
 ---
 
-O vídeo é o capítulo 7 do módulo, gravado na versão 0.109.0: ele mostra esta
-tarefa, não as mudanças que vieram depois.
+O vídeo é o capítulo 7 do módulo, gravado na versão 0.109.0: o que mudou
+depois não aparece nele.
 
 ## Quando usar
 

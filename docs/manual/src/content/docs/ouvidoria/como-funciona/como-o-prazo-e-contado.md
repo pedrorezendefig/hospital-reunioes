@@ -47,5 +47,5 @@ O aviso de que a manifestação chegou conta em horas corridas, contando noite e
 fim de semana, porque é uma promessa a quem esperou. Todo o resto conta só em
 expediente.
 
-A lista, a página do caso, o e-mail e o relatório mostram o mesmo prazo e a
+A lista, a página do caso, o email e o relatório mostram o mesmo prazo e a
 mesma frase, porque todos perguntam ao mesmo lugar.
