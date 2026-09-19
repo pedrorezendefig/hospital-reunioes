@@ -115,9 +115,13 @@ describe("Visão Geral: o número-manchete", () => {
 
     expect(await screen.findByText("1.000")).toBeTruthy();
     expect(screen.getByText(/últimos 7 dias/)).toBeTruthy();
-    expect(chamadas).toEqual([
-      { url: "/api/admin/central-de-comando/visao-geral?periodo=7d", autorizacao: "Bearer token-de-teste" },
-    ]);
+    // `toContainEqual`, e não a lista exata: a tela agora traz também o
+    // indicador Ao vivo (issue #816), que consulta `/ao-vivo` em paralelo. O
+    // que este teste mede é a chamada da Visão Geral, com o período e o token.
+    expect(chamadas).toContainEqual({
+      url: "/api/admin/central-de-comando/visao-geral?periodo=7d",
+      autorizacao: "Bearer token-de-teste",
+    });
   });
 
   it("mostra a variação para cima contra o período anterior", async () => {

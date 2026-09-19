@@ -106,6 +106,29 @@ async def dados_do_google(request: Request, periodo: Periodo = Query(PERIODO_PAD
     return await _do_google(telas.ler, "dados-do-google", periodo)
 
 
+# ─── Ao vivo (issue #816) ────────────────────────────────────────────────────
+
+# O único número em tempo real da Central, e o único que NÃO passa pelo cache:
+# leitura direta da fonte de tempo real do Google a cada consulta, porque cache
+# de 1 hora mataria o "agora". A tela consulta a cada 30 segundos e ao voltar o
+# foco (ADR 0050, decisão 9); o limite é o das telas de leitura e, como todo
+# limite da casa, conta por endereço.
+LIMITE_DO_AO_VIVO = "30/minute"
+
+
+@router.get("/ao-vivo")
+@limiter.limit(LIMITE_DO_AO_VIVO)
+async def ao_vivo(request: Request):
+    """Quantas pessoas estão no Site agora, direto da fonte de tempo real do
+    Google, sem passar pelo cache.
+
+    Não é tela do registro de `telas.py`: nunca é guardado e não tem Atualizar
+    agora. Fonte fora é 502 e falta de configuração é 503, pelo mesmo
+    `_do_google` das telas de tendência; nunca um zero inventado.
+    """
+    return {"pessoas": await _do_google(provedor_google.pessoas_no_site_agora)}
+
+
 # ─── Atualizar agora (issue #815) ────────────────────────────────────────────
 
 # Cada Atualizar agora é uma ida garantida ao Google, que tem cota por
