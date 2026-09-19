@@ -2,6 +2,29 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-19T13:57:56-03:00",
+      "sha": "3ef1d8b5",
+      "app_version": "0.149.0",
+      "subject": "Guia do conector da Central com o endereço novo",
+      "raw_subject": "docs(comunicacao): guia do conector da Central com o endereço novo (#837)",
+      "scope": [
+        "docs"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 200,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 3 da fila fixa (PRD #809, ADR 0058): docs-only. Guia do conector em docs/comunicacao/central/guia-conector/ (HTML + PDF), com o endereço novo https://api.hospitalsaomatheus.cloud/api/mcp, sem nome de pessoa e sem travessão. SEM bump: o app não muda (o guia não é servido pelo app), então a versão segue 0.149.0; o rebuild do webhook é do mesmo código. Revisor de docs limpo. Cobertura no README não adicionada de propósito (ADR 0046: docs/comunicacao é coberto por padrão). Conferência visual do PDF feita antes do merge."
+    },
+    {
       "at": "2026-09-19T13:09:49-03:00",
       "sha": "3303264e",
       "app_version": "0.149.0",
@@ -1466,35 +1489,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PRs #581 (ADR 0043 + /montar-ondas + semaforo de deploy), #582 (#559, so CONTEXT.md e corpo do PRD #469) e #583 (#572). Na #572 a constante ENDERECO_OMITIDO saiu de _alvo_no_log para email_service.py; 5 mutantes mortos, um deles (pergunta unica trocada por comparacao de string) so morreu com o caso papel=None. PRD #469 auditado pela terceira vez e APROVADO. Migration 097 segue pendente no Studio."
-    },
-    {
-      "at": "2026-09-03T20:36:12-03:00",
-      "sha": "6afbbd5",
-      "app_version": "0.109.1",
-      "subject": "onda 3: trava de rede da suite vira de repositorio e o endereco do manifestante sai do log pelo papel",
-      "raw_subject": "fix(ouvidoria): o log omite o endereço pelo papel, não por lista de gatilhos (#547) (#565)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1200,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PRs #564 (#546) e #565 (#547). A #546 fechou um vazamento ATIVO: test_pipeline.py mandava a transcricao ao OpenRouter com a chave do .env a cada pytest local. A #547 trocou lista de gatilhos por allowlist de papeis internos; papel desconhecido, com espaco ou com caixa diferente passou a OMITIR. Follow-up aberto na issue #572. A migration 097 da onda 2 segue pendente de aplicacao manual no Studio."
     }
   ]
 }

@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-19T13:15:00-03:00",
+  "updated_at": "2026-09-19T14:02:00-03:00",
   "updated_by": "onda@ship",
   "last_app_version": "0.149.0",
   "production": {
@@ -21,8 +21,8 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "3303264",
-      "last_deploy_at": "2026-09-19T16:09:51Z",
+      "last_deploy_sha": "3ef1d8b",
+      "last_deploy_at": "2026-09-19T16:57:58Z",
       "last_health_check": {
         "at": "2026-09-19T13:09:49-03:00",
         "latency_ms": 177,
@@ -39,8 +39,8 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "3303264",
-      "last_deploy_at": "2026-09-19T16:09:51Z",
+      "last_deploy_sha": "3ef1d8b",
+      "last_deploy_at": "2026-09-19T16:57:58Z",
       "last_health_check": {
         "at": "2026-09-19T13:09:49-03:00",
         "latency_ms": 135,
@@ -174,64 +174,55 @@
   },
   "gates": [
     {
-      "name": "CI 3/3 verde no PR #836 (Backend, Frontend, Docker Build); MERGEABLE e CLEAN em cada etapa",
+      "name": "#824 docs-only: guia do conector em docs/comunicacao com o endereço novo. Sem CI (ci.yml ignora docs/**), PR MERGEABLE e CLEAN, o verde terminal de docs-only",
       "status": "ok"
     },
     {
-      "name": "Gate 1.5 spec x diff por revisor independente do sub-agente: núcleo OAuth sólido, fail-closed, achados endereçados (JWKS indisponível 401, autorizar em thread, cache TTL)",
+      "name": "Revisor de docs do orquestrador: LIMPO. Fidelidade ao guia antigo, endereço novo único (sem vestígio do antigo), sem nome de pessoa, sem travessão",
       "status": "ok"
     },
     {
-      "name": "Dois revisores do orquestrador (código+correção e segurança OAuth adversarial): 0 must-fix, nenhum fail-open. RS256 fixo (bloqueia alg:none e HS256), iss/aud/exp/escopo/email_verified, gate fail-closed, 401 sempre, CORS só no metadata, sem SSRF",
+      "name": "Cobertura no README NÃO adicionada, por design: ADR 0046 trata docs/comunicacao como coberto por padrão (nível 1 e 2); confirmado pelo checker do setup-maquina e pelos irmãos sem linha própria",
       "status": "ok"
     },
     {
-      "name": "4 should-fix do checkpoint aplicados antes do merge e conferidos no delta: DoS do thread-pool, 500->401 no gate, params->-32602, batching removido. 56 testes (era 48), incluindo recusa de alg:none e HS256",
+      "name": "Conferência visual do PDF/HTML feita antes do merge (render no navegador): layout, marca, 4 passos, endereço e blocos conferidos",
       "status": "ok"
     },
     {
-      "name": "Enumerador de rotas do snapshot intacto: as 2 rotas entram no schema OpenAPI, no_app == no_schema, com teste (test_as_rotas_estao_no_schema_publico)",
+      "name": "Merge SEM bump: docs-only não muda o app, versão segue 0.149.0; o rebuild do webhook é do mesmo código",
       "status": "ok"
     },
     {
-      "name": "APP_VERSION 0.149.0 no Coolify ANTES do merge; version match provado no ar: /api/health em 0.149.0, db healthy, frontend 200",
-      "status": "ok"
-    },
-    {
-      "name": "Conector DORMENTE em producao: metadata em 503 (fail-closed) por ausencia de variavel do conector no backend de prod, coerente com o corte da ADR 0058. Nao ativado pela onda",
+      "name": "Conector MCP segue DORMENTE em producao (503, sem variaveis do conector em prod), tratado na #826/#827/#828 (fora da onda)",
       "status": "warn"
     },
     {
-      "name": "Semáforo pego antes do merge e solto no fim; bookkeeping em worktree detached de origin/main",
+      "name": "Semáforo pego antes do merge e solto no fim; bookkeeping em worktree detached",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.149.0 saudável",
-      "text": "Conector MCP no backend (dormente). /api/health em 0.149.0 com db healthy, frontend 200. Backend rápido e frontend cerca de 3min no SHA 3303264. Sem OOM."
+      "title": "Guia do conector publicado no repo (v0.149.0)",
+      "text": "docs/comunicacao/central/guia-conector/ (HTML + PDF) com o endereço novo. Deploy docs-only, sem bump; app segue 0.149.0, health inalterado."
     },
     {
       "kind": "warn",
       "title": "Conector MCP dormente: 503 e sem variaveis em prod",
-      "text": "O /.well-known/oauth-protected-resource responde 503 (config ausente, fail-closed) e NENHUMA variavel do conector (issuer/resource/jwks/WorkOS) esta no backend de producao. Coerente com o plano do conector dormente ate o dia do corte (ADR 0058 dec. 3 e 9). Se as vars da #814 deviam estar em prod, falta propaga-las; se so entram no corte, o 503 e esperado. Ativar o conector e o corte, fora da onda: as vars nao foram criadas nem alteradas aqui."
+      "text": "Segue valendo desde o deploy da #822: o /.well-known responde 503 e nao ha variavel do conector no backend de producao. Resolucao na #826 (credenciais no Coolify e WorkOS), #827 (ligar) e #828 (corte). Registrado na #826."
     },
     {
       "kind": "info",
-      "title": "Resource Indicators respondidos no PR #836",
-      "text": "O AuthKit expoe UM Resource Indicator, nao aceita os dois ao mesmo tempo. Corte troca o RI antigo pelo da API. Sim/nao empirico depende de token na mao na integracao (trava pendente da ADR 0006). Plano do corte inalterado."
-    },
-    {
-      "kind": "info",
-      "title": "Nits registrados no PR #836",
-      "text": "email_verified aceita True ou string 'true' (fail-closed proposital); e-mail case-sensitive no lookup do Supabase (coberto pelo checklist do corte); header MCP-Protocol-Version do request nao validado (leniente); confirmar OPTIONS/CORS do transporte na integracao."
+      "title": "Onda 4 (#823) bloqueada pela #819",
+      "text": "A #823 (ferramentas de Site e Instagram do conector) depende da #819 (Instagram, sessao B), que segue aberta. A onda para aqui ate a #819 fechar."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "3303264",
+    "sha": "3ef1d8b",
     "result": "healthy",
-    "duration_seconds": 240
+    "duration_seconds": 200
   }
 }
