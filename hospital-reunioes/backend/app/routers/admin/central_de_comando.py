@@ -44,7 +44,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.dependencies import require_super_admin
 from app.limiter import limiter
-from app.services.central_de_comando import provedor_google, provedor_instagram, telas
+from app.services.central_de_comando import objetivos, provedor_google, provedor_instagram, telas
 from app.services.central_de_comando.periodo import PERIODO_PADRAO, Periodo
 
 router = APIRouter(
@@ -130,6 +130,40 @@ async def instagram(request: Request, periodo: Periodo = Query(PERIODO_PADRAO)):
     frescor; sem número guardado, 502. Sem credencial, 503.
     """
     return await _do_fonte(telas.ler, "instagram", periodo)
+
+
+# ─── Objetivos (issue #820) ──────────────────────────────────────────────────
+
+
+@router.get("/objetivos")
+@limiter.limit("30/minute")
+async def objetivos_galeria(request: Request):
+    """A galeria dos Objetivos: os seis do catálogo, com o número de hoje (28
+    dias) dos quatro com montador e os dois em construção sem número nem destino
+    navegável. Dentro da hora, sai do cache sem ir às fontes.
+
+    É tudo ou nada como as outras telas até a #821: uma fonte fora sem número
+    guardado é 502 (ou 503, sem credencial) para a galeria inteira.
+    """
+    return await _do_fonte(objetivos.ler_galeria)
+
+
+@router.get("/objetivos/{identificador}")
+@limiter.limit("30/minute")
+async def objetivo_lente(request: Request, identificador: str, periodo: Periodo = Query(PERIODO_PADRAO)):
+    """A lente de um Objetivo: os números dele no período, as sugestões (cada uma
+    com o porquê) e o frescor.
+
+    Identificador que não é de um Objetivo com lente (inexistente, ou em
+    construção sem destino navegável) é 404. Período que a lente não tem (90 dias
+    no Instagram) é 422, sem ir à fonte.
+    """
+    if not objetivos.tem_lente(identificador):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"A Central não tem o Objetivo {identificador!r}.",
+        )
+    return await _do_fonte(objetivos.ler_lente, identificador, periodo)
 
 
 # ─── Ao vivo (issue #816) ────────────────────────────────────────────────────
