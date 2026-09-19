@@ -703,3 +703,259 @@ def gate_e_limitador_zerados():
     yield
     limiter._storage.reset()
     _participante_ctx.set(None)
+
+
+# ─── O Instagram de mentira: a Graph API no lugar do transporte (issue #819) ──
+#
+# No molde do `GoogleFalso`: troca só o transporte do `httpx.Client`, o provedor
+# roda de verdade e a rede vem daqui. A Graph API do Instagram é GET com os
+# parâmetros na URL (ao contrário do POST da GA4), então o dublê despacha pelo
+# caminho e pelos parâmetros do pedido. O host real da Graph API contém o nome
+# da empresa dona da rede: ele mora só aqui e no `provedor_instagram`, nunca em
+# tela nem em identificador de domínio (ADR 0058).
+
+# O token e o id da conta profissional que o dublê aceita. O `id` é numérico,
+# como o real, para o teste pegar um provedor que troque o nó pela borda.
+TOKEN_DO_INSTAGRAM = "token-de-teste-do-instagram"
+CONTA_DO_INSTAGRAM = "17841400000000000"
+HOST_DA_GRAPH_API = "graph.facebook.com"
+
+# Os Seguidores (estoque): o mesmo número em qualquer período, porque vem do
+# perfil, e não de uma janela de datas.
+SEGUIDORES_DO_INSTAGRAM = 18420
+
+# Os insights da conta por intervalo (início, fim). Contados à mão para as
+# asserções da tela baterem sem refazer a conta do código. As pontas são os
+# intervalos de 28 e 7 dias a partir de HOJE_DE_TESTE (18/09/2026).
+INSIGHTS_DO_INSTAGRAM: dict[tuple[str, str], dict[str, int]] = {
+    # 28 dias: 21/08 a 17/09, contra 24/07 a 20/08.
+    ("2026-08-21", "2026-09-17"): {
+        "reach": 41280,
+        "views": 96540,
+        "total_interactions": 7820,
+        "accounts_engaged": 5140,
+        "likes": 5980,
+        "comments": 540,
+        "saves": 820,
+        "shares": 480,
+    },
+    ("2026-07-24", "2026-08-20"): {
+        "reach": 37650,
+        "views": 88210,
+        "total_interactions": 6910,
+        "accounts_engaged": 4720,
+        "likes": 5210,
+        "comments": 470,
+        "saves": 700,
+        "shares": 410,
+    },
+    # 7 dias: 11/09 a 17/09, contra 04/09 a 10/09.
+    ("2026-09-11", "2026-09-17"): {
+        "reach": 10800,
+        "views": 24300,
+        "total_interactions": 1980,
+        "accounts_engaged": 1360,
+        "likes": 1500,
+        "comments": 150,
+        "saves": 210,
+        "shares": 120,
+    },
+    ("2026-09-04", "2026-09-10"): {
+        "reach": 11200,
+        "views": 25100,
+        "total_interactions": 2050,
+        "accounts_engaged": 1410,
+        "likes": 1560,
+        "comments": 160,
+        "saves": 210,
+        "shares": 120,
+    },
+}
+
+# Ganhos e perdas de seguidores (a chamada dedicada de `follows_and_unfollows`)
+# por intervalo. O crescimento é ganhos menos perdas: 312 nos 28 dias.
+FOLLOWS_DO_INSTAGRAM: dict[tuple[str, str], tuple[int, int]] = {
+    ("2026-08-21", "2026-09-17"): (340, 28),
+    ("2026-07-24", "2026-08-20"): (270, 22),
+    ("2026-09-11", "2026-09-17"): (90, 8),
+    ("2026-09-04", "2026-09-10"): (85, 10),
+}
+
+# As mídias recentes que a borda `/media` devolve. Três publicações de feed
+# dentro dos 28 dias, um Story (que a tela não mostra) e uma publicação antiga
+# fora da janela (que fica de fora mesmo com muitas interações).
+MIDIAS_DO_INSTAGRAM: list[dict] = [
+    {
+        "id": "m1",
+        "media_type": "IMAGE",
+        "permalink": "https://www.instagram.com/p/m1",
+        "timestamp": "2026-09-10T12:00:00+0000",
+        "caption": "Mutirão de vacinação",
+        "media_url": "https://cdn/m1.jpg",
+    },
+    {
+        "id": "m2",
+        "media_type": "VIDEO",
+        "media_product_type": "REELS",
+        "permalink": "https://www.instagram.com/reel/m2",
+        "timestamp": "2026-09-05T09:00:00+0000",
+        "caption": "Bastidores da Maternidade",
+        "media_url": "https://cdn/m2.mp4",
+        "thumbnail_url": "https://cdn/m2.jpg",
+    },
+    {
+        "id": "m3",
+        "media_type": "CAROUSEL_ALBUM",
+        "permalink": "https://www.instagram.com/p/m3",
+        "timestamp": "2026-08-25T15:00:00+0000",
+        "caption": "Dicas do cardiologista",
+        "media_url": "https://cdn/m3.jpg",
+    },
+    {
+        "id": "s1",
+        "media_type": "VIDEO",
+        "media_product_type": "STORY",
+        "permalink": "https://www.instagram.com/stories/s1",
+        "timestamp": "2026-09-12T18:00:00+0000",
+        "caption": "Story do dia",
+        "media_url": "https://cdn/s1.mp4",
+    },
+    {
+        "id": "antigo",
+        "media_type": "IMAGE",
+        "permalink": "https://www.instagram.com/p/antigo",
+        "timestamp": "2020-01-01T00:00:00+0000",
+        "caption": "Publicação antiga",
+        "media_url": "https://cdn/antigo.jpg",
+    },
+]
+
+# As Interações de cada mídia (a borda `/{midia}/insights?metric=total_interactions`).
+# O Story e a antiga têm muitas, de propósito: provam que a exclusão acontece
+# antes do ranking.
+INTERACOES_DA_MIDIA: dict[str, int] = {"m1": 1840, "m2": 1520, "m3": 1190, "s1": 9999, "antigo": 8888}
+
+
+def erro_do_instagram(http_status: int, codigo: int, tipo: str, mensagem: str) -> httpx.Response:
+    """O envelope de erro da Graph API: o HTTP e o `error.code` são
+    independentes (token vencido é HTTP 400 com `code` 190)."""
+    return httpx.Response(http_status, json={"error": {"message": mensagem, "type": tipo, "code": codigo}})
+
+
+class InstagramFalso:
+    """A Graph API do Instagram de mentira, no lugar do transporte do `httpx.Client`.
+
+    Confere o token (no header `Authorization: Bearer`) e responde pela borda
+    pedida: `followers_count` do perfil, os insights da conta por intervalo, o
+    `follows_and_unfollows`, a lista de `/media` e as `total_interactions` de
+    cada mídia. As Interações da mídia vêm na forma REAL `values:[{value}]`.
+    `forcar` troca TODA resposta por uma fixa ou por uma exceção de rede.
+    `pedidos` e `clientes` registram o que passou.
+    """
+
+    def __init__(self) -> None:
+        self.conta = CONTA_DO_INSTAGRAM
+        self.seguidores = SEGUIDORES_DO_INSTAGRAM
+        self.insights = {faixa: dict(v) for faixa, v in INSIGHTS_DO_INSTAGRAM.items()}
+        self.follows = dict(FOLLOWS_DO_INSTAGRAM)
+        self.midias = [dict(m) for m in MIDIAS_DO_INSTAGRAM]
+        self.interacoes = dict(INTERACOES_DA_MIDIA)
+        self.pedidos: list[httpx.Request] = []
+        self.clientes: list[dict[str, Any]] = []
+        self.forcar: httpx.Response | Exception | None = None
+
+    def __call__(self, pedido: httpx.Request) -> httpx.Response:
+        self.pedidos.append(pedido)
+        if isinstance(self.forcar, Exception):
+            raise self.forcar
+        if self.forcar is not None:
+            return self.forcar
+        if pedido.url.host != HOST_DA_GRAPH_API or pedido.method != "GET":
+            return httpx.Response(404)
+        # O token vai no header Authorization: Bearer (nunca na query, que o
+        # httpx registra em log). O dublê confere o header, como o `GoogleFalso`.
+        autorizacao = pedido.headers.get("authorization", "")
+        if autorizacao.removeprefix("Bearer ") != TOKEN_DO_INSTAGRAM:
+            # O que a Graph API responde para token inválido ou vencido.
+            return erro_do_instagram(400, 190, "OAuthException", "Error validating access token: it has expired.")
+        params = pedido.url.params
+
+        segmentos = [s for s in pedido.url.path.split("/") if s]
+        no = segmentos[1] if len(segmentos) > 1 else ""
+        borda = segmentos[2] if len(segmentos) > 2 else None
+
+        if borda is None:
+            if no == self.conta and params.get("fields") == "followers_count":
+                return httpx.Response(200, json={"id": no, "followers_count": self.seguidores})
+        elif borda == "insights":
+            if no == self.conta:
+                return self._insights_da_conta(params)
+            return self._interacoes_da_midia(no)
+        elif borda == "media" and no == self.conta:
+            return httpx.Response(200, json={"data": self.midias})
+
+        return erro_do_instagram(400, 100, "GraphMethodException", f"pedido que o dublê não sabe: {pedido.url}")
+
+    def _insights_da_conta(self, params: Any) -> httpx.Response:
+        metricas = (params.get("metric") or "").split(",")
+        faixa = (params.get("since"), params.get("until"))
+        if "follows_and_unfollows" in metricas:
+            ganhos, perdidos = self.follows.get(faixa, (0, 0))
+            return httpx.Response(
+                200,
+                json={
+                    "data": [
+                        {
+                            "name": "follows_and_unfollows",
+                            "total_value": {
+                                "breakdowns": [
+                                    {
+                                        "results": [
+                                            {"dimension_values": ["FOLLOWER"], "value": ganhos},
+                                            {"dimension_values": ["NON_FOLLOWER"], "value": perdidos},
+                                        ]
+                                    }
+                                ]
+                            },
+                        }
+                    ]
+                },
+            )
+        conhecidos = self.insights.get(faixa, {})
+        dados = [{"name": m, "total_value": {"value": conhecidos[m]}} for m in metricas if m in conhecidos]
+        return httpx.Response(200, json={"data": dados})
+
+    def _interacoes_da_midia(self, media_id: str) -> httpx.Response:
+        # A forma REAL da Graph API: as Interações de uma mídia vêm em
+        # `values:[{value}]`, sem `total_value` (esse é da conta, com
+        # `metric_type=total_value`). O provedor tem de ler as duas formas.
+        valor = self.interacoes.get(media_id, 0)
+        return httpx.Response(200, json={"data": [{"name": "total_interactions", "values": [{"value": valor}]}]})
+
+
+@pytest.fixture
+def instagram_configurado(monkeypatch) -> None:
+    """O token e o id da conta preenchidos no `settings`, como no `.env` de quem
+    confere com a credencial real."""
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "instagram_access_token", TOKEN_DO_INSTAGRAM)
+    monkeypatch.setattr(settings, "instagram_business_account_id", CONTA_DO_INSTAGRAM)
+
+
+@pytest.fixture
+def instagram_falso(monkeypatch, cache_da_central) -> InstagramFalso:
+    """Troca só o transporte do `httpx.Client` pelo `InstagramFalso`, com o cache
+    da Central vazio. O gate é importado antes da troca, pelo mesmo motivo do
+    `google_falso` (o `postgrest` herda do `httpx.Client` na primeira vez)."""
+    import app.dependencies  # noqa: F401
+
+    falso = InstagramFalso()
+    cliente_de_verdade = httpx.Client
+
+    def _cliente(*args, **kwargs):
+        falso.clientes.append(dict(kwargs))
+        return cliente_de_verdade(*args, transport=httpx.MockTransport(falso), **kwargs)
+
+    monkeypatch.setattr(httpx, "Client", _cliente)
+    return falso

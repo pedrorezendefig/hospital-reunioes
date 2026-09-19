@@ -181,12 +181,17 @@ def _instalar() -> None:
             "connect": socket.socket.connect,
             "connect_ex": socket.socket.connect_ex,
             "sendto": socket.socket.sendto,
-            "sendmsg": socket.socket.sendmsg,
             "getaddrinfo": socket.getaddrinfo,
             "gethostbyname": socket.gethostbyname,
             "gethostbyname_ex": socket.gethostbyname_ex,
         }
     )
+    # `sendmsg` do socket só existe no Unix (o UDP sai sem `connect`); no
+    # Windows ele não está, e a suíte roda sem essa porta. Guardar o original
+    # só quando ele existe deixa a trava instalável nas duas plataformas, sem
+    # mudar nada no Linux do CI, onde `sendmsg` está e continua trancado.
+    if hasattr(socket.socket, "sendmsg"):
+        _REAIS["sendmsg"] = socket.socket.sendmsg
 
     def create_connection(address, *args, **kwargs):
         _guardar(address)
@@ -231,7 +236,8 @@ def _instalar() -> None:
     socket.socket.connect = connect
     socket.socket.connect_ex = connect_ex
     socket.socket.sendto = sendto
-    socket.socket.sendmsg = sendmsg
+    if "sendmsg" in _REAIS:
+        socket.socket.sendmsg = sendmsg
     socket.getaddrinfo = getaddrinfo
     socket.gethostbyname = gethostbyname
     socket.gethostbyname_ex = gethostbyname_ex
@@ -244,7 +250,8 @@ def _desinstalar() -> None:
     socket.socket.connect = _REAIS["connect"]
     socket.socket.connect_ex = _REAIS["connect_ex"]
     socket.socket.sendto = _REAIS["sendto"]
-    socket.socket.sendmsg = _REAIS["sendmsg"]
+    if "sendmsg" in _REAIS:
+        socket.socket.sendmsg = _REAIS["sendmsg"]
     socket.getaddrinfo = _REAIS["getaddrinfo"]
     socket.gethostbyname = _REAIS["gethostbyname"]
     socket.gethostbyname_ex = _REAIS["gethostbyname_ex"]
