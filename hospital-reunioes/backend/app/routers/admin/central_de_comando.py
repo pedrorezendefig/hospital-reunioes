@@ -98,6 +98,9 @@ async def dados_do_google(request: Request, periodo: Periodo = Query(PERIODO_PAD
     dispositivo, com o frescor. Dentro da hora, sai do cache sem ir ao Google;
     o Atualizar agora é o da rota genérica, com `tela=dados-do-google`.
 
+    No mesmo payload, e na mesma chave de cache (#818): as Áreas do site, a
+    Origem do público e os Contatos gerados.
+
     Período fora de 7, 28 e 90 dias é 422, como na Visão Geral.
     """
     return await _do_google(telas.ler, "dados-do-google", periodo)

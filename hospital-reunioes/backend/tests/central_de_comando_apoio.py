@@ -363,6 +363,45 @@ VISITAS_POR_PAGINA_NA_GA4: dict[tuple[str, str], dict[str, int]] = {
     },
 }
 
+# Visitas (`sessions`) por grupo de canal padrão da GA4
+# (`sessionDefaultChannelGroup`), no período atual de cada tamanho, para a
+# Origem do público (#818). A GA4 fala inglês e tem mais grupos que as origens
+# da Central, e os termos crus "(not set)" e "(other)".
+VISITAS_POR_CANAL_NA_GA4: dict[tuple[str, str], dict[str, int]] = {
+    # 28 dias, 9.410 Visitas: busca 5.700; direto 1.800; redes 520 + 280 = 800;
+    # anúncios 500 + 250 = 750; Outros 300 + 20 = 320 ("Referral" e "(not set)");
+    # Não identificado 30 + 10 = 40 ("Unassigned" e "(other)").
+    ("2026-08-21", "2026-09-17"): {
+        "Organic Search": 5700,
+        "Direct": 1800,
+        "Organic Social": 520,
+        "Paid Social": 280,
+        "Paid Search": 500,
+        "Display": 250,
+        "Referral": 300,
+        "(not set)": 20,
+        "Unassigned": 30,
+        "(other)": 10,
+    },
+    # 7 dias: o direto na frente da busca, e nada de resto.
+    ("2026-09-11", "2026-09-17"): {"Direct": 900, "Organic Search": 600},
+}
+
+# Quantas vezes cada evento aconteceu (`eventCount` por `eventName`), no período
+# atual de cada tamanho, para os Contatos gerados (#818). Os eventos de contato
+# que o Site dispara hoje são o "wa_click" (WhatsApp) e o "generate_lead" (Fale
+# Conosco); os outros eventos da GA4 só aparecem se o filtro do pedido deixar.
+EVENTOS_NA_GA4: dict[tuple[str, str], dict[str, int]] = {
+    ("2026-08-21", "2026-09-17"): {
+        "wa_click": 4514,
+        "generate_lead": 2272,
+        "page_view": 88000,
+        "session_start": 30000,
+    },
+    # 7 dias: ninguém enviou o Fale Conosco.
+    ("2026-09-11", "2026-09-17"): {"wa_click": 1100, "page_view": 20000},
+}
+
 # O limite da GA4: um `batchRunReports` leva de 1 a 5 relatórios.
 MAXIMO_DE_RELATORIOS_POR_LOTE = 5
 
@@ -411,7 +450,8 @@ class LoteDaGA4:
     GA4 respondeu.
 
     E as da #818, na mesma tela, acrescentadas no fim do `__init__`: as
-    Visitas por página (Áreas do site).
+    Visitas por página (Áreas do site) e por grupo de canal (Origem do
+    público), e os eventos filtrados por nome (Contatos gerados).
     """
 
     def __init__(self) -> None:
@@ -422,7 +462,9 @@ class LoteDaGA4:
         # As perguntas da #818: a tela pergunta tudo numa ida só, então o lote
         # de qualquer teste da tela precisa saber respondê-las.
         self.visitas_por_pagina = {faixa: dict(v) for faixa, v in VISITAS_POR_PAGINA_NA_GA4.items()}
-        self.perguntas += [self._visitas_por_pagina]
+        self.visitas_por_canal = {faixa: dict(v) for faixa, v in VISITAS_POR_CANAL_NA_GA4.items()}
+        self.eventos = {faixa: dict(v) for faixa, v in EVENTOS_NA_GA4.items()}
+        self.perguntas += [self._visitas_por_pagina, self._visitas_por_canal, self._eventos_filtrados_por_nome]
 
     def __call__(self, metodo: str, corpo: dict) -> dict | None:
         if metodo != "batchRunReports":
@@ -471,6 +513,39 @@ class LoteDaGA4:
         ):
             return None
         return relatorio_de_uma_dimensao("pagePath", "sessions", self.visitas_por_pagina.get(faixa, {}))
+
+    def _visitas_por_canal(self, pedido: dict) -> dict | None:
+        faixa = faixa_unica(pedido)
+        if (
+            faixa is None
+            or pedido.get("metrics") != [{"name": "sessions"}]
+            or pedido.get("dimensions") != [{"name": "sessionDefaultChannelGroup"}]
+        ):
+            return None
+        return relatorio_de_uma_dimensao(
+            "sessionDefaultChannelGroup", "sessions", self.visitas_por_canal.get(faixa, {})
+        )
+
+    def _eventos_filtrados_por_nome(self, pedido: dict) -> dict | None:
+        """`eventCount` por `eventName` num intervalo, com o filtro de lista
+        de nomes (`inListFilter`) aplicado como a GA4 aplica: só volta linha
+        de evento que está na lista. Pedido sem esse filtro exato não é esta
+        pergunta."""
+        faixas = pedido.get("dateRanges") or []
+        filtro = pedido.get("dimensionFilter") or {}
+        nomes = ((filtro.get("filter") or {}).get("inListFilter") or {}).get("values")
+        if (
+            len(faixas) != 1
+            or pedido.get("metrics") != [{"name": "eventCount"}]
+            or pedido.get("dimensions") != [{"name": "eventName"}]
+            or not isinstance(nomes, list)
+            or filtro != {"filter": {"fieldName": "eventName", "inListFilter": {"values": nomes}}}
+        ):
+            return None
+        eventos = self.eventos.get((faixas[0]["startDate"], faixas[0]["endDate"]), {})
+        return relatorio_de_uma_dimensao(
+            "eventName", "eventCount", {nome: n for nome, n in eventos.items() if nome in nomes}
+        )
 
 
 @pytest.fixture

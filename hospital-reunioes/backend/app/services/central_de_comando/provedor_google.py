@@ -633,3 +633,111 @@ def _visitas_por_area(relatorio: dict) -> dict[AreaDoSite, int]:
         if area is not None:
             visitas[area] += int(numero)
     return visitas
+
+
+OrigemDoPublico = Literal["busca", "direto", "redes", "anuncios", "outros", "nao-identificado"]
+
+# O grupo de canal padrão da GA4 (`sessionDefaultChannelGroup`) de cada Origem do
+# público, igual ao da Central antiga (`CHANNEL_FROM_GA4`). Grupo identificado
+# que não está aqui ("Referral", "Email") é Outros, e o nome vazio é Não
+# identificado: nenhum termo cru da GA4 chega à tela.
+_ORIGEM_DO_CANAL: dict[str, OrigemDoPublico] = {
+    "Organic Search": "busca",
+    "Direct": "direto",
+    "Organic Social": "redes",
+    "Paid Social": "redes",
+    "Paid Search": "anuncios",
+    "Display": "anuncios",
+    "Paid Shopping": "anuncios",
+    "Paid Video": "anuncios",
+    "Paid Other": "anuncios",
+    "Cross-network": "anuncios",
+    "Unassigned": "nao-identificado",
+    "(other)": "nao-identificado",
+}
+
+
+def origem_do_canal(canal: str) -> OrigemDoPublico:
+    """A Origem do público de um grupo de canal da GA4. Porte do `channelKey`
+    da Central antiga, com as mesmas três regras: o grupo do mapa vira a
+    origem dele; o nome vazio é Não identificado; qualquer outro grupo
+    (inclusive o "(not set)", que não está no mapa) é Outros."""
+    if canal in _ORIGEM_DO_CANAL:
+        return _ORIGEM_DO_CANAL[canal]
+    if canal == "":
+        return "nao-identificado"
+    return "outros"
+
+
+@dataclass(frozen=True)
+class VisitasNaOrigem:
+    origem: OrigemDoPublico
+    visitas: int
+
+
+def visitas_por_origem(periodo: Periodo, hoje: date) -> Pergunta[tuple[VisitasNaOrigem, ...]]:
+    """As Visitas do período em cada Origem do público.
+
+    As `sessions` da GA4 por `sessionDefaultChannelGroup`, como a Central
+    antiga (`getTrafficSources` e `mapTrafficSources`), somadas por origem.
+    Só as origens que apareceram na resposta, na ordem em que apareceram:
+    quem ordena para a tela é a tela.
+    """
+
+    def ler(relatorios: tuple[dict, ...]) -> tuple[VisitasNaOrigem, ...]:
+        (relatorio,) = relatorios
+        visitas: dict[OrigemDoPublico, int] = {}
+        for canal, numero in _linhas(relatorio):
+            origem = origem_do_canal(canal)
+            visitas[origem] = visitas.get(origem, 0) + int(numero)
+        return tuple(VisitasNaOrigem(origem, numero) for origem, numero in visitas.items())
+
+    corpo = {
+        "dateRanges": [_faixa_da_ga4(intervalo_atual(periodo, hoje))],
+        "metrics": [{"name": "sessions"}],
+        "dimensions": [{"name": "sessionDefaultChannelGroup"}],
+    }
+    return Pergunta(relatorios=(corpo,), ler=ler)
+
+
+CanalDeContato = Literal["agendar", "whatsapp", "fale-conosco", "telefone"]
+
+
+@dataclass(frozen=True)
+class CliquesNoCanal:
+    canal: CanalDeContato
+    cliques: int
+
+
+def cliques_de_contato(periodo: Periodo, hoje: date) -> Pergunta[tuple[CliquesNoCanal, ...]]:
+    """Os cliques do período nos canais de contato que a GA4 mede.
+
+    O `eventCount` da GA4 por `eventName`, filtrado pelos dois eventos que o
+    Site dispara (`GA4_EVENTO_WHATSAPP` e `GA4_EVENTO_FALE_CONOSCO`), como a
+    Central antiga (`getContactClicks` e `mapContactClicks`). O agendar entra
+    sempre com zero, porque o botão de marcar consulta ainda não dispara
+    evento, e a tela o lê como em construção; o telefone fica de fora, porque
+    ligação não é clique, e a tela o lê como não medido. Evento que não
+    aconteceu no período é zero, não ausência: a GA4 omite a linha dele.
+    """
+    whatsapp = settings.ga4_evento_whatsapp
+    fale_conosco = settings.ga4_evento_fale_conosco
+
+    def ler(relatorios: tuple[dict, ...]) -> tuple[CliquesNoCanal, ...]:
+        (relatorio,) = relatorios
+        por_evento = {evento: int(numero) for evento, numero in _linhas(relatorio)}
+        return (
+            CliquesNoCanal("agendar", 0),
+            CliquesNoCanal("whatsapp", por_evento.get(whatsapp, 0)),
+            CliquesNoCanal("fale-conosco", por_evento.get(fale_conosco, 0)),
+        )
+
+    corpo = {
+        "dateRanges": [_faixa_da_ga4(intervalo_atual(periodo, hoje))],
+        "metrics": [{"name": "eventCount"}],
+        "dimensions": [{"name": "eventName"}],
+        "dimensionFilter": {
+            "filter": {"fieldName": "eventName", "inListFilter": {"values": [whatsapp, fale_conosco]}},
+        },
+    }
+    return Pergunta(relatorios=(corpo,), ler=ler)

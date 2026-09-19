@@ -7,13 +7,28 @@ compartilhado (`cliente_da_central`). Dublados só o que é fronteira: quem est�
 logado, a rede do Google (`google_falso`, com o `lote_da_ga4` respondendo o
 `batchRunReports`) e os relógios da Central. As tabelas do que a GA4 "sabe"
 (`VISITAS_POR_PAGINA_NA_GA4`, `VISITAS_POR_CANAL_NA_GA4` e `EVENTOS_NA_GA4`,
-no apoio) foram contadas à mão, e é contra elas que as asserções conferem.
+no apoio) foram contadas à mão, e é contra elas que as asserções conferem: o
+Google de mentira só responde a pergunta certa (métrica, dimensão, intervalo e
+filtro), então o número só sai certo se o provedor perguntar certo.
+
+As regras de agrupamento e de rótulo são testadas também direto, sem rota
+(`area_da_pagina`, `origem_do_canal`, `ordenar_origens`, `canais_de_contato` e
+os catálogos), como o PRD pede para as regras puras.
+
+Porte dos testes de `src/lib/analytics` do repositório antigo que cabem nesta
+fatia: o catálogo das Áreas, o ranking (`getBranchRanking`), a Origem
+(`orderSources`, `getTrafficSources`), os Contatos (`montarCanais`,
+`getContacts`), os mapeadores (`mapTrafficSources` e o `sumMetric`) e as
+perguntas do provedor (`getVisitsByBranch`, `getTrafficSources`,
+`getContactClicks`), além do "serve do cache no segundo acesso" de cada um.
 """
 
 from __future__ import annotations
 
 import os
+import re
 import sys
+from pathlib import Path
 from typing import get_args
 
 import httpx
@@ -27,6 +42,7 @@ from central_de_comando_apoio import (  # noqa: E402
     cliente_da_central,
 )
 
+from app.config import settings  # noqa: E402
 from app.services.central_de_comando import dados_do_google, provedor_google  # noqa: E402
 
 pytestmark = pytest.mark.usefixtures("gate_e_limitador_zerados")
@@ -227,3 +243,393 @@ class TestCatalogoDasAreas:
         """O provedor agrupa as páginas e a tela dá o nome: as duas listas são
         a mesma, na mesma ordem, senão uma Área chegaria à tela sem nome."""
         assert list(get_args(provedor_google.AreaDoSite)) == list(dados_do_google.AREAS_DO_SITE)
+
+
+# ─── Origem do público ───────────────────────────────────────────────────────
+
+
+@pytest.mark.usefixtures("lote_da_ga4")
+class TestOrigemDoPublico:
+    def test_as_visitas_por_origem_com_rotulo_e_percentual_e_o_resto_no_fim(self):
+        """28 dias, 9.410 Visitas: os grupos de canal da GA4 somados em cada
+        Origem do público, as origens da maior para a menor e o resto (Outros
+        e Não identificado) sempre no fim. Os pontos percentuais somam 100."""
+        resposta = _dados_do_google("28d")
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["origem_do_publico"] == [
+            {"chave": "busca", "rotulo": "Busca no Google", "visitas": 5700, "percentual": 61},
+            {"chave": "direto", "rotulo": "Direto", "visitas": 1800, "percentual": 19},
+            {"chave": "redes", "rotulo": "Redes sociais", "visitas": 800, "percentual": 9},
+            {"chave": "anuncios", "rotulo": "Anúncios", "visitas": 750, "percentual": 8},
+            {"chave": "outros", "rotulo": "Outros", "visitas": 320, "percentual": 3},
+            {"chave": "nao-identificado", "rotulo": "Não identificado", "visitas": 40, "percentual": 0},
+        ]
+
+    def test_nunca_mostra_o_termo_cru_da_fonte(self):
+        """O "(not set)" e o "(other)" da GA4 chegam somados nos rótulos
+        gentis, como na Central antiga: nenhum termo técnico chega à tela."""
+        origem = _dados_do_google("28d").json()["origem_do_publico"]
+
+        for termo_da_fonte in ("(not set)", "(other)", "not set", "Unassigned", "Referral", "Organic Search"):
+            assert termo_da_fonte not in str(origem)
+
+    def test_a_ordem_e_a_do_periodo_escolhido(self):
+        """7 dias: o direto na frente da busca, e nada de resto."""
+        assert _dados_do_google("7d").json()["origem_do_publico"] == [
+            {"chave": "direto", "rotulo": "Direto", "visitas": 900, "percentual": 60},
+            {"chave": "busca", "rotulo": "Busca no Google", "visitas": 600, "percentual": 40},
+        ]
+
+    def test_o_resto_fica_no_fim_mesmo_quando_e_maior_que_as_origens(self, lote_da_ga4):
+        """Porte de "mantém Outros e Não identificado no fim, mesmo se
+        grandes" (`orderSources`)."""
+        lote_da_ga4.visitas_por_canal[_28_DIAS] = {
+            "Referral": 9999,
+            "Organic Search": 100,
+            "Unassigned": 5000,
+            "Direct": 200,
+        }
+
+        origem = _dados_do_google("28d").json()["origem_do_publico"]
+
+        assert [o["chave"] for o in origem] == ["direto", "busca", "outros", "nao-identificado"]
+
+    def test_grupos_da_mesma_origem_somam(self, lote_da_ga4):
+        """Porte de "mapeia para chaves canônicas, agrega e usa fallback"
+        (`mapTrafficSources`): as redes pagas e as orgânicas são as mesmas
+        redes, e o "Referral", que não está no mapa, é Outros."""
+        lote_da_ga4.visitas_por_canal[_28_DIAS] = {
+            "Organic Search": 100,
+            "Paid Social": 30,
+            "Organic Social": 20,
+            "Unassigned": 5,
+            "Referral": 8,
+        }
+
+        origem = _dados_do_google("28d").json()["origem_do_publico"]
+
+        assert [(o["chave"], o["visitas"]) for o in origem] == [
+            ("busca", 100),
+            ("redes", 50),
+            ("outros", 8),
+            ("nao-identificado", 5),
+        ]
+
+    def test_origem_sem_visita_nao_aparece(self, lote_da_ga4):
+        """A fatia vazia não vira barra: só entra origem com Visita."""
+        lote_da_ga4.visitas_por_canal[_7_DIAS] = {"Direct": 900, "Paid Search": 0, "Unassigned": 0}
+
+        origem = _dados_do_google("7d").json()["origem_do_publico"]
+
+        assert [(o["chave"], o["percentual"]) for o in origem] == [("direto", 100)]
+
+    def test_periodo_sem_visita_nenhuma_nao_tem_origem_nenhuma(self):
+        """90 dias: a GA4 respondeu que ninguém veio. Lista vazia, e a tela
+        diz que não há dado de origem, sem barra de zeros."""
+        assert _dados_do_google("90d").json()["origem_do_publico"] == []
+
+
+class TestOrigemDoCanal:
+    """A regra pura de grupo de canal da GA4 para Origem do público, direto,
+    sem rota. O mapa é o da Central antiga, grupo por grupo."""
+
+    @pytest.mark.parametrize(
+        ("canal", "origem"),
+        [
+            ("Organic Search", "busca"),
+            ("Direct", "direto"),
+            ("Organic Social", "redes"),
+            ("Paid Social", "redes"),
+            ("Paid Search", "anuncios"),
+            ("Display", "anuncios"),
+            ("Paid Shopping", "anuncios"),
+            ("Paid Video", "anuncios"),
+            ("Paid Other", "anuncios"),
+            ("Cross-network", "anuncios"),
+            ("Unassigned", "nao-identificado"),
+            ("(other)", "nao-identificado"),
+            ("", "nao-identificado"),
+        ],
+    )
+    def test_o_grupo_do_mapa_vira_a_origem_dele(self, canal, origem):
+        assert provedor_google.origem_do_canal(canal) == origem
+
+    @pytest.mark.parametrize("canal", ["Referral", "Email", "Organic Video", "Affiliates", "SMS", "(not set)"])
+    def test_grupo_identificado_fora_do_mapa_e_outros(self, canal):
+        """Como na Central antiga: o "(not set)" não está no mapa e não é o
+        nome vazio, então é Outros (e não Não identificado)."""
+        assert provedor_google.origem_do_canal(canal) == "outros"
+
+    def test_toda_origem_tem_rotulo_na_tela(self):
+        assert list(get_args(provedor_google.OrigemDoPublico)) == list(dados_do_google.ROTULO_DA_ORIGEM)
+
+
+class TestOrdenarOrigens:
+    """A ordem da Origem do público, direto (`orderSources`)."""
+
+    def test_o_resto_no_fim_na_ordem_outros_e_nao_identificado(self):
+        origens = [
+            provedor_google.VisitasNaOrigem("outros", 9999),
+            provedor_google.VisitasNaOrigem("busca", 100),
+            provedor_google.VisitasNaOrigem("nao-identificado", 5000),
+            provedor_google.VisitasNaOrigem("direto", 200),
+        ]
+
+        assert [o.origem for o in dados_do_google.ordenar_origens(origens)] == [
+            "direto",
+            "busca",
+            "outros",
+            "nao-identificado",
+        ]
+
+    def test_no_empate_vale_a_ordem_em_que_chegaram(self):
+        origens = [
+            provedor_google.VisitasNaOrigem("redes", 800),
+            provedor_google.VisitasNaOrigem("anuncios", 800),
+            provedor_google.VisitasNaOrigem("busca", 800),
+        ]
+
+        assert [o.origem for o in dados_do_google.ordenar_origens(origens)] == ["redes", "anuncios", "busca"]
+
+
+# ─── Contatos gerados ────────────────────────────────────────────────────────
+
+
+@pytest.mark.usefixtures("lote_da_ga4")
+class TestContatosGerados:
+    def test_os_quatro_canais_com_o_estado_honesto_de_cada_um(self):
+        """28 dias: o WhatsApp e o Fale Conosco medidos pelos eventos que o
+        Site dispara; o agendar em construção (o botão ainda não dispara
+        evento) e o telefone não medido (ligação não é clique). Nenhum dos dois
+        traz número: nem zero."""
+        resposta = _dados_do_google("28d")
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["contatos_gerados"] == [
+            {"chave": "agendar", "rotulo": "Cliques para agendar", "estado": "em-construcao"},
+            {"chave": "whatsapp", "rotulo": "WhatsApp", "estado": "medido", "cliques": 4514},
+            {"chave": "fale-conosco", "rotulo": "Fale Conosco", "estado": "medido", "cliques": 2272},
+            {"chave": "telefone", "rotulo": "Telefone", "estado": "nao-medido"},
+        ]
+
+    def test_canal_medido_sem_clique_no_periodo_fica_em_construcao_e_nao_mostra_zero(self):
+        """7 dias: ninguém enviou o Fale Conosco, e a GA4 não devolve linha
+        para ele. Como na Central antiga, o zero de um canal medido não é
+        mostrado como resultado: o canal fica em construção."""
+        contatos = _dados_do_google("7d").json()["contatos_gerados"]
+
+        assert [(c["chave"], c["estado"], c.get("cliques")) for c in contatos] == [
+            ("agendar", "em-construcao", None),
+            ("whatsapp", "medido", 1100),
+            ("fale-conosco", "em-construcao", None),
+            ("telefone", "nao-medido", None),
+        ]
+
+    def test_periodo_sem_clique_nenhum_nao_inventa_numero(self):
+        """90 dias: a GA4 respondeu que nenhum evento de contato aconteceu.
+        Nenhum canal traz número, nem zero."""
+        contatos = _dados_do_google("90d").json()["contatos_gerados"]
+
+        assert [c["estado"] for c in contatos] == ["em-construcao", "em-construcao", "em-construcao", "nao-medido"]
+        assert all("cliques" not in c for c in contatos)
+
+    def test_os_eventos_contados_sao_os_da_configuracao(self, monkeypatch, lote_da_ga4):
+        """O nome de cada evento vem de `GA4_EVENTO_WHATSAPP` e
+        `GA4_EVENTO_FALE_CONOSCO`: se o Site trocar o nome, troca-se a
+        variável, e o evento com o nome antigo deixa de contar."""
+        monkeypatch.setattr(settings, "ga4_evento_whatsapp", "clique_no_whatsapp")
+        monkeypatch.setattr(settings, "ga4_evento_fale_conosco", "envio_do_formulario")
+        lote_da_ga4.eventos[_28_DIAS] = {"clique_no_whatsapp": 77, "envio_do_formulario": 5, "wa_click": 4514}
+
+        contatos = _dados_do_google("28d").json()["contatos_gerados"]
+
+        assert [(c["chave"], c.get("cliques")) for c in contatos] == [
+            ("agendar", None),
+            ("whatsapp", 77),
+            ("fale-conosco", 5),
+            ("telefone", None),
+        ]
+
+
+class TestCanaisDeContato:
+    """A regra pura dos estados dos Contatos gerados, direto, sem rota. Porte
+    dos testes de `montarCanais` da Central antiga."""
+
+    def test_os_quatro_canais_na_ordem_da_tela(self):
+        assert [c["chave"] for c in dados_do_google.canais_de_contato({})] == [
+            "agendar",
+            "whatsapp",
+            "fale-conosco",
+            "telefone",
+        ]
+
+    def test_canal_medido_com_zero_clique_fica_em_construcao_e_nao_medido_com_zero(self):
+        (agendar, *_) = dados_do_google.canais_de_contato({"agendar": 0})
+
+        assert agendar == {"chave": "agendar", "rotulo": "Cliques para agendar", "estado": "em-construcao"}
+
+    def test_canal_com_clique_e_medido_com_o_numero(self):
+        (agendar, *_) = dados_do_google.canais_de_contato({"agendar": 42})
+
+        assert agendar == {"chave": "agendar", "rotulo": "Cliques para agendar", "estado": "medido", "cliques": 42}
+
+    def test_canal_que_a_ga4_nao_mede_e_nao_medido_sem_numero(self):
+        _, whatsapp, _, telefone = dados_do_google.canais_de_contato({"agendar": 42})
+
+        assert whatsapp == {"chave": "whatsapp", "rotulo": "WhatsApp", "estado": "nao-medido"}
+        assert telefone == {"chave": "telefone", "rotulo": "Telefone", "estado": "nao-medido"}
+
+    def test_todo_canal_tem_nome_na_tela(self):
+        assert list(get_args(provedor_google.CanalDeContato)) == list(dados_do_google.ROTULO_DO_CONTATO)
+
+
+# ─── A tela: mesmo payload, mesma chave de cache, mesmo Atualizar agora ──────
+
+
+@pytest.mark.usefixtures("lote_da_ga4")
+class TestNaMesmaTela:
+    """Decisão da triagem (18/09/2026): os três blocos entram no payload e na
+    chave de cache da tela Dados do Google, sem rota nova, e o frescor e o
+    Atualizar agora da tela valem para eles."""
+
+    def test_o_payload_da_tela_traz_os_blocos_de_antes_os_tres_novos_e_o_frescor(self, relogio_da_central):
+        """Porte de "monta todos os painéis e o frescor agregado"
+        (`google-data-screen.test.ts`)."""
+        corpo = _dados_do_google("28d").json()
+
+        assert set(corpo) == {
+            "periodo",
+            "movimento",
+            "dispositivos",
+            "areas_do_site",
+            "origem_do_publico",
+            "contatos_gerados",
+            "frescor",
+        }
+        assert corpo["frescor"] == {
+            "atualizado_em": "2026-09-18T13:45:00+00:00",
+            "atualizacao_falhou": False,
+            "motivo": None,
+        }
+
+    def test_a_segunda_leitura_dentro_da_hora_serve_os_tres_blocos_do_cache(
+        self, google_falso, lote_da_ga4, relogio_da_central
+    ):
+        """Porte de "serve do cache no segundo acesso ao mesmo período" do
+        ranking, da origem e dos contatos da Central antiga."""
+        cliente = cliente_da_central(SUPER_ADMIN)
+        primeira = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"}).json()
+        idas_da_primeira = len(google_falso.pedidos)
+        _mudar_os_tres_blocos_na_ga4(lote_da_ga4)
+        relogio_da_central.avancar(minutes=59)
+
+        segunda = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"}).json()
+
+        assert segunda == primeira
+        assert len(google_falso.pedidos) == idas_da_primeira
+
+    def test_o_atualizar_agora_da_tela_renova_os_tres_blocos(self, lote_da_ga4, relogio_da_central):
+        """O Atualizar agora é o da rota genérica da #815, sem rota nova: vai à
+        GA4 mesmo dentro da hora e traz os três blocos novos, com o carimbo
+        novo."""
+        cliente = cliente_da_central(SUPER_ADMIN)
+        cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"})
+        _mudar_os_tres_blocos_na_ga4(lote_da_ga4)
+        relogio_da_central.avancar(minutes=5)
+
+        resposta = cliente.post(
+            f"{PREFIXO_DA_CENTRAL}/atualizar-agora", params={"tela": "dados-do-google", "periodo": "28d"}
+        )
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert corpo["areas_do_site"][0]["chave"] == "centro-medico"
+        assert corpo["areas_do_site"][0]["visitas"] == 9000
+        assert [(o["chave"], o["percentual"]) for o in corpo["origem_do_publico"]] == [("redes", 100)]
+        assert corpo["contatos_gerados"][1] == {
+            "chave": "whatsapp",
+            "rotulo": "WhatsApp",
+            "estado": "medido",
+            "cliques": 1,
+        }
+        assert corpo["frescor"]["atualizado_em"] == "2026-09-18T13:50:00+00:00"
+
+    def test_google_fora_com_numero_guardado_mostra_os_tres_blocos_de_antes(self, google_falso, relogio_da_central):
+        """A tela nunca zera por causa de uma falha: o último valor bom inclui
+        os três blocos, e o frescor diz que a atualização falhou."""
+        cliente = cliente_da_central(SUPER_ADMIN)
+        antes = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"}).json()
+        relogio_da_central.avancar(hours=2)
+        google_falso.forcar = httpx.Response(503, json={"error": {"code": 503, "status": "UNAVAILABLE"}})
+
+        resposta = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"})
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        for bloco in ("areas_do_site", "origem_do_publico", "contatos_gerados"):
+            assert corpo[bloco] == antes[bloco]
+        assert corpo["frescor"]["atualizacao_falhou"] is True
+
+    def test_um_lote_que_falha_derruba_a_tela_inteira_sem_bloco_pela_metade(self, lote_da_ga4):
+        """Os 7 relatórios vão em dois lotes. Se a GA4 recusar o lote dos
+        Contatos gerados, a tela é 502 com a frase, e não um payload com os
+        blocos do outro lote e um buraco (ou um zero) no lugar dos contatos.
+        A tela é tudo ou nada até a #821."""
+        lote_da_ga4.perguntas.remove(lote_da_ga4._eventos_filtrados_por_nome)
+
+        resposta = _dados_do_google("28d")
+
+        assert resposta.status_code == 502
+        assert set(resposta.json()) == {"detail"}
+        assert "HTTP 400" in resposta.json()["detail"]
+
+
+def _mudar_os_tres_blocos_na_ga4(lote_da_ga4) -> None:
+    """A GA4 passa a responder outra coisa nos três blocos, nos 28 dias."""
+    lote_da_ga4.visitas_por_pagina[_28_DIAS] = {"/centro-medico/": 9000}
+    lote_da_ga4.visitas_por_canal[_28_DIAS] = {"Organic Social": 10}
+    lote_da_ga4.eventos[_28_DIAS] = {"wa_click": 1}
+
+
+# ─── O nome novo e nenhum vínculo com a taxonomia de Setores ─────────────────
+
+_RAIZ_DO_BACKEND = Path(__file__).resolve().parent.parent
+
+# O código da Central no backend: o pacote de serviços e o router.
+_CODIGO_DA_CENTRAL = [
+    *sorted((_RAIZ_DO_BACKEND / "app" / "services" / "central_de_comando").glob("*.py")),
+    _RAIZ_DO_BACKEND / "app" / "routers" / "admin" / "central_de_comando.py",
+]
+
+# O nome antigo da Área do site, com e sem cedilha, no singular e no plural.
+_NOME_ANTIGO = re.compile(r"bra[cç]os?\b", re.IGNORECASE)
+
+
+class TestVocabulario:
+    def test_a_varredura_acha_o_codigo_da_central(self):
+        """Sem isto, varrer nada passaria em tudo."""
+        nomes = {arquivo.name for arquivo in _CODIGO_DA_CENTRAL}
+
+        assert {"provedor_google.py", "dados_do_google.py", "central_de_comando.py"} <= nomes
+
+    def test_o_nome_antigo_da_area_do_site_nao_aparece_no_codigo_nem_no_payload(self, lote_da_ga4):
+        """ADR 0058, decisão 7: a Área do site tem o nome novo em toda a
+        interface e no código."""
+        culpados = [a.name for a in _CODIGO_DA_CENTRAL if _NOME_ANTIGO.search(a.read_text(encoding="utf-8"))]
+
+        assert culpados == []
+        assert not _NOME_ANTIGO.search(_dados_do_google("28d").text)
+
+    def test_as_areas_do_site_nao_tem_vinculo_com_a_taxonomia_de_setores(self):
+        """O catálogo das Áreas mora no código da Central e não lê nem importa
+        Setor nenhum. A leitura de tabela também está trancada: o Supabase de
+        mentira do `cliente_da_central` só conhece a tabela do gate."""
+        importa_setores = [
+            arquivo.name
+            for arquivo in _CODIGO_DA_CENTRAL
+            for linha in arquivo.read_text(encoding="utf-8").splitlines()
+            if linha.lstrip().startswith(("import ", "from ")) and re.search(r"setor|taxonomia", linha, re.IGNORECASE)
+        ]
+
+        assert importa_setores == []

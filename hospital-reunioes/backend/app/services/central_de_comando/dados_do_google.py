@@ -13,11 +13,19 @@ Um bloco da tela, uma chave do payload:
   cada um ao lado do dia correspondente do período anterior.
 - `dispositivos`: as Visitas por dispositivo (celular, computador, tablet), com
   o rótulo da tela e a fatia de cada um em pontos percentuais que somam 100.
+- `areas_do_site` (#818): o ranking das cinco Áreas do site por Visitas, com o
+  nome, o que cada uma reúne e a comparação com o período anterior.
+- `origem_do_publico` (#818): as Visitas por Origem do público, com o rótulo
+  gentil e a fatia de cada uma; Outros e Não identificado sempre no fim.
+- `contatos_gerados` (#818): os quatro canais de contato, cada um com o estado
+  honesto (medido, em construção, não medido); só o medido traz número.
 
 Todos os números da tela saem de UMA ida à GA4 (`provedor_google.perguntar`,
 pelo `batchRunReports`). A #818 acrescenta os blocos dela (Áreas do site,
 Origem do público e Contatos gerados) aqui mesmo: uma pergunta a mais no
 `perguntar` e uma chave a mais no payload, na mesma chave de cache.
+Com eles, a tela pede 7 relatórios, que vão em dois lotes ao mesmo tempo (a
+GA4 leva até 5 por lote): a tela continua esperando a GA4 uma vez só.
 
 O `frescor` não é bloco daqui: quem o acrescenta é a leitura pelo cache
 (`telas.py`, issue #815), porque ele diz de quando é o payload inteiro. E a
@@ -27,6 +35,7 @@ sobe daqui como exceção do provedor.
 
 from __future__ import annotations
 
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 from app.services.central_de_comando import periodo as periodos
@@ -47,16 +56,20 @@ def montar(periodo: Periodo) -> dict:
     provedor, e a rota a traduz em 502 ou 503: nunca um payload com zero no
     lugar."""
     hoje = periodos.hoje_utc()
-    movimento, dispositivos, areas = provedor_google.perguntar(
+    movimento, dispositivos, areas, origens, contatos = provedor_google.perguntar(
         provedor_google.movimento_diario(periodo, hoje),
         provedor_google.visitas_por_dispositivo(periodo, hoje),
         provedor_google.visitas_por_area_do_site(periodo, hoje),
+        provedor_google.visitas_por_origem(periodo, hoje),
+        provedor_google.cliques_de_contato(periodo, hoje),
     )
     return {
         "periodo": _bloco_periodo(periodo, movimento),
         "movimento": _bloco_movimento(movimento),
         "dispositivos": _bloco_dispositivos(dispositivos),
         "areas_do_site": _bloco_areas_do_site(areas),
+        "origem_do_publico": _bloco_origem_do_publico(origens),
+        "contatos_gerados": canais_de_contato({contato.canal: contato.cliques for contato in contatos}),
     }
 
 
@@ -164,3 +177,83 @@ def _bloco_areas_do_site(areas: tuple[provedor_google.VisitasNaArea, ...]) -> li
         }
         for area in ranking
     ]
+
+
+# O nome de cada Origem do público na tela, os da Central antiga. Os dois do fim
+# são os rótulos gentis do que o Google não classificou: a tela nunca mostra o
+# termo cru da fonte.
+ROTULO_DA_ORIGEM: dict[provedor_google.OrigemDoPublico, str] = {
+    "busca": "Busca no Google",
+    "direto": "Direto",
+    "redes": "Redes sociais",
+    "anuncios": "Anúncios",
+    "outros": "Outros",
+    "nao-identificado": "Não identificado",
+}
+
+# O resto: sempre no fim da lista, nesta ordem, qualquer que seja o tamanho.
+_RESTO: tuple[provedor_google.OrigemDoPublico, ...] = ("outros", "nao-identificado")
+
+
+def ordenar_origens(origens: list[provedor_google.VisitasNaOrigem]) -> list[provedor_google.VisitasNaOrigem]:
+    """A ordem da Origem do público na tela. Porte do `orderSources` da
+    Central antiga: as origens da mais visitada para a menos (no empate, a
+    ordem em que chegaram) e o resto sempre no fim, Outros e depois Não
+    identificado, mesmo quando é maior que uma origem."""
+
+    def lugar(origem: provedor_google.VisitasNaOrigem) -> tuple[int, int]:
+        if origem.origem in _RESTO:
+            return 1 + _RESTO.index(origem.origem), -origem.visitas
+        return 0, -origem.visitas
+
+    return sorted(origens, key=lugar)
+
+
+def _bloco_origem_do_publico(origens: tuple[provedor_google.VisitasNaOrigem, ...]) -> list[dict]:
+    """As barras da Origem do público: só as origens com Visita no período, na
+    ordem da tela, cada uma com o rótulo e a fatia em pontos percentuais que,
+    juntos, somam 100."""
+    com_visita = ordenar_origens([origem for origem in origens if origem.visitas > 0])
+    fatias = percentuais_que_somam_100([origem.visitas for origem in com_visita])
+    return [
+        {
+            "chave": origem.origem,
+            "rotulo": ROTULO_DA_ORIGEM[origem.origem],
+            "visitas": origem.visitas,
+            "percentual": fatia,
+        }
+        for origem, fatia in zip(com_visita, fatias, strict=True)
+    ]
+
+
+# Os canais de contato, na ordem da tela, com o nome de cada um: os da Central
+# antiga (lá o Fale Conosco se chamava "leads" por dentro).
+ROTULO_DO_CONTATO: dict[provedor_google.CanalDeContato, str] = {
+    "agendar": "Cliques para agendar",
+    "whatsapp": "WhatsApp",
+    "fale-conosco": "Fale Conosco",
+    "telefone": "Telefone",
+}
+
+
+def canais_de_contato(medidos: Mapping[provedor_google.CanalDeContato, int]) -> list[dict]:
+    """Os Contatos gerados, um item por canal, na ordem da tela, cada um com
+    o estado honesto dele. Porte do `montarCanais` da Central antiga:
+
+    - canal que a GA4 não mede (ausente de `medidos`) é **não medido**;
+    - canal medido com zero clique é **em construção**: o Site ainda não avisa
+      a GA4 quando ele acontece, e o zero não é resultado;
+    - canal com clique é **medido**, e só ele traz `cliques`.
+
+    Em construção e não medido nunca trazem número, nem zero.
+    """
+    canais: list[dict] = []
+    for canal, rotulo in ROTULO_DO_CONTATO.items():
+        cliques = medidos.get(canal)
+        if cliques is None:
+            canais.append({"chave": canal, "rotulo": rotulo, "estado": "nao-medido"})
+        elif cliques == 0:
+            canais.append({"chave": canal, "rotulo": rotulo, "estado": "em-construcao"})
+        else:
+            canais.append({"chave": canal, "rotulo": rotulo, "estado": "medido", "cliques": cliques})
+    return canais
