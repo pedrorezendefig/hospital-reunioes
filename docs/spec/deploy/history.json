@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-18T21:05:29-03:00",
+      "sha": "214e0d72",
+      "app_version": "0.144.0",
+      "subject": "A Central de Comando chega dormente, com guard de Super admin e Visitantes reais do GA4",
+      "raw_subject": "feat(central): seção dormente, guard de Super admin e Visitantes do GA4 (#814) (#830)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 462,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 do PRD #809 (ADR 0058). Sem migration. Critério da credencial real conferido com OK do humano: Visitantes idênticos à Central antiga em 7, 28 e 90 dias. Gates 2.6 e 2.8 não verificáveis: o token do CLI do Coolify não revela valores."
+    },
+    {
       "at": "2026-09-17T19:56:00-03:00",
       "sha": "f7e6e92e",
       "app_version": "0.143.0",
@@ -1440,34 +1472,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 1 de 3 desta sessao. Duas issues do PRD #469. A #513 tirou a formatacao duplicada do vencimento: _formatar_vencimento era privada de ouvidoria_notificacoes.py e virou formatar_vencimento em ouvidoria_prazos.py, com os 8 call sites do email e a tela do portal consumindo a MESMA funcao. A rota do token passou a devolver vencimento_formatado. Tres decisoes que valem lembrar. Primeira, a fixture do page.test.tsx MENTIA: cravava rotulo_prazo 'vence amanha as 17h', frase que rotular_vencimento nunca produz, e era ela que fazia a tela parecer cumprir a historia 2 do PRD #469. Teste vacuo classico, so caiu porque o autor rodou mutacao. Segunda, calendario de feriados ilegivel agora tira so a contagem regressiva e mantem a data; antes a frase inteira sumia e quem tinha que responder ficava sem prazo nenhum na tela (issue #449). Terceira, vencimento_formatado tambem viaja no payload do painel da Ouvidoria, onde nenhuma tela le ainda, de proposito, para nao criar uma segunda saida so para o portal. A #514 foi so documentacao: ratificou no ADR 0041 que no caso anonimo o anonimato pesa mais que a RN-78, alinhou o verbete do CONTEXT.md e corrigiu DOIS pontos do comentario da migration 068 (a issue apontava so o COMMENT ON COLUMN, mas o cabecalho repetia a mesma frase errada). Nenhum SQL executavel mudou, confirmado byte a byte pelo revisor."
-    },
-    {
-      "at": "2026-09-03T10:05:00-03:00",
-      "sha": "da5b508",
-      "app_version": "0.107.0",
-      "subject": "Onda 4 do PRD #471, a ultima: caixa alta so em rotulo curto nas telas da Ouvidoria",
-      "raw_subject": "feat(ouvidoria): caixa alta só em rótulo curto nas telas do módulo (#548)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 225,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "1 fatia, 1 PR, 3 rodadas de revisao, 4 must-fix. Fecha o PRD #471 com 9 de 9. O achado que mais rende: o teste da barra mentiu TRES vezes de tres jeitos, cada versao mais esperta e cada uma com uma porta (substring, depois primeiro casamento com .find(), agora exatamente um cancelador). A familia do erro ficou escrita no comentario da funcao. O orcamento de largura media uma tela que nao existe, ignorando o sidebar de 256px, e ficava verde afirmando que cabia algo que transbordava 200px. Com o numero certo a barra nao cabia no md e foi para o lg, o que expos um gatilho de 20px de alvo virando a unica navegacao do tablet."
     }
   ]
 }

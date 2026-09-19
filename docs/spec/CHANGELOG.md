@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.144.0 - 2026-09-18 21:05 - a Central de Comando chega dormente, com guard de Super admin e Visitantes reais do GA4
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `214e0d7`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (462s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/214e0d7
+
 ## v0.143.0 - 2026-09-17 19:56 - o QR pergunta de quem é o relato e o Dossiê mostra o paciente
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `f7e6e92`
