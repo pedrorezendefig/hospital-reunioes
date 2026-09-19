@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-19T07:23:01-03:00",
+      "sha": "62f47174",
+      "app_version": "0.146.0",
+      "subject": "A Central ganha a tela Dados do Google, com Visitantes por dia e dispositivos",
+      "raw_subject": "feat(central): Dados do Google com Visitantes por dia e dispositivos (#817) (#832)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 273,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 3 do PRD #809 (ADR 0058). Sem migration. Números conferidos com a credencial real e OK do humano: idênticos à Central antiga dia a dia em 7, 28 e 90 dias. Duas revisões limpas. Gates 2.6 e 2.8 não verificáveis (token do CLI)."
+    },
+    {
       "at": "2026-09-19T06:27:31-03:00",
       "sha": "7395016c",
       "app_version": "0.145.0",
@@ -1446,35 +1478,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 3 de 3, e a unica sem mudanca no codigo da app: por isso sem bump, a versao segue 0.107.2. O merge disparou rebuild pelo webhook do mesmo jeito, porque o Coolify rebuilda tudo a cada push. A #549 emendou a decisao 1 do PRD #471 e criou o verbete Semaforo de prazo no CONTEXT.md: a regua de cor do prazo e propria, nao e a paleta de gravidade. O revisor provou a tese pela origem dos valores (#B3261E e #C77700 so existem em FAIXAS_GRAVIDADE, sob o comentario da RN-34; o semaforo de prazo nunca usou hex) e recuperou por GraphQL a versao anterior do corpo do PRD para confirmar que a edicao ao vivo mudou UMA linha e nao perdeu nenhuma das 8 secoes, 18 historias e 9 fatias. A #542 e a mais instrutiva da sessao. O snapshot.py enumerava rotas por app.routes, e no FastAPI 0.141 isso devolve ZERO: o ROTAS.md sairia vazio a cada deploy. A troca para app.openapi() devolve as mesmas 192 rotas nas duas versoes. O que quase escapou nao foi a contagem. A primeira tentativa do autor filtrava por isinstance e ficou com 192 rotas e ZERO gates require_, ou seja documentacao afirmando que a app inteira e aberta; ele mesmo pegou. Na revisao o mesmo estado se mostrou ainda alcancavel por dois caminhos que saiam com codigo 0, porque o piso de sanidade contava ROTAS e nao METADADOS. Corrigido: o piso passou a exigir tambem as rotas com module, e o snapshot interrompe a geracao sem escrever nem commitar. Terceira rodada de revisao (uma a mais que o teto do ADR 0035) por dois defeitos de duas linhas: um teste que so passava por efeito colateral do cache do app.openapi() deixado por outro teste do mesmo arquivo, e um travessao numa linha nova do SKILL.md. O orquestrador conferiu na main mergeada: 192 rotas, 192 com module, 134 com require_."
-    },
-    {
-      "at": "2026-09-03T14:55:00-03:00",
-      "sha": "94072c1",
-      "app_version": "0.107.2",
-      "subject": "Teto de 10.000 caracteres na justificativa da prorrogacao, e quem manifestou vira o decimo elemento da RN-59",
-      "raw_subject": "fix(ouvidoria): quem manifestou vira o décimo elemento da RN-59 e o aviso sai inteiro nas duas versões do email (#556)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 760,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 de 3. Duas issues avulsas da ouvidoria, as duas no portal do setor. A #510 tinha tres itens e so o item 2 virou codigo: o teto de 10.000 na justificativa da prorrogacao, no molde do relato e da resposta da area (#482). O item 3 foi recusado por decisao humana da triagem de 02/09 e a recusa esta registrada no corpo do PR. O que salva esta issue e a PRIMEIRA versao dela, que foi derrubada pelo proprio autor no gate de spec x diff: ela aplicava o teto por Field(max_length) do pydantic, e o 422 do pydantic tem detail como LISTA DE OBJETOS. O portal faz setErroDoPedido(mensagemDoPortal(res.status, body.detail)) e renderiza {erroDoPedido} como filho de JSX, entao objeto ali derruba a pagina inteira e leva junto a justificativa ja digitada. Era alcancavel de verdade, porque o textarea nao tem maxLength e a validacao do cliente so exige texto nao vazio: o teto seria o primeiro 422 de fato alcancavel naquele formulario. Guarda-corpo virando indisponibilidade, o padrao do PR #533. A versao final move a regra para o servico e a recusa sai como frase; o revisor confirmou que o unico Field que sobrou (dias_uteis) nao e alcancavel pela tela. A #511 nomeou quem manifestou como decimo elemento da RN-59 e tirou a frase de orientacao sobre autoria de dentro do template HTML, embutindo-a nas constantes AVISO_SIGILO e AVISO_ANONIMO. De quebra desfez uma duplicacao de guarda: _identificacao vivia privada em ouvidoria_notificacoes.py com sigilo_reforcado or anonimo, que e caso_protegido reescrito com outras palavras. O revisor de seguranca montou a tabela verdade das quatro combinacoes e confirmou 4 de 4, e confirmou tambem que a rota do token devolve identificacao null no JSON para anonimo e sigiloso, montada campo a campo, nao ocultacao no React. O revisor de codigo devolveu dois must-fix, os dois de contagem: o CONTEXT.md enumerava onze itens e escrevia dez, e sobrou um comentario dizendo nove num teste que compara dez. Corrigidos numa rodada de texto puro."
     }
   ]
 }

@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.146.0 - 2026-09-19 07:23 - a Central ganha a tela Dados do Google, com Visitantes por dia e dispositivos
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `62f4717`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (273s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/62f4717
+
 ## v0.145.0 - 2026-09-19 06:27 - os números da Central ganham frescor: cache de 1 hora, Atualizar agora e último valor bom
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `7395016`
