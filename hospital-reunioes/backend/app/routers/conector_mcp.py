@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import logging
 
+import anyio.to_thread
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import JSONResponse, Response
 
@@ -59,7 +60,9 @@ async def transporte_mcp(request: Request, supabase=Depends(get_supabase_client)
 
     token = _bearer(request)
     try:
-        conector_mcp.autorizar(token, supabase, cfg)
+        # O `autorizar` faz I/O síncrono (JWKS e banco); roda em thread para não
+        # travar o event loop, no mesmo molde da leitura do Google no Ao vivo.
+        await anyio.to_thread.run_sync(conector_mcp.autorizar, token, supabase, cfg)
     except conector_mcp.AcessoNegadoMCPError as exc:
         logger.info("[ConectorMCP] acesso negado: %s", exc)
         return JSONResponse(

@@ -147,11 +147,11 @@ def mcp_configurado(monkeypatch) -> conector_mcp.ConfiguracaoMCP:
 def jwks_no_emissor(monkeypatch, chave_do_emissor) -> dict:
     """Dubla a única ida de rede da verificação: o `_buscar_jwks` devolve o JWKS
     da chave de teste, e o cache nasce e morre vazio."""
-    conector_mcp._JWKS_CACHE.clear()
+    conector_mcp._jwks_cache.clear()
     jwks = jwks_de(chave_do_emissor)
     monkeypatch.setattr(conector_mcp, "_buscar_jwks", lambda _uri: jwks)
     yield jwks
-    conector_mcp._JWKS_CACHE.clear()
+    conector_mcp._jwks_cache.clear()
 
 
 # ─── 1. Configuração ausente: erro de config, nunca porta aberta ─────────────
@@ -476,6 +476,21 @@ class TestTransporteRecusaCom401:
 
         assert resposta.status_code == 401
 
+    def test_jwks_indisponivel_e_401_nao_500(self, monkeypatch, chave_do_emissor):
+        """JWKS fora do ar é falha de autorização, não erro do servidor: qualquer
+        falha é 401 (fail-closed), nunca um 500 que vaze rastro interno."""
+
+        def _falha(_uri):
+            raise RuntimeError("emissor fora do ar")
+
+        conector_mcp._jwks_cache.clear()
+        monkeypatch.setattr(conector_mcp, "_buscar_jwks", _falha)
+
+        resposta = _rpc(_cliente_mcp(), INIT, token(chave_do_emissor))
+
+        assert resposta.status_code == 401
+        assert "resource_metadata=" in resposta.headers["www-authenticate"]
+
     def test_email_sem_participante_e_401(self, chave_do_emissor):
         resposta = _rpc(_cliente_mcp([SUPER_ADMIN]), INIT, token(chave_do_emissor, email="ninguem@hsm.com"))
 
@@ -533,12 +548,17 @@ class TestForaDoGateDeSessao:
         return acc
 
     def _rotas_do_conector(self):
+        """As rotas pelo próprio router, não por `app.routes`: desde o FastAPI
+        0.141 o `include_router` guarda o router incluído em vez de copiar as
+        rotas para cima, e `app.routes` volta sem APIRoute de router (o venv
+        local está na 0.136, o CI na nova; isto vale nas duas). Que elas cheguem
+        ao app montado é o que `test_as_rotas_estao_no_schema_publico` prova."""
         from fastapi.routing import APIRoute
 
-        from app.main import app
+        from app.routers import conector_mcp as router_mcp
 
         alvos = {conector_mcp.CAMINHO_DO_METADATA, CAMINHO_MCP}
-        return [r for r in app.routes if isinstance(r, APIRoute) and r.path in alvos]
+        return [r for r in router_mcp.router.routes if isinstance(r, APIRoute) and r.path in alvos]
 
     def test_as_duas_rotas_do_conector_existem(self):
         caminhos = {r.path for r in self._rotas_do_conector()}

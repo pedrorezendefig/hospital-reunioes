@@ -35,6 +35,7 @@ encontrado".
 from __future__ import annotations
 
 import logging
+import time
 from dataclasses import dataclass
 
 import anyio.to_thread
@@ -190,10 +191,13 @@ def _escopos(claims: dict) -> list[str]:
 
 # ─── O JWKS do emissor ───────────────────────────────────────────────────────
 
-# O JWKS por emissor, em memória do processo. Chave rara de rodar, e trocar o
-# emissor exige redeploy (zera o cache). Refetch quando o `kid` do token não
-# está no cache guardado: é como a chave rotacionada entra sem redeploy.
-_JWKS_CACHE: dict[str, dict] = {}
+# O JWKS por emissor, em memória do processo, com validade curta. O cache serve
+# a chave normal sem tocar a rede; passado o TTL, a próxima verificação rebusca,
+# e é por aí que a chave rotacionada do AuthKit entra sem redeploy. O TTL também
+# fecha a amplificação: um token com `kid` aleatório não dispara uma ida de rede
+# por requisição (a assinatura seria negada de qualquer forma).
+_JWKS_TTL_SEGUNDOS = 600
+_jwks_cache: dict[str, tuple[dict, float]] = {}
 
 
 def _buscar_jwks(jwks_uri: str) -> dict:
@@ -205,26 +209,15 @@ def _buscar_jwks(jwks_uri: str) -> dict:
         return resposta.json()
 
 
-def jwks_do_emissor(cfg: ConfiguracaoMCP, kid: str | None = None) -> dict:
-    """O JWKS do emissor, do cache quando o `kid` já está nele; senão busca e
-    guarda. Sem `kid`, serve o cache se houver."""
-    cache = _JWKS_CACHE.get(cfg.jwks_uri)
-    if cache is not None and (not kid or _tem_kid(cache, kid)):
-        return cache
+def jwks_do_emissor(cfg: ConfiguracaoMCP) -> dict:
+    """O JWKS do emissor: do cache enquanto está fresco (TTL), senão rebusca e
+    guarda. Falha de rede sobe para o `autorizar`, que a traduz em 401."""
+    entrada = _jwks_cache.get(cfg.jwks_uri)
+    if entrada is not None and (time.monotonic() - entrada[1]) < _JWKS_TTL_SEGUNDOS:
+        return entrada[0]
     jwks = _buscar_jwks(cfg.jwks_uri)
-    _JWKS_CACHE[cfg.jwks_uri] = jwks
+    _jwks_cache[cfg.jwks_uri] = (jwks, time.monotonic())
     return jwks
-
-
-def _tem_kid(jwks: dict, kid: str) -> bool:
-    return any(isinstance(k, dict) and k.get("kid") == kid for k in jwks.get("keys", []))
-
-
-def _kid_do_token(token: str) -> str | None:
-    try:
-        return jwt.get_unverified_header(token).get("kid")
-    except Exception:  # noqa: BLE001 - token malformado: sem kid, a verificação nega adiante
-        return None
 
 
 # ─── O gate de Super admin, pelo participante ────────────────────────────────
@@ -255,11 +248,18 @@ def resolver_super_admin(supabase, email: str) -> dict:
 
 def autorizar(token: str | None, supabase, cfg: ConfiguracaoMCP) -> dict:
     """As duas etapas do gate, na ordem: o token do AuthKit, depois o
-    participante Super admin. Devolve o participante, ou levanta `AcessoNegado
-    MCP`."""
+    participante Super admin. Devolve o participante, ou levanta
+    `AcessoNegadoMCPError` (sempre 401).
+
+    JWKS indisponível também nega com 401, não deixa subir 500: "qualquer falha
+    é 401" (fail-closed). Faz I/O de rede (JWKS) e ao banco (participante), então
+    o chamador roda em thread para não travar o event loop."""
     if not token:
         raise AcessoNegadoMCPError("token ausente")
-    jwks = jwks_do_emissor(cfg, _kid_do_token(token))
+    try:
+        jwks = jwks_do_emissor(cfg)
+    except Exception as exc:  # noqa: BLE001 - JWKS indisponível: fail-closed, nega (qualquer falha é 401)
+        raise AcessoNegadoMCPError(f"JWKS indisponível ({type(exc).__name__})") from exc
     email = verificar_acesso(token, jwks, cfg)
     return resolver_super_admin(supabase, email)
 
