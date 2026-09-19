@@ -39,6 +39,12 @@ from central_de_comando_apoio import (  # noqa: E402
 )
 from conftest import TentativaDeRedeNoTeste  # noqa: E402
 
+# O `google_falso` troca o `httpx.Client` por uma função enquanto o teste roda,
+# e o `postgrest`, que o gate carrega na primeira vez, herda do `httpx.Client`
+# ao ser importado. O `lote_da_ga4` das classes daqui entra antes do gate, então
+# o app é importado já aqui, antes de qualquer troca: sem isto, o arquivo passa
+# na suíte (outro arquivo importa o app antes) e quebra quando roda sozinho.
+import app.dependencies  # noqa: E402, F401
 from app.config import settings  # noqa: E402
 from app.services.central_de_comando import provedor_google  # noqa: E402
 from app.services.central_de_comando.dados_do_google import percentuais_que_somam_100  # noqa: E402
@@ -458,6 +464,46 @@ class TestGoogleFalhou:
 
         assert [dia["visitantes"] for dia in movimento] == [410, 0, 0, 0, 0, 0, 0]
 
+    @pytest.mark.parametrize("rows", [5, True, "linhas", {"linha": 1}], ids=["numero", "booleano", "texto", "objeto"])
+    def test_rows_que_nao_e_lista_e_resposta_fora_do_formato(self, lote_da_ga4, rows):
+        """O `rows` da GA4 é uma lista de linhas. Qualquer outra coisa é
+        resposta fora do formato: 502 com a frase, e não um erro de código."""
+        lote_da_ga4.perguntas.insert(0, _rows_assim(rows))
+
+        resposta = _dados_do_google("7d")
+
+        assert resposta.status_code == 502
+        assert resposta.json() == {"detail": "O Google Analytics devolveu um relatório fora do formato esperado."}
+
+    def test_rows_que_nao_e_lista_com_numero_guardado_mostra_o_ultimo_valor_bom(self, lote_da_ga4, relogio_da_central):
+        """Como falha da fonte que é, o `rows` fora do formato não derruba a
+        tela que já tinha número: vem o último valor bom, com o aviso."""
+        cliente = cliente_da_central(SUPER_ADMIN)
+        cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "7d"})
+        relogio_da_central.avancar(hours=2)
+        lote_da_ga4.perguntas.insert(0, _rows_assim(5))
+
+        resposta = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "7d"})
+
+        assert resposta.status_code == 200, resposta.text
+        assert resposta.json()["movimento"][0]["visitantes"] == 410
+        assert resposta.json()["frescor"] == {
+            "atualizado_em": "2026-09-18T13:45:00+00:00",
+            "atualizacao_falhou": True,
+            "motivo": "O Google Analytics devolveu um relatório fora do formato esperado.",
+        }
+
+
+def _rows_assim(rows: object):
+    """Uma GA4 que devolve o `rows` do período de 7 dias como veio aqui."""
+
+    def responder(pedido: dict) -> dict | None:
+        if not _so_o_periodo_de_7_dias(pedido):
+            return None
+        return {"rows": rows}
+
+    return responder
+
 
 def _so_o_periodo_de_7_dias(pedido: dict) -> bool:
     return pedido.get("dimensions") == [{"name": "date"}] and pedido["dateRanges"][0]["startDate"] == "2026-09-11"
@@ -510,6 +556,38 @@ class TestPerguntasEmLote:
         assert de_90.anterior[-1].visitantes == 101
         assert [(d.dispositivo, d.visitas) for d in dispositivos] == [("celular", 1850), ("computador", 640)]
 
+    @pytest.mark.parametrize(
+        ("falha", "trecho"),
+        [
+            ("recusado", "HTTP 400"),
+            ("sem-resposta", "tempo esperado"),
+            ("relatorio-a-menos", "fora do formato"),
+        ],
+    )
+    def test_um_lote_que_falha_derruba_todas_as_respostas(self, google_falso, lote_da_ga4, falha, trecho):
+        """7 relatórios são dois lotes ao mesmo tempo: 5 e 2. O primeiro dá
+        certo e o segundo falha (a GA4 recusa um relatório dele, não responde
+        a tempo, ou devolve relatório a menos): o `perguntar` levanta a falha, e
+        nenhuma resposta sai pela metade, com número de um lote e buraco no
+        outro. A tela cai inteira para o último valor bom, ou para o 502."""
+        ultima = provedor_google.visitas_por_dispositivo("7d", HOJE_DE_TESTE)
+        if falha == "recusado":
+            ultima = _pergunta_que_a_ga4_recusa()
+        else:
+            google_falso.respondedores.insert(0, _segundo_lote_que_falha(falha))
+
+        with pytest.raises(provedor_google.GoogleError) as erro:
+            provedor_google.perguntar(
+                provedor_google.movimento_diario("7d", HOJE_DE_TESTE),
+                provedor_google.movimento_diario("28d", HOJE_DE_TESTE),
+                provedor_google.movimento_diario("90d", HOJE_DE_TESTE),
+                ultima,
+            )
+
+        assert trecho in str(erro.value)
+        assert len(google_falso.pedidos) == 2, "os dois lotes foram ao Google"
+        assert len(lote_da_ga4.lotes) == 1, "o primeiro lote deu certo, e mesmo assim nada foi devolvido"
+
     def test_o_lote_nao_espera_o_google_para_sempre(self, google_falso):
         _dados_do_google("28d")
 
@@ -519,6 +597,33 @@ class TestPerguntasEmLote:
             assert isinstance(timeout, httpx.Timeout)
             assert timeout.read is not None and timeout.read <= 10
             assert timeout.connect is not None and timeout.connect <= 5
+
+
+def _pergunta_que_a_ga4_recusa() -> provedor_google.Pergunta:
+    """Um relatório com uma dimensão que a GA4 não tem: ela recusa o lote
+    inteiro com 400, e o dublê também (ninguém sabe responder)."""
+    corpo = {
+        "dateRanges": [{"startDate": "2026-09-11", "endDate": "2026-09-17"}],
+        "metrics": [{"name": "sessions"}],
+        "dimensions": [{"name": "dimensaoQueNaoExiste"}],
+    }
+    return provedor_google.Pergunta(relatorios=(corpo,), ler=lambda relatorios: relatorios)
+
+
+def _segundo_lote_que_falha(falha: str):
+    """Um respondedor que só mexe no lote que traz o relatório de dispositivos
+    (o segundo, dos 7 relatórios): não responde a tempo, ou devolve um
+    relatório a menos. O primeiro lote segue para o `lote_da_ga4`."""
+
+    def responder(metodo: str, corpo: dict) -> dict | None:
+        pedidos = corpo.get("requests") or []
+        if metodo != "batchRunReports" or not any(p.get("dimensions") == [{"name": "deviceCategory"}] for p in pedidos):
+            return None
+        if falha == "sem-resposta":
+            raise httpx.ReadTimeout("o segundo lote não respondeu")
+        return {"reports": [{"kind": "analyticsData#runReport"}]}
+
+    return responder
 
 
 class TestTravaDeRede:

@@ -172,6 +172,10 @@ def _primeira_metrica(relatorio: dict) -> float:
 
 # ─── Dados do Google: as perguntas em lote (issue #817) ─────────────────────
 
+# A frase de todo relatório que chega fora do formato: fixa, porque vai para a
+# tela e fica no cache como o motivo do último valor bom.
+_RELATORIO_FORA_DO_FORMATO = "O Google Analytics devolveu um relatório fora do formato esperado."
+
 
 @dataclass(frozen=True)
 class Pergunta[T]:
@@ -333,17 +337,23 @@ def _linhas(relatorio: dict) -> list[tuple[str, float]]:
     dimensão e uma métrica.
 
     Sem linha nenhuma, lista vazia: a GA4 omite `rows` quando não houve dado, e
-    isso é resposta. Linha sem a dimensão ou sem a métrica é resposta fora do
-    formato. Número que não é número finito é zero, nunca NaN (o `num` da
-    Central antiga).
+    isso é resposta. Um `rows` que não é lista, ou linha sem a dimensão ou sem a
+    métrica, é resposta fora do formato: `GoogleError`, e não um erro de código,
+    para a rota responder 502 e o cache servir o último valor bom. Número que
+    não é número finito é zero, nunca NaN (o `num` da Central antiga).
     """
+    linhas = relatorio.get("rows")
+    if linhas is None:
+        return []
+    if not isinstance(linhas, list):
+        raise GoogleError(_RELATORIO_FORA_DO_FORMATO)
     resultado: list[tuple[str, float]] = []
-    for linha in relatorio.get("rows") or []:
+    for linha in linhas:
         try:
             valor = linha["dimensionValues"][0]["value"]
             bruto = linha["metricValues"][0]["value"]
         except (KeyError, IndexError, TypeError) as exc:
-            raise GoogleError("O Google Analytics devolveu um relatório fora do formato esperado.") from exc
+            raise GoogleError(_RELATORIO_FORA_DO_FORMATO) from exc
         resultado.append((str(valor), _numero(bruto)))
     return resultado
 
