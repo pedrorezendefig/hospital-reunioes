@@ -21,6 +21,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DadosDoGoogle, type DadosDoGooglePayload } from "./DadosDoGoogle";
 import type { DispositivoDoPayload } from "./GraficoDispositivos";
 import type { PontoDoMovimento } from "./GraficoVisitantesPorDia";
+import type { OrigemDoPayload } from "./BarrasOrigemDoPublico";
+import type { ContatoDoPayload } from "./CanaisDeContato";
+import type { AreaDoPayload } from "./RankingAreasDoSite";
 
 const sessao = vi.hoisted(() => ({ token: "token-de-teste" as string | null }));
 
@@ -88,6 +91,9 @@ function payloadDe7Dias(ultimoDia = 402): DadosDoGooglePayload {
       { chave: "celular", rotulo: "Celular", visitas: 1850, percentual: 74 },
       { chave: "computador", rotulo: "Computador", visitas: 640, percentual: 26 },
     ],
+    areas_do_site: AREAS_DE_7_DIAS,
+    origem_do_publico: ORIGEM_DE_7_DIAS,
+    contatos_gerados: CONTATOS_DE_7_DIAS,
     frescor: { atualizado_em: "2026-09-18T16:45:00+00:00", atualizacao_falhou: false, motivo: null },
   };
 }
@@ -111,9 +117,75 @@ function payloadDe90Dias(): DadosDoGooglePayload {
       { chave: "celular", rotulo: "Celular", visitas: 11000, percentual: 46 },
       { chave: "tablet", rotulo: "Tablet", visitas: 1000, percentual: 4 },
     ],
+    areas_do_site: AREAS_DE_7_DIAS.map((area) => ({ ...area, visitas: 0, visitas_anterior: 0, variacao: null })),
+    origem_do_publico: [],
+    contatos_gerados: [
+      { chave: "agendar", rotulo: "Cliques para agendar", estado: "em-construcao" },
+      { chave: "whatsapp", rotulo: "WhatsApp", estado: "em-construcao" },
+      { chave: "fale-conosco", rotulo: "Fale Conosco", estado: "em-construcao" },
+      { chave: "telefone", rotulo: "Telefone", estado: "nao-medido" },
+    ],
     frescor: { atualizado_em: "2026-09-18T16:45:00+00:00", atualizacao_falhou: false, motivo: null },
   };
 }
+
+// Os blocos da #818 nos 7 dias, como o backend manda: as cinco Áreas do site
+// da mais visitada para a menos, as origens com Visita e os quatro canais de
+// contato com o estado de cada um.
+const AREAS_DE_7_DIAS: AreaDoPayload[] = [
+  {
+    chave: "laboratorio",
+    nome: "Laboratório",
+    descricao: "Exames e resultados",
+    visitas: 450,
+    visitas_anterior: 500,
+    variacao: -0.1,
+  },
+  {
+    chave: "maternidade",
+    nome: "Maternidade",
+    descricao: "Estrutura, preparativos, amamentação",
+    visitas: 400,
+    visitas_anterior: 400,
+    variacao: 0,
+  },
+  {
+    chave: "emergencia",
+    nome: "Emergência 24h",
+    descricao: "Adulto, pediátrica, obstétrica, ortopédica",
+    visitas: 200,
+    visitas_anterior: 0,
+    variacao: null,
+  },
+  {
+    chave: "centro-de-imagem",
+    nome: "Centro de Imagem",
+    descricao: "Diagnóstico por imagem",
+    visitas: 0,
+    visitas_anterior: 0,
+    variacao: null,
+  },
+  {
+    chave: "centro-medico",
+    nome: "Centro Médico",
+    descricao: "Especialidades e consultas",
+    visitas: 0,
+    visitas_anterior: 0,
+    variacao: null,
+  },
+];
+
+const ORIGEM_DE_7_DIAS: OrigemDoPayload[] = [
+  { chave: "direto", rotulo: "Direto", visitas: 900, percentual: 60 },
+  { chave: "busca", rotulo: "Busca no Google", visitas: 600, percentual: 40 },
+];
+
+const CONTATOS_DE_7_DIAS: ContatoDoPayload[] = [
+  { chave: "agendar", rotulo: "Cliques para agendar", estado: "em-construcao" },
+  { chave: "whatsapp", rotulo: "WhatsApp", estado: "medido", cliques: 1100 },
+  { chave: "fale-conosco", rotulo: "Fale Conosco", estado: "em-construcao" },
+  { chave: "telefone", rotulo: "Telefone", estado: "nao-medido" },
+];
 
 function resposta(status: number, corpo: unknown): Response {
   return new Response(JSON.stringify(corpo), { status, headers: { "Content-Type": "application/json" } });
@@ -385,5 +457,135 @@ describe("Dados do Google: a honestidade do dado", () => {
 
     expect(await screen.findByText(/sessão não está ativa/)).toBeTruthy();
     expect(pedidos).toEqual([]);
+  });
+});
+
+// ─── Os blocos da #818: Áreas do site, Origem do público e Contatos gerados ──
+//
+// Os três blocos são barras e cartões em Tailwind puro (sem `recharts`), então
+// rodam de verdade aqui, sem dublê: o teste lê o que a tela desenha.
+
+const nomesDasAreas = () =>
+  within(screen.getByRole("list", { name: "Áreas do site por Visitas" }))
+    .getAllByRole("listitem")
+    .map((item) => item.querySelector("p")?.textContent);
+
+const linhasDaOrigem = () =>
+  within(screen.getByRole("list", { name: "Visitas por Origem do público" }))
+    .getAllByRole("listitem")
+    .map((item) => item.textContent);
+
+const cartoesDosContatos = () =>
+  within(screen.getByRole("list", { name: "Contatos gerados por canal" }))
+    .getAllByRole("listitem")
+    .map((item) => item.textContent);
+
+describe("Dados do Google: Áreas do site, Origem do público e Contatos gerados", () => {
+  it("nomeia os três blocos, cada um com a dica do que conta", async () => {
+    servidor({ leitura: pelosPeriodos });
+
+    render(<DadosDoGoogle periodo="7d" />);
+
+    expect(await screen.findByRole("heading", { level: 2, name: "Áreas do site" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "Origem do público" })).toBeTruthy();
+    expect(screen.getByRole("heading", { level: 2, name: "Contatos gerados" })).toBeTruthy();
+    expect(screen.getByText(/não da procura pelo serviço/)).toBeTruthy();
+  });
+
+  it("desenha o ranking das Áreas do site na ordem que veio do backend", async () => {
+    servidor({ leitura: pelosPeriodos });
+
+    render(<DadosDoGoogle periodo="7d" />);
+
+    await screen.findByRole("heading", { level: 2, name: "Áreas do site" });
+    expect(nomesDasAreas()).toEqual([
+      "Laboratório",
+      "Maternidade",
+      "Emergência 24h",
+      "Centro de Imagem",
+      "Centro Médico",
+    ]);
+    expect(screen.getByText("↓ 10,0%")).toBeTruthy();
+  });
+
+  it("desenha a Origem do público com as fatias que vieram do backend", async () => {
+    servidor({ leitura: pelosPeriodos });
+
+    render(<DadosDoGoogle periodo="7d" />);
+
+    await screen.findByRole("heading", { level: 2, name: "Origem do público" });
+    expect(linhasDaOrigem()).toEqual(["Direto60%900 visitas", "Busca no Google40%600 visitas"]);
+  });
+
+  it("desenha os Contatos gerados com o estado de cada canal, sem número no que não é medido", async () => {
+    servidor({ leitura: pelosPeriodos });
+
+    render(<DadosDoGoogle periodo="7d" />);
+
+    await screen.findByRole("heading", { level: 2, name: "Contatos gerados" });
+    expect(cartoesDosContatos()).toEqual([
+      "em construçãoCliques para agendar",
+      "1.100WhatsAppmedido",
+      "em construçãoFale Conosco",
+      "não medidoTelefone",
+    ]);
+  });
+
+  it("trocar o período troca os três blocos", async () => {
+    servidor({ leitura: pelosPeriodos });
+    const { rerender } = render(<DadosDoGoogle periodo="7d" />);
+    await screen.findByRole("heading", { level: 2, name: "Origem do público" });
+
+    rerender(<DadosDoGoogle periodo="90d" />);
+
+    expect(await screen.findByText("Sem dados de Origem do público para este período.")).toBeTruthy();
+    expect(screen.queryByText("↓ 10,0%")).toBeNull();
+    expect(cartoesDosContatos()).toEqual([
+      "em construçãoCliques para agendar",
+      "em construçãoWhatsApp",
+      "em construçãoFale Conosco",
+      "não medidoTelefone",
+    ]);
+  });
+
+  it("o Atualizar agora troca os três blocos pelos números novos", async () => {
+    const novo = payloadDe7Dias();
+    novo.areas_do_site = [{ ...AREAS_DE_7_DIAS[2], visitas: 999 }, ...AREAS_DE_7_DIAS.filter((_, i) => i !== 2)];
+    novo.origem_do_publico = [{ chave: "redes", rotulo: "Redes sociais", visitas: 10, percentual: 100 }];
+    novo.contatos_gerados = CONTATOS_DE_7_DIAS.map((contato) =>
+      contato.chave === "fale-conosco" ? { ...contato, estado: "medido" as const, cliques: 3 } : contato,
+    );
+    novo.frescor = { atualizado_em: "2026-09-18T16:50:00+00:00", atualizacao_falhou: false, motivo: null };
+    servidor({ leitura: pelosPeriodos, atualizar: () => resposta(200, novo) });
+    render(<DadosDoGoogle periodo="7d" />);
+    await screen.findByRole("heading", { level: 2, name: "Áreas do site" });
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: /Atualizar agora/ }));
+    });
+
+    await waitFor(() => expect(linhasDaOrigem()).toEqual(["Redes sociais100%10 visitas"]));
+    expect(nomesDasAreas()[0]).toBe("Emergência 24h");
+    expect(cartoesDosContatos()[2]).toBe("3Fale Conoscomedido");
+  });
+
+  it("o nome antigo da Área do site não aparece na tela", async () => {
+    servidor({ leitura: pelosPeriodos });
+
+    render(<DadosDoGoogle periodo="7d" />);
+
+    await screen.findByRole("heading", { level: 2, name: "Áreas do site" });
+    expect(document.body.textContent).not.toMatch(/bra[cç]os?\b/i);
+  });
+
+  it("com o Google fora e nada guardado (502), nenhum dos três blocos aparece", async () => {
+    servidor({ leitura: () => resposta(502, { detail: "O Google Analytics respondeu HTTP 503." }) });
+
+    render(<DadosDoGoogle periodo="28d" />);
+
+    expect(await screen.findByText("O Google Analytics respondeu HTTP 503.")).toBeTruthy();
+    expect(screen.queryByRole("heading", { level: 2, name: "Áreas do site" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Origem do público" })).toBeNull();
+    expect(screen.queryByRole("heading", { level: 2, name: "Contatos gerados" })).toBeNull();
   });
 });

@@ -11,6 +11,12 @@
  *   anterior (`GraficoVisitantesPorDia`);
  * - Por dispositivo: as Visitas no celular, no computador e no tablet
  *   (`GraficoDispositivos`).
+ * - Áreas do site (#818): o ranking das cinco por Visitas, com a seta da
+ *   variação (`RankingAreasDoSite`).
+ * - Origem do público (#818): as Visitas por origem, com o resto no fim
+ *   (`BarrasOrigemDoPublico`).
+ * - Contatos gerados (#818): os canais de contato com o estado honesto de
+ *   cada um (`CanaisDeContato`).
  *
  * A #818 acrescenta aqui os blocos dela (Áreas do site, Origem do público e
  * Contatos gerados), no mesmo payload e no mesmo molde.
@@ -36,7 +42,10 @@ import { temAnterior } from "@/lib/central-de-comando/graficos";
 import type { Periodo } from "@/lib/central-de-comando/periodo";
 
 import { BarraDeFrescor } from "./BarraDeFrescor";
+import { BarrasOrigemDoPublico, type OrigemDoPayload } from "./BarrasOrigemDoPublico";
 import type { PeriodoDoPayload } from "./BlocoVisitantes";
+import { CanaisDeContato, type ContatoDoPayload } from "./CanaisDeContato";
+import { RankingAreasDoSite, type AreaDoPayload } from "./RankingAreasDoSite";
 import { GraficoDispositivos, type DispositivoDoPayload } from "./GraficoDispositivos";
 import { GraficoVisitantesPorDia, type PontoDoMovimento } from "./GraficoVisitantesPorDia";
 import { SeletorDePeriodo } from "./SeletorDePeriodo";
@@ -49,6 +58,9 @@ export type DadosDoGooglePayload = {
   periodo: PeriodoDoPayload;
   movimento: PontoDoMovimento[];
   dispositivos: DispositivoDoPayload[];
+  areas_do_site: AreaDoPayload[];
+  origem_do_publico: OrigemDoPayload[];
+  contatos_gerados: ContatoDoPayload[];
   frescor: Frescor;
 };
 
@@ -99,11 +111,32 @@ export function DadosDoGoogle({ periodo }: { periodo: Periodo }) {
               <DatasDoMovimento periodo={estado.dados.periodo} comAnterior={temAnterior(estado.dados.movimento)} />
             </Bloco>
             <Bloco
+              id="central-areas-do-site"
+              titulo="Áreas do site"
+              dica="As Visitas às páginas de cada serviço do hospital com página própria no Site. O número fala do Site, não da procura pelo serviço."
+            >
+              <RankingAreasDoSite areas={estado.dados.areas_do_site} />
+            </Bloco>
+            <Bloco
+              id="central-origem-do-publico"
+              titulo="Origem do público"
+              dica="De onde veio quem chegou ao Site: as Visitas do período por origem"
+            >
+              <BarrasOrigemDoPublico origens={estado.dados.origem_do_publico} />
+            </Bloco>
+            <Bloco
               id="central-dispositivos"
               titulo="Por dispositivo"
               dica="Onde o público navega: as Visitas do período em cada tipo de aparelho"
             >
               <GraficoDispositivos dispositivos={estado.dados.dispositivos} />
+            </Bloco>
+            <Bloco
+              id="central-contatos-gerados"
+              titulo="Contatos gerados"
+              dica="Quantas vezes alguém, no Site, clicou para falar com o hospital no período"
+            >
+              <CanaisDeContato contatos={estado.dados.contatos_gerados} />
             </Bloco>
             <p className="text-xs text-text-secondary">
               Números do Google Analytics. Os Visitantes por dia contam as pessoas de cada dia, e quem volta em outro
