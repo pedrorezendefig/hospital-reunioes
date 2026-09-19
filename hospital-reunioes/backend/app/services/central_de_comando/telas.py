@@ -31,6 +31,7 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from functools import partial
 
+from app.services.central_de_comando import dados_do_google as tela_dados_do_google
 from app.services.central_de_comando import provedor_google
 from app.services.central_de_comando import visao_geral as tela_visao_geral
 from app.services.central_de_comando.cache import cache_da_central
@@ -65,6 +66,13 @@ class Tela:
 
 TELAS: dict[str, Tela] = {
     "visao-geral": Tela(montar=tela_visao_geral.montar, falhas=(provedor_google.GoogleError,)),
+    # Dados do Google (#817): os blocos da #818 entram no mesmo `montar`, na
+    # mesma chave, e o Atualizar agora renova todos juntos.
+    "dados-do-google": Tela(
+        montar=tela_dados_do_google.montar,
+        falhas=(provedor_google.GoogleError,),
+        periodos=PERIODOS,
+    ),
 }
 
 

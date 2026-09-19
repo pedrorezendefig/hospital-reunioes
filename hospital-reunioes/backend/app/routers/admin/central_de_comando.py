@@ -23,6 +23,7 @@ quando são os números e se a última atualização falhou.
 Telas, uma rota por tela, cada uma devolvendo o payload inteiro dela:
 
 - GET /admin/central-de-comando/visao-geral?periodo=7d|28d|90d   (issue #814)
+- GET /admin/central-de-comando/dados-do-google?periodo=7d|28d|90d   (issue #817)
 
 E uma rota só de Atualizar agora, para toda tela do registro de `telas.py`:
 
@@ -85,6 +86,21 @@ async def visao_geral(request: Request, periodo: Periodo = Query(PERIODO_PADRAO)
     digita no endereço é a tela, que cai no padrão de 28 dias.
     """
     return await _do_google(telas.ler, "visao-geral", periodo)
+
+
+# ─── Dados do Google (issue #817) ────────────────────────────────────────────
+
+
+@router.get("/dados-do-google")
+@limiter.limit("30/minute")
+async def dados_do_google(request: Request, periodo: Periodo = Query(PERIODO_PADRAO)):
+    """Dados do Google no período: os Visitantes por dia e as Visitas por
+    dispositivo, com o frescor. Dentro da hora, sai do cache sem ir ao Google;
+    o Atualizar agora é o da rota genérica, com `tela=dados-do-google`.
+
+    Período fora de 7, 28 e 90 dias é 422, como na Visão Geral.
+    """
+    return await _do_google(telas.ler, "dados-do-google", periodo)
 
 
 # ─── Atualizar agora (issue #815) ────────────────────────────────────────────
