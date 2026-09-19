@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-18T21:06-0300 -->
+<!-- last_update: 2026-09-19T06:27-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -45,7 +45,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
-| GET | `/admin/central-de-comando/visao-geral` | A Visão Geral no período: os Visitantes, o anterior e a variação. | ✅ |
+| POST | `/admin/central-de-comando/atualizar-agora` | Força a renovação da tela pedida, no período pedido, e devolve o | ✅ |
+| GET | `/admin/central-de-comando/visao-geral` | A Visão Geral no período: os Visitantes, o anterior, a variação e o | ✅ |
 
 ## comentarios (`app/routers/comentarios.py`)
 
@@ -383,4 +384,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 222 endpoints em 31 routers · 94% exigem auth.
+**Totais:** 223 endpoints em 31 routers · 94% exigem auth.
