@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-19T07:57:38-03:00",
-  "updated_by": "deploy-skill@ship",
-  "last_app_version": "0.147.0",
+  "updated_at": "2026-09-19T10:46:00-03:00",
+  "updated_by": "onda@ship",
+  "last_app_version": "0.148.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "e970e4df",
-      "last_deploy_at": "2026-09-19T10:53:42Z",
+      "last_deploy_sha": "2185b73",
+      "last_deploy_at": "2026-09-19T13:43:57Z",
       "last_health_check": {
-        "at": "2026-09-19T07:57:38-03:00",
-        "latency_ms": 63,
+        "at": "2026-09-19T10:43:55-03:00",
+        "latency_ms": 101,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 21,
+      "build_duration_seconds": 20,
       "env_count": 24
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "e970e4df",
-      "last_deploy_at": "2026-09-19T10:56:36Z",
+      "last_deploy_sha": "2185b73",
+      "last_deploy_at": "2026-09-19T13:43:57Z",
       "last_health_check": {
-        "at": "2026-09-19T07:57:38-03:00",
-        "latency_ms": 234,
+        "at": "2026-09-19T10:43:55-03:00",
+        "latency_ms": 256,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 195,
+      "build_duration_seconds": 180,
       "env_count": 5
     },
     {
@@ -174,103 +174,60 @@
   },
   "gates": [
     {
-      "name": "Onda 4 da /onda com fila fixa (#814, #815, #817, #818): só a #818 nesta subida, fechando a fila; PRD #809, ADR 0058. Liberação do humano pedida e dada citando o PR #833",
+      "name": "CI 3/3 verde no PR #835 pos integração do main e bump (Backend, Frontend, Docker Build); MERGEABLE e CLEAN",
       "status": "ok"
     },
     {
-      "name": "Construída empilhada sobre a #817 e rebaseada sobre a main depois do merge do #832; código do merge idêntico ao do head 5c69f78 em hospital-reunioes/ (diff vazio)",
+      "name": "Gate 1.5 spec x diff por revisor independente do sub-agente: SPEC-COMPLETO, 4 de 4 critérios, sem scope creep",
       "status": "ok"
     },
     {
-      "name": "CI 3/3 verde no head 5c69f78",
+      "name": "Dois revisores do orquestrador (código+segurança e segurança dedicada, rota admin nova): os dois LIMPOS, 0 must-fix. Should-fix de rate-limit aplicado (30 para 5/min); should-fix de teste virou follow-up",
       "status": "ok"
     },
     {
-      "name": "Gate 1.5 (spec x diff) verde na 2ª rodada (a 1ª pegou a fatia da Origem divergindo do formatShare antigo, corrigida) e revisão independente do orquestrador limpa, 0 must-fix; 1 should-fix e 5 nits registrados na issue #834 com o OK do humano",
+      "name": "Gate de Super admin herdado do router (dependencies require_super_admin) cobre a nova rota; sem bypass, testado na rota real (403/401)",
       "status": "ok"
     },
     {
-      "name": "Os 4 nits da 2ª revisão da #817 incorporados em commits separados (varredura de cores, rows falso, import no google_falso, frase fixa)",
+      "name": "APP_VERSION 0.148.0 no Coolify ANTES do merge (forma posicional). Leitura -s do CLI volta vazia, mas sem -s mostra mascarado e o /health confirma 0.148.0",
       "status": "ok"
     },
     {
-      "name": "Critério 'números batem com a Central antiga' conferido com OK do humano: dados_do_google.montar rodado com a credencial real e comparado no mesmo minuto com o conector da Central antiga; Áreas do site (visitas, anterior, variação e ordem), Origem do público e Contatos gerados idênticos em 7, 28 e 90 dias",
+      "name": "Version match provado no ar: /api/health em 0.148.0 (era 0.147.0), status healthy, db healthy; frontend 200",
       "status": "ok"
     },
     {
-      "name": "Pre-flight local: git limpo, sem pasta de backup, CORS sem padrão aberto, ruff check/format e next lint/tsc verdes",
-      "status": "ok"
-    },
-    {
-      "name": "Coolify 2.6 e 2.8 NAO VERIFICÁVEIS: o token do CLI não revela valores (env list -s devolve value vazio)",
-      "status": "warn"
-    },
-    {
-      "name": "APP_VERSION 0.147.0 setada no Coolify pelo CLI antes do merge, na forma posicional",
-      "status": "ok"
-    },
-    {
-      "name": "Sem migration nova; a 110 segue sendo a última aplicada",
-      "status": "ok"
-    },
-    {
-      "name": "Health: backend 200 em 63 ms, db healthy, versão 0.147.0 igual à esperada; frontend 200 em 234 ms",
-      "status": "ok"
-    },
-    {
-      "name": "Fumaça em produção: GET dados-do-google e POST atualizar-agora da Central sem login devolvem 401",
-      "status": "ok"
-    },
-    {
-      "name": "Merge pela API do GitHub (squash) sem tocar a árvore principal; registro do deploy em worktree destacado de origin/main",
-      "status": "ok"
-    },
-    {
-      "name": "Semáforo de deploy pego antes do merge e solto no fim",
+      "name": "Semáforo pego antes do merge e solto no fim; bookkeeping em worktree detached de origin/main (árvore principal com collect.py/serve.py intocada)",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.147.0 saudável; fila da /onda fechada",
-      "text": "Backend 21 s e frontend 3min15s no SHA e970e4df. /api/health em 0.147.0 com db healthy, frontend em 200. As #814, #815, #817 e #818 estão no ar, todas dormentes até a #827."
-    },
-    {
-      "kind": "ok",
-      "title": "Dormência da Central conferida em produção",
-      "text": "O humano entrou como Super admin em produção em 18/09/2026 e a seção Central de Comando não aparece no menu."
+      "title": "Deploy v0.148.0 saudável",
+      "text": "Ao vivo (pessoas no site agora) na Visão Geral. Backend rápido e frontend cerca de 3min no SHA 2185b73. /api/health em 0.148.0 com db healthy, frontend 200. Sem OOM."
     },
     {
       "kind": "info",
-      "title": "Acabamentos das revisões na issue #834",
-      "text": "Varredura de cores nas barras em Tailwind, teste de lotes simultâneos, contagem relativa que prova o cache, rows fora do formato na Visão Geral, acessibilidade da variação das Áreas e 3 nits do #831. Nenhum afeta o uso hoje."
+      "title": "Should-fix adiado (teste)",
+      "text": "VisaoGeral.test.tsx usa toContainEqual e perdeu a garantia de exatamente uma chamada a visao-geral. Reforçar filtrando as chamadas e afirmando length igual a 1. Follow-up, não trava."
     },
     {
       "kind": "info",
-      "title": "Decisões de produto pendentes (mantidas por paridade com a Central antiga)",
-      "text": "'(not set)' cai em Outros e '(other)' em Não identificado (o CONTEXT.md sugere o contrário); Referral (indicação) cai em Outros; canal medido com zero clique no período aparece em construção."
+      "title": "Nits do IndicadorAoVivo",
+      "text": "aria-live=polite reanuncia o número a cada 30s; animate-ping pode não respeitar prefers-reduced-motion; sobreposição foco+poll segue o padrão da ADR 0050 decisão 9. Candidatos a acabamento."
     },
     {
       "kind": "warn",
-      "title": "Token do CLI do Coolify não revela valores",
-      "text": "coolify app env list -s devolve value vazio para toda chave, então os gates 2.6 (valores exatos) e 2.8 (segredos não vazios) não comparam nada. Correção: token com permissão read:sensitive em tokens/.env e coolify context set-token."
-    },
-    {
-      "kind": "info",
-      "title": "Sugestões para a #827 (outra sessão)",
-      "text": "Ao tirar a dormência, remover a asserção de NEXT_PUBLIC_ENVIRONMENT e o TestDormenciaNaProducao; registrar os eventos renomeados (WHATSAPP_EVENT virou GA4_EVENTO_WHATSAPP, LEADS_EVENT virou GA4_EVENTO_FALE_CONOSCO)."
-    },
-    {
-      "kind": "info",
-      "title": "Imagem e CI do backend não instalam pelo uv.lock",
-      "text": "Pré-existente: Dockerfile e ci.yml usam uv pip install -r pyproject.toml, que resolve a versão mais nova na hora. Vale issue própria (uv sync --frozen)."
+      "title": "coolify env list -s volta value vazio",
+      "text": "Nesta versão do CLI, 'coolify app env list -s' devolve value vazio para APP_VERSION (sem -s mostra mascarado). Conferir o valor exato só pelo /api/health pos-deploy, não pelo CLI."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "e970e4df",
+    "sha": "2185b73",
     "result": "healthy",
-    "duration_seconds": 260
+    "duration_seconds": 240
   }
 }

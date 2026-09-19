@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-19T10:43:55-03:00",
+      "sha": "2185b737",
+      "app_version": "0.148.0",
+      "subject": "Ao vivo, pessoas no Site agora entra na Visão Geral",
+      "raw_subject": "feat(central): Ao vivo, pessoas no Site agora na Visão Geral (#835)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 240,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 da fila fixa (PRD #809, ADR 0058): Ao vivo (pessoas no site agora) na Visão Geral. Rota GET /api/admin/central-de-comando/ao-vivo sob require_super_admin, SEM cache (ida direta ao runRealtimeReport da GA4), degradação honesta (nunca zero inventado). Sem migration. Rate-limit alinhado a 5/min como a rota irmã de ida garantida (achado do revisor de segurança). Dois revisores do orquestrador limpos, 0 must-fix. Version match 0.148.0 no /health. Gates 2.6/2.8 não verificáveis: 'env list -s' do CLI volta value vazio nesta versão."
+    },
+    {
       "at": "2026-09-19T07:57:38-03:00",
       "sha": "e970e4df",
       "app_version": "0.147.0",
@@ -1460,35 +1492,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PRs #560 (#540), #561 (#541) e #562 (#521). A migration 097 NAO foi aplicada pelo deploy: o Pedro aplica no SQL Editor do Studio de producao e roda a fumaca (aprova so NOTICE: APROVADO 42501). A #540 fechou tambem o perfil secretaria combinado com papel de gestao, que apagava serie alheia; a clausula 'ou que criou' da triagem caiu por decisao humana."
-    },
-    {
-      "at": "2026-09-03T17:41:56-03:00",
-      "sha": "ca6b399",
-      "app_version": "0.108.0",
-      "subject": "onda 1: token órfão no upload, IP do cliente no log e cobrança ao responsável vigente",
-      "raw_subject": "chore(observabilidade): devolve o IP do cliente à linha de log do request (#543) (#552)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1980,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PRs #551 (#539), #554 (#536) e #552 (#543). O log do request truncou o IP nas 3 rotas anônimas da Ouvidoria (/24 em IPv4, /48 em IPv6) por decisão do Pedro: o /qr entrava na mesma /24 do POST de manifestação e permitia recompor o endereço do manifestante. O detector do teste passou a perguntar se a rota exige credencial, em vez de casar a palavra publico."
     }
   ]
 }

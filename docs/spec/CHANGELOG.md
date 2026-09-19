@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-09-19 10:43 — Ao vivo, pessoas no Site agora entra na Visão Geral
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `2185b73`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (240s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/2185b73
+
 ## v0.147.0 - 2026-09-19 07:57 - áreas do site, origem do público e contatos gerados entram na tela Dados do Google
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `e970e4d`
