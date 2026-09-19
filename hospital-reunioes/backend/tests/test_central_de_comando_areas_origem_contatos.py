@@ -42,12 +42,6 @@ from central_de_comando_apoio import (  # noqa: E402
     cliente_da_central,
 )
 
-# O `google_falso` troca o `httpx.Client` por uma função enquanto o teste roda,
-# e o `postgrest`, que o gate carrega na primeira vez, herda do `httpx.Client`
-# ao ser importado. As classes daqui pedem o `lote_da_ga4` antes do gate, então
-# o app é importado já aqui, antes de qualquer troca: sem isto, o arquivo passa
-# na suíte (outro arquivo importa o app antes) e quebra quando roda sozinho.
-import app.dependencies  # noqa: E402, F401
 from app.config import settings  # noqa: E402
 from app.services.central_de_comando import dados_do_google, provedor_google  # noqa: E402
 

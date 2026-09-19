@@ -237,7 +237,17 @@ def google_falso(monkeypatch, chave_rsa_da_central, cache_da_central) -> GoogleF
 
     O Google de mentira nasce com o cache da Central vazio: sem isso, um
     número guardado por um teste anterior responderia no lugar dele, e o teste
-    passaria ou falharia conforme a ordem da suíte."""
+    passaria ou falharia conforme a ordem da suíte.
+
+    E o gate (`app.dependencies`) é importado ANTES da troca. O `postgrest`,
+    que o gate carrega na primeira vez, herda do `httpx.Client` ao ser
+    importado, e herdar da função que fica no lugar da classe quebra na
+    coleta (`TypeError` em `postgrest/utils.py`). Na suíte inteira outro
+    arquivo sempre importa o app antes, e o erro só aparecia com um arquivo
+    da Central rodando sozinho; importado aqui, nenhum arquivo precisa
+    lembrar."""
+    import app.dependencies  # noqa: F401
+
     chave_publica = chave_rsa_da_central.public_key().public_bytes(
         serialization.Encoding.PEM,
         serialization.PublicFormat.SubjectPublicKeyInfo,
