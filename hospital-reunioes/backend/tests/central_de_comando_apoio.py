@@ -19,6 +19,9 @@ nome:
   `RelogioDeTeste` parado em `AGORA_DE_TESTE` que só anda quando mandam.
 - `gate_e_limitador_zerados`: o limitador de taxa e o participante do gate
   zerados antes e depois do teste, para quem bate na rota.
+- `lote_da_ga4`: o `batchRunReports` no Google de mentira (#817), que responde
+  os Visitantes por dia e as Visitas por dispositivo pelas tabelas daqui. A
+  #818 ensina as perguntas dela em `lote_da_ga4.perguntas`.
 
 E, para testar pela rota real sem importar outro arquivo de teste (#815), o
 app mínimo com o gate de pé e quem está logado: `cliente_da_central(logado)`,

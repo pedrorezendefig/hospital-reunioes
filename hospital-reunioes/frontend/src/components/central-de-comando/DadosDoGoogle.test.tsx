@@ -283,6 +283,24 @@ describe("Dados do Google: o frescor", () => {
     ]);
   });
 
+  it("com a tela aberta, renova sozinha de hora em hora, pela renovação desta tela", async () => {
+    servidor({ leitura: pelosPeriodos, atualizar: () => resposta(200, payloadDe7Dias(999)) });
+    render(<DadosDoGoogle periodo="7d" />);
+    await screen.findByTestId("grafico-visitantes");
+
+    // 60 minutos escritos à mão, como no teste da Visão Geral.
+    await act(async () => {
+      vi.advanceTimersByTime(60 * 60_000);
+    });
+
+    await waitFor(() =>
+      expect(itens("grafico-visitantes").at(-1)).toBe("2026-09-17: 999 (anterior 2026-09-10: 441)"),
+    );
+    expect(pedidos.filter((p) => p.metodo === "POST").map((p) => p.url)).toEqual([
+      "/api/admin/central-de-comando/atualizar-agora?tela=dados-do-google&periodo=7d",
+    ]);
+  });
+
   it("com a fonte fora, mostra o último número bom e o aviso, sem zerar os blocos", async () => {
     const guardado = payloadDe7Dias();
     guardado.frescor = {

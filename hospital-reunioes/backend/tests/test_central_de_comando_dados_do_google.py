@@ -1,13 +1,21 @@
 """A tela Dados do Google da Central de Comando pela rota real (issue #817).
 
 O seam é a ROTA HTTP, com `require_super_admin` de pé (PRD #809, "Decisões de
-teste"), como na Visão Geral. Dublados só o que é fronteira: quem está logado,
-a rede do Google (`google_falso`, com o `lote_da_ga4` respondendo o
-`batchRunReports`) e o relógio do dia (`hoje_da_central`, 18/09/2026). As
-tabelas do que a GA4 "sabe" (`VISITANTES_POR_DIA_NA_GA4` e
-`VISITAS_POR_DISPOSITIVO_NA_GA4`) foram contadas à mão, e é contra elas que as
-asserções conferem: se o provedor pedisse o dia errado, a métrica errada ou a
-dimensão errada, o número da resposta sairia errado.
+teste"), como na Visão Geral: o app mínimo e as pessoas logadas vêm do apoio
+compartilhado (`cliente_da_central`). Dublados só o que é fronteira: quem está
+logado, a rede do Google (`google_falso`, com o `lote_da_ga4` respondendo o
+`batchRunReports`) e os relógios da Central (`hoje_da_central`, 18/09/2026, e
+`relogio_da_central`, o do cache). As tabelas do que a GA4 "sabe"
+(`VISITANTES_POR_DIA_NA_GA4` e `VISITAS_POR_DISPOSITIVO_NA_GA4`) foram contadas
+à mão, e é contra elas que as asserções conferem: se o provedor pedisse o dia
+errado, a métrica errada ou a dimensão errada, o número da resposta sairia
+errado.
+
+Porte dos testes de `src/lib/analytics` do repositório antigo que cabem nesta
+fatia: `ga4-mappers.test.ts` (`mapVisitorsByDay`, `mapDeviceBreakdown`),
+`ga4-provider.test.ts` (Visitantes por dia e dispositivos), `movimento.test.ts`,
+`dispositivo.test.ts` e `google-data-screen.test.ts` (o payload da tela com o
+frescor), pela rota.
 """
 
 from __future__ import annotations
@@ -20,29 +28,22 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from central_de_comando_apoio import HOJE_DE_TESTE, erro_da_ga4  # noqa: E402
+from central_de_comando_apoio import (  # noqa: E402
+    FACILITADOR,
+    HOJE_DE_TESTE,
+    PREFIXO_DA_CENTRAL,
+    SECRETARIA,
+    SUPER_ADMIN,
+    cliente_da_central,
+    erro_da_ga4,
+)
 from conftest import TentativaDeRedeNoTeste  # noqa: E402
-from test_central_de_comando_visao_geral import FACILITADOR, PREFIXO, SECRETARIA, SUPER_ADMIN, _montar  # noqa: E402
 
 from app.config import settings  # noqa: E402
-from app.dependencies import _participante_ctx  # noqa: E402
-from app.limiter import limiter  # noqa: E402
 from app.services.central_de_comando import provedor_google  # noqa: E402
 from app.services.central_de_comando.dados_do_google import percentuais_que_somam_100  # noqa: E402
 
-
-@pytest.fixture(autouse=True)
-def _reset_rate_limiter():
-    limiter._storage.reset()
-    yield
-    limiter._storage.reset()
-
-
-@pytest.fixture(autouse=True)
-def _reset_participante_ctx():
-    _participante_ctx.set(None)
-    yield
-    _participante_ctx.set(None)
+pytestmark = pytest.mark.usefixtures("gate_e_limitador_zerados")
 
 
 @pytest.fixture(autouse=True)
@@ -52,7 +53,7 @@ def _central_no_dia_de_teste(hoje_da_central, central_configurada):
 
 def _dados_do_google(periodo: str | None = None, logado: dict | None = SUPER_ADMIN) -> httpx.Response:
     params = {"periodo": periodo} if periodo is not None else None
-    return _montar(logado).get(f"{PREFIXO}/dados-do-google", params=params)
+    return cliente_da_central(logado).get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params=params)
 
 
 # ─── Visitantes por dia ──────────────────────────────────────────────────────
@@ -303,12 +304,12 @@ class TestFrescor:
         }
 
     def test_segunda_leitura_dentro_da_hora_nao_vai_ao_google(self, google_falso, lote_da_ga4, relogio_da_central):
-        cliente = _montar(SUPER_ADMIN)
-        primeira = cliente.get(f"{PREFIXO}/dados-do-google", params={"periodo": "28d"}).json()
+        cliente = cliente_da_central(SUPER_ADMIN)
+        primeira = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"}).json()
         lote_da_ga4.visitantes_por_dia["2026-09-17"] = 999
         relogio_da_central.avancar(minutes=59)
 
-        segunda = cliente.get(f"{PREFIXO}/dados-do-google", params={"periodo": "28d"}).json()
+        segunda = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"}).json()
 
         assert segunda == primeira
         assert len(google_falso.pedidos) == 1
@@ -316,10 +317,10 @@ class TestFrescor:
     def test_trocar_o_periodo_troca_os_dois_blocos(self, google_falso, relogio_da_central):
         """A chave do cache é tela e período: os 7 dias guardados não
         respondem pelos 90, e os dois blocos mudam juntos."""
-        cliente = _montar(SUPER_ADMIN)
-        de_7_dias = cliente.get(f"{PREFIXO}/dados-do-google", params={"periodo": "7d"}).json()
+        cliente = cliente_da_central(SUPER_ADMIN)
+        de_7_dias = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "7d"}).json()
 
-        de_90_dias = cliente.get(f"{PREFIXO}/dados-do-google", params={"periodo": "90d"}).json()
+        de_90_dias = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "90d"}).json()
 
         assert (len(de_7_dias["movimento"]), len(de_90_dias["movimento"])) == (7, 90)
         assert [d["chave"] for d in de_7_dias["dispositivos"]] == ["celular", "computador"]
@@ -329,13 +330,15 @@ class TestFrescor:
     def test_atualizar_agora_renova_os_dois_blocos_e_o_carimbo(self, google_falso, lote_da_ga4, relogio_da_central):
         """A tela ganha o Atualizar agora pela rota genérica da #815, sem rota
         nova: vai ao Google mesmo dentro da hora e troca os dois blocos."""
-        cliente = _montar(SUPER_ADMIN)
-        cliente.get(f"{PREFIXO}/dados-do-google", params={"periodo": "7d"})
+        cliente = cliente_da_central(SUPER_ADMIN)
+        cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "7d"})
         lote_da_ga4.visitantes_por_dia["2026-09-17"] = 999
         lote_da_ga4.visitas_por_dispositivo[("2026-09-11", "2026-09-17")] = {"mobile": 1, "desktop": 3}
         relogio_da_central.avancar(minutes=5)
 
-        resposta = cliente.post(f"{PREFIXO}/atualizar-agora", params={"tela": "dados-do-google", "periodo": "7d"})
+        resposta = cliente.post(
+            f"{PREFIXO_DA_CENTRAL}/atualizar-agora", params={"tela": "dados-do-google", "periodo": "7d"}
+        )
 
         assert resposta.status_code == 200, resposta.text
         corpo = resposta.json()
@@ -345,12 +348,12 @@ class TestFrescor:
         assert len(google_falso.pedidos) == 2
 
     def test_google_fora_com_numero_guardado_mostra_o_ultimo_valor_bom(self, google_falso, relogio_da_central):
-        cliente = _montar(SUPER_ADMIN)
-        cliente.get(f"{PREFIXO}/dados-do-google", params={"periodo": "28d"})
+        cliente = cliente_da_central(SUPER_ADMIN)
+        cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"})
         relogio_da_central.avancar(hours=2)
         google_falso.forcar = erro_da_ga4(503, "UNAVAILABLE", "The service is currently unavailable.")
 
-        resposta = cliente.get(f"{PREFIXO}/dados-do-google", params={"periodo": "28d"})
+        resposta = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"})
 
         assert resposta.status_code == 200, resposta.text
         corpo = resposta.json()
@@ -543,8 +546,8 @@ class TestSoSuperAdmin:
         assert google_falso.pedidos == []
 
     def test_o_atualizar_agora_da_tela_tambem_e_so_do_super_admin(self, google_falso):
-        resposta = _montar(SECRETARIA).post(
-            f"{PREFIXO}/atualizar-agora", params={"tela": "dados-do-google", "periodo": "28d"}
+        resposta = cliente_da_central(SECRETARIA).post(
+            f"{PREFIXO_DA_CENTRAL}/atualizar-agora", params={"tela": "dados-do-google", "periodo": "28d"}
         )
 
         assert resposta.status_code == 403
