@@ -10,7 +10,8 @@ Três invariantes que o resto do app herda de graça:
 
 - **Só leitura.** A credencial pede só o escopo de leitura, e o único verbo é
   o `runReport` (o Ao vivo acrescenta o `runRealtimeReport`, também leitura),
-  sozinho ou em lote (`batchRunReports`, que é vários `runReport` numa ida só).
+  sozinho ou em lote (`batchRunReports`, que junta vários `runReport` numa ida
+  só).
 - **Não configurado é 503, nunca zero.** Sem propriedade ou sem chave, a
   exceção é `GoogleNaoConfiguradoError`, com o que falta na mensagem. O
   provedor falso da Central antiga, que desenhava número de demonstração sem
