@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-09-19 18:09 — Provedor e tela do Instagram na Central
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `5476202`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (284s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/5476202
+
 ## 2026-09-19 13:57 — Guia do conector da Central com o endereço novo
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `3ef1d8b`

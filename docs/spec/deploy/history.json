@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-19T18:09:13-03:00",
+      "sha": "5476202",
+      "app_version": "0.150.0",
+      "subject": "Provedor e tela do Instagram na Central",
+      "raw_subject": "feat(central): provedor e tela do Instagram na Central (#819)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 284,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 da fila fixa (PRD #809, ADR 0058, sessao B): provedor do Instagram (porta de rede unica, token no header Authorization Bearer fora do log) e tela completa, portados de src/lib/instagram do repo antigo. Reusa o cache com frescor da #815 (ultimo valor bom no token vencido) e as variaveis do Settings da #814, sem recriar nada. O Gate 2.5 achou 2 must-fix (vazamento do token no log pela query string do httpx; interacoes por publicacao zerando com o token real porque o port derrubou o fallback values[0] e o duble de teste mascarava), ambos corrigidos e reverificados. Conferencia com credencial real (gate humano): os numeros bateram 100% com a Central antiga nos periodos de 7 e 28 dias, incluindo o ranking. Sem migration. Em producao a Central segue dormente para o Instagram (variaveis so no .env local, nao no Coolify) ate a fatia #827. Sem travessao."
+    },
+    {
       "at": "2026-09-19T13:57:56-03:00",
       "sha": "3ef1d8b5",
       "app_version": "0.149.0",
@@ -1460,35 +1492,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda 1 de 2 do PRD #598 (issue #600, fatia G). Review em 2 rodadas: seguranca limpa nas duas, codigo com 2 must-fix na primeira (motivo de largura zero passava porque strip nao enxerga Cf, e o teto de 10.000 nao tinha par na tela). O fix extraiu a peneira de invisiveis para text_sanitizer, uma implementacao para os dois textos livres. Migration 098 aplicada a mao antes do merge."
-    },
-    {
-      "at": "2026-09-04T12:15:07-03:00",
-      "sha": "e56c7ad",
-      "app_version": "0.109.2",
-      "subject": "onda 03/09: o alerta ao admin tecnico omite o email do manifestante; docs do PRD #469 e skills do modo AFK",
-      "raw_subject": "fix(ouvidoria): alerta ao admin técnico omite o email do manifestante (#572) (#583)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 900,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PRs #581 (ADR 0043 + /montar-ondas + semaforo de deploy), #582 (#559, so CONTEXT.md e corpo do PRD #469) e #583 (#572). Na #572 a constante ENDERECO_OMITIDO saiu de _alvo_no_log para email_service.py; 5 mutantes mortos, um deles (pergunta unica trocada por comparacao de string) so morreu com o caso papel=None. PRD #469 auditado pela terceira vez e APROVADO. Migration 097 segue pendente no Studio."
     }
   ]
 }
