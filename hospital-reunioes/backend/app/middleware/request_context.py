@@ -186,6 +186,11 @@ def configure_logging(level: int = logging.INFO) -> None:
     handler = logging.StreamHandler(sys.stdout)
     handler.setFormatter(JsonFormatter())
     logging.basicConfig(level=level, handlers=[handler], force=True)
+    # O httpx loga a URL inteira de cada request em INFO, e o root vai a INFO no
+    # stdout do container. Nenhum cliente da casa manda segredo na URL (o token
+    # do Instagram vai no header Authorization), mas silenciar o INFO do httpx é
+    # defesa em profundidade contra vazamento de query string em log.
+    logging.getLogger("httpx").setLevel(logging.WARNING)
 
 
 # ---------------------------------------------------------------------------

@@ -165,3 +165,23 @@ class TestRanquearPorInteracoes:
         ranqueadas = ig.ranquear_por_interacoes(posts, 2)
 
         assert [p.id for p in ranqueadas] == ["b", "c"]
+
+
+class TestValorDoInsight:
+    """As duas formas em que a Graph API entrega o valor de um insight: a conta
+    manda `total_value.value` (com `metric_type=total_value`); a mídia manda
+    `values:[{value}]` (as Interações por publicação). Porte do `insightValue`
+    da Central antiga, que lia `total_value.value ?? values[0].value ?? 0`. Sem
+    a forma `values`, toda publicação voltaria com 0 Interações com o token
+    real, e o ranking das Principais publicações quebraria."""
+
+    def test_le_o_total_value_da_conta(self):
+        assert ig.valor_do_insight([iv("reach", 100)], "reach") == 100
+
+    def test_le_o_values_da_midia(self):
+        insight = {"name": "total_interactions", "values": [{"value": 77}]}
+        assert ig.valor_do_insight([insight], "total_interactions") == 77
+
+    def test_ausente_ou_sem_valor_e_zero(self):
+        assert ig.valor_do_insight([], "reach") == 0
+        assert ig.valor_do_insight([{"name": "reach"}], "reach") == 0

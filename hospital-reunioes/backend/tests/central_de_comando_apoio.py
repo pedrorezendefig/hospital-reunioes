@@ -845,11 +845,12 @@ def erro_do_instagram(http_status: int, codigo: int, tipo: str, mensagem: str) -
 class InstagramFalso:
     """A Graph API do Instagram de mentira, no lugar do transporte do `httpx.Client`.
 
-    Confere o token (o `access_token` na query) e responde pela borda pedida:
-    `followers_count` do perfil, os insights da conta por intervalo, o
+    Confere o token (no header `Authorization: Bearer`) e responde pela borda
+    pedida: `followers_count` do perfil, os insights da conta por intervalo, o
     `follows_and_unfollows`, a lista de `/media` e as `total_interactions` de
-    cada mídia. `forcar` troca TODA resposta por uma fixa ou por uma exceção de
-    rede. `pedidos` e `clientes` registram o que passou.
+    cada mídia. As Interações da mídia vêm na forma REAL `values:[{value}]`.
+    `forcar` troca TODA resposta por uma fixa ou por uma exceção de rede.
+    `pedidos` e `clientes` registram o que passou.
     """
 
     def __init__(self) -> None:
@@ -871,10 +872,13 @@ class InstagramFalso:
             return self.forcar
         if pedido.url.host != HOST_DA_GRAPH_API or pedido.method != "GET":
             return httpx.Response(404)
-        params = pedido.url.params
-        if params.get("access_token") != TOKEN_DO_INSTAGRAM:
+        # O token vai no header Authorization: Bearer (nunca na query, que o
+        # httpx registra em log). O dublê confere o header, como o `GoogleFalso`.
+        autorizacao = pedido.headers.get("authorization", "")
+        if autorizacao.removeprefix("Bearer ") != TOKEN_DO_INSTAGRAM:
             # O que a Graph API responde para token inválido ou vencido.
             return erro_do_instagram(400, 190, "OAuthException", "Error validating access token: it has expired.")
+        params = pedido.url.params
 
         segmentos = [s for s in pedido.url.path.split("/") if s]
         no = segmentos[1] if len(segmentos) > 1 else ""
@@ -922,8 +926,11 @@ class InstagramFalso:
         return httpx.Response(200, json={"data": dados})
 
     def _interacoes_da_midia(self, media_id: str) -> httpx.Response:
+        # A forma REAL da Graph API: as Interações de uma mídia vêm em
+        # `values:[{value}]`, sem `total_value` (esse é da conta, com
+        # `metric_type=total_value`). O provedor tem de ler as duas formas.
         valor = self.interacoes.get(media_id, 0)
-        return httpx.Response(200, json={"data": [{"name": "total_interactions", "total_value": {"value": valor}}]})
+        return httpx.Response(200, json={"data": [{"name": "total_interactions", "values": [{"value": valor}]}]})
 
 
 @pytest.fixture

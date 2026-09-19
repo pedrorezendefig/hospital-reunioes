@@ -342,14 +342,15 @@ def _pedir(caminho: str, params: dict[str, str]) -> Any:
     A ÚNICA porta de rede do módulo: o único lugar onde falha de rede, HTTP ou
     corpo ilegível vira `InstagramError`, e o token vencido (`code` 190) vira
     `InstagramTokenExpiradoError`. A configuração é conferida antes de qualquer
-    rede: sem ela, nada sai daqui. O token vai no `access_token` da query (o
-    modo da Central antiga) e nunca é registrado em log."""
+    rede: sem ela, nada sai daqui. O token vai no header `Authorization: Bearer`,
+    como no provedor do Google, e nunca na query string: o httpx registra a URL
+    do pedido em log, e um token na URL vazaria em texto puro no stdout."""
     _verificar_configuracao()
     url = f"{BASE_URL}/{caminho}"
-    tudo = {**params, "access_token": settings.instagram_access_token}
+    cabecalhos = {"Authorization": f"Bearer {settings.instagram_access_token}"}
     try:
         with httpx.Client(timeout=_TIMEOUT) as cliente:
-            resposta = cliente.get(url, params=tudo)
+            resposta = cliente.get(url, params=params, headers=cabecalhos)
             resposta.raise_for_status()
             return resposta.json()
     except httpx.HTTPStatusError as exc:
@@ -418,13 +419,19 @@ def _midias_recentes(limite: int) -> list[dict]:
 
 
 def _interacoes_da_midia(media_id: str) -> int:
+    """As Interações de uma mídia (`total_interactions`).
+
+    Sem `metric_type=total_value` (que é da conta), a Graph API devolve o valor
+    da mídia como `values:[{value}]`, e NÃO como `total_value`. O
+    `valor_do_insight` lê as duas formas, o mesmo `total_value.value ??
+    values[0].value ?? 0` do `insightValue` da Central antiga: sem esse fallback,
+    toda publicação voltaria com 0 Interações com o token real, e o ranking das
+    Principais publicações quebraria."""
     dados = _pedir(f"{media_id}/insights", {"metric": "total_interactions"})
     data = dados.get("data") if isinstance(dados, dict) else None
     if not data:
         return 0
-    total_value = data[0].get("total_value") or {}
-    valor = total_value.get("value")
-    return int(valor) if isinstance(valor, int | float) else 0
+    return valor_do_insight(data, "total_interactions")
 
 
 # ─── A porta pública do provedor ────────────────────────────────────────────
