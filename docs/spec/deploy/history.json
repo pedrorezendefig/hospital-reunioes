@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-19T13:09:49-03:00",
+      "sha": "3303264e",
+      "app_version": "0.149.0",
+      "subject": "Conector MCP da Central no backend: OAuth WorkOS e gate de Super admin",
+      "raw_subject": "feat(mcp): conector MCP da Central com OAuth WorkOS e gate de Super admin (#836)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 240,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 da fila fixa (PRD #809, ADR 0058): primeiro resource server OAuth do backend. Rotas GET /.well-known/oauth-protected-resource e POST /api/mcp, as duas FORA do gate de sessão. Verifica o token do WorkOS AuthKit (python-jose, RS256 fixo, iss/aud/exp/escopo/email_verified) e resolve o participante por e-mail exigindo ativo e Super admin; toda falha é 401, config ausente é 503. Sem migration. Reusou python-jose. Dois revisores do orquestrador: 0 must-fix; os 4 should-fix aplicados antes do merge (DoS do thread-pool: valida formato do JWT antes da rede + circuit breaker de 30s no JWKS; 500 do gate vira 401; params não-dict vira -32602; batching removido conforme protocolo 2025-06-18). 56 testes. CONECTOR DORMENTE em produção: o metadata responde 503 porque não há variável do conector (issuer/resource/jwks/WorkOS) no backend de produção, coerente com o corte da ADR 0058 (dec. 3 e 9). Ativar é o corte, fora da onda."
+    },
+    {
       "at": "2026-09-19T10:43:55-03:00",
       "sha": "2185b737",
       "app_version": "0.148.0",
@@ -1463,35 +1495,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PRs #564 (#546) e #565 (#547). A #546 fechou um vazamento ATIVO: test_pipeline.py mandava a transcricao ao OpenRouter com a chave do .env a cada pytest local. A #547 trocou lista de gatilhos por allowlist de papeis internos; papel desconhecido, com espaco ou com caixa diferente passou a OMITIR. Follow-up aberto na issue #572. A migration 097 da onda 2 segue pendente de aplicacao manual no Studio."
-    },
-    {
-      "at": "2026-09-03T18:56:47-03:00",
-      "sha": "4e4535a",
-      "app_version": "0.109.0",
-      "subject": "onda 2: escopo no DELETE de série, cinco RPCs fechadas para a conta anônima e o visto carimbado no servidor",
-      "raw_subject": "feat(ouvidoria): a ação do ouvidor carimba o visto, no servidor (#521) (#562)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1500,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PRs #560 (#540), #561 (#541) e #562 (#521). A migration 097 NAO foi aplicada pelo deploy: o Pedro aplica no SQL Editor do Studio de producao e roda a fumaca (aprova so NOTICE: APROVADO 42501). A #540 fechou tambem o perfil secretaria combinado com papel de gestao, que apagava serie alheia; a clausula 'ou que criou' da triagem caiu por decisao humana."
     }
   ]
 }

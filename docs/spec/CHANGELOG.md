@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-09-19 13:09 — Conector MCP da Central no backend: OAuth WorkOS e gate de Super admin
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `3303264`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (240s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/3303264
+
 ## 2026-09-19 10:43 — Ao vivo, pessoas no Site agora entra na Visão Geral
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `2185b73`

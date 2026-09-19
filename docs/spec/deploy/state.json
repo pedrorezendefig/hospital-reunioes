@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-19T10:46:00-03:00",
+  "updated_at": "2026-09-19T13:15:00-03:00",
   "updated_by": "onda@ship",
-  "last_app_version": "0.148.0",
+  "last_app_version": "0.149.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,11 +21,11 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "2185b73",
-      "last_deploy_at": "2026-09-19T13:43:57Z",
+      "last_deploy_sha": "3303264",
+      "last_deploy_at": "2026-09-19T16:09:51Z",
       "last_health_check": {
-        "at": "2026-09-19T10:43:55-03:00",
-        "latency_ms": 101,
+        "at": "2026-09-19T13:09:49-03:00",
+        "latency_ms": 177,
         "http_status": 200,
         "body_ok": true
       },
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "2185b73",
-      "last_deploy_at": "2026-09-19T13:43:57Z",
+      "last_deploy_sha": "3303264",
+      "last_deploy_at": "2026-09-19T16:09:51Z",
       "last_health_check": {
-        "at": "2026-09-19T10:43:55-03:00",
-        "latency_ms": 256,
+        "at": "2026-09-19T13:09:49-03:00",
+        "latency_ms": 135,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 180,
+      "build_duration_seconds": 200,
       "env_count": 5
     },
     {
@@ -174,59 +174,63 @@
   },
   "gates": [
     {
-      "name": "CI 3/3 verde no PR #835 pos integração do main e bump (Backend, Frontend, Docker Build); MERGEABLE e CLEAN",
+      "name": "CI 3/3 verde no PR #836 (Backend, Frontend, Docker Build); MERGEABLE e CLEAN em cada etapa",
       "status": "ok"
     },
     {
-      "name": "Gate 1.5 spec x diff por revisor independente do sub-agente: SPEC-COMPLETO, 4 de 4 critérios, sem scope creep",
+      "name": "Gate 1.5 spec x diff por revisor independente do sub-agente: núcleo OAuth sólido, fail-closed, achados endereçados (JWKS indisponível 401, autorizar em thread, cache TTL)",
       "status": "ok"
     },
     {
-      "name": "Dois revisores do orquestrador (código+segurança e segurança dedicada, rota admin nova): os dois LIMPOS, 0 must-fix. Should-fix de rate-limit aplicado (30 para 5/min); should-fix de teste virou follow-up",
+      "name": "Dois revisores do orquestrador (código+correção e segurança OAuth adversarial): 0 must-fix, nenhum fail-open. RS256 fixo (bloqueia alg:none e HS256), iss/aud/exp/escopo/email_verified, gate fail-closed, 401 sempre, CORS só no metadata, sem SSRF",
       "status": "ok"
     },
     {
-      "name": "Gate de Super admin herdado do router (dependencies require_super_admin) cobre a nova rota; sem bypass, testado na rota real (403/401)",
+      "name": "4 should-fix do checkpoint aplicados antes do merge e conferidos no delta: DoS do thread-pool, 500->401 no gate, params->-32602, batching removido. 56 testes (era 48), incluindo recusa de alg:none e HS256",
       "status": "ok"
     },
     {
-      "name": "APP_VERSION 0.148.0 no Coolify ANTES do merge (forma posicional). Leitura -s do CLI volta vazia, mas sem -s mostra mascarado e o /health confirma 0.148.0",
+      "name": "Enumerador de rotas do snapshot intacto: as 2 rotas entram no schema OpenAPI, no_app == no_schema, com teste (test_as_rotas_estao_no_schema_publico)",
       "status": "ok"
     },
     {
-      "name": "Version match provado no ar: /api/health em 0.148.0 (era 0.147.0), status healthy, db healthy; frontend 200",
+      "name": "APP_VERSION 0.149.0 no Coolify ANTES do merge; version match provado no ar: /api/health em 0.149.0, db healthy, frontend 200",
       "status": "ok"
     },
     {
-      "name": "Semáforo pego antes do merge e solto no fim; bookkeeping em worktree detached de origin/main (árvore principal com collect.py/serve.py intocada)",
+      "name": "Conector DORMENTE em producao: metadata em 503 (fail-closed) por ausencia de variavel do conector no backend de prod, coerente com o corte da ADR 0058. Nao ativado pela onda",
+      "status": "warn"
+    },
+    {
+      "name": "Semáforo pego antes do merge e solto no fim; bookkeeping em worktree detached de origin/main",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Deploy v0.148.0 saudável",
-      "text": "Ao vivo (pessoas no site agora) na Visão Geral. Backend rápido e frontend cerca de 3min no SHA 2185b73. /api/health em 0.148.0 com db healthy, frontend 200. Sem OOM."
-    },
-    {
-      "kind": "info",
-      "title": "Should-fix adiado (teste)",
-      "text": "VisaoGeral.test.tsx usa toContainEqual e perdeu a garantia de exatamente uma chamada a visao-geral. Reforçar filtrando as chamadas e afirmando length igual a 1. Follow-up, não trava."
-    },
-    {
-      "kind": "info",
-      "title": "Nits do IndicadorAoVivo",
-      "text": "aria-live=polite reanuncia o número a cada 30s; animate-ping pode não respeitar prefers-reduced-motion; sobreposição foco+poll segue o padrão da ADR 0050 decisão 9. Candidatos a acabamento."
+      "title": "Deploy v0.149.0 saudável",
+      "text": "Conector MCP no backend (dormente). /api/health em 0.149.0 com db healthy, frontend 200. Backend rápido e frontend cerca de 3min no SHA 3303264. Sem OOM."
     },
     {
       "kind": "warn",
-      "title": "coolify env list -s volta value vazio",
-      "text": "Nesta versão do CLI, 'coolify app env list -s' devolve value vazio para APP_VERSION (sem -s mostra mascarado). Conferir o valor exato só pelo /api/health pos-deploy, não pelo CLI."
+      "title": "Conector MCP dormente: 503 e sem variaveis em prod",
+      "text": "O /.well-known/oauth-protected-resource responde 503 (config ausente, fail-closed) e NENHUMA variavel do conector (issuer/resource/jwks/WorkOS) esta no backend de producao. Coerente com o plano do conector dormente ate o dia do corte (ADR 0058 dec. 3 e 9). Se as vars da #814 deviam estar em prod, falta propaga-las; se so entram no corte, o 503 e esperado. Ativar o conector e o corte, fora da onda: as vars nao foram criadas nem alteradas aqui."
+    },
+    {
+      "kind": "info",
+      "title": "Resource Indicators respondidos no PR #836",
+      "text": "O AuthKit expoe UM Resource Indicator, nao aceita os dois ao mesmo tempo. Corte troca o RI antigo pelo da API. Sim/nao empirico depende de token na mao na integracao (trava pendente da ADR 0006). Plano do corte inalterado."
+    },
+    {
+      "kind": "info",
+      "title": "Nits registrados no PR #836",
+      "text": "email_verified aceita True ou string 'true' (fail-closed proposital); e-mail case-sensitive no lookup do Supabase (coberto pelo checklist do corte); header MCP-Protocol-Version do request nao validado (leniente); confirmar OPTIONS/CORS do transporte na integracao."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "2185b73",
+    "sha": "3303264",
     "result": "healthy",
     "duration_seconds": 240
   }
