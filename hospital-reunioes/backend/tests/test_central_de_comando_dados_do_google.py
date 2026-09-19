@@ -462,10 +462,16 @@ class TestGoogleFalhou:
 
         assert [dia["visitantes"] for dia in movimento] == [410, 0, 0, 0, 0, 0, 0]
 
-    @pytest.mark.parametrize("rows", [5, True, "linhas", {"linha": 1}], ids=["numero", "booleano", "texto", "objeto"])
+    @pytest.mark.parametrize(
+        "rows",
+        [5, True, "linhas", {"linha": 1}, {}, 0],
+        ids=["numero", "booleano", "texto", "objeto", "objeto-vazio", "zero"],
+    )
     def test_rows_que_nao_e_lista_e_resposta_fora_do_formato(self, lote_da_ga4, rows):
         """O `rows` da GA4 é uma lista de linhas. Qualquer outra coisa é
-        resposta fora do formato: 502 com a frase, e não um erro de código."""
+        resposta fora do formato: 502 com a frase, e não um erro de código.
+        Inclusive o que é "falso" sem ser lista (`{}`, `0`): lido como lista
+        vazia, viraria um dia com zero que ninguém mediu."""
         lote_da_ga4.perguntas.insert(0, _rows_assim(rows))
 
         resposta = _dados_do_google("7d")
