@@ -81,6 +81,10 @@ _TIMEOUT = httpx.Timeout(10.0, connect=3.0)
 # verdade) de um `{}` de proxy ou de página de erro, que não é resposta nenhuma.
 _KIND_DO_RELATORIO = "analyticsData#runReport"
 
+# A frase de todo relatório que chega fora do formato, em qualquer tela: fixa,
+# porque vai para a tela e fica no cache como o motivo do último valor bom.
+_RELATORIO_FORA_DO_FORMATO = "O Google Analytics devolveu um relatório fora do formato esperado."
+
 _FALTA_CONFIGURAR = (
     "A Central de Comando ainda não está ligada ao Google Analytics: falta configurar {faltando} no "
     "backend. Enquanto isso, nenhum número do Site é mostrado."
@@ -162,7 +166,7 @@ def _primeira_metrica(relatorio: dict) -> float:
     try:
         valor = linhas[0]["metricValues"][0]["value"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise GoogleError("O Google Analytics devolveu um relatório fora do formato esperado.") from exc
+        raise GoogleError(_RELATORIO_FORA_DO_FORMATO) from exc
     try:
         numero = float(valor)
     except (TypeError, ValueError):
@@ -171,10 +175,6 @@ def _primeira_metrica(relatorio: dict) -> float:
 
 
 # ─── Dados do Google: as perguntas em lote (issue #817) ─────────────────────
-
-# A frase de todo relatório que chega fora do formato: fixa, porque vai para a
-# tela e fica no cache como o motivo do último valor bom.
-_RELATORIO_FORA_DO_FORMATO = "O Google Analytics devolveu um relatório fora do formato esperado."
 
 
 @dataclass(frozen=True)
@@ -549,3 +549,195 @@ def _um_lote(propriedade: str, token: str, corpos: list[dict]) -> list[dict]:
         logger.error("[CentralGoogle] batchRunReports respondeu fora do formato do lote da GA4")
         raise GoogleError("O Google Analytics devolveu uma resposta fora do formato esperado.")
     return relatorios
+
+
+# ─── Áreas do site, Origem do público e Contatos gerados (issue #818) ────────
+#
+# Mais três números da tela Dados do Google, cada um uma `Pergunta` que entra no
+# mesmo `perguntar` da tela. A GA4 só conhece páginas, grupos de canal e eventos
+# soltos: juntar isso no que a Central mostra é interpretação da Central, e mora
+# aqui, como o nome dos dispositivos. As métricas, as dimensões, os filtros e o
+# agrupamento são os da Central antiga, para os números baterem com os dela.
+
+AreaDoSite = Literal["maternidade", "emergencia", "centro-de-imagem", "centro-medico", "laboratorio"]
+
+# A página de cada Área do site no Site, na ordem do catálogo. A Área é a página
+# e as subpáginas dela. O caminho segue o endereço VIVO do Site: a Emergência
+# mudou de "/emergencia-24h" para "/emergencia", e um caminho morto zeraria a
+# Área em silêncio (a Central antiga caiu nisso uma vez).
+_CAMINHO_DA_AREA: dict[AreaDoSite, str] = {
+    "maternidade": "/maternidade",
+    "emergencia": "/emergencia",
+    "centro-de-imagem": "/centro-de-imagem",
+    "centro-medico": "/centro-medico",
+    "laboratorio": "/laboratorio",
+}
+
+
+def area_da_pagina(caminho: str) -> AreaDoSite | None:
+    """A Área do site da página, ou `None` para a página que não é de Área
+    nenhuma (a inicial, o blog).
+
+    Conta a própria página da Área e as subpáginas dela ("/maternidade" e
+    "/maternidade/amamentacao/"), nunca um prefixo parcial: "/maternidade-
+    clinica/" não é da Maternidade. Porte do `inSection` da Central antiga.
+    """
+    for area, base in _CAMINHO_DA_AREA.items():
+        if caminho == base or caminho.startswith(f"{base}/"):
+            return area
+    return None
+
+
+@dataclass(frozen=True)
+class VisitasNaArea:
+    area: AreaDoSite
+    visitas: int
+    visitas_anterior: int
+
+
+def visitas_por_area_do_site(periodo: Periodo, hoje: date) -> Pergunta[tuple[VisitasNaArea, ...]]:
+    """As Visitas às páginas de cada Área do site, no período e no anterior.
+
+    As `sessions` da GA4 por `pagePath`, um relatório por intervalo, somadas
+    na Área de cada página, como a Central antiga (`getVisitsByBranch` e
+    `mapBranchVisits`). Página fora do catálogo não conta. Sempre as cinco
+    Áreas, na ordem do catálogo, com zero na que não teve visita: quem ordena
+    o ranking é a tela.
+    """
+    atual = intervalo_atual(periodo, hoje)
+    anterior = intervalo_anterior(periodo, hoje)
+
+    def ler(relatorios: tuple[dict, ...]) -> tuple[VisitasNaArea, ...]:
+        do_atual, do_anterior = relatorios
+        no_atual = _visitas_por_area(do_atual)
+        no_anterior = _visitas_por_area(do_anterior)
+        return tuple(VisitasNaArea(area, no_atual[area], no_anterior[area]) for area in _CAMINHO_DA_AREA)
+
+    return Pergunta(relatorios=(_visitas_por_pagina_em(atual), _visitas_por_pagina_em(anterior)), ler=ler)
+
+
+def _visitas_por_pagina_em(intervalo: Intervalo) -> dict:
+    return {
+        "dateRanges": [_faixa_da_ga4(intervalo)],
+        "metrics": [{"name": "sessions"}],
+        "dimensions": [{"name": "pagePath"}],
+    }
+
+
+def _visitas_por_area(relatorio: dict) -> dict[AreaDoSite, int]:
+    """As Visitas de cada Área num relatório de Visitas por página, com zero
+    na Área que não teve página visitada."""
+    visitas = dict.fromkeys(_CAMINHO_DA_AREA, 0)
+    for caminho, numero in _linhas(relatorio):
+        area = area_da_pagina(caminho)
+        if area is not None:
+            visitas[area] += int(numero)
+    return visitas
+
+
+OrigemDoPublico = Literal["busca", "direto", "redes", "anuncios", "outros", "nao-identificado"]
+
+# O grupo de canal padrão da GA4 (`sessionDefaultChannelGroup`) de cada Origem do
+# público, igual ao da Central antiga (`CHANNEL_FROM_GA4`). Grupo identificado
+# que não está aqui ("Referral", "Email") é Outros, e o nome vazio é Não
+# identificado: nenhum termo cru da GA4 chega à tela.
+_ORIGEM_DO_CANAL: dict[str, OrigemDoPublico] = {
+    "Organic Search": "busca",
+    "Direct": "direto",
+    "Organic Social": "redes",
+    "Paid Social": "redes",
+    "Paid Search": "anuncios",
+    "Display": "anuncios",
+    "Paid Shopping": "anuncios",
+    "Paid Video": "anuncios",
+    "Paid Other": "anuncios",
+    "Cross-network": "anuncios",
+    "Unassigned": "nao-identificado",
+    "(other)": "nao-identificado",
+}
+
+
+def origem_do_canal(canal: str) -> OrigemDoPublico:
+    """A Origem do público de um grupo de canal da GA4. Porte do `channelKey`
+    da Central antiga, com as mesmas três regras: o grupo do mapa vira a
+    origem dele; o nome vazio é Não identificado; qualquer outro grupo
+    (inclusive o "(not set)", que não está no mapa) é Outros."""
+    if canal in _ORIGEM_DO_CANAL:
+        return _ORIGEM_DO_CANAL[canal]
+    if canal == "":
+        return "nao-identificado"
+    return "outros"
+
+
+@dataclass(frozen=True)
+class VisitasNaOrigem:
+    origem: OrigemDoPublico
+    visitas: int
+
+
+def visitas_por_origem(periodo: Periodo, hoje: date) -> Pergunta[tuple[VisitasNaOrigem, ...]]:
+    """As Visitas do período em cada Origem do público.
+
+    As `sessions` da GA4 por `sessionDefaultChannelGroup`, como a Central
+    antiga (`getTrafficSources` e `mapTrafficSources`), somadas por origem.
+    Só as origens que apareceram na resposta, na ordem em que apareceram:
+    quem ordena para a tela é a tela.
+    """
+
+    def ler(relatorios: tuple[dict, ...]) -> tuple[VisitasNaOrigem, ...]:
+        (relatorio,) = relatorios
+        visitas: dict[OrigemDoPublico, int] = {}
+        for canal, numero in _linhas(relatorio):
+            origem = origem_do_canal(canal)
+            visitas[origem] = visitas.get(origem, 0) + int(numero)
+        return tuple(VisitasNaOrigem(origem, numero) for origem, numero in visitas.items())
+
+    corpo = {
+        "dateRanges": [_faixa_da_ga4(intervalo_atual(periodo, hoje))],
+        "metrics": [{"name": "sessions"}],
+        "dimensions": [{"name": "sessionDefaultChannelGroup"}],
+    }
+    return Pergunta(relatorios=(corpo,), ler=ler)
+
+
+CanalDeContato = Literal["agendar", "whatsapp", "fale-conosco", "telefone"]
+
+
+@dataclass(frozen=True)
+class CliquesNoCanal:
+    canal: CanalDeContato
+    cliques: int
+
+
+def cliques_de_contato(periodo: Periodo, hoje: date) -> Pergunta[tuple[CliquesNoCanal, ...]]:
+    """Os cliques do período nos canais de contato que a GA4 mede.
+
+    O `eventCount` da GA4 por `eventName`, filtrado pelos dois eventos que o
+    Site dispara (`GA4_EVENTO_WHATSAPP` e `GA4_EVENTO_FALE_CONOSCO`), como a
+    Central antiga (`getContactClicks` e `mapContactClicks`). O agendar entra
+    sempre com zero, porque o botão de marcar consulta ainda não dispara
+    evento, e a tela o lê como em construção; o telefone fica de fora, porque
+    ligação não é clique, e a tela o lê como não medido. Evento que não
+    aconteceu no período é zero, não ausência: a GA4 omite a linha dele.
+    """
+    whatsapp = settings.ga4_evento_whatsapp
+    fale_conosco = settings.ga4_evento_fale_conosco
+
+    def ler(relatorios: tuple[dict, ...]) -> tuple[CliquesNoCanal, ...]:
+        (relatorio,) = relatorios
+        por_evento = {evento: int(numero) for evento, numero in _linhas(relatorio)}
+        return (
+            CliquesNoCanal("agendar", 0),
+            CliquesNoCanal("whatsapp", por_evento.get(whatsapp, 0)),
+            CliquesNoCanal("fale-conosco", por_evento.get(fale_conosco, 0)),
+        )
+
+    corpo = {
+        "dateRanges": [_faixa_da_ga4(intervalo_atual(periodo, hoje))],
+        "metrics": [{"name": "eventCount"}],
+        "dimensions": [{"name": "eventName"}],
+        "dimensionFilter": {
+            "filter": {"fieldName": "eventName", "inListFilter": {"values": [whatsapp, fale_conosco]}},
+        },
+    }
+    return Pergunta(relatorios=(corpo,), ler=ler)

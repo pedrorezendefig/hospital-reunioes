@@ -11,15 +11,24 @@
  * - hexadecimal em qualquer lugar do código: numa string inteira ("#2B2E7E"),
  *   dentro de uma maior ("1px solid #E2E8F0"), numa classe arbitrária do
  *   Tailwind (`bg-[#2B2E7E]`) ou no valor de reserva de um token;
- * - função de cor: `rgb()`, `rgba()`, `hsl()`, `hsla()`, `hwb()`, `lab()`,
- *   `lch()`, `oklab()`, `oklch()`, `color()` e `color-mix()`;
+ * - função de cor, em maiúscula ou minúscula (o CSS aceita as duas): `rgb()`,
+ *   `rgba()`, `hsl()`, `hsla()`, `hwb()`, `lab()`, `lch()`, `oklab()`,
+ *   `oklch()`, `color()` e `color-mix()`;
  * - cor por nome ("white", "red") em `fill`, `stroke`, `color`,
- *   `backgroundColor`, `borderColor` e `stopColor`, como atributo do JSX ou
- *   chave de objeto (só `none`, `currentColor` e `transparent` passam);
+ *   `backgroundColor`, `borderColor` e `stopColor`, quando o valor é a própria
+ *   string, como atributo do JSX ou chave de objeto (só `none`, `currentColor`
+ *   e `transparent` passam);
  * - token que não existe: todo `var(--...)` usado, com ou sem valor de reserva
  *   e com dígito no nome, tem de estar definido no `globals.css`. Um token com o
  *   nome errado não quebra nada, só some: a linha do gráfico fica sem cor, e
  *   ninguém é avisado.
+ *
+ * E, onde as cores moram, confere o VALOR, e não só o texto (nit da revisão
+ * da #817, entregue na #818): toda exportação `COR_*` do `graficos.ts`, e cada
+ * valor de um mapa `COR_*`, tem de ser um `var(--token)` sozinho, com o token
+ * no `globals.css`. É o que pega cor por nome que o texto não pega (uma
+ * constante `"gray"`, um valor de mapa `"teal"`), e vale para qualquer cor
+ * nova que um gráfico ou uma barra da seção for buscar lá.
  *
  * Fica de fora, de propósito: as classes da paleta do Tailwind (`bg-white`,
  * `text-emerald-700`), que são o molde da casa (as mesmas da variação da Visão
@@ -36,6 +45,8 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 
 import { describe, expect, it } from "vitest";
+
+import * as graficos from "@/lib/central-de-comando/graficos";
 
 // O vitest roda com a raiz do frontend como cwd (é onde está o vitest.config).
 const RAIZ_SRC = join(process.cwd(), "src");
@@ -56,8 +67,9 @@ function semComentarios(codigo: string): string {
 // Hexadecimal em qualquer lugar: string inteira, pedaço de string, classe.
 const HEX = /#[0-9a-fA-F]{3,8}\b/g;
 
-// As funções de cor do CSS. O `color-mix` vem antes do `color`.
-const FUNCAO_DE_COR = /(?<![\w-])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix|color)\s*\(/g;
+// As funções de cor do CSS, em qualquer caixa (`RGB()` também é cor para o
+// navegador). O `color-mix` vem antes do `color`.
+const FUNCAO_DE_COR = /(?<![\w-])(?:rgba?|hsla?|hwb|lab|lch|oklab|oklch|color-mix|color)\s*\(/gi;
 
 // Cor por nome numa propriedade de cor, como atributo (`stroke="white"`,
 // `stroke={"white"}`) ou chave de objeto (`fill: "white"`, `"fill": "white"`).
@@ -96,6 +108,32 @@ function tokensQueNaoExistem(trecho: string): string[] {
   return tokensUsados(trecho).filter((token) => !TOKENS_DO_APP.has(token));
 }
 
+// O token sozinho, sem valor de reserva e sem mais nada: `var(--color-primary)`.
+const SO_O_TOKEN = /^var\(\s*(--[\w-]+)\s*\)$/;
+
+/**
+ * Por que uma cor exportada do `graficos.ts` não serve, ou `null` quando ela é
+ * um token do app sozinho. Confere o valor, e não o texto: pega a cor por nome
+ * numa constante ou num mapa, que a varredura do texto deixa passar.
+ */
+function problemaDaCor(cor: unknown): string | null {
+  if (typeof cor !== "string") return "não é texto";
+  const token = SO_O_TOKEN.exec(cor)?.[1];
+  if (!token) return "não é um var(--token) sozinho";
+  return TOKENS_DO_APP.has(token) ? null : "o token não existe no globals.css";
+}
+
+/** Cada cor que o `graficos.ts` exporta: as constantes `COR_*` e cada valor dos mapas `COR_*`. */
+function coresExportadas(): [string, unknown][] {
+  return Object.entries(graficos)
+    .filter(([nome]) => nome.startsWith("COR_"))
+    .flatMap(([nome, valor]): [string, unknown][] =>
+      valor !== null && typeof valor === "object"
+        ? Object.entries(valor).map(([chave, cor]): [string, unknown] => [`${nome}.${chave}`, cor])
+        : [[nome, valor]],
+    );
+}
+
 function arquivosDosGraficos(): string[] {
   return PASTAS_DA_CENTRAL.flatMap((pasta) =>
     readdirSync(join(RAIZ_SRC, pasta))
@@ -115,6 +153,7 @@ const COM_COR_A_MAO: [string, string][] = [
   ["hex no valor de reserva de um token", `<Line stroke="var(--color-primary, #2B2E7E)" />`],
   ["hex na mesma linha de um endereço", `const ajuda = "https://recharts.org/api"; const cor = "#2B2E7E";`],
   ["rgb()", `<Cell fill="rgb(43, 46, 126)" />`],
+  ["RGB() em maiúscula", `<Cell fill="RGB(43, 46, 126)" />`],
   ["rgba()", `<Cell fill="rgba(43, 46, 126, 0.5)" />`],
   ["hsl()", `<Cell fill="hsl(237 49% 33%)" />`],
   ["hsla()", `<Cell fill="hsla(237, 49%, 33%, 0.5)" />`],
@@ -176,7 +215,43 @@ describe("a varredura de token", () => {
   });
 });
 
+const CORES_QUE_NAO_SERVEM: [string, unknown][] = [
+  ["cor por nome numa constante", "gray"],
+  ["cor por nome num valor de mapa", "teal"],
+  ["hex", "#2B2E7E"],
+  ["função de cor em maiúscula", "RGB(43, 46, 126)"],
+  ["token com valor de reserva", "var(--color-primary, #2B2E7E)"],
+  ["token que não existe", "var(--color-primari)"],
+  ["token com outra coisa junto", "var(--color-primary) !important"],
+  ["valor que não é texto", 42],
+];
+
+describe("a conferência do valor das cores do graficos.ts", () => {
+  it.each(CORES_QUE_NAO_SERVEM)("recusa %s", (_, cor) => {
+    expect(problemaDaCor(cor)).not.toBeNull();
+  });
+
+  it("aceita um token do app sozinho", () => {
+    expect(problemaDaCor("var(--color-primary)")).toBeNull();
+    expect(problemaDaCor("var( --color-info )")).toBeNull();
+  });
+});
+
 describe("as cores dos gráficos da Central de Comando", () => {
+  it("toda cor que o graficos.ts exporta, constante ou valor de mapa, é um token do app sozinho", () => {
+    const cores = coresExportadas();
+    const recusadas = cores
+      .map(([nome, cor]) => [nome, cor, problemaDaCor(cor)] as const)
+      .filter(([, , problema]) => problema !== null)
+      .map(([nome, cor, problema]) => `${nome}: ${String(cor)} (${problema})`);
+
+    // Sem isto, conferir nada passaria em tudo.
+    expect(cores.map(([nome]) => nome)).toEqual(
+      expect.arrayContaining(["COR_ATUAL", "COR_DO_DISPOSITIVO.celular", "COR_DO_DISPOSITIVO.tablet", "COR_DA_BARRA"]),
+    );
+    expect(recusadas).toEqual([]);
+  });
+
   it("a varredura acha os gráficos (sem isto, varrer nada passaria em tudo)", () => {
     expect(arquivosDosGraficos()).toEqual(
       expect.arrayContaining([

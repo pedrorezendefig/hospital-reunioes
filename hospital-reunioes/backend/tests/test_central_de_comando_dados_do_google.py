@@ -39,12 +39,6 @@ from central_de_comando_apoio import (  # noqa: E402
 )
 from conftest import TentativaDeRedeNoTeste  # noqa: E402
 
-# O `google_falso` troca o `httpx.Client` por uma função enquanto o teste roda,
-# e o `postgrest`, que o gate carrega na primeira vez, herda do `httpx.Client`
-# ao ser importado. O `lote_da_ga4` das classes daqui entra antes do gate, então
-# o app é importado já aqui, antes de qualquer troca: sem isto, o arquivo passa
-# na suíte (outro arquivo importa o app antes) e quebra quando roda sozinho.
-import app.dependencies  # noqa: E402, F401
 from app.config import settings  # noqa: E402
 from app.services.central_de_comando import provedor_google  # noqa: E402
 from app.services.central_de_comando.dados_do_google import percentuais_que_somam_100  # noqa: E402
@@ -288,13 +282,14 @@ class TestPeriodo:
         assert google_falso.pedidos == []
 
     def test_a_tela_inteira_sai_de_uma_ida_so_ao_google(self, google_falso, lote_da_ga4):
-        """Os relatórios da tela vão juntos, num `batchRunReports`: uma espera
-        pela GA4 por leitura, e não uma por relatório, em série."""
+        """Os relatórios da tela vão juntos, pelo `batchRunReports`: uma espera
+        pela GA4 por leitura, e não uma por relatório, em série. Com os blocos
+        da #818 a tela pede 7 relatórios, e a GA4 leva até 5 por lote: são
+        dois lotes, que saem ao mesmo tempo."""
         _dados_do_google("28d")
 
-        assert len(google_falso.pedidos) == 1
-        assert google_falso.pedidos[0].url.path.endswith(":batchRunReports")
-        assert len(lote_da_ga4.lotes) == 1
+        assert all(pedido.url.path.endswith(":batchRunReports") for pedido in google_falso.pedidos)
+        assert sorted(len(lote) for lote in lote_da_ga4.lotes) == [2, 5]
 
 
 # ─── Frescor e Atualizar agora: o cache da #815 vale para a tela ─────────────
@@ -312,32 +307,35 @@ class TestFrescor:
     def test_segunda_leitura_dentro_da_hora_nao_vai_ao_google(self, google_falso, lote_da_ga4, relogio_da_central):
         cliente = cliente_da_central(SUPER_ADMIN)
         primeira = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"}).json()
+        idas_da_primeira = len(google_falso.pedidos)
         lote_da_ga4.visitantes_por_dia["2026-09-17"] = 999
         relogio_da_central.avancar(minutes=59)
 
         segunda = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"}).json()
 
         assert segunda == primeira
-        assert len(google_falso.pedidos) == 1
+        assert len(google_falso.pedidos) == idas_da_primeira
 
     def test_trocar_o_periodo_troca_os_dois_blocos(self, google_falso, relogio_da_central):
         """A chave do cache é tela e período: os 7 dias guardados não
         respondem pelos 90, e os dois blocos mudam juntos."""
         cliente = cliente_da_central(SUPER_ADMIN)
         de_7_dias = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "7d"}).json()
+        idas_por_leitura = len(google_falso.pedidos)
 
         de_90_dias = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "90d"}).json()
 
         assert (len(de_7_dias["movimento"]), len(de_90_dias["movimento"])) == (7, 90)
         assert [d["chave"] for d in de_7_dias["dispositivos"]] == ["celular", "computador"]
         assert [d["chave"] for d in de_90_dias["dispositivos"]] == ["computador", "celular", "tablet"]
-        assert len(google_falso.pedidos) == 2
+        assert len(google_falso.pedidos) == 2 * idas_por_leitura
 
     def test_atualizar_agora_renova_os_dois_blocos_e_o_carimbo(self, google_falso, lote_da_ga4, relogio_da_central):
         """A tela ganha o Atualizar agora pela rota genérica da #815, sem rota
         nova: vai ao Google mesmo dentro da hora e troca os dois blocos."""
         cliente = cliente_da_central(SUPER_ADMIN)
         cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "7d"})
+        idas_por_leitura = len(google_falso.pedidos)
         lote_da_ga4.visitantes_por_dia["2026-09-17"] = 999
         lote_da_ga4.visitas_por_dispositivo[("2026-09-11", "2026-09-17")] = {"mobile": 1, "desktop": 3}
         relogio_da_central.avancar(minutes=5)
@@ -351,7 +349,7 @@ class TestFrescor:
         assert corpo["movimento"][-1]["visitantes"] == 999
         assert [(d["chave"], d["percentual"]) for d in corpo["dispositivos"]] == [("computador", 75), ("celular", 25)]
         assert corpo["frescor"]["atualizado_em"] == "2026-09-18T13:50:00+00:00"
-        assert len(google_falso.pedidos) == 2
+        assert len(google_falso.pedidos) == 2 * idas_por_leitura
 
     def test_google_fora_com_numero_guardado_mostra_o_ultimo_valor_bom(self, google_falso, relogio_da_central):
         cliente = cliente_da_central(SUPER_ADMIN)
@@ -464,10 +462,16 @@ class TestGoogleFalhou:
 
         assert [dia["visitantes"] for dia in movimento] == [410, 0, 0, 0, 0, 0, 0]
 
-    @pytest.mark.parametrize("rows", [5, True, "linhas", {"linha": 1}], ids=["numero", "booleano", "texto", "objeto"])
+    @pytest.mark.parametrize(
+        "rows",
+        [5, True, "linhas", {"linha": 1}, {}, 0],
+        ids=["numero", "booleano", "texto", "objeto", "objeto-vazio", "zero"],
+    )
     def test_rows_que_nao_e_lista_e_resposta_fora_do_formato(self, lote_da_ga4, rows):
         """O `rows` da GA4 é uma lista de linhas. Qualquer outra coisa é
-        resposta fora do formato: 502 com a frase, e não um erro de código."""
+        resposta fora do formato: 502 com a frase, e não um erro de código.
+        Inclusive o que é "falso" sem ser lista (`{}`, `0`): lido como lista
+        vazia, viraria um dia com zero que ninguém mediu."""
         lote_da_ga4.perguntas.insert(0, _rows_assim(rows))
 
         resposta = _dados_do_google("7d")

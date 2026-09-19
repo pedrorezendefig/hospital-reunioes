@@ -54,3 +54,29 @@ export function marcasDoEixo(dias: number): number[] {
 export function temAnterior(pontos: readonly { visitantes_anterior: number }[]): boolean {
   return pontos.some((ponto) => ponto.visitantes_anterior > 0);
 }
+
+// ─── As barras de Dados do Google (issue #818) ─────────────────────────────
+//
+// O ranking das Áreas do site e a Origem do público são barras em Tailwind
+// puro, sem `recharts`: um trilho e, dentro dele, a barra com a largura da
+// fatia. As cores continuam sendo os tokens do app, e moram aqui, onde a
+// varredura das cores as confere.
+
+/** A barra de uma Área do site ou de uma Origem do público: o azul-marinho da marca. */
+export const COR_DA_BARRA = "var(--color-primary)";
+
+/** A barra do resto da Origem do público (Outros e Não identificado): cinza, para ficar atrás. */
+export const COR_DA_BARRA_DO_RESTO = "var(--color-text-secondary)";
+
+/** O trilho, o fundo de cada barra. */
+export const COR_DO_TRILHO = "var(--color-border)";
+
+/**
+ * A largura da barra de um valor ao lado do maior deles, em pontos
+ * percentuais do trilho, com duas casas: o maior enche o trilho, e os outros
+ * ficam na proporção dele. Porte da barra do ranking da Central antiga. Com
+ * tudo zerado, as barras ficam vazias, sem dividir por zero.
+ */
+export function larguraNaProporcaoDoMaior(valor: number, maior: number): number {
+  return Number(((valor / Math.max(1, maior)) * 100).toFixed(2));
+}
