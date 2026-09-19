@@ -32,6 +32,7 @@ import { AlertTriangle, ChartLine, Loader2, PlugZap } from "lucide-react";
 
 import type { Frescor } from "@/lib/central-de-comando/api";
 import { formatarData } from "@/lib/central-de-comando/formato";
+import { temAnterior } from "@/lib/central-de-comando/graficos";
 import type { Periodo } from "@/lib/central-de-comando/periodo";
 
 import { BarraDeFrescor } from "./BarraDeFrescor";
@@ -95,11 +96,7 @@ export function DadosDoGoogle({ periodo }: { periodo: Periodo }) {
           <div className={`space-y-6 transition-opacity ${atualizando ? "pointer-events-none opacity-50" : ""}`}>
             <Bloco id="central-movimento" titulo="Movimento do site" dica={`Visitantes por dia · últimos ${estado.dados.periodo.dias} dias`}>
               <GraficoVisitantesPorDia pontos={estado.dados.movimento} />
-              <p className="text-xs text-text-secondary">
-                De {formatarData(estado.dados.periodo.atual.inicio)} a {formatarData(estado.dados.periodo.atual.fim)}, ao
-                lado do período anterior, de {formatarData(estado.dados.periodo.anterior.inicio)} a{" "}
-                {formatarData(estado.dados.periodo.anterior.fim)}.
-              </p>
+              <DatasDoMovimento periodo={estado.dados.periodo} comAnterior={temAnterior(estado.dados.movimento)} />
             </Bloco>
             <Bloco
               id="central-dispositivos"
@@ -136,6 +133,23 @@ export function DadosDoGoogle({ periodo }: { periodo: Periodo }) {
         </div>
       )}
     </div>
+  );
+}
+
+/**
+ * As datas do Movimento do site, para conferir com o Google. Quando o período
+ * anterior não teve visita, o gráfico não desenha a linha dele, e a frase diz
+ * isso em vez de prometer uma comparação que não está na tela.
+ */
+function DatasDoMovimento({ periodo, comAnterior }: { periodo: PeriodoDoPayload; comAnterior: boolean }) {
+  const atual = `${formatarData(periodo.atual.inicio)} a ${formatarData(periodo.atual.fim)}`;
+  const anterior = `${formatarData(periodo.anterior.inicio)} a ${formatarData(periodo.anterior.fim)}`;
+  return (
+    <p className="text-xs text-text-secondary">
+      {comAnterior
+        ? `De ${atual}, ao lado do período anterior, de ${anterior}.`
+        : `De ${atual}. O período anterior, de ${anterior}, não teve visita.`}
+    </p>
   );
 }
 

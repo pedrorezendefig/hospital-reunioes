@@ -215,7 +215,18 @@ describe("Dados do Google: os dois blocos", () => {
     expect(screen.getByRole("heading", { level: 2, name: "Por dispositivo" })).toBeTruthy();
     expect(screen.getByText(/Visitantes por dia · últimos 7 dias/)).toBeTruthy();
     expect(screen.getByText(/11\/09\/2026 a 17\/09\/2026/)).toBeTruthy();
-    expect(screen.getByText(/04\/09\/2026 a 10\/09\/2026/)).toBeTruthy();
+    expect(screen.getByText(/ao lado do período anterior, de 04\/09\/2026 a 10\/09\/2026/)).toBeTruthy();
+  });
+
+  it("período anterior sem visita: a frase não promete uma linha que o gráfico não desenha", async () => {
+    const semAnterior = payloadDe7Dias();
+    semAnterior.movimento = semAnterior.movimento.map((p) => ({ ...p, visitantes_anterior: 0 }));
+    servidor({ leitura: () => resposta(200, semAnterior) });
+
+    render(<DadosDoGoogle periodo="7d" />);
+
+    expect(await screen.findByText(/O período anterior, de 04\/09\/2026 a 10\/09\/2026, não teve visita\./)).toBeTruthy();
+    expect(screen.queryByText(/ao lado do período anterior/)).toBeNull();
   });
 });
 
