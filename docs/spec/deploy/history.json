@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-19T07:57:38-03:00",
+      "sha": "e970e4df",
+      "app_version": "0.147.0",
+      "subject": "Áreas do site, Origem do público e Contatos gerados entram na tela Dados do Google",
+      "raw_subject": "feat(central): Áreas do site, Origem do público e Contatos gerados na tela Dados do Google (#818) (#833)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 260,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 4 do PRD #809 (ADR 0058), fecha a fila fixa da /onda. Sem migration. Números conferidos com a credencial real e OK do humano: idênticos à Central antiga em 7, 28 e 90 dias. Acabamentos das revisões na issue #834. Gates 2.6 e 2.8 não verificáveis (token do CLI)."
+    },
+    {
       "at": "2026-09-19T07:23:01-03:00",
       "sha": "62f47174",
       "app_version": "0.146.0",
@@ -1457,27 +1489,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "PRs #551 (#539), #554 (#536) e #552 (#543). O log do request truncou o IP nas 3 rotas anônimas da Ouvidoria (/24 em IPv4, /48 em IPv6) por decisão do Pedro: o /qr entrava na mesma /24 do POST de manifestação e permitia recompor o endereço do manifestante. O detector do teste passou a perguntar se a rota exige credencial, em vez de casar a palavra publico."
-    },
-    {
-      "at": "2026-09-03T16:05:00-03:00",
-      "sha": "390bda6",
-      "app_version": "0.107.2",
-      "subject": "A regua de cor do prazo e propria, e o snapshot sobrevive ao FastAPI 0.141",
-      "raw_subject": "fix(snapshot): enumerar rotas pelo schema OpenAPI, com piso de sanidade (#558)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 640,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 3 de 3, e a unica sem mudanca no codigo da app: por isso sem bump, a versao segue 0.107.2. O merge disparou rebuild pelo webhook do mesmo jeito, porque o Coolify rebuilda tudo a cada push. A #549 emendou a decisao 1 do PRD #471 e criou o verbete Semaforo de prazo no CONTEXT.md: a regua de cor do prazo e propria, nao e a paleta de gravidade. O revisor provou a tese pela origem dos valores (#B3261E e #C77700 so existem em FAIXAS_GRAVIDADE, sob o comentario da RN-34; o semaforo de prazo nunca usou hex) e recuperou por GraphQL a versao anterior do corpo do PRD para confirmar que a edicao ao vivo mudou UMA linha e nao perdeu nenhuma das 8 secoes, 18 historias e 9 fatias. A #542 e a mais instrutiva da sessao. O snapshot.py enumerava rotas por app.routes, e no FastAPI 0.141 isso devolve ZERO: o ROTAS.md sairia vazio a cada deploy. A troca para app.openapi() devolve as mesmas 192 rotas nas duas versoes. O que quase escapou nao foi a contagem. A primeira tentativa do autor filtrava por isinstance e ficou com 192 rotas e ZERO gates require_, ou seja documentacao afirmando que a app inteira e aberta; ele mesmo pegou. Na revisao o mesmo estado se mostrou ainda alcancavel por dois caminhos que saiam com codigo 0, porque o piso de sanidade contava ROTAS e nao METADADOS. Corrigido: o piso passou a exigir tambem as rotas com module, e o snapshot interrompe a geracao sem escrever nem commitar. Terceira rodada de revisao (uma a mais que o teto do ADR 0035) por dois defeitos de duas linhas: um teste que so passava por efeito colateral do cache do app.openapi() deixado por outro teste do mesmo arquivo, e um travessao numa linha nova do SKILL.md. O orquestrador conferiu na main mergeada: 192 rotas, 192 com module, 134 com require_."
     }
   ]
 }

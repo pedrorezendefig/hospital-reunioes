@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.147.0 - 2026-09-19 07:57 - áreas do site, origem do público e contatos gerados entram na tela Dados do Google
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `e970e4d`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (260s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e970e4d
+
 ## v0.146.0 - 2026-09-19 07:23 - a Central ganha a tela Dados do Google, com Visitantes por dia e dispositivos
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `62f4717`
