@@ -27,6 +27,8 @@ sobe daqui como exceção do provedor.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
+
 from app.services.central_de_comando import periodo as periodos
 from app.services.central_de_comando import provedor_google
 from app.services.central_de_comando.periodo import Periodo, dias_do_periodo
@@ -45,14 +47,16 @@ def montar(periodo: Periodo) -> dict:
     provedor, e a rota a traduz em 502 ou 503: nunca um payload com zero no
     lugar."""
     hoje = periodos.hoje_utc()
-    movimento, dispositivos = provedor_google.perguntar(
+    movimento, dispositivos, areas = provedor_google.perguntar(
         provedor_google.movimento_diario(periodo, hoje),
         provedor_google.visitas_por_dispositivo(periodo, hoje),
+        provedor_google.visitas_por_area_do_site(periodo, hoje),
     )
     return {
         "periodo": _bloco_periodo(periodo, movimento),
         "movimento": _bloco_movimento(movimento),
         "dispositivos": _bloco_dispositivos(dispositivos),
+        "areas_do_site": _bloco_areas_do_site(areas),
     }
 
 
@@ -118,3 +122,45 @@ def percentuais_que_somam_100(valores: list[int]) -> list[int]:
     for i in por_resto[:faltam]:
         inteiros[i] += 1
     return inteiros
+
+
+# ─── Áreas do site, Origem do público e Contatos gerados (issue #818) ────────
+
+
+@dataclass(frozen=True)
+class AreaNaTela:
+    """Como a tela apresenta uma Área do site: o nome e o que ela reúne."""
+
+    nome: str
+    descricao: str
+
+
+# O catálogo das Áreas do site, na ordem do catálogo. Fechado: só entra serviço
+# do hospital com página própria no Site. É interpretação da Central, sem
+# vínculo com a taxonomia de Setores: nome igual ao de um Setor é coincidência.
+AREAS_DO_SITE: dict[provedor_google.AreaDoSite, AreaNaTela] = {
+    "maternidade": AreaNaTela("Maternidade", "Estrutura, preparativos, amamentação"),
+    "emergencia": AreaNaTela("Emergência 24h", "Adulto, pediátrica, obstétrica, ortopédica"),
+    "centro-de-imagem": AreaNaTela("Centro de Imagem", "Diagnóstico por imagem"),
+    "centro-medico": AreaNaTela("Centro Médico", "Especialidades e consultas"),
+    "laboratorio": AreaNaTela("Laboratório", "Exames e resultados"),
+}
+
+
+def _bloco_areas_do_site(areas: tuple[provedor_google.VisitasNaArea, ...]) -> list[dict]:
+    """O ranking das Áreas do site: as cinco, da mais visitada para a menos
+    (no empate, a ordem do catálogo, como o ranking da Central antiga), cada
+    uma com o nome, o que reúne, as Visitas do período e do anterior e a
+    variação de um para o outro (nula quando o anterior não teve visita)."""
+    ranking = sorted(areas, key=lambda area: area.visitas, reverse=True)
+    return [
+        {
+            "chave": area.area,
+            "nome": AREAS_DO_SITE[area.area].nome,
+            "descricao": AREAS_DO_SITE[area.area].descricao,
+            "visitas": area.visitas,
+            "visitas_anterior": area.visitas_anterior,
+            "variacao": variacao_relativa(area.visitas, area.visitas_anterior),
+        }
+        for area in ranking
+    ]

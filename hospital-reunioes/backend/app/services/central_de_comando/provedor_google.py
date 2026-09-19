@@ -549,3 +549,87 @@ def _um_lote(propriedade: str, token: str, corpos: list[dict]) -> list[dict]:
         logger.error("[CentralGoogle] batchRunReports respondeu fora do formato do lote da GA4")
         raise GoogleError("O Google Analytics devolveu uma resposta fora do formato esperado.")
     return relatorios
+
+
+# ─── Áreas do site, Origem do público e Contatos gerados (issue #818) ────────
+#
+# Mais três números da tela Dados do Google, cada um uma `Pergunta` que entra no
+# mesmo `perguntar` da tela. A GA4 só conhece páginas, grupos de canal e eventos
+# soltos: juntar isso no que a Central mostra é interpretação da Central, e mora
+# aqui, como o nome dos dispositivos. As métricas, as dimensões, os filtros e o
+# agrupamento são os da Central antiga, para os números baterem com os dela.
+
+AreaDoSite = Literal["maternidade", "emergencia", "centro-de-imagem", "centro-medico", "laboratorio"]
+
+# A página de cada Área do site no Site, na ordem do catálogo. A Área é a página
+# e as subpáginas dela. O caminho segue o endereço VIVO do Site: a Emergência
+# mudou de "/emergencia-24h" para "/emergencia", e um caminho morto zeraria a
+# Área em silêncio (a Central antiga caiu nisso uma vez).
+_CAMINHO_DA_AREA: dict[AreaDoSite, str] = {
+    "maternidade": "/maternidade",
+    "emergencia": "/emergencia",
+    "centro-de-imagem": "/centro-de-imagem",
+    "centro-medico": "/centro-medico",
+    "laboratorio": "/laboratorio",
+}
+
+
+def area_da_pagina(caminho: str) -> AreaDoSite | None:
+    """A Área do site da página, ou `None` para a página que não é de Área
+    nenhuma (a inicial, o blog).
+
+    Conta a própria página da Área e as subpáginas dela ("/maternidade" e
+    "/maternidade/amamentacao/"), nunca um prefixo parcial: "/maternidade-
+    clinica/" não é da Maternidade. Porte do `inSection` da Central antiga.
+    """
+    for area, base in _CAMINHO_DA_AREA.items():
+        if caminho == base or caminho.startswith(f"{base}/"):
+            return area
+    return None
+
+
+@dataclass(frozen=True)
+class VisitasNaArea:
+    area: AreaDoSite
+    visitas: int
+    visitas_anterior: int
+
+
+def visitas_por_area_do_site(periodo: Periodo, hoje: date) -> Pergunta[tuple[VisitasNaArea, ...]]:
+    """As Visitas às páginas de cada Área do site, no período e no anterior.
+
+    As `sessions` da GA4 por `pagePath`, um relatório por intervalo, somadas
+    na Área de cada página, como a Central antiga (`getVisitsByBranch` e
+    `mapBranchVisits`). Página fora do catálogo não conta. Sempre as cinco
+    Áreas, na ordem do catálogo, com zero na que não teve visita: quem ordena
+    o ranking é a tela.
+    """
+    atual = intervalo_atual(periodo, hoje)
+    anterior = intervalo_anterior(periodo, hoje)
+
+    def ler(relatorios: tuple[dict, ...]) -> tuple[VisitasNaArea, ...]:
+        do_atual, do_anterior = relatorios
+        no_atual = _visitas_por_area(do_atual)
+        no_anterior = _visitas_por_area(do_anterior)
+        return tuple(VisitasNaArea(area, no_atual[area], no_anterior[area]) for area in _CAMINHO_DA_AREA)
+
+    return Pergunta(relatorios=(_visitas_por_pagina_em(atual), _visitas_por_pagina_em(anterior)), ler=ler)
+
+
+def _visitas_por_pagina_em(intervalo: Intervalo) -> dict:
+    return {
+        "dateRanges": [_faixa_da_ga4(intervalo)],
+        "metrics": [{"name": "sessions"}],
+        "dimensions": [{"name": "pagePath"}],
+    }
+
+
+def _visitas_por_area(relatorio: dict) -> dict[AreaDoSite, int]:
+    """As Visitas de cada Área num relatório de Visitas por página, com zero
+    na Área que não teve página visitada."""
+    visitas = dict.fromkeys(_CAMINHO_DA_AREA, 0)
+    for caminho, numero in _linhas(relatorio):
+        area = area_da_pagina(caminho)
+        if area is not None:
+            visitas[area] += int(numero)
+    return visitas

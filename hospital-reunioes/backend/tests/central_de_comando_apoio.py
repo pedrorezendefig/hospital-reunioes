@@ -238,6 +238,13 @@ def google_falso(monkeypatch, chave_rsa_da_central, cache_da_central) -> GoogleF
     O Google de mentira nasce com o cache da Central vazio: sem isso, um
     número guardado por um teste anterior responderia no lugar dele, e o teste
     passaria ou falharia conforme a ordem da suíte."""
+    # O gate (`app.dependencies`) é importado ANTES da troca (#818): o
+    # `postgrest`, que ele carrega, herda de `httpx.Client` na importação, e
+    # herdar da função que fica no lugar da classe quebra. Na suíte inteira
+    # alguém sempre o importa antes; um arquivo da Central rodado sozinho
+    # quebrava na primeira rota.
+    import app.dependencies  # noqa: F401
+
     chave_publica = chave_rsa_da_central.public_key().public_bytes(
         serialization.Encoding.PEM,
         serialization.PublicFormat.SubjectPublicKeyInfo,
@@ -313,6 +320,49 @@ VISITAS_POR_DISPOSITIVO_NA_GA4: dict[tuple[str, str], dict[str, int]] = {
     ("2026-06-20", "2026-09-17"): {"desktop": 12000, "mobile": 11000, "tablet": 1000},
 }
 
+# Visitas (`sessions`) por página (`pagePath`), pelo intervalo (início, fim), para
+# as Áreas do site (#818). A GA4 só conhece páginas soltas, com e sem barra no
+# fim, e o Site tem páginas que não são de Área nenhuma. Intervalo que não está
+# aqui não teve visita em página nenhuma (os 90 dias).
+VISITAS_POR_PAGINA_NA_GA4: dict[tuple[str, str], dict[str, int]] = {
+    # 28 dias (21/08 a 17/09): Maternidade 3.842, Emergência 3.610, Centro de
+    # Imagem e Centro Médico empatados em 1.230, Laboratório 480.
+    ("2026-08-21", "2026-09-17"): {
+        "/": 8000,
+        "/maternidade/": 3100,
+        "/maternidade/amamentacao/": 742,
+        "/maternidade-clinica/": 99,
+        "/emergencia/": 2610,
+        "/emergencia/pediatrica/": 1000,
+        "/emergencia-24h/": 57,
+        "/centro-de-imagem/": 1230,
+        "/centro-medico/": 900,
+        "/centro-medico/cardiologia/": 330,
+        "/laboratorio/": 480,
+        "/blog/": 5000,
+    },
+    # O anterior dos 28 dias (24/07 a 20/08): ninguém no Centro Médico.
+    ("2026-07-24", "2026-08-20"): {
+        "/": 7000,
+        "/maternidade/": 3500,
+        "/emergencia/": 3700,
+        "/centro-de-imagem/": 1230,
+        "/laboratorio/": 400,
+    },
+    # 7 dias (11/09 a 17/09): o Laboratório na frente, e duas Áreas sem visita.
+    ("2026-09-11", "2026-09-17"): {
+        "/laboratorio/": 300,
+        "/laboratorio/resultados/": 150,
+        "/maternidade/": 400,
+        "/emergencia/": 200,
+    },
+    # O anterior dos 7 dias (04/09 a 10/09).
+    ("2026-09-04", "2026-09-10"): {
+        "/laboratorio/": 500,
+        "/maternidade/": 400,
+    },
+}
+
 # O limite da GA4: um `batchRunReports` leva de 1 a 5 relatórios.
 MAXIMO_DE_RELATORIOS_POR_LOTE = 5
 
@@ -359,6 +409,9 @@ class LoteDaGA4:
     Nasce sabendo as duas perguntas da #817, pelas tabelas: Visitantes por dia
     e Visitas por dispositivo. `lotes` guarda os pedidos de cada lote que a
     GA4 respondeu.
+
+    E as da #818, na mesma tela, acrescentadas no fim do `__init__`: as
+    Visitas por página (Áreas do site).
     """
 
     def __init__(self) -> None:
@@ -366,6 +419,10 @@ class LoteDaGA4:
         self.visitas_por_dispositivo = {faixa: dict(v) for faixa, v in VISITAS_POR_DISPOSITIVO_NA_GA4.items()}
         self.perguntas: list[PerguntaDoLote] = [self._visitantes_por_dia, self._visitas_por_dispositivo]
         self.lotes: list[list[dict]] = []
+        # As perguntas da #818: a tela pergunta tudo numa ida só, então o lote
+        # de qualquer teste da tela precisa saber respondê-las.
+        self.visitas_por_pagina = {faixa: dict(v) for faixa, v in VISITAS_POR_PAGINA_NA_GA4.items()}
+        self.perguntas += [self._visitas_por_pagina]
 
     def __call__(self, metodo: str, corpo: dict) -> dict | None:
         if metodo != "batchRunReports":
@@ -404,6 +461,16 @@ class LoteDaGA4:
         ):
             return None
         return relatorio_de_uma_dimensao("deviceCategory", "sessions", self.visitas_por_dispositivo.get(faixa, {}))
+
+    def _visitas_por_pagina(self, pedido: dict) -> dict | None:
+        faixa = faixa_unica(pedido)
+        if (
+            faixa is None
+            or pedido.get("metrics") != [{"name": "sessions"}]
+            or pedido.get("dimensions") != [{"name": "pagePath"}]
+        ):
+            return None
+        return relatorio_de_uma_dimensao("pagePath", "sessions", self.visitas_por_pagina.get(faixa, {}))
 
 
 @pytest.fixture
