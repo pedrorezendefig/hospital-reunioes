@@ -29,10 +29,11 @@ não existe ida ao endpoint de token: a única chamada de rede é a da GA4, pelo
 
 **Para as próximas fatias.** Cada número do Site é uma função pública daqui
 (Visitantes comparados, movimento diário, Áreas do site, Origem do público,
-dispositivos, Contatos gerados, Ao vivo), e toda chamada à GA4 passa pelo
-`_relatorio` ou, para as telas que pedem vários relatórios de uma vez (Dados
-do Google, #817), pelo `_um_lote`: as duas portas de rede do módulo, com o
-mesmo timeout e a mesma tradução de falha.
+dispositivos, Contatos gerados, Ao vivo), e toda chamada à GA4 sai por uma de
+duas portas de rede, com o mesmo timeout e a mesma tradução de falha: o
+`_postar_na_ga4`, para um relatório só (o `runReport` das telas de tendência e
+o `runRealtimeReport` do Ao vivo), e o `_um_lote` (`batchRunReports`), para as
+telas que pedem vários relatórios de uma vez (Dados do Google, #817).
 """
 
 from __future__ import annotations
@@ -172,6 +173,27 @@ def _primeira_metrica(relatorio: dict) -> float:
     except (TypeError, ValueError):
         return 0
     return numero if math.isfinite(numero) else 0
+
+
+# ─── Ao vivo: as pessoas no Site agora (issue #816) ─────────────────────────
+#
+# O único número em tempo real da Central, e o único que NÃO passa pelo cache:
+# um cache de 1 hora mataria o "agora". Vem do `runRealtimeReport`, a fonte de
+# tempo real da GA4, leitura como o `runReport`, pela sua própria porta de rede
+# (`_relatorio_em_tempo_real`, mais abaixo).
+
+
+def pessoas_no_site_agora() -> int:
+    """Quantas pessoas estão no Site agora, da fonte de tempo real do Google.
+
+    O `activeUsers` do `runRealtimeReport`, sem dimensão: as pessoas ativas no
+    Site nos últimos minutos, o mesmo número que o Google mostra como ativos
+    agora. Sem ninguém online, a GA4 omite `rows`, e isso é zero de verdade,
+    como no relatório de período. Falha da fonte é `GoogleError` (502 na rota),
+    nunca um zero inventado.
+    """
+    relatorio = _relatorio_em_tempo_real({"metrics": [{"name": "activeUsers"}]})
+    return int(_primeira_metrica(relatorio))
 
 
 # ─── Dados do Google: as perguntas em lote (issue #817) ─────────────────────
@@ -448,40 +470,71 @@ def _motivo_do_google(resposta: httpx.Response) -> str:
         return "sem corpo legível"
 
 
-def _relatorio(corpo: dict) -> dict:
-    """`runReport` na propriedade; devolve o relatório, ou levanta.
+def _postar_na_ga4(verbo: str, corpo: dict) -> Any:
+    """POST `{propriedade}:{verbo}` na GA4; devolve o JSON da resposta, ou levanta.
 
-    A única porta de rede do módulo, e o único lugar onde falha vira
-    `GoogleError`. A configuração é conferida antes de qualquer rede: sem ela,
-    nada sai daqui.
+    A porta de rede das perguntas de um relatório só, o `runReport` das telas de
+    tendência e o `runRealtimeReport` do Ao vivo: o único lugar onde falha de
+    rede, HTTP ou corpo ilegível vira `GoogleError`. A configuração é conferida
+    antes de qualquer rede: sem ela, nada sai daqui. Quem chama confere o `kind`
+    do relatório que pediu, porque é ele que distingue a resposta da GA4 de um
+    `{}` de proxy ou de página de erro.
     """
     _verificar_configuracao()
     propriedade = _propriedade()
     token = _token_de_acesso()
-    url = f"{BASE_URL}/properties/{propriedade}:runReport"
+    url = f"{BASE_URL}/properties/{propriedade}:{verbo}"
     try:
         with httpx.Client(timeout=_TIMEOUT) as cliente:
             resposta = cliente.post(url, json=corpo, headers={"Authorization": f"Bearer {token}"})
             resposta.raise_for_status()
-            relatorio = resposta.json()
+            return resposta.json()
     except httpx.HTTPStatusError as exc:
         codigo = exc.response.status_code
-        logger.error("[CentralGoogle] runReport respondeu HTTP %s (%s)", codigo, _motivo_do_google(exc.response))
+        logger.error("[CentralGoogle] %s respondeu HTTP %s (%s)", verbo, codigo, _motivo_do_google(exc.response))
         raise GoogleError(_frase_do_status(codigo)) from exc
     except httpx.TimeoutException as exc:
-        logger.error("[CentralGoogle] timeout no runReport")
+        logger.error("[CentralGoogle] timeout no %s", verbo)
         raise GoogleError("O Google Analytics não respondeu no tempo esperado.") from exc
     except httpx.HTTPError as exc:
-        logger.error("[CentralGoogle] falha de rede no runReport: %s", type(exc).__name__)
+        logger.error("[CentralGoogle] falha de rede no %s: %s", verbo, type(exc).__name__)
         raise GoogleError("Não foi possível falar com o Google Analytics.") from exc
     except ValueError as exc:
-        logger.error("[CentralGoogle] corpo ilegível no runReport")
+        logger.error("[CentralGoogle] corpo ilegível no %s", verbo)
         raise GoogleError("O Google Analytics devolveu uma resposta ilegível.") from exc
 
+
+def _relatorio(corpo: dict) -> dict:
+    """`runReport` na propriedade; devolve o relatório, ou levanta.
+
+    A falha vira `GoogleError` no `_postar_na_ga4`; aqui fica a conferência do
+    `kind`: sem ele, o corpo pode ser um `{}` de proxy ou de página de erro, e
+    "sem linha" nele viraria um zero que ninguém mediu.
+    """
+    relatorio = _postar_na_ga4("runReport", corpo)
     if not isinstance(relatorio, dict) or relatorio.get("kind") != _KIND_DO_RELATORIO:
-        # Sem o `kind`, o corpo pode ser um `{}` de proxy ou de página de erro,
-        # e "sem linha" nele viraria um zero que ninguém mediu.
         logger.error("[CentralGoogle] runReport respondeu sem o kind do relatório da GA4")
+        raise GoogleError("O Google Analytics devolveu uma resposta fora do formato esperado.")
+    return relatorio
+
+
+# O `kind` fixo do relatório de tempo real, como o `_KIND_DO_RELATORIO` para o de
+# período: é ele que distingue "a GA4 respondeu" de um `{}` de proxy, que sem ele
+# viraria um zero inventado de pessoas no Site.
+_KIND_DO_RELATORIO_EM_TEMPO_REAL = "analyticsData#runRealtimeReport"
+
+
+def _relatorio_em_tempo_real(corpo: dict) -> dict:
+    """`runRealtimeReport` na propriedade; devolve o relatório, ou levanta.
+
+    Como o `_relatorio`, mas na fonte de tempo real do Ao vivo (issue #816): a
+    falha sai do `_postar_na_ga4`, e aqui confere o `kind` do relatório de tempo
+    real, e não o de período, para um `{}` sem `kind` ser resposta fora do
+    formato (502), nunca "ninguém no Site".
+    """
+    relatorio = _postar_na_ga4("runRealtimeReport", corpo)
+    if not isinstance(relatorio, dict) or relatorio.get("kind") != _KIND_DO_RELATORIO_EM_TEMPO_REAL:
+        logger.error("[CentralGoogle] runRealtimeReport respondeu sem o kind do relatório de tempo real da GA4")
         raise GoogleError("O Google Analytics devolveu uma resposta fora do formato esperado.")
     return relatorio
 

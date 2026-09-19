@@ -32,6 +32,7 @@ import type { Periodo } from "@/lib/central-de-comando/periodo";
 
 import { BarraDeFrescor } from "./BarraDeFrescor";
 import { BlocoVisitantes, type PeriodoDoPayload, type VisitantesDoPayload } from "./BlocoVisitantes";
+import { IndicadorAoVivo } from "./IndicadorAoVivo";
 import { SeletorDePeriodo } from "./SeletorDePeriodo";
 import { useTelaDaCentral } from "./useTelaDaCentral";
 
@@ -80,6 +81,10 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
             aviso={aviso}
             onAtualizar={atualizarAgora}
           />
+          {/* O Ao vivo é tempo real e não passa pelo cache: fica fora do bloco
+              que esmaece durante o Atualizar agora, porque não é ele que
+              renova o Ao vivo. Some sozinho enquanto não há número. */}
+          <IndicadorAoVivo />
           <div className={`space-y-6 transition-opacity ${atualizando ? "pointer-events-none opacity-50" : ""}`}>
             <BlocoVisitantes periodo={estado.dados.periodo} visitantes={estado.dados.visitantes} />
           </div>
