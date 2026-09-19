@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-19T06:27:31-03:00",
+      "sha": "7395016c",
+      "app_version": "0.145.0",
+      "subject": "Os números da Central ganham frescor: cache de 1 hora, Atualizar agora e último valor bom",
+      "raw_subject": "feat(central): frescor dos números, cache de 1 hora, Atualizar agora e último valor bom (#815) (#831)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 359,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 do PRD #809 (ADR 0058). Sem migration: o cache vive na memória do processo. Três revisões limpas. A #817 e a #818 seguem empilhadas sobre esta subida. Gates 2.6 e 2.8 não verificáveis: o token do CLI do Coolify não revela valores."
+    },
+    {
       "at": "2026-09-18T21:05:29-03:00",
       "sha": "214e0d72",
       "app_version": "0.144.0",
@@ -1443,35 +1475,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 2 de 3. Duas issues avulsas da ouvidoria, as duas no portal do setor. A #510 tinha tres itens e so o item 2 virou codigo: o teto de 10.000 na justificativa da prorrogacao, no molde do relato e da resposta da area (#482). O item 3 foi recusado por decisao humana da triagem de 02/09 e a recusa esta registrada no corpo do PR. O que salva esta issue e a PRIMEIRA versao dela, que foi derrubada pelo proprio autor no gate de spec x diff: ela aplicava o teto por Field(max_length) do pydantic, e o 422 do pydantic tem detail como LISTA DE OBJETOS. O portal faz setErroDoPedido(mensagemDoPortal(res.status, body.detail)) e renderiza {erroDoPedido} como filho de JSX, entao objeto ali derruba a pagina inteira e leva junto a justificativa ja digitada. Era alcancavel de verdade, porque o textarea nao tem maxLength e a validacao do cliente so exige texto nao vazio: o teto seria o primeiro 422 de fato alcancavel naquele formulario. Guarda-corpo virando indisponibilidade, o padrao do PR #533. A versao final move a regra para o servico e a recusa sai como frase; o revisor confirmou que o unico Field que sobrou (dias_uteis) nao e alcancavel pela tela. A #511 nomeou quem manifestou como decimo elemento da RN-59 e tirou a frase de orientacao sobre autoria de dentro do template HTML, embutindo-a nas constantes AVISO_SIGILO e AVISO_ANONIMO. De quebra desfez uma duplicacao de guarda: _identificacao vivia privada em ouvidoria_notificacoes.py com sigilo_reforcado or anonimo, que e caso_protegido reescrito com outras palavras. O revisor de seguranca montou a tabela verdade das quatro combinacoes e confirmou 4 de 4, e confirmou tambem que a rota do token devolve identificacao null no JSON para anonimo e sigiloso, montada campo a campo, nao ocultacao no React. O revisor de codigo devolveu dois must-fix, os dois de contagem: o CONTEXT.md enumerava onze itens e escrevia dez, e sobrou um comentario dizendo nove num teste que compara dez. Corrigidos numa rodada de texto puro."
-    },
-    {
-      "at": "2026-09-03T14:20:00-03:00",
-      "sha": "777f63d",
-      "app_version": "0.107.1",
-      "subject": "O prazo na tela do responsavel ganha data e hora, do mesmo lugar que o email, e o ADR 0041 fica ratificado no caso anonimo",
-      "raw_subject": "fix(ouvidoria): o prazo do responsável ganha data e hora, do mesmo lugar que o email (#553)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 420,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 de 3 desta sessao. Duas issues do PRD #469. A #513 tirou a formatacao duplicada do vencimento: _formatar_vencimento era privada de ouvidoria_notificacoes.py e virou formatar_vencimento em ouvidoria_prazos.py, com os 8 call sites do email e a tela do portal consumindo a MESMA funcao. A rota do token passou a devolver vencimento_formatado. Tres decisoes que valem lembrar. Primeira, a fixture do page.test.tsx MENTIA: cravava rotulo_prazo 'vence amanha as 17h', frase que rotular_vencimento nunca produz, e era ela que fazia a tela parecer cumprir a historia 2 do PRD #469. Teste vacuo classico, so caiu porque o autor rodou mutacao. Segunda, calendario de feriados ilegivel agora tira so a contagem regressiva e mantem a data; antes a frase inteira sumia e quem tinha que responder ficava sem prazo nenhum na tela (issue #449). Terceira, vencimento_formatado tambem viaja no payload do painel da Ouvidoria, onde nenhuma tela le ainda, de proposito, para nao criar uma segunda saida so para o portal. A #514 foi so documentacao: ratificou no ADR 0041 que no caso anonimo o anonimato pesa mais que a RN-78, alinhou o verbete do CONTEXT.md e corrigiu DOIS pontos do comentario da migration 068 (a issue apontava so o COMMENT ON COLUMN, mas o cabecalho repetia a mesma frase errada). Nenhum SQL executavel mudou, confirmado byte a byte pelo revisor."
     }
   ]
 }

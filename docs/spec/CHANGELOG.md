@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.145.0 - 2026-09-19 06:27 - os números da Central ganham frescor: cache de 1 hora, Atualizar agora e último valor bom
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `7395016`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (359s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/7395016
+
 ## v0.144.0 - 2026-09-18 21:05 - a Central de Comando chega dormente, com guard de Super admin e Visitantes reais do GA4
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `214e0d7`
