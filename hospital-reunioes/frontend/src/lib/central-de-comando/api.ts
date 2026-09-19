@@ -14,7 +14,7 @@ export const BASE_CENTRAL = "/api/admin/central-de-comando";
  * `POST {BASE_CENTRAL}/atualizar-agora?tela=&periodo=`. Tela nova entra aqui
  * e no registro de telas do backend, como Dados do Google na #817.
  */
-export type TelaDaCentral = "visao-geral" | "dados-do-google";
+export type TelaDaCentral = "visao-geral" | "dados-do-google" | "instagram";
 
 /**
  * O Atualizar agora tem limite de taxa no backend. O 429 do `slowapi` chega

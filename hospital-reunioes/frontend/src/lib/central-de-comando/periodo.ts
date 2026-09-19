@@ -12,6 +12,14 @@ export type Periodo = "7d" | "28d" | "90d";
 /** Na ordem do seletor. */
 export const PERIODOS: readonly Periodo[] = ["7d", "28d", "90d"];
 
+/**
+ * Os períodos do Instagram: só 7 e 28 dias. A fonte entrega no máximo 30 dias
+ * de insights por consulta, então 90 dias fica de fora, e quem digita
+ * `?periodo=90d` no endereço vê o padrão de 28 (o `lerPeriodo` com estes
+ * `permitidos`), sem tela de erro.
+ */
+export const PERIODOS_DO_INSTAGRAM: readonly Periodo[] = ["7d", "28d"];
+
 /** O de quando ninguém escolheu (e de quando escolheram um que não existe). */
 export const PERIODO_PADRAO: Periodo = "28d";
 
