@@ -8,7 +8,17 @@
 
 import { describe, expect, it } from "vitest";
 
-import { formatarData, formatarHora, formatarInteiro, formatarPercentual, formatarQuando } from "./formato";
+import {
+  formatarData,
+  formatarDiaCurto,
+  formatarDiaLongo,
+  formatarFatia,
+  formatarHora,
+  formatarInteiro,
+  formatarInteiroCompacto,
+  formatarPercentual,
+  formatarQuando,
+} from "./formato";
 
 describe("formatarInteiro", () => {
   it("usa o separador de milhar do pt-BR", () => {
@@ -79,5 +89,45 @@ describe("formatarQuando", () => {
 
   it("o dia é o do hospital: 22h de ontem em Brasília é ontem, mesmo sendo hoje em UTC", () => {
     expect(formatarQuando(Date.parse("2026-09-18T01:00:00Z"), AGORA)).toBe("17/09/2026 às 22h00");
+  });
+});
+
+/**
+ * Os rótulos dos gráficos de Dados do Google (issue #817). Porte de
+ * `formatDayShort`, `formatDayLong` e `formatShare` (`src/lib/format.test.ts`
+ * do repositório antigo). As datas saem do texto do backend, e não de um
+ * `Date` no fuso do navegador, como no `formatarData`.
+ */
+describe("formatarDiaCurto", () => {
+  it("escreve a data ISO como 'dia mês' abreviado", () => {
+    expect(formatarDiaCurto("2026-06-16")).toBe("16 jun");
+    expect(formatarDiaCurto("2026-09-01")).toBe("1 set");
+  });
+});
+
+describe("formatarDiaLongo", () => {
+  it("acrescenta o dia da semana abreviado", () => {
+    expect(formatarDiaLongo("2026-06-16")).toBe("ter, 16 jun");
+    expect(formatarDiaLongo("2026-09-13")).toBe("dom, 13 set");
+  });
+});
+
+describe("formatarFatia", () => {
+  it("escreve os pontos percentuais inteiros que o backend mandou", () => {
+    expect(formatarFatia(71)).toBe("71%");
+    expect(formatarFatia(100)).toBe("100%");
+  });
+
+  it("fatia com visita e menos de 1% é '<1%', e não zero", () => {
+    expect(formatarFatia(0)).toBe("<1%");
+  });
+});
+
+describe("formatarInteiroCompacto", () => {
+  it("encurta os milhares para caber no eixo do gráfico no celular", () => {
+    // O Intl separa o número do "mil" com espaço que não quebra (U+00A0).
+    expect(formatarInteiroCompacto(950)).toBe("950");
+    expect(formatarInteiroCompacto(1200)).toBe("1,2 mil");
+    expect(formatarInteiroCompacto(38412)).toBe("38 mil");
   });
 });

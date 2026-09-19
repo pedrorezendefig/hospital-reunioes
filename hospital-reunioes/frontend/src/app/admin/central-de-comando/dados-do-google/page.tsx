@@ -1,14 +1,18 @@
-import { ChartLine } from "lucide-react";
+import { DadosDoGoogle } from "@/components/central-de-comando/DadosDoGoogle";
+import { lerPeriodo } from "@/lib/central-de-comando/periodo";
 
-import { EmConstrucao } from "@/components/central-de-comando/EmConstrucao";
-
-/** Os Dados do Google da Central de Comando: chegam numa fatia própria do PRD #809. */
-export default function DadosDoGooglePage() {
-  return (
-    <EmConstrucao
-      titulo="Dados do Google"
-      icone={ChartLine}
-      descricao="O movimento do Site, direto do Google Analytics, em linguagem simples."
-    />
-  );
+/**
+ * Os Dados do Google da Central de Comando (issue #817, ADR 0058).
+ *
+ * O período mora no endereço (`?periodo=`): o link guardado abre no mesmo
+ * período, e o que se digita errado vira o padrão de 28 dias. Esta página só
+ * lê o endereço: os números vêm do backend, pela tela, com o token da sessão.
+ */
+export default async function DadosDoGooglePage({
+  searchParams,
+}: {
+  searchParams: Promise<{ periodo?: string | string[] }>;
+}) {
+  const { periodo } = await searchParams;
+  return <DadosDoGoogle periodo={lerPeriodo(periodo)} />;
 }
