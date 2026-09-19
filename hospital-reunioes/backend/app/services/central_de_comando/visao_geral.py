@@ -11,16 +11,22 @@ Um bloco da tela, uma chave do payload. Nesta fatia (#814) são dois:
   confere com o Google usa para comparar o mesmo intervalo.
 - `visitantes`: o número-manchete, o do período anterior e a variação.
 
-As fatias seguintes acrescentam as suas chaves (o frescor, o contexto do
-número-manchete, o Instagram num relance, os Objetivos em foco e "O que vem por
-aí"), cada uma com a sua função `_bloco_*`.
+As fatias seguintes acrescentam as suas chaves (o contexto do número-manchete,
+o Instagram num relance, os Objetivos em foco e "O que vem por aí"), cada uma
+com a sua função `_bloco_*`. O `frescor` não é bloco daqui: quem o acrescenta
+é a leitura pelo cache (`telas.py`, issue #815), porque ele diz de quando é o
+payload inteiro.
+
+**O payload inteiro vai para o cache de 1 hora.** Por isso o Ao vivo não entra
+aqui: ele nunca é guardado, tem a sua própria rota.
 
 **Hoje a tela é tudo ou nada.** Qualquer falha do Google sobe daqui como
-exceção, o `_do_google` da rota responde 502 ou 503 para o payload INTEIRO, e a
-tela mostra só o aviso. Um bloco novo que falhe sozinho (o Instagram com o
-token vencido, por exemplo) derrubaria os que estão de pé. Isso vale até a
-#821, que passa a devolver status por bloco; até lá, bloco que não pode
-derrubar a tela não entra aqui sem essa mudança.
+exceção. Com número guardado, o cache devolve o payload INTEIRO de antes,
+marcado com a falha; sem número guardado, o `_do_google` da rota responde 502
+ou 503 para o payload inteiro, e a tela mostra só o aviso. Um bloco novo que
+falhe sozinho (o Instagram com o token vencido, por exemplo) derrubaria os que
+estão de pé. Isso vale até a #821, que passa a devolver status por bloco; até
+lá, bloco que não pode derrubar a tela não entra aqui sem essa mudança.
 """
 
 from __future__ import annotations

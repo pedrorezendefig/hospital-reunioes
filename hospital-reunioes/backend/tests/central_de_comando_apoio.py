@@ -10,8 +10,13 @@ nome:
   verdade; a conta, não.
 - `credencial_da_central`: o JSON da service account de mentira, com essa chave.
 - `central_configurada`: as duas variáveis do Google preenchidas no `settings`.
-- `google_falso`: troca só o transporte do `httpx.Client` pelo `GoogleFalso`.
+- `google_falso`: troca só o transporte do `httpx.Client` pelo `GoogleFalso`,
+  com o cache da Central vazio (pede o `cache_da_central`).
 - `hoje_da_central`: congela o relógio da Central em `HOJE_DE_TESTE`.
+- `cache_da_central`: o cache com frescor do processo (#815), vazio no começo e
+  no fim do teste.
+- `relogio_da_central`: o relógio do cache (#815) nas mãos do teste, um
+  `RelogioDeTeste` parado em `AGORA_DE_TESTE` que só anda quando mandam.
 
 Nenhuma fixture daqui é `autouse`: plugin vale para a suíte inteira, e só pede
 quem precisa. Nenhuma credencial de verdade mora aqui, e nada sai da máquina: a
@@ -25,7 +30,7 @@ from __future__ import annotations
 
 import json
 from collections.abc import Callable
-from datetime import date
+from datetime import UTC, date, datetime, timedelta
 from typing import Any
 
 import httpx
@@ -195,9 +200,24 @@ def central_configurada(monkeypatch, credencial_da_central) -> None:
 
 
 @pytest.fixture
-def google_falso(monkeypatch, chave_rsa_da_central) -> GoogleFalso:
+def cache_da_central():
+    """O cache com frescor do processo (issue #815), vazio no começo e no fim
+    do teste: número guardado por um teste não responde pelo seguinte."""
+    from app.services.central_de_comando.cache import cache_da_central as cache
+
+    cache.limpar()
+    yield cache
+    cache.limpar()
+
+
+@pytest.fixture
+def google_falso(monkeypatch, chave_rsa_da_central, cache_da_central) -> GoogleFalso:
     """Troca só o transporte do `httpx.Client`: o cliente de verdade monta o
-    pedido, e a resposta vem do Google de mentira."""
+    pedido, e a resposta vem do Google de mentira.
+
+    O Google de mentira nasce com o cache da Central vazio: sem isso, um
+    número guardado por um teste anterior responderia no lugar dele, e o teste
+    passaria ou falharia conforme a ordem da suíte."""
     chave_publica = chave_rsa_da_central.public_key().public_bytes(
         serialization.Encoding.PEM,
         serialization.PublicFormat.SubjectPublicKeyInfo,
@@ -220,3 +240,36 @@ def hoje_da_central(monkeypatch) -> date:
 
     monkeypatch.setattr(periodo, "hoje_utc", lambda: HOJE_DE_TESTE)
     return HOJE_DE_TESTE
+
+
+# O instante em que os testes do cache começam: o `HOJE_DE_TESTE`, às 13h45 em
+# UTC. Hora redonda de propósito, para o carimbo de frescor ser conferido de
+# olho ("2026-09-18T13:45:00+00:00").
+AGORA_DE_TESTE = datetime(2026, 9, 18, 13, 45, tzinfo=UTC)
+
+
+class RelogioDeTeste:
+    """O relógio do cache com frescor nas mãos do teste: parado até o teste
+    mandar andar. É ele que diz se a hora do cache já passou."""
+
+    def __init__(self, agora: datetime = AGORA_DE_TESTE):
+        self.agora = agora
+
+    def __call__(self) -> datetime:
+        return self.agora
+
+    def avancar(self, **quanto: float) -> None:
+        """Anda o relógio: `avancar(minutes=59)`, `avancar(hours=1)`."""
+        self.agora += timedelta(**quanto)
+
+
+@pytest.fixture
+def relogio_da_central(monkeypatch) -> RelogioDeTeste:
+    """O relógio do cache com frescor nas mãos do teste, parado em
+    `AGORA_DE_TESTE`. É outro relógio que o do `hoje_da_central`: aquele diz
+    que dia é (os períodos), este diz há quanto tempo o número foi buscado."""
+    from app.services.central_de_comando import cache
+
+    relogio = RelogioDeTeste()
+    monkeypatch.setattr(cache, "agora_utc", relogio)
+    return relogio

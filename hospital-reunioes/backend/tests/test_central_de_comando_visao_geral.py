@@ -333,9 +333,10 @@ class TestSemCredencial:
 
 @pytest.mark.usefixtures("central_configurada")
 class TestGoogleFalhou:
-    """Porte de "propaga erro do client" (`ga4-provider.test.ts`): lá o erro
-    subia para o cache; aqui sobe para a rota, que responde 502 com a frase.
-    O cache com o último valor bom é a fatia #815."""
+    """Porte de "propaga erro do client" (`ga4-provider.test.ts`): o erro sobe
+    do provedor e, sem número guardado no cache (o `google_falso` o entrega
+    vazio), a rota responde 502 com a frase. Com número guardado, é o último
+    valor bom: `test_central_de_comando_frescor.py` (#815)."""
 
     @pytest.mark.parametrize(
         ("resposta_do_google", "trecho"),
