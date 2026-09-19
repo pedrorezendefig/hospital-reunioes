@@ -21,10 +21,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { VisaoGeral, type VisaoGeralPayload } from "./VisaoGeral";
 
-const sessao = vi.hoisted(() => ({ token: "token-de-teste" as string | null }));
+// `quebrada` faz a leitura da sessão rejeitar em vez de devolver token: é o
+// que o supabase-js faz com erro que não é de autenticação, ou sem as variáveis
+// públicas do cliente.
+const sessao = vi.hoisted(() => ({ token: "token-de-teste" as string | null, quebrada: false }));
 
 vi.mock("@/hooks/useAuth", () => ({
-  getAuthToken: async () => sessao.token ?? undefined,
+  getAuthToken: async () => {
+    if (sessao.quebrada) throw new Error("o cliente do Supabase não respondeu");
+    return sessao.token ?? undefined;
+  },
 }));
 
 vi.mock("next/link", () => ({
@@ -88,6 +94,7 @@ const atualizacoes = () => pedidos.filter((p) => p.metodo === "POST");
 
 beforeEach(() => {
   sessao.token = "token-de-teste";
+  sessao.quebrada = false;
   vi.useFakeTimers({ shouldAdvanceTime: true });
   vi.setSystemTime(AGORA);
 });
@@ -276,6 +283,36 @@ describe("Visão Geral: a renovação automática", () => {
     expect(atualizacoes()).toHaveLength(1);
   });
 
+  const falhasDaRenovacao: [string, () => Response | Promise<Response>][] = [
+    ["o limite de taxa (429)", () => resposta(429, { error: "Rate limit exceeded: 5 per 1 minute" })],
+    ["o Google fora sem nada guardado (502)", () => resposta(502, { detail: "O Google Analytics respondeu HTTP 503." })],
+    ["a rede fora", () => Promise.reject(new TypeError("Failed to fetch"))],
+  ];
+
+  it.each(falhasDaRenovacao)(
+    "%s: a renovação que falha fica em silêncio, com os números e o carimbo de antes",
+    async (_caso, atualizar) => {
+      // Ninguém clicou: não há a quem avisar. O carimbo que envelhece já diz
+      // de quando são os números, e a hora seguinte tenta de novo.
+      servidor({ leitura: () => resposta(200, payload(12345)), atualizar });
+      render(<VisaoGeral periodo="28d" />);
+      await screen.findByText("12.345");
+
+      await passar(60 * 60_000);
+      await waitFor(() => expect(atualizacoes()).toHaveLength(1));
+      // A resposta ruim termina de chegar (corpo lido, estado decidido).
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000);
+      });
+
+      expect(screen.getByText("12.345")).toBeTruthy();
+      expect(screen.getByText("Atualizado há 1 hora")).toBeTruthy();
+      expect(screen.queryByRole("status")).toBeNull();
+      expect(screen.queryByText(/Muitas atualizações|Não foi possível/)).toBeNull();
+      expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
+    },
+  );
+
   it("pede a sessão de novo a cada renovação: o token da abertura vence em 1 hora", async () => {
     servidor({
       leitura: () => resposta(200, payload(12345)),
@@ -402,5 +439,61 @@ describe("Visão Geral: trocar de período no meio de uma atualização", () => 
     expect(screen.getByText("3.100")).toBeTruthy();
     expect(screen.queryByText("99.999")).toBeNull();
     expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
+  });
+});
+
+describe("Visão Geral: a sessão que não dá para ler", () => {
+  const SEM_SESSAO = /sessão não está ativa ou o servidor não respondeu/;
+
+  async function passar(ms: number) {
+    await act(async () => {
+      vi.advanceTimersByTime(ms);
+    });
+  }
+
+  it("na abertura, diz por que não há números em vez de ficar em 'Carregando'", async () => {
+    servidor({ leitura: () => resposta(200, payload(12345)) });
+    sessao.quebrada = true;
+
+    render(<VisaoGeral periodo="28d" />);
+
+    expect(await screen.findByText(SEM_SESSAO)).toBeTruthy();
+    expect(screen.queryByText(/Carregando os números/)).toBeNull();
+    expect(pedidos).toEqual([]);
+  });
+
+  it("no Atualizar agora, os números ficam, o botão volta e o aviso diz por quê", async () => {
+    servidor({
+      leitura: () => resposta(200, payload(12345)),
+      atualizar: () => resposta(200, payload(12400)),
+    });
+    render(<VisaoGeral periodo="28d" />);
+    await screen.findByText("12.345");
+    sessao.quebrada = true;
+
+    fireEvent.click(screen.getByRole("button", { name: /Atualizar agora/ }));
+
+    expect(await screen.findByText(SEM_SESSAO)).toBeTruthy();
+    expect(screen.getByText("12.345")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
+    expect(atualizacoes()).toEqual([]);
+  });
+
+  it("a renovação de hora em hora continua depois de a sessão falhar e voltar", async () => {
+    servidor({
+      leitura: () => resposta(200, payload(12345)),
+      atualizar: () => resposta(200, payload(12400)),
+    });
+    render(<VisaoGeral periodo="28d" />);
+    await screen.findByText("12.345");
+    sessao.quebrada = true;
+    fireEvent.click(screen.getByRole("button", { name: /Atualizar agora/ }));
+    await screen.findByText(SEM_SESSAO);
+    sessao.quebrada = false;
+
+    await passar(60 * 60_000);
+
+    expect(await screen.findByText("12.400")).toBeTruthy();
+    expect(atualizacoes()).toHaveLength(1);
   });
 });

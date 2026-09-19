@@ -106,9 +106,21 @@ type Resposta<T> = { dados: T } | { falha: Falha; status: number | null };
  * Um pedido ao backend, com a sessão do momento. Nunca levanta: devolve os
  * dados, ou a falha já em palavras com o status HTTP (nulo quando o servidor
  * nem respondeu).
+ *
+ * "Nunca levanta" inclui a leitura da sessão: o supabase-js relança erro que
+ * não é de autenticação, e o cliente sem as variáveis públicas também levanta.
+ * Se isso escapasse daqui, a marca de pedido no ar nunca seria tirada: a tela
+ * ficaria em "Carregando", o botão preso em "Atualizando…" e a renovação de
+ * hora em hora pararia em silêncio.
  */
 async function pedir<T>(url: string, metodo: "GET" | "POST"): Promise<Resposta<T>> {
-  const token = await getAuthToken();
+  let token: string | undefined;
+  try {
+    token = await getAuthToken();
+  } catch (e) {
+    console.error("[central-de-comando] não foi possível ler a sessão", e);
+    token = undefined;
+  }
   if (!token) return { falha: { tipo: "sem-conexao", mensagem: SEM_SESSAO }, status: null };
   try {
     const resposta = await fetch(url, { method: metodo, headers: { Authorization: `Bearer ${token}` } });
