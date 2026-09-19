@@ -26,10 +26,11 @@ export const MUITAS_ATUALIZACOES = "Muitas atualizações em pouco tempo. Espere
  * O bloco `frescor` que todo payload de tela traz (issue #815): de quando são
  * os números (ISO 8601, com fuso) e se a última tentativa de renová-los
  * falhou, com a frase do porquê. Quando falhou, os números são o último valor
- * bom, e `atualizado_em` é a hora dele.
+ * bom, e `atualizado_em` é a hora dele. Nulo quando o backend não tem hora
+ * nenhuma registrada (o contrato admite; a leitura de uma tela sempre tem).
  */
 export type Frescor = {
-  atualizado_em: string;
+  atualizado_em: string | null;
   atualizacao_falhou: boolean;
   motivo: string | null;
 };

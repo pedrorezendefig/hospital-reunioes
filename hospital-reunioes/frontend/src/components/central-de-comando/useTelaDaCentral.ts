@@ -21,12 +21,17 @@
  *    diz "Atualizando…". Se ele não trouxer números (o limite de taxa, a rede
  *    fora, o Google fora sem nada guardado no backend), os números de antes
  *    ficam e a razão vira `aviso`: a tela nunca zera por causa de uma falha.
- * 3. **A renovação automática**, de hora em hora com a tela aberta, pela mesma
- *    rota do Atualizar agora (molde do `RefreshScope` da Central antiga, que
- *    também forçava a renovação). Ela é silenciosa: sem "Atualizando…" e sem
- *    aviso; se falhar, o carimbo que envelhece já diz de quando são os números.
- *    Forçar, e não reler, é o que garante número de no máximo 1 hora: uma
- *    releitura a 1 hora da abertura pegaria o cache ainda a segundos de vencer.
+ * 3. **A renovação automática**, de hora em hora com a tela aberta, contada da
+ *    abertura, pela mesma rota do Atualizar agora (molde do `RefreshScope` da
+ *    Central antiga, que também forçava a renovação). Ela é silenciosa: sem
+ *    "Atualizando…" e sem aviso; se falhar, o carimbo que envelhece já diz de
+ *    quando são os números. Forçar, e não reler, é o que faz cada renovação
+ *    trazer número novo: uma releitura a 1 hora da abertura pegaria o cache
+ *    ainda a segundos de vencer, e o número ficaria mais uma hora parado. O
+ *    número da tela não tem idade máxima de 1 hora: se o cache já tinha quase
+ *    1 hora quando a tela abriu, ele chega a quase 2 antes da primeira
+ *    renovação. A barra sempre diz a idade, e o Atualizar agora resolve na hora.
+ *    Ela não vai por cima de uma leitura ou de um clique ainda no ar.
  * 4. **O selo de sequência.** Cada pedido leva um número, e só escreve na tela
  *    se ainda for o último: trocar de período no meio de um Atualizar agora
  *    não deixa o número do período antigo entrar na tela do novo.
@@ -125,21 +130,25 @@ function avisoDa(resposta: { falha: Falha; status: number | null }): string {
 
 export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCentral, periodo: Periodo) {
   const [quadro, despachar] = useReducer(reduzir<T>, QUADRO_INICIAL);
+  // O selo do pedido mais novo: só ele escreve na tela.
   const selo = useRef(0);
-
-  // O quadro de agora, para a renovação automática decidir se é hora de ir.
-  const quadroAtual = useRef<Quadro<T>>(quadro);
-  useEffect(() => {
-    quadroAtual.current = quadro;
-  });
+  // O selo da leitura ou do Atualizar agora clicado que ainda está no ar, ou
+  // nulo. A renovação automática não vai por cima deles: se fosse, o selo novo
+  // descartaria o resultado deles, e uma renovação silenciosa que falhasse
+  // deixaria a tela em "Carregando" ou o botão em "Atualizando…" para sempre.
+  // É ref marcada na hora do pedido, e não o estado da tela: o estado só chega
+  // ao timer depois do render e do efeito, e o timer pode bater antes.
+  const noAr = useRef<number | null>(null);
 
   // 1. A leitura, na abertura e a cada troca de período. O selo novo aposenta
   // tudo o que ainda estiver no ar, leitura ou Atualizar agora do período velho.
   useEffect(() => {
     const meu = ++selo.current;
+    noAr.current = meu;
     despachar({ tipo: "abrir" });
     (async () => {
       const resultado = await pedir<T>(`${BASE_CENTRAL}/${tela}?periodo=${periodo}`, "GET");
+      if (noAr.current === meu) noAr.current = null;
       if (meu !== selo.current) return;
       despachar({ tipo: "leu", estado: "dados" in resultado ? { tipo: "pronto", dados: resultado.dados } : resultado.falha });
     })();
@@ -149,8 +158,12 @@ export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCen
   const renovar = useCallback(
     async (silenciosa: boolean) => {
       const meu = ++selo.current;
-      if (!silenciosa) despachar({ tipo: "atualizar" });
+      if (!silenciosa) {
+        noAr.current = meu;
+        despachar({ tipo: "atualizar" });
+      }
       const resultado = await pedir<T>(`${BASE_CENTRAL}/atualizar-agora?tela=${tela}&periodo=${periodo}`, "POST");
+      if (noAr.current === meu) noAr.current = null;
       if (meu !== selo.current) return;
       if ("dados" in resultado) despachar({ tipo: "atualizou", dados: resultado.dados });
       else if (!silenciosa) despachar({ tipo: "nao-atualizou", aviso: avisoDa(resultado) });
@@ -162,9 +175,7 @@ export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCen
 
   useEffect(() => {
     const id = setInterval(() => {
-      // Nada de renovar por cima de uma leitura ou de um clique ainda no ar.
-      const agora = quadroAtual.current;
-      if (agora.estado.tipo === "carregando" || agora.atualizando) return;
+      if (noAr.current !== null) return;
       void renovar(true);
     }, RENOVACAO_AUTOMATICA_MS);
     return () => clearInterval(id);

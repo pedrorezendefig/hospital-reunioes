@@ -209,13 +209,71 @@ describe("Visão Geral: a renovação automática", () => {
 
     await passar(60 * 60_000);
 
-    expect(atualizacoes()).toHaveLength(1);
+    await waitFor(() => expect(atualizacoes()).toHaveLength(1));
     expect(screen.queryByText(/Atualizando/)).toBeNull();
     expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
     expect(screen.getByText("12.345")).toBeTruthy();
 
     await act(async () => responder(resposta(200, payload(12400))));
     expect(await screen.findByText("12.400")).toBeTruthy();
+  });
+
+  it("renova mesmo quando o relógio bate logo depois de os números aparecerem", async () => {
+    // O timer não pode depender de o React já ter rodado os efeitos do render
+    // que desenhou os números: o CI em Linux pegou o timer batendo antes, com a
+    // tela ainda marcada como "carregando", e a renovação da hora se perdia.
+    // A corrida só aparece quando o render passa do quadro de 5 ms do React (a
+    // máquina lenta do CI), então este teste pode passar numa máquina rápida
+    // mesmo com o defeito; quem a fecha de vez é a marca de "pedido no ar",
+    // posta na hora do pedido, e os dois testes seguintes provam a regra dela.
+    servidor({
+      leitura: () => resposta(200, payload(12345)),
+      atualizar: () => resposta(200, payload(12400)),
+    });
+    render(<VisaoGeral periodo="28d" />);
+    await screen.findByText("12.345");
+
+    act(() => {
+      vi.advanceTimersByTime(60 * 60_000);
+    });
+
+    await waitFor(() => expect(atualizacoes()).toHaveLength(1));
+    expect(await screen.findByText("12.400")).toBeTruthy();
+  });
+
+  it("não renova por cima da leitura que ainda está no ar", async () => {
+    let responderLeitura: (r: Response) => void = () => {};
+    servidor({
+      leitura: () => new Promise<Response>((r) => (responderLeitura = r)),
+      atualizar: () => resposta(503, "<html>fora</html>"),
+    });
+    render(<VisaoGeral periodo="28d" />);
+    await waitFor(() => expect(pedidos).toHaveLength(1));
+
+    await passar(60 * 60_000);
+    await act(async () => responderLeitura(resposta(200, payload(12345))));
+
+    expect(await screen.findByText("12.345")).toBeTruthy();
+    expect(atualizacoes()).toEqual([]);
+  });
+
+  it("não renova por cima de um Atualizar agora clicado, e o botão não fica preso", async () => {
+    let responderClique: (r: Response) => void = () => {};
+    servidor({
+      leitura: () => resposta(200, payload(12345)),
+      atualizar: () => new Promise<Response>((r) => (responderClique = r)),
+    });
+    render(<VisaoGeral periodo="28d" />);
+    await screen.findByText("12.345");
+    fireEvent.click(screen.getByRole("button", { name: /Atualizar agora/ }));
+    await screen.findByRole("button", { name: /Atualizando/ });
+
+    await passar(60 * 60_000);
+    await act(async () => responderClique(resposta(200, payload(12400))));
+
+    expect(await screen.findByText("12.400")).toBeTruthy();
+    expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
+    expect(atualizacoes()).toHaveLength(1);
   });
 
   it("pede a sessão de novo a cada renovação: o token da abertura vence em 1 hora", async () => {

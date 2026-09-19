@@ -4,7 +4,7 @@ import { useCallback, useSyncExternalStore } from "react";
 import { AlertTriangle, RefreshCw } from "lucide-react";
 
 import type { Frescor } from "@/lib/central-de-comando/api";
-import { formatarHora } from "@/lib/central-de-comando/formato";
+import { formatarQuando } from "@/lib/central-de-comando/formato";
 import { tempoRelativo } from "@/lib/central-de-comando/tempo-relativo";
 
 const MINUTO_MS = 60_000;
@@ -21,14 +21,16 @@ function assinarMinuto(avisar: () => void) {
  * Porte do `FreshnessBar` do repositório antigo: diz há quanto tempo os
  * números foram atualizados, tem o botão Atualizar agora e, quando a última
  * atualização falhou, troca o carimbo por um aviso calmo com a hora do último
- * número bom e o motivo que o backend mandou. A tela nunca zera por causa de
- * uma falha: os números de antes continuam embaixo da barra.
+ * número bom (e o dia, se não é de hoje) e o motivo que o backend mandou. A
+ * tela nunca zera por causa de uma falha: os números de antes continuam
+ * embaixo da barra.
  *
  * O "há X minutos" anda sozinho, a cada minuto, sem recarregar a página. O
  * instante é contado em minutos inteiros desde a atualização, e não é o
  * relógio cru: o valor só muda quando o minuto vira, e é isso que a
  * `useSyncExternalStore` precisa para não redesenhar à toa. No servidor não
- * há relógio (`null`), e o carimbo sai sem o tempo.
+ * há relógio (`null`), e o carimbo sai sem o tempo. Sem hora registrada, a
+ * barra não inventa hora nenhuma.
  *
  * `aviso` é a frase de um Atualizar agora que não chegou a trazer payload (o
  * limite de taxa, a rede fora): os números e o carimbo continuam os de antes.
@@ -44,11 +46,11 @@ export function BarraDeFrescor({
   aviso?: string | null;
   onAtualizar: () => void;
 }) {
-  const desde = Date.parse(frescor.atualizado_em);
-  const agoraNoMinuto = useCallback(
-    () => desde + Math.floor((Date.now() - desde) / MINUTO_MS) * MINUTO_MS,
-    [desde],
-  );
+  const desde = frescor.atualizado_em === null ? null : Date.parse(frescor.atualizado_em);
+  const agoraNoMinuto = useCallback(() => {
+    if (desde === null) return null;
+    return desde + Math.floor((Date.now() - desde) / MINUTO_MS) * MINUTO_MS;
+  }, [desde]);
   const agora = useSyncExternalStore(assinarMinuto, agoraNoMinuto, () => null);
 
   return (
@@ -58,14 +60,15 @@ export function BarraDeFrescor({
           <p role="status" className="flex items-start gap-2 text-amber-900">
             <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-amber-600" aria-hidden="true" />
             <span>
-              <span className="font-semibold">Não foi possível atualizar agora.</span> Mostrando os números de{" "}
-              {formatarHora(desde)}.{frescor.motivo && <span className="block">{frescor.motivo}</span>}
+              <span className="font-semibold">Não foi possível atualizar agora.</span>
+              {desde !== null && ` Mostrando os números de ${formatarQuando(desde, agora ?? desde)}.`}
+              {frescor.motivo && <span className="block">{frescor.motivo}</span>}
             </span>
           </p>
         ) : (
           <p className="flex items-center gap-2 font-medium text-text-secondary">
             <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
-            {agora === null ? "Atualizado" : `Atualizado ${tempoRelativo(desde, agora)}`}
+            {desde === null || agora === null ? "Atualizado" : `Atualizado ${tempoRelativo(desde, agora)}`}
           </p>
         )}
         {aviso && (

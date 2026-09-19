@@ -22,9 +22,11 @@ import { BarraDeFrescor } from "./BarraDeFrescor";
 const AGORA = Date.parse("2026-09-18T16:50:00Z");
 const HA_5_MINUTOS = "2026-09-18T16:45:00+00:00";
 
-function frescor(parcial: { atualizado_em?: string; atualizacao_falhou?: boolean; motivo?: string | null } = {}) {
+function frescor(
+  parcial: { atualizado_em?: string | null; atualizacao_falhou?: boolean; motivo?: string | null } = {},
+) {
   return {
-    atualizado_em: parcial.atualizado_em ?? HA_5_MINUTOS,
+    atualizado_em: parcial.atualizado_em === undefined ? HA_5_MINUTOS : parcial.atualizado_em,
     atualizacao_falhou: parcial.atualizacao_falhou ?? false,
     motivo: parcial.motivo ?? null,
   };
@@ -64,10 +66,13 @@ describe("BarraDeFrescor", () => {
   });
 
   it("quando a atualização falhou, avisa com calma e diz de que horas são os números", () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(AGORA);
+
     render(
       <BarraDeFrescor
         frescor={frescor({
-          atualizado_em: "2026-06-21T16:45:00+00:00",
+          atualizado_em: "2026-09-18T16:45:00+00:00",
           atualizacao_falhou: true,
           motivo: "O Google Analytics respondeu HTTP 500.",
         })}
@@ -82,6 +87,50 @@ describe("BarraDeFrescor", () => {
     expect(aviso.textContent).toContain("O Google Analytics respondeu HTTP 500.");
     expect(screen.queryByText(/^Atualizado/)).toBeNull();
     expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
+  });
+
+  it("número bom de outro dia diz o dia, e não só a hora", () => {
+    // O Google fora desde ontem: "os números de 13h45" leria como de hoje.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(AGORA);
+
+    render(
+      <BarraDeFrescor
+        frescor={frescor({ atualizado_em: "2026-09-17T16:45:00+00:00", atualizacao_falhou: true })}
+        atualizando={false}
+        onAtualizar={() => {}}
+      />,
+    );
+
+    expect(screen.getByRole("status").textContent).toContain("Mostrando os números de 17/09/2026 às 13h45");
+  });
+
+  it("sem hora registrada, não inventa tempo nenhum", () => {
+    // O contrato do backend admite `atualizado_em` nulo (frescor de chaves que
+    // nunca foram lidas). A barra não escreve "há NaN horas" nem hora falsa.
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    vi.setSystemTime(AGORA);
+
+    const { rerender } = render(
+      <BarraDeFrescor frescor={frescor({ atualizado_em: null })} atualizando={false} onAtualizar={() => {}} />,
+    );
+
+    expect(screen.queryByText(/NaN/)).toBeNull();
+    expect(screen.queryByText(/Atualizado há/)).toBeNull();
+    expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
+
+    rerender(
+      <BarraDeFrescor
+        frescor={frescor({ atualizado_em: null, atualizacao_falhou: true, motivo: "O Google caiu." })}
+        atualizando={false}
+        onAtualizar={() => {}}
+      />,
+    );
+
+    const aviso = screen.getByRole("status").textContent ?? "";
+    expect(aviso).toContain("Não foi possível atualizar agora");
+    expect(aviso).toContain("O Google caiu.");
+    expect(aviso).not.toMatch(/NaN|Mostrando os números de/);
   });
 
   it("falha sem motivo mantém a frase de sempre", () => {

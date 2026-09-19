@@ -50,6 +50,25 @@ export function formatarHora(instante: number): string {
   return `${Number(hora)}h${minuto}`;
 }
 
+/** O dia do hospital de um instante, como "17/09/2026". */
+const DIA_NO_HOSPITAL = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "2-digit",
+  month: "2-digit",
+  year: "numeric",
+});
+
+/**
+ * De quando é um número, visto de `agora` (epoch em ms): só a hora quando é do
+ * mesmo dia do hospital ("13h45"), o dia e a hora quando não é ("17/09/2026 às
+ * 13h45"). É o que o aviso do último valor bom usa: com o Google fora desde
+ * ontem, "os números de 13h45" leria como de hoje.
+ */
+export function formatarQuando(instante: number, agora: number): string {
+  const dia = DIA_NO_HOSPITAL.format(instante);
+  return dia === DIA_NO_HOSPITAL.format(agora) ? formatarHora(instante) : `${dia} às ${formatarHora(instante)}`;
+}
+
 /**
  * Data ISO do backend (`2026-08-21`) como o hospital lê: "21/08/2026".
  *

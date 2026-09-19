@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { formatarData, formatarHora, formatarInteiro, formatarPercentual } from "./formato";
+import { formatarData, formatarHora, formatarInteiro, formatarPercentual, formatarQuando } from "./formato";
 
 describe("formatarInteiro", () => {
   it("usa o separador de milhar do pt-BR", () => {
@@ -58,5 +58,26 @@ describe("formatarHora", () => {
 
   it("meia-noite é 0h", () => {
     expect(formatarHora(Date.parse("2026-06-21T03:10:00Z"))).toBe("0h10");
+  });
+});
+
+/**
+ * De quando é o último número bom, no aviso da barra de frescor (issue #815):
+ * a hora quando é de hoje, o dia e a hora quando não é. "Hoje" é o dia do
+ * hospital, e não o do UTC: 22h em Brasília já é o dia seguinte em UTC.
+ */
+describe("formatarQuando", () => {
+  const AGORA = Date.parse("2026-09-18T16:50:00Z"); // 13h50 em Brasília
+
+  it("número de hoje: só a hora", () => {
+    expect(formatarQuando(Date.parse("2026-09-18T16:45:00Z"), AGORA)).toBe("13h45");
+  });
+
+  it("número de outro dia: o dia e a hora", () => {
+    expect(formatarQuando(Date.parse("2026-09-17T16:45:00Z"), AGORA)).toBe("17/09/2026 às 13h45");
+  });
+
+  it("o dia é o do hospital: 22h de ontem em Brasília é ontem, mesmo sendo hoje em UTC", () => {
+    expect(formatarQuando(Date.parse("2026-09-18T01:00:00Z"), AGORA)).toBe("17/09/2026 às 22h00");
   });
 });
