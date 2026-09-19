@@ -154,10 +154,11 @@ class TestAtualizarAgora:
         assert de_28_dias["frescor"]["atualizado_em"] == "2026-09-18T13:45:00+00:00"
         assert len(google_falso.pedidos) == 3 * PEDIDOS_POR_LEITURA
 
-    @pytest.mark.parametrize("tela", ["ao-vivo", "instagram", "", "../visao-geral", "Visao-Geral"])
+    @pytest.mark.parametrize("tela", ["ao-vivo", "", "../visao-geral", "Visao-Geral"])
     def test_tela_que_nao_esta_no_cache_e_recusada_sem_consultar_o_google(self, cliente, google_falso, tela):
         """Só tela registrada tem Atualizar agora. O Ao vivo não é tela do
-        cache: ele não tem o que forçar, porque nunca é guardado."""
+        cache: ele não tem o que forçar, porque nunca é guardado. (O Instagram
+        entrou no registro na #819, então saiu desta lista.)"""
         resposta = _atualizar_agora(cliente, tela=tela)
 
         assert resposta.status_code == 422

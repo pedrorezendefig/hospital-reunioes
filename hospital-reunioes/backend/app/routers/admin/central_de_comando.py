@@ -24,14 +24,15 @@ Telas, uma rota por tela, cada uma devolvendo o payload inteiro dela:
 
 - GET /admin/central-de-comando/visao-geral?periodo=7d|28d|90d   (issue #814)
 - GET /admin/central-de-comando/dados-do-google?periodo=7d|28d|90d   (issue #817)
+- GET /admin/central-de-comando/instagram?periodo=7d|28d   (issue #819)
 
 E uma rota só de Atualizar agora, para toda tela do registro de `telas.py`:
 
 - POST /admin/central-de-comando/atualizar-agora?tela=...&periodo=...  (#815)
 
 Os provedores são síncronos (`httpx.Client`, padrão da casa) e rodam em thread
-pelo `_do_google`, que é também quem traduz a falha em resposta HTTP. A fatia
-do Instagram ganha o seu par, no mesmo molde. O Ao vivo não passa pelo cache.
+pelo `_do_fonte`, que é também quem traduz a falha em resposta HTTP, uma
+tradução só para o Google e o Instagram. O Ao vivo não passa pelo cache.
 """
 
 from __future__ import annotations
@@ -43,7 +44,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 
 from app.dependencies import require_super_admin
 from app.limiter import limiter
-from app.services.central_de_comando import provedor_google, telas
+from app.services.central_de_comando import provedor_google, provedor_instagram, telas
 from app.services.central_de_comando.periodo import PERIODO_PADRAO, Periodo
 
 router = APIRouter(
@@ -53,13 +54,19 @@ router = APIRouter(
 )
 
 
-async def _do_google(funcao, *args):
-    """Roda uma leitura que depende do Google e traduz a falha em HTTP honesto.
+async def _do_fonte(funcao, *args):
+    """Roda uma leitura que depende de uma fonte externa (Google ou Instagram) e
+    traduz a falha em HTTP honesto.
 
-    Envolve a tela inteira: uma falha do Google sem número guardado (o cache
-    já devolveu o último valor bom quando havia) vira 502 ou 503 do payload
-    todo, e não de um bloco só. Vale até a #821, que passa a usar status por
-    bloco. O pedido de tela que o registro recusa (`telas.ler`) vira 422.
+    Envolve a tela inteira: uma falha da fonte sem número guardado (o cache já
+    devolveu o último valor bom quando havia) vira 502 ou 503 do payload todo, e
+    não de um bloco só. Vale até a #821, que passa a usar status por bloco. O
+    pedido de tela que o registro recusa (`telas.ler`) vira 422.
+
+    Uma tradução só para as duas fontes: o Atualizar agora é genérico e serve
+    qualquer tela do registro, então a falha do Instagram precisa virar HTTP
+    aqui como a do Google. O token vencido do Instagram é subclasse de
+    `InstagramError` e cai no 502 quando não há número guardado.
     """
     try:
         return await anyio.to_thread.run_sync(funcao, *args)
@@ -67,9 +74,9 @@ async def _do_google(funcao, *args):
         # Tela fora do registro ou período que ela não tem: recusado antes de
         # qualquer busca, dentro do `telas.ler`.
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
-    except provedor_google.GoogleNaoConfiguradoError as exc:
+    except (provedor_google.GoogleNaoConfiguradoError, provedor_instagram.InstagramNaoConfiguradoError) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
-    except provedor_google.GoogleError as exc:
+    except (provedor_google.GoogleError, provedor_instagram.InstagramError) as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
 
@@ -85,7 +92,7 @@ async def visao_geral(request: Request, periodo: Periodo = Query(PERIODO_PADRAO)
     Período fora de 7, 28 e 90 dias é 422 aqui: quem é leniente com o que se
     digita no endereço é a tela, que cai no padrão de 28 dias.
     """
-    return await _do_google(telas.ler, "visao-geral", periodo)
+    return await _do_fonte(telas.ler, "visao-geral", periodo)
 
 
 # ─── Dados do Google (issue #817) ────────────────────────────────────────────
@@ -103,7 +110,26 @@ async def dados_do_google(request: Request, periodo: Periodo = Query(PERIODO_PAD
 
     Período fora de 7, 28 e 90 dias é 422, como na Visão Geral.
     """
-    return await _do_google(telas.ler, "dados-do-google", periodo)
+    return await _do_fonte(telas.ler, "dados-do-google", periodo)
+
+
+# ─── Instagram (issue #819) ──────────────────────────────────────────────────
+
+
+@router.get("/instagram")
+@limiter.limit("30/minute")
+async def instagram(request: Request, periodo: Periodo = Query(PERIODO_PADRAO)):
+    """A tela do Instagram no período: Seguidores e crescimento, Alcance,
+    Visualizações, o bloco de engajamento e as Principais publicações, com o
+    frescor. Dentro da hora, sai do cache sem ir ao Instagram; o Atualizar agora
+    é o da rota genérica, com `tela=instagram`.
+
+    Só 7 e 28 dias: a Graph API limita os insights a 30 dias por chamada, então
+    o registro (`telas.py`) recusa 90 dias com 422, e não o busca. Token vencido
+    com número guardado é 200 com o último valor bom e o aviso de renovação no
+    frescor; sem número guardado, 502. Sem credencial, 503.
+    """
+    return await _do_fonte(telas.ler, "instagram", periodo)
 
 
 # ─── Ao vivo (issue #816) ────────────────────────────────────────────────────
@@ -129,7 +155,7 @@ async def ao_vivo(request: Request):
     agora. Fonte fora é 502 e falta de configuração é 503, pelo mesmo
     `_do_google` das telas de tendência; nunca um zero inventado.
     """
-    return {"pessoas": await _do_google(provedor_google.pessoas_no_site_agora)}
+    return {"pessoas": await _do_fonte(provedor_google.pessoas_no_site_agora)}
 
 
 # ─── Atualizar agora (issue #815) ────────────────────────────────────────────
@@ -153,4 +179,4 @@ async def atualizar_agora(request: Request, tela: str = Query(...), periodo: Per
     Tela fora do registro de `telas.py` (o Ao vivo, por exemplo) ou período que
     a tela não tem é 422, sem ir à fonte: quem recusa é o próprio `telas.ler`.
     """
-    return await _do_google(partial(telas.ler, tela, periodo, forcar=True))
+    return await _do_fonte(partial(telas.ler, tela, periodo, forcar=True))

@@ -32,7 +32,8 @@ from dataclasses import dataclass
 from functools import partial
 
 from app.services.central_de_comando import dados_do_google as tela_dados_do_google
-from app.services.central_de_comando import provedor_google
+from app.services.central_de_comando import instagram as tela_instagram
+from app.services.central_de_comando import provedor_google, provedor_instagram
 from app.services.central_de_comando import visao_geral as tela_visao_geral
 from app.services.central_de_comando.cache import cache_da_central
 from app.services.central_de_comando.periodo import PERIODOS, Periodo
@@ -72,6 +73,15 @@ TELAS: dict[str, Tela] = {
         montar=tela_dados_do_google.montar,
         falhas=(provedor_google.GoogleError,),
         periodos=PERIODOS,
+    ),
+    # Instagram (#819): só 7 e 28 dias (a Graph API limita insights a 30 dias).
+    # `InstagramError` cobre a falha da fonte, e o token vencido
+    # (`InstagramTokenExpiradoError`) é subclasse dela, então também vira último
+    # valor bom; o "não configurado" fica de fora e é sempre 503.
+    "instagram": Tela(
+        montar=tela_instagram.montar,
+        falhas=(provedor_instagram.InstagramError,),
+        periodos=("7d", "28d"),
     ),
 }
 

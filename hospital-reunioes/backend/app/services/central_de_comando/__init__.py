@@ -16,12 +16,16 @@ Um módulo por assunto, para as fatias do PRD acrescentarem sem reescrever:
   chave do payload.
 - `dados_do_google`: monta o payload da tela Dados do Google (#817), com todos
   os relatórios dela numa ida só à GA4.
+- `provedor_instagram`: o provedor de dados do Instagram, o ÚNICO ponto do app
+  que fala com a Graph API do Instagram (#819). Seguidores e crescimento,
+  Alcance, Visualizações, Interações e as partes, Contas que engajaram e as
+  Principais publicações. Na tela diz-se sempre "Instagram".
+- `instagram`: monta o payload da tela do Instagram (#819).
 - `cache`: o cache com frescor de 1 hora, em memória do processo, com o último
   valor bom quando a fonte cai (#815). O Ao vivo nunca passa por ele.
 - `telas`: o registro das telas lidas pelo cache, uma chave por tela e
   período, com o frescor no payload e o Atualizar agora (#815). Tela nova
   entra no registro e ganha os três.
 
-O que ainda vem, cada um no seu módulo: o provedor de dados do Instagram
-(#819), as telas de Instagram e Objetivos, e o conector MCP.
+O que ainda vem, cada um no seu módulo: a tela de Objetivos e o conector MCP.
 """
