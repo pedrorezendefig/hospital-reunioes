@@ -81,6 +81,10 @@ _TIMEOUT = httpx.Timeout(10.0, connect=3.0)
 # verdade) de um `{}` de proxy ou de página de erro, que não é resposta nenhuma.
 _KIND_DO_RELATORIO = "analyticsData#runReport"
 
+# A frase de todo relatório que chega fora do formato, em qualquer tela: fixa,
+# porque vai para a tela e fica no cache como o motivo do último valor bom.
+_RELATORIO_FORA_DO_FORMATO = "O Google Analytics devolveu um relatório fora do formato esperado."
+
 _FALTA_CONFIGURAR = (
     "A Central de Comando ainda não está ligada ao Google Analytics: falta configurar {faltando} no "
     "backend. Enquanto isso, nenhum número do Site é mostrado."
@@ -162,7 +166,7 @@ def _primeira_metrica(relatorio: dict) -> float:
     try:
         valor = linhas[0]["metricValues"][0]["value"]
     except (KeyError, IndexError, TypeError) as exc:
-        raise GoogleError("O Google Analytics devolveu um relatório fora do formato esperado.") from exc
+        raise GoogleError(_RELATORIO_FORA_DO_FORMATO) from exc
     try:
         numero = float(valor)
     except (TypeError, ValueError):
@@ -171,10 +175,6 @@ def _primeira_metrica(relatorio: dict) -> float:
 
 
 # ─── Dados do Google: as perguntas em lote (issue #817) ─────────────────────
-
-# A frase de todo relatório que chega fora do formato: fixa, porque vai para a
-# tela e fica no cache como o motivo do último valor bom.
-_RELATORIO_FORA_DO_FORMATO = "O Google Analytics devolveu um relatório fora do formato esperado."
 
 
 @dataclass(frozen=True)
