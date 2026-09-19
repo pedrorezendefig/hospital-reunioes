@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-19T20:10:13-03:00",
+      "sha": "d93bfc0",
+      "app_version": "0.151.0",
+      "subject": "Objetivos com galeria, lente e sugestoes",
+      "raw_subject": "feat(central-de-comando): Objetivos com galeria, lente e sugestões (#820)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 235,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 da fila fixa (PRD #809, ADR 0058, sessao B): Objetivos na Central, galeria (6/4/2), lente por objetivo (numeros + periodo + frescor) e sugestoes com o porque (5 regras portadas de src/lib/objetivos, incluindo regras/). Montadores reusam os provedores (Instagram da #819, Google) e o cache da #815, sem chamar a fonte por fora; rota /objetivos/{identificador} com allowlist (404 no desconhecido). Gate 2.5: os dois revisores independentes LIMPOS, sem must-fix; delta pos-review so teste (classificacao do path param + token fora do log). 'meta'/'Braco' so nos testes-guarda de ausencia. Sem migration. Em producao a Central segue dormente para Instagram/GA4 (variaveis so no .env local) ate a #827. Nice-to-haves nao bloqueantes: reaproveitar a leitura do Instagram entre 2 montadores, lista de periodos duplicada front/back, encodeURIComponent no fetch e 404 que ecoa o identificador. Sem travessao."
+    },
+    {
       "at": "2026-09-19T18:09:13-03:00",
       "sha": "5476202",
       "app_version": "0.150.0",
@@ -1461,37 +1493,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 2 de 2 do PRD #598, que fecha o PRD: #599 (PR #605) e #601 (PR #606). Sem migration, porque a 098 ja tinha deixado o gatilho no CHECK. O #605 saiu limpo de primeira; o #606 precisou de 3 rodadas de review, uma acima do teto e autorizada pelo humano, e as tres giraram em torno de apagar evidencia de atraso. A colisao de bump (os dois pediam 0.111.0) foi resolvida no merge, com o #606 refeito a mao como 0.112.0 depois que o rebase descartou o bump por conteudo identico. Um buraco irmao, ainda aberto em producao desde a v0.110.0, virou a issue #607."
-    },
-    {
-      "at": "2026-09-07T15:05:00-03:00",
-      "sha": "80fb433",
-      "app_version": "0.110.0",
-      "subject": "a area devolve pelo link do portal o caso que nao e dela, e o caso volta para a fila de classificacao",
-      "raw_subject": "feat(ouvidoria): a área devolve o caso que não é dela pelo link do portal (#602)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 660,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "098_ouvidoria_devolucao_a_ouvidoria.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 de 2 do PRD #598 (issue #600, fatia G). Review em 2 rodadas: seguranca limpa nas duas, codigo com 2 must-fix na primeira (motivo de largura zero passava porque strip nao enxerga Cf, e o teto de 10.000 nao tinha par na tela). O fix extraiu a peneira de invisiveis para text_sanitizer, uma implementacao para os dois textos livres. Migration 098 aplicada a mao antes do merge."
     }
   ]
 }
