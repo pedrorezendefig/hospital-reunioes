@@ -1,6 +1,6 @@
 {
   "name": "hospital-reunioes-frontend",
-  "version": "0.144.0",
+  "version": "0.145.0",
   "private": true,
   "scripts": {
     "dev": "next dev --turbopack",
