@@ -197,7 +197,13 @@ def _escopos(claims: dict) -> list[str]:
 # fecha a amplificação: um token com `kid` aleatório não dispara uma ida de rede
 # por requisição (a assinatura seria negada de qualquer forma).
 _JWKS_TTL_SEGUNDOS = 600
+# Circuit breaker: um emissor fora do ar não pode multiplicar bloqueio de thread
+# (o pool é o mesmo do Ao vivo). A primeira falha "abre o circuito" por este
+# tempo, e nele o fetch é pulado (nega direto), em vez de cada requisição prender
+# uma thread no timeout da rede.
+_JWKS_FALHA_COOLDOWN_SEGUNDOS = 30
 _jwks_cache: dict[str, tuple[dict, float]] = {}
+_jwks_falha_ate: dict[str, float] = {}
 
 
 def _buscar_jwks(jwks_uri: str) -> dict:
@@ -211,12 +217,22 @@ def _buscar_jwks(jwks_uri: str) -> dict:
 
 def jwks_do_emissor(cfg: ConfiguracaoMCP) -> dict:
     """O JWKS do emissor: do cache enquanto está fresco (TTL), senão rebusca e
-    guarda. Falha de rede sobe para o `autorizar`, que a traduz em 401."""
+    guarda. Falha de rede abre o circuito por um cooldown curto (o fetch seguinte
+    é pulado, sem tocar a rede) e sobe para o `autorizar`, que a traduz em 401."""
+    agora = time.monotonic()
     entrada = _jwks_cache.get(cfg.jwks_uri)
-    if entrada is not None and (time.monotonic() - entrada[1]) < _JWKS_TTL_SEGUNDOS:
+    if entrada is not None and (agora - entrada[1]) < _JWKS_TTL_SEGUNDOS:
         return entrada[0]
-    jwks = _buscar_jwks(cfg.jwks_uri)
+    aberto_ate = _jwks_falha_ate.get(cfg.jwks_uri)
+    if aberto_ate is not None and agora < aberto_ate:
+        raise RuntimeError("JWKS do emissor indisponível (circuito aberto)")
+    try:
+        jwks = _buscar_jwks(cfg.jwks_uri)
+    except Exception:
+        _jwks_falha_ate[cfg.jwks_uri] = time.monotonic() + _JWKS_FALHA_COOLDOWN_SEGUNDOS
+        raise
     _jwks_cache[cfg.jwks_uri] = (jwks, time.monotonic())
+    _jwks_falha_ate.pop(cfg.jwks_uri, None)
     return jwks
 
 
@@ -246,22 +262,43 @@ def resolver_super_admin(supabase, email: str) -> dict:
     return participante
 
 
+def _token_bem_formado(token: str) -> bool:
+    """O token tem os 3 segmentos de um JWS compacto e um header decodificável
+    com `alg`. Conferido ANTES de qualquer rede: um Bearer malformado é negado
+    sem gastar o fetch do JWKS nem prender uma thread no timeout do emissor."""
+    if token.count(".") != 2:
+        return False
+    try:
+        header = jwt.get_unverified_header(token)
+    except Exception:  # noqa: BLE001 - header ilegível: token malformado, nega
+        return False
+    return isinstance(header, dict) and bool(header.get("alg"))
+
+
 def autorizar(token: str | None, supabase, cfg: ConfiguracaoMCP) -> dict:
     """As duas etapas do gate, na ordem: o token do AuthKit, depois o
     participante Super admin. Devolve o participante, ou levanta
     `AcessoNegadoMCPError` (sempre 401).
 
-    JWKS indisponível também nega com 401, não deixa subir 500: "qualquer falha
-    é 401" (fail-closed). Faz I/O de rede (JWKS) e ao banco (participante), então
-    o chamador roda em thread para não travar o event loop."""
+    Fail-closed ponta a ponta: token ausente ou malformado nega ANTES de tocar a
+    rede (sem fetch do JWKS); JWKS indisponível e qualquer falha inesperada do
+    gate (I/O ao Supabase) também viram 401, nunca 500. Faz I/O de rede (JWKS) e
+    ao banco, então o chamador roda em thread para não travar o event loop."""
     if not token:
         raise AcessoNegadoMCPError("token ausente")
+    if not _token_bem_formado(token):
+        raise AcessoNegadoMCPError("token malformado")
     try:
         jwks = jwks_do_emissor(cfg)
     except Exception as exc:  # noqa: BLE001 - JWKS indisponível: fail-closed, nega (qualquer falha é 401)
         raise AcessoNegadoMCPError(f"JWKS indisponível ({type(exc).__name__})") from exc
     email = verificar_acesso(token, jwks, cfg)
-    return resolver_super_admin(supabase, email)
+    try:
+        return resolver_super_admin(supabase, email)
+    except AcessoNegadoMCPError:
+        raise
+    except Exception as exc:  # noqa: BLE001 - falha inesperada do gate (I/O ao banco): fail-closed, 401
+        raise AcessoNegadoMCPError(f"falha no gate de participante ({type(exc).__name__})") from exc
 
 
 # ─── O protocolo MCP (transporte Streamable HTTP, JSON-RPC 2.0) ──────────────
@@ -303,17 +340,13 @@ def _resultado_de_erro(mensagem: str) -> dict:
     return {"content": [{"type": "text", "text": mensagem}], "isError": True}
 
 
-async def responder_mcp(mensagem: object) -> dict | list | None:
-    """Responde uma mensagem JSON-RPC do MCP, ou uma lista delas. Devolve o
-    objeto de resposta, uma lista de respostas, ou `None` quando não há resposta
-    a enviar (notificação, ou um lote só de notificações)."""
-    if isinstance(mensagem, list):
-        respostas = [r for m in mensagem if (r := await _responder_uma(m)) is not None]
-        return respostas or None
-    return await _responder_uma(mensagem)
+async def responder_mcp(mensagem: object) -> dict | None:
+    """Responde uma mensagem JSON-RPC do MCP (objeto único). Devolve o objeto de
+    resposta, ou `None` para notificação (sem resposta).
 
-
-async def _responder_uma(mensagem: object) -> dict | None:
+    Sem batching: o JSON-RPC batching foi removido no protocolo 2025-06-18. Uma
+    lista, ou qualquer coisa que não seja um objeto JSON-RPC 2.0, cai em -32600
+    (requisição inválida), nunca é processada como lote."""
     if not isinstance(mensagem, dict) or mensagem.get("jsonrpc") != "2.0":
         return _erro(None, -32600, "Requisição JSON-RPC inválida")
     if "id" not in mensagem:
@@ -334,7 +367,12 @@ async def _responder_uma(mensagem: object) -> dict | None:
     if metodo == "tools/list":
         return _ok(id_, {"tools": ferramentas()})
     if metodo == "tools/call":
-        params = mensagem.get("params") or {}
+        params = mensagem.get("params")
+        if params is not None and not isinstance(params, dict):
+            # `params` fora do objeto JSON-RPC (string, número, lista): -32602,
+            # nunca um 500 por desreferenciar o que não é dict.
+            return _erro(id_, -32602, "Params inválidos")
+        params = params or {}
         resultado = await _executar_ferramenta(params.get("name"), params.get("arguments") or {})
         return _ok(id_, resultado)
     if metodo == "ping":

@@ -24,6 +24,8 @@ rede: o `_buscar_jwks` do módulo é dublado, e a fonte do Google é o
 
 from __future__ import annotations
 
+import base64
+import json
 import os
 import sys
 import time
@@ -148,10 +150,12 @@ def jwks_no_emissor(monkeypatch, chave_do_emissor) -> dict:
     """Dubla a única ida de rede da verificação: o `_buscar_jwks` devolve o JWKS
     da chave de teste, e o cache nasce e morre vazio."""
     conector_mcp._jwks_cache.clear()
+    conector_mcp._jwks_falha_ate.clear()
     jwks = jwks_de(chave_do_emissor)
     monkeypatch.setattr(conector_mcp, "_buscar_jwks", lambda _uri: jwks)
     yield jwks
     conector_mcp._jwks_cache.clear()
+    conector_mcp._jwks_falha_ate.clear()
 
 
 # ─── 1. Configuração ausente: erro de config, nunca porta aberta ─────────────
@@ -276,6 +280,46 @@ class TestVerificarAcesso:
         with pytest.raises(conector_mcp.AcessoNegadoMCPError):
             conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
 
+    def test_alg_none_recusado(self, cfg, chave_do_emissor):
+        """`alg: none` (token sem assinatura) é recusado: o verificador fixa
+        RS256, então nenhum token sem assinatura passa (invariante travada)."""
+
+        def _seg(dado: dict) -> str:
+            return base64.urlsafe_b64encode(json.dumps(dado).encode()).rstrip(b"=").decode()
+
+        payload = {
+            "sub": "u",
+            "iss": EMISSOR,
+            "aud": RECURSO,
+            "email": "super@hsm.com",
+            "email_verified": True,
+            "scope": "read:analytics",
+            "exp": int(time.time()) + 3600,
+        }
+        tok = f"{_seg({'alg': 'none', 'typ': 'JWT'})}.{_seg(payload)}."
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
+            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
+
+    def test_confusao_de_algoritmo_hs256_recusada(self, cfg, chave_do_emissor):
+        """Token HS256 assinado com um segredo qualquer é recusado: com RS256
+        fixo, a chave pública do JWKS nunca é usada como segredo HMAC (a confusão
+        de algoritmo clássica de resource server)."""
+        tok = jose_jwt.encode(
+            {
+                "sub": "u",
+                "iss": EMISSOR,
+                "aud": RECURSO,
+                "email": "super@hsm.com",
+                "email_verified": True,
+                "scope": "read:analytics",
+                "exp": int(time.time()) + 3600,
+            },
+            "segredo-publico-qualquer",
+            algorithm="HS256",
+        )
+        with pytest.raises(conector_mcp.AcessoNegadoMCPError):
+            conector_mcp.verificar_acesso(tok, jwks_de(chave_do_emissor), cfg)
+
 
 # ─── 3. resolver_super_admin: o gate pelo participante ───────────────────────
 
@@ -355,14 +399,16 @@ class TestMetadataDoRecurso:
 CAMINHO_MCP = f"{settings.api_prefix}/mcp"
 
 
-def _cliente_mcp(participantes: list[dict] | None = None) -> TestClient:
+def _cliente_mcp(participantes: list[dict] | None = None, supabase: object | None = None) -> TestClient:
     from app.dependencies import get_supabase_client
     from app.routers import conector_mcp as router_mcp
 
-    tabela = participantes if participantes is not None else [SUPER_ADMIN, SECRETARIA, FACILITADOR]
+    if supabase is None:
+        tabela = participantes if participantes is not None else [SUPER_ADMIN, SECRETARIA, FACILITADOR]
+        supabase = SupabaseDosParticipantes(tabela)
     app = FastAPI()
     app.include_router(router_mcp.router)
-    app.dependency_overrides[get_supabase_client] = lambda: SupabaseDosParticipantes(tabela)
+    app.dependency_overrides[get_supabase_client] = lambda: supabase
     return TestClient(app)
 
 
@@ -491,6 +537,58 @@ class TestTransporteRecusaCom401:
         assert resposta.status_code == 401
         assert "resource_metadata=" in resposta.headers["www-authenticate"]
 
+    def test_bearer_malformado_nega_antes_de_tocar_a_rede(self, monkeypatch):
+        """Bearer lixo (não é JWT) é 401 ANTES de qualquer rede: o fetch do JWKS
+        nem é chamado, senão um flood de tokens malformados prenderia threads do
+        pool (o mesmo do Ao vivo) no timeout de um emissor lento."""
+        tocou = {"fetch": False}
+
+        def _marca(_uri):
+            tocou["fetch"] = True
+            raise RuntimeError("não podia ter sido chamado")
+
+        conector_mcp._jwks_cache.clear()
+        conector_mcp._jwks_falha_ate.clear()
+        monkeypatch.setattr(conector_mcp, "_buscar_jwks", _marca)
+
+        resposta = _rpc(_cliente_mcp(), INIT, "isto-nao-e-um-jwt")
+
+        assert resposta.status_code == 401
+        assert tocou["fetch"] is False, "o fetch do JWKS foi tocado por um Bearer malformado"
+
+    def test_emissor_fora_nao_multiplica_o_fetch(self, monkeypatch, chave_do_emissor):
+        """Emissor fora do ar abre o circuito: a segunda requisição dentro do
+        cooldown nega sem tocar a rede de novo (não multiplica bloqueio de thread)."""
+        chamadas = {"n": 0}
+
+        def _falha(_uri):
+            chamadas["n"] += 1
+            raise RuntimeError("emissor fora do ar")
+
+        conector_mcp._jwks_cache.clear()
+        conector_mcp._jwks_falha_ate.clear()
+        monkeypatch.setattr(conector_mcp, "_buscar_jwks", _falha)
+        cliente = _cliente_mcp()
+
+        r1 = _rpc(cliente, INIT, token(chave_do_emissor))
+        r2 = _rpc(cliente, INIT, token(chave_do_emissor))
+
+        assert r1.status_code == 401
+        assert r2.status_code == 401
+        assert chamadas["n"] == 1, "o circuito devia pular o segundo fetch"
+
+    def test_falha_inesperada_do_gate_e_401_nao_500(self, chave_do_emissor):
+        """Falha inesperada no gate de participante (I/O ao banco) é 401
+        (fail-closed), não 500 que vaze rastro interno."""
+
+        class SupabaseQueQuebra:
+            def table(self, _nome):
+                raise RuntimeError("banco fora do ar")
+
+        resposta = _rpc(_cliente_mcp(supabase=SupabaseQueQuebra()), INIT, token(chave_do_emissor))
+
+        assert resposta.status_code == 401
+
     def test_email_sem_participante_e_401(self, chave_do_emissor):
         resposta = _rpc(_cliente_mcp([SUPER_ADMIN]), INIT, token(chave_do_emissor, email="ninguem@hsm.com"))
 
@@ -578,3 +676,31 @@ class TestForaDoGateDeSessao:
         caminhos = set(app.openapi()["paths"])
         assert conector_mcp.CAMINHO_DO_METADATA in caminhos
         assert CAMINHO_MCP in caminhos
+
+
+# ─── 7. Decisões de protocolo do dispatch (direto no responder_mcp) ──────────
+
+
+class TestProtocoloJsonRpc:
+    """As decisões de protocolo do `responder_mcp`, testadas na função (o gate
+    já é coberto pelas rotas): params inválido e o batching removido no 2025-06-18."""
+
+    async def test_tools_call_com_params_nao_dict_e_invalid_params(self):
+        """`params` que não é objeto (string, número, lista) é -32602, nunca um
+        500 por desreferenciar o que não é dict."""
+        resposta = await conector_mcp.responder_mcp(
+            {"jsonrpc": "2.0", "id": 5, "method": "tools/call", "params": "isto-devia-ser-objeto"}
+        )
+
+        assert resposta["error"]["code"] == -32602
+
+    async def test_lista_nao_e_tratada_como_batch(self):
+        """Batching foi removido no protocolo 2025-06-18: uma lista não é lote,
+        é requisição inválida (-32600), e a resposta é um objeto, nunca uma lista."""
+        resposta = await conector_mcp.responder_mcp([{"jsonrpc": "2.0", "id": 1, "method": "ping"}])
+
+        assert isinstance(resposta, dict)
+        assert resposta["error"]["code"] == -32600
+
+    async def test_mensagem_que_nao_e_objeto_json_rpc_e_invalida(self):
+        assert (await conector_mcp.responder_mcp(42))["error"]["code"] == -32600
