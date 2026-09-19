@@ -19,6 +19,7 @@ from app.routers import (
     ana,
     auth,
     comentarios,
+    conector_mcp,
     configuracoes,
     health,
     notificacoes,
@@ -125,6 +126,11 @@ app.include_router(admin_dados_atendimento.router, prefix=settings.api_prefix)
 app.include_router(admin_espelho_global_health.router, prefix=settings.api_prefix)
 # Central de Comando (ADR 0058): só Super admin, gate no próprio router.
 app.include_router(admin_central_de_comando.router, prefix=settings.api_prefix)
+# Conector MCP da Central (ADR 0058, decisões 3 e 4): FORA do gate de sessão do
+# app. Sem prefixo aqui: o router já traz os caminhos inteiros, o metadata na
+# raiz do domínio (/.well-known/...) e o transporte em /api/mcp. O gate é o
+# próprio, a verificação do token do WorkOS AuthKit.
+app.include_router(conector_mcp.router)
 app.include_router(pops_pops.router, prefix=settings.api_prefix)
 app.include_router(pops_biblioteca.router, prefix=settings.api_prefix)
 app.include_router(pops_elaboracao.router, prefix=settings.api_prefix)
