@@ -9,7 +9,9 @@ faz à GA4 e a tradução de erro. Quem está fora recebe números do domínio
 Três invariantes que o resto do app herda de graça:
 
 - **Só leitura.** A credencial pede só o escopo de leitura, e o único verbo é
-  o `runReport` (o Ao vivo acrescenta o `runRealtimeReport`, também leitura).
+  o `runReport` (o Ao vivo acrescenta o `runRealtimeReport`, também leitura),
+  sozinho ou em lote (`batchRunReports`, que junta vários `runReport` numa ida
+  só).
 - **Não configurado é 503, nunca zero.** Sem propriedade ou sem chave, a
   exceção é `GoogleNaoConfiguradoError`, com o que falta na mensagem. O
   provedor falso da Central antiga, que desenhava número de demonstração sem
@@ -28,7 +30,9 @@ não existe ida ao endpoint de token: a única chamada de rede é a da GA4, pelo
 **Para as próximas fatias.** Cada número do Site é uma função pública daqui
 (Visitantes comparados, movimento diário, Áreas do site, Origem do público,
 dispositivos, Contatos gerados, Ao vivo), e toda chamada à GA4 passa pelo
-`_relatorio`, que é a única porta de rede do módulo.
+`_relatorio` ou, para as telas que pedem vários relatórios de uma vez (Dados
+do Google, #817), pelo `_um_lote`: as duas portas de rede do módulo, com o
+mesmo timeout e a mesma tradução de falha.
 """
 
 from __future__ import annotations
@@ -37,8 +41,12 @@ import json
 import logging
 import math
 import re
+from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass
 from datetime import date
+from functools import partial
+from typing import Any, Literal
 
 import google.auth.exceptions
 import google.auth.transport
@@ -46,7 +54,13 @@ import httpx
 from google.oauth2 import service_account
 
 from app.config import settings
-from app.services.central_de_comando.periodo import Intervalo, Periodo, intervalo_anterior, intervalo_atual
+from app.services.central_de_comando.periodo import (
+    Intervalo,
+    Periodo,
+    dias_do_intervalo,
+    intervalo_anterior,
+    intervalo_atual,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -151,6 +165,202 @@ def _primeira_metrica(relatorio: dict) -> float:
         raise GoogleError("O Google Analytics devolveu um relatório fora do formato esperado.") from exc
     try:
         numero = float(valor)
+    except (TypeError, ValueError):
+        return 0
+    return numero if math.isfinite(numero) else 0
+
+
+# ─── Dados do Google: as perguntas em lote (issue #817) ─────────────────────
+
+# A frase de todo relatório que chega fora do formato: fixa, porque vai para a
+# tela e fica no cache como o motivo do último valor bom.
+_RELATORIO_FORA_DO_FORMATO = "O Google Analytics devolveu um relatório fora do formato esperado."
+
+
+@dataclass(frozen=True)
+class Pergunta[T]:
+    """Um número do Site como pergunta à GA4: os relatórios que ele pede e como
+    lê as respostas deles, na mesma ordem.
+
+    Quem faz a pergunta é o `perguntar`, que junta num lote só as perguntas de
+    uma tela. É por aqui que a tela Dados do Google cresce (#818): cada número
+    novo é uma função daqui que devolve a `Pergunta` dele.
+    """
+
+    relatorios: tuple[dict, ...]
+    ler: Callable[[tuple[dict, ...]], T]
+
+
+def perguntar(*perguntas: Pergunta[Any]) -> list[Any]:
+    """Faz as perguntas à GA4 e devolve as respostas, na ordem das perguntas.
+
+    Os relatórios de todas vão juntos pelo `batchRunReports`, até 5 por
+    chamada (o limite da GA4): a tela que pede três relatórios faz uma ida só
+    ao Google, e não três em série. Qualquer falha derruba todas as respostas,
+    como a tela, que é tudo ou nada até a #821.
+    """
+    relatorios = _relatorios_em_lote([corpo for pergunta in perguntas for corpo in pergunta.relatorios])
+    respostas: list[Any] = []
+    inicio = 0
+    for pergunta in perguntas:
+        fim = inicio + len(pergunta.relatorios)
+        respostas.append(pergunta.ler(tuple(relatorios[inicio:fim])))
+        inicio = fim
+    return respostas
+
+
+@dataclass(frozen=True)
+class VisitantesNoDia:
+    dia: date
+    visitantes: int
+
+
+@dataclass(frozen=True)
+class MovimentoDiario:
+    """Os Visitantes de cada dia do período e do anterior, sem buraco: o dia
+    sem visita vem com zero. As duas séries têm o mesmo tamanho e andam juntas,
+    o primeiro dia do período ao lado do primeiro do anterior."""
+
+    atual: tuple[VisitantesNoDia, ...]
+    anterior: tuple[VisitantesNoDia, ...]
+    intervalo_atual: Intervalo
+    intervalo_anterior: Intervalo
+
+
+def movimento_diario(periodo: Periodo, hoje: date) -> Pergunta[MovimentoDiario]:
+    """Os Visitantes por dia, no período e no anterior de mesmo tamanho.
+
+    O `activeUsers` da GA4 por `date`, um relatório por intervalo, como a
+    Central antiga (`getVisitorsByDay`), para os números baterem com os dela.
+    Cada dia conta as pessoas daquele dia: a soma dos dias passa dos Visitantes
+    do período, porque quem volta em outro dia conta de novo.
+    """
+    atual = intervalo_atual(periodo, hoje)
+    anterior = intervalo_anterior(periodo, hoje)
+
+    def ler(relatorios: tuple[dict, ...]) -> MovimentoDiario:
+        do_atual, do_anterior = relatorios
+        return MovimentoDiario(
+            atual=_serie_por_dia(do_atual, atual),
+            anterior=_serie_por_dia(do_anterior, anterior),
+            intervalo_atual=atual,
+            intervalo_anterior=anterior,
+        )
+
+    return Pergunta(relatorios=(_visitantes_por_dia_em(atual), _visitantes_por_dia_em(anterior)), ler=ler)
+
+
+def _visitantes_por_dia_em(intervalo: Intervalo) -> dict:
+    return {
+        "dateRanges": [_faixa_da_ga4(intervalo)],
+        "metrics": [{"name": "activeUsers"}],
+        "dimensions": [{"name": "date"}],
+    }
+
+
+def _faixa_da_ga4(intervalo: Intervalo) -> dict[str, str]:
+    return {"startDate": intervalo.inicio.isoformat(), "endDate": intervalo.fim.isoformat()}
+
+
+def _serie_por_dia(relatorio: dict, intervalo: Intervalo) -> tuple[VisitantesNoDia, ...]:
+    """Um item por dia do intervalo, na ordem do calendário, com zero no dia
+    que a GA4 não devolveu (ela omite o dia sem dado e não promete ordem).
+
+    Linha com um dia que não se lê fica de fora, como na Central antiga
+    (`mapVisitorsByDay`), e o dia dela fica com zero.
+    """
+    por_dia: dict[date, int] = {}
+    for valor, numero in _linhas(relatorio):
+        dia = _dia_da_ga4(valor)
+        if dia is not None:
+            por_dia[dia] = int(numero)
+    return tuple(VisitantesNoDia(dia, por_dia.get(dia, 0)) for dia in dias_do_intervalo(intervalo))
+
+
+def _dia_da_ga4(valor: str) -> date | None:
+    """A dimensão `date` da GA4 vem sem hífen: "20260917" é 17/09/2026."""
+    if not re.fullmatch(r"[0-9]{8}", valor):
+        return None
+    try:
+        return date(int(valor[:4]), int(valor[4:6]), int(valor[6:]))
+    except ValueError:
+        return None
+
+
+Dispositivo = Literal["celular", "computador", "tablet"]
+
+# As três categorias de dispositivo da Central, pelo nome que a GA4 dá a cada
+# uma. As outras que a GA4 conhece (a "smart tv", por exemplo) ficam de fora,
+# como na Central antiga: nenhum termo da fonte chega à tela.
+_DISPOSITIVO_DA_GA4: dict[str, Dispositivo] = {"mobile": "celular", "desktop": "computador", "tablet": "tablet"}
+
+
+@dataclass(frozen=True)
+class VisitasNoDispositivo:
+    dispositivo: Dispositivo
+    visitas: int
+
+
+def visitas_por_dispositivo(periodo: Periodo, hoje: date) -> Pergunta[tuple[VisitasNoDispositivo, ...]]:
+    """As Visitas do período em cada categoria de dispositivo.
+
+    As `sessions` da GA4 por `deviceCategory`, como a Central antiga
+    (`getDeviceBreakdown`): conta idas ao Site, e não pessoas, porque a mesma
+    pessoa pode entrar pelo celular e pelo computador. Só as categorias que
+    apareceram na resposta, somadas por categoria, na ordem celular,
+    computador, tablet.
+    """
+
+    def ler(relatorios: tuple[dict, ...]) -> tuple[VisitasNoDispositivo, ...]:
+        (relatorio,) = relatorios
+        visitas: dict[Dispositivo, int] = {}
+        for valor, numero in _linhas(relatorio):
+            dispositivo = _DISPOSITIVO_DA_GA4.get(valor)
+            if dispositivo is not None:
+                visitas[dispositivo] = visitas.get(dispositivo, 0) + int(numero)
+        return tuple(
+            VisitasNoDispositivo(dispositivo, visitas[dispositivo])
+            for dispositivo in _DISPOSITIVO_DA_GA4.values()
+            if dispositivo in visitas
+        )
+
+    corpo = {
+        "dateRanges": [_faixa_da_ga4(intervalo_atual(periodo, hoje))],
+        "metrics": [{"name": "sessions"}],
+        "dimensions": [{"name": "deviceCategory"}],
+    }
+    return Pergunta(relatorios=(corpo,), ler=ler)
+
+
+def _linhas(relatorio: dict) -> list[tuple[str, float]]:
+    """O valor da dimensão e o número de cada linha, num relatório de uma
+    dimensão e uma métrica.
+
+    Sem linha nenhuma, lista vazia: a GA4 omite `rows` quando não houve dado, e
+    isso é resposta. Um `rows` que não é lista, ou linha sem a dimensão ou sem a
+    métrica, é resposta fora do formato: `GoogleError`, e não um erro de código,
+    para a rota responder 502 e o cache servir o último valor bom. Número que
+    não é número finito é zero, nunca NaN (o `num` da Central antiga).
+    """
+    linhas = relatorio.get("rows")
+    if linhas is None:
+        return []
+    if not isinstance(linhas, list):
+        raise GoogleError(_RELATORIO_FORA_DO_FORMATO)
+    resultado: list[tuple[str, float]] = []
+    for linha in linhas:
+        try:
+            valor = linha["dimensionValues"][0]["value"]
+            bruto = linha["metricValues"][0]["value"]
+        except (KeyError, IndexError, TypeError) as exc:
+            raise GoogleError(_RELATORIO_FORA_DO_FORMATO) from exc
+        resultado.append((str(valor), _numero(bruto)))
+    return resultado
+
+
+def _numero(bruto: Any) -> float:
+    try:
+        numero = float(bruto)
     except (TypeError, ValueError):
         return 0
     return numero if math.isfinite(numero) else 0
@@ -274,3 +484,68 @@ def _relatorio(corpo: dict) -> dict:
         logger.error("[CentralGoogle] runReport respondeu sem o kind do relatório da GA4")
         raise GoogleError("O Google Analytics devolveu uma resposta fora do formato esperado.")
     return relatorio
+
+
+# ─── O lote: `batchRunReports` (issue #817) ──────────────────────────────────
+
+# O limite da GA4: um `batchRunReports` leva até 5 relatórios.
+_RELATORIOS_POR_LOTE = 5
+
+# A assinatura do lote da GA4, como o `kind` do relatório no `_relatorio`: é ela
+# que distingue a resposta do Google de um `{}` de proxy, que viraria zero.
+_KIND_DO_LOTE = "analyticsData#batchRunReports"
+
+
+def _relatorios_em_lote(corpos: list[dict]) -> list[dict]:
+    """Os relatórios pedidos, na ordem, pelo `batchRunReports` da propriedade.
+
+    A segunda porta de rede do módulo, no molde do `_relatorio`: a configuração
+    é conferida antes de qualquer rede, e toda falha vira `GoogleError`. Mais
+    de 5 relatórios viram lotes de 5, que vão ao mesmo tempo, cada um com o seu
+    cliente e o mesmo timeout: a tela espera a GA4 uma vez, e não uma por lote.
+    """
+    _verificar_configuracao()
+    propriedade = _propriedade()
+    token = _token_de_acesso()
+    lotes = [corpos[i : i + _RELATORIOS_POR_LOTE] for i in range(0, len(corpos), _RELATORIOS_POR_LOTE)]
+    if len(lotes) <= 1:
+        return [relatorio for lote in lotes for relatorio in _um_lote(propriedade, token, lote)]
+    with ThreadPoolExecutor(max_workers=len(lotes)) as executor:
+        respostas = list(executor.map(partial(_um_lote, propriedade, token), lotes))
+    return [relatorio for resposta in respostas for relatorio in resposta]
+
+
+def _um_lote(propriedade: str, token: str, corpos: list[dict]) -> list[dict]:
+    """Um `batchRunReports` de até 5 relatórios; devolve os relatórios, na
+    ordem dos pedidos, ou levanta. A tradução de falha é a do `_relatorio`."""
+    url = f"{BASE_URL}/properties/{propriedade}:batchRunReports"
+    try:
+        with httpx.Client(timeout=_TIMEOUT) as cliente:
+            resposta = cliente.post(url, json={"requests": corpos}, headers={"Authorization": f"Bearer {token}"})
+            resposta.raise_for_status()
+            lote = resposta.json()
+    except httpx.HTTPStatusError as exc:
+        codigo = exc.response.status_code
+        logger.error("[CentralGoogle] batchRunReports respondeu HTTP %s (%s)", codigo, _motivo_do_google(exc.response))
+        raise GoogleError(_frase_do_status(codigo)) from exc
+    except httpx.TimeoutException as exc:
+        logger.error("[CentralGoogle] timeout no batchRunReports")
+        raise GoogleError("O Google Analytics não respondeu no tempo esperado.") from exc
+    except httpx.HTTPError as exc:
+        logger.error("[CentralGoogle] falha de rede no batchRunReports: %s", type(exc).__name__)
+        raise GoogleError("Não foi possível falar com o Google Analytics.") from exc
+    except ValueError as exc:
+        logger.error("[CentralGoogle] corpo ilegível no batchRunReports")
+        raise GoogleError("O Google Analytics devolveu uma resposta ilegível.") from exc
+
+    relatorios = lote.get("reports") if isinstance(lote, dict) and lote.get("kind") == _KIND_DO_LOTE else None
+    if (
+        not isinstance(relatorios, list)
+        or len(relatorios) != len(corpos)
+        or not all(isinstance(relatorio, dict) for relatorio in relatorios)
+    ):
+        # Sem o `kind` do lote, ou com relatório a menos, a resposta não é da
+        # GA4 (ou não é inteira): "sem linha" nela viraria um zero inventado.
+        logger.error("[CentralGoogle] batchRunReports respondeu fora do formato do lote da GA4")
+        raise GoogleError("O Google Analytics devolveu uma resposta fora do formato esperado.")
+    return relatorios

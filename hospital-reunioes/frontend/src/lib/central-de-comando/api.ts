@@ -11,10 +11,10 @@ export const BASE_CENTRAL = "/api/admin/central-de-comando";
 /**
  * As telas que passam pelo cache com frescor do backend (issue #815): a
  * leitura é `GET {BASE_CENTRAL}/{tela}?periodo=` e o Atualizar agora é
- * `POST {BASE_CENTRAL}/atualizar-agora?tela=&periodo=`. Tela nova (Dados do
- * Google, #817) entra aqui e no registro de telas do backend.
+ * `POST {BASE_CENTRAL}/atualizar-agora?tela=&periodo=`. Tela nova entra aqui
+ * e no registro de telas do backend, como Dados do Google na #817.
  */
-export type TelaDaCentral = "visao-geral";
+export type TelaDaCentral = "visao-geral" | "dados-do-google";
 
 /**
  * O Atualizar agora tem limite de taxa no backend. O 429 do `slowapi` chega

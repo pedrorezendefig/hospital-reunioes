@@ -19,6 +19,9 @@ nome:
   `RelogioDeTeste` parado em `AGORA_DE_TESTE` que só anda quando mandam.
 - `gate_e_limitador_zerados`: o limitador de taxa e o participante do gate
   zerados antes e depois do teste, para quem bate na rota.
+- `lote_da_ga4`: o `batchRunReports` no Google de mentira (#817), que responde
+  os Visitantes por dia e as Visitas por dispositivo pelas tabelas daqui. A
+  #818 ensina as perguntas dela em `lote_da_ga4.perguntas`.
 
 E, para testar pela rota real sem importar outro arquivo de teste (#815), o
 app mínimo com o gate de pé e quem está logado: `cliente_da_central(logado)`,
@@ -257,6 +260,159 @@ def hoje_da_central(monkeypatch) -> date:
 
     monkeypatch.setattr(periodo, "hoje_utc", lambda: HOJE_DE_TESTE)
     return HOJE_DE_TESTE
+
+
+# ─── O lote da GA4: a tela Dados do Google (issue #817) ─────────────────────
+#
+# A tela Dados do Google faz todas as perguntas dela numa ida só à GA4, o
+# `batchRunReports`, com até 5 relatórios por chamada. O `LoteDaGA4` é o
+# respondedor do `GoogleFalso` para esse método: responde cada pedido do lote
+# como a GA4 responderia um `runReport`. A fatia seguinte da mesma tela (#818)
+# ensina as perguntas dela acrescentando em `lote_da_ga4.perguntas`, ou enchendo
+# as tabelas daqui, sem editar a classe.
+
+# Visitantes (`activeUsers`) por dia (`date`) que a GA4 "sabe". Dia que não está
+# aqui é dia sem visita: a GA4 não devolve linha para ele. Uma tabela só, por
+# dia, como a da GA4: o dia 04/09 é o primeiro do período anterior de 7 dias e
+# está dentro do período atual de 28, com o mesmo número nos dois.
+VISITANTES_POR_DIA_NA_GA4: dict[str, int] = {
+    # 90 dias: a ponta do anterior (22/03 a 19/06) e o primeiro dia (20/06 a 17/09).
+    "2026-03-22": 95,
+    "2026-06-19": 101,
+    "2026-06-20": 120,
+    # 28 dias: as pontas do anterior (24/07 a 20/08) e o primeiro dia (21/08 a 17/09).
+    "2026-07-24": 250,
+    "2026-08-20": 333,
+    "2026-08-21": 300,
+    # O anterior dos 7 dias (04/09 a 10/09): todos os dias com visita.
+    "2026-09-04": 350,
+    "2026-09-05": 362,
+    "2026-09-06": 298,
+    "2026-09-07": 301,
+    "2026-09-08": 455,
+    "2026-09-09": 470,
+    "2026-09-10": 441,
+    # Os 7 dias (11/09 a 17/09): o dia 13 não teve visita, e a GA4 o omite.
+    "2026-09-11": 410,
+    "2026-09-12": 385,
+    "2026-09-14": 520,
+    "2026-09-15": 498,
+    "2026-09-16": 471,
+    "2026-09-17": 402,
+}
+
+# Visitas (`sessions`) por `deviceCategory`, no período atual de cada tamanho,
+# pelo intervalo (início, fim). A GA4 fala inglês e conhece categorias além das
+# três da Central (a "smart tv").
+VISITAS_POR_DISPOSITIVO_NA_GA4: dict[tuple[str, str], dict[str, int]] = {
+    # 7 dias: ninguém de tablet.
+    ("2026-09-11", "2026-09-17"): {"mobile": 1850, "desktop": 640},
+    # 28 dias: 10.000 Visitas nas três categorias, e 3 numa smart tv.
+    ("2026-08-21", "2026-09-17"): {"mobile": 7100, "desktop": 2300, "tablet": 600, "smart tv": 3},
+    # 90 dias: o computador na frente.
+    ("2026-06-20", "2026-09-17"): {"desktop": 12000, "mobile": 11000, "tablet": 1000},
+}
+
+# O limite da GA4: um `batchRunReports` leva de 1 a 5 relatórios.
+MAXIMO_DE_RELATORIOS_POR_LOTE = 5
+
+# Uma pergunta do lote recebe UM pedido de relatório e devolve o relatório (sem
+# o `kind`, que o lote põe) ou `None` para passar o pedido adiante.
+PerguntaDoLote = Callable[[dict], dict | None]
+
+
+def relatorio_de_uma_dimensao(dimensao: str, metrica: str, valores: dict[str, int]) -> dict:
+    """O relatório da GA4 com uma dimensão e uma métrica. As linhas vêm da maior
+    para a menor, e não na ordem do calendário: sem `orderBys`, a GA4 não
+    promete ordem nenhuma. Sem valor nenhum, sem `rows`, que é como a GA4 diz
+    que o intervalo não teve dado."""
+    relatorio: dict[str, Any] = {
+        "dimensionHeaders": [{"name": dimensao}],
+        "metricHeaders": [{"name": metrica, "type": "TYPE_INTEGER"}],
+    }
+    linhas = sorted(valores.items(), key=lambda item: item[1], reverse=True)
+    if linhas:
+        relatorio["rows"] = [
+            {"dimensionValues": [{"value": valor}], "metricValues": [{"value": str(numero)}]}
+            for valor, numero in linhas
+        ]
+        relatorio["rowCount"] = len(linhas)
+    return relatorio
+
+
+def faixa_unica(pedido: dict) -> tuple[str, str] | None:
+    """O (início, fim) do pedido de UM intervalo e sem filtro, ou `None`."""
+    faixas = pedido.get("dateRanges") or []
+    if len(faixas) != 1 or pedido.get("dimensionFilter"):
+        return None
+    return faixas[0]["startDate"], faixas[0]["endDate"]
+
+
+class LoteDaGA4:
+    """O `batchRunReports` da GA4 de mentira, respondedor do `GoogleFalso`.
+
+    Responde cada pedido do lote pelas `perguntas`, na ordem: vale a primeira
+    que souber responder. Como a GA4, o lote leva de 1 a 5 pedidos, e basta um
+    pedido que ninguém sabe responder para o lote inteiro levar 400 (o
+    `GoogleFalso` responde o 400 quando o respondedor devolve `None`).
+
+    Nasce sabendo as duas perguntas da #817, pelas tabelas: Visitantes por dia
+    e Visitas por dispositivo. `lotes` guarda os pedidos de cada lote que a
+    GA4 respondeu.
+    """
+
+    def __init__(self) -> None:
+        self.visitantes_por_dia = dict(VISITANTES_POR_DIA_NA_GA4)
+        self.visitas_por_dispositivo = {faixa: dict(v) for faixa, v in VISITAS_POR_DISPOSITIVO_NA_GA4.items()}
+        self.perguntas: list[PerguntaDoLote] = [self._visitantes_por_dia, self._visitas_por_dispositivo]
+        self.lotes: list[list[dict]] = []
+
+    def __call__(self, metodo: str, corpo: dict) -> dict | None:
+        if metodo != "batchRunReports":
+            return None
+        pedidos = corpo.get("requests")
+        if not isinstance(pedidos, list) or not 1 <= len(pedidos) <= MAXIMO_DE_RELATORIOS_POR_LOTE:
+            return None
+        relatorios = []
+        for pedido in pedidos:
+            relatorio = next((r for pergunta in self.perguntas if (r := pergunta(pedido)) is not None), None)
+            if relatorio is None:
+                return None
+            relatorios.append({"kind": "analyticsData#runReport", **relatorio})
+        self.lotes.append(pedidos)
+        return {"reports": relatorios}
+
+    def _visitantes_por_dia(self, pedido: dict) -> dict | None:
+        faixa = faixa_unica(pedido)
+        if (
+            faixa is None
+            or pedido.get("metrics") != [{"name": "activeUsers"}]
+            or pedido.get("dimensions") != [{"name": "date"}]
+        ):
+            return None
+        inicio, fim = faixa
+        # A dimensão `date` da GA4 chega sem hífen: "20260917".
+        no_intervalo = {dia.replace("-", ""): n for dia, n in self.visitantes_por_dia.items() if inicio <= dia <= fim}
+        return relatorio_de_uma_dimensao("date", "activeUsers", no_intervalo)
+
+    def _visitas_por_dispositivo(self, pedido: dict) -> dict | None:
+        faixa = faixa_unica(pedido)
+        if (
+            faixa is None
+            or pedido.get("metrics") != [{"name": "sessions"}]
+            or pedido.get("dimensions") != [{"name": "deviceCategory"}]
+        ):
+            return None
+        return relatorio_de_uma_dimensao("deviceCategory", "sessions", self.visitas_por_dispositivo.get(faixa, {}))
+
+
+@pytest.fixture
+def lote_da_ga4(google_falso) -> LoteDaGA4:
+    """O `batchRunReports` no Google de mentira, com as tabelas da #817. Pede
+    o `google_falso`, então o cache da Central também nasce vazio."""
+    lote = LoteDaGA4()
+    google_falso.respondedores.append(lote)
+    return lote
 
 
 # O instante em que os testes do cache começam: o `HOJE_DE_TESTE`, às 13h45 em

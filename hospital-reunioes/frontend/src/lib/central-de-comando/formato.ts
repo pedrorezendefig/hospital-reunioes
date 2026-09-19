@@ -79,3 +79,47 @@ export function formatarData(iso: string): string {
   const [ano, mes, dia] = iso.split("-");
   return `${dia}/${mes}/${ano}`;
 }
+
+const MESES = ["jan", "fev", "mar", "abr", "mai", "jun", "jul", "ago", "set", "out", "nov", "dez"];
+const DIAS_DA_SEMANA = ["dom", "seg", "ter", "qua", "qui", "sex", "sáb"];
+
+function partesDaData(iso: string): { dia: number; mes: number; semana: number } {
+  const [ano, mes, dia] = iso.split("-").map(Number);
+  // O dia da semana da própria data, em UTC: o fuso do navegador não entra.
+  const semana = new Date(Date.UTC(ano, mes - 1, dia)).getUTCDay();
+  return { dia, mes, semana };
+}
+
+/**
+ * Data ISO do backend como rótulo curto de gráfico: "16 jun", "1 set".
+ *
+ * Porte de `formatDayShort` do repositório antigo; como o `formatarData`, sai
+ * do texto, e não de um `Date` no fuso do navegador.
+ */
+export function formatarDiaCurto(iso: string): string {
+  const { dia, mes } = partesDaData(iso);
+  return `${dia} ${MESES[mes - 1]}`;
+}
+
+/** Com o dia da semana: "ter, 16 jun". Porte de `formatDayLong`. */
+export function formatarDiaLongo(iso: string): string {
+  const { dia, mes, semana } = partesDaData(iso);
+  return `${DIAS_DA_SEMANA[semana]}, ${dia} ${MESES[mes - 1]}`;
+}
+
+/**
+ * Uma fatia em pontos percentuais inteiros, como o backend manda (e somam
+ * 100): 71 vira "71%". O backend só manda fatia com visita, então 0 ponto é
+ * menos de 1%, e sai "<1%" (o `formatShare` do repositório antigo), nunca um
+ * zero que diria "ninguém".
+ */
+export function formatarFatia(percentual: number): string {
+  return percentual <= 0 ? "<1%" : `${percentual}%`;
+}
+
+const INTEIRO_COMPACTO = new Intl.NumberFormat("pt-BR", { notation: "compact" });
+
+/** Inteiro curto para o eixo do gráfico no celular: 1200 vira "1,2 mil". */
+export function formatarInteiroCompacto(n: number): string {
+  return INTEIRO_COMPACTO.format(n);
+}
