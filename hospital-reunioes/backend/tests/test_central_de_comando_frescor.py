@@ -1,11 +1,12 @@
 """O frescor dos números da Central de Comando pela rota real (issue #815).
 
-O seam é a ROTA HTTP, como em `test_central_de_comando_visao_geral.py`, de
-onde vêm o app mínimo com o gate de pé e as pessoas logadas. Dublados só o que
-é fronteira: quem está logado, a rede do Google (`google_falso`) e os dois
-relógios da Central, o do dia (`hoje_da_central`) e o do cache
-(`relogio_da_central`). O cache é o de verdade, o do processo, e o
-`google_falso` o entrega vazio a cada teste.
+O seam é a ROTA HTTP, como em `test_central_de_comando_visao_geral.py`, com o
+app mínimo com o gate de pé e as pessoas logadas de `central_de_comando_apoio.py`
+(`cliente_da_central`). Dublados só o que é fronteira: quem está logado, a rede
+do Google (`google_falso`) e os dois relógios da Central, o do dia
+(`hoje_da_central`) e o do cache (`relogio_da_central`). O cache é o de
+verdade, o do processo, e o `google_falso` o entrega vazio a cada teste; quem
+não pede o `google_falso` e pode gravar no cache pede o `cache_da_central`.
 
 O que se observa é o que a tela recebe: o número, o carimbo de frescor e se a
 leitura foi ou não à fonte (`google_falso.pedidos`). Cada pergunta de
@@ -23,29 +24,22 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from central_de_comando_apoio import erro_da_ga4  # noqa: E402
-from test_central_de_comando_visao_geral import PREFIXO, SECRETARIA, SUPER_ADMIN, _montar  # noqa: E402
+from central_de_comando_apoio import PREFIXO_DA_CENTRAL as PREFIXO  # noqa: E402
+from central_de_comando_apoio import (  # noqa: E402
+    SECRETARIA,
+    SUPER_ADMIN,
+    cliente_da_central,
+    erro_da_ga4,
+)
 
-from app.dependencies import _participante_ctx  # noqa: E402
-from app.limiter import limiter  # noqa: E402
 from app.services.central_de_comando import telas  # noqa: E402
 
 # Os pedidos que uma leitura da Visão Geral faz ao Google: o período e o anterior.
 PEDIDOS_POR_LEITURA = 2
 
-
-@pytest.fixture(autouse=True)
-def _reset_rate_limiter():
-    limiter._storage.reset()
-    yield
-    limiter._storage.reset()
-
-
-@pytest.fixture(autouse=True)
-def _reset_participante_ctx():
-    _participante_ctx.set(None)
-    yield
-    _participante_ctx.set(None)
+# O limitador de taxa e o participante do gate zerados antes e depois de cada
+# teste (fixture de `central_de_comando_apoio.py`).
+pytestmark = pytest.mark.usefixtures("gate_e_limitador_zerados")
 
 
 @pytest.fixture(autouse=True)
@@ -56,7 +50,7 @@ def _central_no_dia_de_teste(hoje_da_central, central_configurada):
 @pytest.fixture
 def cliente():
     """Um cliente só por teste: as leituras de um teste falam com o mesmo app."""
-    return _montar(SUPER_ADMIN)
+    return cliente_da_central(SUPER_ADMIN)
 
 
 def _ler(cliente, periodo: str = "28d"):
@@ -179,7 +173,8 @@ class TestAtualizarAgora:
     def test_tem_limite_de_taxa_de_5_por_minuto(self, cliente, google_falso, relogio_da_central):
         """Cada Atualizar agora é uma ida garantida ao Google, que tem cota: o
         sexto seguido no mesmo minuto leva 429 e não chega à fonte. O limitador
-        é zerado antes e depois de cada teste (fixture no topo do arquivo)."""
+        é zerado antes e depois de cada teste (`gate_e_limitador_zerados`, no
+        `pytestmark` do topo do arquivo)."""
         respostas = [_atualizar_agora(cliente).status_code for _ in range(5)]
         pedidos_antes = len(google_falso.pedidos)
 
@@ -197,10 +192,13 @@ class TestAtualizarAgora:
 
         assert _ler(cliente).status_code == 200
 
-    def test_tela_registrada_ganha_o_atualizar_agora_sem_rota_nova(self, monkeypatch, cliente, relogio_da_central):
+    def test_tela_registrada_ganha_o_atualizar_agora_sem_rota_nova(
+        self, monkeypatch, cliente, relogio_da_central, cache_da_central
+    ):
         """O ponto de extensão das fatias seguintes (#817, #818): a tela entra
         no registro de `telas.py` e o Atualizar agora já vale para ela, com o
-        frescor no payload e a chave por período."""
+        frescor no payload e a chave por período. Sem o `google_falso`, quem
+        esvazia o cache do processo no fim é o `cache_da_central`."""
         idas: list[str] = []
 
         def montar(periodo):
@@ -217,7 +215,7 @@ class TestAtualizarAgora:
         }
         assert idas == ["7d"]
 
-    def test_periodo_que_a_tela_nao_tem_e_recusado(self, monkeypatch, cliente):
+    def test_periodo_que_a_tela_nao_tem_e_recusado(self, monkeypatch, cliente, cache_da_central):
         """O Instagram não tem 90 dias: tela registrada só com 7 e 28 recusa o
         Atualizar agora de 90, sem buscar nada."""
         idas: list[str] = []
@@ -235,7 +233,7 @@ class TestAtualizarAgora:
     def test_quem_nao_e_super_admin_nao_forca_ida_nenhuma_ao_google(self, google_falso):
         """O gate do router vale para o Atualizar agora: secretária leva 403 e
         o Google nem é chamado."""
-        resposta = _atualizar_agora(_montar(SECRETARIA))
+        resposta = _atualizar_agora(cliente_da_central(SECRETARIA))
 
         assert resposta.status_code == 403
         assert google_falso.pedidos == []
@@ -309,3 +307,66 @@ class TestFonteFora:
             assert resposta.status_code == 502
             assert set(resposta.json()) == {"detail"}
             assert "HTTP 500" in resposta.json()["detail"]
+
+
+# ─── O registro de telas, a porta das fatias seguintes ───────────────────────
+
+
+class FonteDeTesteForaError(Exception):
+    """A falha de fonte da tela de mentira, com frase fixa."""
+
+
+@pytest.fixture
+def tela_de_teste(monkeypatch, cache_da_central, relogio_da_central) -> list[str]:
+    """Uma tela de mentira no registro, só com 7 e 28 dias (como o Instagram).
+    Devolve a lista dos períodos que o `montar` dela buscou."""
+    idas: list[str] = []
+
+    def montar(periodo):
+        idas.append(periodo)
+        return {"periodo": periodo, "bloco": {"numeros": [1, 2]}}
+
+    monkeypatch.setitem(
+        telas.TELAS,
+        "tela-de-teste",
+        telas.Tela(montar=montar, falhas=(FonteDeTesteForaError,), periodos=("7d", "28d")),
+    )
+    return idas
+
+
+class TestRegistroDeTelas:
+    """`telas.ler`, que a rota de cada tela e o Atualizar agora chamam, testado
+    direto com uma tela de mentira."""
+
+    def test_quem_mexe_no_payload_devolvido_nao_mexe_no_guardado(self, tela_de_teste):
+        """O payload guardado é o mesmo para todo Super admin por 1 hora: uma
+        rota que anotasse algo no payload devolvido (um status por bloco, por
+        exemplo) não pode mudar o que a leitura seguinte recebe."""
+        primeiro = telas.ler("tela-de-teste", "28d")
+        primeiro["bloco"]["numeros"].append(999)
+        primeiro["periodo"] = "adulterado"
+
+        segundo = telas.ler("tela-de-teste", "28d")
+
+        assert segundo["bloco"] == {"numeros": [1, 2]}
+        assert segundo["periodo"] == "28d"
+        assert tela_de_teste == ["28d"]
+
+    def test_periodo_que_a_tela_nao_tem_e_recusado_sem_buscar_nada(self, tela_de_teste):
+        """A regra mora na porta, e não só na rota do Atualizar agora: a rota
+        de leitura de uma tela sem 90 dias não guardaria 90 dias por esquecer
+        de conferir."""
+        with pytest.raises(telas.PedidoDeTelaInvalidoError, match="90d"):
+            telas.ler("tela-de-teste", "90d")
+
+        assert tela_de_teste == []
+
+    def test_tela_que_nao_esta_no_registro_e_recusada(self, cache_da_central):
+        with pytest.raises(telas.PedidoDeTelaInvalidoError, match="ao-vivo"):
+            telas.ler("ao-vivo", "28d")
+
+    def test_forcar_tambem_passa_pela_regra(self, tela_de_teste):
+        with pytest.raises(telas.PedidoDeTelaInvalidoError):
+            telas.ler("tela-de-teste", "90d", forcar=True)
+
+        assert tela_de_teste == []

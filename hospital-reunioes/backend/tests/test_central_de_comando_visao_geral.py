@@ -8,9 +8,10 @@ teste"). Só três coisas são dubladas:
   transporte de mentira (`httpx.MockTransport`), e todo o resto roda de
   verdade, inclusive a assinatura do JWT da service account.
 
-O Google de mentira e a service account de mentira moram em
-`tests/central_de_comando_apoio.py`, compartilhados com as fatias seguintes da
-Central. O dublê responde como a GA4 Data API responderia: confere a assinatura
+O Google de mentira, a service account de mentira e o app mínimo com o gate
+(`cliente_da_central` e as pessoas) moram em `tests/central_de_comando_apoio.py`,
+compartilhados com as fatias seguintes da Central. O dublê responde como a GA4
+Data API responderia: confere a assinatura
 do token com a chave pública da service account do teste, a propriedade no
 caminho e devolve os `activeUsers` do intervalo pedido. Por isso as asserções
 olham só o que a rota devolve: se o provedor pedisse o intervalo errado ou a
@@ -33,47 +34,33 @@ import json
 import os
 import re
 import sys
-from typing import Any
 
 import httpx
 import pytest
 from cryptography.hazmat.primitives.asymmetric import rsa
-from fastapi import FastAPI
-from fastapi.testclient import TestClient
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.errors import RateLimitExceeded
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from central_de_comando_apoio import (  # noqa: E402
+    FACILITADOR,
     HOJE_DE_TESTE,
     PROPRIEDADE_DE_TESTE,
+    SECRETARIA,
+    SUPER_ADMIN,
+    cliente_da_central,
     erro_da_ga4,
     pem_da_chave_privada,
+    pessoa,
 )
+from central_de_comando_apoio import PREFIXO_DA_CENTRAL as PREFIXO  # noqa: E402
 from conftest import TentativaDeRedeNoTeste  # noqa: E402
 
 from app.config import settings  # noqa: E402
-from app.dependencies import _participante_ctx, get_current_user, get_supabase_client  # noqa: E402
-from app.limiter import limiter  # noqa: E402
-from app.routers.admin import central_de_comando as central_router  # noqa: E402
 from app.services.central_de_comando import provedor_google  # noqa: E402
 
-PREFIXO = "/api/admin/central-de-comando"
-
-
-@pytest.fixture(autouse=True)
-def _reset_rate_limiter():
-    limiter._storage.reset()
-    yield
-    limiter._storage.reset()
-
-
-@pytest.fixture(autouse=True)
-def _reset_participante_ctx():
-    _participante_ctx.set(None)
-    yield
-    _participante_ctx.set(None)
+# O limitador de taxa e o participante do gate zerados antes e depois de cada
+# teste (fixture de `central_de_comando_apoio.py`).
+pytestmark = pytest.mark.usefixtures("gate_e_limitador_zerados")
 
 
 @pytest.fixture(autouse=True)
@@ -82,86 +69,14 @@ def _hoje_fixo(hoje_da_central):
     mão em `VISITANTES_NA_GA4` (18/09/2026)."""
 
 
-# ─── Quem está logado ────────────────────────────────────────────────────────
-
-
-def _pessoa(pid: str, access_profile: str | None, *, ativo: bool = True) -> dict:
-    return {
-        "id": pid,
-        "auth_user_id": f"auth-{pid}",
-        "email": f"{pid}@hsm.com",
-        "nome_completo": f"Pessoa {pid}",
-        "cargo": None,
-        "setor": None,
-        "area": None,
-        "role": None,
-        "ativo": ativo,
-        "is_externo": False,
-        "is_super_admin": access_profile == "super_admin",
-        "access_profile": access_profile,
-        "perfil_pop": None,
-        "perfil_ouvidoria": None,
-        "github_login": None,
-        "data_cadastro": "2026-01-01",
-    }
-
-
-SUPER_ADMIN = _pessoa("super", "super_admin")
-SECRETARIA = _pessoa("secretaria", "secretaria")
-FACILITADOR = _pessoa("facilitador", "regular")
-
-
-class _Resultado:
-    def __init__(self, data: list):
-        self.data = data
-
-
-class _ConsultaDeParticipantes:
-    def __init__(self, linhas: list[dict]):
-        self._linhas = linhas
-        self._filtros: list[tuple[str, Any]] = []
-
-    def select(self, *_a, **_kw):
-        return self
-
-    def eq(self, coluna, valor):
-        self._filtros.append((coluna, valor))
-        return self
-
-    def execute(self):
-        return _Resultado([dict(li) for li in self._linhas if all(li.get(c) == v for c, v in self._filtros)])
-
-
-class _SupabaseFalso:
-    def __init__(self, participantes: list[dict]):
-        self._participantes = participantes
-
-    def table(self, nome: str):
-        assert nome == "participantes", f"a Central não lê tabela nenhuma além do gate: {nome}"
-        return _ConsultaDeParticipantes(self._participantes)
-
-
-def _montar(logado: dict | None) -> TestClient:
-    """O router de verdade num app mínimo. `logado=None` é o anônimo, que passa
-    pelo `get_current_user` de verdade (sem token, 401)."""
-    app = FastAPI()
-    app.state.limiter = limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
-    app.include_router(central_router.router, prefix="/api")
-
-    app.dependency_overrides[get_supabase_client] = lambda: _SupabaseFalso([SUPER_ADMIN, SECRETARIA, FACILITADOR])
-    if logado is not None:
-
-        async def _usuario() -> dict[str, Any]:
-            return {"id": logado["auth_user_id"], "email": logado["email"], "metadata": {}}
-
-        app.dependency_overrides[get_current_user] = _usuario
-    return TestClient(app)
+# Quem está logado e o app mínimo com o gate de pé moram em
+# `central_de_comando_apoio.py` (`cliente_da_central`, `SUPER_ADMIN`, ...),
+# para toda fatia da Central testar pela rota sem importar este arquivo.
 
 
 def _visao_geral(periodo: str | None = None, logado: dict | None = SUPER_ADMIN) -> httpx.Response:
     params = {"periodo": periodo} if periodo is not None else None
-    return _montar(logado).get(f"{PREFIXO}/visao-geral", params=params)
+    return cliente_da_central(logado).get(f"{PREFIXO}/visao-geral", params=params)
 
 
 # ─── 1. Os Visitantes de ponta a ponta ──────────────────────────────────────
@@ -518,30 +433,29 @@ class TestSoSuperAdmin:
     @pytest.mark.parametrize("metodo,caminho", ROTAS)
     @pytest.mark.parametrize("persona", [SECRETARIA, FACILITADOR], ids=["secretaria", "facilitador"])
     def test_quem_nao_e_super_admin_leva_403(self, persona, metodo, caminho):
-        assert _montar(persona).request(metodo, caminho).status_code == 403
+        assert cliente_da_central(persona).request(metodo, caminho).status_code == 403
 
     @pytest.mark.parametrize("metodo,caminho", ROTAS)
     def test_anonimo_leva_401(self, metodo, caminho):
-        assert _montar(None).request(metodo, caminho).status_code == 401
+        assert cliente_da_central(None).request(metodo, caminho).status_code == 401
 
     @pytest.mark.parametrize("metodo,caminho", ROTAS)
     def test_super_admin_passa_pelo_gate(self, metodo, caminho):
         """O par de presença: sem ele, um 403 cravado em toda rota passaria
         pelos dois testes de cima. O que se mede é o gate: rota de fatia
         seguinte que exija corpo pode responder 422 aqui, nunca 401 ou 403."""
-        assert _montar(SUPER_ADMIN).request(metodo, caminho).status_code not in (401, 403)
+        assert cliente_da_central(SUPER_ADMIN).request(metodo, caminho).status_code not in (401, 403)
 
     def test_super_admin_desligado_leva_403(self):
         """Sessão viva de quem foi desligado não abre os números (issue #309)."""
-        desligado = _pessoa("super", "super_admin", ativo=False)
-        cliente = _montar(desligado)
-        cliente.app.dependency_overrides[get_supabase_client] = lambda: _SupabaseFalso([desligado])
+        desligado = pessoa("super", "super_admin", ativo=False)
+        cliente = cliente_da_central(desligado, participantes=[desligado])
 
         assert cliente.get(f"{PREFIXO}/visao-geral").status_code == 403
 
     def test_quem_nao_passa_no_gate_nao_gasta_consulta_no_google(self, google_falso):
         """O gate responde antes de a fonte ser tocada."""
-        _montar(SECRETARIA).get(f"{PREFIXO}/visao-geral")
-        _montar(None).get(f"{PREFIXO}/visao-geral")
+        cliente_da_central(SECRETARIA).get(f"{PREFIXO}/visao-geral")
+        cliente_da_central(None).get(f"{PREFIXO}/visao-geral")
 
         assert google_falso.pedidos == []

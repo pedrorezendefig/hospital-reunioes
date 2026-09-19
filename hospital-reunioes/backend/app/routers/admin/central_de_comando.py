@@ -58,10 +58,14 @@ async def _do_google(funcao, *args):
     Envolve a tela inteira: uma falha do Google sem número guardado (o cache
     já devolveu o último valor bom quando havia) vira 502 ou 503 do payload
     todo, e não de um bloco só. Vale até a #821, que passa a usar status por
-    bloco.
+    bloco. O pedido de tela que o registro recusa (`telas.ler`) vira 422.
     """
     try:
         return await anyio.to_thread.run_sync(funcao, *args)
+    except telas.PedidoDeTelaInvalidoError as exc:
+        # Tela fora do registro ou período que ela não tem: recusado antes de
+        # qualquer busca, dentro do `telas.ler`.
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except provedor_google.GoogleNaoConfiguradoError as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except provedor_google.GoogleError as exc:
@@ -102,9 +106,6 @@ async def atualizar_agora(request: Request, tela: str = Query(...), periodo: Per
     Vai à fonte mesmo com o número dentro da hora. Se a fonte falhar, devolve
     o último valor bom marcado (200), ou 502 se não houver nenhum guardado.
     Tela fora do registro de `telas.py` (o Ao vivo, por exemplo) ou período que
-    a tela não tem é 422, sem ir à fonte.
+    a tela não tem é 422, sem ir à fonte: quem recusa é o próprio `telas.ler`.
     """
-    motivo = telas.motivo_da_recusa(tela, periodo)
-    if motivo:
-        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=motivo)
     return await _do_google(partial(telas.ler, tela, periodo, forcar=True))

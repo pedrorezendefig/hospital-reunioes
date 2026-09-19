@@ -14,8 +14,10 @@ regras, porque são elas que decidem de quando é o número que a tela mostra:
   nunca zera, e nunca diz que um número velho é novo. Sem número guardado, a
   falha sobe (erro honesto, 502 na rota).
 - **Só falha da fonte vira último valor bom.** Quem lê diz o que é falha da
-  fonte (`falhas`). Outro erro sobe mesmo com número guardado: a configuração
-  que sumiu é 503, e defeito do código é defeito, não "falha passageira".
+  fonte (`falhas`); se não disser, nada vira último valor bom. Outro erro sobe
+  mesmo com número guardado: a configuração que sumiu é 503, e defeito do
+  código é defeito, não "falha passageira". A frase da falha declarada vai
+  para a tela, então só se declara exceção de frase fixa e segura.
 - **Registro de frescor.** Cada chave guarda quando foi renovada e se a última
   tentativa falhou. A marca de falha fica até a próxima busca dar certo.
 
@@ -120,13 +122,18 @@ class CacheComFrescor:
         buscar: Callable[[], T],
         *,
         forcar: bool = False,
-        falhas: tuple[type[Exception], ...] = (Exception,),
+        falhas: tuple[type[Exception], ...] = (),
     ) -> Leitura[T]:
         """Serve o número guardado se ele está dentro da hora; senão, busca.
 
         `forcar` é o Atualizar agora: busca mesmo dentro da hora. `falhas` são
         as exceções que querem dizer "a fonte falhou" e, com número guardado,
         viram o último valor bom. Sem número guardado, elas sobem.
+
+        `falhas` começa vazio de propósito: nada vira último valor bom sem ser
+        declarado. A frase da exceção declarada vai para a tela (`motivo`) e
+        fica guardada aqui, então só entra exceção de frase fixa, sem URL,
+        token ou detalhe interno (a `GoogleError` do provedor é assim).
         """
         with self._trava:
             guardado = self._guardados.get(chave)
@@ -166,7 +173,7 @@ class CacheComFrescor:
         if not registrados:
             return Frescor(None)
         return Frescor(
-            atualizado_em=min(f.atualizado_em for f in registrados if f.atualizado_em is not None),
+            atualizado_em=min((f.atualizado_em for f in registrados if f.atualizado_em is not None), default=None),
             atualizacao_falhou=any(f.atualizacao_falhou for f in registrados),
             motivo=next((f.motivo for f in registrados if f.motivo), None),
         )

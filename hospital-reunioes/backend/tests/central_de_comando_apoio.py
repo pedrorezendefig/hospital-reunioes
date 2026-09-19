@@ -17,13 +17,26 @@ nome:
   no fim do teste.
 - `relogio_da_central`: o relógio do cache (#815) nas mãos do teste, um
   `RelogioDeTeste` parado em `AGORA_DE_TESTE` que só anda quando mandam.
+- `gate_e_limitador_zerados`: o limitador de taxa e o participante do gate
+  zerados antes e depois do teste, para quem bate na rota.
+
+E, para testar pela rota real sem importar outro arquivo de teste (#815), o
+app mínimo com o gate de pé e quem está logado: `cliente_da_central(logado)`,
+as pessoas `SUPER_ADMIN`, `SECRETARIA` e `FACILITADOR` (ou `pessoa(...)`) e o
+`PREFIXO_DA_CENTRAL`. Um arquivo novo da Central usa assim:
+
+    pytestmark = pytest.mark.usefixtures("gate_e_limitador_zerados")
+
+    def test_...(google_falso, central_configurada):
+        resposta = cliente_da_central(SUPER_ADMIN).get(f"{PREFIXO_DA_CENTRAL}/...")
 
 Nenhuma fixture daqui é `autouse`: plugin vale para a suíte inteira, e só pede
 quem precisa. Nenhuma credencial de verdade mora aqui, e nada sai da máquina: a
 trava de rede do `tests/conftest.py` continua de pé.
 
-O `app` é importado dentro das fixtures, e não no topo: este módulo carrega com
-o `conftest.py`, antes de qualquer teste pôr o backend no `sys.path`.
+O `app` é importado dentro das fixtures e das funções, e não no topo: este
+módulo carrega com o `conftest.py`, antes de qualquer teste pôr o backend no
+`sys.path`.
 """
 
 from __future__ import annotations
@@ -37,7 +50,11 @@ import httpx
 import pytest
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import rsa
+from fastapi import FastAPI
+from fastapi.testclient import TestClient
 from google.auth import jwt as jwt_do_google
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 PROPRIEDADE_DE_TESTE = "123456789"
 # O escopo que a GA4 exige para ler. Escrito aqui, e não importado do provedor:
@@ -273,3 +290,115 @@ def relogio_da_central(monkeypatch) -> RelogioDeTeste:
     relogio = RelogioDeTeste()
     monkeypatch.setattr(cache, "agora_utc", relogio)
     return relogio
+
+
+# ─── O app mínimo com o gate de pé, e quem está logado (issue #815) ──────────
+#
+# Morava em `test_central_de_comando_visao_geral.py`, e o arquivo de teste
+# seguinte o importava de lá: importar um arquivo de teste roda o que ele roda
+# na coleta (a varredura de rotas monta o app inteiro) e amarra um ao outro.
+# Aqui ele serve a qualquer fatia da Central (#817, #818) sem isso.
+
+PREFIXO_DA_CENTRAL = "/api/admin/central-de-comando"
+
+
+def pessoa(pid: str, access_profile: str | None, *, ativo: bool = True) -> dict:
+    """Uma linha de `participantes`, como o gate de Super admin a lê."""
+    return {
+        "id": pid,
+        "auth_user_id": f"auth-{pid}",
+        "email": f"{pid}@hsm.com",
+        "nome_completo": f"Pessoa {pid}",
+        "cargo": None,
+        "setor": None,
+        "area": None,
+        "role": None,
+        "ativo": ativo,
+        "is_externo": False,
+        "is_super_admin": access_profile == "super_admin",
+        "access_profile": access_profile,
+        "perfil_pop": None,
+        "perfil_ouvidoria": None,
+        "github_login": None,
+        "data_cadastro": "2026-01-01",
+    }
+
+
+SUPER_ADMIN = pessoa("super", "super_admin")
+SECRETARIA = pessoa("secretaria", "secretaria")
+FACILITADOR = pessoa("facilitador", "regular")
+
+
+class _Resultado:
+    def __init__(self, data: list):
+        self.data = data
+
+
+class _ConsultaDeParticipantes:
+    def __init__(self, linhas: list[dict]):
+        self._linhas = linhas
+        self._filtros: list[tuple[str, Any]] = []
+
+    def select(self, *_a, **_kw):
+        return self
+
+    def eq(self, coluna, valor):
+        self._filtros.append((coluna, valor))
+        return self
+
+    def execute(self):
+        return _Resultado([dict(li) for li in self._linhas if all(li.get(c) == v for c, v in self._filtros)])
+
+
+class SupabaseDosParticipantes:
+    """O cliente Supabase que o gate usa: só a tabela `participantes`. A Central
+    não lê tabela nenhuma além dessa, e o dublê grita se alguém tentar."""
+
+    def __init__(self, participantes: list[dict]):
+        self._participantes = participantes
+
+    def table(self, nome: str):
+        assert nome == "participantes", f"a Central não lê tabela nenhuma além do gate: {nome}"
+        return _ConsultaDeParticipantes(self._participantes)
+
+
+def cliente_da_central(logado: dict | None, participantes: list[dict] | None = None) -> TestClient:
+    """O router de verdade da Central num app mínimo, com o gate de pé.
+
+    Só dois dublês: `get_current_user` (quem está logado) e o cliente Supabase
+    (a tabela que o gate lê). `logado=None` é o anônimo, que passa pelo
+    `get_current_user` de verdade e leva 401. `participantes` troca a tabela;
+    o padrão são as três pessoas daqui.
+    """
+    from app.dependencies import get_current_user, get_supabase_client
+    from app.limiter import limiter
+    from app.routers.admin import central_de_comando as central_router
+
+    tabela = participantes if participantes is not None else [SUPER_ADMIN, SECRETARIA, FACILITADOR]
+    app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+    app.include_router(central_router.router, prefix="/api")
+    app.dependency_overrides[get_supabase_client] = lambda: SupabaseDosParticipantes(tabela)
+    if logado is not None:
+
+        async def _usuario() -> dict[str, Any]:
+            return {"id": logado["auth_user_id"], "email": logado["email"], "metadata": {}}
+
+        app.dependency_overrides[get_current_user] = _usuario
+    return TestClient(app)
+
+
+@pytest.fixture
+def gate_e_limitador_zerados():
+    """O limitador de taxa (que conta em memória do processo) e o participante
+    que o gate guarda no contexto, zerados antes e depois do teste: pedido de um
+    teste não gasta a cota nem responde pela pessoa do seguinte."""
+    from app.dependencies import _participante_ctx
+    from app.limiter import limiter
+
+    limiter._storage.reset()
+    _participante_ctx.set(None)
+    yield
+    limiter._storage.reset()
+    _participante_ctx.set(None)

@@ -25,6 +25,15 @@ from central_de_comando_apoio import RelogioDeTeste  # noqa: E402
 from app.services.central_de_comando.cache import CacheComFrescor, Frescor  # noqa: E402
 
 
+class FonteForaError(Exception):
+    """A falha da fonte de mentira, com frase fixa, como a `GoogleError`."""
+
+
+# O que os testes declaram como falha da fonte: sem declarar, nada vira último
+# valor bom (`test_quem_nao_declara_falhas_nao_ganha_ultimo_valor_bom`).
+FALHAS = (FonteForaError,)
+
+
 class Fonte:
     """A fonte de mentira: conta as idas e devolve `valor`, ou levanta `erro`."""
 
@@ -107,9 +116,9 @@ class TestUltimoValorBom:
         cache = _cache(relogio)
         fonte = Fonte(100)
         cache.ler("k", fonte)
-        fonte.erro = RuntimeError("rede caiu")
+        fonte.erro = FonteForaError("rede caiu")
 
-        assert cache.ler("k", fonte, forcar=True).valor == 100
+        assert cache.ler("k", fonte, forcar=True, falhas=FALHAS).valor == 100
 
     def test_numero_velho_com_a_fonte_fora_continua_na_tela(self):
         """Passou da hora e a fonte caiu: o número de antes segue valendo, em
@@ -119,19 +128,37 @@ class TestUltimoValorBom:
         fonte = Fonte(100)
         cache.ler("k", fonte)
         relogio.avancar(hours=3)
-        fonte.erro = RuntimeError("rede caiu")
+        fonte.erro = FonteForaError("rede caiu")
 
-        assert cache.ler("k", fonte).valor == 100
+        assert cache.ler("k", fonte, falhas=FALHAS).valor == 100
         assert fonte.idas == 2
 
     def test_sem_valor_guardado_o_erro_sobe(self):
         """Erro honesto: sem número bom para mostrar, não há o que inventar."""
         cache = _cache(RelogioDeTeste())
         fonte = Fonte()
-        fonte.erro = RuntimeError("boom")
+        fonte.erro = FonteForaError("boom")
 
-        with pytest.raises(RuntimeError, match="boom"):
-            cache.ler("k", fonte)
+        with pytest.raises(FonteForaError, match="boom"):
+            cache.ler("k", fonte, falhas=FALHAS)
+
+    def test_quem_nao_declara_falhas_nao_ganha_ultimo_valor_bom(self):
+        """Sem `falhas`, nenhuma exceção vira último valor bom. A frase dela iria
+        para a tela num 200 e ficaria guardada no cache: o texto cru de um erro
+        de HTTP traz a URL inteira, e a de uma API com token na query traria o
+        token. Quem quer o último valor bom declara a exceção da fonte, que tem
+        frase fixa. A falha não declarada também não marca o registro."""
+        relogio = RelogioDeTeste()
+        cache = _cache(relogio)
+        fonte = Fonte(100)
+        cache.ler("k", fonte)
+        fonte.erro = FonteForaError("https://api.exemplo/?access_token=SEGREDO")
+
+        with pytest.raises(FonteForaError):
+            cache.ler("k", fonte, forcar=True)
+
+        assert cache.frescor("k").atualizacao_falhou is False
+        assert cache.frescor("k").motivo is None
 
     def test_so_a_falha_da_fonte_vira_ultimo_valor_bom(self):
         """Quem lê diz o que é falha da fonte (`falhas`). Outro erro, como um
@@ -162,9 +189,9 @@ class TestUltimoValorBom:
 
         def fonte_que_cai_enquanto_outra_leitura_renova():
             cache.ler("k", Fonte(2), forcar=True)
-            raise RuntimeError("caiu")
+            raise FonteForaError("caiu")
 
-        leitura = cache.ler("k", fonte_que_cai_enquanto_outra_leitura_renova)
+        leitura = cache.ler("k", fonte_que_cai_enquanto_outra_leitura_renova, falhas=FALHAS)
         depois = cache.ler("k", Fonte(3))
 
         assert leitura.valor == 2
@@ -179,9 +206,9 @@ class TestUltimoValorBom:
 
         def fonte_que_cai_enquanto_outra_leitura_busca():
             cache.ler("k", Fonte(5))
-            raise RuntimeError("caiu")
+            raise FonteForaError("caiu")
 
-        assert cache.ler("k", fonte_que_cai_enquanto_outra_leitura_busca).valor == 5
+        assert cache.ler("k", fonte_que_cai_enquanto_outra_leitura_busca, falhas=FALHAS).valor == 5
 
 
 class TestRegistroDeFrescor:
@@ -214,9 +241,9 @@ class TestRegistroDeFrescor:
         fonte = Fonte(1)
         cache.ler("k", fonte)
         relogio.avancar(minutes=30)
-        fonte.erro = RuntimeError("x")
+        fonte.erro = FonteForaError("x")
 
-        leitura = cache.ler("k", fonte, forcar=True)
+        leitura = cache.ler("k", fonte, forcar=True, falhas=FALHAS)
 
         assert leitura.frescor.atualizado_em == datetime(2026, 9, 18, 10, 0, tzinfo=UTC)
         assert leitura.frescor.atualizacao_falhou is True
@@ -229,9 +256,9 @@ class TestRegistroDeFrescor:
         fonte = Fonte(1)
         cache.ler("k", fonte)
         relogio.avancar(hours=2)
-        fonte.erro = RuntimeError("O Google Analytics respondeu HTTP 500.")
+        fonte.erro = FonteForaError("O Google Analytics respondeu HTTP 500.")
 
-        leitura = cache.ler("k", fonte)
+        leitura = cache.ler("k", fonte, falhas=FALHAS)
 
         assert leitura.valor == 1
         assert leitura.frescor.atualizacao_falhou is True
@@ -245,15 +272,15 @@ class TestRegistroDeFrescor:
         cache = _cache(relogio)
         fonte = Fonte(1)
         cache.ler("k", fonte)
-        fonte.erro = RuntimeError("fora")
-        cache.ler("k", fonte, forcar=True)
+        fonte.erro = FonteForaError("fora")
+        cache.ler("k", fonte, forcar=True, falhas=FALHAS)
         relogio.avancar(minutes=10)
 
         ainda_falhou = cache.ler("k", fonte)
         fonte.erro = None
         fonte.valor = 2
         relogio.avancar(minutes=5)
-        voltou = cache.ler("k", fonte, forcar=True)
+        voltou = cache.ler("k", fonte, forcar=True, falhas=FALHAS)
 
         assert ainda_falhou.frescor.atualizacao_falhou is True
         assert voltou.valor == 2
@@ -275,8 +302,8 @@ class TestFrescorDeVariasChaves:
         cache.ler("c", fonte)
         relogio.avancar(minutes=10)
         cache.ler("a", fonte)
-        fonte.erro = RuntimeError("b caiu")
-        cache.ler("b", fonte, forcar=True)
+        fonte.erro = FonteForaError("b caiu")
+        cache.ler("b", fonte, forcar=True, falhas=FALHAS)
 
         frescor = cache.frescor("a", "b", "c")
 
@@ -290,6 +317,17 @@ class TestFrescorDeVariasChaves:
         cache.ler("a", Fonte(1))
 
         assert cache.frescor("a", "nunca") == Frescor(datetime(2026, 9, 18, 10, 0, tzinfo=UTC))
+
+    def test_chaves_lidas_sem_hora_registrada_dao_sem_hora_e_nao_erro(self):
+        """O contrato do `Frescor` admite hora nula. Se todas as chaves lidas
+        estiverem assim, o frescor da tela é "sem hora", e não um `ValueError`
+        do `min` de uma lista vazia. Um relógio que não diz hora é o único
+        jeito de chegar lá pela porta pública."""
+        cache = CacheComFrescor(relogio=lambda: None)
+        cache.ler("a", Fonte(1))
+        cache.ler("b", Fonte(2))
+
+        assert cache.frescor("a", "b") == Frescor(atualizado_em=None, atualizacao_falhou=False, motivo=None)
 
     def test_sem_nenhuma_chave_lida_nao_ha_hora_nenhuma(self):
         cache = _cache(RelogioDeTeste())
