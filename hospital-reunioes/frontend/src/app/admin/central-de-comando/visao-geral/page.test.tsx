@@ -14,7 +14,7 @@ import { cleanup, render, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({ token: "token-de-teste", userId: "auth-1", userEmail: "diretor@hsm", loading: false }),
+  getAuthToken: async () => "token-de-teste",
 }));
 
 vi.mock("next/link", () => ({

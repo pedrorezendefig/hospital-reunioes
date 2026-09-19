@@ -8,6 +8,32 @@
 
 export const BASE_CENTRAL = "/api/admin/central-de-comando";
 
+/**
+ * As telas que passam pelo cache com frescor do backend (issue #815): a
+ * leitura é `GET {BASE_CENTRAL}/{tela}?periodo=` e o Atualizar agora é
+ * `POST {BASE_CENTRAL}/atualizar-agora?tela=&periodo=`. Tela nova (Dados do
+ * Google, #817) entra aqui e no registro de telas do backend.
+ */
+export type TelaDaCentral = "visao-geral";
+
+/**
+ * O Atualizar agora tem limite de taxa no backend. O 429 do `slowapi` chega
+ * sem `detail` (`{"error": ...}`, em inglês): a frase é da tela.
+ */
+export const MUITAS_ATUALIZACOES = "Muitas atualizações em pouco tempo. Espere um minuto e tente de novo.";
+
+/**
+ * O bloco `frescor` que todo payload de tela traz (issue #815): de quando são
+ * os números (ISO 8601, com fuso) e se a última tentativa de renová-los
+ * falhou, com a frase do porquê. Quando falhou, os números são o último valor
+ * bom, e `atualizado_em` é a hora dele.
+ */
+export type Frescor = {
+  atualizado_em: string;
+  atualizacao_falhou: boolean;
+  motivo: string | null;
+};
+
 /** A rede caiu antes de o backend responder. */
 export const FALHA_DE_CONEXAO =
   "Não foi possível falar com o servidor. Verifique a conexão e tente de novo.";
