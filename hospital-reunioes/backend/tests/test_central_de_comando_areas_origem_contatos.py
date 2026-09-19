@@ -259,7 +259,8 @@ class TestOrigemDoPublico:
     def test_as_visitas_por_origem_com_rotulo_e_percentual_e_o_resto_no_fim(self):
         """28 dias, 9.410 Visitas: os grupos de canal da GA4 somados em cada
         Origem do público, as origens da maior para a menor e o resto (Outros
-        e Não identificado) sempre no fim. Os pontos percentuais somam 100."""
+        e Não identificado) sempre no fim. Cada fatia arredondada sozinha, e o
+        Não identificado, com 0,43%, vem com 0 ponto ("<1%" na tela)."""
         resposta = _dados_do_google("28d")
 
         assert resposta.status_code == 200, resposta.text
@@ -403,7 +404,7 @@ class TestFatiaComoNaCentralAntiga:
         ("visitas", "total", "fatia"),
         [
             (5700, 9410, 61),  # 60,57%
-            (800, 9410, 9),  # 8,50%: meio ponto para cima
+            (800, 9410, 9),  # 8,5016%: passa do meio ponto, sobe
             (1, 7, 14),  # 14,29%
             (2, 7, 29),  # 28,57%
             (3, 200, 2),  # 1,5%: meio ponto para cima

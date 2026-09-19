@@ -108,10 +108,11 @@ export function formatarDiaLongo(iso: string): string {
 }
 
 /**
- * Uma fatia em pontos percentuais inteiros, como o backend manda (e somam
- * 100): 71 vira "71%". O backend só manda fatia com visita, então 0 ponto é
- * menos de 1%, e sai "<1%" (o `formatShare` do repositório antigo), nunca um
- * zero que diria "ninguém".
+ * Uma fatia em pontos percentuais inteiros, como o backend manda (no Por
+ * dispositivo as fatias somam 100; na Origem do público, #818, cada uma é
+ * arredondada sozinha, como na Central antiga): 71 vira "71%". O backend só
+ * manda fatia com visita, então 0 ponto é menos de 1%, e sai "<1%" (o
+ * `formatShare` do repositório antigo), nunca um zero que diria "ninguém".
  */
 export function formatarFatia(percentual: number): string {
   return percentual <= 0 ? "<1%" : `${percentual}%`;
