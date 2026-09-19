@@ -153,7 +153,7 @@ async def ao_vivo(request: Request):
 
     Não é tela do registro de `telas.py`: nunca é guardado e não tem Atualizar
     agora. Fonte fora é 502 e falta de configuração é 503, pelo mesmo
-    `_do_google` das telas de tendência; nunca um zero inventado.
+    `_do_fonte` das telas de tendência; nunca um zero inventado.
     """
     return {"pessoas": await _do_fonte(provedor_google.pessoas_no_site_agora)}
 
