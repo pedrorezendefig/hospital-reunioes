@@ -14,8 +14,12 @@ Um módulo por assunto, para as fatias do PRD acrescentarem sem reescrever:
   fala com o Google Analytics. Cada número do Site é uma função dele.
 - `visao_geral`: monta o payload da tela Visão Geral. Cada bloco da tela é uma
   chave do payload.
+- `cache`: o cache com frescor de 1 hora, em memória do processo, com o último
+  valor bom quando a fonte cai (#815). O Ao vivo nunca passa por ele.
+- `telas`: o registro das telas lidas pelo cache, uma chave por tela e
+  período, com o frescor no payload e o Atualizar agora (#815). Tela nova
+  entra no registro e ganha os três.
 
-O que ainda vem, cada um no seu módulo: o cache com frescor (#815), o provedor
-de dados do Instagram (#819), as telas de Dados do Google, Instagram e
-Objetivos, e o conector MCP.
+O que ainda vem, cada um no seu módulo: o provedor de dados do Instagram
+(#819), as telas de Dados do Google, Instagram e Objetivos, e o conector MCP.
 """

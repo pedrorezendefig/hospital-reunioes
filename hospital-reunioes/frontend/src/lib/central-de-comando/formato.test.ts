@@ -8,7 +8,7 @@
 
 import { describe, expect, it } from "vitest";
 
-import { formatarData, formatarInteiro, formatarPercentual } from "./formato";
+import { formatarData, formatarHora, formatarInteiro, formatarPercentual, formatarQuando } from "./formato";
 
 describe("formatarInteiro", () => {
   it("usa o separador de milhar do pt-BR", () => {
@@ -37,5 +37,47 @@ describe("formatarData", () => {
     // Um `new Date("2026-09-01")` é meia-noite em UTC, que no Brasil ainda é o
     // dia anterior. A data sai do texto, e não do relógio.
     expect(formatarData("2026-09-01")).toBe("01/09/2026");
+  });
+});
+
+/**
+ * Porte de `formatClock` (`src/lib/format.test.ts` do repositório antigo, issue
+ * #815): a hora do "Mostrando os números de 13h45". Lá era o fuso do
+ * navegador; aqui é o do hospital, como no resto do app. Os instantes entram em
+ * UTC, e a hora sai em Brasília: numa máquina em UTC, ler no fuso da máquina
+ * daria 16h45 e o teste acusaria.
+ */
+describe("formatarHora", () => {
+  it("escreve o instante como hora do hospital, 'HhMM'", () => {
+    expect(formatarHora(Date.parse("2026-06-21T16:45:00Z"))).toBe("13h45");
+  });
+
+  it("preenche os minutos com zero à esquerda, e a hora não", () => {
+    expect(formatarHora(Date.parse("2026-06-21T12:05:00Z"))).toBe("9h05");
+  });
+
+  it("meia-noite é 0h", () => {
+    expect(formatarHora(Date.parse("2026-06-21T03:10:00Z"))).toBe("0h10");
+  });
+});
+
+/**
+ * De quando é o último número bom, no aviso da barra de frescor (issue #815):
+ * a hora quando é de hoje, o dia e a hora quando não é. "Hoje" é o dia do
+ * hospital, e não o do UTC: 22h em Brasília já é o dia seguinte em UTC.
+ */
+describe("formatarQuando", () => {
+  const AGORA = Date.parse("2026-09-18T16:50:00Z"); // 13h50 em Brasília
+
+  it("número de hoje: só a hora", () => {
+    expect(formatarQuando(Date.parse("2026-09-18T16:45:00Z"), AGORA)).toBe("13h45");
+  });
+
+  it("número de outro dia: o dia e a hora", () => {
+    expect(formatarQuando(Date.parse("2026-09-17T16:45:00Z"), AGORA)).toBe("17/09/2026 às 13h45");
+  });
+
+  it("o dia é o do hospital: 22h de ontem em Brasília é ontem, mesmo sendo hoje em UTC", () => {
+    expect(formatarQuando(Date.parse("2026-09-18T01:00:00Z"), AGORA)).toBe("17/09/2026 às 22h00");
   });
 });

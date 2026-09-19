@@ -28,13 +28,12 @@ const sessao = vi.hoisted(() => ({
   carregando: false,
 }));
 
+// A tela pede a sessão a cada pedido (issue #815: ela fica aberta por horas, e
+// o token da abertura vence em 1 hora). Enquanto a sessão carrega, a promessa
+// não volta.
 vi.mock("@/hooks/useAuth", () => ({
-  useAuth: () => ({
-    token: sessao.token,
-    userId: sessao.token ? "auth-1" : null,
-    userEmail: sessao.token ? "diretor@hsm" : null,
-    loading: sessao.carregando,
-  }),
+  getAuthToken: () =>
+    sessao.carregando ? new Promise<string | undefined>(() => {}) : Promise.resolve(sessao.token ?? undefined),
 }));
 
 vi.mock("next/link", () => ({
@@ -66,6 +65,7 @@ function payload(parcial: {
       anterior: parcial.anterior ?? 10000,
       variacao: parcial.variacao === undefined ? 0.2345 : parcial.variacao,
     },
+    frescor: { atualizado_em: "2026-09-18T16:45:00+00:00", atualizacao_falhou: false, motivo: null },
   };
 }
 

@@ -6,27 +6,34 @@
  * Pede ao backend o payload inteiro da tela e desenha o que veio: a conta
  * (variação, datas do período) é do backend, e a tela não compõe chamadas.
  *
- * Um bloco do payload, um componente. Nesta fatia é o número-manchete dos
- * Visitantes; as seguintes acrescentam os seus (o frescor e o Atualizar agora,
- * o Ao vivo, o contexto do número, o Instagram num relance, os Objetivos em
- * foco e "O que vem por aí") no mesmo molde, abaixo do que já existe.
+ * Um bloco do payload, um componente. Hoje é o número-manchete dos Visitantes;
+ * as fatias seguintes acrescentam os seus (o Ao vivo, o contexto do número, o
+ * Instagram num relance, os Objetivos em foco e "O que vem por aí") no mesmo
+ * molde, abaixo do que já existe.
+ *
+ * O frescor (issue #815) é da tela inteira: a leitura, o Atualizar agora e a
+ * renovação de hora em hora moram no `useTelaDaCentral`, e a `BarraDeFrescor`
+ * fica em cima dos blocos. Enquanto um Atualizar agora está no ar, os blocos
+ * esmaecem, mas continuam na tela.
  *
  * Honestidade do dado: sem credencial (503 com a frase do backend) ou com a
- * fonte fora (502), a tela diz o que houve com a frase do servidor e não
- * desenha número nenhum. Hoje isso vale para a tela INTEIRA: o backend
- * responde um status só para o payload todo, e um aviso substitui todos os
- * blocos. Vale até a #821, que passa a usar status por bloco.
+ * fonte fora e nada guardado (502), a tela diz o que houve com a frase do
+ * servidor e não desenha número nenhum. Com a fonte fora e números guardados,
+ * o backend manda o último valor bom, e a barra avisa que não atualizou. Hoje
+ * isso vale para a tela INTEIRA: o backend responde um status só para o
+ * payload todo, e um aviso substitui todos os blocos. Vale até a #821, que
+ * passa a usar status por bloco.
  */
 
-import { useEffect, useState } from "react";
 import { AlertTriangle, LayoutDashboard, Loader2, PlugZap } from "lucide-react";
 
-import { useAuth } from "@/hooks/useAuth";
-import { BASE_CENTRAL, FALHA_DE_CONEXAO, SEM_SESSAO, lerRecusa, type Recusa } from "@/lib/central-de-comando/api";
+import type { Frescor } from "@/lib/central-de-comando/api";
 import type { Periodo } from "@/lib/central-de-comando/periodo";
 
+import { BarraDeFrescor } from "./BarraDeFrescor";
 import { BlocoVisitantes, type PeriodoDoPayload, type VisitantesDoPayload } from "./BlocoVisitantes";
 import { SeletorDePeriodo } from "./SeletorDePeriodo";
+import { useTelaDaCentral } from "./useTelaDaCentral";
 
 export const CAMINHO_VISAO_GERAL = "/admin/central-de-comando/visao-geral";
 
@@ -34,49 +41,11 @@ export const CAMINHO_VISAO_GERAL = "/admin/central-de-comando/visao-geral";
 export type VisaoGeralPayload = {
   periodo: PeriodoDoPayload;
   visitantes: VisitantesDoPayload;
+  frescor: Frescor;
 };
 
-type Estado =
-  | { tipo: "carregando" }
-  | { tipo: "pronto"; dados: VisaoGeralPayload }
-  | Recusa
-  | { tipo: "sem-conexao"; mensagem: string };
-
 export function VisaoGeral({ periodo }: { periodo: Periodo }) {
-  const { token, loading: carregandoAuth } = useAuth();
-  const [estado, setEstado] = useState<Estado>({ tipo: "carregando" });
-
-  useEffect(() => {
-    // O `useAuth` começa sem token e com `loading`: acusar falta de sessão
-    // antes de ele terminar seria alarme falso em toda abertura da tela.
-    if (carregandoAuth) return;
-    if (!token) {
-      setEstado({ tipo: "sem-conexao", mensagem: SEM_SESSAO });
-      return;
-    }
-
-    // Trocar de período no meio de uma resposta lenta não pode deixar a tela
-    // com o número do período anterior: a resposta velha é descartada.
-    let descartada = false;
-    setEstado({ tipo: "carregando" });
-    (async () => {
-      try {
-        const resposta = await fetch(`${BASE_CENTRAL}/visao-geral?periodo=${periodo}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        const proximo: Estado = resposta.ok
-          ? { tipo: "pronto", dados: (await resposta.json()) as VisaoGeralPayload }
-          : await lerRecusa(resposta);
-        if (!descartada) setEstado(proximo);
-      } catch (e) {
-        console.error("[central-de-comando/visao-geral] falha ao carregar", e);
-        if (!descartada) setEstado({ tipo: "sem-conexao", mensagem: FALHA_DE_CONEXAO });
-      }
-    })();
-    return () => {
-      descartada = true;
-    };
-  }, [carregandoAuth, token, periodo]);
+  const { estado, atualizando, aviso, atualizarAgora } = useTelaDaCentral<VisaoGeralPayload>("visao-geral", periodo);
 
   return (
     <div className="animate-fade-in-up space-y-6">
@@ -104,7 +73,17 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
       )}
 
       {estado.tipo === "pronto" && (
-        <BlocoVisitantes periodo={estado.dados.periodo} visitantes={estado.dados.visitantes} />
+        <>
+          <BarraDeFrescor
+            frescor={estado.dados.frescor}
+            atualizando={atualizando}
+            aviso={aviso}
+            onAtualizar={atualizarAgora}
+          />
+          <div className={`space-y-6 transition-opacity ${atualizando ? "pointer-events-none opacity-50" : ""}`}>
+            <BlocoVisitantes periodo={estado.dados.periodo} visitantes={estado.dados.visitantes} />
+          </div>
+        </>
       )}
 
       {estado.tipo === "nao-configurado" && (
