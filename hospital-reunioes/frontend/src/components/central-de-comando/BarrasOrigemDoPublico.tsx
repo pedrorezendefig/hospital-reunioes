@@ -5,7 +5,8 @@ import { COR_DA_BARRA, COR_DA_BARRA_DO_RESTO, COR_DO_TRILHO } from "@/lib/centra
  * Uma origem do bloco `origem_do_publico` do payload de Dados do Google: as
  * Visitas do período que chegaram por ela, o rótulo da tela e a fatia em
  * pontos percentuais. O backend manda só as que tiveram Visita, na ordem da
- * tela (Outros e Não identificado no fim), e as fatias somam 100.
+ * tela (Outros e Não identificado no fim), com cada fatia arredondada sozinha,
+ * como na Central antiga: abaixo de 1% vem 0 ponto, que a tela escreve "<1%".
  */
 export type OrigemDoPayload = {
   chave: string;

@@ -7,7 +7,7 @@
  *
  * Porte do teste da origem da Central antiga (`SourceBreakdown.test.tsx`). As
  * origens chegam prontas do backend: só as que tiveram Visita, na ordem, com
- * o rótulo gentil e a fatia em pontos percentuais que somam 100.
+ * o rótulo gentil e a fatia em pontos percentuais, arredondada como lá.
  */
 
 import { cleanup, render, screen, within } from "@testing-library/react";
@@ -17,12 +17,13 @@ import { BarrasOrigemDoPublico, type OrigemDoPayload } from "./BarrasOrigemDoPub
 
 afterEach(cleanup);
 
-// 8.640 Visitas.
+// 8.640 Visitas, cada fatia arredondada sozinha: 65,97%, 20,83%, 9,26%, 3,47%
+// e 0,46% (abaixo de 1%, 0 ponto).
 const ORIGENS: OrigemDoPayload[] = [
   { chave: "busca", rotulo: "Busca no Google", visitas: 5700, percentual: 66 },
   { chave: "direto", rotulo: "Direto", visitas: 1800, percentual: 21 },
   { chave: "anuncios", rotulo: "Anúncios", visitas: 800, percentual: 9 },
-  { chave: "outros", rotulo: "Outros", visitas: 300, percentual: 4 },
+  { chave: "outros", rotulo: "Outros", visitas: 300, percentual: 3 },
   { chave: "nao-identificado", rotulo: "Não identificado", visitas: 40, percentual: 0 },
 ];
 
@@ -37,7 +38,7 @@ describe("BarrasOrigemDoPublico", () => {
       "Busca no Google66%5.700 visitas",
       "Direto21%1.800 visitas",
       "Anúncios9%800 visitas",
-      "Outros4%300 visitas",
+      "Outros3%300 visitas",
       "Não identificado<1%40 visitas",
     ]);
   });
@@ -49,7 +50,7 @@ describe("BarrasOrigemDoPublico", () => {
       "66%",
       "21%",
       "9%",
-      "4%",
+      "3%",
       "0%",
     ]);
   });

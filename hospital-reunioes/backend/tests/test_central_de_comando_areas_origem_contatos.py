@@ -42,6 +42,12 @@ from central_de_comando_apoio import (  # noqa: E402
     cliente_da_central,
 )
 
+# O `google_falso` troca o `httpx.Client` por uma função enquanto o teste roda,
+# e o `postgrest`, que o gate carrega na primeira vez, herda do `httpx.Client`
+# ao ser importado. As classes daqui pedem o `lote_da_ga4` antes do gate, então
+# o app é importado já aqui, antes de qualquer troca: sem isto, o arquivo passa
+# na suíte (outro arquivo importa o app antes) e quebra quando roda sozinho.
+import app.dependencies  # noqa: E402, F401
 from app.config import settings  # noqa: E402
 from app.services.central_de_comando import dados_do_google, provedor_google  # noqa: E402
 
@@ -316,6 +322,29 @@ class TestOrigemDoPublico:
             ("nao-identificado", 5),
         ]
 
+    @pytest.mark.parametrize(
+        ("canais", "fatias"),
+        [
+            # 8 de 3.008 é 0,27%: abaixo de 1% é "<1%" (0 ponto), e não 1%.
+            ({"Organic Search": 1000, "Direct": 1000, "Organic Social": 1000, "Unassigned": 8}, [33, 33, 33, 0]),
+            # Um sétimo e dois sétimos: 14,3% e 28,6% viram 14 e 29, e a soma dá 101.
+            ({"Organic Search": 2, "Direct": 2, "Organic Social": 2, "Paid Search": 1}, [29, 29, 29, 14]),
+            # 3 de 200 é 1,5%: arredonda para cima, 2. E 1 de 200 é 0,5%: "<1%".
+            ({"Organic Search": 196, "Direct": 3, "Unassigned": 1}, [98, 2, 0]),
+        ],
+        ids=["abaixo-de-1-por-cento", "soma-101", "meio-ponto"],
+    )
+    def test_a_fatia_de_cada_origem_e_a_da_central_antiga(self, lote_da_ga4, canais, fatias):
+        """Porte do `formatShare` da Central antiga, para a tela bater lado a
+        lado com ela: cada fatia arredondada sozinha (meio ponto para cima), e
+        a que fica abaixo de 1% vem com 0 ponto, que a tela escreve "<1%". A
+        soma pode dar 99 ou 101, como lá."""
+        lote_da_ga4.visitas_por_canal[_28_DIAS] = canais
+
+        origem = _dados_do_google("28d").json()["origem_do_publico"]
+
+        assert [o["percentual"] for o in origem] == fatias
+
     def test_origem_sem_visita_nao_aparece(self, lote_da_ga4):
         """A fatia vazia não vira barra: só entra origem com Visita."""
         lote_da_ga4.visitas_por_canal[_7_DIAS] = {"Direct": 900, "Paid Search": 0, "Unassigned": 0}
@@ -363,6 +392,36 @@ class TestOrigemDoCanal:
 
     def test_toda_origem_tem_rotulo_na_tela(self):
         assert list(get_args(provedor_google.OrigemDoPublico)) == list(dados_do_google.ROTULO_DA_ORIGEM)
+
+
+class TestFatiaComoNaCentralAntiga:
+    """A fatia de cada origem, direto (`formatShare`): cada uma arredondada
+    sozinha, meio ponto para cima, e abaixo de 1% é 0 ponto ("<1%" na tela).
+    Os esperados foram contados à mão."""
+
+    @pytest.mark.parametrize(
+        ("visitas", "total", "fatia"),
+        [
+            (5700, 9410, 61),  # 60,57%
+            (800, 9410, 9),  # 8,50%: meio ponto para cima
+            (1, 7, 14),  # 14,29%
+            (2, 7, 29),  # 28,57%
+            (3, 200, 2),  # 1,5%: meio ponto para cima
+            (2, 200, 1),  # 1% em ponto: já não é "<1%"
+            (199, 200, 100),  # 99,5%
+            (7, 7, 100),
+        ],
+    )
+    def test_a_fatia_arredondada_sozinha(self, visitas, total, fatia):
+        assert dados_do_google.fatia_como_na_central_antiga(visitas, total) == fatia
+
+    @pytest.mark.parametrize(("visitas", "total"), [(40, 9410), (8, 3008), (1, 200), (99, 10000)])
+    def test_abaixo_de_1_por_cento_e_0_ponto_e_nao_1(self, visitas, total):
+        """0,5% arredondaria para 1%; a Central antiga escrevia "<1%"."""
+        assert dados_do_google.fatia_como_na_central_antiga(visitas, total) == 0
+
+    def test_sem_total_e_zero(self):
+        assert dados_do_google.fatia_como_na_central_antiga(0, 0) == 0
 
 
 class TestOrdenarOrigens:

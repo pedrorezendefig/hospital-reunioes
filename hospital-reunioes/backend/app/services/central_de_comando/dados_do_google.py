@@ -211,19 +211,35 @@ def ordenar_origens(origens: list[provedor_google.VisitasNaOrigem]) -> list[prov
 
 def _bloco_origem_do_publico(origens: tuple[provedor_google.VisitasNaOrigem, ...]) -> list[dict]:
     """As barras da Origem do público: só as origens com Visita no período, na
-    ordem da tela, cada uma com o rótulo e a fatia em pontos percentuais que,
-    juntos, somam 100."""
+    ordem da tela, cada uma com o rótulo e a fatia do total, arredondada como
+    a Central antiga arredondava (`fatia_como_na_central_antiga`)."""
     com_visita = ordenar_origens([origem for origem in origens if origem.visitas > 0])
-    fatias = percentuais_que_somam_100([origem.visitas for origem in com_visita])
+    total = sum(origem.visitas for origem in com_visita)
     return [
         {
             "chave": origem.origem,
             "rotulo": ROTULO_DA_ORIGEM[origem.origem],
             "visitas": origem.visitas,
-            "percentual": fatia,
+            "percentual": fatia_como_na_central_antiga(origem.visitas, total),
         }
-        for origem, fatia in zip(com_visita, fatias, strict=True)
+        for origem in com_visita
     ]
+
+
+def fatia_como_na_central_antiga(visitas: int, total: int) -> int:
+    """A fatia de uma origem em pontos percentuais inteiros, arredondada
+    sozinha, como a barra da Origem da Central antiga (`formatShare`), para a
+    tela bater lado a lado com ela.
+
+    Abaixo de 1% do total é 0 ponto, que a tela escreve "<1%" (e não o 1% que
+    o arredondamento daria a 0,5%). Do resto, o arredondamento é o de sempre,
+    meio ponto para cima: 8,5% é 9. A conta é inteira, sem erro de ponto
+    flutuante. As fatias arredondadas uma a uma podem somar 99 ou 101, como
+    lá; o Por dispositivo, que fecha em 100, usa o `percentuais_que_somam_100`.
+    """
+    if total <= 0 or 100 * visitas < total:
+        return 0
+    return (200 * visitas + total) // (2 * total)
 
 
 # Os canais de contato, na ordem da tela, com o nome de cada um: os da Central
