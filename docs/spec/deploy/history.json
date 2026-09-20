@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-19T22:22:08-03:00",
+      "sha": "bd198cb",
+      "app_version": "0.152.0",
+      "subject": "Visao Geral completa, com 'O que vem por ai'",
+      "raw_subject": "feat(central-de-comando): Visão Geral completa com 'O que vem por aí' (#821)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 248,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 3 (ultima) da fila fixa (PRD #809, ADR 0058, sessao B): Visao Geral composta da Central, os 5 blocos que degradam sozinhos (Visitantes+contexto, Instagram num relance, Objetivos em foco, 'O que vem por ai', Atalhos); a rota responde sempre 200 com estado por bloco, e a falha de uma fonte nao derruba a tela. Reusa os provedores (dados_do_google #818, provedor_instagram #819) e o cache #815, sem chamar a fonte por fora; 'O que vem por ai' portado de src/lib/pages.ts sem data prometida. A fatia foi retomada apos o rate limit da sessao (reset 21:10): trabalho parcial preservado em commit WIP e concluido. Gate 2.5: os dois revisores independentes LIMPOS, sem must-fix. Sem migration. Em producao a Central segue dormente para Instagram/GA4 (variaveis so no .env local) ate a #827. Nice-to-haves nao bloqueantes: teste de regressao do motivo sem material de token, frescor 'Atualizado' verde com os dois blocos down, GA4 over-fetch no bloco Visitantes, conferencia mobile manual. Sem travessao. Fila-alvo (#819, #820, #821) concluida."
+    },
+    {
       "at": "2026-09-19T20:10:13-03:00",
       "sha": "d93bfc0",
       "app_version": "0.151.0",
@@ -1464,35 +1496,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 1 de 2 desta sessao: #607 (PR #619, fatia P do PRD #598) e #593 (PR #620, fatia M do PRD #591), em paralelo. Sem migration por decisao do humano: a #593 so le o carimbo anonimizada_em que a 079 ja criou. Tres merges na main, tres builds: #619, depois o #624, depois o #620. O #624 nao estava na fila: o WeasyPrint 70.0 saiu no meio da onda e removeu default_url_fetcher, quebrando a guarda _pdf_url_fetcher (recusa de file:// e host privado no PDF do POP). A main ficou vermelha sozinha, sem mudanca de codigo. Nem o CI (uv pip install -e .[dev]) nem o Dockerfile (uv pip install -r pyproject.toml) usam o uv.lock, entao o proximo build de producao teria levado o 70.0 e o PDF do POP quebraria em prod. Teto weasyprint>=62.0,<70 aprovado pelo humano; resolucao conferida com uv pip compile: com teto resolve 69.0, sem teto resolve 70.0. Portar para a API nova (classe URLFetcher) ficou na issue #625. Achados dos revisores que viraram conserto antes do merge: no #619, o rollback de _restaurar_prazo restaurava o prazo e deixava o carimbo, o que travaria uma prorrogacao aprovada depois; no #620, o bloco de Prorrogacao mostrava o marcador interno [anonimizado pela retencao] na tela do caso apagado, a guarda de reabertura morava numa porta so, e a tela ainda aceitava escrita de texto livre em categoria, campo que a retencao preserva de proposito e que fica fora da varredura depois do carimbo. O autor do #620 achou os proprios testes passando em vacuo (assercoes de ausencia antes das leituras da pagina voltarem) e corrigiu; o revisor confirmou por experimento em copia isolada. O autor tambem contestou com evidencia uma suposicao errada da rodada 1 sobre /transicoes, e o revisor da rodada 2 lhe deu razao. Corrida de bump a tres (#619, #620 e o #621 de outra sessao, todos saindo de 0.112.0), resolvida pelo semaforo: esta sessao ficou com 0.113.0 e a outra re-bumpou para 0.114.0. Sobras viraram issue, nao ficaram no PR: #622 (portas /anexos e /tentativas-contato ainda escrevem em caso apagado), #623 (rollback grava carimbo sempre, _instante duplicado) e #625 (port do WeasyPrint)."
-    },
-    {
-      "at": "2026-09-07T16:55:00-03:00",
-      "sha": "40a8585",
-      "app_version": "0.112.0",
-      "subject": "a Ouvidoria e avisada por email da devolucao, e o Dossie mostra o caso devolvido com o reacionamento pre-preenchido",
-      "raw_subject": "feat(ouvidoria): Dossiê mostra a devolução e o ouvidor reaciona a área certa (#601) (#606)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 720,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 de 2 do PRD #598, que fecha o PRD: #599 (PR #605) e #601 (PR #606). Sem migration, porque a 098 ja tinha deixado o gatilho no CHECK. O #605 saiu limpo de primeira; o #606 precisou de 3 rodadas de review, uma acima do teto e autorizada pelo humano, e as tres giraram em torno de apagar evidencia de atraso. A colisao de bump (os dois pediam 0.111.0) foi resolvida no merge, com o #606 refeito a mao como 0.112.0 depois que o rebase descartou o bump por conteudo identico. Um buraco irmao, ainda aberto em producao desde a v0.110.0, virou a issue #607."
     }
   ]
 }
