@@ -34,7 +34,6 @@ from functools import partial
 from app.services.central_de_comando import dados_do_google as tela_dados_do_google
 from app.services.central_de_comando import instagram as tela_instagram
 from app.services.central_de_comando import provedor_google, provedor_instagram
-from app.services.central_de_comando import visao_geral as tela_visao_geral
 from app.services.central_de_comando.cache import cache_da_central
 from app.services.central_de_comando.periodo import PERIODOS, Periodo
 
@@ -66,7 +65,10 @@ class Tela:
 
 
 TELAS: dict[str, Tela] = {
-    "visao-geral": Tela(montar=tela_visao_geral.montar, falhas=(provedor_google.GoogleError,)),
+    # A Visão Geral saiu daqui na #821: virou tela COMPOSTA, um bloco por chave
+    # de cache, cada bloco degradando sozinho (`visao_geral.ler`). Não cabe no
+    # registro de chave única, que é tudo ou nada. O Atualizar agora dela é
+    # despachado à parte no router (`LEITORES_COMPOSTOS`).
     # Dados do Google (#817): os blocos da #818 entram no mesmo `montar`, na
     # mesma chave, e o Atualizar agora renova todos juntos.
     "dados-do-google": Tela(

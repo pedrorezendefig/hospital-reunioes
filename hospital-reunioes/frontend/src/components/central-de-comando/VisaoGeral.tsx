@@ -1,28 +1,23 @@
 "use client";
 
 /**
- * A tela Visão Geral da Central de Comando (issue #814, PRD #809, ADR 0058).
+ * A tela Visão Geral da Central de Comando (issue #821, PRD #809, ADR 0058).
  *
- * Pede ao backend o payload inteiro da tela e desenha o que veio: a conta
- * (variação, datas do período) é do backend, e a tela não compõe chamadas.
+ * O panorama da Central num relance: o número-manchete e o contexto dele, o
+ * Instagram num relance, os Objetivos em foco, os atalhos para as outras telas e
+ * o "O que vem por aí". Pede ao backend o payload inteiro e desenha o que veio;
+ * a conta é do backend, a tela só escreve.
  *
- * Um bloco do payload, um componente. Hoje é o número-manchete dos Visitantes;
- * as fatias seguintes acrescentam os seus (o Ao vivo, o contexto do número, o
- * Instagram num relance, os Objetivos em foco e "O que vem por aí") no mesmo
- * molde, abaixo do que já existe.
+ * **Cada bloco degrada sozinho (issue #821).** O backend responde 200 com um
+ * `estado` por bloco de fonte: se a fonte de um bloco falha, o bloco mostra o
+ * estado calmo (`nao-configurado`) ou o erro honesto (`sem-dado`), e os outros
+ * quatro seguem. Nenhum bloco derruba a tela. Os atalhos e o "O que vem por aí"
+ * são conteúdo fixo, sempre presentes.
  *
- * O frescor (issue #815) é da tela inteira: a leitura, o Atualizar agora e a
- * renovação de hora em hora moram no `useTelaDaCentral`, e a `BarraDeFrescor`
- * fica em cima dos blocos. Enquanto um Atualizar agora está no ar, os blocos
- * esmaecem, mas continuam na tela.
- *
- * Honestidade do dado: sem credencial (503 com a frase do backend) ou com a
- * fonte fora e nada guardado (502), a tela diz o que houve com a frase do
- * servidor e não desenha número nenhum. Com a fonte fora e números guardados,
- * o backend manda o último valor bom, e a barra avisa que não atualizou. Hoje
- * isso vale para a tela INTEIRA: o backend responde um status só para o
- * payload todo, e um aviso substitui todos os blocos. Vale até a #821, que
- * passa a usar status por bloco.
+ * O frescor (issue #815) é combinado dos blocos: a `BarraDeFrescor` fica em cima,
+ * e o aviso do último valor bom vale para a tela. Só uma falha de transporte (a
+ * rede fora, o servidor sem responder) troca a tela inteira por um aviso, porque
+ * aí não há payload nenhum para desenhar.
  */
 
 import { AlertTriangle, LayoutDashboard, Loader2, PlugZap } from "lucide-react";
@@ -30,18 +25,24 @@ import { AlertTriangle, LayoutDashboard, Loader2, PlugZap } from "lucide-react";
 import type { Frescor } from "@/lib/central-de-comando/api";
 import type { Periodo } from "@/lib/central-de-comando/periodo";
 
+import { Atalhos } from "./Atalhos";
 import { BarraDeFrescor } from "./BarraDeFrescor";
 import { BlocoVisitantes, type PeriodoDoPayload, type VisitantesDoPayload } from "./BlocoVisitantes";
 import { IndicadorAoVivo } from "./IndicadorAoVivo";
+import { InstagramNumRelance, type InstagramDeRelance } from "./InstagramNumRelance";
+import { ObjetivosEmFoco, type ObjetivoEmFoco } from "./ObjetivosEmFoco";
+import { OQueVemPorAi } from "./OQueVemPorAi";
 import { SeletorDePeriodo } from "./SeletorDePeriodo";
 import { useTelaDaCentral } from "./useTelaDaCentral";
 
 export const CAMINHO_VISAO_GERAL = "/admin/central-de-comando/visao-geral";
 
-/** O que `GET /api/admin/central-de-comando/visao-geral` devolve. */
+/** O que `GET /api/admin/central-de-comando/visao-geral` devolve (issue #821). */
 export type VisaoGeralPayload = {
   periodo: PeriodoDoPayload;
   visitantes: VisitantesDoPayload;
+  instagram: InstagramDeRelance;
+  objetivos: { em_foco: ObjetivoEmFoco[] };
   frescor: Frescor;
 };
 
@@ -82,11 +83,14 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
             onAtualizar={atualizarAgora}
           />
           {/* O Ao vivo é tempo real e não passa pelo cache: fica fora do bloco
-              que esmaece durante o Atualizar agora, porque não é ele que
-              renova o Ao vivo. Some sozinho enquanto não há número. */}
+              que esmaece durante o Atualizar agora. Some sozinho sem número. */}
           <IndicadorAoVivo />
           <div className={`space-y-6 transition-opacity ${atualizando ? "pointer-events-none opacity-50" : ""}`}>
             <BlocoVisitantes periodo={estado.dados.periodo} visitantes={estado.dados.visitantes} />
+            <InstagramNumRelance instagram={estado.dados.instagram} />
+            <ObjetivosEmFoco objetivos={estado.dados.objetivos.em_foco} />
+            <Atalhos />
+            <OQueVemPorAi />
           </div>
         </>
       )}
@@ -95,7 +99,7 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
         <div role="status" className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
           <PlugZap className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="space-y-1">
-            <p className="font-semibold">Sem ligação com o Google Analytics</p>
+            <p className="font-semibold">Central de Comando indisponível</p>
             <p className="text-sm">{estado.mensagem}</p>
           </div>
         </div>
@@ -105,7 +109,7 @@ export function VisaoGeral({ periodo }: { periodo: Periodo }) {
         <div role="alert" className="flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="space-y-1">
-            <p className="font-semibold">Não foi possível buscar os números do Site agora.</p>
+            <p className="font-semibold">Não foi possível abrir a Visão Geral agora.</p>
             <p className="text-sm">{estado.mensagem}</p>
           </div>
         </div>

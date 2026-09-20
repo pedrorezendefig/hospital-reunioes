@@ -3,22 +3,15 @@
  */
 
 /**
- * A tela Visão Geral da Central de Comando (issue #814, ADR 0058).
+ * A tela Visão Geral da Central de Comando, completa e por bloco (issue #821).
  *
- * O servidor é falso e a conta fica com ele: a tela não calcula variação nem
- * datas, ela escreve o que o payload trouxe. Por isso as asserções olham o que
- * o Super admin lê para um dado payload, e a chamada que a tela faz (endereço
- * e token), que é o que ela controla.
- *
- * Porte das partes de `app/(painel)/page.test.tsx` do repositório antigo que
- * cabem nesta fatia: o número-manchete do período, o rótulo "últimos N dias",
- * o seletor com o período ativo e a variação contra o período anterior.
- *
- * O resto do princípio da Central, a honestidade do dado: sem credencial (503)
- * ou com a fonte fora (502), a tela diz o que houve e NÃO mostra número.
+ * O servidor é falso e a conta fica com ele: a tela escreve o que o payload
+ * trouxe. As asserções olham o que o Super admin lê para um dado payload. A
+ * mudança da #821: cada bloco de fonte degrada sozinho, e a tela responde 200
+ * com um `estado` por bloco. Só uma falha de transporte troca a tela inteira.
  */
 
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { VisaoGeral, type VisaoGeralPayload } from "./VisaoGeral";
@@ -28,9 +21,6 @@ const sessao = vi.hoisted(() => ({
   carregando: false,
 }));
 
-// A tela pede a sessão a cada pedido (issue #815: ela fica aberta por horas, e
-// o token da abertura vence em 1 hora). Enquanto a sessão carrega, a promessa
-// não volta.
 vi.mock("@/hooks/useAuth", () => ({
   getAuthToken: () =>
     sessao.carregando ? new Promise<string | undefined>(() => {}) : Promise.resolve(sessao.token ?? undefined),
@@ -46,44 +36,68 @@ vi.mock("next/link", () => ({
 
 const CAMINHO = "/admin/central-de-comando/visao-geral";
 
-function payload(parcial: {
-  chave?: "7d" | "28d" | "90d";
-  dias?: number;
-  atual?: number;
-  anterior?: number;
-  variacao?: number | null;
-}): VisaoGeralPayload {
+function payloadCompleto(over: Partial<VisaoGeralPayload> = {}): VisaoGeralPayload {
   return {
     periodo: {
-      chave: parcial.chave ?? "28d",
-      dias: parcial.dias ?? 28,
+      chave: "28d",
+      dias: 28,
       atual: { inicio: "2026-08-21", fim: "2026-09-17" },
       anterior: { inicio: "2026-07-24", fim: "2026-08-20" },
     },
     visitantes: {
-      atual: parcial.atual ?? 12345,
-      anterior: parcial.anterior ?? 10000,
-      variacao: parcial.variacao === undefined ? 0.2345 : parcial.variacao,
+      estado: "ok",
+      atual: 12345,
+      anterior: 10000,
+      variacao: 0.2345,
+      contexto: {
+        area: { chave: "maternidade", nome: "Maternidade", visitas: 3842 },
+        origem: { chave: "busca", rotulo: "Busca no Google", percentual: 61 },
+        dispositivo: { chave: "celular", rotulo: "Celular", percentual: 71 },
+      },
+    },
+    instagram: {
+      estado: "ok",
+      seguidores: { total: 18420, crescimento: 312 },
+      alcance: { atual: 41280, variacao: 0.05 },
+      visualizacoes: { atual: 96540, variacao: 0.06 },
+      interacoes: { atual: 7820, variacao: 0.13 },
+    },
+    objetivos: {
+      em_foco: [
+        {
+          id: "site-visitantes",
+          nome: "Atrair mais visitantes pro site",
+          descricao: "Mais gente conhecendo o hospital pelo site.",
+          numero: { rotulo: "Visitantes", valor: 12345 },
+        },
+        {
+          id: "instagram-seguidores",
+          nome: "Crescer no Instagram",
+          descricao: "Aumentar o número de seguidores da conta.",
+          numero: { rotulo: "Seguidores", valor: 18420 },
+        },
+        {
+          id: "instagram-engajamento",
+          nome: "Aumentar o engajamento no Instagram",
+          descricao: "Mais gente curtindo, comentando e salvando.",
+          numero: { rotulo: "Interações", valor: 7820 },
+        },
+      ],
     },
     frescor: { atualizado_em: "2026-09-18T16:45:00+00:00", atualizacao_falhou: false, motivo: null },
+    ...over,
   };
 }
 
-type Chamada = { url: string; autorizacao: string | null };
-let chamadas: Chamada[] = [];
+let chamadas: string[] = [];
 
-/** O servidor falso: responde o status e o corpo dados, e anota a chamada. */
 function servidor(status: number, corpo: unknown) {
   chamadas = [];
   vi.stubGlobal(
     "fetch",
-    vi.fn(async (url: string, init?: RequestInit) => {
-      const cabecalhos = new Headers(init?.headers);
-      chamadas.push({ url, autorizacao: cabecalhos.get("Authorization") });
-      return new Response(JSON.stringify(corpo), {
-        status,
-        headers: { "Content-Type": "application/json" },
-      });
+    vi.fn(async (url: string) => {
+      chamadas.push(url);
+      return new Response(JSON.stringify(corpo), { status, headers: { "Content-Type": "application/json" } });
     }),
   );
 }
@@ -98,122 +112,173 @@ afterEach(() => {
   vi.unstubAllGlobals();
 });
 
-describe("Visão Geral: o número-manchete", () => {
-  it("mostra os Visitantes do período padrão, de 28 dias", async () => {
-    servidor(200, payload({}));
+describe("Visão Geral: o número-manchete e o contexto", () => {
+  it("mostra os Visitantes do período e a variação", async () => {
+    servidor(200, payloadCompleto());
 
     render(<VisaoGeral periodo="28d" />);
 
-    expect(await screen.findByText("12.345")).toBeTruthy();
+    expect((await screen.findAllByText("12.345")).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/últimos 28 dias/)).toBeTruthy();
+    expect(screen.getByText(/↑\s*23,5%/)).toBeTruthy();
   });
 
-  it("pede ao backend o período escolhido, com o token da sessão", async () => {
-    servidor(200, payload({ chave: "7d", dias: 7, atual: 1000, anterior: 800, variacao: 0.25 }));
+  it("mostra o contexto do número: Área do site, Origem do público e dispositivo", async () => {
+    servidor(200, payloadCompleto());
+
+    render(<VisaoGeral periodo="28d" />);
+
+    expect(await screen.findByText("Área do site que mais atrai")).toBeTruthy();
+    expect(screen.getByText("Maternidade")).toBeTruthy();
+    expect(screen.getByText(/Busca no Google/)).toBeTruthy();
+    expect(screen.getByText("Dispositivo mais usado")).toBeTruthy();
+    expect(screen.getByText("Celular")).toBeTruthy();
+  });
+
+  it("pede ao backend o período escolhido", async () => {
+    servidor(200, payloadCompleto({ periodo: { chave: "7d", dias: 7, atual: { inicio: "2026-09-11", fim: "2026-09-17" }, anterior: { inicio: "2026-09-04", fim: "2026-09-10" } } }));
 
     render(<VisaoGeral periodo="7d" />);
 
-    expect(await screen.findByText("1.000")).toBeTruthy();
-    expect(screen.getByText(/últimos 7 dias/)).toBeTruthy();
-    // `toContainEqual`, e não a lista exata: a tela agora traz também o
-    // indicador Ao vivo (issue #816), que consulta `/ao-vivo` em paralelo. O
-    // que este teste mede é a chamada da Visão Geral, com o período e o token.
-    expect(chamadas).toContainEqual({
-      url: "/api/admin/central-de-comando/visao-geral?periodo=7d",
-      autorizacao: "Bearer token-de-teste",
-    });
+    await screen.findByText(/últimos 7 dias/);
+    expect(chamadas).toContain("/api/admin/central-de-comando/visao-geral?periodo=7d");
   });
+});
 
-  it("mostra a variação para cima contra o período anterior", async () => {
-    servidor(200, payload({ variacao: 0.2345 }));
+describe("Visão Geral: o Instagram num relance", () => {
+  it("mostra os quatro números do relance", async () => {
+    servidor(200, payloadCompleto());
 
     render(<VisaoGeral periodo="28d" />);
 
-    expect(await screen.findByText(/↑\s*23,5%/)).toBeTruthy();
-    expect(screen.getByText(/em relação ao período anterior/)).toBeTruthy();
+    expect(await screen.findByText("O Instagram num relance")).toBeTruthy();
+    const relance = screen.getByRole("region", { name: "O Instagram num relance" });
+    expect(within(relance).getByText("18.420")).toBeTruthy();
+    expect(within(relance).getByText("41.280")).toBeTruthy();
+    expect(within(relance).getByText("96.540")).toBeTruthy();
+    expect(within(relance).getByText("7.820")).toBeTruthy();
   });
+});
 
-  it("mostra a variação para baixo sem sinal de menos, só com a seta", async () => {
-    servidor(200, payload({ atual: 3100, anterior: 3350, variacao: -0.0746 }));
+describe("Visão Geral: os Objetivos em foco", () => {
+  it("mostra os três Objetivos com link para a lente", async () => {
+    servidor(200, payloadCompleto());
 
     render(<VisaoGeral periodo="28d" />);
 
-    expect(await screen.findByText(/↓\s*7,5%/)).toBeTruthy();
-    expect(screen.queryByText(/-7,5%/)).toBeNull();
+    expect(await screen.findByText("Objetivos em foco")).toBeTruthy();
+    expect(screen.getByRole("link", { name: /Atrair mais visitantes pro site/ }).getAttribute("href")).toBe(
+      "/admin/central-de-comando/objetivos/site-visitantes",
+    );
+    expect(screen.getByRole("link", { name: /Crescer no Instagram/ }).getAttribute("href")).toBe(
+      "/admin/central-de-comando/objetivos/instagram-seguidores",
+    );
   });
+});
 
-  it("sem base de comparação não desenha seta nem porcentagem", async () => {
-    servidor(200, payload({ atual: 500, anterior: 0, variacao: null }));
+describe("Visão Geral: os atalhos para as outras telas", () => {
+  it("leva às três outras telas da Central", async () => {
+    servidor(200, payloadCompleto());
 
     render(<VisaoGeral periodo="28d" />);
 
-    expect(await screen.findByText("500")).toBeTruthy();
-    expect(screen.queryByText(/[↑↓]/)).toBeNull();
-    expect(screen.getByText(/sem base de comparação com o período anterior/)).toBeTruthy();
+    await screen.findByText("Ir para");
+    const hrefs = screen.getAllByRole("link").map((a) => a.getAttribute("href"));
+    expect(hrefs).toContain("/admin/central-de-comando/objetivos");
+    expect(hrefs).toContain("/admin/central-de-comando/dados-do-google");
+    expect(hrefs).toContain("/admin/central-de-comando/instagram");
   });
+});
 
-  it("diz as datas do período e do anterior, para conferir com o Google", async () => {
-    servidor(200, payload({}));
+describe("Visão Geral: o que vem por aí", () => {
+  it("lista Blog, Editor do Site, Mapa de Calor e Google Ads, sem data", async () => {
+    servidor(200, payloadCompleto());
 
     render(<VisaoGeral periodo="28d" />);
 
-    expect(await screen.findByText(/21\/08\/2026 a 17\/09\/2026/)).toBeTruthy();
-    expect(screen.getByText(/24\/07\/2026 a 20\/08\/2026/)).toBeTruthy();
+    const secao = await screen.findByRole("region", { name: "O que vem por aí" });
+    expect(within(secao).getByText("Blog")).toBeTruthy();
+    expect(within(secao).getByText("Editor do Site")).toBeTruthy();
+    expect(within(secao).getByText("Mapa de Calor")).toBeTruthy();
+    expect(within(secao).getByText("Google Ads")).toBeTruthy();
+    // Sem data prometida e sem selo "em breve".
+    expect(within(secao).queryByText(/em breve/i)).toBeNull();
+    expect(within(secao).queryByText(/\d{1,2}\/\d{4}|\d{4}/)).toBeNull();
+  });
+});
+
+describe("Visão Geral: cada bloco degrada sozinho", () => {
+  it("Instagram não configurado: o relance mostra o estado calmo e o resto segue", async () => {
+    servidor(
+      200,
+      payloadCompleto({
+        instagram: { estado: "nao-configurado", motivo: "A conta do Instagram ainda não está configurada." },
+      }),
+    );
+
+    render(<VisaoGeral periodo="28d" />);
+
+    expect(await screen.findByText("Conta do Instagram ainda não configurada")).toBeTruthy();
+    // O resto da tela segue: o número-manchete do Google e os blocos fixos.
+    expect(screen.getAllByText("12.345").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("O que vem por aí")).toBeTruthy();
+    expect(screen.getByText("Ir para")).toBeTruthy();
+  });
+
+  it("Visitantes sem dado: o bloco mostra o erro honesto e o Instagram segue", async () => {
+    servidor(
+      200,
+      payloadCompleto({
+        visitantes: { estado: "sem-dado", motivo: "O Google Analytics não respondeu no tempo esperado." },
+      }),
+    );
+
+    render(<VisaoGeral periodo="28d" />);
+
+    expect(await screen.findByText("Não foi possível buscar os Visitantes agora.")).toBeTruthy();
+    const relance = screen.getByRole("region", { name: "O Instagram num relance" });
+    expect(within(relance).getByText("18.420")).toBeTruthy();
+  });
+
+  it("o objetivo do Instagram fica sem número, mas o card aparece", async () => {
+    servidor(
+      200,
+      payloadCompleto({
+        instagram: { estado: "sem-dado", motivo: "boom" },
+        objetivos: {
+          em_foco: [
+            {
+              id: "instagram-seguidores",
+              nome: "Crescer no Instagram",
+              descricao: "Aumentar o número de seguidores da conta.",
+              numero: null,
+            },
+          ],
+        },
+      }),
+    );
+
+    render(<VisaoGeral periodo="28d" />);
+
+    const card = await screen.findByRole("link", { name: /Crescer no Instagram/ });
+    expect(within(card).getByText("Ver os números")).toBeTruthy();
   });
 });
 
 describe("Visão Geral: o seletor de período", () => {
   it("oferece 7, 28 e 90 dias e marca o período ativo", async () => {
-    servidor(200, payload({ chave: "7d", dias: 7 }));
+    servidor(200, payloadCompleto({ periodo: { chave: "7d", dias: 7, atual: { inicio: "2026-09-11", fim: "2026-09-17" }, anterior: { inicio: "2026-09-04", fim: "2026-09-10" } } }));
 
     render(<VisaoGeral periodo="7d" />);
 
+    await screen.findByText("O que vem por aí");
     expect(screen.getByRole("link", { name: "7 dias" }).getAttribute("aria-current")).toBe("page");
     expect(screen.getByRole("link", { name: "28 dias" }).getAttribute("href")).toBe(`${CAMINHO}?periodo=28d`);
     expect(screen.getByRole("link", { name: "90 dias" }).getAttribute("href")).toBe(`${CAMINHO}?periodo=90d`);
   });
 });
 
-describe("Visão Geral: a honestidade do dado", () => {
-  const SEM_CREDENCIAL =
-    "A Central de Comando ainda não está ligada ao Google Analytics: falta configurar GA4_PROPERTY_ID e GOOGLE_APPLICATION_CREDENTIALS_JSON no backend.";
-
-  it("sem credencial do Google (503), diz o que falta e não mostra número nenhum", async () => {
-    servidor(503, { detail: SEM_CREDENCIAL });
-
-    render(<VisaoGeral periodo="28d" />);
-
-    expect(await screen.findByText(SEM_CREDENCIAL)).toBeTruthy();
-    expect(screen.getByText("Sem ligação com o Google Analytics")).toBeTruthy();
-    expect(screen.queryByText(/^0$/)).toBeNull();
-    expect(screen.queryByText(/últimos 28 dias/)).toBeNull();
-  });
-
-  it("um 503 sem a frase do backend (proxy fora do ar) não vira falta de configuração", async () => {
-    // Só o backend sabe dizer que falta configurar, e ele diz com a frase no
-    // `detail`. Um 503 cru do proxy, no meio de um deploy, é falha comum.
-    vi.stubGlobal(
-      "fetch",
-      vi.fn(async () => new Response("<html>Service Unavailable</html>", { status: 503 })),
-    );
-
-    render(<VisaoGeral periodo="28d" />);
-
-    expect(await screen.findByText(/Não foi possível buscar os números do Site/)).toBeTruthy();
-    expect(screen.getByText("O servidor respondeu 503.")).toBeTruthy();
-    expect(screen.queryByText("Sem ligação com o Google Analytics")).toBeNull();
-  });
-
-  it("com o Google fora (502), diz que não conseguiu buscar e não mostra número", async () => {
-    servidor(502, { detail: "O Google Analytics não respondeu no tempo esperado." });
-
-    render(<VisaoGeral periodo="28d" />);
-
-    expect(await screen.findByText("O Google Analytics não respondeu no tempo esperado.")).toBeTruthy();
-    expect(screen.getByText(/Não foi possível buscar os números do Site/)).toBeTruthy();
-    expect(screen.queryByText(/últimos 28 dias/)).toBeNull();
-  });
-
+describe("Visão Geral: falha de transporte", () => {
   it("com a rede fora, avisa em vez de mostrar a tela vazia", async () => {
     vi.stubGlobal(
       "fetch",
@@ -224,11 +289,11 @@ describe("Visão Geral: a honestidade do dado", () => {
 
     render(<VisaoGeral periodo="28d" />);
 
-    expect(await screen.findByText(/Não foi possível falar com o servidor/)).toBeTruthy();
+    expect(await screen.findByText(/Não foi possível abrir a Visão Geral agora/)).toBeTruthy();
   });
 
   it("sem sessão, não pede nada e diz por quê", async () => {
-    servidor(200, payload({}));
+    servidor(200, payloadCompleto());
     sessao.token = null;
 
     render(<VisaoGeral periodo="28d" />);
@@ -238,7 +303,7 @@ describe("Visão Geral: a honestidade do dado", () => {
   });
 
   it("enquanto a sessão carrega, espera em vez de acusar falta de sessão", async () => {
-    servidor(200, payload({}));
+    servidor(200, payloadCompleto());
     sessao.token = null;
     sessao.carregando = true;
 

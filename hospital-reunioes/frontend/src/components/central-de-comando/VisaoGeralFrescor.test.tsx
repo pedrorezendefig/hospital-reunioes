@@ -44,6 +44,8 @@ vi.mock("next/link", () => ({
 // 18/09/2026, 13h50 em Brasília.
 const AGORA = Date.parse("2026-09-18T16:50:00Z");
 
+// Os números do Instagram e dos Objetivos em foco são fixos e distintos do
+// número-manchete (`atual`), para o "12.345" que os testes olham ser só o dele.
 function payload(atual: number, frescor: Partial<VisaoGeralPayload["frescor"]> = {}): VisaoGeralPayload {
   return {
     periodo: {
@@ -52,7 +54,31 @@ function payload(atual: number, frescor: Partial<VisaoGeralPayload["frescor"]> =
       atual: { inicio: "2026-08-21", fim: "2026-09-17" },
       anterior: { inicio: "2026-07-24", fim: "2026-08-20" },
     },
-    visitantes: { atual, anterior: 10000, variacao: 0.2345 },
+    visitantes: {
+      estado: "ok",
+      atual,
+      anterior: 10000,
+      variacao: 0.2345,
+      contexto: {
+        area: { chave: "maternidade", nome: "Maternidade", visitas: 3842 },
+        origem: { chave: "busca", rotulo: "Busca no Google", percentual: 61 },
+        dispositivo: { chave: "celular", rotulo: "Celular", percentual: 71 },
+      },
+    },
+    instagram: {
+      estado: "ok",
+      seguidores: { total: 60001, crescimento: 312 },
+      alcance: { atual: 60002, variacao: 0.05 },
+      visualizacoes: { atual: 60003, variacao: 0.06 },
+      interacoes: { atual: 60004, variacao: 0.07 },
+    },
+    objetivos: {
+      em_foco: [
+        { id: "site-visitantes", nome: "Atrair mais visitantes pro site", descricao: "x", numero: { rotulo: "Visitantes", valor: 55501 } },
+        { id: "instagram-seguidores", nome: "Crescer no Instagram", descricao: "x", numero: { rotulo: "Seguidores", valor: 55502 } },
+        { id: "instagram-engajamento", nome: "Aumentar o engajamento no Instagram", descricao: "x", numero: { rotulo: "Interações", valor: 55503 } },
+      ],
+    },
     frescor: {
       atualizado_em: "2026-09-18T16:45:00+00:00",
       atualizacao_falhou: false,
