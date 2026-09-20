@@ -30,7 +30,8 @@ export type ContextoDoPayload = {
  */
 export type VisitantesDoPayload =
   | { estado: "ok"; atual: number; anterior: number; variacao: number | null; contexto: ContextoDoPayload }
-  | { estado: "nao-configurado" | "sem-dado"; motivo: string };
+  | { estado: "nao-configurado"; motivo: string }
+  | { estado: "sem-dado"; motivo: string };
 
 /**
  * A seta da variação contra o período anterior: para cima em verde, para baixo

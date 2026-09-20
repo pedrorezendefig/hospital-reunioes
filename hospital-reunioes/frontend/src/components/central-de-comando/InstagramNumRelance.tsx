@@ -21,7 +21,8 @@ export type InstagramDeRelance =
       visualizacoes: NumeroDeFluxo;
       interacoes: NumeroDeFluxo;
     }
-  | { estado: "nao-configurado" | "sem-dado"; motivo: string };
+  | { estado: "nao-configurado"; motivo: string }
+  | { estado: "sem-dado"; motivo: string };
 
 /**
  * O Instagram num relance: quatro números na linguagem nativa da rede (na
