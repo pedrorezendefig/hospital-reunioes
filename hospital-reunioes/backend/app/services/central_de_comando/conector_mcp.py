@@ -26,24 +26,35 @@ MCP responde ao 401 refazendo o login OAuth. E `email_verified` ausente é negad
 (estar no cadastro não basta). Config ausente é `ConectorNaoConfiguradoError`:
 sem emissor ou sem recurso, nenhum token é aceito e nenhuma ferramenta roda.
 
-**Só leitura.** A única ferramenta desta fatia é o Ao vivo (as pessoas no site
-agora), casca fina sobre `provedor_google.pessoas_no_site_agora`. O protocolo
-não expõe escrita nenhuma; método desconhecido é erro JSON-RPC "método não
-encontrado".
+**Só leitura.** Três ferramentas, cada uma casca fina sobre o que a Central já
+lê: o Ao vivo (as pessoas no site agora, sem cache, `provedor_google.
+pessoas_no_site_agora`) e os números do Site e do Instagram por período (#823).
+As duas de período leem do MESMO cache das telas (o painel e o registro de
+telas, #815/#818/#819), sem leitura própria nem ida à fonte por conta: o Site
+sai do bloco de Visitantes do painel e da tela Dados do Google, o Instagram da
+tela do Instagram. O contrato é o do conector antigo (ADR 0006 de lá), com uma
+diferença de nome no payload do Site: as áreas do hospital com página são as
+Áreas do site (o nome da casa, ADR 0058, decisão 7), no lugar do nome antigo, de
+marca. O protocolo não expõe escrita nenhuma; método desconhecido é erro
+JSON-RPC "método não encontrado".
 """
 
 from __future__ import annotations
 
+import json
 import logging
+import math
 import time
 from dataclasses import dataclass
+from datetime import datetime
 
 import anyio.to_thread
 import httpx
 from jose import jwt
 
 from app.config import settings
-from app.services.central_de_comando import provedor_google
+from app.services.central_de_comando import cache, provedor_google, provedor_instagram, telas, visao_geral
+from app.services.central_de_comando.variacao import variacao_relativa
 
 logger = logging.getLogger(__name__)
 
@@ -64,9 +75,17 @@ PROTOCOLO_MCP = "2025-06-18"
 
 _SERVIDOR = {"name": "central-de-comando-hsm", "version": settings.app_version}
 
-# A ferramenta do Ao vivo mantém o nome do conector antigo, para o contrato não
-# mudar para quem já conecta (ADR 0058, decisão 3).
+# As ferramentas mantêm os nomes do conector antigo, para o contrato não mudar
+# para quem já conecta (ADR 0058, decisão 3).
 FERRAMENTA_AO_VIVO = "get_active_now"
+FERRAMENTA_SITE = "get_site_analytics"
+FERRAMENTA_INSTAGRAM = "get_instagram_analytics"
+
+# Os períodos que cada ferramenta de tendência aceita: o Site tem 7, 28 e 90
+# dias; o Instagram só 7 e 28 (a Graph API entrega no máximo 30 dias por
+# consulta), exatamente como as telas da Central.
+_PERIODOS_SITE = ("7d", "28d", "90d")
+_PERIODOS_INSTAGRAM = ("7d", "28d")
 
 _TIMEOUT = httpx.Timeout(10.0, connect=3.0)
 
@@ -304,8 +323,47 @@ def autorizar(token: str | None, supabase, cfg: ConfiguracaoMCP) -> dict:
 # ─── O protocolo MCP (transporte Streamable HTTP, JSON-RPC 2.0) ──────────────
 
 
+# O glossário que cada ferramenta carrega na descrição, da seção "Central de
+# Comando" do CONTEXT.md: é ele que faz o Claude falar a língua da casa
+# (Visitantes, Áreas do site, Alcance) e tratar o que não é medido como não
+# medido, nunca como zero (honestidade do dado). Porte do `glossario.ts` do
+# conector antigo, com o nome novo da Área do site.
+GLOSSARIO_SITE = (
+    "Números do Site do Hospital São Matheus (fonte: Google Analytics), somente leitura. "
+    'O campo "visitantes" traz as pessoas diferentes que acessaram o Site no período (os usuários '
+    'ativos do Google), com o número do período anterior de mesmo tamanho e "variacaoPct" (12 quer '
+    "dizer +12%; null quer dizer que não há base para comparar). "
+    '"areasDoSite" é o ranking das Áreas do site, os grupos de páginas por serviço do hospital '
+    "(Maternidade, Emergência 24h, Centro de Imagem, Centro Médico, Laboratório); o número fala do "
+    "site, não da procura real pelo serviço. "
+    '"origens" é a Origem do público (busca, direto, redes, anúncios, e os rótulos gentis Outros e '
+    'Não identificado para o que o Google não classificou). "dispositivos" são as Visitas por '
+    'dispositivo. Em "contatos", cada canal tem um "estado": "medido" traz os "cliques" reais (hoje '
+    'WhatsApp e Fale Conosco), "em-construcao" quer dizer que o Site ainda não avisa o Google quando '
+    'o contato acontece, e "nao-medido" quer dizer que não há como medir; "em-construcao" e '
+    '"nao-medido" nunca são zero. Em "frescor", "atualizadoHaMin" diz há quantos minutos o dado foi '
+    'lido e "falhaAoAtualizar" verdadeiro quer dizer que é o último valor bom guardado. Não invente '
+    "números que não estejam no payload."
+)
+
+GLOSSARIO_INSTAGRAM = (
+    "Números do Instagram do Hospital São Matheus, somente leitura. "
+    '"disponivel" falso quer dizer que o dado não pôde ser lido agora (por exemplo, token ou '
+    'configuração), e não é zero nem "sem seguidores": diga que está indisponível, com o motivo, '
+    "nunca relate como queda. As métricas comparadas (Alcance, Visualizações, Interações, Contas "
+    'que engajaram) trazem o atual, o anterior e "variacaoPct". "alcance" são as contas diferentes '
+    'que viram o conteúdo (pessoas); "visualizacoes" são as vezes que o conteúdo foi exibido. '
+    '"seguidores" é estoque (o total agora), sem variação percentual: o que varia por período é o '
+    '"crescimento". "interacoes" é a soma de curtidas, comentários, salvamentos e compartilhamentos, '
+    'e "detalheInteracoes" abre essas quatro partes. "principaisPublicacoes" vêm ordenadas por '
+    "interações no período, sem Stories. Não invente números que não estejam no payload."
+)
+
+
 def ferramentas() -> list[dict]:
-    """A lista de ferramentas do `tools/list`. Só o Ao vivo nesta fatia."""
+    """A lista de ferramentas do `tools/list`: o Ao vivo, os números do Site e os
+    do Instagram. As descrições carregam o glossário da seção "Central de
+    Comando" do CONTEXT.md, para o Claude falar a língua da casa."""
     return [
         {
             "name": FERRAMENTA_AO_VIVO,
@@ -315,23 +373,248 @@ def ferramentas() -> list[dict]:
                 "Comando). Sem ninguém no site, é zero de verdade, não falta de dado. Não recebe argumentos."
             ),
             "inputSchema": {"type": "object", "properties": {}, "additionalProperties": False},
-        }
+        },
+        {
+            "name": FERRAMENTA_SITE,
+            "title": "Números do Site",
+            "description": f"Os números do Site do hospital no período pedido (a Central de Comando). {GLOSSARIO_SITE}",
+            "inputSchema": _schema_de_periodo(_PERIODOS_SITE, "7d, 28d ou 90d"),
+        },
+        {
+            "name": FERRAMENTA_INSTAGRAM,
+            "title": "Números do Instagram",
+            "description": (
+                f"Os números do Instagram do hospital no período pedido (a Central de Comando). {GLOSSARIO_INSTAGRAM}"
+            ),
+            "inputSchema": _schema_de_periodo(_PERIODOS_INSTAGRAM, "7d ou 28d"),
+        },
     ]
 
 
-async def _executar_ferramenta(nome: str, _argumentos: dict) -> dict:
+def _schema_de_periodo(permitidos: tuple[str, ...], texto: str) -> dict:
+    """O `inputSchema` de uma ferramenta de período: um `period` obrigatório,
+    restrito aos períodos que a ferramenta aceita (o Instagram não tem 90 dias)."""
+    return {
+        "type": "object",
+        "properties": {
+            "period": {"type": "string", "enum": list(permitidos), "description": f"A janela de tempo: {texto}."}
+        },
+        "required": ["period"],
+        "additionalProperties": False,
+    }
+
+
+async def _executar_ferramenta(nome: str, argumentos: dict) -> dict:
     """Roda a ferramenta pedida e devolve o resultado do `tools/call`. Falha da
     fonte vira resultado com `isError`, o jeito do MCP de dizer "a ferramenta
-    respondeu que não deu", nunca um número inventado."""
-    if nome != FERRAMENTA_AO_VIVO:
-        return _resultado_de_erro(f"Ferramenta desconhecida: {nome}")
+    respondeu que não deu", nunca um número inventado. As duas ferramentas de
+    período fazem I/O (o cache das telas, que pode ir à GA4 ou à Graph API), então
+    rodam em thread, no mesmo molde do Ao vivo, para não travar o event loop."""
+    if nome == FERRAMENTA_AO_VIVO:
+        return await _ferramenta_ao_vivo()
+    if nome == FERRAMENTA_SITE:
+        return await anyio.to_thread.run_sync(_ferramenta_site, argumentos)
+    if nome == FERRAMENTA_INSTAGRAM:
+        return await anyio.to_thread.run_sync(_ferramenta_instagram, argumentos)
+    return _resultado_de_erro(f"Ferramenta desconhecida: {nome}")
+
+
+async def _ferramenta_ao_vivo() -> dict:
+    """O Ao vivo: as pessoas no site agora, sem cache (o único número em tempo
+    real da Central), casca fina sobre o provedor do Google."""
     try:
         pessoas = await anyio.to_thread.run_sync(provedor_google.pessoas_no_site_agora)
     except (provedor_google.GoogleNaoConfiguradoError, provedor_google.GoogleError) as exc:
         return _resultado_de_erro(str(exc))
+    return _resultado_estruturado(
+        {"pessoasAgora": pessoas},
+        texto=f"{pessoas} pessoas estão no site do hospital agora.",
+    )
+
+
+def _ferramenta_site(argumentos: dict) -> dict:
+    """Os números do Site no período, lidos do MESMO cache das telas: os
+    Visitantes comparados vêm do bloco do painel (`visao_geral.ler_visitantes`) e
+    o resto da tela Dados do Google (`telas.ler`). Fonte fora sem número guardado
+    ou não configurada viram resultado com `isError`, com a frase segura da
+    Central, nunca um número inventado."""
+    periodo = _periodo_valido(argumentos, _PERIODOS_SITE)
+    if periodo is None:
+        return _resultado_de_erro(f"Período inválido. Use um de: {', '.join(_PERIODOS_SITE)}.")
+    try:
+        visitantes = visao_geral.ler_visitantes(periodo)
+        if visitantes["estado"] != "ok":
+            return _resultado_de_erro(visitantes.get("motivo") or "Os números do Site estão indisponíveis agora.")
+        google = telas.ler("dados-do-google", periodo)
+    except (provedor_google.GoogleNaoConfiguradoError, provedor_google.GoogleError) as exc:
+        return _resultado_de_erro(str(exc))
+    return _resultado_estruturado(serializar_site(periodo, visitantes, google, cache.agora_utc()))
+
+
+def _ferramenta_instagram(argumentos: dict) -> dict:
+    """Os números do Instagram no período, lidos do MESMO cache da tela
+    (`telas.ler`). Não configurado, token vencido sem número guardado ou fonte
+    fora sem número guardado viram "indisponível" com o motivo (glossário:
+    `disponivel:false` não é zero nem queda), nunca um `isError`."""
+    periodo = _periodo_valido(argumentos, _PERIODOS_INSTAGRAM)
+    if periodo is None:
+        return _resultado_de_erro(f"Período inválido. Use um de: {', '.join(_PERIODOS_INSTAGRAM)}.")
+    try:
+        tela = telas.ler("instagram", periodo)
+    except (provedor_instagram.InstagramNaoConfiguradoError, provedor_instagram.InstagramError) as exc:
+        return _resultado_estruturado(serializar_instagram_indisponivel(periodo, str(exc)))
+    return _resultado_estruturado(serializar_instagram_disponivel(periodo, tela, cache.agora_utc()))
+
+
+def _periodo_valido(argumentos: dict, permitidos: tuple[str, ...]) -> str | None:
+    """O `period` do pedido, se for um dos que a ferramenta aceita; senão `None`,
+    e a ferramenta responde com uma frase clara (como o `assertPreset` do conector
+    antigo), sem tocar a fonte."""
+    periodo = (argumentos or {}).get("period")
+    return periodo if periodo in permitidos else None
+
+
+# ─── A serialização do payload (porte do `serialize.ts` do conector antigo,
+# testada direto, com a chave das áreas renomeada para "areasDoSite") ────────
+
+
+def serializar_site(periodo: str, visitantes: dict, google: dict, agora: datetime) -> dict:
+    """O payload do Site para o Claude, equivalente ao `serializeSite` do conector
+    antigo, com a chave das áreas renomeada para "areasDoSite" (o nome da casa).
+    Os Visitantes vêm do bloco do painel; movimento, áreas, origens, dispositivos,
+    contatos e frescor, da tela Dados do Google."""
     return {
-        "content": [{"type": "text", "text": f"{pessoas} pessoas estão no site do hospital agora."}],
-        "structuredContent": {"pessoasAgora": pessoas},
+        "periodo": periodo,
+        "visitantes": _comparado(visitantes["atual"], visitantes["anterior"]),
+        "movimento": [
+            {"data": dia["data"], "visitantes": dia["visitantes"], "anterior": dia["visitantes_anterior"]}
+            for dia in google["movimento"]
+        ],
+        "areasDoSite": {
+            "disponivel": True,
+            "itens": [
+                {
+                    "chave": area["chave"],
+                    "nome": area["nome"],
+                    "visitas": area["visitas"],
+                    "visitasAnterior": area["visitas_anterior"],
+                    "variacaoPct": _variacao_pct(area["visitas"], area["visitas_anterior"]),
+                }
+                for area in google["areas_do_site"]
+            ],
+        },
+        "origens": [
+            {"chave": o["chave"], "rotulo": o["rotulo"], "visitas": o["visitas"]} for o in google["origem_do_publico"]
+        ],
+        "dispositivos": [
+            {"chave": d["chave"], "rotulo": d["rotulo"], "visitas": d["visitas"]} for d in google["dispositivos"]
+        ],
+        "contatos": [_contato(canal) for canal in google["contatos_gerados"]],
+        "frescor": serializar_frescor(google["frescor"], agora),
+    }
+
+
+def _contato(canal: dict) -> dict:
+    """Um canal de Contatos gerados: o medido traz os cliques, os outros só o
+    estado honesto (o `ContatoPayload` do conector antigo)."""
+    contato = {"chave": canal["chave"], "rotulo": canal["rotulo"], "estado": canal["estado"]}
+    if canal["estado"] == "medido":
+        contato["cliques"] = canal["cliques"]
+    return contato
+
+
+def serializar_instagram_disponivel(periodo: str, tela: dict, agora: datetime) -> dict:
+    """O payload do Instagram quando os números vieram, equivalente ao
+    `serializeInstagram` do conector antigo com a saúde presente."""
+    seguidores = tela["seguidores"]
+    engajamento = tela["engajamento"]
+    partes = {parte["chave"]: parte["valor"] for parte in engajamento["partes"]}
+    return {
+        "periodo": periodo,
+        "disponivel": True,
+        "seguidores": {
+            "total": seguidores["total"],
+            "crescimento": _comparado(seguidores["crescimento"], seguidores["crescimento_anterior"]),
+        },
+        "alcance": _comparado(tela["alcance"]["atual"], tela["alcance"]["anterior"]),
+        "visualizacoes": _comparado(tela["visualizacoes"]["atual"], tela["visualizacoes"]["anterior"]),
+        "interacoes": _comparado(engajamento["interacoes"], engajamento["interacoes_anterior"]),
+        "contasEngajadas": _comparado(engajamento["contas_engajadas"], engajamento["contas_engajadas_anterior"]),
+        "detalheInteracoes": {
+            "curtidas": partes["curtidas"],
+            "comentarios": partes["comentarios"],
+            "salvamentos": partes["salvamentos"],
+            "compartilhamentos": partes["compartilhamentos"],
+        },
+        "principaisPublicacoes": [
+            {
+                "id": pub["id"],
+                "legenda": pub["legenda"],
+                "tipo": pub["tipo"],
+                "interacoes": pub["interacoes"],
+                "link": pub["link"],
+                "quando": pub["data"],
+            }
+            for pub in tela["principais_publicacoes"]
+        ],
+        "frescor": serializar_frescor(tela["frescor"], agora),
+    }
+
+
+def serializar_instagram_indisponivel(periodo: str, motivo: str) -> dict:
+    """O payload do Instagram quando o dado não pôde ser lido (não configurado,
+    token vencido ou fonte fora, sem número guardado): "indisponível" com o
+    motivo, nunca zero nem erro. Equivale ao `serializeInstagram` do conector
+    antigo com a saúde nula, e o glossário manda dizer indisponível, não queda."""
+    return {
+        "periodo": periodo,
+        "disponivel": False,
+        "principaisPublicacoes": [],
+        "frescor": {"atualizadoHaMin": None, "falhaAoAtualizar": True, "motivo": motivo},
+    }
+
+
+def serializar_frescor(frescor: dict, agora: datetime) -> dict:
+    """O frescor pronto para o Claude: há quantos minutos o dado foi lido e se a
+    atualização falhou. Porte do `serializeFrescor` do conector antigo, sobre o
+    frescor que a leitura pelo cache devolve (`atualizado_em` em ISO 8601, ou nulo
+    quando a chave nunca foi lida)."""
+    atualizado_em = frescor.get("atualizado_em")
+    if atualizado_em is None:
+        atualizado_ha_min = None
+    else:
+        minutos = (agora - datetime.fromisoformat(atualizado_em)).total_seconds() / 60
+        atualizado_ha_min = math.floor(minutos + 0.5)
+    return {
+        "atualizadoHaMin": atualizado_ha_min,
+        "falhaAoAtualizar": bool(frescor.get("atualizacao_falhou")),
+        "motivo": frescor.get("motivo"),
+    }
+
+
+def _comparado(atual: int, anterior: int) -> dict:
+    """Um número comparado: o atual, o anterior e a variação em pontos percentuais
+    (o `Comparado` do conector antigo)."""
+    return {"atual": atual, "anterior": anterior, "variacaoPct": _variacao_pct(atual, anterior)}
+
+
+def _variacao_pct(atual: int, anterior: int) -> int | None:
+    """A variação em pontos percentuais inteiros (0,12 vira 12), ou `None` sem base
+    de comparação. Arredonda meio ponto para cima, como o `Math.round` que o
+    conector antigo usava, para o número bater com o dele."""
+    fracao = variacao_relativa(atual, anterior)
+    return None if fracao is None else math.floor(fracao * 100 + 0.5)
+
+
+def _resultado_estruturado(payload: dict, *, texto: str | None = None) -> dict:
+    """O resultado de uma ferramenta que devolve um objeto: o objeto em
+    `structuredContent` e o mesmo em texto (uma frase, ou o JSON), no molde do Ao
+    vivo. Nunca é `isError`: um Instagram indisponível é resposta válida, não
+    falha."""
+    corpo = texto if texto is not None else json.dumps(payload, ensure_ascii=False)
+    return {
+        "content": [{"type": "text", "text": corpo}],
+        "structuredContent": payload,
         "isError": False,
     }
 

@@ -89,6 +89,17 @@ def _bloco_visitantes(periodo: Periodo, forcar: bool) -> tuple[dict, tuple | Non
     )
 
 
+def ler_visitantes(periodo: Periodo, *, forcar: bool = False) -> dict:
+    """O bloco de Visitantes (o número-manchete do Site e o contexto dele), lido
+    do MESMO cache do painel. Existe para o conector MCP (#823) reusar o
+    número-manchete sem abrir caminho de leitura próprio nem ir à fonte por
+    conta: é o `_bloco_visitantes` exposto, sem a chave de frescor que só o
+    painel usa. O `estado` viaja junto (`ok`, `sem-dado` ou `nao-configurado`),
+    e nunca levanta por falha de fonte."""
+    bloco, _chave = _bloco_visitantes(periodo, forcar)
+    return bloco
+
+
 def _buscar_visitantes(periodo: Periodo) -> dict:
     """O número-manchete e o contexto numa leitura só, reaproveitando os Dados do
     Google (#818): a Área que mais atrai, a principal Origem e o dispositivo mais
