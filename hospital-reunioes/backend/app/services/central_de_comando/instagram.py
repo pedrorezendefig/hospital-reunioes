@@ -116,6 +116,9 @@ def _bloco_engajamento(saude: provedor_instagram.SaudeDaConta) -> dict:
 
 
 def _bloco_publicacao(pub: provedor_instagram.Publicacao) -> dict:
+    # `data` (o instante em que foi publicada) entra no payload da tela mesmo a
+    # tela não a desenhando: é o cache que o conector MCP lê (#823), e é dali que
+    # ele tira o "quando" de cada publicação, sem abrir leitura própria à fonte.
     return {
         "id": pub.id,
         "legenda": pub.legenda,
@@ -123,5 +126,6 @@ def _bloco_publicacao(pub: provedor_instagram.Publicacao) -> dict:
         "rotulo_tipo": ROTULO_DO_TIPO[pub.tipo],
         "miniatura": pub.miniatura,
         "link": pub.link,
+        "data": pub.data,
         "interacoes": pub.interacoes,
     }
