@@ -117,20 +117,20 @@ _GOOGLE = {
 
 class TestSerializarSite:
     def test_monta_visitantes_com_variacao_percentual(self):
-        payload = conector_mcp.serializar_site("28d", _VISITANTES_OK, _GOOGLE, AGORA)
+        payload = conector_mcp.serializar_site("28d", _VISITANTES_OK, _GOOGLE, _GOOGLE["frescor"], AGORA)
 
         assert payload["periodo"] == "28d"
         assert payload["visitantes"] == {"atual": 112, "anterior": 100, "variacaoPct": 12}
 
     def test_alinha_o_movimento_dia_atual_e_o_mesmo_dia_do_anterior(self):
-        payload = conector_mcp.serializar_site("28d", _VISITANTES_OK, _GOOGLE, AGORA)
+        payload = conector_mcp.serializar_site("28d", _VISITANTES_OK, _GOOGLE, _GOOGLE["frescor"], AGORA)
 
         assert payload["movimento"][1] == {"data": "2026-05-02", "visitantes": 20, "anterior": 12}
 
     def test_a_chave_das_areas_e_o_nome_novo_e_nunca_o_antigo(self):
         """ADR 0058, decisão 7: a chave é "areasDoSite" (o nome da casa), e o
         nome antigo, de marca, não aparece no payload."""
-        payload = conector_mcp.serializar_site("28d", _VISITANTES_OK, _GOOGLE, AGORA)
+        payload = conector_mcp.serializar_site("28d", _VISITANTES_OK, _GOOGLE, _GOOGLE["frescor"], AGORA)
 
         assert "areasDoSite" in payload
         assert not re.search(r"bra[cç]os?", str(payload), re.IGNORECASE)
@@ -144,18 +144,34 @@ class TestSerializarSite:
     def test_origens_e_dispositivos_so_com_chave_rotulo_e_visitas(self):
         """O contrato do conector antigo: origens e dispositivos não levam o
         percentual da tela."""
-        payload = conector_mcp.serializar_site("28d", _VISITANTES_OK, _GOOGLE, AGORA)
+        payload = conector_mcp.serializar_site("28d", _VISITANTES_OK, _GOOGLE, _GOOGLE["frescor"], AGORA)
 
         assert payload["origens"] == [{"chave": "busca", "rotulo": "Busca no Google", "visitas": 70}]
         assert payload["dispositivos"] == [{"chave": "celular", "rotulo": "Celular", "visitas": 90}]
 
     def test_preserva_o_estado_dos_contatos(self):
-        payload = conector_mcp.serializar_site("28d", _VISITANTES_OK, _GOOGLE, AGORA)
+        payload = conector_mcp.serializar_site("28d", _VISITANTES_OK, _GOOGLE, _GOOGLE["frescor"], AGORA)
 
         assert {"chave": "agendar", "rotulo": "Cliques para agendar", "estado": "medido", "cliques": 12} in payload[
             "contatos"
         ]
         assert {"chave": "whatsapp", "rotulo": "WhatsApp", "estado": "nao-medido"} in payload["contatos"]
+
+    def test_o_frescor_do_payload_e_o_combinado_passado_nao_o_de_uma_chave_so(self):
+        """Honestidade do frescor: o payload reporta o frescor COMBINADO que o
+        chamador passa (o pior caso das chaves), nunca o de uma chave só. Aqui o
+        combinado falhou; o frescor da tela Dados do Google segue sem falha, e o
+        payload conta a falha, não mente."""
+        frescor_combinado = {
+            "atualizado_em": (AGORA - timedelta(minutes=90)).isoformat(),
+            "atualizacao_falhou": True,
+            "motivo": "renovacao falhou",
+        }
+
+        payload = conector_mcp.serializar_site("28d", _VISITANTES_OK, _GOOGLE, frescor_combinado, AGORA)
+
+        assert _GOOGLE["frescor"]["atualizacao_falhou"] is False
+        assert payload["frescor"] == {"atualizadoHaMin": 90, "falhaAoAtualizar": True, "motivo": "renovacao falhou"}
 
 
 # ─── 3. serializar_instagram: porte de serializeInstagram ────────────────────
@@ -341,6 +357,47 @@ class TestFerramentaSite:
 
         assert resultado["isError"] is True
 
+    def test_frescor_honesto_quando_visitantes_venceu_com_falha_e_dados_estao_frescos(
+        self, google_falso, relogio_da_central
+    ):
+        """As duas chaves do Site (Visitantes e Dados do Google) têm TTL e estado
+        de falha independentes. Aqui a de Visitantes vence e a renovação falha,
+        enquanto a de Dados do Google está fresca. O frescor do payload tem que
+        contar a falha do pior caso, nunca dizer "fresco, sem falha" com o
+        manchete de Visitantes velho renovando com erro."""
+        conector_mcp._ferramenta_site({"period": "28d"})  # aquece as duas chaves
+        relogio_da_central.avancar(hours=2)
+        telas.ler("dados-do-google", "28d", forcar=True)  # só Dados do Google renova, fresco
+        google_falso.forcar = httpx.Response(503, json={"error": {"code": 503, "status": "UNAVAILABLE"}})
+
+        resultado = conector_mcp._ferramenta_site({"period": "28d"})
+
+        assert resultado["isError"] is False  # serve o último valor bom
+        frescor = resultado["structuredContent"]["frescor"]
+        assert frescor["falhaAoAtualizar"] is True
+        assert frescor["atualizadoHaMin"] == 120  # a hora do número mais velho (Visitantes)
+        assert frescor["motivo"]
+
+    def test_frescor_honesto_quando_dados_venceram_com_falha_e_visitantes_estao_frescos(
+        self, google_falso, relogio_da_central
+    ):
+        """O outro lado da divergência: Dados do Google vence e a renovação
+        falha, Visitantes está fresco. O frescor do Site tem que ancorar nas DUAS
+        chaves, então a falha de Dados do Google também aparece (guarda contra
+        reportar só a chave dos Visitantes)."""
+        conector_mcp._ferramenta_site({"period": "28d"})  # aquece as duas chaves
+        relogio_da_central.avancar(hours=2)
+        visao_geral.ler_visitantes("28d", forcar=True)  # só Visitantes renova, fresco
+        google_falso.forcar = httpx.Response(503, json={"error": {"code": 503, "status": "UNAVAILABLE"}})
+
+        resultado = conector_mcp._ferramenta_site({"period": "28d"})
+
+        assert resultado["isError"] is False
+        frescor = resultado["structuredContent"]["frescor"]
+        assert frescor["falhaAoAtualizar"] is True
+        assert frescor["atualizadoHaMin"] == 120
+        assert frescor["motivo"]
+
 
 # ─── 6. A ferramenta de Instagram, lida do cache da tela ─────────────────────
 
@@ -440,3 +497,18 @@ class TestToolsCallPeloResponderMcp:
         assert resultado["isError"] is False
         assert resultado["structuredContent"]["visitantes"]["atual"] == 12345
         assert resultado["structuredContent"]["areasDoSite"]["disponivel"] is True
+
+    async def test_tools_call_com_arguments_nao_dict_e_invalid_params(self):
+        """`arguments` que não é objeto (array, string, número) é -32602 (Params
+        inválidos), no mesmo molde do `params` da #822: nunca um 500 quando a
+        ferramenta for desreferenciar o que não é dict."""
+        pedido = {
+            "jsonrpc": "2.0",
+            "id": 3,
+            "method": "tools/call",
+            "params": {"name": "get_site_analytics", "arguments": ["nao", "e", "objeto"]},
+        }
+
+        resposta = await conector_mcp.responder_mcp(pedido)
+
+        assert resposta["error"]["code"] == -32602

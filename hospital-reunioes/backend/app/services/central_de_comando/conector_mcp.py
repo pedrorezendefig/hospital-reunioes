@@ -87,6 +87,12 @@ FERRAMENTA_INSTAGRAM = "get_instagram_analytics"
 _PERIODOS_SITE = ("7d", "28d", "90d")
 _PERIODOS_INSTAGRAM = ("7d", "28d")
 
+# O nome da tela Dados do Google no registro de telas. A chave de cache de uma
+# tela é `(nome, período)` (o mesmo par que o Atualizar agora endereça), então o
+# Site usa este nome nos dois lugares: para ler o payload e para ancorar nela
+# metade do frescor.
+_TELA_DADOS_DO_GOOGLE = "dados-do-google"
+
 _TIMEOUT = httpx.Timeout(10.0, connect=3.0)
 
 
@@ -435,20 +441,35 @@ async def _ferramenta_ao_vivo() -> dict:
 def _ferramenta_site(argumentos: dict) -> dict:
     """Os números do Site no período, lidos do MESMO cache das telas: os
     Visitantes comparados vêm do bloco do painel (`visao_geral.ler_visitantes`) e
-    o resto da tela Dados do Google (`telas.ler`). Fonte fora sem número guardado
-    ou não configurada viram resultado com `isError`, com a frase segura da
-    Central, nunca um número inventado."""
+    o resto da tela Dados do Google (`telas.ler`). O frescor é o pior caso das
+    duas chaves (`_frescor_do_site`), para não dizer "fresco" com o manchete de
+    Visitantes velho. Fonte fora sem número guardado ou não configurada viram
+    resultado com `isError`, com a frase segura da Central, nunca um número
+    inventado."""
     periodo = _periodo_valido(argumentos, _PERIODOS_SITE)
     if periodo is None:
         return _resultado_de_erro(f"Período inválido. Use um de: {', '.join(_PERIODOS_SITE)}.")
     try:
-        visitantes = visao_geral.ler_visitantes(periodo)
+        visitantes, chave_visitantes = visao_geral.ler_visitantes(periodo)
         if visitantes["estado"] != "ok":
             return _resultado_de_erro(visitantes.get("motivo") or "Os números do Site estão indisponíveis agora.")
-        google = telas.ler("dados-do-google", periodo)
+        google = telas.ler(_TELA_DADOS_DO_GOOGLE, periodo)
     except (provedor_google.GoogleNaoConfiguradoError, provedor_google.GoogleError) as exc:
         return _resultado_de_erro(str(exc))
-    return _resultado_estruturado(serializar_site(periodo, visitantes, google, cache.agora_utc()))
+    frescor = _frescor_do_site(chave_visitantes, periodo)
+    return _resultado_estruturado(serializar_site(periodo, visitantes, google, frescor, cache.agora_utc()))
+
+
+def _frescor_do_site(chave_visitantes: tuple | None, periodo: str) -> dict:
+    """O frescor do Site é o PIOR caso entre as chaves que compõem o payload: os
+    Visitantes (a chave do painel) e a tela Dados do Google. Combina pela mesma
+    `cache.frescor` que o painel usa (a hora do número mais velho, e "falhou" se
+    a renovação de qualquer uma falhou). As duas chaves têm TTL e estado de falha
+    independentes; sem combinar, o payload poderia dizer "fresco, sem falha" com
+    o manchete de Visitantes velho renovando com erro, a desonestidade que o
+    glossário proíbe. É o que o conector antigo fazia ancorando o frescor do Site
+    na fonte dos Visitantes."""
+    return cache.cache_da_central.frescor(chave_visitantes, (_TELA_DADOS_DO_GOOGLE, periodo)).como_dict()
 
 
 def _ferramenta_instagram(argumentos: dict) -> dict:
@@ -478,11 +499,13 @@ def _periodo_valido(argumentos: dict, permitidos: tuple[str, ...]) -> str | None
 # testada direto, com a chave das áreas renomeada para "areasDoSite") ────────
 
 
-def serializar_site(periodo: str, visitantes: dict, google: dict, agora: datetime) -> dict:
+def serializar_site(periodo: str, visitantes: dict, google: dict, frescor: dict, agora: datetime) -> dict:
     """O payload do Site para o Claude, equivalente ao `serializeSite` do conector
     antigo, com a chave das áreas renomeada para "areasDoSite" (o nome da casa).
-    Os Visitantes vêm do bloco do painel; movimento, áreas, origens, dispositivos,
-    contatos e frescor, da tela Dados do Google."""
+    Os Visitantes vêm do bloco do painel; movimento, áreas, origens, dispositivos
+    e contatos, da tela Dados do Google. O `frescor` chega pronto do chamador (o
+    pior caso das duas chaves, `_frescor_do_site`), e não sai de uma chave só, que
+    mentiria se a outra tivesse vencido com falha de renovação."""
     return {
         "periodo": periodo,
         "visitantes": _comparado(visitantes["atual"], visitantes["anterior"]),
@@ -510,7 +533,7 @@ def serializar_site(periodo: str, visitantes: dict, google: dict, agora: datetim
             {"chave": d["chave"], "rotulo": d["rotulo"], "visitas": d["visitas"]} for d in google["dispositivos"]
         ],
         "contatos": [_contato(canal) for canal in google["contatos_gerados"]],
-        "frescor": serializar_frescor(google["frescor"], agora),
+        "frescor": serializar_frescor(frescor, agora),
     }
 
 
@@ -656,7 +679,13 @@ async def responder_mcp(mensagem: object) -> dict | None:
             # nunca um 500 por desreferenciar o que não é dict.
             return _erro(id_, -32602, "Params inválidos")
         params = params or {}
-        resultado = await _executar_ferramenta(params.get("name"), params.get("arguments") or {})
+        argumentos = params.get("arguments")
+        if argumentos is not None and not isinstance(argumentos, dict):
+            # `arguments` que não é objeto (array, string, número): -32602, no
+            # mesmo molde do `params`, nunca um 500 quando a ferramenta for
+            # desreferenciar o que não é dict.
+            return _erro(id_, -32602, "Argumentos inválidos")
+        resultado = await _executar_ferramenta(params.get("name"), argumentos or {})
         return _ok(id_, resultado)
     if metodo == "ping":
         return _ok(id_, {})
