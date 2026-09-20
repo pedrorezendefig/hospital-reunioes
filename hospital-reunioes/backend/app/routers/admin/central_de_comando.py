@@ -45,7 +45,14 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from app.dependencies import require_super_admin
 from app.limiter import limiter
 from app.services.central_de_comando import objetivos, provedor_google, provedor_instagram, telas
+from app.services.central_de_comando import visao_geral as visao_geral_service
 from app.services.central_de_comando.periodo import PERIODO_PADRAO, Periodo
+
+# As telas compostas de vários blocos, cada bloco com a sua chave de cache e a
+# sua degradação (issue #821). Não passam pelo `telas.ler` de chave única: a
+# leitura delas já é honesta por bloco e nunca levanta por falha de fonte, então
+# não precisam do `_do_fonte`. O Atualizar agora as reconhece pelo nome.
+LEITORES_COMPOSTOS = {"visao-geral": visao_geral_service.ler}
 
 router = APIRouter(
     prefix="/admin/central-de-comando",
@@ -86,13 +93,16 @@ async def _do_fonte(funcao, *args):
 @router.get("/visao-geral")
 @limiter.limit("30/minute")
 async def visao_geral(request: Request, periodo: Periodo = Query(PERIODO_PADRAO)):
-    """A Visão Geral no período: os Visitantes, o anterior, a variação e o
-    frescor. Dentro da hora, sai do cache sem ir ao Google.
+    """A Visão Geral no período, por bloco (issue #821): o número-manchete e o
+    contexto dele, o Instagram num relance e os Objetivos em foco, cada bloco com
+    o seu `estado`, mais o frescor combinado. Dentro da hora, cada bloco sai do
+    cache sem ir à fonte.
 
-    Período fora de 7, 28 e 90 dias é 422 aqui: quem é leniente com o que se
-    digita no endereço é a tela, que cai no padrão de 28 dias.
+    Responde 200 mesmo com uma fonte fora: o erro mora no bloco (`sem-dado` ou
+    `nao-configurado`), nunca derruba a tela. Período fora de 7, 28 e 90 dias é
+    422 aqui: quem é leniente com o que se digita no endereço é a tela.
     """
-    return await _do_fonte(telas.ler, "visao-geral", periodo)
+    return await anyio.to_thread.run_sync(visao_geral_service.ler, periodo)
 
 
 # ─── Dados do Google (issue #817) ────────────────────────────────────────────
@@ -212,5 +222,11 @@ async def atualizar_agora(request: Request, tela: str = Query(...), periodo: Per
     o último valor bom marcado (200), ou 502 se não houver nenhum guardado.
     Tela fora do registro de `telas.py` (o Ao vivo, por exemplo) ou período que
     a tela não tem é 422, sem ir à fonte: quem recusa é o próprio `telas.ler`.
+
+    A Visão Geral (e qualquer tela composta) renova todos os seus blocos pela
+    leitura própria dela, que já é honesta por bloco: não passa pelo `_do_fonte`.
     """
+    leitor_composto = LEITORES_COMPOSTOS.get(tela)
+    if leitor_composto is not None:
+        return await anyio.to_thread.run_sync(partial(leitor_composto, periodo, forcar=True))
     return await _do_fonte(partial(telas.ler, tela, periodo, forcar=True))

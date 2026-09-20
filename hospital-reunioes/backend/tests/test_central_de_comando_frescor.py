@@ -1,17 +1,23 @@
 """O frescor dos números da Central de Comando pela rota real (issue #815).
 
-O seam é a ROTA HTTP, como em `test_central_de_comando_visao_geral.py`, com o
-app mínimo com o gate de pé e as pessoas logadas de `central_de_comando_apoio.py`
-(`cliente_da_central`). Dublados só o que é fronteira: quem está logado, a rede
-do Google (`google_falso`) e os dois relógios da Central, o do dia
-(`hoje_da_central`) e o do cache (`relogio_da_central`). O cache é o de
-verdade, o do processo, e o `google_falso` o entrega vazio a cada teste; quem
-não pede o `google_falso` e pode gravar no cache pede o `cache_da_central`.
+O seam é a ROTA HTTP, com o app mínimo com o gate de pé e as pessoas logadas de
+`central_de_comando_apoio.py` (`cliente_da_central`). Dublados só o que é
+fronteira: quem está logado, a rede do Google (`google_falso` com o
+`lote_da_ga4`) e os dois relógios da Central, o do dia (`hoje_da_central`) e o do
+cache (`relogio_da_central`). O cache é o de verdade, o do processo, e o
+`google_falso` o entrega vazio a cada teste.
 
-O que se observa é o que a tela recebe: o número, o carimbo de frescor e se a
-leitura foi ou não à fonte (`google_falso.pedidos`). Cada pergunta de
-Visitantes é um pedido; a Visão Geral faz dois por leitura (o período e o
-anterior).
+**A tela usada aqui é a Dados do Google (#817).** É a tela de chave única mais
+simples que passa pelo cache com frescor: uma leitura pergunta tudo à GA4 em
+dois `batchRunReports` (sete relatórios, e o lote leva no máximo cinco). A Visão
+Geral saiu do registro de chave única na #821 (virou tela
+composta, um bloco por chave, cada bloco degradando sozinho): o frescor por
+bloco dela é testado em `test_central_de_comando_visao_geral.py`, e o mecânico
+do cache de #815 continua aqui, na tela que ainda é tudo ou nada.
+
+O que se observa é o que a tela recebe: o número (as Visitas do dispositivo
+líder), o carimbo de frescor e se a leitura foi ou não à fonte
+(`google_falso.pedidos`).
 """
 
 from __future__ import annotations
@@ -34,8 +40,12 @@ from central_de_comando_apoio import (  # noqa: E402
 
 from app.services.central_de_comando import telas  # noqa: E402
 
-# Os pedidos que uma leitura da Visão Geral faz ao Google: o período e o anterior.
+# Uma leitura da tela Dados do Google faz dois `batchRunReports` (sete
+# relatórios, cinco por lote).
 PEDIDOS_POR_LEITURA = 2
+
+# O intervalo de 28 dias, chave das tabelas do `lote_da_ga4`.
+_28_DIAS = ("2026-08-21", "2026-09-17")
 
 # O limitador de taxa e o participante do gate zerados antes e depois de cada
 # teste (fixture de `central_de_comando_apoio.py`).
@@ -54,15 +64,20 @@ def cliente():
 
 
 def _ler(cliente, periodo: str = "28d"):
-    return cliente.get(f"{PREFIXO}/visao-geral", params={"periodo": periodo})
+    return cliente.get(f"{PREFIXO}/dados-do-google", params={"periodo": periodo})
 
 
-def _atualizar_agora(cliente, periodo: str = "28d", tela: str = "visao-geral"):
+def _atualizar_agora(cliente, periodo: str = "28d", tela: str = "dados-do-google"):
     return cliente.post(f"{PREFIXO}/atualizar-agora", params={"tela": tela, "periodo": periodo})
 
 
+def _lider(corpo: dict) -> int:
+    """As Visitas do dispositivo líder: o número que estas mecânicas observam."""
+    return corpo["dispositivos"][0]["visitas"]
+
+
 class TestFrescorNoPayload:
-    def test_a_visao_geral_diz_de_quando_sao_os_numeros(self, cliente, google_falso, relogio_da_central):
+    def test_a_tela_diz_de_quando_sao_os_numeros(self, cliente, google_falso, lote_da_ga4, relogio_da_central):
         corpo = _ler(cliente).json()
 
         assert corpo["frescor"] == {
@@ -70,15 +85,15 @@ class TestFrescorNoPayload:
             "atualizacao_falhou": False,
             "motivo": None,
         }
-        assert corpo["visitantes"]["atual"] == 12345
+        assert _lider(corpo) == 7100
 
 
 class TestUmaHoraDeCache:
     def test_segunda_leitura_da_mesma_tela_e_periodo_dentro_da_hora_nao_vai_a_fonte(
-        self, cliente, google_falso, relogio_da_central
+        self, cliente, google_falso, lote_da_ga4, relogio_da_central
     ):
         primeira = _ler(cliente).json()
-        google_falso.visitantes[("2026-08-21", "2026-09-17")] = 99999
+        lote_da_ga4.visitas_por_dispositivo[_28_DIAS] = {"mobile": 8000}
         relogio_da_central.avancar(minutes=59)
 
         segunda = _ler(cliente).json()
@@ -87,32 +102,34 @@ class TestUmaHoraDeCache:
         assert segunda == primeira
         assert segunda["frescor"]["atualizado_em"] == "2026-09-18T13:45:00+00:00"
 
-    def test_passada_a_hora_a_leitura_busca_numeros_novos(self, cliente, google_falso, relogio_da_central):
+    def test_passada_a_hora_a_leitura_busca_numeros_novos(self, cliente, google_falso, lote_da_ga4, relogio_da_central):
         _ler(cliente)
-        google_falso.visitantes[("2026-08-21", "2026-09-17")] = 12400
+        lote_da_ga4.visitas_por_dispositivo[_28_DIAS] = {"mobile": 8000}
         relogio_da_central.avancar(hours=1)
 
         corpo = _ler(cliente).json()
 
         assert len(google_falso.pedidos) == 2 * PEDIDOS_POR_LEITURA
-        assert corpo["visitantes"]["atual"] == 12400
+        assert _lider(corpo) == 8000
         assert corpo["frescor"]["atualizado_em"] == "2026-09-18T14:45:00+00:00"
 
-    def test_outro_periodo_e_outra_chave(self, cliente, google_falso, relogio_da_central):
+    def test_outro_periodo_e_outra_chave(self, cliente, google_falso, lote_da_ga4, relogio_da_central):
         """A chave é tela e período: os 28 dias guardados não respondem pelos 7."""
         _ler(cliente, "28d")
 
         corpo = _ler(cliente, "7d").json()
 
         assert len(google_falso.pedidos) == 2 * PEDIDOS_POR_LEITURA
-        assert corpo["visitantes"]["atual"] == 3100
         assert corpo["periodo"]["chave"] == "7d"
+        assert _lider(corpo) == 1850
 
 
 class TestAtualizarAgora:
-    def test_vai_a_fonte_mesmo_com_o_cache_valido_e_o_carimbo_muda(self, cliente, google_falso, relogio_da_central):
+    def test_vai_a_fonte_mesmo_com_o_cache_valido_e_o_carimbo_muda(
+        self, cliente, google_falso, lote_da_ga4, relogio_da_central
+    ):
         _ler(cliente)
-        google_falso.visitantes[("2026-08-21", "2026-09-17")] = 12400
+        lote_da_ga4.visitas_por_dispositivo[_28_DIAS] = {"mobile": 8000}
         relogio_da_central.avancar(minutes=5)
 
         resposta = _atualizar_agora(cliente)
@@ -120,16 +137,18 @@ class TestAtualizarAgora:
         assert resposta.status_code == 200, resposta.text
         corpo = resposta.json()
         assert len(google_falso.pedidos) == 2 * PEDIDOS_POR_LEITURA
-        assert corpo["visitantes"]["atual"] == 12400
+        assert _lider(corpo) == 8000
         assert corpo["frescor"] == {
             "atualizado_em": "2026-09-18T13:50:00+00:00",
             "atualizacao_falhou": False,
             "motivo": None,
         }
 
-    def test_depois_dele_a_leitura_comum_ja_serve_o_numero_novo(self, cliente, google_falso, relogio_da_central):
+    def test_depois_dele_a_leitura_comum_ja_serve_o_numero_novo(
+        self, cliente, google_falso, lote_da_ga4, relogio_da_central
+    ):
         _ler(cliente)
-        google_falso.visitantes[("2026-08-21", "2026-09-17")] = 12400
+        lote_da_ga4.visitas_por_dispositivo[_28_DIAS] = {"mobile": 8000}
         relogio_da_central.avancar(minutes=5)
         _atualizar_agora(cliente)
         relogio_da_central.avancar(minutes=5)
@@ -137,10 +156,10 @@ class TestAtualizarAgora:
         corpo = _ler(cliente).json()
 
         assert len(google_falso.pedidos) == 2 * PEDIDOS_POR_LEITURA
-        assert corpo["visitantes"]["atual"] == 12400
+        assert _lider(corpo) == 8000
         assert corpo["frescor"]["atualizado_em"] == "2026-09-18T13:50:00+00:00"
 
-    def test_renova_so_o_periodo_pedido(self, cliente, google_falso, relogio_da_central):
+    def test_renova_so_o_periodo_pedido(self, cliente, google_falso, lote_da_ga4, relogio_da_central):
         _ler(cliente, "7d")
         _ler(cliente, "28d")
         relogio_da_central.avancar(minutes=5)
@@ -154,11 +173,11 @@ class TestAtualizarAgora:
         assert de_28_dias["frescor"]["atualizado_em"] == "2026-09-18T13:45:00+00:00"
         assert len(google_falso.pedidos) == 3 * PEDIDOS_POR_LEITURA
 
-    @pytest.mark.parametrize("tela", ["ao-vivo", "", "../visao-geral", "Visao-Geral"])
+    @pytest.mark.parametrize("tela", ["ao-vivo", "", "../dados-do-google", "Dados-do-Google"])
     def test_tela_que_nao_esta_no_cache_e_recusada_sem_consultar_o_google(self, cliente, google_falso, tela):
-        """Só tela registrada tem Atualizar agora. O Ao vivo não é tela do
-        cache: ele não tem o que forçar, porque nunca é guardado. (O Instagram
-        entrou no registro na #819, então saiu desta lista.)"""
+        """Só tela registrada tem Atualizar agora. O Ao vivo não é tela do cache;
+        a Visão Geral é composta e o nome dela só vale exato (o Atualizar agora
+        dela é despachado à parte)."""
         resposta = _atualizar_agora(cliente, tela=tela)
 
         assert resposta.status_code == 422
@@ -171,11 +190,9 @@ class TestAtualizarAgora:
         assert resposta.status_code == 422
         assert google_falso.pedidos == []
 
-    def test_tem_limite_de_taxa_de_5_por_minuto(self, cliente, google_falso, relogio_da_central):
+    def test_tem_limite_de_taxa_de_5_por_minuto(self, cliente, google_falso, lote_da_ga4, relogio_da_central):
         """Cada Atualizar agora é uma ida garantida ao Google, que tem cota: o
-        sexto seguido no mesmo minuto leva 429 e não chega à fonte. O limitador
-        é zerado antes e depois de cada teste (`gate_e_limitador_zerados`, no
-        `pytestmark` do topo do arquivo)."""
+        sexto seguido no mesmo minuto leva 429 e não chega à fonte."""
         respostas = [_atualizar_agora(cliente).status_code for _ in range(5)]
         pedidos_antes = len(google_falso.pedidos)
 
@@ -185,9 +202,9 @@ class TestAtualizarAgora:
         assert sexto.status_code == 429
         assert len(google_falso.pedidos) == pedidos_antes
 
-    def test_o_limite_nao_trava_a_leitura_comum(self, cliente, google_falso, relogio_da_central):
-        """Estourar o Atualizar agora não tira a tela do ar: a leitura comum
-        tem o limite dela e segue servindo o que está guardado."""
+    def test_o_limite_nao_trava_a_leitura_comum(self, cliente, google_falso, lote_da_ga4, relogio_da_central):
+        """Estourar o Atualizar agora não tira a tela do ar: a leitura comum tem
+        o limite dela e segue servindo o que está guardado."""
         for _ in range(6):
             _atualizar_agora(cliente)
 
@@ -196,10 +213,9 @@ class TestAtualizarAgora:
     def test_tela_registrada_ganha_o_atualizar_agora_sem_rota_nova(
         self, monkeypatch, cliente, relogio_da_central, cache_da_central
     ):
-        """O ponto de extensão das fatias seguintes (#817, #818): a tela entra
-        no registro de `telas.py` e o Atualizar agora já vale para ela, com o
-        frescor no payload e a chave por período. Sem o `google_falso`, quem
-        esvazia o cache do processo no fim é o `cache_da_central`."""
+        """O ponto de extensão das fatias seguintes (#817, #818): a tela entra no
+        registro de `telas.py` e o Atualizar agora já vale para ela, com o frescor
+        no payload e a chave por período."""
         idas: list[str] = []
 
         def montar(periodo):
@@ -232,8 +248,8 @@ class TestAtualizarAgora:
         assert idas == []
 
     def test_quem_nao_e_super_admin_nao_forca_ida_nenhuma_ao_google(self, google_falso):
-        """O gate do router vale para o Atualizar agora: secretária leva 403 e
-        o Google nem é chamado."""
+        """O gate do router vale para o Atualizar agora: secretária leva 403 e o
+        Google nem é chamado."""
         resposta = _atualizar_agora(cliente_da_central(SECRETARIA))
 
         assert resposta.status_code == 403
@@ -245,11 +261,10 @@ class TestAtualizarAgora:
 
 class TestFonteFora:
     def test_com_numero_guardado_a_tela_mostra_o_ultimo_valor_bom_e_o_aviso(
-        self, cliente, google_falso, relogio_da_central
+        self, cliente, google_falso, lote_da_ga4, relogio_da_central
     ):
-        """Passou da hora e o Google caiu: a tela recebe os números de 13h45,
-        com a marca de que a atualização falhou e a frase do porquê. Nunca
-        zero, nunca a tela vazia."""
+        """Passou da hora e o Google caiu: a tela recebe os números de 13h45, com
+        a marca de que a atualização falhou e a frase do porquê. Nunca zero."""
         _ler(cliente)
         relogio_da_central.avancar(hours=2)
         google_falso.forcar = erro_da_ga4(500, "INTERNAL", "Internal error encountered.")
@@ -258,7 +273,7 @@ class TestFonteFora:
 
         assert resposta.status_code == 200, resposta.text
         corpo = resposta.json()
-        assert corpo["visitantes"] == {"atual": 12345, "anterior": 10000, "variacao": pytest.approx(0.2345)}
+        assert _lider(corpo) == 7100
         assert corpo["frescor"] == {
             "atualizado_em": "2026-09-18T13:45:00+00:00",
             "atualizacao_falhou": True,
@@ -266,7 +281,7 @@ class TestFonteFora:
         }
 
     def test_atualizar_agora_que_falha_devolve_o_ultimo_valor_bom_e_o_aviso(
-        self, cliente, google_falso, relogio_da_central
+        self, cliente, google_falso, lote_da_ga4, relogio_da_central
     ):
         _ler(cliente)
         relogio_da_central.avancar(minutes=10)
@@ -276,12 +291,12 @@ class TestFonteFora:
 
         assert resposta.status_code == 200, resposta.text
         corpo = resposta.json()
-        assert corpo["visitantes"]["atual"] == 12345
+        assert _lider(corpo) == 7100
         assert corpo["frescor"]["atualizado_em"] == "2026-09-18T13:45:00+00:00"
         assert corpo["frescor"]["atualizacao_falhou"] is True
         assert "tempo esperado" in corpo["frescor"]["motivo"]
 
-    def test_o_aviso_some_quando_a_fonte_volta(self, cliente, google_falso, relogio_da_central):
+    def test_o_aviso_some_quando_a_fonte_volta(self, cliente, google_falso, lote_da_ga4, relogio_da_central):
         _ler(cliente)
         relogio_da_central.avancar(hours=2)
         google_falso.forcar = erro_da_ga4(503, "UNAVAILABLE", "The service is currently unavailable.")
@@ -297,8 +312,9 @@ class TestFonteFora:
             "motivo": None,
         }
 
-    def test_sem_numero_guardado_e_erro_honesto(self, cliente, google_falso, relogio_da_central):
-        """Nada para mostrar: 502 com a frase, como antes do cache."""
+    def test_sem_numero_guardado_e_erro_honesto(self, cliente, google_falso, lote_da_ga4, relogio_da_central):
+        """Nada para mostrar: 502 com a frase, como antes do cache. A tela de
+        chave única segue tudo ou nada (a Visão Geral, composta, não)."""
         google_falso.forcar = erro_da_ga4(500, "INTERNAL", "Internal error encountered.")
 
         leitura = _ler(cliente)
@@ -354,9 +370,6 @@ class TestRegistroDeTelas:
         assert tela_de_teste == ["28d"]
 
     def test_periodo_que_a_tela_nao_tem_e_recusado_sem_buscar_nada(self, tela_de_teste):
-        """A regra mora na porta, e não só na rota do Atualizar agora: a rota
-        de leitura de uma tela sem 90 dias não guardaria 90 dias por esquecer
-        de conferir."""
         with pytest.raises(telas.PedidoDeTelaInvalidoError, match="90d"):
             telas.ler("tela-de-teste", "90d")
 
