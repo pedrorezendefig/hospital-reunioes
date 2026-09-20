@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-19T22:22:08-03:00",
+  "updated_at": "2026-09-20T00:25:00-03:00",
   "updated_by": "onda@ship",
-  "last_app_version": "0.152.0",
+  "last_app_version": "0.153.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "bd198cb",
-      "last_deploy_at": "2026-09-20T01:17:26Z",
+      "last_deploy_sha": "f8e47da",
+      "last_deploy_at": "2026-09-20T03:19:58Z",
       "last_health_check": {
-        "at": "2026-09-19T22:22:08-03:00",
-        "latency_ms": 76,
+        "at": "2026-09-20T00:19:56-03:00",
+        "latency_ms": 150,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 147,
+      "build_duration_seconds": 20,
       "env_count": 24
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "bd198cb",
-      "last_deploy_at": "2026-09-20T01:17:26Z",
+      "last_deploy_sha": "f8e47da",
+      "last_deploy_at": "2026-09-20T03:19:58Z",
       "last_health_check": {
-        "at": "2026-09-19T22:22:08-03:00",
+        "at": "2026-09-20T00:19:56-03:00",
         "latency_ms": 150,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 248,
+      "build_duration_seconds": 200,
       "env_count": 5
     },
     {
@@ -174,60 +174,59 @@
   },
   "gates": [
     {
-      "name": "#821 fatia M: CI verde (backend+frontend+docker) no bump 5198a03; PR #841 MERGEABLE/CLEAN",
+      "name": "CI 3/3 verde no PR #842 (Backend, Frontend, Docker Build), MERGEABLE e CLEAN em cada etapa",
       "status": "ok"
     },
     {
-      "name": "Gate 1.5 (spec x diff, sub-agente) + Gate 2.5 (2 revisores independentes, codigo+seguranca): ambos LIMPOS, sem must-fix. A fatia foi retomada apos o rate limit da sessao (reset 21:10): trabalho parcial preservado em commit WIP e concluido",
+      "name": "Gate 1.5 spec x diff por revisor independente do sub-agente: contrato bate campo a campo com o antigo, glossario Braços->areasDoSite completo",
       "status": "ok"
     },
     {
-      "name": "Guardrails: os 5 blocos degradam sozinhos (rota sempre 200 com estado por bloco; falha de fonte nunca derruba a tela; auth levanta antes, nunca mascarada como 200); 'O que vem por ai' de src/lib/pages.ts sem data prometida; montadores reusam provedores (dados_do_google #818, provedor_instagram #819) + cache #815, sem chamar a fonte por fora; 'nao-configurado' nunca vira ultimo valor bom velho",
+      "name": "Dois revisores do orquestrador (código+correção e segurança): 0 must-fix. Ferramentas gated (entrada unica, sem atalho por ferramenta), seam ler_visitantes nao expoe alem do painel, data do Instagram e dado publico",
       "status": "ok"
     },
     {
-      "name": "Version-match: GET /api/health = 0.152.0 = APP_VERSION do Coolify",
+      "name": "Should-fix do frescor corrigido antes do merge: frescor do Site e o pior caso das duas chaves (cache.frescor do painel), com teste da divergencia nas duas direcoes; mais arguments nao-dict vira -32602",
       "status": "ok"
     },
     {
-      "name": "Sem migration; sem 'meta'/'Braco' em tela nem codigo; motivo sem segredo (corpo de erro da Graph API so vai para o log)",
+      "name": "Le do mesmo cache das telas (#815): teste conta idas reais a fonte (nao tautologia). Sem migration, sem rota nova (test_snapshot_enumeracao_rotas verde)",
       "status": "ok"
     },
     {
-      "name": "Central dormente em producao para Instagram/GA4 (variaveis so no .env local, nao no Coolify) ate a fatia de ativacao (#827)",
+      "name": "APP_VERSION 0.153.0 no Coolify ANTES do merge; version match no ar: /api/health em 0.153.0, db healthy, frontend 200",
+      "status": "ok"
+    },
+    {
+      "name": "Conector segue DORMENTE em producao (503, sem variaveis do conector em prod), tratado na #826/#827/#828 fora da onda",
       "status": "warn"
     },
     {
-      "name": "Semaforo pego antes do merge e solto no fim; bookkeeping em worktree detached de origin/main, arvore principal intocada",
+      "name": "Semaforo pego antes do merge e solto no fim; bookkeeping em worktree detached",
       "status": "ok"
     }
   ],
   "next_actions": [
     {
       "kind": "ok",
-      "title": "Visao Geral no ar em v0.152.0",
-      "text": "Os 5 blocos (Visitantes, Instagram num relance, Objetivos em foco, 'O que vem por ai', Atalhos) com degradacao por bloco. Backend e frontend saudaveis; /api/health em 0.152.0."
-    },
-    {
-      "kind": "ok",
-      "title": "Fila-alvo da sessao esvaziada",
-      "text": "As 3 ondas da fila fixa (#819 Instagram v0.150.0, #820 Objetivos v0.151.0, #821 Visao Geral v0.152.0) foram entregues e deployadas."
+      "title": "Deploy v0.153.0 saudável, fila da onda esvaziada",
+      "text": "Ferramentas de Site e Instagram no conector MCP. As 4 fatias da fila fixa (#816, #822, #824, #823) fecharam e subiram. /api/health em 0.153.0, db healthy, frontend 200."
     },
     {
       "kind": "warn",
-      "title": "Central dormente em producao ate #827",
-      "text": "Instagram e GA4 sem variaveis no Coolify de producao; as telas da Central respondem 503 de configuracao ate a fatia que liga a Central (#827), como manda o ADR 0058."
+      "title": "Conector MCP dormente: 503 e sem variaveis em prod",
+      "text": "As 3 ferramentas (Ao vivo, Site, Instagram) estao no ar mas o conector responde 503 por falta de variaveis do conector no backend de producao. Ligar e o corte: #826 (credenciais no Coolify e WorkOS), #827 (ligar), #828 (corte). Achado registrado na #826."
     },
     {
       "kind": "info",
-      "title": "Nice-to-haves da #821 (nao bloqueantes)",
-      "text": "Teste de regressao afirmando que o motivo de um bloco nao contem material de token/segredo (os dois revisores citaram); frescor mostra 'Atualizado' verde quando os dois blocos estao down sem dado (estado neutro seria melhor); bloco Visitantes puxa o dados_do_google.montar inteiro; conferencia visual mobile e manual."
+      "title": "Snapshot desatualizado (issue #838)",
+      "text": "O ROTAS.md nao inclui as rotas do conector (/api/mcp, /.well-known): o snapshot.py nao roda no Windows local. Regenerar num ambiente com o venv, conforme a #838."
     }
   ],
   "last_run": {
     "mode": "ship",
-    "sha": "bd198cb",
+    "sha": "f8e47da",
     "result": "healthy",
-    "duration_seconds": 248
+    "duration_seconds": 240
   }
 }

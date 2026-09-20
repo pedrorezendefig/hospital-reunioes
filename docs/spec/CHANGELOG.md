@@ -7,6 +7,13 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## 2026-09-20 00:19 — Ferramentas de Site e Instagram no conector MCP
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `f8e47da`
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (240s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f8e47da
+
 ## 2026-09-19 22:22 — Visao Geral completa, com 'O que vem por ai'
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `bd198cb`

@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-20T00:19:56-03:00",
+      "sha": "f8e47da2",
+      "app_version": "0.153.0",
+      "subject": "Ferramentas de Site e Instagram no conector MCP",
+      "raw_subject": "feat(central-de-comando): ferramentas de Site e Instagram no conector MCP (#842)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 240,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 4 (última) da fila fixa (PRD #809, ADR 0058): ferramentas get_site_analytics e get_instagram_analytics no conector MCP (o da #822), lendo do MESMO cache das telas (#815). Glossário da casa aplicado: Braços vira areasDoSite. Sem migration, sem rota nova (entram no /api/mcp existente, enumerador do snapshot intacto). Dois revisores do orquestrador, 0 must-fix. Should-fix corrigido antes do merge: frescor do Site agora é o pior caso das duas chaves de cache (visitantes + dados-do-google), pela mesma cache.frescor do painel, para não reportar fresco com número velho; mais arguments não-dict vira -32602. O conector segue DORMENTE em producao (503, sem variaveis em prod): ligar e o corte, #826/#827/#828."
+    },
+    {
       "at": "2026-09-19T22:22:08-03:00",
       "sha": "bd198cb",
       "app_version": "0.152.0",
@@ -1467,35 +1499,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda 1 de 2 desta sessao: #592 (PR #621, fatia M do PRD #591), sozinha, com a #594 esperando ela fechar. Migration 099 aplicada a mao no Studio pelo humano antes do merge, e a ordem era obrigatoria (ver nota da migration). Prova de que o codigo novo subiu, nao so um restart: POST /api/ouvidoria/manifestacoes/<id>/arquivo sem token devolve 401, e a mesma rota com sufixo inventado devolve 404. Os dois revisores do orquestrador acharam must-fix que o CI verde nao pegava. O de codigo achou o pior: o filtro arquivada_em IS NULL entrou na rota da lista, mas o painel em tempo real e o segundo consumidor dessa rota e ninguem o revisou na fatia, entao arquivar 30 de 40 casos faria o card Encerrada cair para 10 enquanto o bloco de metricas da MESMA tela seguia em 40, contradizendo o verbete do CONTEXT.md e a decisao 4 do ADR 0047. O conserto mudou o desenho: o parametro da lista deixou de ser booleano e virou recorte de tres valores (nao/sim/todos), com o painel pedindo todos porque ele conta em vez de trabalhar; somar duas listagens no cliente pagaria duas idas ao banco por polling para reconstruir um numero que o servidor da numa consulta. O de seguranca achou que reabrir por reincidencia nao limpava arquivada_em, entao o caso voltava a aguardando_area com prazo novo e email ao setor mas ficava fora da lista, fora do contador do menu e com tem_novidade falso, virando acao invisivel com relogio correndo; achou tambem TOCTOU no update do arquivamento, que nao repetia o .eq de status encerrado. Os quatro must-fix fecharam em uma rodada e a rodada 2 voltou LIMPA nas duas lentes. Dois achados do proprio autor pela mutacao: a guarda de corrida do filtro nasceu redundante (duas checagens, cada mutante sobrevivendo porque a outra cobria) e o harness de teste do frontend devolvia o array de casos por referencia, entao o splice de arquivar mutava o estado que o React ja segurava. Bump fantasma 0.113.0 entrou no PR e foi eliminado na raiz no rebase, pulando o commit em vez de remendar. Foram tres rebases: a main andou duas vezes durante a execucao (#619, #624 e #620 da sessao paralela), e o intermediario sobre o #620 o autor fez por conta propria porque o #620 mexe na mesma funcao reabrir_por_reincidencia, preferindo rodar o CI sobre a combinacao real. Corrida de bump a tres resolvida pelo semaforo: a outra sessao pegou a trava primeiro e ficou com 0.113.0, esta re-bumpou para 0.114.0. Os docs do grilling de 04/09/2026 entraram neste PR vindos da arvore principal, sem commit ate aqui: ADR 0047 inteiro, o verbete Arquivo (da Manifestacao) e o paragrafo da porta antecipada em Retencao no CONTEXT.md, e o ponteiro amended_by do 0034. O ADR 0048 e o verbete Devolucao a Ouvidoria ficaram de fora por serem da outra sessao. O verbete ganhou depois duas invariantes que nasceram das proprias correcoes: reabrir tira do arquivo, e ler o arquivo exige o perfil conferido no servidor."
-    },
-    {
-      "at": "2026-09-08T14:12:00-03:00",
-      "sha": "9025aa5",
-      "app_version": "0.113.0",
-      "subject": "a area nao apaga o proprio estouro de prazo ao devolver pelo portal, e o caso apagado nao reabre e mostra aviso no lugar do relato",
-      "raw_subject": "feat(ouvidoria): caso apagado nao reabre e o Dossie avisa no lugar do relato (#620)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 de 2 desta sessao: #607 (PR #619, fatia P do PRD #598) e #593 (PR #620, fatia M do PRD #591), em paralelo. Sem migration por decisao do humano: a #593 so le o carimbo anonimizada_em que a 079 ja criou. Tres merges na main, tres builds: #619, depois o #624, depois o #620. O #624 nao estava na fila: o WeasyPrint 70.0 saiu no meio da onda e removeu default_url_fetcher, quebrando a guarda _pdf_url_fetcher (recusa de file:// e host privado no PDF do POP). A main ficou vermelha sozinha, sem mudanca de codigo. Nem o CI (uv pip install -e .[dev]) nem o Dockerfile (uv pip install -r pyproject.toml) usam o uv.lock, entao o proximo build de producao teria levado o 70.0 e o PDF do POP quebraria em prod. Teto weasyprint>=62.0,<70 aprovado pelo humano; resolucao conferida com uv pip compile: com teto resolve 69.0, sem teto resolve 70.0. Portar para a API nova (classe URLFetcher) ficou na issue #625. Achados dos revisores que viraram conserto antes do merge: no #619, o rollback de _restaurar_prazo restaurava o prazo e deixava o carimbo, o que travaria uma prorrogacao aprovada depois; no #620, o bloco de Prorrogacao mostrava o marcador interno [anonimizado pela retencao] na tela do caso apagado, a guarda de reabertura morava numa porta so, e a tela ainda aceitava escrita de texto livre em categoria, campo que a retencao preserva de proposito e que fica fora da varredura depois do carimbo. O autor do #620 achou os proprios testes passando em vacuo (assercoes de ausencia antes das leituras da pagina voltarem) e corrigiu; o revisor confirmou por experimento em copia isolada. O autor tambem contestou com evidencia uma suposicao errada da rodada 1 sobre /transicoes, e o revisor da rodada 2 lhe deu razao. Corrida de bump a tres (#619, #620 e o #621 de outra sessao, todos saindo de 0.112.0), resolvida pelo semaforo: esta sessao ficou com 0.113.0 e a outra re-bumpou para 0.114.0. Sobras viraram issue, nao ficaram no PR: #622 (portas /anexos e /tentativas-contato ainda escrevem em caso apagado), #623 (rollback grava carimbo sempre, _instante duplicado) e #625 (port do WeasyPrint)."
     }
   ]
 }
