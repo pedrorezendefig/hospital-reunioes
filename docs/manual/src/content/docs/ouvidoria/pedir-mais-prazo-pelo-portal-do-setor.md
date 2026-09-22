@@ -17,7 +17,7 @@ pedido vale uma vez por caso e precisa ser feito antes do vencimento.
 
 ## Passo a passo
 
-1. Abra o caso pelo link do e-mail da Ouvidoria.
+1. Abra o caso pelo link do email da Ouvidoria.
 2. Vá até **Precisa de mais prazo?**, no fim da tela, e leia as regras.
 
    ![Bloco Precisa de mais prazo com as regras](../../../assets/ouvidoria/portal-prorrogacao.png)
@@ -39,5 +39,5 @@ pedido vale uma vez por caso e precisa ser feito antes do vencimento.
 - **O pedido foi enviado sem justificativa:** não é possível. Sem o texto, o
   sistema recusa o pedido.
 - **A Ouvidoria negou:** a tela diz "A Ouvidoria negou a prorrogação" e o prazo
-  de antes continua valendo. Você recebe a decisão por e-mail mesmo que já tenha
+  de antes continua valendo. Você recebe a decisão por email mesmo que já tenha
   respondido.

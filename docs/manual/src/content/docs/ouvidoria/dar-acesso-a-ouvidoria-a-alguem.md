@@ -35,10 +35,11 @@ separado.
 
 - **A pessoa ainda não entrou na plataforma:** a concessão cria o login dela na
   hora, e a senha aparece uma única vez na tela. Copie e entregue antes de
-  fechar. Sem e-mail cadastrado a tela recusa, porque o login precisa de
+  fechar. Sem email cadastrado a tela recusa, porque o login precisa de
   endereço. O passo a passo completo está em
   [Dar acesso aos POPs e à Ouvidoria](/admin/dar-acesso-aos-pops-e-a-ouvidoria/).
-- **Você administra o sistema e não consegue abrir um caso sigiloso:** é de
-  propósito. Cuidar do sistema não é o mesmo que poder ler denúncia.
+- **Você administra a plataforma e não consegue abrir um caso sigiloso:**
+  administrar o sistema não dá acesso a denúncia. Caso sigiloso é só do ouvidor
+  e da Diretoria.
 - **Alguém saiu do hospital:** quem é desligado perde o acesso junto, sem
   ninguém precisar lembrar de tirar na mão.

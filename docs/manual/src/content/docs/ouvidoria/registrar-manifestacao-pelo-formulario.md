@@ -40,7 +40,8 @@ site do hospital.
 - **O botão Enviar manifestação está apagado:** falta escrever o relato, ou
   falta responder **Este relato é sobre quem?**. Com o relato escrito, a tela
   cobra a resposta que falta logo acima do botão.
-- **Você marcou anônima e os campos de nome e contato sumiram:** é assim mesmo.
-  Sem identificação, a Ouvidoria não tem como dar retorno a você.
+- **Você marcou anônima e os campos de nome e contato sumiram:** eles somem
+  junto com a identificação. Sem contato, a Ouvidoria não tem como dar retorno
+  a você.
 - **Você leu o QR do cartaz e o setor não aparece no alto da tela:** registre do
   mesmo jeito. A Ouvidoria define o setor responsável ao ler o seu relato.

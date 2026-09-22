@@ -7,14 +7,13 @@ sidebar:
   order: 21
 ---
 
-Na plataforma, **Secretária** não é um cargo: é um acesso. Ele existe para
-quem prepara a reunião que outra pessoa vai conduzir, e é por isso que ele
-enxerga mais de umas coisas e menos de outras.
+Na plataforma, **Secretária** é um acesso, dado a quem prepara a reunião que
+outra pessoa vai conduzir. Por isso ele enxerga mais de umas coisas e menos
+de outras.
 
 ## O que ela vê a mais
 
-- **As reuniões de toda a organização**, e não só as suas. É o acesso com
-  visão global da agenda.
+- **As reuniões de toda a organização**, com visão global da agenda.
 - **Uma tela própria de marcação**, com o campo **Facilitador**: ela escolhe
   quem vai conduzir. Ninguém mais tem esse campo.
 - **Uma lista de trabalho em Início**, com as reuniões que ainda vão acontecer,
@@ -43,7 +42,7 @@ cuida do que vem antes (data, sala, pessoas, pauta) e do que precisa ser
 corrigido depois (participante que faltou, nome errado). Quem conduziu é quem
 assume o que ficou escrito, e quem cobra o que saiu dali.
 
-## E o Super admin
+## E o Super Admin
 
 O **Super Admin** é o acesso mais alto de Reuniões e metas. Além de tudo o que
 o Facilitador faz, ele apaga reunião em qualquer estado, troca o facilitador de

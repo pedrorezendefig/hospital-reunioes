@@ -95,12 +95,12 @@ e em [Imprimir o cartaz com o QR do setor](/ouvidoria/imprimir-o-cartaz-com-o-qr
 ## A Diretoria passa a enxergar o todo
 
 Agosto de 2026. Nasceram o painel em tempo real, os relatórios quinzenal e mensal
-por e-mail, a nota externa do Google e do Reclame Aqui, e o apagamento automático
+por email, a nota externa do Google e do Reclame Aqui, e o apagamento automático
 do relato depois de cinco anos.
 
 Está em [Acompanhar o painel da Ouvidoria](/ouvidoria/acompanhar-o-painel-da-ouvidoria/),
 [Lançar a nota do Google e do Reclame Aqui](/ouvidoria/lancar-a-nota-do-google-e-do-reclame-aqui/)
-e [Os relatórios que chegam por e-mail](/ouvidoria/como-funciona/os-relatorios-que-chegam-por-email/).
+e [Os relatórios que chegam por email](/ouvidoria/como-funciona/os-relatorios-que-chegam-por-email/).
 
 ## O prazo agora tem consequência
 
@@ -118,7 +118,7 @@ Está em [Quando ninguém responde](/ouvidoria/como-funciona/quando-ninguem-resp
 
 Agosto de 2026. A Ouvidoria passou a viver na plataforma: formulário público,
 cartaz com QR por ponto de escuta, registro manual, classificação com sigilo e o
-acionamento da área por e-mail, com prazo contado em calendário útil.
+acionamento da área por email, com prazo contado em calendário útil.
 
 <video controls muted playsinline preload="metadata" src="/video/percepcao/317-a-reclamacao-chega-ao-setor-com-prazo.mp4"></video>
 

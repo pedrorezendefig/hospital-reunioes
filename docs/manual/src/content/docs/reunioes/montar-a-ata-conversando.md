@@ -45,5 +45,5 @@ Esta ata termina sem assinatura digital.
 - **Um responsável aparece sem vínculo no quadro:** o assistente não achou essa
   pessoa no cadastro. Diga o nome completo. Nome sem vínculo não recebe
   cobrança.
-- **O documento anexado não entrou na ata:** é assim mesmo. O assistente só usa
-  o documento de apoio quando você pede.
+- **O documento anexado não entrou na ata:** o assistente só usa o documento
+  de apoio quando você pede.
