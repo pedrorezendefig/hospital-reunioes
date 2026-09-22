@@ -130,6 +130,16 @@ async function linhaDe(protocolo: string): Promise<HTMLElement> {
   }
   return linhas[0];
 }
+/**
+ * O painel do menu de ações da linha (issue #777). Ele sai por portal no
+ * `body` desde que o `overflow-hidden` dos cards da fila passou a recortá-lo,
+ * então procurar item de menu dentro da linha acha nada, sempre, e a asserção
+ * passa a valer vazio. O gatilho continua na linha; só o painel viaja.
+ */
+function menuDe(protocolo: string): HTMLElement {
+  return screen.getByLabelText(`Ações da manifestação ${protocolo}`);
+}
+
 
 afterEach(async () => {
   // A leitura do cadastro de responsáveis continua em voo depois que a linha
@@ -241,9 +251,10 @@ describe("a ação primária vira botão de largura total com 44px de toque (RN-
     const linha = await linhaDe("2026-0007");
 
     fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
+    const menu = within(menuDe("2026-0007"));
     const itens = [
-      within(linha).getByRole("button", { name: "Encerrar" }),
-      within(linha).getByRole("link", { name: "Abrir manifestação" }),
+      menu.getByRole("button", { name: "Encerrar" }),
+      menu.getByRole("link", { name: "Abrir manifestação" }),
     ];
     for (const item of itens) {
       expect(item.className).toContain("min-h-[44px]");
