@@ -95,3 +95,12 @@ def test_o_env_manda_pedir_ao_pedro_as_chaves_da_central():
         assert f"`{chave}`" in item, f"o --env não cita {chave}"
     assert re.search(r"peça ao Pedro", item, re.I)
     assert "references/chaves.md" in item
+
+
+def test_a_skill_nunca_le_o_env_local_do_app_antigo():
+    """O caminho curto (copiar do `CentraldeComando`) é segredo fora do cofre."""
+    nunca = secao(SKILL, "O que esta skill nunca faz")
+
+    regra = re.search(r"^- Nunca lê nem copia o `\.env\.local`[^\n]*", nunca, re.M)
+    assert regra, "falta a regra do .env.local na lista do que a skill nunca faz"
+    assert "CentraldeComando" in regra.group(0)

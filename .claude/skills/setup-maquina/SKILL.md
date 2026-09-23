@@ -48,6 +48,7 @@ Saída: uma linha por checagem, com `OK`, `FALTA` (conta e dá exit 1), `AVISO` 
 - Nunca toca produção: zero `coolify deploy`, zero migration, zero escrita de env no Coolify.
 - Nunca instala sem confirmação e nunca usa `sudo`.
 - Nunca acessa o 1Password (nem `op`, nem pedir o valor no chat). Quem copia a chave é o humano.
+- Nunca lê nem copia o `.env.local` do app antigo da Central (`CentraldeComando`), nem o de outro projeto, mesmo que esteja na máquina: a origem das chaves é o cofre, e quem copia é o humano.
 
 ## Explicar o repositório (`/setup-maquina --mapa`, ou qualquer pergunta "o que é a pasta X")
 
