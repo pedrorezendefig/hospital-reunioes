@@ -21,17 +21,18 @@
  *    diz "Atualizando…". Se ele não trouxer números (o limite de taxa, a rede
  *    fora, o Google fora sem nada guardado no backend), os números de antes
  *    ficam e a razão vira `aviso`: a tela nunca zera por causa de uma falha.
- * 3. **A renovação automática**, de hora em hora com a tela aberta, contada da
- *    abertura, pela mesma rota do Atualizar agora (molde do `RefreshScope` da
- *    Central antiga, que também forçava a renovação). Ela é silenciosa: sem
+ * 3. **A renovação automática** (issue #858): com a tela aberta, relê pela
+ *    leitura comum (GET) quando o número da tela faz 1 hora, contada do
+ *    `frescor.atualizado_em` que o backend mandou, e não da abertura. Não força:
+ *    quem chega primeiro depois da hora faz a única ida à fonte, e as outras
+ *    abas e os outros Super admins pegam o número novo do cache do backend, sem
+ *    gastar o limite do Atualizar agora (que é por endereço, e os Super admins
+ *    atrás do mesmo NAT dividem um só). Se a releitura não trouxer número novo
+ *    (a fonte fora, que o backend segura por 5 minutos, ou o relógio da máquina
+ *    adiantado), relê de novo em 5 minutos, nunca antes. Ela é silenciosa: sem
  *    "Atualizando…" e sem aviso; se falhar, o carimbo que envelhece já diz de
- *    quando são os números. Forçar, e não reler, é o que faz cada renovação
- *    trazer número novo: uma releitura a 1 hora da abertura pegaria o cache
- *    ainda a segundos de vencer, e o número ficaria mais uma hora parado. O
- *    número da tela não tem idade máxima de 1 hora: se o cache já tinha quase
- *    1 hora quando a tela abriu, ele chega a quase 2 antes da primeira
- *    renovação. A barra sempre diz a idade, e o Atualizar agora resolve na hora.
- *    Ela não vai por cima de uma leitura ou de um clique ainda no ar.
+ *    quando são os números. Ela não vai por cima de uma leitura ou de um clique
+ *    ainda no ar.
  * 4. **O selo de sequência.** Cada pedido leva um número, e só escreve na tela
  *    se ainda for o último: trocar de período no meio de um Atualizar agora
  *    não deixa o número do período antigo entrar na tela do novo.
@@ -58,8 +59,30 @@ import {
 } from "@/lib/central-de-comando/api";
 import type { Periodo } from "@/lib/central-de-comando/periodo";
 
-/** A tela aberta se renova sozinha de hora em hora: a hora do cache do backend. */
-export const RENOVACAO_AUTOMATICA_MS = 60 * 60 * 1000;
+/** A hora do cache do backend: o número vale 1 hora a contar de quando foi buscado. */
+export const HORA_DO_CACHE_MS = 60 * 60 * 1000;
+
+/**
+ * O menor intervalo entre duas releituras automáticas: a espera do backend
+ * depois de uma falha da fonte. Vale quando a hora do número já passou e a
+ * releitura não trouxe outro (a fonte fora, o relógio da máquina adiantado), e
+ * quando a tela não tem carimbo para contar.
+ */
+export const RELEITURA_MINIMA_MS = 5 * 60 * 1000;
+
+/**
+ * Folga depois da hora: o relógio da máquina e o do servidor não batem ao
+ * milissegundo, e reler um instante antes da hora traria o número velho.
+ */
+const FOLGA_MS = 5 * 1000;
+
+/** Quanto falta para o número da tela fazer 1 hora, com a folga, e nunca menos que a releitura mínima. */
+function esperaAteRenovar(atualizadoEm: string | null): number {
+  if (atualizadoEm === null) return RELEITURA_MINIMA_MS;
+  const vence = Date.parse(atualizadoEm) + HORA_DO_CACHE_MS + FOLGA_MS;
+  if (Number.isNaN(vence)) return RELEITURA_MINIMA_MS;
+  return Math.max(vence - Date.now(), RELEITURA_MINIMA_MS);
+}
 
 /** Por que não há números na tela. */
 type Falha = Recusa | { tipo: "sem-conexao"; mensagem: string };
@@ -147,6 +170,19 @@ function avisoDa(resposta: { falha: Falha; status: number | null }): string {
   return resposta.status === 429 ? MUITAS_ATUALIZACOES : resposta.falha.mensagem;
 }
 
+/** O endereço da leitura da tela: o da abertura e o da renovação automática. */
+function enderecoDaLeitura(tela: TelaDaCentral, periodo: Periodo): string {
+  return `${BASE_CENTRAL}/${tela}?periodo=${periodo}`;
+}
+
+/**
+ * Quando reler, depois de um pedido que voltou: pelo carimbo, se ele trouxe
+ * números; senão, na releitura mínima, sem martelar.
+ */
+function proximaRenovacao<T extends { frescor: Frescor }>(resultado: Resposta<T>): number {
+  return "dados" in resultado ? esperaAteRenovar(resultado.dados.frescor.atualizado_em) : RELEITURA_MINIMA_MS;
+}
+
 export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCentral, periodo: Periodo) {
   const [quadro, despachar] = useReducer(reduzir<T>, QUADRO_INICIAL);
   // O selo do pedido mais novo: só ele escreve na tela.
@@ -159,16 +195,47 @@ export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCen
   // ao timer depois do render e do efeito, e o timer pode bater antes.
   const noAr = useRef<number | null>(null);
 
+  // O próximo disparo da renovação automática, ou nulo.
+  const agendado = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // 3. A renovação automática: relê em silêncio, pela leitura comum, quando o
+  // número da tela faz 1 hora. É agendada na hora em que os números chegam, e
+  // não num efeito que olha o estado: o efeito só roda depois do render, e o
+  // relógio pode bater antes (o CI em Linux já pegou essa corrida). Só troca os
+  // números se a releitura os trouxer; a falha fica calada, e o carimbo que
+  // envelhece já diz de quando são os números.
+  const programar = useCallback(
+    function programar(ms: number) {
+      if (agendado.current !== null) clearTimeout(agendado.current);
+      agendado.current = setTimeout(async () => {
+        agendado.current = null;
+        // Uma leitura ou um clique no ar: não vai por cima dele. Se ele trouxer
+        // números, reagenda pelo carimbo novo; senão, este tenta mais tarde.
+        if (noAr.current !== null) return programar(RELEITURA_MINIMA_MS);
+        const meu = ++selo.current;
+        const resultado = await pedir<T>(enderecoDaLeitura(tela, periodo), "GET");
+        if (meu !== selo.current) return;
+        if ("dados" in resultado) despachar({ tipo: "atualizou", dados: resultado.dados });
+        programar(proximaRenovacao(resultado));
+      }, ms);
+    },
+    [tela, periodo],
+  );
+
   // 1. A leitura, na abertura e a cada troca de período. O selo novo aposenta
-  // tudo o que ainda estiver no ar, leitura ou Atualizar agora do período velho.
+  // tudo o que ainda estiver no ar, leitura, Atualizar agora ou renovação do
+  // período velho, e a saída da tela também.
   useEffect(() => {
-    const meu = ++selo.current;
+    // As refs em variáveis do efeito: a limpeza mexe nelas, e não em nó do DOM.
+    const selos = selo;
+    const disparo = agendado;
+    const meu = ++selos.current;
     noAr.current = meu;
     despachar({ tipo: "abrir" });
     (async () => {
-      const resultado = await pedir<T>(`${BASE_CENTRAL}/${tela}?periodo=${periodo}`, "GET");
+      const resultado = await pedir<T>(enderecoDaLeitura(tela, periodo), "GET");
       if (noAr.current === meu) noAr.current = null;
-      if (meu !== selo.current) return;
+      if (meu !== selos.current) return;
       despachar({
         tipo: "leu",
         estado:
@@ -176,35 +243,30 @@ export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCen
             ? { tipo: "pronto", dados: resultado.dados }
             : { ...resultado.falha, status: resultado.status },
       });
+      programar(proximaRenovacao(resultado));
     })();
-  }, [tela, periodo]);
+    return () => {
+      ++selos.current;
+      if (disparo.current !== null) clearTimeout(disparo.current);
+      disparo.current = null;
+    };
+  }, [tela, periodo, programar]);
 
-  // 2 e 3. O Atualizar agora e a renovação automática, pela mesma rota.
-  const renovar = useCallback(
-    async (silenciosa: boolean) => {
+  // 2. O Atualizar agora.
+  const atualizarAgora = useCallback(() => {
+    void (async () => {
       const meu = ++selo.current;
-      if (!silenciosa) {
-        noAr.current = meu;
-        despachar({ tipo: "atualizar" });
-      }
+      noAr.current = meu;
+      despachar({ tipo: "atualizar" });
       const resultado = await pedir<T>(`${BASE_CENTRAL}/atualizar-agora?tela=${tela}&periodo=${periodo}`, "POST");
       if (noAr.current === meu) noAr.current = null;
       if (meu !== selo.current) return;
       if ("dados" in resultado) despachar({ tipo: "atualizou", dados: resultado.dados });
-      else if (!silenciosa) despachar({ tipo: "nao-atualizou", aviso: avisoDa(resultado) });
-    },
-    [tela, periodo],
-  );
-
-  const atualizarAgora = useCallback(() => void renovar(false), [renovar]);
-
-  useEffect(() => {
-    const id = setInterval(() => {
-      if (noAr.current !== null) return;
-      void renovar(true);
-    }, RENOVACAO_AUTOMATICA_MS);
-    return () => clearInterval(id);
-  }, [renovar]);
+      else despachar({ tipo: "nao-atualizou", aviso: avisoDa(resultado) });
+      // Também na falha: o clique pode ter aposentado uma renovação no ar.
+      programar(proximaRenovacao(resultado));
+    })();
+  }, [tela, periodo, programar]);
 
   return { ...quadro, atualizarAgora };
 }

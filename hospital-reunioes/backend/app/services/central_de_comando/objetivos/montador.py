@@ -45,7 +45,7 @@ from app.services.central_de_comando.periodo import (
     intervalo_anterior,
     intervalo_atual,
 )
-from app.services.central_de_comando.telas import PedidoDeTelaInvalidoError
+from app.services.central_de_comando.telas import Fonte, PedidoDeTelaInvalidoError, fontes_no
 from app.services.central_de_comando.variacao import variacao_relativa
 
 # As duas fontes que, caídas com número guardado, viram o último valor bom.
@@ -147,6 +147,20 @@ PERIODOS_POR_OBJETIVO: dict[ObjetivoId, tuple[Periodo, ...]] = {
 }
 
 
+# De onde vêm os números de cada lente. O Atualizar agora de uma lente vence as
+# telas vizinhas da mesma fonte e período, e o de uma vizinha vence a lente
+# (issue #858): a lente, a galeria e a tela do Instagram mostram o mesmo número.
+FONTES_POR_OBJETIVO: dict[ObjetivoId, tuple[Fonte, ...]] = {
+    "site-visitantes": ("google",),
+    "instagram-seguidores": ("instagram",),
+    "instagram-engajamento": ("instagram",),
+    "contatos": ("google",),
+}
+
+# A galeria lê todos os montadores, então lê das duas fontes.
+FONTES_DA_GALERIA: tuple[Fonte, ...] = ("google", "instagram")
+
+
 def tem_lente(identificador: str) -> bool:
     """O identificador é de um Objetivo navegável (existe e tem montador)?
     Objetivo inexistente ou em construção não tem lente: a rota responde 404."""
@@ -208,6 +222,7 @@ def ler_lente(identificador: str, periodo: Periodo, *, forcar: bool = False) -> 
         partial(montar_lente, identificador, periodo),
         forcar=forcar,
         falhas=_FALHAS,
+        fontes=fontes_no(FONTES_POR_OBJETIVO[identificador], periodo),
     )
     return {**copy.deepcopy(leitura.valor), "frescor": leitura.frescor.como_dict()}
 
@@ -219,6 +234,7 @@ def ler_galeria(*, forcar: bool = False) -> dict:
         partial(montar_galeria, PERIODO_DA_GALERIA),
         forcar=forcar,
         falhas=_FALHAS,
+        fontes=fontes_no(FONTES_DA_GALERIA, PERIODO_DA_GALERIA),
     )
     return {**copy.deepcopy(leitura.valor), "frescor": leitura.frescor.como_dict()}
 

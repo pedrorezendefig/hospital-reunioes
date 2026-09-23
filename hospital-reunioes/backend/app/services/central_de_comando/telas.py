@@ -27,15 +27,25 @@ se não houver nenhum guardado.
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import partial
+from typing import Literal
 
 from app.services.central_de_comando import dados_do_google as tela_dados_do_google
 from app.services.central_de_comando import instagram as tela_instagram
 from app.services.central_de_comando import provedor_google, provedor_instagram
 from app.services.central_de_comando.cache import cache_da_central
 from app.services.central_de_comando.periodo import PERIODOS, Periodo
+
+# De onde vêm os números de uma tela. O cache compara fonte e período para
+# saber quais telas o Atualizar agora de uma vizinha vence (issue #858).
+Fonte = Literal["google", "instagram"]
+
+
+def fontes_no(fontes: Iterable[Fonte], periodo: Periodo) -> set[tuple[Fonte, Periodo]]:
+    """As fontes no período, como o cache as compara."""
+    return {(fonte, periodo) for fonte in fontes}
 
 
 class PedidoDeTelaInvalidoError(ValueError):
@@ -57,11 +67,14 @@ class Tela:
       `GoogleError` do provedor é assim; a exceção crua do `httpx` não é (o
       texto dela traz a URL inteira).
     - `periodos`: os períodos que a tela tem. O Instagram só tem 7 e 28 dias.
+    - `fontes`: de onde vêm os números (`"google"`, `"instagram"`). O Atualizar
+      agora da tela vence as outras telas da mesma fonte e período (#858).
     """
 
     montar: Callable[[Periodo], dict]
     falhas: tuple[type[Exception], ...]
     periodos: tuple[Periodo, ...] = PERIODOS
+    fontes: tuple[Fonte, ...] = ()
 
 
 TELAS: dict[str, Tela] = {
@@ -75,6 +88,7 @@ TELAS: dict[str, Tela] = {
         montar=tela_dados_do_google.montar,
         falhas=(provedor_google.GoogleError,),
         periodos=PERIODOS,
+        fontes=("google",),
     ),
     # Instagram (#819): só 7 e 28 dias (a Graph API limita insights a 30 dias).
     # `InstagramError` cobre a falha da fonte, e o token vencido
@@ -84,6 +98,7 @@ TELAS: dict[str, Tela] = {
         montar=tela_instagram.montar,
         falhas=(provedor_instagram.InstagramError,),
         periodos=("7d", "28d"),
+        fontes=("instagram",),
     ),
 }
 
@@ -119,5 +134,6 @@ def ler(nome: str, periodo: Periodo, *, forcar: bool = False) -> dict:
         partial(tela.montar, periodo),
         forcar=forcar,
         falhas=tela.falhas,
+        fontes=fontes_no(tela.fontes, periodo),
     )
     return {**copy.deepcopy(leitura.valor), "frescor": leitura.frescor.como_dict()}

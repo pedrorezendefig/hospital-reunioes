@@ -374,6 +374,61 @@ class TestAtualizarAgoraNaLente:
         assert central_falsa.instagram.pedidos == []
 
 
+def _instagram(periodo: str = "28d") -> httpx.Response:
+    return cliente_da_central(SUPER_ADMIN).get(f"{PREFIXO_DA_CENTRAL}/instagram", params={"periodo": periodo})
+
+
+def _atualizar_tela(tela: str, periodo: str = "28d") -> httpx.Response:
+    return cliente_da_central(SUPER_ADMIN).post(
+        f"{PREFIXO_DA_CENTRAL}/atualizar-agora", params={"tela": tela, "periodo": periodo}
+    )
+
+
+def _seguidores_na_galeria() -> int:
+    objetivos = {o["id"]: o for o in _galeria().json()["objetivos"]}
+    return objetivos["instagram-seguidores"]["numero"]["valor"]
+
+
+def _seguidores_na_lente() -> int:
+    numeros = _lente("instagram-seguidores", "28d").json()["numeros"]
+    return {n["chave"]: n["valor"] for n in numeros}["followers"]
+
+
+class TestSincroniaEntreTelas:
+    """Depois do Atualizar agora numa tela, as telas vizinhas que mostram a
+    mesma métrica no mesmo período mostram o mesmo número (issue #858, achado
+    do revisor no PR #863). Todas já estavam no cache, dentro da hora."""
+
+    @pytest.fixture(autouse=True)
+    def _tudo_lido_e_seguidores_mudaram(self, central_falsa, relogio_da_central):
+        _galeria()
+        _lente("instagram-seguidores", "28d")
+        _instagram()
+        central_falsa.instagram.seguidores = 20000
+        relogio_da_central.avancar(minutes=5)
+
+    def test_atualizar_a_lente_renova_a_galeria_e_a_tela_do_instagram(self):
+        assert _atualizar_tela("objetivos/instagram-seguidores").status_code == 200
+
+        assert _seguidores_na_galeria() == 20000
+        assert _instagram().json()["seguidores"]["total"] == 20000
+
+    def test_atualizar_a_tela_do_instagram_renova_a_lente_e_a_galeria(self):
+        assert _atualizar_tela("instagram").status_code == 200
+
+        assert _seguidores_na_lente() == 20000
+        assert _seguidores_na_galeria() == 20000
+
+    def test_outro_periodo_continua_no_cache(self, central_falsa):
+        _lente("instagram-seguidores", "7d")
+        _atualizar_tela("instagram", "28d")
+        idas = len(central_falsa.instagram.pedidos)
+
+        _lente("instagram-seguidores", "7d")
+
+        assert len(central_falsa.instagram.pedidos) == idas
+
+
 class TestVocabularioNaLente:
     def test_a_lente_nao_fala_em_meta_nem_em_braco(self, central_falsa):
         texto = _lente("site-visitantes", "28d").text

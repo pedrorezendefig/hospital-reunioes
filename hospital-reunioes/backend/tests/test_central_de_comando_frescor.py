@@ -329,6 +329,58 @@ class TestFonteFora:
 # ─── O registro de telas, a porta das fatias seguintes ───────────────────────
 
 
+class TestEsperaDepoisDeFalha:
+    """Com o Google fora, a leitura não volta a ele por 5 minutos (issue #858):
+    a tela segue com o último valor bom e o aviso, sem nova ida. O Atualizar
+    agora continua forçando."""
+
+    def _google_caiu(self, cliente, google_falso, relogio_da_central):
+        _ler(cliente)
+        relogio_da_central.avancar(hours=2)
+        google_falso.forcar = erro_da_ga4(500, "INTERNAL", "Internal error encountered.")
+        _ler(cliente)
+        return len(google_falso.pedidos)
+
+    def test_leituras_seguidas_dentro_da_espera_nao_vao_ao_google(
+        self, cliente, google_falso, lote_da_ga4, relogio_da_central
+    ):
+        idas = self._google_caiu(cliente, google_falso, relogio_da_central)
+        relogio_da_central.avancar(minutes=4)
+
+        respostas = [_ler(cliente) for _ in range(3)]
+
+        assert len(google_falso.pedidos) == idas
+        for resposta in respostas:
+            assert resposta.status_code == 200, resposta.text
+            assert _lider(resposta.json()) == 7100
+            assert resposta.json()["frescor"]["atualizacao_falhou"] is True
+
+    def test_passada_a_espera_a_leitura_tenta_o_google_de_novo(
+        self, cliente, google_falso, lote_da_ga4, relogio_da_central
+    ):
+        idas = self._google_caiu(cliente, google_falso, relogio_da_central)
+        relogio_da_central.avancar(minutes=5)
+        google_falso.forcar = None
+
+        corpo = _ler(cliente).json()
+
+        assert len(google_falso.pedidos) > idas
+        assert corpo["frescor"]["atualizacao_falhou"] is False
+
+    def test_o_atualizar_agora_forca_a_ida_dentro_da_espera(
+        self, cliente, google_falso, lote_da_ga4, relogio_da_central
+    ):
+        idas = self._google_caiu(cliente, google_falso, relogio_da_central)
+        relogio_da_central.avancar(minutes=1)
+        google_falso.forcar = None
+
+        resposta = _atualizar_agora(cliente)
+
+        assert resposta.status_code == 200, resposta.text
+        assert len(google_falso.pedidos) > idas
+        assert resposta.json()["frescor"]["atualizacao_falhou"] is False
+
+
 class FonteDeTesteForaError(Exception):
     """A falha de fonte da tela de mentira, com frase fixa."""
 
