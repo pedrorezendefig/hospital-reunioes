@@ -16,3 +16,20 @@
 INSERT INTO tecnologia_produtos (nome, ordem) VALUES
   ('Central de Comando', (SELECT COALESCE(MAX(ordem), 0) + 1 FROM tecnologia_produtos))
 ON CONFLICT DO NOTHING;
+
+-- O dono: o mesmo do Site. A migration 102 nao carimba dono porque nao sabe
+-- quem e; aqui ha uma escolha humana para copiar. A Central sao os numeros do
+-- Site e do Instagram, e quem responde pelo Site do lado da Vitta responde por
+-- eles. Sem dono a API recusa Demanda no Produto, e o pedido sobre a Central
+-- nao teria para onde ir.
+--
+-- Idempotente e conservador: so preenche a Central SEM dono, entao rodar de
+-- novo nao troca o dono escolhido depois pela tela. Site sem dono deixa a
+-- Central sem dono tambem, e a tela cobra um, como cobra dos sete do seed.
+UPDATE tecnologia_produtos AS central
+   SET dono_id = site.dono_id
+  FROM tecnologia_produtos AS site
+ WHERE lower(central.nome) = 'central de comando'
+   AND central.dono_id IS NULL
+   AND lower(site.nome) = 'site'
+   AND site.dono_id IS NOT NULL;
