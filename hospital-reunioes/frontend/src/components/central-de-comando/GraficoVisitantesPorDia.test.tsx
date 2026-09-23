@@ -29,7 +29,20 @@ vi.mock("recharts", async (importOriginal) => {
   };
 });
 
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  vi.useRealTimers();
+});
+
+/**
+ * Congela o relógio num instante escrito com o fuso de Brasília (`-03:00`): é
+ * o dia do hospital que diz o que é "ontem" (issue #857). Só o `Date` é
+ * trocado; o resto do `recharts` roda com os timers de verdade.
+ */
+function relogioEm(instante: string) {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date(instante));
+}
 
 function ponto(
   data: string,
@@ -107,6 +120,9 @@ describe("GraficoVisitantesPorDia", () => {
   });
 
   it("no celular, o eixo dos dias tem no máximo 4 rótulos curtos, e o último dia é 'ontem'", () => {
+    // 22h de 18/09 em Brasília: o 17 é ontem, mesmo com o UTC já em 19/09.
+    relogioEm("2026-09-18T22:00:00-03:00");
+
     const { container } = render(<GraficoVisitantesPorDia pontos={vinteEOitoDias()} />);
 
     const rotulos = [...container.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick-value")].map(
@@ -115,7 +131,20 @@ describe("GraficoVisitantesPorDia", () => {
     expect(rotulos).toEqual(["21 ago", "30 ago", "8 set", "ontem"]);
   });
 
+  it("às 22h de Brasília, o último dia que ainda é o hoje de Brasília não é 'ontem'", () => {
+    // 22h de 17/09 em Brasília já é 18/09 em UTC: o dia 17 está pela metade.
+    relogioEm("2026-09-17T22:00:00-03:00");
+
+    const { container } = render(<GraficoVisitantesPorDia pontos={vinteEOitoDias()} />);
+
+    const rotulos = [...container.querySelectorAll(".recharts-xAxis .recharts-cartesian-axis-tick-value")].map(
+      (rotulo) => rotulo.textContent,
+    );
+    expect(rotulos).toEqual(["21 ago", "30 ago", "8 set", "17 set"]);
+  });
+
   it("ao passar o dedo ou o mouse, mostra os Visitantes do dia e a comparação com o anterior", () => {
+    relogioEm("2026-09-17T09:00:00-03:00");
     const { container } = render(<GraficoVisitantesPorDia pontos={TRES_DIAS} />);
 
     // 360 px de largura: o eixo dos Visitantes ocupa os primeiros 48 e a
@@ -135,7 +164,7 @@ describe("DicaDoDia", () => {
       <DicaDoDia
         active
         payload={[{ payload: p, value: p.visitantes, dataKey: "visitantes" }]}
-        ultimoDia="2026-09-17"
+        ontem="2026-09-17"
         comAnterior={comAnterior}
       />,
     );
@@ -176,7 +205,7 @@ describe("DicaDoDia", () => {
   });
 
   it("fora do dedo e do mouse, não mostra nada", () => {
-    const { container } = render(<DicaDoDia active={false} payload={[]} ultimoDia="2026-09-17" comAnterior />);
+    const { container } = render(<DicaDoDia active={false} payload={[]} ontem="2026-09-17" comAnterior />);
 
     expect(container.textContent).toBe("");
   });

@@ -44,14 +44,35 @@ export type PontoDoMovimento = {
 // continua com altura de gráfico, sem virar uma tira.
 const ALTURA = 240;
 
+// O dia do hospital, e não o do navegador: é o fuso em que o backend fecha o
+// período (issue #857).
+const DIA_NO_HOSPITAL = new Intl.DateTimeFormat("pt-BR", {
+  timeZone: "America/Sao_Paulo",
+  day: "numeric",
+  month: "numeric",
+  year: "numeric",
+});
+
+/**
+ * O "ontem" do hospital visto de `agora` (epoch em ms), como data ISO
+ * (`2026-09-17`), a mesma forma das datas do payload. Das 21h à meia-noite de
+ * Brasília o dia em UTC já virou, e o ontem de UTC é o hoje do hospital.
+ */
+function ontemNoHospital(agora: number): string {
+  const partes = DIA_NO_HOSPITAL.formatToParts(agora);
+  const parte = (tipo: Intl.DateTimeFormatPartTypes) => Number(partes.find((p) => p.type === tipo)?.value);
+  return new Date(Date.UTC(parte("year"), parte("month") - 1, parte("day") - 1)).toISOString().slice(0, 10);
+}
+
 /**
  * O gráfico de Visitantes por dia de Dados do Google (issue #817, ADR 0058).
  *
  * Porte do `VisitorsChart` do repositório antigo em `recharts`, no molde dos
  * gráficos do dashboard, com as cores dos tokens do app: a linha do período
  * escolhido em azul e a do período anterior em cinza tracejado, atrás, só
- * quando ele teve visita. No eixo, no máximo 4 dias, o último chamado de
- * "ontem" (o período termina ontem), para caber no celular. Passar o dedo ou o
+ * quando ele teve visita. No eixo, no máximo 4 dias, para caber no celular; o
+ * dia que é mesmo ontem no hospital aparece como "ontem" (o período termina
+ * ontem, mas o número pode ter vindo de antes da meia-noite). Passar o dedo ou o
  * mouse mostra o dia, os Visitantes e a comparação com o dia correspondente
  * do anterior; a conta dessa comparação vem pronta do backend.
  */
@@ -61,7 +82,7 @@ export function GraficoVisitantesPorDia({ pontos }: { pontos: PontoDoMovimento[]
   }
 
   const comAnterior = temAnterior(pontos);
-  const ultimoDia = pontos[pontos.length - 1].data;
+  const ontem = ontemNoHospital(Date.now());
   const marcas = marcasDoEixo(pontos.length).map((i) => pontos[i].data);
   const rotulo =
     `Visitantes por dia nos últimos ${pontos.length} dias.` +
@@ -89,7 +110,7 @@ export function GraficoVisitantesPorDia({ pontos }: { pontos: PontoDoMovimento[]
               dataKey="data"
               ticks={marcas}
               interval={0}
-              tickFormatter={(data: string) => (data === ultimoDia ? "ontem" : formatarDiaCurto(data))}
+              tickFormatter={(data: string) => (data === ontem ? "ontem" : formatarDiaCurto(data))}
               tick={{ fontSize: 12, fill: COR_DO_EIXO }}
               tickLine={false}
               axisLine={false}
@@ -104,7 +125,7 @@ export function GraficoVisitantesPorDia({ pontos }: { pontos: PontoDoMovimento[]
               axisLine={false}
             />
             <Tooltip
-              content={<DicaDoDia ultimoDia={ultimoDia} comAnterior={comAnterior} />}
+              content={<DicaDoDia ontem={ontem} comAnterior={comAnterior} />}
               cursor={{ stroke: COR_DA_GRADE }}
               isAnimationActive={false}
             />
@@ -137,24 +158,24 @@ export function GraficoVisitantesPorDia({ pontos }: { pontos: PontoDoMovimento[]
 }
 
 /**
- * A dica do dia sob o dedo ou o mouse: o dia (o último é "ontem"), os
- * Visitantes, e, com o período anterior no gráfico, os Visitantes do dia
- * correspondente e a variação, com a seta do sentido e sem sinal de menos
- * (molde do número-manchete da Visão Geral).
+ * A dica do dia sob o dedo ou o mouse: o dia (com "ontem" na frente quando é
+ * o `ontem` do hospital), os Visitantes, e, com o período anterior no gráfico,
+ * os Visitantes do dia correspondente e a variação, com a seta do sentido e sem
+ * sinal de menos (molde do número-manchete da Visão Geral).
  */
 export function DicaDoDia({
   active,
   payload,
-  ultimoDia,
+  ontem,
   comAnterior,
-}: TooltipProps<number, string> & { ultimoDia: string; comAnterior: boolean }) {
+}: TooltipProps<number, string> & { ontem: string; comAnterior: boolean }) {
   const ponto = payload?.[0]?.payload as PontoDoMovimento | undefined;
   if (!active || !ponto) return null;
 
   return (
     <div className="space-y-1 rounded-lg border border-border bg-white px-3 py-2 text-sm shadow-premium">
       <p className="text-xs text-text-secondary">
-        {ponto.data === ultimoDia ? `ontem · ${formatarDiaLongo(ponto.data)}` : formatarDiaLongo(ponto.data)}
+        {ponto.data === ontem ? `ontem · ${formatarDiaLongo(ponto.data)}` : formatarDiaLongo(ponto.data)}
       </p>
       <p className="font-semibold tabular-nums text-text">
         {formatarInteiro(ponto.visitantes)} {ponto.visitantes === 1 ? "visitante" : "visitantes"}
