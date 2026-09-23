@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-23T16:59:08-03:00",
+      "sha": "37e42427",
+      "app_version": "0.154.2",
+      "subject": "Onda onda-a: Acabamentos das revisões da #815 e da #818 na Central de Comando; Barra de frescor neutra sem carimbo e motivo de bloco sem segredo",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#870 #869)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 25,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #870 #869. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-09-23T15:14:30-03:00",
       "sha": "f6504200",
       "app_version": "0.154.1",
@@ -1499,26 +1531,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Segunda fatia da onda 1, e a que mudou de peso durante a execucao. A issue pedia so portar _pdf_url_fetcher para a API nova do WeasyPrint (a classe URLFetcher, que substituiu default_url_fetcher no 70.0) e tirar o teto <70 que o PR #624 tinha posto de emergencia. Ao portar, o autor descobriu que a guarda anti-SSRF do PDF do POP estava INERTE em producao desde a issue #152: o url_fetcher era passado ao write_pdf, e quem busca recursos e o objeto HTML, entao o WeasyPrint descartava a opcao em silencio (no 70 ele ao menos loga Unknown rendering option, no 62.3 nem isso). Medido com um fetcher que recusa tudo: pelo write_pdf o PDF sai com 143049 bytes e o logo embutido, pelo construtor sai com 2326 bytes e sem logo. Ou seja, file:// arbitrario e SSRF nunca foram barrados ali. O fetcher passou para o construtor do HTML e o teste test_guarda_esta_ligada_no_render_do_pop trava isso. Area sensivel, entao o orquestrador rodou 2 revisores dedicados em paralelo, um de codigo e um de seguranca. Eles acharam, por caminhos independentes e os dois reproduzindo por execucao, um bug NOVO que o proprio port criou: o URLFetcher do 70 guarda estado em self._request, e a guarda levantava ValueError antes do super().fetch(), entao uma recusa vinda do open (o caminho do redirect) deixava a requisicao recusada pendurada e a busca SEGUINTE do mesmo PDF a reexecutava, enfiando os bytes no PDF. Um revisor pediu o file:// do logo e recebeu o corpo do servidor em 127.0.0.1; o outro montou um 302 real e recebeu SEGREDO-DA-REDE-INTERNA no lugar do PNG. Consertado com self._request = None antes dos tres raise (nao so o do host) e travado pelo teste test_recusa_no_redirect_nao_envenena_a_busca_seguinte, que cria o fetcher uma vez e reusa o mesmo objeto nas tres sequencias, que e justamente a propriedade de estado em jogo. Segundo must-fix: a justificativa do piso >=70 era falsa. O revisor de codigo baixou os wheels 62.3, 65.1, 66.0, 67.0, 68.0, 68.1, 69.0 e 70.0 do PyPI e leu urls.py em cada um: URLFetcher existe desde o 68.0, ja com as assinaturas usadas. O orquestrador decidiu por >=68, que e o piso verdadeiro e a menor mudanca que respeita o pedido da triagem; o revisor depois montou venvs com 68.0, 68.1 e 69.0 e rodou a guarda real nas quatro versoes. Achado de versao que ninguem tinha fixado: self._request nao existe no 68.0 nem no 68.1 (o pai sempre monta um Request novo) e existe do 69.0 em diante, e o open sobrescrito que protege o redirect ja existe no 68.0, entao o piso >=68 pega a protecao sem pegar o bug. Prova por mutacao: 14 plantados, 13 mortos, incluindo afrouxamentos (allowlist por prefixo, allowlist sem caixa, is_reserved removido, DNS fail-open) e tres mutantes no proprio detector. O unico sobrevivente, B2 (remocao de is_link_local), e equivalente de verdade, confirmado de forma independente pelos dois revisores: is_private do Python ja engloba loopback, link-local e unspecified. Essa mesma varredura achou um buraco real, porque is_reserved e o unico predicado que decide sozinho (em 64:ff9b::), e o mutante B3 sobrevivia com a lista de IPs original. As recusas sao asseridas pelo marcador da mensagem e nao por raises(ValueError), porque as tres levantam o mesmo tipo. Atenuante da vulnerabilidade que estava viva: a rota do PDF do POP e autenticada (app/routers/pops/documento.py:33), nao e o canal publico, e o bleach mais o sanitizar_svg seguravam como primeira camada. CI e Dockerfile instalam do pyproject.toml e nao do lock, entao o Docker Build verde e a prova real do piso; uv pip compile sai 70.0 antes e depois. Ficou registrado e nao tocado: pdf_generator.py (Ata), ouvidoria_relatorio.py e ouvidoria_pontos.py chamam write_pdf sem url_fetcher nenhum, sem guarda alguma, e a guarda nao recusa multicast. Sobrou uma imprecisao conhecida: o docstring da fabrica ainda diz que a classe vale a partir do 70, quando o piso e 68."
-    },
-    {
-      "at": "2026-09-08T20:48:21-03:00",
-      "sha": "d7c7996",
-      "app_version": "0.115.2",
-      "subject": "o rollback do prazo da area so toca o carimbo que a propria ida escreveu, e a leitura do instante vira ponto unico",
-      "raw_subject": "refactor(ouvidoria): rollback so toca o carimbo que a ida escreveu, e _instante vira ponto unico (#629)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 de 1 desta sessao, duas fatias em paralelo: #623 (fatia P) e #625 (fatia M), as duas fechando o desenvolvimento em 1 tentativa. Sao as sobras que os revisores do PR #619 (issue #607) marcaram como menores. Duas coisas: o rollback de _restaurar_prazo passou a receber carimbo_a_restaurar como dict e so inclui area_estourou_em sob a mesma condicional da ida, e _instante virou ler_instante em ouvidoria_prazos.py, consumido pelos dois routers (o nome ganhou prefixo porque o modulo ja usa instante como variavel local em tres funcoes). O contrato da triagem tinha duas frases que divergiam num caso e o autor achou isso sozinho: como estouro_consumado devolve ja_consumado quando ha carimbo, estourou e estouro_anterior nao sao mutuamente exclusivos, entao a leitura literal (so quando havia carimbo anterior) deixaria o caso que fura o prazo NESTA devolucao voltar com prazo restaurado e carimbo gravado, reabrindo exatamente o #607. Ele implementou o espelho da ida e deixou a prova executavel no mutante M3. Prova por mutacao: 5 plantados, 5 mortos, dois deles no proprio detector (updates em ordem invertida e espiao cego). Os testes asserem o payload do update e nao a linha no banco, porque o banco nao distingue coluna nunca escrita de coluna escrita com None. Revisor independente de 2 lentes voltou limpo na rodada 1: 0 must-fix e 5 nice-to-have, todos registrados no PR. Ele confirmou por leitura do codigo, nao pela tabela do autor, que ler_instante e identica as duas copias removidas, que nao ha orfao nem import circular, que os dois .eq de guarda continuam de pe, e plantou 2 mutantes proprios que tambem morreram. O maior dos nice-to-have: existe um quarto caso (carimbo antigo mais prazo furado agora) que o codigo acerta mas nenhum teste segura. Rebase sobre a main que ja trazia o PR #628 da sessao paralela, no mesmo ouvidoria.py, sem conflito nenhum; suite pos-rebase com 3667 passed. Registrado que _instante ainda existe copiado em cinco services, fora do escopo desta issue."
     }
   ]
 }

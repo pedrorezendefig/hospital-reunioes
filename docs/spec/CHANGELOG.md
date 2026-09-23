@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.154.2 - 2026-09-23 16:59 - Onda onda-a: Acabamentos das revisões da #815 e da #818 na Central de Comando; Barra de frescor neutra sem carimbo e motivo de bloco sem segredo
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `37e4242`
+- PRs: [#870](https://github.com/pedrorezendefig/hospital-reunioes/pull/870), [#869](https://github.com/pedrorezendefig/hospital-reunioes/pull/869)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (25s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/37e4242
+
 ## 2026-09-23 15:14 — Central de Comando: uma ida à fonte por tela e hora, espera depois de falha e telas em sincronia
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `f650420`
