@@ -27,6 +27,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 from central_de_comando_apoio import (  # noqa: E402
     HOST_DA_GRAPH_API,
     PREFIXO_DA_CENTRAL,
+    SECRETARIA,
     SUPER_ADMIN,
     VISITANTES_NA_GA4,
     GoogleFalso,
@@ -219,6 +220,11 @@ class TestLenteInstagramEngajamento:
         assert numeros["interactions"]["valor"] == 7820
         assert numeros["accountsEngaged"]["valor"] == 5140
 
+    def test_sem_regra_disparada_vem_sem_sugestao(self, central_falsa):
+        """Interações e Alcance subindo, sem Reels no topo: estado calmo, e a
+        tela diz que está tudo no rumo (issue #861)."""
+        assert _lente("instagram-engajamento", "28d").json()["sugestoes"] == []
+
     def test_interacoes_em_queda_com_alcance_mantido_gera_sugestao(self, central_falsa):
         central_falsa.instagram.insights[_28_DIAS]["total_interactions"] = 5000
 
@@ -293,6 +299,79 @@ class TestCache:
 
         assert segunda == primeira
         assert len(central_falsa.google.pedidos) == idas_da_primeira
+
+
+def _atualizar_lente(identificador: str, periodo: str = "28d", logado: dict | None = SUPER_ADMIN) -> httpx.Response:
+    return cliente_da_central(logado).post(
+        f"{PREFIXO_DA_CENTRAL}/atualizar-agora",
+        params={"tela": f"objetivos/{identificador}", "periodo": periodo},
+    )
+
+
+class TestAtualizarAgoraNaLente:
+    """A lente tem o Atualizar agora das outras telas (issue #861), pela mesma
+    rota genérica e com o mesmo limite de taxa: forçar a lente é ir às fontes
+    que ela lê, e o carimbo muda."""
+
+    def test_vai_a_fonte_mesmo_com_o_cache_valido_e_o_carimbo_muda(self, central_falsa, relogio_da_central):
+        _lente("instagram-seguidores", "28d")
+        idas_da_leitura = len(central_falsa.instagram.pedidos)
+        central_falsa.instagram.insights[_28_DIAS]["reach"] = 50000
+        relogio_da_central.avancar(minutes=5)
+
+        resposta = _atualizar_lente("instagram-seguidores")
+
+        assert resposta.status_code == 200, resposta.text
+        corpo = resposta.json()
+        assert len(central_falsa.instagram.pedidos) > idas_da_leitura
+        assert {n["chave"]: n["valor"] for n in corpo["numeros"]}["reach"] == 50000
+        assert corpo["frescor"] == {
+            "atualizado_em": "2026-09-18T13:50:00+00:00",
+            "atualizacao_falhou": False,
+            "motivo": None,
+        }
+
+    def test_depois_dele_a_leitura_comum_ja_serve_o_numero_novo(self, central_falsa, relogio_da_central):
+        _lente("site-visitantes", "28d")
+        central_falsa.google.visitantes[_28_DIAS] = 99999
+        relogio_da_central.avancar(minutes=5)
+        _atualizar_lente("site-visitantes")
+        relogio_da_central.avancar(minutes=5)
+
+        corpo = _lente("site-visitantes", "28d").json()
+
+        assert {n["chave"]: n["valor"] for n in corpo["numeros"]}["visitors"] == 99999
+        assert corpo["frescor"]["atualizado_em"] == "2026-09-18T13:50:00+00:00"
+
+    @pytest.mark.parametrize("identificador", ["nao-existe", "site-area", "../instagram", ""])
+    def test_objetivo_sem_lente_e_recusado_sem_ir_a_fonte(self, central_falsa, identificador):
+        resposta = _atualizar_lente(identificador)
+
+        assert resposta.status_code == 422
+        assert central_falsa.google.pedidos == []
+        assert central_falsa.instagram.pedidos == []
+
+    def test_o_instagram_nao_tem_90_dias_e_e_422_sem_ir_a_fonte(self, central_falsa):
+        resposta = _atualizar_lente("instagram-engajamento", "90d")
+
+        assert resposta.status_code == 422
+        assert central_falsa.instagram.pedidos == []
+
+    def test_divide_o_limite_de_5_por_minuto_do_atualizar_agora(self, central_falsa):
+        respostas = [_atualizar_lente("instagram-seguidores").status_code for _ in range(5)]
+        idas_antes = len(central_falsa.instagram.pedidos)
+
+        sexto = _atualizar_lente("instagram-seguidores")
+
+        assert respostas == [200] * 5
+        assert sexto.status_code == 429
+        assert len(central_falsa.instagram.pedidos) == idas_antes
+
+    def test_quem_nao_e_super_admin_nao_forca_ida_nenhuma(self, central_falsa):
+        resposta = _atualizar_lente("instagram-seguidores", logado=SECRETARIA)
+
+        assert resposta.status_code == 403
+        assert central_falsa.instagram.pedidos == []
 
 
 class TestVocabularioNaLente:

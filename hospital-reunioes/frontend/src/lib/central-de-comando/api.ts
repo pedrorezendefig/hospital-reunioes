@@ -13,8 +13,11 @@ export const BASE_CENTRAL = "/api/admin/central-de-comando";
  * leitura é `GET {BASE_CENTRAL}/{tela}?periodo=` e o Atualizar agora é
  * `POST {BASE_CENTRAL}/atualizar-agora?tela=&periodo=`. Tela nova entra aqui
  * e no registro de telas do backend, como Dados do Google na #817.
+ *
+ * A lente de um Objetivo é `objetivos/{id}` (issue #861): o mesmo caminho da
+ * leitura dela, que o Atualizar agora do backend também reconhece.
  */
-export type TelaDaCentral = "visao-geral" | "dados-do-google" | "instagram";
+export type TelaDaCentral = "visao-geral" | "dados-do-google" | "instagram" | `objetivos/${string}`;
 
 /**
  * O Atualizar agora tem limite de taxa no backend. O 429 do `slowapi` chega
