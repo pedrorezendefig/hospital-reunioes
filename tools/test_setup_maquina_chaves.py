@@ -16,6 +16,7 @@ import pytest
 RAIZ = Path(__file__).resolve().parent.parent
 SKILL_DIR = RAIZ / ".claude" / "skills" / "setup-maquina"
 CHAVES = (SKILL_DIR / "references" / "chaves.md").read_text(encoding="utf-8")
+SKILL = (SKILL_DIR / "SKILL.md").read_text(encoding="utf-8")
 ENV_EXEMPLO = (RAIZ / "hospital-reunioes" / ".env.example").read_text(encoding="utf-8")
 
 # Os nomes que o backend lê para ligar a Central (ADR 0058).
@@ -77,3 +78,20 @@ def test_a_credencial_do_google_e_o_json_inteiro_nao_o_caminho():
     assert "caminho" in nota
     assert "JSON inteiro" in nota
     assert "`GOOGLE_APPLICATION_CREDENTIALS_JSON`" in nota
+
+
+def item_do_env() -> str:
+    """O passo `--env` da lista "O que fazer com o resultado" do SKILL.md."""
+    achado = re.search(r"^4\. Com `--env`.*?(?=^\d+\. )", SKILL, re.S | re.M)
+    assert achado, "sumiu o passo `--env` do SKILL.md"
+    return achado.group(0)
+
+
+def test_o_env_manda_pedir_ao_pedro_as_chaves_da_central():
+    item = item_do_env()
+
+    assert "Central de Comando" in item
+    for chave in CHAVES_DA_CENTRAL:
+        assert f"`{chave}`" in item, f"o --env não cita {chave}"
+    assert re.search(r"peça ao Pedro", item, re.I)
+    assert "references/chaves.md" in item
