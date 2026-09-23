@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.156.0 - 2026-09-23 20:54 - Onda onda-b: Limite de 60 por minuto na rota pública POST /api/mcp; Diz de onde vêm as chaves do GA4 e do Instagram; Aquecer o cache no boot, uma vez, no período padrão
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `3468a09`
+- PRs: [#874](https://github.com/pedrorezendefig/hospital-reunioes/pull/874), [#875](https://github.com/pedrorezendefig/hospital-reunioes/pull/875), [#876](https://github.com/pedrorezendefig/hospital-reunioes/pull/876)
+- Serviços: backend
+- Resultado: 🟢 healthy (19s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/3468a09
+
 ## v0.155.0 - 2026-09-23 17:43 - Onda onda-a: Período termina no ontem de Brasília; Agrupamentos de Dados do Google seguem o CONTEXT.md
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `b7e6cde`

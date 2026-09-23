@@ -2,6 +2,36 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-23T20:54:12-03:00",
+      "sha": "3468a09e",
+      "app_version": "0.156.0",
+      "subject": "Onda onda-b: Limite de 60 por minuto na rota pública POST /api/mcp; Diz de onde vêm as chaves do GA4 e do Instagram; Aquecer o cache no boot, uma vez, no período padrão",
+      "raw_subject": "chore(deploy): registro da onda onda-b (#874 #875 #876)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 19,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-b: PRs #874 #875 #876. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-09-23T17:43:40-03:00",
       "sha": "b7e6cdec",
       "app_version": "0.155.0",
@@ -1503,38 +1533,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda 3 desta sessao: issue #627 sozinha, ultima filha aberta do PRD #591. O arquivamento em lote que a #594 entregou carimbava os casos e registrava o log de acesso em dois passos, entao uma falha no meio deixava lote arquivado sem rastro. A migration 101 traz a funcao ouvidoria_arquivar_encerrados, que faz os dois na MESMA transacao, sem bloco EXCEPTION de proposito, e o recorte passou a viver dentro do proprio UPDATE em vez de numa leitura anterior. Sem indice e sem tocar no ato de um caso so, como a triagem pedia. A triagem pedia tambem SECURITY DEFINER, e essa parte foi EMENDADA no checkpoint: ficou SECURITY INVOKER, com as duas reviews e o dono de acordo, porque quem chama e o backend com service_role, que ja passa por cima do RLS; DEFINER nao habilitaria nada e so tiraria uma camada, ja que aplicada pelo Studio a funcao nasceria com owner postgres e o REVOKE seria a unica coisa entre a anon_key do bundle e um UPDATE em massa. A emenda ficou registrada na issue e no corpo do PR. Os dois must-fix da revisao giraram em torno dessa mesma linha do SQL, e o mais perigoso nao era codigo: o corpo do PR CONVIDAVA o humano a trocar a clausula na hora de colar no Studio, o que quebraria a prova por hash que o proprio corpo afirma e deixaria o SET search_path obrigatorio so em prosa. O outro era que essa clausula era a UNICA linha do SQL sem guarda de teste: troca-la deixava os 127 testes verdes. Os dois fecharam em uma rodada, e a verificacao focada voltou limpa nos cinco pontos, com o verificador provando por mutacao no proprio detector qual assercao trabalha. Esta onda transformou a licao do PR #632 em procedimento: o ORQUESTRADOR conferiu por hash, antes de entregar o SQL ao humano, que o bloco do corpo publicado e identico ao arquivo, e repetiu a conferencia depois da edicao do corpo. E a fumaca da RPC rodou contra producao com a chave anonima ANTES do merge, devolvendo SQLSTATE 42501, o que prova de uma vez que a funcao existe (senao viria PGRST202) e que o REVOKE pegou; ela e segura por construcao, porque SMOKE627 nao e id valido de participante e as duas colunas escritas tem FK, entao a transacao morreria antes de qualquer escrita. O teto de lote foi medido em vez de chutado: authenticator ja carrega statement_timeout=8s e lock_timeout=8s, e a RPC rodou 10 mil casos em 166 ms, 50 mil em 1,9 s e 200 mil em 7,0 s num Postgres de verdade, entao nenhum teto foi implementado e o motivo ficou escrito. Uma leitura isolada do /api/health logo apos o deploy devolveu 503 no available server durante a troca de container, com o Coolify ja em running:healthy; seis leituras seguidas depois vieram 200 com 0.116.1, e nada foi feito."
-    },
-    {
-      "at": "2026-09-08T22:42:38-03:00",
-      "sha": "b80caeb",
-      "app_version": "0.116.0",
-      "subject": "a Diretoria apaga o caso encerrado antes dos cinco anos, com motivo escrito a mao",
-      "raw_subject": "feat(ouvidoria): a Diretoria apaga o caso encerrado, com motivo escrito (#595) (#632)",
-      "scope": [
-        "backend",
-        "frontend",
-        "supabase"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 445,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "100_ouvidoria_apagamento_pela_diretoria.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 desta sessao: issue #595 sozinha, fatia G do PRD #591, ADR 0047. Abre a porta antecipada da Retencao: a Diretoria Executiva manda apagar o Dossie de um caso encerrado antes dos cinco anos, escrevendo o motivo a mao. A migration 100 acrescenta a SEGUNDA CHAVE na guarda de UPDATE da trilha, sem tocar na guarda de DELETE, e as duas chaves seguem exigindo caso encerrado com marco de encerramento. O desenho nao alcanca caso fora de encerrado, travado em tres lugares independentes: a rota devolve 409, o update repete as pre-condicoes no proprio filtro (fecha o TOCTOU) e a guarda no banco exige o mesmo. Foram TRES rodadas de revisao, uma a mais que o limite da /onda, autorizada pelo humano. Rodada 1, tres must-fix. O pior era regressao de seguranca: a marca do movimento de apagamento tinha virado o prefixo de texto 'Apagamento do Dossie' na observacao, que o ouvidor digita a mao na transicao, quando antes era o autor_nome que so o servidor escreve. Um ouvidor que encerrasse o caso com esse texto fazia o apagamento adotar o movimento dele: o motivo da Diretoria nunca entrava na trilha, o texto plantado era preservado pelo exceto= e virava imutavel, e a tela creditava o apagamento a ele. Junto vieram o pedido gravado e nunca cumprido (falha no meio deixava o caso com o carimbo e o Dossie inteiro, e o cron dos cinco anos nao varria esse estado) e a recusa do servidor escrita na pagina por baixo do modal, que sobe por createPortal, entao nos 409 e 503 a Diretoria nao via mensagem nenhuma e o teste passava porque findByText olha o DOM e nao a sobreposicao. Rodada 2: os tres fechados e confirmados por mutacao do proprio revisor, que varreu as 11 portas que gravam na trilha para provar que a regua nova nao e forjavel. Mas o codigo do conserto trouxe dois achados novos. O segundo era a fila nova do cron apagando o ciclo NOVO de um caso reaberto, porque a reabertura nao limpava o carimbo do pedido; provado com o contraste que fecha o argumento, a rota humana recusava esse mesmo caso com 409 e so o robo dizia sim. O primeiro nao estava no codigo: o bloco SQL do CORPO do PR, que e o que o humano cola no Studio, estava preso na versao anterior e sem o AND p.anonimizada_em IS NULL. O CI ficava verde porque os testes leem o arquivo, ninguem executa o arquivo, e a consulta de conferencia sugerida no proprio corpo devolvia true nas duas versoes, entao nada acusaria. Aplicado assim, a fresta da trilha ficaria aberta para sempre em todo caso apagado. Passou a ser gerado do arquivo, e a fumaça passou a checar prosrc like '%anonimizada_em IS NULL%'. O orquestrador conferiu por hash que o corpo publicado e identico ao arquivo antes de entregar o SQL ao humano. Rodada 3 fechou os dois, mais os tres mutantes vivos que o revisor apontou, e um agente focado verificou a fila do cron com cinco mutantes e as variacoes do caso reaberto. Residuais registrados e nao bloqueantes: caso meio apagado que chegue ao estado reaberto fica parado para sempre e esse estado e beco sem saida pela API (so por corrida estreita, e antes deste PR o pedido orfao era o caso normal de qualquer 503); _reabriu_depois_do_pedido compara timestamp como string e falha aberta com offset nao-UTC, hoje sem efeito porque o PostgREST devolve UTC. A migration foi aplicada a mao pelo humano antes do merge, e a ordem era obrigatoria: sem as colunas a pagina do caso nao degrada, cai com 404. Codigo novo provado em prod sem login: POST na rota de apagamento sem token devolve 401 e com sufixo inventado devolve 404, e o HTML servido traz 0.116.0 embutido."
     }
   ]
 }
