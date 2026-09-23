@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-23T17:43:40-03:00",
+      "sha": "b7e6cdec",
+      "app_version": "0.155.0",
+      "subject": "Onda onda-a: Período termina no ontem de Brasília; Agrupamentos de Dados do Google seguem o CONTEXT.md",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#871 #872)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 11,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #871 #872. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-09-23T16:59:08-03:00",
       "sha": "37e42427",
       "app_version": "0.154.2",
@@ -1503,34 +1535,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda 2 desta sessao: issue #595 sozinha, fatia G do PRD #591, ADR 0047. Abre a porta antecipada da Retencao: a Diretoria Executiva manda apagar o Dossie de um caso encerrado antes dos cinco anos, escrevendo o motivo a mao. A migration 100 acrescenta a SEGUNDA CHAVE na guarda de UPDATE da trilha, sem tocar na guarda de DELETE, e as duas chaves seguem exigindo caso encerrado com marco de encerramento. O desenho nao alcanca caso fora de encerrado, travado em tres lugares independentes: a rota devolve 409, o update repete as pre-condicoes no proprio filtro (fecha o TOCTOU) e a guarda no banco exige o mesmo. Foram TRES rodadas de revisao, uma a mais que o limite da /onda, autorizada pelo humano. Rodada 1, tres must-fix. O pior era regressao de seguranca: a marca do movimento de apagamento tinha virado o prefixo de texto 'Apagamento do Dossie' na observacao, que o ouvidor digita a mao na transicao, quando antes era o autor_nome que so o servidor escreve. Um ouvidor que encerrasse o caso com esse texto fazia o apagamento adotar o movimento dele: o motivo da Diretoria nunca entrava na trilha, o texto plantado era preservado pelo exceto= e virava imutavel, e a tela creditava o apagamento a ele. Junto vieram o pedido gravado e nunca cumprido (falha no meio deixava o caso com o carimbo e o Dossie inteiro, e o cron dos cinco anos nao varria esse estado) e a recusa do servidor escrita na pagina por baixo do modal, que sobe por createPortal, entao nos 409 e 503 a Diretoria nao via mensagem nenhuma e o teste passava porque findByText olha o DOM e nao a sobreposicao. Rodada 2: os tres fechados e confirmados por mutacao do proprio revisor, que varreu as 11 portas que gravam na trilha para provar que a regua nova nao e forjavel. Mas o codigo do conserto trouxe dois achados novos. O segundo era a fila nova do cron apagando o ciclo NOVO de um caso reaberto, porque a reabertura nao limpava o carimbo do pedido; provado com o contraste que fecha o argumento, a rota humana recusava esse mesmo caso com 409 e so o robo dizia sim. O primeiro nao estava no codigo: o bloco SQL do CORPO do PR, que e o que o humano cola no Studio, estava preso na versao anterior e sem o AND p.anonimizada_em IS NULL. O CI ficava verde porque os testes leem o arquivo, ninguem executa o arquivo, e a consulta de conferencia sugerida no proprio corpo devolvia true nas duas versoes, entao nada acusaria. Aplicado assim, a fresta da trilha ficaria aberta para sempre em todo caso apagado. Passou a ser gerado do arquivo, e a fumaça passou a checar prosrc like '%anonimizada_em IS NULL%'. O orquestrador conferiu por hash que o corpo publicado e identico ao arquivo antes de entregar o SQL ao humano. Rodada 3 fechou os dois, mais os tres mutantes vivos que o revisor apontou, e um agente focado verificou a fila do cron com cinco mutantes e as variacoes do caso reaberto. Residuais registrados e nao bloqueantes: caso meio apagado que chegue ao estado reaberto fica parado para sempre e esse estado e beco sem saida pela API (so por corrida estreita, e antes deste PR o pedido orfao era o caso normal de qualquer 503); _reabriu_depois_do_pedido compara timestamp como string e falha aberta com offset nao-UTC, hoje sem efeito porque o PostgREST devolve UTC. A migration foi aplicada a mao pelo humano antes do merge, e a ordem era obrigatoria: sem as colunas a pagina do caso nao degrada, cai com 404. Codigo novo provado em prod sem login: POST na rota de apagamento sem token devolve 401 e com sufixo inventado devolve 404, e o HTML servido traz 0.116.0 embutido."
-    },
-    {
-      "at": "2026-09-08T20:52:33-03:00",
-      "sha": "387af87",
-      "app_version": "0.115.3",
-      "subject": "a guarda anti-SSRF do PDF do POP volta a existir de fato, agora na API nova do WeasyPrint, e o teto de emergencia sai",
-      "raw_subject": "refactor(pops): portar a guarda do PDF do POP para a API nova do WeasyPrint (#630)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Segunda fatia da onda 1, e a que mudou de peso durante a execucao. A issue pedia so portar _pdf_url_fetcher para a API nova do WeasyPrint (a classe URLFetcher, que substituiu default_url_fetcher no 70.0) e tirar o teto <70 que o PR #624 tinha posto de emergencia. Ao portar, o autor descobriu que a guarda anti-SSRF do PDF do POP estava INERTE em producao desde a issue #152: o url_fetcher era passado ao write_pdf, e quem busca recursos e o objeto HTML, entao o WeasyPrint descartava a opcao em silencio (no 70 ele ao menos loga Unknown rendering option, no 62.3 nem isso). Medido com um fetcher que recusa tudo: pelo write_pdf o PDF sai com 143049 bytes e o logo embutido, pelo construtor sai com 2326 bytes e sem logo. Ou seja, file:// arbitrario e SSRF nunca foram barrados ali. O fetcher passou para o construtor do HTML e o teste test_guarda_esta_ligada_no_render_do_pop trava isso. Area sensivel, entao o orquestrador rodou 2 revisores dedicados em paralelo, um de codigo e um de seguranca. Eles acharam, por caminhos independentes e os dois reproduzindo por execucao, um bug NOVO que o proprio port criou: o URLFetcher do 70 guarda estado em self._request, e a guarda levantava ValueError antes do super().fetch(), entao uma recusa vinda do open (o caminho do redirect) deixava a requisicao recusada pendurada e a busca SEGUINTE do mesmo PDF a reexecutava, enfiando os bytes no PDF. Um revisor pediu o file:// do logo e recebeu o corpo do servidor em 127.0.0.1; o outro montou um 302 real e recebeu SEGREDO-DA-REDE-INTERNA no lugar do PNG. Consertado com self._request = None antes dos tres raise (nao so o do host) e travado pelo teste test_recusa_no_redirect_nao_envenena_a_busca_seguinte, que cria o fetcher uma vez e reusa o mesmo objeto nas tres sequencias, que e justamente a propriedade de estado em jogo. Segundo must-fix: a justificativa do piso >=70 era falsa. O revisor de codigo baixou os wheels 62.3, 65.1, 66.0, 67.0, 68.0, 68.1, 69.0 e 70.0 do PyPI e leu urls.py em cada um: URLFetcher existe desde o 68.0, ja com as assinaturas usadas. O orquestrador decidiu por >=68, que e o piso verdadeiro e a menor mudanca que respeita o pedido da triagem; o revisor depois montou venvs com 68.0, 68.1 e 69.0 e rodou a guarda real nas quatro versoes. Achado de versao que ninguem tinha fixado: self._request nao existe no 68.0 nem no 68.1 (o pai sempre monta um Request novo) e existe do 69.0 em diante, e o open sobrescrito que protege o redirect ja existe no 68.0, entao o piso >=68 pega a protecao sem pegar o bug. Prova por mutacao: 14 plantados, 13 mortos, incluindo afrouxamentos (allowlist por prefixo, allowlist sem caixa, is_reserved removido, DNS fail-open) e tres mutantes no proprio detector. O unico sobrevivente, B2 (remocao de is_link_local), e equivalente de verdade, confirmado de forma independente pelos dois revisores: is_private do Python ja engloba loopback, link-local e unspecified. Essa mesma varredura achou um buraco real, porque is_reserved e o unico predicado que decide sozinho (em 64:ff9b::), e o mutante B3 sobrevivia com a lista de IPs original. As recusas sao asseridas pelo marcador da mensagem e nao por raises(ValueError), porque as tres levantam o mesmo tipo. Atenuante da vulnerabilidade que estava viva: a rota do PDF do POP e autenticada (app/routers/pops/documento.py:33), nao e o canal publico, e o bleach mais o sanitizar_svg seguravam como primeira camada. CI e Dockerfile instalam do pyproject.toml e nao do lock, entao o Docker Build verde e a prova real do piso; uv pip compile sai 70.0 antes e depois. Ficou registrado e nao tocado: pdf_generator.py (Ata), ouvidoria_relatorio.py e ouvidoria_pontos.py chamam write_pdf sem url_fetcher nenhum, sem guarda alguma, e a guarda nao recusa multicast. Sobrou uma imprecisao conhecida: o docstring da fabrica ainda diz que a classe vale a partir do 70, quando o piso e 68."
     }
   ]
 }

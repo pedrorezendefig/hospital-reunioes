@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.155.0 - 2026-09-23 17:43 - Onda onda-a: Período termina no ontem de Brasília; Agrupamentos de Dados do Google seguem o CONTEXT.md
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `b7e6cde`
+- PRs: [#871](https://github.com/pedrorezendefig/hospital-reunioes/pull/871), [#872](https://github.com/pedrorezendefig/hospital-reunioes/pull/872)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (11s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/b7e6cde
+
 ## v0.154.2 - 2026-09-23 16:59 - Onda onda-a: Acabamentos das revisões da #815 e da #818 na Central de Comando; Barra de frescor neutra sem carimbo e motivo de bloco sem segredo
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `37e4242`
