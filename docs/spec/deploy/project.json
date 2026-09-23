@@ -104,7 +104,8 @@
           { "name": "INSTAGRAM_BUSINESS_ACCOUNT_ID", "purpose": "Central de Comando (ADR 0058): id da conta profissional do Instagram do hospital, par do INSTAGRAM_ACCESS_TOKEN. Vazio/ausente = Instagram não configurado (503)." },
           { "name": "MCP_AUTH_ISSUER", "purpose": "Conector MCP da Central (ADR 0058, decisões 3 e 4): o emissor do WorkOS AuthKit, que vira o `iss` esperado no token. Vazio/ausente = o conector responde erro de configuração e nunca abre a porta." },
           { "name": "MCP_AUTH_JWKS_URI", "purpose": "Conector MCP da Central: o JWKS do emissor, para validar a assinatura do token. Vazio/ausente = <MCP_AUTH_ISSUER>/oauth2/jwks, o formato do AuthKit; só se define se o JWKS morar noutro caminho." },
-          { "name": "MCP_RESOURCE_URL", "purpose": "Conector MCP da Central: o endereço público do conector (https://api.hospitalsaomatheus.cloud/api/mcp), que é a audiência (`aud`) do token (Resource Indicator, RFC 8707). Vazio/ausente = erro de configuração, nunca acesso aberto. Não existe lista de e-mails: quem conecta é quem é Super admin ativo." }
+          { "name": "MCP_RESOURCE_URL", "purpose": "Conector MCP da Central: o endereço público do conector (https://api.hospitalsaomatheus.cloud/api/mcp), que é a audiência (`aud`) do token (Resource Indicator, RFC 8707). Vazio/ausente = erro de configuração, nunca acesso aberto. Não existe lista de e-mails: quem conecta é quem é Super admin ativo." },
+          { "name": "CENTRAL_AQUECER_NO_BOOT", "purpose": "Central de Comando (issue #867, ADR 0059): liga o aquecimento do cache no boot, uma leitura do período padrão (28 dias) de cada tela, numa thread, logo depois de o backend subir, para a primeira abertura depois do deploy não esperar o Google e o Instagram. Ausente = true (ligado). Defina 'false' e reinicie o backend para desligar sem deploy de código, por exemplo se a cota de uma fonte apertar." }
         ],
         "build_time_must_be_marked": false
       },

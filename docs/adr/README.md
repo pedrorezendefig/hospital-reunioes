@@ -35,6 +35,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | ADR | Status | Título |
 |---|---|---|
 | [0058](0058-central-de-comando-migra-para-dentro-do-app.md) | accepted | Central de Comando migra para dentro do app do hospital, só para Super admin, com o servidor portado para o FastAPI (emenda 0057) |
+| [0059](0059-central-de-comando-aquece-o-cache-no-boot.md) | accepted | Central de Comando aquece o cache uma vez no boot, só no período padrão (emenda 0058) |
 
 ## Reuniões e Atas
 

@@ -48,6 +48,7 @@ from app.routers.pops import pops as pops_pops
 from app.routers.pops import revisao as pops_revisao
 from app.routers.pops import setores as pops_setores
 from app.routers.pops import usuarios as pops_usuarios
+from app.services.central_de_comando import aquecimento as aquecimento_da_central
 
 configure_logging()
 
@@ -58,6 +59,10 @@ _unhandled_logger = logging.getLogger("unhandled")
 async def lifespan(app: FastAPI):
     print(f"🚀 {settings.app_name} v{settings.app_version} starting...")
     start_scheduler()
+    # O cache da Central nasce vazio a cada deploy. Uma rodada só, numa thread
+    # própria, lê o período padrão de cada tela; o boot não espera por ela, e o
+    # app responde enquanto ela aquece (issue #867, ADR 0059).
+    app.state.aquecimento_da_central = aquecimento_da_central.disparar()
     yield
     stop_scheduler()
     print("👋 Shutting down...")

@@ -57,6 +57,7 @@ fechasse essa porta não seria segurança, seria indisponibilidade.
 from __future__ import annotations
 
 import ipaddress
+import os
 import socket
 
 import pytest
@@ -66,6 +67,14 @@ import pytest
 # Plugin, e não fixture escrita aqui, para este arquivo continuar sendo o da
 # trava. Nenhuma fixture de lá é `autouse`, e nenhuma liga ou desliga a trava.
 pytest_plugins = ("central_de_comando_apoio",)
+
+# O aquecimento do cache da Central no boot (issue #867) fica DESLIGADO na
+# suíte inteira. Todo teste que sobe o app com o `lifespan` (um `with
+# TestClient(app)`) dispararia a rodada, e ela lê o Google e o Instagram com a
+# credencial do `.env` desta máquina. Aqui, e não numa fixture, pelo mesmo
+# motivo da trava: vale antes de qualquer import do app, para o arquivo novo
+# também. O teste que quer a rodada liga no `settings`, com `monkeypatch`.
+os.environ["CENTRAL_AQUECER_NO_BOOT"] = "false"
 
 # Escape hatch, no estilo da lista `EXCECOES` do guard de leitura direta
 # (issue #492): isenção é por ARQUIVO, escrita à mão aqui. Nenhuma fixture

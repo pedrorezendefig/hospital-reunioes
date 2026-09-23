@@ -113,6 +113,12 @@ class Settings(BaseSettings):
     mcp_auth_issuer: str = ""
     mcp_auth_jwks_uri: str = ""
     mcp_resource_url: str = ""
+    # Aquecimento do cache no boot (issue #867, ADR 0059): logo depois de subir,
+    # o backend lê uma vez, numa thread, o período padrão de cada tela, para a
+    # primeira abertura depois do deploy não esperar a fonte. Ausente = true.
+    # Defina 'false' e reinicie para desligar sem deploy de código. A suíte de
+    # testes roda com ele desligado (`tests/conftest.py`).
+    central_aquecer_no_boot: bool = True
 
     # Email (Resend)
     resend_api_key: str = ""

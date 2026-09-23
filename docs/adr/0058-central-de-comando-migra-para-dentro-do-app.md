@@ -1,6 +1,7 @@
 ---
 status: accepted
 amends: 0057
+amended_by: 0059
 ---
 
 # Central de Comando migra para dentro do app do hospital, só para Super admin, com o servidor portado para o FastAPI
@@ -60,4 +61,4 @@ Continuam valendo, e o raciocínio completo fica em `pedroribbe/central-de-coman
 - O backend ganha a primeira integração com Google e com Instagram e o primeiro resource server OAuth. Todo teste desses clientes precisa dublar a rede, por causa da trava de rede da suíte.
 - O token do Instagram expira e é renovado à mão, como hoje. Só muda onde a variável é colada.
 - Risco a responder na primeira fatia do MCP: se o AuthKit aceita dois Resource Indicators ao mesmo tempo. Se não aceitar, o MCP novo só é testado no dia do corte, com o antigo já parado.
-- Deploy do backend zera o cache de 1 hora. O backend do hospital sobe com muito mais frequência do que a Central subia, então a primeira leitura depois de cada deploy vai à fonte.
+- Deploy do backend zera o cache de 1 hora. O backend do hospital sobe com muito mais frequência do que a Central subia, então a primeira leitura depois de cada deploy vai à fonte. Emendado pela ADR 0059 (issue #867): o backend aquece o período padrão de cada tela uma vez, logo depois de subir, e a troca de período e a abertura depois de horas sem ninguém olhando continuam indo à fonte.
