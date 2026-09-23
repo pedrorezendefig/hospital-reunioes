@@ -436,3 +436,37 @@ class TestRegistroDeTelas:
             telas.ler("tela-de-teste", "90d", forcar=True)
 
         assert tela_de_teste == []
+
+    def test_a_frase_da_falha_fica_guardada_ate_a_proxima_busca_sem_prazo(
+        self, monkeypatch, cache_da_central, relogio_da_central
+    ):
+        """O que o docstring de `Tela.falhas` promete sobre a frase da falha
+        (revisão do PR #831, #834): ela fica guardada até a próxima busca
+        daquela chave, sem prazo, porque o cache não despeja. O Google cai na
+        sexta à noite e ninguém abre a Central até segunda: a frase segue
+        guardada o fim de semana inteiro. Prometer "até 1 hora" dizia menos do
+        que o cache guarda, e é por isso que só entra frase fixa e segura."""
+        fonte_fora = {"agora": False}
+
+        def montar(periodo):
+            if fonte_fora["agora"]:
+                raise FonteDeTesteForaError("A fonte de teste está fora.")
+            return {"periodo": periodo}
+
+        monkeypatch.setitem(
+            telas.TELAS,
+            "tela-de-teste",
+            telas.Tela(montar=montar, falhas=(FonteDeTesteForaError,), periodos=("28d",)),
+        )
+        telas.ler("tela-de-teste", "28d")
+        fonte_fora["agora"] = True
+        telas.ler("tela-de-teste", "28d", forcar=True)
+        relogio_da_central.avancar(hours=60)
+
+        guardado = cache_da_central.frescor(("tela-de-teste", "28d"))
+
+        assert guardado.motivo == "A fonte de teste está fora."
+        promessa = " ".join((telas.Tela.__doc__ or "").split())
+        assert "até a próxima busca daquela chave" in promessa
+        assert "sem prazo" in promessa
+        assert "1 hora" not in promessa

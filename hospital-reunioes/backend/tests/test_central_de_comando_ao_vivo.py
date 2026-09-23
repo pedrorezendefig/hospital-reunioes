@@ -210,6 +210,37 @@ class TestAoVivoQuandoAFonteFalha:
         assert resposta.status_code == 502
         assert "pessoas" not in resposta.json()
 
+    @pytest.mark.parametrize(
+        "rows",
+        [{}, 0, "", 5, "linhas", {"linha": 1}],
+        ids=["objeto-vazio", "zero", "texto-vazio", "numero", "texto", "objeto"],
+    )
+    def test_rows_que_nao_e_lista_e_502_nunca_zero(self, google_falso, rows):
+        """O Ao vivo lê o `rows` pelo mesmo `_primeira_metrica` da Visão Geral
+        (#834). Um `rows` que não é lista no `runRealtimeReport` é resposta
+        fora do formato: 502 com a frase, e não "0 pessoas no Site". Inclusive
+        o que é "falso" sem ser lista (`{}`, `0`, `''`), que lido como lista
+        vazia viraria um zero que ninguém mediu."""
+        google_falso.respondedores.insert(0, _ao_vivo_com_rows(rows))
+
+        resposta = _ao_vivo()
+
+        assert resposta.status_code == 502
+        assert resposta.json()["detail"] == "O Google Analytics devolveu um relatório fora do formato esperado."
+        assert "pessoas" not in resposta.json()
+
+
+def _ao_vivo_com_rows(rows: object):
+    """Uma GA4 que devolve o `runRealtimeReport` do Ao vivo com o `rows` como
+    veio aqui."""
+
+    def responder(metodo: str, corpo: dict) -> dict | None:
+        if metodo != "runRealtimeReport":
+            return None
+        return {"rows": rows}
+
+    return responder
+
 
 class TestAoVivoSemCredencial:
     """Sem propriedade e sem chave, é 503 de configuração, nunca zero e sem

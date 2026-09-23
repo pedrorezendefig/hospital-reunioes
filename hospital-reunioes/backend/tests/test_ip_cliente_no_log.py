@@ -34,9 +34,9 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# O parse do CMD já existe no arquivo irmão do contrato de proxy (issue #349).
-# Reaproveitado em vez de virar a terceira cópia do mesmo loop.
-from test_proxy_confiavel import _cmd_do_dockerfile  # noqa: E402
+# O parse do CMD mora no apoio do Dockerfile (#834, antes no contrato de proxy
+# da #349). Reaproveitado em vez de virar mais uma cópia do mesmo loop.
+from dockerfile_apoio import cmd_do_dockerfile as _cmd_do_dockerfile  # noqa: E402
 
 from app.middleware.request_context import (  # noqa: E402
     JsonFormatter,

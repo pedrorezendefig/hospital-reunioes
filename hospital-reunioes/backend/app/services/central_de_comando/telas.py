@@ -62,8 +62,9 @@ class Tela:
       guardado, elas viram o último valor bom; as outras sobem sempre (a
       configuração que falta é 503, nunca um número velho). **A mensagem
       dessas exceções vai para a tela** (o `motivo` do frescor, num 200) e
-      fica guardada no cache por até 1 hora: só entra exceção de frase fixa e
-      segura, sem URL, token, corpo da fonte ou detalhe interno. A
+      fica guardada no cache até a próxima busca daquela chave, sem prazo (o
+      cache não despeja): só entra exceção de frase fixa e segura, sem URL,
+      token, corpo da fonte ou detalhe interno. A
       `GoogleError` do provedor é assim; a exceção crua do `httpx` não é (o
       texto dela traz a URL inteira).
     - `periodos`: os períodos que a tela tem. O Instagram só tem 7 e 28 dias.
@@ -126,7 +127,8 @@ def ler(nome: str, periodo: Periodo, *, forcar: bool = False) -> dict:
     tem por uma rota esquecer de conferir.
 
     O payload sai do cache em cópia funda: ele é o mesmo para todo Super admin
-    por até 1 hora, e quem mexer no que recebeu não mexe no guardado.
+    até a próxima busca daquela chave, e quem mexer no que recebeu não mexe no
+    guardado.
     """
     tela = _tela_do_pedido(nome, periodo)
     leitura = cache_da_central.ler(

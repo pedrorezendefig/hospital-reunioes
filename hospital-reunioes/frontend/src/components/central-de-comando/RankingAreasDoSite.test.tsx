@@ -58,6 +58,13 @@ function area(parcial: Partial<AreaDoPayload>): AreaDoPayload {
 
 const itens = () => within(screen.getByRole("list", { name: "Áreas do site por Visitas" })).getAllByRole("listitem");
 
+/** O texto que o leitor de tela lê do trecho: tudo, menos o que está escondido dele (`aria-hidden`). */
+function lidoPeloLeitorDeTela(elemento: HTMLElement): string {
+  const copia = elemento.cloneNode(true) as HTMLElement;
+  copia.querySelectorAll('[aria-hidden="true"]').forEach((escondido) => escondido.remove());
+  return (copia.textContent ?? "").replace(/\s+/g, " ").trim();
+}
+
 describe("RankingAreasDoSite", () => {
   it("lista as Áreas na ordem recebida, com o nome e o que cada uma reúne", () => {
     render(<RankingAreasDoSite areas={AREAS} />);
@@ -91,13 +98,25 @@ describe("RankingAreasDoSite", () => {
     expect((barra.parentElement as HTMLElement).style.backgroundColor).toBe("var(--color-border)");
   });
 
-  it("marca alta com a seta para cima e queda com a seta para baixo, com o sentido dito ao leitor de tela", () => {
+  it("marca alta com a seta para cima e queda com a seta para baixo", () => {
     render(<RankingAreasDoSite areas={AREAS} />);
 
     expect(within(itens()[0]).getByText("↑ 6,2%")).toBeTruthy();
     expect(within(itens()[1]).getByText("↑ 3,1%")).toBeTruthy();
     expect(within(itens()[2]).getByText("↓ 1,0%")).toBeTruthy();
-    expect(within(itens()[2]).getByLabelText("caiu 1,0% em relação ao período anterior")).toBeTruthy();
+  });
+
+  it("o leitor de tela anuncia o sentido da variação de cada Área, e não a seta", () => {
+    // Revisão do PR #833 (#834): o `aria-label` num `<p>` não é anunciado (a
+    // ARIA 1.2 proíbe nome acessível em parágrafo), e o leitor lia só "6,2%",
+    // sem dizer se subiu ou caiu. O sentido vai no texto que ele lê.
+    const { container } = render(<RankingAreasDoSite areas={AREAS} />);
+
+    expect(lidoPeloLeitorDeTela(itens()[0])).toContain("subiu 6,2% em relação ao período anterior");
+    expect(lidoPeloLeitorDeTela(itens()[1])).toContain("subiu 3,1% em relação ao período anterior");
+    expect(lidoPeloLeitorDeTela(itens()[2])).toContain("caiu 1,0% em relação ao período anterior");
+    expect(itens().map(lidoPeloLeitorDeTela).join(" ")).not.toMatch(/↑|↓/);
+    expect(container.querySelectorAll("p[aria-label]")).toHaveLength(0);
   });
 
   it("sem visita no período anterior, não mostra variação", () => {
