@@ -66,3 +66,14 @@ def test_o_nivel_3_diz_tipo_origem_e_o_pedido_ao_pedro(chave):
     assert re.search(
         rf"peça ao Pedro: `{chave}`, serve para \w", origem, re.I
     ), "falta a frase de pedido"
+
+
+def test_a_credencial_do_google_e_o_json_inteiro_nao_o_caminho():
+    """No app antigo o nome é outro e guarda um caminho: copiar falha calado."""
+    antigo = re.search(r"`GOOGLE_APPLICATION_CREDENTIALS`[^\n]*", NIVEL_3)
+    assert antigo, "o nível 3 não cita o nome antigo, sem o _JSON"
+
+    nota = antigo.group(0)
+    assert "caminho" in nota
+    assert "JSON inteiro" in nota
+    assert "`GOOGLE_APPLICATION_CREDENTIALS_JSON`" in nota
