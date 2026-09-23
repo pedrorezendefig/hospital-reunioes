@@ -271,6 +271,16 @@ class TestLenteContatos:
         assert "contatos-instrumentar" in sugestoes
         assert "2 de 4" in sugestoes["contatos-instrumentar"]["porque"]
 
+    def test_canal_medido_sem_clique_nao_entra_na_sugestao_de_instrumentar(self, central_falsa):
+        """7 dias: ninguém enviou o Fale Conosco. O canal segue medido (com 0),
+        então a sugestão pede para instrumentar só o que o Site não avisa ao
+        Google: o agendar e o telefone (#856)."""
+        corpo = _lente("contatos", "7d").json()
+
+        porque = {s["id"]: s for s in corpo["sugestoes"]}["contatos-instrumentar"]["porque"]
+        assert "2 de 4" in porque
+        assert "Fale Conosco" not in porque
+
 
 # ─── 404, 422 e o cache ──────────────────────────────────────────────────────
 

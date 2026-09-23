@@ -767,8 +767,12 @@ CanalDeContato = Literal["agendar", "whatsapp", "fale-conosco", "telefone"]
 
 @dataclass(frozen=True)
 class CliquesNoCanal:
+    """Os cliques de um canal de contato no período. `None` quer dizer que o
+    Site ainda não avisa a GA4 quando o contato acontece: não há número, nem
+    zero."""
+
     canal: CanalDeContato
-    cliques: int
+    cliques: int | None
 
 
 def cliques_de_contato(periodo: Periodo, hoje: date) -> Pergunta[tuple[CliquesNoCanal, ...]]:
@@ -777,10 +781,10 @@ def cliques_de_contato(periodo: Periodo, hoje: date) -> Pergunta[tuple[CliquesNo
     O `eventCount` da GA4 por `eventName`, filtrado pelos dois eventos que o
     Site dispara (`GA4_EVENTO_WHATSAPP` e `GA4_EVENTO_FALE_CONOSCO`), como a
     Central antiga (`getContactClicks` e `mapContactClicks`). O agendar entra
-    sempre com zero, porque o botão de marcar consulta ainda não dispara
-    evento, e a tela o lê como em construção; o telefone fica de fora, porque
-    ligação não é clique, e a tela o lê como não medido. Evento que não
-    aconteceu no período é zero, não ausência: a GA4 omite a linha dele.
+    sem número, porque o botão de marcar consulta ainda não dispara evento, e
+    a tela o lê como em construção; o telefone fica de fora, porque ligação
+    não é clique, e a tela o lê como não medido. Evento que não aconteceu no
+    período é zero medido, não ausência: a GA4 omite a linha dele.
     """
     whatsapp = settings.ga4_evento_whatsapp
     fale_conosco = settings.ga4_evento_fale_conosco
@@ -789,7 +793,7 @@ def cliques_de_contato(periodo: Periodo, hoje: date) -> Pergunta[tuple[CliquesNo
         (relatorio,) = relatorios
         por_evento = {evento: int(numero) for evento, numero in _linhas(relatorio)}
         return (
-            CliquesNoCanal("agendar", 0),
+            CliquesNoCanal("agendar", None),
             CliquesNoCanal("whatsapp", por_evento.get(whatsapp, 0)),
             CliquesNoCanal("fale-conosco", por_evento.get(fale_conosco, 0)),
         )

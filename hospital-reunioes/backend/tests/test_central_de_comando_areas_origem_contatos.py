@@ -520,26 +520,32 @@ class TestContatosGerados:
             {"chave": "telefone", "rotulo": "Telefone", "estado": "nao-medido"},
         ]
 
-    def test_canal_medido_sem_clique_no_periodo_fica_em_construcao_e_nao_mostra_zero(self):
+    def test_canal_medido_sem_clique_no_periodo_mostra_zero_e_segue_medido(self):
         """7 dias: ninguém enviou o Fale Conosco, e a GA4 não devolve linha
-        para ele. Como na Central antiga, o zero de um canal medido não é
-        mostrado como resultado: o canal fica em construção."""
+        para ele. O Site avisa o Google desse contato, então o zero é
+        resultado medido (decisão do dono na #856; na Central antiga o canal
+        virava em construção)."""
         contatos = _dados_do_google("7d").json()["contatos_gerados"]
 
         assert [(c["chave"], c["estado"], c.get("cliques")) for c in contatos] == [
             ("agendar", "em-construcao", None),
             ("whatsapp", "medido", 1100),
-            ("fale-conosco", "em-construcao", None),
+            ("fale-conosco", "medido", 0),
             ("telefone", "nao-medido", None),
         ]
 
-    def test_periodo_sem_clique_nenhum_nao_inventa_numero(self):
-        """90 dias: a GA4 respondeu que nenhum evento de contato aconteceu.
-        Nenhum canal traz número, nem zero."""
+    def test_periodo_sem_clique_nenhum_mostra_zero_so_nos_canais_medidos(self):
+        """90 dias: a GA4 respondeu que nenhum evento de contato aconteceu. O
+        WhatsApp e o Fale Conosco, que o Site avisa, mostram 0; o agendar (em
+        construção) e o telefone (não medido) seguem sem número, nem zero."""
         contatos = _dados_do_google("90d").json()["contatos_gerados"]
 
-        assert [c["estado"] for c in contatos] == ["em-construcao", "em-construcao", "em-construcao", "nao-medido"]
-        assert all("cliques" not in c for c in contatos)
+        assert contatos == [
+            {"chave": "agendar", "rotulo": "Cliques para agendar", "estado": "em-construcao"},
+            {"chave": "whatsapp", "rotulo": "WhatsApp", "estado": "medido", "cliques": 0},
+            {"chave": "fale-conosco", "rotulo": "Fale Conosco", "estado": "medido", "cliques": 0},
+            {"chave": "telefone", "rotulo": "Telefone", "estado": "nao-medido"},
+        ]
 
     def test_os_eventos_contados_sao_os_da_configuracao(self, monkeypatch, lote_da_ga4):
         """O nome de cada evento vem de `GA4_EVENTO_WHATSAPP` e
@@ -571,10 +577,15 @@ class TestCanaisDeContato:
             "telefone",
         ]
 
-    def test_canal_medido_com_zero_clique_fica_em_construcao_e_nao_medido_com_zero(self):
-        (agendar, *_) = dados_do_google.canais_de_contato({"agendar": 0})
+    def test_canal_que_o_site_ainda_nao_avisa_e_em_construcao_sem_numero(self):
+        (agendar, *_) = dados_do_google.canais_de_contato({"agendar": None})
 
         assert agendar == {"chave": "agendar", "rotulo": "Cliques para agendar", "estado": "em-construcao"}
+
+    def test_canal_medido_com_zero_clique_e_medido_com_zero(self):
+        _, whatsapp, *_ = dados_do_google.canais_de_contato({"whatsapp": 0})
+
+        assert whatsapp == {"chave": "whatsapp", "rotulo": "WhatsApp", "estado": "medido", "cliques": 0}
 
     def test_canal_com_clique_e_medido_com_o_numero(self):
         (agendar, *_) = dados_do_google.canais_de_contato({"agendar": 42})
