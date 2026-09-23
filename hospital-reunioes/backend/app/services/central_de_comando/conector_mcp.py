@@ -502,7 +502,8 @@ def _periodo_valido(argumentos: dict, permitidos: tuple[str, ...]) -> str | None
 def serializar_site(periodo: str, visitantes: dict, google: dict, frescor: dict, agora: datetime) -> dict:
     """O payload do Site para o Claude, equivalente ao `serializeSite` do conector
     antigo, com duas trocas de contrato registradas na ADR 0058, decisão 7: a
-    chave das áreas é "areasDoSite" (era "bracos"), e o canal Fale Conosco, em
+    chave das áreas é "areasDoSite" (o nome antigo fica só na ADR: o teste de
+    vocabulário o proíbe no código), e o canal Fale Conosco, em
     `contatos[].chave`, é "fale-conosco" (era "leads"), o nome do canal na casa.
     Os Visitantes vêm do bloco do painel; movimento, áreas, origens, dispositivos
     e contatos, da tela Dados do Google. O `frescor` chega pronto do chamador (o
