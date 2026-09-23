@@ -26,7 +26,8 @@ Telas, uma rota por tela, cada uma devolvendo o payload inteiro dela:
 - GET /admin/central-de-comando/dados-do-google?periodo=7d|28d|90d   (issue #817)
 - GET /admin/central-de-comando/instagram?periodo=7d|28d   (issue #819)
 
-E uma rota só de Atualizar agora, para toda tela do registro de `telas.py`:
+E uma rota só de Atualizar agora, para toda tela do registro de `telas.py`, a
+Visão Geral e a lente de cada Objetivo (`tela=objetivos/{id}`, issue #861):
 
 - POST /admin/central-de-comando/atualizar-agora?tela=...&periodo=...  (#815)
 
@@ -53,6 +54,13 @@ from app.services.central_de_comando.periodo import PERIODO_PADRAO, Periodo
 # leitura delas já é honesta por bloco e nunca levanta por falha de fonte, então
 # não precisam do `_do_fonte`. O Atualizar agora as reconhece pelo nome.
 LEITORES_COMPOSTOS = {"visao-geral": visao_geral_service.ler}
+
+# A lente de um Objetivo entra no Atualizar agora como `tela=objetivos/{id}`, o
+# mesmo caminho da leitura dela (issue #861). A lente não está no registro de
+# `telas.py`: o montador dela lê os provedores direto, então forçar a chave da
+# lente é ir às fontes que ela usa. Objetivo sem lente ou período que ela não
+# tem é 422 dentro do `ler_lente`, sem ir à fonte.
+PREFIXO_DA_LENTE = "objetivos/"
 
 router = APIRouter(
     prefix="/admin/central-de-comando",
@@ -225,8 +233,14 @@ async def atualizar_agora(request: Request, tela: str = Query(...), periodo: Per
 
     A Visão Geral (e qualquer tela composta) renova todos os seus blocos pela
     leitura própria dela, que já é honesta por bloco: não passa pelo `_do_fonte`.
+
+    A lente de um Objetivo (`tela=objetivos/{id}`, issue #861) renova a leitura
+    dela, dentro deste mesmo limite de taxa.
     """
     leitor_composto = LEITORES_COMPOSTOS.get(tela)
     if leitor_composto is not None:
         return await anyio.to_thread.run_sync(partial(leitor_composto, periodo, forcar=True))
+    if tela.startswith(PREFIXO_DA_LENTE):
+        identificador = tela.removeprefix(PREFIXO_DA_LENTE)
+        return await _do_fonte(partial(objetivos.ler_lente, identificador, periodo, forcar=True))
     return await _do_fonte(partial(telas.ler, tela, periodo, forcar=True))

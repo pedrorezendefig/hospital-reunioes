@@ -64,8 +64,15 @@ export const RENOVACAO_AUTOMATICA_MS = 60 * 60 * 1000;
 /** Por que não há números na tela. */
 type Falha = Recusa | { tipo: "sem-conexao"; mensagem: string };
 
+/**
+ * A leitura que não trouxe números, com o status HTTP da recusa (nulo quando o
+ * servidor nem respondeu). Quem lê o status é a lente de um Objetivo, de
+ * endereço variável: o 404 dela é Objetivo que não existe (issue #861).
+ */
+type FalhaDaLeitura = Falha & { status: number | null };
+
 /** O que a tela mostra: esperando, os números, ou por que não há números. */
-export type EstadoDaTela<T> = { tipo: "carregando" } | { tipo: "pronto"; dados: T } | Falha;
+export type EstadoDaTela<T> = { tipo: "carregando" } | { tipo: "pronto"; dados: T } | FalhaDaLeitura;
 
 type Quadro<T> = {
   estado: EstadoDaTela<T>;
@@ -162,7 +169,13 @@ export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCen
       const resultado = await pedir<T>(`${BASE_CENTRAL}/${tela}?periodo=${periodo}`, "GET");
       if (noAr.current === meu) noAr.current = null;
       if (meu !== selo.current) return;
-      despachar({ tipo: "leu", estado: "dados" in resultado ? { tipo: "pronto", dados: resultado.dados } : resultado.falha });
+      despachar({
+        tipo: "leu",
+        estado:
+          "dados" in resultado
+            ? { tipo: "pronto", dados: resultado.dados }
+            : { ...resultado.falha, status: resultado.status },
+      });
     })();
   }, [tela, periodo]);
 

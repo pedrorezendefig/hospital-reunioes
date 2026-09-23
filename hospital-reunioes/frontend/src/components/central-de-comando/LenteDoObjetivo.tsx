@@ -11,20 +11,24 @@
  * Honestidade do dado, como nas outras telas: sem credencial (503) ou com a
  * fonte fora e nada guardado (502), a lente diz o que houve e nao inventa
  * numero.
+ *
+ * O frescor, o Atualizar agora e a renovacao de hora em hora sao os das outras
+ * telas (issue #861): a lente pluga o `useTelaDaCentral` com a tela
+ * `objetivos/{id}` e desenha a `BarraDeFrescor`.
  */
 
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Loader2, PlugZap } from "lucide-react";
-import { useEffect, useState } from "react";
 
-import { getAuthToken } from "@/hooks/useAuth";
-import { BASE_CENTRAL, FALHA_DE_CONEXAO, type Frescor, lerRecusa, SEM_SESSAO } from "@/lib/central-de-comando/api";
-import { formatarInteiro, formatarPercentual, formatarQuando } from "@/lib/central-de-comando/formato";
+import type { Frescor } from "@/lib/central-de-comando/api";
+import { formatarInteiro, formatarPercentual } from "@/lib/central-de-comando/formato";
 import { PERIODOS, PERIODOS_DO_INSTAGRAM, type Periodo } from "@/lib/central-de-comando/periodo";
 
+import { BarraDeFrescor } from "./BarraDeFrescor";
 import { CAMINHO_OBJETIVOS } from "./Objetivos";
 import { SeletorDePeriodo } from "./SeletorDePeriodo";
+import { useTelaDaCentral } from "./useTelaDaCentral";
 
 /** Um numero da lente. Fluxo traz `anterior` e `variacao`; estoque, `crescimento`. */
 export type NumeroDaLente = {
@@ -55,13 +59,13 @@ export type LentePayload = {
   frescor: Frescor;
 };
 
-type Estado =
-  | { tipo: "carregando" }
-  | { tipo: "pronto"; dados: LentePayload }
-  | { tipo: "nao-encontrado" }
-  | { tipo: "nao-configurado"; mensagem: string }
-  | { tipo: "falhou"; mensagem: string }
-  | { tipo: "sem-conexao"; mensagem: string };
+/**
+ * O estado calmo das sugestões (issue #861): nenhuma regra disparou, e a lente
+ * diz isso com a frase da Central antiga, sem travessão (ADR 0013). Fica fixo
+ * aqui, como as outras frases de estado vazio da Central. Sem número nenhum a
+ * frase não sai: a fonte em construção não é "tudo no rumo".
+ */
+export const TUDO_NO_RUMO = "Tá tudo no rumo, nenhuma ação urgente para esse objetivo agora.";
 
 const CORES_DO_TOM: Record<SugestaoDaLente["tom"], string> = {
   atencao: "border-amber-200 bg-amber-50 text-amber-900",
@@ -70,52 +74,14 @@ const CORES_DO_TOM: Record<SugestaoDaLente["tom"], string> = {
 };
 
 export function LenteDoObjetivo({ identificador, periodo }: { identificador: string; periodo: Periodo }) {
-  const [estado, setEstado] = useState<Estado>({ tipo: "carregando" });
+  const { estado, atualizando, aviso, atualizarAgora } = useTelaDaCentral<LentePayload>(
+    `objetivos/${identificador}`,
+    periodo,
+  );
   const caminho = `${CAMINHO_OBJETIVOS}/${identificador}`;
   const periodos = identificador.startsWith("instagram") ? PERIODOS_DO_INSTAGRAM : PERIODOS;
 
-  useEffect(() => {
-    let vivo = true;
-
-    async function carregar() {
-      setEstado({ tipo: "carregando" });
-      let token: string | undefined;
-      try {
-        token = await getAuthToken();
-      } catch {
-        token = undefined;
-      }
-      if (!token) {
-        if (vivo) setEstado({ tipo: "sem-conexao", mensagem: SEM_SESSAO });
-        return;
-      }
-      try {
-        const resposta = await fetch(`${BASE_CENTRAL}/objetivos/${identificador}?periodo=${periodo}`, {
-          headers: { Authorization: `Bearer ${token}` },
-        });
-        if (resposta.status === 404) {
-          if (vivo) setEstado({ tipo: "nao-encontrado" });
-          return;
-        }
-        if (!resposta.ok) {
-          const recusa = await lerRecusa(resposta);
-          if (vivo) setEstado(recusa);
-          return;
-        }
-        const dados = (await resposta.json()) as LentePayload;
-        if (vivo) setEstado({ tipo: "pronto", dados });
-      } catch {
-        if (vivo) setEstado({ tipo: "sem-conexao", mensagem: FALHA_DE_CONEXAO });
-      }
-    }
-
-    carregar();
-    return () => {
-      vivo = false;
-    };
-  }, [identificador, periodo]);
-
-  if (estado.tipo === "nao-encontrado") {
+  if (estado.tipo === "falhou" && estado.status === 404) {
     // Em producao, `notFound` lanca e a pagina de nao encontrado assume; o
     // `return null` e defensivo (e o que o teste observa).
     notFound();
@@ -150,31 +116,46 @@ export function LenteDoObjetivo({ identificador, periodo }: { identificador: str
           <header className="space-y-1">
             <h1 className="text-2xl font-bold text-text">{estado.dados.objetivo.nome}</h1>
             <p className="text-sm text-text-secondary">{estado.dados.objetivo.descricao}</p>
-            <LinhaDeFrescor frescor={estado.dados.frescor} dias={estado.dados.periodo.dias} />
           </header>
 
-          {estado.dados.numeros.length > 0 ? (
-            <ul aria-label="Números do Objetivo" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-              {estado.dados.numeros.map((numero) => (
-                <li key={numero.chave}>
-                  <CardNumero numero={numero} />
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p role="status" className="rounded-2xl border border-dashed border-border bg-bg p-6 text-sm text-text-secondary">
-              Ainda sem número para este período: a fonte deste Objetivo está em construção.
-            </p>
-          )}
+          <BarraDeFrescor
+            frescor={estado.dados.frescor}
+            atualizando={atualizando}
+            aviso={aviso}
+            onAtualizar={atualizarAgora}
+          />
 
-          {estado.dados.sugestoes.length > 0 && (
-            <section aria-label="Sugestões" className="space-y-3">
-              <h2 className="text-lg font-bold text-text">Sugestões</h2>
-              {estado.dados.sugestoes.map((sugestao) => (
-                <CardSugestao key={sugestao.id} sugestao={sugestao} />
-              ))}
-            </section>
-          )}
+          <div className={`space-y-6 transition-opacity ${atualizando ? "pointer-events-none opacity-50" : ""}`}>
+            {estado.dados.numeros.length > 0 ? (
+              <ul aria-label="Números do Objetivo" className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                {estado.dados.numeros.map((numero) => (
+                  <li key={numero.chave}>
+                    <CardNumero numero={numero} />
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <p
+                role="status"
+                className="rounded-2xl border border-dashed border-border bg-bg p-6 text-sm text-text-secondary"
+              >
+                Ainda sem número para este período: a fonte deste Objetivo está em construção.
+              </p>
+            )}
+
+            {(estado.dados.sugestoes.length > 0 || estado.dados.numeros.length > 0) && (
+              <section aria-label="Sugestões" className="space-y-3">
+                <h2 className="text-lg font-bold text-text">Sugestões</h2>
+                {estado.dados.sugestoes.length > 0 ? (
+                  estado.dados.sugestoes.map((sugestao) => <CardSugestao key={sugestao.id} sugestao={sugestao} />)
+                ) : (
+                  <p className="rounded-2xl border border-emerald-200 bg-emerald-50 p-5 text-sm text-emerald-900">
+                    {TUDO_NO_RUMO}
+                  </p>
+                )}
+              </section>
+            )}
+          </div>
         </div>
       )}
 
@@ -238,15 +219,4 @@ function CardSugestao({ sugestao }: { sugestao: SugestaoDaLente }) {
       <p className="text-xs opacity-80">{sugestao.porque}</p>
     </div>
   );
-}
-
-function LinhaDeFrescor({ frescor, dias }: { frescor: Frescor; dias: number }) {
-  const partes: string[] = [`últimos ${dias} dias`];
-  if (frescor.atualizado_em) {
-    partes.push(`números de ${formatarQuando(Date.parse(frescor.atualizado_em), Date.now())}`);
-  }
-  if (frescor.atualizacao_falhou && frescor.motivo) {
-    partes.push(`não foi possível atualizar agora: ${frescor.motivo}`);
-  }
-  return <p className="text-xs text-text-secondary">{partes.join(" · ")}</p>;
 }
