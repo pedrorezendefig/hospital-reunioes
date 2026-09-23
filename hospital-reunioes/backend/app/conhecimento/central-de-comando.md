@@ -17,7 +17,7 @@ Só quem é Super admin no aplicativo. Secretária e facilitador não veem a se�
 - **Dados do Google**: o Site em detalhe, com números do Google Analytics. Visitantes e Visitas, o movimento dia a dia, as Áreas do site mais procuradas, a Origem do público (busca, direto, redes, indicação), os dispositivos e os Contatos gerados, que são os cliques para falar com o hospital por canal (agendar, WhatsApp, Fale Conosco e telefone).
 - **Instagram**: a conta do hospital, só o orgânico. Seguidores, com o crescimento no período, Alcance, Visualizações, Interações e as Principais publicações.
 
-O período se escolhe na tela: 7, 28 ou 90 dias, sempre terminando ontem, porque o dia de hoje ainda está pela metade. Quando um número ainda não é medido, a tela diz que não é medido, em vez de mostrar zero.
+O período se escolhe na tela: 7, 28 ou 90 dias, sempre terminando ontem, porque o dia de hoje ainda está pela metade. No Instagram, e nos Objetivos do Instagram, só existem 7 ou 28 dias, porque a fonte não entrega mais que 30 dias de números. Quando um número ainda não é medido, a tela diz que não é medido, em vez de mostrar zero.
 
 ## Ao vivo e Atualizar agora
 
