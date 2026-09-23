@@ -28,6 +28,7 @@ payload: o menu só lista o que funciona, e o roadmap é texto, não dado.
 
 from __future__ import annotations
 
+import json
 import os
 import re
 import sys
@@ -36,6 +37,7 @@ from types import SimpleNamespace
 import httpx
 import pytest
 from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import rsa
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -45,6 +47,7 @@ from central_de_comando_apoio import (  # noqa: E402
     HOST_DA_GRAPH_API,
     SECRETARIA,
     SUPER_ADMIN,
+    TOKEN_DO_INSTAGRAM,
     VISITANTES_NA_GA4,
     GoogleFalso,
     InstagramFalso,
@@ -52,6 +55,7 @@ from central_de_comando_apoio import (  # noqa: E402
     cliente_da_central,
     erro_da_ga4,
     erro_do_instagram,
+    pem_da_chave_privada,
     pessoa,
 )
 from central_de_comando_apoio import PREFIXO_DA_CENTRAL as PREFIXO  # noqa: E402
@@ -445,3 +449,165 @@ class TestTravaDeRede:
             provedor_google.visitantes_comparados("28d", HOJE_DE_TESTE)
 
         assert "analyticsdata.googleapis.com" in str(erro.value)
+
+
+# ─── 11. O motivo nunca carrega segredo (issue #848) ────────────────────────
+#
+# Com o status por bloco (#821), o `motivo` da falha viaja num 200, dentro do
+# bloco e do frescor, e não mais só no `detail` de um 5xx. Os provedores já
+# montam frases fixas; estes testes travam isso na tela, que é onde o segredo
+# vazaria: nenhum `motivo` carrega material de chave, `Bearer`, URL ou tira com
+# cara de token, nem quando a fonte ecoa o segredo na mensagem de erro dela.
+
+# O que tem cara de segredo num texto que vai para a tela.
+_CARA_DE_SEGREDO = (
+    re.compile(r"PRIVATE KEY|-----"),  # material de chave PEM
+    re.compile(r"\bbearer\b", re.IGNORECASE),  # o esquema do header de acesso
+    re.compile(r"://|googleapis|facebook", re.IGNORECASE),  # URL da fonte
+    re.compile(r"eyJ[A-Za-z0-9_-]{8,}"),  # JWT (o `{"` do cabeçalho em base64)
+    re.compile(r"(?=[A-Za-z0-9_-]*[0-9])(?=[A-Za-z0-9_-]*[A-Za-z])[A-Za-z0-9_-]{20,}"),  # tira de token
+)
+
+# Um token do Instagram com a cara do real (longo, letras e dígitos), vencido.
+_TOKEN_DO_INSTAGRAM_VENCIDO = "EAAGvencido0123456789abcdefSEGREDO"
+
+
+def _motivos(no) -> list[str]:
+    """Todo `motivo` do payload, de bloco e do frescor, em qualquer profundidade."""
+    if isinstance(no, dict):
+        proprio = [no["motivo"]] if isinstance(no.get("motivo"), str) else []
+        return proprio + [m for valor in no.values() for m in _motivos(valor)]
+    if isinstance(no, list):
+        return [m for valor in no for m in _motivos(valor)]
+    return []
+
+
+def _sem_segredo(resposta: httpx.Response, *segredos: str) -> list[str]:
+    """Confere que nenhum `motivo` tem cara de segredo e que os segredos do
+    cenário não aparecem em lugar nenhum da resposta. Devolve os motivos."""
+    assert resposta.status_code == 200, resposta.text
+    motivos = _motivos(resposta.json())
+    assert motivos, "o cenário tinha de produzir ao menos um motivo"
+    for motivo in motivos:
+        for cara in _CARA_DE_SEGREDO:
+            assert not cara.search(motivo), f"{cara.pattern!r} no motivo: {motivo!r}"
+    for segredo in segredos:
+        assert segredo not in resposta.text
+    return motivos
+
+
+@pytest.mark.parametrize(
+    "texto",
+    [
+        "-----BEGIN PRIVATE KEY-----",
+        "Authorization: Bearer abc",
+        "https://graph.facebook.com/v21.0/me",
+        "eyJhbGciOiJSUzI1NiJ9.eyJpc3MiOiJ4In0.assinatura",
+        _TOKEN_DO_INSTAGRAM_VENCIDO,
+    ],
+)
+def test_o_detector_enxerga_o_que_tem_cara_de_segredo(texto):
+    """O detector tem dente: se ele não pegasse isto, os testes abaixo passariam
+    sem provar nada."""
+    assert any(cara.search(texto) for cara in _CARA_DE_SEGREDO)
+
+
+class TestMotivoSemSegredo:
+    def test_chave_privada_estragada(self, central_falsa, credencial_da_central, monkeypatch):
+        """Volta o `test_chave_privada_estragada_e_503_sem_ecoar_a_chave`, que saiu
+        com o 503: agora a falha mora no bloco, num 200."""
+        from app.config import settings
+
+        miolo = "SEGREDOquebrado0123456789abcdefXYZ"
+        estragada = {
+            **credencial_da_central,
+            "private_key": f"-----BEGIN PRIVATE KEY-----\n{miolo}\n-----END PRIVATE KEY-----\n",
+        }
+        monkeypatch.setattr(settings, "google_application_credentials_json", json.dumps(estragada))
+
+        resposta = _visao_geral("28d")
+
+        assert resposta.json()["visitantes"]["estado"] == "nao-configurado"
+        _sem_segredo(resposta, miolo)
+        assert central_falsa.google.pedidos == []
+
+    def test_credencial_cortada_no_meio_da_chave(self, central_falsa, credencial_da_central, monkeypatch):
+        """O JSON colado pela metade: o erro do `json` carrega o documento, que é
+        a chave privada. Nada dele chega à tela."""
+        from app.config import settings
+
+        inteira = json.dumps(credencial_da_central)
+        cortada = inteira[: inteira.index("-----END")]
+        linha_da_chave = credencial_da_central["private_key"].splitlines()[1]
+        monkeypatch.setattr(settings, "google_application_credentials_json", cortada)
+
+        resposta = _visao_geral("28d")
+
+        assert resposta.json()["visitantes"]["estado"] == "nao-configurado"
+        _sem_segredo(resposta, linha_da_chave)
+
+    def test_chave_de_outra_conta_recusada_pelo_google(self, central_falsa, credencial_da_central, monkeypatch):
+        """A chave é válida, mas não é a da service account: o Google recusa o
+        token assinado (401). O `motivo` explica sem ecoar o token nem a chave."""
+        from app.config import settings
+
+        outra = pem_da_chave_privada(rsa.generate_private_key(public_exponent=65537, key_size=2048))
+        monkeypatch.setattr(
+            settings, "google_application_credentials_json", json.dumps({**credencial_da_central, "private_key": outra})
+        )
+
+        resposta = _visao_geral("28d")
+
+        assert resposta.json()["visitantes"]["estado"] == "sem-dado"
+        token = central_falsa.google.pedidos[0].headers["authorization"].removeprefix("Bearer ")
+        motivos = _sem_segredo(resposta, token, outra.splitlines()[1])
+        assert any("HTTP 401" in m for m in motivos)
+
+    def test_o_google_ecoa_o_token_na_mensagem_de_erro(self, central_falsa):
+        """A mensagem que o Google devolve fica no log, nunca na tela: mesmo que
+        ela traga o token e a URL, o `motivo` é a frase fixa da Central."""
+        eco = "Bearer eyJhbGciOiJSUzI1NiJ9.eyJzZWdyZWRvIjoxfQ.assinatura0123456789 em https://analyticsdata.googleapis.com/x"
+        central_falsa.google.forcar = erro_da_ga4(401, "UNAUTHENTICATED", eco)
+
+        resposta = _visao_geral("28d")
+
+        assert resposta.json()["visitantes"]["estado"] == "sem-dado"
+        _sem_segredo(resposta, "eyJzZWdyZWRvIjoxfQ", "assinatura0123456789")
+
+    def test_token_do_instagram_vencido_sem_numero_guardado(self, central_falsa, monkeypatch):
+        """O token venceu antes da primeira leitura: o bloco fica `sem-dado`, e o
+        `motivo` pede a renovação sem ecoar o token, nem quando a Graph API o
+        devolve na mensagem de erro."""
+        from app.config import settings
+
+        monkeypatch.setattr(settings, "instagram_access_token", _TOKEN_DO_INSTAGRAM_VENCIDO)
+        central_falsa.instagram.forcar = erro_do_instagram(
+            400,
+            190,
+            "OAuthException",
+            f"Error validating access token {_TOKEN_DO_INSTAGRAM_VENCIDO}: "
+            f"https://graph.facebook.com/v21.0/me?access_token={_TOKEN_DO_INSTAGRAM_VENCIDO}",
+        )
+
+        resposta = _visao_geral("28d")
+
+        assert resposta.json()["instagram"]["estado"] == "sem-dado"
+        motivos = _sem_segredo(resposta, _TOKEN_DO_INSTAGRAM_VENCIDO)
+        assert any("Renove o token" in m for m in motivos)
+
+    def test_token_do_instagram_vencido_com_o_ultimo_valor_bom(self, central_falsa, relogio_da_central, monkeypatch):
+        """Passou a hora e o token venceu: o relance mostra o último valor bom, e
+        o `motivo` do frescor pede a renovação sem ecoar token nenhum."""
+        from app.config import settings
+
+        _visao_geral("28d")
+        relogio_da_central.avancar(hours=2)
+        monkeypatch.setattr(settings, "instagram_access_token", _TOKEN_DO_INSTAGRAM_VENCIDO)
+
+        resposta = _visao_geral("28d")
+
+        corpo = resposta.json()
+        assert corpo["instagram"]["estado"] == "ok"
+        assert corpo["frescor"]["atualizacao_falhou"] is True
+        _sem_segredo(resposta, _TOKEN_DO_INSTAGRAM_VENCIDO, TOKEN_DO_INSTAGRAM)
+        assert "Renove o token" in corpo["frescor"]["motivo"]

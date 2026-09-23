@@ -18,6 +18,10 @@ Os blocos:
 - `visitantes`: o número-manchete (Visitantes), a variação e o **contexto** dele
   (a Área do site que mais atrai, a principal Origem do público e o dispositivo
   mais usado). Vem do Google, reaproveitando os Dados do Google (#818).
+  A leitura é o `dados_do_google.montar` inteiro, de propósito (decisão da
+  #848): ela vale 1 hora no cache, a #867 a aquece no boot, e uma leitura
+  enxuta só para o topo dos rankings seria um segundo caminho para o mesmo
+  número.
 - `instagram`: o Instagram num relance, quatro números (Seguidores, Alcance,
   Visualizações, Interações). Vem do Instagram (#819), capado a 28 dias (a Graph
   API entrega no máximo 30 dias por consulta).
