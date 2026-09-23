@@ -108,13 +108,14 @@ def _montar_site_visitantes(periodo: Periodo, hoje: date) -> tuple[list[Numero],
 
 def _montar_contatos(periodo: Periodo, hoje: date) -> tuple[list[Numero], Extras]:
     """Gerar mais contatos: os Contatos medidos do período (a soma dos canais
-    que a GA4 mede), com todos os canais e o estado de cada um nos extras. Sem
-    clique medido no período, não há número (estado calmo), e a lente só
-    mostra a sugestão de instrumentar."""
+    que a GA4 mede), com todos os canais e o estado de cada um nos extras.
+    Canal medido sem clique no período conta 0, igual à tela Dados do Google:
+    havendo canal medido, a lente e o card dizem "Contatos medidos 0" (decisão
+    do dono na revisão do PR #872). Só sem canal medido nenhum não há número."""
     (cliques,) = provedor_google.perguntar(provedor_google.cliques_de_contato(periodo, hoje))
     canais = _canais_da_lente(cliques)
-    medidos = sum(c.cliques for c in canais if c.estado == "medido" and c.cliques is not None)
-    numeros = [Numero("contatos", "Contatos medidos", medidos)] if medidos > 0 else []
+    medidos = [c.cliques for c in canais if c.estado == "medido" and c.cliques is not None]
+    numeros = [Numero("contatos", "Contatos medidos", sum(medidos))] if medidos else []
     return numeros, Extras(canais=canais)
 
 
