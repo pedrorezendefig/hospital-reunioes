@@ -744,3 +744,32 @@ class TestLimiteDeRequisicoes:
 
         assert passou_do_teto.status_code == 429
         assert chamou_o_gate["n"] == 0, "o pedido acima do teto chegou ao gate"
+
+    def test_a_conversa_normal_do_conector_passa_folgada(self, chave_do_emissor, central_configurada, ao_vivo_na_ga4):
+        """Uma conversa no claude.ai: initialize, a notificação de pronto,
+        tools/list e três chamadas de ferramenta. Cinco conversas inteiras no
+        mesmo minuto (30 pedidos, metade do teto), mais do que qualquer uso de
+        uma pessoa, passam sem nenhum 429 e com as respostas de verdade."""
+        chamada_do_ao_vivo = {
+            "jsonrpc": "2.0",
+            "method": "tools/call",
+            "params": {"name": conector_mcp.FERRAMENTA_AO_VIVO, "arguments": {}},
+        }
+        conversa = [
+            INIT,
+            {"jsonrpc": "2.0", "method": "notifications/initialized"},
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            {**chamada_do_ao_vivo, "id": 3},
+            {**chamada_do_ao_vivo, "id": 4},
+            {**chamada_do_ao_vivo, "id": 5},
+        ]
+        cliente = _cliente_mcp()
+        tok = token(chave_do_emissor)
+
+        respostas = [_rpc(cliente, pedido, tok) for _ in range(5) for pedido in conversa]
+
+        assert len(respostas) == 30
+        assert [r.status_code for r in respostas] == [200, 202, 200, 200, 200, 200] * 5
+        ultima = respostas[-1].json()["result"]
+        assert ultima["isError"] is False
+        assert ultima["structuredContent"] == {"pessoasAgora": 42}
