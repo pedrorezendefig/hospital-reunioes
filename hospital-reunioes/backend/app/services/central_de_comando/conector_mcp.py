@@ -342,11 +342,12 @@ GLOSSARIO_SITE = (
     '"areasDoSite" é o ranking das Áreas do site, os grupos de páginas por serviço do hospital '
     "(Maternidade, Emergência 24h, Centro de Imagem, Centro Médico, Laboratório); o número fala do "
     "site, não da procura real pelo serviço. "
-    '"origens" é a Origem do público (busca, direto, redes, anúncios, e os rótulos gentis Outros e '
-    'Não identificado para o que o Google não classificou). "dispositivos" são as Visitas por '
-    'dispositivo. Em "contatos", cada canal tem um "estado": "medido" traz os "cliques" reais (hoje '
-    'WhatsApp e Fale Conosco), "em-construcao" quer dizer que o Site ainda não avisa o Google quando '
-    'o contato acontece, e "nao-medido" quer dizer que não há como medir; "em-construcao" e '
+    '"origens" é a Origem do público (Busca no Google, Direto, Redes sociais, Anúncios, Indicação para '
+    "quem chegou por um link em outro site, e os rótulos gentis Outros, a soma das origens pequenas, e "
+    'Não identificado, o que o Google não classificou). "dispositivos" são as Visitas por '
+    'dispositivo. Em "contatos", cada canal tem um "estado": "medido" traz os "cliques" reais, zero '
+    'incluso (hoje WhatsApp e Fale Conosco), "em-construcao" quer dizer que o Site ainda não avisa o '
+    'Google quando o contato acontece, e "nao-medido" quer dizer que não há como medir; "em-construcao" e '
     '"nao-medido" nunca são zero. Em "frescor", "atualizadoHaMin" diz há quantos minutos o dado foi '
     'lido e "falhaAoAtualizar" verdadeiro quer dizer que é o último valor bom guardado. Não invente '
     "números que não estejam no payload."

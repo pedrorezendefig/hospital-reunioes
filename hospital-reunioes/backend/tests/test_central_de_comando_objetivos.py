@@ -156,6 +156,15 @@ class TestGaleria:
         for navegavel in ("site-visitantes", "instagram-seguidores", "instagram-engajamento", "contatos"):
             assert por_id[navegavel]["em_construcao"] is False
 
+    def test_contatos_com_todo_canal_medido_em_zero_mostra_0_no_card(self, central_falsa):
+        """Nenhum clique em canal medido nos 28 dias: o card diz 0, e não "Ver os
+        números" (decisão do dono na revisão do PR #872)."""
+        central_falsa.lote.eventos[_28_DIAS] = {"page_view": 88000}
+
+        por_id = {o["id"]: o for o in _galeria().json()["objetivos"]}
+
+        assert por_id["contatos"]["numero"]["valor"] == 0
+
     def test_dois_em_construcao_sem_numero_nem_destino_navegavel(self, central_falsa):
         por_id = {o["id"]: o for o in _galeria().json()["objetivos"]}
 
@@ -270,6 +279,26 @@ class TestLenteContatos:
         sugestoes = {s["id"]: s for s in corpo["sugestoes"]}
         assert "contatos-instrumentar" in sugestoes
         assert "2 de 4" in sugestoes["contatos-instrumentar"]["porque"]
+
+    def test_canal_medido_sem_clique_nao_entra_na_sugestao_de_instrumentar(self, central_falsa):
+        """7 dias: ninguém enviou o Fale Conosco. O canal segue medido (com 0),
+        então a sugestão pede para instrumentar só o que o Site não avisa ao
+        Google: o agendar e o telefone (#856)."""
+        corpo = _lente("contatos", "7d").json()
+
+        porque = {s["id"]: s for s in corpo["sugestoes"]}["contatos-instrumentar"]["porque"]
+        assert "2 de 4" in porque
+        assert "Fale Conosco" not in porque
+
+    def test_canal_medido_com_zero_clique_mostra_contatos_medidos_0(self, central_falsa):
+        """90 dias: nenhum clique no WhatsApp nem no Fale Conosco. Os dois seguem
+        medidos, então a lente diz "Contatos medidos 0", igual à tela Dados do
+        Google, e não esconde o número (decisão do dono na revisão do PR #872)."""
+        corpo = _lente("contatos", "90d").json()
+
+        numeros = {n["chave"]: n for n in corpo["numeros"]}
+        assert numeros["contatos"]["valor"] == 0
+        assert numeros["contatos"]["rotulo"] == "Contatos medidos"
 
 
 # ─── 404, 422 e o cache ──────────────────────────────────────────────────────

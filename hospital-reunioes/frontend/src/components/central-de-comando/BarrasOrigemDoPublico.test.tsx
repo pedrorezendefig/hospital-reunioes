@@ -74,6 +74,21 @@ describe("BarrasOrigemDoPublico", () => {
     expect(within(itens()[4]).queryByText("0%")).toBeNull();
   });
 
+  it("a Indicação é origem identificada: cor das origens e sem a nota do resto (#856)", () => {
+    render(
+      <BarrasOrigemDoPublico
+        origens={[
+          { chave: "busca", rotulo: "Busca no Google", visitas: 700, percentual: 70 },
+          { chave: "indicacao", rotulo: "Indicação", visitas: 300, percentual: 30 },
+        ]}
+      />,
+    );
+
+    expect(itens()[1].textContent).toBe("Indicação30%300 visitas");
+    expect(within(itens()[1]).getByTestId("barra").style.backgroundColor).toBe("var(--color-primary)");
+    expect(screen.queryByText(/privacidade/)).toBeNull();
+  });
+
   it("com Outros ou Não identificado, explica o que são", () => {
     render(<BarrasOrigemDoPublico origens={ORIGENS} />);
 

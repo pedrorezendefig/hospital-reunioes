@@ -179,14 +179,16 @@ def _bloco_areas_do_site(areas: tuple[provedor_google.VisitasNaArea, ...]) -> li
     ]
 
 
-# O nome de cada Origem do público na tela, os da Central antiga. Os dois do fim
-# são os rótulos gentis do que o Google não classificou: a tela nunca mostra o
-# termo cru da fonte.
+# O nome de cada Origem do público na tela: os da Central antiga e a Indicação
+# (quem chegou por um link em outro site), que lá caía em Outros. Os dois do fim
+# são os rótulos gentis das fatias pequenas somadas e do que o Google não
+# classificou: a tela nunca mostra o termo cru da fonte.
 ROTULO_DA_ORIGEM: dict[provedor_google.OrigemDoPublico, str] = {
     "busca": "Busca no Google",
     "direto": "Direto",
     "redes": "Redes sociais",
     "anuncios": "Anúncios",
+    "indicacao": "Indicação",
     "outros": "Outros",
     "nao-identificado": "Não identificado",
 }
@@ -252,23 +254,26 @@ ROTULO_DO_CONTATO: dict[provedor_google.CanalDeContato, str] = {
 }
 
 
-def canais_de_contato(medidos: Mapping[provedor_google.CanalDeContato, int]) -> list[dict]:
+def canais_de_contato(medidos: Mapping[provedor_google.CanalDeContato, int | None]) -> list[dict]:
     """Os Contatos gerados, um item por canal, na ordem da tela, cada um com
-    o estado honesto dele. Porte do `montarCanais` da Central antiga:
+    o estado honesto dele:
 
     - canal que a GA4 não mede (ausente de `medidos`) é **não medido**;
-    - canal medido com zero clique é **em construção**: o Site ainda não avisa
-      a GA4 quando ele acontece, e o zero não é resultado;
-    - canal com clique é **medido**, e só ele traz `cliques`.
+    - canal sem número (`None`) é **em construção**: o Site ainda não avisa a
+      GA4 quando ele acontece;
+    - canal com número é **medido**, e só ele traz `cliques`, zero incluso: o
+      Site avisa o Google, então nenhum clique no período é resultado (decisão
+      do dono na #856; a Central antiga lia esse zero como em construção).
 
     Em construção e não medido nunca trazem número, nem zero.
     """
     canais: list[dict] = []
     for canal, rotulo in ROTULO_DO_CONTATO.items():
-        cliques = medidos.get(canal)
-        if cliques is None:
+        if canal not in medidos:
             canais.append({"chave": canal, "rotulo": rotulo, "estado": "nao-medido"})
-        elif cliques == 0:
+            continue
+        cliques = medidos[canal]
+        if cliques is None:
             canais.append({"chave": canal, "rotulo": rotulo, "estado": "em-construcao"})
         else:
             canais.append({"chave": canal, "rotulo": rotulo, "estado": "medido", "cliques": cliques})

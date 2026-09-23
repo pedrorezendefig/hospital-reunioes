@@ -276,6 +276,23 @@ class TestFerramentasListadas:
         assert not re.search(r"bra[cç]os?", descricao_site, re.IGNORECASE)
         assert "Alcance" in por_nome["get_instagram_analytics"]["description"]
 
+    def test_a_descricao_do_site_cita_toda_origem_que_o_payload_pode_trazer(self):
+        """O Claude lê as origens pelo rótulo: a descrição da ferramenta nomeia
+        cada uma, inclusive a Indicação (#856), para ele não inventar sentido."""
+        from app.services.central_de_comando.dados_do_google import ROTULO_DA_ORIGEM
+
+        descricao_site = {f["name"]: f for f in conector_mcp.ferramentas()}["get_site_analytics"]["description"]
+
+        for rotulo in ROTULO_DA_ORIGEM.values():
+            assert rotulo.lower() in descricao_site.lower(), rotulo
+
+    def test_a_descricao_do_site_diz_que_o_canal_medido_pode_ter_zero(self):
+        """Canal medido sem clique no período traz 0; em construção e não
+        medido seguem sem número (#856)."""
+        descricao_site = {f["name"]: f for f in conector_mcp.ferramentas()}["get_site_analytics"]["description"]
+
+        assert "zero incluso" in descricao_site
+
 
 # ─── 5. A ferramenta de Site, lida do cache das telas ────────────────────────
 

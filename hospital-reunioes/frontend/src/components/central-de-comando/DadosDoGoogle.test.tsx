@@ -121,8 +121,8 @@ function payloadDe90Dias(): DadosDoGooglePayload {
     origem_do_publico: [],
     contatos_gerados: [
       { chave: "agendar", rotulo: "Cliques para agendar", estado: "em-construcao" },
-      { chave: "whatsapp", rotulo: "WhatsApp", estado: "em-construcao" },
-      { chave: "fale-conosco", rotulo: "Fale Conosco", estado: "em-construcao" },
+      { chave: "whatsapp", rotulo: "WhatsApp", estado: "medido", cliques: 0 },
+      { chave: "fale-conosco", rotulo: "Fale Conosco", estado: "medido", cliques: 0 },
       { chave: "telefone", rotulo: "Telefone", estado: "nao-medido" },
     ],
     frescor: { atualizado_em: "2026-09-18T16:45:00+00:00", atualizacao_falhou: false, motivo: null },
@@ -183,7 +183,7 @@ const ORIGEM_DE_7_DIAS: OrigemDoPayload[] = [
 const CONTATOS_DE_7_DIAS: ContatoDoPayload[] = [
   { chave: "agendar", rotulo: "Cliques para agendar", estado: "em-construcao" },
   { chave: "whatsapp", rotulo: "WhatsApp", estado: "medido", cliques: 1100 },
-  { chave: "fale-conosco", rotulo: "Fale Conosco", estado: "em-construcao" },
+  { chave: "fale-conosco", rotulo: "Fale Conosco", estado: "medido", cliques: 0 },
   { chave: "telefone", rotulo: "Telefone", estado: "nao-medido" },
 ];
 
@@ -538,7 +538,7 @@ describe("Dados do Google: Áreas do site, Origem do público e Contatos gerados
     expect(cartoesDosContatos()).toEqual([
       "em construçãoCliques para agendar",
       "1.100WhatsAppmedido",
-      "em construçãoFale Conosco",
+      "0Fale Conoscomedido",
       "não medidoTelefone",
     ]);
   });
@@ -554,8 +554,8 @@ describe("Dados do Google: Áreas do site, Origem do público e Contatos gerados
     expect(screen.queryByText("↓ 10,0%")).toBeNull();
     expect(cartoesDosContatos()).toEqual([
       "em construçãoCliques para agendar",
-      "em construçãoWhatsApp",
-      "em construçãoFale Conosco",
+      "0WhatsAppmedido",
+      "0Fale Conoscomedido",
       "não medidoTelefone",
     ]);
   });

@@ -693,12 +693,15 @@ def _visitas_por_area(relatorio: dict) -> dict[AreaDoSite, int]:
     return visitas
 
 
-OrigemDoPublico = Literal["busca", "direto", "redes", "anuncios", "outros", "nao-identificado"]
+OrigemDoPublico = Literal["busca", "direto", "redes", "anuncios", "indicacao", "outros", "nao-identificado"]
 
 # O grupo de canal padrão da GA4 (`sessionDefaultChannelGroup`) de cada Origem do
-# público, igual ao da Central antiga (`CHANNEL_FROM_GA4`). Grupo identificado
-# que não está aqui ("Referral", "Email") é Outros, e o nome vazio é Não
-# identificado: nenhum termo cru da GA4 chega à tela.
+# público, como o CONTEXT.md define (decisão do dono na #856, que tirou o mapa
+# do `CHANNEL_FROM_GA4` da Central antiga). O "Referral", quem chegou por um link
+# em outro site, é a Indicação, com fatia própria. O que o Google não soube classificar
+# ("Unassigned", "(not set)" e o nome vazio) é Não identificado; o "(other)", a
+# linha em que o Google soma as fatias pequenas, e o grupo identificado que não
+# está aqui ("Email", "SMS") são Outros: nenhum termo cru da GA4 chega à tela.
 _ORIGEM_DO_CANAL: dict[str, OrigemDoPublico] = {
     "Organic Search": "busca",
     "Direct": "direto",
@@ -710,16 +713,17 @@ _ORIGEM_DO_CANAL: dict[str, OrigemDoPublico] = {
     "Paid Video": "anuncios",
     "Paid Other": "anuncios",
     "Cross-network": "anuncios",
+    "Referral": "indicacao",
     "Unassigned": "nao-identificado",
-    "(other)": "nao-identificado",
+    "(not set)": "nao-identificado",
+    "(other)": "outros",
 }
 
 
 def origem_do_canal(canal: str) -> OrigemDoPublico:
-    """A Origem do público de um grupo de canal da GA4. Porte do `channelKey`
-    da Central antiga, com as mesmas três regras: o grupo do mapa vira a
-    origem dele; o nome vazio é Não identificado; qualquer outro grupo
-    (inclusive o "(not set)", que não está no mapa) é Outros."""
+    """A Origem do público de um grupo de canal da GA4, com três regras: o
+    grupo do mapa vira a origem dele; o nome vazio é Não identificado;
+    qualquer outro grupo é Outros."""
     if canal in _ORIGEM_DO_CANAL:
         return _ORIGEM_DO_CANAL[canal]
     if canal == "":
@@ -763,8 +767,12 @@ CanalDeContato = Literal["agendar", "whatsapp", "fale-conosco", "telefone"]
 
 @dataclass(frozen=True)
 class CliquesNoCanal:
+    """Os cliques de um canal de contato no período. `None` quer dizer que o
+    Site ainda não avisa a GA4 quando o contato acontece: não há número, nem
+    zero."""
+
     canal: CanalDeContato
-    cliques: int
+    cliques: int | None
 
 
 def cliques_de_contato(periodo: Periodo, hoje: date) -> Pergunta[tuple[CliquesNoCanal, ...]]:
@@ -773,10 +781,10 @@ def cliques_de_contato(periodo: Periodo, hoje: date) -> Pergunta[tuple[CliquesNo
     O `eventCount` da GA4 por `eventName`, filtrado pelos dois eventos que o
     Site dispara (`GA4_EVENTO_WHATSAPP` e `GA4_EVENTO_FALE_CONOSCO`), como a
     Central antiga (`getContactClicks` e `mapContactClicks`). O agendar entra
-    sempre com zero, porque o botão de marcar consulta ainda não dispara
-    evento, e a tela o lê como em construção; o telefone fica de fora, porque
-    ligação não é clique, e a tela o lê como não medido. Evento que não
-    aconteceu no período é zero, não ausência: a GA4 omite a linha dele.
+    sem número, porque o botão de marcar consulta ainda não dispara evento, e
+    a tela o lê como em construção; o telefone fica de fora, porque ligação
+    não é clique, e a tela o lê como não medido. Evento que não aconteceu no
+    período é zero medido, não ausência: a GA4 omite a linha dele.
     """
     whatsapp = settings.ga4_evento_whatsapp
     fale_conosco = settings.ga4_evento_fale_conosco
@@ -785,7 +793,7 @@ def cliques_de_contato(periodo: Periodo, hoje: date) -> Pergunta[tuple[CliquesNo
         (relatorio,) = relatorios
         por_evento = {evento: int(numero) for evento, numero in _linhas(relatorio)}
         return (
-            CliquesNoCanal("agendar", 0),
+            CliquesNoCanal("agendar", None),
             CliquesNoCanal("whatsapp", por_evento.get(whatsapp, 0)),
             CliquesNoCanal("fale-conosco", por_evento.get(fale_conosco, 0)),
         )

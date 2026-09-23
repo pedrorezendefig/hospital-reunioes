@@ -372,8 +372,8 @@ VISITAS_POR_PAGINA_NA_GA4: dict[tuple[str, str], dict[str, int]] = {
 # da Central, e os termos crus "(not set)" e "(other)".
 VISITAS_POR_CANAL_NA_GA4: dict[tuple[str, str], dict[str, int]] = {
     # 28 dias, 9.410 Visitas: busca 5.700; direto 1.800; redes 520 + 280 = 800;
-    # anúncios 500 + 250 = 750; Outros 300 + 20 = 320 ("Referral" e "(not set)");
-    # Não identificado 30 + 10 = 40 ("Unassigned" e "(other)").
+    # anúncios 500 + 250 = 750; Indicação 300 ("Referral"); Outros 10 ("(other)");
+    # Não identificado 30 + 20 = 50 ("Unassigned" e "(not set)").
     ("2026-08-21", "2026-09-17"): {
         "Organic Search": 5700,
         "Direct": 1800,
