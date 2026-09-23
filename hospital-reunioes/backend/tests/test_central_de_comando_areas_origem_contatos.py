@@ -254,7 +254,7 @@ class TestOrigemDoPublico:
         """28 dias, 9.410 Visitas: os grupos de canal da GA4 somados em cada
         Origem do público, as origens da maior para a menor e o resto (Outros
         e Não identificado) sempre no fim. Cada fatia arredondada sozinha, e o
-        Não identificado, com 0,43%, vem com 0 ponto ("<1%" na tela)."""
+        Não identificado, com 0,53%, vem com 0 ponto ("<1%" na tela)."""
         resposta = _dados_do_google("28d")
 
         assert resposta.status_code == 200, resposta.text
@@ -263,13 +263,32 @@ class TestOrigemDoPublico:
             {"chave": "direto", "rotulo": "Direto", "visitas": 1800, "percentual": 19},
             {"chave": "redes", "rotulo": "Redes sociais", "visitas": 800, "percentual": 9},
             {"chave": "anuncios", "rotulo": "Anúncios", "visitas": 750, "percentual": 8},
-            {"chave": "outros", "rotulo": "Outros", "visitas": 320, "percentual": 3},
-            {"chave": "nao-identificado", "rotulo": "Não identificado", "visitas": 40, "percentual": 0},
+            {"chave": "outros", "rotulo": "Outros", "visitas": 310, "percentual": 3},
+            {"chave": "nao-identificado", "rotulo": "Não identificado", "visitas": 50, "percentual": 0},
+        ]
+
+    def test_o_not_set_soma_no_nao_identificado_e_o_other_no_outros(self, lote_da_ga4):
+        """Pela rota, os dois termos crus da GA4 caem cada um no rótulo gentil
+        que o CONTEXT.md define: o "(not set)" (origem desconhecida) junto do
+        "Unassigned", e o "(other)" (fatias pequenas somadas) em Outros."""
+        lote_da_ga4.visitas_por_canal[_28_DIAS] = {
+            "Organic Search": 100,
+            "(not set)": 7,
+            "Unassigned": 3,
+            "(other)": 4,
+        }
+
+        origem = _dados_do_google("28d").json()["origem_do_publico"]
+
+        assert [(o["chave"], o["rotulo"], o["visitas"]) for o in origem] == [
+            ("busca", "Busca no Google", 100),
+            ("outros", "Outros", 4),
+            ("nao-identificado", "Não identificado", 10),
         ]
 
     def test_nunca_mostra_o_termo_cru_da_fonte(self):
         """O "(not set)" e o "(other)" da GA4 chegam somados nos rótulos
-        gentis, como na Central antiga: nenhum termo técnico chega à tela."""
+        gentis: nenhum termo técnico chega à tela."""
         origem = _dados_do_google("28d").json()["origem_do_publico"]
 
         for termo_da_fonte in ("(not set)", "(other)", "not set", "Unassigned", "Referral", "Organic Search"):
@@ -356,7 +375,9 @@ class TestOrigemDoPublico:
 
 class TestOrigemDoCanal:
     """A regra pura de grupo de canal da GA4 para Origem do público, direto,
-    sem rota. O mapa é o da Central antiga, grupo por grupo."""
+    sem rota. O mapa segue o CONTEXT.md, grupo por grupo (decisão do dono na
+    #856): a origem desconhecida é Não identificado e a soma das fatias
+    pequenas é Outros."""
 
     @pytest.mark.parametrize(
         ("canal", "origem"),
@@ -372,17 +393,26 @@ class TestOrigemDoCanal:
             ("Paid Other", "anuncios"),
             ("Cross-network", "anuncios"),
             ("Unassigned", "nao-identificado"),
-            ("(other)", "nao-identificado"),
             ("", "nao-identificado"),
         ],
     )
     def test_o_grupo_do_mapa_vira_a_origem_dele(self, canal, origem):
         assert provedor_google.origem_do_canal(canal) == origem
 
-    @pytest.mark.parametrize("canal", ["Referral", "Email", "Organic Video", "Affiliates", "SMS", "(not set)"])
+    def test_o_not_set_e_origem_desconhecida_e_vira_nao_identificado(self):
+        """O "(not set)" é a Visita que o Google não soube classificar: origem
+        desconhecida, Não identificado (na Central antiga caía em Outros)."""
+        assert provedor_google.origem_do_canal("(not set)") == "nao-identificado"
+
+    def test_o_other_e_a_soma_das_fatias_pequenas_e_vira_outros(self):
+        """O "(other)" é a linha em que o Google soma as fatias pequenas: é
+        Outros (na Central antiga caía em Não identificado)."""
+        assert provedor_google.origem_do_canal("(other)") == "outros"
+
+    @pytest.mark.parametrize("canal", ["Email", "Organic Video", "Affiliates", "SMS", "Mobile Push Notifications"])
     def test_grupo_identificado_fora_do_mapa_e_outros(self, canal):
-        """Como na Central antiga: o "(not set)" não está no mapa e não é o
-        nome vazio, então é Outros (e não Não identificado)."""
+        """Grupo que a GA4 conhece mas que não tem origem própria na tela
+        entra em Outros, com as demais fatias pequenas."""
         assert provedor_google.origem_do_canal(canal) == "outros"
 
     def test_toda_origem_tem_rotulo_na_tela(self):
