@@ -32,13 +32,13 @@ Chaves de produção: só no Coolify. A lista e o "quem mexe" estão no `README.
 | `INSTAGRAM_ACCESS_TOKEN` | compartilhada | 1Password, VITTA TECH, item "Central de Comando Instagram" (criar). Peça ao Pedro: `INSTAGRAM_ACCESS_TOKEN`, serve para a Central de Comando ler o Instagram do hospital. |
 | `INSTAGRAM_BUSINESS_ACCOUNT_ID` | compartilhada | 1Password, VITTA TECH, item "Central de Comando Instagram" (criar), o mesmo da linha de cima. Peça ao Pedro: `INSTAGRAM_BUSINESS_ACCOUNT_ID`, serve para a Central de Comando saber qual conta profissional do Instagram ler. |
 | `GA4_EVENTO_WHATSAPP`, `GA4_EVENTO_FALE_CONOSCO` | config | Vazias usam `wa_click` e `generate_lead`, os mesmos da produção. Não precisa pedir. |
+| `RESEND_API_KEY` | só produção | 1Password, VITTA TECH, item "Resend". Não entra no local. |
+| `GH_TOKEN_HOMOLOG` | só produção | 1Password, HOSPITAL SÃO MATHEUS, item "Global Health". É a agenda de homologação, não é GitHub. Não entra no local. |
+| `FIREFLIES_*`, `DIRETOR_EMAIL`, `DEFAULT_USER_PASSWORD` | só produção | Vivem no Coolify. |
 
 **Credencial do Google, armadilha de formato:** no app antigo da Central (`CentraldeComando`) a chave se chama `GOOGLE_APPLICATION_CREDENTIALS` e guarda o caminho de um arquivo JSON; aqui a variável é `GOOGLE_APPLICATION_CREDENTIALS_JSON` e guarda o JSON inteiro da service account, numa linha só, entre aspas simples. Copiar o nome ou o valor de um para o outro não funciona, e o erro é calado: a tela só mostra "Sem ligação com o Google Analytics".
 
 **Origem das chaves da Central:** hoje o valor real mora no Coolify de produção (backend, #826) e no app antigo. O Pedro cria os dois itens "Central de Comando" no cofre uma vez, e o mesmo item serve ao `.env` local e ao Coolify. Sem as chaves, a Central local fica desligada e diz que falta configurar, nunca mostra zero.
-| `RESEND_API_KEY` | só produção | 1Password, VITTA TECH, item "Resend". Não entra no local. |
-| `GH_TOKEN_HOMOLOG` | só produção | 1Password, HOSPITAL SÃO MATHEUS, item "Global Health". É a agenda de homologação, não é GitHub. Não entra no local. |
-| `FIREFLIES_*`, `DIRETOR_EMAIL`, `DEFAULT_USER_PASSWORD` | só produção | Vivem no Coolify. |
 
 ## Onde cada variável mora
 

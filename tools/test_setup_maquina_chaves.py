@@ -51,6 +51,14 @@ def linha_do_nivel_3(chave: str) -> list[str]:
     return [c.strip() for c in linhas[0].strip().strip("|").split("|")]
 
 
+def test_a_tabela_do_nivel_3_e_uma_so():
+    """Texto no meio da tabela vira parágrafo solto com as linhas de baixo."""
+    linhas = NIVEL_3.strip().splitlines()
+    na_tabela = [i for i, li in enumerate(linhas) if li.startswith("|")]
+
+    assert na_tabela == list(range(na_tabela[0], na_tabela[-1] + 1))
+
+
 @pytest.mark.parametrize("chave", CHAVES_DA_CENTRAL)
 def test_a_chave_pedida_e_a_que_o_app_le(chave):
     """Nome na skill que o `.env.example` não tem é pedido que não liga nada."""
@@ -64,9 +72,9 @@ def test_o_nivel_3_diz_tipo_origem_e_o_pedido_ao_pedro(chave):
     assert tipo == "compartilhada"
     assert "1Password, VITTA TECH" in origem
     assert "(criar)" in origem, "o item ainda não existe no cofre"
-    assert re.search(
-        rf"peça ao Pedro: `{chave}`, serve para \w", origem, re.I
-    ), "falta a frase de pedido"
+    assert re.search(rf"peça ao Pedro: `{chave}`, serve para \w", origem, re.I), (
+        "falta a frase de pedido"
+    )
 
 
 def test_a_credencial_do_google_e_o_json_inteiro_nao_o_caminho():
