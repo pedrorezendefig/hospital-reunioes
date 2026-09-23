@@ -114,7 +114,7 @@ class TestNoSettings:
     def test_evento_de_contato_vazio_no_env_usa_o_padrao(self, chave, padrao):
         """Quem copia o `.env.example` leva a linha vazia junto. Um nome de
         evento vazio contaria zero clique em silêncio, e o canal apareceria
-        "em construção" sem estar."""
+        medido com 0 sem ser verdade."""
         assert getattr(_settings(**{chave.lower(): ""}), chave.lower()) == padrao
         assert getattr(_settings(**{chave.lower(): "   "}), chave.lower()) == padrao
 
