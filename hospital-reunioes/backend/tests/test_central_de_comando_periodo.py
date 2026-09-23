@@ -12,7 +12,7 @@ from __future__ import annotations
 
 import os
 import sys
-from datetime import date
+from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
@@ -24,6 +24,7 @@ from app.services.central_de_comando.periodo import (  # noqa: E402
     Intervalo,
     dias_do_intervalo,
     dias_do_periodo,
+    hoje_utc,
     intervalo_anterior,
     intervalo_atual,
     ler_periodo,
@@ -53,6 +54,33 @@ class TestIntervaloAtual:
 
     def test_90_dias_terminando_ontem(self):
         assert intervalo_atual("90d", HOJE) == Intervalo(inicio=date(2026, 3, 19), fim=date(2026, 6, 16))
+
+
+# Brasília: UTC-3 o ano todo, sem horário de verão desde 2019. Escrito à mão,
+# e não importado do módulo: é a fonte independente contra a qual ele é conferido.
+_BRASILIA = timezone(timedelta(hours=-3))
+
+
+def _as(hora: int, minuto: int, dia: int) -> datetime:
+    """Um instante de setembro de 2026 no relógio de Brasília, entregue em UTC,
+    como o servidor o vê."""
+    return datetime(2026, 9, dia, hora, minuto, tzinfo=_BRASILIA).astimezone(UTC)
+
+
+class TestFimNoDiaDoHospital:
+    """O período termina no "ontem" de Brasília, e não no de UTC (issue #857).
+
+    Das 21h à meia-noite de Brasília, a data em UTC já é a de amanhã: com o
+    relógio em UTC, o "ontem" seria o hoje de Brasília, ainda pela metade, e os
+    números mudariam às 21h. O relógio entra fixo, por parâmetro.
+    """
+
+    def test_as_22h_de_brasilia_o_periodo_termina_no_dia_anterior_de_brasilia(self):
+        # 22h de 18/09 em Brasília é 01h de 19/09 em UTC.
+        hoje = hoje_utc(_as(22, 0, dia=18))
+
+        assert hoje == date(2026, 9, 18)
+        assert intervalo_atual("28d", hoje) == Intervalo(inicio=date(2026, 8, 21), fim=date(2026, 9, 17))
 
 
 class TestIntervaloAnterior:

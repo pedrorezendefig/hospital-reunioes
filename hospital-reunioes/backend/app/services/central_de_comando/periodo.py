@@ -9,9 +9,12 @@ Duas regras que parecem detalhe e não são:
 - **Termina ontem.** O período atual são N dias completos terminando no dia
   anterior a hoje. O dia de hoje ainda está pela metade: contá-lo faria todo
   período parecer em queda de manhã.
-- **Em UTC.** O "hoje" é a data em UTC, como na Central antiga. A GA4 recebe só
-  a data (`YYYY-MM-DD`) e interpreta no fuso da propriedade; o que importa aqui
-  é escolher os MESMOS dias que a antiga escolhia.
+- **No dia do hospital.** O "hoje" é a data em Brasília (`FUSO_DO_HOSPITAL`),
+  o fuso da propriedade da GA4 e o mesmo com que a tela escreve o dia. A GA4
+  recebe só a data (`YYYY-MM-DD`) e interpreta no fuso da propriedade. A Central
+  antiga usava a data em UTC, e das 21h à meia-noite de Brasília isso punha no
+  período o hoje de Brasília, ainda pela metade, com o número mudando às 21h
+  (issue #857).
 
 Regras puras: nenhuma função daqui fala com rede, banco ou relógio, exceto
 `hoje_utc`, que é o relógio em si e fica isolado para os testes o fixarem.
@@ -22,6 +25,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
 from typing import Literal, get_args
+from zoneinfo import ZoneInfo
 
 Periodo = Literal["7d", "28d", "90d"]
 
@@ -33,6 +37,10 @@ PERIODOS: tuple[Periodo, ...] = get_args(Periodo)
 PERIODO_PADRAO: Periodo = "28d"
 
 _DIAS: dict[Periodo, int] = {"7d": 7, "28d": 28, "90d": 90}
+
+# O fuso do hospital, que é o da propriedade da GA4. Fixo no código, e não lido
+# da GA4 a cada pedido: se um dia a propriedade mudar de fuso, muda aqui.
+FUSO_DO_HOSPITAL = ZoneInfo("America/Sao_Paulo")
 
 
 @dataclass(frozen=True)
@@ -47,9 +55,15 @@ class Intervalo:
         return {"inicio": self.inicio.isoformat(), "fim": self.fim.isoformat()}
 
 
-def hoje_utc() -> date:
-    """A data de hoje em UTC. O único relógio do módulo."""
-    return datetime.now(UTC).date()
+def hoje_utc(agora: datetime | None = None) -> date:
+    """A data de hoje no hospital. O único relógio do módulo.
+
+    O nome ficou do tempo em que o relógio era UTC: os chamadores e o relógio
+    fixo dos testes chamam por ele. `agora` (com fuso) fixa o instante; sem
+    ele, vale o relógio do servidor.
+    """
+    instante = agora if agora is not None else datetime.now(UTC)
+    return instante.astimezone(FUSO_DO_HOSPITAL).date()
 
 
 def ler_periodo(valor: str | None, permitidos: tuple[Periodo, ...] = PERIODOS) -> Periodo:
