@@ -32,6 +32,6 @@ Rejeitado:
 
 - O deploy continua zerando o cache, mas o backend aquece o período padrão logo depois de subir. A primeira abertura de cada tela depois do deploy, no período padrão, sai do cache quando a rodada já passou por ela. Continuam indo à fonte: a troca de período, a abertura depois de horas sem ninguém olhando e a abertura que chega antes de a rodada passar pela chave (essa espera a ida no ar, sem abrir outra).
 - A Central continua sem tarefa agendada: a rodada é uma por processo, fora do scheduler.
-- Cada deploy custa algumas idas ao Google e ao Instagram, uma por chave aquecida, com ou sem alguém abrindo a Central.
+- Cada deploy custa 9 leituras, uma por chave aquecida, com ou sem alguém abrindo a Central. Em chamadas às fontes, isso dá cerca de 14 à GA4 e 33 + 3N à Graph API do Instagram (N = publicações dos últimos 28 dias, até 25), porque cada leitura faz várias chamadas e a galeria roda de novo os quatro montadores. É esse o custo a pesar se a cota apertar.
 - O Ao vivo continua fora do cache e fora da rodada.
 - Nada muda no estado: sem banco, sem volume, um processo só.

@@ -297,6 +297,8 @@ class TestLeituraDuranteOAquecimento:
             assert a_caminho.wait(PACIENCIA)
             # A folga para a tela chegar enquanto a rodada segura a fonte.
             leitor.join(0.1)
+            # Ainda viva: a tela está esperando a ida no ar, não leu depois.
+            assert leitor.is_alive()
         finally:
             liberar.set()
         leitor.join(PACIENCIA)
