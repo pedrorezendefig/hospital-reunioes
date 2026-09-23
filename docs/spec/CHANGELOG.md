@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.154.0 - 2026-09-23 13:21 - Onda onda-central: Ligar a Central de Comando em produção e registrar o Produto no kit
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `9387074`
+- PRs: [#864](https://github.com/pedrorezendefig/hospital-reunioes/pull/864)
+- Serviços: backend, frontend, supabase
+- Resultado: 🟢 healthy (13s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/9387074
+
 ## v0.153.1 - 2026-09-23 11:23 - Onda onda-central: Lentes dos Objetivos com o aviso de tudo no rumo e o Atualizar agora
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `899d583`

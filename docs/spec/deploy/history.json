@@ -2,6 +2,42 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-23T13:21:42-03:00",
+      "sha": "93870744",
+      "app_version": "0.154.0",
+      "subject": "Onda onda-central: Ligar a Central de Comando em produção e registrar o Produto no kit",
+      "raw_subject": "chore(deploy): registro da onda onda-central (#864)",
+      "scope": [
+        "backend",
+        "frontend",
+        "supabase"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 13,
+      "services_touched": [
+        "backend",
+        "frontend",
+        "supabase"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "111_tecnologia_produto_central_de_comando.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-central: PRs #864. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-09-23T11:23:34-03:00",
       "sha": "899d5831",
       "app_version": "0.153.1",
@@ -1479,27 +1515,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 1 desta sessao: issue #622 sozinha, com --paralelo 1. Duas rotas ainda gravavam em caso apagado (POST /manifestacoes/{id}/anexos e POST /manifestacoes/{id}/tentativas-contato), alcancaveis por chamada direta a API e nao por clique. As duas passaram a usar o helper barrar_caso_apagado que o #620 criou, que agora segura cinco portas; nenhuma guarda nova foi escrita, por decisao da triagem de 08/09/2026. A guarda entra antes de qualquer efeito colateral: no anexo, antes de validar_anexo, antes do file.read(), antes do upload_private e antes do insert. A tupla de carregar_manifestacao das duas rotas passou a pedir anonimizada_em, e esse foi o mutante obrigatorio: tirar a coluna do select faz a guarda ler None e mata os dois testes novos, porque os fakes de PostgREST projetam de verdade so as colunas pedidas. Sete mutantes ao todo, todos mortos, dois deles plantados no proprio detector para provar que o teste nao passa no vacuo; os testes batem na rota HTTP real, nao na funcao. Rotas de email ficaram fora do escopo. Sem migration: o carimbo anonimizada_em existe desde a 079. Os dois revisores do orquestrador voltaram limpos na rodada 1, zero must-fix, o que nao tinha acontecido nas ondas anteriores desta serie. O revisor de codigo varreu as 22 rotas de escrita de ouvidoria.py e nao achou terceira porta analoga no painel, mas achou uma FORA do painel: POST /api/ouvidoria-setor/{token}/responder sobe binario para o mesmo bucket sem a guarda, segura hoje so porque exige status aguardando_area enquanto a retencao so carimba caso encerrado. Como a #595 mexe justamente no apagamento, isso virou a issue #631 em needs-triage em vez de entrar neste PR. Segundo nice-to-have nao aplicado: a tupla pede protocolo, que nenhuma das duas rotas le. A trava do semaforo estava presa ha 250 minutos na sessao do PR #626; sem build rodando no Coolify, foi solta com --forcar. A entrada da v0.115.0 logo abaixo foi reconstruida por esta sessao pelo mesmo motivo."
-    },
-    {
-      "at": "2026-09-08T16:01:28-03:00",
-      "sha": "ad0b956",
-      "app_version": "0.115.0",
-      "subject": "o ouvidor arquiva todos os casos encerrados de uma vez pela lista",
-      "raw_subject": "feat(ouvidoria): arquivar todos os encerrados de uma vez pela lista (#626)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "ENTRADA RECONSTRUIDA. A sessao que fez este ship (chave de semaforo 2efc47ae, onda 2, PR #626, issue #594, fatia do PRD #591) deployou as 19:01 UTC e nao escreveu o bookkeeping: morreu segurando a trava, que ficou presa 250 minutos ate a sessao seguinte solta-la com --forcar. Os dados aqui vieram so de fatos verificaveis (git log, package.json do commit, lista de deploys do Coolify), sem narrativa inventada: 5 arquivos tocados, +1136/-17, nenhuma migration, backend e frontend construidos do commit ad0b956d. O resultado healthy e inferido do estado observado depois: o /api/health respondia 0.115.0 saudavel quando a onda seguinte comecou, e os dois builds constam finished no Coolify. O que se perdeu e o registro dos gates, dos achados de revisao e das decisoes daquela fatia: isso vive na issue #594 e no PR #626."
     }
   ]
 }
