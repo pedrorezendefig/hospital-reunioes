@@ -170,6 +170,19 @@ function avisoDa(resposta: { falha: Falha; status: number | null }): string {
   return resposta.status === 429 ? MUITAS_ATUALIZACOES : resposta.falha.mensagem;
 }
 
+/** O endereço da leitura da tela: o da abertura e o da renovação automática. */
+function enderecoDaLeitura(tela: TelaDaCentral, periodo: Periodo): string {
+  return `${BASE_CENTRAL}/${tela}?periodo=${periodo}`;
+}
+
+/**
+ * Quando reler, depois de um pedido que voltou: pelo carimbo, se ele trouxe
+ * números; senão, na releitura mínima, sem martelar.
+ */
+function proximaRenovacao<T extends { frescor: Frescor }>(resultado: Resposta<T>): number {
+  return "dados" in resultado ? esperaAteRenovar(resultado.dados.frescor.atualizado_em) : RELEITURA_MINIMA_MS;
+}
+
 export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCentral, periodo: Periodo) {
   const [quadro, despachar] = useReducer(reduzir<T>, QUADRO_INICIAL);
   // O selo do pedido mais novo: só ele escreve na tela.
@@ -181,7 +194,6 @@ export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCen
   // É ref marcada na hora do pedido, e não o estado da tela: o estado só chega
   // ao timer depois do render e do efeito, e o timer pode bater antes.
   const noAr = useRef<number | null>(null);
-
 
   // O próximo disparo da renovação automática, ou nulo.
   const agendado = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -201,14 +213,10 @@ export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCen
         // números, reagenda pelo carimbo novo; senão, este tenta mais tarde.
         if (noAr.current !== null) return programar(RELEITURA_MINIMA_MS);
         const meu = ++selo.current;
-        const resultado = await pedir<T>(`${BASE_CENTRAL}/${tela}?periodo=${periodo}`, "GET");
+        const resultado = await pedir<T>(enderecoDaLeitura(tela, periodo), "GET");
         if (meu !== selo.current) return;
-        if ("dados" in resultado) {
-          despachar({ tipo: "atualizou", dados: resultado.dados });
-          programar(esperaAteRenovar(resultado.dados.frescor.atualizado_em));
-        } else {
-          programar(RELEITURA_MINIMA_MS);
-        }
+        if ("dados" in resultado) despachar({ tipo: "atualizou", dados: resultado.dados });
+        programar(proximaRenovacao(resultado));
       }, ms);
     },
     [tela, periodo],
@@ -225,7 +233,7 @@ export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCen
     noAr.current = meu;
     despachar({ tipo: "abrir" });
     (async () => {
-      const resultado = await pedir<T>(`${BASE_CENTRAL}/${tela}?periodo=${periodo}`, "GET");
+      const resultado = await pedir<T>(enderecoDaLeitura(tela, periodo), "GET");
       if (noAr.current === meu) noAr.current = null;
       if (meu !== selos.current) return;
       despachar({
@@ -235,9 +243,7 @@ export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCen
             ? { tipo: "pronto", dados: resultado.dados }
             : { ...resultado.falha, status: resultado.status },
       });
-      programar(
-        "dados" in resultado ? esperaAteRenovar(resultado.dados.frescor.atualizado_em) : RELEITURA_MINIMA_MS,
-      );
+      programar(proximaRenovacao(resultado));
     })();
     return () => {
       ++selos.current;
@@ -255,14 +261,10 @@ export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCen
       const resultado = await pedir<T>(`${BASE_CENTRAL}/atualizar-agora?tela=${tela}&periodo=${periodo}`, "POST");
       if (noAr.current === meu) noAr.current = null;
       if (meu !== selo.current) return;
-      if ("dados" in resultado) {
-        despachar({ tipo: "atualizou", dados: resultado.dados });
-        programar(esperaAteRenovar(resultado.dados.frescor.atualizado_em));
-      } else {
-        despachar({ tipo: "nao-atualizou", aviso: avisoDa(resultado) });
-        // O clique pode ter aposentado uma renovação no ar: a corrente segue.
-        programar(RELEITURA_MINIMA_MS);
-      }
+      if ("dados" in resultado) despachar({ tipo: "atualizou", dados: resultado.dados });
+      else despachar({ tipo: "nao-atualizou", aviso: avisoDa(resultado) });
+      // Também na falha: o clique pode ter aposentado uma renovação no ar.
+      programar(proximaRenovacao(resultado));
     })();
   }, [tela, periodo, programar]);
 

@@ -27,15 +27,25 @@ se não houver nenhum guardado.
 from __future__ import annotations
 
 import copy
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from functools import partial
+from typing import Literal
 
 from app.services.central_de_comando import dados_do_google as tela_dados_do_google
 from app.services.central_de_comando import instagram as tela_instagram
 from app.services.central_de_comando import provedor_google, provedor_instagram
 from app.services.central_de_comando.cache import cache_da_central
 from app.services.central_de_comando.periodo import PERIODOS, Periodo
+
+# De onde vêm os números de uma tela. O cache compara fonte e período para
+# saber quais telas o Atualizar agora de uma vizinha vence (issue #858).
+Fonte = Literal["google", "instagram"]
+
+
+def fontes_no(fontes: Iterable[Fonte], periodo: Periodo) -> set[tuple[Fonte, Periodo]]:
+    """As fontes no período, como o cache as compara."""
+    return {(fonte, periodo) for fonte in fontes}
 
 
 class PedidoDeTelaInvalidoError(ValueError):
@@ -64,11 +74,7 @@ class Tela:
     montar: Callable[[Periodo], dict]
     falhas: tuple[type[Exception], ...]
     periodos: tuple[Periodo, ...] = PERIODOS
-    fontes: tuple[str, ...] = ()
-
-    def fontes_no(self, periodo: Periodo) -> set[tuple[str, Periodo]]:
-        """As fontes da tela no período, como o cache as compara."""
-        return {(fonte, periodo) for fonte in self.fontes}
+    fontes: tuple[Fonte, ...] = ()
 
 
 TELAS: dict[str, Tela] = {
@@ -128,6 +134,6 @@ def ler(nome: str, periodo: Periodo, *, forcar: bool = False) -> dict:
         partial(tela.montar, periodo),
         forcar=forcar,
         falhas=tela.falhas,
-        fontes=tela.fontes_no(periodo),
+        fontes=fontes_no(tela.fontes, periodo),
     )
     return {**copy.deepcopy(leitura.valor), "frescor": leitura.frescor.como_dict()}

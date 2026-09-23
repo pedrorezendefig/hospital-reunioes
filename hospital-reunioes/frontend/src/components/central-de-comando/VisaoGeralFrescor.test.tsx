@@ -232,6 +232,31 @@ describe("Visão Geral: a renovação automática", () => {
     expect(await screen.findByText("12.455")).toBeTruthy();
   });
 
+  it("com 3 abas abertas, o servidor vai à fonte uma vez só, e não uma por aba", async () => {
+    // O servidor falso faz o que o cache do backend faz: serve o número
+    // guardado dentro da hora e só vai à fonte com a hora vencida.
+    let guardado = { numero: 12345, atualizado_em: "2026-09-18T16:45:00+00:00" };
+    let idasAFonte = 0;
+    servidor({
+      leitura: () => {
+        if (Date.now() - Date.parse(guardado.atualizado_em) >= 60 * 60_000) {
+          idasAFonte += 1;
+          guardado = { numero: guardado.numero + 55, atualizado_em: new Date().toISOString() };
+        }
+        return resposta(200, payload(guardado.numero, { atualizado_em: guardado.atualizado_em }));
+      },
+    });
+    for (let aba = 0; aba < 3; aba++) render(<VisaoGeral periodo="28d" />);
+    await waitFor(() => expect(screen.getAllByText("12.345")).toHaveLength(3));
+
+    await passar(56 * 60_000);
+
+    await waitFor(() => expect(screen.getAllByText("12.400")).toHaveLength(3));
+    expect(idasAFonte).toBe(1);
+    expect(leituras()).toHaveLength(6);
+    expect(atualizacoes()).toEqual([]);
+  });
+
   it("não usa o Atualizar agora: a renovação não gasta o limite de quem clica", async () => {
     servidor({
       leitura: () => (leituras().length === 1 ? resposta(200, payload(12345)) : novo(12400)),

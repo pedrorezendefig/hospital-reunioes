@@ -15,7 +15,6 @@ from __future__ import annotations
 import os
 import sys
 import threading
-import time
 from datetime import UTC, datetime
 
 import pytest
@@ -338,6 +337,26 @@ class TestFrescorDeVariasChaves:
         assert cache.frescor("x") == Frescor(atualizado_em=None, atualizacao_falhou=False, motivo=None)
 
 
+class RelogioQueConta(RelogioDeTeste):
+    """O relógio do teste que conta quantas vezes o cache olhou a hora, para o
+    teste saber que uma leitura já passou pela conferência da hora."""
+
+    def __init__(self):
+        super().__init__()
+        self.chamadas = 0
+        self._mudou = threading.Condition()
+
+    def __call__(self):
+        with self._mudou:
+            self.chamadas += 1
+            self._mudou.notify_all()
+        return super().__call__()
+
+    def esperar_chamadas(self, quantas: int) -> bool:
+        with self._mudou:
+            return self._mudou.wait_for(lambda: self.chamadas >= quantas, timeout=5)
+
+
 class TestUmaIdaPorChave:
     """Leituras que chegam juntas numa chave vencida esperam a ida que já está
     no ar (issue #858): N abas abertas na mesma tela fazem 1 ida, não N. A rota
@@ -346,7 +365,7 @@ class TestUmaIdaPorChave:
     a hora do cache continua no relógio do teste."""
 
     def test_leituras_ao_mesmo_tempo_da_chave_vencida_fazem_uma_ida_so(self):
-        relogio = RelogioDeTeste()
+        relogio = RelogioQueConta()
         cache = _cache(relogio)
         cache.ler("k", Fonte(1))
         relogio.avancar(hours=1)
@@ -369,10 +388,13 @@ class TestUmaIdaPorChave:
         primeira = threading.Thread(target=ler)
         primeira.start()
         assert no_ar.wait(5)
+        olharam = relogio.chamadas
         de_tras = [threading.Thread(target=ler) for _ in range(2)]
         for t in de_tras:
             t.start()
-        time.sleep(0.2)
+        # As duas de trás já viram que o número passou da hora com a ida no ar:
+        # daqui em diante, ou esperam a ida, ou vão à fonte. Sem tempo real.
+        assert relogio.esperar_chamadas(olharam + 2)
         liberar.set()
         for t in [primeira, *de_tras]:
             t.join(5)
@@ -551,3 +573,64 @@ class TestSincroniaPeloAtualizarAgora:
         cache.ler("galeria", fontes["galeria"])
 
         assert fontes["galeria"].idas == 1
+
+    def test_leitura_da_vizinha_que_ja_estava_no_ar_nao_apaga_a_marca(self):
+        """A galeria estava indo à fonte quando alguém clicou no Atualizar agora
+        da lente. O número que a galeria traz é de antes do clique: ela continua
+        vencida, e a próxima leitura busca de novo."""
+        relogio = RelogioDeTeste()
+        cache = _cache(relogio)
+        cache.ler("lente", Fonte(1), fontes={("instagram", "28d")})
+        cache.ler("galeria", Fonte(1), fontes={("instagram", "28d")})
+        relogio.avancar(hours=1)
+
+        def galeria_que_volta_depois_do_clique():
+            cache.ler("lente", Fonte(2), forcar=True, fontes={("instagram", "28d")})
+            return 1
+
+        cache.ler("galeria", galeria_que_volta_depois_do_clique, fontes={("instagram", "28d")})
+        galeria = Fonte(2)
+
+        assert cache.ler("galeria", galeria).valor == 2
+        assert galeria.idas == 1
+
+    def test_a_vizinha_em_espera_por_falha_busca_mesmo_assim(self):
+        """O Atualizar agora que deu certo mostra que a fonte voltou: a espera
+        da falha antiga da vizinha não segura a busca dela."""
+        relogio = RelogioDeTeste()
+        cache = _cache(relogio)
+        galeria = Fonte(1)
+        cache.ler("lente", Fonte(1), fontes={("instagram", "28d")})
+        cache.ler("galeria", galeria, falhas=FALHAS, fontes={("instagram", "28d")})
+        relogio.avancar(hours=1)
+        galeria.erro = FonteForaError("fora")
+        cache.ler("galeria", galeria, falhas=FALHAS)
+        relogio.avancar(minutes=1)
+        cache.ler("lente", Fonte(2), forcar=True, fontes={("instagram", "28d")})
+        galeria.erro = None
+        galeria.valor = 2
+
+        leitura = cache.ler("galeria", galeria, falhas=FALHAS)
+
+        assert leitura.valor == 2
+        assert leitura.frescor.atualizacao_falhou is False
+        assert galeria.idas == 3
+
+    def test_o_erro_repetido_na_espera_e_um_novo_a_cada_leitura(self):
+        """Dentro da espera, sem número guardado, a leitura repete o erro com a
+        mesma frase, mas não a mesma exceção: relançar a guardada faria o
+        traceback dela crescer a cada leitura, segurando os frames de todas."""
+        cache = _cache(RelogioDeTeste())
+        fonte = Fonte()
+        fonte.erro = FonteForaError("fora")
+        with pytest.raises(FonteForaError):
+            cache.ler("k", fonte, falhas=FALHAS)
+
+        erros = []
+        for _ in range(2):
+            with pytest.raises(FonteForaError, match="fora") as capturado:
+                cache.ler("k", fonte, falhas=FALHAS)
+            erros.append(capturado.value)
+
+        assert erros[0] is not erros[1]
+        assert erros[0] is not fonte.erro

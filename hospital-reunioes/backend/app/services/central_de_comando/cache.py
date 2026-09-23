@@ -61,6 +61,7 @@ tempo real da Central e não é guardado.
 
 from __future__ import annotations
 
+import copy
 import threading
 from collections.abc import Callable, Hashable, Iterable
 from dataclasses import dataclass
@@ -147,8 +148,11 @@ class CacheComFrescor:
         self._no_ar: dict[Hashable, threading.Event] = {}
         # A falha da fonte que ainda segura a leitura comum, por chave.
         self._falhas: dict[Hashable, _Falha] = {}
-        # As chaves vencidas pelo Atualizar agora de uma vizinha da mesma fonte.
-        self._vencidas: set[Hashable] = set()
+        # As chaves vencidas pelo Atualizar agora de uma vizinha da mesma fonte,
+        # cada uma com a marca do clique que a venceu: uma busca que saiu antes
+        # do clique volta com número de antes dele, e não tira a marca.
+        self._vencidas: dict[Hashable, int] = {}
+        self._cliques = 0
         self._trava = threading.Lock()
 
     def ler[T](
@@ -193,7 +197,9 @@ class CacheComFrescor:
                 falha = self._falhas.get(chave)
                 if falha is not None and not forcar and self._dentro_da_espera(falha):
                     if guardado is None:
-                        raise falha.erro
+                        # Uma cópia, e não a guardada: relançar a mesma faria o
+                        # traceback dela crescer a cada leitura da espera.
+                        raise copy.copy(falha.erro)
                     return Leitura(guardado.valor, guardado.frescor)
                 no_ar = self._no_ar.get(chave)
                 if no_ar is None or forcar:
@@ -203,13 +209,14 @@ class CacheComFrescor:
                     minha_ida = threading.Event() if no_ar is None else None
                     if minha_ida is not None:
                         self._no_ar[chave] = minha_ida
+                    marca = self._vencidas.get(chave)
                     break
             # Outra leitura já foi à fonte por esta chave: espera ela voltar e
             # olha de novo o que ficou guardado.
             no_ar.wait()
 
         try:
-            return self._buscar(chave, buscar, guardado, falhas, fontes, forcar)
+            return self._buscar(chave, buscar, guardado, falhas, fontes, forcar, marca)
         finally:
             if minha_ida is not None:
                 with self._trava:
@@ -224,8 +231,10 @@ class CacheComFrescor:
         falhas: tuple[type[Exception], ...],
         fontes: frozenset[Hashable],
         forcar: bool,
+        marca: int | None,
     ) -> Leitura[T]:
-        """A ida à fonte, fora da trava, e o registro do que ela trouxe."""
+        """A ida à fonte, fora da trava, e o registro do que ela trouxe.
+        `marca` é a do vencimento da chave quando a ida saiu."""
         try:
             valor = buscar()
         except falhas as exc:
@@ -246,12 +255,21 @@ class CacheComFrescor:
         with self._trava:
             self._guardados[chave] = _Guardado(valor, frescor, fontes)
             self._falhas.pop(chave, None)
-            self._vencidas.discard(chave)
+            if self._vencidas.get(chave) == marca:
+                self._vencidas.pop(chave, None)
             if forcar and fontes:
-                self._vencidas.update(
-                    outra for outra, g in self._guardados.items() if outra != chave and g.fontes & fontes
-                )
+                self._vencer_vizinhas(chave, fontes)
         return Leitura(valor, frescor)
+
+    def _vencer_vizinhas(self, chave: Hashable, fontes: frozenset[Hashable]) -> None:
+        """Vence as chaves que dividem uma fonte com a que o Atualizar agora
+        acabou de renovar. A espera da falha antiga delas cai junto: o clique
+        que deu certo mostra que a fonte voltou. Chamado com a trava."""
+        self._cliques += 1
+        for outra, g in self._guardados.items():
+            if outra != chave and g.fontes & fontes:
+                self._vencidas[outra] = self._cliques
+                self._falhas.pop(outra, None)
 
     def frescor(self, *chaves: Hashable) -> Frescor:
         """O frescor de uma tela feita de várias chaves: a hora do número mais
