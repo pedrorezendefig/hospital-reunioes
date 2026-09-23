@@ -4,7 +4,9 @@
  * No molde da varredura do teste de leitura direta do dashboard
  * (`app/dashboard/leitura-direta.test.tsx`): em vez de confiar que ninguém vai
  * escrever uma cor à mão num gráfico, o teste lê o código de cada gráfico da
- * Central (todo arquivo da seção que usa `recharts`, e o
+ * Central (todo arquivo da seção que usa `recharts` ou importa
+ * `@/lib/central-de-comando/graficos`, como as barras em Tailwind puro das
+ * Áreas do site e da Origem do público, e o próprio
  * `lib/central-de-comando/graficos.ts`, onde as cores moram), sem os
  * comentários, e trava:
  *
@@ -54,6 +56,18 @@ const RAIZ_SRC = join(process.cwd(), "src");
 const PASTAS_DA_CENTRAL = [join("components", "central-de-comando"), join("lib", "central-de-comando")];
 
 const ONDE_AS_CORES_MORAM = join("lib", "central-de-comando", "graficos.ts");
+
+// Um gráfico é quem desenha com `recharts` ou quem busca as cores onde elas
+// moram (as barras em Tailwind puro, #834).
+const USA_RECHARTS = /from\s+["']recharts["']/;
+const USA_AS_CORES = /from\s+["']@\/lib\/central-de-comando\/graficos["']/;
+
+// As barras da seção que não usam `recharts` (#818): entraram na varredura pelo
+// import do `graficos.ts` (#834).
+const BARRAS_EM_TAILWIND = [
+  join("components", "central-de-comando", "RankingAreasDoSite.tsx"),
+  join("components", "central-de-comando", "BarrasOrigemDoPublico.tsx"),
+];
 
 /**
  * O código sem os comentários: o "#817" de um comentário não é cor, e uma cor
@@ -139,7 +153,21 @@ function arquivosDosGraficos(): string[] {
     readdirSync(join(RAIZ_SRC, pasta))
       .filter((nome) => /\.tsx?$/.test(nome) && !/\.test\.tsx?$/.test(nome))
       .map((nome) => join(pasta, nome))
-      .filter((caminho) => caminho === ONDE_AS_CORES_MORAM || /from\s+["']recharts["']/.test(codigo(caminho))),
+      .filter(
+        (caminho) =>
+          caminho === ONDE_AS_CORES_MORAM || USA_RECHARTS.test(codigo(caminho)) || USA_AS_CORES.test(codigo(caminho)),
+      ),
+  );
+}
+
+/**
+ * Cada cor escrita à mão nos gráficos, como `caminho: cor`. Quem lê o código de
+ * cada arquivo é o `ler`: o caso de controle planta uma cor num arquivo sem
+ * mexer nele.
+ */
+function coresAMaoNosGraficos(ler: (caminho: string) => string): string[] {
+  return arquivosDosGraficos().flatMap((caminho) =>
+    coresEscritasAMao(ler(caminho)).map((cor) => `${caminho}: ${cor}`),
   );
 }
 
@@ -257,19 +285,26 @@ describe("as cores dos gráficos da Central de Comando", () => {
       expect.arrayContaining([
         join("components", "central-de-comando", "GraficoVisitantesPorDia.tsx"),
         join("components", "central-de-comando", "GraficoDispositivos.tsx"),
+        ...BARRAS_EM_TAILWIND,
         ONDE_AS_CORES_MORAM,
       ]),
     );
   });
 
   it("nenhum gráfico escreve cor à mão", () => {
-    const culpados = arquivosDosGraficos().flatMap((caminho) =>
-      coresEscritasAMao(codigo(caminho)).map((cor) => `${caminho}: ${cor}`),
-    );
+    expect(
+      coresAMaoNosGraficos(codigo),
+      "Use os tokens do app, var(--color-...), como em lib/central-de-comando/graficos.ts.",
+    ).toEqual([]);
+  });
 
-    expect(culpados, "Use os tokens do app, var(--color-...), como em lib/central-de-comando/graficos.ts.").toEqual(
-      [],
-    );
+  // Caso de controle das barras em Tailwind puro (revisão do PR #833, #834):
+  // sem `recharts`, elas ficavam fora da varredura, e um hex nelas passava.
+  it.each(BARRAS_EM_TAILWIND)("acusa um hex plantado em %s", (alvo) => {
+    const comHexPlantado = (caminho: string) =>
+      caminho === alvo ? `${codigo(caminho)}\nconst plantado = "#2B2E7E";\n` : codigo(caminho);
+
+    expect(coresAMaoNosGraficos(comHexPlantado)).toEqual([`${alvo}: #2B2E7E`]);
   });
 
   it("todo token usado nos gráficos existe no globals.css", () => {
