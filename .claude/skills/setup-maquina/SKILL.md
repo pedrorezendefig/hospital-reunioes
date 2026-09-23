@@ -35,6 +35,7 @@ Saída: uma linha por checagem, com `OK`, `FALTA` (conta e dá exit 1), `AVISO` 
 4. Com `--env`, gere os arquivos que faltam a partir dos `.env.example`:
    - `tokens/.env`: `COOLIFY_ACCESS_TOKEN` é por pessoa (gerado no painel do Coolify, conta criada pelo Pedro); `ANA_API_KEY` vem do 1Password; `GITHUB_PERSONAL_ACCESS_TOKEN` só se for usar Actions locais.
    - `hospital-reunioes/.env`: o script já dá o comando que cria o arquivo com os três valores fictícios. Chave real só entra se o usuário for rodar o app local (nível 3).
+   - Quem vai ver a Central de Comando local precisa de `GA4_PROPERTY_ID`, `GOOGLE_APPLICATION_CREDENTIALS_JSON`, `INSTAGRAM_ACCESS_TOKEN` e `INSTAGRAM_BUSINESS_ACCOUNT_ID`. As quatro são compartilhadas e só o Pedro tem: diga "peça ao Pedro: `NOME`, serve para X" com o item e o motivo da linha de `references/chaves.md`, e avise da armadilha de formato (a credencial do Google entra como JSON inteiro, não como caminho de arquivo). Sem elas a Central local fica desligada; o resto do app roda.
    - O humano abre o 1Password e copia o valor à mão. A skill diz só o item e o campo. Nunca use a CLI do 1Password nem peça o valor no chat.
    - Nunca sobrescreva um `.env` existente: escreva `.env.novo` ao lado e mostre a diferença de chaves.
    - Depois de gravar, rode `git check-ignore -q <arquivo>` em cada um. Se algum não estiver ignorado, pare e avise.
@@ -47,6 +48,7 @@ Saída: uma linha por checagem, com `OK`, `FALTA` (conta e dá exit 1), `AVISO` 
 - Nunca toca produção: zero `coolify deploy`, zero migration, zero escrita de env no Coolify.
 - Nunca instala sem confirmação e nunca usa `sudo`.
 - Nunca acessa o 1Password (nem `op`, nem pedir o valor no chat). Quem copia a chave é o humano.
+- Nunca lê nem copia o `.env.local` do app antigo da Central (`CentraldeComando`), nem o de outro projeto, mesmo que esteja na máquina: a origem das chaves é o cofre, e quem copia é o humano.
 
 ## Explicar o repositório (`/setup-maquina --mapa`, ou qualquer pergunta "o que é a pasta X")
 
