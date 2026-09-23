@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-09-20T00:25:00-03:00",
-  "updated_by": "onda@ship",
-  "last_app_version": "0.153.0",
+  "updated_at": "2026-09-23T11:23:34-03:00",
+  "updated_by": "onda-enxuta@fechar_onda",
+  "last_app_version": "0.153.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -20,16 +20,16 @@
       "domain": "api.hospitalsaomatheus.cloud",
       "port": 8000,
       "health_path": "/api/health",
-      "status": "healthy",
-      "last_deploy_sha": "f8e47da",
-      "last_deploy_at": "2026-09-20T03:19:58Z",
+      "status": "warning",
+      "last_deploy_sha": "899d5831",
+      "last_deploy_at": "2026-09-23T11:23:34-03:00",
       "last_health_check": {
-        "at": "2026-09-20T00:19:56-03:00",
-        "latency_ms": 150,
-        "http_status": 200,
-        "body_ok": true
+        "at": "2026-09-23T11:23:34-03:00",
+        "latency_ms": null,
+        "http_status": null,
+        "body_ok": false
       },
-      "build_duration_seconds": 20,
+      "build_duration_seconds": null,
       "env_count": 24
     },
     {
@@ -38,16 +38,16 @@
       "domain": "app.hospitalsaomatheus.cloud",
       "port": 3000,
       "health_path": null,
-      "status": "healthy",
-      "last_deploy_sha": "f8e47da",
-      "last_deploy_at": "2026-09-20T03:19:58Z",
+      "status": "warning",
+      "last_deploy_sha": "899d5831",
+      "last_deploy_at": "2026-09-23T11:23:34-03:00",
       "last_health_check": {
-        "at": "2026-09-20T00:19:56-03:00",
-        "latency_ms": 150,
-        "http_status": 200,
-        "body_ok": true
+        "at": "2026-09-23T11:23:34-03:00",
+        "latency_ms": null,
+        "http_status": null,
+        "body_ok": false
       },
-      "build_duration_seconds": 200,
+      "build_duration_seconds": null,
       "env_count": 5
     },
     {
@@ -206,27 +206,10 @@
       "status": "ok"
     }
   ],
-  "next_actions": [
-    {
-      "kind": "ok",
-      "title": "Deploy v0.153.0 saudável, fila da onda esvaziada",
-      "text": "Ferramentas de Site e Instagram no conector MCP. As 4 fatias da fila fixa (#816, #822, #824, #823) fecharam e subiram. /api/health em 0.153.0, db healthy, frontend 200."
-    },
-    {
-      "kind": "warn",
-      "title": "Conector MCP dormente: 503 e sem variaveis em prod",
-      "text": "As 3 ferramentas (Ao vivo, Site, Instagram) estao no ar mas o conector responde 503 por falta de variaveis do conector no backend de producao. Ligar e o corte: #826 (credenciais no Coolify e WorkOS), #827 (ligar), #828 (corte). Achado registrado na #826."
-    },
-    {
-      "kind": "info",
-      "title": "Snapshot desatualizado (issue #838)",
-      "text": "O ROTAS.md nao inclui as rotas do conector (/api/mcp, /.well-known): o snapshot.py nao roda no Windows local. Regenerar num ambiente com o venv, conforme a #838."
-    }
-  ],
   "last_run": {
-    "mode": "ship",
-    "sha": "f8e47da",
+    "mode": "onda-enxuta",
+    "sha": "899d5831",
     "result": "healthy",
-    "duration_seconds": 240
+    "duration_seconds": 15
   }
 }
