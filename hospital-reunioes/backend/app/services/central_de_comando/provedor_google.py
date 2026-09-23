@@ -693,11 +693,12 @@ def _visitas_por_area(relatorio: dict) -> dict[AreaDoSite, int]:
     return visitas
 
 
-OrigemDoPublico = Literal["busca", "direto", "redes", "anuncios", "outros", "nao-identificado"]
+OrigemDoPublico = Literal["busca", "direto", "redes", "anuncios", "indicacao", "outros", "nao-identificado"]
 
 # O grupo de canal padrão da GA4 (`sessionDefaultChannelGroup`) de cada Origem do
 # público, como o CONTEXT.md define (decisão do dono na #856, que tirou o mapa
-# do `CHANNEL_FROM_GA4` da Central antiga). O que o Google não soube classificar
+# do `CHANNEL_FROM_GA4` da Central antiga). O "Referral", quem chegou por um link
+# em outro site, é a Indicação, com fatia própria. O que o Google não soube classificar
 # ("Unassigned", "(not set)" e o nome vazio) é Não identificado; o "(other)", a
 # linha em que o Google soma as fatias pequenas, e o grupo identificado que não
 # está aqui ("Email", "SMS") são Outros: nenhum termo cru da GA4 chega à tela.
@@ -712,6 +713,7 @@ _ORIGEM_DO_CANAL: dict[str, OrigemDoPublico] = {
     "Paid Video": "anuncios",
     "Paid Other": "anuncios",
     "Cross-network": "anuncios",
+    "Referral": "indicacao",
     "Unassigned": "nao-identificado",
     "(not set)": "nao-identificado",
     "(other)": "outros",

@@ -179,14 +179,16 @@ def _bloco_areas_do_site(areas: tuple[provedor_google.VisitasNaArea, ...]) -> li
     ]
 
 
-# O nome de cada Origem do público na tela, os da Central antiga. Os dois do fim
-# são os rótulos gentis do que o Google não classificou: a tela nunca mostra o
-# termo cru da fonte.
+# O nome de cada Origem do público na tela: os da Central antiga e a Indicação
+# (quem chegou por um link em outro site), que lá caía em Outros. Os dois do fim
+# são os rótulos gentis das fatias pequenas somadas e do que o Google não
+# classificou: a tela nunca mostra o termo cru da fonte.
 ROTULO_DA_ORIGEM: dict[provedor_google.OrigemDoPublico, str] = {
     "busca": "Busca no Google",
     "direto": "Direto",
     "redes": "Redes sociais",
     "anuncios": "Anúncios",
+    "indicacao": "Indicação",
     "outros": "Outros",
     "nao-identificado": "Não identificado",
 }

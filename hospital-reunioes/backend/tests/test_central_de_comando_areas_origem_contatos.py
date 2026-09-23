@@ -254,7 +254,8 @@ class TestOrigemDoPublico:
         """28 dias, 9.410 Visitas: os grupos de canal da GA4 somados em cada
         Origem do público, as origens da maior para a menor e o resto (Outros
         e Não identificado) sempre no fim. Cada fatia arredondada sozinha, e o
-        Não identificado, com 0,53%, vem com 0 ponto ("<1%" na tela)."""
+        Outros, com 0,11%, e o Não identificado, com 0,53%, vêm com 0 ponto
+        ("<1%" na tela)."""
         resposta = _dados_do_google("28d")
 
         assert resposta.status_code == 200, resposta.text
@@ -263,8 +264,27 @@ class TestOrigemDoPublico:
             {"chave": "direto", "rotulo": "Direto", "visitas": 1800, "percentual": 19},
             {"chave": "redes", "rotulo": "Redes sociais", "visitas": 800, "percentual": 9},
             {"chave": "anuncios", "rotulo": "Anúncios", "visitas": 750, "percentual": 8},
-            {"chave": "outros", "rotulo": "Outros", "visitas": 310, "percentual": 3},
+            {"chave": "indicacao", "rotulo": "Indicação", "visitas": 300, "percentual": 3},
+            {"chave": "outros", "rotulo": "Outros", "visitas": 10, "percentual": 0},
             {"chave": "nao-identificado", "rotulo": "Não identificado", "visitas": 50, "percentual": 0},
+        ]
+
+    def test_a_visita_indicada_por_outro_site_tem_fatia_propria(self, lote_da_ga4):
+        """O "Referral" da GA4 (quem chegou por um link em outro site) é a
+        Indicação: fatia própria, que disputa lugar com as outras origens e
+        não vai para o resto, mesmo quando é a maior."""
+        lote_da_ga4.visitas_por_canal[_28_DIAS] = {
+            "Organic Search": 100,
+            "Referral": 400,
+            "(other)": 900,
+        }
+
+        origem = _dados_do_google("28d").json()["origem_do_publico"]
+
+        assert [(o["chave"], o["rotulo"], o["visitas"]) for o in origem] == [
+            ("indicacao", "Indicação", 400),
+            ("busca", "Busca no Google", 100),
+            ("outros", "Outros", 900),
         ]
 
     def test_o_not_set_soma_no_nao_identificado_e_o_other_no_outros(self, lote_da_ga4):
@@ -305,7 +325,7 @@ class TestOrigemDoPublico:
         """Porte de "mantém Outros e Não identificado no fim, mesmo se
         grandes" (`orderSources`)."""
         lote_da_ga4.visitas_por_canal[_28_DIAS] = {
-            "Referral": 9999,
+            "(other)": 9999,
             "Organic Search": 100,
             "Unassigned": 5000,
             "Direct": 200,
@@ -318,13 +338,15 @@ class TestOrigemDoPublico:
     def test_grupos_da_mesma_origem_somam(self, lote_da_ga4):
         """Porte de "mapeia para chaves canônicas, agrega e usa fallback"
         (`mapTrafficSources`): as redes pagas e as orgânicas são as mesmas
-        redes, e o "Referral", que não está no mapa, é Outros."""
+        redes, e o "Email", que não está no mapa, soma em Outros com o
+        "(other)"."""
         lote_da_ga4.visitas_por_canal[_28_DIAS] = {
             "Organic Search": 100,
             "Paid Social": 30,
             "Organic Social": 20,
             "Unassigned": 5,
-            "Referral": 8,
+            "Email": 5,
+            "(other)": 3,
         }
 
         origem = _dados_do_google("28d").json()["origem_do_publico"]
@@ -392,6 +414,7 @@ class TestOrigemDoCanal:
             ("Paid Video", "anuncios"),
             ("Paid Other", "anuncios"),
             ("Cross-network", "anuncios"),
+            ("Referral", "indicacao"),
             ("Unassigned", "nao-identificado"),
             ("", "nao-identificado"),
         ],
