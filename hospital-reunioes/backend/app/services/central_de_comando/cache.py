@@ -28,8 +28,11 @@ Se um dia rodar com mais de um processo, cada um terá o seu: a mesma tela pode
 mostrar carimbos diferentes conforme o processo que responder, cada processo
 vai à fonte uma vez por hora e chave, e o Atualizar agora só renova o processo
 que o atendeu. É este o ponto que precisaria mudar (um cache compartilhado),
-como o PRD #809 já registra. Deploy do backend zera o cache: a primeira leitura
-depois de cada deploy vai à fonte (aceito na ADR 0058).
+como o PRD #809 já registra. Deploy do backend zera o cache, e logo depois de
+subir o backend o aquece uma vez, numa thread, no período padrão de cada tela
+(`aquecimento.py`, issue #867, ADR 0059, que emenda a 0058): a primeira abertura
+depois do deploy sai daqui. A troca de período e a abertura depois de horas sem
+ninguém olhando continuam indo à fonte.
 
 **Chaves finitas.** A chave é tela e período (`telas.py`), e as telas e os
 períodos são poucos e fixos: nada precisa ser despejado.
