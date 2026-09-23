@@ -571,16 +571,22 @@ class TestNaMesmaTela:
         self, google_falso, lote_da_ga4, relogio_da_central
     ):
         """Porte de "serve do cache no segundo acesso ao mesmo período" do
-        ranking, da origem e dos contatos da Central antiga."""
+        ranking, da origem e dos contatos da Central antiga. A contagem é
+        relativa à primeira leitura, então a primeira tem de ter ido mesmo ao
+        Google, e dado certo (revisão do PR #833, #834): sem isso, uma primeira
+        leitura que não saísse passaria por cache."""
         cliente = cliente_da_central(SUPER_ADMIN)
-        primeira = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"}).json()
+        primeira = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"})
         idas_da_primeira = len(google_falso.pedidos)
         _mudar_os_tres_blocos_na_ga4(lote_da_ga4)
         relogio_da_central.avancar(minutes=59)
 
-        segunda = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"}).json()
+        segunda = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"})
 
-        assert segunda == primeira
+        assert primeira.status_code == 200, primeira.text
+        # Os 7 relatórios da tela, em dois lotes (5 e 2).
+        assert idas_da_primeira == 2
+        assert segunda.json() == primeira.json()
         assert len(google_falso.pedidos) == idas_da_primeira
 
     def test_o_atualizar_agora_da_tela_renova_os_tres_blocos(self, lote_da_ga4, relogio_da_central):

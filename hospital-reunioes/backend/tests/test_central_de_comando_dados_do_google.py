@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
 
 import httpx
 import pytest
@@ -291,6 +292,20 @@ class TestPeriodo:
         assert all(pedido.url.path.endswith(":batchRunReports") for pedido in google_falso.pedidos)
         assert sorted(len(lote) for lote in lote_da_ga4.lotes) == [2, 5]
 
+    def test_os_dois_lotes_saem_ao_mesmo_tempo(self, google_falso, lote_da_ga4):
+        """Contar os lotes não prova que eles saem juntos: dois lotes em série
+        também seriam dois (revisão do PR #833, #834). Aqui cada lote só passa
+        pela GA4 quando o outro também chegou nela: em série, o primeiro espera
+        sozinho até o prazo e a barreira quebra."""
+        lotes_juntos = _LotesQueSoPassamJuntos(partes=2)
+        google_falso.respondedores.insert(0, lotes_juntos)
+
+        resposta = _dados_do_google("28d")
+
+        assert resposta.status_code == 200, resposta.text
+        assert lotes_juntos.chegaram == 2
+        assert not lotes_juntos.quebrou, "os lotes do batchRunReports foram ao Google um depois do outro"
+
 
 # ─── Frescor e Atualizar agora: o cache da #815 vale para a tela ─────────────
 
@@ -305,15 +320,23 @@ class TestFrescor:
         }
 
     def test_segunda_leitura_dentro_da_hora_nao_vai_ao_google(self, google_falso, lote_da_ga4, relogio_da_central):
+        """A contagem é relativa à primeira leitura, então a primeira tem de ter
+        ido mesmo ao Google, e dado certo (revisão do PR #833, #834): uma
+        primeira leitura que não saísse, ou que caísse no 502, deixaria a
+        segunda "sem ida nenhuma" por outro motivo, e o teste passaria sem
+        provar o cache."""
         cliente = cliente_da_central(SUPER_ADMIN)
-        primeira = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"}).json()
+        primeira = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"})
         idas_da_primeira = len(google_falso.pedidos)
         lote_da_ga4.visitantes_por_dia["2026-09-17"] = 999
         relogio_da_central.avancar(minutes=59)
 
-        segunda = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"}).json()
+        segunda = cliente.get(f"{PREFIXO_DA_CENTRAL}/dados-do-google", params={"periodo": "28d"})
 
-        assert segunda == primeira
+        assert primeira.status_code == 200, primeira.text
+        # Os 7 relatórios da tela, em dois lotes (5 e 2).
+        assert idas_da_primeira == 2
+        assert segunda.json() == primeira.json()
         assert len(google_falso.pedidos) == idas_da_primeira
 
     def test_trocar_o_periodo_troca_os_dois_blocos(self, google_falso, relogio_da_central):
@@ -628,6 +651,32 @@ def _segundo_lote_que_falha(falha: str):
         return {"reports": [{"kind": "analyticsData#runReport"}]}
 
     return responder
+
+
+class _LotesQueSoPassamJuntos:
+    """Um respondedor que segura cada `batchRunReports` numa barreira até os
+    `partes` lotes chegarem à GA4, e então passa a pergunta adiante (para o
+    `lote_da_ga4`). Lotes que saem juntos atravessam a barreira na hora; em
+    série, o primeiro espera sozinho até o prazo e ela quebra, e é isso que
+    `quebrou` registra (a exceção não sobe: o teste diz o porquê, e não um
+    erro de código da thread)."""
+
+    def __init__(self, partes: int, prazo: float = 2):
+        self._barreira = threading.Barrier(partes, timeout=prazo)
+        self._trava = threading.Lock()
+        self.chegaram = 0
+        self.quebrou = False
+
+    def __call__(self, metodo: str, corpo: dict) -> dict | None:
+        if metodo != "batchRunReports":
+            return None
+        with self._trava:
+            self.chegaram += 1
+        try:
+            self._barreira.wait()
+        except threading.BrokenBarrierError:
+            self.quebrou = True
+        return None
 
 
 class TestTravaDeRede:
