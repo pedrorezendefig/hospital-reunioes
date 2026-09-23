@@ -156,6 +156,40 @@ class TestBlocoVisitantes:
     def test_variacao_negativa_vem_com_sinal(self, central_falsa):
         assert _visao_geral("7d").json()["visitantes"]["variacao"] == pytest.approx(-0.07462686)
 
+    @pytest.mark.parametrize(
+        "rows",
+        [{}, 0, "", 5, "linhas", {"linha": 1}],
+        ids=["objeto-vazio", "zero", "texto-vazio", "numero", "texto", "objeto"],
+    )
+    def test_rows_que_nao_e_lista_e_resposta_fora_do_formato(self, central_falsa, rows):
+        """O `rows` da GA4 é uma lista de linhas, como o `_linhas` dos Dados do
+        Google já confere (#834). Qualquer outra coisa no relatório dos
+        Visitantes é resposta fora do formato: o bloco fica `sem-dado` com a
+        frase, e não um número. Inclusive o que é "falso" sem ser lista (`{}`,
+        `0`, `''`): lido como lista vazia, viraria 0 Visitantes que ninguém
+        mediu."""
+        central_falsa.google.respondedores.insert(0, _visitantes_com_rows(rows))
+
+        corpo = _visao_geral("28d")
+
+        assert corpo.status_code == 200, corpo.text
+        visitantes = corpo.json()["visitantes"]
+        assert visitantes["estado"] == "sem-dado"
+        assert visitantes["motivo"] == "O Google Analytics devolveu um relatório fora do formato esperado."
+        assert "atual" not in visitantes
+
+
+def _visitantes_com_rows(rows: object):
+    """Uma GA4 que devolve os Visitantes sem dimensão (o `runReport` do
+    número-manchete) com o `rows` como veio aqui."""
+
+    def responder(metodo: str, corpo: dict) -> dict | None:
+        if metodo != "runReport" or corpo.get("dimensions") or corpo.get("metrics") != [{"name": "activeUsers"}]:
+            return None
+        return {"rows": rows}
+
+    return responder
+
 
 # ─── 2. O Instagram num relance (Instagram) ─────────────────────────────────
 

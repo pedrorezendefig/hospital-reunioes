@@ -158,10 +158,15 @@ def _primeira_metrica(relatorio: dict) -> float:
     conferiu que a resposta É um relatório da GA4 (o `kind`): um `{}` de proxy
     nunca chega aqui para virar zero. Valor que não é número finito também é
     zero, como na Central antiga (`firstMetric`): anomalia da GA4 nunca chega à
-    tela como "NaN". Linha sem o campo de métrica, essa sim, é resposta fora do
-    formato.
+    tela como "NaN". Um `rows` que não é lista, ou linha sem o campo de métrica,
+    esses sim, são resposta fora do formato, como no `_linhas`: um `rows` `{}`,
+    `0` ou `''` lido como lista vazia viraria 0 Visitantes que ninguém mediu.
     """
-    linhas = relatorio.get("rows") or []
+    linhas = relatorio.get("rows")
+    if linhas is None:
+        return 0
+    if not isinstance(linhas, list):
+        raise GoogleError(_RELATORIO_FORA_DO_FORMATO)
     if not linhas:
         return 0
     try:
