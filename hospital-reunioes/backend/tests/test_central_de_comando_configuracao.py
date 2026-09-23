@@ -59,8 +59,9 @@ TODAS = CHAVES_SEM_PADRAO + tuple(EVENTOS_DE_CONTATO)
 # de Runtime.
 SEGREDOS = ("GOOGLE_APPLICATION_CREDENTIALS_JSON", "INSTAGRAM_ACCESS_TOKEN")
 
-# Os ambientes em que a seção dormente da Central aparece no menu (espelho de
-# `FORA_DE_PRODUCAO` em `frontend/src/lib/central-de-comando/dormente.ts`).
+# Os ambientes em que a seção dormente da Central aparecia no menu, até a issue
+# #827 ligar a Central em produção. Nenhum deles vale em produção, e a asserção
+# do contrato segue travando isso por higiene.
 AMBIENTES_QUE_MOSTRAM_A_CENTRAL = ("development", "ci", "staging")
 
 
@@ -164,9 +165,10 @@ class TestNoContratoDeDeploy:
 
 
 class TestDormenciaNaProducao:
-    """A Central dormente depende de a `NEXT_PUBLIC_ENVIRONMENT` de produção
-    não ser um dos ambientes que mostram a seção. A asserção de produção do
-    `/deploy` (gate 2.6) trava isso no contrato, e aceita o valor de hoje em
+    """A Central dormente dependia de a `NEXT_PUBLIC_ENVIRONMENT` de produção
+    não ser um dos ambientes que mostravam a seção. A issue #827 ligou a Central
+    e o menu não lê mais a variável, mas a asserção de produção do `/deploy`
+    (gate 2.6) continua no contrato por higiene, e aceita o valor de hoje em
     produção, que é vazio."""
 
     @staticmethod
