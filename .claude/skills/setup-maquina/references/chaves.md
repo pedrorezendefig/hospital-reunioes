@@ -27,6 +27,11 @@ Chaves de produção: só no Coolify. A lista e o "quem mexe" estão no `README.
 | `OPENROUTER_API_KEY` | por pessoa ou compartilhada | 1Password, VITTA TECH, item "OpenRouter" (criar). Vazia liga o mock de IA. |
 | `CLICKSIGN_API_KEY` (sandbox) | compartilhada | 1Password, VITTA TECH, item "ClickSign sandbox" (criar). |
 | `SMTP_USER`, `SMTP_PASSWORD` | por pessoa | Senha de app do Gmail de quem roda. Vazio imprime o email no log. O Supabase local lê os mesmos nomes de `hospital-reunioes/supabase/.env` (molde em `supabase/.env.example`). |
+| `GA4_PROPERTY_ID` | compartilhada | 1Password, VITTA TECH, item "Central de Comando Google" (criar). Peça ao Pedro: `GA4_PROPERTY_ID`, serve para a Central de Comando saber qual propriedade do Google Analytics é o Site. |
+| `GOOGLE_APPLICATION_CREDENTIALS_JSON` | compartilhada | 1Password, VITTA TECH, item "Central de Comando Google" (criar), o mesmo da linha de cima. Peça ao Pedro: `GOOGLE_APPLICATION_CREDENTIALS_JSON`, serve para a Central de Comando entrar no Google Analytics com a service account. |
+| `INSTAGRAM_ACCESS_TOKEN` | compartilhada | 1Password, VITTA TECH, item "Central de Comando Instagram" (criar). Peça ao Pedro: `INSTAGRAM_ACCESS_TOKEN`, serve para a Central de Comando ler o Instagram do hospital. |
+| `INSTAGRAM_BUSINESS_ACCOUNT_ID` | compartilhada | 1Password, VITTA TECH, item "Central de Comando Instagram" (criar), o mesmo da linha de cima. Peça ao Pedro: `INSTAGRAM_BUSINESS_ACCOUNT_ID`, serve para a Central de Comando saber qual conta profissional do Instagram ler. |
+| `GA4_EVENTO_WHATSAPP`, `GA4_EVENTO_FALE_CONOSCO` | config | Vazias usam `wa_click` e `generate_lead`, os mesmos da produção. Não precisa pedir. |
 | `RESEND_API_KEY` | só produção | 1Password, VITTA TECH, item "Resend". Não entra no local. |
 | `GH_TOKEN_HOMOLOG` | só produção | 1Password, HOSPITAL SÃO MATHEUS, item "Global Health". É a agenda de homologação, não é GitHub. Não entra no local. |
 | `FIREFLIES_*`, `DIRETOR_EMAIL`, `DEFAULT_USER_PASSWORD` | só produção | Vivem no Coolify. |
