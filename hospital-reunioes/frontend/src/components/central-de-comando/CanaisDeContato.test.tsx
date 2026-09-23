@@ -47,6 +47,14 @@ describe("CanaisDeContato", () => {
     expect(within(itens()[2]).getByText("2.272")).toBeTruthy();
   });
 
+  it("o canal medido sem clique no período mostra 0 com o selo de medido (#856)", () => {
+    render(<CanaisDeContato contatos={[{ chave: "fale-conosco", rotulo: "Fale Conosco", estado: "medido", cliques: 0 }]} />);
+
+    const faleConosco = itens()[0];
+    expect(faleConosco.textContent).toBe("0Fale Conoscomedido");
+    expect(within(faleConosco).queryByText("em construção")).toBeNull();
+  });
+
   it("o canal em construção diz isso, sem número nem selo de medido", () => {
     render(<CanaisDeContato contatos={CONTATOS} />);
 

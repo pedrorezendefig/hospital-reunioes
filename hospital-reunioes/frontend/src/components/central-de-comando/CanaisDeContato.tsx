@@ -11,7 +11,8 @@ import { formatarInteiro } from "@/lib/central-de-comando/formato";
 
 /**
  * Um canal do bloco `contatos_gerados` do payload de Dados do Google, com o
- * estado honesto dele. Só o medido traz `cliques`: em construção (o Site
+ * estado honesto dele. Só o medido traz `cliques`, e o zero dele é resultado
+ * (nenhum clique no período, #856): em construção (o Site
  * ainda não avisa o Google quando o clique acontece) e não medido (não há
  * clique para contar) não trazem número nenhum, nem zero. O backend manda os
  * quatro canais, na ordem da tela.
