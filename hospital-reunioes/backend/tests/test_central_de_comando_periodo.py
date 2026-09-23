@@ -5,14 +5,15 @@ repositório antigo (`pedroribbe/central-de-comando-hsm`): os testes de lá são
 especificação do porte, e a conta tem de dar o mesmo dia que a Central antiga
 dava, senão o número da tela nova não bate com o da antiga no "mesmo período".
 
-Sem I/O: só datas e números. O "hoje" entra por parâmetro, fixo, como lá.
+Sem I/O: só datas e números. O "hoje" entra por parâmetro, fixo, como lá, e o
+instante do relógio também (issue #857).
 """
 
 from __future__ import annotations
 
 import os
 import sys
-from datetime import date
+from datetime import UTC, date, datetime, timedelta, timezone
 
 import pytest
 
@@ -24,13 +25,15 @@ from app.services.central_de_comando.periodo import (  # noqa: E402
     Intervalo,
     dias_do_intervalo,
     dias_do_periodo,
+    hoje_utc,
     intervalo_anterior,
     intervalo_atual,
     ler_periodo,
 )
 from app.services.central_de_comando.variacao import variacao_relativa  # noqa: E402
 
-# O "hoje" fixo do teste de lá (2026-06-17T10:00:00Z): a data UTC é o que conta.
+# O "hoje" fixo do teste de lá (2026-06-17T10:00:00Z), 7h em Brasília: a data
+# do hospital é o que conta, e às 7h ela é a mesma em UTC.
 HOJE = date(2026, 6, 17)
 
 
@@ -53,6 +56,49 @@ class TestIntervaloAtual:
 
     def test_90_dias_terminando_ontem(self):
         assert intervalo_atual("90d", HOJE) == Intervalo(inicio=date(2026, 3, 19), fim=date(2026, 6, 16))
+
+
+# Brasília: UTC-3 o ano todo, sem horário de verão desde 2019. Escrito à mão,
+# e não importado do módulo: é a fonte independente contra a qual ele é conferido.
+_BRASILIA = timezone(timedelta(hours=-3))
+
+
+def _as(hora: int, minuto: int, dia: int) -> datetime:
+    """Um instante de setembro de 2026 no relógio de Brasília, entregue em UTC,
+    como o servidor o vê."""
+    return datetime(2026, 9, dia, hora, minuto, tzinfo=_BRASILIA).astimezone(UTC)
+
+
+class TestFimNoDiaDoHospital:
+    """O período termina no "ontem" de Brasília, e não no de UTC (issue #857).
+
+    Das 21h à meia-noite de Brasília, a data em UTC já é a de amanhã: com o
+    relógio em UTC, o "ontem" seria o hoje de Brasília, ainda pela metade, e os
+    números mudariam às 21h. O relógio entra fixo, por parâmetro.
+    """
+
+    def test_as_22h_de_brasilia_o_periodo_termina_no_dia_anterior_de_brasilia(self):
+        # 22h de 18/09 em Brasília é 01h de 19/09 em UTC.
+        hoje = hoje_utc(_as(22, 0, dia=18))
+
+        assert hoje == date(2026, 9, 18)
+        assert intervalo_atual("28d", hoje) == Intervalo(inicio=date(2026, 8, 21), fim=date(2026, 9, 17))
+
+    def test_a_virada_das_21h_nao_muda_o_periodo(self):
+        """Às 21h de Brasília o UTC vira o dia; o período, não."""
+        antes = intervalo_atual("7d", hoje_utc(_as(20, 59, dia=18)))
+        depois = intervalo_atual("7d", hoje_utc(_as(21, 0, dia=18)))
+
+        assert antes == depois == Intervalo(inicio=date(2026, 9, 11), fim=date(2026, 9, 17))
+
+    def test_a_meia_noite_de_brasilia_o_periodo_anda_um_dia(self):
+        """É a meia-noite de Brasília, e não a de UTC, que fecha o dia: às
+        23h59 o 18 ainda está pela metade; à 0h do 19 ele entra inteiro."""
+        antes = intervalo_atual("7d", hoje_utc(_as(23, 59, dia=18)))
+        depois = intervalo_atual("7d", hoje_utc(_as(0, 0, dia=19)))
+
+        assert antes == Intervalo(inicio=date(2026, 9, 11), fim=date(2026, 9, 17))
+        assert depois == Intervalo(inicio=date(2026, 9, 12), fim=date(2026, 9, 18))
 
 
 class TestIntervaloAnterior:
