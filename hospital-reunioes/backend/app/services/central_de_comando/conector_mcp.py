@@ -496,12 +496,15 @@ def _periodo_valido(argumentos: dict, permitidos: tuple[str, ...]) -> str | None
 
 
 # ─── A serialização do payload (porte do `serialize.ts` do conector antigo,
-# testada direto, com a chave das áreas renomeada para "areasDoSite") ────────
+# testada direto, com duas chaves renomeadas: "areasDoSite" e "fale-conosco") ─
 
 
 def serializar_site(periodo: str, visitantes: dict, google: dict, frescor: dict, agora: datetime) -> dict:
     """O payload do Site para o Claude, equivalente ao `serializeSite` do conector
-    antigo, com a chave das áreas renomeada para "areasDoSite" (o nome da casa).
+    antigo, com duas trocas de contrato registradas na ADR 0058, decisão 7: a
+    chave das áreas é "areasDoSite" (o nome antigo fica só na ADR: o teste de
+    vocabulário o proíbe no código), e o canal Fale Conosco, em
+    `contatos[].chave`, é "fale-conosco" (era "leads"), o nome do canal na casa.
     Os Visitantes vêm do bloco do painel; movimento, áreas, origens, dispositivos
     e contatos, da tela Dados do Google. O `frescor` chega pronto do chamador (o
     pior caso das duas chaves, `_frescor_do_site`), e não sai de uma chave só, que

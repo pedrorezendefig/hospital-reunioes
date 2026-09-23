@@ -5,7 +5,6 @@ import { usePathname } from "next/navigation";
 import { Logo } from "@/components/ui/Logo";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
 import { isSuperAdmin } from "@/lib/auth";
-import { centralDeComandoNoMenu } from "@/lib/central-de-comando/dormente";
 import {
   Users,
   ArrowLeft,
@@ -26,13 +25,10 @@ import { urlDoManual } from "@/components/layout/Sidebar";
 type Item = { href: string; label: string; icon: LucideIcon };
 // somenteSuperAdmin: secoes que a sidebar esconde de secretaria/facilitador
 // (o backend segue sendo o gate real, com 403 nas rotas de super admin).
-// dormente: secao que so entra fora de producao, ate a fatia que a liga
-// (Central de Comando, ADR 0058, decisao 8).
 type Section = {
   label: string;
   items: Item[];
   somenteSuperAdmin?: boolean;
-  dormente?: boolean;
 };
 
 const SECTIONS: Section[] = [
@@ -70,8 +66,6 @@ const SECTIONS: Section[] = [
     // ativo e decidido por prefixo e a raiz acenderia em todas as telas.
     label: "Central de Comando",
     somenteSuperAdmin: true,
-    // A issue #827 tira esta linha e liga a secao em producao.
-    dormente: true,
     items: [
       {
         href: "/admin/central-de-comando/visao-geral",
@@ -114,11 +108,7 @@ export function AdminSidebar({
   const pathname = usePathname();
   const { participante } = useCurrentParticipante();
   const superAdmin = isSuperAdmin(participante);
-  const sections = SECTIONS.filter(
-    (s) =>
-      (superAdmin || !s.somenteSuperAdmin) &&
-      (!s.dormente || centralDeComandoNoMenu()),
-  );
+  const sections = SECTIONS.filter((s) => superAdmin || !s.somenteSuperAdmin);
 
   const content = (
     <>
