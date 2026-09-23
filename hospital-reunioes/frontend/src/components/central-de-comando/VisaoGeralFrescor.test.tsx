@@ -141,6 +141,23 @@ describe("Visão Geral: a barra de frescor", () => {
     expect(screen.getByText("Atualizado há 5 minutos")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
   });
+
+  it("com os dois blocos fora e sem carimbo, a barra não diz 'Atualizado' (issue #848)", async () => {
+    // O Google caiu sem número guardado e o Instagram não está configurado:
+    // nenhum bloco tem número, e o frescor chega sem hora e sem falha.
+    const semNumero: VisaoGeralPayload = {
+      ...payload(0, { atualizado_em: null }),
+      visitantes: { estado: "sem-dado", motivo: "O Google Analytics respondeu HTTP 500." },
+      instagram: { estado: "nao-configurado", motivo: "Falta configurar INSTAGRAM_ACCESS_TOKEN." },
+    };
+    servidor({ leitura: () => resposta(200, semNumero) });
+
+    render(<VisaoGeral periodo="28d" />);
+
+    expect(await screen.findByText("Nenhum número disponível agora.")).toBeTruthy();
+    expect(screen.queryByText(/^Atualizado/)).toBeNull();
+    expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
+  });
 });
 
 describe("Visão Geral: o Atualizar agora", () => {

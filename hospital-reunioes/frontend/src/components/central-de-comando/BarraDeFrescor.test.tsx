@@ -133,6 +133,18 @@ describe("BarraDeFrescor", () => {
     expect(aviso).not.toMatch(/NaN|Mostrando os números de/);
   });
 
+  it("sem carimbo nenhum, não diz 'Atualizado' nem pinta o ponto verde (issue #848)", () => {
+    // A Visão Geral com as duas fontes fora (ou sem configurar) e nada guardado:
+    // o backend manda `{atualizado_em: null, atualizacao_falhou: false}`. Nenhum
+    // bloco deu número, então nada foi atualizado: a barra fica neutra.
+    render(<BarraDeFrescor frescor={frescor({ atualizado_em: null })} atualizando={false} onAtualizar={() => {}} />);
+
+    expect(screen.queryByText(/Atualizado/)).toBeNull();
+    expect(screen.getByText("Nenhum número disponível agora.")).toBeTruthy();
+    expect(document.querySelector(".bg-emerald-500")).toBeNull();
+    expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
+  });
+
   it("falha sem motivo mantém a frase de sempre", () => {
     render(
       <BarraDeFrescor

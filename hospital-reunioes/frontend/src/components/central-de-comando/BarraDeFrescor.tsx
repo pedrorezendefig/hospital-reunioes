@@ -9,6 +9,9 @@ import { tempoRelativo } from "@/lib/central-de-comando/tempo-relativo";
 
 const MINUTO_MS = 60_000;
 
+/** A frase neutra de quando não há carimbo: nenhum bloco tem número. */
+const SEM_NUMERO = "Nenhum número disponível agora.";
+
 /** O relógio da barra bate uma vez por minuto. */
 function assinarMinuto(avisar: () => void) {
   const id = setInterval(avisar, MINUTO_MS);
@@ -31,6 +34,12 @@ function assinarMinuto(avisar: () => void) {
  * `useSyncExternalStore` precisa para não redesenhar à toa. No servidor não
  * há relógio (`null`), e o carimbo sai sem o tempo. Sem hora registrada, a
  * barra não inventa hora nenhuma.
+ *
+ * **Sem carimbo, a barra fica neutra (issue #848).** `atualizado_em` nulo sem
+ * falha quer dizer que nenhum bloco da tela tem número (na Visão Geral, as duas
+ * fontes fora ou sem configurar, e nada guardado): nada foi atualizado, então a
+ * barra não diz "Atualizado" nem pinta o ponto verde. Cada bloco embaixo conta
+ * o próprio porquê.
  *
  * `aviso` é a frase de um Atualizar agora que não chegou a trazer payload (o
  * limite de taxa, a rede fora): os números e o carimbo continuam os de antes.
@@ -65,10 +74,15 @@ export function BarraDeFrescor({
               {frescor.motivo && <span className="block">{frescor.motivo}</span>}
             </span>
           </p>
+        ) : desde === null ? (
+          <p className="flex items-center gap-2 font-medium text-text-secondary">
+            <span className="h-2 w-2 shrink-0 rounded-full bg-slate-300" aria-hidden="true" />
+            {SEM_NUMERO}
+          </p>
         ) : (
           <p className="flex items-center gap-2 font-medium text-text-secondary">
             <span className="h-2 w-2 shrink-0 rounded-full bg-emerald-500" aria-hidden="true" />
-            {desde === null || agora === null ? "Atualizado" : `Atualizado ${tempoRelativo(desde, agora)}`}
+            {agora === null ? "Atualizado" : `Atualizado ${tempoRelativo(desde, agora)}`}
           </p>
         )}
         {aviso && (
