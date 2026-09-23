@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-23T15:14:30-03:00",
+      "sha": "f6504200",
+      "app_version": "0.154.1",
+      "subject": "Central de Comando: uma ida à fonte por tela e hora, espera depois de falha e telas em sincronia",
+      "raw_subject": "refactor(central): uma ida à fonte por tela e hora, espera depois de falha e telas em sincronia (#868)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 479,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "/ship da #858 (PRD #809): PR #868. Aquecimento do cache ficou na #867. Health 0.154.1 ok."
+    },
+    {
       "at": "2026-09-23T13:21:42-03:00",
       "sha": "93870744",
       "app_version": "0.154.0",
@@ -1487,34 +1519,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 1 de 1 desta sessao, duas fatias em paralelo: #623 (fatia P) e #625 (fatia M), as duas fechando o desenvolvimento em 1 tentativa. Sao as sobras que os revisores do PR #619 (issue #607) marcaram como menores. Duas coisas: o rollback de _restaurar_prazo passou a receber carimbo_a_restaurar como dict e so inclui area_estourou_em sob a mesma condicional da ida, e _instante virou ler_instante em ouvidoria_prazos.py, consumido pelos dois routers (o nome ganhou prefixo porque o modulo ja usa instante como variavel local em tres funcoes). O contrato da triagem tinha duas frases que divergiam num caso e o autor achou isso sozinho: como estouro_consumado devolve ja_consumado quando ha carimbo, estourou e estouro_anterior nao sao mutuamente exclusivos, entao a leitura literal (so quando havia carimbo anterior) deixaria o caso que fura o prazo NESTA devolucao voltar com prazo restaurado e carimbo gravado, reabrindo exatamente o #607. Ele implementou o espelho da ida e deixou a prova executavel no mutante M3. Prova por mutacao: 5 plantados, 5 mortos, dois deles no proprio detector (updates em ordem invertida e espiao cego). Os testes asserem o payload do update e nao a linha no banco, porque o banco nao distingue coluna nunca escrita de coluna escrita com None. Revisor independente de 2 lentes voltou limpo na rodada 1: 0 must-fix e 5 nice-to-have, todos registrados no PR. Ele confirmou por leitura do codigo, nao pela tabela do autor, que ler_instante e identica as duas copias removidas, que nao ha orfao nem import circular, que os dois .eq de guarda continuam de pe, e plantou 2 mutantes proprios que tambem morreram. O maior dos nice-to-have: existe um quarto caso (carimbo antigo mais prazo furado agora) que o codigo acerta mas nenhum teste segura. Rebase sobre a main que ja trazia o PR #628 da sessao paralela, no mesmo ouvidoria.py, sem conflito nenhum; suite pos-rebase com 3667 passed. Registrado que _instante ainda existe copiado em cinco services, fora do escopo desta issue."
-    },
-    {
-      "at": "2026-09-08T20:09:06-03:00",
-      "sha": "a4f4d44",
-      "app_version": "0.115.1",
-      "subject": "caso apagado deixa de aceitar anexo e registro de tentativa de contato",
-      "raw_subject": "fix(ouvidoria): caso apagado não recebe anexo nem tentativa de contato (#628)",
-      "scope": [
-        "backend"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 396,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 desta sessao: issue #622 sozinha, com --paralelo 1. Duas rotas ainda gravavam em caso apagado (POST /manifestacoes/{id}/anexos e POST /manifestacoes/{id}/tentativas-contato), alcancaveis por chamada direta a API e nao por clique. As duas passaram a usar o helper barrar_caso_apagado que o #620 criou, que agora segura cinco portas; nenhuma guarda nova foi escrita, por decisao da triagem de 08/09/2026. A guarda entra antes de qualquer efeito colateral: no anexo, antes de validar_anexo, antes do file.read(), antes do upload_private e antes do insert. A tupla de carregar_manifestacao das duas rotas passou a pedir anonimizada_em, e esse foi o mutante obrigatorio: tirar a coluna do select faz a guarda ler None e mata os dois testes novos, porque os fakes de PostgREST projetam de verdade so as colunas pedidas. Sete mutantes ao todo, todos mortos, dois deles plantados no proprio detector para provar que o teste nao passa no vacuo; os testes batem na rota HTTP real, nao na funcao. Rotas de email ficaram fora do escopo. Sem migration: o carimbo anonimizada_em existe desde a 079. Os dois revisores do orquestrador voltaram limpos na rodada 1, zero must-fix, o que nao tinha acontecido nas ondas anteriores desta serie. O revisor de codigo varreu as 22 rotas de escrita de ouvidoria.py e nao achou terceira porta analoga no painel, mas achou uma FORA do painel: POST /api/ouvidoria-setor/{token}/responder sobe binario para o mesmo bucket sem a guarda, segura hoje so porque exige status aguardando_area enquanto a retencao so carimba caso encerrado. Como a #595 mexe justamente no apagamento, isso virou a issue #631 em needs-triage em vez de entrar neste PR. Segundo nice-to-have nao aplicado: a tupla pede protocolo, que nenhuma das duas rotas le. A trava do semaforo estava presa ha 250 minutos na sessao do PR #626; sem build rodando no Coolify, foi solta com --forcar. A entrada da v0.115.0 logo abaixo foi reconstruida por esta sessao pelo mesmo motivo."
     }
   ]
 }
