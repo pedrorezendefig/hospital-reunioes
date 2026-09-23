@@ -98,17 +98,23 @@ export function RankingAreasDoSite({ areas }: { areas: AreaDoPayload[] }) {
  * da Visão Geral: para cima em verde, para baixo em âmbar, a porcentagem sem
  * sinal. Sem base de comparação, ou estável, não há seta (como no ranking da
  * Central antiga).
+ *
+ * A seta é escondida do leitor de tela, e o sentido vai por escrito num texto
+ * só dele (`sr-only`, issue #834): nome acessível num `<p>` (`aria-label`) não
+ * é anunciado, a ARIA 1.2 o proíbe em parágrafo.
  */
 function Variacao({ variacao }: { variacao: number | null }) {
   if (variacao === null || variacao === 0) return null;
   const subiu = variacao > 0;
   const texto = formatarPercentual(Math.abs(variacao));
   return (
-    <p
-      aria-label={`${subiu ? "subiu" : "caiu"} ${texto} em relação ao período anterior`}
-      className={`text-xs font-semibold tabular-nums ${subiu ? "text-emerald-700" : "text-amber-700"}`}
-    >
-      {subiu ? "↑" : "↓"} {texto}
+    <p className={`text-xs font-semibold tabular-nums ${subiu ? "text-emerald-700" : "text-amber-700"}`}>
+      <span aria-hidden="true">
+        {subiu ? "↑" : "↓"} {texto}
+      </span>
+      <span className="sr-only">
+        {subiu ? "subiu" : "caiu"} {texto} em relação ao período anterior
+      </span>
     </p>
   );
 }
