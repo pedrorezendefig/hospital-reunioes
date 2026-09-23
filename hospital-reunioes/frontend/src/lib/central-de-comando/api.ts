@@ -30,7 +30,9 @@ export const MUITAS_ATUALIZACOES = "Muitas atualizações em pouco tempo. Espere
  * os números (ISO 8601, com fuso) e se a última tentativa de renová-los
  * falhou, com a frase do porquê. Quando falhou, os números são o último valor
  * bom, e `atualizado_em` é a hora dele. Nulo quando o backend não tem hora
- * nenhuma registrada (o contrato admite; a leitura de uma tela sempre tem).
+ * nenhuma registrada: na Visão Geral, quando nenhum bloco tem número (as duas
+ * fontes fora ou sem configurar, e nada guardado). Aí a barra fica neutra e
+ * não diz "Atualizado" (issue #848).
  */
 export type Frescor = {
   atualizado_em: string | null;
