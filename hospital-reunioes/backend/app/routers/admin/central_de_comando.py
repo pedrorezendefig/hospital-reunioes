@@ -216,7 +216,8 @@ async def ao_vivo(request: Request):
 # propriedade e por hora. Cinco por minuto sobram para quem clica e acabam com
 # o botão como porta de abuso. Por endereço, e não por pessoa, porque é assim
 # que o `limiter` do app conta em todo lugar. A renovação automática da tela
-# aberta usa esta mesma rota, uma vez por hora.
+# aberta não usa esta rota: relê pela leitura comum (issue #858), e o limite
+# fica todo para quem clica.
 LIMITE_DO_ATUALIZAR_AGORA = "5/minute"
 
 

@@ -84,6 +84,7 @@ def _bloco_visitantes(periodo: Periodo, forcar: bool) -> tuple[dict, tuple | Non
         ("visao-geral:visitantes", periodo),
         lambda: _buscar_visitantes(periodo),
         forcar=forcar,
+        fonte=("google", periodo),
         falha=provedor_google.GoogleError,
         nao_configurado=provedor_google.GoogleNaoConfiguradoError,
     )
@@ -153,6 +154,7 @@ def _bloco_instagram(periodo: Periodo, forcar: bool) -> tuple[dict, tuple | None
         ("visao-geral:instagram", periodo_ig),
         lambda: _buscar_instagram(periodo_ig),
         forcar=forcar,
+        fonte=("instagram", periodo_ig),
         falha=provedor_instagram.InstagramError,
         nao_configurado=provedor_instagram.InstagramNaoConfiguradoError,
     )
@@ -206,6 +208,7 @@ def _bloco_de_fonte(
     buscar: Callable[[], dict],
     *,
     forcar: bool,
+    fonte: tuple[str, Periodo],
     falha: type[Exception],
     nao_configurado: type[Exception],
 ) -> tuple[dict, tuple | None]:
@@ -216,7 +219,7 @@ def _bloco_de_fonte(
     chave (ou `None` quando o bloco não tem número guardado, para ficar fora do
     frescor)."""
     try:
-        leitura = cache_da_central.ler(chave, buscar, forcar=forcar, falhas=(falha,))
+        leitura = cache_da_central.ler(chave, buscar, forcar=forcar, falhas=(falha,), fontes={fonte})
     except nao_configurado as exc:
         return {"estado": "nao-configurado", "motivo": str(exc)}, None
     except falha as exc:

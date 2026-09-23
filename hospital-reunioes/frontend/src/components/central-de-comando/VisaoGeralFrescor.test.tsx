@@ -187,99 +187,118 @@ describe("Visão Geral: o Atualizar agora", () => {
 });
 
 describe("Visão Geral: a renovação automática", () => {
+  // O número que a abertura recebe foi buscado às 16h45 (o `payload` padrão), e
+  // a tela abre às 16h50: ele faz 1 hora às 17h45, 55 minutos depois. A tela
+  // relê pela leitura comum (GET), e não pelo Atualizar agora: quem chega
+  // primeiro depois da hora faz a única ida à fonte, e as outras abas pegam o
+  // número novo do cache do servidor (issue #858). Minutos escritos à mão:
+  // medir contra a própria constante ficaria verde com ela trocada.
+  // Assíncrono: as promessas andam entre um timer e outro, como no navegador,
+  // e a releitura sai na hora em que o relógio bate, e não no fim do avanço.
   async function passar(ms: number) {
     await act(async () => {
-      vi.advanceTimersByTime(ms);
+      await vi.advanceTimersByTimeAsync(ms);
     });
   }
 
-  it("com a tela aberta, renova sozinha de hora em hora, sem ninguém clicar", async () => {
+  // Só a leitura da tela: o Ao vivo, na mesma tela, consulta a cada 30 segundos.
+  const leituras = () => pedidos.filter((p) => p.metodo === "GET" && p.url.includes("/visao-geral?"));
+
+  /** O número novo, buscado pelo servidor na hora da releitura. */
+  const novo = (numero: number) => resposta(200, payload(numero, { atualizado_em: new Date().toISOString() }));
+
+  it("com a tela aberta, relê quando o número faz 1 hora, sem ninguém clicar", async () => {
     let numero = 12345;
     servidor({
-      leitura: () => resposta(200, payload(12345)),
-      atualizar: () => resposta(200, payload((numero += 55), { atualizado_em: new Date().toISOString() })),
+      leitura: () => (leituras().length === 1 ? resposta(200, payload(12345)) : novo((numero += 55))),
     });
     render(<VisaoGeral periodo="28d" />);
     await screen.findByText("12.345");
 
-    // 60 minutos escritos à mão: medir contra a própria constante ficaria
-    // verde com ela trocada para um dia, que é o mesmo que não renovar.
-    await passar(60 * 60_000);
+    await passar(54 * 60_000);
+    expect(leituras()).toHaveLength(1);
 
+    await passar(2 * 60_000);
     expect(await screen.findByText("12.400")).toBeTruthy();
-    expect(atualizacoes().map((p) => p.url)).toEqual([
-      "/api/admin/central-de-comando/atualizar-agora?tela=visao-geral&periodo=28d",
+    expect(leituras().map((p) => p.url)).toEqual([
+      "/api/admin/central-de-comando/visao-geral?periodo=28d",
+      "/api/admin/central-de-comando/visao-geral?periodo=28d",
     ]);
 
-    await passar(60 * 60_000);
-
+    // O número relido é de agora: a próxima releitura é 1 hora depois dele.
+    await passar(58 * 60_000);
+    expect(leituras()).toHaveLength(2);
+    await passar(2 * 60_000);
     expect(await screen.findByText("12.455")).toBeTruthy();
-    expect(atualizacoes()).toHaveLength(2);
   });
 
-  it("não renova antes da hora", async () => {
+  it("não usa o Atualizar agora: a renovação não gasta o limite de quem clica", async () => {
     servidor({
-      leitura: () => resposta(200, payload(12345)),
-      atualizar: () => resposta(200, payload(12400)),
+      leitura: () => (leituras().length === 1 ? resposta(200, payload(12345)) : novo(12400)),
+      atualizar: () => resposta(200, payload(99999)),
     });
     render(<VisaoGeral periodo="28d" />);
     await screen.findByText("12.345");
 
-    await passar(59 * 60_000);
+    await passar(56 * 60_000);
 
+    expect(await screen.findByText("12.400")).toBeTruthy();
     expect(atualizacoes()).toEqual([]);
-    expect(screen.getByText("12.345")).toBeTruthy();
   });
 
-  it("renova em silêncio: não pisca 'Atualizando…' nem apaga os números", async () => {
+  it("se o servidor ainda devolve o número velho, relê de novo em 5 minutos, e não antes", async () => {
+    // O Google fora (o servidor segura as idas por 5 minutos e devolve o último
+    // valor bom), ou o relógio da máquina adiantado: a hora do número já
+    // passou, e a tela não pode ficar relendo sem parar.
+    servidor({ leitura: () => resposta(200, payload(12345)) });
+    render(<VisaoGeral periodo="28d" />);
+    await screen.findByText("12.345");
+    await passar(56 * 60_000);
+    await waitFor(() => expect(leituras()).toHaveLength(2));
+
+    await passar(4 * 60_000);
+    expect(leituras()).toHaveLength(2);
+
+    await passar(1 * 60_000);
+    await waitFor(() => expect(leituras()).toHaveLength(3));
+  });
+
+  it("relê em silêncio: não pisca 'Atualizando…' nem apaga os números", async () => {
     let responder: (r: Response) => void = () => {};
     servidor({
-      leitura: () => resposta(200, payload(12345)),
-      atualizar: () => new Promise<Response>((r) => (responder = r)),
+      leitura: () =>
+        leituras().length === 1 ? resposta(200, payload(12345)) : new Promise<Response>((r) => (responder = r)),
     });
     render(<VisaoGeral periodo="28d" />);
     await screen.findByText("12.345");
 
-    await passar(60 * 60_000);
+    await passar(56 * 60_000);
 
-    await waitFor(() => expect(atualizacoes()).toHaveLength(1));
+    await waitFor(() => expect(leituras()).toHaveLength(2));
     expect(screen.queryByText(/Atualizando/)).toBeNull();
     expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
     expect(screen.getByText("12.345")).toBeTruthy();
 
-    await act(async () => responder(resposta(200, payload(12400))));
+    await act(async () => responder(novo(12400)));
     expect(await screen.findByText("12.400")).toBeTruthy();
   });
 
-  it("renova mesmo quando o relógio bate logo depois de os números aparecerem", async () => {
-    // O timer não pode depender de o React já ter rodado os efeitos do render
-    // que desenhou os números: o CI em Linux pegou o timer batendo antes, com a
-    // tela ainda marcada como "carregando", e a renovação da hora se perdia.
-    // A corrida só aparece quando o render passa do quadro de 5 ms do React (a
-    // máquina lenta do CI), então este teste pode passar numa máquina rápida
-    // mesmo com o defeito; quem a fecha de vez é a marca de "pedido no ar",
-    // posta na hora do pedido, e os dois testes seguintes provam a regra dela.
-    servidor({
-      leitura: () => resposta(200, payload(12345)),
-      atualizar: () => resposta(200, payload(12400)),
-    });
+  it("relê mesmo quando o relógio bate logo depois de os números aparecerem", async () => {
+    servidor({ leitura: () => (leituras().length === 1 ? resposta(200, payload(12345)) : novo(12400)) });
     render(<VisaoGeral periodo="28d" />);
     await screen.findByText("12.345");
 
     act(() => {
-      vi.advanceTimersByTime(60 * 60_000);
+      vi.advanceTimersByTime(56 * 60_000);
     });
 
-    await waitFor(() => expect(atualizacoes()).toHaveLength(1));
+    await waitFor(() => expect(leituras()).toHaveLength(2));
     expect(await screen.findByText("12.400")).toBeTruthy();
   });
 
-  it("não renova por cima da leitura que ainda está no ar", async () => {
+  it("não relê por cima da leitura que ainda está no ar", async () => {
     let responderLeitura: (r: Response) => void = () => {};
-    servidor({
-      leitura: () => new Promise<Response>((r) => (responderLeitura = r)),
-      atualizar: () => resposta(503, "<html>fora</html>"),
-    });
+    servidor({ leitura: () => new Promise<Response>((r) => (responderLeitura = r)) });
     render(<VisaoGeral periodo="28d" />);
     await waitFor(() => expect(pedidos).toHaveLength(1));
 
@@ -287,10 +306,10 @@ describe("Visão Geral: a renovação automática", () => {
     await act(async () => responderLeitura(resposta(200, payload(12345))));
 
     expect(await screen.findByText("12.345")).toBeTruthy();
-    expect(atualizacoes()).toEqual([]);
+    expect(leituras()).toHaveLength(1);
   });
 
-  it("não renova por cima de um Atualizar agora clicado, e o botão não fica preso", async () => {
+  it("não relê por cima de um Atualizar agora clicado, e o botão não fica preso", async () => {
     let responderClique: (r: Response) => void = () => {};
     servidor({
       leitura: () => resposta(200, payload(12345)),
@@ -301,31 +320,32 @@ describe("Visão Geral: a renovação automática", () => {
     fireEvent.click(screen.getByRole("button", { name: /Atualizar agora/ }));
     await screen.findByRole("button", { name: /Atualizando/ });
 
-    await passar(60 * 60_000);
-    await act(async () => responderClique(resposta(200, payload(12400))));
+    await passar(56 * 60_000);
+    await act(async () => responderClique(novo(12400)));
 
     expect(await screen.findByText("12.400")).toBeTruthy();
     expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
+    expect(leituras()).toHaveLength(1);
     expect(atualizacoes()).toHaveLength(1);
   });
 
-  const falhasDaRenovacao: [string, () => Response | Promise<Response>][] = [
-    ["o limite de taxa (429)", () => resposta(429, { error: "Rate limit exceeded: 5 per 1 minute" })],
+  const falhasDaReleitura: [string, () => Response | Promise<Response>][] = [
+    ["o limite de taxa (429)", () => resposta(429, { error: "Rate limit exceeded: 30 per 1 minute" })],
     ["o Google fora sem nada guardado (502)", () => resposta(502, { detail: "O Google Analytics respondeu HTTP 503." })],
     ["a rede fora", () => Promise.reject(new TypeError("Failed to fetch"))],
   ];
 
-  it.each(falhasDaRenovacao)(
-    "%s: a renovação que falha fica em silêncio, com os números e o carimbo de antes",
-    async (_caso, atualizar) => {
+  it.each(falhasDaReleitura)(
+    "%s: a releitura que falha fica em silêncio, com os números e o carimbo de antes, e tenta de novo",
+    async (_caso, falhar) => {
       // Ninguém clicou: não há a quem avisar. O carimbo que envelhece já diz
-      // de quando são os números, e a hora seguinte tenta de novo.
-      servidor({ leitura: () => resposta(200, payload(12345)), atualizar });
+      // de quando são os números.
+      servidor({ leitura: () => (leituras().length === 1 ? resposta(200, payload(12345)) : falhar()) });
       render(<VisaoGeral periodo="28d" />);
       await screen.findByText("12.345");
 
-      await passar(60 * 60_000);
-      await waitFor(() => expect(atualizacoes()).toHaveLength(1));
+      await passar(56 * 60_000);
+      await waitFor(() => expect(leituras()).toHaveLength(2));
       // A resposta ruim termina de chegar (corpo lido, estado decidido).
       await act(async () => {
         await vi.advanceTimersByTimeAsync(1_000);
@@ -336,22 +356,22 @@ describe("Visão Geral: a renovação automática", () => {
       expect(screen.queryByRole("status")).toBeNull();
       expect(screen.queryByText(/Muitas atualizações|Não foi possível/)).toBeNull();
       expect(screen.getByRole("button", { name: /Atualizar agora/ })).toBeTruthy();
+
+      await passar(5 * 60_000);
+      await waitFor(() => expect(leituras()).toHaveLength(3));
     },
   );
 
-  it("pede a sessão de novo a cada renovação: o token da abertura vence em 1 hora", async () => {
-    servidor({
-      leitura: () => resposta(200, payload(12345)),
-      atualizar: () => resposta(200, payload(12400)),
-    });
+  it("pede a sessão de novo a cada releitura: o token da abertura vence em 1 hora", async () => {
+    servidor({ leitura: () => (leituras().length === 1 ? resposta(200, payload(12345)) : novo(12400)) });
     render(<VisaoGeral periodo="28d" />);
     await screen.findByText("12.345");
     sessao.token = "token-renovado";
 
-    await passar(60 * 60_000);
+    await passar(56 * 60_000);
 
-    await waitFor(() => expect(atualizacoes()).toHaveLength(1));
-    expect(atualizacoes()[0].autorizacao).toBe("Bearer token-renovado");
+    await waitFor(() => expect(leituras()).toHaveLength(2));
+    expect(leituras()[1].autorizacao).toBe("Bearer token-renovado");
   });
 });
 
@@ -505,10 +525,13 @@ describe("Visão Geral: a sessão que não dá para ler", () => {
     expect(atualizacoes()).toEqual([]);
   });
 
-  it("a renovação de hora em hora continua depois de a sessão falhar e voltar", async () => {
+  it("a renovação automática continua depois de a sessão falhar e voltar", async () => {
+    const leituras = () => pedidos.filter((p) => p.metodo === "GET" && p.url.includes("/visao-geral?"));
     servidor({
-      leitura: () => resposta(200, payload(12345)),
-      atualizar: () => resposta(200, payload(12400)),
+      leitura: () =>
+        leituras().length === 1
+          ? resposta(200, payload(12345))
+          : resposta(200, payload(12400, { atualizado_em: new Date().toISOString() })),
     });
     render(<VisaoGeral periodo="28d" />);
     await screen.findByText("12.345");
@@ -520,6 +543,6 @@ describe("Visão Geral: a sessão que não dá para ler", () => {
     await passar(60 * 60_000);
 
     expect(await screen.findByText("12.400")).toBeTruthy();
-    expect(atualizacoes()).toHaveLength(1);
+    expect(leituras()).toHaveLength(2);
   });
 });

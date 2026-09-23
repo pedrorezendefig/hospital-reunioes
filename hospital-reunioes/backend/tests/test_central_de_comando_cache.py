@@ -14,6 +14,8 @@ from __future__ import annotations
 
 import os
 import sys
+import threading
+import time
 from datetime import UTC, datetime
 
 import pytest
@@ -201,11 +203,12 @@ class TestUltimoValorBom:
 
     def test_sem_numero_guardado_a_falha_devolve_o_que_outra_leitura_trouxe(self):
         """A primeira leitura da chave falhou, mas outra, no meio dela, trouxe
-        o número: há o que mostrar, então não é erro."""
+        o número: há o que mostrar, então não é erro. A do meio é um Atualizar
+        agora: uma leitura comum esperaria a ida que já está no ar (#858)."""
         cache = _cache(RelogioDeTeste())
 
         def fonte_que_cai_enquanto_outra_leitura_busca():
-            cache.ler("k", Fonte(5))
+            cache.ler("k", Fonte(5), forcar=True)
             raise FonteForaError("caiu")
 
         assert cache.ler("k", fonte_que_cai_enquanto_outra_leitura_busca, falhas=FALHAS).valor == 5
@@ -333,3 +336,218 @@ class TestFrescorDeVariasChaves:
         cache = _cache(RelogioDeTeste())
 
         assert cache.frescor("x") == Frescor(atualizado_em=None, atualizacao_falhou=False, motivo=None)
+
+
+class TestUmaIdaPorChave:
+    """Leituras que chegam juntas numa chave vencida esperam a ida que já está
+    no ar (issue #858): N abas abertas na mesma tela fazem 1 ida, não N. A rota
+    lê em thread, então o teste usa threads de verdade. O único tempo real é a
+    folga para as leituras de trás chegarem enquanto a fonte segura a primeira:
+    a hora do cache continua no relógio do teste."""
+
+    def test_leituras_ao_mesmo_tempo_da_chave_vencida_fazem_uma_ida_so(self):
+        relogio = RelogioDeTeste()
+        cache = _cache(relogio)
+        cache.ler("k", Fonte(1))
+        relogio.avancar(hours=1)
+
+        no_ar = threading.Event()
+        liberar = threading.Event()
+        idas = []
+
+        def fonte_lenta():
+            idas.append(1)
+            no_ar.set()
+            liberar.wait(5)
+            return 2
+
+        valores = []
+
+        def ler():
+            valores.append(cache.ler("k", fonte_lenta).valor)
+
+        primeira = threading.Thread(target=ler)
+        primeira.start()
+        assert no_ar.wait(5)
+        de_tras = [threading.Thread(target=ler) for _ in range(2)]
+        for t in de_tras:
+            t.start()
+        time.sleep(0.2)
+        liberar.set()
+        for t in [primeira, *de_tras]:
+            t.join(5)
+
+        assert len(idas) == 1
+        assert valores == [2, 2, 2]
+
+    def test_a_ida_de_uma_chave_nao_segura_a_leitura_de_outra(self):
+        relogio = RelogioDeTeste()
+        cache = _cache(relogio)
+        no_ar = threading.Event()
+        liberar = threading.Event()
+
+        def fonte_lenta():
+            no_ar.set()
+            liberar.wait(5)
+            return 1
+
+        lenta = threading.Thread(target=lambda: cache.ler("lenta", fonte_lenta))
+        lenta.start()
+        assert no_ar.wait(5)
+        outra = threading.Thread(target=lambda: cache.ler("outra", Fonte(9)))
+        outra.start()
+        outra.join(2)
+        segurada = outra.is_alive()
+        liberar.set()
+        lenta.join(5)
+
+        assert segurada is False
+
+
+class TestEsperaDepoisDeFalha:
+    """Depois de uma falha da fonte, a leitura comum não volta a ela por 5
+    minutos (issue #858): com o Google fora, toda leitura de uma chave vencida
+    ia bater nele de novo. O Atualizar agora ignora a espera."""
+
+    def _com_falha(self):
+        relogio = RelogioDeTeste()
+        cache = _cache(relogio)
+        fonte = Fonte(10)
+        cache.ler("k", fonte, falhas=FALHAS)
+        relogio.avancar(hours=1)
+        fonte.erro = FonteForaError("fora")
+        cache.ler("k", fonte, falhas=FALHAS)
+        return relogio, cache, fonte
+
+    def test_dentro_da_espera_a_leitura_serve_o_ultimo_valor_bom_sem_ir_a_fonte(self):
+        relogio, cache, fonte = self._com_falha()
+        relogio.avancar(minutes=4, seconds=59)
+
+        leitura = cache.ler("k", fonte, falhas=FALHAS)
+
+        assert fonte.idas == 2
+        assert leitura.valor == 10
+        assert leitura.frescor.atualizacao_falhou is True
+        assert leitura.frescor.motivo == "fora"
+
+    def test_passada_a_espera_a_leitura_tenta_de_novo(self):
+        relogio, cache, fonte = self._com_falha()
+        relogio.avancar(minutes=5)
+        fonte.erro = None
+        fonte.valor = 11
+
+        leitura = cache.ler("k", fonte, falhas=FALHAS)
+
+        assert fonte.idas == 3
+        assert leitura.valor == 11
+        assert leitura.frescor.atualizacao_falhou is False
+
+    def test_o_atualizar_agora_ignora_a_espera(self):
+        relogio, cache, fonte = self._com_falha()
+        relogio.avancar(minutes=1)
+        fonte.erro = None
+        fonte.valor = 12
+
+        assert cache.ler("k", fonte, forcar=True, falhas=FALHAS).valor == 12
+        assert fonte.idas == 3
+
+    def test_sem_numero_guardado_a_falha_se_repete_sem_ir_a_fonte(self):
+        relogio = RelogioDeTeste()
+        cache = _cache(relogio)
+        fonte = Fonte()
+        fonte.erro = FonteForaError("fora")
+        with pytest.raises(FonteForaError):
+            cache.ler("k", fonte, falhas=FALHAS)
+        relogio.avancar(minutes=4)
+
+        with pytest.raises(FonteForaError, match="fora"):
+            cache.ler("k", fonte, falhas=FALHAS)
+        assert fonte.idas == 1
+
+        relogio.avancar(minutes=1)
+        fonte.erro = None
+        assert cache.ler("k", fonte, falhas=FALHAS).valor == 42
+        assert fonte.idas == 2
+
+    def test_falha_que_nao_e_da_fonte_nao_ganha_espera(self):
+        """Defeito do código não é "a fonte caiu": a leitura seguinte tenta."""
+        relogio = RelogioDeTeste()
+        cache = _cache(relogio)
+        fonte = Fonte()
+        fonte.erro = RuntimeError("defeito")
+        with pytest.raises(RuntimeError):
+            cache.ler("k", fonte, falhas=FALHAS)
+        fonte.erro = None
+
+        assert cache.ler("k", fonte, falhas=FALHAS).valor == 42
+        assert fonte.idas == 2
+
+
+class TestSincroniaPeloAtualizarAgora:
+    """O Atualizar agora de uma chave vence as outras que leem da mesma fonte
+    (issue #858): a próxima leitura delas busca, e as telas vizinhas param de
+    mostrar números diferentes para a mesma métrica. Só marca, não busca junto:
+    um clique não vira uma rajada de idas."""
+
+    def _tres_chaves(self):
+        relogio = RelogioDeTeste()
+        cache = _cache(relogio)
+        fontes = {"lente": Fonte(1), "galeria": Fonte(1), "site": Fonte(1)}
+        cache.ler("lente", fontes["lente"], fontes={("instagram", "28d")})
+        cache.ler("galeria", fontes["galeria"], fontes={("instagram", "28d"), ("google", "28d")})
+        cache.ler("site", fontes["site"], fontes={("google", "28d")})
+        return relogio, cache, fontes
+
+    def test_quem_le_da_mesma_fonte_busca_na_proxima_leitura(self):
+        relogio, cache, fontes = self._tres_chaves()
+        fontes["lente"].valor = 2
+        fontes["galeria"].valor = 2
+        cache.ler("lente", fontes["lente"], forcar=True, fontes={("instagram", "28d")})
+
+        assert fontes["galeria"].idas == 1
+        assert cache.ler("galeria", fontes["galeria"]).valor == 2
+        assert fontes["galeria"].idas == 2
+
+    def test_quem_le_de_outra_fonte_continua_servido_do_cache(self):
+        relogio, cache, fontes = self._tres_chaves()
+        cache.ler("lente", fontes["lente"], forcar=True, fontes={("instagram", "28d")})
+
+        cache.ler("site", fontes["site"])
+
+        assert fontes["site"].idas == 1
+
+    def test_a_chave_vencida_volta_ao_cache_depois_de_buscar(self):
+        relogio, cache, fontes = self._tres_chaves()
+        cache.ler("lente", fontes["lente"], forcar=True, fontes={("instagram", "28d")})
+        cache.ler("galeria", fontes["galeria"])
+
+        cache.ler("galeria", fontes["galeria"])
+
+        assert fontes["galeria"].idas == 2
+
+    def test_a_renovacao_pela_hora_nao_vence_as_vizinhas(self):
+        """Só o Atualizar agora sincroniza: se a renovação pela hora também
+        vencesse as vizinhas, cada leitura derrubaria a outra, e as telas iam
+        à fonte a cada abertura."""
+        relogio = RelogioDeTeste()
+        cache = _cache(relogio)
+        lente, galeria = Fonte(1), Fonte(1)
+        cache.ler("lente", lente, fontes={("instagram", "28d")})
+        relogio.avancar(minutes=30)
+        cache.ler("galeria", galeria, fontes={("instagram", "28d")})
+        relogio.avancar(minutes=30)
+        cache.ler("lente", lente, fontes={("instagram", "28d")})
+
+        cache.ler("galeria", galeria)
+
+        assert lente.idas == 2
+        assert galeria.idas == 1
+
+    def test_atualizar_agora_que_falha_nao_vence_ninguem(self):
+        relogio, cache, fontes = self._tres_chaves()
+        fontes["lente"].erro = FonteForaError("fora")
+        cache.ler("lente", fontes["lente"], forcar=True, falhas=FALHAS, fontes={("instagram", "28d")})
+
+        cache.ler("galeria", fontes["galeria"])
+
+        assert fontes["galeria"].idas == 1

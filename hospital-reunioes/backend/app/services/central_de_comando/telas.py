@@ -57,11 +57,18 @@ class Tela:
       `GoogleError` do provedor é assim; a exceção crua do `httpx` não é (o
       texto dela traz a URL inteira).
     - `periodos`: os períodos que a tela tem. O Instagram só tem 7 e 28 dias.
+    - `fontes`: de onde vêm os números (`"google"`, `"instagram"`). O Atualizar
+      agora da tela vence as outras telas da mesma fonte e período (#858).
     """
 
     montar: Callable[[Periodo], dict]
     falhas: tuple[type[Exception], ...]
     periodos: tuple[Periodo, ...] = PERIODOS
+    fontes: tuple[str, ...] = ()
+
+    def fontes_no(self, periodo: Periodo) -> set[tuple[str, Periodo]]:
+        """As fontes da tela no período, como o cache as compara."""
+        return {(fonte, periodo) for fonte in self.fontes}
 
 
 TELAS: dict[str, Tela] = {
@@ -75,6 +82,7 @@ TELAS: dict[str, Tela] = {
         montar=tela_dados_do_google.montar,
         falhas=(provedor_google.GoogleError,),
         periodos=PERIODOS,
+        fontes=("google",),
     ),
     # Instagram (#819): só 7 e 28 dias (a Graph API limita insights a 30 dias).
     # `InstagramError` cobre a falha da fonte, e o token vencido
@@ -84,6 +92,7 @@ TELAS: dict[str, Tela] = {
         montar=tela_instagram.montar,
         falhas=(provedor_instagram.InstagramError,),
         periodos=("7d", "28d"),
+        fontes=("instagram",),
     ),
 }
 
@@ -119,5 +128,6 @@ def ler(nome: str, periodo: Periodo, *, forcar: bool = False) -> dict:
         partial(tela.montar, periodo),
         forcar=forcar,
         falhas=tela.falhas,
+        fontes=tela.fontes_no(periodo),
     )
     return {**copy.deepcopy(leitura.valor), "frescor": leitura.frescor.como_dict()}

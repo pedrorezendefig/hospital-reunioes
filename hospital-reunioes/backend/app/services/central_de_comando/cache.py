@@ -36,11 +36,24 @@ períodos são poucos e fixos: nada precisa ser despejado.
 
 **Threads.** A rota roda a leitura numa thread (`anyio.to_thread`), então duas
 leituras podem chegar juntas. A trava protege só o registro; a ida à fonte
-corre fora dela, e duas leituras da mesma chave vencida ao mesmo tempo vão as
-duas à fonte (a última a voltar é a que fica). Com um Super admin olhando, é
-raro e barato, e evita que uma fonte lenta segure a leitura das outras telas.
-Uma falha que volta depois de outra leitura já ter renovado a chave não apaga
-o número novo: é ele que as duas devolvem.
+corre fora dela, para uma fonte lenta não segurar a leitura das outras chaves.
+**Uma ida por chave de cada vez** (issue #858): a leitura comum que chega com
+outra ida da mesma chave no ar espera por ela e serve o que ela trouxe. Com
+várias abas abertas renovando na mesma hora, é uma ida à fonte, e não uma por
+aba. O Atualizar agora não espera: vai por conta própria. Uma falha que volta
+depois de outra leitura já ter renovado a chave não apaga o número novo: é ele
+que as duas devolvem.
+
+**Espera depois de falha** (issue #858). Depois de uma falha da fonte numa
+chave, a leitura comum não volta a ela por `ESPERA_DEPOIS_DE_FALHA`: serve o
+último valor bom (ou repete o erro, sem número guardado). O Atualizar agora
+força mesmo assim.
+
+**Sincronia pelo Atualizar agora** (issue #858). Cada chave diz de que fontes
+vêm os números dela (fonte e período). O Atualizar agora que dá certo vence as
+outras chaves da mesma fonte, que buscam na próxima leitura: a lente de um
+Objetivo, a galeria e a tela do Instagram não ficam com números diferentes
+para a mesma métrica.
 
 O Ao vivo nunca passa por aqui (glossário, "Ao vivo"): é o único número em
 tempo real da Central e não é guardado.
@@ -49,14 +62,20 @@ tempo real da Central e não é guardado.
 from __future__ import annotations
 
 import threading
-from collections.abc import Callable, Hashable
+from collections.abc import Callable, Hashable, Iterable
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
-# A hora do cache: o número vale 60 minutos, como na Central antiga. É também o
-# ritmo da renovação automática da tela aberta, no front.
+# A hora do cache: o número vale 60 minutos, como na Central antiga. A tela
+# aberta relê quando o número faz 1 hora, pela leitura comum (issue #858).
 TTL = timedelta(hours=1)
+
+# Depois de uma falha da fonte, a leitura comum não volta a ela por este tempo
+# (issue #858): serve o último valor bom, ou repete o erro, sem nova ida. Sem
+# isso, com a fonte fora e o número vencido, toda leitura ia bater nela de novo.
+# O Atualizar agora não espera.
+ESPERA_DEPOIS_DE_FALHA = timedelta(minutes=5)
 
 
 def agora_utc() -> datetime:
@@ -100,6 +119,16 @@ class Leitura[T]:
 class _Guardado:
     valor: Any
     frescor: Frescor
+    fontes: frozenset[Hashable] = frozenset()
+
+
+@dataclass(frozen=True)
+class _Falha:
+    """A última ida à fonte que falhou numa chave: quando, e o erro, para a
+    leitura dentro da espera repetir sem ir à fonte."""
+
+    quando: datetime | None
+    erro: Exception
 
 
 class CacheComFrescor:
@@ -114,6 +143,12 @@ class CacheComFrescor:
         # teste troca o relógio da instância do processo (`agora_utc`).
         self._relogio = relogio or (lambda: agora_utc())
         self._guardados: dict[Hashable, _Guardado] = {}
+        # A ida à fonte que está no ar, por chave: quem chega a espera.
+        self._no_ar: dict[Hashable, threading.Event] = {}
+        # A falha da fonte que ainda segura a leitura comum, por chave.
+        self._falhas: dict[Hashable, _Falha] = {}
+        # As chaves vencidas pelo Atualizar agora de uma vizinha da mesma fonte.
+        self._vencidas: set[Hashable] = set()
         self._trava = threading.Lock()
 
     def ler[T](
@@ -123,6 +158,7 @@ class CacheComFrescor:
         *,
         forcar: bool = False,
         falhas: tuple[type[Exception], ...] = (),
+        fontes: Iterable[Hashable] = (),
     ) -> Leitura[T]:
         """Serve o número guardado se ele está dentro da hora; senão, busca.
 
@@ -134,16 +170,67 @@ class CacheComFrescor:
         declarado. A frase da exceção declarada vai para a tela (`motivo`) e
         fica guardada aqui, então só entra exceção de frase fixa, sem URL,
         token ou detalhe interno (a `GoogleError` do provedor é assim).
-        """
-        with self._trava:
-            guardado = self._guardados.get(chave)
-            if guardado is not None and not forcar and self._dentro_da_hora(guardado.frescor):
-                return Leitura(guardado.valor, guardado.frescor)
 
+        `fontes` diz de onde vêm os números da chave (fonte e período, como
+        `("instagram", "28d")`). O Atualizar agora que dá certo vence as outras
+        chaves que dividem uma fonte com ele: a próxima leitura delas busca, e
+        as telas vizinhas não ficam com números diferentes para a mesma métrica
+        (issue #858). Só marca, não busca junto, então um clique não vira uma
+        rajada de idas. A renovação pela hora não vence ninguém: se vencesse,
+        cada leitura derrubaria a vizinha, e as telas iam à fonte a toda hora.
+        """
+        fontes = frozenset(fontes)
+        while True:
+            with self._trava:
+                guardado = self._guardados.get(chave)
+                if (
+                    guardado is not None
+                    and not forcar
+                    and chave not in self._vencidas
+                    and self._dentro_da_hora(guardado.frescor)
+                ):
+                    return Leitura(guardado.valor, guardado.frescor)
+                falha = self._falhas.get(chave)
+                if falha is not None and not forcar and self._dentro_da_espera(falha):
+                    if guardado is None:
+                        raise falha.erro
+                    return Leitura(guardado.valor, guardado.frescor)
+                no_ar = self._no_ar.get(chave)
+                if no_ar is None or forcar:
+                    # Esta leitura vai à fonte. Registra a ida para as leituras
+                    # comuns que chegarem esperarem por ela; a forçada que chega
+                    # com outra ida no ar vai por conta própria, sem registrar.
+                    minha_ida = threading.Event() if no_ar is None else None
+                    if minha_ida is not None:
+                        self._no_ar[chave] = minha_ida
+                    break
+            # Outra leitura já foi à fonte por esta chave: espera ela voltar e
+            # olha de novo o que ficou guardado.
+            no_ar.wait()
+
+        try:
+            return self._buscar(chave, buscar, guardado, falhas, fontes, forcar)
+        finally:
+            if minha_ida is not None:
+                with self._trava:
+                    del self._no_ar[chave]
+                minha_ida.set()
+
+    def _buscar[T](
+        self,
+        chave: Hashable,
+        buscar: Callable[[], T],
+        guardado: _Guardado | None,
+        falhas: tuple[type[Exception], ...],
+        fontes: frozenset[Hashable],
+        forcar: bool,
+    ) -> Leitura[T]:
+        """A ida à fonte, fora da trava, e o registro do que ela trouxe."""
         try:
             valor = buscar()
         except falhas as exc:
             with self._trava:
+                self._falhas[chave] = _Falha(self._relogio(), exc)
                 atual = self._guardados.get(chave)
                 if atual is not None and atual is not guardado:
                     # Outra leitura renovou a chave enquanto esta esperava a
@@ -152,12 +239,18 @@ class CacheComFrescor:
                 if guardado is None:
                     raise
                 frescor = Frescor(guardado.frescor.atualizado_em, atualizacao_falhou=True, motivo=str(exc))
-                self._guardados[chave] = _Guardado(guardado.valor, frescor)
+                self._guardados[chave] = _Guardado(guardado.valor, frescor, guardado.fontes)
             return Leitura(guardado.valor, frescor)
 
         frescor = Frescor(self._relogio())
         with self._trava:
-            self._guardados[chave] = _Guardado(valor, frescor)
+            self._guardados[chave] = _Guardado(valor, frescor, fontes)
+            self._falhas.pop(chave, None)
+            self._vencidas.discard(chave)
+            if forcar and fontes:
+                self._vencidas.update(
+                    outra for outra, g in self._guardados.items() if outra != chave and g.fontes & fontes
+                )
         return Leitura(valor, frescor)
 
     def frescor(self, *chaves: Hashable) -> Frescor:
@@ -182,6 +275,12 @@ class CacheComFrescor:
         """Esquece tudo. Usado pelos testes; o processo só esquece no deploy."""
         with self._trava:
             self._guardados.clear()
+            self._falhas.clear()
+            self._vencidas.clear()
+
+    def _dentro_da_espera(self, falha: _Falha) -> bool:
+        agora = self._relogio()
+        return falha.quando is not None and agora is not None and agora - falha.quando < ESPERA_DEPOIS_DE_FALHA
 
     def _dentro_da_hora(self, frescor: Frescor) -> bool:
         return frescor.atualizado_em is not None and self._relogio() - frescor.atualizado_em < self._ttl
