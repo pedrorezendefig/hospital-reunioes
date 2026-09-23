@@ -5,7 +5,8 @@ repositório antigo (`pedroribbe/central-de-comando-hsm`): os testes de lá são
 especificação do porte, e a conta tem de dar o mesmo dia que a Central antiga
 dava, senão o número da tela nova não bate com o da antiga no "mesmo período".
 
-Sem I/O: só datas e números. O "hoje" entra por parâmetro, fixo, como lá.
+Sem I/O: só datas e números. O "hoje" entra por parâmetro, fixo, como lá, e o
+instante do relógio também (issue #857).
 """
 
 from __future__ import annotations
@@ -31,7 +32,8 @@ from app.services.central_de_comando.periodo import (  # noqa: E402
 )
 from app.services.central_de_comando.variacao import variacao_relativa  # noqa: E402
 
-# O "hoje" fixo do teste de lá (2026-06-17T10:00:00Z): a data UTC é o que conta.
+# O "hoje" fixo do teste de lá (2026-06-17T10:00:00Z), 7h em Brasília: a data
+# do hospital é o que conta, e às 7h ela é a mesma em UTC.
 HOJE = date(2026, 6, 17)
 
 
@@ -81,6 +83,22 @@ class TestFimNoDiaDoHospital:
 
         assert hoje == date(2026, 9, 18)
         assert intervalo_atual("28d", hoje) == Intervalo(inicio=date(2026, 8, 21), fim=date(2026, 9, 17))
+
+    def test_a_virada_das_21h_nao_muda_o_periodo(self):
+        """Às 21h de Brasília o UTC vira o dia; o período, não."""
+        antes = intervalo_atual("7d", hoje_utc(_as(20, 59, dia=18)))
+        depois = intervalo_atual("7d", hoje_utc(_as(21, 0, dia=18)))
+
+        assert antes == depois == Intervalo(inicio=date(2026, 9, 11), fim=date(2026, 9, 17))
+
+    def test_a_meia_noite_de_brasilia_o_periodo_anda_um_dia(self):
+        """É a meia-noite de Brasília, e não a de UTC, que fecha o dia: às
+        23h59 o 18 ainda está pela metade; à 0h do 19 ele entra inteiro."""
+        antes = intervalo_atual("7d", hoje_utc(_as(23, 59, dia=18)))
+        depois = intervalo_atual("7d", hoje_utc(_as(0, 0, dia=19)))
+
+        assert antes == Intervalo(inicio=date(2026, 9, 11), fim=date(2026, 9, 17))
+        assert depois == Intervalo(inicio=date(2026, 9, 12), fim=date(2026, 9, 18))
 
 
 class TestIntervaloAnterior:
