@@ -21,6 +21,7 @@ from fastapi.responses import JSONResponse, Response
 
 from app.config import settings
 from app.dependencies import get_supabase_client
+from app.limiter import limiter
 from app.services.central_de_comando import conector_mcp
 
 logger = logging.getLogger(__name__)
@@ -36,6 +37,14 @@ CAMINHO_DO_TRANSPORTE = f"{settings.api_prefix}/mcp"
 # global do app (preso ao front) não o remove.
 _CORS_DO_METADATA = {"Access-Control-Allow-Origin": "*"}
 
+# O transporte é porta pública (o gate é o token, não a sessão do app), então
+# tem teto, no molde das portas públicas da Ouvidoria: 60 por minuto. Uma
+# conversa no claude.ai faz poucas chamadas por minuto (initialize, tools/list e
+# uma por ferramenta), e o teto sobra para ela. Conta por endereço, como todo
+# limite da casa, e barra antes do gate: quem martela não gasta a verificação
+# do token (JWKS e banco).
+LIMITE_DO_CONECTOR = "60/minute"
+
 
 @router.get(conector_mcp.CAMINHO_DO_METADATA)
 async def metadata_do_recurso_protegido() -> Response:
@@ -49,6 +58,7 @@ async def metadata_do_recurso_protegido() -> Response:
 
 
 @router.post(CAMINHO_DO_TRANSPORTE)
+@limiter.limit(LIMITE_DO_CONECTOR)
 async def transporte_mcp(request: Request, supabase=Depends(get_supabase_client)) -> Response:
     """O transporte Streamable HTTP do MCP. Config ausente é 503; token que não
     passa no gate é 401 com o cabeçalho que aponta o metadata; notificação

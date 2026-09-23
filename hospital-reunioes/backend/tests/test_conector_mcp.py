@@ -400,13 +400,21 @@ CAMINHO_MCP = f"{settings.api_prefix}/mcp"
 
 
 def _cliente_mcp(participantes: list[dict] | None = None, supabase: object | None = None) -> TestClient:
+    """O router de verdade num app mínimo, com o limitador de taxa ligado como
+    no `main.py` (a resposta do 429 é a do handler da casa)."""
+    from slowapi import _rate_limit_exceeded_handler
+    from slowapi.errors import RateLimitExceeded
+
     from app.dependencies import get_supabase_client
+    from app.limiter import limiter
     from app.routers import conector_mcp as router_mcp
 
     if supabase is None:
         tabela = participantes if participantes is not None else [SUPER_ADMIN, SECRETARIA, FACILITADOR]
         supabase = SupabaseDosParticipantes(tabela)
     app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.include_router(router_mcp.router)
     app.dependency_overrides[get_supabase_client] = lambda: supabase
     return TestClient(app)
@@ -704,3 +712,35 @@ class TestProtocoloJsonRpc:
 
     async def test_mensagem_que_nao_e_objeto_json_rpc_e_invalida(self):
         assert (await conector_mcp.responder_mcp(42))["error"]["code"] == -32600
+
+
+# ─── 8. O limite de requisições da rota pública (issue #866) ─────────────────
+
+
+@pytest.mark.usefixtures("mcp_configurado", "jwks_no_emissor")
+class TestLimiteDeRequisicoes:
+    """A rota do transporte é pública (o gate é o token, não a sessão do app),
+    então tem teto por endereço, no molde das portas públicas da Ouvidoria:
+    60 por minuto."""
+
+    def test_o_61o_pedido_no_mesmo_minuto_e_429_e_nao_chega_ao_gate(self, monkeypatch, chave_do_emissor):
+        """Quem martela a rota leva 429 no 61º pedido do mesmo minuto. O teto
+        vale antes do gate: nem um token válido fura, e o pedido barrado não
+        gasta a verificação do token (JWKS e banco)."""
+        cliente = _cliente_mcp()
+        dentro_do_teto = [_rpc(cliente, INIT, None) for _ in range(60)]
+        assert [r.status_code for r in dentro_do_teto] == [401] * 60
+
+        chamou_o_gate = {"n": 0}
+        autorizar_de_verdade = conector_mcp.autorizar
+
+        def _conta(*args, **kwargs):
+            chamou_o_gate["n"] += 1
+            return autorizar_de_verdade(*args, **kwargs)
+
+        monkeypatch.setattr(conector_mcp, "autorizar", _conta)
+
+        passou_do_teto = _rpc(cliente, INIT, token(chave_do_emissor))
+
+        assert passou_do_teto.status_code == 429
+        assert chamou_o_gate["n"] == 0, "o pedido acima do teto chegou ao gate"
