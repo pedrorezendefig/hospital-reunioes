@@ -12,16 +12,28 @@ aqui com o `montar` dela e o que conta como falha da fonte, e ganha de graça:
 - o `frescor` no payload, que a barra de frescor da tela desenha;
 - o Atualizar agora, pela rota genérica `POST /atualizar-agora?tela=...`,
   sem rota nova. A rota de leitura dela chama `ler(nome, periodo)` pelo
-  `_do_google` do router, que traduz a recusa do pedido em 422;
-- a recusa de período que a tela não tem, conferida aqui dentro do `ler`.
+  `_do_fonte` do router, que traduz a recusa do pedido em 422;
+- a recusa de período que a tela não tem, conferida aqui dentro do `ler`;
+- o aquecimento no boot, se ela tem o período padrão: a rodada de
+  `aquecimento.py` (#867) lê a lista deste registro.
 
 **Fica de fora, de propósito, o Ao vivo**: é o único número em tempo real da
 Central e nunca é guardado, então não é tela deste registro e não tem o que
 forçar no Atualizar agora.
 
-Até a #821, a tela é tudo ou nada (`visao_geral.py`): o `montar` sobe a falha
-de qualquer bloco e a tela inteira cai para o último valor bom, ou para o erro
-se não houver nenhum guardado.
+**Fica de fora também a tela composta.** Aqui a tela é tudo ou nada: o `montar`
+sobe a falha de qualquer bloco, e a tela inteira cai para o último valor bom, ou
+para o erro se não houver nenhum guardado. A Visão Geral saiu do registro na
+#821 porque cada bloco dela lê a sua própria chave e degrada sozinho
+(`visao_geral.py`); o Atualizar agora dela é despachado à parte no router
+(`LEITORES_COMPOSTOS`), e o aquecimento a chama pelo nome.
+
+**Conferência com a fonte real** (primeira onda, #859). A tela portada da
+Central antiga se confere sem subir a stack: o `montar` roda no `.venv` do
+backend com a credencial real (a do `.env.local` da Central antiga serve), e o
+resultado se compara, no mesmo minuto, com o conector da Central antiga, porque
+os números da fonte andam de um minuto para o outro. Vale enquanto a Central
+antiga estiver no ar (#828).
 """
 
 from __future__ import annotations
