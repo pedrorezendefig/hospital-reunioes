@@ -29,6 +29,8 @@ import json
 import os
 import sys
 import time
+import tomllib
+from pathlib import Path
 
 import pytest
 from cryptography.hazmat.primitives import serialization
@@ -38,6 +40,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.testclient import TestClient
 from jose import jwk as jose_jwk
 from jose import jwt as jose_jwt
+from packaging.requirements import Requirement
+from packaging.specifiers import SpecifierSet
+from packaging.version import Version
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -773,3 +778,38 @@ class TestLimiteDeRequisicoes:
         ultima = respostas[-1].json()["result"]
         assert ultima["isError"] is False
         assert ultima["structuredContent"] == {"pessoasAgora": 42}
+
+
+# ─── O python-jose sem as versões das CVEs (issue #843) ──────────────────────
+
+
+class TestPythonJoseSemAsVersoesDasCves:
+    """CVE-2024-33663 (confusão de algoritmo) e CVE-2024-33664 (JWE que infla)
+    não são exploráveis aqui: o conector só aceita RS256 com a chave RSA do
+    JWKS e nunca decifra JWE. O pin `>=3.4.0` trava a regressão mesmo assim,
+    no `pyproject.toml` (de onde a imagem instala) e no `uv.lock`."""
+
+    _BACKEND = Path(__file__).resolve().parents[1]
+    _CORRIGIDA = Version("3.4.0")
+    _VULNERAVEL = Version("3.3.0")
+
+    def _pedido_do_pyproject(self) -> Requirement:
+        projeto = tomllib.loads((self._BACKEND / "pyproject.toml").read_text(encoding="utf-8"))
+        pedidos = [Requirement(dep) for dep in projeto["project"]["dependencies"]]
+        return next(p for p in pedidos if p.name == "python-jose")
+
+    def test_o_pyproject_recusa_a_versao_vulneravel(self):
+        pedido = self._pedido_do_pyproject()
+
+        assert self._VULNERAVEL not in pedido.specifier
+        assert self._CORRIGIDA in pedido.specifier
+        assert "cryptography" in pedido.extras
+
+    def test_o_lock_pede_e_resolve_uma_versao_corrigida(self):
+        lock = tomllib.loads((self._BACKEND / "uv.lock").read_text(encoding="utf-8"))
+        pacotes = {p["name"]: p for p in lock["package"]}
+        raiz = next(p for p in lock["package"] if p.get("source", {}).get("virtual") == ".")
+        pedido_no_lock = next(r for r in raiz["metadata"]["requires-dist"] if r["name"] == "python-jose")
+
+        assert SpecifierSet(pedido_no_lock["specifier"]) == self._pedido_do_pyproject().specifier
+        assert Version(pacotes["python-jose"]["version"]) >= self._CORRIGIDA

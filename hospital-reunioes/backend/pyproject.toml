@@ -33,7 +33,9 @@ dependencies = [
     # na imagem, que é o que a biblioteca oficial do GA4 traria.
     "google-auth>=2.40.0",
     "apscheduler>=3.10.4",
-    "python-jose[cryptography]>=3.3.0",
+    # 3.4.0 fecha a CVE-2024-33663 e a CVE-2024-33664 (issue #843): o conector
+    # MCP só aceita RS256 e nunca decifra JWE, mas o pin trava a regressão.
+    "python-jose[cryptography]>=3.4.0",
     "bcrypt>=4.2.0",
     "slowapi>=0.1.9",
     "resend>=2.0.0",
