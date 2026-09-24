@@ -759,3 +759,12 @@ class TestDescricaoDizAsDiferencasDoContratoAntigo:
 
         assert '"movimento"' in descricao
         assert '"anterior" é sempre um número' in descricao
+
+    def test_o_site_nao_afirma_que_zero_no_movimento_e_ninguem_ter_vindo(self):
+        """O provedor põe zero em todo dia que a GA4 não devolveu (linha
+        ilegível, dia antes de a propriedade medir): zero é ausência de dado
+        do Google, não a certeza de que ninguém veio."""
+        descricao = _descricao(conector_mcp.FERRAMENTA_SITE)
+
+        assert "nenhum visitante naquele dia" not in descricao
+        assert "zero quer dizer que o Google não trouxe visitante naquele dia" in descricao

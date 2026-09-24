@@ -362,7 +362,8 @@ GLOSSARIO_SITE = (
     'usuários ativos do Google), com o número do período anterior de mesmo tamanho e "variacaoPct" (12 '
     "quer dizer +12%; null quer dizer que não há base para comparar). "
     '"movimento" traz, dia a dia, os "visitantes" do dia e o "anterior", os do dia correspondente do '
-    'período anterior; o "anterior" é sempre um número, e zero ali quer dizer nenhum visitante naquele dia. '
+    'período anterior; o "anterior" é sempre um número, e zero quer dizer que o Google não trouxe '
+    "visitante naquele dia. "
     '"areasDoSite" é o ranking das Áreas do site, os grupos de páginas por serviço do hospital '
     "(Maternidade, Emergência 24h, Centro de Imagem, Centro Médico, Laboratório); o número fala do "
     "site, não da procura real pelo serviço. "
