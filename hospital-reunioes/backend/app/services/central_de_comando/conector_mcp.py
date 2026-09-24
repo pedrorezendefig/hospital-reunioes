@@ -351,12 +351,18 @@ def autorizar(token: str | None, supabase, cfg: ConfiguracaoMCP) -> dict:
 # Comando" do CONTEXT.md: é ele que faz o Claude falar a língua da casa
 # (Visitantes, Áreas do site, Alcance) e tratar o que não é medido como não
 # medido, nunca como zero (honestidade do dado). Porte do `glossario.ts` do
-# conector antigo, com o nome novo da Área do site.
+# conector antigo, com o nome novo da Área do site. É cópia à mão dos verbetes:
+# o teste do glossário (issue #843) lê o CONTEXT.md e trava a deriva. As duas
+# diferenças do contrato antigo que ficaram (o "motivo" sempre presente no
+# frescor e o "anterior" do movimento nunca nulo, aceitas na #862) vão ditas
+# aqui, para o Claude não esperar o formato de antes.
 GLOSSARIO_SITE = (
     "Números do Site do Hospital São Matheus (fonte: Google Analytics), somente leitura. "
-    'O campo "visitantes" traz as pessoas diferentes que acessaram o Site no período (os usuários '
-    'ativos do Google), com o número do período anterior de mesmo tamanho e "variacaoPct" (12 quer '
-    "dizer +12%; null quer dizer que não há base para comparar). "
+    'O campo "visitantes" traz os Visitantes, as pessoas diferentes que acessaram o Site no período (os '
+    'usuários ativos do Google), com o número do período anterior de mesmo tamanho e "variacaoPct" (12 '
+    "quer dizer +12%; null quer dizer que não há base para comparar). "
+    '"movimento" traz, dia a dia, os "visitantes" do dia e o "anterior", os do dia correspondente do '
+    'período anterior; o "anterior" é sempre um número, e zero ali quer dizer nenhum visitante naquele dia. '
     '"areasDoSite" é o ranking das Áreas do site, os grupos de páginas por serviço do hospital '
     "(Maternidade, Emergência 24h, Centro de Imagem, Centro Médico, Laboratório); o número fala do "
     "site, não da procura real pelo serviço. "
@@ -367,8 +373,9 @@ GLOSSARIO_SITE = (
     'incluso (hoje WhatsApp e Fale Conosco), "em-construcao" quer dizer que o Site ainda não avisa o '
     'Google quando o contato acontece, e "nao-medido" quer dizer que não há como medir; "em-construcao" e '
     '"nao-medido" nunca são zero. Em "frescor", "atualizadoHaMin" diz há quantos minutos o dado foi '
-    'lido e "falhaAoAtualizar" verdadeiro quer dizer que é o último valor bom guardado. Não invente '
-    "números que não estejam no payload."
+    'lido e "falhaAoAtualizar" verdadeiro quer dizer que é o último valor bom guardado; "motivo" vem '
+    "sempre, nulo quando não houve falha, e com a frase da falha quando houve. Não invente números que "
+    "não estejam no payload."
 )
 
 GLOSSARIO_INSTAGRAM = (
@@ -381,7 +388,10 @@ GLOSSARIO_INSTAGRAM = (
     '"seguidores" é estoque (o total agora), sem variação percentual: o que varia por período é o '
     '"crescimento". "interacoes" é a soma de curtidas, comentários, salvamentos e compartilhamentos, '
     'e "detalheInteracoes" abre essas quatro partes. "principaisPublicacoes" vêm ordenadas por '
-    "interações no período, sem Stories. Não invente números que não estejam no payload."
+    'interações no período, sem Stories. Em "frescor", "atualizadoHaMin" diz há quantos minutos o dado '
+    'foi lido e "falhaAoAtualizar" verdadeiro quer dizer que é o último valor bom guardado; "motivo" '
+    "vem sempre, nulo quando não houve falha, e com a frase da falha quando houve. Não invente números "
+    "que não estejam no payload."
 )
 
 

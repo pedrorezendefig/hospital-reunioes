@@ -24,7 +24,9 @@ from __future__ import annotations
 import os
 import re
 import sys
+import unicodedata
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import httpx
 import pytest
@@ -610,3 +612,150 @@ class TestNaoConfiguradoSemNomeDeVariavel:
 
         assert bloco["estado"] == "nao-configurado"
         assert "GA4_PROPERTY_ID" in bloco["motivo"]
+
+
+# ─── 9. O glossário das ferramentas bate com o CONTEXT.md (issue #843) ───────
+
+# O glossário nas descrições das ferramentas é uma cópia, à mão, dos verbetes da
+# seção "Central de Comando" do CONTEXT.md. O teste lê o CONTEXT.md (nunca o
+# altera) e confere os fatos que não podem divergir: o catálogo das Áreas do
+# site, as partes das Interações, os estados dos Contatos gerados, os termos da
+# casa e o que os verbetes mandam evitar.
+_CONTEXT_MD = Path(__file__).resolve().parents[3] / "CONTEXT.md"
+
+
+def _secao_da_central() -> str:
+    texto = _CONTEXT_MD.read_text(encoding="utf-8")
+    inicio = texto.index("## Central de Comando")
+    fim = texto.index("\n## ", inicio + 1)
+    return texto[inicio:fim]
+
+
+def _nomes_dos_verbetes() -> set[str]:
+    """Os nomes de verbete da seção, inclusive os pares (`**A** / **B**:`)."""
+    nomes: set[str] = set()
+    for cabeca in re.findall(r"^(\*\*.+\*\*):$", _secao_da_central(), re.MULTILINE):
+        nomes.update(re.findall(r"\*\*(.+?)\*\*", cabeca))
+    return nomes
+
+
+def _verbete(nome: str) -> str:
+    """O texto de um verbete: a definição e a linha _Evitar_."""
+    achado = re.search(
+        rf"^\*\*{re.escape(nome)}\*\*[^\n]*:\n(.+?)(?:\n\n|\Z)", _secao_da_central(), re.MULTILINE | re.DOTALL
+    )
+    assert achado, f"verbete {nome!r} sumiu do CONTEXT.md"
+    return achado.group(1)
+
+
+def _sem_negrito(texto: str) -> str:
+    return texto.replace("**", "")
+
+
+def _descricoes() -> str:
+    return " ".join(f["description"] for f in conector_mcp.ferramentas())
+
+
+def _descricao(nome: str) -> str:
+    return next(f["description"] for f in conector_mcp.ferramentas() if f["name"] == nome)
+
+
+def _slug(texto: str) -> str:
+    sem_acento = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
+    return sem_acento.lower().replace(" ", "-")
+
+
+class TestGlossarioBateComOContext:
+    def test_as_areas_do_site_sao_o_mesmo_catalogo_fechado(self):
+        do_context = re.search(r"\(([^)]+)\)", _verbete("Área do site")).group(1)
+        da_descricao = re.search(r'"areasDoSite"[^(]+\(([^)]+)\)', conector_mcp.GLOSSARIO_SITE).group(1)
+
+        assert da_descricao.split(", ") == do_context.split(", ")
+
+    def test_as_interacoes_somam_as_mesmas_partes(self):
+        partes = re.search(r"A soma de (.+?) no período", _verbete("Interações")).group(1)
+
+        assert f"soma de {partes}" in conector_mcp.GLOSSARIO_INSTAGRAM
+
+    def test_os_estados_dos_contatos_sao_os_do_verbete(self):
+        estados = re.findall(r"\*\*(.+?)\*\*", _verbete("Contatos gerados"))
+
+        assert [_slug(e) for e in estados] == ["medido", "em-construcao", "nao-medido"]
+        for estado in estados:
+            assert f'"{_slug(estado)}"' in conector_mcp.GLOSSARIO_SITE
+
+    @pytest.mark.parametrize(
+        ("termo", "verbete"),
+        [
+            ("Central de Comando", "Central de Comando"),
+            ("Site", "Site"),
+            ("Visitantes", "Visitantes"),
+            ("Visitas", "Visita"),
+            ("Áreas do site", "Área do site"),
+            ("Origem do público", "Origem do público"),
+            ("Não identificado", "Não identificado"),
+            ("Outros", "Outros"),
+            ("Ao vivo", "Ao vivo"),
+            ("Alcance", "Alcance"),
+            ("Visualizações", "Visualizações"),
+            ("Interações", "Interações"),
+        ],
+    )
+    def test_cada_termo_da_casa_nas_descricoes_e_verbete_do_context(self, termo, verbete):
+        assert termo in _descricoes()
+        assert verbete in _nomes_dos_verbetes()
+
+    @pytest.mark.parametrize(
+        ("verbete", "expressao"),
+        [
+            ("Visitantes", "pessoas diferentes"),
+            ("Área do site", "não da procura real pelo serviço"),
+            ("Contatos gerados", "WhatsApp"),
+            ("Contatos gerados", "Fale Conosco"),
+            ("Ao vivo", "tempo real"),
+            ("Alcance", "contas diferentes"),
+            ("Visualizações", "vezes"),
+            ("Seguidores", "estoque"),
+            ("Seguidores", "crescimento"),
+            ("Principais publicações", "Stories"),
+        ],
+    )
+    def test_o_que_o_verbete_diz_a_descricao_repete(self, verbete, expressao):
+        assert expressao in _sem_negrito(_verbete(verbete))
+        assert expressao in _descricoes()
+
+    @pytest.mark.parametrize(
+        ("proibido", "verbete"),
+        [
+            ("Braço", "Área do site"),
+            ("impressões", "Alcance"),
+            ("top posts", "Principais publicações"),
+            ("Site Novo", "Site"),
+            ("sessões", "Visitantes"),
+            ("(not set)", "Não identificado"),
+            ("dashboard de marketing", "Central de Comando"),
+        ],
+    )
+    def test_as_descricoes_nao_usam_o_que_o_verbete_manda_evitar(self, proibido, verbete):
+        evitar = next(linha for linha in _verbete(verbete).splitlines() if linha.startswith("_Evitar_"))
+
+        assert proibido in evitar
+        assert proibido.lower() not in _descricoes().lower()
+
+
+class TestDescricaoDizAsDiferencasDoContratoAntigo:
+    """Duas diferenças do contrato antigo ficam como estão (aceitas na #862), e a
+    descrição conta ao Claude: `frescor.motivo` vem sempre, nulo sem falha, e o
+    `anterior` de cada dia do movimento nunca é nulo."""
+
+    def test_o_site_diz_que_o_motivo_vem_nulo_quando_nao_houve_falha(self):
+        assert '"motivo" vem sempre, nulo quando não houve falha' in _descricao(conector_mcp.FERRAMENTA_SITE)
+
+    def test_o_instagram_diz_que_o_motivo_vem_nulo_quando_nao_houve_falha(self):
+        assert '"motivo" vem sempre, nulo quando não houve falha' in _descricao(conector_mcp.FERRAMENTA_INSTAGRAM)
+
+    def test_o_site_diz_que_o_anterior_do_movimento_nunca_e_nulo(self):
+        descricao = _descricao(conector_mcp.FERRAMENTA_SITE)
+
+        assert '"movimento"' in descricao
+        assert '"anterior" é sempre um número' in descricao
