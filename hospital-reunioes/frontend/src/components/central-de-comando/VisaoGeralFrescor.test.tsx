@@ -148,7 +148,7 @@ describe("Visão Geral: a barra de frescor", () => {
     const semNumero: VisaoGeralPayload = {
       ...payload(0, { atualizado_em: null }),
       visitantes: { estado: "sem-dado", motivo: "O Google Analytics respondeu HTTP 500." },
-      instagram: { estado: "nao-configurado", motivo: "Falta configurar INSTAGRAM_ACCESS_TOKEN." },
+      instagram: { estado: "nao-configurado", motivo: "A Central de Comando ainda não está ligada ao Instagram no servidor." },
     };
     servidor({ leitura: () => resposta(200, semNumero) });
 

@@ -95,29 +95,23 @@ _TELA_DADOS_DO_GOOGLE = "dados-do-google"
 
 _TIMEOUT = httpx.Timeout(10.0, connect=3.0)
 
-# O motivo de "fonte não configurada" que chega ao cliente MCP: frase fixa, sem
-# nome de variável de ambiente (issue #843), a promessa do docstring de
-# `ConectorNaoConfiguradoError`. É a frase das telas sem a lista do que falta: a
-# tela é do Super admin logado, que pode ir configurar e precisa saber quais
-# variáveis faltam; o cliente MCP é o Claude de alguém, e ali o nome da variável
-# não ajuda ninguém. Vale para toda falha de configuração da fonte (variável
-# vazia, propriedade ou chave inválida), porque todas citam a variável.
-_SITE_NAO_CONFIGURADO = (
-    "A Central de Comando ainda não está ligada ao Google Analytics no servidor. "
-    "Enquanto isso, nenhum número do Site é mostrado."
-)
-_INSTAGRAM_NAO_CONFIGURADO = (
-    "A Central de Comando ainda não está ligada ao Instagram no servidor. "
-    "Enquanto isso, nenhum número do Instagram é mostrado."
-)
+# O motivo de "fonte não configurada" que chega ao cliente MCP: a MESMA frase
+# fixa das telas, sem nome de variável de ambiente (issue #843). Vale para toda
+# falha de configuração da fonte (variável vazia, propriedade ou chave
+# inválida); quais variáveis faltam fica no log do backend.
+_SITE_NAO_CONFIGURADO = provedor_google.FRASE_NAO_CONFIGURADO
+_INSTAGRAM_NAO_CONFIGURADO = provedor_instagram.FRASE_NAO_CONFIGURADO
 
 
 class ConectorNaoConfiguradoError(RuntimeError):
     """Falta configurar o conector MCP no backend (o emissor do AuthKit ou o
     recurso). Fecha a porta: sem config, a rota responde erro de configuração e
-    nenhum token é aceito. A mensagem não ecoa nome de variável ao cliente, e o
-    mesmo vale para a fonte não configurada das ferramentas
-    (`_SITE_NAO_CONFIGURADO`, `_INSTAGRAM_NAO_CONFIGURADO`)."""
+    nenhum token é aceito. A mensagem não ecoa nome de variável ao cliente.
+    As ferramentas seguem a mesma regra no que devolvem: a fonte não configurada
+    é a frase fixa das telas (`_SITE_NAO_CONFIGURADO`,
+    `_INSTAGRAM_NAO_CONFIGURADO`), e as frases de falha da fonte que sobem por
+    `str(exc)` e pelo `motivo` (inclusive o acesso recusado, HTTP 401/403, do
+    Google) vêm dos provedores sem nome de variável."""
 
 
 class AcessoNegadoMCPError(Exception):

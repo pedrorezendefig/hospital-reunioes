@@ -33,10 +33,10 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from central_de_comando_apoio import erro_do_instagram  # noqa: E402
+from central_de_comando_apoio import erro_da_ga4, erro_do_instagram  # noqa: E402
 
 from app.config import settings  # noqa: E402
-from app.services.central_de_comando import conector_mcp, telas, visao_geral  # noqa: E402
+from app.services.central_de_comando import conector_mcp, provedor_instagram, telas, visao_geral  # noqa: E402
 
 pytestmark = pytest.mark.usefixtures("gate_e_limitador_zerados")
 
@@ -533,12 +533,13 @@ class TestToolsCallPeloResponderMcp:
         assert resposta["error"]["code"] == -32602
 
 
-# ─── 8. Não configurado: frase fixa, sem nome de variável (issue #843) ───────
+# ─── 8. Não configurado e acesso recusado: sem nome de variável (issue #843) ─
 
 # Um nome de variável de ambiente: letras maiúsculas com sublinhado
-# (GA4_PROPERTY_ID, INSTAGRAM_ACCESS_TOKEN). A tela da Central mostra quais
-# faltam a quem pode ir configurar; o cliente MCP é o Claude de alguém, e o
-# docstring de `ConectorNaoConfiguradoError` promete não ecoar nome de variável.
+# (GA4_PROPERTY_ID, INSTAGRAM_ACCESS_TOKEN). Nem o cliente MCP nem a tela da
+# Central recebem nome de variável: a fonte não configurada é a mesma frase fixa
+# nos dois lados, e o acesso recusado pelo Google (401/403) também não cita
+# nenhum. Quais variáveis faltam fica no log do backend.
 _NOME_DE_VARIAVEL = re.compile(r"\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b")
 
 
@@ -605,13 +606,83 @@ class TestNaoConfiguradoSemNomeDeVariavel:
         _sem_nome_de_variavel(resultado["content"][0]["text"])
 
     @pytest.mark.usefixtures("google_sem_configurar")
-    def test_a_tela_da_central_segue_dizendo_o_que_falta_configurar(self, cache_da_central):
-        """A tela é só do Super admin logado, que pode ir configurar: lá a frase
-        do provedor continua com os nomes. Só o cliente MCP recebe a fixa."""
+    async def test_a_tela_mostra_a_mesma_frase_fixa_que_o_cliente_mcp_recebe(self, cache_da_central):
+        """A triagem pediu a frase fixa "a mesma das telas": o bloco de
+        Visitantes da tela e o cliente MCP dizem exatamente a mesma coisa."""
         bloco, _ = visao_geral.ler_visitantes("28d")
+        ao_vivo = await conector_mcp._ferramenta_ao_vivo()
+        site = conector_mcp._ferramenta_site({"period": "28d"})
 
         assert bloco["estado"] == "nao-configurado"
-        assert "GA4_PROPERTY_ID" in bloco["motivo"]
+        _sem_nome_de_variavel(bloco["motivo"])
+        assert ao_vivo["content"][0]["text"] == bloco["motivo"]
+        assert site["content"][0]["text"] == bloco["motivo"]
+
+    def test_a_tela_do_instagram_mostra_a_mesma_frase_fixa_que_o_cliente_mcp_recebe(self, monkeypatch, instagram_falso):
+        monkeypatch.setattr(settings, "instagram_access_token", "")
+        monkeypatch.setattr(settings, "instagram_business_account_id", "")
+
+        with pytest.raises(provedor_instagram.InstagramNaoConfiguradoError) as erro:
+            telas.ler("instagram", "28d")
+        resultado = conector_mcp._ferramenta_instagram({"period": "28d"})
+
+        _sem_nome_de_variavel(str(erro.value))
+        assert resultado["structuredContent"]["frescor"]["motivo"] == str(erro.value)
+
+
+def _acesso_recusado_pelo_google():
+    return erro_da_ga4(403, "PERMISSION_DENIED", "User does not have sufficient permissions.")
+
+
+@pytest.mark.usefixtures("central_configurada")
+class TestAcessoRecusadoPeloGoogleSemNomeDeVariavel:
+    """O 401/403 da GA4 é `GoogleError`, não "não configurado": chega ao
+    cliente MCP pelo texto do erro (Ao vivo e Site), pelo motivo do bloco de
+    Visitantes e pelo `frescor.motivo` do último valor bom. Em nenhum dos
+    quatro caminhos a frase cita nome de variável."""
+
+    async def test_ao_vivo(self, google_falso):
+        google_falso.forcar = _acesso_recusado_pelo_google()
+
+        resultado = await conector_mcp._ferramenta_ao_vivo()
+
+        assert resultado["isError"] is True
+        texto = resultado["content"][0]["text"]
+        _sem_nome_de_variavel(texto)
+        assert "HTTP 403" in texto
+
+    def test_site_sem_numero_guardado(self, google_falso, relogio_da_central):
+        google_falso.forcar = _acesso_recusado_pelo_google()
+
+        resultado = conector_mcp._ferramenta_site({"period": "28d"})
+
+        assert resultado["isError"] is True
+        texto = resultado["content"][0]["text"]
+        _sem_nome_de_variavel(texto)
+        assert "HTTP 403" in texto
+
+    def test_motivo_do_bloco_de_visitantes(self, google_falso, relogio_da_central):
+        google_falso.forcar = _acesso_recusado_pelo_google()
+
+        bloco, _ = visao_geral.ler_visitantes("28d")
+
+        assert bloco["estado"] != "ok"
+        _sem_nome_de_variavel(bloco["motivo"])
+        assert "HTTP 403" in bloco["motivo"]
+
+    @pytest.mark.usefixtures("lote_da_ga4")
+    def test_frescor_motivo_do_ultimo_valor_bom(self, google_falso, relogio_da_central):
+        conector_mcp._ferramenta_site({"period": "28d"})  # aquece as duas chaves
+        relogio_da_central.avancar(hours=2)
+        google_falso.forcar = _acesso_recusado_pelo_google()
+
+        resultado = conector_mcp._ferramenta_site({"period": "28d"})
+
+        assert resultado["isError"] is False  # serve o último valor bom
+        frescor = resultado["structuredContent"]["frescor"]
+        assert frescor["falhaAoAtualizar"] is True
+        _sem_nome_de_variavel(frescor["motivo"])
+        assert "HTTP 403" in frescor["motivo"]
 
 
 # ─── 9. O glossário das ferramentas bate com o CONTEXT.md (issue #843) ───────

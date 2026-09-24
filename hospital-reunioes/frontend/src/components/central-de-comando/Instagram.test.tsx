@@ -245,7 +245,7 @@ describe("Instagram: estados de erro", () => {
 
   it("conta não configurada: mostra a tela calma com a frase do backend", async () => {
     const frase =
-      "A Central de Comando ainda não está ligada ao Instagram: falta configurar INSTAGRAM_ACCESS_TOKEN no backend.";
+      "A Central de Comando ainda não está ligada ao Instagram no servidor. Enquanto isso, nenhum número do Instagram é mostrado.";
     servidor({ leitura: () => resposta(503, { detail: frase }) });
 
     render(<Instagram periodo="28d" />);

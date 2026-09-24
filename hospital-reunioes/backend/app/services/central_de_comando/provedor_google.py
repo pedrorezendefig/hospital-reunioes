@@ -13,7 +13,8 @@ Três invariantes que o resto do app herda de graça:
   sozinho ou em lote (`batchRunReports`, que junta vários `runReport` numa ida
   só).
 - **Não configurado é 503, nunca zero.** Sem propriedade ou sem chave, a
-  exceção é `GoogleNaoConfiguradoError`, com o que falta na mensagem. O
+  exceção é `GoogleNaoConfiguradoError`, com a frase fixa `FRASE_NAO_CONFIGURADO`
+  (sem nome de variável; o que falta vai para o log). O
   provedor falso da Central antiga, que desenhava número de demonstração sem
   credencial, não foi portado de propósito.
 - **Falha é falha.** Timeout, 5xx, acesso recusado e corpo ilegível viram
@@ -86,11 +87,15 @@ _KIND_DO_RELATORIO = "analyticsData#runReport"
 # porque vai para a tela e fica no cache como o motivo do último valor bom.
 _RELATORIO_FORA_DO_FORMATO = "O Google Analytics devolveu um relatório fora do formato esperado."
 
-_FALTA_CONFIGURAR = (
-    "A Central de Comando ainda não está ligada ao Google Analytics: falta configurar {faltando} no "
-    "backend. Enquanto isso, nenhum número do Site é mostrado."
+# A frase de "não configurado" (variável vazia, propriedade ou chave inválida):
+# fixa e sem nome de variável de ambiente (issue #843). É a mesma na tela e no
+# cliente MCP. O que falta ou está malformado vai para o log, nunca o valor.
+FRASE_NAO_CONFIGURADO = (
+    "A Central de Comando ainda não está ligada ao Google Analytics no servidor. "
+    "Enquanto isso, nenhum número do Site é mostrado."
 )
 
+# O detalhe de cada caso, só para o log (`_nao_configurado`).
 _PROPRIEDADE_INVALIDA = (
     "GA4_PROPERTY_ID precisa ser só o número da propriedade do Google Analytics, sem letras, espaços nem barras."
 )
@@ -108,7 +113,16 @@ class GoogleError(RuntimeError):
 
 class GoogleNaoConfiguradoError(RuntimeError):
     """Falta configurar (ou está malformada) a propriedade ou a chave da
-    service account. A mensagem diz o que falta, sem nunca ecoar a chave."""
+    service account. A mensagem é a `FRASE_NAO_CONFIGURADO`, sem nome de
+    variável; o que falta vai para o log, sem nunca ecoar a chave."""
+
+
+def _nao_configurado(detalhe: str) -> GoogleNaoConfiguradoError:
+    """O erro de não configurado: o detalhe (qual variável, o que está errado)
+    vai para o log de quem opera o servidor; quem lê a tela ou o Claude recebe
+    a frase fixa."""
+    logger.warning("[CentralGoogle] não configurado: %s", detalhe)
+    return GoogleNaoConfiguradoError(FRASE_NAO_CONFIGURADO)
 
 
 @dataclass(frozen=True)
@@ -397,7 +411,7 @@ def _propriedade() -> str:
     """O número da propriedade, validado: ele entra no caminho da URL."""
     propriedade = settings.ga4_property_id.strip()
     if not re.fullmatch(r"[0-9]+", propriedade):
-        raise GoogleNaoConfiguradoError(_PROPRIEDADE_INVALIDA)
+        raise _nao_configurado(_PROPRIEDADE_INVALIDA)
     return propriedade
 
 
@@ -427,21 +441,21 @@ def _token_de_acesso() -> str:
     except ValueError:
         # `from None`: o erro do `json` carrega o documento inteiro, que é a
         # chave privada. Ele não pode subir encadeado para log nenhum.
-        raise GoogleNaoConfiguradoError(_CREDENCIAL_INVALIDA) from None
+        raise _nao_configurado(_CREDENCIAL_INVALIDA) from None
     if not isinstance(info, dict) or info.get("type") != "service_account":
-        raise GoogleNaoConfiguradoError(_CREDENCIAL_INVALIDA)
+        raise _nao_configurado(_CREDENCIAL_INVALIDA)
     try:
         credencial = service_account.Credentials.from_service_account_info(
             info, scopes=[ESCOPO_DE_LEITURA], always_use_jwt_access=True
         )
         credencial.refresh(_SemRede())
     except (ValueError, TypeError, KeyError, google.auth.exceptions.GoogleAuthError):
-        raise GoogleNaoConfiguradoError(_CREDENCIAL_INVALIDA) from None
+        raise _nao_configurado(_CREDENCIAL_INVALIDA) from None
     return credencial.token
 
 
 def _verificar_configuracao() -> None:
-    """As duas variáveis, antes de qualquer coisa: a mensagem diz TODAS as que
+    """As duas variáveis, antes de qualquer coisa: o log diz TODAS as que
     faltam de uma vez, e não uma por deploy."""
     faltando = [
         nome
@@ -452,14 +466,18 @@ def _verificar_configuracao() -> None:
         if not valor.strip()
     ]
     if faltando:
-        raise GoogleNaoConfiguradoError(_FALTA_CONFIGURAR.format(faltando=" e ".join(faltando)))
+        raise _nao_configurado(f"falta configurar {' e '.join(faltando)}")
 
 
 def _frase_do_status(codigo: int) -> str:
+    """A frase de um HTTP de erro da GA4. Vai para a tela, para o cache (o
+    motivo do último valor bom) e para o cliente MCP: nunca cita nome de
+    variável de ambiente (issue #843)."""
     if codigo in (401, 403):
         return (
             f"O Google Analytics recusou o acesso da Central (HTTP {codigo}). Confira se a service "
-            "account tem o papel Leitor na propriedade e se GA4_PROPERTY_ID é o número dela."
+            "account tem o papel Leitor na propriedade e se o número da propriedade configurado no "
+            "servidor é o dela."
         )
     if codigo == 429:
         return "O Google Analytics limitou as consultas da Central (HTTP 429). Tente de novo em alguns minutos."
