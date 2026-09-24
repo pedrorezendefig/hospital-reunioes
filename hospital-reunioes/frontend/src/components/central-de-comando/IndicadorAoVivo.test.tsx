@@ -112,6 +112,31 @@ describe("Indicador Ao vivo: o número de agora", () => {
     expect(chamadas[0]).toEqual({ url: CAMINHO_AO_VIVO, autorizacao: "Bearer token-de-teste" });
   });
 
+  it("o leitor de tela acompanha só o número, e não o bloco inteiro", async () => {
+    responderCom({ status: 200, corpo: { pessoas: 12 } });
+
+    const { container } = render(<IndicadorAoVivo />);
+    const numero = await screen.findByText("12");
+
+    // A região viva é o número: o rótulo "no site agora" não é reanunciado a
+    // cada consulta de 30 segundos.
+    const regioesVivas = container.querySelectorAll("[aria-live]");
+    expect(regioesVivas).toHaveLength(1);
+    expect(regioesVivas[0]).toBe(numero);
+    expect(numero.getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("o ponto que pulsa para quando a pessoa pede menos movimento", async () => {
+    responderCom({ status: 200, corpo: { pessoas: 12 } });
+
+    const { container } = render(<IndicadorAoVivo />);
+    await screen.findByText("12");
+
+    const pulsante = container.querySelector(".animate-ping");
+    expect(pulsante).not.toBeNull();
+    expect(pulsante?.classList.contains("motion-reduce:animate-none")).toBe(true);
+  });
+
   it("sem sessão, não consulta e não mostra nada", async () => {
     sessao.token = null;
     responderCom({ status: 200, corpo: { pessoas: 3 } });
