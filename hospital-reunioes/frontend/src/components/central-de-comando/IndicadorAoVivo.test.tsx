@@ -191,9 +191,52 @@ describe("Indicador Ao vivo: o ritmo da consulta", () => {
     await passar(30_000);
     expect(chamadas).toHaveLength(1);
 
-    // A irmã de presença: com a aba de volta, o relógio volta a valer.
+    // A irmã de presença: com a aba de volta, consulta na hora e o relógio
+    // volta a valer.
     esconderAba(false);
+    await assentar();
+    expect(chamadas).toHaveLength(2);
+
     await passar(30_000);
+    expect(chamadas).toHaveLength(3);
+  });
+
+  it("consulta na hora quando a aba reaparece, mesmo sem o foco da janela", async () => {
+    // Trocar de aba nem sempre dispara `focus`: sem isto, a volta cairia no
+    // intervalo de até 30 segundos.
+    responderCom({ status: 200, corpo: { pessoas: 5 } });
+
+    render(<IndicadorAoVivo />);
+    await screen.findByText("5");
+    expect(chamadas).toHaveLength(1);
+
+    esconderAba(true);
+    expect(chamadas).toHaveLength(1);
+
+    responderCom({ status: 200, corpo: { pessoas: 9 } });
+    esconderAba(false);
+
+    expect(await screen.findByText("9")).toBeTruthy();
+    expect(chamadas).toHaveLength(2);
+  });
+
+  it("a aba que reaparece junto com o foco consulta uma vez só", async () => {
+    responderCom({ status: 200, corpo: { pessoas: 5 } });
+
+    render(<IndicadorAoVivo />);
+    await screen.findByText("5");
+    expect(chamadas).toHaveLength(1);
+
+    esconderAba(true);
+    await passar(60_000);
+
+    // O navegador costuma disparar os dois na volta para a aba.
+    esconderAba(false);
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await assentar();
+
     expect(chamadas).toHaveLength(2);
   });
 
