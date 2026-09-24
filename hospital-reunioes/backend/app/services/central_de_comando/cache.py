@@ -29,9 +29,10 @@ mostrar carimbos diferentes conforme o processo que responder, cada processo
 vai à fonte uma vez por hora e chave, e o Atualizar agora só renova o processo
 que o atendeu. O limitador de taxa do app (`slowapi`, balde em memória) é do
 processo pelo mesmo motivo: com mais processos, o limite do Atualizar agora vira
-um limite por processo. É este o ponto que precisaria mudar (um cache e um
-limitador compartilhados), como o PRD #809 já registra, e antes dele a trava do
-processo único (`tests/test_central_de_comando_um_processo.py`).
+um limite por processo. É este o ponto que precisaria mudar, com um cache
+compartilhado (como o PRD #809 já registra) e um limitador compartilhado, e a
+trava do processo único (`tests/test_central_de_comando_um_processo.py`) muda
+junto.
 
 **Deploy do backend zera o cache.** Logo depois de subir, o backend o aquece
 uma vez, numa thread, no período padrão de cada tela (`aquecimento.py`, issue
