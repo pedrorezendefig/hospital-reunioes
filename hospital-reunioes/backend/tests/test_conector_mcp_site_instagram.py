@@ -529,3 +529,84 @@ class TestToolsCallPeloResponderMcp:
         resposta = await conector_mcp.responder_mcp(pedido)
 
         assert resposta["error"]["code"] == -32602
+
+
+# ─── 8. Não configurado: frase fixa, sem nome de variável (issue #843) ───────
+
+# Um nome de variável de ambiente: letras maiúsculas com sublinhado
+# (GA4_PROPERTY_ID, INSTAGRAM_ACCESS_TOKEN). A tela da Central mostra quais
+# faltam a quem pode ir configurar; o cliente MCP é o Claude de alguém, e o
+# docstring de `ConectorNaoConfiguradoError` promete não ecoar nome de variável.
+_NOME_DE_VARIAVEL = re.compile(r"\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b")
+
+
+def _sem_nome_de_variavel(texto: str) -> None:
+    assert texto
+    assert not _NOME_DE_VARIAVEL.search(texto), texto
+
+
+@pytest.fixture
+def google_sem_configurar(monkeypatch):
+    monkeypatch.setattr(settings, "ga4_property_id", "")
+    monkeypatch.setattr(settings, "google_application_credentials_json", "")
+
+
+class TestNaoConfiguradoSemNomeDeVariavel:
+    @pytest.mark.usefixtures("google_sem_configurar")
+    async def test_ao_vivo_sem_configurar_diz_o_motivo_sem_nome_de_variavel(self):
+        resultado = await conector_mcp._ferramenta_ao_vivo()
+
+        assert resultado["isError"] is True
+        texto = resultado["content"][0]["text"]
+        _sem_nome_de_variavel(texto)
+        assert "Google Analytics" in texto
+
+    async def test_ao_vivo_com_a_chave_invalida_diz_o_motivo_sem_nome_de_variavel(self, monkeypatch):
+        monkeypatch.setattr(settings, "ga4_property_id", "123456789")
+        monkeypatch.setattr(settings, "google_application_credentials_json", "não é a chave")
+
+        resultado = await conector_mcp._ferramenta_ao_vivo()
+
+        assert resultado["isError"] is True
+        _sem_nome_de_variavel(resultado["content"][0]["text"])
+
+    @pytest.mark.usefixtures("google_sem_configurar")
+    def test_site_sem_configurar_diz_o_motivo_sem_nome_de_variavel(self, google_falso):
+        resultado = conector_mcp._ferramenta_site({"period": "28d"})
+
+        assert resultado["isError"] is True
+        texto = resultado["content"][0]["text"]
+        _sem_nome_de_variavel(texto)
+        assert "Site" in texto
+        assert google_falso.pedidos == []
+
+    def test_site_com_a_propriedade_invalida_diz_o_motivo_sem_nome_de_variavel(
+        self, monkeypatch, central_configurada, google_falso
+    ):
+        monkeypatch.setattr(settings, "ga4_property_id", "properties/123")
+
+        resultado = conector_mcp._ferramenta_site({"period": "28d"})
+
+        assert resultado["isError"] is True
+        _sem_nome_de_variavel(resultado["content"][0]["text"])
+
+    def test_instagram_sem_configurar_diz_o_motivo_sem_nome_de_variavel(self, monkeypatch, instagram_falso):
+        monkeypatch.setattr(settings, "instagram_access_token", "")
+        monkeypatch.setattr(settings, "instagram_business_account_id", "")
+
+        resultado = conector_mcp._ferramenta_instagram({"period": "28d"})
+
+        payload = resultado["structuredContent"]
+        assert payload["disponivel"] is False
+        _sem_nome_de_variavel(payload["frescor"]["motivo"])
+        assert "Instagram" in payload["frescor"]["motivo"]
+        _sem_nome_de_variavel(resultado["content"][0]["text"])
+
+    @pytest.mark.usefixtures("google_sem_configurar")
+    def test_a_tela_da_central_segue_dizendo_o_que_falta_configurar(self, cache_da_central):
+        """A tela é só do Super admin logado, que pode ir configurar: lá a frase
+        do provedor continua com os nomes. Só o cliente MCP recebe a fixa."""
+        bloco, _ = visao_geral.ler_visitantes("28d")
+
+        assert bloco["estado"] == "nao-configurado"
+        assert "GA4_PROPERTY_ID" in bloco["motivo"]

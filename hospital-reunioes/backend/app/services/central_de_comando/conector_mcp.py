@@ -95,11 +95,29 @@ _TELA_DADOS_DO_GOOGLE = "dados-do-google"
 
 _TIMEOUT = httpx.Timeout(10.0, connect=3.0)
 
+# O motivo de "fonte não configurada" que chega ao cliente MCP: frase fixa, sem
+# nome de variável de ambiente (issue #843), a promessa do docstring de
+# `ConectorNaoConfiguradoError`. É a frase das telas sem a lista do que falta: a
+# tela é do Super admin logado, que pode ir configurar e precisa saber quais
+# variáveis faltam; o cliente MCP é o Claude de alguém, e ali o nome da variável
+# não ajuda ninguém. Vale para toda falha de configuração da fonte (variável
+# vazia, propriedade ou chave inválida), porque todas citam a variável.
+_SITE_NAO_CONFIGURADO = (
+    "A Central de Comando ainda não está ligada ao Google Analytics no servidor. "
+    "Enquanto isso, nenhum número do Site é mostrado."
+)
+_INSTAGRAM_NAO_CONFIGURADO = (
+    "A Central de Comando ainda não está ligada ao Instagram no servidor. "
+    "Enquanto isso, nenhum número do Instagram é mostrado."
+)
+
 
 class ConectorNaoConfiguradoError(RuntimeError):
     """Falta configurar o conector MCP no backend (o emissor do AuthKit ou o
     recurso). Fecha a porta: sem config, a rota responde erro de configuração e
-    nenhum token é aceito. A mensagem não ecoa nome de variável ao cliente."""
+    nenhum token é aceito. A mensagem não ecoa nome de variável ao cliente, e o
+    mesmo vale para a fonte não configurada das ferramentas
+    (`_SITE_NAO_CONFIGURADO`, `_INSTAGRAM_NAO_CONFIGURADO`)."""
 
 
 class AcessoNegadoMCPError(Exception):
@@ -431,7 +449,9 @@ async def _ferramenta_ao_vivo() -> dict:
     real da Central), casca fina sobre o provedor do Google."""
     try:
         pessoas = await anyio.to_thread.run_sync(provedor_google.pessoas_no_site_agora)
-    except (provedor_google.GoogleNaoConfiguradoError, provedor_google.GoogleError) as exc:
+    except provedor_google.GoogleNaoConfiguradoError:
+        return _resultado_de_erro(_SITE_NAO_CONFIGURADO)
+    except provedor_google.GoogleError as exc:
         return _resultado_de_erro(str(exc))
     return _resultado_estruturado(
         {"pessoasAgora": pessoas},
@@ -446,16 +466,20 @@ def _ferramenta_site(argumentos: dict) -> dict:
     duas chaves (`_frescor_do_site`), para não dizer "fresco" com o manchete de
     Visitantes velho. Fonte fora sem número guardado ou não configurada viram
     resultado com `isError`, com a frase segura da Central, nunca um número
-    inventado."""
+    inventado; a de não configurada é a fixa, sem nome de variável."""
     periodo = _periodo_valido(argumentos, _PERIODOS_SITE)
     if periodo is None:
         return _resultado_de_erro(f"Período inválido. Use um de: {', '.join(_PERIODOS_SITE)}.")
     try:
         visitantes, chave_visitantes = visao_geral.ler_visitantes(periodo)
+        if visitantes["estado"] == "nao-configurado":
+            return _resultado_de_erro(_SITE_NAO_CONFIGURADO)
         if visitantes["estado"] != "ok":
             return _resultado_de_erro(visitantes.get("motivo") or "Os números do Site estão indisponíveis agora.")
         google = telas.ler(_TELA_DADOS_DO_GOOGLE, periodo)
-    except (provedor_google.GoogleNaoConfiguradoError, provedor_google.GoogleError) as exc:
+    except provedor_google.GoogleNaoConfiguradoError:
+        return _resultado_de_erro(_SITE_NAO_CONFIGURADO)
+    except provedor_google.GoogleError as exc:
         return _resultado_de_erro(str(exc))
     frescor = _frescor_do_site(chave_visitantes, periodo)
     return _resultado_estruturado(serializar_site(periodo, visitantes, google, frescor, cache.agora_utc()))
@@ -477,13 +501,16 @@ def _ferramenta_instagram(argumentos: dict) -> dict:
     """Os números do Instagram no período, lidos do MESMO cache da tela
     (`telas.ler`). Não configurado, token vencido sem número guardado ou fonte
     fora sem número guardado viram "indisponível" com o motivo (glossário:
-    `disponivel:false` não é zero nem queda), nunca um `isError`."""
+    `disponivel:false` não é zero nem queda), nunca um `isError`. O motivo de
+    não configurado é a frase fixa, sem nome de variável."""
     periodo = _periodo_valido(argumentos, _PERIODOS_INSTAGRAM)
     if periodo is None:
         return _resultado_de_erro(f"Período inválido. Use um de: {', '.join(_PERIODOS_INSTAGRAM)}.")
     try:
         tela = telas.ler("instagram", periodo)
-    except (provedor_instagram.InstagramNaoConfiguradoError, provedor_instagram.InstagramError) as exc:
+    except provedor_instagram.InstagramNaoConfiguradoError:
+        return _resultado_estruturado(serializar_instagram_indisponivel(periodo, _INSTAGRAM_NAO_CONFIGURADO))
+    except provedor_instagram.InstagramError as exc:
         return _resultado_estruturado(serializar_instagram_indisponivel(periodo, str(exc)))
     return _resultado_estruturado(serializar_instagram_disponivel(periodo, tela, cache.agora_utc()))
 
