@@ -26,6 +26,7 @@ from __future__ import annotations
 
 import base64
 import json
+import logging
 import os
 import sys
 import time
@@ -778,6 +779,69 @@ class TestLimiteDeRequisicoes:
         ultima = respostas[-1].json()["result"]
         assert ultima["isError"] is False
         assert ultima["structuredContent"] == {"pessoasAgora": 42}
+
+
+# ─── O MCP-Protocol-Version do cliente: leniente, e no log (issue #843) ──────
+
+
+@pytest.mark.usefixtures("mcp_configurado", "jwks_no_emissor")
+class TestVersaoDoProtocoloLeniente:
+    """O cabeçalho `MCP-Protocol-Version` não é validado: recusar uma versão
+    poderia derrubar o claude.ai em produção no dia em que ele trocar de versão.
+    A versão que o cliente manda, quando não é a que o conector fala, fica no
+    log, para a conferência ver o que o claude.ai usa."""
+
+    _LOGGER = "app.routers.conector_mcp"
+
+    def _pedido(self, chave, cabecalhos: dict) -> object:
+        pedido = {"jsonrpc": "2.0", "id": 2, "method": "tools/list"}
+        return _cliente_mcp().post(
+            CAMINHO_MCP, json=pedido, headers={"Authorization": f"Bearer {token(chave)}", **cabecalhos}
+        )
+
+    def _linhas_da_versao(self, caplog) -> list[str]:
+        return [
+            r.getMessage()
+            for r in caplog.records
+            if r.name == self._LOGGER and "MCP-Protocol-Version" in r.getMessage()
+        ]
+
+    def test_outra_versao_no_cabecalho_passa_e_fica_no_log(self, chave_do_emissor, caplog):
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+
+        resposta = self._pedido(chave_do_emissor, {"MCP-Protocol-Version": "2099-01-01"})
+
+        assert resposta.status_code == 200, resposta.text
+        assert "tools" in resposta.json()["result"]
+        linhas = self._linhas_da_versao(caplog)
+        assert len(linhas) == 1
+        assert "2099-01-01" in linhas[0]
+
+    def test_sem_o_cabecalho_passa_e_fica_no_log(self, chave_do_emissor, caplog):
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+
+        resposta = self._pedido(chave_do_emissor, {})
+
+        assert resposta.status_code == 200, resposta.text
+        assert len(self._linhas_da_versao(caplog)) == 1
+
+    def test_a_versao_que_o_conector_fala_nao_vai_ao_log(self, chave_do_emissor, caplog):
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+
+        resposta = self._pedido(chave_do_emissor, {"MCP-Protocol-Version": "2025-06-18"})
+
+        assert resposta.status_code == 200, resposta.text
+        assert self._linhas_da_versao(caplog) == []
+
+    def test_quem_nao_passa_no_gate_nao_vai_ao_log_da_versao(self, caplog):
+        caplog.set_level(logging.INFO, logger=self._LOGGER)
+
+        resposta = _cliente_mcp().post(
+            CAMINHO_MCP, json={"jsonrpc": "2.0", "id": 2, "method": "tools/list"}, headers={"MCP-Protocol-Version": "x"}
+        )
+
+        assert resposta.status_code == 401
+        assert self._linhas_da_versao(caplog) == []
 
 
 # ─── O python-jose sem as versões das CVEs (issue #843) ──────────────────────
