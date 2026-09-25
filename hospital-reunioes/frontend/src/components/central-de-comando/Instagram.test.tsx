@@ -243,6 +243,30 @@ describe("Instagram: estados de erro", () => {
     expect(screen.getByText(/Não foi possível atualizar agora/)).toBeTruthy();
   });
 
+  it("token vencido sem número guardado: mostra o aviso calmo de renovação, e não o erro técnico", async () => {
+    const frase = "O acesso ao Instagram expirou. Renove o token para voltar a atualizar os números.";
+    servidor({ leitura: () => resposta(502, { detail: frase, causa: "token-vencido" }) });
+
+    render(<Instagram periodo="28d" />);
+
+    const aviso = (await screen.findByText(frase)).closest("[role]");
+    expect(aviso?.getAttribute("role")).toBe("status");
+    expect(within(aviso as HTMLElement).getByText(/renovar o acesso/i)).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/Não foi possível buscar/)).toBeNull();
+    expect(screen.queryByText("18.420")).toBeNull();
+  });
+
+  it("outra falha sem número guardado: segue o erro honesto, com a frase do servidor", async () => {
+    servidor({ leitura: () => resposta(502, { detail: "O Instagram não respondeu." }) });
+
+    render(<Instagram periodo="28d" />);
+
+    const alerta = await screen.findByRole("alert");
+    expect(within(alerta).getByText(/Não foi possível buscar/)).toBeTruthy();
+    expect(within(alerta).getByText("O Instagram não respondeu.")).toBeTruthy();
+  });
+
   it("conta não configurada: mostra a tela calma com a frase do backend", async () => {
     const frase =
       "A Central de Comando ainda não está ligada ao Instagram no servidor. Enquanto isso, nenhum número do Instagram é mostrado.";

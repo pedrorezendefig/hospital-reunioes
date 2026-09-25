@@ -14,15 +14,17 @@
  *
  * Honestidade do dado, como nas outras telas: sem credencial (503) a tela diz o
  * que falta e não mostra número; com o token vencido e números guardados, o
- * backend manda o último valor bom e a `BarraDeFrescor` avisa da renovação. O
+ * backend manda o último valor bom e a `BarraDeFrescor` avisa da renovação;
+ * com o token vencido e nada guardado, o aviso é calmo, com a mesma frase de
+ * renovação, e não o erro técnico (issue #846). O
  * frescor, o Atualizar agora e a renovação de hora em hora moram no
  * `useTelaDaCentral`. Os dados só saem do backend, que exige Super admin em
  * toda rota: esta tela não confia no guard do `layout.tsx` para nada.
  */
 
-import { AlertTriangle, ArrowDown, ArrowUp, Camera, Loader2, PlugZap } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Camera, KeyRound, Loader2, PlugZap } from "lucide-react";
 
-import type { Frescor } from "@/lib/central-de-comando/api";
+import { CAUSA_TOKEN_VENCIDO, type Frescor } from "@/lib/central-de-comando/api";
 import { formatarInteiro, formatarPercentual } from "@/lib/central-de-comando/formato";
 import { PERIODOS_DO_INSTAGRAM, type Periodo } from "@/lib/central-de-comando/periodo";
 
@@ -66,6 +68,7 @@ export type InstagramPayload = {
 
 export function Instagram({ periodo }: { periodo: Periodo }) {
   const { estado, atualizando, aviso, atualizarAgora } = useTelaDaCentral<InstagramPayload>("instagram", periodo);
+  const tokenVencido = estado.tipo === "falhou" && estado.causa === CAUSA_TOKEN_VENCIDO;
 
   return (
     <div className="animate-fade-in-up space-y-6">
@@ -145,7 +148,17 @@ export function Instagram({ periodo }: { periodo: Periodo }) {
         </div>
       )}
 
-      {(estado.tipo === "falhou" || estado.tipo === "sem-conexao") && (
+      {tokenVencido && (
+        <div role="status" className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <KeyRound className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="space-y-1">
+            <p className="font-semibold">É preciso renovar o acesso ao Instagram</p>
+            <p className="text-sm">{estado.mensagem}</p>
+          </div>
+        </div>
+      )}
+
+      {((estado.tipo === "falhou" && !tokenVencido) || estado.tipo === "sem-conexao") && (
         <div role="alert" className="flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="space-y-1">
