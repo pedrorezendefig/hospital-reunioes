@@ -34,7 +34,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date, datetime
+from datetime import UTC, date, datetime
 from typing import Any, Literal
 
 import httpx
@@ -258,11 +258,14 @@ def dentro_do_periodo(timestamp: str, intervalo: Intervalo) -> bool:
     A Graph API manda o instante em UTC (`2026-09-20T01:00:00+0000`); o período
     é de datas de Brasília desde a #857. Por isso o instante vira hora do
     hospital antes de virar data: a publicação das 22h de Brasília do último dia
-    (01h UTC do dia seguinte) entra. Timestamp inválido fica de fora."""
+    (01h UTC do dia seguinte) entra. Sem offset, o instante é UTC, como a Graph
+    API fala, e nunca a hora local do servidor. Timestamp inválido fica de fora."""
     try:
         instante = datetime.fromisoformat(timestamp)
     except ValueError:
         return False
+    if instante.tzinfo is None:
+        instante = instante.replace(tzinfo=UTC)
     dia = instante.astimezone(FUSO_DO_HOSPITAL).date()
     return intervalo.inicio <= dia <= intervalo.fim
 

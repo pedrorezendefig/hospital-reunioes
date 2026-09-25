@@ -130,6 +130,13 @@ class TestDentroDoPeriodo:
         # 12/09 às 22h em Brasília, que em UTC já é 13/09 às 01h.
         assert ig.dentro_do_periodo("2026-09-13T01:00:00+0000", intervalo) is False
 
+    def test_timestamp_sem_fuso_e_lido_em_utc_como_a_graph_api(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # Sem offset, o instante é UTC, e não a hora local do servidor: o
+        # resultado não pode depender do fuso da máquina que roda a Central.
+        assert ig.dentro_do_periodo("2026-09-20T01:00:00", intervalo) is True
+
     def test_timestamp_invalido_fica_de_fora(self):
         intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
 
