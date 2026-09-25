@@ -416,7 +416,7 @@ describe("Dados do Google: o frescor", () => {
 
 describe("Dados do Google: a honestidade do dado", () => {
   const SEM_CREDENCIAL =
-    "A Central de Comando ainda não está ligada ao Google Analytics: falta configurar GA4_PROPERTY_ID e GOOGLE_APPLICATION_CREDENTIALS_JSON no backend.";
+    "A Central de Comando ainda não está ligada ao Google Analytics no servidor. Enquanto isso, nenhum número do Site é mostrado.";
 
   it("enquanto o backend não responde, diz que está carregando", async () => {
     servidor({ leitura: () => new Promise<Response>(() => {}) });
@@ -427,7 +427,7 @@ describe("Dados do Google: a honestidade do dado", () => {
     expect(screen.queryByTestId("grafico-visitantes")).toBeNull();
   });
 
-  it("sem credencial do Google (503), diz o que falta e não desenha gráfico nenhum", async () => {
+  it("sem credencial do Google (503), mostra a frase do backend e não desenha gráfico nenhum", async () => {
     servidor({ leitura: () => resposta(503, { detail: SEM_CREDENCIAL }) });
 
     render(<DadosDoGoogle periodo="28d" />);

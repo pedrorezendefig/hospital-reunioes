@@ -141,7 +141,11 @@ describe("Visão Geral: o número-manchete e o contexto", () => {
     render(<VisaoGeral periodo="7d" />);
 
     await screen.findByText(/últimos 7 dias/);
-    expect(chamadas).toContain("/api/admin/central-de-comando/visao-geral?periodo=7d");
+    // O Ao vivo também consulta o servidor: filtra só a tela e afirma que ela
+    // foi pedida uma vez só, para um pedido duplicado não passar despercebido.
+    const daTela = chamadas.filter((url) => url.includes("/visao-geral"));
+    expect(daTela).toHaveLength(1);
+    expect(daTela[0]).toBe("/api/admin/central-de-comando/visao-geral?periodo=7d");
   });
 });
 

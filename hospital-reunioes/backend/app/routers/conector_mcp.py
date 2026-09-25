@@ -62,7 +62,17 @@ async def metadata_do_recurso_protegido() -> Response:
 async def transporte_mcp(request: Request, supabase=Depends(get_supabase_client)) -> Response:
     """O transporte Streamable HTTP do MCP. Config ausente é 503; token que não
     passa no gate é 401 com o cabeçalho que aponta o metadata; notificação
-    JSON-RPC é 202 sem corpo."""
+    JSON-RPC é 202 sem corpo.
+
+    O cabeçalho `MCP-Protocol-Version` é leniente de propósito (issue #843): o
+    conector não o valida nem recusa versão nenhuma, porque recusar derrubaria o
+    claude.ai em produção no dia em que ele mudasse de versão, e as três
+    ferramentas de hoje respondem igual em qualquer uma. Quando o cliente
+    autorizado manda outra versão, ou não diz qual, ela fica no log.
+
+    Sem `OPTIONS` nem CORS aqui: o conector funciona no claude.ai desde a #825
+    sem preflight (quem chama é o servidor da Anthropic, não um navegador).
+    """
     try:
         cfg = conector_mcp.configuracao_mcp()
     except conector_mcp.ConectorNaoConfiguradoError as exc:
@@ -72,6 +82,10 @@ async def transporte_mcp(request: Request, supabase=Depends(get_supabase_client)
     try:
         # O `autorizar` faz I/O síncrono (JWKS e banco); roda em thread para não
         # travar o event loop, no mesmo molde da leitura do Google no Ao vivo.
+        # O participante que ele devolve é descartado de propósito: as
+        # ferramentas de hoje são globais (os mesmos números para todo Super
+        # admin). Ferramenta futura com recorte por usuário precisa guardar
+        # esse retorno e passá-lo adiante, nunca ler quem é do corpo do pedido.
         await anyio.to_thread.run_sync(conector_mcp.autorizar, token, supabase, cfg)
     except conector_mcp.AcessoNegadoMCPError as exc:
         logger.info("[ConectorMCP] acesso negado: %s", exc)
@@ -79,6 +93,14 @@ async def transporte_mcp(request: Request, supabase=Depends(get_supabase_client)
             {"error": "unauthorized"},
             status_code=401,
             headers={"WWW-Authenticate": conector_mcp.desafio_www_authenticate(cfg)},
+        )
+
+    versao = request.headers.get("mcp-protocol-version")
+    if versao != conector_mcp.PROTOCOLO_MCP:
+        logger.info(
+            "[ConectorMCP] MCP-Protocol-Version do cliente: %r; o conector fala %s",
+            versao[:40] if versao else None,
+            conector_mcp.PROTOCOLO_MCP,
         )
 
     try:

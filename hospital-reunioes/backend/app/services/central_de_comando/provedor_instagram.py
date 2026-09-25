@@ -21,7 +21,8 @@ Três invariantes que a tela herda:
 - **Terminologia nativa do Instagram** (Alcance, Visualizações, Seguidores,
   Interações), na linguagem que o diretor vê no próprio app.
 - **Não configurado é 503, nunca zero.** Sem o token ou sem o id da conta, a
-  exceção é `InstagramNaoConfiguradoError`, com o que falta na mensagem.
+  exceção é `InstagramNaoConfiguradoError`, com a frase fixa
+  `FRASE_NAO_CONFIGURADO` (sem nome de variável; o que falta vai para o log).
 - **Token vencido mantém o último valor bom.** O token do Instagram expira e é
   renovado à mão. Quando a Graph API o recusa, a exceção é
   `InstagramTokenExpiradoError`, uma falha da fonte (subclasse de
@@ -68,9 +69,11 @@ _CODE_TOKEN_VENCIDO = 190
 # empresa dona da rede.
 _TOKEN_VENCIDO = "O acesso ao Instagram expirou. Renove o token para voltar a atualizar os números."
 
-_FALTA_CONFIGURAR = (
-    "A Central de Comando ainda não está ligada ao Instagram: falta configurar {faltando} no "
-    "backend. Enquanto isso, nenhum número do Instagram é mostrado."
+# A frase de "não configurado": fixa e sem nome de variável de ambiente (issue
+# #843). É a mesma na tela e no cliente MCP; o que falta vai para o log.
+FRASE_NAO_CONFIGURADO = (
+    "A Central de Comando ainda não está ligada ao Instagram no servidor. "
+    "Enquanto isso, nenhum número do Instagram é mostrado."
 )
 
 
@@ -92,9 +95,10 @@ class InstagramTokenExpiradoError(InstagramError):
 
 
 class InstagramNaoConfiguradoError(RuntimeError):
-    """Falta o token ou o id da conta profissional do Instagram. A mensagem diz
-    o que falta, sem nunca ecoar o token. Não é falha da fonte: sempre 503, e
-    nunca vira último valor bom."""
+    """Falta o token ou o id da conta profissional do Instagram. A mensagem é
+    a `FRASE_NAO_CONFIGURADO`, sem nome de variável; o que falta vai para o
+    log, sem nunca ecoar o token. Não é falha da fonte: sempre 503, e nunca
+    vira último valor bom."""
 
 
 # ─── Os tipos do domínio (o que sai deste módulo) ───────────────────────────
@@ -300,8 +304,8 @@ _MIDIAS_ESCANEADAS = 25
 
 
 def _verificar_configuracao() -> None:
-    """O token e o id da conta, antes de qualquer rede: a mensagem diz TODOS os
-    que faltam de uma vez, e nunca ecoa o token."""
+    """O token e o id da conta, antes de qualquer rede: o log diz TODOS os que
+    faltam de uma vez, e nunca ecoa o token."""
     faltando = [
         nome
         for nome, valor in (
@@ -311,7 +315,8 @@ def _verificar_configuracao() -> None:
         if not valor.strip()
     ]
     if faltando:
-        raise InstagramNaoConfiguradoError(_FALTA_CONFIGURAR.format(faltando=" e ".join(faltando)))
+        logger.warning("[CentralInstagram] não configurado: falta configurar %s", " e ".join(faltando))
+        raise InstagramNaoConfiguradoError(FRASE_NAO_CONFIGURADO)
 
 
 def _conta() -> str:

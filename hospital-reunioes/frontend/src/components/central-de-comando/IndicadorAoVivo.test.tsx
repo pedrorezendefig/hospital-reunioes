@@ -112,6 +112,31 @@ describe("Indicador Ao vivo: o número de agora", () => {
     expect(chamadas[0]).toEqual({ url: CAMINHO_AO_VIVO, autorizacao: "Bearer token-de-teste" });
   });
 
+  it("o leitor de tela acompanha só o número, e não o bloco inteiro", async () => {
+    responderCom({ status: 200, corpo: { pessoas: 12 } });
+
+    const { container } = render(<IndicadorAoVivo />);
+    const numero = await screen.findByText("12");
+
+    // A região viva é o número: o rótulo "no site agora" não é reanunciado a
+    // cada consulta de 30 segundos.
+    const regioesVivas = container.querySelectorAll("[aria-live]");
+    expect(regioesVivas).toHaveLength(1);
+    expect(regioesVivas[0]).toBe(numero);
+    expect(numero.getAttribute("aria-live")).toBe("polite");
+  });
+
+  it("o ponto que pulsa para quando a pessoa pede menos movimento", async () => {
+    responderCom({ status: 200, corpo: { pessoas: 12 } });
+
+    const { container } = render(<IndicadorAoVivo />);
+    await screen.findByText("12");
+
+    const pulsante = container.querySelector(".animate-ping");
+    expect(pulsante).not.toBeNull();
+    expect(pulsante?.classList.contains("motion-reduce:animate-none")).toBe(true);
+  });
+
   it("sem sessão, não consulta e não mostra nada", async () => {
     sessao.token = null;
     responderCom({ status: 200, corpo: { pessoas: 3 } });
@@ -166,9 +191,52 @@ describe("Indicador Ao vivo: o ritmo da consulta", () => {
     await passar(30_000);
     expect(chamadas).toHaveLength(1);
 
-    // A irmã de presença: com a aba de volta, o relógio volta a valer.
+    // A irmã de presença: com a aba de volta, consulta na hora e o relógio
+    // volta a valer.
     esconderAba(false);
+    await assentar();
+    expect(chamadas).toHaveLength(2);
+
     await passar(30_000);
+    expect(chamadas).toHaveLength(3);
+  });
+
+  it("consulta na hora quando a aba reaparece, mesmo sem o foco da janela", async () => {
+    // Trocar de aba nem sempre dispara `focus`: sem isto, a volta cairia no
+    // intervalo de até 30 segundos.
+    responderCom({ status: 200, corpo: { pessoas: 5 } });
+
+    render(<IndicadorAoVivo />);
+    await screen.findByText("5");
+    expect(chamadas).toHaveLength(1);
+
+    esconderAba(true);
+    expect(chamadas).toHaveLength(1);
+
+    responderCom({ status: 200, corpo: { pessoas: 9 } });
+    esconderAba(false);
+
+    expect(await screen.findByText("9")).toBeTruthy();
+    expect(chamadas).toHaveLength(2);
+  });
+
+  it("a aba que reaparece junto com o foco consulta uma vez só", async () => {
+    responderCom({ status: 200, corpo: { pessoas: 5 } });
+
+    render(<IndicadorAoVivo />);
+    await screen.findByText("5");
+    expect(chamadas).toHaveLength(1);
+
+    esconderAba(true);
+    await passar(60_000);
+
+    // O navegador costuma disparar os dois na volta para a aba.
+    esconderAba(false);
+    await act(async () => {
+      window.dispatchEvent(new Event("focus"));
+    });
+    await assentar();
+
     expect(chamadas).toHaveLength(2);
   });
 

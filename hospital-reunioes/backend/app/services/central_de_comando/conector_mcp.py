@@ -95,11 +95,23 @@ _TELA_DADOS_DO_GOOGLE = "dados-do-google"
 
 _TIMEOUT = httpx.Timeout(10.0, connect=3.0)
 
+# O motivo de "fonte não configurada" que chega ao cliente MCP: a MESMA frase
+# fixa das telas, sem nome de variável de ambiente (issue #843). Vale para toda
+# falha de configuração da fonte (variável vazia, propriedade ou chave
+# inválida); quais variáveis faltam fica no log do backend.
+_SITE_NAO_CONFIGURADO = provedor_google.FRASE_NAO_CONFIGURADO
+_INSTAGRAM_NAO_CONFIGURADO = provedor_instagram.FRASE_NAO_CONFIGURADO
+
 
 class ConectorNaoConfiguradoError(RuntimeError):
     """Falta configurar o conector MCP no backend (o emissor do AuthKit ou o
     recurso). Fecha a porta: sem config, a rota responde erro de configuração e
-    nenhum token é aceito. A mensagem não ecoa nome de variável ao cliente."""
+    nenhum token é aceito. A mensagem não ecoa nome de variável ao cliente.
+    As ferramentas seguem a mesma regra no que devolvem: a fonte não configurada
+    é a frase fixa das telas (`_SITE_NAO_CONFIGURADO`,
+    `_INSTAGRAM_NAO_CONFIGURADO`), e as frases de falha da fonte que sobem por
+    `str(exc)` e pelo `motivo` (inclusive o acesso recusado, HTTP 401/403, do
+    Google) vêm dos provedores sem nome de variável."""
 
 
 class AcessoNegadoMCPError(Exception):
@@ -333,12 +345,19 @@ def autorizar(token: str | None, supabase, cfg: ConfiguracaoMCP) -> dict:
 # Comando" do CONTEXT.md: é ele que faz o Claude falar a língua da casa
 # (Visitantes, Áreas do site, Alcance) e tratar o que não é medido como não
 # medido, nunca como zero (honestidade do dado). Porte do `glossario.ts` do
-# conector antigo, com o nome novo da Área do site.
+# conector antigo, com o nome novo da Área do site. É cópia à mão dos verbetes:
+# o teste do glossário (issue #843) lê o CONTEXT.md e trava a deriva. As duas
+# diferenças do contrato antigo que ficaram (o "motivo" sempre presente no
+# frescor e o "anterior" do movimento nunca nulo, aceitas na #862) vão ditas
+# aqui, para o Claude não esperar o formato de antes.
 GLOSSARIO_SITE = (
     "Números do Site do Hospital São Matheus (fonte: Google Analytics), somente leitura. "
-    'O campo "visitantes" traz as pessoas diferentes que acessaram o Site no período (os usuários '
-    'ativos do Google), com o número do período anterior de mesmo tamanho e "variacaoPct" (12 quer '
-    "dizer +12%; null quer dizer que não há base para comparar). "
+    'O campo "visitantes" traz os Visitantes, as pessoas diferentes que acessaram o Site no período (os '
+    'usuários ativos do Google), com o número do período anterior de mesmo tamanho e "variacaoPct" (12 '
+    "quer dizer +12%; null quer dizer que não há base para comparar). "
+    '"movimento" traz, dia a dia, os "visitantes" do dia e o "anterior", os do dia correspondente do '
+    'período anterior; o "anterior" é sempre um número, e zero quer dizer que o Google não trouxe '
+    "visitante naquele dia. "
     '"areasDoSite" é o ranking das Áreas do site, os grupos de páginas por serviço do hospital '
     "(Maternidade, Emergência 24h, Centro de Imagem, Centro Médico, Laboratório); o número fala do "
     "site, não da procura real pelo serviço. "
@@ -349,8 +368,9 @@ GLOSSARIO_SITE = (
     'incluso (hoje WhatsApp e Fale Conosco), "em-construcao" quer dizer que o Site ainda não avisa o '
     'Google quando o contato acontece, e "nao-medido" quer dizer que não há como medir; "em-construcao" e '
     '"nao-medido" nunca são zero. Em "frescor", "atualizadoHaMin" diz há quantos minutos o dado foi '
-    'lido e "falhaAoAtualizar" verdadeiro quer dizer que é o último valor bom guardado. Não invente '
-    "números que não estejam no payload."
+    'lido e "falhaAoAtualizar" verdadeiro quer dizer que é o último valor bom guardado; "motivo" vem '
+    "sempre, nulo quando não houve falha, e com a frase da falha quando houve. Não invente números que "
+    "não estejam no payload."
 )
 
 GLOSSARIO_INSTAGRAM = (
@@ -363,7 +383,10 @@ GLOSSARIO_INSTAGRAM = (
     '"seguidores" é estoque (o total agora), sem variação percentual: o que varia por período é o '
     '"crescimento". "interacoes" é a soma de curtidas, comentários, salvamentos e compartilhamentos, '
     'e "detalheInteracoes" abre essas quatro partes. "principaisPublicacoes" vêm ordenadas por '
-    "interações no período, sem Stories. Não invente números que não estejam no payload."
+    'interações no período, sem Stories. Em "frescor", "atualizadoHaMin" diz há quantos minutos o dado '
+    'foi lido e "falhaAoAtualizar" verdadeiro quer dizer que é o último valor bom guardado; "motivo" '
+    "vem sempre, nulo quando não houve falha, e com a frase da falha quando houve. Não invente números "
+    "que não estejam no payload."
 )
 
 
@@ -431,7 +454,9 @@ async def _ferramenta_ao_vivo() -> dict:
     real da Central), casca fina sobre o provedor do Google."""
     try:
         pessoas = await anyio.to_thread.run_sync(provedor_google.pessoas_no_site_agora)
-    except (provedor_google.GoogleNaoConfiguradoError, provedor_google.GoogleError) as exc:
+    except provedor_google.GoogleNaoConfiguradoError:
+        return _resultado_de_erro(_SITE_NAO_CONFIGURADO)
+    except provedor_google.GoogleError as exc:
         return _resultado_de_erro(str(exc))
     return _resultado_estruturado(
         {"pessoasAgora": pessoas},
@@ -446,16 +471,20 @@ def _ferramenta_site(argumentos: dict) -> dict:
     duas chaves (`_frescor_do_site`), para não dizer "fresco" com o manchete de
     Visitantes velho. Fonte fora sem número guardado ou não configurada viram
     resultado com `isError`, com a frase segura da Central, nunca um número
-    inventado."""
+    inventado; a de não configurada é a fixa, sem nome de variável."""
     periodo = _periodo_valido(argumentos, _PERIODOS_SITE)
     if periodo is None:
         return _resultado_de_erro(f"Período inválido. Use um de: {', '.join(_PERIODOS_SITE)}.")
     try:
         visitantes, chave_visitantes = visao_geral.ler_visitantes(periodo)
+        if visitantes["estado"] == "nao-configurado":
+            return _resultado_de_erro(_SITE_NAO_CONFIGURADO)
         if visitantes["estado"] != "ok":
             return _resultado_de_erro(visitantes.get("motivo") or "Os números do Site estão indisponíveis agora.")
         google = telas.ler(_TELA_DADOS_DO_GOOGLE, periodo)
-    except (provedor_google.GoogleNaoConfiguradoError, provedor_google.GoogleError) as exc:
+    except provedor_google.GoogleNaoConfiguradoError:
+        return _resultado_de_erro(_SITE_NAO_CONFIGURADO)
+    except provedor_google.GoogleError as exc:
         return _resultado_de_erro(str(exc))
     frescor = _frescor_do_site(chave_visitantes, periodo)
     return _resultado_estruturado(serializar_site(periodo, visitantes, google, frescor, cache.agora_utc()))
@@ -477,13 +506,16 @@ def _ferramenta_instagram(argumentos: dict) -> dict:
     """Os números do Instagram no período, lidos do MESMO cache da tela
     (`telas.ler`). Não configurado, token vencido sem número guardado ou fonte
     fora sem número guardado viram "indisponível" com o motivo (glossário:
-    `disponivel:false` não é zero nem queda), nunca um `isError`."""
+    `disponivel:false` não é zero nem queda), nunca um `isError`. O motivo de
+    não configurado é a frase fixa, sem nome de variável."""
     periodo = _periodo_valido(argumentos, _PERIODOS_INSTAGRAM)
     if periodo is None:
         return _resultado_de_erro(f"Período inválido. Use um de: {', '.join(_PERIODOS_INSTAGRAM)}.")
     try:
         tela = telas.ler("instagram", periodo)
-    except (provedor_instagram.InstagramNaoConfiguradoError, provedor_instagram.InstagramError) as exc:
+    except provedor_instagram.InstagramNaoConfiguradoError:
+        return _resultado_estruturado(serializar_instagram_indisponivel(periodo, _INSTAGRAM_NAO_CONFIGURADO))
+    except provedor_instagram.InstagramError as exc:
         return _resultado_estruturado(serializar_instagram_indisponivel(periodo, str(exc)))
     return _resultado_estruturado(serializar_instagram_disponivel(periodo, tela, cache.agora_utc()))
 

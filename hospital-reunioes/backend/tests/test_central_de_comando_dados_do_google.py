@@ -397,7 +397,7 @@ class TestFrescor:
 
 
 class TestSemCredencial:
-    def test_falta_configurar_e_503_sem_numero_nem_ida_ao_google(self, monkeypatch, google_falso):
+    def test_falta_configurar_e_503_sem_numero_nem_ida_ao_google(self, monkeypatch, google_falso, caplog):
         monkeypatch.setattr(settings, "ga4_property_id", "")
         monkeypatch.setattr(settings, "google_application_credentials_json", "")
 
@@ -405,8 +405,11 @@ class TestSemCredencial:
 
         assert resposta.status_code == 503
         assert set(resposta.json()) == {"detail"}
-        assert "GA4_PROPERTY_ID" in resposta.json()["detail"]
-        assert "GOOGLE_APPLICATION_CREDENTIALS_JSON" in resposta.json()["detail"]
+        # A tela mostra a frase fixa, sem nome de variável (issue #843); quais
+        # faltam fica no log de quem opera o servidor.
+        assert resposta.json()["detail"] == provedor_google.FRASE_NAO_CONFIGURADO
+        assert "GA4_PROPERTY_ID" in caplog.text
+        assert "GOOGLE_APPLICATION_CREDENTIALS_JSON" in caplog.text
         assert google_falso.pedidos == []
 
 

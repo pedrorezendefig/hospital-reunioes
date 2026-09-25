@@ -276,7 +276,7 @@ class TestDegradacaoPorBloco:
         assert corpo.status_code == 200
         corpo = corpo.json()
         assert corpo["visitantes"]["estado"] == "nao-configurado"
-        assert "GA4_PROPERTY_ID" in corpo["visitantes"]["motivo"]
+        assert corpo["visitantes"]["motivo"] == provedor_google.FRASE_NAO_CONFIGURADO
         assert corpo["instagram"]["estado"] == "ok"
         assert corpo["instagram"]["seguidores"]["total"] == 18420
 

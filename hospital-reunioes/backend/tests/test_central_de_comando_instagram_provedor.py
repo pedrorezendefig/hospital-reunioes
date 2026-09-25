@@ -150,8 +150,8 @@ class TestSemCredencial:
         ],
         ids=["nenhuma", "sem-token", "sem-conta", "token-em-branco"],
     )
-    def test_falta_configurar_e_nao_configurado_dizendo_o_que_falta(
-        self, monkeypatch, instagram_falso, token, conta, faltando
+    def test_falta_configurar_e_nao_configurado_com_o_que_falta_no_log(
+        self, monkeypatch, instagram_falso, caplog, token, conta, faltando
     ):
         monkeypatch.setattr(settings, "instagram_access_token", token)
         monkeypatch.setattr(settings, "instagram_business_account_id", conta)
@@ -159,8 +159,12 @@ class TestSemCredencial:
         with pytest.raises(ig.InstagramNaoConfiguradoError) as erro:
             ig.saude_da_conta("28d", HOJE_DE_TESTE)
 
+        # A mensagem é a frase fixa, sem nome de variável (issue #843); o que
+        # falta vai para o log, nunca o token.
+        assert str(erro.value) == ig.FRASE_NAO_CONFIGURADO
         for nome in faltando:
-            assert nome in str(erro.value)
+            assert nome in caplog.text
+        assert "token-de-teste-do-instagram" not in caplog.text
         # Não configurado nunca toca a rede: não há o que perguntar sem token.
         assert instagram_falso.pedidos == []
 

@@ -24,17 +24,19 @@ from __future__ import annotations
 import os
 import re
 import sys
+import unicodedata
 from datetime import UTC, datetime, timedelta
+from pathlib import Path
 
 import httpx
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from central_de_comando_apoio import erro_do_instagram  # noqa: E402
+from central_de_comando_apoio import erro_da_ga4, erro_do_instagram  # noqa: E402
 
 from app.config import settings  # noqa: E402
-from app.services.central_de_comando import conector_mcp, telas, visao_geral  # noqa: E402
+from app.services.central_de_comando import conector_mcp, provedor_instagram, telas, visao_geral  # noqa: E402
 
 pytestmark = pytest.mark.usefixtures("gate_e_limitador_zerados")
 
@@ -529,3 +531,311 @@ class TestToolsCallPeloResponderMcp:
         resposta = await conector_mcp.responder_mcp(pedido)
 
         assert resposta["error"]["code"] == -32602
+
+
+# ─── 8. Não configurado e acesso recusado: sem nome de variável (issue #843) ─
+
+# Um nome de variável de ambiente: letras maiúsculas com sublinhado
+# (GA4_PROPERTY_ID, INSTAGRAM_ACCESS_TOKEN). Nem o cliente MCP nem a tela da
+# Central recebem nome de variável: a fonte não configurada é a mesma frase fixa
+# nos dois lados, e o acesso recusado pelo Google (401/403) também não cita
+# nenhum. Quais variáveis faltam fica no log do backend.
+_NOME_DE_VARIAVEL = re.compile(r"\b[A-Z][A-Z0-9]*_[A-Z0-9_]+\b")
+
+
+def _sem_nome_de_variavel(texto: str) -> None:
+    assert texto
+    assert not _NOME_DE_VARIAVEL.search(texto), texto
+
+
+@pytest.fixture
+def google_sem_configurar(monkeypatch):
+    monkeypatch.setattr(settings, "ga4_property_id", "")
+    monkeypatch.setattr(settings, "google_application_credentials_json", "")
+
+
+class TestNaoConfiguradoSemNomeDeVariavel:
+    @pytest.mark.usefixtures("google_sem_configurar")
+    async def test_ao_vivo_sem_configurar_diz_o_motivo_sem_nome_de_variavel(self):
+        resultado = await conector_mcp._ferramenta_ao_vivo()
+
+        assert resultado["isError"] is True
+        texto = resultado["content"][0]["text"]
+        _sem_nome_de_variavel(texto)
+        assert "Google Analytics" in texto
+
+    async def test_ao_vivo_com_a_chave_invalida_diz_o_motivo_sem_nome_de_variavel(self, monkeypatch):
+        monkeypatch.setattr(settings, "ga4_property_id", "123456789")
+        monkeypatch.setattr(settings, "google_application_credentials_json", "não é a chave")
+
+        resultado = await conector_mcp._ferramenta_ao_vivo()
+
+        assert resultado["isError"] is True
+        _sem_nome_de_variavel(resultado["content"][0]["text"])
+
+    @pytest.mark.usefixtures("google_sem_configurar")
+    def test_site_sem_configurar_diz_o_motivo_sem_nome_de_variavel(self, google_falso):
+        resultado = conector_mcp._ferramenta_site({"period": "28d"})
+
+        assert resultado["isError"] is True
+        texto = resultado["content"][0]["text"]
+        _sem_nome_de_variavel(texto)
+        assert "Site" in texto
+        assert google_falso.pedidos == []
+
+    def test_site_com_a_propriedade_invalida_diz_o_motivo_sem_nome_de_variavel(
+        self, monkeypatch, central_configurada, google_falso
+    ):
+        monkeypatch.setattr(settings, "ga4_property_id", "properties/123")
+
+        resultado = conector_mcp._ferramenta_site({"period": "28d"})
+
+        assert resultado["isError"] is True
+        _sem_nome_de_variavel(resultado["content"][0]["text"])
+
+    def test_instagram_sem_configurar_diz_o_motivo_sem_nome_de_variavel(self, monkeypatch, instagram_falso):
+        monkeypatch.setattr(settings, "instagram_access_token", "")
+        monkeypatch.setattr(settings, "instagram_business_account_id", "")
+
+        resultado = conector_mcp._ferramenta_instagram({"period": "28d"})
+
+        payload = resultado["structuredContent"]
+        assert payload["disponivel"] is False
+        _sem_nome_de_variavel(payload["frescor"]["motivo"])
+        assert "Instagram" in payload["frescor"]["motivo"]
+        _sem_nome_de_variavel(resultado["content"][0]["text"])
+
+    @pytest.mark.usefixtures("google_sem_configurar")
+    async def test_a_tela_mostra_a_mesma_frase_fixa_que_o_cliente_mcp_recebe(self, cache_da_central):
+        """A triagem pediu a frase fixa "a mesma das telas": o bloco de
+        Visitantes da tela e o cliente MCP dizem exatamente a mesma coisa."""
+        bloco, _ = visao_geral.ler_visitantes("28d")
+        ao_vivo = await conector_mcp._ferramenta_ao_vivo()
+        site = conector_mcp._ferramenta_site({"period": "28d"})
+
+        assert bloco["estado"] == "nao-configurado"
+        _sem_nome_de_variavel(bloco["motivo"])
+        assert ao_vivo["content"][0]["text"] == bloco["motivo"]
+        assert site["content"][0]["text"] == bloco["motivo"]
+
+    def test_a_tela_do_instagram_mostra_a_mesma_frase_fixa_que_o_cliente_mcp_recebe(self, monkeypatch, instagram_falso):
+        monkeypatch.setattr(settings, "instagram_access_token", "")
+        monkeypatch.setattr(settings, "instagram_business_account_id", "")
+
+        with pytest.raises(provedor_instagram.InstagramNaoConfiguradoError) as erro:
+            telas.ler("instagram", "28d")
+        resultado = conector_mcp._ferramenta_instagram({"period": "28d"})
+
+        _sem_nome_de_variavel(str(erro.value))
+        assert resultado["structuredContent"]["frescor"]["motivo"] == str(erro.value)
+
+
+def _acesso_recusado_pelo_google():
+    return erro_da_ga4(403, "PERMISSION_DENIED", "User does not have sufficient permissions.")
+
+
+@pytest.mark.usefixtures("central_configurada")
+class TestAcessoRecusadoPeloGoogleSemNomeDeVariavel:
+    """O 401/403 da GA4 é `GoogleError`, não "não configurado": chega ao
+    cliente MCP pelo texto do erro (Ao vivo e Site), pelo motivo do bloco de
+    Visitantes e pelo `frescor.motivo` do último valor bom. Em nenhum dos
+    quatro caminhos a frase cita nome de variável."""
+
+    async def test_ao_vivo(self, google_falso):
+        google_falso.forcar = _acesso_recusado_pelo_google()
+
+        resultado = await conector_mcp._ferramenta_ao_vivo()
+
+        assert resultado["isError"] is True
+        texto = resultado["content"][0]["text"]
+        _sem_nome_de_variavel(texto)
+        assert "HTTP 403" in texto
+
+    def test_site_sem_numero_guardado(self, google_falso, relogio_da_central):
+        google_falso.forcar = _acesso_recusado_pelo_google()
+
+        resultado = conector_mcp._ferramenta_site({"period": "28d"})
+
+        assert resultado["isError"] is True
+        texto = resultado["content"][0]["text"]
+        _sem_nome_de_variavel(texto)
+        assert "HTTP 403" in texto
+
+    def test_motivo_do_bloco_de_visitantes(self, google_falso, relogio_da_central):
+        google_falso.forcar = _acesso_recusado_pelo_google()
+
+        bloco, _ = visao_geral.ler_visitantes("28d")
+
+        assert bloco["estado"] != "ok"
+        _sem_nome_de_variavel(bloco["motivo"])
+        assert "HTTP 403" in bloco["motivo"]
+
+    @pytest.mark.usefixtures("lote_da_ga4")
+    def test_frescor_motivo_do_ultimo_valor_bom(self, google_falso, relogio_da_central):
+        conector_mcp._ferramenta_site({"period": "28d"})  # aquece as duas chaves
+        relogio_da_central.avancar(hours=2)
+        google_falso.forcar = _acesso_recusado_pelo_google()
+
+        resultado = conector_mcp._ferramenta_site({"period": "28d"})
+
+        assert resultado["isError"] is False  # serve o último valor bom
+        frescor = resultado["structuredContent"]["frescor"]
+        assert frescor["falhaAoAtualizar"] is True
+        _sem_nome_de_variavel(frescor["motivo"])
+        assert "HTTP 403" in frescor["motivo"]
+
+
+# ─── 9. O glossário das ferramentas bate com o CONTEXT.md (issue #843) ───────
+
+# O glossário nas descrições das ferramentas é uma cópia, à mão, dos verbetes da
+# seção "Central de Comando" do CONTEXT.md. O teste lê o CONTEXT.md (nunca o
+# altera) e confere os fatos que não podem divergir: o catálogo das Áreas do
+# site, as partes das Interações, os estados dos Contatos gerados, os termos da
+# casa e o que os verbetes mandam evitar.
+_CONTEXT_MD = Path(__file__).resolve().parents[3] / "CONTEXT.md"
+
+
+def _secao_da_central() -> str:
+    texto = _CONTEXT_MD.read_text(encoding="utf-8")
+    inicio = texto.index("## Central de Comando")
+    fim = texto.index("\n## ", inicio + 1)
+    return texto[inicio:fim]
+
+
+def _nomes_dos_verbetes() -> set[str]:
+    """Os nomes de verbete da seção, inclusive os pares (`**A** / **B**:`)."""
+    nomes: set[str] = set()
+    for cabeca in re.findall(r"^(\*\*.+\*\*):$", _secao_da_central(), re.MULTILINE):
+        nomes.update(re.findall(r"\*\*(.+?)\*\*", cabeca))
+    return nomes
+
+
+def _verbete(nome: str) -> str:
+    """O texto de um verbete: a definição e a linha _Evitar_."""
+    achado = re.search(
+        rf"^\*\*{re.escape(nome)}\*\*[^\n]*:\n(.+?)(?:\n\n|\Z)", _secao_da_central(), re.MULTILINE | re.DOTALL
+    )
+    assert achado, f"verbete {nome!r} sumiu do CONTEXT.md"
+    return achado.group(1)
+
+
+def _sem_negrito(texto: str) -> str:
+    return texto.replace("**", "")
+
+
+def _descricoes() -> str:
+    return " ".join(f["description"] for f in conector_mcp.ferramentas())
+
+
+def _descricao(nome: str) -> str:
+    return next(f["description"] for f in conector_mcp.ferramentas() if f["name"] == nome)
+
+
+def _slug(texto: str) -> str:
+    sem_acento = unicodedata.normalize("NFKD", texto).encode("ascii", "ignore").decode()
+    return sem_acento.lower().replace(" ", "-")
+
+
+class TestGlossarioBateComOContext:
+    def test_as_areas_do_site_sao_o_mesmo_catalogo_fechado(self):
+        do_context = re.search(r"\(([^)]+)\)", _verbete("Área do site")).group(1)
+        da_descricao = re.search(r'"areasDoSite"[^(]+\(([^)]+)\)', conector_mcp.GLOSSARIO_SITE).group(1)
+
+        assert da_descricao.split(", ") == do_context.split(", ")
+
+    def test_as_interacoes_somam_as_mesmas_partes(self):
+        partes = re.search(r"A soma de (.+?) no período", _verbete("Interações")).group(1)
+
+        assert f"soma de {partes}" in conector_mcp.GLOSSARIO_INSTAGRAM
+
+    def test_os_estados_dos_contatos_sao_os_do_verbete(self):
+        estados = re.findall(r"\*\*(.+?)\*\*", _verbete("Contatos gerados"))
+
+        assert [_slug(e) for e in estados] == ["medido", "em-construcao", "nao-medido"]
+        for estado in estados:
+            assert f'"{_slug(estado)}"' in conector_mcp.GLOSSARIO_SITE
+
+    @pytest.mark.parametrize(
+        ("termo", "verbete"),
+        [
+            ("Central de Comando", "Central de Comando"),
+            ("Site", "Site"),
+            ("Visitantes", "Visitantes"),
+            ("Visitas", "Visita"),
+            ("Áreas do site", "Área do site"),
+            ("Origem do público", "Origem do público"),
+            ("Não identificado", "Não identificado"),
+            ("Outros", "Outros"),
+            ("Ao vivo", "Ao vivo"),
+            ("Alcance", "Alcance"),
+            ("Visualizações", "Visualizações"),
+            ("Interações", "Interações"),
+        ],
+    )
+    def test_cada_termo_da_casa_nas_descricoes_e_verbete_do_context(self, termo, verbete):
+        assert termo in _descricoes()
+        assert verbete in _nomes_dos_verbetes()
+
+    @pytest.mark.parametrize(
+        ("verbete", "expressao"),
+        [
+            ("Visitantes", "pessoas diferentes"),
+            ("Área do site", "não da procura real pelo serviço"),
+            ("Contatos gerados", "WhatsApp"),
+            ("Contatos gerados", "Fale Conosco"),
+            ("Ao vivo", "tempo real"),
+            ("Alcance", "contas diferentes"),
+            ("Visualizações", "vezes"),
+            ("Seguidores", "estoque"),
+            ("Seguidores", "crescimento"),
+            ("Principais publicações", "Stories"),
+        ],
+    )
+    def test_o_que_o_verbete_diz_a_descricao_repete(self, verbete, expressao):
+        assert expressao in _sem_negrito(_verbete(verbete))
+        assert expressao in _descricoes()
+
+    @pytest.mark.parametrize(
+        ("proibido", "verbete"),
+        [
+            ("Braço", "Área do site"),
+            ("impressões", "Alcance"),
+            ("top posts", "Principais publicações"),
+            ("Site Novo", "Site"),
+            ("sessões", "Visitantes"),
+            ("(not set)", "Não identificado"),
+            ("dashboard de marketing", "Central de Comando"),
+        ],
+    )
+    def test_as_descricoes_nao_usam_o_que_o_verbete_manda_evitar(self, proibido, verbete):
+        evitar = next(linha for linha in _verbete(verbete).splitlines() if linha.startswith("_Evitar_"))
+
+        assert proibido in evitar
+        assert proibido.lower() not in _descricoes().lower()
+
+
+class TestDescricaoDizAsDiferencasDoContratoAntigo:
+    """Duas diferenças do contrato antigo ficam como estão (aceitas na #862), e a
+    descrição conta ao Claude: `frescor.motivo` vem sempre, nulo sem falha, e o
+    `anterior` de cada dia do movimento nunca é nulo."""
+
+    def test_o_site_diz_que_o_motivo_vem_nulo_quando_nao_houve_falha(self):
+        assert '"motivo" vem sempre, nulo quando não houve falha' in _descricao(conector_mcp.FERRAMENTA_SITE)
+
+    def test_o_instagram_diz_que_o_motivo_vem_nulo_quando_nao_houve_falha(self):
+        assert '"motivo" vem sempre, nulo quando não houve falha' in _descricao(conector_mcp.FERRAMENTA_INSTAGRAM)
+
+    def test_o_site_diz_que_o_anterior_do_movimento_nunca_e_nulo(self):
+        descricao = _descricao(conector_mcp.FERRAMENTA_SITE)
+
+        assert '"movimento"' in descricao
+        assert '"anterior" é sempre um número' in descricao
+
+    def test_o_site_nao_afirma_que_zero_no_movimento_e_ninguem_ter_vindo(self):
+        """O provedor põe zero em todo dia que a GA4 não devolveu (linha
+        ilegível, dia antes de a propriedade medir): zero é ausência de dado
+        do Google, não a certeza de que ninguém veio."""
+        descricao = _descricao(conector_mcp.FERRAMENTA_SITE)
+
+        assert "nenhum visitante naquele dia" not in descricao
+        assert "zero quer dizer que o Google não trouxe visitante naquele dia" in descricao

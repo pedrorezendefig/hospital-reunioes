@@ -7,9 +7,11 @@
  * É o único número em tempo real da Central, e o único que NÃO passa pelo
  * cache: cada consulta vai direto à rota de tempo real do backend
  * (`GET /ao-vivo`), que lê a fonte de tempo real do Google. A tela consulta a
- * cada 30 segundos e ao voltar o foco, e para quando sai (ADR 0050, decisão 9;
- * o mesmo desenho do Quadro de Demandas: `usePolling` para o intervalo, gatado
- * pela aba à vista, e o `focus` para recarregar na volta).
+ * cada 30 segundos e na volta, e para quando sai (ADR 0050, decisão 9; o mesmo
+ * desenho do Quadro de Demandas: `usePolling` para o intervalo, gatado pela aba
+ * à vista). A volta é o `focus` da janela ou a aba que reaparece: trocar de aba
+ * nem sempre dispara `focus` (issue #843), e quando os dois disparam juntos a
+ * volta consulta uma vez só.
  *
  * Degradação silenciosa: se a consulta falha, o número não zera nem some de
  * repente, e a tela não cai. `null` é "não sei" (nunca houve número bom, ou a
@@ -25,6 +27,12 @@ import { BASE_CENTRAL } from "@/lib/central-de-comando/api";
 
 /** A tela consulta o Ao vivo a cada 30 segundos (ADR 0050, decisão 9). */
 export const INTERVALO_AO_VIVO_MS = 30 * 1000;
+
+/**
+ * A volta para a tela costuma disparar `visibilitychange` e `focus` quase
+ * juntos. Uma segunda volta dentro desta janela não pede de novo.
+ */
+const JANELA_DA_VOLTA_MS = 2 * 1000;
 
 const CAMINHO_AO_VIVO = `${BASE_CENTRAL}/ao-vivo`;
 
@@ -60,7 +68,7 @@ async function buscarAoVivo(): Promise<number | null> {
 
 /**
  * O número do Ao vivo, ou `null` enquanto não há um número bom. Renovado
- * sozinho a cada 30 segundos com a aba à vista e ao voltar o foco, e parado
+ * sozinho a cada 30 segundos com a aba à vista e na volta para a tela, e parado
  * quando a tela sai. A falha nunca zera nem levanta.
  */
 export function useAoVivo(): number | null {
@@ -88,24 +96,38 @@ export function useAoVivo(): number | null {
   }, [consultar]);
 
   // A cada 30 segundos, só com a aba à vista: pedir para uma aba escondida
-  // gasta rede a troco de nada, e o foco abaixo recarrega na volta.
+  // gasta rede a troco de nada, e a volta abaixo recarrega na hora.
   usePolling(() => void consultar(), INTERVALO_AO_VIVO_MS, abaVisivel);
 
-  // A volta para a janela consulta na hora (ADR 0050, decisão 9).
-  useEffect(() => {
-    const aoFocar = () => void consultar();
-    window.addEventListener("focus", aoFocar);
-    return () => window.removeEventListener("focus", aoFocar);
+  // A volta para a tela consulta na hora (ADR 0050, decisão 9). A aba que
+  // reaparece e o foco da janela costumam chegar juntos: o segundo, dentro da
+  // janela, não pede de novo.
+  const ultimaVolta = useRef<number | null>(null);
+  const aoVoltar = useCallback(() => {
+    const agora = Date.now();
+    if (ultimaVolta.current !== null && agora - ultimaVolta.current < JANELA_DA_VOLTA_MS) return;
+    ultimaVolta.current = agora;
+    void consultar();
   }, [consultar]);
 
-  // A aba escondida desliga o intervalo; à vista, liga. Fica só com dizer se a
-  // aba está à vista: recarregar na volta é do `focus`, para não pedir duas vezes.
   useEffect(() => {
-    const aoTrocar = () => setAbaVisivel(document.visibilityState === "visible");
-    aoTrocar();
+    window.addEventListener("focus", aoVoltar);
+    return () => window.removeEventListener("focus", aoVoltar);
+  }, [aoVoltar]);
+
+  // A aba escondida desliga o intervalo; à vista, liga e conta como volta. A
+  // leitura da abertura só diz se a aba está à vista: a primeira consulta já
+  // foi feita acima.
+  useEffect(() => {
+    const aoTrocar = () => {
+      const visivel = document.visibilityState === "visible";
+      setAbaVisivel(visivel);
+      if (visivel) aoVoltar();
+    };
+    setAbaVisivel(document.visibilityState === "visible");
     document.addEventListener("visibilitychange", aoTrocar);
     return () => document.removeEventListener("visibilitychange", aoTrocar);
-  }, []);
+  }, [aoVoltar]);
 
   return pessoas;
 }

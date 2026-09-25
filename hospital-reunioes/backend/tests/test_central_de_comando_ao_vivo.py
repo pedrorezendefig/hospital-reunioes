@@ -254,7 +254,7 @@ class TestAoVivoSemCredencial:
 
         assert resposta.status_code == 503
         assert "pessoas" not in resposta.json()
-        assert "configurar" in resposta.json()["detail"]
+        assert resposta.json()["detail"] == provedor_google.FRASE_NAO_CONFIGURADO
         assert google_falso.pedidos == []
 
 

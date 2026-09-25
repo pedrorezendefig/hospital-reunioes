@@ -29,6 +29,7 @@ from central_de_comando_apoio import (  # noqa: E402
 )
 
 from app.config import settings  # noqa: E402
+from app.services.central_de_comando import provedor_instagram  # noqa: E402
 
 pytestmark = pytest.mark.usefixtures("gate_e_limitador_zerados")
 
@@ -140,8 +141,9 @@ class TestSemCredencial:
 
         assert resposta.status_code == 503
         detalhe = resposta.json()["detail"]
-        assert "INSTAGRAM_ACCESS_TOKEN" in detalhe
-        assert "configurar" in detalhe
+        # A frase fixa, sem nome de variável (issue #843).
+        assert detalhe == provedor_instagram.FRASE_NAO_CONFIGURADO
+        assert "INSTAGRAM_ACCESS_TOKEN" not in detalhe
         assert set(resposta.json()) == {"detail"}
         assert instagram_falso.pedidos == []
 
