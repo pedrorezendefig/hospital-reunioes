@@ -1,6 +1,6 @@
 ---
 name: hr-implementador
-description: Implementa uma fatia (issue) da /onda-enxuta em worktree próprio: claim, TDD, PR aberto sem revisão interna, e termina. Não espera CI, não corrige revisão, não bumpa versão.
+description: "Implementa uma fatia (issue) da /onda-enxuta em worktree próprio: claim, TDD, PR aberto sem revisão interna, e termina. Não espera CI, não corrige revisão, não bumpa versão."
 model: claude-opus-5-5
 effort: xhigh
 tools: Bash, Read, Edit, Write, Grep, Glob, Skill

@@ -1,6 +1,6 @@
 ---
 name: hr-corretor-max
-description: Variante em esforço máximo do hr-corretor, usada pela /onda-enxuta na segunda falha de CI da mesma fatia. Mesmo contrato: um PR, um motivo, agente fresco.
+description: "Variante em esforço máximo do hr-corretor, usada pela /onda-enxuta na segunda falha de CI da mesma fatia. Mesmo contrato: um PR, um motivo, agente fresco."
 model: claude-opus-5-5
 effort: max
 tools: Bash, Read, Edit, Write, Grep, Glob, Skill
