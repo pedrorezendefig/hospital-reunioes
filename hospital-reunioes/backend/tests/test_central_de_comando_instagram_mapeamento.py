@@ -130,6 +130,13 @@ class TestDentroDoPeriodo:
         # 12/09 às 22h em Brasília, que em UTC já é 13/09 às 01h.
         assert ig.dentro_do_periodo("2026-09-13T01:00:00+0000", intervalo) is False
 
+    def test_timestamp_invalido_fica_de_fora(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        assert ig.dentro_do_periodo("", intervalo) is False
+        assert ig.dentro_do_periodo("ontem à noite", intervalo) is False
+        assert ig.dentro_do_periodo("2026-09-31T12:00:00+0000", intervalo) is False
+
 
 class TestParaPublicacao:
     def test_miniatura_cai_para_media_url_quando_nao_ha_thumbnail(self):
