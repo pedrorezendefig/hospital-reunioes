@@ -62,6 +62,10 @@ LEITORES_COMPOSTOS = {"visao-geral": visao_geral_service.ler}
 # tem é 422 dentro do `ler_lente`, sem ir à fonte.
 PREFIXO_DA_LENTE = "objetivos/"
 
+# O 404 da lente. Genérico de propósito (issue #847): o identificador recebido
+# não volta na resposta.
+OBJETIVO_INEXISTENTE = "A Central não tem esse Objetivo."
+
 router = APIRouter(
     prefix="/admin/central-de-comando",
     tags=["admin", "central-de-comando"],
@@ -173,14 +177,12 @@ async def objetivo_lente(request: Request, identificador: str, periodo: Periodo 
     com o porquê) e o frescor.
 
     Identificador que não é de um Objetivo com lente (inexistente, ou em
-    construção sem destino navegável) é 404. Período que a lente não tem (90 dias
-    no Instagram) é 422, sem ir à fonte.
+    construção sem destino navegável) é 404, com frase genérica: o valor
+    digitado no endereço não volta na resposta (issue #847). Período que a lente
+    não tem (90 dias no Instagram) é 422, sem ir à fonte.
     """
     if not objetivos.tem_lente(identificador):
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"A Central não tem o Objetivo {identificador!r}.",
-        )
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=OBJETIVO_INEXISTENTE)
     return await _do_fonte(objetivos.ler_lente, identificador, periodo)
 
 
