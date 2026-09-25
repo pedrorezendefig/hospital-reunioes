@@ -124,6 +124,12 @@ class TestDentroDoPeriodo:
         # 19/09 às 22h em Brasília, que em UTC já é 20/09 às 01h.
         assert ig.dentro_do_periodo("2026-09-20T01:00:00+0000", intervalo) is True
 
+    def test_22h_de_brasilia_da_vespera_do_primeiro_dia_fica_de_fora(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # 12/09 às 22h em Brasília, que em UTC já é 13/09 às 01h.
+        assert ig.dentro_do_periodo("2026-09-13T01:00:00+0000", intervalo) is False
+
 
 class TestParaPublicacao:
     def test_miniatura_cai_para_media_url_quando_nao_ha_thumbnail(self):
