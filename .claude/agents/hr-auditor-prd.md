@@ -1,6 +1,6 @@
 ---
 name: hr-auditor-prd
-description: Auditoria pós-fechamento de um PRD na /onda-enxuta: lê os critérios de aceite do PRD, verifica ponta a ponta contra o app em produção e comenta o veredito; reabre o PRD com ready-for-human se algo falhar (ADR 0029).
+description: "Auditoria pós-fechamento de um PRD na /onda-enxuta: lê os critérios de aceite do PRD, verifica ponta a ponta contra o app em produção e comenta o veredito; reabre o PRD com ready-for-human se algo falhar (ADR 0029)."
 model: claude-opus-5-5
 effort: high
 tools: Bash, Read, Grep, Glob
