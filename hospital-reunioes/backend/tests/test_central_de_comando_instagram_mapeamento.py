@@ -114,6 +114,16 @@ class TestDentroDoPeriodo:
         assert ig.dentro_do_periodo("2026-06-21T23:00:00Z", intervalo) is True
         assert ig.dentro_do_periodo("2026-06-14T23:00:00Z", intervalo) is False
 
+    # O dia da publicação é o de Brasília (issue #873), como o fim do período
+    # desde a #857. A Graph API manda o timestamp em UTC com offset `+0000`;
+    # Brasília é UTC-3, então 01h UTC é 22h da véspera no hospital.
+
+    def test_22h_de_brasilia_do_ultimo_dia_entra(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # 19/09 às 22h em Brasília, que em UTC já é 20/09 às 01h.
+        assert ig.dentro_do_periodo("2026-09-20T01:00:00+0000", intervalo) is True
+
 
 class TestParaPublicacao:
     def test_miniatura_cai_para_media_url_quando_nao_ha_thumbnail(self):
