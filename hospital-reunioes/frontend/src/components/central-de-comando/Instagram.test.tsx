@@ -201,6 +201,23 @@ describe("Instagram: principais publicações", () => {
     expect(screen.getByText(/1\.840 interações/)).toBeTruthy();
   });
 
+  it("publicação sem miniatura mostra o marcador no lugar da imagem, e não uma imagem quebrada", async () => {
+    const semMiniatura = payload28d();
+    semMiniatura.principais_publicacoes[1].miniatura = "";
+    servidor({ leitura: () => resposta(200, semMiniatura) });
+
+    render(<Instagram periodo="28d" />);
+
+    await screen.findByText("18.420");
+    const cartao = screen.getByRole("link", { name: /Bastidores da Maternidade/ });
+    expect(cartao.querySelector("img")).toBeNull();
+    expect(within(cartao).getByRole("img", { name: "Bastidores da Maternidade" })).toBeTruthy();
+    expect(within(cartao).getByText("Sem miniatura")).toBeTruthy();
+    // As outras seguem com a miniatura delas.
+    const comMiniatura = screen.getByRole("link", { name: /Mutirão de vacinação/ });
+    expect(comMiniatura.querySelector("img")?.getAttribute("src")).toBe("https://cdn/m1.jpg");
+  });
+
   it("sem publicações no período, mostra o estado vazio calmo", async () => {
     const semPosts = payload28d();
     semPosts.principais_publicacoes = [];

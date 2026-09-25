@@ -289,14 +289,7 @@ function GradeDePublicacoes({ publicacoes }: { publicacoes: PublicacaoDoPayload[
             rel="noopener noreferrer"
             className="block overflow-hidden rounded-xl border border-border bg-white transition-shadow hover:shadow-premium"
           >
-            {/* Miniatura externa da conta do Instagram: `<img>` puro, porque o
-                host da imagem é da rede e varia (o next/image pediria whitelist). */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={pub.miniatura}
-              alt={pub.legenda ?? "Publicação do Instagram"}
-              className="aspect-square w-full object-cover"
-            />
+            <Miniatura pub={pub} />
             <div className="space-y-1 p-3">
               <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
                 {pub.rotulo_tipo}
@@ -309,4 +302,42 @@ function GradeDePublicacoes({ publicacoes }: { publicacoes: PublicacaoDoPayload[
       ))}
     </ul>
   );
+}
+
+/**
+ * A miniatura da publicação, ou o marcador quando não há uma para mostrar: a
+ * publicação sem `thumbnail_url` nem `media_url` chega com a miniatura vazia, e
+ * vira o marcador, nunca uma imagem quebrada (issue #846). O nome acessível é
+ * o mesmo nos dois casos, a legenda.
+ */
+function Miniatura({ pub }: { pub: PublicacaoDoPayload }) {
+  const descricao = pub.legenda ?? "Publicação do Instagram";
+  if (!ehHttps(pub.miniatura)) {
+    return (
+      <div
+        role="img"
+        aria-label={descricao}
+        className="flex aspect-square w-full flex-col items-center justify-center gap-2 bg-surface text-text-secondary"
+      >
+        <Camera className="h-8 w-8" aria-hidden="true" />
+        <span className="text-xs">Sem miniatura</span>
+      </div>
+    );
+  }
+  return (
+    <>
+      {/* Miniatura externa da conta do Instagram: `<img>` puro, porque o
+          host da imagem é da rede e varia (o next/image pediria whitelist). */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={pub.miniatura} alt={descricao} className="aspect-square w-full object-cover" />
+    </>
+  );
+}
+
+/**
+ * Só endereço `https://` vira `src` na tela (issue #846): a miniatura vazia, ou
+ * de outro esquema, fica de fora.
+ */
+function ehHttps(endereco: string): boolean {
+  return endereco.startsWith("https://");
 }
