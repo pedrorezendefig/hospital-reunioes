@@ -33,6 +33,13 @@ as pessoas `SUPER_ADMIN`, `SECRETARIA` e `FACILITADOR` (ou `pessoa(...)`) e o
     def test_...(google_falso, central_configurada):
         resposta = cliente_da_central(SUPER_ADMIN).get(f"{PREFIXO_DA_CENTRAL}/...")
 
+**Nenhum arquivo de teste importa outro** (a regra das fatias da Central, lição
+da primeira onda, #859). Importar um arquivo de teste roda o que ele roda na
+coleta e amarra um ao outro. O dublê, a fixture ou a constante que mais de um
+arquivo precisa mora aqui (ou no `dockerfile_apoio.py`), e o teste importa
+daqui. A trava é o `test_nenhum_arquivo_de_teste_da_central_importa_outro`, em
+`test_central_de_comando_um_processo.py`.
+
 Nenhuma fixture daqui é `autouse`: plugin vale para a suíte inteira, e só pede
 quem precisa. Nenhuma credencial de verdade mora aqui, e nada sai da máquina: a
 trava de rede do `tests/conftest.py` continua de pé.

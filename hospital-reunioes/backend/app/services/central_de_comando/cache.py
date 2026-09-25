@@ -27,12 +27,20 @@ nenhuma migration. O backend roda com um processo só (`CMD` do Dockerfile, sem
 Se um dia rodar com mais de um processo, cada um terá o seu: a mesma tela pode
 mostrar carimbos diferentes conforme o processo que responder, cada processo
 vai à fonte uma vez por hora e chave, e o Atualizar agora só renova o processo
-que o atendeu. É este o ponto que precisaria mudar (um cache compartilhado),
-como o PRD #809 já registra. Deploy do backend zera o cache, e logo depois de
-subir o backend o aquece uma vez, numa thread, no período padrão de cada tela
-(`aquecimento.py`, issue #867, ADR 0059, que emenda a 0058): a primeira abertura
-depois do deploy sai daqui. A troca de período e a abertura depois de horas sem
-ninguém olhando continuam indo à fonte.
+que o atendeu. O limitador de taxa do app (`slowapi`, balde em memória) é do
+processo pelo mesmo motivo: com mais processos, o limite do Atualizar agora vira
+um limite por processo. É este o ponto que precisaria mudar, com um cache
+compartilhado (como o PRD #809 já registra) e um limitador compartilhado, e a
+trava do processo único (`tests/test_central_de_comando_um_processo.py`) muda
+junto.
+
+**Deploy do backend zera o cache.** Logo depois de subir, o backend o aquece
+uma vez, numa thread, no período padrão de cada tela (`aquecimento.py`, issue
+#867, ADR 0059, que emenda a 0058): a primeira abertura depois do deploy sai
+daqui. A troca de período e a abertura depois de horas sem ninguém olhando
+continuam indo à fonte. Com a fonte fora na hora do aquecimento, nada fica
+guardado, e a primeira leitura depois do deploy é o erro honesto de quando não
+há número guardado, como era antes da #867.
 
 **Chaves finitas.** A chave é tela e período (`telas.py`), e as telas e os
 períodos são poucos e fixos: nada precisa ser despejado.
