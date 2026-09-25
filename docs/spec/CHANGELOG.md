@@ -19,6 +19,7 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `f5383e1`
 - PRs: [#880](https://github.com/pedrorezendefig/hospital-reunioes/pull/880), [#882](https://github.com/pedrorezendefig/hospital-reunioes/pull/882), [#883](https://github.com/pedrorezendefig/hospital-reunioes/pull/883)
+- Levou junto, mergeados antes sem deploy: [#877](https://github.com/pedrorezendefig/hospital-reunioes/pull/877) (lições da primeira onda nos docstrings, #859), [#878](https://github.com/pedrorezendefig/hospital-reunioes/pull/878) (acabamentos das revisões da Central, Ao vivo, pin do python-jose e conector MCP, #843)
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (15s)
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f5383e1
