@@ -283,24 +283,42 @@ function GradeDePublicacoes({ publicacoes }: { publicacoes: PublicacaoDoPayload[
     <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {publicacoes.map((pub) => (
         <li key={pub.id}>
-          <a
-            href={pub.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block overflow-hidden rounded-xl border border-border bg-white transition-shadow hover:shadow-premium"
-          >
-            <Miniatura pub={pub} />
-            <div className="space-y-1 p-3">
-              <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                {pub.rotulo_tipo}
-              </span>
-              {pub.legenda && <p className="line-clamp-2 text-sm text-text">{pub.legenda}</p>}
-              <p className="text-xs text-text-secondary">{formatarInteiro(pub.interacoes)} interações</p>
-            </div>
-          </a>
+          <CartaoDaPublicacao pub={pub} />
         </li>
       ))}
     </ul>
+  );
+}
+
+/**
+ * Uma publicação da grade. Abre no Instagram, em outra aba, só se o link for
+ * `https://` (issue #846): link de outro esquema não vira `href`, e a
+ * publicação aparece do mesmo jeito, sem link.
+ */
+function CartaoDaPublicacao({ pub }: { pub: PublicacaoDoPayload }) {
+  const moldura = "block overflow-hidden rounded-xl border border-border bg-white";
+  const conteudo = (
+    <>
+      <Miniatura pub={pub} />
+      <div className="space-y-1 p-3">
+        <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+          {pub.rotulo_tipo}
+        </span>
+        {pub.legenda && <p className="line-clamp-2 text-sm text-text">{pub.legenda}</p>}
+        <p className="text-xs text-text-secondary">{formatarInteiro(pub.interacoes)} interações</p>
+      </div>
+    </>
+  );
+  if (!ehHttps(pub.link)) return <div className={moldura}>{conteudo}</div>;
+  return (
+    <a
+      href={pub.link}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`${moldura} transition-shadow hover:shadow-premium`}
+    >
+      {conteudo}
+    </a>
   );
 }
 
@@ -335,8 +353,9 @@ function Miniatura({ pub }: { pub: PublicacaoDoPayload }) {
 }
 
 /**
- * Só endereço `https://` vira `src` na tela (issue #846): a miniatura vazia, ou
- * de outro esquema, fica de fora.
+ * Só endereço `https://` vira `src` ou `href` na tela (issue #846): a miniatura
+ * vazia, ou de outro esquema, vira o marcador; o link de outro esquema, como
+ * `javascript:` ou `http://`, não vira link.
  */
 function ehHttps(endereco: string): boolean {
   return endereco.startsWith("https://");

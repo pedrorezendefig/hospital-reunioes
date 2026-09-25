@@ -218,6 +218,25 @@ describe("Instagram: principais publicações", () => {
     expect(comMiniatura.querySelector("img")?.getAttribute("src")).toBe("https://cdn/m1.jpg");
   });
 
+  it.each([["javascript:alert(1)"], ["http://www.instagram.com/p/m3"], [""]])(
+    "link que não é https (%j) não vira href: a publicação aparece, sem link",
+    async (link) => {
+      const comLinkRuim = payload28d();
+      comLinkRuim.principais_publicacoes[2].link = link;
+      servidor({ leitura: () => resposta(200, comLinkRuim) });
+
+      render(<Instagram periodo="28d" />);
+
+      await screen.findByText("18.420");
+      expect(screen.getByText("Dicas do cardiologista")).toBeTruthy();
+      expect(screen.queryByRole("link", { name: /Dicas do cardiologista/ })).toBeNull();
+      expect(screen.getByText(/1\.190 interações/)).toBeTruthy();
+      // As outras seguem com o link delas.
+      const mutirao = screen.getByRole("link", { name: /Mutirão de vacinação/ });
+      expect(mutirao.getAttribute("href")).toBe("https://www.instagram.com/p/m1");
+    },
+  );
+
   it("sem publicações no período, mostra o estado vazio calmo", async () => {
     const semPosts = payload28d();
     semPosts.principais_publicacoes = [];
