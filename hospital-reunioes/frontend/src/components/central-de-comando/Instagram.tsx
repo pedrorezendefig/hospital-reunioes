@@ -16,10 +16,10 @@
  * que falta e não mostra número; com o token vencido e números guardados, o
  * backend manda o último valor bom e a `BarraDeFrescor` avisa da renovação;
  * com o token vencido e nada guardado, o aviso é calmo, com a mesma frase de
- * renovação, e não o erro técnico (issue #846). O
- * frescor, o Atualizar agora e a renovação de hora em hora moram no
- * `useTelaDaCentral`. Os dados só saem do backend, que exige Super admin em
- * toda rota: esta tela não confia no guard do `layout.tsx` para nada.
+ * renovação, e não o erro técnico (issue #846). O frescor, o Atualizar agora e
+ * a renovação de hora em hora moram no `useTelaDaCentral`. Os dados só saem do
+ * backend, que exige Super admin em toda rota: esta tela não confia no guard do
+ * `layout.tsx` para nada.
  */
 
 import { AlertTriangle, ArrowDown, ArrowUp, Camera, KeyRound, Loader2, PlugZap } from "lucide-react";
@@ -325,8 +325,9 @@ function CartaoDaPublicacao({ pub }: { pub: PublicacaoDoPayload }) {
 /**
  * A miniatura da publicação, ou o marcador quando não há uma para mostrar: a
  * publicação sem `thumbnail_url` nem `media_url` chega com a miniatura vazia, e
- * vira o marcador, nunca uma imagem quebrada (issue #846). O nome acessível é
- * o mesmo nos dois casos, a legenda.
+ * vira o marcador, nunca uma imagem quebrada (issue #846). A miniatura que não
+ * é `https://` também vira o marcador, pela mesma regra do link. O nome
+ * acessível é o mesmo nos dois casos, a legenda.
  */
 function Miniatura({ pub }: { pub: PublicacaoDoPayload }) {
   const descricao = pub.legenda ?? "Publicação do Instagram";

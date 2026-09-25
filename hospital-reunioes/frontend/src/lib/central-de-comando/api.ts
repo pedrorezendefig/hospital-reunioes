@@ -69,6 +69,8 @@ export const SEM_SESSAO =
  * A causa que o backend manda ao lado do `detail` no 502 do token vencido do
  * Instagram sem número guardado (issue #846). Não é a fonte fora: é o acesso a
  * renovar, e a tela do Instagram troca o erro técnico pelo aviso calmo.
+ * Espelha a `CAUSA_TOKEN_VENCIDO` de
+ * `backend/app/routers/admin/central_de_comando.py`: renomear lá é renomear aqui.
  */
 export const CAUSA_TOKEN_VENCIDO = "token-vencido";
 

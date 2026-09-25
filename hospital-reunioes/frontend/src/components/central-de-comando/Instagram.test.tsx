@@ -201,22 +201,30 @@ describe("Instagram: principais publicações", () => {
     expect(screen.getByText(/1\.840 interações/)).toBeTruthy();
   });
 
-  it("publicação sem miniatura mostra o marcador no lugar da imagem, e não uma imagem quebrada", async () => {
-    const semMiniatura = payload28d();
-    semMiniatura.principais_publicacoes[1].miniatura = "";
-    servidor({ leitura: () => resposta(200, semMiniatura) });
+  // A miniatura vazia é o pedido da issue; a `http://` segue a mesma regra do
+  // link (só `https://` vira `src`), e não uma imagem de conteúdo misto.
+  it.each([
+    ["vazia", ""],
+    ["http://", "http://cdn/m2.jpg"],
+  ])(
+    "publicação com miniatura %s mostra o marcador no lugar da imagem, e não uma imagem quebrada",
+    async (_caso, miniatura) => {
+      const semMiniatura = payload28d();
+      semMiniatura.principais_publicacoes[1].miniatura = miniatura;
+      servidor({ leitura: () => resposta(200, semMiniatura) });
 
-    render(<Instagram periodo="28d" />);
+      render(<Instagram periodo="28d" />);
 
-    await screen.findByText("18.420");
-    const cartao = screen.getByRole("link", { name: /Bastidores da Maternidade/ });
-    expect(cartao.querySelector("img")).toBeNull();
-    expect(within(cartao).getByRole("img", { name: "Bastidores da Maternidade" })).toBeTruthy();
-    expect(within(cartao).getByText("Sem miniatura")).toBeTruthy();
-    // As outras seguem com a miniatura delas.
-    const comMiniatura = screen.getByRole("link", { name: /Mutirão de vacinação/ });
-    expect(comMiniatura.querySelector("img")?.getAttribute("src")).toBe("https://cdn/m1.jpg");
-  });
+      await screen.findByText("18.420");
+      const cartao = screen.getByRole("link", { name: /Bastidores da Maternidade/ });
+      expect(cartao.querySelector("img")).toBeNull();
+      expect(within(cartao).getByRole("img", { name: "Bastidores da Maternidade" })).toBeTruthy();
+      expect(within(cartao).getByText("Sem miniatura")).toBeTruthy();
+      // As outras seguem com a miniatura delas.
+      const comMiniatura = screen.getByRole("link", { name: /Mutirão de vacinação/ });
+      expect(comMiniatura.querySelector("img")?.getAttribute("src")).toBe("https://cdn/m1.jpg");
+    },
+  );
 
   it.each([["javascript:alert(1)"], ["http://www.instagram.com/p/m3"], [""]])(
     "link que não é https (%j) não vira href: a publicação aparece, sem link",

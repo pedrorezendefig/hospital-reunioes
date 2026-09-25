@@ -41,11 +41,14 @@ tradução só para o Google e o Instagram. O Ao vivo não passa pelo cache.
 
 from __future__ import annotations
 
+from collections.abc import Callable, Coroutine
 from functools import partial
+from typing import Any
 
 import anyio.to_thread
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
+from fastapi.routing import APIRoute
 
 from app.dependencies import require_super_admin
 from app.limiter import limiter
@@ -74,12 +77,54 @@ OBJETIVO_INEXISTENTE = "A Central não tem esse Objetivo."
 # É o sinal que a tela lê para trocar o erro técnico pelo aviso calmo de
 # renovação; o `detail` é a mesma frase de renovação do caso com número
 # guardado. As outras falhas da fonte seguem o 502 só com o `detail`.
+# Espelhada no front em `frontend/src/lib/central-de-comando/api.ts`: renomear
+# aqui é renomear lá.
 CAUSA_TOKEN_VENCIDO = "token-vencido"
+
+
+class FalhaComCausa(HTTPException):
+    """Um `HTTPException` que leva a `causa` ao lado do `detail` (issue #846).
+
+    O `_do_fonte` levanta esta falha, e nunca devolve uma resposta pronta: quem
+    embrulha o retorno dele (o Ao vivo faz `{"pessoas": await _do_fonte(...)}`)
+    só recebe dado ou exceção. Quem escreve `detail` + `causa` no corpo é a
+    `_RotaDaCentral`. Fora dela, cai no tratador padrão do `HTTPException` e
+    sai o 502 só com o `detail`, que é o erro honesto de sempre.
+    """
+
+    def __init__(self, status_code: int, detail: str, causa: str) -> None:
+        super().__init__(status_code=status_code, detail=detail)
+        self.causa = causa
+
+
+class _RotaDaCentral(APIRoute):
+    """Toda rota da Central escreve a `FalhaComCausa` com `detail` + `causa`.
+
+    Vive no router, e não num `exception_handler` do app, para valer igual no
+    app de produção e no app mínimo dos testes, sem registro em dois lugares.
+    """
+
+    def get_route_handler(self) -> Callable[[Request], Coroutine[Any, Any, Response]]:
+        tratador = super().get_route_handler()
+
+        async def com_causa(request: Request) -> Response:
+            try:
+                return await tratador(request)
+            except FalhaComCausa as exc:
+                return JSONResponse(
+                    status_code=exc.status_code,
+                    content={"detail": exc.detail, "causa": exc.causa},
+                    headers=exc.headers,
+                )
+
+        return com_causa
+
 
 router = APIRouter(
     prefix="/admin/central-de-comando",
     tags=["admin", "central-de-comando"],
     dependencies=[Depends(require_super_admin)],
+    route_class=_RotaDaCentral,
 )
 
 
@@ -96,8 +141,8 @@ async def _do_fonte(funcao, *args):
     qualquer tela do registro, então a falha do Instagram precisa virar HTTP
     aqui como a do Google. O token vencido do Instagram é subclasse de
     `InstagramError` e, sem número guardado, também é 502, mas com a
-    `CAUSA_TOKEN_VENCIDO` no corpo (issue #846). Esse 502 é devolvido, e não
-    levantado: o tratador padrão do `HTTPException` só escreve o `detail`.
+    `CAUSA_TOKEN_VENCIDO` no corpo (issue #846), levantado como `FalhaComCausa`.
+    Toda falha aqui é levantada, nunca devolvida como resposta.
     """
     try:
         return await anyio.to_thread.run_sync(funcao, *args)
@@ -109,10 +154,9 @@ async def _do_fonte(funcao, *args):
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
     except provedor_instagram.InstagramTokenExpiradoError as exc:
         # Antes da tupla de baixo, que o pegaria por ser subclasse.
-        return JSONResponse(
-            status_code=status.HTTP_502_BAD_GATEWAY,
-            content={"detail": str(exc), "causa": CAUSA_TOKEN_VENCIDO},
-        )
+        raise FalhaComCausa(
+            status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc), causa=CAUSA_TOKEN_VENCIDO
+        ) from exc
     except (provedor_google.GoogleError, provedor_instagram.InstagramError) as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 

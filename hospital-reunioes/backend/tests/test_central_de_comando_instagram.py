@@ -197,3 +197,26 @@ class TestTokenVencido:
 
         assert resposta.status_code == 502
         assert set(resposta.json()) == {"detail"}
+
+
+class TestDoFonteSempreLevanta:
+    def test_token_vencido_levanta_a_falha_com_causa_e_nao_devolve_resposta(self):
+        """O `_do_fonte` levanta em toda falha, inclusive no token vencido: quem
+        embrulha o retorno (o Ao vivo faz `{"pessoas": await _do_fonte(...)}`)
+        nunca recebe uma resposta pronta no lugar do dado. A causa viaja na
+        exceção, e a rota escreve `detail` + `causa` (revisão do PR #884)."""
+        import anyio
+        from fastapi import HTTPException
+
+        from app.routers.admin import central_de_comando as central_router
+
+        def falha():
+            raise provedor_instagram.InstagramTokenExpiradoError("O acesso ao Instagram expirou.")
+
+        with pytest.raises(HTTPException) as capturada:
+            anyio.run(central_router._do_fonte, falha)
+
+        assert isinstance(capturada.value, central_router.FalhaComCausa)
+        assert capturada.value.status_code == 502
+        assert capturada.value.detail == "O acesso ao Instagram expirou."
+        assert capturada.value.causa == "token-vencido"
