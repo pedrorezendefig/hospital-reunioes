@@ -201,6 +201,50 @@ describe("Instagram: principais publicações", () => {
     expect(screen.getByText(/1\.840 interações/)).toBeTruthy();
   });
 
+  // A miniatura vazia é o pedido da issue; a `http://` segue a mesma regra do
+  // link (só `https://` vira `src`), e não uma imagem de conteúdo misto.
+  it.each([
+    ["vazia", ""],
+    ["http://", "http://cdn/m2.jpg"],
+  ])(
+    "publicação com miniatura %s mostra o marcador no lugar da imagem, e não uma imagem quebrada",
+    async (_caso, miniatura) => {
+      const semMiniatura = payload28d();
+      semMiniatura.principais_publicacoes[1].miniatura = miniatura;
+      servidor({ leitura: () => resposta(200, semMiniatura) });
+
+      render(<Instagram periodo="28d" />);
+
+      await screen.findByText("18.420");
+      const cartao = screen.getByRole("link", { name: /Bastidores da Maternidade/ });
+      expect(cartao.querySelector("img")).toBeNull();
+      expect(within(cartao).getByRole("img", { name: "Bastidores da Maternidade" })).toBeTruthy();
+      expect(within(cartao).getByText("Sem miniatura")).toBeTruthy();
+      // As outras seguem com a miniatura delas.
+      const comMiniatura = screen.getByRole("link", { name: /Mutirão de vacinação/ });
+      expect(comMiniatura.querySelector("img")?.getAttribute("src")).toBe("https://cdn/m1.jpg");
+    },
+  );
+
+  it.each([["javascript:alert(1)"], ["http://www.instagram.com/p/m3"], [""]])(
+    "link que não é https (%j) não vira href: a publicação aparece, sem link",
+    async (link) => {
+      const comLinkRuim = payload28d();
+      comLinkRuim.principais_publicacoes[2].link = link;
+      servidor({ leitura: () => resposta(200, comLinkRuim) });
+
+      render(<Instagram periodo="28d" />);
+
+      await screen.findByText("18.420");
+      expect(screen.getByText("Dicas do cardiologista")).toBeTruthy();
+      expect(screen.queryByRole("link", { name: /Dicas do cardiologista/ })).toBeNull();
+      expect(screen.getByText(/1\.190 interações/)).toBeTruthy();
+      // As outras seguem com o link delas.
+      const mutirao = screen.getByRole("link", { name: /Mutirão de vacinação/ });
+      expect(mutirao.getAttribute("href")).toBe("https://www.instagram.com/p/m1");
+    },
+  );
+
   it("sem publicações no período, mostra o estado vazio calmo", async () => {
     const semPosts = payload28d();
     semPosts.principais_publicacoes = [];
@@ -241,6 +285,30 @@ describe("Instagram: estados de erro", () => {
     expect(await screen.findByText("18.420")).toBeTruthy();
     expect(screen.getByText(/Renove o token/)).toBeTruthy();
     expect(screen.getByText(/Não foi possível atualizar agora/)).toBeTruthy();
+  });
+
+  it("token vencido sem número guardado: mostra o aviso calmo de renovação, e não o erro técnico", async () => {
+    const frase = "O acesso ao Instagram expirou. Renove o token para voltar a atualizar os números.";
+    servidor({ leitura: () => resposta(502, { detail: frase, causa: "token-vencido" }) });
+
+    render(<Instagram periodo="28d" />);
+
+    const aviso = (await screen.findByText(frase)).closest("[role]");
+    expect(aviso?.getAttribute("role")).toBe("status");
+    expect(within(aviso as HTMLElement).getByText(/renovar o acesso/i)).toBeTruthy();
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.queryByText(/Não foi possível buscar/)).toBeNull();
+    expect(screen.queryByText("18.420")).toBeNull();
+  });
+
+  it("outra falha sem número guardado: segue o erro honesto, com a frase do servidor", async () => {
+    servidor({ leitura: () => resposta(502, { detail: "O Instagram não respondeu." }) });
+
+    render(<Instagram periodo="28d" />);
+
+    const alerta = await screen.findByRole("alert");
+    expect(within(alerta).getByText(/Não foi possível buscar/)).toBeTruthy();
+    expect(within(alerta).getByText("O Instagram não respondeu.")).toBeTruthy();
   });
 
   it("conta não configurada: mostra a tela calma com a frase do backend", async () => {

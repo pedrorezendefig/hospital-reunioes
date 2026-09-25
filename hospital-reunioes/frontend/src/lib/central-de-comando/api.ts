@@ -66,26 +66,46 @@ export const SEM_SESSAO =
   "Não foi possível carregar os números: a sessão não está ativa ou o servidor não respondeu. Tente recarregar a página.";
 
 /**
+ * A causa que o backend manda ao lado do `detail` no 502 do token vencido do
+ * Instagram sem número guardado (issue #846). Não é a fonte fora: é o acesso a
+ * renovar, e a tela do Instagram troca o erro técnico pelo aviso calmo.
+ * Espelha a `CAUSA_TOKEN_VENCIDO` de
+ * `backend/app/routers/admin/central_de_comando.py`: renomear lá é renomear aqui.
+ */
+export const CAUSA_TOKEN_VENCIDO = "token-vencido";
+
+/**
  * Como a resposta do backend chega à tela:
  *
  * - `nao-configurado`: 503 COM a frase do backend no `detail`, que é como o
  *   router da Central diz que falta configurar a fonte;
  * - `falhou`: todo o resto, inclusive o 503 cru de um proxy no meio de um
- *   deploy, que não é falta de configuração nenhuma.
+ *   deploy, que não é falta de configuração nenhuma. O 502 com a
+ *   `CAUSA_TOKEN_VENCIDO` no corpo chega com a `causa`: a tela que conhece a
+ *   causa mostra o aviso calmo, e a que não conhece segue no erro honesto.
  *
  * A frase mostrada é a do servidor, que sabe o que houve. A tela não inventa
  * causa, e nunca troca o erro por um zero.
  */
-export type Recusa = { tipo: "nao-configurado" | "falhou"; mensagem: string };
+export type Recusa = {
+  tipo: "nao-configurado" | "falhou";
+  mensagem: string;
+  causa?: typeof CAUSA_TOKEN_VENCIDO;
+};
 
 export async function lerRecusa(resposta: Response): Promise<Recusa> {
   let frase: string | null = null;
+  let causa: unknown = null;
   try {
     const corpo = await resposta.json();
     if (typeof corpo?.detail === "string") frase = corpo.detail;
+    causa = corpo?.causa;
   } catch {
     // Resposta sem corpo JSON: sobra o status.
   }
   if (resposta.status === 503 && frase) return { tipo: "nao-configurado", mensagem: frase };
+  if (resposta.status === 502 && frase && causa === CAUSA_TOKEN_VENCIDO) {
+    return { tipo: "falhou", mensagem: frase, causa: CAUSA_TOKEN_VENCIDO };
+  }
   return { tipo: "falhou", mensagem: frase ?? `O servidor respondeu ${resposta.status}.` };
 }

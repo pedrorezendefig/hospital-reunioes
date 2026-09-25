@@ -14,15 +14,17 @@
  *
  * Honestidade do dado, como nas outras telas: sem credencial (503) a tela diz o
  * que falta e não mostra número; com o token vencido e números guardados, o
- * backend manda o último valor bom e a `BarraDeFrescor` avisa da renovação. O
- * frescor, o Atualizar agora e a renovação de hora em hora moram no
- * `useTelaDaCentral`. Os dados só saem do backend, que exige Super admin em
- * toda rota: esta tela não confia no guard do `layout.tsx` para nada.
+ * backend manda o último valor bom e a `BarraDeFrescor` avisa da renovação;
+ * com o token vencido e nada guardado, o aviso é calmo, com a mesma frase de
+ * renovação, e não o erro técnico (issue #846). O frescor, o Atualizar agora e
+ * a renovação de hora em hora moram no `useTelaDaCentral`. Os dados só saem do
+ * backend, que exige Super admin em toda rota: esta tela não confia no guard do
+ * `layout.tsx` para nada.
  */
 
-import { AlertTriangle, ArrowDown, ArrowUp, Camera, Loader2, PlugZap } from "lucide-react";
+import { AlertTriangle, ArrowDown, ArrowUp, Camera, KeyRound, Loader2, PlugZap } from "lucide-react";
 
-import type { Frescor } from "@/lib/central-de-comando/api";
+import { CAUSA_TOKEN_VENCIDO, type Frescor } from "@/lib/central-de-comando/api";
 import { formatarInteiro, formatarPercentual } from "@/lib/central-de-comando/formato";
 import { PERIODOS_DO_INSTAGRAM, type Periodo } from "@/lib/central-de-comando/periodo";
 
@@ -66,6 +68,7 @@ export type InstagramPayload = {
 
 export function Instagram({ periodo }: { periodo: Periodo }) {
   const { estado, atualizando, aviso, atualizarAgora } = useTelaDaCentral<InstagramPayload>("instagram", periodo);
+  const tokenVencido = estado.tipo === "falhou" && estado.causa === CAUSA_TOKEN_VENCIDO;
 
   return (
     <div className="animate-fade-in-up space-y-6">
@@ -145,7 +148,17 @@ export function Instagram({ periodo }: { periodo: Periodo }) {
         </div>
       )}
 
-      {(estado.tipo === "falhou" || estado.tipo === "sem-conexao") && (
+      {tokenVencido && (
+        <div role="status" className="flex gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-6 text-amber-900">
+          <KeyRound className="mt-0.5 h-5 w-5 shrink-0" />
+          <div className="space-y-1">
+            <p className="font-semibold">É preciso renovar o acesso ao Instagram</p>
+            <p className="text-sm">{estado.mensagem}</p>
+          </div>
+        </div>
+      )}
+
+      {((estado.tipo === "falhou" && !tokenVencido) || estado.tipo === "sem-conexao") && (
         <div role="alert" className="flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="space-y-1">
@@ -270,30 +283,81 @@ function GradeDePublicacoes({ publicacoes }: { publicacoes: PublicacaoDoPayload[
     <ul className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
       {publicacoes.map((pub) => (
         <li key={pub.id}>
-          <a
-            href={pub.link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="block overflow-hidden rounded-xl border border-border bg-white transition-shadow hover:shadow-premium"
-          >
-            {/* Miniatura externa da conta do Instagram: `<img>` puro, porque o
-                host da imagem é da rede e varia (o next/image pediria whitelist). */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={pub.miniatura}
-              alt={pub.legenda ?? "Publicação do Instagram"}
-              className="aspect-square w-full object-cover"
-            />
-            <div className="space-y-1 p-3">
-              <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
-                {pub.rotulo_tipo}
-              </span>
-              {pub.legenda && <p className="line-clamp-2 text-sm text-text">{pub.legenda}</p>}
-              <p className="text-xs text-text-secondary">{formatarInteiro(pub.interacoes)} interações</p>
-            </div>
-          </a>
+          <CartaoDaPublicacao pub={pub} />
         </li>
       ))}
     </ul>
   );
+}
+
+/**
+ * Uma publicação da grade. Abre no Instagram, em outra aba, só se o link for
+ * `https://` (issue #846): link de outro esquema não vira `href`, e a
+ * publicação aparece do mesmo jeito, sem link.
+ */
+function CartaoDaPublicacao({ pub }: { pub: PublicacaoDoPayload }) {
+  const moldura = "block overflow-hidden rounded-xl border border-border bg-white";
+  const conteudo = (
+    <>
+      <Miniatura pub={pub} />
+      <div className="space-y-1 p-3">
+        <span className="inline-block rounded-full bg-primary/10 px-2 py-0.5 text-xs font-medium text-primary">
+          {pub.rotulo_tipo}
+        </span>
+        {pub.legenda && <p className="line-clamp-2 text-sm text-text">{pub.legenda}</p>}
+        <p className="text-xs text-text-secondary">{formatarInteiro(pub.interacoes)} interações</p>
+      </div>
+    </>
+  );
+  if (!ehHttps(pub.link)) return <div className={moldura}>{conteudo}</div>;
+  return (
+    <a
+      href={pub.link}
+      target="_blank"
+      rel="noopener noreferrer"
+      className={`${moldura} transition-shadow hover:shadow-premium`}
+    >
+      {conteudo}
+    </a>
+  );
+}
+
+/**
+ * A miniatura da publicação, ou o marcador quando não há uma para mostrar: a
+ * publicação sem `thumbnail_url` nem `media_url` chega com a miniatura vazia, e
+ * vira o marcador, nunca uma imagem quebrada (issue #846). A miniatura que não
+ * é `https://` também vira o marcador, pela mesma regra do link. O nome
+ * acessível é o mesmo nos dois casos, a legenda.
+ */
+function Miniatura({ pub }: { pub: PublicacaoDoPayload }) {
+  const descricao = pub.legenda ?? "Publicação do Instagram";
+  if (!ehHttps(pub.miniatura)) {
+    return (
+      <div
+        role="img"
+        aria-label={descricao}
+        className="flex aspect-square w-full flex-col items-center justify-center gap-2 bg-surface text-text-secondary"
+      >
+        <Camera className="h-8 w-8" aria-hidden="true" />
+        <span className="text-xs">Sem miniatura</span>
+      </div>
+    );
+  }
+  return (
+    <>
+      {/* Miniatura externa da conta do Instagram: `<img>` puro, porque o
+          host da imagem é da rede e varia (o next/image pediria whitelist). */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={pub.miniatura} alt={descricao} className="aspect-square w-full object-cover" />
+    </>
+  );
+}
+
+/**
+ * Só endereço `https://` vira `src` ou `href` na tela (issue #846): a miniatura
+ * vazia, ou de outro esquema, vira o marcador; o link de outro esquema, como
+ * `javascript:` ou `http://`, não vira link.
+ */
+function ehHttps(endereco: string): boolean {
+  return endereco.startsWith("https://");
 }
