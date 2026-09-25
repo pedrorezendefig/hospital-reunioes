@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.156.2 - 2026-09-25 17:51 - Onda onda-a: Acabamentos do Instagram, aviso calmo do token vencido sem número guardado, marcador de miniatura e link só https
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `fd5e4cc`
+- PRs: [#884](https://github.com/pedrorezendefig/hospital-reunioes/pull/884)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (12s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/fd5e4cc
+
 ## v0.156.1 - 2026-09-25 16:57 - Onda onda-a: Tira o andaime da fase dormente (EmConstrucao e comentário do config); Publicações do Instagram entram no período pelo dia de Brasília; Acabamentos dos Objetivos, uma leitura do Instagram
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `f5383e1`

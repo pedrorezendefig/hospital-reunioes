@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-25T17:51:27-03:00",
+      "sha": "fd5e4cc2",
+      "app_version": "0.156.2",
+      "subject": "Onda onda-a: Acabamentos do Instagram, aviso calmo do token vencido sem número guardado, marcador de miniatura e link só https",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#884)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 12,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #884. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-09-25T16:57:42-03:00",
       "sha": "f5383e1a",
       "app_version": "0.156.1",
@@ -1502,38 +1534,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 2 desta sessao: issue #637 sozinha, a fatia G e a maior do PRD #634. Entrega a Demanda nascendo e andando no Quadro: cinco colunas, o card, o modal, a maquina de estados e a Conversa em modo leitura. Seis rotas novas em /api/admin/tecnologia, todas com require_super_admin, o que leva a aba a 10 rotas e 10 gates. NENHUMA MIGRATION: as tres tabelas ja nasceram no formato final na 102 da fatia #636, e o diff nao toca supabase/ em lugar nenhum. Conferido pelo orquestrador antes e depois de cada rodada de correcao. A maquina de estados vive em app/services/tecnologia.py como funcao pura sem I/O. Cinco estados dao 25 pares: 12 permitidas e 13 proibidas, e a revisao conferiu par a par contra a issue e a decisao 5 do ADR 0050, sem nenhuma inventada nem omitida. O CHECK da 102 restringe so os VALORES de estado, nao as transicoes, entao nao existe regra em dois lugares para divergir: quem barra o salto e o Python, como a propria migration documenta. Concluir e cancelar carimbam quem e quando; reabrir LIMPA os quatro campos, e isso esta provado pela rota e nao so pela funcao pura (um update parcial deixaria concluida_em preenchido numa Demanda em andamento). Quatro revisoes independentes rodaram sobre este PR: codigo, seguranca, uma rodada 2 e uma verificacao final. Somaram 4 must-fix na primeira leva, 1 na segunda e 0 na ultima. O achado mais importante da primeira leva foi de coerencia entre portas: criar Demanda entregava o card ao dono do Produto que ja tinha PERDIDO o acesso a aba, enquanto POST /atribuir recusava exatamente essa pessoa com 422. O app criava por uma porta o estado que recusava pela outra, e o card ficava com um responsavel que nao conseguia abrir a aba; pior, o modal mostrava 'Sem responsavel' enquanto o card mostrava o nome. A decisao do orquestrador foi recusar na criacao, alinhando com a porta de atribuir, com a frase apontando a saida ('Troque o dono na lista de Produtos, logo abaixo do Quadro'), porque o guarda-corpo so e legitimo quando quem leva a recusa TEM onde carimbar: aqui tem, na mesma tela, e a decisao 11 do ADR 0050 diz que todos dentro da aba podem tudo. A rodada 2 confirmou que nao existe estado em que o Super admin fique sem poder criar Demanda nenhuma. Os outros tres da primeira leva: apagar o Titulo no modal mostrava JSON cru do pydantic ao Super admin (o min_length=1 respondia antes da frase de gente); sessao sem token deixava o Quadro com cinco colunas zeradas e caladas, indistinguivel de 'nao ha Demanda', que e a mesma falha da fatia #636 com outra causa; e o piso da varredura do gate continuava em 4 rotas com 10 publicadas, o que deixaria as 6 novas sairem da matriz de 403 em silencio numa fatia futura, a morte por varredura parcial das issues #542 e #546 graduada. A rodada 2 achou uma REGRESSAO introduzida pela propria correcao anterior, e esse foi o achado mais fino da onda: o aviso de sessao novo disparava em TODA abertura da aba, porque o QuadroDemandas recebia token por prop e nao sabia que a autenticacao ainda estava resolvendo (o useAuth nasce com token nulo e loading true, e so entrega o token depois de duas idas a rede). O alerta vermelho piscava com a sessao perfeitamente valida. Nenhum teste pegou porque o mock de useAuth cravava loading: false nos dois arquivos, entao o estado de boot nunca era exercido. O revisor provou com sonda, nao deduziu. A correcao passou carregandoAuth ao Quadro e tornou o mock parametrizavel, com dois testes, um por nivel, porque a regressao nasceu justamente da distancia entre eles. A verificacao final rodou a mesma sonda de novo e mediu a diferenca entre consertar e esconder: o mutante 'calar sempre' derruba 27 testes, o mutante 'tirar a guarda' derruba 2. Outros consertos que sairam de nit: TOCTOU no mover (o update passou a amarrar .eq('estado', de), e resultado vazio vira 409); a falha ao gravar a linha do fio deixou de passar calada (sem RPC, por decisao do orquestrador: confere o retorno, pega httpx.HTTPError junto com APIError, e devolve 500 honesto dizendo que a Demanda mudou mas o fio ficou incompleto, porque dizer 'nao deu certo' seria mentira); a frase do 409 parou de culpar causa unica e de afirmar onde a Demanda esta, passando a falar so do desfecho; o log parou de gravar o texto do movimento, que carregava nome de pessoa; e o Select de dono do Produto ganhou a marca '(sem acesso a aba)', porque a frase da recusa mandava ir ate a lista de Produtos e la o dono problematico aparecia com nome normal, carimbo do backend sem par na tela. O deploy correu limpo: aprendendo com a onda 1, o APP_VERSION foi gravado no Coolify ANTES do merge, e o /api/health subiu direto em 0.118.0 sem redeploy extra. Codigo novo provado em producao sem login pelo par 401 contra 404: /demandas, /demandas/{id}/conversa e POST /demandas/{id}/mover respondem 401, uma rota irma inventada responde 404, e /produtos da fatia anterior segue viva."
-    },
-    {
-      "at": "2026-09-09T01:52:14-03:00",
-      "sha": "ffa51d1",
-      "app_version": "0.117.0",
-      "subject": "a aba Tecnologia nasce com gate de Super admin e a gestao dos Produtos",
-      "raw_subject": "feat(tecnologia): aba Tecnologia com gate Super admin e gestao de Produtos (#643)",
-      "scope": [
-        "backend",
-        "frontend",
-        "supabase"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 260,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "102_tecnologia_fundacao.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 desta sessao: issue #636 sozinha, a fatia de fundacao do PRD #634 (aba Tecnologia, o quadro de Demandas entre o hospital e a Vitta, ADR 0050). Entrega a aba com gate de Super admin, a gestao de Produtos e as tres abas internas (Quadro, Minha vez, Historico) como casca vazia; a Demanda e a Conversa vem nas fatias #637 a #642, que nao criam migration porque as tres tabelas ja nascem na 102 no formato final. Quatro rotas novas em /api/admin/tecnologia, todas com require_super_admin e nenhuma com DELETE: desativar e a saida. O Gate 1.5 pegou um defeito que so aparecia no estado inicial do sistema: os sete Produtos do seed nascem ativos e SEM dono, porque e a propria migration que manda cria-los assim, e a guarda do PATCH olhava so o estado final, entao renomear qualquer um dos sete devolvia 422 'Produto ativo precisa de dono' na primeira abertura, culpando o Super admin por uma falta que ele nao provocou. A regra pura virou edicao_deixa_produto_ativo_sem_dono(antes, depois): recusa quando a edicao CRIA o estado ruim, passa quando apenas o herda, e quem cobra o dono dos sete passou a ser a tela, com a marca 'Falta dono'. E o caso da licao 'guarda-corpo novo pode virar indisponibilidade' virando correcao antes do merge. A revisao do orquestrador (ADR 0035) rodou com dois revisores independentes em paralelo, codigo e seguranca. Seguranca fechou com zero must-fix percorrendo sete itens com evidencia. Codigo trouxe um must-fix real e de front: o fetch da tela de Produtos nao tinha catch, entao qualquer falha de rede desenhava a lista VAZIA e CALADA, indistinguivel de 'o banco nao tem Produto', bem no criterio de aceite 'a tela lista os sete Produtos na primeira abertura'; quem abrisse concluiria que o seed da migration nao rodou. Tres caminhos foram fechados (carregar, enviar e o token ausente que deixava a tela girando para sempre), no molde do admin/usuarios que ja fazia certo, com quatro testes novos e um teste DETECTOR para que nenhum deles passasse de graca. Dois nits viraram correcao por decisao do orquestrador. O primeiro era bug de verdade: PATCH com dono_id vazio passava pelas duas guardas e gravava string vazia, que nao e NULL e nao existe em participantes, violando a FK com 500. O segundo protege as seis fatias seguintes: a matriz que prova o gate era uma lista de rotas escrita a mao, entao uma rota nova sem require_super_admin em #637 a #642 nao deixaria teste vermelho; virou varredura de app.openapi()['paths'] com piso de sanidade, e a fonte e o schema e nao app.routes, porque o uv.lock fixa FastAPI 0.136 e o CI instala 0.141, onde app.routes volta quase vazio e a varredura ficaria verde sobre nada (a mordida das issues #542 e #546). Essa troca mexe no cache do OpenAPI durante a coleta do pytest, e a rodada 2 de revisao provou que a restauracao num finally esta correta e que o detector de rota escondida continua vivo. A rodada 2 achou so um nit de texto, corrigido: a frase do caminho sem token dizia 'Sua sessao expirou. Entre de novo' tambem quando a causa era rede caida, mandando o Super admin sair e entrar justo quando ele nao consegue. Virou uma frase unica que nomeia as duas causas e pede recarregar a pagina, porque o useAuth devolve token nulo nos dois casos e separa-las exigiria mexer num hook compartilhado por seis modulos so para melhorar um texto. A prova por hash do SQL foi feita pelo ORQUESTRADOR antes de entregar o arquivo ao humano, e refeita depois de cada uma das duas rodadas de correcao: o bloco do corpo do PR e o arquivo tem o mesmo sha256 59c85a512021caf14a8be4518f3849522dabf6ef286a1fda2259f0184603eb07, 10166 bytes. E o procedimento herdado do PR #632 e do #635. O deploy teve um tropeco conhecido e consertado: o APP_VERSION so chegou ao Coolify depois que o webhook do merge ja havia disparado o build do backend, entao o /api/health voltou 0.116.1 com o codigo novo ja no ar. Um redeploy manual do backend, disparado DEPOIS do frontend terminar para nao concorrer por memoria na VPS, resolveu: /api/health passou a 0.117.0. O codigo novo em producao foi provado sem login, pelo par 401 contra 404: /api/admin/tecnologia/produtos e /pessoas respondem 401 (a rota existe e a guarda esta de pe) e uma rota irma inventada responde 404. Uma leitura isolada do health durante a troca de container devolveu 'no available server', transitorio e sem acao, o mesmo comportamento ja registrado no deploy anterior."
     }
   ]
 }
