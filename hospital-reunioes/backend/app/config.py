@@ -88,10 +88,10 @@ class Settings(BaseSettings):
     # Super admin. Todas as variáveis da Central moram aqui desde a primeira
     # fatia do PRD #809, para as fatias paralelas não disputarem este arquivo.
     #
-    # A Central nasce DORMENTE: tudo vazio, e vazio quer dizer funcionalidade
-    # desligada com erro honesto de configuração (503), nunca número zero nem
-    # lista vazia. As credenciais só entram no Coolify na última fatia, a que
-    # liga a Central em produção (ADR 0058, decisão 8).
+    # A Central nasceu dormente, com tudo vazio, e está ligada em produção desde
+    # a issue #827 (ADR 0058, decisão 8): as credenciais já estão no Coolify.
+    # Vazio continua querendo dizer funcionalidade desligada com erro honesto
+    # de configuração (503), nunca número zero nem lista vazia.
     #
     # Google Analytics 4: o número da propriedade e o JSON inteiro da chave da
     # service account (papel Leitor na propriedade). A base da API fica fixa no
