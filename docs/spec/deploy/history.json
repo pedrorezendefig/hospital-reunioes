@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-09-25T16:57:42-03:00",
+      "sha": "f5383e1a",
+      "app_version": "0.156.1",
+      "subject": "Onda onda-a: Tira o andaime da fase dormente (EmConstrucao e comentário do config); Publicações do Instagram entram no período pelo dia de Brasília; Acabamentos dos Objetivos, uma leitura do Instagram",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#880 #882 #883)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 15,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #880 #882 #883. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-09-23T20:54:12-03:00",
       "sha": "3468a09e",
       "app_version": "0.156.0",
@@ -1502,37 +1534,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda 1 desta sessao: issue #636 sozinha, a fatia de fundacao do PRD #634 (aba Tecnologia, o quadro de Demandas entre o hospital e a Vitta, ADR 0050). Entrega a aba com gate de Super admin, a gestao de Produtos e as tres abas internas (Quadro, Minha vez, Historico) como casca vazia; a Demanda e a Conversa vem nas fatias #637 a #642, que nao criam migration porque as tres tabelas ja nascem na 102 no formato final. Quatro rotas novas em /api/admin/tecnologia, todas com require_super_admin e nenhuma com DELETE: desativar e a saida. O Gate 1.5 pegou um defeito que so aparecia no estado inicial do sistema: os sete Produtos do seed nascem ativos e SEM dono, porque e a propria migration que manda cria-los assim, e a guarda do PATCH olhava so o estado final, entao renomear qualquer um dos sete devolvia 422 'Produto ativo precisa de dono' na primeira abertura, culpando o Super admin por uma falta que ele nao provocou. A regra pura virou edicao_deixa_produto_ativo_sem_dono(antes, depois): recusa quando a edicao CRIA o estado ruim, passa quando apenas o herda, e quem cobra o dono dos sete passou a ser a tela, com a marca 'Falta dono'. E o caso da licao 'guarda-corpo novo pode virar indisponibilidade' virando correcao antes do merge. A revisao do orquestrador (ADR 0035) rodou com dois revisores independentes em paralelo, codigo e seguranca. Seguranca fechou com zero must-fix percorrendo sete itens com evidencia. Codigo trouxe um must-fix real e de front: o fetch da tela de Produtos nao tinha catch, entao qualquer falha de rede desenhava a lista VAZIA e CALADA, indistinguivel de 'o banco nao tem Produto', bem no criterio de aceite 'a tela lista os sete Produtos na primeira abertura'; quem abrisse concluiria que o seed da migration nao rodou. Tres caminhos foram fechados (carregar, enviar e o token ausente que deixava a tela girando para sempre), no molde do admin/usuarios que ja fazia certo, com quatro testes novos e um teste DETECTOR para que nenhum deles passasse de graca. Dois nits viraram correcao por decisao do orquestrador. O primeiro era bug de verdade: PATCH com dono_id vazio passava pelas duas guardas e gravava string vazia, que nao e NULL e nao existe em participantes, violando a FK com 500. O segundo protege as seis fatias seguintes: a matriz que prova o gate era uma lista de rotas escrita a mao, entao uma rota nova sem require_super_admin em #637 a #642 nao deixaria teste vermelho; virou varredura de app.openapi()['paths'] com piso de sanidade, e a fonte e o schema e nao app.routes, porque o uv.lock fixa FastAPI 0.136 e o CI instala 0.141, onde app.routes volta quase vazio e a varredura ficaria verde sobre nada (a mordida das issues #542 e #546). Essa troca mexe no cache do OpenAPI durante a coleta do pytest, e a rodada 2 de revisao provou que a restauracao num finally esta correta e que o detector de rota escondida continua vivo. A rodada 2 achou so um nit de texto, corrigido: a frase do caminho sem token dizia 'Sua sessao expirou. Entre de novo' tambem quando a causa era rede caida, mandando o Super admin sair e entrar justo quando ele nao consegue. Virou uma frase unica que nomeia as duas causas e pede recarregar a pagina, porque o useAuth devolve token nulo nos dois casos e separa-las exigiria mexer num hook compartilhado por seis modulos so para melhorar um texto. A prova por hash do SQL foi feita pelo ORQUESTRADOR antes de entregar o arquivo ao humano, e refeita depois de cada uma das duas rodadas de correcao: o bloco do corpo do PR e o arquivo tem o mesmo sha256 59c85a512021caf14a8be4518f3849522dabf6ef286a1fda2259f0184603eb07, 10166 bytes. E o procedimento herdado do PR #632 e do #635. O deploy teve um tropeco conhecido e consertado: o APP_VERSION so chegou ao Coolify depois que o webhook do merge ja havia disparado o build do backend, entao o /api/health voltou 0.116.1 com o codigo novo ja no ar. Um redeploy manual do backend, disparado DEPOIS do frontend terminar para nao concorrer por memoria na VPS, resolveu: /api/health passou a 0.117.0. O codigo novo em producao foi provado sem login, pelo par 401 contra 404: /api/admin/tecnologia/produtos e /pessoas respondem 401 (a rota existe e a guarda esta de pe) e uma rota irma inventada responde 404. Uma leitura isolada do health durante a troca de container devolveu 'no available server', transitorio e sem acao, o mesmo comportamento ja registrado no deploy anterior."
-    },
-    {
-      "at": "2026-09-09T00:08:29-03:00",
-      "sha": "6e135f2",
-      "app_version": "0.116.1",
-      "subject": "arquivar todos os encerrados de uma vez passa a gravar o log de acesso na mesma transacao",
-      "raw_subject": "fix(ouvidoria): arquivar o lote e registrar o acesso na mesma transação (#635)",
-      "scope": [
-        "backend",
-        "supabase"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 317,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "101_ouvidoria_lote_do_arquivo_atomico.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 3 desta sessao: issue #627 sozinha, ultima filha aberta do PRD #591. O arquivamento em lote que a #594 entregou carimbava os casos e registrava o log de acesso em dois passos, entao uma falha no meio deixava lote arquivado sem rastro. A migration 101 traz a funcao ouvidoria_arquivar_encerrados, que faz os dois na MESMA transacao, sem bloco EXCEPTION de proposito, e o recorte passou a viver dentro do proprio UPDATE em vez de numa leitura anterior. Sem indice e sem tocar no ato de um caso so, como a triagem pedia. A triagem pedia tambem SECURITY DEFINER, e essa parte foi EMENDADA no checkpoint: ficou SECURITY INVOKER, com as duas reviews e o dono de acordo, porque quem chama e o backend com service_role, que ja passa por cima do RLS; DEFINER nao habilitaria nada e so tiraria uma camada, ja que aplicada pelo Studio a funcao nasceria com owner postgres e o REVOKE seria a unica coisa entre a anon_key do bundle e um UPDATE em massa. A emenda ficou registrada na issue e no corpo do PR. Os dois must-fix da revisao giraram em torno dessa mesma linha do SQL, e o mais perigoso nao era codigo: o corpo do PR CONVIDAVA o humano a trocar a clausula na hora de colar no Studio, o que quebraria a prova por hash que o proprio corpo afirma e deixaria o SET search_path obrigatorio so em prosa. O outro era que essa clausula era a UNICA linha do SQL sem guarda de teste: troca-la deixava os 127 testes verdes. Os dois fecharam em uma rodada, e a verificacao focada voltou limpa nos cinco pontos, com o verificador provando por mutacao no proprio detector qual assercao trabalha. Esta onda transformou a licao do PR #632 em procedimento: o ORQUESTRADOR conferiu por hash, antes de entregar o SQL ao humano, que o bloco do corpo publicado e identico ao arquivo, e repetiu a conferencia depois da edicao do corpo. E a fumaca da RPC rodou contra producao com a chave anonima ANTES do merge, devolvendo SQLSTATE 42501, o que prova de uma vez que a funcao existe (senao viria PGRST202) e que o REVOKE pegou; ela e segura por construcao, porque SMOKE627 nao e id valido de participante e as duas colunas escritas tem FK, entao a transacao morreria antes de qualquer escrita. O teto de lote foi medido em vez de chutado: authenticator ja carrega statement_timeout=8s e lock_timeout=8s, e a RPC rodou 10 mil casos em 166 ms, 50 mil em 1,9 s e 200 mil em 7,0 s num Postgres de verdade, entao nenhum teto foi implementado e o motivo ficou escrito. Uma leitura isolada do /api/health logo apos o deploy devolveu 503 no available server durante a troca de container, com o Coolify ja em running:healthy; seis leituras seguidas depois vieram 200 com 0.116.1, e nada foi feito."
     }
   ]
 }

@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.156.1 - 2026-09-25 16:57 - Onda onda-a: Tira o andaime da fase dormente (EmConstrucao e comentário do config); Publicações do Instagram entram no período pelo dia de Brasília; Acabamentos dos Objetivos, uma leitura do Instagram
+- Autor: Pedro <pedro.ribbe@gmail.com>
+- SHA: `f5383e1`
+- PRs: [#880](https://github.com/pedrorezendefig/hospital-reunioes/pull/880), [#882](https://github.com/pedrorezendefig/hospital-reunioes/pull/882), [#883](https://github.com/pedrorezendefig/hospital-reunioes/pull/883)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (15s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f5383e1
+
 ## v0.156.0 - 2026-09-23 20:54 - Onda onda-b: Limite de 60 por minuto na rota pública POST /api/mcp; Diz de onde vêm as chaves do GA4 e do Instagram; Aquecer o cache no boot, uma vez, no período padrão
 - Autor: Pedro <pedro.ribbe@gmail.com>
 - SHA: `3468a09`
