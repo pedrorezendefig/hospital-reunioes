@@ -20,6 +20,7 @@ import sys
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from datetime import date  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 from app.services.central_de_comando import provedor_instagram as ig  # noqa: E402
 from app.services.central_de_comando.periodo import Intervalo  # noqa: E402
@@ -143,6 +144,20 @@ class TestDentroDoPeriodo:
         assert ig.dentro_do_periodo("", intervalo) is False
         assert ig.dentro_do_periodo("ontem à noite", intervalo) is False
         assert ig.dentro_do_periodo("2026-09-31T12:00:00+0000", intervalo) is False
+
+    def test_o_fuso_so_existe_no_modulo_de_periodo(self):
+        # Decisão da #857: um fuso só, fixo no código, em `periodo.py`. O
+        # provedor importa a constante; nenhum outro módulo da Central escreve o
+        # fuso de novo. `ZoneInfo` guarda as instâncias em cache, então comparar
+        # objetos não pegaria um literal duplicado: quem pega é o texto.
+        pacote = Path(ig.__file__).parent
+        com_o_fuso = sorted(
+            arquivo.name
+            for arquivo in pacote.rglob("*.py")
+            if "America/Sao_Paulo" in arquivo.read_text(encoding="utf-8")
+        )
+
+        assert com_o_fuso == ["periodo.py"]
 
 
 class TestParaPublicacao:
