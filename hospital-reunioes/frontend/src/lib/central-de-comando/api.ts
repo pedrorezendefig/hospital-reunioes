@@ -19,6 +19,19 @@ export const BASE_CENTRAL = "/api/admin/central-de-comando";
  */
 export type TelaDaCentral = "visao-geral" | "dados-do-google" | "instagram" | `objetivos/${string}`;
 
+/** O começo da tela da lente de um Objetivo, o mesmo `PREFIXO_DA_LENTE` do backend. */
+export const PREFIXO_DA_LENTE = "objetivos/";
+
+/**
+ * O caminho da leitura de uma tela, depois da `BASE_CENTRAL`. O identificador
+ * da lente vem do endereço, que é digitável, e vai codificado (issue #847): uma
+ * barra, um espaço ou uma interrogação nele não mudam a rota nem a query.
+ */
+export function caminhoDaTela(tela: TelaDaCentral): string {
+  if (!tela.startsWith(PREFIXO_DA_LENTE)) return tela;
+  return PREFIXO_DA_LENTE + encodeURIComponent(tela.slice(PREFIXO_DA_LENTE.length));
+}
+
 /**
  * O Atualizar agora tem limite de taxa no backend. O 429 do `slowapi` chega
  * sem `detail` (`{"error": ...}`, em inglês): a frase é da tela.
