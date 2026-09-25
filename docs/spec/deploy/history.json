@@ -63,7 +63,7 @@
       ],
       "migrations_applied": [],
       "rollback_target_sha": null,
-      "notes": "onda-enxuta onda-a: PRs #880 #882 #883. Um push, um build. Registro no commit seguinte ao sha."
+      "notes": "onda-enxuta onda-a: PRs #880 #882 #883. Um push, um build. Registro no commit seguinte ao sha. O mesmo build levou junto #877 (#859) e #878 (#843), mergeados antes na main sem /deploy."
     },
     {
       "at": "2026-09-23T20:54:12-03:00",
