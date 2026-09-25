@@ -171,13 +171,29 @@ class TestTokenVencido:
         assert "renov" in motivo
         assert "instagram" in motivo
 
-    def test_sem_numero_guardado_e_erro_honesto(self, cliente, instagram_falso, relogio_da_central):
-        """Token vencido e nada guardado: 502, como qualquer falha da fonte sem
-        último valor bom. Nunca zero, nunca lista vazia."""
+    @pytest.mark.parametrize("pedido", [_ler, _atualizar], ids=["leitura", "atualizar-agora"])
+    def test_sem_numero_guardado_diz_que_e_para_renovar(self, cliente, instagram_falso, relogio_da_central, pedido):
+        """Token vencido e nada guardado (issue #846): segue 502, porque não há
+        número para mostrar, mas com a MESMA frase de renovação do caso com
+        número guardado e a causa `token-vencido`, que a tela lê para mostrar o
+        aviso calmo de renovação, e não o erro técnico. Nunca zero, nunca lista
+        vazia."""
         instagram_falso.forcar = erro_do_instagram(400, 190, "OAuthException", "Session has expired.")
+
+        resposta = pedido(cliente)
+
+        assert resposta.status_code == 502
+        assert resposta.json() == {
+            "detail": "O acesso ao Instagram expirou. Renove o token para voltar a atualizar os números.",
+            "causa": "token-vencido",
+        }
+
+    def test_outra_falha_sem_numero_guardado_segue_502_sem_causa(self, cliente, instagram_falso, relogio_da_central):
+        """Só o token vencido ganha a causa: a fonte fora continua o 502 de
+        sempre, com o `detail` e mais nada, e a tela mostra o erro honesto."""
+        instagram_falso.forcar = erro_do_instagram(500, 1, "InternalError", "Please retry.")
 
         resposta = _ler(cliente)
 
         assert resposta.status_code == 502
         assert set(resposta.json()) == {"detail"}
-        assert "seguidores" not in resposta.json()

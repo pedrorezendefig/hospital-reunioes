@@ -17,7 +17,10 @@ quando são os números e se a última atualização falhou.
   porque a fonte disse zero. Também é 200 o último valor bom: a fonte caiu,
   mas havia número guardado, e o `frescor` diz que a atualização falhou e por
   quê. A tela nunca zera por causa de uma falha.
-- 502: a fonte falhou e não há número guardado para mostrar.
+- 502: a fonte falhou e não há número guardado para mostrar. O token vencido
+  do Instagram é o único 502 com `causa` no corpo, ao lado do `detail`
+  (`CAUSA_TOKEN_VENCIDO`, issue #846): a tela mostra o aviso calmo de
+  renovação, e não o erro técnico.
 - 503: falta configurar a fonte no backend. Nunca zero, nunca lista vazia.
 
 Telas, uma rota por tela, cada uma devolvendo o payload inteiro dela:
@@ -42,6 +45,7 @@ from functools import partial
 
 import anyio.to_thread
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
+from fastapi.responses import JSONResponse
 
 from app.dependencies import require_super_admin
 from app.limiter import limiter
@@ -66,6 +70,12 @@ PREFIXO_DA_LENTE = "objetivos/"
 # não volta na resposta.
 OBJETIVO_INEXISTENTE = "A Central não tem esse Objetivo."
 
+# A causa do 502 do token vencido do Instagram sem número guardado (issue #846).
+# É o sinal que a tela lê para trocar o erro técnico pelo aviso calmo de
+# renovação; o `detail` é a mesma frase de renovação do caso com número
+# guardado. As outras falhas da fonte seguem o 502 só com o `detail`.
+CAUSA_TOKEN_VENCIDO = "token-vencido"
+
 router = APIRouter(
     prefix="/admin/central-de-comando",
     tags=["admin", "central-de-comando"],
@@ -85,7 +95,9 @@ async def _do_fonte(funcao, *args):
     Uma tradução só para as duas fontes: o Atualizar agora é genérico e serve
     qualquer tela do registro, então a falha do Instagram precisa virar HTTP
     aqui como a do Google. O token vencido do Instagram é subclasse de
-    `InstagramError` e cai no 502 quando não há número guardado.
+    `InstagramError` e, sem número guardado, também é 502, mas com a
+    `CAUSA_TOKEN_VENCIDO` no corpo (issue #846). Esse 502 é devolvido, e não
+    levantado: o tratador padrão do `HTTPException` só escreve o `detail`.
     """
     try:
         return await anyio.to_thread.run_sync(funcao, *args)
@@ -95,6 +107,12 @@ async def _do_fonte(funcao, *args):
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail=str(exc)) from exc
     except (provedor_google.GoogleNaoConfiguradoError, provedor_instagram.InstagramNaoConfiguradoError) as exc:
         raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail=str(exc)) from exc
+    except provedor_instagram.InstagramTokenExpiradoError as exc:
+        # Antes da tupla de baixo, que o pegaria por ser subclasse.
+        return JSONResponse(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            content={"detail": str(exc), "causa": CAUSA_TOKEN_VENCIDO},
+        )
     except (provedor_google.GoogleError, provedor_instagram.InstagramError) as exc:
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=str(exc)) from exc
 
@@ -149,7 +167,8 @@ async def instagram(request: Request, periodo: Periodo = Query(PERIODO_PADRAO)):
     Só 7 e 28 dias: a Graph API limita os insights a 30 dias por chamada, então
     o registro (`telas.py`) recusa 90 dias com 422, e não o busca. Token vencido
     com número guardado é 200 com o último valor bom e o aviso de renovação no
-    frescor; sem número guardado, 502. Sem credencial, 503.
+    frescor; sem número guardado, 502 com a mesma frase e a
+    `CAUSA_TOKEN_VENCIDO` (issue #846). Sem credencial, 503.
     """
     return await _do_fonte(telas.ler, "instagram", periodo)
 
