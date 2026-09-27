@@ -186,9 +186,9 @@ from app.services.tecnologia_vinculo import (
     motivo_ja_vinculada_para_levar,
     motivo_numero_ja_usado,
     tem_github_login,
-    texto_do_diretor,
     texto_levou_para_desenvolvimento,
     texto_movimento_etapa,
+    titulo_da_issue,
 )
 from app.services.transcricao_extractor import (
     FORMATOS_DE_TEXTO_PURO,
@@ -1435,8 +1435,8 @@ async def levar_para_desenvolvimento(
 
     # O titulo tambem vai para o repositorio publico, e nao so o corpo: passa
     # pela mesma peneira (o corpo ja passava, porque o titulo e o "O que muda"
-    # da Demanda sem descricao).
-    titulo = texto_do_diretor(demanda.get("titulo"))
+    # da Demanda sem descricao). Inclusive a de dado pessoal (issue #772).
+    titulo = titulo_da_issue(demanda.get("titulo"))
     legivel = _com_nomes(supabase, [demanda], ator=ator)[0]
 
     corpo = corpo_da_issue_nova(

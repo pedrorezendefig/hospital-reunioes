@@ -29,6 +29,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0050](0050-demandas-de-tecnologia-moram-no-app-apartadas-das-pendencias.md) | accepted | Demandas de tecnologia moram no app do hospital, só para Super admin, apartadas das Pendências |
 | [0054](0054-demanda-vinculada-a-issue-etapa-derivada-e-revisor-no-app.md) | accepted | Demanda vinculada a issue do GitHub: Etapa derivada, comentário do diretor espelhado e a bola volta a quem pediu (emenda 0020) |
 | [0056](0056-assistente-de-tecnologia-rascunho-confirmado-kit-proprio.md) | accepted | Assistente de Tecnologia: rascunho confirmado por gente, kit próprio embarcado, responde do kit ou registra |
+| [0060](0060-texto-que-sai-para-a-issue-publica-passa-pela-peneira-de-dado-pessoal.md) | accepted | Texto que sai para a issue pública passa pela peneira de dado pessoal (emenda 0054) |
 
 ## Central de Comando (números do ecossistema digital)
 
