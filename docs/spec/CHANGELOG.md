@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.156.5 - 2026-09-27 20:00 - Chamadas à IA saem do event loop nas rotas async
+- Autor: Pedro <pedroribbe@gmail.com>
+- SHA: `baa3477`
+- PRs: [#892](https://github.com/pedrorezendefig/hospital-reunioes/pull/892) (issue #773)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (220s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/baa3477
+
 ## v0.156.4 - 2026-09-27 16:33 - Secretária não vira facilitadora pelo Calendário
 - Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `43f4cdd`
