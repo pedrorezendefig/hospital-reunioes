@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.156.3 - 2026-09-27 15:11 - Peneira de dado pessoal no que sai para a issue pública
+- Autor: Pedro <pedroribbe@gmail.com>
+- SHA: `0ab8587`
+- PRs: [#887](https://github.com/pedrorezendefig/hospital-reunioes/pull/887) (issue #772, ADR 0060)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (281s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/0ab8587
+
 ## v0.156.2 - 2026-09-25 17:51 - Onda onda-a: Acabamentos do Instagram, aviso calmo do token vencido sem número guardado, marcador de miniatura e link só https
 - Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `fd5e4cc`
