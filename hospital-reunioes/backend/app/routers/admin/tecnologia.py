@@ -112,7 +112,7 @@ from app.models.tecnologia_schemas import (
     TextoParaIaResponse,
     VincularPayload,
 )
-from app.services import assistente_tecnologia, github_client
+from app.services import ai_processor, assistente_tecnologia, github_client
 from app.services.conhecimento import carregar_kit
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
@@ -2218,7 +2218,10 @@ async def assistente_chat(
     # Com o mapa so dos ativos, essa Demanda chegaria ao prompt sem Produto.
     nomes_de_produto = {p["id"]: p.get("nome") or "" for p in todos_os_produtos}
 
-    return assistente_tecnologia.conversar(
+    # Fora do loop (issue #773): o turno espera o provedor, e no corpo da rota
+    # prenderia o worker inteiro, `/api/health` incluso.
+    return await ai_processor.chamar_fora_do_loop(
+        assistente_tecnologia.conversar,
         rascunho=payload.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in payload.messages],
         kit=carregar_kit(),
@@ -2392,7 +2395,11 @@ async def assistente_descrever_imagem(
             detail=MOTIVO_IMAGEM_GRANDE,
         )
 
-    texto = assistente_tecnologia.descrever_imagem(imagem=conteudo, extensao=extensao)
+    # Fora do loop (issue #773): a visao leva dezenas de segundos esperando o
+    # provedor, e e a chamada que mais tempo prenderia o worker.
+    texto = await ai_processor.chamar_fora_do_loop(
+        assistente_tecnologia.descrever_imagem, imagem=conteudo, extensao=extensao
+    )
     if texto is None:
         # O servico nao levanta: ele devolve `None` para "nao deu para ler", e
         # quem escreve a frase e a rota. 502, e nao 422: o arquivo estava bom, e

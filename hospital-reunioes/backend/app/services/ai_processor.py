@@ -1,7 +1,10 @@
+import asyncio
 import json
 import logging
 import re
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timedelta
+from functools import partial
 
 from openai import OpenAI
 
@@ -37,6 +40,35 @@ def _get_llm() -> tuple[OpenAI, str, dict]:
         base_url=settings.openrouter_base_url,
     )
     return client, settings.llm_model, {"extra_headers": _OPENROUTER_HEADERS}
+
+
+# Executor PRÓPRIO das chamadas à IA feitas por rota `async def` (issue #773).
+#
+# O cliente do provedor é síncrono. Chamado no corpo da rota, ele prende o
+# event loop enquanto a resposta não chega, e uma leitura de print leva dezenas
+# de segundos: o worker para de atender tudo, inclusive o `/api/health`, e o
+# `/deploy ship` desfaz um deploy bom porque alguém conversava com a IA na
+# janela do health check.
+#
+# Executor próprio, e não `asyncio.to_thread`, pelo mesmo motivo da extração de
+# documento (#758, `transcricao_extractor._EXECUTOR_DE_EXTRACAO`): o executor
+# default é o do `/health` (timeout de 2 s), das chamadas ao GitHub e do email.
+# Com poucas conversas longas ao mesmo tempo ele se esgota, e o `/health`
+# estoura por outra porta. Também não é o executor da extração: aquele é
+# dimensionado para CPU (vagas contadas por semáforo), e a IA só espera rede.
+# Esperar rede não gasta CPU, então cabe bem mais gente que lá. Quem passa do
+# teto espera na fila interna deste executor, sem prender o loop nem o `/health`.
+_EXECUTOR_DA_IA = ThreadPoolExecutor(max_workers=16, thread_name_prefix="ia")
+
+
+async def chamar_fora_do_loop(funcao, /, *args, **kwargs):
+    """Roda `funcao` (síncrona, chega ao provedor) no executor da IA.
+
+    É a porta que toda rota `async def` usa para chamar a IA. A trava de classe
+    em `tests/test_ia_fora_do_loop.py` reprova a rota que chamar direto.
+    """
+    laco = asyncio.get_running_loop()
+    return await laco.run_in_executor(_EXECUTOR_DA_IA, partial(funcao, *args, **kwargs))
 
 
 def _log_llm_call(reuniao_id: str, provider: str, model: str) -> None:
