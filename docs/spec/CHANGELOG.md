@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.156.4 - 2026-09-27 16:33 - Secretária não vira facilitadora pelo Calendário
+- Autor: Pedro <pedroribbe@gmail.com>
+- SHA: `43f4cdd`
+- PRs: [#889](https://github.com/pedrorezendefig/hospital-reunioes/pull/889) (issue #761)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (192s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/43f4cdd
+
 ## v0.156.3 - 2026-09-27 15:11 - Peneira de dado pessoal no que sai para a issue pública
 - Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `0ab8587`
