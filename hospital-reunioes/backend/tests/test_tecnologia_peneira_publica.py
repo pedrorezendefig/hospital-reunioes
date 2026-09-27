@@ -93,6 +93,19 @@ class TestLevarParaDesenvolvimento:
         assert _vazou(criada["corpo"]) == []
         assert "**O que muda:** Cadastro de [NOME] ([CPF]) some da fila" in criada["corpo"]
 
+    def test_o_titulo_da_issue_nao_leva_a_barra_do_marcador(self, monkeypatch):
+        """O titulo da issue no GitHub e texto puro, e nao Markdown: la a barra
+        que desliga o link apareceria ("\\[NOME]: leito 12"). Ela so vale no
+        corpo, onde o "O que muda" repete o titulo quando nao ha descricao."""
+        demanda = _demanda("d-1", titulo="Maria Silva: leito 12", descricao=None)
+        client, _, gh = _montar(logado=PEDRO, demandas=[demanda], monkeypatch=monkeypatch)
+
+        assert client.post(ROTA_LEVAR).status_code == 200
+
+        criada = gh.criadas[0]
+        assert criada["titulo"] == "[NOME]: leito 12"
+        assert "**O que muda:** \\[NOME]: leito 12" in criada["corpo"]
+
     def test_a_demanda_no_app_mantem_titulo_e_descricao_originais(self, monkeypatch):
         """A peneira age so no que sai para o GitHub. A Demanda e o card
         continuam com o texto de quem escreveu."""

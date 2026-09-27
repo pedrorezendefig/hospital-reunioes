@@ -567,18 +567,36 @@ def texto_do_diretor(bruto: str | None) -> str:
     return _escapar_para_o_github(pseudonimizar(texto))
 
 
-def _escapar_para_o_github(texto: str) -> str:
+def titulo_da_issue(bruto: str | None) -> str:
+    """O titulo da Demanda, pronto para o titulo da issue publica.
+
+    O mesmo funil do `texto_do_diretor` (peneira de dado pessoal, `<` e
+    estrutura em coluna zero escapados), menos a barra antes do colchete do
+    marcador: o titulo da issue e texto puro no GitHub, e nao Markdown, entao
+    la nao ha link a desligar e a barra apareceria ("\\[NOME]: leito 12"). O
+    "O que muda" que repete o titulo no corpo passa pelo `texto_do_diretor` e
+    ganha a barra la, onde ela vale.
+    """
+    texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
+    return _escapar_para_o_github(pseudonimizar(texto), marcador_vira_link=False)
+
+
+def _escapar_para_o_github(texto: str, *, marcador_vira_link: bool = True) -> str:
     """O escape do `texto_do_diretor`, sem a peneira: `<` vira `&lt;`,
     estrutura em coluna zero desligada, travessao sanitizado.
 
     Existe separado porque o `texto_espelhado` peneira TRECHO a trecho, entre
     as mencoes do app, e o `@login` que ele poe no lugar de cada mencao nao
     pode passar pela peneira depois: ela o leria como perfil de rede social.
+
+    `marcador_vira_link=False` e so para o titulo da issue, que nao e Markdown
+    (`titulo_da_issue`).
     """
     texto = _QUEBRA_DE_LINHA.sub("\n", texto)
     escapado = texto.replace("<", "&lt;")
     neutralizado = _ESTRUTURA_NA_COLUNA_ZERO.sub(r"\1\\\2", escapado)
-    neutralizado = _MARCADOR_QUE_VIRA_LINK.sub(r"\\\g<0>", neutralizado)
+    if marcador_vira_link:
+        neutralizado = _MARCADOR_QUE_VIRA_LINK.sub(r"\\\g<0>", neutralizado)
     return sanitizar_travessao(neutralizado).strip()
 
 
