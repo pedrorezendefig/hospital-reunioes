@@ -15,7 +15,9 @@ Quando a reunião já tem data e você quer reservá-la e avisar quem vai. Ela
 nasce com quem marcou no comando.
 
 :::caution[Quem marca vira o facilitador]
-A reunião nasce com quem clicou aqui no comando da ata.
+A reunião nasce com quem clicou aqui no comando da ata. Na Secretaria é
+diferente: o clique leva para a tela **Marcar nova reunião**, em que você
+escolhe quem vai conduzir.
 :::
 
 ## Passo a passo
@@ -25,7 +27,10 @@ A reunião nasce com quem clicou aqui no comando da ata.
 
    ![Calendário de reuniões aberto no mês](../../../assets/reunioes/calendario.png)
 2. Clique no dia da reunião. A janela **Agendar Reunião** abre com a data
-   preenchida.
+   preenchida. Se você é da Secretaria, o clique (no dia, no horário da
+   semana ou no botão **Agendar Reunião**) abre a tela **Marcar nova reunião**
+   já com a data e a hora, e você segue em
+   [Marcar a reunião de um facilitador](/reunioes/marcar-a-reuniao-de-um-facilitador/).
 3. Escreva o **Título** e confira a **Data**. Em **Tipo**, escolha
    **Diretoria**, **Gerencial**, **Coordenação**, **Mensal** ou
    **Extraordinária**.
@@ -43,10 +48,6 @@ A **Frequência** é **Semanal** ou **Quinzenal**.
 
 ## Se der errado
 
-- **Você é da Secretaria:** marcando por aqui, a reunião fica com **você** como
-  facilitadora, e depois você não monta a ata dela. Para marcar a de outra
-  pessoa, use
-  [Marcar a reunião de um facilitador](/reunioes/marcar-a-reuniao-de-um-facilitador/).
 - **A pessoa que você procura não aparece:** só quem está cadastrado aparece na
   busca, dez por vez. Escreva mais letras do nome, ou peça a quem administra a
   plataforma para cadastrar a pessoa.
