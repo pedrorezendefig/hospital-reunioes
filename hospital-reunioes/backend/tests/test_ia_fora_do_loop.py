@@ -21,6 +21,7 @@ Duas provas aqui:
 from __future__ import annotations
 
 import ast
+import asyncio
 import json
 import os
 import sys
@@ -42,7 +43,9 @@ from test_pops_elaboracao import ELABORADOR, _chat, _client_para, _sb  # noqa: E
 
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
+from app.middleware.request_context import get_request_id, get_user_id, request_id_var, user_id_var  # noqa: E402
 from app.routers import reunioes as reunioes_router  # noqa: E402
+from app.services import ai_processor  # noqa: E402
 
 CHAT_DO_ASSISTENTE = "/api/admin/tecnologia/assistente/chat"
 LEITURA_DO_PRINT = "/api/admin/tecnologia/assistente/descrever-imagem"
@@ -75,8 +78,6 @@ class _ProvedorQueAnotaAThread:
 
 @pytest.fixture
 def provedor(monkeypatch) -> _ProvedorQueAnotaAThread:
-    from app.services import ai_processor
-
     cliente = _ProvedorQueAnotaAThread()
     monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
     monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente, "modelo-teste", {}))
@@ -84,7 +85,12 @@ def provedor(monkeypatch) -> _ProvedorQueAnotaAThread:
 
 
 def _cliente_de_reunioes(monkeypatch, reuniao: dict) -> TestClient:
-    """O router de Reuniões com um Facilitador comum que enxerga a Reunião."""
+    """O router de Reuniões com um Facilitador comum que enxerga a Reunião.
+
+    Espelha a fixture `make_client` de `test_ata_guiada.py` em vez de
+    importá-la: fixture importada de outro arquivo de teste é redefinição de
+    nome para o linter (mesma decisão de `test_ouvidoria_relatorio_mensal.py`).
+    """
     app = FastAPI()
     app.state.limiter = limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
@@ -105,9 +111,31 @@ def _cliente_de_reunioes(monkeypatch, reuniao: dict) -> TestClient:
 
 
 def _correu_no_executor_da_ia(provedor: _ProvedorQueAnotaAThread) -> None:
-    assert provedor.threads, "a rota nao chegou ao provedor"
+    assert provedor.threads, "a rota não chegou ao provedor"
     thread = provedor.threads[-1]
-    assert thread.startswith("ia_"), f"a chamada a IA correu em {thread}, e nao no executor da IA"
+    assert thread.startswith("ia_"), f"a chamada à IA correu em {thread}, e não no executor da IA"
+
+
+class TestPortaDaIa:
+    def test_o_log_da_chamada_leva_o_request_id_e_o_user_id(self):
+        """Mesmo log de antes: a linha da IA continua dizendo de que requisição veio.
+
+        O `JsonFormatter` lê `request_id` e `user_id` de contextvars, e o
+        `run_in_executor` sozinho NÃO os leva para a thread (o `to_thread` leva).
+        Sem a cópia do contexto, o `_log_llm_call` e o log de erro do provedor
+        saíam sem os dois campos, e não dava mais para ligar a falha à pessoa.
+        """
+
+        async def _turno():
+            request_id_var.set("req-773")
+            user_id_var.set("pessoa-773")
+            return await ai_processor.chamar_ia_fora_do_loop(
+                lambda: (get_request_id(), get_user_id(), threading.current_thread().name)
+            )
+
+        request_id, user_id, thread = asyncio.run(_turno())
+        assert (request_id, user_id) == ("req-773", "pessoa-773")
+        assert thread.startswith("ia_")
 
 
 class TestRotasChamamAIaForaDoLoop:
@@ -155,14 +183,28 @@ class TestRotasChamamAIaForaDoLoop:
 APP = Path(__file__).resolve().parent.parent / "app"
 
 
-def _nome_chamado(chamada: ast.Call) -> str | None:
-    """`f(...)` e `modulo.f(...)` viram `f`. A varredura casa por nome."""
+def _nome_chamado(chamada: ast.Call, apelidos: dict[str, str] | None = None) -> str | None:
+    """`f(...)` e `modulo.f(...)` viram `f`. A varredura casa por nome.
+
+    `apelidos` desfaz o `from x import f as g` do arquivo: `g(...)` vira `f`.
+    """
     alvo = chamada.func
     if isinstance(alvo, ast.Name):
-        return alvo.id
+        return (apelidos or {}).get(alvo.id, alvo.id)
     if isinstance(alvo, ast.Attribute):
         return alvo.attr
     return None
+
+
+def _apelidos(arvore: ast.AST) -> dict[str, str]:
+    """`apelido -> nome de origem` de todo `import ... as ...` do arquivo."""
+    return {
+        nome.asname: nome.name.rsplit(".", 1)[-1]
+        for no in ast.walk(arvore)
+        if isinstance(no, ast.Import | ast.ImportFrom)
+        for nome in no.names
+        if nome.asname
+    }
 
 
 def _chama_o_provedor(chamada: ast.Call) -> bool:
@@ -190,12 +232,13 @@ def _chamadas_do_corpo(funcao: ast.AST):
 
 
 def _funcoes(raiz: Path):
-    """`(arquivo, nó)` de toda função de todo `.py` debaixo de `raiz`."""
+    """`(arquivo, nó, apelidos do arquivo)` de toda função de todo `.py` debaixo de `raiz`."""
     for arquivo in sorted(raiz.rglob("*.py")):
         arvore = ast.parse(arquivo.read_text(encoding="utf-8"), filename=str(arquivo))
+        apelidos = _apelidos(arvore)
         for no in ast.walk(arvore):
             if isinstance(no, ast.FunctionDef | ast.AsyncFunctionDef):
-                yield arquivo, no
+                yield arquivo, no, apelidos
 
 
 def funcoes_que_chegam_ao_provedor(raiz: Path) -> set[str]:
@@ -205,28 +248,34 @@ def funcoes_que_chegam_ao_provedor(raiz: Path) -> set[str]:
     chama essas, até parar de crescer. Uma função nova de IA entra sozinha.
     `async def` não sobe: a rota assíncrona é justamente o que se confere.
     """
-    sincronas = [no for _, no in _funcoes(raiz) if isinstance(no, ast.FunctionDef)]
-    chegam = {no.name for no in sincronas if any(_chama_o_provedor(c) for c in _chamadas_do_corpo(no))}
+    sincronas = [(no, apelidos) for _, no, apelidos in _funcoes(raiz) if isinstance(no, ast.FunctionDef)]
+    chegam = {no.name for no, _ in sincronas if any(_chama_o_provedor(c) for c in _chamadas_do_corpo(no))}
     cresceu = True
     while cresceu:
         cresceu = False
-        for no in sincronas:
-            if no.name not in chegam and any(_nome_chamado(c) in chegam for c in _chamadas_do_corpo(no)):
+        for no, apelidos in sincronas:
+            if no.name in chegam:
+                continue
+            if any(_nome_chamado(c, apelidos) in chegam for c in _chamadas_do_corpo(no)):
                 chegam.add(no.name)
                 cresceu = True
     return chegam
 
 
 def async_que_chamam_a_ia_no_loop(raiz: Path) -> list[str]:
-    """`arquivo:linha funcao -> chamada` de cada `async def` que espera o provedor no loop."""
+    """`arquivo:linha funcao -> chamada` de cada `async def` que espera o provedor no loop.
+
+    Pega os dois jeitos: chamar uma função que chega ao provedor, e chamar o
+    cliente ali mesmo (`_get_llm()` ou `.completions.create(...)` no corpo).
+    """
     chegam = funcoes_que_chegam_ao_provedor(raiz)
     achados = []
-    for arquivo, no in _funcoes(raiz):
+    for arquivo, no, apelidos in _funcoes(raiz):
         if not isinstance(no, ast.AsyncFunctionDef):
             continue
         for chamada in _chamadas_do_corpo(no):
-            nome = _nome_chamado(chamada)
-            if nome in chegam:
+            nome = _nome_chamado(chamada, apelidos)
+            if nome in chegam or _chama_o_provedor(chamada):
                 relativo = arquivo.relative_to(raiz).as_posix()
                 achados.append(f"{relativo}:{chamada.lineno} {no.name} -> {nome}")
     return sorted(achados)
@@ -248,7 +297,7 @@ class TestTravaDaClasse:
     def test_nenhuma_rota_async_do_app_chama_a_ia_no_loop(self):
         """Uma rota nova escrita do jeito errado deixa este teste vermelho.
 
-        O jeito certo é `await ai_processor.chamar_fora_do_loop(funcao, ...)`:
+        O jeito certo é `await ai_processor.chamar_ia_fora_do_loop(funcao, ...)`:
         a função vai como REFERÊNCIA, e quem a chama é o executor da IA.
         """
         achados = async_que_chamam_a_ia_no_loop(APP)
@@ -270,7 +319,32 @@ class TestTravaDaClasse:
     def test_rota_de_exemplo_escrita_do_jeito_certo_passa(self, tmp_path):
         (tmp_path / "servico.py").write_text(SERVICO_DE_EXEMPLO, encoding="utf-8")
         (tmp_path / "rota.py").write_text(
-            "async def rota_nova(texto):\n    return await chamar_fora_do_loop(servico.resumir_com_titulo, texto)\n",
+            "async def rota_nova(texto):\n    return await chamar_ia_fora_do_loop(servico.resumir_com_titulo, texto)\n",
             encoding="utf-8",
         )
         assert async_que_chamam_a_ia_no_loop(tmp_path) == []
+
+    def test_rota_que_usa_o_cliente_direto_e_pega(self, tmp_path):
+        """O jeito errado mais provável de uma rota nova: pegar o cliente e chamar ali mesmo."""
+        (tmp_path / "rota.py").write_text(
+            "async def rota_nova(texto):\n"
+            "    cliente, modelo, extra = ai_processor._get_llm()\n"
+            "    return cliente.chat.completions.create(model=modelo, messages=[])\n",
+            encoding="utf-8",
+        )
+        assert async_que_chamam_a_ia_no_loop(tmp_path) == [
+            "rota.py:2 rota_nova -> _get_llm",
+            "rota.py:3 rota_nova -> create",
+        ]
+
+    def test_rota_que_chama_por_apelido_de_import_e_pega(self, tmp_path):
+        """A varredura casa por nome, então o apelido volta ao nome de origem."""
+        (tmp_path / "servico.py").write_text(SERVICO_DE_EXEMPLO, encoding="utf-8")
+        (tmp_path / "rota.py").write_text(
+            "from servico import resumir_com_titulo as resumir_rapido\n"
+            "\n"
+            "async def rota_nova(texto):\n"
+            "    return resumir_rapido(texto)\n",
+            encoding="utf-8",
+        )
+        assert async_que_chamam_a_ia_no_loop(tmp_path) == ["rota.py:4 rota_nova -> resumir_com_titulo"]

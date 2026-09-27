@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import json
 import logging
 import re
@@ -61,14 +62,21 @@ def _get_llm() -> tuple[OpenAI, str, dict]:
 _EXECUTOR_DA_IA = ThreadPoolExecutor(max_workers=16, thread_name_prefix="ia")
 
 
-async def chamar_fora_do_loop(funcao, /, *args, **kwargs):
+async def chamar_ia_fora_do_loop(funcao, /, *args, **kwargs):
     """Roda `funcao` (síncrona, chega ao provedor) no executor da IA.
 
     É a porta que toda rota `async def` usa para chamar a IA. A trava de classe
-    em `tests/test_ia_fora_do_loop.py` reprova a rota que chamar direto.
+    em `tests/test_ia_fora_do_loop.py` reprova a rota que chamar direto. Por que
+    executor próprio, e não `asyncio.to_thread`: ver `_EXECUTOR_DA_IA`.
+
+    O contexto vai junto (`copy_context`), como o `to_thread` faria e o
+    `run_in_executor` sozinho não faz: o log JSON lê `request_id` e `user_id` de
+    contextvars, e sem a cópia o `_log_llm_call` e o erro do provedor sairiam
+    sem dizer de que requisição vieram.
     """
     laco = asyncio.get_running_loop()
-    return await laco.run_in_executor(_EXECUTOR_DA_IA, partial(funcao, *args, **kwargs))
+    contexto = contextvars.copy_context()
+    return await laco.run_in_executor(_EXECUTOR_DA_IA, partial(contexto.run, funcao, *args, **kwargs))
 
 
 def _log_llm_call(reuniao_id: str, provider: str, model: str) -> None:

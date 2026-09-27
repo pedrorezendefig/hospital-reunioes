@@ -1712,11 +1712,10 @@ async def chat_correcao_endpoint(
     if not req.messages:
         raise HTTPException(status_code=422, detail="Lista de mensagens não pode ser vazia")
 
-    from app.services.ai_processor import chamar_fora_do_loop, chat_correcao
+    from app.services.ai_processor import chamar_ia_fora_do_loop, chat_correcao
 
-    # Fora do loop (issue #773): no corpo da rota, a espera pelo provedor
-    # prenderia o worker inteiro, `/api/health` incluso.
-    response = await chamar_fora_do_loop(
+    # Fora do loop (issue #773, o porquê em `ai_processor._EXECUTOR_DA_IA`).
+    response = await chamar_ia_fora_do_loop(
         chat_correcao,
         json_ata_atual=json_ata,
         messages=[{"role": m.role, "content": m.content} for m in req.messages],
@@ -1765,13 +1764,13 @@ async def chat_ata_guiada_endpoint(
     if not req.messages:
         raise HTTPException(status_code=422, detail="Lista de mensagens não pode ser vazia")
 
-    from app.services.ai_processor import chamar_fora_do_loop, chat_ata_guiada
+    from app.services.ai_processor import chamar_ia_fora_do_loop, chat_ata_guiada
     from app.services.resolucao_service import montar_candidatos
 
     # Resolução ao vivo (ADR 0008, #79): o agente enxerga os candidatos no prompt
     # e o quadro devolvido volta vinculado deterministicamente pelo backend.
     # Fora do loop (issue #773), como o chat de correção.
-    return await chamar_fora_do_loop(
+    return await chamar_ia_fora_do_loop(
         chat_ata_guiada,
         rascunho=req.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in req.messages],

@@ -133,7 +133,7 @@ async def chat_elaboracao(
     except pops_dominio.TransicaoInvalidaError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    from app.services.ai_processor import chamar_fora_do_loop, chat_elaboracao_pop
+    from app.services.ai_processor import chamar_ia_fora_do_loop, chat_elaboracao_pop
 
     # Comentários de Devolução entram no contexto do agente (issue #85) — com
     # o autor resolvido (sempre o Revisor ou o Validador designados).
@@ -146,9 +146,8 @@ async def chat_elaboracao(
     # do banco em toda interação — não depende do cliente reenviar (#84).
     materiais = _materiais_da_versao(supabase, versao["id"], com_texto=True)
 
-    # Fora do loop (issue #773): no corpo da rota, a espera pelo provedor
-    # prenderia o worker inteiro, `/api/health` incluso.
-    out = await chamar_fora_do_loop(
+    # Fora do loop (issue #773, o porquê em `ai_processor._EXECUTOR_DA_IA`).
+    out = await chamar_ia_fora_do_loop(
         chat_elaboracao_pop,
         rascunho=req.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in req.messages],

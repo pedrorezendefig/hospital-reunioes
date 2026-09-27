@@ -2218,9 +2218,8 @@ async def assistente_chat(
     # Com o mapa so dos ativos, essa Demanda chegaria ao prompt sem Produto.
     nomes_de_produto = {p["id"]: p.get("nome") or "" for p in todos_os_produtos}
 
-    # Fora do loop (issue #773): o turno espera o provedor, e no corpo da rota
-    # prenderia o worker inteiro, `/api/health` incluso.
-    return await ai_processor.chamar_fora_do_loop(
+    # Fora do loop (issue #773, o porque em `ai_processor._EXECUTOR_DA_IA`).
+    return await ai_processor.chamar_ia_fora_do_loop(
         assistente_tecnologia.conversar,
         rascunho=payload.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in payload.messages],
@@ -2395,9 +2394,8 @@ async def assistente_descrever_imagem(
             detail=MOTIVO_IMAGEM_GRANDE,
         )
 
-    # Fora do loop (issue #773): a visao leva dezenas de segundos esperando o
-    # provedor, e e a chamada que mais tempo prenderia o worker.
-    texto = await ai_processor.chamar_fora_do_loop(
+    # Fora do loop (issue #773): a visao e a chamada mais longa de todas.
+    texto = await ai_processor.chamar_ia_fora_do_loop(
         assistente_tecnologia.descrever_imagem, imagem=conteudo, extensao=extensao
     )
     if texto is None:
