@@ -53,6 +53,10 @@ router = APIRouter(
 logger = logging.getLogger(__name__)
 
 
+_DETALHE_SECRETARIA_SEM_FACILITADOR = "Escolha o facilitador da reunião. A Secretária agenda, mas não conduz a ata."
+_DETALHE_SECRETARIA_COMO_FACILITADORA = "Secretária não pode ser facilitadora: a montagem da ata é do Facilitador."
+
+
 class CorrecaoInternaRequest(BaseModel):
     texto: str
 
@@ -124,6 +128,12 @@ async def agendar_reuniao(
     # token órfão, então aqui a linha existe.
     criador_id = me["id"]
 
+    # Secretária não monta ata (Ata Guiada e pendências a recusam), então o
+    # fallback abaixo a faria facilitadora de uma reunião que ela não conduz
+    # (issue #761). Para ela, dizer quem facilita é obrigatório.
+    if not req.facilitador_id and is_secretaria(me):
+        raise HTTPException(status_code=422, detail=_DETALHE_SECRETARIA_SEM_FACILITADOR)
+
     # Resolve facilitador_id: usa o do payload se informado e válido, senão
     # cai no fallback histórico (email do usuário logado).
     facilitador_id: str | None = None
@@ -131,7 +141,7 @@ async def agendar_reuniao(
         try:
             fac_result = (
                 supabase.table("participantes")
-                .select("id, nome_completo, email, ativo")
+                .select("id, nome_completo, email, ativo, access_profile")
                 .eq("id", req.facilitador_id)
                 .limit(1)
                 .execute()
@@ -141,6 +151,8 @@ async def agendar_reuniao(
             facilitador_row = fac_result.data[0]
             if not facilitador_row.get("ativo"):
                 raise HTTPException(status_code=400, detail="Facilitador informado está inativo")
+            if is_secretaria(facilitador_row):
+                raise HTTPException(status_code=422, detail=_DETALHE_SECRETARIA_COMO_FACILITADORA)
             facilitador_id = facilitador_row["id"]
         except HTTPException:
             raise
@@ -999,11 +1011,20 @@ async def editar_reuniao(
     # validação é que rodava só pra ela, então todo mundo gravava ponteiro solto
     # (ou pessoa desligada) na coluna.
     if req.facilitador_id:
-        fac = supabase.table("participantes").select("id, ativo").eq("id", req.facilitador_id).limit(1).execute()
+        fac = (
+            supabase.table("participantes")
+            .select("id, ativo, access_profile")
+            .eq("id", req.facilitador_id)
+            .limit(1)
+            .execute()
+        )
         if not fac.data:
             raise HTTPException(status_code=404, detail="Facilitador informado não encontrado")
         if not fac.data[0].get("ativo"):
             raise HTTPException(status_code=400, detail="Facilitador informado está inativo")
+        # Mesma trava do `agendar` (issue #761): a reunião travaria na ata.
+        if is_secretaria(fac.data[0]):
+            raise HTTPException(status_code=422, detail=_DETALHE_SECRETARIA_COMO_FACILITADORA)
 
     updates: dict = {k: v for k, v in req.model_dump(exclude_none=True).items()}
     if "tipo" in updates and updates["tipo"] is not None:
