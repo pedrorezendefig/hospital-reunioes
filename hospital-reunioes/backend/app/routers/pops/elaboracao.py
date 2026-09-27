@@ -171,7 +171,24 @@ async def chat_elaboracao(
         updates: dict = {"rascunho": out["rascunho"]}
         if out.get("periodicidade_sugerida"):
             updates["periodicidade_sugerida"] = out["periodicidade_sugerida"]
-        supabase.table("pops_versoes").update(updates).eq("id", versao["id"]).execute()
+        # A gravação confere o estado DE NOVO, no próprio update: com a IA fora
+        # do loop (issue #773), a Versão pode ter ido para revisão enquanto o
+        # agente respondia, e a guarda do começo da rota já não vale.
+        gravadas = (
+            supabase.table("pops_versoes")
+            .update(updates)
+            .eq("id", versao["id"])
+            .in_("estado", list(pops_dominio.ESTADOS_ELABORACAO))
+            .execute()
+        )
+        if not gravadas.data:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "A Versão foi enviada para revisão enquanto o agente respondia, "
+                    "então esta resposta não foi gravada."
+                ),
+            )
         versao = pops_dominio.iniciar_elaboracao_se_preciso(supabase, versao, actor=actor, request=request)
 
     if out.get("periodicidade_sugerida") is None:

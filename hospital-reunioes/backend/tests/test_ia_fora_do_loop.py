@@ -39,7 +39,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from test_assistente_tecnologia import _corpo, _imagem, _montar, _pessoa  # noqa: E402
 from test_ata_guiada import CURRENT_USER, FACILITADOR, _reuniao_programada, _SupabaseMock  # noqa: E402
-from test_pops_elaboracao import ELABORADOR, _chat, _client_para, _sb  # noqa: E402
+from test_pops_elaboracao import ELABORADOR, _chat, _client_para, _resposta_ia, _sb, _versao  # noqa: E402
 
 from app.dependencies import get_current_user, get_supabase_client  # noqa: E402
 from app.limiter import limiter  # noqa: E402
@@ -174,6 +174,38 @@ class TestRotasChamamAIaForaDoLoop:
         resposta = _chat(_client_para(ELABORADOR, _sb()))
         assert resposta.status_code == 200, resposta.text
         _correu_no_executor_da_ia(provedor)
+
+
+class TestVersaoQueSaiDaElaboracaoDuranteOChat:
+    """Com a IA fora do loop, outra requisição anda enquanto o chat espera.
+
+    Antes o loop preso serializava tudo (um worker só), e o envio da Versão
+    para revisão esperava o chat terminar. Agora ele pode entrar no meio, e a
+    resposta da IA não pode gravar rascunho numa Versão que já saiu das mãos do
+    Elaborador, nem registrar o início da elaboração de novo.
+    """
+
+    def test_a_resposta_nao_grava_o_rascunho_e_a_rota_avisa(self, monkeypatch):
+        sb = _sb(versao=_versao(estado="EM_ELABORACAO"))
+
+        def _enviada_para_revisao_no_meio(**_kwargs):
+            sb.tables["pops_versoes"][0]["estado"] = "EM_REVISAO"
+            return SimpleNamespace(choices=[SimpleNamespace(message=SimpleNamespace(content=_resposta_ia()))])
+
+        cliente_da_ia = SimpleNamespace(
+            chat=SimpleNamespace(completions=SimpleNamespace(create=_enviada_para_revisao_no_meio))
+        )
+        monkeypatch.setattr(ai_processor, "_llm_provider", lambda: "openrouter")
+        monkeypatch.setattr(ai_processor, "_get_llm", lambda: (cliente_da_ia, "modelo-teste", {}))
+
+        resposta = _chat(_client_para(ELABORADOR, sb))
+
+        assert resposta.status_code == 409, resposta.text
+        assert "revisão" in resposta.json()["detail"]
+        versao = sb.tables["pops_versoes"][0]
+        assert versao["estado"] == "EM_REVISAO"
+        assert versao["rascunho"] is None, "o rascunho da IA foi gravado numa Versão fora da elaboração"
+        assert sb.tables["audit_log"] == []
 
 
 # ═══════════════════════════════════════════════════════════════════════════
