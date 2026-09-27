@@ -42,3 +42,11 @@ export function copiaDaRecorrencia(original: ReuniaoOriginal, data: string, seri
     nome_grupo_recorrencia: serie.nomeGrupo.trim() || null,
   };
 }
+
+// Herdar o facilitador tem um custo: se ele foi desligado, todas as cópias
+// voltam recusadas. A contagem sozinha não diz por quê, então a mensagem leva o
+// motivo que o servidor deu na primeira recusa.
+export function falhaDaRecorrencia(criadas: number, total: number, motivo: string | null): string {
+  const contagem = `Apenas ${criadas} de ${total} reuniões foram criadas.`;
+  return motivo ? `${contagem} ${motivo}` : contagem;
+}

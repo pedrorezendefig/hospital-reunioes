@@ -4,7 +4,7 @@
 // é a mesma reunião se repetindo: as cópias herdam o facilitador da original.
 import { describe, expect, it } from "vitest";
 
-import { copiaDaRecorrencia } from "./copiaDaRecorrencia";
+import { copiaDaRecorrencia, falhaDaRecorrencia } from "./copiaDaRecorrencia";
 
 const ORIGINAL = {
   titulo: "Diretoria",
@@ -53,5 +53,17 @@ describe("copiaDaRecorrencia", () => {
     expect(copia.objetivo).toBeNull();
     expect(copia.participante_ids).toEqual([]);
     expect(copia.nome_grupo_recorrencia).toBeNull();
+  });
+});
+
+describe("falhaDaRecorrencia", () => {
+  it("diz quantas cópias nasceram e o motivo que o servidor deu", () => {
+    expect(falhaDaRecorrencia(0, 4, "Facilitador informado está inativo")).toBe(
+      "Apenas 0 de 4 reuniões foram criadas. Facilitador informado está inativo",
+    );
+  });
+
+  it("sem motivo do servidor, fica só a contagem", () => {
+    expect(falhaDaRecorrencia(2, 4, null)).toBe("Apenas 2 de 4 reuniões foram criadas.");
   });
 });

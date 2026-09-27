@@ -49,7 +49,7 @@ import TrocarFacilitadorModal from "@/components/reunioes/TrocarFacilitadorModal
 import { DeleteButton } from "@/components/DeleteButton";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { isSecretaria, isSuperAdmin } from "@/lib/auth";
-import { copiaDaRecorrencia } from "@/lib/reunioes/copiaDaRecorrencia";
+import { copiaDaRecorrencia, falhaDaRecorrencia } from "@/lib/reunioes/copiaDaRecorrencia";
 import { seloAssinaturas } from "@/lib/reunioes/seloAssinaturas";
 import { getErrorMessage } from "@/lib/errors";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
@@ -414,6 +414,7 @@ function RecorrenciaPanel({
     setErro(null);
     const token = await getToken();
     let criados = 0;
+    let motivo: string | null = null;
     const idGrupo = crypto.randomUUID();
 
     for (const data of datas) {
@@ -426,14 +427,19 @@ function RecorrenciaPanel({
         },
         body: JSON.stringify(payload),
       });
-      if (res.ok) criados++;
+      if (res.ok) {
+        criados++;
+      } else if (motivo === null) {
+        const corpo = await res.json().catch(() => null);
+        motivo = typeof corpo?.detail === "string" ? corpo.detail : null;
+      }
     }
 
     setCriando(false);
     if (criados === datas.length) {
       setSucesso(criados);
     } else {
-      setErro(`Apenas ${criados} de ${datas.length} reuniões foram criadas.`);
+      setErro(falhaDaRecorrencia(criados, datas.length, motivo));
     }
   };
 
