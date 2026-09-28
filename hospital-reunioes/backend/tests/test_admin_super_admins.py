@@ -372,11 +372,17 @@ class TestSuperAdminLegadoFonteDeVerdade:
 
     def test_demote_ultimo_conta_por_access_profile(self):
         # Divergencia real: actor e super admin so pelo fallback do espelho
-        # (access_profile NULL, pre-backfill); o alvo e o UNICO super admin
-        # por access_profile. Contando pelo espelho seriam 2 (liberaria);
-        # contando pela fonte da verdade e 1 (bloqueia).
+        # (linha sem a coluna access_profile, caller antigo); o alvo e o UNICO
+        # super admin por access_profile. Contando pelo espelho seriam 2
+        # (liberaria); contando pela fonte da verdade e 1 (bloqueia).
+        #
+        # Sem a CHAVE, e nao com a chave nula: desde a issue #752 o
+        # access_profile nulo explicito e "sem papel" e nega mesmo com a flag
+        # ligada, entao esse actor nem passaria no require_super_admin.
+        actor_so_pelo_espelho = _admin_row("P1", "auth-admin", "admin@ex.com", is_super_admin=True)
+        del actor_so_pelo_espelho["access_profile"]
         participantes = [
-            _admin_row("P1", "auth-admin", "admin@ex.com", is_super_admin=True, access_profile=None),
+            actor_so_pelo_espelho,
             _admin_row("P2", "auth-2", "outro@ex.com", is_super_admin=True),
         ]
         _, sb, client = _make_app(participantes)
