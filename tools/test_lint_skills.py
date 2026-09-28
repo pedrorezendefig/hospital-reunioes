@@ -82,3 +82,23 @@ def test_skill_sem_cabecalho_falha(tmp_path: Path) -> None:
 
     assert resultado.returncode == 1
     assert "solta" in resultado.stdout
+
+
+def test_cabecalho_com_quebra_de_linha_do_windows_passa(tmp_path: Path) -> None:
+    _skill(
+        tmp_path,
+        "windows",
+        "---\r\nname: windows\r\ndescription: 'Salva no Windows: CRLF.'\r\n---\r\n\r\n# Windows\r\n",
+    )
+
+    resultado = _rodar(tmp_path)
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr
+
+
+def test_pasta_sem_nenhuma_skill_falha(tmp_path: Path) -> None:
+    # Caminho errado no --dir não pode deixar o CI verde sobre varredura vazia.
+    resultado = _rodar(tmp_path)
+
+    assert resultado.returncode == 1
+    assert "nenhum" in resultado.stdout.lower()

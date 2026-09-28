@@ -39,8 +39,11 @@ def _problema(arquivo: Path) -> str | None:
 
 def problemas(pasta: Path) -> list[str]:
     """Um texto por SKILL.md cujo cabeçalho o Claude Code descartaria."""
+    arquivos = sorted(pasta.glob("*/SKILL.md"))
+    if not arquivos:
+        return [f"{pasta}: nenhum */SKILL.md encontrado; confira o --dir."]
     erros: list[str] = []
-    for arquivo in sorted(pasta.glob("*/SKILL.md")):
+    for arquivo in arquivos:
         problema = _problema(arquivo)
         if problema:
             erros.append(f"{arquivo}: {problema}")
