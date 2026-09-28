@@ -86,17 +86,21 @@ def _eh(comando: list[str], *prefixo: str) -> bool:
     return tuple(comando[: len(prefixo)]) == prefixo
 
 
+def _eh_pip_install(comando: list[str]) -> bool:
+    return (
+        _eh(comando, "uv", "pip", "install")
+        or _eh(comando, "pip", "install")
+        or _eh(comando, "python", "-m", "pip", "install")
+    )
+
+
+def _le_o_lock(comando: list[str]) -> bool:
+    return _eh(comando, "uv", "export") or _eh(comando, "uv", "sync")
+
+
 def _comandos_de_instalacao(texto: str) -> list[list[str]]:
     """Os comandos que instalam ou resolvem dependências Python."""
-    return [
-        c
-        for c in _comandos(texto)
-        if _eh(c, "uv", "pip", "install")
-        or _eh(c, "uv", "sync")
-        or _eh(c, "uv", "export")
-        or _eh(c, "pip", "install")
-        or _eh(c, "python", "-m", "pip", "install")
-    ]
+    return [c for c in _comandos(texto) if _eh_pip_install(c) or _le_o_lock(c)]
 
 
 def _runs_de_instalacao() -> list[tuple[int, list[list[str]]]]:
@@ -116,7 +120,9 @@ class TestImagemInstalaPeloLock:
 
     def test_lock_entra_na_imagem_antes_da_instalacao(self):
         instrucoes = _instrucoes_do_dockerfile()
-        copias_do_lock = [i for i, (nome, args) in enumerate(instrucoes) if nome == "COPY" and "uv.lock" in args.split()]
+        copias_do_lock = [
+            i for i, (nome, args) in enumerate(instrucoes) if nome == "COPY" and "uv.lock" in args.split()
+        ]
         assert copias_do_lock, "O Dockerfile não copia o uv.lock: a instalação não tem como ler o lock."
         primeira_instalacao = _runs_de_instalacao()[0][0]
         assert copias_do_lock[0] < primeira_instalacao, "O uv.lock precisa entrar na imagem antes do RUN que instala."
@@ -128,11 +134,12 @@ class TestImagemInstalaPeloLock:
                 assert "pyproject.toml" not in c, f"Instalação lendo o pyproject.toml, fora do lock: {shlex.join(c)}"
                 if "install" in c:
                     alvos = c[c.index("install") + 1 :]
-                    assert "." not in alvos and "-e" not in alvos, f"Instalação do projeto, fora do lock: {shlex.join(c)}"
+                    projeto = "." in alvos or "-e" in alvos
+                    assert not projeto, f"Instalação do projeto, fora do lock: {shlex.join(c)}"
 
     def test_lock_e_lido_congelado(self):
         """`uv export` e `uv sync` leem o lock como está (`--frozen` ou `--locked`), sem re-resolver."""
-        leituras = [c for _, cmds in _runs_de_instalacao() for c in cmds if _eh(c, "uv", "export") or _eh(c, "uv", "sync")]
+        leituras = [c for _, cmds in _runs_de_instalacao() for c in cmds if _le_o_lock(c)]
         assert leituras, "Nenhum `uv export` nem `uv sync` no Dockerfile: nada lê o uv.lock."
         for c in leituras:
             assert "--frozen" in c or "--locked" in c, f"Leitura do lock sem --frozen/--locked: {shlex.join(c)}"
@@ -141,7 +148,7 @@ class TestImagemInstalaPeloLock:
         """Com `--require-hashes`, pacote sem versão exata e hash do lock não entra."""
         for _, comandos in _runs_de_instalacao():
             for c in comandos:
-                if _eh(c, "uv", "pip", "install") or _eh(c, "pip", "install") or _eh(c, "python", "-m", "pip", "install"):
+                if _eh_pip_install(c):
                     assert "--require-hashes" in c, f"pip install sem --require-hashes: {shlex.join(c)}"
 
     def test_imagem_nao_leva_dependencias_de_dev(self):
@@ -152,7 +159,7 @@ class TestImagemInstalaPeloLock:
                 assert "dev" not in [c[i + 1] for i, t in enumerate(c[:-1]) if t in {"--extra", "--group"}], (
                     f"Extra de dev na imagem: {texto}"
                 )
-                if _eh(c, "uv", "export") or _eh(c, "uv", "sync"):
+                if _le_o_lock(c):
                     assert "--no-dev" in c, f"Leitura do lock sem --no-dev: {texto}"
 
 
@@ -172,6 +179,12 @@ def _indice(passos: list[dict], condicao) -> list[int]:
 
 def _comandos_do_passo(passo: dict) -> list[list[str]]:
     return [c for linha in passo.get("run", "").splitlines() for c in _comandos(linha)]
+
+
+def _passo_do_sync(passos: list[dict]) -> int:
+    indices = _indice(passos, lambda r: "uv sync" in r)
+    assert indices, "Nenhum passo do job de backend roda `uv sync`."
+    return indices[0]
 
 
 class TestCiInstalaPeloLock:
@@ -196,7 +209,7 @@ class TestCiInstalaPeloLock:
 
     def test_lint_e_testes_rodam_depois_da_instalacao(self):
         passos = _passos_do_backend()
-        sync = _indice(passos, lambda r: "uv sync" in r)[0]
+        sync = _passo_do_sync(passos)
         for ferramenta in ("ruff check", "ruff format", "pytest"):
             usos = _indice(passos, lambda r, f=ferramenta: f in r)
             assert usos and all(i > sync for i in usos), f"`{ferramenta}` roda antes do `uv sync`"
@@ -225,5 +238,7 @@ class TestCiReprovaLockForaDeSincronia:
     def test_checagem_vem_antes_de_instalar(self):
         """Lock velho reprova antes de o `uv sync --frozen` instalar a versão velha em silêncio."""
         passos = _passos_do_backend()
-        sync = _indice(passos, lambda r: "uv sync" in r)[0]
-        assert min(self._passos_de_checagem()) < sync
+        sync = _passo_do_sync(passos)
+        checagens = self._passos_de_checagem()
+        assert checagens, "Nenhum passo do CI roda `uv lock --check`."
+        assert min(checagens) < sync, "`uv lock --check` precisa rodar antes do `uv sync`."

@@ -36,9 +36,11 @@ def _com_timeout_no_resend() -> None:
 
     O `resend` monta a requisição num cliente próprio (`resend.default_http_client`),
     e é ELE quem tem o `timeout`. As versões novas já trazem 30 segundos por
-    padrão; as antigas, não. Como o `pyproject.toml` pede `resend>=2.0.0`, o que
-    o CI instala não é o que a `uv.lock` fixa (foi o que mordeu nas issues #542 e
-    #546), então o teto é escrito aqui e não deixado por conta da versão.
+    padrão; as antigas, não. Imagem e CI instalam pelo `uv.lock` (issue #852),
+    mas o `pyproject.toml` pede só `resend>=2.0.0` e qualquer `uv lock` pode
+    trocar a versão (antes da #852, CI e lock já divergiam, o que mordeu nas
+    issues #542 e #546), então o teto é escrito aqui e não deixado por conta da
+    versão.
 
     Falhar aqui não pode derrubar a subida do app: SDK sem esta peça continua
     mandando email, só que sem o nosso teto, e o log diz isso.
