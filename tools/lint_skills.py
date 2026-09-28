@@ -1,6 +1,15 @@
 #!/usr/bin/env python3
 """Lint do cabeçalho YAML das skills (.claude/skills/*/SKILL.md), issue #807.
 
+Quando o cabeçalho não parseia, o Claude Code não avisa: carrega a skill com o
+nome da pasta e a primeira linha do corpo como descrição, e todo campo do
+cabeçalho some. O caso clássico é `description:` sem aspas com um dois-pontos
+seguido de espaço no meio do texto, que o YAML lê como chave nova. A correção é
+pôr o valor entre aspas simples.
+
+Garante, para toda skill: cabeçalho entre `---` na primeira linha, que parseia
+com `yaml.safe_load` e tem `name` e `description` não vazios.
+
 Uso: python3 tools/lint_skills.py [--dir .claude/skills]
 Sai com código 1 se houver qualquer violação.
 """
@@ -24,7 +33,11 @@ def _problema(arquivo: Path) -> str | None:
     try:
         cabecalho = yaml.safe_load(m.group(1))
     except yaml.YAMLError as e:
-        return f"cabeçalho YAML não parseia ({str(e).splitlines()[0]})."
+        motivo = str(e).splitlines()[0]
+        return (
+            f"cabeçalho YAML não parseia ({motivo}). "
+            "Dois-pontos no texto? Ponha o valor entre aspas simples."
+        )
     if not isinstance(cabecalho, dict):
         return "cabeçalho YAML não é um mapa de campos."
     faltando = [
