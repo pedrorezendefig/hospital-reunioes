@@ -352,3 +352,478 @@ class TestOEmailChegaEApareceNaTriagem:
         assert corpo["anexos"][0]["disponivel"] is True
         # O binário foi baixado no ato e guardado no bucket privado da Ouvidoria.
         assert list(supabase.storage.arquivos.values()) == [PDF]
+
+    def test_o_mesmo_evento_duas_vezes_gera_um_item_so_e_sucesso_nas_duas(self, monkeypatch):
+        """O Resend reentrega o que acha que falhou, e o svix pode mandar a
+        mesma entrega de novo. O e-mail é um só, e a triagem também."""
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_0001"] = _lido()
+
+        primeira = _entregar(cliente, _evento())
+        segunda = _entregar(cliente, _evento())
+
+        assert primeira.status_code == 200, primeira.text
+        assert segunda.status_code == 200, segunda.text
+        assert segunda.json()["desfecho"] == "duplicado"
+        assert len(supabase.tabelas["ouvidoria_emails_recebidos"]) == 1
+        assert len(supabase.tabelas["ouvidoria_emails_recebidos_anexos"]) == 1
+        # A reentrega de item completo não gasta cota nem tempo no Resend.
+        assert resend.chamadas == ["em_0001"]
+        assert len(cliente.get("/api/ouvidoria/triagem-email").json()["emails"]) == 1
+
+    def test_evento_que_nao_e_email_recebido_e_ignorado_sem_gravar(self, monkeypatch):
+        """O mesmo endpoint do Resend pode receber os eventos do e-mail que o
+        app ENVIA. Eles não são triagem."""
+        cliente, supabase, resend = _client(monkeypatch)
+
+        r = _entregar(cliente, _evento(tipo="email.delivered"))
+
+        assert r.status_code == 200
+        assert r.json() == {"ignorado": "evento"}
+        assert supabase.tabelas["ouvidoria_emails_recebidos"] == []
+        assert resend.chamadas == []
+
+    def test_remetente_do_dominio_do_hospital_entra_com_a_marca_interno(self, monkeypatch):
+        """Resposta de área e e-mail de colega chegam na mesma caixa. A marca
+        ajuda o ouvidor a não confundir isso com manifestação."""
+        cliente, _, resend = _client(monkeypatch)
+        remetentes = {
+            "em_interno": "Faturamento <faturamento@hospitalsaomatheus.com.br>",
+            "em_sub": "ti@sistemas.hospitalsaomatheus.com.br",
+            "em_fora": "Joana <joana@gmail.com>",
+            # O domínio no fim do nome de outro domínio não é o hospital.
+            "em_parecido": "golpe@falsohospitalsaomatheus.com.br",
+        }
+        for email_id, remetente in remetentes.items():
+            resend.respostas[email_id] = _lido(anexos=())
+            assert _entregar(cliente, _evento(email_id, remetente=remetente, anexos=[])).status_code == 200
+
+        emails = cliente.get("/api/ouvidoria/triagem-email").json()["emails"]
+        marcas = {e["remetente_endereco"]: e["interno"] for e in emails}
+        assert marcas == {
+            "faturamento@hospitalsaomatheus.com.br": True,
+            "ti@sistemas.hospitalsaomatheus.com.br": True,
+            "joana@gmail.com": False,
+            "golpe@falsohospitalsaomatheus.com.br": False,
+        }
+
+
+class TestAAssinaturaGuardaAPorta:
+    """A porta é pública e não tem login: a assinatura do Resend é a única
+    prova de que a entrega veio dele. Sem ela, qualquer um poria e-mail falso
+    na triagem."""
+
+    def test_assinatura_invalida_e_recusada_e_nada_e_gravado(self, monkeypatch):
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_0001"] = _lido()
+        corpo = json.dumps(_evento()).encode("utf-8")
+        outro_segredo = "whsec_" + base64.b64encode(b"outro-segredo-que-nao-e-o-nosso!").decode("ascii")
+
+        r = _entregar(cliente, _evento(), cabecalhos=_assinatura(corpo, segredo=outro_segredo))
+
+        assert r.status_code == 401
+        assert supabase.tabelas["ouvidoria_emails_recebidos"] == []
+        assert supabase.storage.arquivos == {}
+        assert resend.chamadas == []
+
+    def test_corpo_alterado_depois_de_assinado_e_recusado(self, monkeypatch):
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_0001"] = _lido()
+        assinado = json.dumps(_evento()).encode("utf-8")
+
+        r = _entregar(cliente, _evento(assunto="Assunto trocado no caminho"), cabecalhos=_assinatura(assinado))
+
+        assert r.status_code == 401
+        assert supabase.tabelas["ouvidoria_emails_recebidos"] == []
+
+    def test_entrega_sem_os_cabecalhos_do_svix_e_recusada(self, monkeypatch):
+        cliente, supabase, _ = _client(monkeypatch)
+
+        r = _entregar(cliente, _evento(), cabecalhos={})
+
+        assert r.status_code == 401
+        assert supabase.tabelas["ouvidoria_emails_recebidos"] == []
+
+    def test_entrega_assinada_mas_velha_e_recusada(self, monkeypatch):
+        """Uma entrega capturada não pode valer para sempre: o carimbo de tempo
+        entra na assinatura e tem janela de cinco minutos."""
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_0001"] = _lido()
+        corpo = json.dumps(_evento()).encode("utf-8")
+
+        r = _entregar(cliente, _evento(), cabecalhos=_assinatura(corpo, timestamp=int(time.time()) - 3600))
+
+        assert r.status_code == 401
+        assert supabase.tabelas["ouvidoria_emails_recebidos"] == []
+
+    def test_segredo_ausente_recusa_tudo_e_nada_e_gravado(self, monkeypatch):
+        """Fail-closed: sem o segredo não há o que conferir, e aceitar seria a
+        porta aberta com aparência de guarda."""
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_0001"] = _lido()
+        monkeypatch.setattr(settings, "resend_webhook_secret", "")
+
+        r = _entregar(cliente, _evento())
+
+        assert r.status_code == 503
+        assert supabase.tabelas["ouvidoria_emails_recebidos"] == []
+        assert resend.chamadas == []
+
+    def test_segredo_que_nao_decodifica_tambem_fecha_a_porta(self, monkeypatch):
+        cliente, supabase, _ = _client(monkeypatch)
+        monkeypatch.setattr(settings, "resend_webhook_secret", "whsec_isto nao e base64!")
+
+        r = _entregar(cliente, _evento(), cabecalhos={"svix-id": "x", "svix-timestamp": "1", "svix-signature": "v1,x"})
+
+        assert r.status_code == 503
+        assert supabase.tabelas["ouvidoria_emails_recebidos"] == []
+
+
+class TestOQueVeioNaoSePerde:
+    """Falha ao buscar corpo ou anexo grava o item com o que veio, marcado como
+    incompleto; a reentrega do Resend completa em vez de duplicar."""
+
+    def test_anexo_que_falha_deixa_o_item_visivel_e_incompleto_e_a_reentrega_completa(self, monkeypatch):
+        cliente, supabase, resend = _client(monkeypatch)
+        anexos = [
+            {"id": "at_1", "filename": "laudo.pdf", "content_type": "application/pdf"},
+            {"id": "at_2", "filename": "foto.jpg", "content_type": "image/jpeg"},
+        ]
+        resend.respostas["em_0001"] = _lido(
+            anexos=(
+                AnexoDoResend(id="at_1", filename="laudo.pdf", content_type="application/pdf", conteudo=PDF),
+                AnexoDoResend(id="at_2", filename="foto.jpg", content_type="image/jpeg", erro="ReadTimeout"),
+            )
+        )
+
+        primeira = _entregar(cliente, _evento(anexos=anexos))
+
+        # O não-2xx é o que faz o Resend reentregar com espera crescente.
+        assert primeira.status_code == 503
+        [item] = cliente.get("/api/ouvidoria/triagem-email").json()["emails"]
+        assert item["incompleto"] is True
+        aberto = cliente.get(f"/api/ouvidoria/triagem-email/{item['id']}").json()
+        assert aberto["corpo_texto"] == "Esperei três horas na recepção sem informação nenhuma."
+        assert {a["filename"]: a["disponivel"] for a in aberto["anexos"]} == {"laudo.pdf": True, "foto.jpg": False}
+
+        resend.respostas["em_0001"] = _lido(
+            anexos=(
+                AnexoDoResend(id="at_1", filename="laudo.pdf", content_type="application/pdf", conteudo=PDF),
+                AnexoDoResend(id="at_2", filename="foto.jpg", content_type="image/jpeg", conteudo=b"\xff\xd8jpeg"),
+            )
+        )
+        segunda = _entregar(cliente, _evento(anexos=anexos))
+
+        assert segunda.status_code == 200, segunda.text
+        assert segunda.json()["desfecho"] == "completado"
+        [item] = cliente.get("/api/ouvidoria/triagem-email").json()["emails"]
+        assert item["incompleto"] is False
+        assert item["quantidade_de_anexos"] == 2
+        aberto = cliente.get(f"/api/ouvidoria/triagem-email/{item['id']}").json()
+        assert {a["filename"]: a["disponivel"] for a in aberto["anexos"]} == {"laudo.pdf": True, "foto.jpg": True}
+        # O laudo, que já estava guardado, não subiu de novo.
+        assert sorted(supabase.storage.arquivos.values()) == sorted([PDF, b"\xff\xd8jpeg"])
+
+    def test_corpo_que_nao_vem_grava_o_cabecalho_e_a_reentrega_traz_o_corpo(self, monkeypatch):
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_0001"] = LeituraDoResendError("HTTPStatusError")
+
+        primeira = _entregar(cliente, _evento())
+
+        assert primeira.status_code == 503
+        [item] = cliente.get("/api/ouvidoria/triagem-email").json()["emails"]
+        assert item["incompleto"] is True
+        assert item["assunto"] == "Demora na recepção do ambulatório"
+        aberto = cliente.get(f"/api/ouvidoria/triagem-email/{item['id']}").json()
+        assert aberto["corpo_texto"] is None
+        # O anexo anunciado no evento aparece, sem binário.
+        assert [(a["filename"], a["disponivel"]) for a in aberto["anexos"]] == [("laudo.pdf", False)]
+
+        resend.respostas["em_0001"] = _lido()
+        segunda = _entregar(cliente, _evento())
+
+        assert segunda.status_code == 200, segunda.text
+        assert len(supabase.tabelas["ouvidoria_emails_recebidos"]) == 1
+        aberto = cliente.get(f"/api/ouvidoria/triagem-email/{item['id']}").json()
+        assert aberto["incompleto"] is False
+        assert aberto["corpo_texto"] == "Esperei três horas na recepção sem informação nenhuma."
+        assert [(a["filename"], a["disponivel"]) for a in aberto["anexos"]] == [("laudo.pdf", True)]
+
+    def test_reentrega_nao_devolve_nada_a_um_email_ja_decidido(self, monkeypatch):
+        """Item decidido (o descarte apaga corpo e anexos) não é completado por
+        reentrega atrasada: o corpo apagado não pode voltar pela porta dos
+        fundos."""
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_0001"] = LeituraDoResendError("HTTPStatusError")
+        _entregar(cliente, _evento())
+        linha = supabase.tabelas["ouvidoria_emails_recebidos"][0]
+        linha.update({"estado": "descartado", "decidido_em": "2026-09-11T09:00:00+00:00"})
+
+        resend.respostas["em_0001"] = _lido()
+        r = _entregar(cliente, _evento())
+
+        assert r.status_code == 200
+        assert linha["corpo_texto"] is None
+        assert resend.chamadas == ["em_0001"]
+
+
+# ─── Seam 2: as rotas da triagem ─────────────────────────────────────────────
+
+
+def _um_email_na_triagem(monkeypatch, participante):
+    cliente, supabase, resend = _client(monkeypatch, participante)
+    resend.respostas["em_0001"] = _lido()
+    assert _entregar(cliente, _evento()).status_code == 200
+    email_id = supabase.tabelas["ouvidoria_emails_recebidos"][0]["id"]
+    anexo_id = supabase.tabelas["ouvidoria_emails_recebidos_anexos"][0]["id"]
+    return cliente, supabase, email_id, anexo_id
+
+
+class TestSoOPerfilDaOuvidoriaVe:
+    @pytest.mark.parametrize("participante", [SECRETARIA, SUPER_ADMIN, None])
+    def test_perfil_sem_ouvidoria_recebe_403_na_listagem_no_item_e_no_anexo(self, monkeypatch, participante):
+        cliente, supabase, email_id, anexo_id = _um_email_na_triagem(monkeypatch, participante)
+
+        assert cliente.get("/api/ouvidoria/triagem-email").status_code == 403
+        assert cliente.get(f"/api/ouvidoria/triagem-email/{email_id}").status_code == 403
+        assert cliente.get(f"/api/ouvidoria/triagem-email/{email_id}/anexos/{anexo_id}/url").status_code == 403
+        assert supabase.storage.assinaturas == []
+
+    @pytest.mark.parametrize("participante", [OUVIDOR, DIRETORIA])
+    def test_os_dois_perfis_da_ouvidoria_leem(self, monkeypatch, participante):
+        cliente, _, email_id, _ = _um_email_na_triagem(monkeypatch, participante)
+
+        assert cliente.get("/api/ouvidoria/triagem-email").status_code == 200
+        assert cliente.get(f"/api/ouvidoria/triagem-email/{email_id}").status_code == 200
+
+    def test_abrir_o_item_entra_no_log_de_acesso_com_o_email_como_alvo(self, monkeypatch):
+        cliente, supabase, email_id, _ = _um_email_na_triagem(monkeypatch, OUVIDOR)
+
+        cliente.get(f"/api/ouvidoria/triagem-email/{email_id}")
+
+        [acesso] = supabase.tabelas["ouvidoria_acessos"]
+        assert acesso["email_recebido_id"] == email_id
+        assert acesso["ator_id"] == "P10"
+        assert acesso["ator_nome"] == "Marta Ouvidora"
+        assert acesso["acao"] == "ver_email_recebido"
+        assert "manifestacao_id" not in acesso
+
+
+class TestOAnexoSoSaiPorUrlAssinada:
+    def test_anexo_do_email_e_lido_por_url_assinada_nunca_por_caminho_publico(self, monkeypatch):
+        cliente, supabase, email_id, anexo_id = _um_email_na_triagem(monkeypatch, OUVIDOR)
+
+        r = cliente.get(f"/api/ouvidoria/triagem-email/{email_id}/anexos/{anexo_id}/url")
+
+        assert r.status_code == 200, r.text
+        assert "token=assinado" in r.json()["url"]
+        assert r.json()["filename"] == "laudo.pdf"
+        assert r.json()["expira_em_segundos"] == 1800
+        [assinatura] = supabase.storage.assinaturas
+        assert assinatura["path"].startswith("anexos-ouvidoria/email-recebido-")
+        assert supabase.storage.publicas == []
+        # Nem a lista nem o item entregam caminho de storage: sem a rota que
+        # assina, não há como chegar ao binário.
+        assert "storage_path" not in json.dumps(cliente.get(f"/api/ouvidoria/triagem-email/{email_id}").json())
+        assert "email-recebido-" not in json.dumps(cliente.get("/api/ouvidoria/triagem-email").json())
+
+    def test_anexo_de_outro_email_nao_abre_por_este(self, monkeypatch):
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_a"] = _lido()
+        resend.respostas["em_b"] = _lido()
+        _entregar(cliente, _evento("em_a"))
+        _entregar(cliente, _evento("em_b"))
+        email_a = supabase.tabelas["ouvidoria_emails_recebidos"][0]["id"]
+        anexo_de_b = supabase.tabelas["ouvidoria_emails_recebidos_anexos"][1]["id"]
+
+        r = cliente.get(f"/api/ouvidoria/triagem-email/{email_a}/anexos/{anexo_de_b}/url")
+
+        assert r.status_code == 404
+        assert supabase.storage.assinaturas == []
+
+    def test_anexo_html_vai_ao_bucket_como_binario_generico(self, monkeypatch):
+        """O tipo declarado é de quem mandou. Um `.html` servido como
+        `text/html` pela URL assinada abriria como página."""
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_0001"] = _lido(
+            anexos=(AnexoDoResend(id="at_1", filename="fatura.html", content_type="text/html", conteudo=b"<script>"),)
+        )
+
+        _entregar(cliente, _evento(anexos=[{"id": "at_1", "filename": "fatura.html", "content_type": "text/html"}]))
+
+        [upload] = supabase.storage.uploads
+        assert upload["opcoes"]["content-type"] == "application/octet-stream"
+        assert not upload["path"].endswith(".html")
+
+
+class TestOHtmlNuncaSaiParaATela:
+    def test_o_item_entrega_o_corpo_em_texto_e_nunca_o_html(self, monkeypatch):
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_0001"] = _lido(texto="texto puro", html='<img src=x onerror="alert(1)">')
+        _entregar(cliente, _evento())
+        email_id = supabase.tabelas["ouvidoria_emails_recebidos"][0]["id"]
+
+        aberto = cliente.get(f"/api/ouvidoria/triagem-email/{email_id}").json()
+
+        # Guardado, para as fatias seguintes e para a auditoria...
+        assert supabase.tabelas["ouvidoria_emails_recebidos"][0]["corpo_html"] == '<img src=x onerror="alert(1)">'
+        # ...e fora da resposta.
+        assert "corpo_html" not in aberto
+        assert "onerror" not in json.dumps(aberto)
+        assert aberto["corpo_texto"] == "texto puro"
+
+
+class TestAOrdemDaTriagem:
+    def test_pendentes_primeiro_e_o_mais_antigo_primeiro(self, monkeypatch):
+        cliente, supabase, _ = _client(monkeypatch)
+        base = {"remetente_nome": None, "assunto": "", "incompleto": False, "interno": False}
+        supabase.tabelas["ouvidoria_emails_recebidos"].extend(
+            [
+                base
+                | {"id": "e1", "remetente_endereco": "a@x.com", "recebido_em": "2026-09-01T10:00:00+00:00"}
+                | {"estado": "descartado", "decidido_em": "2026-09-02T10:00:00+00:00"},
+                base
+                | {"id": "e2", "remetente_endereco": "b@x.com", "recebido_em": "2026-09-05T10:00:00+00:00"}
+                | {"estado": "pendente"},
+                base
+                | {"id": "e3", "remetente_endereco": "c@x.com", "recebido_em": "2026-09-03T10:00:00+00:00"}
+                | {"estado": "pendente"},
+            ]
+        )
+
+        emails = cliente.get("/api/ouvidoria/triagem-email").json()["emails"]
+
+        assert [e["id"] for e in emails] == ["e3", "e2", "e1"]
+
+
+# ─── A função única de leitura do Resend ────────────────────────────────────
+
+
+class TestALeituraDoResend:
+    """A leitura real, contra um transporte dublado (`httpx.MockTransport` não
+    abre socket). Prova o contrato com a API de recebimento do Resend: onde
+    pede, com que chave, e que o anexo que falha volta com erro em vez de
+    derrubar a leitura."""
+
+    @staticmethod
+    def _cliente_http(rotas: dict[str, httpx.Response], pedidos: list[httpx.Request]) -> httpx.Client:
+        def responder(pedido: httpx.Request) -> httpx.Response:
+            pedidos.append(pedido)
+            return rotas.get(str(pedido.url), httpx.Response(404))
+
+        return httpx.Client(transport=httpx.MockTransport(responder))
+
+    def test_busca_corpo_cabecalhos_e_baixa_cada_anexo_pelo_link_assinado(self, monkeypatch):
+        monkeypatch.setattr(settings, "resend_inbound_api_key", "re_leitura")
+        monkeypatch.setattr(settings, "resend_inbound_base_url", "https://api.resend.test")
+        base = "https://api.resend.test/emails/receiving/em_0001"
+        pedidos: list[httpx.Request] = []
+        rotas = {
+            base: httpx.Response(
+                200,
+                json={
+                    "object": "email",
+                    "id": "em_0001",
+                    "text": "corpo em texto",
+                    "html": "<p>corpo</p>",
+                    "message_id": "<abc@mail>",
+                    "reply_to": ["joana@gmail.com"],
+                    "headers": {"Auto-Submitted": "no", "Received": "from mx.google.com", "DKIM-Signature": "v=1"},
+                    "attachments": [
+                        {"id": "at_1", "filename": "laudo.pdf", "content_type": "application/pdf"},
+                        {"id": "at_2", "filename": "foto.jpg", "content_type": "image/jpeg"},
+                    ],
+                },
+            ),
+            f"{base}/attachments": httpx.Response(
+                200,
+                json={
+                    "object": "list",
+                    "data": [
+                        {"id": "at_1", "download_url": "https://cdn.resend.test/at_1?sig=1"},
+                        {"id": "at_2", "download_url": "https://cdn.resend.test/at_2?sig=2"},
+                    ],
+                },
+            ),
+            "https://cdn.resend.test/at_1?sig=1": httpx.Response(200, content=PDF),
+            "https://cdn.resend.test/at_2?sig=2": httpx.Response(500),
+        }
+
+        with self._cliente_http(rotas, pedidos) as http:
+            lido = email_service.ler_email_recebido("em_0001", cliente=http)
+
+        assert lido.texto == "corpo em texto"
+        assert lido.html == "<p>corpo</p>"
+        assert lido.cabecalhos == {
+            "auto-submitted": "no",
+            "message-id": "<abc@mail>",
+            "reply-to": "joana@gmail.com",
+        }
+        assert [(a.id, a.conteudo, a.erro) for a in lido.anexos] == [
+            ("at_1", PDF, None),
+            ("at_2", None, "HTTPStatusError"),
+        ]
+        chamados_na_api = [p for p in pedidos if p.url.host == "api.resend.test"]
+        assert {p.headers["authorization"] for p in chamados_na_api} == {"Bearer re_leitura"}
+        # A chave do Resend não vai para o host que serve o binário.
+        assert all("authorization" not in p.headers for p in pedidos if p.url.host == "cdn.resend.test")
+
+    def test_email_que_a_api_nao_devolve_levanta_erro_de_leitura(self, monkeypatch):
+        monkeypatch.setattr(settings, "resend_inbound_api_key", "re_leitura")
+        monkeypatch.setattr(settings, "resend_inbound_base_url", "https://api.resend.test")
+
+        with self._cliente_http({}, []) as http, pytest.raises(LeituraDoResendError):
+            email_service.ler_email_recebido("em_inexistente", cliente=http)
+
+    def test_sem_chave_nenhuma_nao_ha_leitura(self, monkeypatch):
+        monkeypatch.setattr(settings, "resend_inbound_api_key", "")
+        monkeypatch.setattr(settings, "resend_api_key", "")
+
+        with pytest.raises(LeituraDoResendError):
+            email_service.ler_email_recebido("em_0001")
+
+    def test_sem_chave_de_leitura_propria_usa_a_chave_do_resend_da_casa(self, monkeypatch):
+        monkeypatch.setattr(settings, "resend_inbound_api_key", "")
+        monkeypatch.setattr(settings, "resend_api_key", "re_da_casa")
+        monkeypatch.setattr(settings, "resend_inbound_base_url", "https://api.resend.test")
+        pedidos: list[httpx.Request] = []
+        rotas = {"https://api.resend.test/emails/receiving/em_0001": httpx.Response(200, json={"text": "oi"})}
+
+        with self._cliente_http(rotas, pedidos) as http:
+            lido = email_service.ler_email_recebido("em_0001", cliente=http)
+
+        assert lido.texto == "oi"
+        assert pedidos[0].headers["authorization"] == "Bearer re_da_casa"
+
+
+# ─── A migration ─────────────────────────────────────────────────────────────
+
+
+class TestMigration:
+    TABELAS = ("ouvidoria_emails_recebidos", "ouvidoria_emails_recebidos_anexos")
+
+    @pytest.fixture
+    def comandos(self) -> str:
+        caminho = os.path.join(
+            os.path.dirname(__file__), "..", "..", "supabase", "migrations", "112_ouvidoria_triagem_email.sql"
+        )
+        with open(caminho, encoding="utf-8") as f:
+            ddl = f.read()
+        # Só o SQL, sem a prosa dos comentários.
+        return "\n".join(linha for linha in ddl.lower().splitlines() if not linha.strip().startswith("--"))
+
+    @pytest.mark.parametrize("tabela", TABELAS)
+    def test_cada_tabela_nasce_com_rls_ligado(self, comandos, tabela):
+        assert f"create table if not exists {tabela}" in comandos
+        assert f"alter table {tabela} enable row level security" in comandos
+
+    def test_nenhuma_policy(self, comandos):
+        """Default-deny: só a service_role do backend passa. Uma policy aqui
+        abriria o corpo do e-mail para a anon_key do bundle."""
+        assert "create policy" not in comandos
+
+    def test_a_dedup_tem_coluna_unica_no_banco(self, comandos):
+        assert "resend_email_id    text not null unique" in comandos
+
+    def test_os_quatro_estados_da_triagem(self, comandos):
+        assert "estado in ('pendente', 'virou_manifestacao', 'juntado', 'descartado')" in comandos
