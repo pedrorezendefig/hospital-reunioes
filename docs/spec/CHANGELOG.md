@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.156.6 - 2026-09-28 11:36 - Recuo da continuação enxerga toda quebra de linha
+- Autor: Pedro <pedroribbe@gmail.com>
+- SHA: `e03a1ec`
+- PRs: [#894](https://github.com/pedrorezendefig/hospital-reunioes/pull/894) (issue #770)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (402s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e03a1ec
+
 ## v0.156.5 - 2026-09-27 20:00 - Chamadas à IA saem do event loop nas rotas async
 - Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `baa3477`
