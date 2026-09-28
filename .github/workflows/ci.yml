@@ -51,8 +51,22 @@ jobs:
           python-version: "3.12"
       - name: Install uv
         run: pip install uv
-      - name: Install dependencies
-        run: uv pip install --system -e ".[dev]"
+      - name: Lock em sincronia (uv.lock x pyproject.toml)
+        # Issue #852: o `uv sync --frozen` abaixo e a imagem instalam o que está
+        # no lock, sem re-resolver. Um pyproject.toml alterado sem `uv lock`
+        # passaria em silêncio com as versões velhas; aqui ele reprova.
+        run: |
+          if ! uv lock --check; then
+            echo "::error file=hospital-reunioes/backend/uv.lock::uv.lock fora de sincronia com o pyproject.toml. Rode 'uv lock' em hospital-reunioes/backend e commite o lock junto."
+            exit 1
+          fi
+      - name: Install dependencies (pelo uv.lock)
+        # Versões exatas do lock, com o extra de dev (ruff, pytest), num venv
+        # no Python 3.12 do setup-python. O venv entra no PATH dos passos
+        # seguintes, então ruff e pytest rodam com o que o lock travou.
+        run: |
+          uv sync --frozen --extra dev --python "$(command -v python)"
+          echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
       - name: Lint (ruff)
         run: ruff check .
       - name: Format check (ruff)
