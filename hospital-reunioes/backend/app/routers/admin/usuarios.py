@@ -73,12 +73,20 @@ def _normalize_access_profile_fields(payload: dict, is_create: bool = False) -> 
     quando o perfil é secretária (não tem cargo hospitalar).
 
     Mutação in-place no `payload`. No update, omite campos não enviados.
+
+    `access_profile` nulo ENVIADO (e não só ausente) tira o papel nas Reuniões
+    e por isso zera a flag legada junto (issue #752). Antes o `return` saía
+    antes do espelho, e `{"access_profile": null}` deixava `is_super_admin =
+    true` de pé: uma revogação que só parecia completa.
     """
-    ap = payload.get("access_profile")
-    if ap is None and is_create:
-        ap = "regular"
-        payload["access_profile"] = ap
+    if is_create and payload.get("access_profile") is None:
+        payload["access_profile"] = "regular"
+    if "access_profile" not in payload:
+        return
+    ap = payload["access_profile"]
+
     if ap is None:
+        payload["is_super_admin"] = False
         return
 
     if ap == "super_admin":
