@@ -58,3 +58,27 @@ def test_descricao_sem_aspas_com_dois_pontos_quebra_o_cabecalho(tmp_path: Path) 
     linhas = resultado.stdout.splitlines()
     assert len(linhas) == 1, resultado.stdout
     assert "ship" in linhas[0] and "SKILL.md" in linhas[0]
+
+
+def test_skill_sem_nome_ou_sem_descricao_falha(tmp_path: Path) -> None:
+    _skill(tmp_path, "sem-nome", "---\ndescription: 'Faz algo.'\n---\n")
+    _skill(tmp_path, "sem-descricao", "---\nname: sem-descricao\n---\n")
+    _skill(tmp_path, "descricao-vazia", "---\nname: descricao-vazia\ndescription:\n---\n")
+
+    resultado = _rodar(tmp_path)
+
+    assert resultado.returncode == 1
+    linhas = resultado.stdout.splitlines()
+    assert len(linhas) == 3, resultado.stdout
+    assert any("sem-nome" in linha and "`name`" in linha for linha in linhas)
+    assert any("sem-descricao" in linha and "`description`" in linha for linha in linhas)
+    assert any("descricao-vazia" in linha and "`description`" in linha for linha in linhas)
+
+
+def test_skill_sem_cabecalho_falha(tmp_path: Path) -> None:
+    _skill(tmp_path, "solta", "# Solta\n\nSem cabeçalho nenhum.\n")
+
+    resultado = _rodar(tmp_path)
+
+    assert resultado.returncode == 1
+    assert "solta" in resultado.stdout

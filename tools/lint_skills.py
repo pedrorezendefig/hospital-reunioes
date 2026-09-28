@@ -17,15 +17,33 @@ import yaml
 FRONTMATTER = re.compile(r"^---\r?\n(.*?)\r?\n---", re.S)
 
 
+def _problema(arquivo: Path) -> str | None:
+    m = FRONTMATTER.match(arquivo.read_text(encoding="utf-8"))
+    if not m:
+        return "sem cabeçalho YAML entre `---` na primeira linha."
+    try:
+        cabecalho = yaml.safe_load(m.group(1))
+    except yaml.YAMLError as e:
+        return f"cabeçalho YAML não parseia ({str(e).splitlines()[0]})."
+    if not isinstance(cabecalho, dict):
+        return "cabeçalho YAML não é um mapa de campos."
+    faltando = [
+        campo
+        for campo in ("name", "description")
+        if not isinstance(cabecalho.get(campo), str) or not cabecalho[campo].strip()
+    ]
+    if faltando:
+        return "falta " + " e ".join(f"`{c}`" for c in faltando) + " no cabeçalho."
+    return None
+
+
 def problemas(pasta: Path) -> list[str]:
+    """Um texto por SKILL.md cujo cabeçalho o Claude Code descartaria."""
     erros: list[str] = []
     for arquivo in sorted(pasta.glob("*/SKILL.md")):
-        m = FRONTMATTER.match(arquivo.read_text(encoding="utf-8"))
-        try:
-            yaml.safe_load(m.group(1))
-        except yaml.YAMLError as e:
-            linha = str(e).splitlines()[0]
-            erros.append(f"{arquivo}: cabeçalho YAML não parseia ({linha}).")
+        problema = _problema(arquivo)
+        if problema:
+            erros.append(f"{arquivo}: {problema}")
     return erros
 
 
