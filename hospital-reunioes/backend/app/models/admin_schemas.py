@@ -116,7 +116,9 @@ class AdminUsuarioUpdate(BaseModel):
     """Payload de PATCH /admin/usuarios/{id}. Todos os campos opcionais.
 
     `access_profile` quando informado espelha em is_super_admin (compat
-    fase 1). Mudar pra 'secretaria' zera role automaticamente.
+    fase 1). Mudar pra 'secretaria' zera role automaticamente. `null`
+    explícito tira o papel nas Reuniões e zera is_super_admin junto (issue
+    #752): sem isso a flag legada seguia concedendo Super admin.
     """
 
     nome_completo: str | None = Field(None, min_length=1, max_length=255)
