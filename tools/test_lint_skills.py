@@ -102,3 +102,11 @@ def test_pasta_sem_nenhuma_skill_falha(tmp_path: Path) -> None:
 
     assert resultado.returncode == 1
     assert "nenhum" in resultado.stdout.lower()
+
+
+def test_todas_as_skills_do_repo_tem_cabecalho_valido() -> None:
+    skills = Path(__file__).resolve().parent.parent / ".claude" / "skills"
+
+    resultado = _rodar(skills)
+
+    assert resultado.returncode == 0, resultado.stdout + resultado.stderr

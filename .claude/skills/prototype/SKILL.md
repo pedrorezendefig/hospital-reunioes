@@ -1,6 +1,6 @@
 ---
 name: prototype
-description: Protótipo descartável para responder uma pergunta de design: validar um modelo de estados ou explorar uma UI. Use em "prototipa isso", "quero brincar com isso".
+description: 'Protótipo descartável para responder uma pergunta de design: validar um modelo de estados ou explorar uma UI. Use em "prototipa isso", "quero brincar com isso".'
 ---
 
 > **Hospital Reuniões:** branch descartável = `prototype/<issue>-<slug>`, nunca mergeado na main (push é seguro: o deploy do Coolify acompanha só a main). O context pointer e o veredicto viram comentário na GitHub Issue da fatia via `gh issue comment`.

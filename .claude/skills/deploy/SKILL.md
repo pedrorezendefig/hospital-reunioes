@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Deploy via Coolify a partir de docs/spec/deploy/project.json. Modos: ship (default), status, rollback, setup, migrate-blueprint. Use para subir para prod, ver o estado de produção ou reverter.
+description: 'Deploy via Coolify a partir de docs/spec/deploy/project.json. Modos: ship (default), status, rollback, setup, migrate-blueprint. Use para subir para prod, ver o estado de produção ou reverter.'
 ---
 
 # deploy — skill universal de deploy
