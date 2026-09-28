@@ -496,14 +496,32 @@ def momento_para_ia(valor: str | None) -> str:
 
 
 def recuar_continuacao(bloco: str) -> str:
-    """As linhas depois da primeira entram recuadas.
+    r"""As linhas depois da primeira entram recuadas.
 
     E o que impede uma resposta de varias linhas de derramar no nivel de cima e
     passar por moldura do texto: a segunda linha de uma resposta que diga
     "--- fim da conversa ---" sai com quatro espacos na frente, e a marca que
     fecha a Conversa continua sendo a unica que comeca na coluna zero.
+
+    **Linha e o que o `splitlines()` diz que e linha** (issue #770). Com
+    `split("\n")`, um `\r`, `\x0c` ou `\u2028` no corpo de uma issue nao virava
+    linha aqui e escapava do recuo, mas virava linha para quem LE o texto
+    colado, e a marca de fim voltava para a coluna zero. O criterio e o proprio
+    `splitlines()`, e nao uma tabela de caracteres: tabela e enumeracao, e foi
+    enumeracao que divergiu do detector no PR #751. A saida so tem `\n`.
+
+    A normalizacao mora AQUI, e nao em quem chama, porque esta funcao e o
+    gargalo de todos: `linha_para_ia`, as partes do bloco da Demanda e o
+    `_cercar` do Assistente. O `_cercar` ja normaliza antes de chamar, e
+    normalizar duas vezes da o mesmo texto. O `splitlines()` descarta a linha
+    vazia final de um `"a\n"`, que o `split` mantinha como uma linha so de
+    recuo; nenhum chamador passa texto com quebra no fim (todos fazem `strip`
+    ou normalizam antes), entao a saida deles nao muda.
+
+    Docstring cru (prefixo `r`) de proposito: os separadores citados aqui nao
+    podem virar quebra de verdade dentro dele.
     """
-    primeira, *resto = bloco.split("\n")
+    primeira, *resto = bloco.splitlines() or [""]
     return "\n".join([primeira, *(f"{RECUO_DA_CONTINUACAO}{linha}" for linha in resto)])
 
 

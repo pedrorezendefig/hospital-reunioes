@@ -182,8 +182,10 @@ def _cercar(texto: str, *, titulo: str, inicio: str, fim: str) -> str:
     `recuar_continuacao` empurrar TODO o resto para a direita, e com a primeira
     coluna sempre nossa nenhuma linha la dentro consegue passar por marca.
 
-    **Todo separador de linha vira `\n` antes do recuo.** O recuo e feito por
-    `split("\n")` (`recuar_continuacao`), e o Python reconhece DEZ separadores:
+    **Todo separador de linha vira `\n` antes do recuo.** O recuo era feito por
+    `split("\n")` (o `recuar_continuacao` passou a usar `splitlines()` na issue
+    #770, e normalizar aqui de novo da o mesmo texto), e o Python reconhece DEZ
+    separadores:
     um `\r`, `\x0c`, `\x1e` ou `\u2028` no meio do material nao vira linha para
     o `split` e escapa do recuo, mas vira linha para quem LE o prompt, e era por
     ali que a marca de fim voltava para a coluna zero. A normalizacao usa o
