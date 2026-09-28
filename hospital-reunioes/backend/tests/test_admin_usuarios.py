@@ -34,6 +34,7 @@ from app.models.admin_schemas import (  # noqa: E402
     AdminUsuarioCreate,
     AdminUsuarioDeleteRequest,
     AdminUsuarioUpdate,
+    ReasonRequest,
 )
 from app.models.schemas import UserRole  # noqa: E402
 from app.routers.admin import usuarios as usuarios_router  # noqa: E402
@@ -1116,3 +1117,27 @@ class TestPerfilZeradoTiraOSuperAdmin:
                 supabase=sb,
             )
         assert exc.value.status_code == 403
+
+    @pytest.mark.asyncio
+    async def test_conceder_a_quem_ficou_so_com_a_flag_concede_de_verdade(self):
+        """A linha gravada antes do conserto (perfil nulo, flag ligada) nao e
+        Super admin para o gate. Se a concessao inline olhasse a flag crua, ela
+        diria "ja e" e sairia sem gravar nada: o clique nao teria efeito."""
+        from app.dependencies import require_super_admin
+
+        sb = _build_supabase(participantes=[self._super_admin_alvo(access_profile=None)])
+
+        await usuarios_router.grant_super_admin_inline(
+            participante_id="P020",
+            body=ReasonRequest(reason="voltou para a diretoria"),
+            request=_FakeRequest(),
+            actor=_super_admin(),
+            supabase=sb,
+        )
+
+        assert sb.participantes[0]["access_profile"] == "super_admin"
+        me = await require_super_admin(
+            current_user={"id": "auth-020", "email": "ana@x.com", "metadata": {}},
+            supabase=sb,
+        )
+        assert me["id"] == "P020"
