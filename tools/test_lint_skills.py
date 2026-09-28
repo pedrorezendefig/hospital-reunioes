@@ -24,6 +24,7 @@ def _skill(raiz: Path, nome: str, conteudo: str) -> Path:
 def _rodar(pasta: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         [sys.executable, str(LINT), "--dir", str(pasta)],
+        check=False,
         capture_output=True,
         text=True,
         encoding="utf-8",
@@ -63,7 +64,9 @@ def test_descricao_sem_aspas_com_dois_pontos_quebra_o_cabecalho(tmp_path: Path) 
 def test_skill_sem_nome_ou_sem_descricao_falha(tmp_path: Path) -> None:
     _skill(tmp_path, "sem-nome", "---\ndescription: 'Faz algo.'\n---\n")
     _skill(tmp_path, "sem-descricao", "---\nname: sem-descricao\n---\n")
-    _skill(tmp_path, "descricao-vazia", "---\nname: descricao-vazia\ndescription:\n---\n")
+    _skill(
+        tmp_path, "descricao-vazia", "---\nname: descricao-vazia\ndescription:\n---\n"
+    )
 
     resultado = _rodar(tmp_path)
 
@@ -71,8 +74,12 @@ def test_skill_sem_nome_ou_sem_descricao_falha(tmp_path: Path) -> None:
     linhas = resultado.stdout.splitlines()
     assert len(linhas) == 3, resultado.stdout
     assert any("sem-nome" in linha and "`name`" in linha for linha in linhas)
-    assert any("sem-descricao" in linha and "`description`" in linha for linha in linhas)
-    assert any("descricao-vazia" in linha and "`description`" in linha for linha in linhas)
+    assert any(
+        "sem-descricao" in linha and "`description`" in linha for linha in linhas
+    )
+    assert any(
+        "descricao-vazia" in linha and "`description`" in linha for linha in linhas
+    )
 
 
 def test_skill_sem_cabecalho_falha(tmp_path: Path) -> None:

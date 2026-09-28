@@ -14,7 +14,7 @@ from pathlib import Path
 
 import yaml
 
-FRONTMATTER = re.compile(r"^---\r?\n(.*?)\r?\n---", re.S)
+FRONTMATTER = re.compile(r"^---\r?\n(.*?)\r?\n---", re.DOTALL)
 
 
 def _problema(arquivo: Path) -> str | None:
