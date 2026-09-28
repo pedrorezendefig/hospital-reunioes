@@ -88,7 +88,8 @@
           { "name": "CLICKSIGN_BASE_URL", "purpose": "URL base da ClickSign (sandbox em dev, app em prod)" },
           { "name": "CLICKSIGN_WEBHOOK_SECRET", "purpose": "HMAC que valida callbacks de assinatura ClickSign" },
           { "name": "RESEND_API_KEY", "purpose": "Chave do Resend para emails transacionais" },
-          { "name": "RESEND_FROM_EMAIL", "purpose": "Endereço remetente padrão (noreply@…)" }
+          { "name": "RESEND_FROM_EMAIL", "purpose": "Endereço remetente padrão (noreply@…)" },
+          { "name": "RESEND_WEBHOOK_SECRET", "purpose": "Triagem de e-mail da Ouvidoria (issue #648, ADR 0051): segredo de assinatura (whsec_...) do webhook do Resend Inbound, copiado do painel do Resend no cadastro do webhook (URL /api/webhooks/resend, evento email.received). Obrigatório porque a falta é silenciosa: sem ele POST /api/webhooks/resend responde 503 a toda entrega, nada é gravado e nenhum e-mail de ouvidoria@ chega à triagem. Passo humano na issue #653." }
         ],
         "runtime_optional": [
           { "name": "APP_VERSION", "purpose": "Versão semântica (semver) exibida no /api/health e no rodapé do frontend. Injetada pelo /ship Passo 8.5 (ou /deploy ship Passo 3.5 standalone) a partir de frontend/package.json. Opcional porque config.py tem default '0.1.0' — app não quebra se ausente." },
@@ -105,7 +106,10 @@
           { "name": "MCP_AUTH_ISSUER", "purpose": "Conector MCP da Central (ADR 0058, decisões 3 e 4): o emissor do WorkOS AuthKit, que vira o `iss` esperado no token. Vazio/ausente = o conector responde erro de configuração e nunca abre a porta." },
           { "name": "MCP_AUTH_JWKS_URI", "purpose": "Conector MCP da Central: o JWKS do emissor, para validar a assinatura do token. Vazio/ausente = <MCP_AUTH_ISSUER>/oauth2/jwks, o formato do AuthKit; só se define se o JWKS morar noutro caminho." },
           { "name": "MCP_RESOURCE_URL", "purpose": "Conector MCP da Central: o endereço público do conector (https://api.hospitalsaomatheus.cloud/api/mcp), que é a audiência (`aud`) do token (Resource Indicator, RFC 8707). Vazio/ausente = erro de configuração, nunca acesso aberto. Não existe lista de e-mails: quem conecta é quem é Super admin ativo." },
-          { "name": "CENTRAL_AQUECER_NO_BOOT", "purpose": "Central de Comando (issue #867, ADR 0059): liga o aquecimento do cache no boot, uma leitura do período padrão (28 dias) de cada tela, numa thread, logo depois de o backend subir, para a primeira abertura depois do deploy não esperar o Google e o Instagram. Ausente = true (ligado). Defina 'false' e reinicie o backend para desligar sem deploy de código, por exemplo se a cota de uma fonte apertar." }
+          { "name": "CENTRAL_AQUECER_NO_BOOT", "purpose": "Central de Comando (issue #867, ADR 0059): liga o aquecimento do cache no boot, uma leitura do período padrão (28 dias) de cada tela, numa thread, logo depois de o backend subir, para a primeira abertura depois do deploy não esperar o Google e o Instagram. Ausente = true (ligado). Defina 'false' e reinicie o backend para desligar sem deploy de código, por exemplo se a cota de uma fonte apertar." },
+          { "name": "RESEND_INBOUND_API_KEY", "purpose": "Triagem de e-mail (issue #648): chave do Resend que LÊ o e-mail recebido (corpo, cabeçalhos e anexos, API /emails/receiving). Vazio/ausente = usa RESEND_API_KEY; só é preciso se a chave de envio for restrita a envio (sending access), que não lê nada. Sem leitura, o e-mail entra na triagem marcado como incompleto e o Resend reentrega." },
+          { "name": "RESEND_INBOUND_BASE_URL", "purpose": "Triagem de e-mail (issue #648): base da API do Resend para a leitura do e-mail recebido. Ausente = https://api.resend.com. Só muda para apontar um dublê em teste." },
+          { "name": "OUVIDORIA_DOMINIO_INTERNO", "purpose": "Triagem de e-mail (issue #648): domínio do hospital para a marca 'interno' do remetente (vírgula separa mais de um; subdomínio conta). Ausente = hospitalsaomatheus.com.br. É marca de leitura, não permissão." }
         ],
         "build_time_must_be_marked": false
       },
