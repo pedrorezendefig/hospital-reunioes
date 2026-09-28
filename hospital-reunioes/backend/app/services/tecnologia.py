@@ -515,8 +515,10 @@ def recuar_continuacao(bloco: str) -> str:
     `_cercar` do Assistente. O `_cercar` ja normaliza antes de chamar, e
     normalizar duas vezes da o mesmo texto. O `splitlines()` descarta a linha
     vazia final de um `"a\n"`, que o `split` mantinha como uma linha so de
-    recuo; nenhum chamador passa texto com quebra no fim (todos fazem `strip`
-    ou normalizam antes), entao a saida deles nao muda.
+    recuo. So um chamador chega aqui com quebra no fim: o `_cercar`, quando o
+    material vem vazio (`f"{titulo}\n"`), e ali o que some e essa linha de
+    espacos antes da marca de fim, sem mudar a cerca. Os outros fazem `strip`
+    antes, e a saida deles nao muda.
 
     Docstring cru (prefixo `r`) de proposito: os separadores citados aqui nao
     podem virar quebra de verdade dentro dele.

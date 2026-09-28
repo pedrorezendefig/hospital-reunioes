@@ -183,15 +183,14 @@ def _cercar(texto: str, *, titulo: str, inicio: str, fim: str) -> str:
     coluna sempre nossa nenhuma linha la dentro consegue passar por marca.
 
     **Todo separador de linha vira `\n` antes do recuo.** O recuo era feito por
-    `split("\n")` (o `recuar_continuacao` passou a usar `splitlines()` na issue
-    #770, e normalizar aqui de novo da o mesmo texto), e o Python reconhece DEZ
-    separadores:
-    um `\r`, `\x0c`, `\x1e` ou `\u2028` no meio do material nao vira linha para
+    `split("\n")`, e o Python reconhece DEZ separadores: um `\r`, `\x0c`,
+    `\x1e` ou `\u2028` no meio do material nao vira linha para
     o `split` e escapa do recuo, mas vira linha para quem LE o prompt, e era por
     ali que a marca de fim voltava para a coluna zero. A normalizacao usa o
     proprio `splitlines()` de proposito, e nao uma tabela de caracteres: uma
     tabela e enumeracao, e enumeracao divergiu do criterio de quem le assim que
-    foi escrita.
+    foi escrita. Desde a issue #770 o proprio `recuar_continuacao` quebra por
+    `splitlines()`, e normalizar aqui de novo da o mesmo texto.
 
     A normalizacao mora AQUI, e nao em quem chama, porque as tres cercas do
     prompt (a conversa, o kit e as Demandas abertas) passam por este gargalo.

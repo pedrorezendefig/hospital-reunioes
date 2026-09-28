@@ -75,6 +75,13 @@ class TestRecuarContinuacao:
 
         assert saida == f"um\n{RECUO_DA_CONTINUACAO}dois\n{RECUO_DA_CONTINUACAO}tres"
 
+    def test_crlf_e_uma_quebra_so(self):
+        """O fim de linha de quem escreve no Windows, e o que chega de muita
+        issue: o par vira UMA quebra, sem linha vazia no meio nem `\\r` solto."""
+        saida = recuar_continuacao(f"oi\r\n{MARCA_FIM_CONVERSA}")
+
+        assert saida == f"oi\n{RECUO_DA_CONTINUACAO}{MARCA_FIM_CONVERSA}"
+
 
 class TestCopiarParaIaComSeparadorNaIssue:
     """O corpo da sub-issue NAO e nosso: o repositorio e publico. A primeira
