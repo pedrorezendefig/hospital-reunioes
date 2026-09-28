@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-19T07:23-0300 -->
+<!-- last_update: 2026-09-28T11:42-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -45,9 +45,13 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
+| GET | `/admin/central-de-comando/ao-vivo` | Quantas pessoas estão no Site agora, direto da fonte de tempo real do | ✅ |
 | POST | `/admin/central-de-comando/atualizar-agora` | Força a renovação da tela pedida, no período pedido, e devolve o | ✅ |
 | GET | `/admin/central-de-comando/dados-do-google` | Dados do Google no período: os Visitantes por dia e as Visitas por | ✅ |
-| GET | `/admin/central-de-comando/visao-geral` | A Visão Geral no período: os Visitantes, o anterior, a variação e o | ✅ |
+| GET | `/admin/central-de-comando/instagram` | A tela do Instagram no período: Seguidores e crescimento, Alcance, | ✅ |
+| GET | `/admin/central-de-comando/objetivos` | A galeria dos Objetivos: os seis do catálogo, com o número de hoje (28 | ✅ |
+| GET | `/admin/central-de-comando/objetivos/{identificador}` | A lente de um Objetivo: os números dele no período, as sugestões (cada uma | ✅ |
+| GET | `/admin/central-de-comando/visao-geral` | A Visão Geral no período, por bloco (issue #821): o número-manchete e o | ✅ |
 
 ## comentarios (`app/routers/comentarios.py`)
 
@@ -57,6 +61,13 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/pendencias/{id_acao}/comentarios` | Cria um comentário na pendência e gera notificações de menção. | ✅ |
 | DELETE | `/pendencias/{id_acao}/comentarios/{comentario_id}` | Exclui um comentário. Apenas o autor pode excluir. | ✅ |
 | GET | `/pendencias/{id_acao}/mencionaveis` | Lista participantes mencionáveis no chat da Pendência (quem enxerga a Pendência). | ✅ |
+
+## conector-mcp (`app/routers/conector_mcp.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/.well-known/oauth-protected-resource` | O documento de metadados do recurso protegido (RFC 9728). Sem config, é | ❌ |
+| POST | `/mcp` | O transporte Streamable HTTP do MCP. Config ausente é 503; token que não | ❌ |
 
 ## configuracoes (`app/routers/configuracoes.py`)
 
@@ -385,4 +396,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 224 endpoints em 31 routers · 94% exigem auth.
+**Totais:** 230 endpoints em 32 routers · 93% exigem auth.
