@@ -46,7 +46,9 @@ const FATURAMENTO = {
 };
 
 function item(resumo: typeof JOANA, extra: Record<string, unknown> = {}) {
-  const { quantidade_de_anexos: _ignorada, ...cabecalho } = resumo;
+  // O item aberto não traz a contagem da lista: traz os anexos em si.
+  const cabecalho: Record<string, unknown> = { ...resumo };
+  delete cabecalho.quantidade_de_anexos;
   return {
     ...cabecalho,
     destinatarios: ["ouvidoria@inbound.hospitalsaomatheus.cloud"],
