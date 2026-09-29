@@ -18,6 +18,7 @@ import { useEffect, useState } from "react";
 import { AlertCircle, Loader2, Lock, Mail, Paperclip } from "lucide-react";
 
 import {
+  avisoDosExcedentes,
   formatarChegada,
   marcasDoEmail,
   nomeDoRemetente,
@@ -168,6 +169,10 @@ export function TriagemDeEmail({ token }: { token: string }) {
     );
   }
 
+  // Os anexos além do teto de quantidade não viram anexo da lista: vêm só
+  // contados, e o aviso diz quantos são e onde está o original.
+  const avisoDeExcedentes = aberto ? avisoDosExcedentes(aberto) : null;
+
   return (
     <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
       <section aria-label="E-mails recebidos" className="min-w-0">
@@ -258,7 +263,7 @@ export function TriagemDeEmail({ token }: { token: string }) {
               )}
             </div>
 
-            {aberto.anexos.length > 0 && (
+            {(aberto.anexos.length > 0 || avisoDeExcedentes) && (
               <div>
                 <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Anexos</h3>
                 {erroDoAnexo && (
@@ -299,6 +304,12 @@ export function TriagemDeEmail({ token }: { token: string }) {
                     </li>
                   ))}
                 </ul>
+                {avisoDeExcedentes && (
+                  <p className="flex items-start gap-2 mt-1 text-sm text-slate-500 px-3 py-2 rounded-lg bg-amber-50">
+                    <Paperclip className="w-3.5 h-3.5 shrink-0 mt-0.5" />
+                    <span className="min-w-0 break-words">{avisoDeExcedentes}</span>
+                  </p>
+                )}
               </div>
             )}
           </div>

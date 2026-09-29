@@ -9,6 +9,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  avisoDosExcedentes,
   formatarChegada,
   marcasDoEmail,
   nomeDoRemetente,
@@ -53,6 +54,18 @@ describe("como o e-mail aparece na lista", () => {
     expect(rotuloDosAnexos(0)).toBe("Sem anexo");
     expect(rotuloDosAnexos(1)).toBe("1 anexo");
     expect(rotuloDosAnexos(3)).toBe("3 anexos");
+  });
+
+  it("os anexos além do teto de quantidade viram um aviso só, com o motivo", () => {
+    const motivo = "passa de 20 anexos por e-mail, o original está na caixa ouvidoria@";
+    expect(avisoDosExcedentes({})).toBeNull();
+    expect(avisoDosExcedentes({ anexos_excedentes: 0, motivo_dos_excedentes: null })).toBeNull();
+    expect(avisoDosExcedentes({ anexos_excedentes: 980, motivo_dos_excedentes: motivo })).toBe(
+      `Mais 980 anexos: ${motivo}`
+    );
+    expect(avisoDosExcedentes({ anexos_excedentes: 1, motivo_dos_excedentes: motivo })).toBe(
+      `Mais 1 anexo: ${motivo}`
+    );
   });
 
   it("as marcas do item: interno e incompleto", () => {

@@ -18,6 +18,13 @@
 --   2. o anexo do e-mail recebido (metadados aqui, binario no bucket privado
 --      anexos-ouvidoria, que ja existe desde a 066);
 --   3. o log de acesso da Ouvidoria passa a aceitar o e-mail recebido como alvo.
+--
+-- Idempotente de verdade: rodar de novo nao falha, e num banco onde uma versao
+-- anterior desta 112 ja rodou ela completa o que faltava. Por isso as colunas
+-- que entraram depois da primeira versao (as do teto dos anexos) vem por
+-- ALTER TABLE ... ADD COLUMN IF NOT EXISTS depois do CREATE, e toda constraint
+-- nomeada sai (DROP CONSTRAINT IF EXISTS) antes de entrar: o CREATE TABLE IF
+-- NOT EXISTS de uma tabela que ja existe nao acrescenta coluna nenhuma.
 -- =====================================================
 
 -- 1. O e-mail recebido.
@@ -72,9 +79,28 @@ COMMENT ON COLUMN ouvidoria_emails_recebidos.corpo_html IS
 COMMENT ON COLUMN ouvidoria_emails_recebidos.estado IS
   'pendente, virou_manifestacao, juntado ou descartado. So pendente nasce no webhook; os outros sao decisao do ouvidor.';
 
--- 2. O anexo do e-mail recebido. Todo anexo que o e-mail anuncia ganha linha,
---    com o binario ou sem ele: storage_path NULL e o anexo que nao veio do
---    Resend, e e ele que a reentrega vem completar.
+-- Quantos anexos o e-mail anunciou alem do teto de quantidade do app. O
+-- remetente e anonimo e o subdominio de recebimento tem MX proprio, sem o
+-- filtro do Workspace: so os primeiros anexos, ate o teto, ganham linha, e o
+-- excedente e so contado aqui. Sem isso, um e-mail com milhares de anexos
+-- minusculos viraria milhares de linhas e de idas ao banco a cada entrega do
+-- webhook (revisao de seguranca do PR #899). O original segue na caixa
+-- ouvidoria@ do Workspace.
+ALTER TABLE ouvidoria_emails_recebidos
+  ADD COLUMN IF NOT EXISTS anexos_excedentes INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE ouvidoria_emails_recebidos
+  DROP CONSTRAINT IF EXISTS ouvidoria_emails_recebidos_anexos_excedentes_check;
+ALTER TABLE ouvidoria_emails_recebidos
+  ADD CONSTRAINT ouvidoria_emails_recebidos_anexos_excedentes_check
+  CHECK (anexos_excedentes >= 0);
+
+COMMENT ON COLUMN ouvidoria_emails_recebidos.anexos_excedentes IS
+  'Anexos anunciados alem do teto de quantidade por e-mail. Nao tem linha em ouvidoria_emails_recebidos_anexos: so a contagem, e o original fica na caixa ouvidoria@.';
+
+-- 2. O anexo do e-mail recebido. Todo anexo que o e-mail anuncia, ate o teto de
+--    quantidade, ganha linha, com o binario ou sem ele: storage_path NULL sem
+--    motivo e o anexo que nao veio do Resend, e e ele que a reentrega vem
+--    completar. O que passa do teto e so contado (anexos_excedentes, acima).
 CREATE TABLE IF NOT EXISTS ouvidoria_emails_recebidos_anexos (
   id                UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email_recebido_id UUID NOT NULL REFERENCES ouvidoria_emails_recebidos(id) ON DELETE RESTRICT,
@@ -83,22 +109,34 @@ CREATE TABLE IF NOT EXISTS ouvidoria_emails_recebidos_anexos (
   content_type      TEXT NOT NULL,
   tamanho_bytes     BIGINT CHECK (tamanho_bytes >= 0),
   storage_path      TEXT CHECK (storage_path IS NULL OR btrim(storage_path) <> ''),
-  -- Por que o binario NAO foi guardado de proposito: tipo fora do catalogo ou
-  -- acima do teto (por anexo, por quantidade ou por total do e-mail). O
-  -- remetente e anonimo, e o teto e do app. Linha com motivo nao conta como
-  -- faltando e a reentrega nao a baixa de novo; o original segue na caixa
-  -- ouvidoria@ do Workspace (revisao de seguranca do PR #899).
-  motivo_sem_binario TEXT CHECK (motivo_sem_binario IS NULL OR btrim(motivo_sem_binario) <> ''),
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT ouvidoria_emails_recebidos_anexos_unico UNIQUE (email_recebido_id, resend_anexo_id),
-  CONSTRAINT ouvidoria_emails_recebidos_anexos_binario_ou_motivo
-    CHECK (storage_path IS NULL OR motivo_sem_binario IS NULL)
+  CONSTRAINT ouvidoria_emails_recebidos_anexos_unico UNIQUE (email_recebido_id, resend_anexo_id)
 );
+
+-- Por que o binario NAO foi guardado de proposito: tipo fora do catalogo ou
+-- acima do teto de tamanho (por anexo ou pelo total do e-mail). O remetente e
+-- anonimo, e o teto e do app. Linha com motivo nao conta como faltando e a
+-- reentrega nao a baixa de novo; o original segue na caixa ouvidoria@ do
+-- Workspace (revisao de seguranca do PR #899). Binario e motivo nunca juntos.
+ALTER TABLE ouvidoria_emails_recebidos_anexos
+  ADD COLUMN IF NOT EXISTS motivo_sem_binario TEXT;
+ALTER TABLE ouvidoria_emails_recebidos_anexos
+  DROP CONSTRAINT IF EXISTS ouvidoria_emails_recebidos_anexos_motivo_sem_binario_check;
+ALTER TABLE ouvidoria_emails_recebidos_anexos
+  ADD CONSTRAINT ouvidoria_emails_recebidos_anexos_motivo_sem_binario_check
+  CHECK (motivo_sem_binario IS NULL OR btrim(motivo_sem_binario) <> '');
+ALTER TABLE ouvidoria_emails_recebidos_anexos
+  DROP CONSTRAINT IF EXISTS ouvidoria_emails_recebidos_anexos_binario_ou_motivo;
+ALTER TABLE ouvidoria_emails_recebidos_anexos
+  ADD CONSTRAINT ouvidoria_emails_recebidos_anexos_binario_ou_motivo
+  CHECK (storage_path IS NULL OR motivo_sem_binario IS NULL);
 
 COMMENT ON TABLE ouvidoria_emails_recebidos_anexos IS
   'Anexos do e-mail recebido (ADR 0051). Metadados aqui, binario no bucket privado anexos-ouvidoria, leitura por URL assinada.';
 COMMENT ON COLUMN ouvidoria_emails_recebidos_anexos.storage_path IS
   'Caminho no bucket privado, nome sorteado. NULL sem motivo_sem_binario = o binario nao veio do Resend (item incompleto); NULL com motivo = recusado pelo teto ou pelo tipo.';
+COMMENT ON COLUMN ouvidoria_emails_recebidos_anexos.motivo_sem_binario IS
+  'Por que o binario foi recusado de proposito (tipo fora do catalogo ou acima do teto de tamanho), com o lugar do original. Nunca junto de storage_path.';
 
 -- 3. RLS default-deny (padrao da casa: 009/041/051/063/064/066). O backend usa
 --    service_role; a anon_key do bundle do frontend fica de fora. Nenhuma

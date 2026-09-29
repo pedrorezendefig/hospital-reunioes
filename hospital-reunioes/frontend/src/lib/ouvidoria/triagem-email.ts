@@ -51,6 +51,13 @@ export interface EmailRecebido extends Omit<EmailRecebidoResumo, "quantidade_de_
   corpo_texto: string | null;
   cabecalhos: Record<string, string>;
   anexos: AnexoDoEmail[];
+  /**
+   * Quantos anexos o e-mail anunciou além do teto de quantidade por e-mail.
+   * Eles não viram anexo da lista: só a contagem, e o original fica na caixa.
+   */
+  anexos_excedentes?: number;
+  /** Por que esses anexos ficaram de fora, com o lugar do original. */
+  motivo_dos_excedentes?: string | null;
 }
 
 /** Quem pode abrir a Triagem de e-mail. */
@@ -85,6 +92,20 @@ export function formatarChegada(iso: string): string {
 export function rotuloDosAnexos(quantidade: number): string {
   if (quantidade === 0) return "Sem anexo";
   return quantidade === 1 ? "1 anexo" : `${quantidade} anexos`;
+}
+
+/**
+ * O aviso dos anexos que passaram do teto de quantidade por e-mail, ou null
+ * quando não há. Eles não viram anexo da lista, mas o ouvidor precisa saber
+ * que existem e onde está o original.
+ */
+export function avisoDosExcedentes(
+  email: Pick<EmailRecebido, "anexos_excedentes" | "motivo_dos_excedentes">
+): string | null {
+  const quantidade = email.anexos_excedentes ?? 0;
+  if (quantidade <= 0) return null;
+  const rotulo = `Mais ${rotuloDosAnexos(quantidade)}`;
+  return email.motivo_dos_excedentes ? `${rotulo}: ${email.motivo_dos_excedentes}` : rotulo;
 }
 
 /**

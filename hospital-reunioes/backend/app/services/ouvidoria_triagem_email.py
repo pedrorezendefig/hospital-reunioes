@@ -68,7 +68,7 @@ CAMPOS_DA_LISTA = (
 
 # O item aberto. O `corpo_html` NÃO está aqui, e isso é a decisão: ele fica
 # guardado e nunca sai para a tela, que desenha só o texto (issue #648).
-CAMPOS_DO_ITEM = CAMPOS_DA_LISTA + ("destinatarios", "corpo_texto", "cabecalhos")
+CAMPOS_DO_ITEM = CAMPOS_DA_LISTA + ("destinatarios", "corpo_texto", "cabecalhos", "anexos_excedentes")
 
 _CAMPOS_DO_ANEXO = ("id", "filename", "content_type", "tamanho_bytes", "storage_path", "motivo_sem_binario")
 
@@ -122,7 +122,7 @@ def e_interno(endereco: str) -> bool:
 def _carregar_por_resend_id(supabase, resend_email_id: str) -> dict | None:
     resultado = (
         supabase.table(TABELA)
-        .select("id, estado, incompleto, corpo_texto, corpo_html")
+        .select("id, estado, incompleto, corpo_texto, corpo_html, anexos_excedentes")
         .eq("resend_email_id", resend_email_id)
         .execute()
     )
@@ -181,6 +181,12 @@ def _tamanho_do_evento(meta: dict) -> int | None:
 # e COM motivo, e não conta como faltando: o item não fica incompleto por ele,
 # e a reentrega não o baixa de novo. O original segue na caixa ouvidoria@ do
 # Workspace, e é para lá que o motivo manda o ouvidor.
+#
+# O teto de quantidade vale também para o TRABALHO da entrega, e não só para o
+# download: só os primeiros `LIMITE_ANEXOS_POR_EMAIL` anexos anunciados ganham
+# linha. O que passa disso não ganha linha nem ida ao banco, e é só contado na
+# linha do e-mail (`anexos_excedentes`). Um e-mail que anuncia mil anexos
+# custa ao webhook o mesmo que um que anuncia vinte.
 
 # Por anexo, o mesmo teto do anexo do caso.
 LIMITE_BYTES_POR_ANEXO = LIMITE_BYTES
@@ -208,12 +214,13 @@ def _tipo_guardado(filename: str) -> tuple[str, str] | None:
     return None
 
 
-def _motivo_da_recusa(posicao: int, filename: str, tamanho: int | None, guardado_no_email: int) -> str | None:
-    """Por que o anexo não é baixado, decidido antes de baixar. None é que pode."""
+def _motivo_da_recusa(filename: str, tamanho: int | None, guardado_no_email: int) -> str | None:
+    """Por que o anexo não é baixado, decidido antes de baixar. None é que pode.
+
+    O teto de quantidade não mora aqui: o anexo que passa dele nem chega a ser
+    olhado um por um (`_guardar_anexos`)."""
     if _tipo_guardado(filename) is None:
         return MOTIVO_TIPO
-    if posicao >= LIMITE_ANEXOS_POR_EMAIL:
-        return MOTIVO_QUANTIDADE
     if tamanho is not None and tamanho > LIMITE_BYTES_POR_ANEXO:
         return MOTIVO_GRANDE
     # Sem tamanho declarado, o download leva o que resta como teto; sem nada
@@ -241,18 +248,26 @@ def _guardar_anexos(
     email_recebido_id: str,
     metas: dict[str, dict],
     lido: email_service.EmailDoResend | None,
-) -> int:
+) -> tuple[int, int]:
     """Guarda o binário de cada anexo que ainda não está no bucket e devolve
-    quantos continuam faltando.
+    (quantos continuam faltando, quantos passaram do teto de quantidade).
 
-    Todo anexo que o e-mail anuncia ganha linha, com o binário, com o motivo
-    da recusa ou sem nenhum dos dois: o ouvidor precisa saber que havia um
-    arquivo, mesmo quando ele não veio. A linha sem `storage_path` e sem motivo
-    é a que a reentrega vem completar.
+    Os primeiros `LIMITE_ANEXOS_POR_EMAIL` anexos anunciados ganham linha, com
+    o binário, com o motivo da recusa ou sem nenhum dos dois: o ouvidor precisa
+    saber que havia um arquivo, mesmo quando ele não veio. A linha sem
+    `storage_path` e sem motivo é a que a reentrega vem completar. O que passa
+    do teto não ganha linha nem ida ao banco: volta só a contagem, que quem
+    chama grava na linha do e-mail. O trabalho da entrega tem teto, anuncie o
+    e-mail quantos anexos anunciar (revisão de segurança do PR #899).
 
     Um anexo por vez, e só os que faltam: baixa com teto, sobe e solta antes
     do próximo. A memória do worker nunca segura mais que um anexo, e esse um
     nunca passa do teto."""
+    descritos = {a.id: a for a in (lido.anexos if lido else ()) if a.id}
+    anunciados = list(dict.fromkeys([*metas, *descritos]))
+    tratados = anunciados[:LIMITE_ANEXOS_POR_EMAIL]
+    excedentes = len(anunciados) - len(tratados)
+
     existentes = {
         a["resend_anexo_id"]: a
         for a in (
@@ -264,13 +279,11 @@ def _guardar_anexos(
             or []
         )
     }
-    descritos = {a.id: a for a in (lido.anexos if lido else ()) if a.id}
-    ordem = list(dict.fromkeys([*metas, *descritos]))
     bucket = settings.supabase_storage_bucket_anexos_ouvidoria
     guardado_no_email = sum(int(a.get("tamanho_bytes") or 0) for a in existentes.values() if a.get("storage_path"))
 
     faltando = 0
-    for posicao, anexo_id in enumerate(ordem):
+    for anexo_id in tratados:
         atual = existentes.get(anexo_id)
         if atual and (atual.get("storage_path") or atual.get("motivo_sem_binario")):
             continue
@@ -281,7 +294,7 @@ def _guardar_anexos(
         declarado = anexo.tamanho if anexo is not None and anexo.tamanho is not None else _tamanho_do_evento(meta)
         path = None
         tamanho = None
-        motivo = _motivo_da_recusa(posicao, filename, declarado, guardado_no_email)
+        motivo = _motivo_da_recusa(filename, declarado, guardado_no_email)
         if motivo is None and anexo is None:
             logger.error("Triagem de e-mail: anexo %s do e-mail %s não veio (não lido)", anexo_id, email_recebido_id)
         elif motivo is None:
@@ -326,7 +339,13 @@ def _guardar_anexos(
             guardado_no_email += tamanho or 0
         elif motivo is None:
             faltando += 1
-    return faltando
+    if excedentes:
+        logger.warning(
+            "Triagem de e-mail: anexos do e-mail %s além do teto de quantidade, só contados: %s",
+            email_recebido_id,
+            excedentes,
+        )
+    return faltando, excedentes
 
 
 def receber_email(supabase, dados: dict) -> Recebimento:
@@ -370,9 +389,14 @@ def receber_email(supabase, dados: dict) -> Recebimento:
             ).eq("id", linha["id"]).execute()
         desfecho = COMPLETADO
 
-    faltando = _guardar_anexos(supabase, linha["id"], _metas_do_evento(dados), lido)
+    faltando, excedentes = _guardar_anexos(supabase, linha["id"], _metas_do_evento(dados), lido)
     incompleto = (lido is None and not corpo_ja_lido) or faltando > 0
-    supabase.table(TABELA).update({"incompleto": incompleto}).eq("id", linha["id"]).execute()
+    # A contagem não encolhe: a reentrega em que a leitura do Resend falhou
+    # conhece menos anexos que a entrega anterior.
+    excedentes = max(excedentes, int(linha.get("anexos_excedentes") or 0))
+    supabase.table(TABELA).update({"incompleto": incompleto, "anexos_excedentes": excedentes}).eq(
+        "id", linha["id"]
+    ).execute()
     return Recebimento(desfecho, incompleto)
 
 
@@ -395,14 +419,22 @@ def listar(supabase) -> list[dict]:
     ordem de chegada, o mais antigo primeiro: é a ordem em que a triagem se
     faz."""
     linhas = ler_tudo(
-        lambda: supabase.table(TABELA).select(", ".join(CAMPOS_DA_LISTA)).order("recebido_em").order("id"),
+        lambda: (
+            supabase.table(TABELA)
+            .select(", ".join((*CAMPOS_DA_LISTA, "anexos_excedentes")))
+            .order("recebido_em")
+            .order("id")
+        ),
         rotulo="e-mails recebidos da triagem",
     )
     # `sorted` é estável: dentro de cada grupo a ordem de chegada do banco fica.
     linhas = sorted(linhas, key=lambda linha: linha.get("estado") != PENDENTE)
     contagem = _contar_anexos(supabase, [linha["id"] for linha in linhas])
+    # A contagem é de tudo o que o e-mail anunciou: os anexos com linha e os
+    # que passaram do teto de quantidade, que só têm a contagem.
     return [
-        {campo: linha.get(campo) for campo in CAMPOS_DA_LISTA} | {"quantidade_de_anexos": contagem.get(linha["id"], 0)}
+        {campo: linha.get(campo) for campo in CAMPOS_DA_LISTA}
+        | {"quantidade_de_anexos": contagem.get(linha["id"], 0) + int(linha.get("anexos_excedentes") or 0)}
         for linha in linhas
     ]
 
@@ -429,9 +461,14 @@ def carregar_item(supabase, email_id: str) -> dict | None:
         .data
         or []
     )
+    excedentes = int(linha.get("anexos_excedentes") or 0)
     return {campo: linha.get(campo) for campo in CAMPOS_DO_ITEM} | {
         "cabecalhos": linha.get("cabecalhos") or {},
         "destinatarios": linha.get("destinatarios") or [],
+        # Os anexos além do teto de quantidade não têm linha: vêm só contados,
+        # com o motivo, para o ouvidor saber que eles existem e onde estão.
+        "anexos_excedentes": excedentes,
+        "motivo_dos_excedentes": MOTIVO_QUANTIDADE if excedentes else None,
         "anexos": [
             {
                 "id": a["id"],

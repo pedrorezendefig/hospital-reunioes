@@ -15,15 +15,21 @@ trava do `conftest` cobre o arquivo, e a leitura real do Resend é provada com
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
 import hmac
 import json
 import os
+import re
 import sys
+import threading
 import time
 from dataclasses import dataclass
 
+import anyio
+import anyio.from_thread
+import anyio.to_thread
 import httpx
 import pytest
 from fastapi import FastAPI
@@ -752,7 +758,7 @@ class TestOAnexoTemTeto:
 
         assert [anexo_id for anexo_id, _ in resend.downloads] == ["at_1", "at_1"]
 
-    def test_passado_o_numero_maximo_de_anexos_o_resto_fica_com_o_motivo(self, monkeypatch):
+    def test_passado_o_numero_maximo_de_anexos_o_resto_nao_ganha_linha_e_fica_contado(self, monkeypatch):
         monkeypatch.setattr(triagem, "LIMITE_ANEXOS_POR_EMAIL", 2)
         cliente, supabase, resend = _client(monkeypatch)
         resend.respostas["em_0001"] = _lido(
@@ -763,10 +769,88 @@ class TestOAnexoTemTeto:
 
         assert r.status_code == 200, r.text
         assert [anexo_id for anexo_id, _ in resend.downloads] == ["at_1", "at_2"]
-        motivos = {
-            a["resend_anexo_id"]: a["motivo_sem_binario"] for a in supabase.tabelas["ouvidoria_emails_recebidos_anexos"]
-        }
-        assert motivos == {"at_1": None, "at_2": None, "at_3": triagem.MOTIVO_QUANTIDADE}
+        # O terceiro não vira linha: fica só contado na linha do e-mail.
+        linhas = supabase.tabelas["ouvidoria_emails_recebidos_anexos"]
+        assert [a["resend_anexo_id"] for a in linhas] == ["at_1", "at_2"]
+        [email] = supabase.tabelas["ouvidoria_emails_recebidos"]
+        assert email["anexos_excedentes"] == 1
+        assert email["incompleto"] is False
+        # A lista conta tudo o que o e-mail anunciou, e o item diz quantos
+        # ficaram de fora e por quê.
+        [item] = cliente.get("/api/ouvidoria/triagem-email").json()["emails"]
+        assert item["quantidade_de_anexos"] == 3
+        aberto = cliente.get(f"/api/ouvidoria/triagem-email/{item['id']}").json()
+        assert [a["filename"] for a in aberto["anexos"]] == ["foto1.jpg", "foto2.jpg"]
+        assert aberto["anexos_excedentes"] == 1
+        assert aberto["motivo_dos_excedentes"] == triagem.MOTIVO_QUANTIDADE
+
+    def test_mil_anexos_anunciados_custam_ao_banco_o_mesmo_que_o_teto(self, monkeypatch):
+        """Um e-mail com mil anexos minúsculos, e o evento ainda abaixo de 1 MB,
+        não pode virar mil linhas e mil idas ao banco a cada entrega (revisão de
+        segurança do PR #899). O trabalho da entrega é o do teto, e não o do
+        anúncio, e o tipo recusado também não passa do teto."""
+        teto = triagem.LIMITE_ANEXOS_POR_EMAIL
+
+        def entregar(quantidade: int):
+            cliente, supabase, resend = _client(monkeypatch)
+            # Um em cada dois fora do catálogo: recusado por tipo, sem download.
+            nomes = [f"arquivo{i}.{'jpg' if i % 2 else 'html'}" for i in range(quantidade)]
+            metas = [{"id": f"at_{i}", "filename": nome, "content_type": "image/jpeg"} for i, nome in enumerate(nomes)]
+            resend.respostas["em_0001"] = _lido(
+                anexos=tuple(_anexo(f"at_{i}", nome, "image/jpeg", b"\xff\xd8") for i, nome in enumerate(nomes))
+            )
+            r = _entregar(cliente, _evento(anexos=metas))
+            assert r.status_code == 200, r.text
+            return cliente, supabase, resend, nomes
+
+        cliente, supabase, resend, nomes = entregar(1000)
+        idas_com_mil = len(supabase.consultas)
+
+        assert len(supabase.tabelas["ouvidoria_emails_recebidos_anexos"]) == teto
+        assert [anexo_id for anexo_id, _ in resend.downloads] == [
+            f"at_{i}" for i, nome in enumerate(nomes[:teto]) if nome.endswith(".jpg")
+        ]
+        [email] = supabase.tabelas["ouvidoria_emails_recebidos"]
+        assert email["anexos_excedentes"] == 1000 - teto
+        assert email["incompleto"] is False
+        [item] = cliente.get("/api/ouvidoria/triagem-email").json()["emails"]
+        assert item["quantidade_de_anexos"] == 1000
+        aberto = cliente.get(f"/api/ouvidoria/triagem-email/{item['id']}").json()
+        assert len(aberto["anexos"]) == teto
+        assert aberto["anexos_excedentes"] == 1000 - teto
+        assert aberto["motivo_dos_excedentes"] == triagem.MOTIVO_QUANTIDADE
+
+        _, supabase_no_teto, _, _ = entregar(teto)
+        [email_no_teto] = supabase_no_teto.tabelas["ouvidoria_emails_recebidos"]
+        assert email_no_teto["anexos_excedentes"] == 0
+
+        # As idas ao banco não crescem com o anúncio: mil anexos custam o mesmo
+        # que o teto, e o teto é um punhado.
+        assert idas_com_mil == len(supabase_no_teto.consultas)
+        assert idas_com_mil <= teto + 5
+
+    def test_a_contagem_do_excedente_nao_encolhe_na_reentrega_que_nao_leu_o_resend(self, monkeypatch):
+        """O evento pode anunciar menos anexos que a leitura do Resend. A
+        reentrega em que a leitura falha conhece só os do evento, e nem por
+        isso o e-mail passa a ter menos anexos."""
+        monkeypatch.setattr(triagem, "LIMITE_ANEXOS_POR_EMAIL", 2)
+        cliente, supabase, resend = _client(monkeypatch)
+        metas = [{"id": f"at_{i}", "filename": f"foto{i}.jpg", "content_type": "image/jpeg"} for i in (1, 2)]
+        resend.respostas["em_0001"] = _lido(
+            anexos=(
+                _anexo("at_1", "foto1.jpg", "image/jpeg", b"\xff\xd8"),
+                _anexo("at_2", "foto2.jpg", "image/jpeg", LeituraDoResendError("ReadTimeout"), tamanho=None),
+                _anexo("at_3", "foto3.jpg", "image/jpeg", b"\xff\xd8"),
+            )
+        )
+        assert _entregar(cliente, _evento(anexos=metas)).status_code == 503
+
+        resend.respostas["em_0001"] = LeituraDoResendError("HTTPStatusError")
+        assert _entregar(cliente, _evento(anexos=metas)).status_code == 503
+
+        [email] = supabase.tabelas["ouvidoria_emails_recebidos"]
+        assert email["anexos_excedentes"] == 1
+        assert email["incompleto"] is True
 
     def test_o_total_do_email_tem_teto_e_o_download_so_pede_o_que_resta(self, monkeypatch):
         monkeypatch.setattr(triagem, "LIMITE_BYTES_POR_EMAIL", 10)
@@ -788,6 +872,80 @@ class TestOAnexoTemTeto:
             a["resend_anexo_id"]: a["motivo_sem_binario"] for a in supabase.tabelas["ouvidoria_emails_recebidos_anexos"]
         }
         assert motivos == {"at_1": None, "at_2": triagem.MOTIVO_TOTAL, "at_3": triagem.MOTIVO_TOTAL}
+
+
+class TestAGravacaoNaoOcupaOPoolPadrao:
+    """A gravação do e-mail recebido faz I/O síncrono e lento (leitura no
+    Resend, download, PostgREST). Ela roda numa thread com limitador próprio,
+    de duas vagas, e não no pool padrão do anyio, que resolve as dependências
+    síncronas de quase toda rota: uma rajada de e-mails não pode parar o app
+    (revisão de segurança do PR #899)."""
+
+    def test_a_gravacao_corre_no_limitador_proprio_sem_tomar_vaga_do_pool_padrao(self, monkeypatch):
+        cliente, _supabase, _resend = _client(monkeypatch)
+        limitador = webhooks_router.LIMITADOR_DA_TRIAGEM_DE_EMAIL
+        vagas: dict[str, float] = {}
+
+        def receber_email(_supabase, _dados):
+            # De dentro da thread da gravação, pergunta ao event loop quem está
+            # segurando vaga de cada limitador.
+            vagas["padrao"], vagas["proprio"] = anyio.from_thread.run_sync(
+                lambda: (anyio.to_thread.current_default_thread_limiter().borrowed_tokens, limitador.borrowed_tokens)
+            )
+            return triagem.Recebimento(triagem.CRIADO, False)
+
+        monkeypatch.setattr(triagem, "receber_email", receber_email)
+
+        r = _entregar(cliente, _evento())
+
+        assert r.status_code == 200, r.text
+        assert vagas == {"padrao": 0, "proprio": 1}
+        assert limitador.total_tokens == 2
+
+    async def test_tres_entregas_ao_mesmo_tempo_so_duas_gravam_e_a_terceira_espera(self, monkeypatch):
+        app = FastAPI()
+        app.state.limiter = limiter
+        app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+        app.include_router(webhooks_router.router, prefix="/api")
+        supabase = _SupabaseFake()
+        app.dependency_overrides[get_supabase_client] = lambda: supabase
+        limitador = webhooks_router.LIMITADOR_DA_TRIAGEM_DE_EMAIL
+        trava = threading.Lock()
+        dentro = {"agora": 0, "maximo": 0}
+        solta = threading.Event()
+
+        def receber_email(_supabase, _dados):
+            with trava:
+                dentro["agora"] += 1
+                dentro["maximo"] = max(dentro["maximo"], dentro["agora"])
+            solta.wait(timeout=10)
+            with trava:
+                dentro["agora"] -= 1
+            return triagem.Recebimento(triagem.CRIADO, False)
+
+        monkeypatch.setattr(triagem, "receber_email", receber_email)
+
+        async with httpx.AsyncClient(transport=httpx.ASGITransport(app=app), base_url="http://teste") as http:
+
+            async def entregar(email_id: str) -> httpx.Response:
+                corpo = json.dumps(_evento(email_id)).encode("utf-8")
+                cabecalhos = {"Content-Type": "application/json"} | _assinatura(corpo)
+                return await http.post("/api/webhooks/resend", content=corpo, headers=cabecalhos)
+
+            entregas = [asyncio.create_task(entregar(f"em_{i}")) for i in range(3)]
+            try:
+                for _ in range(500):
+                    if dentro["agora"] == 2 and limitador.statistics().tasks_waiting == 1:
+                        break
+                    await asyncio.sleep(0.01)
+                gravando, esperando = dentro["agora"], limitador.statistics().tasks_waiting
+            finally:
+                solta.set()
+                respostas = await asyncio.gather(*entregas)
+
+        assert (gravando, esperando) == (2, 1)
+        assert dentro["maximo"] == 2
+        assert [r.status_code for r in respostas] == [200, 200, 200]
 
 
 class TestOHtmlNuncaSaiParaATela:
@@ -1017,6 +1175,33 @@ class TestMigration:
     def test_linha_de_anexo_tem_binario_ou_motivo_nunca_os_dois(self, comandos):
         assert "motivo_sem_binario text" in comandos
         assert "check (storage_path is null or motivo_sem_binario is null)" in comandos
+
+    def test_o_excedente_do_teto_de_quantidade_e_uma_contagem_no_email(self, comandos):
+        assert "anexos_excedentes integer not null default 0" in comandos
+        assert "check (anexos_excedentes >= 0)" in comandos
+
+    def test_rodar_de_novo_completa_uma_versao_anterior_da_112(self, comandos):
+        """A 112 é aplicada à mão no Studio, e uma versão anterior dela pode já
+        ter rodado em algum banco (revisão do PR #899). O CREATE TABLE IF NOT
+        EXISTS de uma tabela que já existe não acrescenta coluna nenhuma: as
+        colunas que vieram depois entram por ADD COLUMN IF NOT EXISTS, e toda
+        constraint nomeada sai antes de entrar, para rodar de novo sem erro."""
+        sql = " ".join(comandos.split())
+        for tabela, coluna in (
+            ("ouvidoria_emails_recebidos_anexos", "motivo_sem_binario"),
+            ("ouvidoria_emails_recebidos", "anexos_excedentes"),
+        ):
+            assert f"alter table {tabela} add column if not exists {coluna} " in sql
+        assert re.findall(r"add column (?!if not exists)", sql) == []
+        assert re.findall(r"create (?:table|index) (?!if not exists)", sql) == []
+        adicionadas = re.findall(r"add constraint (\w+)", sql)
+        assert {
+            "ouvidoria_emails_recebidos_anexos_binario_ou_motivo",
+            "ouvidoria_emails_recebidos_anexos_motivo_sem_binario_check",
+            "ouvidoria_emails_recebidos_anexos_excedentes_check",
+        } <= set(adicionadas)
+        for nome in adicionadas:
+            assert sql.index(f"drop constraint if exists {nome};") < sql.index(f"add constraint {nome} ")
 
     def test_os_quatro_estados_da_triagem(self, comandos):
         assert "estado in ('pendente', 'virou_manifestacao', 'juntado', 'descartado')" in comandos

@@ -7,6 +7,8 @@ import logging
 import time
 from datetime import UTC, datetime
 
+import anyio
+import anyio.to_thread
 from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
@@ -599,6 +601,16 @@ LIMITE_DO_WEBHOOK_RESEND = "120/minute"
 
 MOTIVO_EMAIL_INCOMPLETO = "E-mail gravado incompleto; reentregue o evento."
 
+# A gravação do e-mail recebido roda numa thread, e com limitador PRÓPRIO, fora
+# do pool padrão do anyio (revisão de segurança do PR #899). O pool padrão, de
+# 40 vagas, é o mesmo que resolve as dependências síncronas de quase toda rota
+# (`get_supabase_client`): uma rajada de e-mails lentos de propósito (leitura no
+# Resend, download de cada anexo, PostgREST) seguraria as 40 e pararia o app. Aqui
+# no máximo duas gravações correm juntas; a entrega que chega com as duas
+# ocupadas espera a vez no event loop, sem ocupar thread nenhuma.
+GRAVACOES_DE_EMAIL_SIMULTANEAS = 2
+LIMITADOR_DA_TRIAGEM_DE_EMAIL = anyio.CapacityLimiter(GRAVACOES_DE_EMAIL_SIMULTANEAS)
+
 
 def _chave_do_segredo_do_resend(segredo: str) -> bytes | None:
     """A chave HMAC do segredo `whsec_<base64>` do Resend (svix). None quando o
@@ -661,6 +673,8 @@ async def webhook_resend(
 
     A gravação sai do event loop: ela faz I/O síncrono no Resend (o corpo e o
     download de cada anexo) e no PostgREST, e o container sobe com um worker só.
+    E sai para um limitador próprio, de duas vagas, e não para o pool padrão,
+    que as outras rotas usam (`LIMITADOR_DA_TRIAGEM_DE_EMAIL`).
     """
     from app.services import ouvidoria_triagem_email
 
@@ -696,7 +710,9 @@ async def webhook_resend(
         logger.warning("[Resend webhook] Evento 'email.received' sem email_id utilizável; ignorado.")
         return {"ignorado": "email"}
 
-    recebimento = await run_in_threadpool(ouvidoria_triagem_email.receber_email, supabase, dados)
+    recebimento = await anyio.to_thread.run_sync(
+        ouvidoria_triagem_email.receber_email, supabase, dados, limiter=LIMITADOR_DA_TRIAGEM_DE_EMAIL
+    )
     if recebimento.incompleto and recebimento.desfecho != ouvidoria_triagem_email.DUPLICADO:
         raise HTTPException(status_code=503, detail=MOTIVO_EMAIL_INCOMPLETO)
     return {"recebido": True, "desfecho": recebimento.desfecho}

@@ -232,6 +232,29 @@ describe("o painel do item", () => {
     expect(within(painel).queryByRole("button", { name: /gravacao\.wav/ })).toBeNull();
   });
 
+  it("os anexos além do teto de quantidade aparecem como um aviso, sem virar anexo", async () => {
+    const motivo = "passa de 20 anexos por e-mail, o original está na caixa ouvidoria@";
+    montar({ e1: item(JOANA, { anexos_excedentes: 980, motivo_dos_excedentes: motivo }) });
+
+    fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
+
+    const painel = await screen.findByRole("region", { name: "E-mail recebido" });
+    expect(await within(painel).findByText(`Mais 980 anexos: ${motivo}`)).toBeTruthy();
+    // O único anexo da lista continua sendo o laudo, com o link dele.
+    expect(within(painel).getAllByRole("listitem")).toHaveLength(1);
+    expect(within(painel).getByRole("button", { name: /laudo\.pdf/ })).toBeTruthy();
+  });
+
+  it("sem excedente, não há aviso", async () => {
+    montar({ e1: item(JOANA, { anexos_excedentes: 0, motivo_dos_excedentes: null }) });
+
+    fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
+
+    const painel = await screen.findByRole("region", { name: "E-mail recebido" });
+    await within(painel).findByText("Esperei três horas na recepção sem informação nenhuma.");
+    expect(within(painel).queryByText(/^Mais /)).toBeNull();
+  });
+
   it("o anexo abre pela URL assinada que o servidor emite na hora", async () => {
     const aba = { opener: {}, location: { href: "" }, close: vi.fn() };
     vi.spyOn(window, "open").mockReturnValue(aba as unknown as Window);
