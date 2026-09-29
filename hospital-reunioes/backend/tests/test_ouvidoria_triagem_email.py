@@ -22,6 +22,7 @@ import json
 import os
 import sys
 import time
+from dataclasses import dataclass
 
 import httpx
 import pytest
@@ -40,7 +41,13 @@ from app.routers import ouvidoria as ouvidoria_router  # noqa: E402
 from app.routers import ouvidoria_triagem_email as triagem_router  # noqa: E402
 from app.routers import webhooks as webhooks_router  # noqa: E402
 from app.services import email_service  # noqa: E402
-from app.services.email_service import AnexoDoResend, EmailDoResend, LeituraDoResendError  # noqa: E402
+from app.services import ouvidoria_triagem_email as triagem  # noqa: E402
+from app.services.email_service import (  # noqa: E402
+    AnexoAcimaDoTetoError,
+    AnexoDoResend,
+    EmailDoResend,
+    LeituraDoResendError,
+)
 
 OUVIDOR = {"id": "P10", "nome_completo": "Marta Ouvidora", "access_profile": None, "perfil_ouvidoria": "ouvidor"}
 DIRETORIA = {
@@ -221,13 +228,46 @@ class _SupabaseFake:
         return _TabelaFake(self, nome)
 
 
+@dataclass(frozen=True)
+class _AnexoDeTeste(AnexoDoResend):
+    """O anexo como a leitura devolve, com o binário que o download dublado
+    entrega (ou a falha que ele levanta)."""
+
+    binario: bytes | Exception | None = None
+
+
+def _anexo(anexo_id: str, filename: str, content_type: str, binario: bytes | Exception, *, tamanho=...):
+    declarado = (len(binario) if isinstance(binario, bytes) else None) if tamanho is ... else tamanho
+    return _AnexoDeTeste(
+        id=anexo_id,
+        filename=filename,
+        content_type=content_type,
+        tamanho=declarado,
+        download_url=f"https://cdn.resend.test/{anexo_id}",
+        binario=binario,
+    )
+
+
 class _ResendFake:
-    """A função única de leitura do Resend, dublada. Cada e-mail responde o que
-    o teste mandar; o que não foi configurado é leitura que falhou."""
+    """A leitura do Resend e o download do anexo, dublados. Cada e-mail
+    responde o que o teste mandar; o que não foi configurado é leitura que
+    falhou. O download honra o teto como o real: passou, levanta."""
 
     def __init__(self):
         self.respostas: dict[str, EmailDoResend | Exception] = {}
         self.chamadas: list[str] = []
+        self.downloads: list[tuple[str, int]] = []
+
+    def baixar(self, anexo: AnexoDoResend, *, limite_bytes: int) -> bytes:
+        self.downloads.append((anexo.id, limite_bytes))
+        binario = getattr(anexo, "binario", None)
+        if isinstance(binario, Exception):
+            raise binario
+        if binario is None:
+            raise LeituraDoResendError("sem binário no teste")
+        if len(binario) > limite_bytes:
+            raise AnexoAcimaDoTetoError("binário acima do teto")
+        return binario
 
     def __call__(self, email_id: str) -> EmailDoResend:
         self.chamadas.append(email_id)
@@ -252,6 +292,7 @@ def _client(monkeypatch, participante: dict | None = OUVIDOR):
 
     monkeypatch.setattr(ouvidoria_router, "get_participante_for_user", _fake_participante)
     monkeypatch.setattr(email_service, "ler_email_recebido", resend)
+    monkeypatch.setattr(email_service, "baixar_anexo_recebido", resend.baixar)
     app.dependency_overrides[get_current_user] = lambda: {"id": "u1", "email": "u@hsm.br"}
     app.dependency_overrides[get_supabase_client] = lambda: supabase
     return TestClient(app), supabase, resend
@@ -296,9 +337,7 @@ def _lido(
         texto=texto,
         html=html,
         cabecalhos={"message-id": "<CAF+joana@mail.gmail.com>", "reply-to": "joana.silva@gmail.com"},
-        anexos=anexos
-        if anexos is not None
-        else (AnexoDoResend(id="at_1", filename="laudo.pdf", content_type="application/pdf", conteudo=PDF),),
+        anexos=anexos if anexos is not None else (_anexo("at_1", "laudo.pdf", "application/pdf", PDF),),
     )
 
 
@@ -491,8 +530,8 @@ class TestOQueVeioNaoSePerde:
         ]
         resend.respostas["em_0001"] = _lido(
             anexos=(
-                AnexoDoResend(id="at_1", filename="laudo.pdf", content_type="application/pdf", conteudo=PDF),
-                AnexoDoResend(id="at_2", filename="foto.jpg", content_type="image/jpeg", erro="ReadTimeout"),
+                _anexo("at_1", "laudo.pdf", "application/pdf", PDF),
+                _anexo("at_2", "foto.jpg", "image/jpeg", LeituraDoResendError("ReadTimeout"), tamanho=None),
             )
         )
 
@@ -508,8 +547,8 @@ class TestOQueVeioNaoSePerde:
 
         resend.respostas["em_0001"] = _lido(
             anexos=(
-                AnexoDoResend(id="at_1", filename="laudo.pdf", content_type="application/pdf", conteudo=PDF),
-                AnexoDoResend(id="at_2", filename="foto.jpg", content_type="image/jpeg", conteudo=b"\xff\xd8jpeg"),
+                _anexo("at_1", "laudo.pdf", "application/pdf", PDF),
+                _anexo("at_2", "foto.jpg", "image/jpeg", b"\xff\xd8jpeg"),
             )
         )
         segunda = _entregar(cliente, _evento(anexos=anexos))
@@ -521,8 +560,9 @@ class TestOQueVeioNaoSePerde:
         assert item["quantidade_de_anexos"] == 2
         aberto = cliente.get(f"/api/ouvidoria/triagem-email/{item['id']}").json()
         assert {a["filename"]: a["disponivel"] for a in aberto["anexos"]} == {"laudo.pdf": True, "foto.jpg": True}
-        # O laudo, que já estava guardado, não subiu de novo.
+        # O laudo, que já estava guardado, não subiu de novo, nem foi baixado.
         assert sorted(supabase.storage.arquivos.values()) == sorted([PDF, b"\xff\xd8jpeg"])
+        assert [anexo_id for anexo_id, _ in resend.downloads] == ["at_1", "at_2", "at_2"]
 
     def test_corpo_que_nao_vem_grava_o_cabecalho_e_a_reentrega_traz_o_corpo(self, monkeypatch):
         cliente, supabase, resend = _client(monkeypatch)
@@ -641,19 +681,113 @@ class TestOAnexoSoSaiPorUrlAssinada:
         assert r.status_code == 404
         assert supabase.storage.assinaturas == []
 
-    def test_anexo_html_vai_ao_bucket_como_binario_generico(self, monkeypatch):
+    def test_anexo_fora_do_catalogo_nao_vai_ao_bucket_e_fica_com_o_motivo(self, monkeypatch):
         """O tipo declarado é de quem mandou. Um `.html` servido como
-        `text/html` pela URL assinada abriria como página."""
+        `text/html` pela URL assinada abriria como página: fora do catálogo da
+        Ouvidoria, o anexo nem é baixado."""
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_0001"] = _lido(anexos=(_anexo("at_1", "fatura.html", "text/html", b"<script>"),))
+
+        r = _entregar(cliente, _evento(anexos=[{"id": "at_1", "filename": "fatura.html", "content_type": "text/html"}]))
+
+        assert r.status_code == 200, r.text
+        assert supabase.storage.uploads == []
+        assert resend.downloads == []
+        [item] = cliente.get("/api/ouvidoria/triagem-email").json()["emails"]
+        assert item["incompleto"] is False
+        [anexo] = cliente.get(f"/api/ouvidoria/triagem-email/{item['id']}").json()["anexos"]
+        assert anexo["disponivel"] is False
+        assert anexo["motivo_indisponivel"] == triagem.MOTIVO_TIPO
+
+
+MB = 1024 * 1024
+
+
+class TestOAnexoTemTeto:
+    """O remetente é anônimo, e o teto é do app (revisão de segurança do PR
+    #899): anexo acima do teto vira linha sem binário, com motivo, que não
+    deixa o item incompleto, e um anexo por vez, só os que faltam."""
+
+    def test_anexo_declarado_acima_do_teto_nem_e_baixado_e_nao_deixa_o_item_incompleto(self, monkeypatch):
+        cliente, supabase, resend = _client(monkeypatch)
+        grande = _anexo("at_2", "gravacao.wav", "audio/wav", b"x", tamanho=triagem.LIMITE_BYTES_POR_ANEXO + 1)
+        resend.respostas["em_0001"] = _lido(anexos=(_anexo("at_1", "laudo.pdf", "application/pdf", PDF), grande))
+
+        r = _entregar(cliente, _evento(anexos=[]))
+
+        assert r.status_code == 200, r.text
+        assert [anexo_id for anexo_id, _ in resend.downloads] == ["at_1"]
+        [item] = cliente.get("/api/ouvidoria/triagem-email").json()["emails"]
+        assert item["incompleto"] is False
+        anexos = cliente.get(f"/api/ouvidoria/triagem-email/{item['id']}").json()["anexos"]
+        assert {a["filename"]: (a["disponivel"], a["motivo_indisponivel"]) for a in anexos} == {
+            "laudo.pdf": (True, None),
+            "gravacao.wav": (False, triagem.MOTIVO_GRANDE),
+        }
+        assert list(supabase.storage.arquivos.values()) == [PDF]
+
+    def test_anexo_sem_tamanho_declarado_para_no_teto_durante_o_download(self, monkeypatch):
+        monkeypatch.setattr(triagem, "LIMITE_BYTES_POR_ANEXO", 10)
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_0001"] = _lido(anexos=(_anexo("at_1", "foto.jpg", "image/jpeg", b"y" * 11, tamanho=None),))
+
+        r = _entregar(cliente, _evento(anexos=[]))
+
+        assert r.status_code == 200, r.text
+        assert resend.downloads == [("at_1", 10)]
+        assert supabase.storage.uploads == []
+        [linha] = supabase.tabelas["ouvidoria_emails_recebidos_anexos"]
+        assert linha["storage_path"] is None
+        assert linha["motivo_sem_binario"] == triagem.MOTIVO_GRANDE
+
+    def test_anexo_recusado_nao_e_baixado_de_novo_na_reentrega(self, monkeypatch):
+        cliente, _supabase, resend = _client(monkeypatch)
+        grande = _anexo("at_2", "gravacao.wav", "audio/wav", b"x", tamanho=triagem.LIMITE_BYTES_POR_ANEXO + 1)
+        falha = _anexo("at_1", "laudo.pdf", "application/pdf", LeituraDoResendError("ReadTimeout"), tamanho=None)
+        resend.respostas["em_0001"] = _lido(anexos=(falha, grande))
+
+        assert _entregar(cliente, _evento(anexos=[])).status_code == 503
+        resend.respostas["em_0001"] = _lido(anexos=(_anexo("at_1", "laudo.pdf", "application/pdf", PDF), grande))
+        assert _entregar(cliente, _evento(anexos=[])).status_code == 200
+
+        assert [anexo_id for anexo_id, _ in resend.downloads] == ["at_1", "at_1"]
+
+    def test_passado_o_numero_maximo_de_anexos_o_resto_fica_com_o_motivo(self, monkeypatch):
+        monkeypatch.setattr(triagem, "LIMITE_ANEXOS_POR_EMAIL", 2)
         cliente, supabase, resend = _client(monkeypatch)
         resend.respostas["em_0001"] = _lido(
-            anexos=(AnexoDoResend(id="at_1", filename="fatura.html", content_type="text/html", conteudo=b"<script>"),)
+            anexos=tuple(_anexo(f"at_{i}", f"foto{i}.jpg", "image/jpeg", b"\xff\xd8") for i in range(1, 4))
         )
 
-        _entregar(cliente, _evento(anexos=[{"id": "at_1", "filename": "fatura.html", "content_type": "text/html"}]))
+        r = _entregar(cliente, _evento(anexos=[]))
 
-        [upload] = supabase.storage.uploads
-        assert upload["opcoes"]["content-type"] == "application/octet-stream"
-        assert not upload["path"].endswith(".html")
+        assert r.status_code == 200, r.text
+        assert [anexo_id for anexo_id, _ in resend.downloads] == ["at_1", "at_2"]
+        motivos = {
+            a["resend_anexo_id"]: a["motivo_sem_binario"] for a in supabase.tabelas["ouvidoria_emails_recebidos_anexos"]
+        }
+        assert motivos == {"at_1": None, "at_2": None, "at_3": triagem.MOTIVO_QUANTIDADE}
+
+    def test_o_total_do_email_tem_teto_e_o_download_so_pede_o_que_resta(self, monkeypatch):
+        monkeypatch.setattr(triagem, "LIMITE_BYTES_POR_EMAIL", 10)
+        cliente, supabase, resend = _client(monkeypatch)
+        resend.respostas["em_0001"] = _lido(
+            anexos=(
+                _anexo("at_1", "a.pdf", "application/pdf", b"1" * 6),
+                _anexo("at_2", "b.pdf", "application/pdf", b"2" * 6, tamanho=None),
+                _anexo("at_3", "c.pdf", "application/pdf", b"3" * 6),
+            )
+        )
+
+        r = _entregar(cliente, _evento(anexos=[]))
+
+        assert r.status_code == 200, r.text
+        # O segundo, sem tamanho declarado, só pode trazer os 4 bytes que restam.
+        assert resend.downloads == [("at_1", 10), ("at_2", 4)]
+        motivos = {
+            a["resend_anexo_id"]: a["motivo_sem_binario"] for a in supabase.tabelas["ouvidoria_emails_recebidos_anexos"]
+        }
+        assert motivos == {"at_1": None, "at_2": triagem.MOTIVO_TOTAL, "at_3": triagem.MOTIVO_TOTAL}
 
 
 class TestOHtmlNuncaSaiParaATela:
@@ -713,7 +847,7 @@ class TestALeituraDoResend:
 
         return httpx.Client(transport=httpx.MockTransport(responder))
 
-    def test_busca_corpo_cabecalhos_e_baixa_cada_anexo_pelo_link_assinado(self, monkeypatch):
+    def test_busca_corpo_cabecalhos_e_os_metadados_de_cada_anexo_sem_baixar(self, monkeypatch):
         monkeypatch.setattr(settings, "resend_inbound_api_key", "re_leitura")
         monkeypatch.setattr(settings, "resend_inbound_base_url", "https://api.resend.test")
         base = "https://api.resend.test/emails/receiving/em_0001"
@@ -730,7 +864,7 @@ class TestALeituraDoResend:
                     "reply_to": ["joana@gmail.com"],
                     "headers": {"Auto-Submitted": "no", "Received": "from mx.google.com", "DKIM-Signature": "v=1"},
                     "attachments": [
-                        {"id": "at_1", "filename": "laudo.pdf", "content_type": "application/pdf"},
+                        {"id": "at_1", "filename": "laudo.pdf", "content_type": "application/pdf", "size": 30},
                         {"id": "at_2", "filename": "foto.jpg", "content_type": "image/jpeg"},
                     ],
                 },
@@ -759,14 +893,69 @@ class TestALeituraDoResend:
             "message-id": "<abc@mail>",
             "reply-to": "joana@gmail.com",
         }
-        assert [(a.id, a.conteudo, a.erro) for a in lido.anexos] == [
-            ("at_1", PDF, None),
-            ("at_2", None, "HTTPStatusError"),
+        assert [(a.id, a.tamanho, a.download_url) for a in lido.anexos] == [
+            ("at_1", 30, "https://cdn.resend.test/at_1?sig=1"),
+            ("at_2", None, "https://cdn.resend.test/at_2?sig=2"),
         ]
-        chamados_na_api = [p for p in pedidos if p.url.host == "api.resend.test"]
-        assert {p.headers["authorization"] for p in chamados_na_api} == {"Bearer re_leitura"}
+        assert {p.headers["authorization"] for p in pedidos} == {"Bearer re_leitura"}
+        # Nenhum binário é baixado na leitura: o download é um por vez, com teto.
+        assert all(p.url.host == "api.resend.test" for p in pedidos)
+
+    def test_o_download_do_anexo_vai_sem_a_chave_e_traz_o_binario(self, monkeypatch):
+        pedidos: list[httpx.Request] = []
+        rotas = {"https://cdn.resend.test/at_1?sig=1": httpx.Response(200, content=PDF)}
+        anexo = AnexoDoResend("at_1", "laudo.pdf", "application/pdf", download_url="https://cdn.resend.test/at_1?sig=1")
+
+        with self._cliente_http(rotas, pedidos) as http:
+            assert email_service.baixar_anexo_recebido(anexo, limite_bytes=1024, cliente=http) == PDF
+
         # A chave do Resend não vai para o host que serve o binário.
-        assert all("authorization" not in p.headers for p in pedidos if p.url.host == "cdn.resend.test")
+        assert all("authorization" not in p.headers for p in pedidos)
+
+    def test_o_download_para_no_teto_mesmo_sem_content_length(self, monkeypatch):
+        entregues: list[int] = []
+
+        def pedacos():
+            for _ in range(100):
+                entregues.append(1)
+                yield b"z" * 1024
+
+        rotas = {"https://cdn.resend.test/at_1?sig=1": httpx.Response(200, content=pedacos())}
+        anexo = AnexoDoResend("at_1", "gravacao.wav", "audio/wav", download_url="https://cdn.resend.test/at_1?sig=1")
+
+        with self._cliente_http(rotas, []) as http, pytest.raises(AnexoAcimaDoTetoError):
+            email_service.baixar_anexo_recebido(anexo, limite_bytes=4 * 1024, cliente=http)
+
+        # Parou no pedaço que passou: os outros 95 KB nem foram lidos.
+        assert len(entregues) == 5
+
+    def test_content_length_acima_do_teto_recusa_antes_de_ler_o_corpo(self, monkeypatch):
+        rotas = {
+            "https://cdn.resend.test/at_1?sig=1": httpx.Response(
+                200, content=b"a" * 10, headers={"Content-Length": str(50 * MB)}
+            )
+        }
+        anexo = AnexoDoResend("at_1", "gravacao.wav", "audio/wav", download_url="https://cdn.resend.test/at_1?sig=1")
+
+        with self._cliente_http(rotas, []) as http, pytest.raises(AnexoAcimaDoTetoError):
+            email_service.baixar_anexo_recebido(anexo, limite_bytes=MB, cliente=http)
+
+    @pytest.mark.parametrize("url", [None, "http://cdn.resend.test/at_1"])
+    def test_download_sem_link_https_nao_acontece(self, monkeypatch, url):
+        anexo = AnexoDoResend("at_1", "laudo.pdf", "application/pdf", download_url=url)
+        pedidos: list[httpx.Request] = []
+
+        with self._cliente_http({}, pedidos) as http, pytest.raises(LeituraDoResendError):
+            email_service.baixar_anexo_recebido(anexo, limite_bytes=MB, cliente=http)
+
+        assert pedidos == []
+
+    def test_download_com_status_de_erro_levanta_erro_de_leitura(self, monkeypatch):
+        rotas = {"https://cdn.resend.test/at_1?sig=1": httpx.Response(500)}
+        anexo = AnexoDoResend("at_1", "laudo.pdf", "application/pdf", download_url="https://cdn.resend.test/at_1?sig=1")
+
+        with self._cliente_http(rotas, []) as http, pytest.raises(LeituraDoResendError, match="HTTPStatusError"):
+            email_service.baixar_anexo_recebido(anexo, limite_bytes=MB, cliente=http)
 
     def test_email_que_a_api_nao_devolve_levanta_erro_de_leitura(self, monkeypatch):
         monkeypatch.setattr(settings, "resend_inbound_api_key", "re_leitura")
@@ -824,6 +1013,10 @@ class TestMigration:
 
     def test_a_dedup_tem_coluna_unica_no_banco(self, comandos):
         assert "resend_email_id    text not null unique" in comandos
+
+    def test_linha_de_anexo_tem_binario_ou_motivo_nunca_os_dois(self, comandos):
+        assert "motivo_sem_binario text" in comandos
+        assert "check (storage_path is null or motivo_sem_binario is null)" in comandos
 
     def test_os_quatro_estados_da_triagem(self, comandos):
         assert "estado in ('pendente', 'virou_manifestacao', 'juntado', 'descartado')" in comandos

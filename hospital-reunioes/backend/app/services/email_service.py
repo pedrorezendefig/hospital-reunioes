@@ -235,22 +235,33 @@ class LeituraDoResendError(Exception):
     devolve pode carregar remetente e assunto, e isto vai para o log."""
 
 
+class AnexoAcimaDoTetoError(Exception):
+    """O binário do anexo passou do teto de quem baixa. O download para no
+    pedaço que passou: o resto nem chega à memória."""
+
+
 @dataclass(frozen=True)
 class AnexoDoResend:
-    """Um anexo do e-mail recebido. `conteudo` None é o anexo que não veio, e
-    `erro` diz por quê (tipo da falha, sem dado do e-mail)."""
+    """Um anexo do e-mail recebido, só os metadados, sem o binário.
+
+    O binário não vem junto de propósito (revisão de segurança do PR #899): o
+    remetente é anônimo, e baixar tudo de uma vez seguraria na memória do
+    worker o que quer que ele tenha mandado. Quem guarda baixa um por vez, com
+    teto, por `baixar_anexo_recebido`. `tamanho` é o que o Resend declara (None
+    quando não declara) e `download_url` é o link assinado (None quando a lista
+    de anexos não veio)."""
 
     id: str
     filename: str
     content_type: str
-    conteudo: bytes | None = None
-    erro: str | None = None
+    tamanho: int | None = None
+    download_url: str | None = None
 
 
 @dataclass(frozen=True)
 class EmailDoResend:
     """O que a API devolve do e-mail recebido: corpo em texto e em HTML, os
-    cabeçalhos relevantes e os anexos, cada um com o binário ou com o erro."""
+    cabeçalhos relevantes e os metadados dos anexos (sem binário)."""
 
     texto: str | None
     html: str | None
@@ -276,35 +287,72 @@ def _cabecalhos_relevantes(dados: dict) -> dict[str, str]:
     return cabecalhos
 
 
-def _baixar_anexo(cliente: httpx.Client, meta: dict, detalhe: dict | None) -> AnexoDoResend:
-    base = {
-        "id": str(meta.get("id") or ""),
-        "filename": str(meta.get("filename") or ""),
-        "content_type": str(meta.get("content_type") or "application/octet-stream"),
-    }
+def _tamanho_declarado(*fontes: dict | None) -> int | None:
+    for fonte in fontes:
+        valor = (fonte or {}).get("size")
+        if isinstance(valor, int) and not isinstance(valor, bool) and valor >= 0:
+            return valor
+        if isinstance(valor, str) and valor.isdigit():
+            return int(valor)
+    return None
+
+
+def _anexo_do_resend(meta: dict, detalhe: dict | None) -> AnexoDoResend:
     url = (detalhe or {}).get("download_url")
+    return AnexoDoResend(
+        id=str(meta.get("id") or ""),
+        filename=str(meta.get("filename") or ""),
+        content_type=str(meta.get("content_type") or "application/octet-stream"),
+        tamanho=_tamanho_declarado(detalhe, meta),
+        download_url=url if isinstance(url, str) else None,
+    )
+
+
+def baixar_anexo_recebido(anexo: AnexoDoResend, *, limite_bytes: int, cliente: httpx.Client | None = None) -> bytes:
+    """Baixa o binário de UM anexo pelo link assinado, em pedaços, e para no
+    pedaço que passa de `limite_bytes` (`AnexoAcimaDoTetoError`). O teto vale
+    sobre o que chega de fato, e não sobre o que o servidor declara: um
+    `Content-Length` mentiroso ou uma compressão que infla não furam o teto.
+
+    Levanta `LeituraDoResendError` quando o binário não vem (sem link, rede,
+    status de erro), com o tipo da falha como mensagem."""
+    url = anexo.download_url
     # O link vem da API autenticada do Resend. Mesmo assim, só https: um link
     # de outro esquema não é o que a API documenta, e não há por que segui-lo.
     if not isinstance(url, str) or not url.startswith("https://"):
-        return AnexoDoResend(**base, erro="sem link de download")
+        raise LeituraDoResendError("sem link de download")
+    proprio = cliente is None
+    http = cliente or httpx.Client(timeout=TIMEOUT_DO_TRANSPORTE)
     try:
         # Sem a chave no cabeçalho: o link já é assinado, e a chave do Resend
         # não tem nada que ir para o host que serve o binário.
-        resposta = cliente.get(url)
-        resposta.raise_for_status()
+        with http.stream("GET", url) as resposta:
+            resposta.raise_for_status()
+            declarado = resposta.headers.get("content-length", "")
+            if declarado.isdigit() and int(declarado) > limite_bytes:
+                raise AnexoAcimaDoTetoError("Content-Length acima do teto")
+            recebido = bytearray()
+            for pedaco in resposta.iter_bytes():
+                recebido += pedaco
+                if len(recebido) > limite_bytes:
+                    raise AnexoAcimaDoTetoError("binário acima do teto")
+        return bytes(recebido)
     except httpx.HTTPError as exc:
-        return AnexoDoResend(**base, erro=type(exc).__name__)
-    return AnexoDoResend(**base, conteudo=resposta.content)
+        raise LeituraDoResendError(type(exc).__name__) from exc
+    finally:
+        if proprio:
+            http.close()
 
 
 def ler_email_recebido(email_id: str, *, cliente: httpx.Client | None = None) -> EmailDoResend:
-    """Busca na API do Resend o corpo, os cabeçalhos e os anexos do e-mail
-    recebido, com o binário de cada anexo já baixado pelo link assinado.
+    """Busca na API do Resend o corpo, os cabeçalhos e os metadados dos anexos
+    do e-mail recebido (tamanho declarado e link assinado de cada um). O
+    binário NÃO é baixado aqui: é `baixar_anexo_recebido`, um por vez, com teto.
 
     Levanta `LeituraDoResendError` quando o e-mail em si não vem (sem chave,
-    API fora, e-mail inexistente). A falha de UM anexo não levanta: ele volta
-    com `erro`, e quem chama grava o item como incompleto em vez de perder o
-    que veio (issue #648)."""
+    API fora, e-mail inexistente). A falta da lista de anexos não levanta: os
+    anexos voltam sem link, e quem chama grava o item como incompleto em vez
+    de perder o que veio (issue #648)."""
     chave = settings.resend_inbound_api_key or settings.resend_api_key
     if not chave:
         raise LeituraDoResendError("chave do Resend para leitura não configurada")
@@ -340,7 +388,7 @@ def ler_email_recebido(email_id: str, *, cliente: httpx.Client | None = None) ->
             texto=dados.get("text"),
             html=dados.get("html"),
             cabecalhos=_cabecalhos_relevantes(dados),
-            anexos=tuple(_baixar_anexo(http, meta, detalhes.get(str(meta.get("id")))) for meta in metas),
+            anexos=tuple(_anexo_do_resend(meta, detalhes.get(str(meta.get("id")))) for meta in metas),
         )
     finally:
         if proprio:

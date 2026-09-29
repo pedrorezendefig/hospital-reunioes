@@ -207,6 +207,31 @@ describe("o painel do item", () => {
     expect(within(painel).queryByRole("button", { name: /foto\.jpg/ })).toBeNull();
   });
 
+  it("anexo recusado pelo teto mostra o motivo no lugar do link", async () => {
+    montar({
+      e1: item(JOANA, {
+        anexos: [
+          {
+            id: "a3",
+            filename: "gravacao.wav",
+            content_type: "audio/wav",
+            tamanho_bytes: 31457280,
+            disponivel: false,
+            motivo_indisponivel: "acima de 20 MB, o original está na caixa ouvidoria@",
+          },
+        ],
+      }),
+    });
+
+    fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
+
+    const painel = await screen.findByRole("region", { name: "E-mail recebido" });
+    expect(await within(painel).findByText("gravacao.wav")).toBeTruthy();
+    expect(within(painel).getByText("acima de 20 MB, o original está na caixa ouvidoria@")).toBeTruthy();
+    expect(within(painel).queryByText("não veio do provedor")).toBeNull();
+    expect(within(painel).queryByRole("button", { name: /gravacao\.wav/ })).toBeNull();
+  });
+
   it("o anexo abre pela URL assinada que o servidor emite na hora", async () => {
     const aba = { opener: {}, location: { href: "" }, close: vi.fn() };
     vi.spyOn(window, "open").mockReturnValue(aba as unknown as Window);

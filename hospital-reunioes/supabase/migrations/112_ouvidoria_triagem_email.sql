@@ -83,14 +83,22 @@ CREATE TABLE IF NOT EXISTS ouvidoria_emails_recebidos_anexos (
   content_type      TEXT NOT NULL,
   tamanho_bytes     BIGINT CHECK (tamanho_bytes >= 0),
   storage_path      TEXT CHECK (storage_path IS NULL OR btrim(storage_path) <> ''),
+  -- Por que o binario NAO foi guardado de proposito: tipo fora do catalogo ou
+  -- acima do teto (por anexo, por quantidade ou por total do e-mail). O
+  -- remetente e anonimo, e o teto e do app. Linha com motivo nao conta como
+  -- faltando e a reentrega nao a baixa de novo; o original segue na caixa
+  -- ouvidoria@ do Workspace (revisao de seguranca do PR #899).
+  motivo_sem_binario TEXT CHECK (motivo_sem_binario IS NULL OR btrim(motivo_sem_binario) <> ''),
   created_at        TIMESTAMPTZ NOT NULL DEFAULT now(),
-  CONSTRAINT ouvidoria_emails_recebidos_anexos_unico UNIQUE (email_recebido_id, resend_anexo_id)
+  CONSTRAINT ouvidoria_emails_recebidos_anexos_unico UNIQUE (email_recebido_id, resend_anexo_id),
+  CONSTRAINT ouvidoria_emails_recebidos_anexos_binario_ou_motivo
+    CHECK (storage_path IS NULL OR motivo_sem_binario IS NULL)
 );
 
 COMMENT ON TABLE ouvidoria_emails_recebidos_anexos IS
   'Anexos do e-mail recebido (ADR 0051). Metadados aqui, binario no bucket privado anexos-ouvidoria, leitura por URL assinada.';
 COMMENT ON COLUMN ouvidoria_emails_recebidos_anexos.storage_path IS
-  'Caminho no bucket privado, nome sorteado. NULL = o binario nao veio do Resend (item incompleto).';
+  'Caminho no bucket privado, nome sorteado. NULL sem motivo_sem_binario = o binario nao veio do Resend (item incompleto); NULL com motivo = recusado pelo teto ou pelo tipo.';
 
 -- 3. RLS default-deny (padrao da casa: 009/041/051/063/064/066). O backend usa
 --    service_role; a anon_key do bundle do frontend fica de fora. Nenhuma

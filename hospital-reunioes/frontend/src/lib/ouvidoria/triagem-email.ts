@@ -33,8 +33,13 @@ export interface AnexoDoEmail {
   filename: string;
   content_type: string;
   tamanho_bytes: number | null;
-  /** Falso quando o binário não veio do Resend: a tela mostra o nome, sem link. */
+  /** Falso quando o binário não está guardado: a tela mostra o nome, sem link. */
   disponivel: boolean;
+  /**
+   * Por que o binário foi recusado (tipo fora do catálogo ou acima do teto),
+   * com o lugar do original. Null com `disponivel` falso: não veio do Resend.
+   */
+  motivo_indisponivel?: string | null;
 }
 
 /**

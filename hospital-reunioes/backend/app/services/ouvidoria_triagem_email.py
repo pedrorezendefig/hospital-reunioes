@@ -32,7 +32,7 @@ from postgrest.exceptions import APIError
 
 from app.config import settings
 from app.services import email_service, storage
-from app.services.ouvidoria_anexos import TIPOS_PERMITIDOS
+from app.services.ouvidoria_anexos import LIMITE_BYTES, LIMITE_LEGIVEL, TIPOS_PERMITIDOS
 from app.services.paginacao import ler_tudo
 
 logger = logging.getLogger(__name__)
@@ -70,7 +70,7 @@ CAMPOS_DA_LISTA = (
 # guardado e nunca sai para a tela, que desenha só o texto (issue #648).
 CAMPOS_DO_ITEM = CAMPOS_DA_LISTA + ("destinatarios", "corpo_texto", "cabecalhos")
 
-_CAMPOS_DO_ANEXO = ("id", "filename", "content_type", "tamanho_bytes", "storage_path")
+_CAMPOS_DO_ANEXO = ("id", "filename", "content_type", "tamanho_bytes", "storage_path", "motivo_sem_binario")
 
 # Quantos ids cabem num `in.(...)` sem a URL da consulta crescer demais.
 _LOTE_DE_IDS = 100
@@ -166,18 +166,74 @@ def _metas_do_evento(dados: dict) -> dict[str, dict]:
     return metas
 
 
-def _tipo_guardado(filename: str) -> tuple[str, str]:
-    """(extensão, content-type) com que o binário vai para o bucket.
+def _tamanho_do_evento(meta: dict) -> int | None:
+    valor = meta.get("size")
+    if isinstance(valor, int) and not isinstance(valor, bool) and valor >= 0:
+        return valor
+    return None
+
+
+# ─── Teto dos anexos ────────────────────────────────────────────────────────
+#
+# O remetente é anônimo e o subdomínio de recebimento tem MX próprio, sem o
+# filtro do Workspace (ADR 0051, decisão 6): o teto é do app, e não do e-mail
+# (revisão de segurança do PR #899). O anexo recusado ganha linha SEM binário
+# e COM motivo, e não conta como faltando: o item não fica incompleto por ele,
+# e a reentrega não o baixa de novo. O original segue na caixa ouvidoria@ do
+# Workspace, e é para lá que o motivo manda o ouvidor.
+
+# Por anexo, o mesmo teto do anexo do caso.
+LIMITE_BYTES_POR_ANEXO = LIMITE_BYTES
+LIMITE_ANEXOS_POR_EMAIL = 20
+LIMITE_BYTES_POR_EMAIL = 50 * 1024 * 1024
+
+_ONDE_ESTA = "o original está na caixa ouvidoria@"
+MOTIVO_TIPO = f"tipo de arquivo não aceito, {_ONDE_ESTA}"
+MOTIVO_GRANDE = f"acima de {LIMITE_LEGIVEL}, {_ONDE_ESTA}"
+MOTIVO_QUANTIDADE = f"passa de {LIMITE_ANEXOS_POR_EMAIL} anexos por e-mail, {_ONDE_ESTA}"
+MOTIVO_TOTAL = f"passa de {LIMITE_BYTES_POR_EMAIL // (1024 * 1024)} MB por e-mail, {_ONDE_ESTA}"
+
+
+def _tipo_guardado(filename: str) -> tuple[str, str] | None:
+    """(extensão, content-type) com que o binário vai para o bucket, ou None
+    quando o tipo não é aceito.
 
     O tipo declarado no e-mail é de quem mandou, e quem serve o arquivo depois é
     uma URL assinada do storage: um anexo `.html` servido como `text/html`
-    abriria como página. Só os tipos que a Ouvidoria já aceita (o mesmo
-    catálogo do anexo do caso) saem com o tipo deles; o resto sai como binário
-    genérico, que o navegador baixa em vez de abrir."""
+    abriria como página. Só entram os tipos que a Ouvidoria já aceita (o mesmo
+    catálogo do anexo do caso), com o tipo do catálogo."""
     extensao = os.path.splitext(filename or "")[1].lower()
     if extensao in TIPOS_PERMITIDOS:
         return extensao, TIPOS_PERMITIDOS[extensao]
-    return "", "application/octet-stream"
+    return None
+
+
+def _motivo_da_recusa(posicao: int, filename: str, tamanho: int | None, guardado_no_email: int) -> str | None:
+    """Por que o anexo não é baixado, decidido antes de baixar. None é que pode."""
+    if _tipo_guardado(filename) is None:
+        return MOTIVO_TIPO
+    if posicao >= LIMITE_ANEXOS_POR_EMAIL:
+        return MOTIVO_QUANTIDADE
+    if tamanho is not None and tamanho > LIMITE_BYTES_POR_ANEXO:
+        return MOTIVO_GRANDE
+    # Sem tamanho declarado, o download leva o que resta como teto; sem nada
+    # restando, nem começa.
+    if guardado_no_email + (tamanho or 0) > LIMITE_BYTES_POR_EMAIL or guardado_no_email >= LIMITE_BYTES_POR_EMAIL:
+        return MOTIVO_TOTAL
+    return None
+
+
+def _baixar(anexo: email_service.AnexoDoResend, email_recebido_id: str, guardado_no_email: int):
+    """(binário, motivo): o binário baixado com o teto que resta, ou o motivo
+    da recusa quando passa dele, ou (None, None) quando não veio."""
+    teto = min(LIMITE_BYTES_POR_ANEXO, LIMITE_BYTES_POR_EMAIL - guardado_no_email)
+    try:
+        return email_service.baixar_anexo_recebido(anexo, limite_bytes=teto), None
+    except email_service.AnexoAcimaDoTetoError:
+        return None, (MOTIVO_GRANDE if teto == LIMITE_BYTES_POR_ANEXO else MOTIVO_TOTAL)
+    except email_service.LeituraDoResendError as exc:
+        logger.error("Triagem de e-mail: anexo %s do e-mail %s não veio (%s)", anexo.id, email_recebido_id, exc)
+        return None, None
 
 
 def _guardar_anexos(
@@ -189,51 +245,67 @@ def _guardar_anexos(
     """Guarda o binário de cada anexo que ainda não está no bucket e devolve
     quantos continuam faltando.
 
-    Todo anexo que o e-mail anuncia ganha linha, com o binário ou sem ele: o
-    ouvidor precisa saber que havia um arquivo, mesmo quando ele não veio. A
-    linha sem `storage_path` é a que a reentrega vem completar."""
+    Todo anexo que o e-mail anuncia ganha linha, com o binário, com o motivo
+    da recusa ou sem nenhum dos dois: o ouvidor precisa saber que havia um
+    arquivo, mesmo quando ele não veio. A linha sem `storage_path` e sem motivo
+    é a que a reentrega vem completar.
+
+    Um anexo por vez, e só os que faltam: baixa com teto, sobe e solta antes
+    do próximo. A memória do worker nunca segura mais que um anexo, e esse um
+    nunca passa do teto."""
     existentes = {
         a["resend_anexo_id"]: a
         for a in (
             supabase.table(TABELA_ANEXOS)
-            .select("id, resend_anexo_id, storage_path")
+            .select("id, resend_anexo_id, storage_path, tamanho_bytes, motivo_sem_binario")
             .eq("email_recebido_id", email_recebido_id)
             .execute()
             .data
             or []
         )
     }
-    binarios = {a.id: a for a in (lido.anexos if lido else ()) if a.id}
-    ordem = list(dict.fromkeys([*metas, *binarios]))
+    descritos = {a.id: a for a in (lido.anexos if lido else ()) if a.id}
+    ordem = list(dict.fromkeys([*metas, *descritos]))
     bucket = settings.supabase_storage_bucket_anexos_ouvidoria
+    guardado_no_email = sum(int(a.get("tamanho_bytes") or 0) for a in existentes.values() if a.get("storage_path"))
 
     faltando = 0
-    for anexo_id in ordem:
+    for posicao, anexo_id in enumerate(ordem):
         atual = existentes.get(anexo_id)
-        if atual and atual.get("storage_path"):
+        if atual and (atual.get("storage_path") or atual.get("motivo_sem_binario")):
             continue
-        anexo = binarios.get(anexo_id)
+        anexo = descritos.get(anexo_id)
         meta = metas.get(anexo_id, {})
         filename = (anexo.filename if anexo else "") or str(meta.get("filename") or "") or "anexo"
         content_type = (anexo.content_type if anexo else "") or str(meta.get("content_type") or "")
+        declarado = anexo.tamanho if anexo is not None and anexo.tamanho is not None else _tamanho_do_evento(meta)
         path = None
         tamanho = None
-        if anexo is not None and anexo.conteudo is not None:
-            extensao, tipo_guardado = _tipo_guardado(filename)
-            # Caminho sorteado: o nome original pode trazer o nome de quem
-            # escreveu, e não vira parte de caminho no storage.
-            candidato = f"email-recebido-{email_recebido_id}/{uuid.uuid4().hex}{extensao}"
-            if storage.upload_private(supabase, bucket, candidato, anexo.conteudo, content_type=tipo_guardado):
-                path, tamanho = candidato, len(anexo.conteudo)
-        else:
-            motivo = anexo.erro if anexo is not None else "não lido"
-            logger.error("Triagem de e-mail: anexo %s do e-mail %s não veio (%s)", anexo_id, email_recebido_id, motivo)
+        motivo = _motivo_da_recusa(posicao, filename, declarado, guardado_no_email)
+        if motivo is None and anexo is None:
+            logger.error("Triagem de e-mail: anexo %s do e-mail %s não veio (não lido)", anexo_id, email_recebido_id)
+        elif motivo is None:
+            conteudo, motivo = _baixar(anexo, email_recebido_id, guardado_no_email)
+            if conteudo is not None:
+                extensao, tipo_guardado = _tipo_guardado(filename)
+                # Caminho sorteado: o nome original pode trazer o nome de quem
+                # escreveu, e não vira parte de caminho no storage.
+                candidato = f"email-recebido-{email_recebido_id}/{uuid.uuid4().hex}{extensao}"
+                if storage.upload_private(supabase, bucket, candidato, conteudo, content_type=tipo_guardado):
+                    path, tamanho = candidato, len(conteudo)
+            # Solta o binário antes do próximo anexo.
+            del conteudo
+        if motivo is not None:
+            logger.warning(
+                "Triagem de e-mail: anexo %s do e-mail %s recusado (%s)", anexo_id, email_recebido_id, motivo
+            )
 
         campos = {
             "filename": filename,
             "content_type": content_type or "application/octet-stream",
             "storage_path": path,
-            "tamanho_bytes": tamanho,
+            "tamanho_bytes": tamanho if path else declarado,
+            "motivo_sem_binario": motivo,
         }
         try:
             if atual:
@@ -249,7 +321,10 @@ def _guardar_anexos(
                 logger.error("Anexo órfão no bucket após falha de registro: %s", path)
             logger.error("Triagem de e-mail: falha ao registrar o anexo %s do e-mail %s", anexo_id, email_recebido_id)
             path = None
-        if path is None:
+            motivo = None
+        if path is not None:
+            guardado_no_email += tamanho or 0
+        elif motivo is None:
             faltando += 1
     return faltando
 
@@ -366,6 +441,9 @@ def carregar_item(supabase, email_id: str) -> dict | None:
                 # Anexo sem binário é o que não veio do Resend: a tela mostra o
                 # nome, e não oferece o link.
                 "disponivel": bool(a.get("storage_path")),
+                # Por que o binário não foi guardado de propósito (tipo ou teto).
+                # None com `disponivel` falso é o anexo que não veio do Resend.
+                "motivo_indisponivel": a.get("motivo_sem_binario"),
             }
             for a in anexos
         ],

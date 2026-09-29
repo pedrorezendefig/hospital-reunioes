@@ -291,7 +291,9 @@ export function TriagemDeEmail({ token }: { token: string }) {
                         <span className="flex items-center gap-2 text-sm text-slate-500 px-3 py-2 rounded-lg bg-amber-50">
                           <Paperclip className="w-3.5 h-3.5 shrink-0" />
                           <span className="truncate flex-1">{anexo.filename}</span>
-                          <span className="text-xs shrink-0">não veio do provedor</span>
+                          <span className="text-xs shrink-0">
+                            {anexo.motivo_indisponivel ?? "não veio do provedor"}
+                          </span>
                         </span>
                       )}
                     </li>
