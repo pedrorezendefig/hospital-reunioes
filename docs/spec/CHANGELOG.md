@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.158.2 - 2026-10-02 18:36 - Onda onda-b: Botão agrupar por responsável na aba Issues
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `28450d6`
+- PRs: [#920](https://github.com/pedrorezendefig/hospital-reunioes/pull/920)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/28450d6
+
 ## v0.158.1 - 2026-10-02 18:30 - Onda pr-918: Aposentar /onda e /montar-ondas e redirecionar os ponteiros para a enxuta
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `2435b22`
