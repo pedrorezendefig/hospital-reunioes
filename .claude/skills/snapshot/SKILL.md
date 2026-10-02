@@ -41,7 +41,7 @@ Flags suportadas pelo script:
 | `--aceitar-listagem-parcial` | Deixa o parser AST reescrever um `ROTAS.md` que veio da introspecção. O arquivo sai carimbado como parcial (perde rota criada por factory e vira a coluna Auth). O bloco `AUTO:rotas` do `ARQUITETURA.md` continua intocado nos dois casos, porque ali não há onde carimbar. |
 | `--root <path>` | Raiz do repo (default: cwd). |
 
-**Código de saída 4:** a passagem correu, mas a listagem de rotas ficou para trás, porque a introspecção do app não rodou (sem `.venv` ou sem `.env`) e o parser AST rebaixaria o que já está em disco. Os outros quatro arquivos são gerados normalmente. O Passo 9.4 do `/deploy` é warn-only e não distingue códigos: quem lê o 4 é quem roda à mão. O conserto é rodar com o backend instalado.
+**Código de saída 4:** a passagem correu, mas a listagem de rotas ficou para trás, porque a introspecção do app não rodou (sem `.venv` ou sem `.env`) e o parser AST rebaixaria o que já está em disco. Os outros quatro arquivos são gerados normalmente. O rabo (`fechar_onda.py`) trata o snapshot como best-effort e imprime `snapshot parcial (codigo 4)` sem parar: quem conserta é quem roda à mão. O conserto é rodar com o backend instalado.
 
 Observação: `FLUXOGRAMAS.md` e `ESTRUTURA.md` são **curados humano** (blocos `<!-- curated -->`). O script só alerta de gaps (rotas/estados novos sem fluxograma correspondente), nunca sobrescreve.
 
@@ -160,7 +160,7 @@ Regenera só 1 arquivo (útil em desenvolvimento da skill ou pra testar geradore
 - ❌ Regenerar `FLUXOGRAMAS.md` automaticamente. Esse arquivo é curado por humano.
 - ❌ Sobrescrever blocos `<!-- curated:start -->...<!-- curated:end -->`. **Sempre preservar.**
 - ❌ Commitar se nada mudou. Idempotência é regra.
-- ❌ Disparar `/deploy ship` em loop. Scope map em `project.json` garante que `chore(spec):` não vira deploy.
+- ❌ Disparar o rabo em loop. O snapshot entra no mesmo push do merge; nunca num push próprio.
 - ❌ Ler valores de secrets (mesmo só nomes) pra escrever em INTEGRACOES.md como valor. **Só o `env_key` (nome da variável)**, nunca o valor.
 
 ---

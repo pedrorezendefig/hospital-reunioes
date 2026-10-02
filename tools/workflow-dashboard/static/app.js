@@ -986,7 +986,7 @@ function fluxoHtml() {
           tip: 'Red-green-refactor: cada critério de aceite da issue vira um teste que falha primeiro; o código vem só pra fazê-lo passar. Nomes de teste descrevem o comportamento de domínio em pt-BR.', src: '.claude/skills/tdd' })}
         <span class="flx-chev">›</span>
         ${flxNode({ cmd: '/ship', sub: 'roda os 3 gates → PR', icon: 'rocket', d: d++,
-          tip: 'Orquestra a mudança end-to-end: branch, commit, PR, 3 gates, approval, merge e deploy num comando só. Dispara /code-review e /security-review automaticamente. Trabalho ancorado na issue (Closes #N fecha no merge).', src: '.claude/skills/ship' })}
+          tip: 'Leva a mudança até o PR verde: branch, commit, PR e 3 gates. Dispara /code-review e /security-review automaticamente e imprime o comando do rabo (fechar_onda.py). Trabalho ancorado na issue (Closes #N fecha no merge).', src: '.claude/skills/ship' })}
       </div>
 
       <div class="flx-subcap">o <code>/ship</code> dispara os 3 gates, em sequência</div>
@@ -1004,12 +1004,12 @@ function fluxoHtml() {
     ${conn()}
 
     ${phase('3', 'revisão humana & deploy')}
-    ${flxNode({ t: 'Gate humano: OK de merge', sub: 'push na main é ação humana · merge sequencial', icon: 'usercheck', cls: 'flx-humangate', d: d++,
-      tip: 'O único toque humano obrigatório: você aprova o lote uma vez. Push na main é ação humana porque merge dispara deploy em produção; o merge é sequencial, com bump de versão um a um.', rule: 'regra: push na main = ação humana' })}
+    ${flxNode({ t: 'Gate humano: OK de merge', sub: 'subir é decisão humana · rabo único por PR ou lote', icon: 'usercheck', cls: 'flx-humangate', d: d++,
+      tip: 'O único toque humano obrigatório: você aprova o PR (ou o lote da onda) citando o número. Quem leva à main é o rabo, fechar_onda.py: merge, bump, APP_VERSION, um push, um build, health e registro (ADR 0061).', rule: 'regra: push na main = ação humana' })}
     ${conn()}
 
-    ${flxNode({ cmd: '/deploy · Coolify', sub: 'build a partir da main → health check', icon: 'cloud', cls: 'flx-wide', d: d++,
-      tip: 'Deploy via Coolify: build a partir da main, health check e rollback automático se falhar. Lê e escreve docs/spec/deploy/*.json e faz prepend no CHANGELOG.', src: '.claude/skills/deploy' })}
+    ${flxNode({ cmd: 'fechar_onda.py · Coolify', sub: 'um push → um build → health com version-match', icon: 'cloud', cls: 'flx-wide', d: d++,
+      tip: 'O rabo único: merge local, bump na main, APP_VERSION no Coolify, um push, um build, health com conferência de versão; escreve docs/spec/deploy/*.json, CHANGELOG e snapshot no mesmo push. Build ou health ruim: código 3/4 e /deploy rollback.', src: '.claude/skills/onda-enxuta/scripts' })}
     ${conn()}
 
     <div class="flx-fork" style="--d:${d++}">

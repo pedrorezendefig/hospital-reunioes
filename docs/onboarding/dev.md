@@ -90,9 +90,10 @@ Loop disciplinado: reproduz → minimiza → hipótese → instrumenta → corri
                    → para no PR verde e imprime o comando do rabo (sem bump no PR)
                    ▼
 fechar_onda.py     o rabo único (ADR 0061), rodado pelo autor do PR depois do OK:
-  --prs <N>        semáforo → merge local --no-ff → bump na main → APP_VERSION no Coolify
-                   → um push → um build → health com version-match
-                   → state.json + history.json + CHANGELOG + snapshot + draft do Manual
+  --prs <N>        semáforo → merge local --no-ff → bump na main
+                   → registro no mesmo push: state.json + history.json + CHANGELOG + snapshot + draft do Manual
+                   → APP_VERSION no Coolify → um push → um build → health com version-match
+                   → publica o Manual se tirou draft
                    (migration nova: aplicar no Studio ANTES de rodar; o script confere o sha256)
                    Na /onda-enxuta é o mesmo script, com o lote da onda em --prs
 ```
