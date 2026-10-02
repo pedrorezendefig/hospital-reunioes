@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.158.4 - 2026-10-02 19:00 - PR #922, issue #921: Nível 2 confere claude --version >= 2.1.280 para a /onda-enxuta
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `76e0aec`
+- PRs: [#922](https://github.com/pedrorezendefig/hospital-reunioes/pull/922)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/76e0aec
+
 ## v0.158.3 - 2026-10-02 18:52 - PR #919, issue #907: Fechar_onda.py com um PR só e /ship parando no PR verde
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `c565aab`

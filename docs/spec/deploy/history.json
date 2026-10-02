@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-02T19:00:26-03:00",
+      "sha": "76e0aec2",
+      "app_version": "0.158.4",
+      "subject": "PR #922, issue #921: Nível 2 confere claude --version >= 2.1.280 para a /onda-enxuta",
+      "raw_subject": "chore(deploy): registro do PR avulso (#922)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        902
+      ],
+      "result": "healthy",
+      "duration_seconds": 5,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #922, issue #921. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-10-02T18:52:56-03:00",
       "sha": "c565aabd",
       "app_version": "0.158.3",
@@ -1533,35 +1565,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda AFK, issue #669. Escopo cravado na triagem: sete guardas (devolver e prorrogacao do portal, cobrar-setor, DELETE .../arquivo, devolucoes, validar, decidir prorrogacao). Arquivar caso apagado continua LIVRE por decisao de produto, com teste travando a decisao. Desvio do plano aceito nos dois gates: um terceiro select (_carregar_para_o_arquivo) precisou ser ampliado, senao a guarda do desarquivar nasceria lendo None. Nice-to-have registrado e nao corrigido: dois testes de tela sao decorativos (o stub devolve a frase que nunca teve a palavra procurada); a prova real esta no backend. Achado fora de escopo para issue nova: o token do portal do setor nao e invalidado pela Retencao, entao o GET do caso segue legivel enquanto o apagamento esta pendente."
-    },
-    {
-      "at": "2026-09-10T22:15:00-03:00",
-      "sha": "fae4a28",
-      "app_version": "0.128.0",
-      "subject": "a Entrega devolve a Demanda a quem pediu, com o card voltando para Aguardando e o selo Entregue, confira e conclua",
-      "raw_subject": "feat(tecnologia): a Entrega devolve a Demanda a quem pediu (#679) (#689)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 190,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Issue #679, ultima fatia desta sessao do PRD #673 (ADR 0054, decisao 6). Sem migration. A devolucao mora DENTRO do sincronizar_demanda que a #678 criou, entao vale de graca pelo webhook e pelo lote de hora em hora. A review independente achou 4 must-fix reais. O mais grave: a devolucao atribuia o card ao autor sem checar se ele ainda ve a aba, coisa que o atribuir do router recusa desde sempre; diretor que saiu do hospital virava responsavel de um card que sumia da Minha vez de todo mundo e sem e-mail, porque o filtro de acesso pula quem nao e pessoa da aba. Corrigido usando a MESMA funcao e_pessoa_da_aba, movendo o card sem trocar o responsavel. Os outros tres: o UPDATE do responsavel sem amarra de estado no ramo em que a Demanda ja esta em Aguardando (quem concluia a mao no mesmo segundo ganhava linha no fio de card fechado e e-mail); texto do e-mail sem nenhum teste preso ao literal, entao trocar RECADO_DA_ENTREGA deixava tudo verde com o e-mail dizendo uma coisa e o selo da tela outra; e devolucao pela metade que ninguem recuperava, com o log do webhook prometendo uma recuperacao que a guarda da foto impede. DIVERGENCIA DE SPEC, decidida pelo dono: o criterio 4 dizia que Demanda fechada que chega a Entregue so ganha a linha de Etapa, mas a #678 ja tinha tirado as fechadas dos dois gatilhos; o criterio foi reescrito na issue e a consequencia virou emenda no ADR 0054 (commit 3a13c42): o selo de Etapa de Demanda fechada congela no dia do fechamento, e quem quiser atualizar reabre a Demanda."
     }
   ]
 }
