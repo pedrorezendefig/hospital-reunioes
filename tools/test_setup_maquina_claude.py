@@ -60,6 +60,11 @@ def test_versao_abaixo_do_piso_acusa_e_diz_como_atualizar(tmp_path):
     assert "install.sh" in li
 
 
+def test_versao_igual_ao_piso_passa(tmp_path):
+    # Fronteira: "2.1.280 ou mais" inclui o próprio piso; um "maior estrito" reprovaria.
+    assert linha(roda_claude(tmp_path, "2.1.280"), "claude >= 2.1.280").startswith("OK")
+
+
 def test_comparacao_e_por_numero_nao_por_texto(tmp_path):
     # 2.1.1000 > 2.1.280 por número; no alfabeto "1000" vem antes de "280".
     assert linha(roda_claude(tmp_path, "2.1.1000"), "claude >= 2.1.280").startswith("OK")
