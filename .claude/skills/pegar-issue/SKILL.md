@@ -81,7 +81,7 @@ Abra o Claude Code dentro de `../hospital-issue-<N>`. Veja `docs/agents/issue-tr
 
 ## Fechar o loop
 
-Terminado o `/tdd` (testes verdes), invoque **`/ship`** — abre o PR com `Closes #N`, roda os gates, mergeia e faz o deploy. Ao mergear, a issue fecha e a Action de higiene (`.github/workflows/higiene-issues.yml`) remove o `in-progress` sozinha.
+Terminado o `/tdd` (testes verdes), invoque **`/ship`**: abre o PR com `Closes #N`, roda os gates até o PR verde e imprime o comando do rabo (`python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>`), que mergeia e faz o deploy (ADR 0061). Ao mergear, a issue fecha e a Action de higiene (`.github/workflows/higiene-issues.yml`) remove o `in-progress` sozinha.
 
 Abandonou? Devolva ao pool:
 ```bash
