@@ -221,16 +221,39 @@ def test_fechada_sem_o_pr_no_history_fica_sem_versao():
 
 
 def test_mencao_ao_pr_em_deploy_anterior_ao_merge_nao_vira_versao():
-    # Caso real do PR #751: o deploy 0.139.0 cita o PR nas notas como contexto,
-    # horas antes do merge; quem levou o PR ao ar foi o 0.140.0.
-    issue, pr = _fechada_com_pr(729, 751, "2026-09-17T03:25:31Z")
+    # Caso real do PR #750: o deploy 0.139.0 cita o PR nas notas como contexto,
+    # horas antes do merge; quem levou o PR ao ar foi o 0.140.0, também só nas notas.
+    issue, pr = _fechada_com_pr(728, 750, "2026-09-17T03:18:20Z")
     history = [
-        _deploy("2026-09-17T00:30:00-03:00", "0.140.0", raw_subject="feat(tecnologia): falar (#751)"),
+        _deploy("2026-09-17T00:30:00-03:00", "0.140.0", raw_subject="feat(tecnologia): falar (#751)",
+                notes="PR #750 (#728, kit de conhecimento) e PR #751."),
         _deploy("2026-09-16T22:35:00-03:00", "0.139.0", raw_subject="feat(extracao): ler (#765)",
-                notes="A issue #758 nasceu das revisoes do PR #751."),
+                notes="A issue #758 nasceu das revisoes do PR #750."),
     ]
 
-    assert _versoes(_agrupar([issue], prs=[pr], history=history)) == {729: "0.140.0"}
+    assert _versoes(_agrupar([issue], prs=[pr], history=history)) == {728: "0.140.0"}
+
+
+def test_registro_da_onda_gravado_segundos_antes_do_merge_ainda_da_a_versao():
+    # O fechar_onda grava o registro antes do push; o GitHub marca o merge segundos depois (PR #863).
+    issue, pr = _fechada_com_pr(860, 863, "2026-09-23T14:23:39Z")
+    history = [
+        _deploy("2026-09-23T11:23:34-03:00", "0.153.1", raw_subject="chore(deploy): registro da onda c (#863)",
+                notes="onda-enxuta c: PRs #863. Um push, um build."),
+    ]
+
+    assert _versoes(_agrupar([issue], prs=[pr], history=history)) == {860: "0.153.1"}
+
+
+def test_citacao_unica_nas_notas_com_hora_escrita_antes_do_merge_ainda_da_a_versao():
+    # Registro antigo com hora escrita à mão, duas horas antes do merge real (PR #715).
+    issue, pr = _fechada_com_pr(705, 715, "2026-09-15T18:15:35Z")
+    history = [
+        _deploy("2026-09-15T13:20:00-03:00", "0.133.0", raw_subject="feat(ouvidoria): aviso (#709) e botao (#710)",
+                notes="Onda com PRs #715 e #716."),
+    ]
+
+    assert _versoes(_agrupar([issue], prs=[pr], history=history)) == {705: "0.133.0"}
 
 
 def test_mencao_ao_pr_em_deploy_posterior_nao_troca_a_versao_em_que_subiu():

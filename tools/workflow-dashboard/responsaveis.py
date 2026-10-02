@@ -14,6 +14,10 @@ SECOES = ("em_andamento", "planejada", "aberta", "fechada")
 LABELS_PLANEJADA = ("ready-for-agent", "ready-for-human")
 # Conclusões de CheckRun que não reprovam; qualquer outra (FAILURE, CANCELLED, TIMED_OUT...) é falha.
 CONCLUSOES_OK = ("SUCCESS", "NEUTRAL", "SKIPPED")
+# Como o /ship e o fechar_onda citam PRs no history.json: "(#894)" ou "(#911 #912)" no
+# raw_subject; "PR #894", "PRs #911 #912" ou "PRs #715 e #716" nas notes.
+RE_PRS_NO_TITULO = r"\((#\d+(?:[\s,]+#\d+)*)\)"
+RE_PRS_NAS_NOTAS = r"PRs? (#\d+(?:(?:,\s*|\s+e\s+|\s+)#\d+)*)"
 
 
 def agrupar_por_responsavel(
@@ -113,11 +117,15 @@ def _versao_por_issue(prs: list[dict], history: list[dict]) -> dict[int, str]:
 
 
 def _versao_por_pr(prs: list[dict], history: list[dict]) -> dict[int, str]:
-    """Primeiro deploy, a partir do merge, que cita o PR.
+    """Versão do deploy que levou cada PR mergeado ao ar.
 
-    As notas citam PRs como contexto, antes e depois de eles subirem (#751 aparece
-    no 0.139.0, horas antes do merge; #688 reaparece no 0.141.0). Deploy anterior ao
-    merge não pode ter levado o PR; entre os posteriores, vale o primeiro.
+    O raw_subject só cita o que subiu ("(#894)" do squash, "(#911 #912)" do registro
+    da onda): vale o primeiro deploy que o cita, sem olhar a hora, porque o
+    fechar_onda grava o registro segundos antes do GitHub marcar o merge.
+    As notas também citam PR como contexto, antes e depois de ele subir (#750 aparece
+    no 0.139.0, horas antes do merge; #688 reaparece no 0.141.0). Citado só nas
+    notas, vale o primeiro deploy a partir do merge; sem nenhum, o último antes dele
+    (registro antigo com hora escrita à mão).
     """
     mergeado_em = {p["number"]: _parse_dt(p.get("merged_at")) for p in prs if p.get("merged_at")}
     deploys = sorted(
@@ -125,25 +133,20 @@ def _versao_por_pr(prs: list[dict], history: list[dict]) -> dict[int, str]:
         key=lambda t: t[0],
     )
     versoes: dict[int, str] = {}
-    for at, d in deploys:
-        for n in _prs_citados(d):
-            if n in mergeado_em and n not in versoes and (mergeado_em[n] is None or at >= mergeado_em[n]):
-                versoes[n] = d["app_version"]
+    for n, merge in mergeado_em.items():
+        no_titulo = [d for _, d in deploys if n in _citados(d.get("raw_subject"), RE_PRS_NO_TITULO)]
+        nas_notas = [(at, d) for at, d in deploys if n in _citados(d.get("notes"), RE_PRS_NAS_NOTAS)]
+        depois_do_merge = [d for at, d in nas_notas if merge and at >= merge]
+        ultimo_antes = [d for _, d in nas_notas[-1:]]
+        escolhidos = no_titulo or depois_do_merge or ultimo_antes
+        if escolhidos:
+            versoes[n] = escolhidos[0]["app_version"]
     return versoes
 
 
-def _prs_citados(deploy: dict) -> set[int]:
-    """Números citados no registro do deploy, no formato que o /ship e o fechar_onda escrevem.
-
-    raw_subject: "(#894)" do squash ou "(#911 #912)" do registro da onda.
-    notes: "PR #894", "PRs #911 #912".
-    """
-    nums: set[int] = set()
-    for grupo in re.findall(r"\((#\d+(?:[\s,]+#\d+)*)\)", deploy.get("raw_subject") or ""):
-        nums |= {int(n) for n in re.findall(r"#(\d+)", grupo)}
-    for grupo in re.findall(r"PRs? (#\d+(?:(?:,\s*|\s+e\s+|\s+)#\d+)*)", deploy.get("notes") or ""):
-        nums |= {int(n) for n in re.findall(r"#(\d+)", grupo)}
-    return nums
+def _citados(texto: str | None, padrao: str) -> set[int]:
+    """Números "#N" dentro de cada trecho do texto que casa com o padrão."""
+    return {int(n) for trecho in re.findall(padrao, texto or "") for n in re.findall(r"#(\d+)", trecho)}
 
 
 def _pr_aberto_por_issue(prs: list[dict]) -> dict[int, dict]:
