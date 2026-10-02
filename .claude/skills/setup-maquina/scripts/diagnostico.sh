@@ -75,11 +75,13 @@ fi
 bin_ok jq "brew install jq"
 bin_ok claude "curl -fsSL https://claude.ai/install.sh | bash"
 
+GH_OK=0
 checa_gh() {
   no_path_do_shell gh || { bin_ok gh "brew install gh && gh auth login"; return; }
   ok "gh"
   gh auth status >/dev/null 2>&1 || { falta "gh autenticado" "gh auth login"; return; }
   ok "gh autenticado"
+  GH_OK=1
   perm="$(gh repo view --json viewerPermission --jq .viewerPermission 2>/dev/null || echo "?")"
   case "$perm" in
     WRITE|ADMIN|MAINTAIN) ok "permissão no repo" "$perm" ;;
@@ -88,8 +90,37 @@ checa_gh() {
 }
 checa_gh
 
-[ -n "$(git config user.name)" ] && [ -n "$(git config user.email)" ] \
+# Cada sócio mergeia o próprio PR (ADR 0061): o user.email do git tem que ser um e-mail
+# verificado da conta gh logada, senão o commit sai em nome de outra pessoa (setembro/2026).
+# Só lê o perfil pela API; o token do gh nunca entra.
+checa_email_git() { # email
+  local alvo perfil login noreply conhecidos lista leu=0
+  alvo="$(printf '%s' "$1" | tr '[:upper:]' '[:lower:]')"
+  if ! perfil="$(gh api user 2>/dev/null)" || ! login="$(printf '%s' "$perfil" | jq -er .login 2>/dev/null)"; then
+    aviso "git user.email é da conta gh" "não consegui ler a conta no gh agora; rode de novo com rede"
+    return
+  fi
+  noreply="$(printf '%s' "$perfil" | jq -r '"\(.id)+\(.login)@users.noreply.github.com"')"
+  conhecidos="$(printf '%s' "$perfil" | jq -r '.email // empty, "\(.login)@users.noreply.github.com"')
+$noreply"
+  if lista="$(gh api user/emails 2>/dev/null)"; then
+    leu=1
+    conhecidos="$conhecidos
+$(printf '%s' "$lista" | jq -r '.[] | select(.verified == true) | .email' 2>/dev/null)"
+  fi
+  if printf '%s\n' "$conhecidos" | tr '[:upper:]' '[:lower:]' | grep -qxF "$alvo"; then
+    ok "git user.email é da conta gh" "$login"
+  elif [ "$leu" -eq 0 ]; then
+    falta "git user.email é da conta gh" "não li os e-mails de $login: gh auth refresh -h github.com -s user:email e rode de novo"
+  else
+    falta "git user.email é da conta gh" "$1 não é e-mail verificado de $login: git config --global user.email \"<e-mail verificado da conta>\" (ou \"$noreply\")"
+  fi
+}
+
+EMAIL_GIT="$(git config user.email)"
+[ -n "$(git config user.name)" ] && [ -n "$EMAIL_GIT" ] \
   && ok "git config user.name e user.email" || falta "git config user.name e user.email" "git config --global user.name \"Nome\"; git config --global user.email \"email\""
+[ -n "$EMAIL_GIT" ] && [ "$GH_OK" -eq 1 ] && checa_email_git "$EMAIL_GIT"
 
 PLUG="$HOME/.claude/plugins/installed_plugins.json"
 LISTA="$REPO_ROOT/.claude/skills/setup-maquina/references/plugins.txt"   # fonte única (o onboarding aponta para cá)
@@ -114,15 +145,46 @@ done < "$LISTA"
 if [ "$NIVEL" -ge 2 ]; then
 titulo "Nível 2: deploy (ship com merge, /deploy, /onda)"
 bin_ok coolify "ver docs/onboarding/claude-setup.md seção 4.1"
-if tem_bin coolify; then
-  ctx="$(coolify context list 2>/dev/null | grep ' hsm ' || true)"
-  if [ -n "$ctx" ]; then
-    ok "contexto hsm"
-    printf '%s' "$ctx" | grep -q ' true ' && ok "hsm é o contexto padrão" || falta "hsm é o contexto padrão" "coolify context use hsm (o /deploy usa o contexto ativo)"
-    if coolify context verify --context hsm >/dev/null 2>&1; then ok "token do Coolify válido"; else falta "token do Coolify válido" "set -a; source tokens/.env; set +a && coolify context set-token hsm \"\$COOLIFY_ACCESS_TOKEN\" (o token vem de tokens/.env; nunca imprima)"; fi
-  else
-    falta "contexto hsm" "ver docs/onboarding/claude-setup.md seção 4.1"
+# A CLI responde e tem o contexto do hospital (hsm). Lê a lista e o verify sem nunca
+# imprimir o que eles devolvem: a saída do CLI pode trazer o token.
+checa_coolify() {
+  local lista ctx resposta
+  if ! lista="$(coolify context list 2>/dev/null)"; then
+    falta "CLI do Coolify roda" "coolify context list falhou; reinstale pela docs/onboarding/claude-setup.md seção 4.1"
+    return
   fi
+  ctx="$(printf '%s\n' "$lista" | grep ' hsm ' || true)"
+  if [ -z "$ctx" ]; then
+    falta "contexto hsm" "a conta no Coolify quem cria é o Pedro; o token você gera em Keys & Tokens (claude-setup.md seção 4.1)"
+    return
+  fi
+  ok "contexto hsm"
+  printf '%s' "$ctx" | grep -q ' true ' && ok "hsm é o contexto padrão" || falta "hsm é o contexto padrão" "coolify context use hsm (o /deploy usa o contexto ativo)"
+  if resposta="$(coolify context verify --context hsm 2>&1)"; then
+    ok "servidor do Coolify responde"
+  elif printf '%s' "$resposta" | grep -qE '401|Unauthenticated|Unauthorized'; then
+    falta "token do Coolify válido" "gere outro em Keys & Tokens e grave em tokens/.env; depois set -a; source tokens/.env; set +a && coolify context set-token hsm \"\$COOLIFY_ACCESS_TOKEN\" (nunca imprima)"
+  else
+    falta "servidor do Coolify responde" "sem resposta do servidor: confira a rede; bloqueio do fail2ban passa sozinho em alguns minutos; persistindo, avise o Pedro"
+  fi
+}
+tem_bin coolify && checa_coolify
+
+# Quem mergeia aplica a migration no Studio de produção (ADR 0061). Só bate na porta, sem
+# credencial: 401 é o login do Studio pedindo usuário, ou seja, alcançável.
+checa_studio() { # url
+  local codigo
+  codigo="$(curl -s -o /dev/null -w '%{http_code}' --max-time 8 "$1" 2>/dev/null)"
+  case "$codigo" in
+    2??|3??|401) ok "Studio de produção alcançável" "o login do Studio vem do Pedro" ;;
+    *) falta "Studio de produção alcançável" "$1 não respondeu (HTTP ${codigo:-000}); peça o acesso ao Pedro" ;;
+  esac
+}
+STUDIO_URL="$(jq -r '.services[] | select(.type == "supabase") | .deploy.fqdn // empty' "$REPO_ROOT/docs/spec/deploy/project.json" 2>/dev/null)"
+if [ -n "$STUDIO_URL" ]; then
+  checa_studio "$STUDIO_URL"
+else
+  falta "Studio de produção alcançável" "docs/spec/deploy/project.json sem o serviço supabase com deploy.fqdn"
 fi
 
 TOK="$REPO_ROOT/tokens/.env"
