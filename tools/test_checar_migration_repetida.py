@@ -155,3 +155,99 @@ def test_branch_empilhada_sobre_pr_que_entrou_por_squash_passa(tmp_path):
     proc = rodar(repo)
 
     assert proc.returncode == 0, proc.stdout
+
+
+def test_roda_da_pasta_do_backend_sobre_o_merge_do_pr_como_no_ci(tmp_path):
+    """O job do backend roda em `hospital-reunioes/backend` e o checkout do PR
+    é o commit de merge que o GitHub monta sobre a base."""
+    repo = repo_com_base(tmp_path)
+    escrever(repo, "111_ouvidoria_triagem_email.sql")
+    commitar(repo, "migration nova com numero ja usado")
+    git(repo, "checkout", "-q", "--detach", "main")
+    git(repo, "merge", "-q", "--no-ff", "feature", "-m", "merge do PR")
+    backend = repo / "hospital-reunioes" / "backend"
+    backend.mkdir(parents=True)
+
+    proc = rodar(backend)
+
+    assert proc.returncode != 0
+    assert "111_ouvidoria_triagem_email.sql" in proc.stdout
+
+
+# --------------------------------------------- segundo tempo: fechar_onda.py
+
+def carregar_fechar_onda():
+    scripts = RAIZ / ".claude" / "skills" / "onda-enxuta" / "scripts"
+    sys.path.insert(0, str(scripts))
+    try:
+        import fechar_onda
+    finally:
+        sys.path.remove(str(scripts))
+    return fechar_onda
+
+
+def origem_com_pr(tmp_path: Path, numero: int, migration: str) -> Path:
+    """Remoto com a `main` de base e o PR em `refs/pull/<n>/head`, como no
+    GitHub; devolve o clone em que o `fechar_onda.py` roda."""
+    repo = repo_com_base(tmp_path)
+    escrever(repo, migration)
+    commitar(repo, "migration do PR")
+    remoto = tmp_path / "remoto.git"
+    git(tmp_path, "init", "-q", "--bare", str(remoto))
+    git(repo, "push", "-q", str(remoto), "main", f"feature:refs/pull/{numero}/head")
+    clone = tmp_path / "clone"
+    git(tmp_path, "clone", "-q", str(remoto), str(clone))
+    git(clone, "fetch", "-q", "origin", "main")
+    return clone
+
+
+def pre_condicoes(fechar_onda, monkeypatch, clone: Path, numero: int) -> None:
+    """Roda as pré-condições de verdade (git contra o remoto local) com o `gh`
+    respondendo que o PR está aberto, verde e mergeável."""
+    run_real = fechar_onda.run
+
+    def run_sem_gh(cmd, *args, **kwargs):
+        if cmd[0] == "gh":
+            return subprocess.CompletedProcess(cmd, 0, "", "")
+        return run_real(cmd, *args, **kwargs)
+
+    pr_verde = {
+        "number": numero,
+        "state": "OPEN",
+        "baseRefName": "main",
+        "mergeable": "MERGEABLE",
+        "statusCheckRollup": [{"name": "Backend", "conclusion": "SUCCESS"}],
+        "files": [{"path": f"{PASTA}/x.sql"}],
+    }
+    monkeypatch.setattr(fechar_onda, "run", run_sem_gh)
+    monkeypatch.setattr(fechar_onda, "gh_json", lambda *a, **k: dict(pr_verde))
+    fechar_onda.checar_pre_condicoes(clone, [numero], dry=True)
+
+
+def test_fechar_onda_para_nas_pre_condicoes_com_a_mesma_mensagem_do_ci(
+    tmp_path, monkeypatch, capsys
+):
+    fechar_onda = carregar_fechar_onda()
+    clone = origem_com_pr(tmp_path, 7, "111_ouvidoria_triagem_email.sql")
+    ci = rodar(tmp_path / "repo")
+
+    try:
+        pre_condicoes(fechar_onda, monkeypatch, clone, 7)
+    except SystemExit as e:
+        assert e.code == fechar_onda.EXIT_PRECOND
+    else:
+        raise AssertionError("o fechar_onda.py seguiu com número repetido")
+
+    saida = capsys.readouterr().out
+    assert "#7" in saida
+    assert "111_tecnologia_produto_central_de_comando.sql" in saida
+    assert "111_ouvidoria_triagem_email.sql" in saida
+    assert ci.returncode != 0
+    assert ci.stdout.strip() in saida
+
+
+def test_fechar_onda_segue_com_numero_inedito(tmp_path, monkeypatch):
+    fechar_onda = carregar_fechar_onda()
+    clone = origem_com_pr(tmp_path, 8, "112_ouvidoria_triagem_email.sql")
+
+    pre_condicoes(fechar_onda, monkeypatch, clone, 8)
