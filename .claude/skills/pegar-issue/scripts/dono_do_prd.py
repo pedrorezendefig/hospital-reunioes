@@ -93,7 +93,8 @@ def main(argv: list[str]) -> int:
         return 0
     owner, repo = repositorio().split("/")
     dados = graphql(CONSULTA_DA_ISSUE, owner=owner, repo=repo, n=int(argv[0]))
-    texto = aviso(donos(dados["repository"]["issue"]["parent"]), dados["viewer"]["login"])
+    parent = dados["repository"]["issue"]["parent"]
+    texto = aviso(donos(parent), dados["viewer"]["login"])
     if texto:
         print(texto)
     return 0
