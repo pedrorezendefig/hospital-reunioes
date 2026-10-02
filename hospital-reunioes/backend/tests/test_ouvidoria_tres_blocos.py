@@ -28,6 +28,7 @@ from app.services.ouvidoria_blocos import (
     ORIENTACAO_DE_AUTORIA,
     aviso_do_caso,
     montar_blocos,
+    paciente_do_caso,
 )
 from app.services.ouvidoria_notificacoes import montar_nova_demanda
 
@@ -38,6 +39,9 @@ SEM_FERIADOS: frozenset[dt.date] = frozenset()
 RESUMO = "Paciente relata espera de duas horas na recepcao."
 RELATO = "Cheguei as 8h com minha mae e so fomos atendidos as 10h30, sem ninguem explicar o motivo."
 EXTRATO = "Apurar a fila da recepcao no turno da manha e responder o que foi feito."
+# O Paciente do caso (ADR 0052): outra pessoa que não quem manifestou.
+PACIENTE = "Maria Aparecida Souza"
+REFERENCIA = "leito 12, 20/08"
 
 
 def _manifestacao(**mudancas) -> dict:
@@ -197,3 +201,38 @@ class TestAvisoDoCasoProtegido:
             assert AVISO_ANONIMO in pedaco
             assert RELATO not in pedaco
             assert RESUMO not in pedaco
+
+
+class TestGuardaDoPacienteDoCaso:
+    """Issue #664 (ADR 0052, decisão 4): uma função só decide se o paciente
+    viaja para a área. A regra NÃO é a de quem manifestou: o anonimato protege
+    quem falou, e o paciente é outra pessoa. Só o sigilo reforçado o segura."""
+
+    def test_caso_comum_leva_nome_e_referencia(self):
+        caso = _manifestacao(paciente_nome=PACIENTE, paciente_referencia=REFERENCIA)
+
+        assert paciente_do_caso(caso) == {"nome": PACIENTE, "referencia": REFERENCIA}
+
+    def test_caso_anonimo_leva_o_paciente_mesmo_sem_quem_manifestou(self):
+        """É o caso que motivou o ADR 0052: o acompanhante anônimo cujo caso a
+        área devolvia por não achar o atendimento."""
+        caso = _manifestacao(
+            anonimo=True, manifestante_nome=None, paciente_nome=PACIENTE, paciente_referencia=REFERENCIA
+        )
+
+        assert paciente_do_caso(caso) == {"nome": PACIENTE, "referencia": REFERENCIA}
+
+    def test_caso_sigiloso_nao_leva_o_paciente(self):
+        """O paciente pode ser a vítima: quem decide o que sai é o ouvidor."""
+        caso = _manifestacao(sigilo_reforcado=True, paciente_nome=PACIENTE, paciente_referencia=REFERENCIA)
+
+        assert paciente_do_caso(caso) is None
+
+    def test_caso_sem_paciente_informado_nao_leva_nada(self):
+        assert paciente_do_caso(_manifestacao()) is None
+        assert paciente_do_caso(_manifestacao(paciente_nome="   ", paciente_referencia=REFERENCIA)) is None
+
+    def test_referencia_ausente_vai_como_nula(self):
+        caso = _manifestacao(paciente_nome=PACIENTE, paciente_referencia=None)
+
+        assert paciente_do_caso(caso) == {"nome": PACIENTE, "referencia": None}
