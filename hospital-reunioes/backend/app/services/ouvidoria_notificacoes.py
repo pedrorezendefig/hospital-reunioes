@@ -231,9 +231,14 @@ CAMPOS_NOTIFICACAO = ", ".join(CAMPOS_NOTIFICACAO_TUPLA)
 # (RN-78, ADR 0041), pelo mecanismo que esta lista existe para exigir: quem lê
 # só a interpretação da Ouvidoria responde à interpretação, não ao paciente. O
 # caso com sigilo reforçado é a exceção, e quem a aplica é `ouvidoria_blocos`.
+#
+# `paciente_nome` e `paciente_referencia` entraram pelo ADR 0052 (issue #664):
+# a área acha o atendimento sem devolver o caso. Quem decide se viajam é
+# `ouvidoria_blocos.paciente_do_caso`, que segura os dois no sigilo reforçado.
 _CAMPOS_DO_EMAIL = (
     "id, protocolo, setor, categoria, resumo, relato_integral, extrato_para_o_setor, "
-    "gravidade, prazo_area_em, sigilo_reforcado, anonimo, manifestante_nome, status"
+    "gravidade, prazo_area_em, sigilo_reforcado, anonimo, manifestante_nome, status, "
+    "paciente_nome, paciente_referencia"
 )
 
 # O que o setor lê quando, por algum caminho, o caso chegou ao email sem
