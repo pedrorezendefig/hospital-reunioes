@@ -41,7 +41,9 @@ jobs:
             echo "codigo=true" >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          arquivos="$(git diff --name-only "$BASE_SHA...$HEAD_SHA")"
+          # --no-renames: num rename o diff lista só o caminho novo, e mover
+          # código para docs/ pularia os checks obrigatórios.
+          arquivos="$(git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA")"
           if printf '%s\n' "$arquivos" | grep -qvE '^(docs/|\.claude/)|\.md$'; then
             echo "codigo=true" >> "$GITHUB_OUTPUT"
           else

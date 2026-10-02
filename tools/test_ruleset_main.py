@@ -127,11 +127,16 @@ def passo_do_detector() -> tuple[str, dict[str, str]]:
 
 
 def rodar_detector(tmp_path: Path, mudados: list[str], evento: str = "pull_request",
-                   base: str | None = None) -> subprocess.CompletedProcess:
+                   base: str | None = None,
+                   renomeados: tuple[tuple[str, str], ...] = ()) -> subprocess.CompletedProcess:
     repo = tmp_path / "repo"
     repo.mkdir()
     subprocess.run(["git", "init", "-q", "-b", "main"], cwd=repo, env=ENV_GIT, check=True)
     (repo / "base.txt").write_text("base\n", encoding="utf-8")
+    for origem, _ in renomeados:
+        arq = repo / origem
+        arq.parent.mkdir(parents=True, exist_ok=True)
+        arq.write_text("conteudo igual, para o git ver o rename\n", encoding="utf-8")
     subprocess.run(["git", "add", "-A"], cwd=repo, env=ENV_GIT, check=True)
     subprocess.run(["git", "commit", "-q", "-m", "base"], cwd=repo, env=ENV_GIT, check=True)
     sha_base = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True,
@@ -140,6 +145,9 @@ def rodar_detector(tmp_path: Path, mudados: list[str], evento: str = "pull_reque
         arq = repo / caminho
         arq.parent.mkdir(parents=True, exist_ok=True)
         arq.write_text("mudou\n", encoding="utf-8")
+    for origem, destino in renomeados:
+        (repo / destino).parent.mkdir(parents=True, exist_ok=True)
+        subprocess.run(["git", "mv", origem, destino], cwd=repo, env=ENV_GIT, check=True)
     subprocess.run(["git", "add", "-A"], cwd=repo, env=ENV_GIT, check=True)
     subprocess.run(["git", "commit", "-q", "--allow-empty", "-m", "pr"], cwd=repo, env=ENV_GIT, check=True)
     sha_head = subprocess.run(["git", "rev-parse", "HEAD"], cwd=repo, capture_output=True,
@@ -175,6 +183,18 @@ def test_detector_classifica_como_o_paths_ignore_do_push(tmp_path, mudados, codi
     proc = rodar_detector(tmp_path, mudados)
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout == f"codigo={codigo}\n"
+
+
+@pytest.mark.parametrize("origem, destino", [
+    ("hospital-reunioes/backend/app/main.py", "docs/main.py"),
+    ("hospital-reunioes/backend/app/main.py", "hospital-reunioes/backend/app/main.md"),
+])
+def test_detector_ve_o_caminho_antigo_de_um_rename(tmp_path, origem, destino):
+    """Num rename o `git diff --name-only` lista só o caminho novo: mover código
+    para docs/ pularia os três checks obrigatórios e o merge subiria sem teste."""
+    proc = rodar_detector(tmp_path, [], renomeados=((origem, destino),))
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == "codigo=true\n"
 
 
 def test_detector_no_push_da_main_sempre_roda(tmp_path):
