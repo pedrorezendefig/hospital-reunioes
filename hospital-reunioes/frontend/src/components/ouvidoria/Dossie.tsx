@@ -198,22 +198,26 @@ interface DossieProps {
 /**
  * Os canais que PERGUNTAM o nome do paciente (issue #662).
  *
- * `qr` e `site` são o canal aberto, o único fluxo que hoje carimba
- * `paciente_nome` (issue #666). O Registro manual do ouvidor (sete canais) e a
- * API da Ana gravam o vínculo `acompanhante` sem nunca pedir o paciente: lá,
- * "sem o nome do paciente" é o estado permanente, e o aviso ficaria aceso para
- * sempre num caso onde não existe tela para apagá-lo. Pior: mandaria o ouvidor
- * confirmar com o manifestante a ligação que ele mesmo acabou de atender.
- * Guarda-corpo que vira ruído treina o olho a ignorar o banner, e aí ele
- * também para de funcionar no caso do QR, que é o que a issue quer pegar.
- *
- * A issue #663 dá os dois campos do paciente ao Registro manual. Quando ela
- * subir, os sete canais manuais (`telefone`, `presencial`, `email`,
- * `whatsapp`, `instagram`, `reclame_aqui`, `google`) passam a ter onde
- * carimbar e entram nesta lista. A Ana fica fora enquanto o payload dela não
- * tiver os campos (fora do escopo do PRD #659).
+ * `qr` e `site` são o canal aberto (issue #666), e os sete canais do Registro
+ * manual do ouvidor perguntam o paciente desde a issue #663. A API da Ana grava
+ * o vínculo `acompanhante` sem nunca pedir o paciente: lá, "sem o nome do
+ * paciente" é o estado permanente, e o aviso ficaria aceso para sempre num
+ * caso onde não existe tela para apagá-lo. Guarda-corpo que vira ruído treina
+ * o olho a ignorar o banner, e aí ele também para de funcionar onde importa.
+ * A Ana entra nesta lista quando o payload dela tiver os campos (fora do
+ * escopo do PRD #659).
  */
-const CANAIS_QUE_PERGUNTAM_O_PACIENTE = ["qr", "site"];
+const CANAIS_QUE_PERGUNTAM_O_PACIENTE = [
+  "qr",
+  "site",
+  "telefone",
+  "presencial",
+  "email",
+  "whatsapp",
+  "instagram",
+  "reclame_aqui",
+  "google",
+];
 
 function formatarDataHora(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", {

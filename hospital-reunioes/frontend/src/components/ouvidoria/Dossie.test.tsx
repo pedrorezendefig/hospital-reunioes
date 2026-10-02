@@ -197,6 +197,17 @@ describe("o Dossiê e o Paciente do caso (issue #666)", () => {
  * que compara a tela com a própria constante do componente segue verde quando
  * alguém derruba o "não" da frase ou a reescreve inteira.
  */
+// Os sete canais do Registro manual (`RegistroManual.canal` no backend).
+const CANAIS_DO_REGISTRO_MANUAL = [
+  "telefone",
+  "presencial",
+  "email",
+  "whatsapp",
+  "instagram",
+  "reclame_aqui",
+  "google",
+];
+
 const AVISO_DO_ACOMPANHANTE_SEM_PACIENTE =
   "Relato em nome de outra pessoa sem o nome do paciente. Confirme com o manifestante antes de acionar.";
 
@@ -275,21 +286,12 @@ describe("o Dossiê e o aviso do acompanhante sem nome do paciente (issue #662)"
     }
   );
 
-  // O Registro manual do ouvidor (`telefone` e os outros seis) e a API da Ana
-  // gravam o vínculo `acompanhante` e não têm campo de paciente. Aceso ali, o
-  // aviso não teria onde ser apagado, e mandaria o ouvidor confirmar com o
-  // manifestante a ligação que ele mesmo acabou de atender.
-  //
-  // QUANDO ESTE TESTE FICAR VERMELHO: a issue #663 dá os dois campos do
-  // paciente ao Registro manual, e quem subir aquela fatia acrescenta os sete
-  // canais manuais a `CANAIS_QUE_PERGUNTAM_O_PACIENTE`. A reação certa então é
-  // MOVER `telefone` daqui para a varredura de acendimento lá em cima (e
-  // acrescentar o caso do telefone COM nome do paciente, que continua em
-  // silêncio), nunca apagar este teste. A Ana segue aqui enquanto o payload
-  // dela não tiver os campos: ela é a prova de que a guarda é uma lista de
-  // quem pergunta, e não uma exceção para o telefone.
-  it.each(["telefone", "ana"])(
-    "o canal %s não pergunta o paciente, e fica em silêncio",
+  // O Registro manual do ouvidor pergunta o paciente desde a issue #663, nos
+  // sete canais dele. Esta varredura é a que antes vivia no silêncio lá
+  // embaixo com `telefone`: a #663 a fez MUDAR de lado, e cada canal aqui mata
+  // o mutante que o tira de `CANAIS_QUE_PERGUNTAM_O_PACIENTE`.
+  it.each(CANAIS_DO_REGISTRO_MANUAL)(
+    "o caso do Registro manual pelo canal %s acende o aviso quando falta o nome do paciente",
     async (canal) => {
       montarComDossie(
         dossie({
@@ -300,10 +302,45 @@ describe("o Dossiê e o aviso do acompanhante sem nome do paciente (issue #662)"
         })
       );
 
-      expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
-      expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
+      expect(await screen.findByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeTruthy();
     }
   );
+
+  it("o caso do Registro manual com o nome do paciente fica em silêncio", async () => {
+    montarComDossie(
+      dossie({
+        canal: "telefone",
+        canal_setor: null,
+        manifestante_vinculo: "acompanhante",
+        paciente_nome: "Maria Souza",
+      })
+    );
+
+    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+    expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
+  });
+
+  // A API da Ana grava o vínculo `acompanhante` e o payload dela não tem campo
+  // de paciente. Aceso ali, o aviso não teria onde ser apagado. É o único
+  // canal fora da lista, e sem ele o mutante que troca a lista por "todo
+  // canal" sobrevive.
+  //
+  // QUANDO ESTE TESTE FICAR VERMELHO porque o payload da Ana ganhou os campos
+  // do paciente, a reação certa é MOVER a Ana para a varredura de acendimento,
+  // nunca apagar este teste.
+  it("o canal ana não pergunta o paciente, e fica em silêncio", async () => {
+    montarComDossie(
+      dossie({
+        canal: "ana",
+        canal_setor: null,
+        manifestante_vinculo: "acompanhante",
+        paciente_nome: null,
+      })
+    );
+
+    expect(await screen.findByText(/A moça da recepção foi muito atenciosa/)).toBeTruthy();
+    expect(screen.queryByText(AVISO_DO_ACOMPANHANTE_SEM_PACIENTE)).toBeNull();
+  });
 
   // Os dois status que faltam ao aviso, e `aguardando_area` é o que importa:
   // é onde `podeValidar` e `podeEncerrar` discordam, então sem ele o mutante
