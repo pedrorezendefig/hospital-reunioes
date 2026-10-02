@@ -44,6 +44,25 @@ def sanitizar_travessao(texto):
     return texto
 
 
+def texto_ou_nulo(valor: str | None) -> str | None:
+    """Campo opcional de texto: vazio e ausencia, nao conteudo.
+
+    Sanitiza o travessao, apara as pontas e devolve None quando nao sobra
+    NENHUM caractere de palavra. Espaco em branco, um hifen sozinho ou tres
+    pontos nao sao resposta: gravados como conteudo, fariam o Dossie parecer
+    preenchido e apagariam o "Nao informado" e os avisos que dependem dele.
+
+    Moram aqui, e nao no canal que a usa, porque o mesmo campo opcional chega
+    por duas portas: o canal publico (issue #666) e o registro manual do
+    ouvidor (issue #663). Duas copias da regra e onde as duas portas comecam a
+    discordar sobre o que e um paciente sem nome.
+    """
+    if valor is None:
+        return None
+    valor = sanitizar_travessao(valor).strip()
+    return valor if re.search(r"\w", valor) else None
+
+
 def sem_invisiveis(texto: str) -> str:
     """Tira os caracteres de formatacao do Unicode (categoria Cf).
 

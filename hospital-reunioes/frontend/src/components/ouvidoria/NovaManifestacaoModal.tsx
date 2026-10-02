@@ -13,6 +13,7 @@ import {
   type CanalManual,
   type FormularioRegistro,
 } from "@/lib/ouvidoria/registro";
+import { AVISO_PACIENTE_PODE_IDENTIFICAR } from "@/lib/ouvidoria/publico";
 import {
   LABEL_TIPO,
   TIPOS_MANIFESTACAO,
@@ -33,6 +34,8 @@ const VAZIO: FormularioRegistro = {
   manifestanteNome: "",
   manifestanteContato: "",
   manifestanteVinculo: "",
+  pacienteNome: "",
+  pacienteReferencia: "",
   anonimo: false,
 };
 
@@ -165,7 +168,7 @@ export function NovaManifestacaoModal({
       if (!res.ok) {
         setErro(
           res.status === 422
-            ? "Confira os campos: relato, tipo, setor e resumo são obrigatórios, e a data do contato não pode estar no futuro."
+            ? "Confira os campos: relato, tipo, setor e resumo são obrigatórios, a data do contato não pode estar no futuro, e o nome do paciente e a referência do atendimento têm no máximo 200 caracteres."
             : "Não foi possível registrar a manifestação. Tente novamente."
         );
         setSalvando(false);
@@ -437,6 +440,52 @@ export function NovaManifestacaoModal({
               </div>
             </div>
           )}
+
+          {/* O Paciente do caso (issue #663, ADR 0052). Fica FORA do bloco do
+              anonimato de propósito: quem o anonimato protege é quem
+              manifesta, e o paciente é outra pessoa. Sem ele, o caso do
+              acompanhante anônimo chega à área sem como achar o atendimento. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div>
+              <label className={ROTULO} htmlFor="paciente-nome">
+                Nome do paciente <span className="normal-case">(opcional)</span>
+              </label>
+              <input
+                id="paciente-nome"
+                className={CAMPO}
+                maxLength={200}
+                value={form.pacienteNome}
+                onChange={(e) => alterar("pacienteNome", e.target.value)}
+                placeholder="De quem é o caso, quando o relato é sobre outra pessoa"
+              />
+            </div>
+            <div>
+              {/* O rótulo é o mesmo do Dossiê, e curto porque sai em caixa
+                  alta (RN-76, D-19): a pergunta inteira vive no placeholder. */}
+              <label className={ROTULO} htmlFor="paciente-referencia">
+                Referência do atendimento <span className="normal-case">(opcional)</span>
+              </label>
+              <input
+                id="paciente-referencia"
+                className={CAMPO}
+                maxLength={200}
+                value={form.pacienteReferencia}
+                onChange={(e) => alterar("pacienteReferencia", e.target.value)}
+                placeholder="Quando ou onde foi: data, setor ou leito"
+              />
+            </div>
+            {/* A contrapartida que o ADR 0052 escreve nas consequências: o
+                paciente e o leito às vezes entregam quem falou, e quem decide
+                sabendo é quem preenche. No canal público quem lê é a própria
+                pessoa; aqui é o ouvidor, que digita em nome dela e é quem tem
+                como perguntar antes. A frase é a mesma do formulário público,
+                importada de lá: uma frase, um lugar. */}
+            {form.anonimo && (
+              <p className="sm:col-span-2 text-xs text-amber-700 px-3 py-2 rounded-lg bg-amber-50 border border-amber-200">
+                {AVISO_PACIENTE_PODE_IDENTIFICAR}
+              </p>
+            )}
+          </div>
 
           <div>
             <label className={ROTULO} htmlFor="anexos">
