@@ -105,3 +105,49 @@ def test_um_grupo_por_responsavel_mais_sem_responsavel_abertos_ao_nascer():
     ramo = _ramo("resp")
     assert "S.respFechado.delete(" in ramo and "S.respFechado.add(" in ramo
     assert "refreshIssueList()" in ramo
+
+
+# ---------- o que cada card mostra ----------
+
+
+def _mapa(nome):
+    m = re.search(rf"const {nome} = \{{(.*?)\}};", APP_JS, re.S)
+    assert m, f"app.js sem const {nome}"
+    return dict(re.findall(r"(\w+): \['(b-\w+)', '[^']+'\]", m.group(1)))
+
+
+def test_issue_em_andamento_mostra_ci_merge_e_dias_parado_do_pr():
+    ci = _mapa("CI_PR")
+    assert set(ci) == {"sucesso", "falha", "pendente"}, "CI do PR fora dos três estados do módulo"
+    assert ci["sucesso"] == "b-green" and ci["falha"] == "b-red" and ci["pendente"] == "b-amber"
+    merge = _mapa("MERGE_PR")
+    assert set(merge) == {"mergeavel", "conflito", "desconhecido"}
+    assert merge["mergeavel"] == "b-green" and merge["conflito"] == "b-red"
+    item = _fn("respItemHtml")
+    assert "CI_PR[p.ci]" in item and "MERGE_PR[p.merge]" in item
+    assert "p.dias_parado" in item, "card não diz há quantos dias o PR espera"
+    assert 'href="${esc(p.url)}"' in item and "PR #${p.number}" in item
+    assert "issueCard(byN[it.number], idx++, byN[it.number].is_prd, respItemHtml(it))" in _fn("responsaveisHtml")
+    card = _fn("issueCard")
+    assert "${extra}" in card[card.index('class="iss-meta"'):card.index('class="chain"')], \
+        "linha do PR/versão fora do lugar, entre a meta e a cadeia"
+
+
+def test_issue_fechada_mostra_a_versao_do_deploy():
+    item = _fn("respItemHtml")
+    assert "it.secao === 'fechada'" in item
+    assert "v${esc(it.versao)}" in item, "fechada sem a versão em que subiu"
+    assert "sem versão registrada" in item, "fechada sem versão some em silêncio"
+
+
+def test_prd_mostra_o_dono_ao_lado_do_titulo_em_qualquer_modo():
+    card = _fn("issueCard")
+    cabeca = card[card.index('class="iss-head"'):card.index('class="iss-meta"')]
+    titulo = cabeca.index('class="ititle"')
+    dono = cabeca.index("prd-dono")
+    assert titulo < dono < cabeca.index("labelBadge"), "dono do PRD longe do título"
+    assert "${prd ? `<span class=\"prd-dono\">" in cabeca, "dono aparece em fatia, não só no PRD"
+    assert "i.assignees.length ? `👤 ${i.assignees.map(esc).join(', ')}` : 'sem dono'" in cabeca
+    # o mesmo issueCard serve à árvore e aos grupos
+    assert "issueCard(prd, idx++, true)" in _fn("issueListHtml")
+    assert "byN[it.number].is_prd" in _fn("responsaveisHtml")

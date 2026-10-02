@@ -996,6 +996,10 @@ body.er-lock main{z-index:130}
 .resp-nome{font-family:var(--sans); font-size:17px; font-weight:500}
 .resp-conta{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
 .resp-itens{margin-left:24px}
+.resp-linha{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:8px 0 0;
+  font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
+.resp-linha a{color:var(--brand)}
+.prd-dono{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
 .tab-issues .comment{border-left:2px solid var(--hairline); padding:8px 14px; margin:10px 0}
 .tab-issues .comment .who{font-family:var(--mono); font-size:11.5px; color:var(--brand); font-weight:500}
 .tab-issues .comment .md{font-family:var(--sans); font-size:13.5px; line-height:1.65; color:var(--ink)}
