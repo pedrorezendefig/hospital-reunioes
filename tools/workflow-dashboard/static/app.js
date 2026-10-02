@@ -9,7 +9,7 @@ import { renderArea, wireArea } from './areas.js';
 const S = {
   data: null,
   tab: 'plano',
-  fIssues: { state: 'all', label: '', q: '' },
+  fIssues: { state: 'all', label: '', q: '', agrupar: true },
   expIss: new Set(),
   expPrd: new Map(),
   expDep: new Set(),
@@ -531,6 +531,7 @@ function renderIssues() {
     <button class="fchip ${f.state === 'all' ? 'on' : ''}" data-act="fstate" data-v="all">todas</button>
     <button class="fchip ${f.state === 'OPEN' ? 'on' : ''}" data-act="fstate" data-v="OPEN">abertas</button>
     <button class="fchip ${f.state === 'CLOSED' ? 'on' : ''}" data-act="fstate" data-v="CLOSED">fechadas</button>
+    <button class="fchip ${f.agrupar ? 'on' : ''}" data-act="fagrupar" aria-pressed="${f.agrupar}">agrupar por responsável</button>
     <select class="fsel" id="flabel">
       <option value="">label: todas</option>
       ${labels.map(l => `<option value="${esc(l)}" ${f.label === l ? 'selected' : ''}>${esc(l)}</option>`).join('')}
@@ -1038,6 +1039,9 @@ view.addEventListener('click', e => {
   } else if (act === 'fstate') {
     S.fIssues.state = t.dataset.v;
     render();
+  } else if (act === 'fagrupar') {
+    S.fIssues.agrupar = !S.fIssues.agrupar;
+    render();
   } else if (act === 'doc') {
     S.mapaDoc = t.dataset.doc;
     render();
@@ -1054,7 +1058,7 @@ view.addEventListener('click', e => {
     S.entTab = t.dataset.t;
     render();
   } else if (act === 'gotab') {
-    S.fIssues = { state: 'all', label: t.dataset.label || '', q: '' };
+    S.fIssues = { state: 'all', label: t.dataset.label || '', q: '', agrupar: S.fIssues.agrupar };
     setTab(t.dataset.go);
   }
 });

@@ -1,0 +1,60 @@
+"""Aba Issues agrupada por responsável (issue #908, ADR 0061).
+
+O agrupamento é calculado no módulo puro responsaveis.py e chega pronto em
+/api/data como S.data.responsaveis; o front só filtra (matchIssue) e desenha.
+Mesmo molde de test_front_plano_issues.py: corpo das functions do app.js
+extraído por contagem de chaves e conferido por substring.
+"""
+
+import re
+from pathlib import Path
+
+STATIC = Path(__file__).resolve().parents[1] / "static"
+APP_JS = (STATIC / "app.js").read_text(encoding="utf-8")
+
+
+def _bloco(i):
+    """Do primeiro "{" a partir de i até a chave que o fecha."""
+    j = APP_JS.index("{", i)
+    depth = 0
+    for k in range(j, len(APP_JS)):
+        if APP_JS[k] == "{":
+            depth += 1
+        elif APP_JS[k] == "}":
+            depth -= 1
+            if depth == 0:
+                return APP_JS[i:k + 1]
+    raise AssertionError("bloco sem fechamento")
+
+
+def _fn(nome):
+    i = APP_JS.find(f"function {nome}(")
+    assert i >= 0, f"app.js sem function {nome}"
+    return _bloco(i)
+
+
+def _ramo(act):
+    """Ramo do despacho de cliques para um data-act."""
+    i = APP_JS.find(f"act === '{act}'")
+    assert i >= 0, f"despacho sem act === '{act}'"
+    return _bloco(i)
+
+
+# ---------- botão e estado ----------
+
+
+def test_botao_agrupar_por_responsavel_na_aba_issues():
+    controles = _fn("renderIssues")
+    m = re.search(r'<button class="fchip[^>]*data-act="fagrupar"[^>]*>([^<]*)</button>', controles)
+    assert m, "aba Issues sem o botão fchip data-act=fagrupar"
+    assert m.group(1).strip() == "agrupar por responsável"
+    assert "${f.agrupar ? 'on' : ''}" in m.group(0), "botão não acende pelo estado da aba"
+    assert 'aria-pressed="${f.agrupar}"' in m.group(0), "botão de alternância sem aria-pressed"
+
+
+def test_agrupar_ligado_por_padrao_junto_dos_filtros():
+    m = re.search(r"fIssues: \{([^}]*)\}", APP_JS)
+    assert m, "estado S.fIssues sumiu"
+    assert "agrupar: true" in m.group(1), "agrupamento não nasce ligado no estado dos filtros"
+    # vindo de outra aba (gotab) os filtros são recriados: a escolha de agrupar sobrevive
+    assert "agrupar: S.fIssues.agrupar" in _ramo("gotab")
