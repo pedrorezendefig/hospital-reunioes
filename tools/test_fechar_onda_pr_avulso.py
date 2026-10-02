@@ -471,6 +471,30 @@ def test_ci_vermelho_depois_do_bump_para_sem_merge_e_sem_app_version(
     assert "#7" in capsys.readouterr().out
 
 
+def test_registro_que_nao_entra_sai_com_5_semaforo_solto_e_producao_intacta(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    ver = c.ver_pr
+
+    def ver_com_ci_vermelho_no_registro(n, campos):
+        if c.prs[n]["headRefName"].startswith("registro/"):
+            c.ci_vermelho.add(c._tip(c.prs[n]["headRefName"]))
+        return ver(n, campos)
+
+    c.ver_pr = ver_com_ci_vermelho_no_registro
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_REGISTRO
+
+    assert [m["pr"] for m in c.merges] == [7]
+    assert c.main_remota() == c.merges[0]["main"]
+    assert c.builds == ["backend"] and c.cancelamentos == []
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+    assert "#101" in capsys.readouterr().out
+
+
 def test_rodada_seguinte_reaproveita_o_bump_que_ficou_na_branch_sem_pular_versao(
     tmp_path, monkeypatch
 ):

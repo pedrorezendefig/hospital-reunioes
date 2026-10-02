@@ -405,7 +405,8 @@ def esperar_checks(raiz: Path, pr: int, sha: str) -> None:
         elif time.time() - inicio > HEAD_ATRASADO_S:
             raise EntregaFalhou(f"PR #{pr} esta em {str(info.get('headRefOid'))[:8]}, nao no {sha[:8]} empurrado")
         if time.time() - inicio > CHECKS_TIMEOUT_S:
-            raise EntregaFalhou(f"PR #{pr}: CI nao ficou verde em {CHECKS_TIMEOUT_S // 60} min")
+            raise EntregaFalhou(f"PR #{pr}: CI nao ficou verde em {CHECKS_TIMEOUT_S // 60} min "
+                                f"(mergeStateStatus {estado or '?'}, {len(checks)} checks)")
         time.sleep(CHECKS_POLL_S)
 
 
@@ -1015,28 +1016,31 @@ def main() -> int:
         vm = " (version match)" if versao_nova else ""
         print(f"health: ok{vm}")
 
-        # registro: so depois do health, num PR so de docs (o CI pula os jobs pesados)
-        run(["git", "fetch", "-q", "origin", "main"], cwd=raiz)
-        wt_reg = criar_worktree(raiz, f"{args.sessao}-registro")
-        linha_snap = "snapshot pulado (--sem-snapshot)" if args.sem_snapshot else rodar_snapshot(wt_reg)
-        linha_manual, houve_pagina = tirar_draft_manual(wt_reg, prds)
-        escrever_registro(wt_reg, args.sessao, infos, versao_nova, versao_antiga, sha_main, prds, migs,
-                          servicos, duracoes, healths, "healthy", bool(versao_nova), avulso, pr_entrega)
-        do_lote = f"do PR {prs_txt}" if avulso else f"da onda {args.sessao}"
-        titulo_reg = f"chore(deploy): registro {do_lote} (v{versao})"
-        commitar(wt_reg, titulo_reg, [SPEC, "docs/manual", "docs/ARQUITETURA.md"])
+        # registro: so depois do health, num PR so de docs (o CI pula os jobs pesados).
+        # Daqui em diante producao esta certa: falha aqui e codigo 5, nunca o 3.
         pr_reg = None
         try:
+            run(["git", "fetch", "-q", "origin", "main"], cwd=raiz)
+            wt_reg = criar_worktree(raiz, f"{args.sessao}-registro")
+            linha_snap = "snapshot pulado (--sem-snapshot)" if args.sem_snapshot else rodar_snapshot(wt_reg)
+            linha_manual, houve_pagina = tirar_draft_manual(wt_reg, prds)
+            escrever_registro(wt_reg, args.sessao, infos, versao_nova, versao_antiga, sha_main, prds, migs,
+                              servicos, duracoes, healths, "healthy", bool(versao_nova), avulso, pr_entrega)
+            do_lote = f"do PR {prs_txt}" if avulso else f"da onda {args.sessao}"
+            titulo_reg = f"chore(deploy): registro {do_lote} (v{versao})"
+            commitar(wt_reg, titulo_reg, [SPEC, "docs/manual", "docs/ARQUITETURA.md"])
             pr_reg, head_reg = entregar(raiz, wt_reg, f"registro/{args.sessao}-{sha_main[:8]}", None, titulo_reg,
                                         "<!-- automacao -->\nRegistro do deploy de producao (history.json, "
                                         "state.json, CHANGELOG, snapshot e draft do Manual), aberto e mergeado "
                                         "pelo `fechar_onda.py` depois do health (ADR 0061). So docs.\n")
             sha_reg = mergear_pela_api(raiz, pr_reg, head_reg, f"{titulo_reg} (#{pr_reg})")
-        except EntregaFalhou as e:
-            remover_worktree(raiz, wt_reg, [])
+        except Exception as e:  # noqa: BLE001
+            if wt_reg:
+                remover_worktree(raiz, wt_reg, [])
             semaforo(raiz, "soltar", args.sessao)
-            onde = f"o PR #{pr_reg}" if pr_reg else "o PR de registro"
-            print(f"registro: {e}. Producao ok; mergeie {onde} quando o CI dele ficar verde.")
+            falta = (f"mergeie o PR #{pr_reg} quando o CI dele ficar verde" if pr_reg
+                     else f"o registro nao virou PR; registre a mao o merge {sha_main[:8]} (v{versao})")
+            print(f"registro: {e}. Producao ok e semaforo solto; {falta}.")
             return EXIT_REGISTRO
         cancelados = cancelar_build_do_registro(servicos_cfg, sha_reg)
         print(f"registro: PR #{pr_reg} so de docs na main ({sha_reg[:8]}), {linha_snap}, {linha_manual}"
