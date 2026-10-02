@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -21,6 +22,25 @@ SKILLS = RAIZ / ".claude" / "skills"
 SCRIPT = SKILLS / "pegar-issue" / "scripts" / "dono_do_prd.py"
 
 QUEM_PEGA = "lucassampaioc1"
+
+
+def texto(skill: str) -> str:
+    return (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8")
+
+
+def criacoes(skill: str) -> list[str]:
+    """Cada `gh issue create` que a skill manda rodar (com título, não a menção)."""
+    achadas = re.findall(r"gh issue create --title[^\n`]*", texto(skill))
+    assert achadas, f"o /{skill} não manda mais rodar gh issue create --title"
+    return achadas
+
+
+def test_o_prd_nasce_com_o_assignee_de_quem_rodou_o_to_prd():
+    assert all("--assignee @me" in c for c in criacoes("to-prd"))
+
+
+def test_o_to_issues_nao_atribui_fatia():
+    assert not any("--assignee" in c for c in criacoes("to-issues"))
 
 
 def rodar(tmp_path: Path, resposta: dict, *args: str) -> subprocess.CompletedProcess:
