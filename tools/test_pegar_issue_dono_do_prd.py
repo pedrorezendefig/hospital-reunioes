@@ -62,7 +62,8 @@ def test_o_aviso_vem_antes_do_claim_e_a_fila_sem_argumento_mostra_o_dono():
 
 
 def test_o_texto_novo_nao_tem_travessao():
-    assert not re.search("[–—]", SCRIPT.read_text(encoding="utf-8"))
+    travessoes = f"[{chr(0x2013)}{chr(0x2014)}]"
+    assert not re.search(travessoes, SCRIPT.read_text(encoding="utf-8"))
 
 
 def rodar(tmp_path: Path, resposta: dict, *args: str) -> subprocess.CompletedProcess:
