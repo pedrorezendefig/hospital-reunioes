@@ -499,6 +499,7 @@ function respItemHtml(it) {
 
 function responsaveisHtml() {
   const r = S.data.responsaveis;
+  if (r.erro) return `<div class="banner"><b>Agrupamento indisponível</b>: ${esc(r.erro)}. Desligue o agrupar por responsável para ver a lista.</div>`;
   const iss = S.data.github.issues || [];
   const byN = Object.fromEntries(iss.map(i => [i.number, i]));
   let idx = 0;

@@ -151,3 +151,27 @@ def test_prd_mostra_o_dono_ao_lado_do_titulo_em_qualquer_modo():
     # o mesmo issueCard serve à árvore e aos grupos
     assert "issueCard(prd, idx++, true)" in _fn("issueListHtml")
     assert "byN[it.number].is_prd" in _fn("responsaveisHtml")
+
+
+# ---------- o front não calcula ----------
+
+
+def test_render_nao_calcula_responsavel():
+    desenho = _fn("responsaveisHtml") + _fn("respItemHtml")
+    # quem é o responsável, a seção, a ordem, o CI, o merge e a versão chegam prontos
+    for proibido in ("assignees", "children", "labels", "in-progress", "ready-for", "closed_at",
+                     "updated_at", ".sort(", "deploys", "prs", "statusCheckRollup", "new Date"):
+        assert proibido not in desenho, f"render do agrupamento calcula com {proibido!r}"
+    # e assignees só aparece no card, para exibir, nunca para agrupar
+    fora_do_card = APP_JS.replace(_fn("issueCard"), "")
+    assert "assignees" not in fora_do_card, "app.js lê assignees fora do issueCard"
+
+
+def test_sem_gh_cai_na_lista_plana_e_erro_do_modulo_vira_aviso():
+    # sem gh o collect manda responsaveis = null: a guarda do issueListHtml cai na árvore
+    assert "S.fIssues.agrupar && S.data.responsaveis" in _fn("issueListHtml")
+    grupos = _fn("responsaveisHtml")
+    m = re.search(r"if \(r\.erro\) return `([^`]*)`;", grupos)
+    assert m, "erro do módulo ({grupos: [], erro}) cai no vazio de filtro"
+    assert 'class="banner"' in m.group(1) and "${esc(r.erro)}" in m.group(1)
+    assert grupos.index("if (r.erro)") < grupos.index("for (const g of r.grupos)")
