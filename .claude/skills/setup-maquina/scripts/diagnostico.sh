@@ -37,6 +37,8 @@ VENV_PY="$APP/backend/.venv/bin/python"
 MSYS_BIN="${WEASYPRINT_DLL_DIRECTORIES:-C:/msys64/mingw64/bin}"
 PANGO_WIN="winget install MSYS2.MSYS2; C:/msys64/usr/bin/bash -lc 'pacman -S --noconfirm mingw-w64-x86_64-pango'; setx WEASYPRINT_DLL_DIRECTORIES C:\\msys64\\mingw64\\bin"
 so() { [ "$WIN" -eq 1 ] && printf '%s' "$2" || printf '%s' "$1"; }   # conserto macOS | conserto Windows
+# Abaixo deste Claude Code o lancar_sessao.sh falha por flag desconhecida (--bg, --strict-mcp-config, --effort).
+CLAUDE_MIN="2.1.280"   # piso da /onda-enxuta (SKILL.md dela, "Em máquina nova")
 
 ok()    { printf '  OK     %-34s %s\n' "$1" "${2:-}"; }
 falta() { printf '  FALTA  %-34s %s\n' "$1" "${2:-}"; FALHAS=$((FALHAS+1)); }
@@ -58,6 +60,13 @@ versao_min() { # atual minima -> 0 se atual >= minima, comparando por número
   # `sort -V` e não ordem alfabética: 22.9 vem depois de 22.12 no alfabeto e
   # aprovaria um Node que não builda o site do Manual.
   [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]
+}
+checa_claude_versao() { # OK se claude --version >= CLAUDE_MIN; FALTA abaixo; AVISO se não responde
+  local v
+  v="$(claude --version 2>/dev/null | awk 'NR==1 {print $1}')"
+  [ -n "$v" ] || { aviso "claude >= $CLAUDE_MIN" "claude --version não respondeu; reinstale: curl -fsSL https://claude.ai/install.sh | bash"; return; }
+  if versao_min "$v" "$CLAUDE_MIN"; then ok "claude >= $CLAUDE_MIN" "$v"
+  else falta "claude >= $CLAUDE_MIN" "tem $v; atualize: curl -fsSL https://claude.ai/install.sh | bash"; fi
 }
 # ---------------------------------------------------------------- Nível 1
 titulo "Nível 1: pipeline (issues, tdd, PR)"
@@ -144,6 +153,7 @@ done < "$LISTA"
 # ---------------------------------------------------------------- Nível 2
 if [ "$NIVEL" -ge 2 ]; then
 titulo "Nível 2: deploy (ship com merge, /deploy, /onda-enxuta)"
+checa_claude_versao
 bin_ok coolify "ver docs/onboarding/claude-setup.md seção 4.1"
 # A CLI responde e tem o contexto do hospital (hsm). Lê a lista e o verify sem nunca
 # imprimir o que eles devolvem: a saída do CLI pode trazer o token.
