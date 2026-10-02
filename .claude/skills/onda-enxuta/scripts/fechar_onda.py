@@ -9,7 +9,8 @@ A ordem dos PRs e a ordem de merge. O script nunca toca na arvore principal
 caminho curto (`~/wt-<sessao>`, por causa do MAX_PATH do Windows).
 
 Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
-  1. pre-condicoes (gh, coolify, PRs abertos e verdes, origin/main buscado)
+  1. pre-condicoes (gh, coolify, PRs abertos e verdes, origin/main buscado,
+     nenhuma migration nova com numero que a main ja usa)
   2. semaforo de deploy (chave = nome da sessao, unica por construcao)
   3. worktree descartavel em origin/main
   4. merges locais `--no-ff` em ordem (um commit de merge por PR)
@@ -64,6 +65,11 @@ if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 if hasattr(sys.stderr, "reconfigure"):
     sys.stderr.reconfigure(encoding="utf-8")
+
+# A guarda de migration repetida e a mesma do CI (issue #903): vem do tools/
+# do mesmo checkout deste script.
+sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "tools"))
+import checar_migration_repetida  # noqa: E402
 
 EXIT_PRECOND = 1
 EXIT_MERGE = 2
@@ -185,7 +191,22 @@ def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> list[dict]:
         infos.append(info)
     if problemas:
         falhar("pre-condicao: " + "; ".join(problemas) + ".", EXIT_PRECOND)
+    conferir_migrations(raiz, prs)
     return infos
+
+
+def conferir_migrations(raiz: Path, prs: list[int]) -> None:
+    """Para se algum PR adiciona migration com numero que a origin/main ja usa.
+
+    Roda depois do `git fetch origin main`: o CI conferiu contra a main da hora
+    do push, e ela pode ter andado desde entao. Renumerar e do autor.
+    """
+    for n in prs:
+        run(["git", "fetch", "-q", "origin", f"pull/{n}/head"], cwd=raiz)
+        head = run(["git", "rev-parse", "FETCH_HEAD"], cwd=raiz).stdout.strip()
+        achadas = checar_migration_repetida.colisoes(raiz, "origin/main", head)
+        if achadas:
+            falhar(f"pre-condicao: #{n}: " + checar_migration_repetida.mensagem(achadas), EXIT_PRECOND)
 
 
 # ----------------------------------------------------------------- semaforo
@@ -635,7 +656,8 @@ def main() -> int:
 
     infos = checar_pre_condicoes(raiz, args.prs, args.dry_run)
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
-    print(f"pre-condicoes ok: {prs_txt}" + (" (dry-run)" if args.dry_run else ""))
+    print(f"pre-condicoes ok: {prs_txt}, migrations sem numero repetido contra origin/main"
+          + (" (dry-run)" if args.dry_run else ""))
 
     wt = None
     semaforo_pego = False

@@ -26,6 +26,7 @@ on:
       - '.claude/skills/deploy/**'
       - '.claude/skills/setup-maquina/**'
       - '.claude/skills/ask-pedro/**'
+      - '.claude/skills/onda-enxuta/**'
       - '.github/workflows/manual.yml'
   pull_request:
     branches: [main]
@@ -48,6 +49,9 @@ on:
       - '.claude/skills/deploy/**'
       - '.claude/skills/setup-maquina/**'
       - '.claude/skills/ask-pedro/**'
+      # O fechar_onda.py chama a guarda de migration repetida nas pré-condições
+      # (issue #903), e o teste que prova a chamada mora em tools/.
+      - '.claude/skills/onda-enxuta/**'
       - '.github/workflows/manual.yml'
 
 jobs:
