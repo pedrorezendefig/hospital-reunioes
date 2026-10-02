@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-02T17:55:47-03:00",
+      "sha": "89ccaafd",
+      "app_version": "0.157.1",
+      "subject": "Onda onda-a: Guarda de migration com número repetido no CI e no fechar_onda.py",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#911)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        902
+      ],
+      "result": "healthy",
+      "duration_seconds": 4,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #911. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-10-02T17:49:02-03:00",
       "sha": "712789f4",
       "app_version": "0.157.0",
@@ -1512,35 +1544,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Issue #670, correcao da auditoria do PRD #634 secao 2.1 (as observacoes 3.1 a 3.5 ficaram fora de proposito). Sem migration, por regra da issue. A review independente do orquestrador achou 1 must-fix real na rodada 1: o _com_nomes do _aviso_da_correcao lia o PostgREST DEPOIS do update e fora de try, entao um timeout devolvia 500 com a correcao ja gravada, e no retry mencoes_acrescentadas voltava vazia e o e-mail nunca mais saia. Corrigido com try/except devolvendo AVISO_EMAIL_NAO_SAIU, provado com httpx.ReadTimeout injetado DENTRO da leitura mais um controle que separa 'derrubou aquela leitura' de 'derrubou tudo'. Rodada 2 limpa. A rota PATCH editar_resposta ganhou o shared_limit das portas de gatilho porque virou porta de e-mail e passa a gastar cota do Resend. Decisao consciente que fica de divida: sem coluna que guarde QUAIS mencoes entraram na correcao, toda mencao de linha com editado_em conta a partir do carimbo, entao toda correcao que acrescenta mencao reabre Minha vez de quem ja respondeu naquela linha (o e-mail nao repete, so a aba). Julgado o lado seguro do erro, porque o contrario e a chamada sumir em silencio. Producao ficou fora do ar por alguns minutos antes deste deploy, com TLS reset em api, app e coolify e as portas 22 e 443 abertas; o humano resolveu e o ship seguiu."
-    },
-    {
-      "at": "2026-09-10T00:41:00-03:00",
-      "sha": "9968e77",
-      "app_version": "0.123.3",
-      "subject": "o conversor PDF/DOCX para Markdown (item Utilitarios do admin) sai do app de ponta a ponta, com a secao Ferramentas da sidebar e a dependencia markitdown",
-      "raw_subject": "chore(admin): remover o conversor PDF/DOCX para Markdown (item Utilitários) (#672)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 300,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Fatia avulsa #671 (PR #672), sem PRD e sem ADR, decidida em grilling. Remocao pura: pagina /admin/utilitarios, item Utilitarios e secao Ferramentas da sidebar, rota POST /admin/utilitarios/converter-markdown, schema ConversaoMarkdownResponse, servico markdown_converter, teste e tres fixtures binarias que so ele usava, e markitdown no pyproject. uv.lock so removeu (276 linhas, 17 pacotes: markitdown e a subarvore exclusiva dele), zero adicoes; pdfplumber, docx2txt, pdfminer.six e lxml ficaram porque a importacao de transcricao e os POPs dependem deles. TDD: teste de ausencia na sidebar (desktop e drawer) com Tecnologia como marcador de presenca, RED antes e GREEN depois. openapi conferido uma vez no PR: 175 rotas, nenhuma com utilitarios. Quatro gates verdes: code-review sem bug (travessoes do template corrigidos a mao no corpo do PR; duplicacao do describe.each ficou por nomear a issue), spec x diff aprovado sem faltante nem scope creep, security review sem achado (superficie diminui: sai um endpoint autenticado de upload e toda a cadeia de parsing), CI verde nos tres jobs. Merge pela API (gh pr merge nao funciona em worktree). APP_VERSION: classifier negou, humano rodou com !; o primeiro comando que entreguei tinha UUID errado escrito de cabeca (404), o certo veio do project.json. Prova em prod: rota removida 404 contra 401 na rota de controle, /api/health em 0.123.3 com db healthy. Issue fechou no merge com 5/5 criterios marcados."
     }
   ]
 }

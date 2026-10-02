@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.157.1 - 2026-10-02 17:55 - Onda onda-a: Guarda de migration com número repetido no CI e no fechar_onda.py
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `89ccaaf`
+- PRs: [#911](https://github.com/pedrorezendefig/hospital-reunioes/pull/911)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (4s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/89ccaaf
+
 ## v0.157.0 - 2026-10-02 17:49 - Onda onda-c: O menu de reticências deixa de ser recortado pelo card da fila; A Retenção apaga o Paciente do caso nas duas portas; O registro manual do ouvidor ganha o paciente do caso; Enxugar a escri
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `712789f`
