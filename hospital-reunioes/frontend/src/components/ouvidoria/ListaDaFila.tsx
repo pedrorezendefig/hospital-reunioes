@@ -276,6 +276,16 @@ function MenuDeAcoes({
     return () => window.removeEventListener("scroll", fechar, true);
   }, [aberto]);
 
+  // O painel mora no fim do `body`, longe do gatilho no DOM: o Tab nunca
+  // chegaria nele, porque antes disso o foco anda pelas linhas seguintes, o
+  // `main` rola e a rolagem fecha o menu. Então o foco vai ao primeiro item
+  // quando o painel já tem lugar. O `preventScroll` é pelo mesmo motivo: uma
+  // rolagem disparada pelo foco fecharia o menu que acabou de abrir.
+  useEffect(() => {
+    if (!aberto || !posicao) return;
+    painel.current?.querySelector<HTMLElement>("a[href], button")?.focus({ preventScroll: true });
+  }, [aberto, posicao]);
+
   function alternar() {
     setPosicao(null);
     setAberto((antes) => !antes);
@@ -301,6 +311,11 @@ function MenuDeAcoes({
               verdade, um botão e um link (issue #476). Agrupar e nomear basta. */}
           <div
             ref={medir}
+            // O Escape fecha pelo `useFecharFlutuante`; aqui só se devolve o
+            // foco ao gatilho, senão ele cai no `body` com o painel desmontado.
+            onKeyDown={(e) => {
+              if (e.key === "Escape") gatilho.current?.focus();
+            }}
             aria-label={`Ações da manifestação ${m.protocolo}`}
             style={{
               top: posicao?.top ?? 0,
@@ -310,7 +325,11 @@ function MenuDeAcoes({
               // pior que painel que demora um quadro.
               visibility: posicao ? undefined : "hidden",
             }}
-            className="fixed z-50 min-w-[13rem] py-1 rounded-xl border border-border bg-white shadow-premium"
+            // Acima da `BottomNav` do celular (`z-[150]`) e abaixo da gaveta e
+            // dos modais (`z-[200]`). A conta usa a janela inteira, então numa
+            // linha logo acima da barra o painel desce e os últimos itens
+            // ficariam atrás dela.
+            className="fixed z-[160] min-w-[13rem] py-1 rounded-xl border border-border bg-white shadow-premium"
           >
             {acoes.map((chave) => (
               <Acao

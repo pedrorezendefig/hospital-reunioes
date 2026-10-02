@@ -19,7 +19,13 @@
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { BottomNav } from "@/components/layout/BottomNav";
+
 import OuvidoriaPage from "./page";
+
+vi.mock("next/navigation", () => ({
+  usePathname: () => "/ouvidoria",
+}));
 
 vi.mock("@/lib/supabase/client", () => ({
   createClient: () => ({
@@ -89,6 +95,16 @@ async function abrirOMenuDoBloco(): Promise<HTMLElement> {
     within(bloco).getByRole("button", { name: `Mais ações da manifestação ${PROTOCOLO}` })
   );
   return bloco;
+}
+
+/**
+ * A camada declarada na classe, `z-50` ou `z-[150]`. jsdom não empilha nada,
+ * então o que se trava é a causa: quem declara a camada maior.
+ */
+function camada(el: Element): number {
+  const z = el.className.match(/(?:^|\s)z-(?:\[(\d+)\]|(\d+))(?:\s|$)/);
+  if (!z) throw new Error(`sem z-index na classe: ${el.className}`);
+  return Number(z[1] ?? z[2]);
 }
 
 function painel(): HTMLElement | null {
@@ -165,5 +181,39 @@ describe("menu de ações da fila (issue #777)", () => {
     fireEvent.scroll(window);
 
     expect(painel()).toBeNull();
+  });
+
+  it("abrir leva o foco ao primeiro item do painel", async () => {
+    // Portado para o fim do `body`, o painel deixou de vir logo depois do
+    // gatilho no DOM: o Tab saía do botão de reticências para a linha seguinte,
+    // o `main` rolava e a rolagem fechava o menu antes de o foco chegar nele.
+    await abrirOMenuDoBloco();
+
+    const primeiro = within(painel()!).getAllByRole("button")[0];
+    expect(document.activeElement).toBe(primeiro);
+  });
+
+  it("Escape devolve o foco ao gatilho", async () => {
+    // Sem isso o foco cai no `body` junto com o painel desmontado, e quem usa
+    // teclado recomeça do topo da página.
+    const bloco = await abrirOMenuDoBloco();
+
+    fireEvent.keyDown(document.activeElement!, { key: "Escape" });
+
+    expect(painel()).toBeNull();
+    expect(document.activeElement).toBe(
+      within(bloco).getByRole("button", { name: `Mais ações da manifestação ${PROTOCOLO}` })
+    );
+  });
+
+  it("o painel fica acima da barra de baixo do celular", async () => {
+    // A barra é `fixed bottom-0` e o painel desce quando cabe na janela
+    // inteira: numa linha logo acima da barra, os últimos itens caíam atrás
+    // dela. Painel numa camada abaixo da barra é a ação que não aparece de novo.
+    render(<BottomNav />);
+    await abrirOMenuDoBloco();
+
+    const barra = screen.getByRole("navigation", { name: "Navegação principal" });
+    expect(camada(painel()!)).toBeGreaterThan(camada(barra));
   });
 });
