@@ -12,7 +12,10 @@ import re
 import subprocess
 from pathlib import Path
 
-from test_setup_maquina_esteira import SAIDAS, TEXTO, falso, funcao, linha
+from test_setup_maquina_esteira import RAIZ, SAIDAS, TEXTO, falso, funcao, linha
+
+
+ENXUTA = (RAIZ / ".claude" / "skills" / "onda-enxuta" / "SKILL.md").read_text(encoding="utf-8")
 
 
 def piso() -> str:
@@ -21,11 +24,12 @@ def piso() -> str:
     return achado.group(1)
 
 
-def roda_claude(tmp_path: Path, versao: str | None) -> str:
-    falso(tmp_path, "claude", f'echo "{versao} (Claude Code)"' if versao else "exit 1")
+def roda_claude(tmp_path: Path, versao: str | None, corpo: str | None = None) -> str:
+    """`corpo` substitui o claude de mentira inteiro; sem ele, responde `versao`."""
+    falso(tmp_path, "claude", corpo or (f'echo "{versao} (Claude Code)"' if versao else "exit 1"))
     script = (
         SAIDAS
-        + f'CLAUDE_MIN="{piso()}"\n'
+        + f'CLAUDE_MIN="{piso()}"\nPATH_SHELL="$PATH"\n'
         + funcao("versao_min")
         + "\n"
         + funcao("checa_claude_versao")
@@ -43,18 +47,21 @@ def roda_claude(tmp_path: Path, versao: str | None) -> str:
 
 
 def test_o_piso_e_o_da_onda_enxuta():
-    assert piso() == "2.1.280"
+    # O número vem da seção "Em máquina nova" da /onda-enxuta, que é quem exige.
+    exigido = re.search(r"`claude --version` \((\d+\.\d+\.\d+) ou mais", ENXUTA)
+    assert exigido, "a /onda-enxuta não diz mais qual versão exige"
+    assert piso() == exigido.group(1)
     assert re.search(r"^CLAUDE_MIN=.*onda-enxuta", TEXTO, re.M), "o comentário cita quem exige o piso"
 
 
 def test_versao_acima_do_piso_passa(tmp_path):
-    li = linha(roda_claude(tmp_path, "2.1.288"), "claude >= 2.1.280")
+    li = linha(roda_claude(tmp_path, "2.1.288"), f"claude >= {piso()}")
     assert li.startswith("OK")
     assert "2.1.288" in li
 
 
 def test_versao_abaixo_do_piso_acusa_e_diz_como_atualizar(tmp_path):
-    li = linha(roda_claude(tmp_path, "2.1.279"), "claude >= 2.1.280")
+    li = linha(roda_claude(tmp_path, "2.1.279"), f"claude >= {piso()}")
     assert li.startswith("FALTA")
     assert "2.1.279" in li
     assert "install.sh" in li
@@ -62,17 +69,31 @@ def test_versao_abaixo_do_piso_acusa_e_diz_como_atualizar(tmp_path):
 
 def test_versao_igual_ao_piso_passa(tmp_path):
     # Fronteira: "2.1.280 ou mais" inclui o próprio piso; um "maior estrito" reprovaria.
-    assert linha(roda_claude(tmp_path, "2.1.280"), "claude >= 2.1.280").startswith("OK")
+    assert linha(roda_claude(tmp_path, piso()), f"claude >= {piso()}").startswith("OK")
 
 
 def test_comparacao_e_por_numero_nao_por_texto(tmp_path):
     # 2.1.1000 > 2.1.280 por número; no alfabeto "1000" vem antes de "280".
-    assert linha(roda_claude(tmp_path, "2.1.1000"), "claude >= 2.1.280").startswith("OK")
+    assert linha(roda_claude(tmp_path, "2.1.1000"), f"claude >= {piso()}").startswith("OK")
 
 
-def test_claude_que_nao_responde_so_avisa(tmp_path):
-    li = linha(roda_claude(tmp_path, None), "claude >= 2.1.280")
-    assert li.startswith("AVISO")
+def test_claude_que_nao_responde_acusa(tmp_path):
+    # Binário presente que não responde é instalação quebrada: a enxuta não lança.
+    li = linha(roda_claude(tmp_path, None), f"claude >= {piso()}")
+    assert li.startswith("FALTA")
+    assert "install.sh" in li
+
+
+def test_saida_sem_numero_nao_passa(tmp_path):
+    # "Update available" ou "Claude Code 2.1.288" na primeira linha: nada de OK por texto.
+    saida = roda_claude(tmp_path, None, corpo='echo "Update available"')
+    assert linha(saida, f"claude >= {piso()}").startswith("FALTA")
+
+
+def test_retorno_de_carro_do_windows_nao_suja_a_versao(tmp_path):
+    li = linha(roda_claude(tmp_path, None, corpo="printf '2.1.288 (Claude Code)\\r\\n'"), f"claude >= {piso()}")
+    assert li.startswith("OK")
+    assert "\r" not in li
 
 
 def test_o_nivel_2_chama_a_conferencia():

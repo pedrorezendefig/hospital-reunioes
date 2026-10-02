@@ -61,10 +61,15 @@ versao_min() { # atual minima -> 0 se atual >= minima, comparando por número
   # aprovaria um Node que não builda o site do Manual.
   [ "$(printf '%s\n%s\n' "$2" "$1" | sort -V | head -1)" = "$2" ]
 }
-checa_claude_versao() { # OK se claude --version >= CLAUDE_MIN; FALTA abaixo; AVISO se não responde
+checa_claude_versao() { # OK se claude --version >= CLAUDE_MIN; FALTA abaixo ou se não responde
+  # PATH do shell, como o Node logo abaixo: é o claude que o lancar_sessao.sh vai achar no terminal.
   local v
-  v="$(claude --version 2>/dev/null | awk 'NR==1 {print $1}')"
-  [ -n "$v" ] || { aviso "claude >= $CLAUDE_MIN" "claude --version não respondeu; reinstale: curl -fsSL https://claude.ai/install.sh | bash"; return; }
+  v="$(PATH="$PATH_SHELL" claude --version 2>/dev/null | awk 'NR==1 {print $1}')"
+  v="${v%$'\r'}"
+  case "$v" in
+    [0-9]*.[0-9]*) ;;
+    *) falta "claude >= $CLAUDE_MIN" "claude --version não respondeu com uma versão (${v:-vazio}); reinstale: curl -fsSL https://claude.ai/install.sh | bash"; return ;;
+  esac
   if versao_min "$v" "$CLAUDE_MIN"; then ok "claude >= $CLAUDE_MIN" "$v"
   else falta "claude >= $CLAUDE_MIN" "tem $v; atualize: curl -fsSL https://claude.ai/install.sh | bash"; fi
 }
