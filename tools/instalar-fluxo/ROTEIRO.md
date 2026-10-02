@@ -151,7 +151,7 @@ Abra `.claude/skills/ship/SKILL.md` e faça, nesta ordem:
 2. Os 3 gates (P5): os comandos de lint, testes e build. Gate pulado na P5 fica marcado como "pulado" na saída do `/ship`, nunca como verde.
 3. Passo 8.5 (sync `APP_VERSION` no Coolify antes do merge): se a plataforma da P3 tem env de runtime e o app lê versão de env, escreva o equivalente; senão, apague o passo e renumere nada (deixe o número, escreva "não se aplica a esta plataforma").
 4. Passo de migrations pré-merge: caminho de migrations do DESTINO e como elas são aplicadas em produção. Sem banco, "não se aplica".
-5. O fim do `/ship` continua chamando `/deploy ship`.
+5. O fim do `/ship` imprime o comando do rabo (`fechar_onda.py`); adapte o script à plataforma do DESTINO.
 
 Não mexa nos invariantes: 3 gates, PR, `AskUserQuestion` de merge citando o PR#, Passo 10.5 (issue `ready-for-human` para pendência humana pós-ciclo).
 

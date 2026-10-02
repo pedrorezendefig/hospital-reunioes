@@ -1,6 +1,6 @@
 ---
 name: snapshot
-description: Mantém docs/spec/snapshots/ (rotas, entidades, schema, migrations, integrações) gerado do código; roda no fim do /deploy ship. Manual: `python3 .claude/skills/snapshot/scripts/snapshot.py [--check]`.
+description: Mantém docs/spec/snapshots/ (rotas, entidades, schema, migrations, integrações) gerado do código; roda no fim do rabo (fechar_onda.py). Manual: `python3 .claude/skills/snapshot/scripts/snapshot.py [--check]`.
 ---
 
 # snapshot — manter `docs/spec/snapshots/` fresco
@@ -17,7 +17,7 @@ Uma skill, sete arquivos vivos. O time tem sempre um **mapa atualizado** da apli
 A skill executa sempre o mesmo algoritmo (detectar mudança → parsear → gerar → comparar → commit se mudou). Cada gerador é parametrizado pelo `project.json` do repo atual.
 
 Relação com outras skills:
-- **`/deploy ship`**: chama `/snapshot` no Passo 9.4 (pós-health verde, antes de fechar). Snapshot regenerado é commitado em commit separado `chore(spec): snapshot pós deploy <sha7>`.
+- **Rabo (`fechar_onda.py`)**: roda o snapshot (best-effort) no commit de registro, no mesmo push do merge (ADR 0061). O `/deploy ship` não roda mais nada.
 - **`/ship`**: usa `/snapshot --diff <base>..HEAD` no Passo 7 pra gerar a seção "Mudanças" do PR body.
 
 ## Sintaxe
@@ -45,7 +45,7 @@ Flags suportadas pelo script:
 
 Observação: `FLUXOGRAMAS.md` e `ESTRUTURA.md` são **curados humano** (blocos `<!-- curated -->`). O script só alerta de gaps (rotas/estados novos sem fluxograma correspondente), nunca sobrescreve.
 
-Flag relacionada (no `/deploy ship`): `--skip-snapshot` pula a invocação do script no Passo 9.4 do deploy (só pra emergência). Ver `.claude/skills/deploy/SKILL.md`.
+Flag relacionada (no `fechar_onda.py`): `--sem-snapshot` pula o snapshot no fechamento (só pra emergência).
 
 ---
 
@@ -169,7 +169,7 @@ Regenera só 1 arquivo (útil em desenvolvimento da skill ou pra testar geradore
 
 | Skill | Quando interage |
 |---|---|
-| **`/deploy ship`** | Invoca `/snapshot` no Passo 9.4 (pós health verde). Commit separado entra antes do prepend do CHANGELOG.md. |
+| **Rabo (`fechar_onda.py`)** | Roda o snapshot no commit de registro, junto do CHANGELOG, no mesmo push do merge. |
 | **`/ship`** | Invoca `/snapshot --diff <base>..HEAD` no Passo 7 pra preencher "Mudanças" do PR body. |
 
 ---

@@ -35,7 +35,7 @@ na primeira linha.
 ## Quem chama
 
 - O humano, via `/manual publicar`, quando quer o site no ar agora.
-- O `/deploy ship`, sozinho, depois de tirar o `draft` das páginas dos PRDs que
+- O rabo (`fechar_onda.py`), sozinho, depois de tirar o `draft` das páginas dos PRDs que
   subiram naquele deploy. Antes de tirar o draft, o Passo 9.6 confere que o MP4
   de cada Vídeo de tarefa existe **naquela máquina** (ele não vem no clone) e
   que Node, corepack e ffmpeg estão lá. Faltando qualquer um, ele para sem
