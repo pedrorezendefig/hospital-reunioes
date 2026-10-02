@@ -11,12 +11,18 @@ Quem clona o repositório precisa de pouca coisa para trabalhar no pipeline (pla
 
 | Nível | Para quê | O que exige |
 |---|---|---|
-| 1 Pipeline | `/grill-with-docs`, `/to-prd`, `/to-issues`, `/pegar-issue`, `/ship` até o PR | clone com a `main` igual à `origin/main`, git, gh autenticado com WRITE, jq, Claude Code, os plugins de `references/plugins.txt`, `git config user.*` |
+| 1 Pipeline | `/grill-with-docs`, `/to-prd`, `/to-issues`, `/pegar-issue`, `/ship` até o PR | clone com a `main` igual à `origin/main`, git, gh autenticado com WRITE, jq, Claude Code, os plugins de `references/plugins.txt`, `git config user.*` com e-mail da conta `gh` |
 | 2 Deploy e testes | `/tdd` (pytest e ruff do backend), `/ship` com merge e deploy, `/deploy`, `/onda` | CLI do Coolify com contexto `hsm`, `tokens/.env`, python3 3.9+, uv + `.venv` do backend, Pango, `hospital-reunioes/.env` com três valores fictícios (o snapshot importa o app), e Node >= 22.12, corepack e ffmpeg, porque o `/deploy ship` publica o Manual quando o deploy tira alguma página do draft |
 | 3 App local | `/atualizar-app`, `vitest` e `tsc` do frontend na máquina | Docker, Supabase CLI, chaves de sandbox (Node e corepack já vêm do nível 2). **Opcional: hoje ninguém usa; teste de frontend confia no CI.** |
 | 4 Produzir vídeo e print | `/divulgar`, `/manual <módulo>` | Chrome, skills globais de HyperFrames, time da Vercel e Playwright em Python para o Roteiro de prints. **Opcional: só quem produz vídeo e print.** |
 
 O padrão é conferir os níveis 1 e 2. `--nivel 3` ou `--nivel 4` acrescenta os opcionais. Node abaixo de 22.12 aparece como `FALTA` já no nível 2, com a versão que a máquina tem e o `brew install node@22` ao lado: quem deploya um PRD com página de manual builda o site na própria máquina, e Node velho derruba o build **depois** do merge.
+
+Como cada sócio mergeia e deploya o próprio PR (ADR 0061), três conferências guardam o acesso. Cada uma só diz se falta e de onde vem o acesso; nenhuma imprime nem grava segredo:
+
+- **Identidade do git** (nível 1): o `git config user.email` precisa ser um e-mail verificado da conta `gh` logada (ou o `ID+login@users.noreply.github.com` dela); senão o commit sai em nome de outra pessoa. Para ler os e-mails privados o `gh` precisa do escopo `user:email`, e o script pede `gh auth refresh -h github.com -s user:email` quando ele falta.
+- **CLI do Coolify** (nível 2): roda, tem o contexto `hsm` como padrão e o servidor responde. Token recusado e servidor sem resposta são falhas diferentes, com consertos diferentes; a conta no Coolify quem cria é o Pedro.
+- **Studio do Supabase de produção** (nível 2): o endereço vem do `docs/spec/deploy/project.json` e a conferência só bate na porta, sem credencial (o login pedindo usuário conta como alcançável). Sem resposta, o acesso se pede ao Pedro.
 
 ## Como rodar
 

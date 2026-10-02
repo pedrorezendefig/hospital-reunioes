@@ -292,5 +292,7 @@ def test_nenhuma_conferencia_imprime_nem_grava_segredo(tmp_path):
     assert SEGREDO not in roda(tmp_path, "checa_coolify")
 
 
-def test_sem_travessao_no_script():
-    assert "—" not in TEXTO and "–" not in TEXTO
+def test_sem_travessao_no_script_nem_na_skill():
+    skill = (SCRIPT.parent.parent / "SKILL.md").read_text(encoding="utf-8")
+    for texto in (TEXTO, skill):
+        assert "\u2014" not in texto and "\u2013" not in texto
