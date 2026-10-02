@@ -70,7 +70,7 @@ Cada ticket leva um label `wayfinder:<tipo>`. Bloqueio entre tickets usa a depen
 
 **Frontier** = filhas abertas, desbloqueadas e sem assignee.
 
-> **Invariante das duas filas:** ticket wayfinder **nunca** recebe `ready-for-agent` e nunca entra na máquina de estados do `/triage`. A fila de execução (`/pegar-issue`, `/onda`) enxerga só issues de build. As filas não colidem.
+> **Invariante das duas filas:** ticket wayfinder **nunca** recebe `ready-for-agent` e nunca entra na máquina de estados do `/triage`. A fila de execução (`/pegar-issue`, `/onda-enxuta`) enxerga só issues de build. As filas não colidem.
 
 ## Tipos de ticket
 

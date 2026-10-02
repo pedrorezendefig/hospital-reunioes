@@ -1,5 +1,7 @@
 # Decisões e por quê
 
+> Emenda de 02/10/2026: a ADR 0061 (decisão 2) aposentou a `/onda` e a `/montar-ondas` e fez da `/onda-enxuta` o único pipeline; o `/ask-pedro` passou a apontar para ela (PR #918). A decisão 6 abaixo ("nada existente muda", coexistência) descreve o contexto de setembro e está superada nesse ponto. O resto segue valendo.
+
 Registro das decisões que desenharam a `/onda-enxuta`, tomadas em `/grill-with-docs` em 22/09/2026 sobre a análise `ANALISE-EFICIENCIA-ONDAS-2026-09-22.md` (três sessões de `/onda`, 18 a 20/09, 11 issues, 1,05 bilhão de tokens, US$ 801 a preço de API). Fazem o papel de ADR sem tocar em `docs/adr/` do repositório (restrição do dono: nada existente muda). Referências em prosa: ADR 0022 (onda com checkpoint por lote), 0029 (goal do PRD, fonte de verdade no GitHub, orquestrador magro), 0035 (gates de review pertencem ao orquestrador), 0013 (tipografia), 0057 (fatia de manual).
 
 ## O que a medição mostrou

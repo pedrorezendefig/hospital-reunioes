@@ -287,7 +287,7 @@ open http://localhost:3000                  # esperado: tela de login do app
 | `/atualizar-app` | Rebuild docker-compose local (opcional). **Não toca produção.** |
 | `/ask-pedro` | Router: responde "qual skill eu uso agora?". |
 | `/setup-maquina` | Confere a máquina (binários, acessos, chaves) e diz o que falta e onde pegar. |
-| as demais | `/ask-pedro` lista e roteia todas (triage, research, resolver-conflitos, montar-ondas, onda, divulgar). |
+| as demais | `/ask-pedro` lista e roteia todas (triage, research, resolver-conflitos, montar-ondas-enxutas, onda-enxuta, divulgar). |
 
 ---
 

@@ -1,11 +1,11 @@
 ---
 name: montar-ondas-enxutas
-description: Planeja sessões /onda-enxuta paralelas sem conflito, presta contas de toda issue aberta e entrega um comando de lançamento por sessão (sessão de fundo, zero MCP, Opus 5.5). Não executa. Sintaxe `/montar-ondas-enxutas [--exceto #PRD] [--max-sessoes N]`.
+description: Planeja sessões /onda-enxuta sem conflito, presta contas de cada issue aberta, um comando de lançamento por sessão. Não executa. Sintaxe `/montar-ondas-enxutas [--exceto #PRD] [--max-sessoes N]`.
 ---
 
 # Montar ondas enxutas: plano de sessões paralelas
 
-Planejador da `/onda-enxuta` (cópia da `/montar-ondas`, com os passos 5 e 6 reescritos; a original não muda). A `/onda-enxuta` executa **uma** fila em **várias ondas**, uma sessão de fundo por onda; esta skill decide **quantas** filas abrir, **o que** vai em cada uma e **em que ordem** o humano aprova os merges. Sai daqui um arquivo de prompt por sessão e **um comando de lançamento** por sessão. Nada roda aqui: o Pedro roda os comandos num terminal, cada sessão nasce em segundo plano, faz a onda 1 até PR verde e para no checkpoint; ele entra com `claude attach` e escreve `vai`.
+Planejador da `/onda-enxuta`. A `/onda-enxuta` executa **uma** fila em **várias ondas**, uma sessão de fundo por onda; esta skill decide **quantas** filas abrir, **o que** vai em cada uma e **em que ordem** o humano aprova os merges. Sai daqui um arquivo de prompt por sessão e **um comando de lançamento** por sessão. Nada roda aqui: o Pedro roda os comandos num terminal, cada sessão nasce em segundo plano, faz a onda 1 até PR verde e para no checkpoint; ele entra com `claude attach` e escreve `vai`.
 
 A meta é sair com **toda issue aberta em um de dois lugares**: dentro de um prompt (`ready-for-agent`) ou numa lista curta do que só o humano faz. Issue "esperando triagem" no fim do plano é falha do plano.
 

@@ -143,7 +143,7 @@ done < "$LISTA"
 
 # ---------------------------------------------------------------- Nível 2
 if [ "$NIVEL" -ge 2 ]; then
-titulo "Nível 2: deploy (ship com merge, /deploy, /onda)"
+titulo "Nível 2: deploy (ship com merge, /deploy, /onda-enxuta)"
 bin_ok coolify "ver docs/onboarding/claude-setup.md seção 4.1"
 # A CLI responde e tem o contexto do hospital (hsm). Lê a lista e o verify sem nunca
 # imprimir o que eles devolvem: a saída do CLI pode trazer o token.

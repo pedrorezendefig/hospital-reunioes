@@ -44,7 +44,7 @@ Chaves de produção: só no Coolify. A lista e o "quem mexe" estão no `README.
 
 | Arquivo | Quem lê | O que vai nele |
 |---|---|---|
-| `tokens/.env` | `/deploy`, `/ship`, `/onda` (CLI do Coolify) | `COOLIFY_ACCESS_TOKEN` (seu), `COOLIFY_BASE_URL`, `ANA_API_KEY` (opcional) |
+| `tokens/.env` | `/deploy`, `/ship`, `/onda-enxuta` (CLI do Coolify) | `COOLIFY_ACCESS_TOKEN` (seu), `COOLIFY_BASE_URL`, `ANA_API_KEY` (opcional) |
 | `hospital-reunioes/.env` | backend local e o snapshot do `/deploy ship` | Os três valores fictícios do nível 2; o resto só no nível 3 |
 | `hospital-reunioes/frontend/.env.local` | `pnpm dev` (opcional) | `NEXT_PUBLIC_*` do Supabase local |
 | Coolify (produção) | os containers | Todas as chaves reais (`env_keys` em `docs/spec/deploy/project.json`; `/deploy setup` confere). Nunca no clone |

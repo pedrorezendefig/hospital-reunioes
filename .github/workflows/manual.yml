@@ -22,7 +22,7 @@ on:
       - '.claude/skills/montar-manual/**'
       - '.claude/skills/to-prd/**'
       - '.claude/skills/to-issues/**'
-      - '.claude/skills/onda/**'
+      - '.claude/agents/**'
       - '.claude/skills/deploy/**'
       - '.claude/skills/setup-maquina/**'
       - '.claude/skills/ask-pedro/**'
@@ -46,7 +46,7 @@ on:
       # renomeia um deles.
       - '.claude/skills/to-prd/**'
       - '.claude/skills/to-issues/**'
-      - '.claude/skills/onda/**'
+      - '.claude/agents/**'
       - '.claude/skills/deploy/**'
       - '.claude/skills/setup-maquina/**'
       - '.claude/skills/ask-pedro/**'

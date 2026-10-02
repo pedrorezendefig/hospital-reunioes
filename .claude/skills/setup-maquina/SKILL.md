@@ -12,7 +12,7 @@ Quem clona o repositório precisa de pouca coisa para trabalhar no pipeline (pla
 | Nível | Para quê | O que exige |
 |---|---|---|
 | 1 Pipeline | `/grill-with-docs`, `/to-prd`, `/to-issues`, `/pegar-issue`, `/ship` até o PR | clone com a `main` igual à `origin/main`, git, gh autenticado com WRITE, jq, Claude Code, os plugins de `references/plugins.txt`, `git config user.*` com e-mail da conta `gh` |
-| 2 Deploy e testes | `/tdd` (pytest e ruff do backend), `/ship` com merge e deploy, `/deploy`, `/onda` | CLI do Coolify com contexto `hsm`, `tokens/.env`, python3 3.9+, uv + `.venv` do backend, Pango, `hospital-reunioes/.env` com três valores fictícios (o snapshot importa o app), e Node >= 22.12, corepack e ffmpeg, porque o `/deploy ship` publica o Manual quando o deploy tira alguma página do draft |
+| 2 Deploy e testes | `/tdd` (pytest e ruff do backend), `/ship` com merge e deploy, `/deploy`, `/onda-enxuta` | CLI do Coolify com contexto `hsm`, `tokens/.env`, python3 3.9+, uv + `.venv` do backend, Pango, `hospital-reunioes/.env` com três valores fictícios (o snapshot importa o app), e Node >= 22.12, corepack e ffmpeg, porque o `/deploy ship` publica o Manual quando o deploy tira alguma página do draft |
 | 3 App local | `/atualizar-app`, `vitest` e `tsc` do frontend na máquina | Docker, Supabase CLI, chaves de sandbox (Node e corepack já vêm do nível 2). **Opcional: hoje ninguém usa; teste de frontend confia no CI.** |
 | 4 Produzir vídeo e print | `/divulgar`, `/manual <módulo>` | Chrome, skills globais de HyperFrames, time da Vercel e Playwright em Python para o Roteiro de prints. **Opcional: só quem produz vídeo e print.** |
 

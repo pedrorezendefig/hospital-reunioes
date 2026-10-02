@@ -105,7 +105,7 @@ Deploy manual (`coolify deploy uuid`, rodado pelo humano com `!`) é **exceção
 
 ### Semáforo de deploy (sessões paralelas)
 
-Várias sessões `/onda` ou `/ship` rodam na mesma máquina e todas terminam na `main`. Como todo push na `main` dispara build pelo webhook, dois merges juntos viram builds concorrentes (o frontend estoura a memória da VPS), e o `/health` mostra a versão de outra sessão, o que dispara rollback errado. O semáforo serializa isso sem o humano de porteiro: quem segura a trava mergeia e deploya; as outras esperam na fila.
+Várias sessões `/onda-enxuta` ou `/ship` rodam na mesma máquina e todas terminam na `main`. Como todo push na `main` dispara build pelo webhook, dois merges juntos viram builds concorrentes (o frontend estoura a memória da VPS), e o `/health` mostra a versão de outra sessão, o que dispara rollback errado. O semáforo serializa isso sem o humano de porteiro: quem segura a trava mergeia e deploya; as outras esperam na fila.
 
 ```bash
 S=.claude/skills/deploy/scripts/semaforo.sh
@@ -161,7 +161,7 @@ Antes de qualquer push na `main`. Chave = basename do scratchpad da sessão; des
 .claude/skills/deploy/scripts/semaforo.sh pegar <chave> "ship: <descrição>"
 ```
 
-Saída `3`: chame de novo (outra sessão está deployando). Saída `2`: trava velha, siga a regra da seção "Semáforo de deploy". Quando o `/ship` ou a `/onda` já pegaram a trava com a mesma chave, o comando devolve "já é sua" e segue.
+Saída `3`: chame de novo (outra sessão está deployando). Saída `2`: trava velha, siga a regra da seção "Semáforo de deploy". Quando o `/ship` ou a `/onda-enxuta` já pegaram a trava com a mesma chave, o comando devolve "já é sua" e segue.
 
 ### Passo 1 — Carregar estado atual
 
@@ -481,7 +481,7 @@ Se mismatch → Passo 8 (rollback). Mensagem: "APP_VERSION do Coolify não bate 
 
 ### Passo 8 — Rollback (se health falhou)
 
-> **A sessão detecta e prepara; o disparo é humano.** O comando de rollback dispara build e é negado pelo classifier, então esta skill não reverte sozinha: ela para, entrega o comando pronto e espera. Em modo AFK (`/onda`), isso significa produção parada no build ruim até alguém rodar o comando: reportar isso em alto e bom som, não seguir em silêncio.
+> **A sessão detecta e prepara; o disparo é humano.** O comando de rollback dispara build e é negado pelo classifier, então esta skill não reverte sozinha: ela para, entrega o comando pronto e espera. Em modo AFK (`/onda-enxuta`), isso significa produção parada no build ruim até alguém rodar o comando: reportar isso em alto e bom som, não seguir em silêncio.
 
 Executar 1×:
 1. Ler `<repo>/docs/spec/deploy/history.json` → último deploy com `result == "healthy"` por service afetado.
