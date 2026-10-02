@@ -254,3 +254,95 @@ def test_registro_da_onda_com_varios_prs_da_versao_a_cada_um():
     ]
 
     assert _versoes(_agrupar([a, b], prs=[pr_a, pr_b], history=history)) == {905: "0.157.0", 906: "0.157.0"}
+
+
+# ---------- Coletor: o gh entra falso, nada de rede ----------
+
+RAIZ = Path(__file__).resolve().parents[3]
+
+PR_GH = {
+    "number": 50,
+    "title": "feat: x",
+    "state": "OPEN",
+    "mergedAt": None,
+    "headRefName": "feat/x-11",
+    "closingIssuesReferences": [{"number": 11}],
+    "url": "https://github.com/x/y/pull/50",
+    "author": {"login": "bia", "is_bot": False},
+    "statusCheckRollup": [_check(), _check(conclusion="FAILURE")],
+    "mergeStateStatus": "DIRTY",
+    "updatedAt": "2026-09-29T09:00:00Z",
+}
+
+ISSUES_GH = [
+    {"number": 10, "title": "PRD: esteira", "state": "OPEN", "labels": [], "createdAt": "2026-09-01T00:00:00Z",
+     "closedAt": None, "assignees": [{"login": "ana"}], "body": "", "url": "https://github.com/x/y/issues/10"},
+    {"number": 11, "title": "Fatia", "state": "OPEN", "labels": [{"name": "in-progress"}],
+     "createdAt": "2026-09-02T00:00:00Z", "closedAt": None, "assignees": [], "body": "",
+     "url": "https://github.com/x/y/issues/11"},
+]
+
+
+def _gh_falso(chamadas):
+    import json
+
+    def run(cmd, cwd, timeout=None):
+        chamadas.append(cmd)
+        if cmd[:3] == ["gh", "issue", "list"]:
+            return "[]" if "--label" in cmd else json.dumps(ISSUES_GH)
+        if cmd[:3] == ["gh", "pr", "list"]:
+            return json.dumps([PR_GH])
+        if cmd[:3] == ["gh", "api", "graphql"]:
+            pagina = {"pageInfo": {"hasNextPage": False, "endCursor": None}, "nodes": []}
+            if "subIssues" in cmd[4]:
+                pagina["nodes"] = [{"number": 10, "subIssues": {"nodes": [{"number": 11}]}}]
+            return json.dumps({"data": {"repository": {"issues": pagina}}})
+        raise RuntimeError("offline no teste")
+
+    return run
+
+
+def test_coletor_traz_autor_ci_merge_e_updated_at_no_mesmo_gh_pr_list(monkeypatch):
+    import collect
+
+    chamadas = []
+    monkeypatch.setattr(collect, "_run", _gh_falso(chamadas))
+
+    prs = collect._gh_prs(RAIZ)
+
+    assert len(chamadas) == 1
+    assert chamadas[0][:3] == ["gh", "pr", "list"]
+    assert prs[0]["author"] == "bia"
+    assert prs[0]["ci"] == "falha"
+    assert prs[0]["merge_state"] == "DIRTY"
+    assert prs[0]["updated_at"] == "2026-09-29T09:00:00Z"
+
+
+def test_api_data_entrega_os_grupos_sem_metrica_por_pessoa(monkeypatch):
+    import collect
+
+    chamadas = []
+    monkeypatch.setattr(collect, "_run", _gh_falso(chamadas))
+
+    data = collect.collect(RAIZ)
+
+    assert sum(1 for c in chamadas if c[:3] == ["gh", "pr", "list"]) == 1
+    grupos = data["responsaveis"]["grupos"]
+    assert [g["responsavel"] for g in grupos] == ["ana"]
+    assert [(i["number"], i["secao"]) for i in grupos[0]["itens"]] == [(11, "em_andamento"), (10, "aberta")]
+    assert grupos[0]["itens"][0]["pr"]["ci"] == "falha"
+    assert grupos[0]["itens"][0]["pr"]["merge"] == "conflito"
+    # Só o agrupamento: nada de lead time nem volume por pessoa (ADR 0061, decisão 5).
+    assert all(set(g) == {"responsavel", "itens"} for g in grupos)
+    assert set(data["responsaveis"]) == {"grupos"}
+
+
+def test_api_data_sem_gh_deixa_responsaveis_vazio(monkeypatch):
+    import collect
+
+    def sem_gh(cmd, cwd, timeout=None):
+        raise FileNotFoundError("gh")
+
+    monkeypatch.setattr(collect, "_run", sem_gh)
+
+    assert collect.collect(RAIZ)["responsaveis"] is None
