@@ -90,3 +90,47 @@ def test_sem_aviso_quando_nao_ha_o_que_combinar(tmp_path, parent):
 
     assert feito.returncode == 0, feito.stderr
     assert feito.stdout == ""
+
+
+def fila(*issues: dict) -> dict:
+    return {"data": {"search": {"nodes": list(issues)}}}
+
+
+def fatia(numero: int, titulo: str, labels: list[str], parent: dict | None) -> dict:
+    return {
+        "number": numero,
+        "title": titulo,
+        "labels": {"nodes": [{"name": n} for n in ["ready-for-agent", *labels]]},
+        "parent": parent,
+    }
+
+
+def test_a_fila_mostra_o_dono_do_prd_ao_lado_de_cada_fatia(tmp_path):
+    resposta = fila(
+        fatia(907, "Esteira: rabo único", ["type:chore"], prd(902, "pedrorezendefig")),
+        fatia(888, "Tecnologia: menção viva", ["type:fix"], None),
+        fatia(664, "Fatia de PRD sem dono", [], prd(659)),
+    )
+
+    feito = rodar(tmp_path, resposta, "--fila")
+
+    assert feito.returncode == 0, feito.stderr
+    linhas = feito.stdout.splitlines()
+    assert linhas[0] == "| # | título | labels | PRD | dono do PRD |"
+    assert linhas[2:] == [
+        "| 907 | Esteira: rabo único | type:chore | #902 | @pedrorezendefig |",
+        "| 888 | Tecnologia: menção viva | type:fix | avulsa |  |",
+        "| 664 | Fatia de PRD sem dono |  | #659 | sem dono |",
+    ]
+
+
+def test_a_fila_continua_so_com_pronta_sem_dono_e_desbloqueada(tmp_path):
+    """O `-is:blocked` só vale na busca avançada; na comum volta a fatia bloqueada."""
+    rodar(tmp_path, fila(), "--fila")
+
+    chamada = (tmp_path / "gh.log").read_text(encoding="utf-8")
+    assert "ISSUE_ADVANCED" in chamada
+    assert (
+        "q=repo:hsm/hospital-reunioes is:issue is:open label:ready-for-agent "
+        "no:assignee -is:blocked"
+    ) in chamada

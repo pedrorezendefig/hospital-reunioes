@@ -2,11 +2,13 @@
 
 O PRD nasce com dono: o `/to-prd` põe como assignee quem rodou. Pegar fatia de
 PRD alheio não é proibido, mas se combina antes; este script dá o aviso, sem
-bloquear o claim.
+bloquear o claim, e mostra o dono ao lado de cada fatia da fila.
 
 Uso:
-  python3 dono_do_prd.py <N>   imprime o aviso, ou nada se a fatia é do próprio
-                               PRD, se o PRD não tem dono ou se a issue é avulsa
+  python3 dono_do_prd.py <N>     imprime o aviso, ou nada se a fatia é do próprio
+                                 PRD, se o PRD não tem dono ou se a issue é avulsa
+  python3 dono_do_prd.py --fila  imprime a fila ready-for-agent sem dono e sem
+                                 bloqueio, em tabela, com o PRD e o dono dele
 """
 
 from __future__ import annotations
@@ -15,17 +17,25 @@ import json
 import subprocess
 import sys
 
-CONSULTA_DA_ISSUE = """
-query($owner: String!, $repo: String!, $n: Int!) {
-  viewer { login }
-  repository(owner: $owner, name: $repo) {
-    issue(number: $n) {
-      number
-      parent { number assignees(first: 10) { nodes { login } } }
-    }
-  }
-}
+PAI = "parent { number assignees(first: 10) { nodes { login } } }"
+
+CONSULTA_DA_ISSUE = f"""
+query($owner: String!, $repo: String!, $n: Int!) {{
+  viewer {{ login }}
+  repository(owner: $owner, name: $repo) {{ issue(number: $n) {{ number {PAI} }} }}
+}}
 """
+
+# Busca avançada: na comum (`ISSUE`) o `-is:blocked` não filtra nada.
+CONSULTA_DA_FILA = f"""
+query($q: String!) {{
+  search(query: $q, type: ISSUE_ADVANCED, first: 100) {{
+    nodes {{ ... on Issue {{ number title labels(first: 20) {{ nodes {{ name }} }} {PAI} }} }}
+  }}
+}}
+"""
+
+FILTRO_DA_FILA = "is:issue is:open label:ready-for-agent no:assignee -is:blocked"
 
 
 def gh(*args: str) -> str:
@@ -34,11 +44,15 @@ def gh(*args: str) -> str:
     ).stdout
 
 
-def graphql(consulta: str, **variaveis: str) -> dict:
+def graphql(consulta: str, **variaveis: str | int) -> dict:
     campos = []
     for nome, valor in variaveis.items():
-        campos += ["-F" if nome == "n" else "-f", f"{nome}={valor}"]
+        campos += ["-F" if isinstance(valor, int) else "-f", f"{nome}={valor}"]
     return json.loads(gh("api", "graphql", "-f", f"query={consulta}", *campos))["data"]
+
+
+def repositorio() -> str:
+    return gh("repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner").strip()
 
 
 def donos(parent: dict | None) -> list[str]:
@@ -54,13 +68,32 @@ def aviso(donos_do_prd: list[str], login: str) -> str | None:
     return f"fatia do PRD de {', '.join('@' + d for d in donos_do_prd)}; combine antes"
 
 
+def linha(issue: dict) -> str:
+    labels = [
+        n["name"] for n in issue["labels"]["nodes"] if n["name"] != "ready-for-agent"
+    ]
+    parent = issue["parent"]
+    if parent:
+        prd = f"#{parent['number']}"
+        dono = ", ".join("@" + d for d in donos(parent)) or "sem dono"
+    else:
+        prd, dono = "avulsa", ""
+    return f"| {issue['number']} | {issue['title']} | {', '.join(labels)} | {prd} | {dono} |"
+
+
+def tabela(issues: list[dict]) -> str:
+    cabecalho = ["| # | título | labels | PRD | dono do PRD |", "|---|---|---|---|---|"]
+    return "\n".join(cabecalho + [linha(i) for i in issues])
+
+
 def main(argv: list[str]) -> int:
-    owner, repo = gh(
-        "repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner"
-    ).strip().split("/")
-    dados = graphql(CONSULTA_DA_ISSUE, owner=owner, repo=repo, n=argv[0])
-    parent = dados["repository"]["issue"]["parent"]
-    texto = aviso(donos(parent), dados["viewer"]["login"])
+    if argv == ["--fila"]:
+        dados = graphql(CONSULTA_DA_FILA, q=f"repo:{repositorio()} {FILTRO_DA_FILA}")
+        print(tabela(dados["search"]["nodes"]))
+        return 0
+    owner, repo = repositorio().split("/")
+    dados = graphql(CONSULTA_DA_ISSUE, owner=owner, repo=repo, n=int(argv[0]))
+    texto = aviso(donos(dados["repository"]["issue"]["parent"]), dados["viewer"]["login"])
     if texto:
         print(texto)
     return 0
