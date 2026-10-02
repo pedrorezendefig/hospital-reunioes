@@ -9,9 +9,10 @@ import { renderArea, wireArea } from './areas.js';
 const S = {
   data: null,
   tab: 'plano',
-  fIssues: { state: 'all', label: '', q: '' },
+  fIssues: { state: 'all', label: '', q: '', agrupar: true },
   expIss: new Set(),
   expPrd: new Map(),
+  respFechado: new Set(),
   expDep: new Set(),
   expAdr: new Set(),
   comments: {},
@@ -425,13 +426,14 @@ function commentsHtml(n) {
       </div>`).join('') + '</div>';
 }
 
-function issueCard(i, idx, prd = false) {
+function issueCard(i, idx, prd = false, extra = '') {
   const open = S.expIss.has(i.number);
   const lead = i.closed_at ? spanH(new Date(i.closed_at) - new Date(i.created_at)) : null;
   const meta = [];
   meta.push(`aberta ${fmtD(i.created_at)}`);
   if (i.closed_at) meta.push(`fechada ${fmtD(i.closed_at)}`);
-  if (i.assignees.length) meta.push(`👤 ${i.assignees.map(esc).join(', ')}`);
+  // no PRD o dono vai ao lado do título
+  if (!prd && i.assignees.length) meta.push(`👤 ${i.assignees.map(esc).join(', ')}`);
   if (i.criteria.total) meta.push(`✓ ${i.criteria.done}/${i.criteria.total} critérios`);
   const blocked = i.blocked_by.length
     ? `<span class="blocked">⛔ bloqueada por ${i.blocked_by.map(n => `<a href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`).join(', ')}</span>` : '';
@@ -444,11 +446,13 @@ function issueCard(i, idx, prd = false) {
         ${prd ? '<span class="prd-tag">PRD</span>' : ''}
         <span class="inum">#${i.number}</span>
         <span class="ititle">${esc(i.title)}</span>
+        ${prd ? `<span class="prd-dono">${i.assignees.length ? `👤 ${i.assignees.map(esc).join(', ')}` : 'sem dono'}</span>` : ''}
         ${i.labels.map(labelBadge).join('')}
         ${stateTag(i)}
         ${lead ? `<span class="chip nrow-lead">⏱ ${lead}</span>` : ''}
       </div>
       <div class="iss-meta">${meta.map(m => `<span>${m}</span>`).join('')}${blocked}</div>
+      ${extra}
       <div class="chain">${chainHtml(i)}</div>
       ${open ? `
       <div class="iss-body">
@@ -461,7 +465,65 @@ function issueCard(i, idx, prd = false) {
   </article>`;
 }
 
+/* Aba Issues agrupada por responsável (#908). Grupos, ordem e seção vêm prontos
+   do módulo puro responsaveis.py em S.data.responsaveis; aqui só filtra e desenha. */
+const CI_PR = {
+  sucesso: ['b-green', 'CI ok'],
+  falha: ['b-red', 'CI falhou'],
+  pendente: ['b-amber', 'CI rodando'],
+};
+const MERGE_PR = {
+  mergeavel: ['b-green', 'mergeável'],
+  conflito: ['b-red', 'conflito'],
+  desconhecido: ['b-ghost', 'merge a conferir'],
+};
+
+function respItemHtml(it) {
+  const badge = ([cls, txt]) => `<span class="badge ${cls}">${txt}</span>`;
+  if (it.pr) {
+    const p = it.pr;
+    const d = p.dias_parado;
+    const espera = d == null ? '' : `<span>${d === 0 ? 'atualizado hoje' : `parado há ${d} dia${d === 1 ? '' : 's'}`}</span>`;
+    return `<div class="resp-linha">
+      <a href="${esc(p.url)}" target="_blank" rel="noopener">PR #${p.number}</a>
+      ${badge(CI_PR[p.ci] || ['b-ghost', 'sem CI'])}
+      ${badge(MERGE_PR[p.merge] || MERGE_PR.desconhecido)}
+      ${espera}
+    </div>`;
+  }
+  if (it.secao === 'fechada') {
+    return `<div class="resp-linha">${it.versao ? badge(['b-green', `subiu na v${esc(it.versao)}`]) : badge(['b-ghost', 'sem versão registrada'])}</div>`;
+  }
+  return '';
+}
+
+function responsaveisHtml() {
+  const r = S.data.responsaveis;
+  if (r.erro) return `<div class="banner"><b>Agrupamento indisponível</b>: ${esc(r.erro)}. Desligue o agrupar por responsável para ver a lista.</div>`;
+  const iss = S.data.github.issues || [];
+  const byN = Object.fromEntries(iss.map(i => [i.number, i]));
+  let idx = 0;
+  const groups = [];
+  for (const g of r.grupos) {
+    const itens = g.itens.filter(it => byN[it.number] && matchIssue(byN[it.number]));
+    if (!itens.length) continue;
+    const chave = g.responsavel || '';
+    const aberto = !S.respFechado.has(chave);
+    groups.push(`
+      <section class="prd-group resp-group">
+        <button class="resp-toggle rv" data-act="resp" data-r="${esc(chave)}" aria-expanded="${aberto}">
+          <span class="ft-caret" aria-hidden="true">${aberto ? '▾' : '▸'}</span>
+          <span class="resp-nome">${g.responsavel ? esc(g.responsavel) : 'sem responsável'}</span>
+          <span class="resp-conta">${itens.length} issue${itens.length === 1 ? '' : 's'}</span>
+        </button>
+        ${aberto ? `<div class="resp-itens">${itens.map(it => issueCard(byN[it.number], idx++, byN[it.number].is_prd, respItemHtml(it))).join('')}</div>` : ''}
+      </section>`);
+  }
+  return groups.join('') || '<div class="empty">nenhuma issue bate com o filtro</div>';
+}
+
 function issueListHtml() {
+  if (S.fIssues.agrupar && S.data.responsaveis) return responsaveisHtml();
   const iss = S.data.github.issues || [];
   const byN = Object.fromEntries(iss.map(i => [i.number, i]));
   const prds = iss.filter(i => i.is_prd).sort((a, b) => b.number - a.number);
@@ -531,6 +593,7 @@ function renderIssues() {
     <button class="fchip ${f.state === 'all' ? 'on' : ''}" data-act="fstate" data-v="all">todas</button>
     <button class="fchip ${f.state === 'OPEN' ? 'on' : ''}" data-act="fstate" data-v="OPEN">abertas</button>
     <button class="fchip ${f.state === 'CLOSED' ? 'on' : ''}" data-act="fstate" data-v="CLOSED">fechadas</button>
+    <button class="fchip ${f.agrupar ? 'on' : ''}" data-act="fagrupar" aria-pressed="${f.agrupar}">agrupar por responsável</button>
     <select class="fsel" id="flabel">
       <option value="">label: todas</option>
       ${labels.map(l => `<option value="${esc(l)}" ${f.label === l ? 'selected' : ''}>${esc(l)}</option>`).join('')}
@@ -1027,6 +1090,11 @@ view.addEventListener('click', e => {
     const n = Number(t.dataset.n);
     S.expPrd.set(n, t.dataset.open !== '1');
     refreshIssueList();
+  } else if (act === 'resp') {
+    const r = t.dataset.r;
+    if (S.respFechado.has(r)) S.respFechado.delete(r);
+    else S.respFechado.add(r);
+    refreshIssueList();
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);
     S.expDep.has(i) ? S.expDep.delete(i) : S.expDep.add(i);
@@ -1037,6 +1105,9 @@ view.addEventListener('click', e => {
     render();
   } else if (act === 'fstate') {
     S.fIssues.state = t.dataset.v;
+    render();
+  } else if (act === 'fagrupar') {
+    S.fIssues.agrupar = !S.fIssues.agrupar;
     render();
   } else if (act === 'doc') {
     S.mapaDoc = t.dataset.doc;
@@ -1054,7 +1125,7 @@ view.addEventListener('click', e => {
     S.entTab = t.dataset.t;
     render();
   } else if (act === 'gotab') {
-    S.fIssues = { state: 'all', label: t.dataset.label || '', q: '' };
+    S.fIssues = { state: 'all', label: t.dataset.label || '', q: '', agrupar: S.fIssues.agrupar };
     setTab(t.dataset.go);
   }
 });
