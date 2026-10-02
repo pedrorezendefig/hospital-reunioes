@@ -129,18 +129,23 @@ def _versao_por_pr(prs: list[dict], history: list[dict]) -> dict[int, str]:
     """
     mergeado_em = {p["number"]: _parse_dt(p.get("merged_at")) for p in prs if p.get("merged_at")}
     deploys = sorted(
-        ((at, d) for d in history if d.get("app_version") and (at := _parse_dt(d.get("at")))),
+        (
+            (at, d["app_version"], _citados(d.get("raw_subject"), RE_PRS_NO_TITULO),
+             _citados(d.get("notes"), RE_PRS_NAS_NOTAS))
+            for d in history
+            if d.get("app_version") and (at := _parse_dt(d.get("at")))
+        ),
         key=lambda t: t[0],
     )
     versoes: dict[int, str] = {}
     for n, merge in mergeado_em.items():
-        no_titulo = [d for _, d in deploys if n in _citados(d.get("raw_subject"), RE_PRS_NO_TITULO)]
-        nas_notas = [(at, d) for at, d in deploys if n in _citados(d.get("notes"), RE_PRS_NAS_NOTAS)]
-        depois_do_merge = [d for at, d in nas_notas if merge and at >= merge]
-        ultimo_antes = [d for _, d in nas_notas[-1:]]
-        escolhidos = no_titulo or depois_do_merge or ultimo_antes
-        if escolhidos:
-            versoes[n] = escolhidos[0]["app_version"]
+        no_titulo = [versao for _, versao, titulo, _ in deploys if n in titulo]
+        nas_notas = [(at, versao) for at, versao, _, notas in deploys if n in notas]
+        depois_do_merge = [versao for at, versao in nas_notas if merge and at >= merge]
+        ultimo_antes = [versao for _, versao in nas_notas[-1:]]
+        escolhidas = no_titulo or depois_do_merge or ultimo_antes
+        if escolhidas:
+            versoes[n] = escolhidas[0]
     return versoes
 
 
