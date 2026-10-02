@@ -221,6 +221,8 @@ class Cenario:
         return {k: v for k, v in pr.items() if k in campos}
 
     def abrir_pr(self, campos: dict) -> dict:
+        if any(p["headRefName"] == campos["head"] and p["state"] == "OPEN" for p in self.prs.values()):
+            raise RuntimeError(f"gh api -> 422: A pull request already exists for {campos['head']}.")
         n = 100 + len(self.prs)
         self.prs[n] = {"number": n, "state": "OPEN", "mergeable": "MERGEABLE",
                        "headRefName": campos["head"], "baseRefName": campos["base"],
@@ -294,6 +296,9 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
             c.gh_chamadas.append(list(cmd[1:]))
             if cmd[1:3] == ["pr", "close"]:
                 c.prs[int(cmd[3])]["state"] = "CLOSED"
+                branch = c.prs[int(cmd[3])]["headRefName"]
+                if "--delete-branch" in cmd and c._tip(branch):
+                    git(c.remoto, "update-ref", "-d", f"refs/heads/{branch}")
             return subprocess.CompletedProcess(cmd, 0, "", "")
         return run_real(cmd, *args, **kwargs)
 
@@ -541,6 +546,42 @@ def test_onda_entra_por_um_pr_de_entrega_que_fecha_as_issues_do_lote(tmp_path, m
     assert len(fechar) == 1 and f"#{entrega['pr']}" in " ".join(fechar[0]), fechar
     assert git(c.remoto, "show", f"{entrega['main']}:hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
     assert c.builds == ["backend"]
+
+
+def test_onda_com_ci_vermelho_fecha_o_pr_de_entrega_e_a_rodada_seguinte_entra(
+    tmp_path, monkeypatch, capsys
+):
+    """CI vermelho no PR de entrega: o PR fecha e a branch `onda/<sessao>` some,
+    senão a rodada seguinte trava no push (non-fast-forward) e no 422 do PR."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    ver = c.ver_pr
+    vermelho = {"ligado": True}
+
+    def ver_com_ci_vermelho_na_entrega(n, campos):
+        if vermelho["ligado"] and c.prs[n]["headRefName"] == "onda/onda-x":
+            c.ci_vermelho.add(c._tip("onda/onda-x"))
+        return ver(n, campos)
+
+    c.ver_pr = ver_com_ci_vermelho_na_entrega
+
+    assert rodar_main(fo, monkeypatch, c, "--sessao", "onda-x") == fo.EXIT_MERGE
+
+    entrega = next(n for n, p in c.prs.items() if p["headRefName"] == "onda/onda-x")
+    fechar = [a for a in c.gh_chamadas if a[:3] == ["pr", "close", str(entrega)]]
+    assert len(fechar) == 1 and "--delete-branch" in fechar[0], fechar
+    assert c.prs[entrega]["state"] == "CLOSED" and c._tip("onda/onda-x") is None
+    assert c.merges == [] and c.main_remota() == c.base and c.coolify() == []
+    assert c.semaforo == [("pegar", "onda-x"), ("soltar", "onda-x")]
+    assert f"#{entrega}" in capsys.readouterr().out
+
+    vermelho["ligado"] = False
+    c.ci_vermelho.clear()
+    assert rodar_main(fo, monkeypatch, c, "--sessao", "onda-x") == 0
+
+    assert c.merges[0]["branch"] == "onda/onda-x" and c.merges[0]["pr"] != entrega
+    assert c.na_main("hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
 
 
 def test_limpeza_remove_o_worktree_de_agente_da_branch_entregue_por_squash(tmp_path, monkeypatch):

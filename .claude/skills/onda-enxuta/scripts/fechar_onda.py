@@ -360,7 +360,10 @@ def entrar_na_branch_do_pr(wt: Path, info: dict) -> bool:
 # ------------------------------------------------- entrega por PR (#910)
 
 class EntregaFalhou(Exception):
-    """Nada entrou na main: push na branch recusado, CI vermelho, merge recusado."""
+    """Nada entrou na main: push na branch recusado, CI vermelho, merge recusado.
+    `pr` e o PR ja aberto quando a falha veio depois dele (o handler o fecha)."""
+
+    pr: int | None = None
 
 
 def empurrar_branch(wt: Path, branch: str) -> str:
@@ -426,7 +429,11 @@ def entregar(raiz: Path, wt: Path, branch: str, pr: int | None, titulo: str, cor
     head = empurrar_branch(wt, branch)
     if pr is None:
         pr = abrir_pr(raiz, branch, titulo, corpo)
-    esperar_checks(raiz, pr, head)
+    try:
+        esperar_checks(raiz, pr, head)
+    except EntregaFalhou as e:
+        e.pr = pr
+        raise
     return pr, head
 
 
@@ -1067,6 +1074,7 @@ def main() -> int:
         # antes do merge: nada entrou na main
         if wt:
             remover_worktree(raiz, wt, args.prs)
+        pr_entrega = pr_entrega or e.pr
         if not avulso and pr_entrega:
             run(["gh", "pr", "close", str(pr_entrega), "--delete-branch", "--comment",
                  f"<!-- automacao -->\nEntrega abandonada: {e}. A proxima rodada abre outro PR."],
