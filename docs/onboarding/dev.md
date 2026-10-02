@@ -84,7 +84,10 @@ Loop disciplinado: reproduz → minimiza → hipótese → instrumenta → corri
 /ship              Gate 1 — code-review (sempre)
                    Gate 2 — security-review (se toca auth/RLS/migrations/env/webhook)
                    Gate 3 — CI verde (GitHub Actions)
-                   → bump de versão → self-approve → squash merge (Closes #N)
+                   → self-approve → squash merge (Closes #N)
+                   (ADR 0061: o bump sai do PR e acontece na hora do merge, na main,
+                    pelo fechar_onda.py, rabo único de merge + deploy; até a fatia entrar,
+                    o /ship ainda bumpa e chama o /deploy)
                    ▼
 /deploy ship       Coolify + migrations + health + version-match + rollback
                    → state.json + history.json + CHANGELOG + snapshot/ARQUITETURA
@@ -108,10 +111,13 @@ Loop disciplinado: reproduz → minimiza → hipótese → instrumenta → corri
 
 1. **Nunca commitar em `main` direto.** Sempre PR via `/ship`.
 2. **Self-approval é OK** — os 3 gates (code-review + security-review + CI) validam. Cada um aprova o próprio PR.
+   - **Emenda (ADR 0061, 01/10/2026):** cada sócio **mergeia e sobe para produção o próprio PR**, sem esperar ninguém. Quem mergeia aplica a migration em produção (Studio) e cuida do `APP_VERSION` no Coolify, então todo sócio precisa de acesso aos dois. PR verde parado esperando o Pedro é erro de processo, não cautela.
 3. **Nunca pular `/security-review`** em mudanças que tocam auth, RLS, migrations, env vars ou webhooks.
 4. **O contexto do trabalho vive na Issue**, não em arquivo de plano. Os critérios de aceite da Issue viram os seus testes no `/tdd`.
 5. **Uma Issue por vez, uma branch por Issue.** Em paralelo (vários terminais), use **1 git worktree por issue** — o claim atômico evita que duas sessões peguem a mesma. Protocolo em `docs/agents/issue-tracker.md`.
-6. **Skills locais ficam em `.claude/skills/`** — não mexa sem confirmar comigo (Pedro). Mudanças aqui são "skills do time".
+   - **Emenda (ADR 0061):** a **árvore principal do seu clone fica sempre na `main`** e só recebe `git pull`. Todo trabalho, inclusive doc e ADR, acontece em worktree. Voltou de uma pausa? `git pull` na árvore principal antes de qualquer coisa.
+6. **Dono do PRD (ADR 0061).** Todo PRD tem um assignee: quem fez o grilling (o `/to-prd` põe). Fatia sem claim conta como do dono do PRD; pegar fatia de PRD de outro sócio se combina antes com ele. Quem está puxando o quê aparece no painel local (`python3 tools/workflow-dashboard/serve.py`, aba Issues, agrupado por responsável).
+7. **Skills locais ficam em `.claude/skills/`** — não mexa sem confirmar comigo (Pedro). Mudanças aqui são "skills do time".
 
 ## Notificações
 

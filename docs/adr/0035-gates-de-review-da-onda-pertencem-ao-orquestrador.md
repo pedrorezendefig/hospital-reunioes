@@ -1,6 +1,7 @@
 ---
 status: accepted
 amends: 0029
+amended_by: 0061
 ---
 
 # Gates de review da onda pertencem ao orquestrador

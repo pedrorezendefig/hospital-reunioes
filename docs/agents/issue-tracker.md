@@ -29,6 +29,7 @@ O `/to-prd` cria a issue grande (o **PRD**); o `/to-issues` quebra em fatias e r
 - **Listar as fatias de um PRD:** `gh api "repos/$REPO/issues/<PRD>/sub_issues" --jq '.[].number'`.
 - **De que PRD veio uma fatia:** a seção `Pai: #N` no corpo, ou o painel de sub-issues na UI da própria fatia.
 - Quando a **última fatia aberta** fecha, a [Action de higiene](#higiene-de-fechamento-github-action) fecha o PRD sozinha, com um comentário. O **claim e o paralelismo (abaixo) acontecem nas fatias**, não no PRD.
+- **Emenda (ADR 0061, 01/10/2026): o PRD tem dono.** O `/to-prd` põe como assignee do PRD quem fez o grilling. Isso não é claim (ninguém "trabalha o PRD"), é responsabilidade: fatia ainda sem claim conta, para efeito de visão, como do dono do PRD. O painel local agrupa a aba Issues por esse responsável.
 
 ## Higiene de fechamento (GitHub Action)
 
@@ -97,6 +98,8 @@ Abra a sessão Claude Code dentro de `../hospital-issue-<N>`. O `EnterWorktree` 
 - O `/tdd` usa os **critérios de aceite** da issue como a lista de testes.
 - `/ship` abre o PR com `Closes #N` no corpo → ao mergear, o GitHub **fecha a issue**, e a [Action de higiene](#higiene-de-fechamento-github-action) remove o `in-progress` automaticamente.
 - Abandonou? Devolva ao pool: `gh issue edit <N> --remove-assignee @me --remove-label in-progress --add-label ready-for-agent`.
+- **Fatia de PRD alheio (ADR 0061):** pode pegar, mas combine antes com o dono do PRD (assignee da issue-raiz). O claim muda o responsável da fatia; o PRD continua do dono.
+- **Quem mergeia e deploya é o autor do PR (ADR 0061):** migration em produção e `APP_VERSION` são de quem mergeia. O bump de versão não entra no PR; acontece no merge, na `main`, pelo `fechar_onda.py`.
 
 ## Bloqueios entre issues (dependências nativas)
 
