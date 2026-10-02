@@ -676,8 +676,15 @@ def limpar_worktrees_de_agente(raiz: Path) -> int:
             if atual_path:
                 entradas.append((atual_path, atual_branch))
             atual_path, atual_branch = None, None
+    # o PR avulso roda do worktree do autor, na branch do PR, que o push acabou de
+    # mergear: remover o proprio checkout apaga trabalho sujo e o cwd do script
+    cwd = Path.cwd().resolve()
+    proprios = {raiz.resolve()}
     for path, branch in entradas:
         if ".claude/worktrees/" not in path.replace("\\", "/") or not branch:
+            continue
+        p = Path(path).resolve()
+        if p in proprios or cwd == p or p in cwd.parents:
             continue
         if branch in merged and branch != "main":
             run(["git", "worktree", "remove", "--force", path], cwd=raiz, check=False)

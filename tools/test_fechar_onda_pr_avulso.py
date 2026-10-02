@@ -427,3 +427,31 @@ def test_pr_sem_migration_nova_nao_pede_hash(tmp_path, monkeypatch):
     preparar(fo, monkeypatch, c)
 
     assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+
+
+# ------------------------------------- rabo rodado de dentro do próprio worktree
+
+def test_rabo_rodado_do_worktree_do_autor_nao_remove_o_proprio_checkout(
+    tmp_path, monkeypatch
+):
+    """O autor roda o rabo do próprio checkout, um worktree em `.claude/worktrees/`
+    na branch do PR. Depois do push essa branch está na main, mas a limpeza não
+    pode remover o worktree de onde o script roda: o arquivo sujo sumiria e o
+    `git` seguinte, com `cwd` apagado, viraria um exit 3 falso depois do deploy
+    verde."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    git(c.clone, "fetch", "-q", "origin", "refs/pull/7/head:feature")
+    autor = c.clone / ".claude" / "worktrees" / "autor"
+    git(c.clone, "worktree", "add", "-q", str(autor), "feature")
+    escrever(autor, "rascunho.txt", "trabalho nao commitado\n")
+    preparar(fo, monkeypatch, c)
+    monkeypatch.chdir(autor)
+    monkeypatch.setattr(sys, "argv", ["fechar_onda.py", "--prs", "7"])
+
+    assert fo.main() == 0
+
+    assert (autor / "rascunho.txt").read_text(encoding="utf-8") == "trabalho nao commitado\n"
+    lista = git(c.clone, "worktree", "list", "--porcelain")
+    assert f"worktree {autor.resolve()}" in lista, lista
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
