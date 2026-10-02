@@ -89,3 +89,69 @@ def test_numero_repetido_falha_nomeando_o_numero_e_os_dois_arquivos(tmp_path):
     assert "111" in saida
     assert "111_tecnologia_produto_central_de_comando.sql" in saida
     assert "111_ouvidoria_triagem_email.sql" in saida
+
+
+def test_branch_sem_migration_nova_passa(tmp_path):
+    repo = repo_com_base(tmp_path)
+    (repo / "README.md").write_text("só código\n", encoding="utf-8")
+    commitar(repo, "sem migration")
+
+    proc = rodar(repo)
+
+    assert proc.returncode == 0, proc.stdout
+    assert checar_migration_repetida.colisoes(repo, "main") == []
+
+
+def test_branch_com_numero_inedito_passa(tmp_path):
+    repo = repo_com_base(tmp_path)
+    escrever(repo, "112_ouvidoria_triagem_email.sql")
+    commitar(repo, "migration nova com numero livre")
+
+    proc = rodar(repo)
+
+    assert proc.returncode == 0, proc.stdout
+    assert checar_migration_repetida.colisoes(repo, "main") == []
+
+
+def test_branch_que_so_renomeia_migration_existente_passa(tmp_path):
+    repo = repo_com_base(tmp_path)
+    git(
+        repo,
+        "mv",
+        f"{PASTA}/111_tecnologia_produto_central_de_comando.sql",
+        f"{PASTA}/111_tecnologia_central_de_comando.sql",
+    )
+    commitar(repo, "renomeia a 111")
+
+    proc = rodar(repo)
+
+    assert proc.returncode == 0, proc.stdout
+
+
+def test_branch_que_so_edita_migration_existente_passa(tmp_path):
+    repo = repo_com_base(tmp_path)
+    escrever(
+        repo,
+        "111_tecnologia_produto_central_de_comando.sql",
+        "select 1;\nselect 2;\n",
+    )
+    commitar(repo, "edita a 111")
+
+    proc = rodar(repo)
+
+    assert proc.returncode == 0, proc.stdout
+
+
+def test_branch_empilhada_sobre_pr_que_entrou_por_squash_passa(tmp_path):
+    """A branch traz de novo o commit original da 112 que a base já tem."""
+    repo = repo_com_base(tmp_path)
+    escrever(repo, "112_ouvidoria_triagem_email.sql")
+    commitar(repo, "PR de baixo cria a 112")
+    git(repo, "checkout", "-q", "main")
+    escrever(repo, "112_ouvidoria_triagem_email.sql")
+    commitar(repo, "squash do PR de baixo")
+    git(repo, "checkout", "-q", "feature")
+
+    proc = rodar(repo)
+
+    assert proc.returncode == 0, proc.stdout
