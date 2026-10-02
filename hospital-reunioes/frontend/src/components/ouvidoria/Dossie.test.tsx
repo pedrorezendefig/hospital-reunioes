@@ -197,6 +197,9 @@ describe("o Dossiê e o Paciente do caso (issue #666)", () => {
  * que compara a tela com a própria constante do componente segue verde quando
  * alguém derruba o "não" da frase ou a reescreve inteira.
  */
+const AVISO_DO_ACOMPANHANTE_SEM_PACIENTE =
+  "Relato em nome de outra pessoa sem o nome do paciente. Confirme com o manifestante antes de acionar.";
+
 // Os sete canais do Registro manual (`RegistroManual.canal` no backend).
 const CANAIS_DO_REGISTRO_MANUAL = [
   "telefone",
@@ -207,9 +210,6 @@ const CANAIS_DO_REGISTRO_MANUAL = [
   "reclame_aqui",
   "google",
 ];
-
-const AVISO_DO_ACOMPANHANTE_SEM_PACIENTE =
-  "Relato em nome de outra pessoa sem o nome do paciente. Confirme com o manifestante antes de acionar.";
 
 describe("o Dossiê e o aviso do acompanhante sem nome do paciente (issue #662)", () => {
   beforeEach(() => {

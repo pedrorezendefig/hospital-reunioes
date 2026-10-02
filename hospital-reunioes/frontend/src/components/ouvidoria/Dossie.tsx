@@ -200,10 +200,10 @@ interface DossieProps {
  *
  * `qr` e `site` são o canal aberto (issue #666), e os sete canais do Registro
  * manual do ouvidor perguntam o paciente desde a issue #663. A API da Ana grava
- * o vínculo `acompanhante` sem nunca pedir o paciente: lá, "sem o nome do
- * paciente" é o estado permanente, e o aviso ficaria aceso para sempre num
- * caso onde não existe tela para apagá-lo. Guarda-corpo que vira ruído treina
- * o olho a ignorar o banner, e aí ele também para de funcionar onde importa.
+ * o vínculo `acompanhante` sem nunca pedir o paciente: o canal não pergunta,
+ * então o aviso acenderia em todo caso de acompanhante que viesse dela.
+ * Guarda-corpo que vira ruído treina o olho a ignorar o banner, e aí ele
+ * também para de funcionar onde importa.
  * A Ana entra nesta lista quando o payload dela tiver os campos (fora do
  * escopo do PRD #659).
  */
