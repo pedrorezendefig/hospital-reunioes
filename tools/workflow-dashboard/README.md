@@ -33,7 +33,7 @@ Porta fixa `8799` (a 8765 fica livre pra rodadas manuais), logs em `~/Library/Lo
 
 ## De onde vêm os dados (ao vivo vs. do último `git pull`)
 
-- **Ao vivo (rede):** issues, PRs e comentários via `gh` (o Plano nasce daí); produção, deploys e releases da `origin/main` (`git fetch` + `git show` — os ships rodam em worktrees paralelos, então a verdade pós-ship vive no remoto); e o seu `git` local (branch, commits).
+- **Ao vivo (rede):** issues, PRs e comentários via `gh` (o Plano nasce daí); produção, deploys e releases da `origin/main` (`git fetch` + `git show`; o rabo `fechar_onda.py` pusha de um worktree próprio, então a verdade pós-merge vive no remoto); e o seu `git` local (branch, commits).
 - **Do seu clone (último `git pull`):** mapa da app (`docs/spec/snapshots/`), decisões e glossário (`docs/adr/` + `CONTEXT.md`).
 
 Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta sozinho a cada 60s. Requer `gh` autenticado para issues e para o Plano — sem ele, o resto continua funcionando (o painel mostra como resolver).

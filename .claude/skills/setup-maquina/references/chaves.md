@@ -15,7 +15,7 @@ Cofre compartilhado do 1Password: **VITTA TECH**. Quem clona precisa de acesso a
 
 ## hospital-reunioes/.env (nível 2: três valores fictícios)
 
-Só para o snapshot do `/deploy ship` conseguir importar o app. O script do `/setup-maquina` cria o arquivo com `ENVIRONMENT=development`, `SUPABASE_URL=http://127.0.0.1:54351` e `SUPABASE_SERVICE_ROLE_KEY=dummy-local` (o mesmo endereço do `.env.example`; o valor só precisa existir). Nada real, nada do 1Password. Chave vazia liga o mock de LLM e de email.
+Só para o snapshot do rabo (`fechar_onda.py`) conseguir importar o app. O script do `/setup-maquina` cria o arquivo com `ENVIRONMENT=development`, `SUPABASE_URL=http://127.0.0.1:54351` e `SUPABASE_SERVICE_ROLE_KEY=dummy-local` (o mesmo endereço do `.env.example`; o valor só precisa existir). Nada real, nada do 1Password. Chave vazia liga o mock de LLM e de email.
 
 Chaves de produção: só no Coolify. A lista e o "quem mexe" estão no `README.md` da raiz, seção "Variáveis de ambiente".
 
@@ -44,8 +44,8 @@ Chaves de produção: só no Coolify. A lista e o "quem mexe" estão no `README.
 
 | Arquivo | Quem lê | O que vai nele |
 |---|---|---|
-| `tokens/.env` | `/deploy`, `/ship`, `/onda-enxuta` (CLI do Coolify) | `COOLIFY_ACCESS_TOKEN` (seu), `COOLIFY_BASE_URL`, `ANA_API_KEY` (opcional) |
-| `hospital-reunioes/.env` | backend local e o snapshot do `/deploy ship` | Os três valores fictícios do nível 2; o resto só no nível 3 |
+| `tokens/.env` | o rabo `fechar_onda.py` (APP_VERSION e build), `/deploy` status e rollback, `/onda-enxuta` (CLI do Coolify) | `COOLIFY_ACCESS_TOKEN` (seu), `COOLIFY_BASE_URL`, `ANA_API_KEY` (opcional) |
+| `hospital-reunioes/.env` | backend local e o snapshot do rabo (`fechar_onda.py`) | Os três valores fictícios do nível 2; o resto só no nível 3 |
 | `hospital-reunioes/frontend/.env.local` | `pnpm dev` (opcional) | `NEXT_PUBLIC_*` do Supabase local |
 | Coolify (produção) | os containers | Todas as chaves reais (`env_keys` em `docs/spec/deploy/project.json`; `/deploy setup` confere). Nunca no clone |
 | GitHub Actions | CI | Nenhum secret: valores fictícios no próprio `ci.yml` |

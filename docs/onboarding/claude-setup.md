@@ -2,7 +2,7 @@
 
 Guia único de setup. Roda do zero até ter o fluxo do time funcionando no terminal — com plugins, CLI do Coolify, MCP servers e permissões alinhadas. Tempo estimado: **15–30 minutos**.
 
-Depois de seguir este guia, leia [`dev.md`](./dev.md) pra entender o fluxo dia-a-dia (`/grill-with-docs` → `/pegar-issue` → `/tdd` → `/ship` → `/deploy`).
+Depois de seguir este guia, leia [`dev.md`](./dev.md) pra entender o fluxo dia-a-dia (`/grill-with-docs` → `/pegar-issue` → `/tdd` → `/ship` → rabo `fechar_onda.py`).
 
 ---
 
@@ -31,10 +31,10 @@ Instale antes de tudo:
 |---|---|---|
 | **Claude Code CLI** | `npm install -g @anthropic-ai/claude-code` ou via [claude.ai/code](https://claude.ai/code) | O agente em si |
 | **GitHub CLI** (`gh`) | `brew install gh` | PRs, Issues, reviews. Usado por `/pegar-issue`, `/to-prd`, `/to-issues` e `/ship` |
-| **`jq`** | `brew install jq` | Parser JSON em scripts (gates do `/deploy`) |
-| **Python 3.9+** | já vem no macOS recente, ou `brew install python@3.12` | Scripts do `/snapshot` + gates do `/deploy`. O 3.12 do backend quem provê é o `uv sync` |
-| **`uv`** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` e depois `cd hospital-reunioes/backend && uv sync` | Cria o `.venv` do backend. O `/deploy ship` importa o app para gerar o snapshot |
-| **Pango** (WeasyPrint) | `brew install pango cairo gdk-pixbuf libffi` | O app importa o WeasyPrint no boot; sem Pango o snapshot do `/deploy` cai em modo parcial (o snapshot já aponta o Pango do Homebrew sozinho) |
+| **`jq`** | `brew install jq` | Parser JSON em scripts (`/deploy status`, semáforo, `/setup-maquina`) |
+| **Python 3.9+** | já vem no macOS recente, ou `brew install python@3.12` | Scripts do `/snapshot`, o rabo (`fechar_onda.py`) e o `/deploy`. O 3.12 do backend quem provê é o `uv sync` |
+| **`uv`** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` e depois `cd hospital-reunioes/backend && uv sync` | Cria o `.venv` do backend. O rabo (`fechar_onda.py`) importa o app para gerar o snapshot |
+| **Pango** (WeasyPrint) | `brew install pango cairo gdk-pixbuf libffi` | O app importa o WeasyPrint no boot; sem Pango o snapshot do rabo cai em modo parcial (o snapshot já aponta o Pango do Homebrew sozinho) |
 | **Docker Desktop** (opcional) | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) | Só para rodar o app local com `/atualizar-app`. Hoje ninguém usa: o app sobe para produção e se testa lá |
 | **Node 20+** (opcional) | `brew install node@22` | Só para rodar o frontend local ou `/divulgar` |
 
@@ -280,10 +280,11 @@ open http://localhost:3000                  # esperado: tela de login do app
 | `/to-issues` | Quebra o PRD em fatias verticais independentes (1 issue cada). |
 | `/pegar-issue` | **Sem arg:** lista a fila. **Com `<N>`:** claim atômico + branch + carrega a spec. |
 | `/tdd` | Red → green → refactor. Critérios de aceite da Issue viram testes. |
-| `/ship` | Orquestrador end-to-end (commit → PR → 3 gates → merge → deploy). |
-| `/deploy` | Deploy via Coolify. Subcomandos: `ship`, `status`, `rollback`, `setup`. |
+| `/ship` | Commit → PR → 3 gates; para no PR verde e imprime o comando do rabo. |
+| `fechar_onda.py --prs <N>` | O rabo único (ADR 0061): merge, bump, `APP_VERSION`, um push, um build, health e registro. |
+| `/deploy` | Opera a produção no Coolify: `status`, `rollback`, `setup`. O `ship` só imprime o comando do rabo. |
 | `/diagnose` | Investigação raiz de bug (reproduz → minimiza → corrige → regressão). |
-| `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Invocado pós-deploy pelo `/deploy`. |
+| `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Invocado pelo rabo (`fechar_onda.py`) no commit de registro. |
 | `/atualizar-app` | Rebuild docker-compose local (opcional). **Não toca produção.** |
 | `/ask-pedro` | Router: responde "qual skill eu uso agora?". |
 | `/setup-maquina` | Confere a máquina (binários, acessos, chaves) e diz o que falta e onde pegar. |
@@ -338,7 +339,7 @@ O que a memória do Claude Code do Pedro aprendeu em produção e que nenhuma sk
 | Precisa provar uma tela sem subir Playwright | Chrome headless executa o JS e despeja o DOM | `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --virtual-time-budget=20000 --dump-dom <url>` ou `--screenshot=<png> --window-size=1440,1900`. Achatar com `tr '\n' ' '` antes de grepar |
 | Playwright acusa erro em todo `<video>` MP4 | O Chromium do Playwright não tem H.264 | `p.chromium.launch(channel="chrome")` e servir por HTTP (`python3 -m http.server`); confirmar por `readyState >= 1` e `duration > 0` |
 | Dois ADRs com o mesmo número em sessões paralelas | O lint indexa por número e um sobrescreve o outro em silêncio | Antes de numerar: `git log origin/main --oneline -5` e `git worktree list`. Quem chega depois renumera e vira emenda em prosa (citação abaixo do frontmatter) |
-| Entrada nova do `CHANGELOG.md` sai com travessão e sem versão | `changelog_prepend.py` monta o título no formato errado | Depois do Passo 9.5 do `/deploy ship`, reescrever a entrada à mão no formato das anteriores (`## vX.Y.Z - DATA - assunto`) |
+| Entrada nova do `CHANGELOG.md` sai com travessão e sem versão | `changelog_prepend.py` monta o título no formato errado | Depois do rabo, reescrever a entrada à mão no formato das anteriores (`## vX.Y.Z - DATA - assunto`) |
 | Classifier nega remoção em massa (worktrees, branches, arquivos) | Loops de remoção são barrados comando a comando | Calcular as listas em arquivo, gravar um script idempotente que só lê as listas, mostrar o resumo e pedir `! bash <script>` |
 | Pasta nova nasceu no caminho aposentado | A árvore principal fica atrás de `origin/main`; o `.gitignore` só cobre o layout novo | `git ls-tree -d --name-only origin/main docs/` antes de criar; `git check-ignore -v` no primeiro arquivo gerado (MP4, render, build) |
 | Comando devolvido ao humano com `! ...` deu 404 | O UUID ou SHA veio "de cabeça" | Valor lido no mesmo turno: `jq -r '.services[] \| select(.id=="backend") \| .uuid' docs/spec/deploy/project.json` |
