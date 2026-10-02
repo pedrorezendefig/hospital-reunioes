@@ -185,3 +185,72 @@ def test_estado_do_pr_separa_mergeavel_de_conflito(merge_state, esperado):
 
     assert estado["merge"] == esperado
     assert estado["dias_parado"] == 0
+
+
+def _deploy(at, versao, *, raw_subject="chore: x", notes=""):
+    """Entrada do history.json (só os campos que importam aqui)."""
+    return {"at": at, "app_version": versao, "raw_subject": raw_subject, "notes": notes, "result": "healthy"}
+
+
+def _fechada_com_pr(number, pr, merged_at):
+    issue = _issue(number, state="CLOSED", assignees=["ana"], closed_at=merged_at)
+    return issue, _pr(pr, closes=[number], state="MERGED", merged_at=merged_at)
+
+
+def _versoes(resultado):
+    return {i["number"]: i["versao"] for g in resultado["grupos"] for i in g["itens"]}
+
+
+def test_fechada_mostra_a_versao_do_deploy_do_pr_que_a_fechou():
+    issue, pr = _fechada_com_pr(770, 894, "2026-09-28T14:00:00Z")
+    history = [
+        _deploy("2026-09-28T11:36:40-03:00", "0.156.6", raw_subject="fix(tecnologia): recuo (#894)"),
+        _deploy("2026-09-27T20:00:13-03:00", "0.156.5", raw_subject="fix(backend): ia (#892)"),
+    ]
+
+    resultado = _agrupar([issue, _issue(9, assignees=["ana"])], prs=[pr], history=history)
+
+    assert _versoes(resultado) == {770: "0.156.6", 9: None}
+
+
+def test_fechada_sem_o_pr_no_history_fica_sem_versao():
+    issue, pr = _fechada_com_pr(770, 894, "2026-09-28T14:00:00Z")
+    history = [_deploy("2026-09-28T11:36:40-03:00", "0.156.5", raw_subject="fix(backend): ia (#892)")]
+
+    assert _versoes(_agrupar([issue], prs=[pr], history=history)) == {770: None}
+
+
+def test_mencao_ao_pr_em_deploy_anterior_ao_merge_nao_vira_versao():
+    # Caso real do PR #751: o deploy 0.139.0 cita o PR nas notas como contexto,
+    # horas antes do merge; quem levou o PR ao ar foi o 0.140.0.
+    issue, pr = _fechada_com_pr(729, 751, "2026-09-17T03:25:31Z")
+    history = [
+        _deploy("2026-09-17T00:30:00-03:00", "0.140.0", raw_subject="feat(tecnologia): falar (#751)"),
+        _deploy("2026-09-16T22:35:00-03:00", "0.139.0", raw_subject="feat(extracao): ler (#765)",
+                notes="A issue #758 nasceu das revisoes do PR #751."),
+    ]
+
+    assert _versoes(_agrupar([issue], prs=[pr], history=history)) == {729: "0.140.0"}
+
+
+def test_mencao_ao_pr_em_deploy_posterior_nao_troca_a_versao_em_que_subiu():
+    # Caso real do PR #688: subiu no 0.127.0 e o 0.141.0 cita o PR nas notas.
+    issue, pr = _fechada_com_pr(677, 688, "2026-09-10T20:00:00Z")
+    history = [
+        _deploy("2026-09-17T09:42:00-03:00", "0.141.0", raw_subject="feat: print (#771)",
+                notes="Tres rodadas de correcao, como no PR #688."),
+        _deploy("2026-09-10T18:28:00-03:00", "0.127.0", raw_subject="feat(tecnologia): botao (#688)"),
+    ]
+
+    assert _versoes(_agrupar([issue], prs=[pr], history=history)) == {677: "0.127.0"}
+
+
+def test_registro_da_onda_com_varios_prs_da_versao_a_cada_um():
+    a, pr_a = _fechada_com_pr(905, 911, "2026-10-02T10:00:00Z")
+    b, pr_b = _fechada_com_pr(906, 912, "2026-10-02T10:05:00Z")
+    history = [
+        _deploy("2026-10-02T09:00:00-03:00", "0.157.0", raw_subject="chore(deploy): registro da onda s1 (#911 #912)",
+                notes="onda-enxuta s1: PRs #911 #912. Um push, um build."),
+    ]
+
+    assert _versoes(_agrupar([a, b], prs=[pr_a, pr_b], history=history)) == {905: "0.157.0", 906: "0.157.0"}

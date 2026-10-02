@@ -6,6 +6,7 @@ collect.py) entram, grupos por responsável saem. O front só desenha.
 
 from __future__ import annotations
 
+import re
 from datetime import datetime, timezone
 
 SECOES = ("em_andamento", "planejada", "aberta", "fechada")
@@ -29,14 +30,17 @@ def agrupar_por_responsavel(
         for n in fatias:
             prds_da_fatia.setdefault(n, []).append(prd)
     pr_aberto = _pr_aberto_por_issue(prs)
+    versao_da_issue = _versao_por_issue(prs, history)
 
     itens = []
     for i in issues:
-        pr = pr_aberto.get(i["number"]) if i["state"] == "OPEN" else None
+        aberta = i["state"] == "OPEN"
+        pr = pr_aberto.get(i["number"]) if aberta else None
         item = {
             "number": i["number"],
             "secao": _secao(i, pr),
             "pr": estado_do_pr(pr, agora) if pr else None,
+            "versao": None if aberta else versao_da_issue.get(i["number"]),
         }
         itens.append((_ordem(i, item["secao"]), item, i))
 
@@ -95,6 +99,51 @@ def _mergeabilidade(merge_state: str | None) -> str:
     if merge_state in (None, "UNKNOWN", "DRAFT"):
         return "desconhecido"
     return "mergeavel"
+
+
+def _versao_por_issue(prs: list[dict], history: list[dict]) -> dict[int, str]:
+    """Versão em que cada issue subiu: a do deploy do PR mergeado mais recente que a fecha."""
+    versao_do_pr = _versao_por_pr(prs, history)
+    versoes: dict[int, str] = {}
+    for p in sorted(prs, key=lambda p: p.get("merged_at") or ""):
+        if p["number"] in versao_do_pr:
+            for n in p["closes"]:
+                versoes[n] = versao_do_pr[p["number"]]
+    return versoes
+
+
+def _versao_por_pr(prs: list[dict], history: list[dict]) -> dict[int, str]:
+    """Primeiro deploy, a partir do merge, que cita o PR.
+
+    As notas citam PRs como contexto, antes e depois de eles subirem (#751 aparece
+    no 0.139.0, horas antes do merge; #688 reaparece no 0.141.0). Deploy anterior ao
+    merge não pode ter levado o PR; entre os posteriores, vale o primeiro.
+    """
+    mergeado_em = {p["number"]: _parse_dt(p.get("merged_at")) for p in prs if p.get("merged_at")}
+    deploys = sorted(
+        ((at, d) for d in history if d.get("app_version") and (at := _parse_dt(d.get("at")))),
+        key=lambda t: t[0],
+    )
+    versoes: dict[int, str] = {}
+    for at, d in deploys:
+        for n in _prs_citados(d):
+            if n in mergeado_em and n not in versoes and (mergeado_em[n] is None or at >= mergeado_em[n]):
+                versoes[n] = d["app_version"]
+    return versoes
+
+
+def _prs_citados(deploy: dict) -> set[int]:
+    """Números citados no registro do deploy, no formato que o /ship e o fechar_onda escrevem.
+
+    raw_subject: "(#894)" do squash ou "(#911 #912)" do registro da onda.
+    notes: "PR #894", "PRs #911 #912".
+    """
+    nums: set[int] = set()
+    for grupo in re.findall(r"\((#\d+(?:[\s,]+#\d+)*)\)", deploy.get("raw_subject") or ""):
+        nums |= {int(n) for n in re.findall(r"#(\d+)", grupo)}
+    for grupo in re.findall(r"PRs? (#\d+(?:(?:,\s*|\s+e\s+|\s+)#\d+)*)", deploy.get("notes") or ""):
+        nums |= {int(n) for n in re.findall(r"#(\d+)", grupo)}
+    return nums
 
 
 def _pr_aberto_por_issue(prs: list[dict]) -> dict[int, dict]:
