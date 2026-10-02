@@ -1516,35 +1516,50 @@ class TestAsDuasGuardasPrometidasPeloAdr0052:
     continua dizendo isso no banco, e vai continuar: migration aplicada é
     imutável, o hash do arquivo é a prova do que rodou no Studio, e corrigir o
     texto pede migration nova. Então o marcador se muda para cá, onde ele
-    acompanha a verdade."""
+    acompanha a verdade.
 
-    def test_a_retencao_varre_e_o_paciente_ainda_nao_viaja_para_a_area(self):
+    Com a issue #664 as duas guardas existem, e a migration 113 reescreveu os
+    dois comentários: banco e código voltaram a dizer a mesma coisa."""
+
+    def test_a_retencao_varre_e_o_paciente_viaja_para_a_area(self):
         """Estado real, nesta linha do tempo:
 
-          - a RETENÇÃO VARRE as duas colunas (issue #665, esta fatia). O
-            comentário no banco diz que não, e está desatualizado;
-          - o PACIENTE AINDA NÃO VIAJA para a área (issue #664, aberta). Nem o
-            email de acionamento nem a tela do responsável selecionam as
-            colunas, e a guarda do sigilo reforçado da decisão 4 não existe.
+          - a RETENÇÃO VARRE as duas colunas (issue #665);
+          - o PACIENTE VIAJA para a área (issue #664): o email de acionamento e
+            a tela do responsável selecionam as colunas, e quem decide se elas
+            saem é `ouvidoria_blocos.paciente_do_caso`, com a guarda do sigilo
+            reforçado da decisão 4 (testada em `test_ouvidoria_tres_blocos.py`
+            e `test_ouvidoria_portal_setor.py`).
 
-        Quem fizer a #664 vira as duas asserções de baixo e escreve, na mesma
-        migration, os dois `COMMENT ON COLUMN` corrigidos de uma vez: aí o banco
-        e o código voltam a dizer a mesma coisa.
-
-        O limite deste teste, escrito porque quem o ler vai confiar nele: ele
-        olha as DUAS constantes de `select` de hoje. Se a #664 levar o paciente
-        à área por outra tupla, por `select("*")` ou por um bloco montado a
-        partir de outra lista, ele fica verde. É gatilho, não garantia."""
+        O limite deste teste: ele olha as DUAS constantes de `select` de hoje.
+        Prova que as colunas chegam às duas superfícies, não que a guarda é
+        aplicada; isso é dos testes citados acima."""
         from app.routers.ouvidoria_setor import _CAMPOS_DO_PORTAL
         from app.services.ouvidoria_notificacoes import _CAMPOS_DO_EMAIL
 
         for coluna in ("paciente_nome", "paciente_referencia"):
             assert coluna in ouvidoria_retencao.CAMPOS_DO_DOSSIE, f"a Retenção parou de varrer {coluna}"
-            assert coluna not in _CAMPOS_DO_EMAIL, (
-                f"{coluna} passou a viajar no email: é a issue #664 chegando. Atualize este "
-                "teste e escreva na migration dela os dois COMMENT ON COLUMN corrigidos."
+            assert coluna in _CAMPOS_DO_EMAIL, f"{coluna} deixou de viajar no email de acionamento"
+            assert coluna in _CAMPOS_DO_PORTAL, f"{coluna} deixou de viajar para a tela do responsável"
+
+    def test_o_ultimo_comentario_de_cada_coluna_nao_promete_guarda_pendente(self):
+        """O comentário que vale no banco é o da migration mais recente que o
+        escreve. Se ele ainda disser PENDENTE, o banco mente sobre as duas
+        guardas que o código já tem."""
+        pasta = os.path.join(os.path.dirname(__file__), "..", "..", "supabase", "migrations")
+        for coluna in ("paciente_nome", "paciente_referencia"):
+            alvo = f"COMMENT ON COLUMN ouvidoria_protocolos.{coluna} IS"
+            com_comentario = sorted(
+                nome for nome in os.listdir(pasta) if nome.endswith(".sql") and alvo in _ler(os.path.join(pasta, nome))
             )
-            assert coluna not in _CAMPOS_DO_PORTAL, (
-                f"{coluna} passou a viajar para a tela do responsável: é a issue #664 chegando. "
-                "Atualize este teste e escreva na migration dela os dois COMMENT ON COLUMN corrigidos."
-            )
+            assert com_comentario, f"nenhuma migration comenta {coluna}"
+            ultima = com_comentario[-1]
+            comentario = _ler(os.path.join(pasta, ultima)).split(alvo, 1)[1].split("';", 1)[0]
+            assert "viaja para a area" in comentario.lower(), f"{ultima} não diz para onde {coluna} viaja"
+            assert "PENDENTE" not in comentario, f"{ultima} ainda promete guarda pendente para {coluna}"
+            assert "ainda nao" not in comentario.lower(), f"{ultima} ainda diz que a guarda não existe para {coluna}"
+
+
+def _ler(caminho: str) -> str:
+    with open(caminho, encoding="utf-8") as arquivo:
+        return arquivo.read()
