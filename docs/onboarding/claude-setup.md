@@ -40,7 +40,7 @@ Instale antes de tudo:
 
 **Validar:**
 ```bash
-claude --version       # > 1.0
+claude --version       # 2.1.280 ou mais (a /onda-enxuta lança sessão de fundo)
 gh --version           # > 2.40
 jq --version           # > 1.6
 python3 --version      # > 3.9
