@@ -95,6 +95,8 @@ def gh_falso(tmp_path: Path, emails: list[dict] | None, publico: str | None = No
         f'  "api user") cat "{dados}/perfil.json" ;;\n'
         f'  "api user/emails") {lista} ;;\n'
         f'  "auth token") echo "{SEGREDO}" ;;\n'
+        f'  "auth status") exit 0 ;;\n'
+        f'  "repo view") echo WRITE ;;\n'
         f'  *) exit 1 ;;\n'
         f'esac',
     )
@@ -268,6 +270,68 @@ def test_o_script_confere_o_studio_do_project_json():
     fqdn = next(s["deploy"]["fqdn"] for s in projeto["services"] if s["type"] == "supabase")
     assert fqdn not in TEXTO
     assert re.search(r'^\s*checa_studio "\$STUDIO_URL"', TEXTO, re.M)
+
+
+# ------------------------------------------------- o script inteiro
+
+
+def test_o_script_inteiro_liga_as_tres_conferencias(tmp_path):
+    """As funções acima só valem se o fluxo do script as chama.
+
+    Roda o `diagnostico.sh` de verdade, numa cópia mínima do repo com o
+    `project.json` real, e confere que as três linhas aparecem: a do e-mail
+    (depende do `GH_OK`), a do Coolify (depende do `tem_bin coolify`) e a do
+    Studio, com o curl chamado no endereço que o jq tira do contrato de deploy.
+    """
+    repo = tmp_path / "repo"
+    pasta_script = repo / ".claude" / "skills" / "setup-maquina" / "scripts"
+    pasta_script.mkdir(parents=True)
+    shutil.copy(SCRIPT, pasta_script / "diagnostico.sh")
+    (pasta_script.parent / "references").mkdir()
+    shutil.copy(
+        SCRIPT.parent.parent / "references" / "plugins.txt",
+        pasta_script.parent / "references" / "plugins.txt",
+    )
+    (repo / "docs" / "spec" / "deploy").mkdir(parents=True)
+    projeto = RAIZ / "docs" / "spec" / "deploy" / "project.json"
+    shutil.copy(projeto, repo / "docs" / "spec" / "deploy" / "project.json")
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    subprocess.run(["git", "-C", str(repo), "config", "user.name", "Fulana"], check=True)
+    subprocess.run(
+        ["git", "-C", str(repo), "config", "user.email", "fulana@hospital.test"], check=True
+    )
+
+    gh_falso(tmp_path, VERIFICADO)
+    coolify_falso(tmp_path, TABELA)
+    chamadas_curl = tmp_path / "curl.args"
+    falso(tmp_path, "curl", f'printf "%s\\n" "$@" > "{chamadas_curl}"; printf 401')
+    pasta = tmp_path / "bin"
+    (pasta / "jq").symlink_to(shutil.which("jq"))
+    casa = tmp_path / "casa"
+    (casa / ".local").mkdir(parents=True)
+    (casa / ".local" / "bin").symlink_to(pasta)  # o script põe ~/.local/bin na frente do PATH
+
+    r = subprocess.run(
+        ["bash", str(pasta_script / "diagnostico.sh"), "--nivel", "2"],
+        cwd=casa,
+        env={"PATH": f"{pasta}:/usr/bin:/bin", "HOME": str(casa)},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    saida = r.stdout + r.stderr
+
+    assert linha(saida, "git user.email é da conta gh").split()[0] == "OK", saida
+    assert linha(saida, "contexto hsm").split()[0] == "OK", saida
+    assert linha(saida, "servidor do Coolify responde").split()[0] == "OK", saida
+    assert linha(saida, "Studio de produção alcançável").split()[0] == "OK", saida
+    fqdn = next(
+        s["deploy"]["fqdn"]
+        for s in json.loads(projeto.read_text(encoding="utf-8"))["services"]
+        if s["type"] == "supabase"
+    )
+    assert fqdn in chamadas_curl.read_text(encoding="utf-8").splitlines()
+    assert SEGREDO not in saida
 
 
 # ------------------------------------------------- segredo
