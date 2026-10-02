@@ -73,3 +73,35 @@ def test_desligado_volta_a_lista_atual_sem_perder_filtro_nem_busca():
     assert "S.fIssues.agrupar = !S.fIssues.agrupar" in ramo
     assert not re.search(r"S\.fIssues(\.(state|label|q))?\s*=[^=]", ramo.replace("S.fIssues.agrupar =", "")), \
         "alternar o agrupamento reescreve filtro ou busca"
+
+
+# ---------- grupos ----------
+
+
+def test_filtro_de_estado_label_e_busca_antes_do_agrupamento():
+    grupos = _fn("responsaveisHtml")
+    # cada item do grupo passa pelo mesmo matchIssue da lista plana antes de virar card
+    assert "g.itens.filter(it => byN[it.number] && matchIssue(byN[it.number]))" in grupos
+    assert "if (!itens.length) continue;" in grupos, "grupo sem nenhum item no filtro continua aparecendo"
+    assert "g.itens.map(" not in grupos, "card desenhado a partir da lista sem filtro"
+    # e o matchIssue cobre abertas, fechadas e todas, label e busca por título ou número
+    filtro = _fn("matchIssue")
+    assert "f.state !== 'all' && i.state !== f.state" in filtro
+    assert "i.labels.includes(f.label)" in filtro
+    assert "`#${i.number} ${i.title}`" in filtro
+
+
+def test_um_grupo_por_responsavel_mais_sem_responsavel_abertos_ao_nascer():
+    grupos = _fn("responsaveisHtml")
+    assert "for (const g of r.grupos)" in grupos, "grupos não vêm de S.data.responsaveis"
+    assert "g.responsavel ? esc(g.responsavel) : 'sem responsável'" in grupos
+    # aberto ao nascer: só fecha o que o usuário fechou
+    assert re.search(r"const S = \{[^;]*respFechado: new Set\(\)", APP_JS, re.S), "estado dos grupos fechados sumiu"
+    assert "const aberto = !S.respFechado.has(chave);" in grupos
+    m = re.search(r'<button class="resp-toggle[ "][^>]*>', grupos)
+    assert m, "grupo sem cabeçalho clicável"
+    assert 'data-act="resp"' in m.group(0) and 'aria-expanded="${aberto}"' in m.group(0)
+    assert "${aberto ? `" in grupos, "cards do grupo não somem com o grupo fechado"
+    ramo = _ramo("resp")
+    assert "S.respFechado.delete(" in ramo and "S.respFechado.add(" in ramo
+    assert "refreshIssueList()" in ramo

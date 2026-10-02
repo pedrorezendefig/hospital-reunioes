@@ -12,6 +12,7 @@ const S = {
   fIssues: { state: 'all', label: '', q: '', agrupar: true },
   expIss: new Set(),
   expPrd: new Map(),
+  respFechado: new Set(),
   expDep: new Set(),
   expAdr: new Set(),
   comments: {},
@@ -464,17 +465,24 @@ function issueCard(i, idx, prd = false) {
 /* Aba Issues agrupada por responsável (#908). Grupos, ordem e seção vêm prontos
    do módulo puro responsaveis.py em S.data.responsaveis; aqui só filtra e desenha. */
 function responsaveisHtml() {
+  const r = S.data.responsaveis;
   const iss = S.data.github.issues || [];
   const byN = Object.fromEntries(iss.map(i => [i.number, i]));
   let idx = 0;
   const groups = [];
-  for (const g of S.data.responsaveis.grupos) {
+  for (const g of r.grupos) {
     const itens = g.itens.filter(it => byN[it.number] && matchIssue(byN[it.number]));
     if (!itens.length) continue;
+    const chave = g.responsavel || '';
+    const aberto = !S.respFechado.has(chave);
     groups.push(`
       <section class="prd-group resp-group">
-        <div class="k-label rv" style="margin:4px 0 12px">${g.responsavel ? esc(g.responsavel) : 'sem responsável'}</div>
-        ${itens.map(it => issueCard(byN[it.number], idx++, byN[it.number].is_prd)).join('')}
+        <button class="resp-toggle rv" data-act="resp" data-r="${esc(chave)}" aria-expanded="${aberto}">
+          <span class="ft-caret" aria-hidden="true">${aberto ? '▾' : '▸'}</span>
+          <span class="resp-nome">${g.responsavel ? esc(g.responsavel) : 'sem responsável'}</span>
+          <span class="resp-conta">${itens.length} issue${itens.length === 1 ? '' : 's'}</span>
+        </button>
+        ${aberto ? `<div class="resp-itens">${itens.map(it => issueCard(byN[it.number], idx++, byN[it.number].is_prd)).join('')}</div>` : ''}
       </section>`);
   }
   return groups.join('') || '<div class="empty">nenhuma issue bate com o filtro</div>';
@@ -1047,6 +1055,11 @@ view.addEventListener('click', e => {
   } else if (act === 'prd') {
     const n = Number(t.dataset.n);
     S.expPrd.set(n, t.dataset.open !== '1');
+    refreshIssueList();
+  } else if (act === 'resp') {
+    const r = t.dataset.r;
+    if (S.respFechado.has(r)) S.respFechado.delete(r);
+    else S.respFechado.add(r);
     refreshIssueList();
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);
