@@ -14,6 +14,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 RAIZ = Path(__file__).resolve().parent.parent
 SKILLS = RAIZ / ".claude" / "skills"
 SCRIPT = SKILLS / "pegar-issue" / "scripts" / "dono_do_prd.py"
@@ -73,3 +75,18 @@ def test_fatia_de_prd_alheio_avisa_com_o_login_do_dono_e_nao_bloqueia(tmp_path):
 
     assert feito.returncode == 0, feito.stderr
     assert feito.stdout.strip() == "fatia do PRD de @pedrorezendefig; combine antes"
+
+
+@pytest.mark.parametrize(
+    "parent",
+    [
+        pytest.param(prd(902, "pedrorezendefig", QUEM_PEGA), id="fatia-do-proprio-prd"),
+        pytest.param(None, id="issue-avulsa"),
+        pytest.param(prd(659), id="prd-sem-dono"),
+    ],
+)
+def test_sem_aviso_quando_nao_ha_o_que_combinar(tmp_path, parent):
+    feito = rodar(tmp_path, issue(parent), "904")
+
+    assert feito.returncode == 0, feito.stderr
+    assert feito.stdout == ""
