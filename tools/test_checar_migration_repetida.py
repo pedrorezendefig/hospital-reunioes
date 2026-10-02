@@ -9,6 +9,7 @@ sem migration, número inédito, renomear ou editar migration que já existe.
 
 from __future__ import annotations
 
+import hashlib
 import os
 import subprocess
 import sys
@@ -203,8 +204,13 @@ def origem_com_pr(tmp_path: Path, numero: int, migration: str) -> Path:
 
 def pre_condicoes(fechar_onda, monkeypatch, clone: Path, numero: int) -> None:
     """Roda as pré-condições de verdade (git contra o remoto local) com o `gh`
-    respondendo que o PR está aberto, verde e mergeável."""
+    respondendo que o PR está aberto, verde e mergeável, e com o corpo
+    declarando o sha256 de cada migration, como pede a issue #907."""
     run_real = fechar_onda.run
+    hashes = [
+        hashlib.sha256(sql.read_bytes()).hexdigest()
+        for sql in sorted((clone.parent / "repo" / PASTA).iterdir())
+    ]
 
     def run_sem_gh(cmd, *args, **kwargs):
         if cmd[0] == "gh":
@@ -218,6 +224,7 @@ def pre_condicoes(fechar_onda, monkeypatch, clone: Path, numero: int) -> None:
         "mergeable": "MERGEABLE",
         "statusCheckRollup": [{"name": "Backend", "conclusion": "SUCCESS"}],
         "files": [{"path": f"{PASTA}/x.sql"}],
+        "body": "\n".join(hashes),
     }
     monkeypatch.setattr(fechar_onda, "run", run_sem_gh)
     monkeypatch.setattr(fechar_onda, "gh_json", lambda *a, **k: dict(pr_verde))

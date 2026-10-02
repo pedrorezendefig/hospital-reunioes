@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""fechar_onda.py: integra uma onda da `/onda-enxuta` com UM push e UM build.
+"""fechar_onda.py: o rabo unico (ADR 0061). Integra um PR avulso ou uma onda da
+`/onda-enxuta` com UM push e UM build.
 
 Uso:
     python fechar_onda.py --prs 850 851 852 --sessao onda-a-1 [--dry-run] [--sem-snapshot] [--raiz <repo>]
+    python fechar_onda.py --prs 907 [--dry-run]     # PR avulso: sem --sessao, a chave e pr-907
 
 A ordem dos PRs e a ordem de merge. O script nunca toca na arvore principal
 (ela pode estar suja): todo o trabalho acontece num worktree descartavel de
@@ -10,7 +12,8 @@ caminho curto (`~/wt-<sessao>`, por causa do MAX_PATH do Windows).
 
 Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
   1. pre-condicoes (gh, coolify, PRs abertos e verdes, origin/main buscado,
-     nenhuma migration nova com numero que a main ja usa)
+     nenhuma migration nova com numero que a main ja usa, e o corpo do PR
+     declarando o sha256 de cada migration nova igual ao do arquivo)
   2. semaforo de deploy (chave = nome da sessao, unica por construcao)
   3. worktree descartavel em origin/main
   4. merges locais `--no-ff` em ordem (um commit de merge por PR)
@@ -28,19 +31,22 @@ Commits produzidos no worktree (todos no mesmo push):
   - um commit de merge por PR: "<titulo do PR> (#N)"
   - `chore(release): bump vX.Y.Z (onda <sessao>: #a #b)`   (so quando ha bump)
   - `chore(deploy): registro da onda <sessao> (vX.Y.Z)`     (bookkeeping)
+No PR avulso: `bump vX.Y.Z (PR #N)` e `registro do PR #N (vX.Y.Z)`, e o
+registro do history.json e do CHANGELOG nomeia PR e issue, sem a onda.
 O campo `sha` do history.json e o sha do commit de bump (ou do ultimo merge,
 quando nao houve bump): e o ultimo commit que muda codigo. O commit de
 registro so muda docs/spec e vem depois, no mesmo push.
 
 Codigos de saida:
-  0  onda fechada, health verde
+  0  PR ou onda fechados, health verde
   1  pre-condicao falhou ou trava velha: nada foi tocado
   2  conflito de merge ou push rejeitado: worktree removido, semaforo solto, rode de novo depois de corrigir
   3  build falhou no Coolify: SEMAFORO FICA PRESO, rode `/deploy rollback` com a chave impressa
   4  health falhou (ou versao nao bate): SEMAFORO FICA PRESO, mesma instrucao do 3
 
-`--dry-run`: executa 1, 3, 4 e calcula o 5 sem escrever; imprime o que faria
-nos demais; nao pega semaforo, nao toca no Coolify, nao pusha.
+`--dry-run`: executa 1, 3, 4 e calcula o 5 sem escrever; imprime o plano (PR,
+issue e tipo de bump) e o que faria nos demais; nao pega semaforo, nao toca no
+Coolify, nao pusha.
 
 Windows: `bash` do Git no PATH (para o semaforo.sh), `PYTHONUTF8=1` no snapshot.
 """
@@ -48,6 +54,7 @@ Windows: `bash` do Git no PATH (para o semaforo.sh), `PYTHONUTF8=1` no snapshot.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -165,7 +172,7 @@ def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> list[dict]:
         for tentativa in range(6):
             info = gh_json(["pr", "view", str(n), "--json",
                             "number,state,mergeable,mergeStateStatus,statusCheckRollup,headRefName,"
-                            "baseRefName,title,files,commits,url,closingIssuesReferences"], cwd=raiz)
+                            "baseRefName,title,files,commits,url,closingIssuesReferences,body"], cwd=raiz)
             if info.get("mergeable") != "UNKNOWN":
                 break
             time.sleep(5)
@@ -191,22 +198,51 @@ def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> list[dict]:
         infos.append(info)
     if problemas:
         falhar("pre-condicao: " + "; ".join(problemas) + ".", EXIT_PRECOND)
-    conferir_migrations(raiz, prs)
+    conferir_migrations(raiz, infos)
     return infos
 
 
-def conferir_migrations(raiz: Path, prs: list[int]) -> None:
-    """Para se algum PR adiciona migration com numero que a origin/main ja usa.
+def conferir_migrations(raiz: Path, infos: list[dict]) -> None:
+    """Para se algum PR adiciona migration com numero que a origin/main ja usa,
+    ou se o sha256 que o corpo do PR declara nao e o do arquivo.
 
     Roda depois do `git fetch origin main`: o CI conferiu contra a main da hora
     do push, e ela pode ter andado desde entao. Renumerar e do autor.
     """
-    for n in prs:
+    for info in infos:
+        n = info["number"]
         run(["git", "fetch", "-q", "origin", f"pull/{n}/head"], cwd=raiz)
         head = run(["git", "rev-parse", "FETCH_HEAD"], cwd=raiz).stdout.strip()
         achadas = checar_migration_repetida.colisoes(raiz, "origin/main", head)
         if achadas:
             falhar(f"pre-condicao: #{n}: " + checar_migration_repetida.mensagem(achadas), EXIT_PRECOND)
+        conferir_hash_das_migrations(raiz, n, head, info.get("body") or "")
+
+
+def conferir_hash_das_migrations(raiz: Path, n: int, head: str, corpo: str) -> None:
+    """Para se o corpo do PR nao traz o sha256 de cada migration nova do head.
+
+    O SQL que o humano cola no Studio e o que a review leu no corpo do PR, e o
+    hash do corpo e a prova de que e o mesmo arquivo que vai entrar na main.
+    """
+    novas = run(["git", "diff", "--name-only", "-M", "--diff-filter=A", f"origin/main...{head}", "--",
+                 checar_migration_repetida.PASTA], cwd=raiz).stdout.split()
+    declarados = sorted({h.lower() for h in re.findall(r"\b[0-9a-fA-F]{64}\b", corpo)})
+    for caminho in novas:
+        if run(["git", "cat-file", "-e", f"origin/main:{caminho}"], cwd=raiz, check=False).returncode == 0:
+            continue  # ja esta na main (PR empilhado sobre um que entrou por squash)
+        conteudo = subprocess.run(["git", "show", f"{head}:{caminho}"], cwd=str(raiz),
+                                  capture_output=True, check=True).stdout
+        sha = hashlib.sha256(conteudo).hexdigest()
+        if sha in declarados:
+            continue
+        nome = Path(caminho).name
+        if not declarados:
+            falhar(f"pre-condicao: #{n}: o corpo do PR nao declara o sha256 de {nome}; "
+                   f"o arquivo no head tem {sha}. Ponha o hash no corpo e rode de novo.", EXIT_PRECOND)
+        falhar(f"pre-condicao: #{n}: o sha256 de {nome} no corpo do PR ({', '.join(declarados)}) "
+               f"nao bate com o arquivo no head ({sha}). Atualize o SQL e o hash do corpo e rode de novo.",
+               EXIT_PRECOND)
 
 
 # ----------------------------------------------------------------- semaforo
@@ -219,8 +255,9 @@ def semaforo(raiz: Path, acao: str, chave: str, descricao: str = "") -> int:
     return proc.returncode
 
 
-def pegar_semaforo(raiz: Path, chave: str, prs: list[int]) -> None:
-    desc = f"onda-enxuta {chave}: PRs " + " ".join(f"#{p}" for p in prs)
+def pegar_semaforo(raiz: Path, chave: str, prs: list[int], avulso: bool = False) -> None:
+    desc = (f"fechar_onda: PR avulso #{prs[0]}" if avulso
+            else f"onda-enxuta {chave}: PRs " + " ".join(f"#{p}" for p in prs))
     while True:
         rc = semaforo(raiz, "pegar", chave, desc)
         if rc == 0:
@@ -351,22 +388,46 @@ def humanizar(subject: str) -> str:
     return (s[:1].upper() + s[1:]) if s else subject
 
 
+def sem_travessao(s: str) -> str:
+    """Travessao e meia-risca viram hifen entre numeros e virgula no resto (ADR 0013)."""
+    s = re.sub(r"(\d)\s*[\u2013\u2014]\s*(\d)", r"\1-\2", s)
+    return re.sub(r"\s*[\u2013\u2014]\s*", ", ", s)
+
+
+def rotulo_issues(info: dict) -> str:
+    nums = [ref["number"] for ref in info.get("closingIssuesReferences") or []]
+    if not nums:
+        return "sem issue"
+    return ("issue " if len(nums) == 1 else "issues ") + " ".join(f"#{n}" for n in nums)
+
+
 def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | None, versao_antiga: str,
                       sha_codigo: str, prds: list[int], migs: list[str], servicos: list[str],
                       duracoes: dict[str, int | None], healths: dict[str, dict], resultado: str,
-                      houve_bump: bool) -> None:
+                      houve_bump: bool, avulso: bool = False) -> None:
     spec = wt / SPEC / "deploy"
     history = ler_json(spec / "history.json")
     state = ler_json(spec / "state.json")
     when = agora_iso()
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
-    subject = (f"Onda {sessao}: " + "; ".join(humanizar(i["title"]) for i in infos))[:200]
+    if avulso:
+        # PR avulso (ADR 0061): o registro nomeia PR e issue, e a palavra onda nao aparece.
+        pr = infos[0]
+        subject = f"PR #{pr['number']}, {rotulo_issues(pr)}: {humanizar(pr['title'])}"
+        raw_subject = f"chore(deploy): registro do PR avulso (#{pr['number']})"
+        notes = (f"PR avulso: PR #{pr['number']}, {rotulo_issues(pr)}. "
+                 "Um push, um build. Registro no commit seguinte ao sha.")
+    else:
+        subject = f"Onda {sessao}: " + "; ".join(humanizar(i["title"]) for i in infos)
+        raw_subject = f"chore(deploy): registro da onda {sessao} ({prs_txt})"
+        notes = f"onda-enxuta {sessao}: PRs {prs_txt}. Um push, um build. Registro no commit seguinte ao sha."
+    subject = sem_travessao(subject)[:200]
     entrada = {
         "at": when,
         "sha": sha_codigo,
         "app_version": versao,
         "subject": subject,
-        "raw_subject": f"chore(deploy): registro da onda {sessao} ({prs_txt})",
+        "raw_subject": raw_subject,
         "scope": servicos,
         "prds": prds,
         "result": resultado,
@@ -375,15 +436,16 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
         "env_changes": ([{"service": "backend", "action": "update", "keys": ["APP_VERSION"]}] if houve_bump else []),
         "migrations_applied": migs,
         "rollback_target_sha": None,
-        "notes": f"onda-enxuta {sessao}: PRs {prs_txt}. Um push, um build. Registro no commit seguinte ao sha.",
+        "notes": notes,
     }
     deploys = history.setdefault("deploys", [])
     deploys.insert(0, entrada)
     del deploys[HISTORY_MAX:]
     escrever_json(spec / "history.json", history)
 
+    modo = "pr-avulso" if avulso else "onda-enxuta"
     state["updated_at"] = when
-    state["updated_by"] = "onda-enxuta@fechar_onda"
+    state["updated_by"] = f"{modo}@fechar_onda"
     if versao:
         state["last_app_version"] = versao
     for svc in state.get("services") or []:
@@ -395,7 +457,7 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
             svc["last_health_check"] = {"at": when, "latency_ms": h.get("latency_ms"),
                                         "http_status": h.get("status"), "body_ok": bool(h.get("ok"))}
             svc["build_duration_seconds"] = duracoes.get(svc["id"])
-    state["last_run"] = {"mode": "onda-enxuta", "sha": sha_codigo, "result": resultado,
+    state["last_run"] = {"mode": modo, "sha": sha_codigo, "result": resultado,
                          "duration_seconds": int(time.time() - T0)}
     state.pop("next_actions", None)
     escrever_json(spec / "state.json", state)
@@ -614,8 +676,15 @@ def limpar_worktrees_de_agente(raiz: Path) -> int:
             if atual_path:
                 entradas.append((atual_path, atual_branch))
             atual_path, atual_branch = None, None
+    # o PR avulso roda do worktree do autor, na branch do PR, que o push acabou de
+    # mergear: remover o proprio checkout apaga trabalho sujo e o cwd do script
+    cwd = Path.cwd().resolve()
+    proprios = {raiz.resolve()}
     for path, branch in entradas:
         if ".claude/worktrees/" not in path.replace("\\", "/") or not branch:
+            continue
+        p = Path(path).resolve()
+        if p in proprios or cwd == p or p in cwd.parents:
             continue
         if branch in merged and branch != "main":
             run(["git", "worktree", "remove", "--force", path], cwd=raiz, check=False)
@@ -625,27 +694,41 @@ def limpar_worktrees_de_agente(raiz: Path) -> int:
     return removidos
 
 
-def conferir_prs_fechados(raiz: Path, infos: list[dict], sessao: str) -> None:
+def conferir_prs_fechados(raiz: Path, infos: list[dict], sessao: str, avulso: bool = False) -> None:
+    como = ("pelo `fechar_onda.py` como PR avulso (merge local `--no-ff`, um push)" if avulso
+            else f"pela onda-enxuta {sessao} (merge local `--no-ff`, um push por onda)")
     for info in infos:
         n = info["number"]
         estado = gh_json(["pr", "view", str(n), "--json", "state"], cwd=raiz).get("state")
         if estado == "OPEN":
             run(["gh", "pr", "close", str(n), "--comment",
-                 f"<!-- automacao -->\nIntegrado na main pela onda-enxuta {sessao} (merge local `--no-ff`, um push por onda)."],
+                 f"<!-- automacao -->\nIntegrado na main {como}."],
                 cwd=raiz, check=False)
 
 
 # --------------------------------------------------------------------- main
 
+def resolver_sessao(prs: list[int], sessao: str | None) -> tuple[str, bool]:
+    """Devolve (sessao, avulso). Sem `--sessao`, um PR so e um PR avulso (ADR 0061)
+    e a chave do semaforo e do worktree sai do numero dele."""
+    if sessao:
+        return sessao, False
+    if len(prs) == 1:
+        return f"pr-{prs[0]}", True
+    falhar("--sessao e obrigatorio com mais de um PR (onda); um PR so dispensa a opcao.", EXIT_PRECOND)
+    raise AssertionError("inalcancavel")
+
+
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Fecha uma onda: um push, um build.")
+    ap = argparse.ArgumentParser(description="Fecha um PR avulso ou uma onda: um push, um build.")
     ap.add_argument("--prs", nargs="+", type=int, required=True, help="PRs na ordem de merge")
-    ap.add_argument("--sessao", required=True, help="nome da sessao (chave do semaforo)")
+    ap.add_argument("--sessao", help="nome da sessao (chave do semaforo); sem ela, um PR so e um PR avulso (pr-<N>)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--sem-snapshot", action="store_true")
     ap.add_argument("--raiz", help="raiz do repositorio (default: git rev-parse)")
     args = ap.parse_args()
 
+    args.sessao, avulso = resolver_sessao(args.prs, args.sessao)
     if not re.fullmatch(r"[A-Za-z0-9._-]+", args.sessao):
         falhar("--sessao so aceita letras, numeros, ponto, hifen e underscore.", EXIT_PRECOND)
     raiz = Path(args.raiz).resolve() if args.raiz else Path(
@@ -656,7 +739,7 @@ def main() -> int:
 
     infos = checar_pre_condicoes(raiz, args.prs, args.dry_run)
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
-    print(f"pre-condicoes ok: {prs_txt}, migrations sem numero repetido contra origin/main"
+    print(f"pre-condicoes ok: {prs_txt}, migrations sem numero repetido contra origin/main e com o sha256 do corpo"
           + (" (dry-run)" if args.dry_run else ""))
 
     wt = None
@@ -664,7 +747,7 @@ def main() -> int:
     pushou = False
     try:
         if not args.dry_run:
-            pegar_semaforo(raiz, args.sessao, args.prs)
+            pegar_semaforo(raiz, args.sessao, args.prs, avulso)
             semaforo_pego = True
         wt = criar_worktree(raiz, args.sessao)
         base = run(["git", "rev-parse", "--short=8", "HEAD"], cwd=wt).stdout.strip()
@@ -697,7 +780,10 @@ def main() -> int:
         migs = migrations_novas(wt, base)
 
         if args.dry_run:
-            print(f"bump: v{versao_antiga} -> " + (f"v{versao_nova} ({tipo})" if tipo else "sem bump (lote docs-only)"))
+            bump = (f"bump {tipo} v{versao_antiga} -> v{versao_nova}" if tipo
+                    else f"sem bump (lote docs-only), versao segue v{versao_antiga}")
+            print("plano: " + ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in infos)
+                  + f"; {bump}; chave {args.sessao}")
             print(f"faria: registro (prds {prds or '[]'}, migrations {migs or '[]'}, services {servicos or '[]'}), "
                   + ("APP_VERSION no Coolify, " if versao_nova else "") + "um push, build, health, limpeza.")
             remover_worktree(raiz, wt, args.prs)
@@ -708,7 +794,8 @@ def main() -> int:
         sha_codigo = shas_merge[-1]
         if versao_nova:
             escrever_versao(wt, versao_nova)
-            sha_codigo = commitar(wt, f"chore(release): bump v{versao_nova} (onda {args.sessao}: {prs_txt})", [PACKAGE_JSON])
+            origem = f"PR {prs_txt}" if avulso else f"onda {args.sessao}: {prs_txt}"
+            sha_codigo = commitar(wt, f"chore(release): bump v{versao_nova} ({origem})", [PACKAGE_JSON])
             print(f"bump: v{versao_antiga} -> v{versao_nova} ({tipo}) em {sha_codigo}")
         else:
             print(f"bump: nenhum (lote docs-only), versao segue v{versao_antiga}")
@@ -719,8 +806,9 @@ def main() -> int:
         # Nao: um push so. O registro nasce com o resultado esperado e, se o build ou o health
         # falharem, o codigo de saida 3/4 e a instrucao de rollback sao a fonte de verdade.
         escrever_registro(wt, args.sessao, infos, versao_nova, versao_antiga, sha_codigo, prds, migs,
-                          servicos, {}, {}, "healthy", bool(versao_nova))
-        commitar(wt, f"chore(deploy): registro da onda {args.sessao} (v{versao_nova or versao_antiga})",
+                          servicos, {}, {}, "healthy", bool(versao_nova), avulso)
+        do_lote = f"do PR {prs_txt}" if avulso else f"da onda {args.sessao}"
+        commitar(wt, f"chore(deploy): registro {do_lote} (v{versao_nova or versao_antiga})",
                  [SPEC, "docs/manual", "docs/ARQUITETURA.md"])
         print(f"registro: history/state/CHANGELOG, {linha_snap}, {linha_manual}")
 
@@ -769,14 +857,15 @@ def main() -> int:
             pub = run([BASH, bash_path(wt / PUBLICAR_MANUAL)], cwd=wt, check=False, timeout=900)
             print("manual publicado" if pub.returncode == 0 else f"manual: publicar.sh falhou ({pub.returncode}); rode a mao depois")
 
-        conferir_prs_fechados(raiz, infos, args.sessao)
+        conferir_prs_fechados(raiz, infos, args.sessao, avulso)
         remover_worktree(raiz, wt, args.prs)
         wt = None
         n_wt = limpar_worktrees_de_agente(raiz)
         semaforo(raiz, "soltar", args.sessao)
         semaforo_pego = False
         builds = ", ".join(f"{sid} {dur(duracoes.get(sid))}" for sid in servicos) or "sem build"
-        print(f"onda {args.sessao} fechada: v{versao_antiga} -> v{versao_nova or versao_antiga} · PRs {prs_txt} · "
+        fechou = f"PR {prs_txt} fechado" if avulso else f"onda {args.sessao} fechada"
+        print(f"{fechou}: v{versao_antiga} -> v{versao_nova or versao_antiga} · PRs {prs_txt} · "
               f"push {sha_push[:7]} · build {builds} · health ok{vm} · {n_wt} worktrees limpos · {dur(time.time() - T0)}")
         return 0
     except SystemExit:

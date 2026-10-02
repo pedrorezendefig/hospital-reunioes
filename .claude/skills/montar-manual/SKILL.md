@@ -134,7 +134,7 @@ Regras:
   cd docs/manual && corepack pnpm@9 install --frozen-lockfile && corepack pnpm@9 build
   python3 tools/checar_build_manual.py --dir docs/manual
 - Pare no draft de cada vídeo e me mande o caminho do MP4: o OK é meu, e só depois vem o render final.
-- Feche com /ship "docs: manual do módulo <modulo>" --issue <N> --no-deploy
+- Feche com /ship "docs: manual do módulo <modulo>" --issue <N>
 ```
 
 A linha "Draft a tirar" só entra quando o inventário achou `draft-entregue` naquele módulo. A linha de Novidades repete o número do PRD e a data que você leu do `history.json`: o terminal não vai adivinhar isso sozinho.

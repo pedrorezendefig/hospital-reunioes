@@ -1,6 +1,6 @@
 ---
 name: deploy
-description: Deploy via Coolify a partir de docs/spec/deploy/project.json. Modos: ship (default), status, rollback, setup, migrate-blueprint. Use para subir para prod, ver o estado de produção ou reverter.
+description: Opera a produção no Coolify a partir de docs/spec/deploy/project.json. Modos status, rollback, setup e migrate-blueprint; o ship aponta para o fechar_onda.py e sai.
 ---
 
 # deploy — skill universal de deploy
@@ -9,7 +9,7 @@ Uma skill, cinco modos. Invocação por subcomando:
 
 | Comando | Modo | Quando usar |
 |---|---|---|
-| `/deploy` | **ship** (default) | Deploy diário: pre-flight → commit → push → monitor → migrations → health → histórico |
+| `/deploy` | **ship** (default) | Não sobe nada: imprime o comando do `fechar_onda.py`, o rabo único (ADR 0061), e sai |
 | `/deploy setup` | **setup** | 1ª vez no projeto: cria projeto, apps, env vars, DNS guia, primeiro deploy, `project.json` |
 | `/deploy status` | **status** | Só reporta estado atual, sem alterar nada |
 | `/deploy rollback` | **rollback** | Reverte para último deploy `healthy` |
@@ -151,7 +151,17 @@ $S status                                # quem segura e há quanto tempo
 
 ## Modo `ship` (default, sem argumento)
 
-Fluxo linear pós-bootstrap.
+O caminho para produção é um só, o `fechar_onda.py` (ADR 0061): merge, bump, `APP_VERSION` no Coolify antes do push, um push, um build, health com conferência de versão e registro, para um PR avulso ou para o lote de uma onda. Este modo não executa passo nenhum: imprime o comando e sai.
+
+```bash
+python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <N>
+```
+
+Com `--dry-run` o script mostra o plano (PR, issue, tipo de bump) sem tocar em nada. Sem PR não há o que subir: abra um pelo `/ship`.
+
+## Passos do ship (referência)
+
+Nenhum passo abaixo roda por este modo. Ficam como a especificação do que o `fechar_onda.py` faz em código e como os passos que o `rollback` e o `setup` reaproveitam: monitorar o build (Passo 5), health (Passo 7), rollback (Passo 8) e registro (Passo 9).
 
 ### Passo 0: Pegar o semáforo
 

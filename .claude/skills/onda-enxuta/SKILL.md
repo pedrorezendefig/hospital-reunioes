@@ -56,7 +56,7 @@ Para cada PRD das issues desta onda: `gh issue view <PRD> --json comments --jq '
 
 ### 3. Lote: implementadores em paralelo
 
-Dispare os `N` `hr-implementador` **na mesma mensagem**, um por issue, com o prompt de `references/prompts.md`. Cada um faz claim, TDD, PR (`/ship --no-merge --skip-review --no-bump`) e morre.
+Dispare os `N` `hr-implementador` **na mesma mensagem**, um por issue, com o prompt de `references/prompts.md`. Cada um faz claim, TDD, PR (`/ship --skip-review`) e morre.
 
 A cada notificação de término, **confira o GitHub**, não o relatório (ADR 0029): `gh pr list --search "<N> in:title,body" --json number,url,headRefName --state open` ou `gh issue view <N> --json labels`. Estados possíveis:
 
