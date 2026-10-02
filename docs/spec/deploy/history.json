@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-02T18:52:56-03:00",
+      "sha": "c565aabd",
+      "app_version": "0.158.3",
+      "subject": "PR #919, issue #907: Fechar_onda.py com um PR só e /ship parando no PR verde",
+      "raw_subject": "chore(deploy): registro do PR avulso (#919)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        902
+      ],
+      "result": "healthy",
+      "duration_seconds": 5,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #919, issue #907. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-10-02T18:36:16-03:00",
       "sha": "28450d68",
       "app_version": "0.158.2",
@@ -1530,35 +1562,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Issue #679, ultima fatia desta sessao do PRD #673 (ADR 0054, decisao 6). Sem migration. A devolucao mora DENTRO do sincronizar_demanda que a #678 criou, entao vale de graca pelo webhook e pelo lote de hora em hora. A review independente achou 4 must-fix reais. O mais grave: a devolucao atribuia o card ao autor sem checar se ele ainda ve a aba, coisa que o atribuir do router recusa desde sempre; diretor que saiu do hospital virava responsavel de um card que sumia da Minha vez de todo mundo e sem e-mail, porque o filtro de acesso pula quem nao e pessoa da aba. Corrigido usando a MESMA funcao e_pessoa_da_aba, movendo o card sem trocar o responsavel. Os outros tres: o UPDATE do responsavel sem amarra de estado no ramo em que a Demanda ja esta em Aguardando (quem concluia a mao no mesmo segundo ganhava linha no fio de card fechado e e-mail); texto do e-mail sem nenhum teste preso ao literal, entao trocar RECADO_DA_ENTREGA deixava tudo verde com o e-mail dizendo uma coisa e o selo da tela outra; e devolucao pela metade que ninguem recuperava, com o log do webhook prometendo uma recuperacao que a guarda da foto impede. DIVERGENCIA DE SPEC, decidida pelo dono: o criterio 4 dizia que Demanda fechada que chega a Entregue so ganha a linha de Etapa, mas a #678 ja tinha tirado as fechadas dos dois gatilhos; o criterio foi reescrito na issue e a consequencia virou emenda no ADR 0054 (commit 3a13c42): o selo de Etapa de Demanda fechada congela no dia do fechamento, e quem quiser atualizar reabre a Demanda."
-    },
-    {
-      "at": "2026-09-10T18:28:00-03:00",
-      "sha": "ee5bcf5",
-      "app_version": "0.127.0",
-      "subject": "Botao Levar para desenvolvimento cria a issue com o texto do diretor",
-      "raw_subject": "feat(tecnologia): botao Levar para desenvolvimento (#688)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 3 (issue #677, PRD #673). Review pegou 6 must-fix: sanitizacao remontavel (texto digitado virava marcador valido, corrigido por escape), duplo clique criando duas issues publicas (CAS no servidor), aviso de repositorio publico, ordem das guardas sem teste. Decisao do diretor: nome civil sai da issue publica, Origem passa a ser link da Demanda mais @github_login de quem levou."
     }
   ]
 }
