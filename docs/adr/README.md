@@ -74,6 +74,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0028](0028-bloqueio-por-dependencia-nativa.md) | accepted | Bloqueio entre issues por dependência nativa do GitHub |
 | [0029](0029-onda-goal-prd-fonte-verdade-github.md) | accepted | Onda escopada em PRD: goal de conclusão, fonte de verdade no GitHub e orquestrador magro |
 | [0035](0035-gates-de-review-da-onda-pertencem-ao-orquestrador.md) | accepted | Gates de review da onda pertencem ao orquestrador |
+| [0061](0061-um-pipeline-dono-por-prd-e-main-protegida.md) | accepted | Um pipeline só, dono por PRD e `main` protegida: a esteira para três sócios em paralelo (emenda 0022, 0035) |
 | [0043](0043-skills-locais-sao-o-kit-do-workflow.md) | accepted | Skills locais são o kit completo do workflow, duplicata com as globais é intencional |
 | [0049](0049-wayfinder-instalada-e-lock-com-ref.md) | accepted | A wayfinder entra instalada no clone, e o `skills-lock.json` fixa o commit de origem |
 | [0053](0053-fluxo-exportavel-por-roteiro-versionado.md) | accepted | O fluxo de trabalho é exportável por um roteiro versionado no repositório, não por prompt solto |
