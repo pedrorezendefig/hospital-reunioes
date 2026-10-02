@@ -737,7 +737,10 @@ def main() -> int:
         migs = migrations_novas(wt, base)
 
         if args.dry_run:
-            print(f"bump: v{versao_antiga} -> " + (f"v{versao_nova} ({tipo})" if tipo else "sem bump (lote docs-only)"))
+            bump = (f"bump {tipo} v{versao_antiga} -> v{versao_nova}" if tipo
+                    else f"sem bump (lote docs-only), versao segue v{versao_antiga}")
+            print("plano: " + ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in infos)
+                  + f"; {bump}; chave {args.sessao}")
             print(f"faria: registro (prds {prds or '[]'}, migrations {migs or '[]'}, services {servicos or '[]'}), "
                   + ("APP_VERSION no Coolify, " if versao_nova else "") + "um push, build, health, limpeza.")
             remover_worktree(raiz, wt, args.prs)

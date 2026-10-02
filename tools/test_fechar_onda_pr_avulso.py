@@ -292,3 +292,23 @@ def test_registro_do_pr_avulso_nomeia_pr_e_issue_sem_onda_e_sem_travessao(
     assert sem_a_palavra_onda(titulo), titulo
     assert TRAVESSAO not in titulo and MEIA_RISCA not in titulo, titulo
     assert "Prazo do caso, conta dias uteis" in titulo, titulo
+
+
+def test_dry_run_do_pr_avulso_imprime_o_plano_com_pr_issue_e_tipo_de_bump(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, titulo="feat(ouvidoria): prazo em dias uteis")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+
+    plano = [li for li in capsys.readouterr().out.splitlines() if li.startswith("plano:")]
+    assert len(plano) == 1, plano
+    assert "PR #7" in plano[0] and "issue #5" in plano[0], plano[0]
+    assert "minor" in plano[0] and "v0.10.0 -> v0.11.0" in plano[0], plano[0]
+    # nada sai da máquina
+    assert c.main_remota() == c.base
+    assert c.coolify() == []
+    assert c.semaforo == []
+    assert c.builds == []
