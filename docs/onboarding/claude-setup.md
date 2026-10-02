@@ -281,7 +281,7 @@ open http://localhost:3000                  # esperado: tela de login do app
 | `/pegar-issue` | **Sem arg:** lista a fila. **Com `<N>`:** claim atômico + branch + carrega a spec. |
 | `/tdd` | Red → green → refactor. Critérios de aceite da Issue viram testes. |
 | `/ship` | Commit → PR → 3 gates; para no PR verde e imprime o comando do rabo. |
-| `fechar_onda.py --prs <N>` | O rabo único (ADR 0061): merge, bump, `APP_VERSION`, um push, um build, health e registro. |
+| `fechar_onda.py --prs <N>` | O rabo único (ADR 0061): bump na branch do PR, `APP_VERSION`, merge pela API, um build, health e registro em PR só de docs. |
 | `/deploy` | Opera a produção no Coolify: `status`, `rollback`, `setup`. O `ship` só imprime o comando do rabo. |
 | `/diagnose` | Investigação raiz de bug (reproduz → minimiza → corrige → regressão). |
 | `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Invocado pelo rabo (`fechar_onda.py`) no commit de registro. |

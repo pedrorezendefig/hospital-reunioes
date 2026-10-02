@@ -90,9 +90,9 @@ Loop disciplinado: reproduz → minimiza → hipótese → instrumenta → corri
                    → para no PR verde e imprime o comando do rabo (sem bump no PR)
                    ▼
 fechar_onda.py     o rabo único (ADR 0061), rodado pelo autor do PR depois do OK:
-  --prs <N>        semáforo → merge local --no-ff → bump na main
-                   → registro no mesmo push: state.json + history.json + CHANGELOG + snapshot + draft do Manual
-                   → APP_VERSION no Coolify → um push → um build → health com version-match
+  --prs <N>        semáforo → bump como commit na branch do PR → CI verde
+                   → APP_VERSION no Coolify → merge pela API (squash) → um build → health com version-match
+                   → registro num PR só de docs: state.json + history.json + CHANGELOG + snapshot + draft do Manual
                    → publica o Manual se tirou draft
                    (migration nova: aplicar no Studio ANTES de rodar; o script confere o sha256)
                    Na /onda-enxuta é o mesmo script, com o lote da onda em --prs
@@ -165,7 +165,7 @@ Sem Discord, sem Slack.
 | `/pegar-issue` | Sem arg: lista a fila. Com `<N>`: claim + branch + spec |
 | `/tdd` | Red → green → refactor (testes a partir dos critérios de aceite) |
 | `/ship` | Commit → PR → 3 gates → para no PR verde e imprime o comando do rabo |
-| `fechar_onda.py --prs <N>` | O rabo único: merge, bump, APP_VERSION, um push, um build, health, registro (ADR 0061) |
+| `fechar_onda.py --prs <N>` | O rabo único: bump na branch do PR, APP_VERSION, merge pela API, um build, health, registro em PR só de docs (ADR 0061) |
 | `/deploy status` | Ver estado de produção (sem alterar) |
 | `/deploy rollback` | Reverte produção pro deploy anterior |
 | `/diagnose` | Investigação raiz de bug |

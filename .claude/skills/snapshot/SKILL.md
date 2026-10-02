@@ -160,7 +160,7 @@ Regenera só 1 arquivo (útil em desenvolvimento da skill ou pra testar geradore
 - ❌ Regenerar `FLUXOGRAMAS.md` automaticamente. Esse arquivo é curado por humano.
 - ❌ Sobrescrever blocos `<!-- curated:start -->...<!-- curated:end -->`. **Sempre preservar.**
 - ❌ Commitar se nada mudou. Idempotência é regra.
-- ❌ Disparar o rabo em loop. O snapshot entra no mesmo push do merge; nunca num push próprio.
+- ❌ Disparar o rabo em loop. O snapshot entra no PR de registro do rabo, junto do `history.json`; nunca num PR próprio.
 - ❌ Ler valores de secrets (mesmo só nomes) pra escrever em INTEGRACOES.md como valor. **Só o `env_key` (nome da variável)**, nunca o valor.
 
 ---

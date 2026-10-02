@@ -196,7 +196,7 @@ A resposta final tem esta forma, nesta ordem. É o que o Pedro lê do celular.
 6. **Passo a passo:**
    1. Num terminal na raiz do repositório, rodar o comando de lançamento de cada sessão (todos de uma vez, se quiser). Cada uma nasce em segundo plano, monta a fila, escreve o Mapa do terreno do PRD se ainda não existir e roda a onda 1 até PR verde. `claude agents` lista as sessões vivas; `claude logs <id>` mostra o andamento.
    2. Quando chegar a notificação de checkpoint: `claude attach <id>` e escrever `vai #a #b` (ou com condição, ou `abortar`). **Uma sessão por vez**: o semáforo enfileira os deploys sozinho, mas aprovar uma de cada vez evita corrida de versão na sua cabeça. Liste a sequência onda a onda, alternando sessões, e marque na linha certa "aplique a migration 0XX no Studio antes do vai" e "ela audita o PRD #X em seguida". Ordem: a sessão menor primeiro, a onda com migration quando o Pedro estiver perto do Studio, a fatia que reabre auditoria de PRD por último.
-   3. Depois do "vai", a sessão fecha a onda (um push, um build), imprime a conta de tokens e lança sozinha a sessão da onda seguinte. Nada a fazer até a próxima notificação.
+   3. Depois do "vai", a sessão fecha a onda (um merge pela API, um build), imprime a conta de tokens e lança sozinha a sessão da onda seguinte. Nada a fazer até a próxima notificação.
    4. **Divulgação:** para cada PRD que fecha, a linha "cole o prompt de `/divulgar #X` num terminal próprio" no momento certo (agora, ou logo após o deploy da onda que sobe a última tela) e, depois do link publicado, "mande o link ao diretor e aos usuários do módulo".
    5. "No tempo morto": as tarefas do item 3.
 
