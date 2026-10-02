@@ -171,9 +171,14 @@ async def get_participante_for_user(
 def is_super_admin(participante: dict[str, Any] | None) -> bool:
     """Super admin identificado por access_profile == 'super_admin'.
 
-    Fallback (fase 1 da migração 035): se access_profile não estiver presente
-    no dict, lê da flag legada is_super_admin. Isso mantém o comportamento em
-    ambientes onde o backfill ainda não rodou. Aceita só dict do participante.
+    Fallback (fase 1 da migração 035): só quando o dict NÃO traz a chave
+    access_profile (caller antigo que não carregou a coluna), lê da flag legada
+    is_super_admin. Aceita só dict do participante.
+
+    access_profile NULO explícito é "sem papel nas Reuniões" (ADR 0007), a
+    mesma leitura de `tem_acesso_reunioes`, e por isso nega mesmo com a flag
+    legada ligada (issue #752). Cair na flag nesse caso fazia a pessoa com o
+    perfil zerado seguir passando em todo `require_super_admin`.
     """
     if participante is None:
         return False
@@ -181,9 +186,8 @@ def is_super_admin(participante: dict[str, Any] | None) -> bool:
         raise TypeError(
             "is_super_admin espera dict do participante. Passe o objeto carregado do banco, não a string de role."
         )
-    ap = participante.get("access_profile")
-    if ap is not None:
-        return ap == "super_admin"
+    if "access_profile" in participante:
+        return participante["access_profile"] == "super_admin"
     return bool(participante.get("is_super_admin"))
 
 

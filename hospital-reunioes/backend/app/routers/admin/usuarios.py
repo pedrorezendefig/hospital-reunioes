@@ -24,7 +24,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, status
 from starlette.requests import Request
 from supabase import Client
 
-from app.dependencies import get_supabase_client, require_super_admin, selecionar_participantes
+from app.dependencies import get_supabase_client, is_super_admin, require_super_admin, selecionar_participantes
 from app.models.admin_schemas import (
     AdminResetPasswordRequest,
     AdminResetPasswordResponse,
@@ -73,12 +73,20 @@ def _normalize_access_profile_fields(payload: dict, is_create: bool = False) -> 
     quando o perfil é secretária (não tem cargo hospitalar).
 
     Mutação in-place no `payload`. No update, omite campos não enviados.
+
+    `access_profile` nulo ENVIADO (e não só ausente) tira o papel nas Reuniões
+    e por isso zera a flag legada junto (issue #752). Antes o `return` saía
+    antes do espelho, e `{"access_profile": null}` deixava `is_super_admin =
+    true` de pé: uma revogação que só parecia completa.
     """
-    ap = payload.get("access_profile")
-    if ap is None and is_create:
-        ap = "regular"
-        payload["access_profile"] = ap
+    if is_create and payload.get("access_profile") is None:
+        payload["access_profile"] = "regular"
+    if "access_profile" not in payload:
+        return
+    ap = payload["access_profile"]
+
     if ap is None:
+        payload["is_super_admin"] = False
         return
 
     if ap == "super_admin":
@@ -893,9 +901,13 @@ async def grant_super_admin_inline(
     Alternativa inline ao fluxo legado /admin/super-admins/{id}/promote —
     permite promover direto do CRUD de Usuarios. Idempotente: se ja e
     super admin, retorna o registro sem re-gravar log.
+
+    "Ja e" pela mesma leitura do gate, e nao pela flag crua: quem ficou com o
+    perfil nulo e a flag ligada nao passa no `require_super_admin` (issue #752),
+    entao a concessao precisa gravar o perfil em vez de sair dizendo que ja e.
     """
     alvo = _fetch_usuario(supabase, participante_id)
-    if alvo.get("is_super_admin"):
+    if is_super_admin(alvo):
         return alvo
 
     update = (
