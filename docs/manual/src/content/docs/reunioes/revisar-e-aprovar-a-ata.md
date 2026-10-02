@@ -12,7 +12,7 @@ sidebar:
 ## Quando usar
 
 Quando a ata já está escrita e a reunião mostra **Validação Necessária**. É o
-momento em que você assume o texto.
+momento em que você assume o texto: depois de fechar, ele não volta atrás.
 
 ## Passo a passo
 
