@@ -58,3 +58,18 @@ def test_agrupar_ligado_por_padrao_junto_dos_filtros():
     assert "agrupar: true" in m.group(1), "agrupamento não nasce ligado no estado dos filtros"
     # vindo de outra aba (gotab) os filtros são recriados: a escolha de agrupar sobrevive
     assert "agrupar: S.fIssues.agrupar" in _ramo("gotab")
+
+
+def test_desligado_volta_a_lista_atual_sem_perder_filtro_nem_busca():
+    lista = _fn("issueListHtml")
+    corpo = lista[lista.index("{") + 1:].strip()
+    assert corpo.startswith("if (S.fIssues.agrupar && S.data.responsaveis) return responsaveisHtml();"), \
+        "issueListHtml não desvia para os grupos só com o botão ligado"
+    # o resto é a árvore PRD > fatias + issues avulsas de antes, intacta
+    for trecho in ("prd-group", "children", "issues avulsas", "filter(matchIssue)"):
+        assert trecho in lista, f"lista plana perdeu {trecho!r}"
+    # alternar o botão só mexe no agrupar: estado, label e busca ficam
+    ramo = _ramo("fagrupar")
+    assert "S.fIssues.agrupar = !S.fIssues.agrupar" in ramo
+    assert not re.search(r"S\.fIssues(\.(state|label|q))?\s*=[^=]", ramo.replace("S.fIssues.agrupar =", "")), \
+        "alternar o agrupamento reescreve filtro ou busca"

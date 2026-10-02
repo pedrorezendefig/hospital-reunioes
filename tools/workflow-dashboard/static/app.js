@@ -461,10 +461,30 @@ function issueCard(i, idx, prd = false) {
   </article>`;
 }
 
-function issueListHtml() {
+/* Aba Issues agrupada por responsável (#908). Grupos, ordem e seção vêm prontos
+   do módulo puro responsaveis.py em S.data.responsaveis; aqui só filtra e desenha. */
+function responsaveisHtml() {
   const iss = S.data.github.issues || [];
   const byN = Object.fromEntries(iss.map(i => [i.number, i]));
-  const prds = iss.filter(i => i.is_prd).sort((a, b) => b.number - a.number);
+  let idx = 0;
+  const groups = [];
+  for (const g of S.data.responsaveis.grupos) {
+    const itens = g.itens.filter(it => byN[it.number] && matchIssue(byN[it.number]));
+    if (!itens.length) continue;
+    groups.push(`
+      <section class="prd-group resp-group">
+        <div class="k-label rv" style="margin:4px 0 12px">${g.responsavel ? esc(g.responsavel) : 'sem responsável'}</div>
+        ${itens.map(it => issueCard(byN[it.number], idx++, byN[it.number].is_prd)).join('')}
+      </section>`);
+  }
+  return groups.join('') || '<div class="empty">nenhuma issue bate com o filtro</div>';
+}
+
+function issueListHtml() {
+  if (S.fIssues.agrupar && S.data.responsaveis) return responsaveisHtml();
+  const iss = S.data.github.issues || [];
+  const byN = Object.fromEntries(iss.map(i => [i.number, i]));
+  const prds =iss.filter(i => i.is_prd).sort((a, b) => b.number - a.number);
   const used = new Set();
   let idx = 0;
   const groups = [];
