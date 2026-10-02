@@ -483,7 +483,7 @@ function respItemHtml(it) {
   if (it.pr) {
     const p = it.pr;
     const d = p.dias_parado;
-    const espera = d == null ? '' : `<span>${d === 0 ? 'mexido hoje' : `parado há ${d} dia${d === 1 ? '' : 's'}`}</span>`;
+    const espera = d == null ? '' : `<span>${d === 0 ? 'atualizado hoje' : `parado há ${d} dia${d === 1 ? '' : 's'}`}</span>`;
     return `<div class="resp-linha">
       <a href="${esc(p.url)}" target="_blank" rel="noopener">PR #${p.number}</a>
       ${badge(CI_PR[p.ci] || ['b-ghost', 'sem CI'])}
