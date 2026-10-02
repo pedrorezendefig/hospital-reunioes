@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-02T20:01:37-03:00",
+      "sha": "d11e2ce8",
+      "app_version": "0.158.6",
+      "subject": "Onda onda-a: Main protegida, o rabo entra por PR e mergeia pela API",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#925)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        902
+      ],
+      "result": "healthy",
+      "duration_seconds": 5,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #925. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-10-02T19:20:51-03:00",
       "sha": "f63e3d8f",
       "app_version": "0.158.5",
@@ -1539,35 +1571,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda AFK, issue #690, NAO criou migration: a correcao so amplia o que a guarda compara, e as colunas o_que_muda e partes ja existiam na 103. A guarda nova (cache_desatualizado) compara o derivado de mudanca_da_foto contra as colunas SEM o carimbo github_sincronizado_em: se o carimbo entrasse na conta, mudanca_da_foto chama datetime.now(UTC) e toda passada viraria escrita. Revisao independente rodou 9 mutantes e sobreviveu um: tirar github_foto da comparacao deixava verdes os 4749 testes da suite. Promovido a must-fix (mesma classe do achado do PR #698) e fechado na rodada 2 com UM teste; o mutante agora deixa 1 vermelho. Sem ele, repositorio renomeado com derivados iguais congelaria o github_foto e o link do Vinculo na tela apontaria para o endereco velho para sempre. ATENCAO na estreia: a primeira passada depois de uma mudanca de regra grava linha no fio, move o estado, troca o responsavel e dispara avisar_atribuicao em LOTE; quem mexer em LABELS_PLANEJADA ou no bloco_para_o_diretor manda e-mail para gente de verdade. Demandas vinculadas antes da #676 levam um UPDATE silencioso unico, sem linha no fio."
-    },
-    {
-      "at": "2026-09-11T12:40:15-03:00",
-      "sha": "eb425f7",
-      "app_version": "0.128.3",
-      "subject": "o alarme da devolucao distingue metade escrita de nada escrito, e o webhook do GitHub conta os bytes durante a leitura para pegar Transfer-Encoding chunked",
-      "raw_subject": "fix(tecnologia): o webhook do GitHub conta os bytes durante a leitura (#698)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 242,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda AFK com duas issues em paralelo, #694 (PR #697) e #691 (PR #698), nenhuma criou migration: a #694 so mexe em nivel e frase de log e a #691 so acrescenta contagem de bytes na leitura do webhook. A 103 segue sendo a ultima. O merge do #697 disparou um build intermediario (3a446c0, v0.128.2) que terminou antes do #698 comecar, entao nao houve build concorrente. Os dois PRs bumparam para 0.128.1 e a main ja estava em 0.128.1 pelo #699 de outra sessao: o rebase do #697 DESCARTOU o commit de bump (patch contents already upstream), o bump fantasma que o playbook preve. Re-bumpados a mao para 0.128.2 e 0.128.3. Revisao independente pegou 1 must-fix no #698: nenhum teste entregava mais de um pedaco util abaixo do teto, entao o mutante acumulado[:0] = pedaco (corpo montado ao contrario) passava verde e teria virado 401 em toda entrega grande do GitHub. Corrigido na rodada 2, so em teste, com os 12 mutantes mortos."
     }
   ]
 }

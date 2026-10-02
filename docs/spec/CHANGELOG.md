@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.158.6 - 2026-10-02 20:01 - Onda onda-a: Main protegida, o rabo entra por PR e mergeia pela API
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `d11e2ce`
+- PRs: [#925](https://github.com/pedrorezendefig/hospital-reunioes/pull/925)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/d11e2ce
+
 ## v0.158.5 - 2026-10-02 19:20 - PR #923, issue #909: Um pipeline só no /ask-pedro, CLAUDE.md, dev.md e README do painel
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `f63e3d8`
