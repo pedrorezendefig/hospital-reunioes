@@ -1,11 +1,11 @@
 ---
 name: ship
-description: Ciclo completo de uma mudança: branch, commit, PR, 3 gates, merge humano e /deploy ship. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--no-deploy] [--no-merge] [--skip-review]`.
+description: Leva uma mudança até o PR verde (branch, commit, PR, 3 gates) e imprime o comando do rabo, o fechar_onda.py. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--skip-review]`.
 ---
 
 # ship — orquestrar mudança end-to-end
 
-Uma skill, um comando. Do plano à produção, com PR + review automatizada + merge + deploy. Usado por time de 3 pessoas (Pedro + 2 contratados), todos com Claude Code e permissão de write no repo.
+Uma skill, um comando. Do plano ao PR verde, com PR + review automatizada + CI. Merge, bump, `APP_VERSION`, push, build, health e registro são do rabo único, o `fechar_onda.py` (ADR 0061): o `/ship` imprime o comando e para. Usado por time de 3 pessoas (Pedro + 2 contratados), todos com Claude Code e permissão de write no repo.
 
 ## Sintaxe
 
@@ -19,15 +19,13 @@ Uma skill, um comando. Do plano à produção, com PR + review automatizada + me
 |---|---|---|
 | `--issue <N>` | nenhuma | Vincula GitHub Issue #N. Adiciona `Closes #N` no PR. |
 | `--type <t>` | inferido | Tipo conventional. Um de: `fix`, `feature`, `chore`, `refactor`, `docs`, `test`, `spec`. Define prefixo de branch e commit. |
-| `--no-deploy` | false | Faz tudo menos o `/deploy ship`. Útil pra mudança que não vai pra prod (doc only). |
-| `--no-merge` | false | Abre PR mas não aprova nem mergeia. Pra deixar review humana acontecer antes. |
 | `--skip-review` | false | Pula `/code-review` e `/security-review`. Só pra emergência. |
 | `--draft` | false | Abre PR como draft (não fica passível de merge). |
 | `--target <branch>` | `main` | Branch de destino do PR (default main). |
 | `--from-diff` | false | Pula a pausa do Passo 4. Usado quando já há mudanças no working tree. Vai direto pro commit + push + PR (código já no working tree). |
 | `--resume` | false | Retoma um ciclo interrompido a partir da Issue (`gh issue view`) e do estado do git. |
-| `--no-bump` | false | Pula o bump automático de versão (Passo 5.5). Útil pra PRs meta (só skills/docs sem mudar app). |
-| `--bump-manual <vX.Y.Z>` | nenhuma | Força versão específica em vez do bump automático. Skill valida semver e exige que seja maior que a atual. |
+
+Não há mais opção de merge, deploy ou bump: o `/ship` nunca faz nenhum dos três (ADR 0061).
 
 ---
 
@@ -36,7 +34,8 @@ Uma skill, um comando. Do plano à produção, com PR + review automatizada + me
 **Esta skill é metodologia pura.** Lê config de `docs/spec/deploy/project.json` (compartilhada com `/deploy`). Não tem conhecimento hardcoded sobre projetos específicos.
 
 Relação com outras skills:
-- **`/deploy`**: chamada no Passo 11 pra subir pra produção.
+- **`fechar_onda.py`** (`.claude/skills/onda-enxuta/scripts/`): o rabo único de merge, bump, `APP_VERSION`, push, build, health e registro, para um PR avulso ou para o lote de uma onda. O `/ship` não o roda: imprime o comando no Passo 10 para o autor rodar.
+- **`/deploy`**: não é chamado. Fica para `status`, `rollback` e `setup`.
 - **`/code-review`**: chamada no Passo 8 como gate.
 - **`/security-review`**: chamada no Passo 8 como gate.
 
@@ -146,59 +145,7 @@ Regras:
 - Hard-excluded da `/deploy` (project.json `hard_excluded`) NUNCA entram.
 - Mensagem do commit segue Conventional Commits (`fix(scope): ...`, `feat(scope): ...`).
 - Body inclui resumo da Issue e `Closes #N` se houver.
-
----
-
-## Passo 5.5 — Bump de versão (semver)
-
-A skill aplica bump automático de versão semântica a partir do tipo dominante dos commits do PR. Esquema completo em [docs/spec/VERSIONING.md](../../docs/spec/VERSIONING.md).
-
-### Algoritmo
-
-1. **Ler versão atual** de `hospital-reunioes/frontend/package.json` (campo `version`).
-
-2. **Inspecionar commits do PR** desde a branch base:
-   ```bash
-   COMMITS=$(git log "$TARGET_BRANCH"..HEAD --format="%s%n%b%n---" --reverse)
-   ```
-
-3. **Decidir tipo de bump** (maior precedência ganha — BREAKING > feat > resto):
-   - Algum commit tem `BREAKING CHANGE:` no body OU subject termina com `!:` → **major**
-   - Algum commit começa com `feat:` ou `feat(<scope>):` → **minor**
-   - Caso contrário (`fix:`, `chore:`, `refactor:`, `docs:`, `perf:`, `test:`, `style:`, `build:`, `ci:`) → **patch**
-
-4. **Computar nova versão**:
-   - patch: `0.1.0 → 0.1.1`
-   - minor: `0.1.0 → 0.2.0` (zera patch)
-   - major: `0.1.0 → 1.0.0` (zera minor e patch)
-
-5. **Aplicar bump** (preservando indentação do JSON):
-   ```bash
-   python3 - << PY
-   import json
-   p = "hospital-reunioes/frontend/package.json"
-   pkg = json.loads(open(p).read())
-   pkg["version"] = "$NEW_VERSION"
-   open(p, "w").write(json.dumps(pkg, indent=2) + "\n")
-   PY
-
-   git add hospital-reunioes/frontend/package.json
-   git commit -m "chore(release): bump v$NEW_VERSION"
-   ```
-
-6. **Reportar pro usuário** o bump aplicado:
-   ```
-   [ship] Bump de versão: v0.1.0 → v0.2.0 (tipo dominante: feat)
-   ```
-
-### Flags de override
-
-- `--no-bump`: pula o bump. `package.json` fica com a versão atual. Use pra PRs meta (só `.claude/skills/`, `docs/`, etc.).
-- `--bump-manual <vX.Y.Z>`: força versão específica em vez do algoritmo. Útil pra marcos (ex: `--bump-manual v1.0.0`). Skill valida semver e que é maior que a atual.
-
-### Fonte da verdade
-
-`hospital-reunioes/frontend/package.json` é a única fonte. O backend lê `APP_VERSION` de env (injetada pelo `/ship` Passo 8.5 pré-merge, ou pelo `/deploy ship` Passo 3.5 quando standalone — ver `.claude/skills/deploy/SKILL.md`). Não há sync manual entre backend e frontend.
+- Sem bump no PR: `hospital-reunioes/frontend/package.json` não muda aqui. A versão sobe no rabo, pelo tipo dos commits, na hora do merge (ADR 0061).
 
 ---
 
@@ -237,6 +184,7 @@ Lê `.github/PULL_REQUEST_TEMPLATE.md` e preenche 5 seções principais + closes
 - `## 🔗 Links` ← issue (`Closes #N`), snapshot links relativos
 - `## 🤖 Gates (3)` ← checkboxes dos 3 gates, marcadas conforme execução
 - `## Closes` ← `Closes #$ISSUE_NUMBER` se houver
+- `## Migration NNN (conferência por hash)` ← só com migration nova: o `sha256` do arquivo (`shasum -a 256 <arquivo>`) e o SQL completo. O rabo confere esse hash contra o arquivo do head e para se faltar ou divergir; mexeu na migration, atualize o hash e o SQL do corpo.
 
 A seção "Mudanças" usa o output da skill `/snapshot --diff <base>..HEAD` (ver `.claude/skills/snapshot/SKILL.md`). Se a skill falhar ou o repo não tiver mudanças relevantes pra snapshot, a seção é omitida ou contém apenas "_(sem mudanças relevantes ao snapshot)_".
 
@@ -249,7 +197,7 @@ A seção "Mudanças" usa o output da skill `/snapshot --diff <base>..HEAD` (ver
 
 ## Passo 8 — Gates automatizados (3 gates)
 
-Self-approval pelo próprio autor é permitido **só** se as camadas obrigatórias passam. Cada camada faz veto independente. Roda em sequência (ou paralelo onde possível).
+Cada camada faz veto independente. Roda em sequência (ou paralelo onde possível). Os 3 gates verdes são o fim do `/ship`: o PR fica pronto para o rabo.
 
 ### Passo 8.0 — Detecção de diff cosmético (Corte 2 do plano de enxugamento)
 
@@ -315,7 +263,7 @@ Captura output. Se levantar issues `must-fix` ou similar → ❌ reportar, comen
 
 ### Gate 1.5: Spec × diff (quando há issue vinculada)
 
-Verifica se o diff cumpre o que a issue pediu **antes** do merge: é o que autoriza o Passo 9.1 a marcar os critérios de aceite (o contrato "verde ⟹ critérios cumpridos" do ADR 0020 passa a ser verificado, não assumido). Sem issue vinculada, pular com nota no PR. Não muda a contagem dos "3 gates" (code-review, security, CI): este é condicional à existência de issue.
+Verifica se o diff cumpre o que a issue pediu **antes** do merge: é o que autoriza o Passo 9 a marcar os critérios de aceite (o contrato "verde ⟹ critérios cumpridos" do ADR 0020 passa a ser verificado, não assumido). Sem issue vinculada, pular com nota no PR. Não muda a contagem dos "3 gates" (code-review, security, CI): este é condicional à existência de issue.
 
 **Fail-fast antes de spawnar** (barato, evita queimar um subagent com ref quebrada):
 
@@ -368,67 +316,31 @@ Ver `references/rigoroso.md` (segunda parte).
 
 ---
 
-## Passo 8.5 — Sync `APP_VERSION` no Coolify (pré-merge)
+## Passo 8.6: Gate de migrations (antes do rabo)
 
-Imediatamente antes do `gh pr merge` (que dispara o webhook de auto-build no Coolify), garantir que `APP_VERSION` no service backend reflete a versão atual de `hospital-reunioes/frontend/package.json`. Evita race condition entre o webhook de merge e o `coolify app env update` do `/deploy ship` Passo 3.5 (que rodaria depois e chegaria tarde demais).
+Se o diff do PR inclui migrations novas em `hospital-reunioes/supabase/migrations/**`, elas são aplicadas **antes** de rodar o rabo. O push do rabo dispara o auto-build no Coolify (webhook do GitHub App): o schema precisa existir **antes** do código novo subir, senão os endpoints que dependem das tabelas novas quebram (500) até a migration rodar.
 
-```bash
-APP_VERSION=$(python3 -c "import json; print(json.load(open('hospital-reunioes/frontend/package.json'))['version'])")
-BACKEND_UUID=$(jq -r '.services[] | select(.id == "backend") | .uuid' docs/spec/deploy/project.json)
-
-# Idempotente: se a key já existe com mesmo valor, no-op.
-# A chave vem POSICIONAL, depois do UUID: --key é o flag de RENAME, não serve pra apontar a var.
-# NADA de --runtime/--build-time no update: a API devolve 422. Os flags atuais são preservados.
-# O update é update-only, por isso o create no fallback (aí sim os flags valem, é var nova).
-coolify app env update "$BACKEND_UUID" APP_VERSION --value "$APP_VERSION" 2>/dev/null \
-  || coolify app env create "$BACKEND_UUID" --key APP_VERSION --value "$APP_VERSION" --runtime --build-time=false
-```
-
-Após esse passo, o squash merge (Passo 9) dispara o webhook do Coolify com `APP_VERSION` já correto no env do container. O `/deploy ship` Passo 3.5 vira **idempotente puro** — só valida que está setado, sem mexer.
-
-Pular se: `--no-deploy` (não vai rodar /deploy ship mesmo), `--no-merge` (nada será mergeado, push manual depois resolve), ou se `frontend/package.json` não existe (projeto sem semver — comum em libs).
-
----
-
-## Passo 8.6 — Gate de migrations (pré-merge)
-
-Se o diff do PR inclui migrations novas em `hospital-reunioes/supabase/migrations/**`, **PARAR antes do merge** e aplicá-las primeiro. O merge dispara o auto-build no Coolify (webhook do GitHub App) — o schema precisa existir **antes** do código novo subir, senão os endpoints que dependem das tabelas novas quebram (500) até a migration rodar.
-
-> O Postgres do Supabase self-hosted **não é exposto** e o CLI/API do Coolify **não executa SQL** — a aplicação é **manual**, pelo humano, no SQL Editor do Supabase Studio de produção. Esta skill nunca aplica migration sozinha (nada de `docker exec`/`psql` por aqui).
+> O Postgres do Supabase self-hosted **não é exposto** e o CLI/API do Coolify **não executa SQL**: a aplicação é **manual**, pelo humano, no SQL Editor do Supabase Studio de produção. Esta skill nunca aplica migration sozinha (nada de `docker exec`/`psql` por aqui).
 
 ```bash
 NEW_MIGRATIONS=$(git diff --name-only --diff-filter=A "$TARGET_BRANCH..HEAD" -- 'hospital-reunioes/supabase/migrations/**')
 ```
 
 Se houver migrations novas:
-1. Para cada uma (ordem cronológica), extrair o arquivo para o scratchpad por `git show` e entregar **primeiro o caminho absoluto clicável terminado em `:1`** (abre em aba do VS Code), junto do arquivo de verificação; o bloco ` ```sql ` no chat é reforço, não o caminho principal. Regra completa em `/deploy` SKILL.md, Passo 6.3. Marcar ⚠ as DESTRUCTIVE (regex de DDL destrutivo: ver `/deploy` SKILL.md, seção "Referência: regex de DDL destrutivo").
-2. Entregar o passo a passo: **Supabase Studio de produção** (`studio.<domínio>`, ex.: `https://studio.hospitalsaomatheus.cloud`) → **SQL Editor → New query** → colar → **Run** → rodar a query de verificação e conferir a contagem de linhas esperada.
-3. **Aguardar a confirmação explícita** do humano ("apliquei") antes de seguir para o merge.
+1. Conferir que o corpo do PR traz o `sha256` de cada uma (seção `## Migration NNN (conferência por hash)`, Passo 7). O rabo confere de novo nas pré-condições e para se faltar ou divergir.
+2. Para cada uma (ordem cronológica), extrair o arquivo para o scratchpad por `git show` e entregar **primeiro o caminho absoluto clicável terminado em `:1`** (abre em aba do VS Code), junto do arquivo de verificação; o bloco ` ```sql ` no chat é reforço, não o caminho principal. Regra completa em `/deploy` SKILL.md, Passo 6.3. Marcar ⚠ as DESTRUCTIVE (regex de DDL destrutivo: ver `/deploy` SKILL.md, seção "Referência: regex de DDL destrutivo").
+3. Entregar o passo a passo: **Supabase Studio de produção** (`studio.<domínio>`, ex.: `https://studio.hospitalsaomatheus.cloud`) → **SQL Editor → New query** → colar → **Run** → rodar a query de verificação e conferir a contagem de linhas esperada.
+4. Dizer no resumo final que o rabo só roda depois do "apliquei" do humano.
 
-É o mesmo gate do `/deploy` Passo 6, antecipado para antes do merge. Pular se não há migration nova no diff.
+Pular se não há migration nova no diff.
 
 ---
 
-## Passo 9 — Aprovar e mergear
+## Passo 9: Marcar critérios de aceite na issue
 
-```bash
-# Aprovar (self-approval permitido após os 3 gates)
-gh pr review "$PR_NUMBER" --approve --body "Aprovado pelo /ship, gates verdes: /code-review · spec×diff (se issue) · /security-review (se sensível) · CI Actions"
+> Contrato do ADR 0020 (decisão 1): os critérios **são** a lista de testes do `/tdd`, e os três gates verdes dizem "verde ⟹ critérios cumpridos". Não marcar só no PR: a issue é o que o revisor lê. Com o Gate 1.5 (spec × diff) verde, essa implicação é **verificada** contra o diff, não só assumida.
 
-# Aguardar todos os checks verdes
-gh pr checks "$PR_NUMBER" --watch
-
-# Merge (squash, linear history)
-gh pr merge "$PR_NUMBER" --squash --delete-branch
-```
-
-Se `--no-merge`: pular este passo.
-
-### Passo 9.1 — Marcar critérios de aceite na issue
-
-> Contrato do ADR 0020 (decisão 1): o merge só passa com os três gates verdes e os critérios **são** a lista de testes do `/tdd`, logo "verde ⟹ critérios cumpridos". "Marcado" sempre significa "entregue". Não marcar só no PR: a issue é o que o revisor lê. Com o Gate 1.5 (spec × diff) verde, essa implicação é **verificada** contra o diff, não só assumida.
-
-Imediatamente após o merge, se há issue vinculada (`$ISSUE_NUMBER`) **e o Gate 1.5 passou verde**, editar o corpo da **issue**:
+Com os gates verdes, se há issue vinculada (`$ISSUE_NUMBER`) **e o Gate 1.5 passou verde**, editar o corpo da **issue**:
 
 - Critério **entregue** → `- [x] ...`
 - Critério **descopado** durante o PR → **riscar**, nunca marcar: `- [ ] ~~...~~`
@@ -443,34 +355,20 @@ gh issue edit "$ISSUE_NUMBER" --body-file /tmp/issue-body-$ISSUE_NUMBER.md
 
 Se houve descope (ou o corpo tem checkboxes fora de `## Critérios de aceite`), **não** usar o sed cego: editar o corpo critério a critério, marcando os entregues e riscando os descopados. Resultado: issue fechada lê **N/N** quando tudo foi entregue; descopado fica visível riscado, não some.
 
-Este passo é automático — faz parte do merge, sem passo manual. No `--resume` em estado "mergeado", verificar se os critérios da issue já estão marcados; se não, marcar antes de seguir ao Passo 10.
-
-Após merge, voltar pra main local:
-```bash
-git checkout "$TARGET_BRANCH"
-git pull origin "$TARGET_BRANCH"
-```
+No `--resume` com os gates verdes, verificar se os critérios da issue já estão marcados; se não, marcar antes de seguir ao Passo 10.
 
 ---
 
-## Passo 10 — Deploy
+## Passo 10: Imprimir o comando do rabo (o /ship termina aqui)
+
+O `/ship` não faz bump, não mexe em `APP_VERSION`, não mergeia e não chama o `/deploy` (ADR 0061). Com o PR verde, imprime o comando do rabo para o autor rodar quando quiser subir para produção:
 
 ```bash
-# Invoca a skill /deploy ship
-/deploy ship
+python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER" --dry-run   # o plano, sem tocar em nada
+python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER"
 ```
 
-Se `--no-deploy`: pular este passo.
-
-A `/deploy ship` é responsável por:
-- Pre-flight gates.
-- Monitorar no Coolify, pelo CLI `coolify`, o build que o merge disparou pelo webhook, e rodar o health check.
-- Rollback se falhar.
-- Atualizar `docs/spec/deploy/state.json` e `history.json`.
-- Prepend em `docs/spec/CHANGELOG.md` (link do commit) + regenerar o snapshot/ARQUITETURA da app.
-- Issue fechada automaticamente pelo `Closes #N` no merge.
-
-> **Auto-deploy por webhook é o caminho normal** (religado em 27/08/2026): o merge na main rebuilda backend e frontend sozinho. Deploy manual só se o webhook não disparar, e aí é **ação humana**: o classifier nega `coolify deploy uuid ...` na sessão, então peça ao Pedro rodar `! coolify deploy uuid <uuid>` na própria sessão.
+Um PR só e sem `--sessao` é o modo PR avulso (chave do semáforo `pr-<N>`). O script faz, nesta ordem: pré-condições (PR verde e mergeável, número e `sha256` das migrations), semáforo, merge local `--no-ff` sobre a `origin/main`, bump pelo tipo dos commits, registro (`state.json`, `history.json`, `CHANGELOG`, snapshot, draft do manual), `APP_VERSION` no Coolify antes do push, um push, um build, health com conferência de versão e limpeza. O registro nomeia o PR e a issue. Códigos de saída e o que fazer em cada um: docstring do script.
 
 ---
 
@@ -489,19 +387,11 @@ Pular se o ciclo não deixou pendência nenhuma.
 
 ---
 
-## Passo 11 — Resumo final
+## Passo 11: Resumo final
 
-> **Single source of truth do CHANGELOG = `/deploy ship` Passo 9.5.** Esta skill NÃO prependa o CHANGELOG.md. O passo abaixo só consolida e mostra o resumo do ciclo todo (já feito por `/deploy ship` no Passo 10) numa única tela.
+Imprime ao usuário o estado final do ciclo, no formato da seção "Output final" abaixo: o PR verde, os gates, a issue e o comando do rabo. Não cria commit. Não pushea. Não escreve em arquivo. É display puro.
 
-Imprime ao usuário o estado final do ciclo. Lê valores pós-deploy do `docs/spec/deploy/state.json` (recém-escrito pelo `/deploy ship` Passo 9.1).
-
-Não cria commit. Não pushea. Não escreve em arquivo. É display puro.
-
-Ver seção `## Output final` mais abaixo pro formato do bloco impresso.
-
-### Por que não duplica com `/deploy`
-
-A skill `/deploy ship` Passo 9.5 prependa o CHANGELOG porque é o único momento em que existem **simultaneamente** os dados necessários: `result`, `duration_deploy_s` e o `sha7` final pós-rollback (se houve). Tentar duplicar aqui no `/ship` Passo 11 levaria a race condition ou inconsistência.
+O `CHANGELOG.md`, o `history.json` e o `state.json` são escritos pelo rabo, no mesmo push do merge; o `/ship` não toca em nenhum deles.
 
 ---
 
@@ -511,25 +401,24 @@ A skill `/deploy ship` Passo 9.5 prependa o CHANGELOG porque é o único momento
 
 ---
 
-## Output final (Corte 4a — compacto)
+## Output final (Corte 4a, compacto)
 
-Bloco único de 4 linhas, com referências essenciais. Sem ruído visual de listas extensas.
+Bloco único de 3 linhas, com referências essenciais. Sem ruído visual de listas extensas.
 
 ```
-$RESULT_EMOJI ship $SHA · v$VERSION_PREV → v$VERSION_NEW · ${DURATION_DEPLOY_s}s · $(IFS=,; echo "${SERVICES_TOUCHED[*]}")
-   PR #$PR_NUMBER
-   CHANGELOG v$VERSION_NEW prepended · Snapshot $(test -n "$SNAPSHOT_OK" && echo OK || echo skip)$([ -n "$ISSUE_NUMBER" ] && echo " · Issue #$ISSUE_NUMBER fechada" || echo "")
+✅ ship PR #$PR_NUMBER verde · gates: $GATES_VERDES$([ -n "$ISSUE_NUMBER" ] && echo " · Issue #$ISSUE_NUMBER com critérios marcados")
+   Rabo (merge, bump, deploy): python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs $PR_NUMBER
+   $([ -n "$NEW_MIGRATIONS" ] && echo "Antes do rabo: aplicar $NEW_MIGRATIONS no Studio (Passo 8.6)")
 ```
 
 **Exemplo concreto** (ciclo de mudança cosmética):
 
 ```
-✅ ship d3cc4a1 · v0.2.0 → v0.2.1 · 169s · frontend
-   PR #9
-   CHANGELOG v0.2.1 prepended · Snapshot OK
+✅ ship PR #9 verde · gates: code-review, spec×diff, CI · Issue #8 com critérios marcados
+   Rabo (merge, bump, deploy): python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs 9
 ```
 
-Se rollback aconteceu: emoji muda pra 🔴, linha 1 termina com `(rolled back to <sha>)`. Cronologia da falha sobrevive em `history.json`.
+Gate vermelho: emoji muda pra ❌ e a linha 2 dá o gate e o motivo em vez do comando do rabo.
 
 Notificações (Discord, etc.) reportadas separadamente como linha solta se houver, ou silenciosamente puladas.
 
@@ -552,8 +441,8 @@ Mapeia o ponto de retomada pelo estado real:
 | Commit feito, sem push | Passo 6 (push) |
 | Pushado, sem PR | Passo 7 (PR) |
 | PR aberto, gates pendentes | Passo 8 (gates) |
-| Gates verdes, sem merge | Passo 9 (merge) |
-| Mergeado, sem deploy | Passo 10 (`/deploy ship`, idempotente) — antes, conferir Passo 9.1 (critérios marcados na issue) |
+| Gates verdes | Passo 9 (critérios na issue) e Passo 10 (comando do rabo) |
+| PR mergeado | Nada: o rabo já rodou. Conferir no `history.json` |
 
 A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem dependência de `docs/planejamento/`.
 
@@ -573,36 +462,25 @@ A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem de
 - O gate que reprovou é reportado no PR; corrigir e re-shippar.
 - Usuário corrige, commita, push, e roda `/ship --resume` (recomeça do Passo 8).
 
-### Falha em Passo 9 (merge)
+### Falha no rabo
 
-- PR aberto, approved.
-- Rodar `/ship --resume` repete o merge.
-
-### Falha em Passo 10 (/deploy)
-
-- A `/deploy` tem rollback automático.
-- CHANGELOG ganha entrada com resultado `rolled-back`/`failed`.
-- Discord notificado da falha (se configurado).
-- `/deploy rollback` pode ser chamado manualmente depois pra reverter.
+- Não é do `/ship`: o `fechar_onda.py` diz o que fazer pelo código de saída (1 pré-condição, 2 conflito ou push rejeitado, 3 build, 4 health; o 3 e o 4 deixam o semáforo preso para o `/deploy rollback`).
 
 ### Falha em Passo 11 (Resumo final / Discord)
 
 - Não bloqueia. Reportar warning.
-- Estado de produção continua healthy (CHANGELOG já foi prependado por `/deploy ship` Passo 9.5 antes daqui).
-- Display final pode ser regerado manualmente via `cat docs/spec/deploy/state.json | jq .last_run`.
 
 ---
 
 ## Regras
 
 - ❌ **Nunca** `git push --force` à main. Apenas `--force-with-lease` na branch própria pra amend.
-- ❌ **Nunca** mergear sem approval (mesmo self).
+- ❌ **Nunca** mergear, fazer bump ou mexer em `APP_VERSION` pelo `/ship`: é tudo do rabo (`fechar_onda.py`).
 - ❌ **Nunca** pular `/security-review` em mudanças que tocam `auth/`, `permissions/`, schema DB ou env vars.
 - ❌ **Nunca** rodar `/ship` em uma branch que já tem PR aberto sem `--resume` ou flag explícita.
 - ❌ **Nunca** logar token/secret em qualquer output.
 - ✅ Conventional commits sempre.
 - ✅ Toda mudança nasce de uma Issue (ou, na falta, descreve a mudança no corpo do PR). Sem chronicle nem plano.
-- ✅ Self-approval permitido (filosofia: Claude já fez review, humano só registra).
 - ✅ Discord notificação SÓ no final, com resultado verdadeiro.
 
 ---
@@ -611,7 +489,7 @@ A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem de
 
 - ❌ "Vou abrir o PR no browser pra editar a descrição mais bonita." — Não. Template + Issue dão estrutura suficiente. Edição livre depois do `/ship` se quiser.
 - ❌ "Vou rodar `/code-review` separado depois do merge." — Não. Review é gate ANTES do merge.
-- ❌ "Vou squash 3 commits em 1 antes de pushear." — Sim, pode. Mas use `git rebase -i` cauteloso. O merge final é sempre squash via gh.
+- ❌ "Vou squash 3 commits em 1 antes de pushear." — Sim, pode. Mas use `git rebase -i` cauteloso. O merge é do rabo: `--no-ff` local e um push.
 - ❌ "Vou commitar com `git commit -am` pra agilizar." — Não. Lista explícita de arquivos.
 
 ---
@@ -621,4 +499,4 @@ A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem de
 - `.github/PULL_REQUEST_TEMPLATE.md`: template do PR.
 - `references/discord.md`: Passo 12 completo (fontes da webhook URL e payload).
 - `https://cli.github.com/manual/` — manual do gh CLI.
-- `.claude/skills/deploy/SKILL.md` — skill `/deploy ship` chamada no Passo 10.
+- `.claude/skills/onda-enxuta/scripts/fechar_onda.py`: o rabo que o Passo 10 imprime.
