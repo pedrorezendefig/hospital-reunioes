@@ -149,11 +149,11 @@ Abra `.claude/skills/ship/SKILL.md` e faça, nesta ordem:
 
 1. Caminho do arquivo de versão (P4) em todo lugar que cita `hospital-reunioes/frontend/package.json`.
 2. Os 3 gates (P5): os comandos de lint, testes e build. Gate pulado na P5 fica marcado como "pulado" na saída do `/ship`, nunca como verde.
-3. Passo 8.5 (sync `APP_VERSION` no Coolify antes do merge): se a plataforma da P3 tem env de runtime e o app lê versão de env, escreva o equivalente; senão, apague o passo e renumere nada (deixe o número, escreva "não se aplica a esta plataforma").
+3. `APP_VERSION`: no Hospital o sync no Coolify antes do push vive no rabo (`fechar_onda.py`, passo 7), não no `/ship`. Se a plataforma da P3 tem env de runtime e o app lê versão de env, escreva o equivalente no rabo do DESTINO; senão, "não se aplica a esta plataforma".
 4. Passo de migrations pré-merge: caminho de migrations do DESTINO e como elas são aplicadas em produção. Sem banco, "não se aplica".
-5. O fim do `/ship` imprime o comando do rabo (`fechar_onda.py`); adapte o script à plataforma do DESTINO.
+5. O fim do `/ship` imprime o comando do rabo (`fechar_onda.py`, da skill `onda-enxuta`, ADR 0061). Este roteiro ainda não leva a `onda-enxuta`: até isso entrar, troque o Passo 10 do `/ship` do DESTINO por uma chamada ao `/deploy ship` gerado na Fase 4.4, para o comando impresso apontar para algo que existe.
 
-Não mexa nos invariantes: 3 gates, PR, `AskUserQuestion` de merge citando o PR#, Passo 10.5 (issue `ready-for-human` para pendência humana pós-ciclo).
+Não mexa nos invariantes: 3 gates, PR, OK humano citando o PR# antes do rabo, Passo 10.5 (issue `ready-for-human` para pendência humana pós-ciclo).
 
 ### 4.4 `/deploy`
 

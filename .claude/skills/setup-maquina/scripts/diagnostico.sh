@@ -263,7 +263,7 @@ else
 fi
 
 # O rabo (fechar_onda.py) publica o Manual quando o deploy tira alguma página do draft
-# (Passo 9.6): o site é Starlight, buildado por `corepack pnpm@9` com Node >=
+# (tools/tirar_draft_manual.py): o site é Starlight, buildado por `corepack pnpm@9` com Node >=
 # 22.12, e a publicação reencoda cada vídeo com ffmpeg. Por isso os três são
 # nível 2, o mesmo do deploy, e não opcionais.
 NODE_MIN=22.12

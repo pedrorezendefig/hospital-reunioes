@@ -36,10 +36,11 @@ na primeira linha.
 
 - O humano, via `/manual publicar`, quando quer o site no ar agora.
 - O rabo (`fechar_onda.py`), sozinho, depois de tirar o `draft` das páginas dos PRDs que
-  subiram naquele deploy. Antes de tirar o draft, o Passo 9.6 confere que o MP4
-  de cada Vídeo de tarefa existe **naquela máquina** (ele não vem no clone) e
-  que Node, corepack e ffmpeg estão lá. Faltando qualquer um, ele para sem
-  tocar em arquivo nenhum: página sem draft e sem publicação fica no
-  repositório e fora do ar.
+  subiram naquele deploy. Antes de tirar o draft, o `tools/tirar_draft_manual.py`
+  confere que o MP4 de cada Vídeo de tarefa existe **naquela máquina** (ele não
+  vem no clone) e que Node, corepack e ffmpeg estão lá. Faltando qualquer um,
+  o rabo imprime `manual: bloqueado, nada tocado` e segue com o merge e o
+  deploy: as páginas ficam em `draft` e fora do ar até alguém rodar o
+  `/manual publicar` numa máquina que tenha tudo.
 
 A Fatia de manual **não publica**: ela para no checkpoint de merge.

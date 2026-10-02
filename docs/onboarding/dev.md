@@ -46,7 +46,9 @@ Agora há issues na fila pra qualquer um pegar.
 /pegar-issue 42       # dá o "claim" (vira sua), cria a branch e carrega a spec
 /tdd                  # red → green → refactor: critérios de aceite viram testes
 /ship                 # 3 gates, para no PR verde e imprime o comando do rabo
-python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>   # merge + bump + deploy + registro (fecha a issue com Closes #42)
+# migration nova? aplique no Studio de produção ANTES do rabo (o script confere o sha256)
+python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR> --dry-run   # o plano, sem tocar em nada
+python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>             # merge + bump + deploy + registro (a issue fecha pelo Closes #42)
 ```
 
 ### Cenário C — Estava trabalhando, sessão fechou, abro outro terminal
@@ -156,7 +158,7 @@ Sem Discord, sem Slack.
 - **`/tdd` vermelho e não fecha?** O teste é a spec — confira o critério de aceite na Issue. Se o critério está errado, ajuste a Issue primeiro.
 - **`/ship` reprovou num gate?** A saída diz qual (code-review, security-review ou CI). Corrija e rode `/ship` de novo — ele retoma.
 - **Conflito com a `main`?** `git pull --rebase origin main` na sua branch, resolve os conflitos, segue.
-- **Deploy falhou em produção?** O `fechar_onda.py` sai com código 3 (build) ou 4 (health) e segura o semáforo; `/deploy rollback` reverte e `/deploy status` mostra o estado. O motivo fica em `docs/spec/deploy/history.json`.
+- **Deploy falhou em produção?** O `fechar_onda.py` sai com código 3 (build) ou 4 (health) e segura o semáforo; a saída dele é a fonte de verdade (o `history.json` já foi escrito no push, como `healthy`, e não é corrigido). `/deploy rollback` reverte e `/deploy status` mostra o estado.
 - **Snapshot desatualizado?** `/snapshot --force`.
 - Na dúvida, pergunta pro Claude — ele puxa o conhecimento daqui.
 
