@@ -25,8 +25,8 @@ RAIZ = Path(__file__).resolve().parent.parent
 SCRIPTS = RAIZ / ".claude" / "skills" / "onda-enxuta" / "scripts"
 MIGRATIONS = "hospital-reunioes/supabase/migrations"
 
-TRAVESSAO = "—"
-MEIA_RISCA = "–"
+TRAVESSAO = "\u2014"
+MEIA_RISCA = "\u2013"
 
 ENV_GIT = {
     "GIT_CONFIG_GLOBAL": os.devnull,
@@ -183,7 +183,9 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
     def gh_json(args, cwd=None):
         c.gh_chamadas.append(list(args))
         if args[:2] == ["pr", "view"]:
-            return dict(c.pr)
+            # como o gh de verdade: só os campos pedidos no --json
+            campos = args[args.index("--json") + 1].split(",")
+            return {k: v for k, v in c.pr.items() if k in campos}
         if args[:2] == ["issue", "view"]:
             return {"body": "## Pai\n\n`#902`, PRD da esteira.\n"}
         raise AssertionError(f"gh inesperado: {args}")
@@ -294,6 +296,32 @@ def test_registro_do_pr_avulso_nomeia_pr_e_issue_sem_onda_e_sem_travessao(
     assert "Prazo do caso, conta dias uteis" in titulo, titulo
 
 
+def test_com_sessao_o_registro_continua_sendo_da_onda(tmp_path, monkeypatch):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--sessao", "onda-x") == 0
+
+    entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
+    assert entrada["subject"].startswith("Onda onda-x: "), entrada["subject"]
+    assert TRAVESSAO not in entrada["subject"], entrada["subject"]
+    assert c.semaforo == [("pegar", "onda-x"), ("soltar", "onda-x")]
+
+
+def test_mais_de_um_pr_sem_sessao_para_antes_de_tudo(tmp_path, monkeypatch):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    monkeypatch.setattr(sys, "argv", ["fechar_onda.py", "--prs", "7", "8", "--raiz", str(c.clone)])
+
+    with pytest.raises(SystemExit) as e:
+        fo.main()
+
+    assert e.value.code == fo.EXIT_PRECOND
+    assert c.gh_chamadas == [] and c.semaforo == []
+
+
 def test_dry_run_do_pr_avulso_imprime_o_plano_com_pr_issue_e_tipo_de_bump(
     tmp_path, monkeypatch, capsys
 ):
@@ -375,6 +403,22 @@ def test_hash_do_corpo_igual_ao_arquivo_segue(tmp_path, monkeypatch, capsys):
 
     assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
     assert "112_triagem.sql" in capsys.readouterr().out
+
+
+def test_migration_que_a_main_ja_tem_por_squash_nao_pede_hash(tmp_path, monkeypatch):
+    """PR empilhado sobre outro que entrou por squash traz de novo a migration
+    que a main já tem: ela não é nova, e o corpo deste PR não precisa do hash."""
+    fo = carregar_fechar_onda()
+    c = pr_com_migration(tmp_path, "## O que mudou\n\nSó o prazo.\n")
+    repo = tmp_path / "repo"
+    git(repo, "checkout", "-q", "main")
+    escrever(repo, f"{MIGRATIONS}/112_triagem.sql", SQL_DO_ARQUIVO)
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "squash do PR de baixo")
+    git(repo, "push", "-q", str(c.remoto), "main")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
 
 
 def test_pr_sem_migration_nova_nao_pede_hash(tmp_path, monkeypatch):

@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
-"""fechar_onda.py: integra uma onda da `/onda-enxuta` com UM push e UM build.
+"""fechar_onda.py: o rabo unico (ADR 0061). Integra um PR avulso ou uma onda da
+`/onda-enxuta` com UM push e UM build.
 
 Uso:
     python fechar_onda.py --prs 850 851 852 --sessao onda-a-1 [--dry-run] [--sem-snapshot] [--raiz <repo>]
+    python fechar_onda.py --prs 907 [--dry-run]     # PR avulso: sem --sessao, a chave e pr-907
 
 A ordem dos PRs e a ordem de merge. O script nunca toca na arvore principal
 (ela pode estar suja): todo o trabalho acontece num worktree descartavel de
@@ -10,7 +12,8 @@ caminho curto (`~/wt-<sessao>`, por causa do MAX_PATH do Windows).
 
 Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
   1. pre-condicoes (gh, coolify, PRs abertos e verdes, origin/main buscado,
-     nenhuma migration nova com numero que a main ja usa)
+     nenhuma migration nova com numero que a main ja usa, e o corpo do PR
+     declarando o sha256 de cada migration nova igual ao do arquivo)
   2. semaforo de deploy (chave = nome da sessao, unica por construcao)
   3. worktree descartavel em origin/main
   4. merges locais `--no-ff` em ordem (um commit de merge por PR)
@@ -28,19 +31,22 @@ Commits produzidos no worktree (todos no mesmo push):
   - um commit de merge por PR: "<titulo do PR> (#N)"
   - `chore(release): bump vX.Y.Z (onda <sessao>: #a #b)`   (so quando ha bump)
   - `chore(deploy): registro da onda <sessao> (vX.Y.Z)`     (bookkeeping)
+No PR avulso: `bump vX.Y.Z (PR #N)` e `registro do PR #N (vX.Y.Z)`, e o
+registro do history.json e do CHANGELOG nomeia PR e issue, sem a onda.
 O campo `sha` do history.json e o sha do commit de bump (ou do ultimo merge,
 quando nao houve bump): e o ultimo commit que muda codigo. O commit de
 registro so muda docs/spec e vem depois, no mesmo push.
 
 Codigos de saida:
-  0  onda fechada, health verde
+  0  PR ou onda fechados, health verde
   1  pre-condicao falhou ou trava velha: nada foi tocado
   2  conflito de merge ou push rejeitado: worktree removido, semaforo solto, rode de novo depois de corrigir
   3  build falhou no Coolify: SEMAFORO FICA PRESO, rode `/deploy rollback` com a chave impressa
   4  health falhou (ou versao nao bate): SEMAFORO FICA PRESO, mesma instrucao do 3
 
-`--dry-run`: executa 1, 3, 4 e calcula o 5 sem escrever; imprime o que faria
-nos demais; nao pega semaforo, nao toca no Coolify, nao pusha.
+`--dry-run`: executa 1, 3, 4 e calcula o 5 sem escrever; imprime o plano (PR,
+issue e tipo de bump) e o que faria nos demais; nao pega semaforo, nao toca no
+Coolify, nao pusha.
 
 Windows: `bash` do Git no PATH (para o semaforo.sh), `PYTHONUTF8=1` no snapshot.
 """
@@ -384,8 +390,8 @@ def humanizar(subject: str) -> str:
 
 def sem_travessao(s: str) -> str:
     """Travessao e meia-risca viram hifen entre numeros e virgula no resto (ADR 0013)."""
-    s = re.sub(r"(\d)\s*[–—]\s*(\d)", r"\1-\2", s)
-    return re.sub(r"\s*[–—]\s*", ", ", s)
+    s = re.sub(r"(\d)\s*[\u2013\u2014]\s*(\d)", r"\1-\2", s)
+    return re.sub(r"\s*[\u2013\u2014]\s*", ", ", s)
 
 
 def rotulo_issues(info: dict) -> str:
@@ -707,7 +713,7 @@ def resolver_sessao(prs: list[int], sessao: str | None) -> tuple[str, bool]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Fecha uma onda: um push, um build.")
+    ap = argparse.ArgumentParser(description="Fecha um PR avulso ou uma onda: um push, um build.")
     ap.add_argument("--prs", nargs="+", type=int, required=True, help="PRs na ordem de merge")
     ap.add_argument("--sessao", help="nome da sessao (chave do semaforo); sem ela, um PR so e um PR avulso (pr-<N>)")
     ap.add_argument("--dry-run", action="store_true")
@@ -726,7 +732,7 @@ def main() -> int:
 
     infos = checar_pre_condicoes(raiz, args.prs, args.dry_run)
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
-    print(f"pre-condicoes ok: {prs_txt}, migrations sem numero repetido contra origin/main"
+    print(f"pre-condicoes ok: {prs_txt}, migrations sem numero repetido contra origin/main e com o sha256 do corpo"
           + (" (dry-run)" if args.dry_run else ""))
 
     wt = None

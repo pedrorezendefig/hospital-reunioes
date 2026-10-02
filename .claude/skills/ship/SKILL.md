@@ -489,7 +489,7 @@ A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem de
 
 - ❌ "Vou abrir o PR no browser pra editar a descrição mais bonita." — Não. Template + Issue dão estrutura suficiente. Edição livre depois do `/ship` se quiser.
 - ❌ "Vou rodar `/code-review` separado depois do merge." — Não. Review é gate ANTES do merge.
-- ❌ "Vou squash 3 commits em 1 antes de pushear." — Sim, pode. Mas use `git rebase -i` cauteloso. O merge é do rabo: `--no-ff` local e um push.
+- ❌ "Vou squash 3 commits em 1 antes de pushear.": sim, pode. Mas use `git rebase -i` cauteloso. O merge é do rabo: `--no-ff` local e um push.
 - ❌ "Vou commitar com `git commit -am` pra agilizar." — Não. Lista explícita de arquivos.
 
 ---
