@@ -43,6 +43,28 @@ def test_o_to_issues_nao_atribui_fatia():
     assert not any("--assignee" in c for c in criacoes("to-issues"))
 
 
+def test_o_pegar_issue_roda_o_script_que_existe():
+    chamadas = dict(
+        (modo, caminho)
+        for caminho, modo in re.findall(
+            r"python3 (\S+/dono_do_prd\.py) (<N>|--fila)", texto("pegar-issue")
+        )
+    )
+    assert set(chamadas) == {"<N>", "--fila"}
+    assert all((RAIZ / caminho) == SCRIPT for caminho in chamadas.values())
+
+
+def test_o_aviso_vem_antes_do_claim_e_a_fila_sem_argumento_mostra_o_dono():
+    sem_argumento, com_argumento = texto("pegar-issue").split("## Com argumento", 1)
+    assert "dono_do_prd.py --fila" in sem_argumento
+    claim = com_argumento.index("gh issue edit <N> --remove-label ready-for-agent")
+    assert com_argumento.index("dono_do_prd.py <N>") < claim
+
+
+def test_o_texto_novo_nao_tem_travessao():
+    assert not re.search("[–—]", SCRIPT.read_text(encoding="utf-8"))
+
+
 def rodar(tmp_path: Path, resposta: dict, *args: str) -> subprocess.CompletedProcess:
     """Roda o script com um `gh` falso que devolve `resposta` ao GraphQL."""
     falso = tmp_path / "bin"
