@@ -43,6 +43,7 @@ Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta s
 - `serve.py` — servidor HTTP (stdlib), só leitura, bind 127.0.0.1.
 - `collect.py` — agrega `gh` + arquivos de `docs/spec` + `git` num único `/api/data`.
 - `plano.py` — módulo puro do Plano: ondas, caminho crítico, tempo típico e copiáveis por fatia (o front não calcula nada).
+- `responsaveis.py`: módulo puro do agrupamento por responsável da aba Issues (assignee, senão dono do PRD, senão "sem responsável"), com estado do PR aberto e versão em que a fechada subiu; sai em `/api/data` como `responsaveis` (ADR 0061).
 - `areas.py`: parse dos snapshots de área para as capas interativas (degrada para `None`, nunca quebra).
 - `diagramas.py`: parse do subset Mermaid dos snapshots (ADR 0025).
 - `tests/` — pytest do módulo plano e da estrutura do shell (`python3 -m pytest tests/`).
