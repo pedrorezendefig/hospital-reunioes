@@ -1,6 +1,6 @@
 ---
 name: onda
-description: Executor AFK da fila de issues em ondas: pegar-issue, tdd e ship em paralelo até PR verde, checkpoint humano de merge, um deploy por onda, auditoria do PRD. Sintaxe `/onda [#PRD | --all]`.
+description: 'Executor AFK da fila de issues em ondas: pegar-issue, tdd e ship em paralelo até PR verde, checkpoint humano de merge, um deploy por onda, auditoria do PRD. Sintaxe `/onda [#PRD | --all]`.'
 ---
 
 # Onda — execução autônoma da fila em ondas

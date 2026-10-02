@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Ciclo completo de uma mudança: branch, commit, PR, 3 gates, merge humano e /deploy ship. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--no-deploy] [--no-merge] [--skip-review]`.
+description: 'Ciclo completo de uma mudança: branch, commit, PR, 3 gates, merge humano e /deploy ship. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--no-deploy] [--no-merge] [--skip-review]`.'
 ---
 
 # ship — orquestrar mudança end-to-end

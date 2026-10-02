@@ -1,6 +1,6 @@
 ---
 name: diagnose
-description: Loop de diagnóstico para bug difícil ou regressão de performance: reproduzir, minimizar, hipótese, instrumentar, corrigir, teste de regressão. Use em "diagnostica isso", "debug isso".
+description: 'Loop de diagnóstico para bug difícil ou regressão de performance: reproduzir, minimizar, hipótese, instrumentar, corrigir, teste de regressão. Use em "diagnostica isso", "debug isso".'
 ---
 
 # Diagnose

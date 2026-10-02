@@ -91,8 +91,10 @@ jobs:
         # novo ganha o teste dele no CI sem lembrar de editar este arquivo. O
         # `--ignore` tira o painel local `tools/workflow-dashboard/`, que tem
         # suíte própria, roda da própria pasta e nunca esteve neste job.
+        # O `pyyaml` é do `tools/lint_skills.py` (issue #807), que também mora
+        # em tools/ e tem o teste pego por este curinga.
         run: |
-          pip install pytest
+          pip install pytest pyyaml
           python -m pytest tools/ -q --ignore=tools/workflow-dashboard
 
       - name: Lint do manual

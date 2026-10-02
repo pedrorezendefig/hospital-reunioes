@@ -1,6 +1,6 @@
 ---
 name: onda-enxuta
-description: Executor AFK da fila de issues em ondas, versão enxuta da /onda: uma sessão de fundo por onda, mapa do terreno por PRD, implementador que morre no PR, corretor fresco, revisão por lista de arquivos, um push e um build por onda, medição automática. Sintaxe `/onda-enxuta [#PRD | --all] [--paralelo N] [--sessao <nome>] [--onda N]`.
+description: 'Executor AFK da fila de issues em ondas, versão enxuta da /onda: uma sessão de fundo por onda, mapa do terreno por PRD, implementador que morre no PR, corretor fresco, revisão por lista de arquivos, um push e um build por onda, medição automática. Sintaxe `/onda-enxuta [#PRD | --all] [--paralelo N] [--sessao <nome>] [--onda N]`.'
 ---
 
 # Onda enxuta
