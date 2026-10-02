@@ -236,3 +236,59 @@ class TestGuardaDoPacienteDoCaso:
         caso = _manifestacao(paciente_nome=PACIENTE, paciente_referencia=None)
 
         assert paciente_do_caso(caso) == {"nome": PACIENTE, "referencia": None}
+
+
+LINHA_DO_PACIENTE = f"Paciente: {PACIENTE} ({REFERENCIA})"
+
+
+class TestPacienteNoEmailDeAcionamento:
+    """Issue #664: a linha "Paciente" no email de acionamento, logo abaixo de
+    quem manifestou, nas duas versões do email (HTML e texto)."""
+
+    def test_caso_comum_leva_a_linha_do_paciente_abaixo_de_quem_manifestou(self):
+        caso = _manifestacao(paciente_nome=PACIENTE, paciente_referencia=REFERENCIA)
+        _, html, texto = montar_nova_demanda(caso, "Carlos", AGORA, SEM_FERIADOS)
+
+        for pedaco in (html, texto):
+            assert LINHA_DO_PACIENTE in pedaco
+        assert html.index("Quem manifestou: Joana da Silva") < html.index(LINHA_DO_PACIENTE)
+
+    def test_caso_anonimo_leva_o_paciente_sem_quem_manifestou(self):
+        caso = _manifestacao(
+            anonimo=True, manifestante_nome=None, paciente_nome=PACIENTE, paciente_referencia=REFERENCIA
+        )
+        _, html, texto = montar_nova_demanda(caso, "Carlos", AGORA, SEM_FERIADOS)
+
+        for pedaco in (html, texto):
+            assert LINHA_DO_PACIENTE in pedaco
+            assert AVISO_ANONIMO in pedaco
+
+    def test_caso_sigiloso_nao_leva_o_paciente(self):
+        """As outras portas seguem abertas (a nota e o aviso chegam): o teste
+        mede o corte do paciente, não um email que esvaziou."""
+        caso = _manifestacao(sigilo_reforcado=True, paciente_nome=PACIENTE, paciente_referencia=REFERENCIA)
+        _, html, texto = montar_nova_demanda(caso, "Carlos", AGORA, SEM_FERIADOS)
+
+        for pedaco in (html, texto):
+            assert EXTRATO in pedaco
+            assert AVISO_SIGILO in pedaco
+            assert PACIENTE not in pedaco
+            assert REFERENCIA not in pedaco
+            assert "Paciente:" not in pedaco
+
+    def test_caso_sem_paciente_nao_desenha_a_linha(self):
+        """Aqui a ausência não é informação, ao contrário do "Sem
+        identificação": caso sem paciente é o caso de quem falou de si."""
+        _, html, texto = montar_nova_demanda(_manifestacao(), "Carlos", AGORA, SEM_FERIADOS)
+
+        for pedaco in (html, texto):
+            assert EXTRATO in pedaco
+            assert "Paciente:" not in pedaco
+
+    def test_sem_referencia_a_linha_leva_so_o_nome(self):
+        caso = _manifestacao(paciente_nome=PACIENTE, paciente_referencia=None)
+        _, html, texto = montar_nova_demanda(caso, "Carlos", AGORA, SEM_FERIADOS)
+
+        for pedaco in (html, texto):
+            assert f"Paciente: {PACIENTE}" in pedaco
+            assert f"{PACIENTE} (" not in pedaco
