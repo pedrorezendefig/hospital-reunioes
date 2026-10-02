@@ -48,6 +48,7 @@ Windows: `bash` do Git no PATH (para o semaforo.sh), `PYTHONUTF8=1` no snapshot.
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import os
 import platform
@@ -165,7 +166,7 @@ def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> list[dict]:
         for tentativa in range(6):
             info = gh_json(["pr", "view", str(n), "--json",
                             "number,state,mergeable,mergeStateStatus,statusCheckRollup,headRefName,"
-                            "baseRefName,title,files,commits,url,closingIssuesReferences"], cwd=raiz)
+                            "baseRefName,title,files,commits,url,closingIssuesReferences,body"], cwd=raiz)
             if info.get("mergeable") != "UNKNOWN":
                 break
             time.sleep(5)
@@ -191,22 +192,51 @@ def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> list[dict]:
         infos.append(info)
     if problemas:
         falhar("pre-condicao: " + "; ".join(problemas) + ".", EXIT_PRECOND)
-    conferir_migrations(raiz, prs)
+    conferir_migrations(raiz, infos)
     return infos
 
 
-def conferir_migrations(raiz: Path, prs: list[int]) -> None:
-    """Para se algum PR adiciona migration com numero que a origin/main ja usa.
+def conferir_migrations(raiz: Path, infos: list[dict]) -> None:
+    """Para se algum PR adiciona migration com numero que a origin/main ja usa,
+    ou se o sha256 que o corpo do PR declara nao e o do arquivo.
 
     Roda depois do `git fetch origin main`: o CI conferiu contra a main da hora
     do push, e ela pode ter andado desde entao. Renumerar e do autor.
     """
-    for n in prs:
+    for info in infos:
+        n = info["number"]
         run(["git", "fetch", "-q", "origin", f"pull/{n}/head"], cwd=raiz)
         head = run(["git", "rev-parse", "FETCH_HEAD"], cwd=raiz).stdout.strip()
         achadas = checar_migration_repetida.colisoes(raiz, "origin/main", head)
         if achadas:
             falhar(f"pre-condicao: #{n}: " + checar_migration_repetida.mensagem(achadas), EXIT_PRECOND)
+        conferir_hash_das_migrations(raiz, n, head, info.get("body") or "")
+
+
+def conferir_hash_das_migrations(raiz: Path, n: int, head: str, corpo: str) -> None:
+    """Para se o corpo do PR nao traz o sha256 de cada migration nova do head.
+
+    O SQL que o humano cola no Studio e o que a review leu no corpo do PR, e o
+    hash do corpo e a prova de que e o mesmo arquivo que vai entrar na main.
+    """
+    novas = run(["git", "diff", "--name-only", "-M", "--diff-filter=A", f"origin/main...{head}", "--",
+                 checar_migration_repetida.PASTA], cwd=raiz).stdout.split()
+    declarados = sorted({h.lower() for h in re.findall(r"\b[0-9a-fA-F]{64}\b", corpo)})
+    for caminho in novas:
+        if run(["git", "cat-file", "-e", f"origin/main:{caminho}"], cwd=raiz, check=False).returncode == 0:
+            continue  # ja esta na main (PR empilhado sobre um que entrou por squash)
+        conteudo = subprocess.run(["git", "show", f"{head}:{caminho}"], cwd=str(raiz),
+                                  capture_output=True, check=True).stdout
+        sha = hashlib.sha256(conteudo).hexdigest()
+        if sha in declarados:
+            continue
+        nome = Path(caminho).name
+        if not declarados:
+            falhar(f"pre-condicao: #{n}: o corpo do PR nao declara o sha256 de {nome}; "
+                   f"o arquivo no head tem {sha}. Ponha o hash no corpo e rode de novo.", EXIT_PRECOND)
+        falhar(f"pre-condicao: #{n}: o sha256 de {nome} no corpo do PR ({', '.join(declarados)}) "
+               f"nao bate com o arquivo no head ({sha}). Atualize o SQL e o hash do corpo e rode de novo.",
+               EXIT_PRECOND)
 
 
 # ----------------------------------------------------------------- semaforo

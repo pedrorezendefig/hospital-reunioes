@@ -312,3 +312,74 @@ def test_dry_run_do_pr_avulso_imprime_o_plano_com_pr_issue_e_tipo_de_bump(
     assert c.coolify() == []
     assert c.semaforo == []
     assert c.builds == []
+
+
+# ------------------------------------------- sha256 da migration no corpo do PR
+
+SQL_DO_ARQUIVO = "create table triagem (id int);\n"
+SHA_DO_ARQUIVO = hashlib.sha256(SQL_DO_ARQUIVO.encode("utf-8")).hexdigest()
+SHA_VELHO = hashlib.sha256(b"create table triagem ();\n").hexdigest()
+
+
+def pr_com_migration(tmp_path: Path, corpo: str) -> Cenario:
+    return Cenario(tmp_path, 8, "feat(ouvidoria): triagem", 6, {
+        f"{MIGRATIONS}/112_triagem.sql": SQL_DO_ARQUIVO,
+        "hospital-reunioes/backend/app/prazo.py": "PRAZO = 15\n",
+    }, corpo=corpo)
+
+
+def corpo_com_hash(sha: str) -> str:
+    return (
+        "## Migration 112 (conferência por hash)\n\n"
+        f"`sha256` do arquivo `{MIGRATIONS}/112_triagem.sql`:\n\n```\n{sha}\n```\n"
+    )
+
+
+def parar_nas_pre_condicoes(fo, monkeypatch, c: Cenario, capsys) -> str:
+    preparar(fo, monkeypatch, c)
+    with pytest.raises(SystemExit) as e:
+        rodar_main(fo, monkeypatch, c)
+    assert e.value.code == fo.EXIT_PRECOND
+    # parou antes de tocar em qualquer coisa
+    assert c.semaforo == [] and c.coolify() == [] and c.main_remota() == c.base
+    return capsys.readouterr().out
+
+
+def test_hash_do_corpo_diferente_do_arquivo_para_nas_pre_condicoes(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_com_migration(tmp_path, corpo_com_hash(SHA_VELHO))
+
+    saida = parar_nas_pre_condicoes(fo, monkeypatch, c, capsys)
+
+    assert "#8" in saida and "112_triagem.sql" in saida, saida
+    assert SHA_DO_ARQUIVO in saida and SHA_VELHO in saida, saida
+
+
+def test_corpo_sem_hash_da_migration_para_e_diz_o_hash_do_arquivo(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_com_migration(tmp_path, "## O que mudou\n\nTabela nova.\n")
+
+    saida = parar_nas_pre_condicoes(fo, monkeypatch, c, capsys)
+
+    assert "112_triagem.sql" in saida and SHA_DO_ARQUIVO in saida, saida
+
+
+def test_hash_do_corpo_igual_ao_arquivo_segue(tmp_path, monkeypatch, capsys):
+    fo = carregar_fechar_onda()
+    c = pr_com_migration(tmp_path, corpo_com_hash(SHA_DO_ARQUIVO.upper()))
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+    assert "112_triagem.sql" in capsys.readouterr().out
+
+
+def test_pr_sem_migration_nova_nao_pede_hash(tmp_path, monkeypatch):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, corpo="")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
