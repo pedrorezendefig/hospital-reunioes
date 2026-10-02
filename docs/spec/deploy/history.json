@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-02T17:49:02-03:00",
+      "sha": "712789f4",
+      "app_version": "0.157.0",
+      "subject": "Onda onda-c: O menu de reticências deixa de ser recortado pelo card da fila; A Retenção apaga o Paciente do caso nas duas portas; O registro manual do ouvidor ganha o paciente do caso; Enxugar a escri",
+      "raw_subject": "chore(deploy): registro da onda onda-c (#778 #798 #796 #801)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        659
+      ],
+      "result": "healthy",
+      "duration_seconds": 8,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-c: PRs #778 #798 #796 #801. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-09-28T11:36:40-03:00",
       "sha": "e03a1ec0",
       "app_version": "0.156.6",
@@ -1509,35 +1541,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Fatia avulsa #671 (PR #672), sem PRD e sem ADR, decidida em grilling. Remocao pura: pagina /admin/utilitarios, item Utilitarios e secao Ferramentas da sidebar, rota POST /admin/utilitarios/converter-markdown, schema ConversaoMarkdownResponse, servico markdown_converter, teste e tres fixtures binarias que so ele usava, e markitdown no pyproject. uv.lock so removeu (276 linhas, 17 pacotes: markitdown e a subarvore exclusiva dele), zero adicoes; pdfplumber, docx2txt, pdfminer.six e lxml ficaram porque a importacao de transcricao e os POPs dependem deles. TDD: teste de ausencia na sidebar (desktop e drawer) com Tecnologia como marcador de presenca, RED antes e GREEN depois. openapi conferido uma vez no PR: 175 rotas, nenhuma com utilitarios. Quatro gates verdes: code-review sem bug (travessoes do template corrigidos a mao no corpo do PR; duplicacao do describe.each ficou por nomear a issue), spec x diff aprovado sem faltante nem scope creep, security review sem achado (superficie diminui: sai um endpoint autenticado de upload e toda a cadeia de parsing), CI verde nos tres jobs. Merge pela API (gh pr merge nao funciona em worktree). APP_VERSION: classifier negou, humano rodou com !; o primeiro comando que entreguei tinha UUID errado escrito de cabeca (404), o certo veio do project.json. Prova em prod: rota removida 404 contra 401 na rota de controle, /api/health em 0.123.3 com db healthy. Issue fechou no merge com 5/5 criterios marcados."
-    },
-    {
-      "at": "2026-09-09T21:00:00-03:00",
-      "sha": "bbe1fc0",
-      "app_version": "0.123.2",
-      "subject": "duas guardas de seguranca que faltavam: anti-SSRF nos tres geradores de PDF sem guarda nenhuma, e a recusa de caso apagado nas duas portas de escrita fechadas so por acidente",
-      "raw_subject": "fix(pdf): guarda anti-SSRF compartilhada na Ata, no relatorio e no cartaz (#668)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 420,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda avulsa de duas issues de seguranca, fora de PRD, arquivos disjuntos, em paralelo. #633 (PR #668, v0.123.2): a guarda anti-SSRF do PDF estava AUSENTE, nem inerte, em tres geradores (Ata, relatorio da Ouvidoria, cartaz dos pontos). A guarda saiu de pops_pdf_service.py para pdf_url_fetcher.py e foi ligada nos tres, com o fetcher no construtor HTML(...), que e onde o WeasyPrint de fato le. Passar no write_pdf() e o erro da #152, que deixou a guarda do POP morta por anos em silencio. Multicast e CGNAT (100.64.0.0/10) entraram como predicados novos: os dois passavam por todos os outros. 13 mutantes mortos. O revisor renderizou os TRES templates reais (o PR so testava com template falso) e confirmou que a guarda nao recusa o logo legitimo. Um comentario factualmente ERRADO foi corrigido: o WeasyPrint NAO normaliza o .. da URL antes do fetcher (url_join devolve iri_to_uri, so percent-encoding); o que salva o asset e template e allowlist sairem da MESMA expressao. #631 (PR #667, v0.123.1): barrar_caso_apagado virou explicita em POST /ouvidoria-setor/{token}/responder e POST .../notificacoes/{id}/reenviar, que antes dependiam da pre-condicao de estado dar certo por consequencia. MUST-FIX pego na review: o ramo do apagamento PENDENTE devolve frase que nomeia a Diretoria Executiva, e com a guarda no portal ela passaria a sair por link sem login para o titular da area, que costuma ser a parte reclamada. Resolvido com o parametro keyword-only canal_publico, que troca so esse ramo por frase neutra; toda porta com login segue com a frase completa. O default ficou pinado nos dois sentidos por mutante. 9 mutantes mortos. Nos dois PRs o mutante mais importante foi no DETECTOR: tirar o campo da tupla do select deixava a guarda lendo None e a suite inteira verde. Nenhuma das duas criou migration. Issue #669 aberta com o inventario das portas irmas que sobraram sem guarda."
     }
   ]
 }

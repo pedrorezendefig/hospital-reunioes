@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.157.0 - 2026-10-02 17:49 - Onda onda-c: O menu de reticências deixa de ser recortado pelo card da fila; A Retenção apaga o Paciente do caso nas duas portas; O registro manual do ouvidor ganha o paciente do caso; Enxugar a escri
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `712789f`
+- PRs: [#778](https://github.com/pedrorezendefig/hospital-reunioes/pull/778), [#798](https://github.com/pedrorezendefig/hospital-reunioes/pull/798), [#796](https://github.com/pedrorezendefig/hospital-reunioes/pull/796), [#801](https://github.com/pedrorezendefig/hospital-reunioes/pull/801)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (8s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/712789f
+
 ## v0.156.6 - 2026-09-28 11:36 - Recuo da continuação enxerga toda quebra de linha
 - Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `e03a1ec`
