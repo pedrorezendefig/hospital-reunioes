@@ -1,0 +1,251 @@
+"""As regras puras do provedor de Instagram, testadas direto (issue #819).
+
+Porte de `src/lib/instagram/meta-mappers.test.ts` do repositório antigo, com as
+MESMAS regras, adaptando o nome do provedor para "instagram" (a empresa dona da
+rede nunca aparece em identificador nem em tela). Regras puras: nenhuma função
+daqui fala com rede, banco ou relógio. O seam é a própria função de mapeamento,
+como `area_da_pagina` e `origem_do_canal` do provedor do Google (PRD #809,
+"Regras puras testadas direto").
+
+Os valores esperados foram contados à mão a partir das entradas, e não pela
+mesma conta do código: é a fonte independente contra a qual o mapeamento é
+conferido.
+"""
+
+from __future__ import annotations
+
+import os
+import sys
+
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
+
+import re  # noqa: E402
+from datetime import date  # noqa: E402
+from pathlib import Path  # noqa: E402
+
+from app.services.central_de_comando import provedor_instagram as ig  # noqa: E402
+from app.services.central_de_comando.periodo import Intervalo  # noqa: E402
+
+
+def iv(nome: str, valor: int) -> dict:
+    """Um insight da conta, como a Graph API entrega com `metric_type=total_value`."""
+    return {"name": nome, "total_value": {"value": valor}}
+
+
+def follows(ganhos: int, perdidos: int) -> dict:
+    """O insight `follows_and_unfollows` com o breakdown por `follow_type`."""
+    return {
+        "name": "follows_and_unfollows",
+        "total_value": {
+            "breakdowns": [
+                {
+                    "results": [
+                        {"dimension_values": ["FOLLOWER"], "value": ganhos},
+                        {"dimension_values": ["NON_FOLLOWER"], "value": perdidos},
+                    ]
+                }
+            ]
+        },
+    }
+
+
+class TestMontarSaude:
+    def test_junta_seguidores_e_insights_atual_e_anterior_ausentes_viram_zero(self):
+        atual = [
+            iv("reach", 100),
+            iv("views", 250),
+            iv("total_interactions", 40),
+            iv("accounts_engaged", 30),
+            iv("likes", 25),
+            iv("comments", 6),
+            iv("saves", 5),
+            iv("shares", 4),
+        ]
+        anterior = [iv("reach", 80)]
+
+        saude = ig.montar_saude(18420, atual, anterior, follows(775, 34), follows(500, 20))
+
+        assert saude.seguidores == 18420
+        assert saude.alcance == 100
+        assert saude.alcance_anterior == 80
+        assert saude.visualizacoes == 250
+        # `views` ausente no anterior vira 0, e nunca None.
+        assert saude.visualizacoes_anterior == 0
+        assert saude.interacoes == 40
+        assert saude.contas_engajadas == 30
+        assert saude.partes.curtidas == 25
+        assert saude.partes.comentarios == 6
+        assert saude.partes.salvamentos == 5
+        assert saude.partes.compartilhamentos == 4
+        # crescimento = ganhos - perdidos, no atual e no anterior.
+        assert saude.crescimento == 741
+        assert saude.crescimento_anterior == 480
+        assert saude.seguidores_ganhos == 775
+        assert saude.seguidores_perdidos == 34
+
+
+class TestDeltaDeSeguidores:
+    def test_le_follower_como_ganho_e_non_follower_como_perda(self):
+        assert ig.delta_de_seguidores(follows(775, 34)) == (775, 34)
+
+    def test_insight_ausente_ou_sem_breakdown_e_zero_a_zero(self):
+        assert ig.delta_de_seguidores(None) == (0, 0)
+        assert ig.delta_de_seguidores({"name": "follows_and_unfollows"}) == (0, 0)
+
+
+class TestTipoDeMidia:
+    def test_imagem(self):
+        assert ig.tipo_de_midia("IMAGE", None) == "imagem"
+
+    def test_carrossel(self):
+        assert ig.tipo_de_midia("CAROUSEL_ALBUM", None) == "carrossel"
+
+    def test_reel_e_video_pelo_media_product_type(self):
+        assert ig.tipo_de_midia("VIDEO", "REELS") == "reel"
+        assert ig.tipo_de_midia("VIDEO", "FEED") == "video"
+
+    def test_qualquer_outro_cai_em_video(self):
+        assert ig.tipo_de_midia("QUALQUER", None) == "video"
+
+
+class TestDentroDoPeriodo:
+    def test_filtra_pela_janela_inclusive_pelo_dia_de_brasilia(self):
+        intervalo = Intervalo(inicio=date(2026, 6, 15), fim=date(2026, 6, 21))
+
+        assert ig.dentro_do_periodo("2026-06-15T09:00:00Z", intervalo) is True
+        assert ig.dentro_do_periodo("2026-06-21T23:00:00Z", intervalo) is True
+        assert ig.dentro_do_periodo("2026-06-14T23:00:00Z", intervalo) is False
+
+    # O dia da publicação é o de Brasília (issue #873), como o fim do período
+    # desde a #857. A Graph API manda o timestamp em UTC com offset `+0000`;
+    # Brasília é UTC-3, então 01h UTC é 22h da véspera no hospital.
+
+    def test_22h_de_brasilia_do_ultimo_dia_entra(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # 19/09 às 22h em Brasília, que em UTC já é 20/09 às 01h.
+        assert ig.dentro_do_periodo("2026-09-20T01:00:00+0000", intervalo) is True
+
+    def test_virada_da_meia_noite_de_brasilia_no_fim_do_periodo(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # A virada é às 03h UTC, e não em outra hora: um fuso trocado por
+        # UTC-2 ou UTC-4 passaria nos testes de 01h UTC, mas não aqui.
+        # 19/09 às 23h59min59s em Brasília entra.
+        assert ig.dentro_do_periodo("2026-09-20T02:59:59+0000", intervalo) is True
+        # 20/09 à meia-noite em Brasília já fica de fora.
+        assert ig.dentro_do_periodo("2026-09-20T03:00:00+0000", intervalo) is False
+
+    def test_timestamp_com_offset_de_brasilia_usa_o_proprio_offset(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # O instante já vem na hora de Brasília: a data do texto é a do hospital.
+        assert ig.dentro_do_periodo("2026-09-19T23:30:00-0300", intervalo) is True
+        assert ig.dentro_do_periodo("2026-09-20T00:00:00-0300", intervalo) is False
+
+    def test_22h_de_brasilia_da_vespera_do_primeiro_dia_fica_de_fora(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # 12/09 às 22h em Brasília, que em UTC já é 13/09 às 01h.
+        assert ig.dentro_do_periodo("2026-09-13T01:00:00+0000", intervalo) is False
+
+    def test_timestamp_sem_fuso_e_lido_em_utc_como_a_graph_api(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # Sem offset, o instante é UTC, e não a hora local do servidor: o
+        # resultado não pode depender do fuso da máquina que roda a Central.
+        assert ig.dentro_do_periodo("2026-09-20T01:00:00", intervalo) is True
+
+    def test_timestamp_invalido_fica_de_fora(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        assert ig.dentro_do_periodo("", intervalo) is False
+        assert ig.dentro_do_periodo("ontem à noite", intervalo) is False
+        assert ig.dentro_do_periodo("2026-09-31T12:00:00+0000", intervalo) is False
+
+    def test_o_fuso_so_existe_no_modulo_de_periodo(self):
+        # Decisão da #857: um fuso só, fixo no código, em `periodo.py`. O
+        # provedor importa a constante; nenhum outro módulo da Central cria o
+        # fuso de novo. `ZoneInfo` guarda as instâncias em cache, então comparar
+        # objetos não pegaria um literal duplicado: quem pega é o texto. A busca
+        # é só por `ZoneInfo(` com o literal, para que uma docstring ou um
+        # comentário que apenas cite o fuso não quebre o teste.
+        cria_o_fuso = re.compile(r"""ZoneInfo\(\s*["']America/Sao_Paulo["']""")
+        pacote = Path(ig.__file__).parent
+        com_o_fuso = sorted(
+            arquivo.name for arquivo in pacote.rglob("*.py") if cria_o_fuso.search(arquivo.read_text(encoding="utf-8"))
+        )
+
+        assert com_o_fuso == ["periodo.py"]
+
+
+class TestParaPublicacao:
+    def test_miniatura_cai_para_media_url_quando_nao_ha_thumbnail(self):
+        midia = {
+            "id": "9",
+            "media_type": "IMAGE",
+            "permalink": "https://x/p/9",
+            "timestamp": "2026-06-18T00:00:00Z",
+            "media_url": "https://x/img.jpg",
+        }
+
+        pub = ig.para_publicacao(midia, 77)
+
+        assert pub.id == "9"
+        assert pub.legenda is None
+        assert pub.tipo == "imagem"
+        assert pub.miniatura == "https://x/img.jpg"
+        assert pub.link == "https://x/p/9"
+        assert pub.data == "2026-06-18T00:00:00Z"
+        assert pub.interacoes == 77
+
+    def test_prefere_thumbnail_quando_existe(self):
+        midia = {
+            "id": "9",
+            "media_type": "VIDEO",
+            "media_product_type": "REELS",
+            "permalink": "https://x/p/9",
+            "timestamp": "2026-06-18T00:00:00Z",
+            "media_url": "https://x/video.mp4",
+            "thumbnail_url": "https://x/thumb.jpg",
+            "caption": "Bastidores",
+        }
+
+        pub = ig.para_publicacao(midia, 5)
+
+        assert pub.miniatura == "https://x/thumb.jpg"
+        assert pub.tipo == "reel"
+        assert pub.legenda == "Bastidores"
+
+
+class TestRanquearPorInteracoes:
+    def test_ordena_desc_e_corta_no_limite(self):
+        posts = [
+            ig.Publicacao("a", None, "imagem", "", "https://x/a", "2026-06-18T00:00:00Z", 10),
+            ig.Publicacao("b", None, "imagem", "", "https://x/b", "2026-06-18T00:00:00Z", 90),
+            ig.Publicacao("c", None, "imagem", "", "https://x/c", "2026-06-18T00:00:00Z", 50),
+        ]
+
+        ranqueadas = ig.ranquear_por_interacoes(posts, 2)
+
+        assert [p.id for p in ranqueadas] == ["b", "c"]
+
+
+class TestValorDoInsight:
+    """As duas formas em que a Graph API entrega o valor de um insight: a conta
+    manda `total_value.value` (com `metric_type=total_value`); a mídia manda
+    `values:[{value}]` (as Interações por publicação). Porte do `insightValue`
+    da Central antiga, que lia `total_value.value ?? values[0].value ?? 0`. Sem
+    a forma `values`, toda publicação voltaria com 0 Interações com o token
+    real, e o ranking das Principais publicações quebraria."""
+
+    def test_le_o_total_value_da_conta(self):
+        assert ig.valor_do_insight([iv("reach", 100)], "reach") == 100
+
+    def test_le_o_values_da_midia(self):
+        insight = {"name": "total_interactions", "values": [{"value": 77}]}
+        assert ig.valor_do_insight([insight], "total_interactions") == 77
+
+    def test_ausente_ou_sem_valor_e_zero(self):
+        assert ig.valor_do_insight([], "reach") == 0
+        assert ig.valor_do_insight([{"name": "reach"}], "reach") == 0

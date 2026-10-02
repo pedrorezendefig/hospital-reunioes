@@ -270,3 +270,152 @@ def test_as_pessoas_de_exemplo_usam_so_o_dominio_inventado():
     assert emails, "o roteiro deixou de ter pessoas de exemplo"
     for email in emails:
         assert email.endswith(f"@{roteiro.DOMINIO_DE_EXEMPLO}"), email
+
+
+# --------------------------------------------------------------------------
+# A lista da arroba e a gente de verdade do banco local
+# --------------------------------------------------------------------------
+
+
+class ListaDaArroba:
+    """A lista de nomes que a arroba abre, no mínimo que a guarda consulta."""
+
+    def __init__(self, texto: str | None) -> None:
+        self.texto = texto
+
+    # `page.locator(...)` devolve isto, e a guarda usa `count`, `first` e
+    # `inner_text`.
+    def locator(self, seletor: str):
+        return self
+
+    def count(self) -> int:
+        return 0 if self.texto is None else 1
+
+    @property
+    def first(self):
+        return self
+
+    def inner_text(self) -> str:
+        return self.texto
+
+
+def test_a_guarda_da_arroba_barra_quem_nao_e_pessoa_de_exemplo():
+    """Mencionável é todo super admin do banco, e o banco local tem as contas
+    de gente de verdade. Um nome desses no print vai para um site público."""
+    roteiro = carregar_roteiro()
+    lista = ListaDaArroba("LS\nLucas Sampaio\nVitta")
+
+    with pytest.raises(SystemExit) as erro:
+        roteiro._exigir_so_pessoas_de_exemplo(lista, "mencao-na-pendencia")
+
+    assert "Lucas Sampaio" in str(erro.value)
+
+
+def test_a_guarda_da_arroba_deixa_passar_so_gente_de_exemplo():
+    """As iniciais do avatar saem no mesmo texto e não identificam ninguém."""
+    roteiro = carregar_roteiro()
+    _, nome, _, _, setor, _, _ = roteiro.PESSOAS[3]
+    lista = ListaDaArroba(f"LB\n{nome}\n{setor}")
+
+    roteiro._exigir_so_pessoas_de_exemplo(lista, "mencao-na-pendencia")
+
+
+def test_a_guarda_da_arroba_para_quando_a_lista_nao_abriu():
+    """Sem lista na tela o balão sairia solto, apontando o nada."""
+    roteiro = carregar_roteiro()
+
+    with pytest.raises(SystemExit) as erro:
+        roteiro._exigir_so_pessoas_de_exemplo(ListaDaArroba(None), "mencao-na-pendencia")
+
+    assert "não abriu" in str(erro.value)
+
+
+# --------------------------------------------------------------------------
+# O comentário de exemplo e o aviso do sino
+# --------------------------------------------------------------------------
+
+
+def semear_registrando(monkeypatch) -> list[tuple]:
+    """Roda o `--semear` com o banco dublado e devolve o que ele chamaria."""
+    roteiro = carregar_roteiro()
+    chamadas: list[tuple] = []
+
+    def rest(caminho, metodo="GET", corpo=None, prefer=None):
+        chamadas.append((caminho, metodo, corpo))
+        return []
+
+    monkeypatch.setattr(roteiro, "_credenciais_locais", lambda: ("http://127.0.0.1", "k"))
+    monkeypatch.setattr(roteiro, "_login_de_exemplo", lambda email, nome: "auth-" + email)
+    monkeypatch.setattr(roteiro, "_rest", rest)
+
+    roteiro.semear()
+    return chamadas
+
+
+def test_o_semear_apaga_o_comentario_de_exemplo_antes_de_criar(monkeypatch):
+    """Sem apagar, o histórico cresce uma linha por rodada e o sino acumula
+    avisos: os dois prints mudariam sozinhos de uma captura para a outra."""
+    chamadas = semear_registrando(monkeypatch)
+
+    apagou = [i for i, (c, m, _) in enumerate(chamadas) if m == "DELETE" and "comentarios_pendencias" in c]
+    criou = [i for i, (c, m, _) in enumerate(chamadas) if m == "POST" and c == "comentarios_pendencias"]
+    assert apagou and criou, "o comentário de exemplo saiu do --semear"
+    assert max(apagou) < min(criou), "o --semear cria o comentário sem apagar o da rodada anterior"
+
+
+def test_o_semear_apaga_o_aviso_do_sino_antes_de_criar(monkeypatch):
+    chamadas = semear_registrando(monkeypatch)
+
+    apagou = [i for i, (c, m, _) in enumerate(chamadas) if m == "DELETE" and c.startswith("notificacoes?")]
+    criou = [i for i, (c, m, _) in enumerate(chamadas) if m == "POST" and c == "notificacoes"]
+    assert apagou and criou, "o aviso do sino saiu do --semear"
+    assert max(apagou) < min(criou), "o --semear acende um aviso novo sem apagar o da rodada anterior"
+
+
+def test_a_pendencia_do_historico_vazio_nao_recebe_comentario(monkeypatch):
+    """O print do passo que mostra 'Sem rastros de atividade.' só existe
+    enquanto essa pendência não tiver comentário nenhum."""
+    roteiro = carregar_roteiro()
+    chamadas = semear_registrando(monkeypatch)
+
+    assert roteiro.PENDENCIA_COM_COMENTARIO != roteiro.PENDENCIA_SEM_COMENTARIO
+    for caminho, metodo, corpo in chamadas:
+        if metodo == "POST" and caminho == "comentarios_pendencias":
+            for linha in corpo:
+                assert linha["id_acao"] != roteiro.PENDENCIA_SEM_COMENTARIO
+
+
+def test_o_comentario_de_exemplo_menciona_quem_o_print_do_sino_mostra(monkeypatch):
+    """O aviso do sino é da conta que os prints usam: sem isso, o print do
+    passo 6 sairia com o sino vazio."""
+    roteiro = carregar_roteiro()
+    chamadas = semear_registrando(monkeypatch)
+
+    comentario = next(c for cam, m, c in chamadas if m == "POST" and cam == "comentarios_pendencias")
+    aviso = next(c for cam, m, c in chamadas if m == "POST" and cam == "notificacoes")
+    assert comentario[0]["mencoes"] == [roteiro.FACILITADORA[0]]
+    assert aviso[0]["destinatario_id"] == roteiro.FACILITADORA[0]
+    assert aviso[0]["tipo"] == "MENCAO"
+
+
+def test_nenhum_outro_roteiro_usa_os_identificadores_deste():
+    """O banco local é um só, e cada módulo do manual tem o seu roteiro.
+
+    Dois roteiros com o mesmo identificador de pessoa fazem o `--semear` de um
+    trocar o nome, o e-mail e o perfil das pessoas do outro. Quem rodasse os
+    cinco em sequência acabaria com a Facilitadora virando ouvidora, e o
+    roteiro daqui pararia na tela vazia, sem dizer por quê.
+    """
+    roteiro = carregar_roteiro()
+    meus = {pessoa[0] for pessoa in roteiro.PESSOAS}
+    prints = ROTEIRO.parent
+
+    for outro in sorted(prints.glob("*.py")):
+        if outro.name == ROTEIRO.name:
+            continue
+        fonte = outro.read_text(encoding="utf-8")
+        repetidos = sorted(pid for pid in meus if f'"{pid}"' in fonte)
+        assert not repetidos, (
+            f"{outro.name} usa {', '.join(repetidos)}, que é de gente deste "
+            "roteiro: semear os dois sobrescreve as pessoas de um dos módulos"
+        )

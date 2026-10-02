@@ -32,9 +32,9 @@ feriado novo no calendário do Rio. Ninguém mais mexe nesta tela.
 
 ## Se der errado
 
-- **Um caso já encaminhado continua com o prazo antigo:** é assim mesmo. A
-  tabela nova vale para as validações novas; quem já recebeu a demanda mantém o
-  prazo que recebeu.
+- **Um caso já encaminhado continua com o prazo antigo:** a tabela nova vale só
+  para as validações novas. Quem já recebeu a demanda mantém o prazo que
+  recebeu.
 - **O acuse de recebimento não respeita o expediente:** só ele. Esse prazo corre
   em horas corridas, contando noite e fim de semana, porque é uma promessa a
   quem esperou.

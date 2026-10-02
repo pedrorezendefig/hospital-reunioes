@@ -24,7 +24,7 @@ mantendo a estrutura e o conteúdo do original.
 
    ![Painel do Consultor de POPs com um arquivo anexado](../../../assets/pops/material-anexado.png)
 3. Escolha um ou vários arquivos de uma vez. Cada um vira uma etiqueta com o
-   nome do arquivo abaixo do campo.
+   nome do arquivo acima do campo de mensagem.
 4. Com o material anexado e a conversa ainda vazia, aparece o botão
    **Elaborar a nova versão a partir do material anexado**. Clique nele.
 5. O pedido pronto cai no campo de mensagem. Ajuste o texto se quiser e envie.

@@ -15,6 +15,20 @@ from __future__ import annotations
 import re
 from typing import Any
 
+from app.services.ouvidoria_pseudonimizacao import (
+    MARCADOR_CEP,
+    MARCADOR_CNS,
+    MARCADOR_CPF,
+    MARCADOR_DATA_NASCIMENTO,
+    MARCADOR_EMAIL,
+    MARCADOR_NOME,
+    MARCADOR_PLACA,
+    MARCADOR_PROTOCOLO,
+    MARCADOR_REDE_SOCIAL,
+    MARCADOR_RG,
+    MARCADOR_TELEFONE,
+    pseudonimizar,
+)
 from app.utils.text_sanitizer import sanitizar_travessao
 
 # ─── 1. A Etapa ──────────────────────────────────────────────────────────────
@@ -485,6 +499,33 @@ _ESTRUTURA_NA_COLUNA_ZERO = re.compile(
     re.MULTILINE,
 )
 
+# O marcador da peneira (issue #772) colado no que o Markdown le como link:
+# `[NOME]: destino` na coluna zero e uma definicao de link de referencia, e o
+# GitHub SOME com a linha; `[TELEFONE](x)` e `[NOME][1]` viram link. A barra
+# antes do colchete o deixa como texto, e o GitHub a mostra como `[NOME]`. O
+# lookbehind e o que mantem o escape idempotente: uma segunda barra desligaria
+# a primeira, e o link voltaria.
+_MARCADOR_QUE_VIRA_LINK = re.compile(
+    r"(?<!\\)(?:"
+    + "|".join(
+        re.escape(marcador)
+        for marcador in (
+            MARCADOR_CEP,
+            MARCADOR_CNS,
+            MARCADOR_CPF,
+            MARCADOR_DATA_NASCIMENTO,
+            MARCADOR_EMAIL,
+            MARCADOR_NOME,
+            MARCADOR_PLACA,
+            MARCADOR_PROTOCOLO,
+            MARCADOR_REDE_SOCIAL,
+            MARCADOR_RG,
+            MARCADOR_TELEFONE,
+        )
+    )
+    + r")(?=[(\[:])"
+)
+
 
 def texto_do_diretor(bruto: str | None) -> str:
     """O texto digitado no app, pronto para entrar num corpo de issue publica.
@@ -515,10 +556,47 @@ def texto_do_diretor(bruto: str | None) -> str:
     Idempotente: `&lt;` nao tem `<` para escapar de novo, e a linha ja
     neutralizada comeca por `\\`, que nao casa a estrutura. Aplicar duas vezes
     da o mesmo texto.
+
+    **Antes de tudo, a peneira de dado pessoal** (issue #772, ADR 0060): o
+    `pseudonimizar` da Ouvidoria troca CPF, CNS, telefone, e-mail, data de
+    nascimento, nome e o resto por marcador. Desde o #730 a descricao pode ser
+    a transcricao de um print de sistema hospitalar, e o diretor tambem digita.
+    A Demanda no app guarda o texto original: a peneira age so no que sai.
     """
     texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
+    return _escapar_para_o_github(pseudonimizar(texto))
+
+
+def titulo_da_issue(bruto: str | None) -> str:
+    """O titulo da Demanda, pronto para o titulo da issue publica.
+
+    O mesmo funil do `texto_do_diretor` (peneira de dado pessoal, `<` e
+    estrutura em coluna zero escapados), menos a barra antes do colchete do
+    marcador: o titulo da issue e texto puro no GitHub, e nao Markdown, entao
+    la nao ha link a desligar e a barra apareceria ("\\[NOME]: leito 12"). O
+    "O que muda" que repete o titulo no corpo passa pelo `texto_do_diretor` e
+    ganha a barra la, onde ela vale.
+    """
+    texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
+    return _escapar_para_o_github(pseudonimizar(texto), marcador_vira_link=False)
+
+
+def _escapar_para_o_github(texto: str, *, marcador_vira_link: bool = True) -> str:
+    """O escape do `texto_do_diretor`, sem a peneira: `<` vira `&lt;`,
+    estrutura em coluna zero desligada, travessao sanitizado.
+
+    Existe separado porque o `texto_espelhado` peneira TRECHO a trecho, entre
+    as mencoes do app, e o `@login` que ele poe no lugar de cada mencao nao
+    pode passar pela peneira depois: ela o leria como perfil de rede social.
+
+    `marcador_vira_link=False` e so para o titulo da issue, que nao e Markdown
+    (`titulo_da_issue`).
+    """
+    texto = _QUEBRA_DE_LINHA.sub("\n", texto)
     escapado = texto.replace("<", "&lt;")
     neutralizado = _ESTRUTURA_NA_COLUNA_ZERO.sub(r"\1\\\2", escapado)
+    if marcador_vira_link:
+        neutralizado = _MARCADOR_QUE_VIRA_LINK.sub(r"\\\g<0>", neutralizado)
     return sanitizar_travessao(neutralizado).strip()
 
 
@@ -583,6 +661,11 @@ def corpo_da_issue_nova(
     - o **`@login`** e de quem LEVOU, nao de quem pediu, e e identificador que a
       propria pessoa ja tornou publico no GitHub. Ele existe sempre, porque a
       rota devolve 403 para quem nao tem `github_login`.
+
+    **Dado de paciente tambem nao sai** (issue #772, ADR 0060): titulo e
+    descricao passam pela peneira do `texto_do_diretor`. O "O que muda" volta
+    ao card pelo `bloco_para_o_diretor` com os marcadores no lugar do dado, e
+    isso e aceito: a Demanda guarda o texto original.
 
     Descricao vazia usa o TITULO: uma issue cujo "O que muda" viesse em branco
     mostraria "Descrição em preparação" no card de quem acabou de pedir.
@@ -699,18 +782,21 @@ def _neutralizar_mencoes(texto: str) -> str:
 def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> str:
     """O texto da resposta, pronto para um comentario em repositorio publico.
 
-    Passa pelo `texto_do_diretor` (o `<` vira `&lt;`, estrutura em coluna zero
-    desligada, travessao sanitizado) e depois trata o `@`, que aquele funil
-    nao conhece porque no corpo da issue nova nao ha mencao:
+    O mesmo funil do `texto_do_diretor` (peneira de dado pessoal, `<` vira
+    `&lt;`, estrutura em coluna zero desligada, travessao sanitizado), com o
+    `@` tratado no meio, que aquele funil nao conhece porque no corpo da issue
+    nova nao ha mencao:
 
     1. a **mencao do app** (o `@Nome Completo` que o autocomplete grava, com o
        id da pessoa em `mencoes`) vira o rotulo dessa pessoa: `@login` quando
        ela tem, que e mencao de verdade no GitHub e chama quem o autor quis
        chamar, ou o rotulo neutro. O nome civil do mencionado nao sai;
-    2. qualquer **outra** mencao (`@fulano` digitado a mao) sai com um espaco
-       depois do `@`, que e o que desliga o filtro de mencao do GitHub sem
-       criar delimitador no texto do autor. O e-mail digitado no texto nao e
-       mencao e fica como esta.
+    2. o texto **entre** as mencoes passa pela peneira (`_trecho_do_autor`,
+       issue #772): o `@fulano` digitado a mao vira `[REDE_SOCIAL]`, o e-mail
+       vira `[EMAIL]`. O que a peneira nao pega (o `@` seguido de digito) sai
+       com um espaco depois do `@`, que e o que desliga o filtro de mencao do
+       GitHub sem criar delimitador no texto do autor. O rotulo do passo 1 nao
+       passa pela peneira: ela leria o `@login` como perfil.
 
     A troca do passo 1 roda sobre o texto BRUTO, antes do `texto_do_diretor`:
     e o nome do cadastro que tem de casar, e o funil transforma o texto (`<`
@@ -727,18 +813,32 @@ def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> 
         if (nome := str((pessoa or {}).get("nome_completo") or "").strip())
     }
     if not rotulos:
-        return texto_do_diretor(_neutralizar_mencoes(texto))
+        return _escapar_para_o_github(_trecho_do_autor(texto))
     padrao = re.compile(
         "|".join(re.escape(f"@{nome}") + _FIM_DO_NOME for nome in sorted(rotulos, key=len, reverse=True))
     )
     partes: list[str] = []
     fim = 0
     for achado in padrao.finditer(texto):
-        partes.append(_neutralizar_mencoes(texto[fim : achado.start()]))
+        partes.append(_trecho_do_autor(texto[fim : achado.start()]))
         partes.append(rotulos[achado.group(0)[1:]])
         fim = achado.end()
-    partes.append(_neutralizar_mencoes(texto[fim:]))
-    return texto_do_diretor("".join(partes))
+    partes.append(_trecho_do_autor(texto[fim:]))
+    return _escapar_para_o_github("".join(partes))
+
+
+def _trecho_do_autor(trecho: str) -> str:
+    """Um trecho do texto ENTRE as mencoes do app: peneira de dado pessoal
+    (issue #772) e depois o `@` solto com espaco.
+
+    A peneira vem primeiro porque ela le o `@` cru: um `@maria.silva88` pode ser
+    o perfil do paciente, e vira `[REDE_SOCIAL]`. Com o espaco posto antes, o
+    handle sairia inteiro ("@ maria.silva88"). O custo e que o `@login` do
+    GitHub digitado a mao tambem vira marcador: a peneira nao sabe distinguir
+    os dois, e a regra do modulo e perder contexto, nunca vazar pessoa. Quem
+    quer chamar alguem usa a mencao do app, que vira `@login` fora daqui.
+    """
+    return _neutralizar_mencoes(pseudonimizar(trecho))
 
 
 def corpo_do_comentario_espelhado(

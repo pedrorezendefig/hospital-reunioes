@@ -1,6 +1,6 @@
 ---
 status: accepted
-amended_by: 0029
+amended_by: 0029, 0061
 ---
 
 # Onda: execução autônoma da fila em ondas com checkpoint por lote e deploy único

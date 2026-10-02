@@ -19,6 +19,7 @@ from app.routers import (
     ana,
     auth,
     comentarios,
+    conector_mcp,
     configuracoes,
     health,
     notificacoes,
@@ -32,6 +33,7 @@ from app.routers import (
     transcricao,
     webhooks,
 )
+from app.routers.admin import central_de_comando as admin_central_de_comando
 from app.routers.admin import dados_atendimento as admin_dados_atendimento
 from app.routers.admin import espelho_global_health as admin_espelho_global_health
 from app.routers.admin import super_admins as admin_super_admins
@@ -46,6 +48,7 @@ from app.routers.pops import pops as pops_pops
 from app.routers.pops import revisao as pops_revisao
 from app.routers.pops import setores as pops_setores
 from app.routers.pops import usuarios as pops_usuarios
+from app.services.central_de_comando import aquecimento as aquecimento_da_central
 
 configure_logging()
 
@@ -56,6 +59,10 @@ _unhandled_logger = logging.getLogger("unhandled")
 async def lifespan(app: FastAPI):
     print(f"🚀 {settings.app_name} v{settings.app_version} starting...")
     start_scheduler()
+    # O cache da Central nasce vazio a cada deploy. Uma rodada só, numa thread
+    # própria, lê o período padrão de cada tela; o boot não espera por ela, e o
+    # app responde enquanto ela aquece (issue #867, ADR 0059).
+    app.state.aquecimento_da_central = aquecimento_da_central.disparar()
     yield
     stop_scheduler()
     print("👋 Shutting down...")
@@ -122,6 +129,13 @@ app.include_router(admin_taxonomia.router, prefix=settings.api_prefix)
 app.include_router(admin_tecnologia.router, prefix=settings.api_prefix)
 app.include_router(admin_dados_atendimento.router, prefix=settings.api_prefix)
 app.include_router(admin_espelho_global_health.router, prefix=settings.api_prefix)
+# Central de Comando (ADR 0058): só Super admin, gate no próprio router.
+app.include_router(admin_central_de_comando.router, prefix=settings.api_prefix)
+# Conector MCP da Central (ADR 0058, decisões 3 e 4): FORA do gate de sessão do
+# app. Sem prefixo aqui: o router já traz os caminhos inteiros, o metadata na
+# raiz do domínio (/.well-known/...) e o transporte em /api/mcp. O gate é o
+# próprio, a verificação do token do WorkOS AuthKit.
+app.include_router(conector_mcp.router)
 app.include_router(pops_pops.router, prefix=settings.api_prefix)
 app.include_router(pops_biblioteca.router, prefix=settings.api_prefix)
 app.include_router(pops_elaboracao.router, prefix=settings.api_prefix)

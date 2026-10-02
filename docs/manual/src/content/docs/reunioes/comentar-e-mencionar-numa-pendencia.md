@@ -17,17 +17,26 @@ pendência, e quem vier depois lê o histórico inteiro.
 
 ## Passo a passo
 
-1. Abra a pendência: clique na linha, na **Lista**, ou no cartão, no
-   **Kanban**.
+1. Abra a pendência: na **Lista**, clique na lupa
+   **Abrir detalhes da pendência**, no fim da linha; no **Kanban**, clique no
+   cartão.
+
+   ![Lupa no fim da linha da pendência, na Lista](../../../assets/reunioes/abrir-a-pendencia.png)
 2. Desça até o histórico. Sem nenhum comentário, ele mostra
    **Sem rastros de atividade.**
+
+   ![Janela da pendência com o histórico vazio e a caixa de escrever](../../../assets/reunioes/comentario-na-pendencia.png)
 3. Escreva na caixa **Escreva algo... (@ para menção)**.
 4. Para chamar alguém, digite arroba e comece o nome. A lista de pessoas abre;
    escolha com as setas e confirme, ou clique no nome.
+
+   ![Lista de pessoas aberta pela arroba, com o botão de enviar ao lado da caixa](../../../assets/reunioes/mencao-na-pendencia.png)
 5. Envie no botão azul ao lado da caixa, ou pelo atalho
    **Cmd/Ctrl + Enter**.
 6. A pessoa mencionada recebe um aviso no sino da plataforma, com o texto
    **Fulano mencionou você**.
+
+   ![Sino aberto com o aviso de quem foi mencionado](../../../assets/reunioes/sino-da-mencao.png)
 
 ## Se der errado
 

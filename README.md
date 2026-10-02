@@ -48,6 +48,7 @@ Tudo que está na árvore é código, doc viva, decisão ou material de comunica
 | `pops/` | Glossário do contexto POPs | Segundo contexto de domínio (ADR 0007) | `CONTEXT.md` e `materiais-reais/` (POPs reais como referência) | Trabalhando em POPs |
 | `comunicacao/` | Material para o diretor e o usuário funcional | Vídeo e página nascem juntos por PRD (ADR 0045) | `<contexto>/<PRD>-<slug>/video/` (composição) e `index.html` (página); `_assets/` (uma fonte, um logo) | `/divulgar <PRD>`. MP4 fica fora do git |
 | `manual/` | O site do Manual do usuário | Quem trava numa tela abre a página da tarefa, vê um vídeo curto e faz (ADR 0057) | Site Astro Starlight: `src/content/docs/<modulo>/` (as páginas), `src/assets/<modulo>/` (prints), `video/<modulo>/` (composições dos Vídeos de tarefa), `prints/<modulo>.py` (Roteiro de prints), `publicar.sh`. As pastas `ouvidoria/` e `tecnologia/` são o manual antigo, de página única, até a migração | `/manual <módulo>` escreve a seção, `/manual publicar` publica; o `/deploy ship` republica sozinho quando a funcionalidade sobe |
+| `prompts/` | Prompts prontos da campanha do Manual | Cada terminal recebe um bloco para colar e roda sozinho, no próprio worktree | `README.md` (a ordem de tudo) e um `.md` numerado por lote de vídeos, prints ou acertos | Quando o humano vai abrir terminais paralelos para produzir o Manual |
 | `ARQUITETURA.md` | Visão de arquitetura | Um lugar para o desenho geral | Os 3 contextos, fluxos, blocos gerados pelo `/snapshot` | Primeira leitura técnica |
 
 ## `hospital-reunioes/` (o app)
@@ -91,6 +92,7 @@ docs/comunicacao
 docs/manual
 docs/onboarding
 docs/pops
+docs/prompts
 docs/spec
 hospital-reunioes
 hospital-reunioes/backend

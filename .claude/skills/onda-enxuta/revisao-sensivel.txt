@@ -1,0 +1,39 @@
+# Caminhos que disparam o revisor de segurança (hr-revisor-seguranca, esforço max).
+# Um glob por linha, relativo à raiz do repositório. Linhas com # são comentário.
+# Prefixo "+" = só dispara quando o PR CRIA o arquivo (status "added" em
+#   gh api repos/{owner}/{repo}/pulls/<N>/files), não quando só edita.
+# Conferido contra a árvore real do repositório em 22/09/2026.
+
+# Banco e políticas
+hospital-reunioes/supabase/migrations/**
+
+# Backend: autenticação, permissões, configuração, limites
+hospital-reunioes/backend/app/config.py
+hospital-reunioes/backend/app/dependencies.py
+hospital-reunioes/backend/app/limiter.py
+hospital-reunioes/backend/app/main.py
+hospital-reunioes/backend/app/middleware/**
+hospital-reunioes/backend/app/routers/auth.py
+hospital-reunioes/backend/app/routers/configuracoes.py
+hospital-reunioes/backend/app/services/auth_provisioning.py
+hospital-reunioes/backend/app/services/*token*
+hospital-reunioes/backend/scripts/sync_auth_ids.py
++hospital-reunioes/backend/app/routers/*.py
+
+# Frontend: middleware de sessão, auth, route handlers, config de build
+hospital-reunioes/frontend/src/middleware.ts
+hospital-reunioes/frontend/src/app/auth/**
+hospital-reunioes/frontend/src/components/auth/**
+hospital-reunioes/frontend/src/app/api/**
+hospital-reunioes/frontend/next.config.ts
+
+# Infra e segredos
+hospital-reunioes/backend/Dockerfile
+hospital-reunioes/frontend/Dockerfile
+docker-compose.yml
+.github/workflows/**
+**/.env*
+**/*secret*
+**/*token*
+**/*credenci*
+**/*senha*

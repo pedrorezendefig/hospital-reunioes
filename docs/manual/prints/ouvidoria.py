@@ -509,6 +509,10 @@ def formulario_publico(page, base: str, saida: Path) -> None:
     page.goto(f"{base}/manifestacao", wait_until="networkidle")
     page.get_by_role("button", name="Elogio").click()
     page.get_by_label("O que aconteceu?").fill(RELATO_DE_EXEMPLO)
+    # "Este relato é sobre quem?" é obrigatório: sem responder, o botão de
+    # enviar fica apagado e o print do último passo sairia mostrando a recusa
+    # em vez do caminho.
+    page.get_by_role("button", name="Sobre mim").click()
     page.get_by_label("Seu nome").fill("Marina Alves")
     page.get_by_label("Telefone ou email").fill("marina.alves@exemplo.com")
     # Sem foco em campo nenhum: o anel de foco no print vira instrução falsa
@@ -518,8 +522,8 @@ def formulario_publico(page, base: str, saida: Path) -> None:
     balao(page, page.get_by_role("heading", name="Ouvidoria").first, 1)
     balao(page, page.get_by_role("button", name="Elogio"), 2)
     balao(page, page.get_by_label("O que aconteceu?"), 3)
-    balao(page, page.get_by_text("Quero registrar de forma anônima", exact=False).first, 4)
-    balao(page, page.get_by_label("Seu nome"), 5)
+    balao(page, page.get_by_text("Este relato é sobre quem?").first, 4)
+    balao(page, page.get_by_text("Quero registrar de forma anônima", exact=False).first, 5)
     balao(page, botao(page, "Enviar manifestação"), 6)
     capturar(page, saida / "formulario-publico.png", "formulario-publico", full_page=True)
     limpar_baloes(page)
@@ -1477,8 +1481,13 @@ ENV_LOCAL = Path(__file__).resolve().parents[3] / "hospital-reunioes" / ".env"
 # A ouvidora de exemplo. O painel da Ouvidoria só abre para quem tem o acesso,
 # e o nome dela aparece no alto de todo print: por isso é gente inventada, e
 # não a conta de ninguém.
+#
+# A faixa de identificadores é P940 em diante porque o banco local é um só e
+# cada módulo do manual tem o seu roteiro: P920 a P924 são as pessoas de
+# Reuniões e metas, e semear por cima delas trocava o nome de quem responde
+# pelas pendências, deixando o roteiro do outro módulo sem a tela dele.
 OUVIDORA = {
-    "id": "P920",
+    "id": "P940",
     "nome": "Cláudia Bastos",
     "email": "claudia.bastos@exemplo.local",
     "senha": "ManualOuvidoria2026!",
@@ -1488,7 +1497,7 @@ OUVIDORA = {
 # Executiva, e a página do manual traz esse selo: o print tem que sair da
 # conta que enxerga a tela.
 DIRETORA = {
-    "id": "P921",
+    "id": "P941",
     "nome": "Regina Villaça",
     "email": "regina.villaca@exemplo.local",
     "senha": "ManualDiretoria2026!",
@@ -1498,7 +1507,7 @@ DIRETORA = {
 # por onde se concede o Acesso à Ouvidoria: ter o acesso à Ouvidoria não abre
 # essa porta, e a conta da ouvidora recebe "Acesso negado" nela.
 ADMINISTRADOR = {
-    "id": "P922",
+    "id": "P942",
     "nome": "Marcelo Prates",
     "email": "marcelo.prates@exemplo.local",
     "senha": "ManualAdministracao2026!",

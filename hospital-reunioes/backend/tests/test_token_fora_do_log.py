@@ -96,6 +96,11 @@ PARAMS_SEM_SEGREDO = {
     "id_acao",
     "id_grupo_recorrencia",
     "id_reuniao",
+    # Id do Objetivo da Central de Comando (issue #820): uma chave de catálogo
+    # fechado ("instagram-seguidores", "contatos"), não credencial. A rota exige
+    # require_super_admin, e o id sozinho não abre porta nenhuma, como o
+    # produto_id ao lado.
+    "identificador",
     "index",
     "item_id",
     # UUID da linha da Conversa da Demanda (issue #638). Nao e credencial: a

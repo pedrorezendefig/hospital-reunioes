@@ -4,6 +4,7 @@ description: Como tirar da lista o caso já encerrado sem perder nada dele.
 prd: [591]
 draft: false
 papel: [Ouvidoria]
+video: arquivar-um-caso-encerrado
 sidebar:
   order: 14
 ---

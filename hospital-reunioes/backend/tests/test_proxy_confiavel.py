@@ -16,31 +16,23 @@ O contrato aqui é duplo:
 
 from __future__ import annotations
 
-import json
 import os
 import sys
-from pathlib import Path
 
 from fastapi import FastAPI, Request
 from fastapi.testclient import TestClient
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+# O parse do CMD mora no apoio do Dockerfile (#834): os outros arquivos que
+# leem o CMD o importam de lá, e não deste arquivo de teste.
+from dockerfile_apoio import DOCKERFILE as _DOCKERFILE  # noqa: E402
+from dockerfile_apoio import cmd_do_dockerfile as _cmd_do_dockerfile  # noqa: E402
 from slowapi.util import get_remote_address  # noqa: E402
 
 # As faixas privadas (RFC 1918) onde vivem o Traefik e o container do Next.
 # É a mesma decisão de confiança do PR #348, agora para o app inteiro.
 FAIXAS_PRIVADAS = ("10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
-
-_DOCKERFILE = Path(__file__).resolve().parents[1] / "Dockerfile"
-
-
-def _cmd_do_dockerfile() -> list[str]:
-    # O `CMD [` da forma exec, não o `CMD curl` de dentro do HEALTHCHECK.
-    for linha in _DOCKERFILE.read_text().splitlines():
-        if linha.strip().startswith("CMD ["):
-            return json.loads(linha.strip().removeprefix("CMD").strip())
-    raise AssertionError("Dockerfile sem linha CMD em forma exec")
 
 
 class TestMiddlewareComAsMesmasFaixas:

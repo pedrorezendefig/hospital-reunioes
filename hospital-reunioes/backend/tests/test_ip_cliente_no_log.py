@@ -34,9 +34,9 @@ from uvicorn.middleware.proxy_headers import ProxyHeadersMiddleware
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-# O parse do CMD já existe no arquivo irmão do contrato de proxy (issue #349).
-# Reaproveitado em vez de virar a terceira cópia do mesmo loop.
-from test_proxy_confiavel import _cmd_do_dockerfile  # noqa: E402
+# O parse do CMD mora no apoio do Dockerfile (#834, antes no contrato de proxy
+# da #349). Reaproveitado em vez de virar mais uma cópia do mesmo loop.
+from dockerfile_apoio import cmd_do_dockerfile as _cmd_do_dockerfile  # noqa: E402
 
 from app.middleware.request_context import (  # noqa: E402
     JsonFormatter,
@@ -404,6 +404,13 @@ SEM_ANONIMATO_A_PROTEGER = {
     "GET /api/ana/exames",
     "GET /api/ana/ouvidoria/protocolos/{protocolo}",
     "POST /api/ana/ouvidoria/protocolos",
+    # O conector MCP da Central (ADR 0058, decisões 3 e 4). O transporte exige o
+    # token OAuth do WorkOS (Super admin), não o login do app, então o schema não
+    # o marca com `security`; e o metadata é documento público de descoberta
+    # (RFC 9728). Não há manifestante anônimo a proteger no IP: quem chega ao
+    # transporte é um Super admin conhecido, e o metadata não carrega PII.
+    "GET /.well-known/oauth-protected-resource",
+    "POST /api/mcp",
     # Não existe em produção: `tests/test_handler_global_excecao.py` registra
     # esta rota no app real na hora do import, e ela aparece no schema quando a
     # suíte roda inteira. Sem esta linha, o vermelho passaria a depender da

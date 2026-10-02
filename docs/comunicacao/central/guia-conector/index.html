@@ -1,0 +1,445 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8" />
+<title>Guia: Conectar a Central ao seu Claude · Hospital São Matheus</title>
+<style>
+  :root {
+    --marinho: #2B2C6B;
+    --royal: #154D9C;
+    --royal-claro: #1E63C8;
+    --fundo: #F4F5F9;
+    --cinza: #6B6E7E;
+    --tinta: #1A1A24;
+    --branco: #FFFFFF;
+    --linha: #E4E6F0;
+    --linha-forte: #D3D6E6;
+    --fonte: "HP Simplified", Arial, "Segoe UI", sans-serif;
+  }
+
+  @page { size: A4; margin: 0; }
+
+  * {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+    -webkit-print-color-adjust: exact;
+    print-color-adjust: exact;
+  }
+
+  html, body {
+    font-family: var(--fonte);
+    color: var(--tinta);
+    background: var(--branco);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  .page {
+    width: 210mm;
+    min-height: 297mm;
+    margin: 0 auto;
+    background: var(--branco);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Cabecalho (marca em duas cores sobre branco) */
+  .header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10mm 16mm 0;
+    position: relative;
+  }
+  .brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+  }
+  .brand .wordmark {
+    display: flex;
+    flex-direction: column;
+    line-height: 1.08;
+  }
+  .brand .wordmark .l1 {
+    font-size: 13px;
+    letter-spacing: 0.16em;
+    font-weight: 700;
+    color: var(--royal);
+  }
+  .brand .wordmark .l2 {
+    font-size: 18px;
+    letter-spacing: 0.05em;
+    font-weight: 800;
+    color: var(--marinho);
+  }
+  .brand .wordmark .sub {
+    margin-top: 3px;
+    font-size: 10px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--cinza);
+    font-weight: 600;
+  }
+  .chip {
+    font-size: 10.5px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--royal);
+    background: #154D9C12;
+    border: 1px solid #154D9C26;
+    padding: 6px 12px;
+    border-radius: 99px;
+  }
+  .rule {
+    height: 3px;
+    margin: 7mm 16mm 0;
+    border-radius: 3px;
+    background: linear-gradient(90deg, var(--marinho), var(--royal) 55%, var(--royal-claro));
+  }
+
+  /* Corpo */
+  .body {
+    padding: 6mm 16mm 0;
+    flex: 1;
+  }
+  .title {
+    font-size: 26px;
+    line-height: 1.1;
+    font-weight: 800;
+    color: var(--marinho);
+    letter-spacing: -0.01em;
+  }
+  .title em {
+    font-style: normal;
+    color: var(--royal);
+  }
+  .lead {
+    margin-top: 8px;
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--cinza);
+    max-width: 66ch;
+  }
+  .lead b { color: var(--tinta); font-weight: 700; }
+
+  /* passos */
+  .steps {
+    margin-top: 6mm;
+    display: flex;
+    flex-direction: column;
+    gap: 9px;
+  }
+  .step {
+    display: flex;
+    gap: 15px;
+    align-items: flex-start;
+    background: var(--branco);
+    border: 1px solid var(--linha);
+    border-radius: 16px;
+    padding: 12px 16px;
+    box-shadow: 0 1px 2px #2b2c6b0a, 0 10px 26px #2b2c6b0d;
+  }
+  .num {
+    flex: none;
+    width: 34px;
+    height: 34px;
+    border-radius: 50%;
+    background: var(--royal);
+    color: #fff;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 17px;
+    font-weight: 800;
+  }
+  .step .txt { padding-top: 1px; }
+  .step h3 {
+    font-size: 15px;
+    font-weight: 700;
+    color: var(--marinho);
+    margin-bottom: 3px;
+  }
+  .step p {
+    font-size: 12.5px;
+    line-height: 1.5;
+    color: var(--cinza);
+  }
+  .url {
+    display: inline-block;
+    margin-top: 6px;
+    font-family: "Consolas", "Courier New", monospace;
+    font-size: 12.5px;
+    font-weight: 700;
+    color: var(--marinho);
+    background: var(--fundo);
+    border: 1px dashed var(--linha-forte);
+    border-radius: 8px;
+    padding: 5px 10px;
+  }
+  .step .hint {
+    margin-top: 6px;
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--cinza);
+  }
+  .step .hint b { color: var(--tinta); font-weight: 700; }
+
+  /* callout de exemplos */
+  .callout {
+    margin-top: 6mm;
+    background: var(--fundo);
+    border-left: 4px solid var(--royal);
+    border-radius: 12px;
+    padding: 12px 16px;
+  }
+  .callout h4 {
+    font-size: 11px;
+    letter-spacing: 0.13em;
+    text-transform: uppercase;
+    color: var(--royal);
+    font-weight: 700;
+    margin-bottom: 10px;
+  }
+  .q {
+    font-size: 13px;
+    color: var(--tinta);
+    line-height: 1.5;
+    padding-left: 20px;
+    position: relative;
+    margin-bottom: 6px;
+  }
+  .q:last-child { margin-bottom: 0; }
+  .q::before {
+    content: "\201C";
+    position: absolute;
+    left: 0;
+    top: 2px;
+    color: var(--royal);
+    font-weight: 800;
+    font-size: 18px;
+    line-height: 1;
+  }
+
+  /* o que ele enxerga */
+  .sees {
+    margin-top: 6mm;
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+  }
+  .see {
+    border: 1px solid var(--linha);
+    border-radius: 12px;
+    padding: 13px 14px;
+    background: var(--branco);
+  }
+  .see .k {
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    font-weight: 700;
+    color: var(--royal);
+    margin-bottom: 4px;
+  }
+  .see .v {
+    font-size: 11.5px;
+    line-height: 1.45;
+    color: var(--cinza);
+  }
+  .sees-hint {
+    margin-top: 8px;
+    font-size: 11.5px;
+    color: var(--cinza);
+    line-height: 1.5;
+  }
+  .sees-hint b { color: var(--tinta); font-weight: 700; }
+
+  .note {
+    margin-top: 5mm;
+    font-size: 11.5px;
+    line-height: 1.5;
+    color: var(--cinza);
+    background: #b9772a0d;
+    border: 1px solid #b9772a26;
+    border-radius: 10px;
+    padding: 11px 14px;
+  }
+  .note b { color: #8a5410; }
+
+  /* Rodape (marca em negativo sobre marinho) */
+  .footer {
+    margin-top: 6mm;
+    background: var(--marinho);
+    color: #fff;
+    padding: 7mm 16mm;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: relative;
+    overflow: hidden;
+  }
+  .footer .fbrand {
+    display: flex;
+    align-items: center;
+    gap: 11px;
+    position: relative;
+    z-index: 1;
+  }
+  .footer .fbrand b {
+    font-size: 12.5px;
+    letter-spacing: 0.05em;
+    font-weight: 800;
+  }
+  .footer .fbrand span {
+    display: block;
+    font-size: 9.5px;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: #ffffffaa;
+    font-weight: 600;
+    margin-top: 1px;
+  }
+  .motto {
+    font-size: 14px;
+    font-weight: 800;
+    letter-spacing: 0.02em;
+    color: #fff;
+    position: relative;
+    z-index: 1;
+  }
+  .motto span { color: #9db8e8; }
+  /* arco decorativo (textura derivada da marca) */
+  .arcdeco {
+    position: absolute;
+    right: -40px;
+    bottom: -70px;
+    width: 220px;
+    height: 220px;
+    opacity: 0.10;
+    z-index: 0;
+  }
+</style>
+</head>
+<body>
+  <div class="page">
+
+    <div class="header">
+      <div class="brand">
+        <!-- Simbolo oficial: dois arcos formando o "M" (marinho mais royal) -->
+        <svg width="46" height="46" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <path d="M6 40 C6 18 14 8 24 8 C34 8 42 18 42 40" stroke="#2B2C6B" stroke-width="4.5" stroke-linecap="round"/>
+          <path d="M16 40 C16 24 19 16 24 16 C29 16 32 24 32 40" stroke="#154D9C" stroke-width="4.5" stroke-linecap="round"/>
+        </svg>
+        <span class="wordmark">
+          <span class="l1">HOSPITAL</span>
+          <span class="l2">SÃO MATHEUS</span>
+          <span class="sub">Central de Comando</span>
+        </span>
+      </div>
+      <span class="chip">Guia do Super admin</span>
+    </div>
+
+    <div class="rule"></div>
+
+    <div class="body">
+      <h1 class="title">Converse com os números do hospital,<br /><em>direto no seu Claude</em></h1>
+      <p class="lead">
+        A <b>Central de Comando</b> pode ser adicionada ao seu Claude como um conector.
+        Você pergunta, em português mesmo, como está o site e as redes do hospital e recebe a
+        resposta na hora, com os <b>números reais</b> do painel. É <b>só leitura</b>, roda na
+        <b>sua própria assinatura</b> do Claude, sem custo extra para o hospital, e está liberada
+        para quem é <b>Super admin</b> no app.
+      </p>
+
+      <div class="steps">
+        <div class="step">
+          <div class="num">1</div>
+          <div class="txt">
+            <h3>Abra os conectores no Claude</h3>
+            <p>No <b>claude.ai</b>, vá em <b>Settings, Connectors, Add custom connector</b>.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">2</div>
+          <div class="txt">
+            <h3>Cole o endereço novo da Central</h3>
+            <p>No campo de URL, cole exatamente:</p>
+            <span class="url">https://api.hospitalsaomatheus.cloud/api/mcp</span>
+            <p class="hint">Este é o <b>endereço novo</b>, no domínio do próprio hospital. O endereço
+              antigo vai ser desligado, então use sempre este.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">3</div>
+          <div class="txt">
+            <h3>Entre com o e-mail do seu cadastro</h3>
+            <p>Vai abrir uma tela de login. Entre com o <b>mesmo e-mail que você usa para acessar o
+              app do hospital</b>, o do seu cadastro. É por esse e-mail que a Central reconhece você
+              como Super admin e libera os números. Se você entrar com outro e-mail, o acesso não passa.</p>
+          </div>
+        </div>
+        <div class="step">
+          <div class="num">4</div>
+          <div class="txt">
+            <h3>Pronto, é só perguntar</h3>
+            <p>A partir daí, basta escrever sua pergunta em linguagem natural, como você falaria com uma pessoa.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="callout">
+        <h4>Experimente perguntar</h4>
+        <div class="q">Quantas pessoas estão no site do hospital agora?</div>
+        <div class="q">Como foi o site nos últimos 28 dias?</div>
+        <div class="q">O que dá para melhorar no Instagram esse mês?</div>
+      </div>
+
+      <div class="sees">
+        <div class="see">
+          <div class="k">Site</div>
+          <div class="v">Visitantes, de onde vêm, áreas mais procuradas e dispositivos (fonte: Google).</div>
+        </div>
+        <div class="see">
+          <div class="k">Instagram</div>
+          <div class="v">Seguidores, alcance, engajamento e as publicações que mais renderam.</div>
+        </div>
+        <div class="see">
+          <div class="k">Ao vivo</div>
+          <div class="v">Quantas pessoas estão navegando no site neste exato momento.</div>
+        </div>
+      </div>
+      <p class="sees-hint">
+        O Claude responde com <b>os mesmos números do painel</b> e não inventa dados: quando algo
+        ainda não é medido, ele diz que não é medido, em vez de mostrar um zero.
+      </p>
+
+      <div class="note">
+        <b>Se o login não passar:</b> o acesso é só de quem é <b>Super admin ativo</b> no app. Não existe
+        lista à parte para pedir inclusão: quem manda é o seu cadastro. Confira se você entrou com o
+        <b>e-mail do seu cadastro no app</b> e se ele está confirmado. Se você deixou de ser Super admin,
+        ou a conta foi desativada, o acesso é retirado na hora.
+      </div>
+    </div>
+
+    <div class="footer">
+      <div class="fbrand">
+        <svg width="30" height="30" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+          <path d="M6 40 C6 18 14 8 24 8 C34 8 42 18 42 40" stroke="#FFFFFF" stroke-width="4.5" stroke-linecap="round"/>
+          <path d="M16 40 C16 24 19 16 24 16 C29 16 32 24 32 40" stroke="#9DB8E8" stroke-width="4.5" stroke-linecap="round"/>
+        </svg>
+        <span><b>Hospital São Matheus</b><span>Central de Comando</span></span>
+      </div>
+      <div class="motto">Cuidar bem<span>.</span></div>
+      <svg class="arcdeco" viewBox="0 0 48 48" fill="none" aria-hidden="true">
+        <path d="M6 40 C6 18 14 8 24 8 C34 8 42 18 42 40" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+        <path d="M16 40 C16 24 19 16 24 16 C29 16 32 24 32 40" stroke="#FFFFFF" stroke-width="3" stroke-linecap="round"/>
+      </svg>
+    </div>
+
+  </div>
+</body>
+</html>

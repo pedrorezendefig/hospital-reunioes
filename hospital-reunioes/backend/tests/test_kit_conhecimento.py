@@ -1,7 +1,7 @@
 """O Kit de conhecimento do Assistente de Tecnologia (ADR 0056, decisao 2).
 
-Este arquivo cuida do KIT: os oito `.md` de `app/conhecimento/`, o que pode e o
-que nao pode estar escrito neles, e a prova de que os oito chegam ao prompt do
+Este arquivo cuida do KIT: os nove `.md` de `app/conhecimento/`, o que pode e o
+que nao pode estar escrito neles, e a prova de que os nove chegam ao prompt do
 chat. O teste da ROTA (gate, tetos, normalizacao do rascunho, cerca) vive em
 `test_assistente_tecnologia.py`.
 
@@ -10,7 +10,7 @@ muda por outro motivo que o codigo da rota, entao quem edita um texto do kit
 sabe onde esta o teste que ele precisa ler.
 
 A sanidade aqui e PURA no que da: o texto de cada arquivo lido do disco. So o
-ultimo teste sobe a rota, porque "os oito chegam ao prompt" e uma afirmacao
+ultimo teste sobe a rota, porque "os nove chegam ao prompt" e uma afirmacao
 sobre o prompt, nao sobre os arquivos.
 """
 
@@ -51,9 +51,10 @@ ARQUIVO_POR_PRODUTO = {
     "POPs": "pops.md",
     "Site": "site.md",
     "Infra": "infra.md",
+    "Central de Comando": "central-de-comando.md",
 }
 
-# O nono arquivo nao e de Produto nenhum: e o da propria aba.
+# O arquivo que sobra nao e de Produto nenhum: e o da propria aba.
 ARQUIVO_DA_ABA = "tecnologia.md"
 
 ARQUIVOS_DO_KIT = (ARQUIVO_DA_ABA, *sorted(ARQUIVO_POR_PRODUTO.values()))
@@ -108,7 +109,7 @@ class TestUmArquivoPorProduto:
         """Piso de sanidade do proprio detector: se a regex parar de casar, a
         lista volta vazia e TODO teste parametrizado por ela some em silencio,
         verde, sem ter olhado para nada."""
-        assert len(_produtos_do_seed()) == 7
+        assert len(_produtos_do_seed()) == 8
 
     def test_o_mapa_cobre_exatamente_o_seed(self):
         """Mutante: acrescentar um Produto ao seed sem escrever o texto dele."""
@@ -116,7 +117,7 @@ class TestUmArquivoPorProduto:
 
     @pytest.mark.parametrize("produto", sorted(ARQUIVO_POR_PRODUTO))
     def test_o_produto_tem_arquivo_no_kit(self, produto):
-        """Mutante: apagar um dos sete `.md`."""
+        """Mutante: apagar um dos oito `.md` de Produto."""
         assert (CONHECIMENTO_DIR / ARQUIVO_POR_PRODUTO[produto]).is_file()
 
     @pytest.mark.parametrize("produto", sorted(ARQUIVO_POR_PRODUTO))
@@ -240,7 +241,7 @@ class TestOsDetectoresMordem:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 3. Os oito arquivos chegam ao prompt do chat
+# 3. Os nove arquivos chegam ao prompt do chat
 # ═══════════════════════════════════════════════════════════════════════════
 
 ROTA = "/api/admin/tecnologia/assistente/chat"
@@ -399,19 +400,19 @@ def _secoes_do_kit(prompt: str) -> dict[str, str]:
     return {nome: textwrap.dedent(corpo) for nome, corpo in secoes.items()}
 
 
-class TestOitoArquivosNoPrompt:
+class TestNoveArquivosNoPrompt:
     @pytest.fixture
     def secoes(self, monkeypatch) -> dict[str, str]:
         return _secoes_do_kit(_prompt_de_um_turno(monkeypatch))
 
-    def test_o_carregador_ve_os_oito_arquivos(self):
+    def test_o_carregador_ve_os_nove_arquivos(self):
         """Mutante: apagar um `.md` da pasta."""
         assert sorted(_secoes_do_kit(carregar_kit())) == sorted(ARQUIVOS_DO_KIT)
 
     @pytest.mark.parametrize("arquivo", ARQUIVOS_DO_KIT)
     def test_o_arquivo_chega_ao_prompt_com_o_cabecalho_e_com_o_texto(self, secoes, arquivo):
         """O cabecalho sozinho nao prova nada: um arquivo esvaziado entregaria
-        os oito cabecalhos e zero material. A asserção e sobre o que veio
+        os nove cabecalhos e zero material. A asserção e sobre o que veio
         DEPOIS do cabecalho.
 
         E nao ha vacuo de fixture aqui: o prompt e montado pelo backend a

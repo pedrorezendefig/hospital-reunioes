@@ -28,7 +28,7 @@ O Tipo não diz de quem é a vez de responder. Isso é o estado e o responsável
 
 ## Os Produtos
 
-Produto é cada coisa que a Vitta mantém para o hospital: Ana (o WhatsApp), Integração Ana x MV, Reuniões, Ouvidoria, POPs, Site e Infra. Cada Produto tem um dono do lado da Vitta.
+Produto é cada coisa que a Vitta mantém para o hospital: Ana (o WhatsApp), Integração Ana x MV, Reuniões, Ouvidoria, POPs, Site, Infra e Central de Comando (o painel dos números do Site e do Instagram, só para Super admin). Cada Produto tem um dono do lado da Vitta.
 
 Toda Demanda pertence a um Produto. É o Produto que decide quem responde por ela.
 

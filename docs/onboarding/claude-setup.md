@@ -145,6 +145,20 @@ mkdir -p ~/.local/bin && install -m 755 /tmp/coolify ~/.local/bin/coolify
 
 Se usar `~/.local/bin`, garanta `export PATH="$HOME/.local/bin:$PATH"` no `~/.zshrc`.
 
+**No Windows (Git Bash):** baixe o `.zip` e ponha o `coolify.exe` em `~/.local/bin`, que o Claude Code já põe no PATH. O contexto fica em `%APPDATA%\coolify\config.json`.
+
+```bash
+VER=$(gh release view -R coollabsio/coolify-cli --json tagName -q .tagName | tr -d v)
+gh release download "v${VER}" -R coollabsio/coolify-cli -p "coolify-cli_${VER}_windows_amd64.zip" -D /tmp --clobber
+unzip -o -q "/tmp/coolify-cli_${VER}_windows_amd64.zip" coolify.exe -d ~/.local/bin
+```
+
+O resto do nível 2 no Windows sai do `winget`, e não do `brew`:
+
+- **uv:** `winget install astral-sh.uv`.
+- **python3:** o instalador do python.org cria só `python.exe`, e o `python3` que sobra no PATH é o atalho da Microsoft Store, que não roda nada. As skills chamam `python3`, então copie `python.exe` como `python3.exe` na mesma pasta do Python.
+- **Pango (WeasyPrint):** `winget install MSYS2.MSYS2`, depois `C:/msys64/usr/bin/bash -lc 'pacman -S --noconfirm mingw-w64-x86_64-pango'` e `setx WEASYPRINT_DLL_DIRECTORIES C:\msys64\mingw64\bin`. Reabra o terminal e o Claude Code para a variável valer.
+
 **Passo 3: criar o contexto `hsm`**
 
 O token canônico vive em `<repo>/tokens/.env` (pasta git-ignored), nas chaves `COOLIFY_ACCESS_TOKEN` e `COOLIFY_BASE_URL`.

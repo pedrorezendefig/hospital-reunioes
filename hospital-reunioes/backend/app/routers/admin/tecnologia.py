@@ -112,7 +112,7 @@ from app.models.tecnologia_schemas import (
     TextoParaIaResponse,
     VincularPayload,
 )
-from app.services import assistente_tecnologia, github_client
+from app.services import ai_processor, assistente_tecnologia, github_client
 from app.services.conhecimento import carregar_kit
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
@@ -186,9 +186,9 @@ from app.services.tecnologia_vinculo import (
     motivo_ja_vinculada_para_levar,
     motivo_numero_ja_usado,
     tem_github_login,
-    texto_do_diretor,
     texto_levou_para_desenvolvimento,
     texto_movimento_etapa,
+    titulo_da_issue,
 )
 from app.services.transcricao_extractor import (
     FORMATOS_DE_TEXTO_PURO,
@@ -1435,8 +1435,8 @@ async def levar_para_desenvolvimento(
 
     # O titulo tambem vai para o repositorio publico, e nao so o corpo: passa
     # pela mesma peneira (o corpo ja passava, porque o titulo e o "O que muda"
-    # da Demanda sem descricao).
-    titulo = texto_do_diretor(demanda.get("titulo"))
+    # da Demanda sem descricao). Inclusive a de dado pessoal (issue #772).
+    titulo = titulo_da_issue(demanda.get("titulo"))
     legivel = _com_nomes(supabase, [demanda], ator=ator)[0]
 
     corpo = corpo_da_issue_nova(
@@ -2218,7 +2218,9 @@ async def assistente_chat(
     # Com o mapa so dos ativos, essa Demanda chegaria ao prompt sem Produto.
     nomes_de_produto = {p["id"]: p.get("nome") or "" for p in todos_os_produtos}
 
-    return assistente_tecnologia.conversar(
+    # Fora do loop (issue #773, o porque em `ai_processor._EXECUTOR_DA_IA`).
+    return await ai_processor.chamar_ia_fora_do_loop(
+        assistente_tecnologia.conversar,
         rascunho=payload.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in payload.messages],
         kit=carregar_kit(),
@@ -2392,7 +2394,10 @@ async def assistente_descrever_imagem(
             detail=MOTIVO_IMAGEM_GRANDE,
         )
 
-    texto = assistente_tecnologia.descrever_imagem(imagem=conteudo, extensao=extensao)
+    # Fora do loop (issue #773): a visao e a chamada mais longa de todas.
+    texto = await ai_processor.chamar_ia_fora_do_loop(
+        assistente_tecnologia.descrever_imagem, imagem=conteudo, extensao=extensao
+    )
     if texto is None:
         # O servico nao levanta: ele devolve `None` para "nao deu para ler", e
         # quem escreve a frase e a rota. 502, e nao 422: o arquivo estava bom, e

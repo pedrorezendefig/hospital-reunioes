@@ -964,6 +964,38 @@ def espelho_da_global_health(page: Page, base: str, saida: Path) -> None:
     limpar_baloes(page)
 
 
+class AgendaOnlineForaDoAr(Exception):
+    """A agenda externa não respondeu, e o print sairia com a tela de espera
+    ou com o aviso vermelho da consulta que falhou."""
+
+
+# O que o bloco diz enquanto a lista não chega, e o que ele diz quando a
+# consulta à agenda estoura o tempo. Nenhum dos dois é a tela que a página
+# do manual explica.
+SEM_LISTA_NO_ESPELHO = ("Carregando", "falhou", "falhar")
+
+
+def _esperar_a_lista(bloco, segundos: int = 40) -> None:
+    """Espera a lista chegar de verdade antes de alguém capturar.
+
+    O Espelho é a única tela do manual que depende de um serviço de fora (a
+    agenda online). Quando ela demora, a espera por tempo fixo termina com o
+    bloco ainda vazio e o print publicado vira uma tela de espera, ou o aviso
+    vermelho da consulta que falhou: o leitor conclui que a plataforma trava
+    ali. Melhor não gravar nada e manter a imagem da rodada anterior, que
+    mostra a tela de verdade.
+    """
+    for _ in range(segundos):
+        texto = bloco.inner_text()
+        if not any(marca in texto for marca in SEM_LISTA_NO_ESPELHO):
+            return
+        bloco.page.wait_for_timeout(1000)
+    raise AgendaOnlineForaDoAr(
+        "a agenda online não devolveu a lista de convênios. O print ficou "
+        "como estava: rode este roteiro de novo quando ela responder."
+    )
+
+
 def _abrir_a_cadeia_do_espelho(page: Page, base: str):
     """Deixa o Espelho aberto na especialidade de exemplo e devolve a linha dela."""
     entrar(page, base)
@@ -993,6 +1025,7 @@ def espelho_convenios(page: Page, base: str, saida: Path) -> None:
     coluna = page.get_by_role("heading", name="Convênios aceitos").locator(
         "xpath=ancestor::div[2]"
     )
+    _esperar_a_lista(coluna)
     caixa = coluna.bounding_box()
     balao(page, page.get_by_role("heading", name="Convênios aceitos"), 4)
     page.screenshot(
@@ -1195,9 +1228,18 @@ def main() -> int:
         )
         page = contexto.new_page()
         try:
+            pulados = []
             for nome in escolhidos:
-                PRINTS[nome](page, args.base.rstrip("/"), saida)
+                try:
+                    PRINTS[nome](page, args.base.rstrip("/"), saida)
+                except AgendaOnlineForaDoAr as fora:
+                    # Serviço de fora não é tela deste repositório: o resto do
+                    # módulo continua, e quem rodou fica sabendo o que falta.
+                    pulados.append(f"{nome}: {fora}")
+                    continue
                 print(f"print: {saida / (nome + '.png')}")
+            for aviso in pulados:
+                print(f"PULADO {aviso}", file=sys.stderr)
         finally:
             # A conta de exemplo da senha não fica de pé depois da captura,
             # nem quando a captura falha no meio.

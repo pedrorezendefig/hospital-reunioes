@@ -1,0 +1,111 @@
+/**
+ * A conversa das telas da Central de Comando com o backend (ADR 0058).
+ *
+ * Cada tela pede o payload inteiro dela a um caminho relativo (`/api/...`),
+ * com o token da sessão, e guarda a resposta em estado local: sem biblioteca
+ * de cache (PRD #809). O que mora aqui é o que toda tela da Central repete.
+ */
+
+export const BASE_CENTRAL = "/api/admin/central-de-comando";
+
+/**
+ * As telas que passam pelo cache com frescor do backend (issue #815): a
+ * leitura é `GET {BASE_CENTRAL}/{tela}?periodo=` e o Atualizar agora é
+ * `POST {BASE_CENTRAL}/atualizar-agora?tela=&periodo=`. Tela nova entra aqui
+ * e no registro de telas do backend, como Dados do Google na #817.
+ *
+ * A lente de um Objetivo é `objetivos/{id}` (issue #861): o mesmo caminho da
+ * leitura dela, que o Atualizar agora do backend também reconhece.
+ */
+export type TelaDaCentral = "visao-geral" | "dados-do-google" | "instagram" | `objetivos/${string}`;
+
+/** O começo da tela da lente de um Objetivo, o mesmo `PREFIXO_DA_LENTE` do backend. */
+export const PREFIXO_DA_LENTE = "objetivos/";
+
+/**
+ * O caminho da leitura de uma tela, depois da `BASE_CENTRAL`. O identificador
+ * da lente vem do endereço, que é digitável, e vai codificado (issue #847): uma
+ * barra, um espaço ou uma interrogação nele não mudam a rota nem a query.
+ */
+export function caminhoDaTela(tela: TelaDaCentral): string {
+  if (!tela.startsWith(PREFIXO_DA_LENTE)) return tela;
+  return PREFIXO_DA_LENTE + encodeURIComponent(tela.slice(PREFIXO_DA_LENTE.length));
+}
+
+/**
+ * O Atualizar agora tem limite de taxa no backend. O 429 do `slowapi` chega
+ * sem `detail` (`{"error": ...}`, em inglês): a frase é da tela.
+ */
+export const MUITAS_ATUALIZACOES = "Muitas atualizações em pouco tempo. Espere um minuto e tente de novo.";
+
+/**
+ * O bloco `frescor` que todo payload de tela traz (issue #815): de quando são
+ * os números (ISO 8601, com fuso) e se a última tentativa de renová-los
+ * falhou, com a frase do porquê. Quando falhou, os números são o último valor
+ * bom, e `atualizado_em` é a hora dele. Nulo quando o backend não tem hora
+ * nenhuma registrada: na Visão Geral, quando nenhum bloco tem número (as duas
+ * fontes fora ou sem configurar, e nada guardado). Aí a barra fica neutra e
+ * não diz "Atualizado" (issue #848).
+ */
+export type Frescor = {
+  atualizado_em: string | null;
+  atualizacao_falhou: boolean;
+  motivo: string | null;
+};
+
+/** A rede caiu antes de o backend responder. */
+export const FALHA_DE_CONEXAO =
+  "Não foi possível falar com o servidor. Verifique a conexão e tente de novo.";
+
+/**
+ * O `useAuth` devolve token nulo quando a sessão acabou E quando o servidor de
+ * login não respondeu, sem distinguir os dois: a frase nomeia as duas causas e
+ * sugere o que resolve ambas (molde da aba Tecnologia).
+ */
+export const SEM_SESSAO =
+  "Não foi possível carregar os números: a sessão não está ativa ou o servidor não respondeu. Tente recarregar a página.";
+
+/**
+ * A causa que o backend manda ao lado do `detail` no 502 do token vencido do
+ * Instagram sem número guardado (issue #846). Não é a fonte fora: é o acesso a
+ * renovar, e a tela do Instagram troca o erro técnico pelo aviso calmo.
+ * Espelha a `CAUSA_TOKEN_VENCIDO` de
+ * `backend/app/routers/admin/central_de_comando.py`: renomear lá é renomear aqui.
+ */
+export const CAUSA_TOKEN_VENCIDO = "token-vencido";
+
+/**
+ * Como a resposta do backend chega à tela:
+ *
+ * - `nao-configurado`: 503 COM a frase do backend no `detail`, que é como o
+ *   router da Central diz que falta configurar a fonte;
+ * - `falhou`: todo o resto, inclusive o 503 cru de um proxy no meio de um
+ *   deploy, que não é falta de configuração nenhuma. O 502 com a
+ *   `CAUSA_TOKEN_VENCIDO` no corpo chega com a `causa`: a tela que conhece a
+ *   causa mostra o aviso calmo, e a que não conhece segue no erro honesto.
+ *
+ * A frase mostrada é a do servidor, que sabe o que houve. A tela não inventa
+ * causa, e nunca troca o erro por um zero.
+ */
+export type Recusa = {
+  tipo: "nao-configurado" | "falhou";
+  mensagem: string;
+  causa?: typeof CAUSA_TOKEN_VENCIDO;
+};
+
+export async function lerRecusa(resposta: Response): Promise<Recusa> {
+  let frase: string | null = null;
+  let causa: unknown = null;
+  try {
+    const corpo = await resposta.json();
+    if (typeof corpo?.detail === "string") frase = corpo.detail;
+    causa = corpo?.causa;
+  } catch {
+    // Resposta sem corpo JSON: sobra o status.
+  }
+  if (resposta.status === 503 && frase) return { tipo: "nao-configurado", mensagem: frase };
+  if (resposta.status === 502 && frase && causa === CAUSA_TOKEN_VENCIDO) {
+    return { tipo: "falhou", mensagem: frase, causa: CAUSA_TOKEN_VENCIDO };
+  }
+  return { tipo: "falhou", mensagem: frase ?? `O servidor respondeu ${resposta.status}.` };
+}

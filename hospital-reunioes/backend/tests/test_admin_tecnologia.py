@@ -317,6 +317,61 @@ class TestMigration:
         assert referenciadas == {"participantes", "tecnologia_produtos", "tecnologia_demandas"}
 
 
+class TestMigrationDoProdutoCentralDeComando:
+    """O Produto "Central de Comando" (issue #827, ADR 0058): entra por migration
+    idempotente, no molde do seed da 102, e nasce COM dono.
+
+    O dono nao e inventado: e o do Site, que um Super admin ja escolheu na tela.
+    A Central sao os numeros do Site e do Instagram, e quem responde pelo Site do
+    lado da Vitta e quem responde por eles. Quem ja escolheu um dono para a
+    Central pela tela nao perde a escolha, e o Site sem dono deixa a Central sem
+    dono tambem, para a tela cobrar como cobra dos sete do seed.
+    """
+
+    @pytest.fixture
+    def comandos(self) -> str:
+        caminho = os.path.join(
+            os.path.dirname(__file__),
+            "..",
+            "..",
+            "supabase",
+            "migrations",
+            "111_tecnologia_produto_central_de_comando.sql",
+        )
+        with open(caminho, encoding="utf-8") as f:
+            ddl = f.read()
+        linhas = (linha for linha in ddl.lower().splitlines() if not linha.strip().startswith("--"))
+        return re.sub(r"\s+", " ", " ".join(linhas))
+
+    def test_o_produto_entra_so_com_nome_e_ordem(self, comandos):
+        assert "insert into tecnologia_produtos (nome, ordem) values ('central de comando'," in comandos
+
+    def test_a_ordem_e_a_proxima_livre_como_no_cadastro_da_tela(self, comandos):
+        assert "(select coalesce(max(ordem), 0) + 1 from tecnologia_produtos)" in comandos
+
+    def test_a_insercao_e_idempotente(self, comandos):
+        assert "on conflict do nothing" in comandos
+
+    def test_o_dono_e_o_do_site(self, comandos):
+        """Mutante: tirar o UPDATE deixa a Central sem dono, e a API recusa
+        criar Demanda em Produto sem dono."""
+        assert "set dono_id = site.dono_id" in comandos
+        assert "lower(site.nome) = 'site'" in comandos
+        assert "lower(central.nome) = 'central de comando'" in comandos
+
+    def test_nao_sobrescreve_o_dono_escolhido_na_tela(self, comandos):
+        """Mutante: tirar a guarda faz rodar de novo trocar o dono que alguem
+        ja escolheu para a Central pela tela."""
+        assert "central.dono_id is null" in comandos
+
+    def test_site_sem_dono_nao_apaga_nada(self, comandos):
+        assert "site.dono_id is not null" in comandos
+
+    def test_so_escreve_nos_produtos(self, comandos):
+        escritas = set(re.findall(r"(?:insert into|update|alter table|delete from)\s+(\w+)", comandos))
+        assert escritas == {"tecnologia_produtos"}
+
+
 # ─── 2. O gate ───────────────────────────────────────────────────────────────
 
 

@@ -2,6 +2,791 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-02T17:55:47-03:00",
+      "sha": "89ccaafd",
+      "app_version": "0.157.1",
+      "subject": "Onda onda-a: Guarda de migration com número repetido no CI e no fechar_onda.py",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#911)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        902
+      ],
+      "result": "healthy",
+      "duration_seconds": 4,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #911. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
+      "at": "2026-10-02T17:49:02-03:00",
+      "sha": "712789f4",
+      "app_version": "0.157.0",
+      "subject": "Onda onda-c: O menu de reticências deixa de ser recortado pelo card da fila; A Retenção apaga o Paciente do caso nas duas portas; O registro manual do ouvidor ganha o paciente do caso; Enxugar a escri",
+      "raw_subject": "chore(deploy): registro da onda onda-c (#778 #798 #796 #801)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        659
+      ],
+      "result": "healthy",
+      "duration_seconds": 8,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-c: PRs #778 #798 #796 #801. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
+      "at": "2026-09-28T11:36:40-03:00",
+      "sha": "e03a1ec0",
+      "app_version": "0.156.6",
+      "subject": "Recuo da continuação enxerga toda quebra de linha",
+      "raw_subject": "fix(tecnologia): recuo da continuação enxerga toda quebra de linha (#894)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 402,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "/ship do PR #894 (issue #770). recuar_continuacao quebra por splitlines(): os nove separadores exoticos no corpo de uma issue nao fecham mais a cerca da Conversa do Copiar para IA. Sem PRD pai, sem migration. Descricao e titulo sem recuo ficam para issue separada."
+    },
+    {
+      "at": "2026-09-27T20:00:13-03:00",
+      "sha": "baa3477b",
+      "app_version": "0.156.5",
+      "subject": "Chamadas à IA saem do event loop nas rotas async",
+      "raw_subject": "fix(backend): chamadas à IA saem do event loop nas rotas async (#892)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 220,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "/ship do PR #892 (issue #773). As 5 rotas async que chamam a IA (chat e print do Assistente, chat de correcao, Ata Guiada, elaboracao de POP) rodam no executor proprio ia_* com o contexto do log copiado; trava AST de classe. POP devolve 409 se a Versao sai da elaboracao durante o chat. Sem PRD pai, sem migration. Teto de payload: #893."
+    },
+    {
+      "at": "2026-09-27T16:33:30-03:00",
+      "sha": "43f4cdde",
+      "app_version": "0.156.4",
+      "subject": "Secretária não vira facilitadora pelo Calendário",
+      "raw_subject": "fix(reunioes): Secretária não vira facilitadora pelo Calendário (#761) (#889)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 192,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "/ship do PR #889 (issue #761). agendar e PATCH recusam Secretaria como facilitadora (422, qualquer perfil) e Secretaria sem facilitador; Calendario leva a Secretaria a /secretaria/nova com data e hora; Recorrencia herda o facilitador da original. Sem PRD pai, sem migration."
+    },
+    {
+      "at": "2026-09-27T15:11:30-03:00",
+      "sha": "0ab8587c",
+      "app_version": "0.156.3",
+      "subject": "Peneira de dado pessoal no que sai para a issue pública",
+      "raw_subject": "fix(tecnologia): peneira de dado pessoal no que sai para a issue pública (#772) (#887)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 281,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "/ship do PR #887 (issue #772, ADR 0060). Titulo, descricao e comentario espelhado passam pelo pseudonimizar antes do GitHub. Frontend so pelo bump. Sem PRD pai."
+    },
+    {
+      "at": "2026-09-25T17:51:27-03:00",
+      "sha": "fd5e4cc2",
+      "app_version": "0.156.2",
+      "subject": "Onda onda-a: Acabamentos do Instagram, aviso calmo do token vencido sem número guardado, marcador de miniatura e link só https",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#884)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 12,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #884. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
+      "at": "2026-09-25T16:57:42-03:00",
+      "sha": "f5383e1a",
+      "app_version": "0.156.1",
+      "subject": "Onda onda-a: Tira o andaime da fase dormente (EmConstrucao e comentário do config); Publicações do Instagram entram no período pelo dia de Brasília; Acabamentos dos Objetivos, uma leitura do Instagram",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#880 #882 #883)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 15,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #880 #882 #883. Um push, um build. Registro no commit seguinte ao sha. O mesmo build levou junto #877 (#859) e #878 (#843), mergeados antes na main sem /deploy."
+    },
+    {
+      "at": "2026-09-23T20:54:12-03:00",
+      "sha": "3468a09e",
+      "app_version": "0.156.0",
+      "subject": "Onda onda-b: Limite de 60 por minuto na rota pública POST /api/mcp; Diz de onde vêm as chaves do GA4 e do Instagram; Aquecer o cache no boot, uma vez, no período padrão",
+      "raw_subject": "chore(deploy): registro da onda onda-b (#874 #875 #876)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 19,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-b: PRs #874 #875 #876. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
+      "at": "2026-09-23T17:43:40-03:00",
+      "sha": "b7e6cdec",
+      "app_version": "0.155.0",
+      "subject": "Onda onda-a: Período termina no ontem de Brasília; Agrupamentos de Dados do Google seguem o CONTEXT.md",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#871 #872)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 11,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #871 #872. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
+      "at": "2026-09-23T16:59:08-03:00",
+      "sha": "37e42427",
+      "app_version": "0.154.2",
+      "subject": "Onda onda-a: Acabamentos das revisões da #815 e da #818 na Central de Comando; Barra de frescor neutra sem carimbo e motivo de bloco sem segredo",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#870 #869)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 25,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #870 #869. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
+      "at": "2026-09-23T15:14:30-03:00",
+      "sha": "f6504200",
+      "app_version": "0.154.1",
+      "subject": "Central de Comando: uma ida à fonte por tela e hora, espera depois de falha e telas em sincronia",
+      "raw_subject": "refactor(central): uma ida à fonte por tela e hora, espera depois de falha e telas em sincronia (#868)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 479,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "/ship da #858 (PRD #809): PR #868. Aquecimento do cache ficou na #867. Health 0.154.1 ok."
+    },
+    {
+      "at": "2026-09-23T13:21:42-03:00",
+      "sha": "93870744",
+      "app_version": "0.154.0",
+      "subject": "Onda onda-central: Ligar a Central de Comando em produção e registrar o Produto no kit",
+      "raw_subject": "chore(deploy): registro da onda onda-central (#864)",
+      "scope": [
+        "backend",
+        "frontend",
+        "supabase"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 13,
+      "services_touched": [
+        "backend",
+        "frontend",
+        "supabase"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "111_tecnologia_produto_central_de_comando.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-central: PRs #864. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
+      "at": "2026-09-23T11:23:34-03:00",
+      "sha": "899d5831",
+      "app_version": "0.153.1",
+      "subject": "Onda onda-central: Lentes dos Objetivos com o aviso de tudo no rumo e o Atualizar agora",
+      "raw_subject": "chore(deploy): registro da onda onda-central (#863)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 15,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-central: PRs #863. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
+      "at": "2026-09-20T00:19:56-03:00",
+      "sha": "f8e47da2",
+      "app_version": "0.153.0",
+      "subject": "Ferramentas de Site e Instagram no conector MCP",
+      "raw_subject": "feat(central-de-comando): ferramentas de Site e Instagram no conector MCP (#842)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 240,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 4 (última) da fila fixa (PRD #809, ADR 0058): ferramentas get_site_analytics e get_instagram_analytics no conector MCP (o da #822), lendo do MESMO cache das telas (#815). Glossário da casa aplicado: Braços vira areasDoSite. Sem migration, sem rota nova (entram no /api/mcp existente, enumerador do snapshot intacto). Dois revisores do orquestrador, 0 must-fix. Should-fix corrigido antes do merge: frescor do Site agora é o pior caso das duas chaves de cache (visitantes + dados-do-google), pela mesma cache.frescor do painel, para não reportar fresco com número velho; mais arguments não-dict vira -32602. O conector segue DORMENTE em producao (503, sem variaveis em prod): ligar e o corte, #826/#827/#828."
+    },
+    {
+      "at": "2026-09-19T22:22:08-03:00",
+      "sha": "bd198cb",
+      "app_version": "0.152.0",
+      "subject": "Visao Geral completa, com 'O que vem por ai'",
+      "raw_subject": "feat(central-de-comando): Visão Geral completa com 'O que vem por aí' (#821)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 248,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 3 (ultima) da fila fixa (PRD #809, ADR 0058, sessao B): Visao Geral composta da Central, os 5 blocos que degradam sozinhos (Visitantes+contexto, Instagram num relance, Objetivos em foco, 'O que vem por ai', Atalhos); a rota responde sempre 200 com estado por bloco, e a falha de uma fonte nao derruba a tela. Reusa os provedores (dados_do_google #818, provedor_instagram #819) e o cache #815, sem chamar a fonte por fora; 'O que vem por ai' portado de src/lib/pages.ts sem data prometida. A fatia foi retomada apos o rate limit da sessao (reset 21:10): trabalho parcial preservado em commit WIP e concluido. Gate 2.5: os dois revisores independentes LIMPOS, sem must-fix. Sem migration. Em producao a Central segue dormente para Instagram/GA4 (variaveis so no .env local) ate a #827. Nice-to-haves nao bloqueantes: teste de regressao do motivo sem material de token, frescor 'Atualizado' verde com os dois blocos down, GA4 over-fetch no bloco Visitantes, conferencia mobile manual. Sem travessao. Fila-alvo (#819, #820, #821) concluida."
+    },
+    {
+      "at": "2026-09-19T20:10:13-03:00",
+      "sha": "d93bfc0",
+      "app_version": "0.151.0",
+      "subject": "Objetivos com galeria, lente e sugestoes",
+      "raw_subject": "feat(central-de-comando): Objetivos com galeria, lente e sugestões (#820)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 235,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 da fila fixa (PRD #809, ADR 0058, sessao B): Objetivos na Central, galeria (6/4/2), lente por objetivo (numeros + periodo + frescor) e sugestoes com o porque (5 regras portadas de src/lib/objetivos, incluindo regras/). Montadores reusam os provedores (Instagram da #819, Google) e o cache da #815, sem chamar a fonte por fora; rota /objetivos/{identificador} com allowlist (404 no desconhecido). Gate 2.5: os dois revisores independentes LIMPOS, sem must-fix; delta pos-review so teste (classificacao do path param + token fora do log). 'meta'/'Braco' so nos testes-guarda de ausencia. Sem migration. Em producao a Central segue dormente para Instagram/GA4 (variaveis so no .env local) ate a #827. Nice-to-haves nao bloqueantes: reaproveitar a leitura do Instagram entre 2 montadores, lista de periodos duplicada front/back, encodeURIComponent no fetch e 404 que ecoa o identificador. Sem travessao."
+    },
+    {
+      "at": "2026-09-19T18:09:13-03:00",
+      "sha": "5476202",
+      "app_version": "0.150.0",
+      "subject": "Provedor e tela do Instagram na Central",
+      "raw_subject": "feat(central): provedor e tela do Instagram na Central (#819)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 284,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 da fila fixa (PRD #809, ADR 0058, sessao B): provedor do Instagram (porta de rede unica, token no header Authorization Bearer fora do log) e tela completa, portados de src/lib/instagram do repo antigo. Reusa o cache com frescor da #815 (ultimo valor bom no token vencido) e as variaveis do Settings da #814, sem recriar nada. O Gate 2.5 achou 2 must-fix (vazamento do token no log pela query string do httpx; interacoes por publicacao zerando com o token real porque o port derrubou o fallback values[0] e o duble de teste mascarava), ambos corrigidos e reverificados. Conferencia com credencial real (gate humano): os numeros bateram 100% com a Central antiga nos periodos de 7 e 28 dias, incluindo o ranking. Sem migration. Em producao a Central segue dormente para o Instagram (variaveis so no .env local, nao no Coolify) ate a fatia #827. Sem travessao."
+    },
+    {
+      "at": "2026-09-19T13:57:56-03:00",
+      "sha": "3ef1d8b5",
+      "app_version": "0.149.0",
+      "subject": "Guia do conector da Central com o endereço novo",
+      "raw_subject": "docs(comunicacao): guia do conector da Central com o endereço novo (#837)",
+      "scope": [
+        "docs"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 200,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 3 da fila fixa (PRD #809, ADR 0058): docs-only. Guia do conector em docs/comunicacao/central/guia-conector/ (HTML + PDF), com o endereço novo https://api.hospitalsaomatheus.cloud/api/mcp, sem nome de pessoa e sem travessão. SEM bump: o app não muda (o guia não é servido pelo app), então a versão segue 0.149.0; o rebuild do webhook é do mesmo código. Revisor de docs limpo. Cobertura no README não adicionada de propósito (ADR 0046: docs/comunicacao é coberto por padrão). Conferência visual do PDF feita antes do merge."
+    },
+    {
+      "at": "2026-09-19T13:09:49-03:00",
+      "sha": "3303264e",
+      "app_version": "0.149.0",
+      "subject": "Conector MCP da Central no backend: OAuth WorkOS e gate de Super admin",
+      "raw_subject": "feat(mcp): conector MCP da Central com OAuth WorkOS e gate de Super admin (#836)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 240,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 da fila fixa (PRD #809, ADR 0058): primeiro resource server OAuth do backend. Rotas GET /.well-known/oauth-protected-resource e POST /api/mcp, as duas FORA do gate de sessão. Verifica o token do WorkOS AuthKit (python-jose, RS256 fixo, iss/aud/exp/escopo/email_verified) e resolve o participante por e-mail exigindo ativo e Super admin; toda falha é 401, config ausente é 503. Sem migration. Reusou python-jose. Dois revisores do orquestrador: 0 must-fix; os 4 should-fix aplicados antes do merge (DoS do thread-pool: valida formato do JWT antes da rede + circuit breaker de 30s no JWKS; 500 do gate vira 401; params não-dict vira -32602; batching removido conforme protocolo 2025-06-18). 56 testes. CONECTOR DORMENTE em produção: o metadata responde 503 porque não há variável do conector (issuer/resource/jwks/WorkOS) no backend de produção, coerente com o corte da ADR 0058 (dec. 3 e 9). Ativar é o corte, fora da onda."
+    },
+    {
+      "at": "2026-09-19T10:43:55-03:00",
+      "sha": "2185b737",
+      "app_version": "0.148.0",
+      "subject": "Ao vivo, pessoas no Site agora entra na Visão Geral",
+      "raw_subject": "feat(central): Ao vivo, pessoas no Site agora na Visão Geral (#835)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 240,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 da fila fixa (PRD #809, ADR 0058): Ao vivo (pessoas no site agora) na Visão Geral. Rota GET /api/admin/central-de-comando/ao-vivo sob require_super_admin, SEM cache (ida direta ao runRealtimeReport da GA4), degradação honesta (nunca zero inventado). Sem migration. Rate-limit alinhado a 5/min como a rota irmã de ida garantida (achado do revisor de segurança). Dois revisores do orquestrador limpos, 0 must-fix. Version match 0.148.0 no /health. Gates 2.6/2.8 não verificáveis: 'env list -s' do CLI volta value vazio nesta versão."
+    },
+    {
+      "at": "2026-09-19T07:57:38-03:00",
+      "sha": "e970e4df",
+      "app_version": "0.147.0",
+      "subject": "Áreas do site, Origem do público e Contatos gerados entram na tela Dados do Google",
+      "raw_subject": "feat(central): Áreas do site, Origem do público e Contatos gerados na tela Dados do Google (#818) (#833)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 260,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 4 do PRD #809 (ADR 0058), fecha a fila fixa da /onda. Sem migration. Números conferidos com a credencial real e OK do humano: idênticos à Central antiga em 7, 28 e 90 dias. Acabamentos das revisões na issue #834. Gates 2.6 e 2.8 não verificáveis (token do CLI)."
+    },
+    {
+      "at": "2026-09-19T07:23:01-03:00",
+      "sha": "62f47174",
+      "app_version": "0.146.0",
+      "subject": "A Central ganha a tela Dados do Google, com Visitantes por dia e dispositivos",
+      "raw_subject": "feat(central): Dados do Google com Visitantes por dia e dispositivos (#817) (#832)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 273,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 3 do PRD #809 (ADR 0058). Sem migration. Números conferidos com a credencial real e OK do humano: idênticos à Central antiga dia a dia em 7, 28 e 90 dias. Duas revisões limpas. Gates 2.6 e 2.8 não verificáveis (token do CLI)."
+    },
+    {
+      "at": "2026-09-19T06:27:31-03:00",
+      "sha": "7395016c",
+      "app_version": "0.145.0",
+      "subject": "Os números da Central ganham frescor: cache de 1 hora, Atualizar agora e último valor bom",
+      "raw_subject": "feat(central): frescor dos números, cache de 1 hora, Atualizar agora e último valor bom (#815) (#831)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 359,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 2 do PRD #809 (ADR 0058). Sem migration: o cache vive na memória do processo. Três revisões limpas. A #817 e a #818 seguem empilhadas sobre esta subida. Gates 2.6 e 2.8 não verificáveis: o token do CLI do Coolify não revela valores."
+    },
+    {
+      "at": "2026-09-18T21:05:29-03:00",
+      "sha": "214e0d72",
+      "app_version": "0.144.0",
+      "subject": "A Central de Comando chega dormente, com guard de Super admin e Visitantes reais do GA4",
+      "raw_subject": "feat(central): seção dormente, guard de Super admin e Visitantes do GA4 (#814) (#830)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        809
+      ],
+      "result": "healthy",
+      "duration_seconds": 462,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "Onda 1 do PRD #809 (ADR 0058). Sem migration. Critério da credencial real conferido com OK do humano: Visitantes idênticos à Central antiga em 7, 28 e 90 dias. Gates 2.6 e 2.8 não verificáveis: o token do CLI do Coolify não revela valores."
+    },
+    {
       "at": "2026-09-17T19:56:00-03:00",
       "sha": "f7e6e92e",
       "app_version": "0.143.0",
@@ -759,715 +1544,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Issue #670, correcao da auditoria do PRD #634 secao 2.1 (as observacoes 3.1 a 3.5 ficaram fora de proposito). Sem migration, por regra da issue. A review independente do orquestrador achou 1 must-fix real na rodada 1: o _com_nomes do _aviso_da_correcao lia o PostgREST DEPOIS do update e fora de try, entao um timeout devolvia 500 com a correcao ja gravada, e no retry mencoes_acrescentadas voltava vazia e o e-mail nunca mais saia. Corrigido com try/except devolvendo AVISO_EMAIL_NAO_SAIU, provado com httpx.ReadTimeout injetado DENTRO da leitura mais um controle que separa 'derrubou aquela leitura' de 'derrubou tudo'. Rodada 2 limpa. A rota PATCH editar_resposta ganhou o shared_limit das portas de gatilho porque virou porta de e-mail e passa a gastar cota do Resend. Decisao consciente que fica de divida: sem coluna que guarde QUAIS mencoes entraram na correcao, toda mencao de linha com editado_em conta a partir do carimbo, entao toda correcao que acrescenta mencao reabre Minha vez de quem ja respondeu naquela linha (o e-mail nao repete, so a aba). Julgado o lado seguro do erro, porque o contrario e a chamada sumir em silencio. Producao ficou fora do ar por alguns minutos antes deste deploy, com TLS reset em api, app e coolify e as portas 22 e 443 abertas; o humano resolveu e o ship seguiu."
-    },
-    {
-      "at": "2026-09-10T00:41:00-03:00",
-      "sha": "9968e77",
-      "app_version": "0.123.3",
-      "subject": "o conversor PDF/DOCX para Markdown (item Utilitarios do admin) sai do app de ponta a ponta, com a secao Ferramentas da sidebar e a dependencia markitdown",
-      "raw_subject": "chore(admin): remover o conversor PDF/DOCX para Markdown (item Utilitários) (#672)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 300,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Fatia avulsa #671 (PR #672), sem PRD e sem ADR, decidida em grilling. Remocao pura: pagina /admin/utilitarios, item Utilitarios e secao Ferramentas da sidebar, rota POST /admin/utilitarios/converter-markdown, schema ConversaoMarkdownResponse, servico markdown_converter, teste e tres fixtures binarias que so ele usava, e markitdown no pyproject. uv.lock so removeu (276 linhas, 17 pacotes: markitdown e a subarvore exclusiva dele), zero adicoes; pdfplumber, docx2txt, pdfminer.six e lxml ficaram porque a importacao de transcricao e os POPs dependem deles. TDD: teste de ausencia na sidebar (desktop e drawer) com Tecnologia como marcador de presenca, RED antes e GREEN depois. openapi conferido uma vez no PR: 175 rotas, nenhuma com utilitarios. Quatro gates verdes: code-review sem bug (travessoes do template corrigidos a mao no corpo do PR; duplicacao do describe.each ficou por nomear a issue), spec x diff aprovado sem faltante nem scope creep, security review sem achado (superficie diminui: sai um endpoint autenticado de upload e toda a cadeia de parsing), CI verde nos tres jobs. Merge pela API (gh pr merge nao funciona em worktree). APP_VERSION: classifier negou, humano rodou com !; o primeiro comando que entreguei tinha UUID errado escrito de cabeca (404), o certo veio do project.json. Prova em prod: rota removida 404 contra 401 na rota de controle, /api/health em 0.123.3 com db healthy. Issue fechou no merge com 5/5 criterios marcados."
-    },
-    {
-      "at": "2026-09-09T21:00:00-03:00",
-      "sha": "bbe1fc0",
-      "app_version": "0.123.2",
-      "subject": "duas guardas de seguranca que faltavam: anti-SSRF nos tres geradores de PDF sem guarda nenhuma, e a recusa de caso apagado nas duas portas de escrita fechadas so por acidente",
-      "raw_subject": "fix(pdf): guarda anti-SSRF compartilhada na Ata, no relatorio e no cartaz (#668)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 420,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda avulsa de duas issues de seguranca, fora de PRD, arquivos disjuntos, em paralelo. #633 (PR #668, v0.123.2): a guarda anti-SSRF do PDF estava AUSENTE, nem inerte, em tres geradores (Ata, relatorio da Ouvidoria, cartaz dos pontos). A guarda saiu de pops_pdf_service.py para pdf_url_fetcher.py e foi ligada nos tres, com o fetcher no construtor HTML(...), que e onde o WeasyPrint de fato le. Passar no write_pdf() e o erro da #152, que deixou a guarda do POP morta por anos em silencio. Multicast e CGNAT (100.64.0.0/10) entraram como predicados novos: os dois passavam por todos os outros. 13 mutantes mortos. O revisor renderizou os TRES templates reais (o PR so testava com template falso) e confirmou que a guarda nao recusa o logo legitimo. Um comentario factualmente ERRADO foi corrigido: o WeasyPrint NAO normaliza o .. da URL antes do fetcher (url_join devolve iri_to_uri, so percent-encoding); o que salva o asset e template e allowlist sairem da MESMA expressao. #631 (PR #667, v0.123.1): barrar_caso_apagado virou explicita em POST /ouvidoria-setor/{token}/responder e POST .../notificacoes/{id}/reenviar, que antes dependiam da pre-condicao de estado dar certo por consequencia. MUST-FIX pego na review: o ramo do apagamento PENDENTE devolve frase que nomeia a Diretoria Executiva, e com a guarda no portal ela passaria a sair por link sem login para o titular da area, que costuma ser a parte reclamada. Resolvido com o parametro keyword-only canal_publico, que troca so esse ramo por frase neutra; toda porta com login segue com a frase completa. O default ficou pinado nos dois sentidos por mutante. 9 mutantes mortos. Nos dois PRs o mutante mais importante foi no DETECTOR: tirar o campo da tupla do select deixava a guarda lendo None e a suite inteira verde. Nenhuma das duas criou migration. Issue #669 aberta com o inventario das portas irmas que sobraram sem guarda."
-    },
-    {
-      "at": "2026-09-09T19:55:00-03:00",
-      "sha": "c0f36e1",
-      "app_version": "0.123.0",
-      "subject": "a aba Tecnologia fecha: Minha vez, Historico com busca, aviso por e-mail e o Quadro que se atualiza sozinho",
-      "raw_subject": "feat(tecnologia): e-mail nos três gatilhos e o Quadro que se atualiza sozinho (#642) (#661)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 600,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 5 desta sessao, a ULTIMA do PRD #634: issues #641 (abas Minha vez e Historico com busca, PR #660) e #642 (e-mail nos tres gatilhos e atualizacao sozinha do Quadro, PR #661), em paralelo, mergeadas na ordem #641 depois #642, com UM deploy no fim. Com isto o PRD #634 fecha as SETE filhas, e NENHUMA das seis fatias depois da #636 criou migration: a 102 nasceu com as tres tabelas no formato final e aguentou o PRD inteiro. O humano aplicou SQL a mao UMA VEZ nesta sessao. A #641 criou duas rotas (minha-vez e historico), levando a aba a 15 operacoes e 15 gates. A #642 nao criou nenhuma. O eixo da #641 e AUTORIZACAO disfarcada de filtro: 'Minha vez' devolve as Demandas que esperam por VOCE, e se o cliente pudesse escolher de quem e a lista, qualquer Super admin montaria a caixa de entrada de outra pessoa. A rota le o ator do require_super_admin e NAO aceita id de pessoa do cliente. O revisor de seguranca escreveu 24 tentativas de exploracao por todos os caminhos (query, corpo, header) e NENHUMA passou. Ainda assim faltava teste que prendesse a regra, e ele entrou na rodada 2 a pedido do orquestrador. O achado mais importante da onda foi de METODO, nao de codigo: o script de mutacao do autor da #641 estava QUEBRADO e marcava todo mutante de frontend como MORTO sem medir. A linha era `return r.returncode == 0 and 'skipped (' not in r.stdout`, e como o vitest sempre imprime 'skipped' ao rodar um caso so, a funcao devolvia False sempre, e False era impresso como MORTO. Pior: um dos tres mutantes nao medidos era um NO-OP (o de/para trocava a linha por ela mesma mais um comentario), e o que ele deveria provar sobrevivia de verdade. O verificador achou isso lendo o script, nao o codigo. A correcao foi alem do pedido: o autor acrescentou um MUTANTE DE CONTROLE em todos os tres scripts, um no-op que TEM que sair VIVO, com o script abortando com codigo 2 e a mensagem 'SCRIPT QUEBRADO: nada acima vale' se ele sair morto; depois re-rodou tudo, inclusive os conjuntos que nao estavam sob suspeita. O verificador da rodada 2 SABOTOU o controle de proposito para confirmar que o guarda dispara. A regra que fica: um verificador de mutantes que nunca diz 'vivo' nao e verificador. Segundo achado da #641, da mesma familia: o teste da segunda guarda do selo de sequencia NUNCA CHEGAVA NELA. No cenario, quando os cabecalhos do pedido velho chegavam, o pedido novo ja tinha nascido, entao o velho batia na PRIMEIRA guarda e voltava ali; o json() dele nunca era chamado. O teste provava a primeira guarda duas vezes e a segunda nenhuma. E um terceiro, achado pela seguranca: o teto de 1000 linhas do PostgREST corta leitura e devolve HTTP 200 sem aviso. O repo ja sabia disso (paginacao.py, issue #430, 14 leituras da Ouvidoria usam ler_tudo), mas a aba Tecnologia nao usava em lugar nenhum. Na #641 isso era grave porque a leitura soma o fio de TODAS as Demandas numa consulta so, ordenada crescente, entao o corte come as linhas mais NOVAS: exatamente as mencoes recentes, que sao o que cria a vez. Provado: 60 Demandas com 1000 linhas antigas de movimento mais a mencao de hoje devolve 200 e lista VAZIA, e a tela mostra 'nada esperando por voce' sobre dado que o backend nao verificou. Corrigido com ler_tudo nas duas leituras, e o verificador confirmou o ponto mais arriscado: a ordenacao desempata por id (UUID PRIMARY KEY nas duas tabelas), entao a paginacao nao pula nem repete linha. Na #642 o eixo foi que a fatia manda E-MAIL, ou seja, empurra conteudo do hospital para caixas de entrada. Os dois revisores acharam o mesmo problema central: o envio era INLINE numa rota async, sem timeout, e o uvicorn sobe sem --workers (um event loop so). Uma resposta com 3 mencoes = 4 envios sequenciais segurando o loop; se o Resend ficasse lento, a Ouvidoria, as Atas, as Reunioes e o portal publico parariam junto. Um e-mail de Tecnologia viraria indisponibilidade de tudo. A casa faz o contrario em todo lugar (BackgroundTasks), e o autor nao pode usar isso porque o aviso_por_email precisa do resultado antes de responder: o desenho comprou o problema. Corrigido com asyncio.to_thread mais timeout no transporte, que preserva as duas coisas. Tres mutantes ficaram VIVOS na #642, e o revisor notou o padrao: dois deles estavam exatamente nas partes que o relatorio mais defendia em prosa. O mais caro: o aviso 'o e-mail nao saiu' NAO chegava a tela nos caminhos de responder no fio e trocar responsavel pelo card, que sao os gatilhos 2 e 3; desligar os dois deixava 928 testes verdes. O mais sutil: a assercao que provava que o Produto aparece no e-mail era `assert 'Ana' in corpo`, e o titulo do cenario era 'Prazo da Ana', entao ela casava com o titulo e trocar o Produto por um id cru passava batido. O autor da #642 levantou sozinho um ponto para o revisor decidir, e o revisor decidiu contra: modo mock contando como enviado. O argumento que fechou: a fatia existe para a falha nao passar calada, e o modo de falha mais provavel em producao (RESEND_API_KEY rotacionada para vazio, literalmente a issue #435) era o unico que ela deixava passar calado. Corrigido com transporte_configurado() e escape para development. Dois achados de seguranca que atravessam modulo: o titulo da Demanda (campo livre) ia para o log em INFO junto com o endereco completo, legivel por quem tem acesso ao log do Coolify e nenhum perfil na aba; e, sem limitador, um laco de respostas queima a cota e a reputacao de remetente do Resend, que e recurso COMPARTILHADO com a Ouvidoria, que depende dele para avisos de prazo com obrigacao legal (ADR 0034). O segundo virou shared_limit (e nao limit) nas tres rotas de gatilho, com a razao medida escrita no codigo: o key_style default do slowapi e 'url', entao limit daria 60 por minuto POR DEMANDA em rota com id no path, o que nao limita nada. A #642 tocou email_service.py, o transporte de e-mail de TODO o app. O verificador tratou isso como prioridade zero: as quatro mudancas sao todas rastreaveis a um must-fix, nenhuma entrou por conveniencia, o parametro novo e o ultimo da assinatura e tem default, e a Ouvidoria continua identica (230 testes de e-mail dela passando, e as linhas de log byte a byte o que eram). Decisoes do dono no checkpoint: mergear as duas com um deploy so, e o e-mail entra LIGADO em producao. Duas coisas para registrar sobre o processo: as issues #641 e #642 NAO fecharam sozinhas no merge, porque o corpo dos PRs nao trazia a linha Closes; foram fechadas a mao e o motivo ficou comentado nas duas. Isso e do /ship e afeta qualquer issue futura. E o deploy correu limpo: APP_VERSION gravado antes do merge nas duas ondas, health direto na versao certa, e o codigo novo provado em producao pelo par 401 contra 404 nas duas rotas da #641."
-    },
-    {
-      "at": "2026-09-09T16:05:00-03:00",
-      "sha": "e7d75fe",
-      "app_version": "0.121.0",
-      "subject": "o card se arrasta entre as colunas, o Quadro lembra o filtro, e a Demanda vira link e texto para IA",
-      "raw_subject": "feat(tecnologia): Copiar para IA, Copiar link e abrir a Demanda pela URL (#658)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 900,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 4 desta sessao, a PRIMEIRA em paralelo: issues #639 (arrastar entre colunas e filtros lembrados, PR #657) e #640 (Copiar para IA, Copiar link e abrir a Demanda pela URL, PR #658), desenvolvidas ao mesmo tempo em worktrees separados e mergeadas na ordem #639 depois #640, com UM deploy no fim. NENHUMA MIGRATION nas duas. A #640 criou a primeira rota nova desde a #638 (GET /demandas/{id}/texto-para-ia), levando a aba a 13 operacoes e 13 gates. As duas tocavam os mesmos quatro arquivos do shell do modulo, e o briefing de cada uma proibiu refatoracao oportunista neles justamente por isso. Funcionou: a #640 rebaseou sobre a #639 com conflito em cinco arquivos e nenhuma linha da #639 se perdeu (provado por diff: zero linhas removidas dos arquivos do shell). O rebase teve uma armadilha que vale registrar: o git fatorou a chave de fechamento final como sufixo comum em demandas.ts e demandas.test.ts, entao manter os dois lados deixava funcao sem fechar; foi reposta a mao e conferida pelo tsc. O commit de bump da #640 foi DESCARTADO pelo git no replay ('patch contents already upstream'), porque a #639 entregou a mesma 0.120.0 antes; a #640 foi para 0.121.0 a mao. Na #639 o achado central foi de qualidade de teste, pelo segundo deploy seguido. O autor afirmou no relatorio e no corpo do PR '15 mutantes, todos mortos'. O revisor rodou 14 dele e DOIS SOBREVIVERAM, os dois na guarda do selo de sequencia que o autor tinha acabado de justificar em prosa. A causa: o teste da corrida respondia numa ORDEM SO (pedido novo primeiro), que e justamente a ordem em que ligar ou desligar a guarda da o mesmo resultado. O autor escreveu a autocritica mais util da sessao: 'a frase e literalmente verdadeira sobre os 15 que eu escolhi, e mesmo assim ela enganou; a afirmacao certa era: rodei 15 mutantes meus, todos mortos, a cobertura dos que eu nao pensei continua sem prova'. E: 'escrevi a prosa da guarda sem escrever o teste da guarda'. Contagem honesta final: 21 mutantes. A licao para as fatias seguintes e que contagem de mutantes so vale com a lista de quais, e que o proprio autor e o pior juiz de quais mutantes faltam. Ainda na #639, o orquestrador DISCORDOU de uma decisao registrada do autor e a reverteu: ele tinha decidido nao recarregar o Quadro sozinho no 409, argumentando que isso tornaria a frase 'Recarregue o Quadro' mentirosa. Mas a frase pedia uma acao que a tela NAO OFERECE (so F5 ou trocar de aba), o que e pior. Com o refetch, ela descreve o que ja aconteceu. O autor concordou depois de ver o argumento. E ele achou uma dependencia entre os dois consertos que ninguem tinha visto: o refetch so e seguro porque a outra correcao impede a leitura de apagar o motivo do erro; sem ela o card voltaria sozinho e calado, pior que o problema original. O verificador provou essa dependencia rodando o mutante certo. Na #640 o eixo foi diferente de todas as fatias anteriores: ela produz um texto DESENHADO PARA SAIR DO HOSPITAL, colado numa IA de fora. A revisao de seguranca rodou cinco mutantes que faziam id da Demanda, id do Produto, id de autor, lista de mencoes e prioridade/prazo vazarem, e todos morreram, inclusive pelos testes DEDICADOS de ausencia. Ela achou porem um vetor novo: INJECAO DE PROMPT pela Conversa. O cabecalho nao tinha delimitador fechando a parte de instrucao, e linha_para_ia prefixava '[data] Autor:' so na PRIMEIRA linha, entao uma resposta multilinha derramava as seguintes no nivel de cima; o teste de exploracao plantou 'IGNORE TODAS AS INSTRUCOES ANTERIORES' e uma 'nova tarefa do administrador' que a IA de quem colasse leria como ordem. Marcado nit pelo revisor (o atacante ja e pessoa de confianca), o orquestrador mandou corrigir por ser barato e o texto sair do hospital: a Conversa passou a ir cercada por marcas de inicio e fim, o cabecalho passou a DIZER o que a cerca significa (marca sem explicacao e enfeite), e toda linha de continuacao entra recuada, que e o que fecha o buraco. A defesa e recuar, nao apagar o que a pessoa escreveu, e ha teste do par de presenca provando isso. Decisao do dono no checkpoint: o NOME COMPLETO dos funcionarios pode sair no texto. O ADR 0050 autoriza 'titulo, tipo, produto, descricao e a Conversa' e nao menciona nome, mas sem ele ninguem entende quem pediu o que numa conversa de varias pessoas, e o nome sairia de qualquer jeito porque as mencoes digitadas ja viajam dentro do texto das respostas. A tela passou a dizer PARA ONDE o texto vai, e nao so o que vai. O achado que so existia DEPOIS do merge da #639: com os filtros no ar, a lista de Demandas passou a ser filtrada, entao o aviso do link diria 'Confira o endereco com quem enviou' quando a causa real e o filtro escondendo a Demanda. Quinta aparicao do mesmo padrao nesta sessao (mensagem culpando causa que o codigo nao distingue), mas aqui o codigo DISTINGUE, porque a #639 acabara de entregar temFiltroAtivo. As duas causas ganharam frases separadas, e a do filtro nao AFIRMA que o filtro e a causa (a Demanda pode nem existir): diz os dois fatos que o codigo tem e aponta o botao Limpar filtros da mesma tela. O autor escreveu um teste que CLICA nesse botao e prova que o card abre, ou seja, que a saida apontada resolve de verdade em vez de ser desculpa educada. O orquestrador proibiu decidir sozinho se o card deveria abrir com a Demanda filtrada; ficou so na mensagem, com o argumento dos dois lados registrado para o dono decidir. O piso da matriz de gate subiu de 12 para 13 e foi de novo um MUST-FIX, o mesmo defeito da #637: a #640 criou rota e deixou o piso para tras. O orquestrador achou esse sozinho antes dos revisores. Vale virar checagem fixa: fatia que cria rota sobe o piso no mesmo commit. O deploy teve um susto que NAO era do app: por quase uma hora o orquestrador nao conseguiu falar com a VPS (TLS resetado em 443, ping e TCP normais) e diagnosticou errado, primeiro como fail2ban e depois como Traefik derrubado por builds concorrentes, chegando a avisar o dono de possivel indisponibilidade. A causa era a VPN da maquina do dono cortando o TLS. Producao esteve no ar o tempo todo, os quatro builds terminaram sem OOM, e o unico efeito real foi o APP_VERSION nao ter gravado no meio do merge, deixando o /api/health em 0.119.0 com o codigo novo ja no ar. Corrigido com gravacao e redeploy do backend. A licao: TLS resetado com ping e TCP bons e sintoma de rede LOCAL antes de ser sintoma do servidor, e portas diferentes respondendo coisas diferentes nao provam Traefik quebrado. Codigo novo provado em producao sem login pelo par 401 contra 404 na rota texto-para-ia."
-    },
-    {
-      "at": "2026-09-09T05:05:00-03:00",
-      "sha": "d0da302",
-      "app_version": "0.119.0",
-      "subject": "a Conversa da Demanda aceita resposta, mencao e correcao pelos primeiros dez minutos",
-      "raw_subject": "feat(tecnologia): responder na Conversa do card, com menção e correção por 10 minutos (#656)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 300,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 3 desta sessao: issue #638 sozinha, a Conversa dentro do card do Quadro de Tecnologia. Entrega responder no fio, @mencao e correcao da propria resposta por 10 minutos. Duas rotas novas de escrita, o que leva a aba a 12 operacoes e 12 gates. NENHUMA MIGRATION: tecnologia_conversas ja tinha mencoes VARCHAR(10)[] e editado_em, que e exatamente a janela de 10 minutos; conferido pelo orquestrador antes e depois de cada rodada. A janela e funcao pura com o instante INJETADO, nunca lendo o relogio por dentro, e conta do ENVIO e nao da ultima edicao (senao uma resposta corrigida de 9 em 9 minutos ficaria editavel para sempre e o fio deixaria de ser trilha). instante_do_banco trata dado quebrado com cuidado: valor ilegivel vira None e NUNCA 'agora', que abriria a janela para sempre em cima de dado corrompido. A borda ficou INCLUSIVA por decisao do dono no checkpoint: aos 10m00s cravados ainda da para corrigir, porque a PRD promete 'por ate 10 minutos' e um limite exclusivo recusaria o clique dado no ultimo segundo do prazo prometido. A @mencao NAO faz parsing do texto no backend: quem escolhe na lista manda o id, porque casar '@Fulano de Tal' dentro da frase erraria em nome com espaco e em nome que e prefixo de outro. O backend valida cada id contra a mesma lista de acesso a aba, nas DUAS portas, pelo mesmo funil, para que a edicao nao crie a mencao que o envio recusa. Escrever '@Fulano' a mao sem passar pela lista nao vira mencao: o texto fica, apenas nao destacado. O ACHADO MAIS IMPORTANTE DA SESSAO INTEIRA saiu aqui, e foi de qualidade de teste, nao de codigo. O teste que dizia provar 'a janela conta do envio, nunca da ultima edicao' era TAUTOLOGIA: ele reescrevia o corpo da funcao em vez de exerce-la. O revisor rodou dois mutantes que faziam a janela contar de editado_em, um na guarda do PATCH e outro no editavel_ate do GET, e OS DOIS SOBREVIVERAM com 173 testes verdes. O codigo de producao estava certo; o que nao existia era a prova. A causa raiz: nenhum dos 46 casos novos tinha editado_em preenchido, entao o detector nunca viu o cenario. A correcao removeu o teste tautologico e entrou com quatro casos pela ROTA com editado_em recente, e o autor provou rodando que os dois mutantes agora morrem, nomeando os testes que os matam. A licao, que vale para as fatias seguintes: teste que reescreve a logica em vez de chama-la passa sobre codigo quebrado, e so o mutante revela isso. O segundo must-fix foi mencao fantasma: mencoesNoTexto decidia por texto.includes('@' + nome), entao com 'Ana Souza' e 'Ana Souza Lima' escolhidas o texto '@Ana Souza Lima decide' gravava as DUAS. O erro era mudo (a tela destacava so a certa) e viraria e-mail para quem o texto nao chamou na fatia #642. Curiosamente o proprio autor ja tinha resolvido isso no destaque, indo do nome mais longo para o mais curto; a outra conta ficou para tras. A correcao fez as duas contas sairem do MESMO pedacosDoTexto, com par de presenca provando que a mencao legitima a pessoa de nome curto nao se perde. A revisao de seguranca fechou com ZERO must-fix depois de escrever 11 testes de exploracao proprios, todos apagados depois: tentou forjar criado_em no corpo para reabrir a janela (422), forjar autor_id para assinar por outra pessoa (gravou o id do logado), editar resposta alheia por PATCH direto na API sem passar pela tela (422, texto intacto), descobrir existencia de linha de outra Demanda (404, mesma frase do id inexistente, sem vazar), e injetar XSS pelo texto (zero dangerouslySetInnerHTML no frontend inteiro, e o destaque casa por startsWith sem regex). Ele achou um vetor de indisponibilidade: normalizar_mencoes era O(n2) e uma lista com 200 mil ids custaria perto de um minuto de CPU num app que sobe uvicorn SEM --workers, ou seja um event loop so, o que congelaria o backend inteiro e nao so a aba. Corrigido das duas formas: set de controle na dedupe, e um teto recusando antes lista maior que a lista de pessoas da aba, porque mais mencoes do que gente nao faz sentido. A verificacao final rodou os dois mutantes da janela e confirmou que morrem, nomeando os testes. Ela achou mais um caso do MESMO padrao do must-fix: o valor 5000 de LIMITE_RESPOSTA nao tinha trava, e mutar para 200 deixava a suite verde, porque os testes mediam o limite contra a propria constante. Travado com literais escritos a mao, e o mesmo julgamento foi refeito por mutante (nao por leitura) na JANELA_DE_EDICAO, que ja estava coberta: mutar 10 para 5 minutos derruba sete casos. Na ultima rodada o autor achou um defeito no proprio conserto do teto de mencoes: se ele continuasse medindo a lista JA LIMPA, viraria codigo morto, porque depois da allowlist os ids sao todos validos e distintos e nunca passariam do numero de pessoas. Passou a medir o que veio no payload, e as duas recusas foram reordenadas para que quem tem id invalido leia a frase do id invalido, e nao uma frase sobre quantidade. A frase diz 'veio com N mencoes' de proposito: dizer 'tem N mencoes' para uma lista com a mesma pessoa repetida contaria uma coisa que o texto nao diz. Conhecido e mantido por decisao: '@Ana' dentro de '@Anastacia' ainda conta como mencao, porque o casamento e por startsWith sem fronteira de palavra. Agora esta CONSISTENTE entre o destaque na tela e a coluna gravada, que era o defeito real; resolver pediria parsing de fronteira de palavra, justamente o que a fatia evitou ao nao deixar o backend adivinhar nomes dentro da frase. Deploy limpo pelo segundo deploy seguido: APP_VERSION gravado no Coolify ANTES do merge, e o /api/health subiu direto em 0.119.0. Codigo novo provado em producao sem login pelo par 401 contra 404 nas duas rotas novas, com as rotas das fatias anteriores seguindo vivas."
-    },
-    {
-      "at": "2026-09-09T03:30:00-03:00",
-      "sha": "04e7abf",
-      "app_version": "0.118.0",
-      "subject": "a Demanda nasce, anda pelas cinco colunas do Quadro e guarda o rastro de cada movimento",
-      "raw_subject": "feat(tecnologia): a Demanda nasce e anda no Quadro (máquina de estados e card) (#647)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 280,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 desta sessao: issue #637 sozinha, a fatia G e a maior do PRD #634. Entrega a Demanda nascendo e andando no Quadro: cinco colunas, o card, o modal, a maquina de estados e a Conversa em modo leitura. Seis rotas novas em /api/admin/tecnologia, todas com require_super_admin, o que leva a aba a 10 rotas e 10 gates. NENHUMA MIGRATION: as tres tabelas ja nasceram no formato final na 102 da fatia #636, e o diff nao toca supabase/ em lugar nenhum. Conferido pelo orquestrador antes e depois de cada rodada de correcao. A maquina de estados vive em app/services/tecnologia.py como funcao pura sem I/O. Cinco estados dao 25 pares: 12 permitidas e 13 proibidas, e a revisao conferiu par a par contra a issue e a decisao 5 do ADR 0050, sem nenhuma inventada nem omitida. O CHECK da 102 restringe so os VALORES de estado, nao as transicoes, entao nao existe regra em dois lugares para divergir: quem barra o salto e o Python, como a propria migration documenta. Concluir e cancelar carimbam quem e quando; reabrir LIMPA os quatro campos, e isso esta provado pela rota e nao so pela funcao pura (um update parcial deixaria concluida_em preenchido numa Demanda em andamento). Quatro revisoes independentes rodaram sobre este PR: codigo, seguranca, uma rodada 2 e uma verificacao final. Somaram 4 must-fix na primeira leva, 1 na segunda e 0 na ultima. O achado mais importante da primeira leva foi de coerencia entre portas: criar Demanda entregava o card ao dono do Produto que ja tinha PERDIDO o acesso a aba, enquanto POST /atribuir recusava exatamente essa pessoa com 422. O app criava por uma porta o estado que recusava pela outra, e o card ficava com um responsavel que nao conseguia abrir a aba; pior, o modal mostrava 'Sem responsavel' enquanto o card mostrava o nome. A decisao do orquestrador foi recusar na criacao, alinhando com a porta de atribuir, com a frase apontando a saida ('Troque o dono na lista de Produtos, logo abaixo do Quadro'), porque o guarda-corpo so e legitimo quando quem leva a recusa TEM onde carimbar: aqui tem, na mesma tela, e a decisao 11 do ADR 0050 diz que todos dentro da aba podem tudo. A rodada 2 confirmou que nao existe estado em que o Super admin fique sem poder criar Demanda nenhuma. Os outros tres da primeira leva: apagar o Titulo no modal mostrava JSON cru do pydantic ao Super admin (o min_length=1 respondia antes da frase de gente); sessao sem token deixava o Quadro com cinco colunas zeradas e caladas, indistinguivel de 'nao ha Demanda', que e a mesma falha da fatia #636 com outra causa; e o piso da varredura do gate continuava em 4 rotas com 10 publicadas, o que deixaria as 6 novas sairem da matriz de 403 em silencio numa fatia futura, a morte por varredura parcial das issues #542 e #546 graduada. A rodada 2 achou uma REGRESSAO introduzida pela propria correcao anterior, e esse foi o achado mais fino da onda: o aviso de sessao novo disparava em TODA abertura da aba, porque o QuadroDemandas recebia token por prop e nao sabia que a autenticacao ainda estava resolvendo (o useAuth nasce com token nulo e loading true, e so entrega o token depois de duas idas a rede). O alerta vermelho piscava com a sessao perfeitamente valida. Nenhum teste pegou porque o mock de useAuth cravava loading: false nos dois arquivos, entao o estado de boot nunca era exercido. O revisor provou com sonda, nao deduziu. A correcao passou carregandoAuth ao Quadro e tornou o mock parametrizavel, com dois testes, um por nivel, porque a regressao nasceu justamente da distancia entre eles. A verificacao final rodou a mesma sonda de novo e mediu a diferenca entre consertar e esconder: o mutante 'calar sempre' derruba 27 testes, o mutante 'tirar a guarda' derruba 2. Outros consertos que sairam de nit: TOCTOU no mover (o update passou a amarrar .eq('estado', de), e resultado vazio vira 409); a falha ao gravar a linha do fio deixou de passar calada (sem RPC, por decisao do orquestrador: confere o retorno, pega httpx.HTTPError junto com APIError, e devolve 500 honesto dizendo que a Demanda mudou mas o fio ficou incompleto, porque dizer 'nao deu certo' seria mentira); a frase do 409 parou de culpar causa unica e de afirmar onde a Demanda esta, passando a falar so do desfecho; o log parou de gravar o texto do movimento, que carregava nome de pessoa; e o Select de dono do Produto ganhou a marca '(sem acesso a aba)', porque a frase da recusa mandava ir ate a lista de Produtos e la o dono problematico aparecia com nome normal, carimbo do backend sem par na tela. O deploy correu limpo: aprendendo com a onda 1, o APP_VERSION foi gravado no Coolify ANTES do merge, e o /api/health subiu direto em 0.118.0 sem redeploy extra. Codigo novo provado em producao sem login pelo par 401 contra 404: /demandas, /demandas/{id}/conversa e POST /demandas/{id}/mover respondem 401, uma rota irma inventada responde 404, e /produtos da fatia anterior segue viva."
-    },
-    {
-      "at": "2026-09-09T01:52:14-03:00",
-      "sha": "ffa51d1",
-      "app_version": "0.117.0",
-      "subject": "a aba Tecnologia nasce com gate de Super admin e a gestao dos Produtos",
-      "raw_subject": "feat(tecnologia): aba Tecnologia com gate Super admin e gestao de Produtos (#643)",
-      "scope": [
-        "backend",
-        "frontend",
-        "supabase"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 260,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "102_tecnologia_fundacao.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 desta sessao: issue #636 sozinha, a fatia de fundacao do PRD #634 (aba Tecnologia, o quadro de Demandas entre o hospital e a Vitta, ADR 0050). Entrega a aba com gate de Super admin, a gestao de Produtos e as tres abas internas (Quadro, Minha vez, Historico) como casca vazia; a Demanda e a Conversa vem nas fatias #637 a #642, que nao criam migration porque as tres tabelas ja nascem na 102 no formato final. Quatro rotas novas em /api/admin/tecnologia, todas com require_super_admin e nenhuma com DELETE: desativar e a saida. O Gate 1.5 pegou um defeito que so aparecia no estado inicial do sistema: os sete Produtos do seed nascem ativos e SEM dono, porque e a propria migration que manda cria-los assim, e a guarda do PATCH olhava so o estado final, entao renomear qualquer um dos sete devolvia 422 'Produto ativo precisa de dono' na primeira abertura, culpando o Super admin por uma falta que ele nao provocou. A regra pura virou edicao_deixa_produto_ativo_sem_dono(antes, depois): recusa quando a edicao CRIA o estado ruim, passa quando apenas o herda, e quem cobra o dono dos sete passou a ser a tela, com a marca 'Falta dono'. E o caso da licao 'guarda-corpo novo pode virar indisponibilidade' virando correcao antes do merge. A revisao do orquestrador (ADR 0035) rodou com dois revisores independentes em paralelo, codigo e seguranca. Seguranca fechou com zero must-fix percorrendo sete itens com evidencia. Codigo trouxe um must-fix real e de front: o fetch da tela de Produtos nao tinha catch, entao qualquer falha de rede desenhava a lista VAZIA e CALADA, indistinguivel de 'o banco nao tem Produto', bem no criterio de aceite 'a tela lista os sete Produtos na primeira abertura'; quem abrisse concluiria que o seed da migration nao rodou. Tres caminhos foram fechados (carregar, enviar e o token ausente que deixava a tela girando para sempre), no molde do admin/usuarios que ja fazia certo, com quatro testes novos e um teste DETECTOR para que nenhum deles passasse de graca. Dois nits viraram correcao por decisao do orquestrador. O primeiro era bug de verdade: PATCH com dono_id vazio passava pelas duas guardas e gravava string vazia, que nao e NULL e nao existe em participantes, violando a FK com 500. O segundo protege as seis fatias seguintes: a matriz que prova o gate era uma lista de rotas escrita a mao, entao uma rota nova sem require_super_admin em #637 a #642 nao deixaria teste vermelho; virou varredura de app.openapi()['paths'] com piso de sanidade, e a fonte e o schema e nao app.routes, porque o uv.lock fixa FastAPI 0.136 e o CI instala 0.141, onde app.routes volta quase vazio e a varredura ficaria verde sobre nada (a mordida das issues #542 e #546). Essa troca mexe no cache do OpenAPI durante a coleta do pytest, e a rodada 2 de revisao provou que a restauracao num finally esta correta e que o detector de rota escondida continua vivo. A rodada 2 achou so um nit de texto, corrigido: a frase do caminho sem token dizia 'Sua sessao expirou. Entre de novo' tambem quando a causa era rede caida, mandando o Super admin sair e entrar justo quando ele nao consegue. Virou uma frase unica que nomeia as duas causas e pede recarregar a pagina, porque o useAuth devolve token nulo nos dois casos e separa-las exigiria mexer num hook compartilhado por seis modulos so para melhorar um texto. A prova por hash do SQL foi feita pelo ORQUESTRADOR antes de entregar o arquivo ao humano, e refeita depois de cada uma das duas rodadas de correcao: o bloco do corpo do PR e o arquivo tem o mesmo sha256 59c85a512021caf14a8be4518f3849522dabf6ef286a1fda2259f0184603eb07, 10166 bytes. E o procedimento herdado do PR #632 e do #635. O deploy teve um tropeco conhecido e consertado: o APP_VERSION so chegou ao Coolify depois que o webhook do merge ja havia disparado o build do backend, entao o /api/health voltou 0.116.1 com o codigo novo ja no ar. Um redeploy manual do backend, disparado DEPOIS do frontend terminar para nao concorrer por memoria na VPS, resolveu: /api/health passou a 0.117.0. O codigo novo em producao foi provado sem login, pelo par 401 contra 404: /api/admin/tecnologia/produtos e /pessoas respondem 401 (a rota existe e a guarda esta de pe) e uma rota irma inventada responde 404. Uma leitura isolada do health durante a troca de container devolveu 'no available server', transitorio e sem acao, o mesmo comportamento ja registrado no deploy anterior."
-    },
-    {
-      "at": "2026-09-09T00:08:29-03:00",
-      "sha": "6e135f2",
-      "app_version": "0.116.1",
-      "subject": "arquivar todos os encerrados de uma vez passa a gravar o log de acesso na mesma transacao",
-      "raw_subject": "fix(ouvidoria): arquivar o lote e registrar o acesso na mesma transação (#635)",
-      "scope": [
-        "backend",
-        "supabase"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 317,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "101_ouvidoria_lote_do_arquivo_atomico.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 3 desta sessao: issue #627 sozinha, ultima filha aberta do PRD #591. O arquivamento em lote que a #594 entregou carimbava os casos e registrava o log de acesso em dois passos, entao uma falha no meio deixava lote arquivado sem rastro. A migration 101 traz a funcao ouvidoria_arquivar_encerrados, que faz os dois na MESMA transacao, sem bloco EXCEPTION de proposito, e o recorte passou a viver dentro do proprio UPDATE em vez de numa leitura anterior. Sem indice e sem tocar no ato de um caso so, como a triagem pedia. A triagem pedia tambem SECURITY DEFINER, e essa parte foi EMENDADA no checkpoint: ficou SECURITY INVOKER, com as duas reviews e o dono de acordo, porque quem chama e o backend com service_role, que ja passa por cima do RLS; DEFINER nao habilitaria nada e so tiraria uma camada, ja que aplicada pelo Studio a funcao nasceria com owner postgres e o REVOKE seria a unica coisa entre a anon_key do bundle e um UPDATE em massa. A emenda ficou registrada na issue e no corpo do PR. Os dois must-fix da revisao giraram em torno dessa mesma linha do SQL, e o mais perigoso nao era codigo: o corpo do PR CONVIDAVA o humano a trocar a clausula na hora de colar no Studio, o que quebraria a prova por hash que o proprio corpo afirma e deixaria o SET search_path obrigatorio so em prosa. O outro era que essa clausula era a UNICA linha do SQL sem guarda de teste: troca-la deixava os 127 testes verdes. Os dois fecharam em uma rodada, e a verificacao focada voltou limpa nos cinco pontos, com o verificador provando por mutacao no proprio detector qual assercao trabalha. Esta onda transformou a licao do PR #632 em procedimento: o ORQUESTRADOR conferiu por hash, antes de entregar o SQL ao humano, que o bloco do corpo publicado e identico ao arquivo, e repetiu a conferencia depois da edicao do corpo. E a fumaca da RPC rodou contra producao com a chave anonima ANTES do merge, devolvendo SQLSTATE 42501, o que prova de uma vez que a funcao existe (senao viria PGRST202) e que o REVOKE pegou; ela e segura por construcao, porque SMOKE627 nao e id valido de participante e as duas colunas escritas tem FK, entao a transacao morreria antes de qualquer escrita. O teto de lote foi medido em vez de chutado: authenticator ja carrega statement_timeout=8s e lock_timeout=8s, e a RPC rodou 10 mil casos em 166 ms, 50 mil em 1,9 s e 200 mil em 7,0 s num Postgres de verdade, entao nenhum teto foi implementado e o motivo ficou escrito. Uma leitura isolada do /api/health logo apos o deploy devolveu 503 no available server durante a troca de container, com o Coolify ja em running:healthy; seis leituras seguidas depois vieram 200 com 0.116.1, e nada foi feito."
-    },
-    {
-      "at": "2026-09-08T22:42:38-03:00",
-      "sha": "b80caeb",
-      "app_version": "0.116.0",
-      "subject": "a Diretoria apaga o caso encerrado antes dos cinco anos, com motivo escrito a mao",
-      "raw_subject": "feat(ouvidoria): a Diretoria apaga o caso encerrado, com motivo escrito (#595) (#632)",
-      "scope": [
-        "backend",
-        "frontend",
-        "supabase"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 445,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "100_ouvidoria_apagamento_pela_diretoria.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 desta sessao: issue #595 sozinha, fatia G do PRD #591, ADR 0047. Abre a porta antecipada da Retencao: a Diretoria Executiva manda apagar o Dossie de um caso encerrado antes dos cinco anos, escrevendo o motivo a mao. A migration 100 acrescenta a SEGUNDA CHAVE na guarda de UPDATE da trilha, sem tocar na guarda de DELETE, e as duas chaves seguem exigindo caso encerrado com marco de encerramento. O desenho nao alcanca caso fora de encerrado, travado em tres lugares independentes: a rota devolve 409, o update repete as pre-condicoes no proprio filtro (fecha o TOCTOU) e a guarda no banco exige o mesmo. Foram TRES rodadas de revisao, uma a mais que o limite da /onda, autorizada pelo humano. Rodada 1, tres must-fix. O pior era regressao de seguranca: a marca do movimento de apagamento tinha virado o prefixo de texto 'Apagamento do Dossie' na observacao, que o ouvidor digita a mao na transicao, quando antes era o autor_nome que so o servidor escreve. Um ouvidor que encerrasse o caso com esse texto fazia o apagamento adotar o movimento dele: o motivo da Diretoria nunca entrava na trilha, o texto plantado era preservado pelo exceto= e virava imutavel, e a tela creditava o apagamento a ele. Junto vieram o pedido gravado e nunca cumprido (falha no meio deixava o caso com o carimbo e o Dossie inteiro, e o cron dos cinco anos nao varria esse estado) e a recusa do servidor escrita na pagina por baixo do modal, que sobe por createPortal, entao nos 409 e 503 a Diretoria nao via mensagem nenhuma e o teste passava porque findByText olha o DOM e nao a sobreposicao. Rodada 2: os tres fechados e confirmados por mutacao do proprio revisor, que varreu as 11 portas que gravam na trilha para provar que a regua nova nao e forjavel. Mas o codigo do conserto trouxe dois achados novos. O segundo era a fila nova do cron apagando o ciclo NOVO de um caso reaberto, porque a reabertura nao limpava o carimbo do pedido; provado com o contraste que fecha o argumento, a rota humana recusava esse mesmo caso com 409 e so o robo dizia sim. O primeiro nao estava no codigo: o bloco SQL do CORPO do PR, que e o que o humano cola no Studio, estava preso na versao anterior e sem o AND p.anonimizada_em IS NULL. O CI ficava verde porque os testes leem o arquivo, ninguem executa o arquivo, e a consulta de conferencia sugerida no proprio corpo devolvia true nas duas versoes, entao nada acusaria. Aplicado assim, a fresta da trilha ficaria aberta para sempre em todo caso apagado. Passou a ser gerado do arquivo, e a fumaça passou a checar prosrc like '%anonimizada_em IS NULL%'. O orquestrador conferiu por hash que o corpo publicado e identico ao arquivo antes de entregar o SQL ao humano. Rodada 3 fechou os dois, mais os tres mutantes vivos que o revisor apontou, e um agente focado verificou a fila do cron com cinco mutantes e as variacoes do caso reaberto. Residuais registrados e nao bloqueantes: caso meio apagado que chegue ao estado reaberto fica parado para sempre e esse estado e beco sem saida pela API (so por corrida estreita, e antes deste PR o pedido orfao era o caso normal de qualquer 503); _reabriu_depois_do_pedido compara timestamp como string e falha aberta com offset nao-UTC, hoje sem efeito porque o PostgREST devolve UTC. A migration foi aplicada a mao pelo humano antes do merge, e a ordem era obrigatoria: sem as colunas a pagina do caso nao degrada, cai com 404. Codigo novo provado em prod sem login: POST na rota de apagamento sem token devolve 401 e com sufixo inventado devolve 404, e o HTML servido traz 0.116.0 embutido."
-    },
-    {
-      "at": "2026-09-08T20:52:33-03:00",
-      "sha": "387af87",
-      "app_version": "0.115.3",
-      "subject": "a guarda anti-SSRF do PDF do POP volta a existir de fato, agora na API nova do WeasyPrint, e o teto de emergencia sai",
-      "raw_subject": "refactor(pops): portar a guarda do PDF do POP para a API nova do WeasyPrint (#630)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Segunda fatia da onda 1, e a que mudou de peso durante a execucao. A issue pedia so portar _pdf_url_fetcher para a API nova do WeasyPrint (a classe URLFetcher, que substituiu default_url_fetcher no 70.0) e tirar o teto <70 que o PR #624 tinha posto de emergencia. Ao portar, o autor descobriu que a guarda anti-SSRF do PDF do POP estava INERTE em producao desde a issue #152: o url_fetcher era passado ao write_pdf, e quem busca recursos e o objeto HTML, entao o WeasyPrint descartava a opcao em silencio (no 70 ele ao menos loga Unknown rendering option, no 62.3 nem isso). Medido com um fetcher que recusa tudo: pelo write_pdf o PDF sai com 143049 bytes e o logo embutido, pelo construtor sai com 2326 bytes e sem logo. Ou seja, file:// arbitrario e SSRF nunca foram barrados ali. O fetcher passou para o construtor do HTML e o teste test_guarda_esta_ligada_no_render_do_pop trava isso. Area sensivel, entao o orquestrador rodou 2 revisores dedicados em paralelo, um de codigo e um de seguranca. Eles acharam, por caminhos independentes e os dois reproduzindo por execucao, um bug NOVO que o proprio port criou: o URLFetcher do 70 guarda estado em self._request, e a guarda levantava ValueError antes do super().fetch(), entao uma recusa vinda do open (o caminho do redirect) deixava a requisicao recusada pendurada e a busca SEGUINTE do mesmo PDF a reexecutava, enfiando os bytes no PDF. Um revisor pediu o file:// do logo e recebeu o corpo do servidor em 127.0.0.1; o outro montou um 302 real e recebeu SEGREDO-DA-REDE-INTERNA no lugar do PNG. Consertado com self._request = None antes dos tres raise (nao so o do host) e travado pelo teste test_recusa_no_redirect_nao_envenena_a_busca_seguinte, que cria o fetcher uma vez e reusa o mesmo objeto nas tres sequencias, que e justamente a propriedade de estado em jogo. Segundo must-fix: a justificativa do piso >=70 era falsa. O revisor de codigo baixou os wheels 62.3, 65.1, 66.0, 67.0, 68.0, 68.1, 69.0 e 70.0 do PyPI e leu urls.py em cada um: URLFetcher existe desde o 68.0, ja com as assinaturas usadas. O orquestrador decidiu por >=68, que e o piso verdadeiro e a menor mudanca que respeita o pedido da triagem; o revisor depois montou venvs com 68.0, 68.1 e 69.0 e rodou a guarda real nas quatro versoes. Achado de versao que ninguem tinha fixado: self._request nao existe no 68.0 nem no 68.1 (o pai sempre monta um Request novo) e existe do 69.0 em diante, e o open sobrescrito que protege o redirect ja existe no 68.0, entao o piso >=68 pega a protecao sem pegar o bug. Prova por mutacao: 14 plantados, 13 mortos, incluindo afrouxamentos (allowlist por prefixo, allowlist sem caixa, is_reserved removido, DNS fail-open) e tres mutantes no proprio detector. O unico sobrevivente, B2 (remocao de is_link_local), e equivalente de verdade, confirmado de forma independente pelos dois revisores: is_private do Python ja engloba loopback, link-local e unspecified. Essa mesma varredura achou um buraco real, porque is_reserved e o unico predicado que decide sozinho (em 64:ff9b::), e o mutante B3 sobrevivia com a lista de IPs original. As recusas sao asseridas pelo marcador da mensagem e nao por raises(ValueError), porque as tres levantam o mesmo tipo. Atenuante da vulnerabilidade que estava viva: a rota do PDF do POP e autenticada (app/routers/pops/documento.py:33), nao e o canal publico, e o bleach mais o sanitizar_svg seguravam como primeira camada. CI e Dockerfile instalam do pyproject.toml e nao do lock, entao o Docker Build verde e a prova real do piso; uv pip compile sai 70.0 antes e depois. Ficou registrado e nao tocado: pdf_generator.py (Ata), ouvidoria_relatorio.py e ouvidoria_pontos.py chamam write_pdf sem url_fetcher nenhum, sem guarda alguma, e a guarda nao recusa multicast. Sobrou uma imprecisao conhecida: o docstring da fabrica ainda diz que a classe vale a partir do 70, quando o piso e 68."
-    },
-    {
-      "at": "2026-09-08T20:48:21-03:00",
-      "sha": "d7c7996",
-      "app_version": "0.115.2",
-      "subject": "o rollback do prazo da area so toca o carimbo que a propria ida escreveu, e a leitura do instante vira ponto unico",
-      "raw_subject": "refactor(ouvidoria): rollback so toca o carimbo que a ida escreveu, e _instante vira ponto unico (#629)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 de 1 desta sessao, duas fatias em paralelo: #623 (fatia P) e #625 (fatia M), as duas fechando o desenvolvimento em 1 tentativa. Sao as sobras que os revisores do PR #619 (issue #607) marcaram como menores. Duas coisas: o rollback de _restaurar_prazo passou a receber carimbo_a_restaurar como dict e so inclui area_estourou_em sob a mesma condicional da ida, e _instante virou ler_instante em ouvidoria_prazos.py, consumido pelos dois routers (o nome ganhou prefixo porque o modulo ja usa instante como variavel local em tres funcoes). O contrato da triagem tinha duas frases que divergiam num caso e o autor achou isso sozinho: como estouro_consumado devolve ja_consumado quando ha carimbo, estourou e estouro_anterior nao sao mutuamente exclusivos, entao a leitura literal (so quando havia carimbo anterior) deixaria o caso que fura o prazo NESTA devolucao voltar com prazo restaurado e carimbo gravado, reabrindo exatamente o #607. Ele implementou o espelho da ida e deixou a prova executavel no mutante M3. Prova por mutacao: 5 plantados, 5 mortos, dois deles no proprio detector (updates em ordem invertida e espiao cego). Os testes asserem o payload do update e nao a linha no banco, porque o banco nao distingue coluna nunca escrita de coluna escrita com None. Revisor independente de 2 lentes voltou limpo na rodada 1: 0 must-fix e 5 nice-to-have, todos registrados no PR. Ele confirmou por leitura do codigo, nao pela tabela do autor, que ler_instante e identica as duas copias removidas, que nao ha orfao nem import circular, que os dois .eq de guarda continuam de pe, e plantou 2 mutantes proprios que tambem morreram. O maior dos nice-to-have: existe um quarto caso (carimbo antigo mais prazo furado agora) que o codigo acerta mas nenhum teste segura. Rebase sobre a main que ja trazia o PR #628 da sessao paralela, no mesmo ouvidoria.py, sem conflito nenhum; suite pos-rebase com 3667 passed. Registrado que _instante ainda existe copiado em cinco services, fora do escopo desta issue."
-    },
-    {
-      "at": "2026-09-08T20:09:06-03:00",
-      "sha": "a4f4d44",
-      "app_version": "0.115.1",
-      "subject": "caso apagado deixa de aceitar anexo e registro de tentativa de contato",
-      "raw_subject": "fix(ouvidoria): caso apagado não recebe anexo nem tentativa de contato (#628)",
-      "scope": [
-        "backend"
-      ],
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 396,
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 desta sessao: issue #622 sozinha, com --paralelo 1. Duas rotas ainda gravavam em caso apagado (POST /manifestacoes/{id}/anexos e POST /manifestacoes/{id}/tentativas-contato), alcancaveis por chamada direta a API e nao por clique. As duas passaram a usar o helper barrar_caso_apagado que o #620 criou, que agora segura cinco portas; nenhuma guarda nova foi escrita, por decisao da triagem de 08/09/2026. A guarda entra antes de qualquer efeito colateral: no anexo, antes de validar_anexo, antes do file.read(), antes do upload_private e antes do insert. A tupla de carregar_manifestacao das duas rotas passou a pedir anonimizada_em, e esse foi o mutante obrigatorio: tirar a coluna do select faz a guarda ler None e mata os dois testes novos, porque os fakes de PostgREST projetam de verdade so as colunas pedidas. Sete mutantes ao todo, todos mortos, dois deles plantados no proprio detector para provar que o teste nao passa no vacuo; os testes batem na rota HTTP real, nao na funcao. Rotas de email ficaram fora do escopo. Sem migration: o carimbo anonimizada_em existe desde a 079. Os dois revisores do orquestrador voltaram limpos na rodada 1, zero must-fix, o que nao tinha acontecido nas ondas anteriores desta serie. O revisor de codigo varreu as 22 rotas de escrita de ouvidoria.py e nao achou terceira porta analoga no painel, mas achou uma FORA do painel: POST /api/ouvidoria-setor/{token}/responder sobe binario para o mesmo bucket sem a guarda, segura hoje so porque exige status aguardando_area enquanto a retencao so carimba caso encerrado. Como a #595 mexe justamente no apagamento, isso virou a issue #631 em needs-triage em vez de entrar neste PR. Segundo nice-to-have nao aplicado: a tupla pede protocolo, que nenhuma das duas rotas le. A trava do semaforo estava presa ha 250 minutos na sessao do PR #626; sem build rodando no Coolify, foi solta com --forcar. A entrada da v0.115.0 logo abaixo foi reconstruida por esta sessao pelo mesmo motivo."
-    },
-    {
-      "at": "2026-09-08T16:01:28-03:00",
-      "sha": "ad0b956",
-      "app_version": "0.115.0",
-      "subject": "o ouvidor arquiva todos os casos encerrados de uma vez pela lista",
-      "raw_subject": "feat(ouvidoria): arquivar todos os encerrados de uma vez pela lista (#626)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "ENTRADA RECONSTRUIDA. A sessao que fez este ship (chave de semaforo 2efc47ae, onda 2, PR #626, issue #594, fatia do PRD #591) deployou as 19:01 UTC e nao escreveu o bookkeeping: morreu segurando a trava, que ficou presa 250 minutos ate a sessao seguinte solta-la com --forcar. Os dados aqui vieram so de fatos verificaveis (git log, package.json do commit, lista de deploys do Coolify), sem narrativa inventada: 5 arquivos tocados, +1136/-17, nenhuma migration, backend e frontend construidos do commit ad0b956d. O resultado healthy e inferido do estado observado depois: o /api/health respondia 0.115.0 saudavel quando a onda seguinte comecou, e os dois builds constam finished no Coolify. O que se perdeu e o registro dos gates, dos achados de revisao e das decisoes daquela fatia: isso vive na issue #594 e no PR #626."
-    },
-    {
-      "at": "2026-09-08T14:15:00-03:00",
-      "sha": "f0bc530",
-      "app_version": "0.114.0",
-      "subject": "o ouvidor arquiva e desarquiva o caso encerrado, e a lista nasce sem os arquivados, com filtro proprio",
-      "raw_subject": "feat(ouvidoria): arquivar e desarquivar um caso encerrado, com filtro Arquivados (#621)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "099_ouvidoria_arquivo_da_manifestacao.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 de 2 desta sessao: #592 (PR #621, fatia M do PRD #591), sozinha, com a #594 esperando ela fechar. Migration 099 aplicada a mao no Studio pelo humano antes do merge, e a ordem era obrigatoria (ver nota da migration). Prova de que o codigo novo subiu, nao so um restart: POST /api/ouvidoria/manifestacoes/<id>/arquivo sem token devolve 401, e a mesma rota com sufixo inventado devolve 404. Os dois revisores do orquestrador acharam must-fix que o CI verde nao pegava. O de codigo achou o pior: o filtro arquivada_em IS NULL entrou na rota da lista, mas o painel em tempo real e o segundo consumidor dessa rota e ninguem o revisou na fatia, entao arquivar 30 de 40 casos faria o card Encerrada cair para 10 enquanto o bloco de metricas da MESMA tela seguia em 40, contradizendo o verbete do CONTEXT.md e a decisao 4 do ADR 0047. O conserto mudou o desenho: o parametro da lista deixou de ser booleano e virou recorte de tres valores (nao/sim/todos), com o painel pedindo todos porque ele conta em vez de trabalhar; somar duas listagens no cliente pagaria duas idas ao banco por polling para reconstruir um numero que o servidor da numa consulta. O de seguranca achou que reabrir por reincidencia nao limpava arquivada_em, entao o caso voltava a aguardando_area com prazo novo e email ao setor mas ficava fora da lista, fora do contador do menu e com tem_novidade falso, virando acao invisivel com relogio correndo; achou tambem TOCTOU no update do arquivamento, que nao repetia o .eq de status encerrado. Os quatro must-fix fecharam em uma rodada e a rodada 2 voltou LIMPA nas duas lentes. Dois achados do proprio autor pela mutacao: a guarda de corrida do filtro nasceu redundante (duas checagens, cada mutante sobrevivendo porque a outra cobria) e o harness de teste do frontend devolvia o array de casos por referencia, entao o splice de arquivar mutava o estado que o React ja segurava. Bump fantasma 0.113.0 entrou no PR e foi eliminado na raiz no rebase, pulando o commit em vez de remendar. Foram tres rebases: a main andou duas vezes durante a execucao (#619, #624 e #620 da sessao paralela), e o intermediario sobre o #620 o autor fez por conta propria porque o #620 mexe na mesma funcao reabrir_por_reincidencia, preferindo rodar o CI sobre a combinacao real. Corrida de bump a tres resolvida pelo semaforo: a outra sessao pegou a trava primeiro e ficou com 0.113.0, esta re-bumpou para 0.114.0. Os docs do grilling de 04/09/2026 entraram neste PR vindos da arvore principal, sem commit ate aqui: ADR 0047 inteiro, o verbete Arquivo (da Manifestacao) e o paragrafo da porta antecipada em Retencao no CONTEXT.md, e o ponteiro amended_by do 0034. O ADR 0048 e o verbete Devolucao a Ouvidoria ficaram de fora por serem da outra sessao. O verbete ganhou depois duas invariantes que nasceram das proprias correcoes: reabrir tira do arquivo, e ler o arquivo exige o perfil conferido no servidor."
-    },
-    {
-      "at": "2026-09-08T14:12:00-03:00",
-      "sha": "9025aa5",
-      "app_version": "0.113.0",
-      "subject": "a area nao apaga o proprio estouro de prazo ao devolver pelo portal, e o caso apagado nao reabre e mostra aviso no lugar do relato",
-      "raw_subject": "feat(ouvidoria): caso apagado nao reabre e o Dossie avisa no lugar do relato (#620)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 de 2 desta sessao: #607 (PR #619, fatia P do PRD #598) e #593 (PR #620, fatia M do PRD #591), em paralelo. Sem migration por decisao do humano: a #593 so le o carimbo anonimizada_em que a 079 ja criou. Tres merges na main, tres builds: #619, depois o #624, depois o #620. O #624 nao estava na fila: o WeasyPrint 70.0 saiu no meio da onda e removeu default_url_fetcher, quebrando a guarda _pdf_url_fetcher (recusa de file:// e host privado no PDF do POP). A main ficou vermelha sozinha, sem mudanca de codigo. Nem o CI (uv pip install -e .[dev]) nem o Dockerfile (uv pip install -r pyproject.toml) usam o uv.lock, entao o proximo build de producao teria levado o 70.0 e o PDF do POP quebraria em prod. Teto weasyprint>=62.0,<70 aprovado pelo humano; resolucao conferida com uv pip compile: com teto resolve 69.0, sem teto resolve 70.0. Portar para a API nova (classe URLFetcher) ficou na issue #625. Achados dos revisores que viraram conserto antes do merge: no #619, o rollback de _restaurar_prazo restaurava o prazo e deixava o carimbo, o que travaria uma prorrogacao aprovada depois; no #620, o bloco de Prorrogacao mostrava o marcador interno [anonimizado pela retencao] na tela do caso apagado, a guarda de reabertura morava numa porta so, e a tela ainda aceitava escrita de texto livre em categoria, campo que a retencao preserva de proposito e que fica fora da varredura depois do carimbo. O autor do #620 achou os proprios testes passando em vacuo (assercoes de ausencia antes das leituras da pagina voltarem) e corrigiu; o revisor confirmou por experimento em copia isolada. O autor tambem contestou com evidencia uma suposicao errada da rodada 1 sobre /transicoes, e o revisor da rodada 2 lhe deu razao. Corrida de bump a tres (#619, #620 e o #621 de outra sessao, todos saindo de 0.112.0), resolvida pelo semaforo: esta sessao ficou com 0.113.0 e a outra re-bumpou para 0.114.0. Sobras viraram issue, nao ficaram no PR: #622 (portas /anexos e /tentativas-contato ainda escrevem em caso apagado), #623 (rollback grava carimbo sempre, _instante duplicado) e #625 (port do WeasyPrint)."
-    },
-    {
-      "at": "2026-09-07T16:55:00-03:00",
-      "sha": "40a8585",
-      "app_version": "0.112.0",
-      "subject": "a Ouvidoria e avisada por email da devolucao, e o Dossie mostra o caso devolvido com o reacionamento pre-preenchido",
-      "raw_subject": "feat(ouvidoria): Dossiê mostra a devolução e o ouvidor reaciona a área certa (#601) (#606)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 720,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 de 2 do PRD #598, que fecha o PRD: #599 (PR #605) e #601 (PR #606). Sem migration, porque a 098 ja tinha deixado o gatilho no CHECK. O #605 saiu limpo de primeira; o #606 precisou de 3 rodadas de review, uma acima do teto e autorizada pelo humano, e as tres giraram em torno de apagar evidencia de atraso. A colisao de bump (os dois pediam 0.111.0) foi resolvida no merge, com o #606 refeito a mao como 0.112.0 depois que o rebase descartou o bump por conteudo identico. Um buraco irmao, ainda aberto em producao desde a v0.110.0, virou a issue #607."
-    },
-    {
-      "at": "2026-09-07T15:05:00-03:00",
-      "sha": "80fb433",
-      "app_version": "0.110.0",
-      "subject": "a area devolve pelo link do portal o caso que nao e dela, e o caso volta para a fila de classificacao",
-      "raw_subject": "feat(ouvidoria): a área devolve o caso que não é dela pelo link do portal (#602)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 660,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "098_ouvidoria_devolucao_a_ouvidoria.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 de 2 do PRD #598 (issue #600, fatia G). Review em 2 rodadas: seguranca limpa nas duas, codigo com 2 must-fix na primeira (motivo de largura zero passava porque strip nao enxerga Cf, e o teto de 10.000 nao tinha par na tela). O fix extraiu a peneira de invisiveis para text_sanitizer, uma implementacao para os dois textos livres. Migration 098 aplicada a mao antes do merge."
-    },
-    {
-      "at": "2026-09-04T12:15:07-03:00",
-      "sha": "e56c7ad",
-      "app_version": "0.109.2",
-      "subject": "onda 03/09: o alerta ao admin tecnico omite o email do manifestante; docs do PRD #469 e skills do modo AFK",
-      "raw_subject": "fix(ouvidoria): alerta ao admin técnico omite o email do manifestante (#572) (#583)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 900,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PRs #581 (ADR 0043 + /montar-ondas + semaforo de deploy), #582 (#559, so CONTEXT.md e corpo do PRD #469) e #583 (#572). Na #572 a constante ENDERECO_OMITIDO saiu de _alvo_no_log para email_service.py; 5 mutantes mortos, um deles (pergunta unica trocada por comparacao de string) so morreu com o caso papel=None. PRD #469 auditado pela terceira vez e APROVADO. Migration 097 segue pendente no Studio."
-    },
-    {
-      "at": "2026-09-03T20:36:12-03:00",
-      "sha": "6afbbd5",
-      "app_version": "0.109.1",
-      "subject": "onda 3: trava de rede da suite vira de repositorio e o endereco do manifestante sai do log pelo papel",
-      "raw_subject": "fix(ouvidoria): o log omite o endereço pelo papel, não por lista de gatilhos (#547) (#565)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1200,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PRs #564 (#546) e #565 (#547). A #546 fechou um vazamento ATIVO: test_pipeline.py mandava a transcricao ao OpenRouter com a chave do .env a cada pytest local. A #547 trocou lista de gatilhos por allowlist de papeis internos; papel desconhecido, com espaco ou com caixa diferente passou a OMITIR. Follow-up aberto na issue #572. A migration 097 da onda 2 segue pendente de aplicacao manual no Studio."
-    },
-    {
-      "at": "2026-09-03T18:56:47-03:00",
-      "sha": "4e4535a",
-      "app_version": "0.109.0",
-      "subject": "onda 2: escopo no DELETE de série, cinco RPCs fechadas para a conta anônima e o visto carimbado no servidor",
-      "raw_subject": "feat(ouvidoria): a ação do ouvidor carimba o visto, no servidor (#521) (#562)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1500,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PRs #560 (#540), #561 (#541) e #562 (#521). A migration 097 NAO foi aplicada pelo deploy: o Pedro aplica no SQL Editor do Studio de producao e roda a fumaca (aprova so NOTICE: APROVADO 42501). A #540 fechou tambem o perfil secretaria combinado com papel de gestao, que apagava serie alheia; a clausula 'ou que criou' da triagem caiu por decisao humana."
-    },
-    {
-      "at": "2026-09-03T17:41:56-03:00",
-      "sha": "ca6b399",
-      "app_version": "0.108.0",
-      "subject": "onda 1: token órfão no upload, IP do cliente no log e cobrança ao responsável vigente",
-      "raw_subject": "chore(observabilidade): devolve o IP do cliente à linha de log do request (#543) (#552)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 1980,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "PRs #551 (#539), #554 (#536) e #552 (#543). O log do request truncou o IP nas 3 rotas anônimas da Ouvidoria (/24 em IPv4, /48 em IPv6) por decisão do Pedro: o /qr entrava na mesma /24 do POST de manifestação e permitia recompor o endereço do manifestante. O detector do teste passou a perguntar se a rota exige credencial, em vez de casar a palavra publico."
-    },
-    {
-      "at": "2026-09-03T16:05:00-03:00",
-      "sha": "390bda6",
-      "app_version": "0.107.2",
-      "subject": "A regua de cor do prazo e propria, e o snapshot sobrevive ao FastAPI 0.141",
-      "raw_subject": "fix(snapshot): enumerar rotas pelo schema OpenAPI, com piso de sanidade (#558)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 640,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 3 de 3, e a unica sem mudanca no codigo da app: por isso sem bump, a versao segue 0.107.2. O merge disparou rebuild pelo webhook do mesmo jeito, porque o Coolify rebuilda tudo a cada push. A #549 emendou a decisao 1 do PRD #471 e criou o verbete Semaforo de prazo no CONTEXT.md: a regua de cor do prazo e propria, nao e a paleta de gravidade. O revisor provou a tese pela origem dos valores (#B3261E e #C77700 so existem em FAIXAS_GRAVIDADE, sob o comentario da RN-34; o semaforo de prazo nunca usou hex) e recuperou por GraphQL a versao anterior do corpo do PRD para confirmar que a edicao ao vivo mudou UMA linha e nao perdeu nenhuma das 8 secoes, 18 historias e 9 fatias. A #542 e a mais instrutiva da sessao. O snapshot.py enumerava rotas por app.routes, e no FastAPI 0.141 isso devolve ZERO: o ROTAS.md sairia vazio a cada deploy. A troca para app.openapi() devolve as mesmas 192 rotas nas duas versoes. O que quase escapou nao foi a contagem. A primeira tentativa do autor filtrava por isinstance e ficou com 192 rotas e ZERO gates require_, ou seja documentacao afirmando que a app inteira e aberta; ele mesmo pegou. Na revisao o mesmo estado se mostrou ainda alcancavel por dois caminhos que saiam com codigo 0, porque o piso de sanidade contava ROTAS e nao METADADOS. Corrigido: o piso passou a exigir tambem as rotas com module, e o snapshot interrompe a geracao sem escrever nem commitar. Terceira rodada de revisao (uma a mais que o teto do ADR 0035) por dois defeitos de duas linhas: um teste que so passava por efeito colateral do cache do app.openapi() deixado por outro teste do mesmo arquivo, e um travessao numa linha nova do SKILL.md. O orquestrador conferiu na main mergeada: 192 rotas, 192 com module, 134 com require_."
-    },
-    {
-      "at": "2026-09-03T14:55:00-03:00",
-      "sha": "94072c1",
-      "app_version": "0.107.2",
-      "subject": "Teto de 10.000 caracteres na justificativa da prorrogacao, e quem manifestou vira o decimo elemento da RN-59",
-      "raw_subject": "fix(ouvidoria): quem manifestou vira o décimo elemento da RN-59 e o aviso sai inteiro nas duas versões do email (#556)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 760,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 de 3. Duas issues avulsas da ouvidoria, as duas no portal do setor. A #510 tinha tres itens e so o item 2 virou codigo: o teto de 10.000 na justificativa da prorrogacao, no molde do relato e da resposta da area (#482). O item 3 foi recusado por decisao humana da triagem de 02/09 e a recusa esta registrada no corpo do PR. O que salva esta issue e a PRIMEIRA versao dela, que foi derrubada pelo proprio autor no gate de spec x diff: ela aplicava o teto por Field(max_length) do pydantic, e o 422 do pydantic tem detail como LISTA DE OBJETOS. O portal faz setErroDoPedido(mensagemDoPortal(res.status, body.detail)) e renderiza {erroDoPedido} como filho de JSX, entao objeto ali derruba a pagina inteira e leva junto a justificativa ja digitada. Era alcancavel de verdade, porque o textarea nao tem maxLength e a validacao do cliente so exige texto nao vazio: o teto seria o primeiro 422 de fato alcancavel naquele formulario. Guarda-corpo virando indisponibilidade, o padrao do PR #533. A versao final move a regra para o servico e a recusa sai como frase; o revisor confirmou que o unico Field que sobrou (dias_uteis) nao e alcancavel pela tela. A #511 nomeou quem manifestou como decimo elemento da RN-59 e tirou a frase de orientacao sobre autoria de dentro do template HTML, embutindo-a nas constantes AVISO_SIGILO e AVISO_ANONIMO. De quebra desfez uma duplicacao de guarda: _identificacao vivia privada em ouvidoria_notificacoes.py com sigilo_reforcado or anonimo, que e caso_protegido reescrito com outras palavras. O revisor de seguranca montou a tabela verdade das quatro combinacoes e confirmou 4 de 4, e confirmou tambem que a rota do token devolve identificacao null no JSON para anonimo e sigiloso, montada campo a campo, nao ocultacao no React. O revisor de codigo devolveu dois must-fix, os dois de contagem: o CONTEXT.md enumerava onze itens e escrevia dez, e sobrou um comentario dizendo nove num teste que compara dez. Corrigidos numa rodada de texto puro."
-    },
-    {
-      "at": "2026-09-03T14:20:00-03:00",
-      "sha": "777f63d",
-      "app_version": "0.107.1",
-      "subject": "O prazo na tela do responsavel ganha data e hora, do mesmo lugar que o email, e o ADR 0041 fica ratificado no caso anonimo",
-      "raw_subject": "fix(ouvidoria): o prazo do responsável ganha data e hora, do mesmo lugar que o email (#553)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 420,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 de 3 desta sessao. Duas issues do PRD #469. A #513 tirou a formatacao duplicada do vencimento: _formatar_vencimento era privada de ouvidoria_notificacoes.py e virou formatar_vencimento em ouvidoria_prazos.py, com os 8 call sites do email e a tela do portal consumindo a MESMA funcao. A rota do token passou a devolver vencimento_formatado. Tres decisoes que valem lembrar. Primeira, a fixture do page.test.tsx MENTIA: cravava rotulo_prazo 'vence amanha as 17h', frase que rotular_vencimento nunca produz, e era ela que fazia a tela parecer cumprir a historia 2 do PRD #469. Teste vacuo classico, so caiu porque o autor rodou mutacao. Segunda, calendario de feriados ilegivel agora tira so a contagem regressiva e mantem a data; antes a frase inteira sumia e quem tinha que responder ficava sem prazo nenhum na tela (issue #449). Terceira, vencimento_formatado tambem viaja no payload do painel da Ouvidoria, onde nenhuma tela le ainda, de proposito, para nao criar uma segunda saida so para o portal. A #514 foi so documentacao: ratificou no ADR 0041 que no caso anonimo o anonimato pesa mais que a RN-78, alinhou o verbete do CONTEXT.md e corrigiu DOIS pontos do comentario da migration 068 (a issue apontava so o COMMENT ON COLUMN, mas o cabecalho repetia a mesma frase errada). Nenhum SQL executavel mudou, confirmado byte a byte pelo revisor."
-    },
-    {
-      "at": "2026-09-03T10:05:00-03:00",
-      "sha": "da5b508",
-      "app_version": "0.107.0",
-      "subject": "Onda 4 do PRD #471, a ultima: caixa alta so em rotulo curto nas telas da Ouvidoria",
-      "raw_subject": "feat(ouvidoria): caixa alta só em rótulo curto nas telas do módulo (#548)",
-      "scope": [
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 225,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "1 fatia, 1 PR, 3 rodadas de revisao, 4 must-fix. Fecha o PRD #471 com 9 de 9. O achado que mais rende: o teste da barra mentiu TRES vezes de tres jeitos, cada versao mais esperta e cada uma com uma porta (substring, depois primeiro casamento com .find(), agora exatamente um cancelador). A familia do erro ficou escrita no comentario da funcao. O orcamento de largura media uma tela que nao existe, ignorando o sidebar de 256px, e ficava verde afirmando que cabia algo que transbordava 200px. Com o numero certo a barra nao cabia no md e foi para o lg, o que expos um gatilho de 20px de alvo virando a unica navegacao do tablet."
     }
   ]
 }

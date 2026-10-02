@@ -1226,20 +1226,11 @@ class TestMigration110:
         comando = ddl.split("alter table ouvidoria_protocolos", 1)[1].split(";", 1)[0]
         assert "not null" not in comando
 
-    def test_a_migration_nao_promete_guarda_que_ainda_nao_existe(self):
-        """O comentário de coluna é o que o próximo dev lê no `\\d+` da tabela,
-        e corrigi-lo depois pede outra migration.
-
-        Esta fatia grava dado pessoal de terceiro SEM as duas guardas que o ADR
-        0052 promete: a Retenção não varre as colunas (issue #665) e o paciente
-        ainda não viaja para a área (issue #664). O texto tem que dizer isso no
-        estado real, senão o banco documenta uma guarda que não existe e o
-        apagamento pela Diretoria carimba `anonimizada_em` deixando o nome e o
-        leito de um paciente vivos."""
-        ddl = self._ddl()
-        assert "ainda nao varre" in ddl, "o comentário precisa dizer que a Retenção não varre ainda"
-        assert "#665" in ddl, "o comentário precisa citar a issue que fará a varredura"
-        assert "#664" in ddl, "o comentário precisa citar a issue que leva o paciente à área"
+    # O marcador do estado real das duas guardas do ADR 0052 (a Retenção varre,
+    # o paciente ainda não viaja) morava aqui e mudou para o arquivo da
+    # Retenção, `TestAsDuasGuardasPrometidasPeloAdr0052`: ele não lê mais o
+    # texto da migration, e quem for procurar decisão de Retenção não olha no
+    # arquivo do formulário público (issue #665).
 
     def test_as_colunas_carregam_a_regra_no_comentario(self):
         """Quem for mexer nelas precisa ler que são dado de TERCEIRO e que o

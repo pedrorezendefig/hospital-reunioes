@@ -1,6 +1,7 @@
 ---
 status: accepted
 amends: 0044, 0056
+amended_by: 0058
 ---
 
 # Manual do usuário: um site por módulo, vídeo por tarefa, fatia de manual por PRD
@@ -9,7 +10,7 @@ Decisão do Pedro (15/set/2026, grilling). O hospital tem um manual só, o da Ou
 
 ## Decisões
 
-1. **Um site, um endereço, por módulo.** O manual é um site único (`manual.hospitalsaomatheus.cloud`, projeto Vercel único), com seções na ordem do menu do app: Primeiros passos, Reuniões e metas, Ouvidoria, POPs, Admin. Papel não é estrutura, é selo na página ("Só admin", "Sem login"). A aba Tecnologia fica fora. O manual da Ouvidoria é reescrito no molde novo e o endereço antigo redireciona. Rejeitado: um site por módulo (N deploys, usuário que erra o módulo cai fora); manual por papel (a mesma tela em três trilhas, envelhece rápido).
+1. **Um site, um endereço, por módulo.** O manual é um site único (`manual.hospitalsaomatheus.cloud`, projeto Vercel único), com seções na ordem do menu do app: Primeiros passos, Reuniões e metas, Ouvidoria, POPs, Admin. Papel não é estrutura, é selo na página ("Só admin", "Sem login"). A aba Tecnologia fica fora, e a Central de Comando também (emenda da ADR 0058, decisão 10: só Super admin vê, e é leitura, não tarefa). O manual da Ouvidoria é reescrito no molde novo e o endereço antigo redireciona. Rejeitado: um site por módulo (N deploys, usuário que erra o módulo cai fora); manual por papel (a mesma tela em três trilhas, envelhece rápido).
 
 2. **Markdown por página, gerado com Astro Starlight.** Conteúdo em `docs/manual/src/content/docs/<modulo>/<tarefa>.md`, tema vestido com o design system do app (HP Simplified, navy, logo), busca, menu mobile e sumário de graça. Rejeitado: HTML à mão por página (cada página nova sai diferente e custa caro); gerador próprio em Python (busca e mobile são o que mais dá trabalho de manter).
 

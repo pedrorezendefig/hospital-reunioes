@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import datetime as dt
 import os
+import re
 import sys
 
 import pytest
@@ -34,6 +35,13 @@ ENCERRADA_HA_DOIS_ANOS = "2024-08-26T12:00:00+00:00"
 # A resposta que a área digitou no portal do setor. Ela viaja inteira para a
 # trilha (issue #374) e é servida pela rota do histórico de respostas.
 RESPOSTA_DA_AREA = "Falamos com a paciente Joana da Silva no telefone 11 99999-0000 e pedimos desculpas."
+
+# O Paciente do caso (migration 110, ADR 0052): quem manifestou é o
+# acompanhante, e estes dois dados são de OUTRA pessoa. Nomes distintos dos de
+# quem manifestou de propósito: um teste que procurasse só "Joana" passaria com
+# o paciente inteiro de pé.
+PACIENTE = "Maria Aparecida de Souza"
+PACIENTE_REFERENCIA = "Leito 12 da Clinica Medica, 01/08/2020"
 
 
 def _manifestacao(numero: int = 7, **overrides) -> dict:
@@ -89,6 +97,18 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         "registrado_por": "P10",
         "validada_por": "P10",
         "respondida_por_nome": "Carlos Titular",
+        # O que a política preserva sem ser estatística (`CAMPOS_PRESERVADOS_SEM_METRICA`).
+        # Pela mesma regra do bloco acima, todos com valor NÃO nulo, inclusive
+        # os dois pares que em produção são exclusivos (ou o aviso saiu, ou não
+        # havia contato): preenchidos os dois lados, a preservação tem o que
+        # afirmar em cada coluna, uma a uma.
+        "natureza_informada": "reclamacao",
+        "prazo_conclusivo_em": "2020-08-20T20:00:00+00:00",
+        "vista_pela_ouvidoria_em": "2020-08-13T09:00:00+00:00",
+        "acuse_recebimento_em": "2020-08-01T10:30:00+00:00",
+        "acuse_sem_contato_em": "2020-08-01T10:31:00+00:00",
+        "encerramento_avisado_em": "2020-08-26T12:30:00+00:00",
+        "encerramento_sem_contato_em": "2020-08-26T12:31:00+00:00",
         # O Arquivo (issue #592, ADR 0047): quem guardou o caso e quando. Gente
         # do hospital e relógio do hospital, como `validada_por` logo acima, e
         # por isso preservados. Preenchidos aqui pela mesma regra do bloco: com
@@ -118,6 +138,10 @@ def _manifestacao(numero: int = 7, **overrides) -> dict:
         # #375 decisão 5): cruzado com o registro de atendimento daquele dia
         # naquele lugar, ele reidentifica quem manifestou.
         "canal_ponto": "Poltrona 12 do saguao",
+        # O Paciente do caso (migration 110, ADR 0052): dado de TERCEIRO, e o
+        # anonimato de quem manifesta não o zera. Quem o apaga é a retenção.
+        "paciente_nome": PACIENTE,
+        "paciente_referencia": PACIENTE_REFERENCIA,
         "anonimizada_em": None,
     }
     row.update(overrides)
@@ -511,6 +535,38 @@ class TestDossieApagado:
         assert supabase.caso()["canal_setor"] == "Recepcao"
         assert supabase.caso()["canal"] == "telefone"
 
+    def test_o_paciente_do_caso_sai_junto_com_o_dossie(self):
+        """Nome e referência do Paciente do caso (issue #665, ADR 0052 decisão
+        6) são dado pessoal de TERCEIRO: quem manifestou é o acompanhante, e o
+        anonimato dele nunca zerou estas colunas. A retenção é o único
+        apagamento que as alcança, e até esta fatia ela não as alcançava: o
+        caso saía carimbado de anonimizado com o nome e o leito de um paciente
+        de pé no banco."""
+        supabase = _SupabaseFake()
+        # O update carimba `None` em toda coluna da lista, exista ela antes ou
+        # não: sem o valor no banco ANTES do ato, o "ficou nulo" de baixo
+        # passaria com a lista vazia.
+        assert supabase.caso()["paciente_nome"] == PACIENTE
+        assert supabase.caso()["paciente_referencia"] == PACIENTE_REFERENCIA
+
+        ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        caso = supabase.caso()
+        assert caso["paciente_nome"] is None
+        assert caso["paciente_referencia"] is None
+        # O leito e a data reidentificam pelo mesmo mecanismo do `canal_ponto`,
+        # então a referência não pode sobrar em canto nenhum da linha.
+        assert "Maria" not in _todo_o_texto(caso)
+        assert "Leito 12" not in _todo_o_texto(caso)
+
+    def test_o_paciente_nao_entra_na_lista_do_que_os_relatorios_preservam(self):
+        """As duas colunas estão do lado certo do contrato: o paciente nunca
+        vira estatística (PRD #659, história 24). A afirmação é sobre a lista
+        porque é ela que a próxima fatia lê para decidir."""
+        for campo in ("paciente_nome", "paciente_referencia"):
+            assert campo in ouvidoria_retencao.CAMPOS_DO_DOSSIE, f"{campo} não entrou na lista do que sai"
+            assert campo not in ouvidoria_retencao.CAMPOS_ESTATISTICOS, f"{campo} entrou na lista do que fica"
+
     def test_nenhum_rastro_do_manifestante_sobra_em_tabela_nenhuma(self):
         """A varredura completa: manifestação, trilha, tentativas de contato,
         prorrogação e anexos. Um único lugar que guarde o nome derruba isto."""
@@ -751,6 +807,11 @@ class TestQuemNaoEhTocado:
         assert anonimizadas == 0
         assert supabase.caso() == antes
         assert supabase.escritas == []
+        # A igualdade acima já cobre a linha inteira. Esta linha existe para o
+        # terceiro critério da issue #665 ser achável pelo nome: caso fora do
+        # prazo mantém o Paciente do caso, que é dado de terceiro mas continua
+        # sendo dado de um caso vivo.
+        assert supabase.caso()["paciente_nome"] == PACIENTE
 
     def test_caso_encerrado_sem_o_marco_do_encerramento_fica_intacto(self):
         """Sem `encerrada_em` não há como afirmar que os cinco anos passaram:
@@ -1254,3 +1315,236 @@ class TestDestinoDasOutrasTabelas:
         # parágrafo não diz o destino desta tabela nenhuma.
         trecho = doc[doc.index("ouvidoria_relatorios") :]
         assert "preserv" in trecho.lower()
+
+
+# Palavras que abrem linha num `CREATE TABLE` sem serem nome de coluna.
+_NAO_SAO_COLUNAS = frozenset({"primary", "unique", "check", "foreign", "constraint", "exclude"})
+
+# As formas de nomear a tabela que o SQL aceita, e que a migration digitada à
+# mão no Studio produz de verdade: o schema explícito (`public.`, o que o
+# Studio e o pgAdmin geram por default) e o `IF EXISTS` do ALTER. O `\b` no fim
+# impede que `ouvidoria_protocolos_historico`, se um dia existir, injete as
+# colunas dela aqui.
+_ALTER_DA_TABELA = r"alter\s+table\s+(?:if\s+exists\s+)?(?:public\.)?ouvidoria_protocolos\b(.*?);"
+_CREATE_DA_TABELA = r"create\s+table(?:\s+if\s+not\s+exists)?\s+(?:public\.)?ouvidoria_protocolos\s*\((.*?)\n\);"
+
+
+def _colunas_declaradas(sql: str, colunas: set[str]) -> set[str]:
+    """Aplica a UM arquivo de migration as colunas que ele cria, renomeia e
+    apaga, na ordem em que aparecem.
+
+    Aplicar em vez de só somar é o que faz a leitura sobreviver a uma coluna
+    que nasce, é renomeada e some ao longo das migrations: somando, o nome
+    velho ficaria vivo para sempre."""
+    # Sem os comentários de linha: a prosa das migrations cita nome de coluna o
+    # tempo todo, e lê-la aqui inventaria coluna que não existe.
+    limpo = "\n".join(linha.split("--")[0] for linha in sql.splitlines())
+    for corpo in re.findall(_CREATE_DA_TABELA, limpo, re.S | re.I):
+        for linha in corpo.splitlines():
+            nome = re.match(r"([a-z_]+)\s+[A-Za-z]", linha.strip())
+            if nome and nome.group(1).lower() not in _NAO_SAO_COLUNAS:
+                colunas.add(nome.group(1).lower())
+    for corpo in re.findall(_ALTER_DA_TABELA, limpo, re.S | re.I):
+        for achado in re.finditer(r"add\s+column(?:\s+if\s+not\s+exists)?\s+([a-z_]+)", corpo, re.I):
+            colunas.add(achado.group(1).lower())
+        for achado in re.finditer(r"rename\s+column\s+([a-z_]+)\s+to\s+([a-z_]+)", corpo, re.I):
+            colunas.discard(achado.group(1).lower())
+            colunas.add(achado.group(2).lower())
+        for achado in re.finditer(r"drop\s+column(?:\s+if\s+exists)?\s+([a-z_]+)", corpo, re.I):
+            colunas.discard(achado.group(1).lower())
+    return colunas
+
+
+# Onde toda decisão de retenção sobre uma coluna do caso pode estar.
+_AS_QUATRO_LISTAS = (
+    "CAMPOS_DO_DOSSIE",
+    "CAMPOS_ESTATISTICOS",
+    "CAMPOS_PRESERVADOS_SEM_METRICA",
+    "CAMPOS_FORA_DA_ESCOLHA",
+)
+
+
+def _tudo_que_foi_decidido() -> set[str]:
+    return {campo for lista in _AS_QUATRO_LISTAS for campo in getattr(ouvidoria_retencao, lista)}
+
+
+class TestNenhumaColunaDoCasoFicaSemDecisao:
+    """O mesmo cobrador do teste acima, um nível abaixo: por COLUNA.
+
+    A retenção é lista de exclusão, e o módulo promete por escrito que cada
+    coluna nova precisa de uma decisão consciente. Só que ninguém conferia, e a
+    promessa falhou na primeira vez que foi posta à prova: as duas colunas do
+    Paciente do caso nasceram na migration 110 e ficaram fora das duas listas,
+    vivas depois de um apagamento que carimbava `anonimizada_em` atestando o
+    contrário (issue #665).
+
+    Este teste liga a tabela REAL, lida das migrations, às listas do módulo:
+    coluna que nasce sem classificação derruba o CI, e quem a criou decide
+    antes de subir em vez de descobrir cinco anos depois."""
+
+    def _colunas_da_tabela(self) -> set[str]:
+        """As colunas de `ouvidoria_protocolos`, lidas do único lugar que manda
+        no banco: as migrations aplicadas."""
+        pasta = os.path.join(os.path.dirname(__file__), "..", "..", "supabase", "migrations")
+        colunas: set[str] = set()
+        for arquivo in sorted(os.listdir(pasta)):
+            if not arquivo.endswith(".sql"):
+                continue
+            with open(os.path.join(pasta, arquivo), encoding="utf-8") as f:
+                _colunas_declaradas(f.read(), colunas)
+        return colunas
+
+    @pytest.mark.parametrize(
+        "sintaxe,sql",
+        [
+            ("alter simples", "ALTER TABLE ouvidoria_protocolos ADD COLUMN paciente_cpf TEXT;"),
+            ("schema explicito", "ALTER TABLE public.ouvidoria_protocolos ADD COLUMN IF NOT EXISTS paciente_cpf TEXT;"),
+            ("if exists", "ALTER TABLE IF EXISTS ouvidoria_protocolos ADD COLUMN paciente_cpf TEXT;"),
+            (
+                "schema explicito e if exists",
+                "ALTER TABLE IF EXISTS public.ouvidoria_protocolos ADD COLUMN paciente_cpf TEXT;",
+            ),
+            ("create com schema", "CREATE TABLE public.ouvidoria_protocolos (\n  paciente_cpf TEXT\n);"),
+            (
+                "renomeada para o nome novo",
+                "ALTER TABLE ouvidoria_protocolos ADD COLUMN cpf TEXT;\n"
+                "ALTER TABLE ouvidoria_protocolos RENAME COLUMN cpf TO paciente_cpf;",
+            ),
+        ],
+    )
+    def test_a_leitura_enxerga_a_coluna_em_toda_sintaxe_que_o_studio_produz(self, sintaxe, sql):
+        """A cegueira que este teste existe para não ter.
+
+        A migration é digitada à mão no SQL Editor do Studio, que qualifica a
+        tabela com `public.` por default, e `IF EXISTS` é hábito de quem escreve
+        DDL reaplicável. Uma leitura que casasse só `alter table
+        ouvidoria_protocolos` deixaria a coluna nova INVISÍVEL, e o teste de
+        completude ficaria verde justamente no caso que ele existe para pegar:
+        a coluna nova, que é a única que ainda não tem decisão."""
+        assert "paciente_cpf" in _colunas_declaradas(sql, set()), f"a leitura não enxerga a sintaxe: {sintaxe}"
+
+    def test_a_leitura_nao_rouba_coluna_de_tabela_de_nome_parecido(self):
+        """`ouvidoria_protocolos_historico` não existe hoje, e o dia em que
+        existir não pode empurrar as colunas dela para esta conta."""
+        sql = "ALTER TABLE ouvidoria_protocolos_historico ADD COLUMN carimbo TEXT;"
+
+        assert _colunas_declaradas(sql, set()) == set()
+
+    def test_a_leitura_das_migrations_acha_a_tabela_inteira(self):
+        """O detector antes do detectado: um parser que voltasse vazio faria o
+        teste de baixo passar sobre nada, que é o jeito preferido de um teste de
+        completude morrer em silêncio.
+
+        O piso não é um número solto: é o tamanho do que o módulo já decidiu.
+        Amarrado assim, ele também pega a leitura que perde UMA coluna (a nova,
+        classificada no mesmo PR), e não só a que quebra inteira."""
+        colunas = self._colunas_da_tabela()
+        decididas = _tudo_que_foi_decidido()
+
+        faltando = sorted(decididas - colunas)
+        assert not faltando, f"a leitura das migrations não achou colunas que o módulo decide: {faltando}"
+        # Uma coluna de cada era da tabela: a original, o Dossiê, a retenção, o
+        # apagamento pela Diretoria e a mais nova.
+        for esperada in ("protocolo", "relato_integral", "anonimizada_em", "apagamento_motivo", "paciente_nome"):
+            assert esperada in colunas, f"a leitura das migrations perdeu a coluna {esperada}"
+
+    def test_toda_coluna_da_tabela_esta_de_um_lado_ou_do_outro(self):
+        sem_decisao = sorted(self._colunas_da_tabela() - _tudo_que_foi_decidido())
+
+        assert not sem_decisao, (
+            f"colunas de ouvidoria_protocolos sem decisão de retenção: {sem_decisao}. "
+            "Escolha uma lista para cada: CAMPOS_DO_DOSSIE (sai no apagamento), "
+            "CAMPOS_ESTATISTICOS (os relatórios contam) ou CAMPOS_PRESERVADOS_SEM_METRICA "
+            "(fica, e nenhum relatório lê). Coluna com dado de quem manifestou, ou de "
+            "terceiro, sai."
+        )
+
+    def test_nenhuma_lista_nomeia_coluna_que_nao_existe(self):
+        """O outro lado da mesma conferência: nome errado numa lista é decisão
+        que não vale para linha nenhuma, e ninguém perceberia."""
+        colunas = self._colunas_da_tabela()
+        for lista in _AS_QUATRO_LISTAS:
+            for campo in getattr(ouvidoria_retencao, lista):
+                assert campo in colunas, f"{lista} nomeia {campo}, que não é coluna de ouvidoria_protocolos"
+
+    def test_a_lista_de_fora_da_escolha_e_fechada_nestas_tres(self):
+        """Das quatro, esta é a abusável: dizer "não se aplica" é o jeito mais
+        barato de calar o teste de completude sem decidir nada. As três aqui
+        estão porque o código faz algo específico com cada uma (`id` é a
+        identidade da linha, `resumo` é reescrito com o marcador, e
+        `anonimizada_em` é o carimbo do ato), e nenhuma coluna nova entra nessa
+        descrição. Fechada por igualdade, coluna nova não se esconde aqui sem
+        alguém reescrever esta linha, que é onde a decisão volta a aparecer no
+        diff."""
+        assert set(ouvidoria_retencao.CAMPOS_FORA_DA_ESCOLHA) == {"id", "resumo", "anonimizada_em"}
+
+    def test_o_que_a_politica_preserva_sem_metrica_sobrevive_inteiro(self):
+        """O par comportamental da lista, no molde que `CAMPOS_ESTATISTICOS` já
+        tem: não basta a coluna estar nomeada ali, ela tem que sair igual do
+        outro lado da anonimização. Uma coluna de PII parada nesta lista
+        precisaria entrar na fixture com valor e ser afirmada como
+        sobrevivente, e ninguém escreve isso sem ver o que está fazendo."""
+        supabase = _SupabaseFake()
+        antes = dict(supabase.caso())
+
+        ouvidoria_retencao.anonimizar_encerradas_antigas(supabase, AGORA)
+
+        depois = supabase.caso()
+        for campo in ouvidoria_retencao.CAMPOS_PRESERVADOS_SEM_METRICA:
+            assert campo in antes, f"a fixture não cobre {campo}"
+            # Nulo dos dois lados ficaria igual sendo apagado ou não, e a
+            # afirmação de preservação ficaria sem dentes.
+            assert antes[campo] is not None, f"a fixture precisa de valor em {campo}"
+            assert depois[campo] == antes[campo], f"a anonimização mexeu em {campo}"
+
+    def test_nenhuma_coluna_esta_em_duas_listas_ao_mesmo_tempo(self):
+        """Sair e ficar ao mesmo tempo não é decisão: é duas fatias lendo a
+        mesma coluna de jeitos opostos."""
+        listas = {nome: set(getattr(ouvidoria_retencao, nome)) for nome in _AS_QUATRO_LISTAS}
+        nomes = sorted(listas)
+        for i, uma in enumerate(nomes):
+            for outra in nomes[i + 1 :]:
+                repetidas = sorted(listas[uma] & listas[outra])
+                assert not repetidas, f"{repetidas} está em {uma} e em {outra}"
+
+
+class TestAsDuasGuardasPrometidasPeloAdr0052:
+    """O marcador do estado real das duas guardas do Paciente do caso.
+
+    O `COMMENT ON COLUMN` da migration 110 nasceu dizendo que as duas guardas
+    do ADR 0052 ainda não existiam, e citando as issues que as fariam. Ele
+    continua dizendo isso no banco, e vai continuar: migration aplicada é
+    imutável, o hash do arquivo é a prova do que rodou no Studio, e corrigir o
+    texto pede migration nova. Então o marcador se muda para cá, onde ele
+    acompanha a verdade."""
+
+    def test_a_retencao_varre_e_o_paciente_ainda_nao_viaja_para_a_area(self):
+        """Estado real, nesta linha do tempo:
+
+          - a RETENÇÃO VARRE as duas colunas (issue #665, esta fatia). O
+            comentário no banco diz que não, e está desatualizado;
+          - o PACIENTE AINDA NÃO VIAJA para a área (issue #664, aberta). Nem o
+            email de acionamento nem a tela do responsável selecionam as
+            colunas, e a guarda do sigilo reforçado da decisão 4 não existe.
+
+        Quem fizer a #664 vira as duas asserções de baixo e escreve, na mesma
+        migration, os dois `COMMENT ON COLUMN` corrigidos de uma vez: aí o banco
+        e o código voltam a dizer a mesma coisa.
+
+        O limite deste teste, escrito porque quem o ler vai confiar nele: ele
+        olha as DUAS constantes de `select` de hoje. Se a #664 levar o paciente
+        à área por outra tupla, por `select("*")` ou por um bloco montado a
+        partir de outra lista, ele fica verde. É gatilho, não garantia."""
+        from app.routers.ouvidoria_setor import _CAMPOS_DO_PORTAL
+        from app.services.ouvidoria_notificacoes import _CAMPOS_DO_EMAIL
+
+        for coluna in ("paciente_nome", "paciente_referencia"):
+            assert coluna in ouvidoria_retencao.CAMPOS_DO_DOSSIE, f"a Retenção parou de varrer {coluna}"
+            assert coluna not in _CAMPOS_DO_EMAIL, (
+                f"{coluna} passou a viajar no email: é a issue #664 chegando. Atualize este "
+                "teste e escreva na migration dela os dois COMMENT ON COLUMN corrigidos."
+            )
+            assert coluna not in _CAMPOS_DO_PORTAL, (
+                f"{coluna} passou a viajar para a tela do responsável: é a issue #664 chegando. "
+                "Atualize este teste e escreva na migration dela os dois COMMENT ON COLUMN corrigidos."
+            )

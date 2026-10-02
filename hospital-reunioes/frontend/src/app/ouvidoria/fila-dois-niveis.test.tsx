@@ -170,6 +170,16 @@ async function linhaDe(protocolo: string): Promise<HTMLElement> {
   }
   return linhas[0];
 }
+/**
+ * O painel do menu de ações da linha (issue #777). Ele sai por portal no
+ * `body` desde que o `overflow-hidden` dos cards da fila passou a recortá-lo,
+ * então procurar item de menu dentro da linha acha nada, sempre, e a asserção
+ * passa a valer vazio. O gatilho continua na linha; só o painel viaja.
+ */
+function menuDe(protocolo: string): HTMLElement {
+  return screen.getByLabelText(`Ações da manifestação ${protocolo}`);
+}
+
 
 afterEach(() => {
   cleanup();
@@ -320,20 +330,23 @@ describe("a ação primária de cada estado, sempre visível (RN-74, D-06)", () 
 
     fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
 
-    expect(within(linha).getByRole("link", { name: "Abrir manifestação" })).toBeTruthy();
+    expect(within(menuDe("2026-0007")).getByRole("link", { name: "Abrir manifestação" })).toBeTruthy();
   });
 
   it("o que sobra fica no menu, e não na linha", async () => {
     montar([caso(7, "aguardando_area")]);
     const linha = await linhaDe("2026-0007");
 
-    expect(within(linha).queryByRole("button", { name: "Encerrar" })).toBeNull();
-    expect(within(linha).queryByRole("link", { name: "Abrir manifestação" })).toBeNull();
+    // Com o menu fechado não está em lugar nenhum da tela, que é mais forte do
+    // que "não está na linha": desde a issue #777 o painel nasce fora dela.
+    expect(screen.queryByRole("button", { name: "Encerrar" })).toBeNull();
+    expect(screen.queryByRole("link", { name: "Abrir manifestação" })).toBeNull();
 
     fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
 
-    expect(within(linha).getByRole("button", { name: "Encerrar" })).toBeTruthy();
-    expect(within(linha).getByRole("link", { name: "Abrir manifestação" })).toBeTruthy();
+    const menu = within(menuDe("2026-0007"));
+    expect(menu.getByRole("button", { name: "Encerrar" })).toBeTruthy();
+    expect(menu.getByRole("link", { name: "Abrir manifestação" })).toBeTruthy();
   });
 
   it("o menu fecha no Escape", async () => {
@@ -344,22 +357,22 @@ describe("a ação primária de cada estado, sempre visível (RN-74, D-06)", () 
     montar([caso(7, "aguardando_area")]);
     const linha = await linhaDe("2026-0007");
     fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
-    expect(within(linha).getByRole("button", { name: "Encerrar" })).toBeTruthy();
+    expect(within(menuDe("2026-0007")).getByRole("button", { name: "Encerrar" })).toBeTruthy();
 
     fireEvent.keyDown(document, { key: "Escape" });
 
-    expect(within(linha).queryByRole("button", { name: "Encerrar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Encerrar" })).toBeNull();
   });
 
   it("o menu fecha ao clicar fora dele", async () => {
     montar([caso(7, "aguardando_area")]);
     const linha = await linhaDe("2026-0007");
     fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
-    expect(within(linha).getByRole("button", { name: "Encerrar" })).toBeTruthy();
+    expect(within(menuDe("2026-0007")).getByRole("button", { name: "Encerrar" })).toBeTruthy();
 
     fireEvent.mouseDown(document.body);
 
-    expect(within(linha).queryByRole("button", { name: "Encerrar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Encerrar" })).toBeNull();
   });
 
   it("quem está fora da Ouvidoria vê a linha e nenhuma ação", async () => {
@@ -379,13 +392,14 @@ describe("redirecionar a partir da linha da fila (issue #710, PRD #706, ADR 0055
     montar([caso(7, "aguardando_area")]);
     const linha = await linhaDe("2026-0007");
 
-    expect(within(linha).queryByRole("button", { name: "Redirecionar" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Redirecionar" })).toBeNull();
 
     fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
 
-    expect(within(linha).getByRole("button", { name: "Redirecionar" })).toBeTruthy();
+    const menu = within(menuDe("2026-0007"));
+    expect(menu.getByRole("button", { name: "Redirecionar" })).toBeTruthy();
     // Junto das demais, e não no lugar delas.
-    expect(within(linha).getByRole("button", { name: "Encerrar" })).toBeTruthy();
+    expect(menu.getByRole("button", { name: "Encerrar" })).toBeTruthy();
   });
 
   it("o caso respondido também oferece, que é o motivo de a porta existir", async () => {
@@ -394,7 +408,7 @@ describe("redirecionar a partir da linha da fila (issue #710, PRD #706, ADR 0055
     const linha = await linhaDe("2026-0007");
     fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
 
-    expect(within(linha).getByRole("button", { name: "Redirecionar" })).toBeTruthy();
+    expect(within(menuDe("2026-0007")).getByRole("button", { name: "Redirecionar" })).toBeTruthy();
   });
 
   it("o caso em classificação não oferece: ali quem escolhe a área é a validação", async () => {
@@ -402,7 +416,9 @@ describe("redirecionar a partir da linha da fila (issue #710, PRD #706, ADR 0055
     const linha = await linhaDe("2026-0007");
     fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
 
-    expect(within(linha).queryByRole("button", { name: "Redirecionar" })).toBeNull();
+    // Dentro do PAINEL, e não da linha: a linha nunca guardou item de menu
+    // desde a issue #777, e procurar ali passaria com o menu inteiro apagado.
+    expect(within(menuDe("2026-0007")).queryByRole("button", { name: "Redirecionar" })).toBeNull();
   });
 
   it("CONTRAPROVA: o clique abre a tela do redirecionamento, com o motivo obrigatório", async () => {
@@ -411,7 +427,7 @@ describe("redirecionar a partir da linha da fila (issue #710, PRD #706, ADR 0055
     montar([caso(7, "aguardando_area")]);
     const linha = await linhaDe("2026-0007");
     fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
-    fireEvent.click(within(linha).getByRole("button", { name: "Redirecionar" }));
+    fireEvent.click(within(menuDe("2026-0007")).getByRole("button", { name: "Redirecionar" }));
 
     await waitFor(() =>
       expect(screen.getByText(/Redirecionar 2026-0007 para outra área/)).toBeTruthy()
@@ -427,7 +443,7 @@ describe("o aviso do redirecionamento na fila (issue #710)", () => {
   async function redirecionarPelaLinha(protocolo: string) {
     const linha = await linhaDe(protocolo);
     fireEvent.click(within(linha).getByRole("button", { name: /Mais ações/ }));
-    fireEvent.click(within(linha).getByRole("button", { name: "Redirecionar" }));
+    fireEvent.click(within(menuDe(protocolo)).getByRole("button", { name: "Redirecionar" }));
     await screen.findByRole("option", { name: "Centro Medico" });
     fireEvent.change(screen.getByLabelText(/Área responsável/), {
       target: { value: "Centro Medico" },

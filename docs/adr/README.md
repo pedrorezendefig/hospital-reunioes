@@ -29,6 +29,14 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0050](0050-demandas-de-tecnologia-moram-no-app-apartadas-das-pendencias.md) | accepted | Demandas de tecnologia moram no app do hospital, só para Super admin, apartadas das Pendências |
 | [0054](0054-demanda-vinculada-a-issue-etapa-derivada-e-revisor-no-app.md) | accepted | Demanda vinculada a issue do GitHub: Etapa derivada, comentário do diretor espelhado e a bola volta a quem pediu (emenda 0020) |
 | [0056](0056-assistente-de-tecnologia-rascunho-confirmado-kit-proprio.md) | accepted | Assistente de Tecnologia: rascunho confirmado por gente, kit próprio embarcado, responde do kit ou registra |
+| [0060](0060-texto-que-sai-para-a-issue-publica-passa-pela-peneira-de-dado-pessoal.md) | accepted | Texto que sai para a issue pública passa pela peneira de dado pessoal (emenda 0054) |
+
+## Central de Comando (números do ecossistema digital)
+
+| ADR | Status | Título |
+|---|---|---|
+| [0058](0058-central-de-comando-migra-para-dentro-do-app.md) | accepted | Central de Comando migra para dentro do app do hospital, só para Super admin, com o servidor portado para o FastAPI (emenda 0057) |
+| [0059](0059-central-de-comando-aquece-o-cache-no-boot.md) | accepted | Central de Comando aquece o cache uma vez no boot, só no período padrão (emenda 0058) |
 
 ## Reuniões e Atas
 
@@ -66,6 +74,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0028](0028-bloqueio-por-dependencia-nativa.md) | accepted | Bloqueio entre issues por dependência nativa do GitHub |
 | [0029](0029-onda-goal-prd-fonte-verdade-github.md) | accepted | Onda escopada em PRD: goal de conclusão, fonte de verdade no GitHub e orquestrador magro |
 | [0035](0035-gates-de-review-da-onda-pertencem-ao-orquestrador.md) | accepted | Gates de review da onda pertencem ao orquestrador |
+| [0061](0061-um-pipeline-dono-por-prd-e-main-protegida.md) | accepted | Um pipeline só, dono por PRD e `main` protegida: a esteira para três sócios em paralelo (emenda 0022, 0035) |
 | [0043](0043-skills-locais-sao-o-kit-do-workflow.md) | accepted | Skills locais são o kit completo do workflow, duplicata com as globais é intencional |
 | [0049](0049-wayfinder-instalada-e-lock-com-ref.md) | accepted | A wayfinder entra instalada no clone, e o `skills-lock.json` fixa o commit de origem |
 | [0053](0053-fluxo-exportavel-por-roteiro-versionado.md) | accepted | O fluxo de trabalho é exportável por um roteiro versionado no repositório, não por prompt solto |

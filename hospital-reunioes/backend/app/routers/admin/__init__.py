@@ -4,6 +4,8 @@ Cada router corresponde a um recorte da camada administrativa:
 - super_admins: promover/rebaixar super admins.
 - usuarios: CRUD cross-user de participantes.
 - tecnologia: aba Tecnologia (Produto, Demanda, Conversa), ADR 0050.
+- central_de_comando: os números do Site e do Instagram (Visão Geral, Dados do
+  Google, Instagram, Objetivos), ADR 0058. Gate de super admin no router.
 - logs (futuro): consulta do audit_log.
 - acoes_massa (futuro): operacoes em lote.
 
