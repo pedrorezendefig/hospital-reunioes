@@ -73,3 +73,27 @@ def test_prd_com_dois_donos_leva_a_fatia_sem_assignee_aos_dois_grupos():
     resultado = _agrupar(issues, fatias_por_prd={10: [11]})
 
     assert _numeros_por_grupo(resultado) == {"ana": [11, 10], "bia": [11, 10]}
+
+
+def test_ordem_no_grupo_em_andamento_planejadas_demais_abertas_e_fechadas_recentes_primeiro():
+    issues = [
+        _issue(1, state="CLOSED", assignees=["ana"], closed_at="2026-09-20T10:00:00Z"),
+        _issue(2, state="CLOSED", assignees=["ana"], closed_at="2026-09-01T10:00:00Z"),
+        _issue(3, labels=["needs-triage"], assignees=["ana"]),
+        _issue(4, labels=["ready-for-agent"], assignees=["ana"]),
+        _issue(5, labels=["in-progress"], assignees=["ana"]),
+        _issue(6, labels=["ready-for-human"], assignees=["ana"]),
+        _issue(7, labels=["blocked"], assignees=["ana"]),
+    ]
+
+    itens = _agrupar(issues)["grupos"][0]["itens"]
+
+    assert [(i["number"], i["secao"]) for i in itens] == [
+        (5, "em_andamento"),
+        (6, "planejada"),
+        (4, "planejada"),
+        (7, "aberta"),
+        (3, "aberta"),
+        (1, "fechada"),
+        (2, "fechada"),
+    ]

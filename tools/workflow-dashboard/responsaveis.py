@@ -8,6 +8,10 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 
+SECOES = ("em_andamento", "planejada", "aberta", "fechada")
+# Mesma régua da Etapa "Planejada" do app (tecnologia_vinculo.LABELS_PLANEJADA).
+LABELS_PLANEJADA = ("ready-for-agent", "ready-for-human")
+
 
 def agrupar_por_responsavel(
     issues: list[dict],
@@ -23,12 +27,41 @@ def agrupar_por_responsavel(
             prds_da_fatia.setdefault(n, []).append(prd)
 
     grupos: dict[str | None, list[dict]] = {}
-    for i in sorted(issues, key=lambda i: -i["number"]):
+    for i in sorted(issues, key=_ordem):
+        item = {"number": i["number"], "secao": _secao(i)}
         for quem in _responsaveis(i, prds_da_fatia, por_numero):
-            grupos.setdefault(quem, []).append({"number": i["number"]})
+            grupos.setdefault(quem, []).append(item)
     # Pessoas em ordem alfabética; "sem responsável" (None) sempre por último.
     ordem = sorted(grupos, key=lambda quem: (quem is None, quem or ""))
     return {"grupos": [{"responsavel": quem, "itens": grupos[quem]} for quem in ordem]}
+
+
+def _secao(issue: dict) -> str:
+    if issue["state"] != "OPEN":
+        return "fechada"
+    if "in-progress" in issue["labels"]:
+        return "em_andamento"
+    if set(issue["labels"]) & set(LABELS_PLANEJADA):
+        return "planejada"
+    return "aberta"
+
+
+def _ordem(issue: dict) -> tuple:
+    """Seção na ordem de SECOES; abertas da mais nova para a mais antiga, fechadas pela data de fechamento."""
+    secao = _secao(issue)
+    if secao == "fechada":
+        fechada = _parse_dt(issue.get("closed_at"))
+        return (SECOES.index(secao), -fechada.timestamp() if fechada else 0.0, -issue["number"])
+    return (SECOES.index(secao), 0.0, -issue["number"])
+
+
+def _parse_dt(s: str | None) -> datetime | None:
+    if not s:
+        return None
+    try:
+        return datetime.fromisoformat(s.replace("Z", "+00:00"))
+    except ValueError:
+        return None
 
 
 def _responsaveis(issue: dict, prds_da_fatia: dict[int, list[int]], por_numero: dict[int, dict]) -> list:
