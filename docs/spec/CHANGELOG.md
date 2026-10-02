@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.158.0 - 2026-10-02 18:26 - Onda onda-c: O Dossiê avisa quando o relato é sobre outra pessoa sem o nome do paciente; O paciente viaja para a área no email, na tela do responsável e no reenvio, com a guarda do sigilo
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `13cb8b3`
+- PRs: [#795](https://github.com/pedrorezendefig/hospital-reunioes/pull/795), [#917](https://github.com/pedrorezendefig/hospital-reunioes/pull/917)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (6s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/13cb8b3
+
 ## v0.157.2 - 2026-10-02 18:08 - Onda onda-b: PRD nasce com dono e o /pegar-issue avisa fatia de PRD alheio; Confere identidade do git, CLI do Coolify e acesso ao Studio; Coletor e módulo puro do agrupamento por responsável
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `53bacf0`

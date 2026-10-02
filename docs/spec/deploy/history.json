@@ -2,6 +2,40 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-02T18:26:38-03:00",
+      "sha": "13cb8b3e",
+      "app_version": "0.158.0",
+      "subject": "Onda onda-c: O Dossiê avisa quando o relato é sobre outra pessoa sem o nome do paciente; O paciente viaja para a área no email, na tela do responsável e no reenvio, com a guarda do sigilo",
+      "raw_subject": "chore(deploy): registro da onda onda-c (#795 #917)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        659
+      ],
+      "result": "healthy",
+      "duration_seconds": 6,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "113_ouvidoria_paciente_do_caso_comentarios.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-c: PRs #795 #917. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-10-02T18:08:40-03:00",
       "sha": "53bacf04",
       "app_version": "0.157.2",
@@ -1518,35 +1552,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 2 (issue #676, PRD #673). Migration 103 ja aplicada na onda 1. Review de seguranca pegou forja da cerca do Copiar para IA: corpo de issue publica podia injetar conversa fabricada na coluna zero; corrigido com indent do bloco da raiz. Decisao do diretor: /to-prd e /to-issues passam a proibir numero de issue no bloco Para o diretor."
-    },
-    {
-      "at": "2026-09-10T15:04:57-03:00",
-      "sha": "3541c39",
-      "app_version": "0.124.0",
-      "subject": "Fundacao do Vinculo da Demanda com a issue e a Action do marcador revisor-app",
-      "raw_subject": "feat(higiene): a Action acende revisor-comentou pelo marcador revisor-app (#682)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 (issues #674 e #675, PRD #673). Migration 103 versionada mas NAO aplicada: pendente no Studio. Faltam GITHUB_INTEGRACAO_TOKEN e GITHUB_INTEGRACAO_REPO no Coolify, sem elas a aba responde 503 por design. Rebase sobre o #683 corrigiu conflito semantico: _aviso_da_correcao chamava _com_nomes sem ator."
     }
   ]
 }
