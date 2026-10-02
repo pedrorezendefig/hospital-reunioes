@@ -11,8 +11,8 @@ sidebar:
 
 ## Quando usar
 
-Quando você quer deixar registrado quais avisos interessam a você. Leia antes o
-fim da página: a escolha fica guardada e os avisos continuam chegando.
+Quando você quer deixar registrado quais avisos interessam a você. A escolha
+fica guardada, mas os avisos continuam chegando do mesmo jeito.
 
 ## Passo a passo
 

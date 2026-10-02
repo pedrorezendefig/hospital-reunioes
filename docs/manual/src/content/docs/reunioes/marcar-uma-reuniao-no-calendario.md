@@ -11,13 +11,12 @@ sidebar:
 
 ## Quando usar
 
-Quando a reunião já tem data e você quer reservá-la e avisar quem vai. Ela
-nasce com quem marcou no comando.
+Quando a reunião já tem data e você quer reservá-la e avisar quem vai.
 
 :::caution[Quem marca vira o facilitador]
-A reunião nasce com quem clicou aqui no comando da ata. Na Secretaria é
-diferente: o clique leva para a tela **Marcar nova reunião**, em que você
-escolhe quem vai conduzir.
+Quem agenda por aqui vira o facilitador da reunião e responde pela ata. Na
+Secretaria é diferente: o clique leva para a tela **Marcar nova reunião**, em
+que você escolhe quem vai conduzir.
 :::
 
 ## Passo a passo
