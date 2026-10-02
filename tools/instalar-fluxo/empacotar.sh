@@ -38,6 +38,9 @@ for d in "$ROOT"/.claude/skills/*/; do
   copiar ".claude/skills/$nome"
 done
 
+# agentes da /onda-enxuta (hr-*), que a skill dispara pelo nome
+for f in "$ROOT"/.claude/agents/hr-*.md; do copiar ".claude/agents/$(basename "$f")"; done
+
 # docs
 copiar docs/agents
 copiar docs/onboarding
