@@ -259,3 +259,36 @@ def test_um_pr_so_sem_sessao_faz_merge_bump_app_version_push_build_health_e_regi
     entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
     assert entrada["app_version"] == "0.10.1"
     assert entrada["prds"] == [902]
+
+
+def sem_a_palavra_onda(texto: str) -> bool:
+    # `fechar_onda` é nome de arquivo, não a palavra: `_` é letra para o `\b`.
+    return re.search(r"\bonda\b", texto, re.I) is None
+
+
+def test_registro_do_pr_avulso_nomeia_pr_e_issue_sem_onda_e_sem_travessao(
+    tmp_path, monkeypatch
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
+    for campo in ("subject", "raw_subject", "notes"):
+        assert sem_a_palavra_onda(entrada[campo]), (campo, entrada[campo])
+    assert "PR #7" in entrada["subject"] and "issue #5" in entrada["subject"], entrada["subject"]
+    assert TRAVESSAO not in entrada["subject"] and MEIA_RISCA not in entrada["subject"]
+    # contrato do painel (`tools/workflow-dashboard/collect.py`, `_correlate`)
+    assert re.search(r"\(#7\)", entrada["raw_subject"]), entrada["raw_subject"]
+    assert re.search(r"PRs? #7\b", entrada["notes"]), entrada["notes"]
+    assert re.search(r"(?:[Ii]ssues? |Closes )#5\b", entrada["notes"]), entrada["notes"]
+
+    titulo = next(li for li in c.na_main("docs/spec/CHANGELOG.md").splitlines()
+                  if li.startswith("## "))
+    assert titulo.startswith("## v0.10.1 - "), titulo
+    assert "PR #7" in titulo and "issue #5" in titulo, titulo
+    assert sem_a_palavra_onda(titulo), titulo
+    assert TRAVESSAO not in titulo and MEIA_RISCA not in titulo, titulo
+    assert "Prazo do caso, conta dias uteis" in titulo, titulo

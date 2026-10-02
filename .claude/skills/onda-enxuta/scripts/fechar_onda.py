@@ -219,8 +219,9 @@ def semaforo(raiz: Path, acao: str, chave: str, descricao: str = "") -> int:
     return proc.returncode
 
 
-def pegar_semaforo(raiz: Path, chave: str, prs: list[int]) -> None:
-    desc = f"onda-enxuta {chave}: PRs " + " ".join(f"#{p}" for p in prs)
+def pegar_semaforo(raiz: Path, chave: str, prs: list[int], avulso: bool = False) -> None:
+    desc = (f"fechar_onda: PR avulso #{prs[0]}" if avulso
+            else f"onda-enxuta {chave}: PRs " + " ".join(f"#{p}" for p in prs))
     while True:
         rc = semaforo(raiz, "pegar", chave, desc)
         if rc == 0:
@@ -351,22 +352,46 @@ def humanizar(subject: str) -> str:
     return (s[:1].upper() + s[1:]) if s else subject
 
 
+def sem_travessao(s: str) -> str:
+    """Travessao e meia-risca viram hifen entre numeros e virgula no resto (ADR 0013)."""
+    s = re.sub(r"(\d)\s*[–—]\s*(\d)", r"\1-\2", s)
+    return re.sub(r"\s*[–—]\s*", ", ", s)
+
+
+def rotulo_issues(info: dict) -> str:
+    nums = [ref["number"] for ref in info.get("closingIssuesReferences") or []]
+    if not nums:
+        return "sem issue"
+    return ("issue " if len(nums) == 1 else "issues ") + " ".join(f"#{n}" for n in nums)
+
+
 def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | None, versao_antiga: str,
                       sha_codigo: str, prds: list[int], migs: list[str], servicos: list[str],
                       duracoes: dict[str, int | None], healths: dict[str, dict], resultado: str,
-                      houve_bump: bool) -> None:
+                      houve_bump: bool, avulso: bool = False) -> None:
     spec = wt / SPEC / "deploy"
     history = ler_json(spec / "history.json")
     state = ler_json(spec / "state.json")
     when = agora_iso()
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
-    subject = (f"Onda {sessao}: " + "; ".join(humanizar(i["title"]) for i in infos))[:200]
+    if avulso:
+        # PR avulso (ADR 0061): o registro nomeia PR e issue, e a palavra onda nao aparece.
+        pr = infos[0]
+        subject = f"PR #{pr['number']}, {rotulo_issues(pr)}: {humanizar(pr['title'])}"
+        raw_subject = f"chore(deploy): registro do PR avulso (#{pr['number']})"
+        notes = (f"PR avulso: PR #{pr['number']}, {rotulo_issues(pr)}. "
+                 "Um push, um build. Registro no commit seguinte ao sha.")
+    else:
+        subject = f"Onda {sessao}: " + "; ".join(humanizar(i["title"]) for i in infos)
+        raw_subject = f"chore(deploy): registro da onda {sessao} ({prs_txt})"
+        notes = f"onda-enxuta {sessao}: PRs {prs_txt}. Um push, um build. Registro no commit seguinte ao sha."
+    subject = sem_travessao(subject)[:200]
     entrada = {
         "at": when,
         "sha": sha_codigo,
         "app_version": versao,
         "subject": subject,
-        "raw_subject": f"chore(deploy): registro da onda {sessao} ({prs_txt})",
+        "raw_subject": raw_subject,
         "scope": servicos,
         "prds": prds,
         "result": resultado,
@@ -375,15 +400,16 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
         "env_changes": ([{"service": "backend", "action": "update", "keys": ["APP_VERSION"]}] if houve_bump else []),
         "migrations_applied": migs,
         "rollback_target_sha": None,
-        "notes": f"onda-enxuta {sessao}: PRs {prs_txt}. Um push, um build. Registro no commit seguinte ao sha.",
+        "notes": notes,
     }
     deploys = history.setdefault("deploys", [])
     deploys.insert(0, entrada)
     del deploys[HISTORY_MAX:]
     escrever_json(spec / "history.json", history)
 
+    modo = "pr-avulso" if avulso else "onda-enxuta"
     state["updated_at"] = when
-    state["updated_by"] = "onda-enxuta@fechar_onda"
+    state["updated_by"] = f"{modo}@fechar_onda"
     if versao:
         state["last_app_version"] = versao
     for svc in state.get("services") or []:
@@ -395,7 +421,7 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
             svc["last_health_check"] = {"at": when, "latency_ms": h.get("latency_ms"),
                                         "http_status": h.get("status"), "body_ok": bool(h.get("ok"))}
             svc["build_duration_seconds"] = duracoes.get(svc["id"])
-    state["last_run"] = {"mode": "onda-enxuta", "sha": sha_codigo, "result": resultado,
+    state["last_run"] = {"mode": modo, "sha": sha_codigo, "result": resultado,
                          "duration_seconds": int(time.time() - T0)}
     state.pop("next_actions", None)
     escrever_json(spec / "state.json", state)
@@ -625,13 +651,15 @@ def limpar_worktrees_de_agente(raiz: Path) -> int:
     return removidos
 
 
-def conferir_prs_fechados(raiz: Path, infos: list[dict], sessao: str) -> None:
+def conferir_prs_fechados(raiz: Path, infos: list[dict], sessao: str, avulso: bool = False) -> None:
+    como = ("pelo `fechar_onda.py` como PR avulso (merge local `--no-ff`, um push)" if avulso
+            else f"pela onda-enxuta {sessao} (merge local `--no-ff`, um push por onda)")
     for info in infos:
         n = info["number"]
         estado = gh_json(["pr", "view", str(n), "--json", "state"], cwd=raiz).get("state")
         if estado == "OPEN":
             run(["gh", "pr", "close", str(n), "--comment",
-                 f"<!-- automacao -->\nIntegrado na main pela onda-enxuta {sessao} (merge local `--no-ff`, um push por onda)."],
+                 f"<!-- automacao -->\nIntegrado na main {como}."],
                 cwd=raiz, check=False)
 
 
@@ -676,7 +704,7 @@ def main() -> int:
     pushou = False
     try:
         if not args.dry_run:
-            pegar_semaforo(raiz, args.sessao, args.prs)
+            pegar_semaforo(raiz, args.sessao, args.prs, avulso)
             semaforo_pego = True
         wt = criar_worktree(raiz, args.sessao)
         base = run(["git", "rev-parse", "--short=8", "HEAD"], cwd=wt).stdout.strip()
@@ -720,7 +748,8 @@ def main() -> int:
         sha_codigo = shas_merge[-1]
         if versao_nova:
             escrever_versao(wt, versao_nova)
-            sha_codigo = commitar(wt, f"chore(release): bump v{versao_nova} (onda {args.sessao}: {prs_txt})", [PACKAGE_JSON])
+            origem = f"PR {prs_txt}" if avulso else f"onda {args.sessao}: {prs_txt}"
+            sha_codigo = commitar(wt, f"chore(release): bump v{versao_nova} ({origem})", [PACKAGE_JSON])
             print(f"bump: v{versao_antiga} -> v{versao_nova} ({tipo}) em {sha_codigo}")
         else:
             print(f"bump: nenhum (lote docs-only), versao segue v{versao_antiga}")
@@ -731,8 +760,9 @@ def main() -> int:
         # Nao: um push so. O registro nasce com o resultado esperado e, se o build ou o health
         # falharem, o codigo de saida 3/4 e a instrucao de rollback sao a fonte de verdade.
         escrever_registro(wt, args.sessao, infos, versao_nova, versao_antiga, sha_codigo, prds, migs,
-                          servicos, {}, {}, "healthy", bool(versao_nova))
-        commitar(wt, f"chore(deploy): registro da onda {args.sessao} (v{versao_nova or versao_antiga})",
+                          servicos, {}, {}, "healthy", bool(versao_nova), avulso)
+        do_lote = f"do PR {prs_txt}" if avulso else f"da onda {args.sessao}"
+        commitar(wt, f"chore(deploy): registro {do_lote} (v{versao_nova or versao_antiga})",
                  [SPEC, "docs/manual", "docs/ARQUITETURA.md"])
         print(f"registro: history/state/CHANGELOG, {linha_snap}, {linha_manual}")
 
@@ -781,14 +811,15 @@ def main() -> int:
             pub = run([BASH, bash_path(wt / PUBLICAR_MANUAL)], cwd=wt, check=False, timeout=900)
             print("manual publicado" if pub.returncode == 0 else f"manual: publicar.sh falhou ({pub.returncode}); rode a mao depois")
 
-        conferir_prs_fechados(raiz, infos, args.sessao)
+        conferir_prs_fechados(raiz, infos, args.sessao, avulso)
         remover_worktree(raiz, wt, args.prs)
         wt = None
         n_wt = limpar_worktrees_de_agente(raiz)
         semaforo(raiz, "soltar", args.sessao)
         semaforo_pego = False
         builds = ", ".join(f"{sid} {dur(duracoes.get(sid))}" for sid in servicos) or "sem build"
-        print(f"onda {args.sessao} fechada: v{versao_antiga} -> v{versao_nova or versao_antiga} · PRs {prs_txt} · "
+        fechou = f"PR {prs_txt} fechado" if avulso else f"onda {args.sessao} fechada"
+        print(f"{fechou}: v{versao_antiga} -> v{versao_nova or versao_antiga} · PRs {prs_txt} · "
               f"push {sha_push[:7]} · build {builds} · health ok{vm} · {n_wt} worktrees limpos · {dur(time.time() - T0)}")
         return 0
     except SystemExit:
