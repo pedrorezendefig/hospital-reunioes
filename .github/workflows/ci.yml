@@ -10,16 +10,52 @@ on:
       - 'docs/**'
       - '.claude/**'
       - '**/*.md'
+  # Sem paths-ignore no PR (issue #910): o ruleset da main exige os três jobs
+  # abaixo, e workflow pulado por filtro de caminho não reporta check nenhum. O
+  # PR só de docs (o registro do fechar_onda.py, ADR, skill) ficaria esperando
+  # para sempre. Quem pula o trabalho pesado é o job `mudancas`, e job pulado
+  # por `if` conta como verde para o ruleset.
   pull_request:
     branches: [main]
-    paths-ignore:
-      - 'docs/**'
-      - '.claude/**'
-      - '**/*.md'
 
 jobs:
+  mudancas:
+    name: Mudanças fora de docs
+    runs-on: ubuntu-latest
+    outputs:
+      codigo: ${{ steps.diff.outputs.codigo }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: O PR muda algo fora de docs/, .claude/ e Markdown?
+        # Mesma regra do paths-ignore do push e do docs-only do fechar_onda.py.
+        # Se o git diff falhar, o passo falha e os jobs rodam (ver o if deles).
+        id: diff
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENTO" != "pull_request" ]; then
+            echo "codigo=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # --no-renames: num rename o diff lista só o caminho novo, e mover
+          # código para docs/ pularia os checks obrigatórios.
+          arquivos="$(git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA")"
+          if printf '%s\n' "$arquivos" | grep -qvE '^(docs/|\.claude/)|\.md$'; then
+            echo "codigo=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "codigo=false" >> "$GITHUB_OUTPUT"
+          fi
+
   backend:
     name: Backend Lint, Format & Tests
+    needs: mudancas
+    # Pulado por if = verde no ruleset. Detector quebrado roda o job: pular o
+    # CI de um PR de código por erro do detector passaria pelo ruleset sem teste.
+    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.codigo == 'true') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -73,6 +109,8 @@ jobs:
 
   frontend-lint:
     name: Frontend Lint & Type Check
+    needs: mudancas
+    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.codigo == 'true') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -101,6 +139,8 @@ jobs:
 
   build:
     name: Docker Build (sanity)
+    needs: mudancas
+    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.codigo == 'true') }}
     runs-on: ubuntu-latest
     # Sanity check: garante que os 2 Dockerfiles ainda buildam.
     # NAO faz push — Coolify cuida do build de producao via webhook do GitHub App.

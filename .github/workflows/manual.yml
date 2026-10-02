@@ -29,6 +29,8 @@ on:
       - '.claude/skills/onda-enxuta/**'
       - '.claude/skills/pegar-issue/**'
       - '.github/workflows/manual.yml'
+      - '.github/workflows/ci.yml'
+      - '.github/rulesets/**'
   pull_request:
     branches: [main]
     paths:
@@ -57,6 +59,10 @@ on:
       # lê o SKILL.md dela; um PR que mexa só na skill também acorda o job.
       - '.claude/skills/pegar-issue/**'
       - '.github/workflows/manual.yml'
+      # O ruleset da main exige os jobs do ci.yml pelo nome (issue #910): o
+      # teste em tools/ que amarra os dois roda quando qualquer um muda.
+      - '.github/workflows/ci.yml'
+      - '.github/rulesets/**'
 
 jobs:
   manual:

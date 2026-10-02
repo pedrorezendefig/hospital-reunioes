@@ -368,7 +368,7 @@ python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER" --d
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER"
 ```
 
-Um PR só e sem `--sessao` é o modo PR avulso (chave do semáforo `pr-<N>`). O script faz, nesta ordem: pré-condições (PR verde e mergeável, número e `sha256` das migrations), semáforo, merge local `--no-ff` sobre a `origin/main`, bump pelo tipo dos commits, registro (`state.json`, `history.json`, `CHANGELOG`, snapshot, draft do manual), `APP_VERSION` no Coolify antes do push, um push, um build, health com conferência de versão e limpeza. O registro nomeia o PR e a issue. Códigos de saída e o que fazer em cada um: docstring do script.
+Um PR só e sem `--sessao` é o modo PR avulso (chave do semáforo `pr-<N>`). O script faz, nesta ordem: pré-condições (PR verde e mergeável, número e `sha256` das migrations), semáforo, bump pelo tipo dos commits como commit na branch do PR (com a `origin/main` trazida antes, se a branch ficou atrás), CI verde nesse head, `APP_VERSION` no Coolify antes do merge, merge pela API do GitHub (a `main` é protegida, ADR 0061), um build, health com conferência de versão, registro (`state.json`, `history.json`, `CHANGELOG`, snapshot, draft do manual) num PR só de docs mergeado do mesmo jeito, e limpeza. O registro nomeia o PR e a issue. Códigos de saída e o que fazer em cada um: docstring do script.
 
 ---
 
@@ -489,7 +489,7 @@ A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem de
 
 - ❌ "Vou abrir o PR no browser pra editar a descrição mais bonita." — Não. Template + Issue dão estrutura suficiente. Edição livre depois do `/ship` se quiser.
 - ❌ "Vou rodar `/code-review` separado depois do merge." — Não. Review é gate ANTES do merge.
-- ❌ "Vou squash 3 commits em 1 antes de pushear.": sim, pode. Mas use `git rebase -i` cauteloso. O merge é do rabo: `--no-ff` local e um push.
+- ❌ "Vou squash 3 commits em 1 antes de pushear.": sim, pode. Mas use `git rebase -i` cauteloso. O merge é do rabo, pela API do GitHub.
 - ❌ "Vou commitar com `git commit -am` pra agilizar." — Não. Lista explícita de arquivos.
 
 ---

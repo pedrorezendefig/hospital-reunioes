@@ -1005,11 +1005,11 @@ function fluxoHtml() {
 
     ${phase('3', 'revisão humana & deploy')}
     ${flxNode({ t: 'Gate humano: OK de merge', sub: 'subir é decisão humana · rabo único por PR ou lote', icon: 'usercheck', cls: 'flx-humangate', d: d++,
-      tip: 'O único toque humano obrigatório: você aprova o PR (ou o lote da onda) citando o número. Quem leva à main é o rabo, fechar_onda.py: merge, bump, APP_VERSION, um push, um build, health e registro (ADR 0061).', rule: 'regra: push na main = ação humana' })}
+      tip: 'O único toque humano obrigatório: você aprova o PR (ou o lote da onda) citando o número. Quem leva à main é o rabo, fechar_onda.py: bump na branch do PR, APP_VERSION, merge pela API, um build, health e registro (ADR 0061).', rule: 'regra: main protegida, só entra por PR' })}
     ${conn()}
 
-    ${flxNode({ cmd: 'fechar_onda.py · Coolify', sub: 'um push → um build → health com version-match', icon: 'cloud', cls: 'flx-wide', d: d++,
-      tip: 'O rabo único: merge local, bump na main, APP_VERSION no Coolify, um push, um build, health com conferência de versão; escreve docs/spec/deploy/*.json, CHANGELOG e snapshot no mesmo push. Build ou health ruim: código 3/4 e /deploy rollback.', src: '.claude/skills/onda-enxuta/scripts' })}
+    ${flxNode({ cmd: 'fechar_onda.py · Coolify', sub: 'merge pela API → um build → health com version-match', icon: 'cloud', cls: 'flx-wide', d: d++,
+      tip: 'O rabo único: bump como commit na branch do PR, CI verde, APP_VERSION no Coolify, merge pela API (a main é protegida), um build, health com conferência de versão; depois, docs/spec/deploy/*.json, CHANGELOG e snapshot num PR só de docs. Build ou health ruim: código 3/4 e /deploy rollback.', src: '.claude/skills/onda-enxuta/scripts' })}
     ${conn()}
 
     <div class="flx-fork" style="--d:${d++}">

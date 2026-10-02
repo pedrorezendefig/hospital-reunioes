@@ -90,9 +90,9 @@ Loop disciplinado: reproduz → minimiza → hipótese → instrumenta → corri
                    → para no PR verde e imprime o comando do rabo (sem bump no PR)
                    ▼
 fechar_onda.py     o rabo único (ADR 0061), rodado pelo autor do PR depois do OK:
-  --prs <N>        semáforo → merge local --no-ff → bump na main
-                   → registro no mesmo push: state.json + history.json + CHANGELOG + snapshot + draft do Manual
-                   → APP_VERSION no Coolify → um push → um build → health com version-match
+  --prs <N>        semáforo → bump como commit na branch do PR → CI verde
+                   → APP_VERSION no Coolify → merge pela API (squash) → um build → health com version-match
+                   → registro num PR só de docs: state.json + history.json + CHANGELOG + snapshot + draft do Manual
                    → publica o Manual se tirou draft
                    (migration nova: aplicar no Studio ANTES de rodar; o script confere o sha256)
                    Na /onda-enxuta é o mesmo script, com o lote da onda em --prs
@@ -124,6 +124,25 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo autor do PR depois do O
 6. **Dono do PRD (ADR 0061).** Todo PRD tem um assignee: quem fez o grilling (o `/to-prd` põe). Fatia sem claim conta como do dono do PRD; pegar fatia de PRD de outro sócio se combina antes com ele. Quem está puxando o quê aparece no painel local (`python3 tools/workflow-dashboard/serve.py`, aba Issues, agrupado por responsável).
 7. **Skills locais ficam em `.claude/skills/`** — não mexa sem confirmar comigo (Pedro). Mudanças aqui são "skills do time".
 
+## Como o código e o registro chegam à `main`
+
+A `main` é protegida por ruleset (ADR 0061, emenda de 02/10/2026): ninguém, admin inclusive, dá push direto nela, e todo PR precisa dos três jobs do CI verdes e da branch em dia com a base. Por isso o rabo (`fechar_onda.py`) entra sempre por PR, em três tempos:
+
+1. **Código.** O bump de versão vira um commit na branch do seu PR (na onda, numa branch `onda/<sessao>` com o lote, que vira um PR de entrega). O script espera o CI desse commit, põe o `APP_VERSION` no Coolify e mergeia pela API do GitHub, com squash.
+2. **Build e health** do que entrou.
+3. **Registro.** `history.json`, `state.json`, `CHANGELOG`, snapshot e draft do Manual sobem num **PR só de docs** que o próprio script abre e mergeia pela API depois do health. O CI desse PR pula os jobs pesados e fica verde em segundos, e o build que o Coolify dispara para ele é cancelado pelo script.
+
+Saída 5 do script: produção ok, mas o PR de registro não entrou. Mergeie o PR que ele imprime quando o CI dele ficar verde.
+
+O ruleset está versionado em `.github/rulesets/main.json`. Aplicar (admin, uma vez) e conferir:
+
+```bash
+gh api -X POST 'repos/{owner}/{repo}/rulesets' --input .github/rulesets/main.json
+gh api 'repos/{owner}/{repo}/rules/branches/main' --jq '.[] | {type, parameters}'
+```
+
+Mudou o JSON depois de aplicado? `gh api -X PUT 'repos/{owner}/{repo}/rulesets/<id>' --input .github/rulesets/main.json`, com o `<id>` de `gh api 'repos/{owner}/{repo}/rulesets'`.
+
 ## Notificações
 
 GitHub Mobile (app no celular) é o canal de notificação. Marca o repo como "Watching" pra receber:
@@ -146,7 +165,7 @@ Sem Discord, sem Slack.
 | `/pegar-issue` | Sem arg: lista a fila. Com `<N>`: claim + branch + spec |
 | `/tdd` | Red → green → refactor (testes a partir dos critérios de aceite) |
 | `/ship` | Commit → PR → 3 gates → para no PR verde e imprime o comando do rabo |
-| `fechar_onda.py --prs <N>` | O rabo único: merge, bump, APP_VERSION, um push, um build, health, registro (ADR 0061) |
+| `fechar_onda.py --prs <N>` | O rabo único: bump na branch do PR, APP_VERSION, merge pela API, um build, health, registro em PR só de docs (ADR 0061) |
 | `/deploy status` | Ver estado de produção (sem alterar) |
 | `/deploy rollback` | Reverte produção pro deploy anterior |
 | `/diagnose` | Investigação raiz de bug |

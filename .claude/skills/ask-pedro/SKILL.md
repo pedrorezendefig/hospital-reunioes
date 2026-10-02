@@ -18,7 +18,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 ## Modo AFK
 
 - `/montar-ondas-enxutas [--exceto #PRD] [--max-sessoes N]`: antes de abrir várias `/onda-enxuta`, monta o plano: inventário que presta contas de toda issue aberta, triagem rápida das `needs-triage` com decisão cravada na issue, pergunta ao humano as decisões de domínio pendentes (2 opções, recomendação na frente) e crava a resposta, abre a fatia de PRD reprovado na auditoria, agrupamento por arquivo tocado em sessões sem conflito interno, e um arquivo de prompt mais um comando de lançamento por sessão (sessão de fundo, zero MCP). Para cada PRD que fecha no plano, escreve também o prompt do `/divulgar` e diz quando colar (terminal próprio, nunca dentro da `/onda-enxuta`). Não executa nada.
-- `/onda-enxuta [#PRD | --all] [--paralelo N] [--sessao <nome>] [--onda N]`: esvazia a fila sozinho em ondas, uma sessão de fundo por onda (`scripts/lancar_sessao.sh`), mapa do terreno por PRD, implementador que morre no PR, corretor fresco, checkpoint humano de merge por lote (`claude attach` + `vai #a #b`), um push e um build por onda pelo `fechar_onda.py`; com `#PRD`, audita o PRD no fim (reopen se a verificação falhar). A review é dos agentes `hr-revisor` e `hr-revisor-seguranca`, disparados pelo orquestrador (ADRs 0022, 0029, 0035 e 0061). A `/onda` e a `/montar-ondas` originais foram aposentadas pela ADR 0061.
+- `/onda-enxuta [#PRD | --all] [--paralelo N] [--sessao <nome>] [--onda N]`: esvazia a fila sozinho em ondas, uma sessão de fundo por onda (`scripts/lancar_sessao.sh`), mapa do terreno por PRD, implementador que morre no PR, corretor fresco, checkpoint humano de merge por lote (`claude attach` + `vai #a #b`), um merge de código e um build por onda pelo `fechar_onda.py`; com `#PRD`, audita o PRD no fim (reopen se a verificação falhar). A review é dos agentes `hr-revisor` e `hr-revisor-seguranca`, disparados pelo orquestrador (ADRs 0022, 0029, 0035 e 0061). A `/onda` e a `/montar-ondas` originais foram aposentadas pela ADR 0061.
 
 ## On-ramps (como o trabalho entra)
 
@@ -47,7 +47,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 
 ## Invariantes (não re-litigar)
 
-- **Subir para prod é decisão humana** (merge = deploy em prod): OK explícito citando o PR#. O gate é a decisão, não a digitação: dado o OK, a sessão roda o rabo (`fechar_onda.py`), que faz merge, deploy e registro num push só, e só devolve `! <comando>` depois de ver a negativa de verdade. Cada sócio sobe o próprio PR (ADR 0061).
+- **Subir para prod é decisão humana** (merge = deploy em prod): OK explícito citando o PR#. O gate é a decisão, não a digitação: dado o OK, a sessão roda o rabo (`fechar_onda.py`), que faz o merge pela API (a `main` é protegida), o deploy e o registro num PR só de docs, e só devolve `! <comando>` depois de ver a negativa de verdade. Cada sócio sobe o próprio PR (ADR 0061).
 - ADRs: consuma só `status: accepted`; supersessão bidirecional travada pelo CI `lint-adr`.
 - Estado vive nas GitHub Issues + `docs/spec/deploy/*.json`; proibido criar docs paralelos de estado/processo.
 - Nada de travessão nem meia-risca em texto visível ao usuário (ADR 0013).
