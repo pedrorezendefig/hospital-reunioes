@@ -49,3 +49,20 @@ Fatos que pesaram:
 - `dev.md` e `issue-tracker.md` já foram emendados em prosa com as regras de gente (decisões 1, 4 e 7), que valem desde já. O que depende de código (decisões 2, 3, 5 e 6) vale quando a fatia correspondente entrar.
 - Promover alguém a colaborador `write` passa a significar: pode mergear e deployar o que fez, e precisa de Studio e Coolify.
 - `CONTEXT.md` não muda: é glossário do hospital, não do time.
+
+## Emenda de 02/10/2026: o rabo com a `main` protegida (issue #910)
+
+A decisão 3 deixou em aberto como o `fechar_onda.py`, que mergeava localmente e dava um push direto na `main` com o bookkeeping junto, convive com um ruleset que exige pull request. Havia duas saídas: (a) tudo entra por PR e o merge sai pela API do GitHub; (b) ruleset com bypass para um ator de deploy, e o script segue como estava.
+
+**Decisão: saída (a).** O bypass da (b) recria a dependência de uma pessoa, porque quem roda o rabo precisa ser o ator com bypass, e a forma sem pessoa (uma GitHub App própria) está fora do escopo do PRD #902. Com a (a), a regra vale para todos, admin inclusive, sem exceção. Rejeitado: (b), pelo mesmo motivo que a decisão 1 rejeitou "só o Pedro mergeia".
+
+Como fica:
+
+- **PR avulso.** O bump entra como commit na própria branch do PR. Se a `main` andou, ela vem antes, por merge, porque o ruleset exige a branch em dia com a base. O script espera o CI desse head ficar verde, põe o `APP_VERSION` no Coolify e mergeia pela API com squash, conferindo o `sha` do head. Squash porque é o único método que o repositório permite.
+- **Onda.** Os PRs do lote entram por merge local `--no-ff` numa branch `onda/<sessao>`, com o bump em cima, e o script abre um **PR de entrega** com `Closes` de cada issue do lote, mergeado pela API como o avulso. Continua um merge de código na `main` e um build por onda; os PRs do lote fecham com comentário apontando o PR de entrega.
+- **Registro.** `history.json`, `state.json`, `CHANGELOG`, snapshot e draft do Manual sobem **depois do health**, num PR só de docs que o script abre e mergeia pela API. O registro deixa de nascer com o resultado presumido e passa a gravar o que aconteceu.
+- **Segundo build.** O merge do registro é um push na `main`, e o webhook do Coolify rebuilda os apps sem olhar o caminho (issue #851). Enquanto o Coolify não filtra caminho, o script cancela o deploy do commit do registro, e só dele.
+- **CI que sempre reporta.** O `ci.yml` deixou de ter `paths-ignore` no `pull_request`: workflow pulado por filtro de caminho não reporta check, e o ruleset deixaria todo PR só de docs (o registro, ADR, skill) esperando para sempre. Um job `mudancas` decide se o PR mexe fora de `docs/`, `.claude/` e Markdown; os três jobs obrigatórios pulam por `if` (job pulado conta como verde) e rodam se o detector falhar.
+- **Ruleset versionado** em `.github/rulesets/main.json`: PR obrigatório com zero aprovações, os três jobs do `ci.yml` obrigatórios (vindos do GitHub Actions) e em dia com a base, force push e delete bloqueados, sem bypass. Aplicar e conferir é do admin, à mão, com os comandos do `docs/onboarding/dev.md`. O `tools/test_ruleset_main.py` amarra o nome de cada check ao job do `ci.yml`.
+
+Custo aceito: o commit de bump redispara o CI antes do merge (alguns minutos com o semáforo preso), e uma rodada que encontra a `main` andando no meio do CI para com código 2 e roda de novo, reaproveitando o bump que ficou na branch.
