@@ -637,15 +637,27 @@ def conferir_prs_fechados(raiz: Path, infos: list[dict], sessao: str) -> None:
 
 # --------------------------------------------------------------------- main
 
+def resolver_sessao(prs: list[int], sessao: str | None) -> tuple[str, bool]:
+    """Devolve (sessao, avulso). Sem `--sessao`, um PR so e um PR avulso (ADR 0061)
+    e a chave do semaforo e do worktree sai do numero dele."""
+    if sessao:
+        return sessao, False
+    if len(prs) == 1:
+        return f"pr-{prs[0]}", True
+    falhar("--sessao e obrigatorio com mais de um PR (onda); um PR so dispensa a opcao.", EXIT_PRECOND)
+    raise AssertionError("inalcancavel")
+
+
 def main() -> int:
     ap = argparse.ArgumentParser(description="Fecha uma onda: um push, um build.")
     ap.add_argument("--prs", nargs="+", type=int, required=True, help="PRs na ordem de merge")
-    ap.add_argument("--sessao", required=True, help="nome da sessao (chave do semaforo)")
+    ap.add_argument("--sessao", help="nome da sessao (chave do semaforo); sem ela, um PR so e um PR avulso (pr-<N>)")
     ap.add_argument("--dry-run", action="store_true")
     ap.add_argument("--sem-snapshot", action="store_true")
     ap.add_argument("--raiz", help="raiz do repositorio (default: git rev-parse)")
     args = ap.parse_args()
 
+    args.sessao, avulso = resolver_sessao(args.prs, args.sessao)
     if not re.fullmatch(r"[A-Za-z0-9._-]+", args.sessao):
         falhar("--sessao so aceita letras, numeros, ponto, hifen e underscore.", EXIT_PRECOND)
     raiz = Path(args.raiz).resolve() if args.raiz else Path(
