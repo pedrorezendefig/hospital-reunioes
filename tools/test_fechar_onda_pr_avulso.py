@@ -1,12 +1,17 @@
-"""O `fechar_onda.py` como rabo único de um PR avulso (issue #907, ADR 0061).
+"""O `fechar_onda.py` como rabo único de um PR avulso (issues #907 e #910, ADR 0061).
 
 O `/ship` passou a parar no PR verde, e quem faz merge, bump, `APP_VERSION`,
-push, build, health e registro de um PR só é o mesmo script da onda. Estes
-testes montam um repositório `git` de verdade em `tmp_path` (uma `main` de base,
-o PR em `refs/pull/<n>/head` num remoto nu, como no GitHub) e rodam o `main()`
-do script contra ele. Fica de fora só o que sai da máquina: o `gh` responde por
-um dublê, o `coolify` é um executável falso no PATH que anota cada chamada, e o
-build e o health devolvem verde sem rede.
+build, health e registro de um PR só é o mesmo script da onda. Estes testes
+montam um repositório `git` de verdade em `tmp_path` (uma `main` de base, o PR
+na branch `feature` e em `refs/pull/<n>/head` num remoto nu, como no GitHub) e
+rodam o `main()` do script contra ele.
+
+A `main` do remoto está sob o ruleset (issue #910): um hook `pre-receive` recusa
+todo push nela, como o GitHub recusa com `GH013`. Ela só anda pelo dublê do
+GitHub, que faz o squash pela API do jeito que o repositório permite: exige o
+`sha` do head, a branch em dia com a base e o CI verde, e apaga a branch depois.
+Fica de fora só o que sai da máquina: o `coolify` é um executável falso no PATH
+que anota cada chamada, e o build e o health devolvem verde sem rede.
 """
 
 from __future__ import annotations
@@ -115,17 +120,19 @@ class Cenario:
         git(repo, "commit", "-q", "-m", titulo)
         self.remoto = tmp_path / "remoto.git"
         git(tmp_path, "init", "-q", "--bare", "-b", "main", str(self.remoto))
-        git(repo, "push", "-q", str(self.remoto), "main", f"feature:refs/pull/{numero}/head")
+        git(repo, "push", "-q", str(self.remoto), "main", "feature",
+            f"feature:refs/pull/{numero}/head")
         self.clone = tmp_path / "clone"
         git(tmp_path, "clone", "-q", str(self.remoto), str(self.clone))
         self.base = self.main_remota()
+        self.head_do_pr = git(self.remoto, "rev-parse", "feature")
         self.pr = {
             "number": numero,
             "state": "OPEN",
             "mergeable": "MERGEABLE",
-            "mergeStateStatus": "CLEAN",
-            "statusCheckRollup": [{"name": "Backend", "conclusion": "SUCCESS"}],
             "headRefName": "feature",
+            "headRefOid": self.head_do_pr,
+            "isCrossRepository": False,
             "baseRefName": "main",
             "title": titulo,
             "files": [{"path": p} for p in arquivos],
@@ -134,10 +141,29 @@ class Cenario:
             "closingIssuesReferences": [{"number": issue}] if issue else [],
             "body": corpo,
         }
+        # PRs que o GitHub conhece: o do autor e os que o script abrir pela API
+        self.prs: dict[int, dict] = {numero: self.pr}
+        self.ci_vermelho: set[str] = set()  # heads em que o CI falha
+        self.merges: list[dict] = []
         self.gh_chamadas: list[list[str]] = []
         self.builds: list[str] = []
         self.healths: list[tuple[str, str | None]] = []
         self.semaforo: list[tuple[str, str]] = []
+        self.cancelamentos: list[str] = []
+        self.log_push_main = tmp_path / "push-na-main.log"
+        hook = self.remoto / "hooks" / "pre-receive"
+        hook.write_text(
+            "#!/bin/sh\n"
+            "while read velho novo ref; do\n"
+            '  if [ "$ref" = "refs/heads/main" ]; then\n'
+            f'    echo "$ref" >> {self.log_push_main}\n'
+            '    echo "GH013: Repository rule violations found for refs/heads/main." >&2\n'
+            "    exit 1\n"
+            "  fi\n"
+            "done\n",
+            encoding="utf-8",
+        )
+        hook.chmod(0o755)
         bin_falso = tmp_path / "bin"
         bin_falso.mkdir()
         self.log_coolify = tmp_path / "coolify.log"
@@ -163,6 +189,70 @@ class Cenario:
             return []
         return self.log_coolify.read_text(encoding="utf-8").splitlines()
 
+    def pushes_na_main(self) -> list[str]:
+        if not self.log_push_main.exists():
+            return []
+        return self.log_push_main.read_text(encoding="utf-8").splitlines()
+
+    def avancar_main(self, repo: Path, ref: str = "main") -> None:
+        """Outro PR entrou na main pela API: o lado do servidor não passa pelo hook."""
+        git(repo, "push", "-q", str(self.remoto), f"{ref}:refs/heads/entrou-por-outro-pr")
+        git(self.remoto, "update-ref", "refs/heads/main", "refs/heads/entrou-por-outro-pr")
+        git(self.remoto, "update-ref", "-d", "refs/heads/entrou-por-outro-pr")
+
+    # ------------------------------------------------------- dublê do GitHub
+
+    def _tip(self, branch: str) -> str | None:
+        proc = subprocess.run(["git", "rev-parse", "--verify", "-q", f"refs/heads/{branch}"],
+                              cwd=self.remoto, capture_output=True, text=True)
+        return proc.stdout.strip() or None
+
+    def _em_dia(self, head: str) -> bool:
+        return subprocess.run(["git", "merge-base", "--is-ancestor", "main", head],
+                              cwd=self.remoto).returncode == 0
+
+    def ver_pr(self, n: int, campos: list[str]) -> dict:
+        pr = dict(self.prs[n])
+        head = self._tip(pr["headRefName"]) or pr.get("headRefOid")
+        pr["headRefOid"] = head
+        pr["statusCheckRollup"] = [{"name": "Backend Lint, Format & Tests", "status": "COMPLETED",
+                                    "conclusion": "FAILURE" if head in self.ci_vermelho else "SUCCESS"}]
+        pr["mergeStateStatus"] = "CLEAN" if self._em_dia(head) else "BEHIND"
+        return {k: v for k, v in pr.items() if k in campos}
+
+    def abrir_pr(self, campos: dict) -> dict:
+        n = 100 + len(self.prs)
+        self.prs[n] = {"number": n, "state": "OPEN", "mergeable": "MERGEABLE",
+                       "headRefName": campos["head"], "baseRefName": campos["base"],
+                       "title": campos["title"], "body": campos["body"],
+                       "url": f"https://github.com/dono/repo/pull/{n}"}
+        return {"number": n, "html_url": self.prs[n]["url"]}
+
+    def mergear_pela_api(self, n: int, campos: dict) -> dict:
+        """PUT /pulls/N/merge como o GitHub com o ruleset: squash (o único método
+        que o repositório permite), recusa head que mudou, branch atrás da base e
+        CI vermelho, e apaga a branch do PR depois do merge."""
+        pr = self.prs[n]
+        head = self._tip(pr["headRefName"])
+        if campos.get("merge_method") != "squash":
+            raise RuntimeError("gh api -> 405: Merge commits are not allowed on this repository.")
+        if campos.get("sha") != head:
+            raise RuntimeError("gh api -> 409: Head branch was modified. Review and try the merge again.")
+        if not self._em_dia(head):
+            raise RuntimeError("gh api -> 405: Head branch is not up to date with the base branch.")
+        if head in self.ci_vermelho:
+            raise RuntimeError("gh api -> 405: Required status check is failing.")
+        antes = self.main_remota()
+        arvore = git(self.remoto, "rev-parse", f"{head}^{{tree}}")
+        novo = git(self.remoto, "commit-tree", arvore, "-p", antes, "-m", campos["commit_title"])
+        git(self.remoto, "update-ref", "refs/heads/main", novo, antes)
+        git(self.remoto, "update-ref", "-d", f"refs/heads/{pr['headRefName']}")
+        pr["state"] = "MERGED"
+        pr["headRefOid"] = head
+        self.merges.append({"pr": n, "head": head, "main": novo, "titulo": campos["commit_title"],
+                            "corpo": pr.get("body", ""), "branch": pr["headRefName"]})
+        return {"sha": novo, "merged": True}
+
 
 def carregar_fechar_onda():
     sys.path.insert(0, str(SCRIPTS))
@@ -184,10 +274,17 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
         c.gh_chamadas.append(list(args))
         if args[:2] == ["pr", "view"]:
             # como o gh de verdade: só os campos pedidos no --json
-            campos = args[args.index("--json") + 1].split(",")
-            return {k: v for k, v in c.pr.items() if k in campos}
+            return c.ver_pr(int(args[2]), args[args.index("--json") + 1].split(","))
         if args[:2] == ["issue", "view"]:
             return {"body": "## Pai\n\n`#902`, PRD da esteira.\n"}
+        if args[:3] in (["api", "-X", "POST"], ["api", "-X", "PUT"]):
+            campos = dict(a.split("=", 1) for a in args[5::2])
+            assert args[4::2] == ["-f"] * len(campos), args
+            if args[2] == "POST" and args[3] == "repos/{owner}/{repo}/pulls":
+                return c.abrir_pr(campos)
+            m = re.fullmatch(r"repos/\{owner\}/\{repo\}/pulls/(\d+)/merge", args[3])
+            if args[2] == "PUT" and m:
+                return c.mergear_pela_api(int(m.group(1)), campos)
         raise AssertionError(f"gh inesperado: {args}")
 
     run_real = fo.run
@@ -195,6 +292,8 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
     def run(cmd, *args, **kwargs):
         if cmd[0] == "gh":
             c.gh_chamadas.append(list(cmd[1:]))
+            if cmd[1:3] == ["pr", "close"]:
+                c.prs[int(cmd[3])]["state"] = "CLOSED"
             return subprocess.CompletedProcess(cmd, 0, "", "")
         return run_real(cmd, *args, **kwargs)
 
@@ -210,11 +309,16 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
         c.healths.append((service["id"], versao_esperada))
         return {"ok": True, "status": 200, "latency_ms": 5}
 
+    def cancelar_build_do_registro(servicos_cfg, sha):
+        c.cancelamentos.append(sha)
+        return []
+
     monkeypatch.setattr(fo, "gh_json", gh_json)
     monkeypatch.setattr(fo, "run", run)
     monkeypatch.setattr(fo, "semaforo", semaforo)
     monkeypatch.setattr(fo, "esperar_build", esperar_build)
     monkeypatch.setattr(fo, "checar_health", checar_health)
+    monkeypatch.setattr(fo, "cancelar_build_do_registro", cancelar_build_do_registro)
 
 
 def rodar_main(fo, monkeypatch, c: Cenario, *extra: str) -> int:
@@ -233,7 +337,7 @@ def pr_de_codigo(tmp_path: Path, **kw) -> Cenario:
 
 # ------------------------------------------------------------ PR avulso inteiro
 
-def test_um_pr_so_sem_sessao_faz_merge_bump_app_version_push_build_health_e_registro(
+def test_um_pr_so_sem_sessao_faz_merge_bump_app_version_build_health_e_registro(
     tmp_path, monkeypatch
 ):
     fo = carregar_fechar_onda()
@@ -242,13 +346,13 @@ def test_um_pr_so_sem_sessao_faz_merge_bump_app_version_push_build_health_e_regi
 
     assert rodar_main(fo, monkeypatch, c) == 0
 
-    # merge: o commit do PR está na main remota, num commit de merge com o número
-    assert git(c.remoto, "merge-base", "--is-ancestor", "refs/pull/7/head", "main") == ""
-    assuntos = git(c.remoto, "log", "--format=%s", f"{c.base}..main").splitlines()
-    assert any(a.endswith("(#7)") for a in assuntos), assuntos
+    # o código do PR chegou à main, num squash com o número do PR
+    codigo = c.merges[0]["main"]
+    assert git(c.remoto, "show", f"{codigo}:hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
+    assert git(c.remoto, "log", "-1", "--format=%s", codigo).endswith("(#7)")
     # bump: patch, pelo tipo do commit
     assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.10.1"
-    # APP_VERSION no Coolify, ANTES do push (a main remota ainda era a base)
+    # APP_VERSION no Coolify, ANTES do merge (a main remota ainda era a base)
     assert c.coolify() == [
         f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}"
     ]
@@ -257,10 +361,210 @@ def test_um_pr_so_sem_sessao_faz_merge_bump_app_version_push_build_health_e_regi
     assert ("backend", "0.10.1") in c.healths
     # semáforo pego e solto com a chave derivada do PR
     assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
-    # registro no mesmo push
+    # registro aponta o commit de código que foi para produção
     entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
     assert entrada["app_version"] == "0.10.1"
     assert entrada["prds"] == [902]
+    assert entrada["sha"] == codigo
+
+
+# ------------------------------------------------ main sob o ruleset (#910)
+
+def test_main_protegida_o_pr_entra_pela_api_com_o_bump_na_branch_dele(tmp_path, monkeypatch):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    # ninguém tentou empurrar na main: o ruleset recusaria
+    assert c.pushes_na_main() == []
+    # o primeiro merge é o do próprio PR, e o head mergeado já trazia o bump
+    entrega = c.merges[0]
+    assert entrega["pr"] == 7 and entrega["branch"] == "feature"
+    versao = git(c.remoto, "show", f"{entrega['head']}:hospital-reunioes/frontend/package.json")
+    assert json.loads(versao)["version"] == "0.10.1"
+    # o bump é um commit em cima do head do PR, não uma reescrita dele
+    assert git(c.remoto, "merge-base", "--is-ancestor", c.head_do_pr, entrega["head"]) == ""
+    assert git(c.remoto, "log", "-1", "--format=%s", entrega["head"]) == "chore(release): bump v0.10.1 (PR #7)"
+    # o PR fechou como mergeado, sem `gh pr close`
+    assert c.prs[7]["state"] == "MERGED"
+    assert [a for a in c.gh_chamadas if a[:2] == ["pr", "close"]] == []
+
+
+def test_registro_sobe_depois_do_health_num_pr_so_de_docs_e_o_build_dele_e_cancelado(
+    tmp_path, monkeypatch
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    healths_no_merge_do_registro = []
+    mergear = c.mergear_pela_api
+
+    def mergear_anotando(n, campos):
+        healths_no_merge_do_registro.append(list(c.healths))
+        return mergear(n, campos)
+
+    c.mergear_pela_api = mergear_anotando
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert [m["pr"] for m in c.merges] == [7, 101]
+    registro = c.merges[1]
+    assert registro["branch"].startswith("registro/"), registro["branch"]
+    # depois do health verde, não antes
+    assert healths_no_merge_do_registro[1] == [("backend", "0.10.1")]
+    # só docs: o CI pula os jobs pesados e o PR não espera build
+    mudados = git(c.remoto, "diff", "--name-only", c.merges[0]["main"], registro["main"]).splitlines()
+    assert mudados and all(m.startswith("docs/") for m in mudados), mudados
+    assert "docs/spec/deploy/history.json" in mudados
+    assert registro["titulo"].startswith("chore(deploy): registro do PR #7 (v0.10.1)"), registro["titulo"]
+    # o push do registro na main dispara o webhook do Coolify: o script cancela esse build
+    assert c.cancelamentos == [registro["main"]]
+    assert c.main_remota() == registro["main"]
+
+
+def test_pr_atras_da_main_recebe_a_main_antes_do_bump(tmp_path, monkeypatch):
+    """O ruleset exige a branch em dia com a base: a main andou depois do CI do
+    PR, e o script traz a main para a branch antes do bump."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    repo = tmp_path / "repo"
+    git(repo, "checkout", "-q", "main")
+    escrever(repo, "hospital-reunioes/backend/app/outro.py", "OUTRO = 1\n")
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "fix: outro PR que entrou antes")
+    c.avancar_main(repo)
+    main_antes = c.main_remota()
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    codigo = c.merges[0]["main"]
+    assert git(c.remoto, "rev-parse", f"{codigo}^") == main_antes
+    assert git(c.remoto, "show", f"{codigo}:hospital-reunioes/backend/app/outro.py") == "OUTRO = 1"
+    assert git(c.remoto, "show", f"{codigo}:hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
+
+
+def test_ci_vermelho_depois_do_bump_para_sem_merge_e_sem_app_version(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    ver = c.ver_pr
+
+    def ver_com_ci_vermelho_no_bump(n, campos):
+        info = ver(n, campos)
+        if info.get("headRefOid") and info["headRefOid"] != c.head_do_pr:
+            c.ci_vermelho.add(info["headRefOid"])
+            info = ver(n, campos)
+        return info
+
+    c.ver_pr = ver_com_ci_vermelho_no_bump
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
+
+    assert c.merges == [] and c.main_remota() == c.base
+    assert c.coolify() == []
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+    assert "#7" in capsys.readouterr().out
+
+
+def test_rodada_seguinte_reaproveita_o_bump_que_ficou_na_branch_sem_pular_versao(
+    tmp_path, monkeypatch
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    ver = c.ver_pr
+    vermelho = {"ligado": True}
+
+    def ver_com_ci_vermelho_na_primeira(n, campos):
+        info = ver(n, campos)
+        if vermelho["ligado"] and info.get("headRefOid") and info["headRefOid"] != c.head_do_pr:
+            c.ci_vermelho.add(info["headRefOid"])
+            info = ver(n, campos)
+        return info
+
+    c.ver_pr = ver_com_ci_vermelho_na_primeira
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
+    head_com_bump = git(c.remoto, "rev-parse", "feature")
+    # o CI do bump ficou verde depois (flaky corrigido); o PR segue com o bump
+    vermelho["ligado"] = False
+    c.ci_vermelho.clear()
+    c.pr["headRefOid"] = head_com_bump
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.10.1"
+    assert c.merges[0]["head"] == head_com_bump, "nenhum segundo commit de bump"
+
+
+def test_onda_entra_por_um_pr_de_entrega_que_fecha_as_issues_do_lote(tmp_path, monkeypatch):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--sessao", "onda-x") == 0
+
+    assert c.pushes_na_main() == []
+    entrega = c.merges[0]
+    assert entrega["branch"] == "onda/onda-x" and entrega["pr"] != 7
+    assert re.search(r"^Closes #5$", entrega["corpo"], re.M), entrega["corpo"]
+    # o PR do lote fecha apontando o PR de entrega
+    fechar = [a for a in c.gh_chamadas if a[:3] == ["pr", "close", "7"]]
+    assert len(fechar) == 1 and f"#{entrega['pr']}" in " ".join(fechar[0]), fechar
+    assert git(c.remoto, "show", f"{entrega['main']}:hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
+    assert c.builds == ["backend"]
+
+
+def test_limpeza_remove_o_worktree_de_agente_da_branch_entregue_por_squash(tmp_path, monkeypatch):
+    """Com squash, a branch do PR não vira ancestral da main e o `--merged` não a
+    acha; o worktree do agente nessa branch, no head que entrou, sai assim mesmo."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    git(c.clone, "fetch", "-q", "origin", "refs/pull/7/head:feature")
+    agente = c.clone / ".claude" / "worktrees" / "agente"
+    git(c.clone, "worktree", "add", "-q", str(agente), "feature")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert not agente.exists()
+    assert "feature" not in git(c.clone, "branch", "--list", "feature")
+
+
+def test_cancelar_build_do_registro_so_cancela_o_deploy_do_commit_do_registro(monkeypatch):
+    fo = carregar_fechar_onda()
+    sha = "a" * 40
+    listas = {
+        "uuid-backend": [
+            {"deployment_uuid": "d-codigo", "commit": "b" * 40, "status": "in_progress"},
+            {"deployment_uuid": "d-registro", "commit": sha, "status": "queued"},
+        ],
+        "uuid-frontend": [{"deployment_uuid": "d-pronto", "commit": sha, "status": "finished"}],
+    }
+    chamadas = []
+    monkeypatch.setattr(fo, "coolify_json", lambda args, timeout=120: listas[args[3]])
+    monkeypatch.setattr(fo, "run", lambda cmd, **kw: chamadas.append(cmd)
+                        or subprocess.CompletedProcess(cmd, 0, "", ""))
+    servicos = {s["id"]: s for s in PROJECT["services"]}
+    servicos["supabase"] = {"id": "supabase", "type": "supabase"}
+
+    assert fo.cancelar_build_do_registro(servicos, sha) == ["backend"]
+    assert chamadas == [["coolify", "deploy", "cancel", "d-registro", "--force"]]
+
+
+def test_cancelar_build_do_registro_sem_deploy_na_janela_nao_cancela_nada(monkeypatch):
+    fo = carregar_fechar_onda()
+    chamadas = []
+    monkeypatch.setattr(fo, "REGISTRO_JANELA_S", 0)
+    monkeypatch.setattr(fo, "coolify_json", lambda args, timeout=120: [])
+    monkeypatch.setattr(fo, "run", lambda cmd, **kw: chamadas.append(cmd))
+
+    assert fo.cancelar_build_do_registro({s["id"]: s for s in PROJECT["services"]}, "a" * 40) == []
+    assert chamadas == []
 
 
 def sem_a_palavra_onda(texto: str) -> bool:
@@ -415,7 +719,7 @@ def test_migration_que_a_main_ja_tem_por_squash_nao_pede_hash(tmp_path, monkeypa
     escrever(repo, f"{MIGRATIONS}/112_triagem.sql", SQL_DO_ARQUIVO)
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "squash do PR de baixo")
-    git(repo, "push", "-q", str(c.remoto), "main")
+    c.avancar_main(repo)
     preparar(fo, monkeypatch, c)
 
     assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
