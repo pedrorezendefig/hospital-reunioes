@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-02T18:30:33-03:00",
+      "sha": "2435b22f",
+      "app_version": "0.158.1",
+      "subject": "Onda pr-918: Aposentar /onda e /montar-ondas e redirecionar os ponteiros para a enxuta",
+      "raw_subject": "chore(deploy): registro da onda pr-918 (#918)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        902
+      ],
+      "result": "healthy",
+      "duration_seconds": 231,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta pr-918: PRs #918. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-10-02T18:26:38-03:00",
       "sha": "13cb8b3e",
       "app_version": "0.158.0",
@@ -1523,35 +1555,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Issue #678, fatia do PRD #673 (ADR 0054). Sem migration. PENDENTE: GITHUB_WEBHOOK_SECRET nao existe no Coolify, entao a rota responde 503 e a integracao esta dormente ate o passo humano. Duas reviews independentes (codigo e seguranca) acharam 4 must-fix na rodada 1, todos reais. Os dois revisores acharam o MESMO bug de forma independente e cada um reproduziu um 500: header X-Hub-Signature-256 com byte nao ASCII fazia hmac.compare_digest levantar TypeError em vez de devolver False, virando 500 em vez de 401, e nesse caminho a linha de log da recusa nunca era alcancada. Os outros tres: rota publica sem teto de taxa lendo ate 100 MB para a RAM antes do HMAC, com replay de entrega capturada queimando a cota da API do GitHub (que e uma so para a integracao inteira); rota async chamando I/O sincrono de ate 20s no unico event loop do processo, o que derrubava o /api/health e faria o Traefik tirar o backend do ar; e zero testes sobre o CORPO da resposta, que e justamente o smoke do passo humano, com mutante vivo fixando sincronizada=true inclusive no except que engole a falha. Corrigidos com comparacao em bytes, 120/minute por IP mais teto de Content-Length, run_in_threadpool com compare-and-swap no UPDATE da Etapa (o threadpool abria a corrida que o bloqueio escondia), e falhou=true no corpo. 40 mutantes na implementacao e 3 no detector, todos mortos. Rebase sobre a #676 revelou acoplamento real: o o_que_muda so era gravado pela porta de vincular, e sem mover para o mudanca_da_foto compartilhado o webhook atualizaria a Etapa deixando congelado o texto que o diretor le."
-    },
-    {
-      "at": "2026-09-10T16:47:56-03:00",
-      "sha": "c436fc8",
-      "app_version": "0.125.0",
-      "subject": "Secao O que muda no card e no Copiar para IA",
-      "raw_subject": "feat(tecnologia): secao O que muda no card e no Copiar para IA (#686)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 (issue #676, PRD #673). Migration 103 ja aplicada na onda 1. Review de seguranca pegou forja da cerca do Copiar para IA: corpo de issue publica podia injetar conversa fabricada na coluna zero; corrigido com indent do bloco da raiz. Decisao do diretor: /to-prd e /to-issues passam a proibir numero de issue no bloco Para o diretor."
     }
   ]
 }

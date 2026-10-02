@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.158.1 - 2026-10-02 18:30 - Onda pr-918: Aposentar /onda e /montar-ondas e redirecionar os ponteiros para a enxuta
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `2435b22`
+- PRs: [#918](https://github.com/pedrorezendefig/hospital-reunioes/pull/918)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (231s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/2435b22
+
 ## v0.158.0 - 2026-10-02 18:26 - Onda onda-c: O Dossiê avisa quando o relato é sobre outra pessoa sem o nome do paciente; O paciente viaja para a área no email, na tela do responsável e no reenvio, com a guarda do sigilo
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `13cb8b3`
