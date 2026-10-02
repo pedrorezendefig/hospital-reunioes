@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-02T19:20:51-03:00",
+      "sha": "f63e3d8f",
+      "app_version": "0.158.5",
+      "subject": "PR #923, issue #909: Um pipeline só no /ask-pedro, CLAUDE.md, dev.md e README do painel",
+      "raw_subject": "chore(deploy): registro do PR avulso (#923)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        902
+      ],
+      "result": "healthy",
+      "duration_seconds": 5,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #923, issue #909. Um push, um build. Registro no commit seguinte ao sha."
+    },
+    {
       "at": "2026-10-02T19:00:26-03:00",
       "sha": "76e0aec2",
       "app_version": "0.158.4",
@@ -1536,35 +1568,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda AFK com duas issues em paralelo, #694 (PR #697) e #691 (PR #698), nenhuma criou migration: a #694 so mexe em nivel e frase de log e a #691 so acrescenta contagem de bytes na leitura do webhook. A 103 segue sendo a ultima. O merge do #697 disparou um build intermediario (3a446c0, v0.128.2) que terminou antes do #698 comecar, entao nao houve build concorrente. Os dois PRs bumparam para 0.128.1 e a main ja estava em 0.128.1 pelo #699 de outra sessao: o rebase do #697 DESCARTOU o commit de bump (patch contents already upstream), o bump fantasma que o playbook preve. Re-bumpados a mao para 0.128.2 e 0.128.3. Revisao independente pegou 1 must-fix no #698: nenhum teste entregava mais de um pedaco util abaixo do teto, entao o mutante acumulado[:0] = pedaco (corpo montado ao contrario) passava verde e teria virado 401 em toda entrega grande do GitHub. Corrigido na rodada 2, so em teste, com os 12 mutantes mortos."
-    },
-    {
-      "at": "2026-09-11T12:20:00-03:00",
-      "sha": "d38aae9",
-      "app_version": "0.128.1",
-      "subject": "a guarda de caso apagado vira explicita nas sete portas de escrita que ainda aceitavam mexer num caso apagado",
-      "raw_subject": "fix(ouvidoria): a guarda de caso apagado vira explícita nas sete portas que sobraram (#699)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 230,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda AFK, issue #669. Escopo cravado na triagem: sete guardas (devolver e prorrogacao do portal, cobrar-setor, DELETE .../arquivo, devolucoes, validar, decidir prorrogacao). Arquivar caso apagado continua LIVRE por decisao de produto, com teste travando a decisao. Desvio do plano aceito nos dois gates: um terceiro select (_carregar_para_o_arquivo) precisou ser ampliado, senao a guarda do desarquivar nasceria lendo None. Nice-to-have registrado e nao corrigido: dois testes de tela sao decorativos (o stub devolve a frase que nunca teve a palavra procurada); a prova real esta no backend. Achado fora de escopo para issue nova: o token do portal do setor nao e invalidado pela Retencao, entao o GET do caso segue legivel enquanto o apagamento esta pendente."
     }
   ]
 }

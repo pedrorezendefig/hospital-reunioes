@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.158.5 - 2026-10-02 19:20 - PR #923, issue #909: Um pipeline só no /ask-pedro, CLAUDE.md, dev.md e README do painel
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `f63e3d8`
+- PRs: [#923](https://github.com/pedrorezendefig/hospital-reunioes/pull/923)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f63e3d8
+
 ## v0.158.4 - 2026-10-02 19:00 - PR #922, issue #921: Nível 2 confere claude --version >= 2.1.280 para a /onda-enxuta
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `76e0aec`
