@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.157.2 - 2026-10-02 18:08 - Onda onda-b: PRD nasce com dono e o /pegar-issue avisa fatia de PRD alheio; Confere identidade do git, CLI do Coolify e acesso ao Studio; Coletor e módulo puro do agrupamento por responsável
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `53bacf0`
+- PRs: [#912](https://github.com/pedrorezendefig/hospital-reunioes/pull/912), [#913](https://github.com/pedrorezendefig/hospital-reunioes/pull/913), [#914](https://github.com/pedrorezendefig/hospital-reunioes/pull/914)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (10s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/53bacf0
+
 ## v0.157.1 - 2026-10-02 17:55 - Onda onda-a: Guarda de migration com número repetido no CI e no fechar_onda.py
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `89ccaaf`
