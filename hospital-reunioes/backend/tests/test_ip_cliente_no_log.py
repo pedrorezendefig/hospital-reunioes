@@ -396,6 +396,11 @@ SEM_ANONIMATO_A_PROTEGER = {
     # infraestrutura deles, provada pelo HMAC, e não uma pessoa. Não há
     # anonimato de manifestante a proteger no IP de origem.
     "POST /api/webhooks/github",
+    # Callback servidor a servidor do Resend Inbound (issue #648, ADR 0051),
+    # provado pela assinatura svix. Quem chega aqui é a infraestrutura do
+    # Resend, e não a pessoa que escreveu o e-mail: o IP de origem não é o de
+    # manifestante nenhum, então não há anonimato a proteger nele.
+    "POST /api/webhooks/resend",
     # As rotas da Ana pedem `X-API-Key` (`require_ana_api_key`), que é
     # credencial de máquina; o schema não as marca porque a checagem é de header
     # e não um esquema de segurança declarado. Não há visitante anônimo aqui.

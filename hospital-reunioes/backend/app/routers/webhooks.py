@@ -1,9 +1,14 @@
+import base64
+import binascii
 import hashlib
 import hmac
 import json
 import logging
+import time
 from datetime import UTC, datetime
 
+import anyio
+import anyio.to_thread
 from fastapi import APIRouter, Depends, HTTPException, Request
 from starlette.concurrency import run_in_threadpool
 
@@ -571,3 +576,143 @@ async def webhook_github(
         return {"recebido": True, "sincronizada": False, "falhou": True}
 
     return {"recebido": True, "sincronizada": mudou}
+
+
+# ─── Webhook do Resend: e-mail recebido em ouvidoria@ (issue #648, ADR 0051) ──
+
+# O único evento que a Triagem de e-mail trata. Os outros eventos do Resend
+# (entrega, bounce, abertura) são do e-mail que o app ENVIA e não entram aqui.
+EVENTO_EMAIL_RECEBIDO = "email.received"
+
+# Janela do carimbo de tempo da entrega, a mesma do svix: entrega assinada mais
+# velha que isso é reprodução de uma entrega capturada, e não o Resend.
+TOLERANCIA_DO_CARIMBO_SEGUNDOS = 5 * 60
+
+# O evento do Resend traz só metadados (o corpo é buscado depois, pela API), e
+# cabe folgado em 1 MB. O teto existe pelo mesmo motivo do webhook do GitHub: a
+# assinatura precisa dos bytes crus, e eles vão para a memória antes de qualquer
+# prova de origem.
+TETO_DO_CORPO_DO_WEBHOOK_RESEND = 1024 * 1024
+
+# Folgado como o do GitHub: o Resend reentrega o que falhou, mas um pico de
+# e-mail (uma lista que responde a todos) não pode virar 429 e atraso na
+# triagem. O teto é para quem martela a porta sem assinatura.
+LIMITE_DO_WEBHOOK_RESEND = "120/minute"
+
+MOTIVO_EMAIL_INCOMPLETO = "E-mail gravado incompleto; reentregue o evento."
+
+# A gravação do e-mail recebido roda numa thread, e com limitador PRÓPRIO, fora
+# do pool padrão do anyio (revisão de segurança do PR #899). O pool padrão, de
+# 40 vagas, é o mesmo que resolve as dependências síncronas de quase toda rota
+# (`get_supabase_client`): uma rajada de e-mails lentos de propósito (leitura no
+# Resend, download de cada anexo, PostgREST) seguraria as 40 e pararia o app. Aqui
+# no máximo duas gravações correm juntas; a entrega que chega com as duas
+# ocupadas espera a vez no event loop, sem ocupar thread nenhuma.
+GRAVACOES_DE_EMAIL_SIMULTANEAS = 2
+LIMITADOR_DA_TRIAGEM_DE_EMAIL = anyio.CapacityLimiter(GRAVACOES_DE_EMAIL_SIMULTANEAS)
+
+
+def _chave_do_segredo_do_resend(segredo: str) -> bytes | None:
+    """A chave HMAC do segredo `whsec_<base64>` do Resend (svix). None quando o
+    segredo não decodifica: segredo que não serve é o mesmo que segredo
+    nenhum, e a porta fica fechada."""
+    try:
+        return base64.b64decode(segredo.strip().removeprefix("whsec_"), validate=True) or None
+    except (binascii.Error, ValueError):
+        return None
+
+
+def _assinatura_do_resend_confere(corpo: bytes, cabecalhos, chave: bytes, agora: float) -> bool:
+    """Se a entrega traz a assinatura svix do Resend sobre o CORPO CRU.
+
+    O conteúdo assinado é `{svix-id}.{svix-timestamp}.{corpo}`, com HMAC
+    SHA-256 da chave e o resultado em base64; o cabeçalho `svix-signature` traz
+    uma ou mais assinaturas `v1,<base64>` separadas por espaço (a rotação de
+    segredo manda as duas). O carimbo de tempo entra na conta e tem janela:
+    sem ela, uma entrega capturada valeria para sempre.
+
+    Comparação em BYTES e com `compare_digest`, pelo mesmo motivo do webhook do
+    GitHub: `compare_digest` com `str` fora de ASCII levanta em vez de recusar,
+    e a comparação ingênua conta ao atacante quantos bytes ele já acertou."""
+    msg_id = cabecalhos.get("svix-id") or ""
+    carimbo = cabecalhos.get("svix-timestamp") or ""
+    assinaturas = cabecalhos.get("svix-signature") or ""
+    if not msg_id or not carimbo.isascii() or not carimbo.isdigit() or not assinaturas:
+        return False
+    if abs(agora - int(carimbo)) > TOLERANCIA_DO_CARIMBO_SEGUNDOS:
+        return False
+    assinado = msg_id.encode("utf-8", "surrogateescape") + b"." + carimbo.encode("ascii") + b"." + corpo
+    esperada = base64.b64encode(hmac.new(chave, assinado, hashlib.sha256).digest())
+    for candidata in assinaturas.split(" "):
+        versao, _, valor = candidata.partition(",")
+        if versao == "v1" and hmac.compare_digest(esperada, valor.strip().encode("utf-8", "surrogateescape")):
+            return True
+    return False
+
+
+@router.post("/resend")
+@limiter.limit(LIMITE_DO_WEBHOOK_RESEND)
+async def webhook_resend(
+    request: Request,
+    supabase=Depends(get_supabase_client),
+):
+    """O e-mail que chegou em ouvidoria@ entra na Triagem de e-mail (ADR 0051).
+
+    Cadastro no Resend: o domínio de recebimento verificado, um webhook com a URL
+    desta rota e o evento `email.received`, e o segredo de assinatura dele no
+    `RESEND_WEBHOOK_SECRET` do ambiente. Sem o segredo a rota responde 503 e
+    não grava nada: aceitar sem conferir seria deixar qualquer um pôr e-mail
+    falso na triagem.
+
+    A ordem das guardas é a do webhook do GitHub: segredo, tamanho, assinatura,
+    e só então o conteúdo. Depois dela, o e-mail é gravado com o que veio da
+    API do Resend, no ato. Item completo ou repetido responde 200. Item que
+    ficou incompleto (corpo ou anexo que não veio) responde 503 de propósito:
+    é o não-2xx que faz o Resend reentregar com espera crescente, e a
+    reentrega completa o item em vez de duplicar.
+
+    A gravação sai do event loop: ela faz I/O síncrono no Resend (o corpo e o
+    download de cada anexo) e no PostgREST, e o container sobe com um worker só.
+    E sai para um limitador próprio, de duas vagas, e não para o pool padrão,
+    que as outras rotas usam (`LIMITADOR_DA_TRIAGEM_DE_EMAIL`).
+    """
+    from app.services import ouvidoria_triagem_email
+
+    segredo = settings.resend_webhook_secret
+    chave = _chave_do_segredo_do_resend(segredo) if segredo else None
+    if chave is None:
+        logger.error("[Resend webhook] RESEND_WEBHOOK_SECRET ausente ou ilegível; entrega recusada.")
+        raise HTTPException(status_code=503, detail=MOTIVO_WEBHOOK_INDISPONIVEL)
+
+    anunciado = request.headers.get("content-length") or ""
+    if anunciado.isdigit() and int(anunciado) > TETO_DO_CORPO_DO_WEBHOOK_RESEND:
+        raise HTTPException(status_code=413, detail=MOTIVO_CORPO_GRANDE_DEMAIS)
+    acumulado = bytearray()
+    async for pedaco in request.stream():
+        acumulado.extend(pedaco)
+        if len(acumulado) > TETO_DO_CORPO_DO_WEBHOOK_RESEND:
+            raise HTTPException(status_code=413, detail=MOTIVO_CORPO_GRANDE_DEMAIS)
+    corpo = bytes(acumulado)
+
+    if not _assinatura_do_resend_confere(corpo, request.headers, chave, time.time()):
+        logger.warning("[Resend webhook] Assinatura inválida: entrega recusada.")
+        raise HTTPException(status_code=401, detail=MOTIVO_ASSINATURA_INVALIDA)
+
+    try:
+        payload = json.loads(corpo)
+    except ValueError:
+        raise HTTPException(status_code=400, detail="Payload JSON inválido")
+
+    if not isinstance(payload, dict) or payload.get("type") != EVENTO_EMAIL_RECEBIDO:
+        return {"ignorado": "evento"}
+    dados = payload.get("data")
+    if not isinstance(dados, dict) or not isinstance(dados.get("email_id"), str) or not dados["email_id"].strip():
+        logger.warning("[Resend webhook] Evento 'email.received' sem email_id utilizável; ignorado.")
+        return {"ignorado": "email"}
+
+    recebimento = await anyio.to_thread.run_sync(
+        ouvidoria_triagem_email.receber_email, supabase, dados, limiter=LIMITADOR_DA_TRIAGEM_DE_EMAIL
+    )
+    if recebimento.incompleto and recebimento.desfecho != ouvidoria_triagem_email.DUPLICADO:
+        raise HTTPException(status_code=503, detail=MOTIVO_EMAIL_INCOMPLETO)
+    return {"recebido": True, "desfecho": recebimento.desfecho}
