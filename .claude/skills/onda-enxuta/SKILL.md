@@ -7,7 +7,7 @@ description: Executor AFK da fila de issues em ondas: sessão de fundo por onda,
 
 É a onda do pipeline (ADRs 0022, 0029, 0035 e 0061): esvazia uma fila de issues em ondas, para no seu OK de merge por lote, um deploy por onda, auditoria do PRD no fim. Muda **a forma do loop**, não os gates. Nasceu da medição de três ondas de setembro de 2026 (1,05 bilhão de tokens para 11 issues, 94% releitura de contexto) e das decisões em [references/decisoes.md](references/decisoes.md). Tudo o que ela precisa vive em `.claude/skills/onda-enxuta/` e `.claude/agents/hr-*.md`. A `/onda` e a `/montar-ondas` originais foram aposentadas pela ADR 0061.
 
-> **Invariantes herdados, sem exceção:** subir para produção é decisão humana por onda, citando os PR#. PR verde = CI verde + spec×diff + veredito limpo do revisor independente. Baixa em 3 tentativas. A fatia de manual para no draft do vídeo. Nada de doc de estado no repositório: o estado vive no GitHub, e o custo em `~/.claude/onda-enxuta/medicoes/`, fora do repositório.
+> **Invariantes herdados, sem exceção:** subir para produção é decisão humana por onda, citando os PR#. PR verde = CI verde + spec×diff + veredito limpo do revisor independente. Baixa em 3 tentativas. Fatia de manual para no draft do vídeo. Nada de doc de estado no repositório: o estado vive no GitHub, e o custo em `~/.claude/onda-enxuta/medicoes/`, fora do repositório.
 
 ## Sintaxe
 

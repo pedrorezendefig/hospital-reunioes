@@ -156,6 +156,7 @@ def test_o_prd_do_deploy_e_campo_do_history_no_lugar_certo():
 
 def test_o_comentario_da_fatia_de_manual_nao_para_a_onda():
     """`revisor-comentou` é falso positivo quando o próprio agente comenta."""
-    linha = next(li for li in linhas_de_manual("onda-enxuta") if "Fatia de manual" in li)
-    assert "<!-- automacao -->" in linha
-    assert "draft" in linha, "o checkpoint cita o draft do vídeo a aprovar"
+    linhas = [li for li in linhas_de_manual("onda-enxuta") if "Fatia de manual" in li]
+    assert any("<!-- automacao -->" in li and "draft" in li for li in linhas), (
+        "o checkpoint cita o draft do vídeo a aprovar e o carimbo do comentário"
+    )
