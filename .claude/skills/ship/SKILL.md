@@ -326,7 +326,7 @@ git rev-parse "$TARGET_BRANCH" >/dev/null || { echo "ref inválida"; exit 1; }
 
 Dispara um subagent **independente** (Task/general-purpose) com:
 
-- O ponto fixo, sem perguntar (não travar a `/onda`): `git diff $TARGET_BRANCH...HEAD` (três pontos, merge-base) + `git log $TARGET_BRANCH..HEAD --oneline`.
+- O ponto fixo, sem perguntar (não travar a `/onda-enxuta`): `git diff $TARGET_BRANCH...HEAD` (três pontos, merge-base) + `git log $TARGET_BRANCH..HEAD --oneline`.
 - O corpo da issue já carregado no Passo 3 (O que construir + Critérios de aceite).
 - O brief: "Reporte: (a) requisitos que a issue pediu e estão **faltando ou parciais** no diff; (b) comportamento no diff que **não foi pedido** (scope creep); (c) requisitos que parecem implementados mas cuja implementação **tem cara de errado**. Cite a linha da spec em cada achado. Menos de 400 palavras."
 
@@ -479,7 +479,7 @@ A `/deploy ship` é responsável por:
 Se o ciclo terminou deixando ações que **só o humano pode fazer** (import de dado na virada, rotação de credencial, ato em sistema externo, validação manual), registrá-las antes do resumo final:
 
 - **1 issue por pendência** (ou 1 issue com checklist quando os passos são um fluxo único), com o label **`ready-for-human`**.
-- Vincular ao PRD **pelo corpo** ("Pai: #N"), **nunca como sub-issue nativa**: a Action de higiene só auto-fecha o PRD quando todas as sub-issues fecham, e uma pendência humana aberta travaria esse fechamento (e a auditoria do `/onda`, ADR 0029).
+- Vincular ao PRD **pelo corpo** ("Pai: #N"), **nunca como sub-issue nativa**: a Action de higiene só auto-fecha o PRD quando todas as sub-issues fecham, e uma pendência humana aberta travaria esse fechamento (e a auditoria da `/onda-enxuta`, ADR 0029).
 - Corpo em pt-BR com: o que fazer (comandos prontos quando houver), por que ficou pendente e links de rastreio (PR, deploy, ADR).
 - Nunca duplicar: se a pendência já tem issue aberta, comentar nela em vez de criar outra.
 

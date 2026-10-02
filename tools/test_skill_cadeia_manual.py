@@ -1,6 +1,6 @@
 """A cadeia de skills combina com o Manual que existe de verdade (issue #735).
 
-O `/to-prd`, o `/to-issues`, a `/onda` e o `/deploy` passaram a falar do Manual,
+O `/to-prd`, o `/to-issues`, a `/onda-enxuta` e o `/deploy` passaram a falar do Manual,
 e nenhum deles executa nada aqui: são instruções que um agente vai seguir num
 terminal, meses depois. Seção renomeada, modo que não existe, script de `tools/`
 com outro nome: tudo isso só apareceria lá, no meio de um deploy. Estes testes
@@ -22,7 +22,7 @@ SKILLS = RAIZ / ".claude" / "skills"
 TETO_DA_DESCRICAO = 200
 
 # As skills que a #735 fez conhecerem o Manual.
-CADEIA = ["to-prd", "to-issues", "onda", "deploy", "setup-maquina", "ask-pedro"]
+CADEIA = ["to-prd", "to-issues", "onda-enxuta", "deploy", "setup-maquina", "ask-pedro"]
 
 # O nome da seção do PRD é contrato entre três skills: o `/to-prd` escreve, o
 # `/to-issues` decide se cria a Fatia de manual e a `/manual` lê para saber que
@@ -156,6 +156,6 @@ def test_o_prd_do_deploy_e_campo_do_history_no_lugar_certo():
 
 def test_o_comentario_da_fatia_de_manual_nao_para_a_onda():
     """`revisor-comentou` é falso positivo quando o próprio agente comenta."""
-    linha = next(li for li in linhas_de_manual("onda") if "Fatia de manual" in li)
+    linha = next(li for li in linhas_de_manual("onda-enxuta") if "Fatia de manual" in li)
     assert "<!-- automacao -->" in linha
     assert "draft" in linha, "o checkpoint cita o draft do vídeo a aprovar"
