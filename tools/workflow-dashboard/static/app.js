@@ -9,10 +9,9 @@ import { renderArea, wireArea } from './areas.js';
 const S = {
   data: null,
   tab: 'plano',
-  fIssues: { state: 'all', label: '', q: '', agrupar: true },
+  fIssues: { state: 'all', label: '', q: '', resp: '' },
   expIss: new Set(),
   expPrd: new Map(),
-  respFechado: new Set(),
   expDep: new Set(),
   expAdr: new Set(),
   comments: {},
@@ -385,10 +384,19 @@ function leadAvg(iss) {
   return closed.reduce((a, i) => a + (new Date(i.closed_at) - new Date(i.created_at)), 0) / closed.length;
 }
 
+/* Responsável = quem está designado (assignee). Um só por vez no filtro;
+   SEM_RESP filtra as issues sem ninguém designado. */
+const SEM_RESP = '(sem)';
+
+function doResponsavel(i, resp) {
+  return resp === SEM_RESP ? i.assignees.length === 0 : i.assignees.includes(resp);
+}
+
 function matchIssue(i) {
   const f = S.fIssues;
   if (f.state !== 'all' && i.state !== f.state) return false;
   if (f.label && !i.labels.includes(f.label)) return false;
+  if (f.resp && !doResponsavel(i, f.resp)) return false;
   if (f.q) {
     const q = f.q.toLowerCase();
     if (!(`#${i.number} ${i.title}`.toLowerCase().includes(q))) return false;
@@ -465,65 +473,7 @@ function issueCard(i, idx, prd = false, extra = '') {
   </article>`;
 }
 
-/* Aba Issues agrupada por responsável (#908). Grupos, ordem e seção vêm prontos
-   do módulo puro responsaveis.py em S.data.responsaveis; aqui só filtra e desenha. */
-const CI_PR = {
-  sucesso: ['b-green', 'CI ok'],
-  falha: ['b-red', 'CI falhou'],
-  pendente: ['b-amber', 'CI rodando'],
-};
-const MERGE_PR = {
-  mergeavel: ['b-green', 'mergeável'],
-  conflito: ['b-red', 'conflito'],
-  desconhecido: ['b-ghost', 'merge a conferir'],
-};
-
-function respItemHtml(it) {
-  const badge = ([cls, txt]) => `<span class="badge ${cls}">${txt}</span>`;
-  if (it.pr) {
-    const p = it.pr;
-    const d = p.dias_parado;
-    const espera = d == null ? '' : `<span>${d === 0 ? 'atualizado hoje' : `parado há ${d} dia${d === 1 ? '' : 's'}`}</span>`;
-    return `<div class="resp-linha">
-      <a href="${esc(p.url)}" target="_blank" rel="noopener">PR #${p.number}</a>
-      ${badge(CI_PR[p.ci] || ['b-ghost', 'sem CI'])}
-      ${badge(MERGE_PR[p.merge] || MERGE_PR.desconhecido)}
-      ${espera}
-    </div>`;
-  }
-  if (it.secao === 'fechada') {
-    return `<div class="resp-linha">${it.versao ? badge(['b-green', `subiu na v${esc(it.versao)}`]) : badge(['b-ghost', 'sem versão registrada'])}</div>`;
-  }
-  return '';
-}
-
-function responsaveisHtml() {
-  const r = S.data.responsaveis;
-  if (r.erro) return `<div class="banner"><b>Agrupamento indisponível</b>: ${esc(r.erro)}. Desligue o agrupar por responsável para ver a lista.</div>`;
-  const iss = S.data.github.issues || [];
-  const byN = Object.fromEntries(iss.map(i => [i.number, i]));
-  let idx = 0;
-  const groups = [];
-  for (const g of r.grupos) {
-    const itens = g.itens.filter(it => byN[it.number] && matchIssue(byN[it.number]));
-    if (!itens.length) continue;
-    const chave = g.responsavel || '';
-    const aberto = !S.respFechado.has(chave);
-    groups.push(`
-      <section class="prd-group resp-group">
-        <button class="resp-toggle rv" data-act="resp" data-r="${esc(chave)}" aria-expanded="${aberto}">
-          <span class="ft-caret" aria-hidden="true">${aberto ? '▾' : '▸'}</span>
-          <span class="resp-nome">${g.responsavel ? esc(g.responsavel) : 'sem responsável'}</span>
-          <span class="resp-conta">${itens.length} issue${itens.length === 1 ? '' : 's'}</span>
-        </button>
-        ${aberto ? `<div class="resp-itens">${itens.map(it => issueCard(byN[it.number], idx++, byN[it.number].is_prd, respItemHtml(it))).join('')}</div>` : ''}
-      </section>`);
-  }
-  return groups.join('') || '<div class="empty">nenhuma issue bate com o filtro</div>';
-}
-
 function issueListHtml() {
-  if (S.fIssues.agrupar && S.data.responsaveis) return responsaveisHtml();
   const iss = S.data.github.issues || [];
   const byN = Object.fromEntries(iss.map(i => [i.number, i]));
   const prds = iss.filter(i => i.is_prd).sort((a, b) => b.number - a.number);
@@ -531,7 +481,7 @@ function issueListHtml() {
   let idx = 0;
   const groups = [];
   const f = S.fIssues;
-  const filtroAtivo = !!(f.q || f.label || f.state !== 'all');
+  const filtroAtivo = !!(f.q || f.label || f.resp || f.state !== 'all');
 
   for (const prd of prds) {
     used.add(prd.number);
@@ -570,11 +520,31 @@ function issueListHtml() {
   return groups.join('') || '<div class="empty">nenhuma issue bate com o filtro</div>';
 }
 
+/* Visor de um responsável: aparece só com o filtro de responsável ligado. */
+function visorResponsavelHtml(iss, resp, rv) {
+  const dele = iss.filter(i => doResponsavel(i, resp));
+  const open = dele.filter(i => i.state === 'OPEN');
+  const fechadas = dele.filter(i => i.state === 'CLOSED');
+  const mes = Date.now() - 30 * 864e5;
+  const noMes = fechadas.filter(i => i.closed_at && new Date(i.closed_at) >= mes).length;
+  const lead = leadAvg(dele);
+  const nome = resp === SEM_RESP ? 'sem responsável' : esc(resp);
+  return `
+  <div class="k-label visor-resp" ${rv()}>${nome} · ${dele.length} issue${dele.length === 1 ? '' : 's'}</div>
+  <div class="grid g12" style="margin-bottom:6px">
+    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">abertas</div><div class="v" style="color:var(--green)">${open.length}</div><div class="s">${open.filter(x => x.labels.includes('in-progress')).length} em andamento</div></div></div>
+    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">entregues</div><div class="v">${fechadas.length}</div><div class="s">${noMes} nos últimos 30 dias</div></div></div>
+    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">lead time médio</div><div class="v" style="font-size:30px; padding-top:6px">${lead ? spanH(lead) : '·'}</div><div class="s">da abertura ao fechamento</div></div></div>
+    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">prontas p/ agente</div><div class="v" style="color:var(--coral)">${open.filter(x => x.labels.includes('ready-for-agent')).length}</div><div class="s">fila ready-for-agent</div></div></div>
+  </div>`;
+}
+
 function renderIssues() {
   const iss = S.data.github.issues || [];
   const open = iss.filter(i => i.state === 'OPEN');
   const lead = leadAvg(iss);
   const labels = [...new Set(iss.flatMap(i => i.labels))].sort();
+  const pessoas = [...new Set(iss.flatMap(i => i.assignees))].sort();
   const f = S.fIssues;
   let i = 0;
   const rv = () => `class="rv" style="--i:${i++}"`;
@@ -588,12 +558,17 @@ function renderIssues() {
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">lead time médio</div><div class="v" style="font-size:30px; padding-top:6px">${lead ? spanH(lead) : '·'}</div><div class="s">da abertura ao fechamento</div></div></div>
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">prontas p/ agente</div><div class="v" style="color:var(--coral)">${open.filter(x => x.labels.includes('ready-for-agent')).length}</div><div class="s">fila ready-for-agent</div></div></div>
   </div>
+  ${f.resp ? visorResponsavelHtml(iss, f.resp, rv) : ''}
 
   <div class="controls rv" style="--i:${i++}">
     <button class="fchip ${f.state === 'all' ? 'on' : ''}" data-act="fstate" data-v="all">todas</button>
     <button class="fchip ${f.state === 'OPEN' ? 'on' : ''}" data-act="fstate" data-v="OPEN">abertas</button>
     <button class="fchip ${f.state === 'CLOSED' ? 'on' : ''}" data-act="fstate" data-v="CLOSED">fechadas</button>
-    <button class="fchip ${f.agrupar ? 'on' : ''}" data-act="fagrupar" aria-pressed="${f.agrupar}">agrupar por responsável</button>
+    <select class="fsel" id="fresp">
+      <option value="">responsável: todos</option>
+      <option value="${SEM_RESP}" ${f.resp === SEM_RESP ? 'selected' : ''}>sem responsável</option>
+      ${pessoas.map(p => `<option value="${esc(p)}" ${f.resp === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}
+    </select>
     <select class="fsel" id="flabel">
       <option value="">label: todas</option>
       ${labels.map(l => `<option value="${esc(l)}" ${f.label === l ? 'selected' : ''}>${esc(l)}</option>`).join('')}
@@ -605,9 +580,11 @@ function renderIssues() {
 }
 
 function wireIssues() {
-  const q = $('#fq'), sel = $('#flabel');
+  const q = $('#fq'), sel = $('#flabel'), resp = $('#fresp');
   if (q) q.addEventListener('input', () => { S.fIssues.q = q.value; refreshIssueList(); });
   if (sel) sel.addEventListener('change', () => { S.fIssues.label = sel.value; refreshIssueList(); });
+  // o visor do responsável fica acima dos controles: trocar a pessoa redesenha a aba
+  if (resp) resp.addEventListener('change', () => { S.fIssues.resp = resp.value; render(); });
 }
 
 function refreshIssueList() {
@@ -1090,11 +1067,6 @@ view.addEventListener('click', e => {
     const n = Number(t.dataset.n);
     S.expPrd.set(n, t.dataset.open !== '1');
     refreshIssueList();
-  } else if (act === 'resp') {
-    const r = t.dataset.r;
-    if (S.respFechado.has(r)) S.respFechado.delete(r);
-    else S.respFechado.add(r);
-    refreshIssueList();
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);
     S.expDep.has(i) ? S.expDep.delete(i) : S.expDep.add(i);
@@ -1105,9 +1077,6 @@ view.addEventListener('click', e => {
     render();
   } else if (act === 'fstate') {
     S.fIssues.state = t.dataset.v;
-    render();
-  } else if (act === 'fagrupar') {
-    S.fIssues.agrupar = !S.fIssues.agrupar;
     render();
   } else if (act === 'doc') {
     S.mapaDoc = t.dataset.doc;
@@ -1125,7 +1094,7 @@ view.addEventListener('click', e => {
     S.entTab = t.dataset.t;
     render();
   } else if (act === 'gotab') {
-    S.fIssues = { state: 'all', label: t.dataset.label || '', q: '', agrupar: S.fIssues.agrupar };
+    S.fIssues = { state: 'all', label: t.dataset.label || '', q: '', resp: '' };
     setTab(t.dataset.go);
   }
 });

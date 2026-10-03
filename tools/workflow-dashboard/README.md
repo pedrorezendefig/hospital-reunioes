@@ -21,7 +21,7 @@ Porta fixa `8799` (a 8765 fica livre pra rodadas manuais), logs em `~/Library/Lo
 
 ## Abas
 
-**Plano** (home) — a leva atual: as fatias do PRD ativo em **ondas** de execução, com tamanho, tempo típico, estado e o comando copiável para pegar cada uma; issues **avulsas** abertas (fora de PRD) fecham a aba em seção própria, com os mesmos estados · **Issues** — tudo que aconteceu (PRD → fatias → PR → deploy); as fatias de cada PRD nascem **colapsadas** atrás de um toggle `▸ N fatias · M fechadas` (filtro/busca ativos forçam a exibição do que bate) · **Produção** — estado de produção + timeline de deploys e releases · **Pendências**, a fila humana: issues abertas com o label `ready-for-human` (ações que só o Pedro pode fazer, criadas no fim de um ciclo pelo `/ship` Passo 10.5), cada card com o rastro do PRD pai e o corpo com o passo a passo; fecha a issue, some do painel · **Mapa** — snapshots factuais da app · **Domínio** — ADRs + glossário · **Guia** — o método em 6 passos, o setup de máquina nova e os bastidores do painel.
+**Plano** (home) — a leva atual: as fatias do PRD ativo em **ondas** de execução, com tamanho, tempo típico, estado e o comando copiável para pegar cada uma; issues **avulsas** abertas (fora de PRD) fecham a aba em seção própria, com os mesmos estados · **Issues** — tudo que aconteceu (PRD → fatias → PR → deploy); as fatias de cada PRD nascem **colapsadas** atrás de um toggle `▸ N fatias · M fechadas` (filtro/busca ativos forçam a exibição do que bate); o filtro de **um responsável** (quem está designado, ou "sem responsável") liga um visor com as contas da pessoa: abertas, entregues, lead time e fila · **Produção** — estado de produção + timeline de deploys e releases · **Pendências**, a fila humana: issues abertas com o label `ready-for-human` (ações que só o Pedro pode fazer, criadas no fim de um ciclo pelo `/ship` Passo 10.5), cada card com o rastro do PRD pai e o corpo com o passo a passo; fecha a issue, some do painel · **Mapa** — snapshots factuais da app · **Domínio** — ADRs + glossário · **Guia** — o método em 6 passos, o setup de máquina nova e os bastidores do painel.
 
 ## Vocabulário do Plano
 
@@ -43,7 +43,6 @@ Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta s
 - `serve.py` — servidor HTTP (stdlib), só leitura, bind 127.0.0.1.
 - `collect.py` — agrega `gh` + arquivos de `docs/spec` + `git` num único `/api/data`.
 - `plano.py` — módulo puro do Plano: ondas, caminho crítico, tempo típico e copiáveis por fatia (o front não calcula nada).
-- `responsaveis.py`: módulo puro do agrupamento por responsável da aba Issues (assignee, senão dono do PRD, senão "sem responsável"), com estado do PR aberto e versão em que a fechada subiu; sai em `/api/data` como `responsaveis` (ADR 0061).
 - `areas.py`: parse dos snapshots de área para as capas interativas (degrada para `None`, nunca quebra).
 - `diagramas.py`: parse do subset Mermaid dos snapshots (ADR 0025).
 - `tests/` — pytest do módulo plano e da estrutura do shell (`python3 -m pytest tests/`).
