@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.159.0 - 2026-10-02 21:41 - PR #928, sem issue: Filtro por um responsável com visor da pessoa e issues sem teto de 200
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e6abd15`
+- PRs: [#928](https://github.com/pedrorezendefig/hospital-reunioes/pull/928)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (889s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e6abd15
+
 ## v0.158.6 - 2026-10-02 20:01 - Onda onda-a: Main protegida, o rabo entra por PR e mergeia pela API
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `d11e2ce`
