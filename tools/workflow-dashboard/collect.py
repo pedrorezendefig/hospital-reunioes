@@ -17,13 +17,13 @@ from pathlib import Path
 from areas import fundir_colunas_no_er, parse_area
 from diagramas import extrair_diagramas
 from plano import bloqueios_do_corpo, montar_plano
-from responsaveis import agrupar_por_responsavel, ci_do_rollup
 
 GH_TIMEOUT = 20
 
 ISSUE_FIELDS = "number,title,state,labels,createdAt,closedAt,assignees,body,url"
-PR_FIELDS = ("number,title,state,mergedAt,headRefName,closingIssuesReferences,url,"
-             "author,statusCheckRollup,mergeStateStatus,updatedAt")
+PR_FIELDS = "number,title,state,mergedAt,headRefName,closingIssuesReferences,url"
+# Sem teto prático: o total de issues e o filtro por responsável contam o histórico inteiro.
+GH_LIMIT = "10000"
 
 SNAPSHOT_ORDER = ["ROTAS", "ENTIDADES", "SCHEMA", "MIGRATIONS", "INTEGRACOES", "ESTRUTURA", "FLUXOGRAMAS"]
 
@@ -112,15 +112,8 @@ def _spec_text_fresh(root: Path, rel: str):
 # ---------- GitHub ----------
 
 def _gh_issues(root: Path) -> list[dict]:
-    items = json.loads(_run(["gh", "issue", "list", "--state", "all", "--limit", "200",
+    items = json.loads(_run(["gh", "issue", "list", "--state", "all", "--limit", GH_LIMIT,
                              "--json", ISSUE_FIELDS], root))
-    # A fila humana (aba Pendências) não pode cair da janela das 200 mais
-    # recentes: pendência antiga aberta sumiria do painel lendo como concluída.
-    # Busca dedicada por label, unida por número.
-    vistos = {it["number"] for it in items}
-    fila = json.loads(_run(["gh", "issue", "list", "--label", "ready-for-human",
-                            "--state", "open", "--limit", "200", "--json", ISSUE_FIELDS], root))
-    items += [it for it in fila if it["number"] not in vistos]
     issues = []
     for it in items:
         body = it.get("body") or ""
@@ -148,7 +141,7 @@ def _gh_issues(root: Path) -> list[dict]:
 
 
 def _gh_prs(root: Path) -> list[dict]:
-    items = json.loads(_run(["gh", "pr", "list", "--state", "all", "--limit", "200",
+    items = json.loads(_run(["gh", "pr", "list", "--state", "all", "--limit", GH_LIMIT,
                              "--json", PR_FIELDS], root))
     return [{
         "number": it["number"],
@@ -158,10 +151,6 @@ def _gh_prs(root: Path) -> list[dict]:
         "head_ref": it.get("headRefName"),
         "url": it.get("url"),
         "closes": [r["number"] for r in it.get("closingIssuesReferences") or []],
-        "author": (it.get("author") or {}).get("login"),
-        "ci": ci_do_rollup(it.get("statusCheckRollup")),
-        "merge_state": it.get("mergeStateStatus"),
-        "updated_at": it.get("updatedAt"),
     } for it in items]
 
 
@@ -444,17 +433,6 @@ def _montar_plano_seguro(github: dict):
         return {"levas": [], "tempos_tipicos": {}, "erro": str(e)[:300]}
 
 
-def _agrupar_responsaveis_seguro(github: dict, history: list[dict]):
-    """Agrupamento por responsável com a degradação do Plano: sem gh, None; erro no módulo, vazio com o erro."""
-    if github["error"]:
-        return None
-    try:
-        fatias_por_prd = {i["number"]: i["children"] for i in github["issues"] if i["children"]}
-        return agrupar_por_responsavel(github["issues"], github["prs"], fatias_por_prd, history)
-    except Exception as e:
-        return {"grupos": [], "erro": str(e)[:300]}
-
-
 # ---------- Montagem ----------
 
 def collect(root: Path) -> dict:
@@ -515,7 +493,6 @@ def collect(root: Path) -> dict:
         "repo_url": f"https://github.com/{slug}",
         "github": github,
         "plano": _montar_plano_seguro(github),
-        "responsaveis": _agrupar_responsaveis_seguro(github, history),
         "state": _state_public(state),
         "history": history,
         "project": project,

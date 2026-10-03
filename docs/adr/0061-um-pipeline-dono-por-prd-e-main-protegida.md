@@ -66,3 +66,11 @@ Como fica:
 - **Ruleset versionado** em `.github/rulesets/main.json`: PR obrigatório com zero aprovações, os três jobs do `ci.yml` obrigatórios (vindos do GitHub Actions) e em dia com a base, force push e delete bloqueados, sem bypass. Aplicar e conferir é do admin, à mão, com os comandos do `docs/onboarding/dev.md`. O `tools/test_ruleset_main.py` amarra o nome de cada check ao job do `ci.yml`.
 
 Custo aceito: o commit de bump redispara o CI antes do merge (alguns minutos com o semáforo preso), e uma rodada que encontra a `main` andando no meio do CI para com código 2 e roda de novo, reaproveitando o bump que ficou na branch.
+
+## Emenda de 02/10/2026: filtro por responsável no painel (decisão 5)
+
+O agrupar por responsável não mostrou quem cuida de quê: a fatia sem claim aparecia no grupo do dono do PRD, e a lista ficava parecendo de gente que não estava trabalhando nela. O Pedro trocou a visão.
+
+**Decisão:** a aba Issues do painel local filtra por **um** responsável de cada vez, em vez de agrupar. Responsável é quem está designado na issue (assignee), sem herdar o dono do PRD; "sem responsável" mostra as issues sem ninguém designado. Com o filtro ligado, um visor abaixo dos cards gerais mostra as contas da pessoa: abertas (e quantas em andamento), entregues (e quantas nos últimos 30 dias), lead time médio e prontas para agente. O coletor passa a trazer todas as issues e PRs, sem o teto de 200.
+
+Revoga, na decisão 5, o agrupamento ligado por padrão, a herança do dono do PRD **na visão do painel** e o "sem métrica por pessoa": o Pedro quer ver quanto cada um entregou. O dono do PRD continua valendo como responsabilidade (decisão 2 e `issue-tracker.md`); só deixa de redistribuir as fatias no painel.
