@@ -384,12 +384,23 @@ function leadAvg(iss) {
   return closed.reduce((a, i) => a + (new Date(i.closed_at) - new Date(i.created_at)), 0) / closed.length;
 }
 
-/* Responsável = quem está designado (assignee). Um só por vez no filtro;
-   SEM_RESP filtra as issues sem ninguém designado. */
+/* Responsável = quem está designado (assignee); sem ninguém designado, quem
+   criou a issue (author). Um só por vez no filtro; SEM_RESP sobra para a issue
+   sem designado e sem autor. O "em andamento" segue só no assignee (claim). */
 const SEM_RESP = '(sem)';
 
+function responsaveis(i) {
+  return i.assignees.length ? i.assignees : (i.author ? [i.author] : []);
+}
+
 function doResponsavel(i, resp) {
-  return resp === SEM_RESP ? i.assignees.length === 0 : i.assignees.includes(resp);
+  const r = responsaveis(i);
+  return resp === SEM_RESP ? r.length === 0 : r.includes(resp);
+}
+
+function donoHtml(i) {
+  if (i.assignees.length) return `👤 ${i.assignees.map(esc).join(', ')}`;
+  return i.author ? `✎ criada por ${esc(i.author)}` : '';
 }
 
 function matchIssue(i) {
@@ -441,7 +452,7 @@ function issueCard(i, idx, prd = false, extra = '') {
   meta.push(`aberta ${fmtD(i.created_at)}`);
   if (i.closed_at) meta.push(`fechada ${fmtD(i.closed_at)}`);
   // no PRD o dono vai ao lado do título
-  if (!prd && i.assignees.length) meta.push(`👤 ${i.assignees.map(esc).join(', ')}`);
+  if (!prd && donoHtml(i)) meta.push(donoHtml(i));
   if (i.criteria.total) meta.push(`✓ ${i.criteria.done}/${i.criteria.total} critérios`);
   const blocked = i.blocked_by.length
     ? `<span class="blocked">⛔ bloqueada por ${i.blocked_by.map(n => `<a href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`).join(', ')}</span>` : '';
@@ -454,7 +465,7 @@ function issueCard(i, idx, prd = false, extra = '') {
         ${prd ? '<span class="prd-tag">PRD</span>' : ''}
         <span class="inum">#${i.number}</span>
         <span class="ititle">${esc(i.title)}</span>
-        ${prd ? `<span class="prd-dono">${i.assignees.length ? `👤 ${i.assignees.map(esc).join(', ')}` : 'sem dono'}</span>` : ''}
+        ${prd ? `<span class="prd-dono">${donoHtml(i) || 'sem dono'}</span>` : ''}
         ${i.labels.map(labelBadge).join('')}
         ${stateTag(i)}
         ${lead ? `<span class="chip nrow-lead">⏱ ${lead}</span>` : ''}
@@ -544,7 +555,7 @@ function renderIssues() {
   const open = iss.filter(i => i.state === 'OPEN');
   const lead = leadAvg(iss);
   const labels = [...new Set(iss.flatMap(i => i.labels))].sort();
-  const pessoas = [...new Set(iss.flatMap(i => i.assignees))].sort();
+  const pessoas = [...new Set(iss.flatMap(responsaveis))].sort();
   const f = S.fIssues;
   let i = 0;
   const rv = () => `class="rv" style="--i:${i++}"`;

@@ -20,7 +20,7 @@ from plano import bloqueios_do_corpo, montar_plano
 
 GH_TIMEOUT = 20
 
-ISSUE_FIELDS = "number,title,state,labels,createdAt,closedAt,assignees,body,url"
+ISSUE_FIELDS = "number,title,state,labels,createdAt,closedAt,assignees,author,body,url"
 PR_FIELDS = "number,title,state,mergedAt,headRefName,closingIssuesReferences,url"
 # Sem teto prático: o total de issues e o filtro por responsável contam o histórico inteiro.
 GH_LIMIT = "10000"
@@ -131,6 +131,7 @@ def _gh_issues(root: Path) -> list[dict]:
             "created_at": it.get("createdAt"),
             "closed_at": it.get("closedAt"),
             "assignees": [a.get("login") for a in it.get("assignees") or []],
+            "author": (it.get("author") or {}).get("login"),
             "url": it.get("url"),
             "body": body,
             "blocked_by": sorted(set(blocked)),
