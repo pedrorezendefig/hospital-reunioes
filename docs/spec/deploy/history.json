@@ -2,6 +2,36 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-02T21:41:40-03:00",
+      "sha": "e6abd153896356d98e9e91ada47f1c33834d8489",
+      "app_version": "0.159.0",
+      "subject": "PR #928, sem issue: Filtro por um responsável com visor da pessoa e issues sem teto de 200",
+      "raw_subject": "chore(deploy): registro do PR avulso (#928)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 888,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #928, sem issue. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
       "at": "2026-10-02T20:01:37-03:00",
       "sha": "d11e2ce8",
       "app_version": "0.158.6",
@@ -1542,35 +1572,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda AFK, issue #693, achado da review da #670. A linha guardava editado_em mas nao QUAIS mencoes tinham entrado na correcao, entao o carimbo valia para todas: virgula corrigida reabria a vez de quem ja respondeu. A coluna nova tem TRES estados com significados distintos, e a diferenca entre os dois ultimos e o conserto inteiro: NULL (nunca corrigida ou corrigida antes da coluna existir, vale o comportamento da #670, que e o lado seguro do erro), lista vazia (correcao sem mencao nova, nao chama ninguem) e lista com ids (so essa gente conta do editado_em). Prova: 7 mutantes do autor mais 5 do revisor, todos mortos, um deles no DETECTOR (a coluna sai do select e a regra nasce lendo None). A janela de 10 minutos foi provada pelos dois lados, pela rota (dois PATCH seguidos, a lista SUBSTITUI e nao acumula) e pela regra. RISCO ACEITO e registrado: a lista guarda so a ULTIMA correcao. Numa fatia estreita (duas correcoes na mesma janela, com a pessoa tendo falado na Demanda entre o envio e a correcao 1) ela perde o carimbo, cai na ordem do fio e SOME de Minha vez sem ter respondido, que e a #670 em miniatura. O conserto de verdade e carimbo por pessoa (id para instante), fora do escopo cravado na triagem. SEM BACKFILL, de proposito: linha antiga fica NULL e aparece a mais, nunca a menos. Quem estiver preso DENTRO da aba por linha corrigida antes da migration segue preso ate responder de novo, porque a janela ja fechou. Backfill para lista vazia seria pior, apagaria chamadas reais."
-    },
-    {
-      "at": "2026-09-11T14:34:02-03:00",
-      "sha": "d35a130",
-      "app_version": "0.129.1",
-      "subject": "a mudanca de regra volta a recalcular Etapa e O que muda das Demandas, mesmo quando o GitHub nao trouxe novidade",
-      "raw_subject": "fix(tecnologia): a mudança de regra alcança a Demanda sem novidade no GitHub (#700)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 302,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda AFK, issue #690, NAO criou migration: a correcao so amplia o que a guarda compara, e as colunas o_que_muda e partes ja existiam na 103. A guarda nova (cache_desatualizado) compara o derivado de mudanca_da_foto contra as colunas SEM o carimbo github_sincronizado_em: se o carimbo entrasse na conta, mudanca_da_foto chama datetime.now(UTC) e toda passada viraria escrita. Revisao independente rodou 9 mutantes e sobreviveu um: tirar github_foto da comparacao deixava verdes os 4749 testes da suite. Promovido a must-fix (mesma classe do achado do PR #698) e fechado na rodada 2 com UM teste; o mutante agora deixa 1 vermelho. Sem ele, repositorio renomeado com derivados iguais congelaria o github_foto e o link do Vinculo na tela apontaria para o endereco velho para sempre. ATENCAO na estreia: a primeira passada depois de uma mudanca de regra grava linha no fio, move o estado, troca o responsavel e dispara avisar_atribuicao em LOTE; quem mexer em LABELS_PLANEJADA ou no bloco_para_o_diretor manda e-mail para gente de verdade. Demandas vinculadas antes da #676 levam um UPDATE silencioso unico, sem linha no fio."
     }
   ]
 }
