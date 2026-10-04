@@ -9,8 +9,8 @@ sidebar:
   order: 9
 ---
 
-O vídeo é o capítulo 4 do módulo, gravado na versão 0.109.0: ele mostra esta
-tarefa, não as mudanças que vieram depois.
+O vídeo é o capítulo 4 do módulo, gravado na versão 0.109.0: o que mudou
+depois não aparece nele.
 
 ## Quando usar
 
@@ -25,11 +25,11 @@ esperando decisão, e quem decide é sempre o ouvidor.
    ![Bloco do pedido de prazo com Aprovar e Negar](../../../assets/ouvidoria/caso-prorrogacao.png)
 
 2. Leia a justificativa que a área escreveu.
-3. Escreva o motivo da decisão, se quiser. Ele é opcional e vai no e-mail ao
+3. Escreva o motivo da decisão, se quiser. Ele é opcional e vai no email ao
    setor.
 4. Clique em **Aprovar** ou em **Negar**.
 5. O bloco passa a mostrar a decisão com o seu nome e a data, e quem pediu recebe
-   o e-mail mesmo que já tenha respondido.
+   o email mesmo que já tenha respondido.
 
 ## Se der errado
 

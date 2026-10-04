@@ -9,7 +9,7 @@ import { renderArea, wireArea } from './areas.js';
 const S = {
   data: null,
   tab: 'plano',
-  fIssues: { state: 'all', label: '', q: '' },
+  fIssues: { state: 'all', label: '', q: '', resp: '' },
   expIss: new Set(),
   expPrd: new Map(),
   expDep: new Set(),
@@ -384,10 +384,19 @@ function leadAvg(iss) {
   return closed.reduce((a, i) => a + (new Date(i.closed_at) - new Date(i.created_at)), 0) / closed.length;
 }
 
+/* Responsável = quem está designado (assignee). Um só por vez no filtro;
+   SEM_RESP filtra as issues sem ninguém designado. */
+const SEM_RESP = '(sem)';
+
+function doResponsavel(i, resp) {
+  return resp === SEM_RESP ? i.assignees.length === 0 : i.assignees.includes(resp);
+}
+
 function matchIssue(i) {
   const f = S.fIssues;
   if (f.state !== 'all' && i.state !== f.state) return false;
   if (f.label && !i.labels.includes(f.label)) return false;
+  if (f.resp && !doResponsavel(i, f.resp)) return false;
   if (f.q) {
     const q = f.q.toLowerCase();
     if (!(`#${i.number} ${i.title}`.toLowerCase().includes(q))) return false;
@@ -425,13 +434,14 @@ function commentsHtml(n) {
       </div>`).join('') + '</div>';
 }
 
-function issueCard(i, idx, prd = false) {
+function issueCard(i, idx, prd = false, extra = '') {
   const open = S.expIss.has(i.number);
   const lead = i.closed_at ? spanH(new Date(i.closed_at) - new Date(i.created_at)) : null;
   const meta = [];
   meta.push(`aberta ${fmtD(i.created_at)}`);
   if (i.closed_at) meta.push(`fechada ${fmtD(i.closed_at)}`);
-  if (i.assignees.length) meta.push(`👤 ${i.assignees.map(esc).join(', ')}`);
+  // no PRD o dono vai ao lado do título
+  if (!prd && i.assignees.length) meta.push(`👤 ${i.assignees.map(esc).join(', ')}`);
   if (i.criteria.total) meta.push(`✓ ${i.criteria.done}/${i.criteria.total} critérios`);
   const blocked = i.blocked_by.length
     ? `<span class="blocked">⛔ bloqueada por ${i.blocked_by.map(n => `<a href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`).join(', ')}</span>` : '';
@@ -444,11 +454,13 @@ function issueCard(i, idx, prd = false) {
         ${prd ? '<span class="prd-tag">PRD</span>' : ''}
         <span class="inum">#${i.number}</span>
         <span class="ititle">${esc(i.title)}</span>
+        ${prd ? `<span class="prd-dono">${i.assignees.length ? `👤 ${i.assignees.map(esc).join(', ')}` : 'sem dono'}</span>` : ''}
         ${i.labels.map(labelBadge).join('')}
         ${stateTag(i)}
         ${lead ? `<span class="chip nrow-lead">⏱ ${lead}</span>` : ''}
       </div>
       <div class="iss-meta">${meta.map(m => `<span>${m}</span>`).join('')}${blocked}</div>
+      ${extra}
       <div class="chain">${chainHtml(i)}</div>
       ${open ? `
       <div class="iss-body">
@@ -469,7 +481,7 @@ function issueListHtml() {
   let idx = 0;
   const groups = [];
   const f = S.fIssues;
-  const filtroAtivo = !!(f.q || f.label || f.state !== 'all');
+  const filtroAtivo = !!(f.q || f.label || f.resp || f.state !== 'all');
 
   for (const prd of prds) {
     used.add(prd.number);
@@ -508,11 +520,31 @@ function issueListHtml() {
   return groups.join('') || '<div class="empty">nenhuma issue bate com o filtro</div>';
 }
 
+/* Visor de um responsável: aparece só com o filtro de responsável ligado. */
+function visorResponsavelHtml(iss, resp, rv) {
+  const dele = iss.filter(i => doResponsavel(i, resp));
+  const open = dele.filter(i => i.state === 'OPEN');
+  const fechadas = dele.filter(i => i.state === 'CLOSED');
+  const mes = Date.now() - 30 * 864e5;
+  const noMes = fechadas.filter(i => i.closed_at && new Date(i.closed_at) >= mes).length;
+  const lead = leadAvg(dele);
+  const nome = resp === SEM_RESP ? 'sem responsável' : esc(resp);
+  return `
+  <div class="k-label visor-resp" ${rv()}>${nome} · ${dele.length} issue${dele.length === 1 ? '' : 's'}</div>
+  <div class="grid g12" style="margin-bottom:6px">
+    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">abertas</div><div class="v" style="color:var(--green)">${open.length}</div><div class="s">${open.filter(x => x.labels.includes('in-progress')).length} em andamento</div></div></div>
+    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">entregues</div><div class="v">${fechadas.length}</div><div class="s">${noMes} nos últimos 30 dias</div></div></div>
+    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">lead time médio</div><div class="v" style="font-size:30px; padding-top:6px">${lead ? spanH(lead) : '·'}</div><div class="s">da abertura ao fechamento</div></div></div>
+    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">prontas p/ agente</div><div class="v" style="color:var(--coral)">${open.filter(x => x.labels.includes('ready-for-agent')).length}</div><div class="s">fila ready-for-agent</div></div></div>
+  </div>`;
+}
+
 function renderIssues() {
   const iss = S.data.github.issues || [];
   const open = iss.filter(i => i.state === 'OPEN');
   const lead = leadAvg(iss);
   const labels = [...new Set(iss.flatMap(i => i.labels))].sort();
+  const pessoas = [...new Set(iss.flatMap(i => i.assignees))].sort();
   const f = S.fIssues;
   let i = 0;
   const rv = () => `class="rv" style="--i:${i++}"`;
@@ -526,11 +558,17 @@ function renderIssues() {
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">lead time médio</div><div class="v" style="font-size:30px; padding-top:6px">${lead ? spanH(lead) : '·'}</div><div class="s">da abertura ao fechamento</div></div></div>
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">prontas p/ agente</div><div class="v" style="color:var(--coral)">${open.filter(x => x.labels.includes('ready-for-agent')).length}</div><div class="s">fila ready-for-agent</div></div></div>
   </div>
+  ${f.resp ? visorResponsavelHtml(iss, f.resp, rv) : ''}
 
   <div class="controls rv" style="--i:${i++}">
     <button class="fchip ${f.state === 'all' ? 'on' : ''}" data-act="fstate" data-v="all">todas</button>
     <button class="fchip ${f.state === 'OPEN' ? 'on' : ''}" data-act="fstate" data-v="OPEN">abertas</button>
     <button class="fchip ${f.state === 'CLOSED' ? 'on' : ''}" data-act="fstate" data-v="CLOSED">fechadas</button>
+    <select class="fsel" id="fresp">
+      <option value="">responsável: todos</option>
+      <option value="${SEM_RESP}" ${f.resp === SEM_RESP ? 'selected' : ''}>sem responsável</option>
+      ${pessoas.map(p => `<option value="${esc(p)}" ${f.resp === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}
+    </select>
     <select class="fsel" id="flabel">
       <option value="">label: todas</option>
       ${labels.map(l => `<option value="${esc(l)}" ${f.label === l ? 'selected' : ''}>${esc(l)}</option>`).join('')}
@@ -542,9 +580,11 @@ function renderIssues() {
 }
 
 function wireIssues() {
-  const q = $('#fq'), sel = $('#flabel');
+  const q = $('#fq'), sel = $('#flabel'), resp = $('#fresp');
   if (q) q.addEventListener('input', () => { S.fIssues.q = q.value; refreshIssueList(); });
   if (sel) sel.addEventListener('change', () => { S.fIssues.label = sel.value; refreshIssueList(); });
+  // o visor do responsável fica acima dos controles: trocar a pessoa redesenha a aba
+  if (resp) resp.addEventListener('change', () => { S.fIssues.resp = resp.value; render(); });
 }
 
 function refreshIssueList() {
@@ -923,7 +963,7 @@ function fluxoHtml() {
           tip: 'Red-green-refactor: cada critério de aceite da issue vira um teste que falha primeiro; o código vem só pra fazê-lo passar. Nomes de teste descrevem o comportamento de domínio em pt-BR.', src: '.claude/skills/tdd' })}
         <span class="flx-chev">›</span>
         ${flxNode({ cmd: '/ship', sub: 'roda os 3 gates → PR', icon: 'rocket', d: d++,
-          tip: 'Orquestra a mudança end-to-end: branch, commit, PR, 3 gates, approval, merge e deploy num comando só. Dispara /code-review e /security-review automaticamente. Trabalho ancorado na issue (Closes #N fecha no merge).', src: '.claude/skills/ship' })}
+          tip: 'Leva a mudança até o PR verde: branch, commit, PR e 3 gates. Dispara /code-review e /security-review automaticamente e imprime o comando do rabo (fechar_onda.py). Trabalho ancorado na issue (Closes #N fecha no merge).', src: '.claude/skills/ship' })}
       </div>
 
       <div class="flx-subcap">o <code>/ship</code> dispara os 3 gates, em sequência</div>
@@ -941,12 +981,12 @@ function fluxoHtml() {
     ${conn()}
 
     ${phase('3', 'revisão humana & deploy')}
-    ${flxNode({ t: 'Gate humano: OK de merge', sub: 'push na main é ação humana · merge sequencial', icon: 'usercheck', cls: 'flx-humangate', d: d++,
-      tip: 'O único toque humano obrigatório: você aprova o lote uma vez. Push na main é ação humana porque merge dispara deploy em produção; o merge é sequencial, com bump de versão um a um.', rule: 'regra: push na main = ação humana' })}
+    ${flxNode({ t: 'Gate humano: OK de merge', sub: 'subir é decisão humana · rabo único por PR ou lote', icon: 'usercheck', cls: 'flx-humangate', d: d++,
+      tip: 'O único toque humano obrigatório: você aprova o PR (ou o lote da onda) citando o número. Quem leva à main é o rabo, fechar_onda.py: bump na branch do PR, APP_VERSION, merge pela API, um build, health e registro (ADR 0061).', rule: 'regra: main protegida, só entra por PR' })}
     ${conn()}
 
-    ${flxNode({ cmd: '/deploy · Coolify', sub: 'build a partir da main → health check', icon: 'cloud', cls: 'flx-wide', d: d++,
-      tip: 'Deploy via Coolify: build a partir da main, health check e rollback automático se falhar. Lê e escreve docs/spec/deploy/*.json e faz prepend no CHANGELOG.', src: '.claude/skills/deploy' })}
+    ${flxNode({ cmd: 'fechar_onda.py · Coolify', sub: 'merge pela API → um build → health com version-match', icon: 'cloud', cls: 'flx-wide', d: d++,
+      tip: 'O rabo único: bump como commit na branch do PR, CI verde, APP_VERSION no Coolify, merge pela API (a main é protegida), um build, health com conferência de versão; depois, docs/spec/deploy/*.json, CHANGELOG e snapshot num PR só de docs. Build ou health ruim: código 3/4 e /deploy rollback.', src: '.claude/skills/onda-enxuta/scripts' })}
     ${conn()}
 
     <div class="flx-fork" style="--d:${d++}">
@@ -1054,7 +1094,7 @@ view.addEventListener('click', e => {
     S.entTab = t.dataset.t;
     render();
   } else if (act === 'gotab') {
-    S.fIssues = { state: 'all', label: t.dataset.label || '', q: '' };
+    S.fIssues = { state: 'all', label: t.dataset.label || '', q: '', resp: '' };
     setTab(t.dataset.go);
   }
 });

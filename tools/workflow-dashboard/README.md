@@ -21,7 +21,7 @@ Porta fixa `8799` (a 8765 fica livre pra rodadas manuais), logs em `~/Library/Lo
 
 ## Abas
 
-**Plano** (home) — a leva atual: as fatias do PRD ativo em **ondas** de execução, com tamanho, tempo típico, estado e o comando copiável para pegar cada uma; issues **avulsas** abertas (fora de PRD) fecham a aba em seção própria, com os mesmos estados · **Issues** — tudo que aconteceu (PRD → fatias → PR → deploy); as fatias de cada PRD nascem **colapsadas** atrás de um toggle `▸ N fatias · M fechadas` (filtro/busca ativos forçam a exibição do que bate) · **Produção** — estado de produção + timeline de deploys e releases · **Pendências**, a fila humana: issues abertas com o label `ready-for-human` (ações que só o Pedro pode fazer, criadas no fim de um ciclo pelo `/ship` Passo 10.5), cada card com o rastro do PRD pai e o corpo com o passo a passo; fecha a issue, some do painel · **Mapa** — snapshots factuais da app · **Domínio** — ADRs + glossário · **Guia** — o método em 6 passos, o setup de máquina nova e os bastidores do painel.
+**Plano** (home) — a leva atual: as fatias do PRD ativo em **ondas** de execução, com tamanho, tempo típico, estado e o comando copiável para pegar cada uma; issues **avulsas** abertas (fora de PRD) fecham a aba em seção própria, com os mesmos estados · **Issues** — tudo que aconteceu (PRD → fatias → PR → deploy); as fatias de cada PRD nascem **colapsadas** atrás de um toggle `▸ N fatias · M fechadas` (filtro/busca ativos forçam a exibição do que bate); o filtro de **um responsável** (quem está designado, ou "sem responsável") liga um visor com as contas da pessoa: abertas, entregues, lead time e fila · **Produção** — estado de produção + timeline de deploys e releases · **Pendências**, a fila humana: issues abertas com o label `ready-for-human` (ações que só o Pedro pode fazer, criadas no fim de um ciclo pelo `/ship` Passo 10.5), cada card com o rastro do PRD pai e o corpo com o passo a passo; fecha a issue, some do painel · **Mapa** — snapshots factuais da app · **Domínio** — ADRs + glossário · **Guia** — o método em 6 passos, o setup de máquina nova e os bastidores do painel.
 
 ## Vocabulário do Plano
 
@@ -33,7 +33,7 @@ Porta fixa `8799` (a 8765 fica livre pra rodadas manuais), logs em `~/Library/Lo
 
 ## De onde vêm os dados (ao vivo vs. do último `git pull`)
 
-- **Ao vivo (rede):** issues, PRs e comentários via `gh` (o Plano nasce daí); produção, deploys e releases da `origin/main` (`git fetch` + `git show` — os ships rodam em worktrees paralelos, então a verdade pós-ship vive no remoto); e o seu `git` local (branch, commits).
+- **Ao vivo (rede):** issues, PRs e comentários via `gh` (o Plano nasce daí); produção, deploys e releases da `origin/main` (`git fetch` + `git show`; o rabo `fechar_onda.py` pusha de um worktree próprio, então a verdade pós-merge vive no remoto); e o seu `git` local (branch, commits).
 - **Do seu clone (último `git pull`):** mapa da app (`docs/spec/snapshots/`), decisões e glossário (`docs/adr/` + `CONTEXT.md`).
 
 Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta sozinho a cada 60s. Requer `gh` autenticado para issues e para o Plano — sem ele, o resto continua funcionando (o painel mostra como resolver).

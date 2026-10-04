@@ -7,7 +7,7 @@ sidebar:
   order: 23
 ---
 
-## O motivo não é burocracia
+## Por que a tela pede um motivo
 
 Várias ações do painel de Usuários param e pedem um **Motivo** antes de
 concluir. Em algumas ele é obrigatório: resetar senha, apagar uma ficha,
@@ -40,7 +40,7 @@ demais para depender de alguém lembrar:
 - a mesclagem de um participante externo, com a contagem do que foi movido.
 
 Na Ouvidoria vai além: cada vez que alguém abre uma manifestação, a abertura
-fica registrada. Ler também é um ato.
+fica registrada.
 
 ## A senha é a única coisa que não volta
 
