@@ -831,6 +831,63 @@ def test_dry_run_do_pr_avulso_imprime_o_plano_com_pr_issue_e_tipo_de_bump(
     assert c.builds == []
 
 
+# ----------------------------------- classe do lote: app ou ferramenta (#965)
+
+def pr_de_ferramenta(tmp_path: Path, **kw) -> Cenario:
+    """PR que não toca `hospital-reunioes/`: script do time e skill. Título `feat`
+    de propósito, que num PR de app daria bump minor."""
+    return Cenario(tmp_path, 7, kw.pop("titulo", "feat(tools): painel conta PRs por PRD"), kw.pop("issue", 5),
+                   kw.pop("arquivos", {"tools/painel.py": "PRDS = 1\n",
+                                       ".claude/skills/painel/SKILL.md": "# painel\n"}), **kw)
+
+
+def test_dry_run_de_pr_so_de_ferramenta_diz_ferramenta_so_merge(tmp_path, monkeypatch, capsys):
+    fo = carregar_fechar_onda()
+    c = pr_de_ferramenta(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+
+    plano = [li for li in capsys.readouterr().out.splitlines() if li.startswith("plano:")]
+    assert len(plano) == 1, plano
+    assert "ferramenta: só merge" in plano[0], plano[0]
+    assert "PR #7" in plano[0] and "bump" not in plano[0] and "->" not in plano[0], plano[0]
+    assert c.main_remota() == c.base and c.coolify() == [] and c.semaforo == []
+
+
+@pytest.mark.parametrize("extra", [(), ("--sessao", "onda-x")], ids=["avulso", "onda"])
+def test_fechamento_de_ferramenta_so_faz_merge_sem_coolify_nem_registro(
+    tmp_path, monkeypatch, capsys, extra
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_ferramenta(tmp_path)
+    history_antes = c.na_main("docs/spec/deploy/history.json")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, *extra) == 0
+
+    # um merge só, o do código, pela API
+    assert len(c.merges) == 1, c.merges
+    codigo = c.merges[0]["main"]
+    assert c.main_remota() == codigo
+    assert git(c.remoto, "show", f"{codigo}:tools/painel.py") == "PRDS = 1"
+    # sem bump: a versão do app é a da base
+    assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.10.0"
+    assert "chore(release)" not in git(c.remoto, "log", "--format=%s", f"{c.base}..{c.merges[0]['head']}")
+    # coolify falso sem nenhuma chamada: nem APP_VERSION, nem deploy forçado
+    assert c.coolify() == []
+    assert c.builds == [] and c.healths == []
+    # nenhum PR de registro: o único POST de PR é o de entrega da onda
+    abertos = [a for a in c.gh_chamadas if a[:4] == ["api", "-X", "POST", "repos/{owner}/{repo}/pulls"]]
+    assert len(abertos) == (0 if not extra else 1), abertos
+    assert not any("head=registro/" in " ".join(a) for a in abertos), abertos
+    assert c.na_main("docs/spec/deploy/history.json") == history_antes
+    # o build que o webhook disparar para o merge é cancelado, como o do registro
+    assert c.cancelamentos == [codigo]
+    assert c.semaforo[-1][0] == "soltar"
+    assert "ferramenta" in capsys.readouterr().out
+
+
 # ------------------------------------------- sha256 da migration no corpo do PR
 
 SQL_DO_ARQUIVO = "create table triagem (id int);\n"

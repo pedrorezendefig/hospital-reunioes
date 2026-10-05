@@ -104,7 +104,7 @@ SEMAFORO = ".claude/skills/deploy/scripts/semaforo.sh"
 SPEC = "docs/spec"
 HISTORY = f"{SPEC}/deploy/history.json"
 STATE = f"{SPEC}/deploy/state.json"
-DOCS_ONLY_PREFIXES = ("docs/", ".claude/")
+APP = "hospital-reunioes/"
 BUILD_WAIT_WEBHOOK_S = 120
 BUILD_POLL_S = 10
 BUILD_TIMEOUT_S = 40 * 60
@@ -197,10 +197,6 @@ def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> list[dict]:
             if info.get("mergeable") != "UNKNOWN":
                 break
             time.sleep(5)
-        info["docs_only"] = all(
-            f["path"].startswith(DOCS_ONLY_PREFIXES) or f["path"].endswith(".md")
-            for f in info.get("files") or []
-        )
         if info.get("state") != "OPEN":
             problemas.append(f"#{n} esta {info.get('state')}")
         if info.get("baseRefName") not in (None, "main"):
@@ -214,8 +210,8 @@ def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> list[dict]:
         if ruins:
             nomes = ", ".join((c.get("name") or c.get("context") or "?") for c in ruins[:4])
             problemas.append(f"#{n} com check nao verde: {nomes}")
-        elif not checks and not info["docs_only"]:
-            problemas.append(f"#{n} sem nenhum check e nao e docs-only")
+        elif not checks and classe_do_lote(f["path"] for f in info.get("files") or []) == "app":
+            problemas.append(f"#{n} sem nenhum check e toca o app")
         infos.append(info)
     if problemas:
         falhar("pre-condicao: " + "; ".join(problemas) + ".", EXIT_PRECOND)
@@ -456,9 +452,13 @@ def entregar(raiz: Path, wt: Path, branch: str, pr: int | None, titulo: str, cor
 
 # --------------------------------------------------------------------- bump
 
-def tipo_de_bump(infos: list[dict]) -> str | None:
-    if all(i["docs_only"] for i in infos):
-        return None
+def classe_do_lote(caminhos) -> str:
+    """"app" se algum arquivo esta em hospital-reunioes/, "ferramenta" se nenhum
+    esta (issue #965). Lote misto e app."""
+    return "app" if any(c.startswith(APP) for c in caminhos) else "ferramenta"
+
+
+def tipo_de_bump(infos: list[dict]) -> str:
     nivel = "patch"
     for info in infos:
         for c in info.get("commits") or []:
@@ -889,30 +889,34 @@ def main() -> int:
                    f"Mande um corretor rebasear o PR sobre origin/main e rode de novo.", EXIT_MERGE)
 
         versao_antiga = ler_versao(wt, base)
-        tipo = tipo_de_bump(infos)
-        versao_nova = proxima_versao(versao_antiga, tipo) if tipo else None
-        docs_only = tipo is None
         arquivos = set()
         for i in infos:
             arquivos.update(f["path"] for f in i.get("files") or [])
+        ferramenta = classe_do_lote(arquivos) == "ferramenta"
+        tipo = None if ferramenta else tipo_de_bump(infos)
+        versao_nova = proxima_versao(versao_antiga, tipo) if tipo else None
         # supabase nao tem build: migration se aplica a mao no Studio (o deploy nao aplica SQL)
         servicos = [sid for sid, s in servicos_cfg.items()
                     if s.get("type") != "supabase" and any(re.match(tp.replace("**", ".*").replace("*", "[^/]*"), a)
                            for a in arquivos for tp in (s.get("diff_routing") or {}).get("trigger_paths") or [])]
-        if not docs_only and not servicos:
+        if not ferramenta and not servicos:
             servicos = [sid for sid, s in servicos_cfg.items() if s.get("type") in ("nextjs", "fastapi", "node", "python", "generic")]
         prds = prds_do_lote(raiz, infos)
         migs = migrations_novas(wt, base)
 
         if args.dry_run:
-            bump = (f"bump {tipo} v{versao_antiga} -> v{versao_nova}" if tipo
-                    else f"sem bump (lote docs-only), versao segue v{versao_antiga}")
+            classe = (f"ferramenta: só merge, versao segue v{versao_antiga}" if ferramenta
+                      else f"app: bump {tipo} v{versao_antiga} -> v{versao_nova}")
             print("plano: " + ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in infos)
-                  + f"; {bump}; chave {args.sessao}")
-            print(f"faria: push na branch {branch}" + ("" if avulso else " e PR de entrega")
-                  + ", CI verde, " + ("APP_VERSION no Coolify, " if versao_nova else "")
-                  + f"merge pela API, build, health, registro em PR so de docs (prds {prds or '[]'}, "
-                  f"migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
+                  + f"; {classe}; chave {args.sessao}")
+            entrega = f"faria: push na branch {branch}" + ("" if avulso else " e PR de entrega") + ", CI verde, "
+            if ferramenta:
+                print(entrega + "merge pela API, cancela o build que o webhook disparar, limpeza; "
+                      "sem bump, APP_VERSION, build, health nem registro.")
+            else:
+                print(entrega + "APP_VERSION no Coolify, "
+                      + f"merge pela API, build, health, registro em PR so de docs (prds {prds or '[]'}, "
+                      f"migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
             remover_worktree(raiz, wt, args.prs)
             wt = None
             print("dry-run terminou sem tocar em nada.")
@@ -925,7 +929,7 @@ def main() -> int:
             sha_bump = commitar(wt, f"chore(release): bump v{versao_nova} ({origem})", [PACKAGE_JSON])
             print(f"bump: v{versao_antiga} -> v{versao_nova} ({tipo}) em {sha_bump}, na branch {branch}")
         else:
-            print(f"bump: nenhum (lote docs-only), versao segue v{versao_antiga}")
+            print(f"bump: nenhum (ferramenta), versao segue v{versao_antiga}")
 
         if avulso:
             titulo = infos[0]["title"].strip()
@@ -955,18 +959,31 @@ def main() -> int:
         remover_worktree(raiz, wt, args.prs)
         wt = None
 
+        if ferramenta:
+            # producao nao muda: sem build, health nem registro (issue #965)
+            cancelados = cancelar_build_do_registro(servicos_cfg, sha_main)
+            conferir_prs_fechados(raiz, infos, args.sessao, avulso, pr_entrega)
+            n_wt = limpar_worktrees_de_agente(raiz, {i["headRefName"]: i.get("headRefOid") for i in infos})
+            semaforo(raiz, "soltar", args.sessao)
+            semaforo_pego = False
+            fechou = f"PR {prs_txt} fechado" if avulso else f"onda {args.sessao} fechada"
+            print(f"{fechou} (ferramenta: só merge): versao segue v{versao_antiga} · merge {sha_main[:7]} · "
+                  "sem build, health nem registro"
+                  + (f" · build do webhook cancelado ({', '.join(cancelados)})" if cancelados else "")
+                  + f" · {n_wt} worktrees limpos · {dur(time.time() - T0)}")
+            return 0
+
         duracoes: dict[str, int | None] = {}
         falhas = []
-        if not docs_only:
-            for sid in servicos:
-                status, d = esperar_build(servicos_cfg[sid], t_merge, sha_main)
-                duracoes[sid] = d
-                if status != "finished":
-                    falhas.append(f"{sid}: {status}")
+        for sid in servicos:
+            status, d = esperar_build(servicos_cfg[sid], t_merge, sha_main)
+            duracoes[sid] = d
+            if status != "finished":
+                falhas.append(f"{sid}: {status}")
         if falhas:
             print("build: " + "; ".join(falhas) + f". Semaforo preso na chave {args.sessao}: rode `/deploy rollback` com ela.")
             return EXIT_BUILD
-        print("build: " + (", ".join(f"{sid} {dur(duracoes.get(sid))}" for sid in servicos) if servicos else "nenhum (docs-only)"))
+        print("build: " + ", ".join(f"{sid} {dur(duracoes.get(sid))}" for sid in servicos))
 
         healths = {}
         for sid in (servicos or [s for s in servicos_cfg if s != "supabase"]):
