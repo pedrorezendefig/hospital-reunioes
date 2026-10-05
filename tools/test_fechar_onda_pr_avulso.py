@@ -911,6 +911,27 @@ def test_pr_misto_de_ferramenta_e_frontend_segue_o_fluxo_de_app(tmp_path, monkey
     assert entrada["app_version"] == "0.11.0" and entrada["sha"] == c.merges[0]["main"]
 
 
+def test_mover_codigo_do_app_para_tools_conta_como_app(tmp_path, monkeypatch, capsys):
+    """O `files` do gh mostra um rename só pelo caminho novo. Sem olhar o caminho
+    antigo, tirar código de `hospital-reunioes/` passaria por ferramenta, e a
+    produção ficaria com o arquivo que a main já não tem."""
+    fo = carregar_fechar_onda()
+    c = pr_de_ferramenta(tmp_path, titulo="chore(tools): prazo vira script do time",
+                         arquivos={"tools/prazo.py": "PRAZO = 10\n"})
+    repo = tmp_path / "repo"
+    git(repo, "rm", "-q", "hospital-reunioes/backend/app/prazo.py")
+    git(repo, "commit", "-q", "-m", "chore(tools): tira o prazo do backend")
+    git(repo, "push", "-q", str(c.remoto), "feature", "feature:refs/pull/7/head")
+    c.head_do_pr = c.pr["headRefOid"] = git(c.remoto, "rev-parse", "feature")
+    assert c.pr["files"] == [{"path": "tools/prazo.py"}]
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+
+    plano = next(li for li in capsys.readouterr().out.splitlines() if li.startswith("plano:"))
+    assert "app: bump patch v0.10.0 -> v0.10.1" in plano, plano
+
+
 # ------------------------------------------- sha256 da migration no corpo do PR
 
 SQL_DO_ARQUIVO = "create table triagem (id int);\n"

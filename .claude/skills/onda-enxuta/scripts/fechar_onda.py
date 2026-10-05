@@ -889,7 +889,9 @@ def main() -> int:
                    f"Mande um corretor rebasear o PR sobre origin/main e rode de novo.", EXIT_MERGE)
 
         versao_antiga = ler_versao(wt, base)
-        arquivos = set()
+        # --no-renames, como o detector do CI: o `files` do gh mostra um rename so
+        # pelo caminho novo, e tirar codigo do app passaria por ferramenta
+        arquivos = set(run(["git", "diff", "--no-renames", "--name-only", f"{base}...HEAD"], cwd=wt).stdout.split())
         for i in infos:
             arquivos.update(f["path"] for f in i.get("files") or [])
         ferramenta = classe_do_lote(arquivos) == "ferramenta"
