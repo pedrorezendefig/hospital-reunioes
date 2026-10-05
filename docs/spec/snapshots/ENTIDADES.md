@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-15T00:44-0300 -->
+<!-- last_update: 2026-10-04T21:49-0300 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -545,7 +545,7 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
 ## ouvidoria_acessos
 
-> Origem: `064_ouvidoria_manifestacao.sql`
+> Origem: `064_ouvidoria_manifestacao.sql` (alterada em: 112_ouvidoria_triagem_email.sql)
 
 | Campo | Tipo | Constraints | Default | FK |
 |-------|------|-------------|---------|-----|
@@ -555,9 +555,11 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `ator_id` | `VARCHAR(10)` | — | — | `participantes.id` |
 | `ator_nome` | `TEXT` | NOT NULL | — | — |
 | `acao` | `TEXT` | NOT NULL | — | — |
+| `email_recebido_id` | `UUID` | — | — | `ouvidoria_emails_recebidos.id` |
 
 **Indexes:**
 - `idx_ouvidoria_acessos_manifestacao` em `(manifestacao_id, ocorrido_em DESC)` (de `064_ouvidoria_manifestacao.sql`)
+- `idx_ouvidoria_acessos_email_recebido` em `(email_recebido_id, ocorrido_em DESC)` (de `112_ouvidoria_triagem_email.sql`)
 
 ## ouvidoria_prazos
 
@@ -879,6 +881,22 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 **Indexes:**
 - `idx_tecnologia_conversas_demanda` em `(demanda_id, criado_em)` (de `102_tecnologia_fundacao.sql`)
 
+## ouvidoria_emails_recebidos_anexos
+
+> Origem: `112_ouvidoria_triagem_email.sql` (alterada em: 112_ouvidoria_triagem_email.sql)
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `id` | `UUID` | PK | `gen_random_uuid()` | — |
+| `email_recebido_id` | `UUID` | NOT NULL | — | `ouvidoria_emails_recebidos.id` |
+| `resend_anexo_id` | `TEXT` | NOT NULL | — | — |
+| `filename` | `TEXT` | NOT NULL | — | — |
+| `content_type` | `TEXT` | NOT NULL | — | — |
+| `tamanho_bytes` | `BIGINT` | — | — | — |
+| `storage_path` | `TEXT` | — | — | — |
+| `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+| `motivo_sem_binario` | `TEXT` | — | — | — |
+
 ---
 
-**Resumo:** 41 tabelas vivas.
+**Resumo:** 42 tabelas vivas.

@@ -1,6 +1,6 @@
 # MIGRATIONS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-02T18:26-0300 -->
+<!-- last_update: 2026-10-04T21:49-0300 -->
 
 Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 
@@ -113,7 +113,8 @@ Ordem cronológica das migrations do Postgres do Hospital Reuniões.
 | 109 | `109_ouvidoria_canais_manuais.sql` | canais de origem manuais da Ouvidoria (issue #721, PRD #720) | 0 | 0 | 0 | 0 |
 | 110 | `110_ouvidoria_paciente_do_caso.sql` | o Paciente do caso na Manifestacao (issue #666, PRD #659, | 0 | 1 | 0 | 0 |
 | 111 | `111_tecnologia_produto_central_de_comando.sql` | 111_tecnologia_produto_central_de_comando.sql | 0 | 0 | 0 | 0 |
+| 112 | `112_ouvidoria_triagem_email.sql` | Triagem de e-mail da Ouvidoria (issue #648, PRD #646, ADR 0051) | 1 | 3 | 2 | 0 |
 | 113 | `113_ouvidoria_paciente_do_caso_comentarios.sql` | os comentarios do Paciente do caso passam a dizer a verdade | 0 | 0 | 0 | 0 |
 
 **Legenda:** C = CREATE TABLE · A = ALTER TABLE · I = CREATE INDEX · D = DROP.
-**Total:** 108 migrations.
+**Total:** 109 migrations.
