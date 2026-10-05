@@ -7,6 +7,11 @@ pelo admin (`gh api`, no corpo do PR #910 e no `dev.md`). Ele exige os jobs do
 caminho não reporta check nenhum, então o PR só de docs (o registro do
 `fechar_onda.py`, ADR, skill) travaria do mesmo jeito. Estes testes amarram as
 duas pontas: o nome de cada check e o CI que sempre reporta.
+
+Desde a issue #966 o detector responde por pasta (backend, frontend,
+ferramenta) e cada job pesado roda só com a parte dele. Os testes rodam o
+script do detector num repo git de verdade e avaliam o `if:` de cada job com as
+saídas dele, como o GitHub avalia: a pergunta é quais jobs rodam.
 """
 
 from __future__ import annotations
@@ -267,11 +272,14 @@ def test_detector_que_nao_acha_a_base_falha_e_roda_tudo(tmp_path):
     assert jobs_que_rodam("failure", saidas_do_passo(proc)) == TUDO
 
 
-def test_estes_testes_rodam_quando_o_ci_ou_o_ruleset_mudam():
-    """Os testes de `tools/` rodam no `manual.yml`, que só acorda pelos caminhos dele."""
+def test_estes_testes_rodam_quando_tools_o_ci_ou_o_ruleset_mudam():
+    """Os testes de `tools/` rodam no `manual.yml`, que só acorda pelos caminhos
+    dele. O `ci.yml` pula PR só de ferramenta (issue #966): sem `tools/**` aqui,
+    mudança em `tools/` entraria sem teste nenhum."""
     texto = MANUAL.read_text(encoding="utf-8")
     on = texto.split("\non:\n", 1)[1].split("\njobs:\n", 1)[0]
     for evento in ("push", "pull_request"):
         bloco = re.search(rf"^  {evento}:\n((?:    .*\n|\n)*)", on, re.M).group(1)
+        assert "- 'tools/**'" in bloco, evento
         assert "- '.github/workflows/ci.yml'" in bloco, evento
         assert "- '.github/rulesets/**'" in bloco, evento
