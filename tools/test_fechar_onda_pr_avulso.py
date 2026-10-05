@@ -102,7 +102,7 @@ class Cenario:
     """O remoto, o clone em que o script roda e o que os dublês anotaram."""
 
     def __init__(self, tmp_path: Path, numero: int, titulo: str, issue: int | None,
-                 arquivos: dict[str, str], corpo: str = ""):
+                 arquivos: dict[str, str], corpo: str = "", deploys: list[dict] | None = None):
         self.numero = numero
         self.issue = issue
         self.log_scripts = tmp_path / "scripts-chamados.log"
@@ -118,7 +118,7 @@ class Cenario:
             "production": {"repo": "dono/repo"},
             "services": [{"id": "backend"}, {"id": "frontend"}],
         }))
-        escrever(repo, "docs/spec/deploy/history.json", json_txt({"deploys": []}))
+        escrever(repo, "docs/spec/deploy/history.json", json_txt({"deploys": deploys or []}))
         escrever(repo, ".claude/skills/snapshot/scripts/snapshot.py",
                  script_falso(self.log_scripts, "snapshot", "docs/spec/snapshots/ROTAS.md"))
         escrever(repo, "tools/tirar_draft_manual.py",
@@ -462,6 +462,22 @@ def test_registro_leva_so_history_e_state_sem_snapshot_nem_draft_do_manual(
     codigo, registro = c.merges[0]["main"], c.merges[1]["main"]
     mudados = git(c.remoto, "diff", "--name-only", codigo, registro).splitlines()
     assert mudados == ["docs/spec/deploy/history.json", "docs/spec/deploy/state.json"], mudados
+
+
+def test_history_guarda_todos_os_deploys_sem_teto(tmp_path, monkeypatch):
+    """ADR 0062, decisão 9: o `history.json` é a timeline inteira, sem o teto de 50."""
+    fo = carregar_fechar_onda()
+    antigos = [{"app_version": f"0.9.{n}", "sha": f"{n:040x}"} for n in range(60, 0, -1)]
+    c = pr_de_codigo(tmp_path, deploys=antigos)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    deploys = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"]
+    assert len(deploys) == 61, len(deploys)
+    assert deploys[0]["app_version"] == "0.10.1"
+    assert deploys[1:] == antigos, "nenhum deploy antigo some nem muda de ordem"
+    assert deploys[-1]["app_version"] == "0.9.1"
 
 
 def test_pr_atras_da_main_recebe_a_main_antes_do_bump(tmp_path, monkeypatch):

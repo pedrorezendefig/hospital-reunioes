@@ -102,7 +102,6 @@ SPEC = "docs/spec"
 HISTORY = f"{SPEC}/deploy/history.json"
 STATE = f"{SPEC}/deploy/state.json"
 DOCS_ONLY_PREFIXES = ("docs/", ".claude/")
-HISTORY_MAX = 50
 BUILD_WAIT_WEBHOOK_S = 120
 BUILD_POLL_S = 10
 BUILD_TIMEOUT_S = 40 * 60
@@ -563,7 +562,6 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
     }
     deploys = history.setdefault("deploys", [])
     deploys.insert(0, entrada)
-    del deploys[HISTORY_MAX:]
     escrever_json(wt / HISTORY, history)
 
     modo = "pr-avulso" if avulso else "onda-enxuta"
