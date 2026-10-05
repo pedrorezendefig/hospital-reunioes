@@ -19,7 +19,8 @@ def montar_fases(issues: list[dict], prs: list[dict], deploys: list[dict], branc
     for p in prs:
         for n in p["closes"]:
             prs_por_issue.setdefault(n, []).append(p)
-    return {"issues": {i["number"]: _fase_issue(i, prs_por_issue.get(i["number"], []), abertas, producao)
+    return {"issues": {i["number"]: _fase_issue(i, prs_por_issue.get(i["number"], []), abertas, producao,
+                                                branches)
                        for i in issues}}
 
 
@@ -50,40 +51,66 @@ class _Producao:
             self.deploys.append((_dt(d["at"]), d, citados))
         self.deploys.sort(key=lambda t: t[0])
 
-    def do_pr(self, pr: dict) -> dict | None:
-        """Primeiro deploy que cita o PR mergeado: a versão em que ele entrou em produção."""
+    def do_pr(self, pr: dict) -> tuple[bool, dict | None]:
+        """(em produção?, deploy) do PR: o primeiro deploy que o cita dá a versão.
+
+        Merge anterior ao deploy mais antigo do history.json também está no ar (todo
+        deploy sobe a main inteira), só que sem versão conhecida: o history.json
+        guardou só os 50 últimos deploys até a ADR 0062.
+        """
         if pr["state"] != "MERGED":
-            return None
+            return False, None
         for _, d, citados in self.deploys:
             if pr["number"] in citados:
-                return d
-        return None
+                return True, d
+        merge = _dt(pr.get("merged_at"))
+        return bool(self.deploys and merge and merge < self.deploys[0][0]), None
 
 
-def _fase_issue(issue: dict, prs: list[dict], abertas: set[int], producao: _Producao) -> dict:
+def _por_data(prs: list[dict]) -> list[dict]:
+    return sorted(prs, key=lambda p: (p.get("created_at") or "", p["number"]))
+
+
+def _branch_sem_pr(numero: int, prs: list[dict], branches: list[str]) -> str | None:
+    """Branch remota da issue (convenção `<type>/<slug>-<N>`) que ainda não virou PR."""
+    com_pr = {p.get("head_ref") for p in prs}
+    sufixo = re.compile(rf"-{numero}$")
+    return next((b for b in branches if sufixo.search(b) and b not in com_pr), None)
+
+
+def _fase_issue(issue: dict, prs: list[dict], abertas: set[int], producao: _Producao,
+                branches: list[str]) -> dict:
     """Régua da issue, na precedência da ADR 0062: a primeira regra que vale decide."""
     labels = set(issue["labels"])
+    prs = _por_data(prs)
     mergeados = [p for p in prs if p["state"] == "MERGED"]
     abertos = [p for p in prs if p["state"] == "OPEN"]
-    out = {"fase": None, "pr": None, "versao": None, "em_producao_em": None}
+    tentativas = [p["number"] for p in prs if p["state"] == "CLOSED"]
+    out = {"fase": None, "sub": None, "branch": None, "pr": None, "sinal": None,
+           "tentativas": tentativas, "versao": None, "em_producao_em": None}
     if "ready-for-human" in labels:
         out["fase"] = "humana"
     elif issue["state"] != "OPEN" and not mergeados:
         out["fase"] = "encerrada_sem_pr"
     elif mergeados:
-        deploys = [d for d in (producao.do_pr(p) for p in mergeados) if d]
         out["pr"] = mergeados[-1]["number"]
+        no_ar = [producao.do_pr(p) for p in mergeados]
+        deploys = [d for _, d in no_ar if d]
         if deploys:
             primeiro = min(deploys, key=lambda d: _dt(d["at"]))
             out.update(fase="em_producao", versao=primeiro.get("app_version"), em_producao_em=primeiro["at"])
         else:
-            out["fase"] = "mergeada"
+            out["fase"] = "em_producao" if any(ok for ok, _ in no_ar) else "mergeada"
     elif abertos:
-        out.update(fase="pr_aberto", pr=abertos[-1]["number"])
+        pr = abertos[-1]
+        out.update(fase="pr_aberto", pr=pr["number"],
+                   sinal={"tentativa_anterior": any(t < pr["number"] for t in tentativas)})
     elif "blocked" in labels or any(b in abertas for b in issue["blocked_by"]):
         out["fase"] = "bloqueada"
     elif "in-progress" in labels or issue["assignees"]:
         out["fase"] = "em_andamento"
+        out["branch"] = _branch_sem_pr(issue["number"], prs, branches)
+        out["sub"] = "branch_criada" if out["branch"] else None
     elif "ready-for-agent" in labels:
         out["fase"] = "fila"
     else:

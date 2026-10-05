@@ -153,3 +153,108 @@ def test_mergeada_sem_versao_no_history_fica_mergeada():
     fase = _fase(issue, prs=[_merged(110, [10])], deploys=outro)
     assert fase["fase"] == "mergeada"
     assert fase["versao"] is None
+
+
+def test_issue_aberta_sem_label_de_triagem_cai_em_triagem():
+    assert _fase(_issue(11, labels=["type:fix"]))["fase"] == "triagem"
+
+
+# ---------- precedência: cada fase vence a de baixo que também vale ----------
+
+DEPLOY_DO_120 = _deploy("0.162.0", "2026-10-04T12:00:00-03:00", "PR #120, issue #20")
+
+
+def test_ready_for_human_vence_tudo():
+    issue = _issue(20, state="CLOSED", labels=["ready-for-human", "in-progress", "ready-for-agent"],
+                   assignees=["bia"], blocked_by=[21])
+    prs = [_merged(120, [20]), _pr(121, [20])]
+    fase = _fase(issue, outras=[_issue(21)], prs=prs, deploys=[DEPLOY_DO_120],
+                 branches=["feat/x-20"])
+    assert fase["fase"] == "humana"
+
+
+def test_encerrada_sem_pr_vence_pr_aberto_e_claim():
+    issue = _issue(22, state="CLOSED", labels=["in-progress"], assignees=["bia"])
+    assert _fase(issue, prs=[_pr(122, [22])])["fase"] == "encerrada_sem_pr"
+
+
+def test_em_producao_vence_pr_aberto_de_issue_reaberta():
+    issue = _issue(20, labels=["in-progress"], assignees=["bia"])
+    fase = _fase(issue, prs=[_merged(120, [20]), _pr(121, [20])], deploys=[DEPLOY_DO_120])
+    assert fase["fase"] == "em_producao"
+
+
+def test_mergeada_vence_pr_aberto():
+    issue = _issue(23, labels=["in-progress"], assignees=["bia"])
+    assert _fase(issue, prs=[_merged(123, [23]), _pr(124, [23])])["fase"] == "mergeada"
+
+
+def test_pr_aberto_vence_bloqueio():
+    issue = _issue(24, labels=["in-progress"], assignees=["bia"], blocked_by=[25])
+    assert _fase(issue, outras=[_issue(25)], prs=[_pr(125, [24])])["fase"] == "pr_aberto"
+
+
+def test_bloqueada_vence_claim():
+    issue = _issue(26, labels=["in-progress"], assignees=["bia"], blocked_by=[27])
+    assert _fase(issue, outras=[_issue(27)])["fase"] == "bloqueada"
+
+
+def test_em_andamento_vence_fila():
+    issue = _issue(28, labels=["ready-for-agent"], assignees=["bia"])
+    assert _fase(issue)["fase"] == "em_andamento"
+
+
+def test_fila_vence_triagem():
+    assert _fase(_issue(29, labels=["ready-for-agent", "needs-info"]))["fase"] == "fila"
+
+
+# ---------- casos obrigatórios da issue #941 ----------
+
+
+def test_bloqueadora_fechada_nao_bloqueia():
+    issue = _issue(30, labels=["ready-for-agent"], blocked_by=[31])
+    fechada = _issue(31, state="CLOSED", closed_at="2026-10-02T10:00:00Z")
+    assert _fase(issue, outras=[fechada])["fase"] == "fila"
+
+
+def test_pr_fechado_sem_merge_seguido_de_pr_novo_marca_tentativa_anterior():
+    issue = _issue(32, labels=["in-progress"], assignees=["bia"])
+    velho = _pr(132, [32], state="CLOSED", created_at="2026-10-02T10:00:00Z", closed_at="2026-10-02T15:00:00Z")
+    novo = _pr(133, [32], created_at="2026-10-03T10:00:00Z")
+    fase = _fase(issue, prs=[novo, velho])
+    assert fase["fase"] == "pr_aberto"
+    assert fase["pr"] == 133
+    assert fase["tentativas"] == [132]
+    assert fase["sinal"]["tentativa_anterior"] is True
+
+
+def test_branch_remota_com_o_numero_e_sem_pr_marca_branch_criada():
+    issue = _issue(33, labels=["in-progress"], assignees=["bia"])
+    fase = _fase(issue, branches=["main", "feat/fases-do-painel-33", "feat/outra-133"])
+    assert fase["fase"] == "em_andamento"
+    assert fase["sub"] == "branch_criada"
+    assert fase["branch"] == "feat/fases-do-painel-33"
+
+
+def test_branch_de_outro_numero_com_o_mesmo_final_nao_conta():
+    issue = _issue(34, labels=["in-progress"], assignees=["bia"])
+    fase = _fase(issue, branches=["feat/outra-134", "feat/x34"])
+    assert fase["sub"] is None
+    assert fase["branch"] is None
+
+
+def test_branch_que_ja_tem_pr_nao_marca_branch_criada():
+    issue = _issue(35, labels=["in-progress"], assignees=["bia"])
+    fechado = _pr(135, [35], state="CLOSED", closed_at="2026-10-02T15:00:00Z", head_ref="feat/x-35")
+    fase = _fase(issue, prs=[fechado], branches=["feat/x-35"])
+    assert fase["fase"] == "em_andamento"
+    assert fase["sub"] is None
+
+
+def test_merge_anterior_ao_historico_conta_como_em_producao_sem_versao():
+    # history.json guardou só os 50 últimos deploys até a #939: o merge antigo já subiu
+    issue = _issue(36, state="CLOSED", closed_at="2026-01-01T10:00:00Z")
+    deploys = [_deploy("0.135.0", "2026-09-15T18:32:00-03:00", "PR #800")]
+    fase = _fase(issue, prs=[_merged(136, [36], merged_at="2026-01-01T10:00:00Z")], deploys=deploys)
+    assert fase["fase"] == "em_producao"
+    assert fase["versao"] is None
