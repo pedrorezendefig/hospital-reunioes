@@ -1,7 +1,7 @@
 ---
 status: accepted
 amends: 0044, 0056
-amended_by: 0058
+amended_by: 0058, 0062
 ---
 
 # Manual do usuário: um site por módulo, vídeo por tarefa, fatia de manual por PRD
