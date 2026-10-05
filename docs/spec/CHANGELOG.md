@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.161.0 (sem bump) - 2026-10-05 14:46 - PR #881, sem issue: Aspas na descrição de três agentes hr-* para o YAML carregar
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e0cccf3`
+- PRs: [#881](https://github.com/pedrorezendefig/hospital-reunioes/pull/881)
+- Serviços: nenhum
+- Resultado: 🟢 healthy (233s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e0cccf3
+
 ## v0.161.0 - 2026-10-05 12:40 - PR #930, sem issue: Responsável cai em quem criou a issue quando ninguém assumiu
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `b64bf9f`
