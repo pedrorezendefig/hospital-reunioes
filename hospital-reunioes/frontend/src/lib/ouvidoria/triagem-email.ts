@@ -2,13 +2,15 @@
  * A Triagem de e-mail da Ouvidoria (issue #648, PRD #646, ADR 0051).
  *
  * Todo e-mail que chega em ouvidoria@ entra numa lista que só o Perfil da
- * Ouvidoria vê, antes de virar caso. Nesta fatia o ouvidor só lê: a lista e o
- * item, com o corpo em texto e os anexos. Não é "caixa de entrada": o app não
- * responde e-mail por aqui.
+ * Ouvidoria vê, antes de virar caso. O ouvidor lê a lista e o item, com o
+ * corpo em texto e os anexos, e pode virar o e-mail em manifestação (issue
+ * #650). Não é "caixa de entrada": o app não responde e-mail por aqui.
  *
  * Aqui moram os tipos do que a API devolve e as regras puras da tela. O gate
  * de verdade é o backend (`require_perfil_ouvidoria`, 403 para os demais).
  */
+
+import type { FormularioRegistro } from "./registro";
 
 /** Os dois perfis da Ouvidoria. Super admin fica de fora, como no Dossiê. */
 export const PERFIS_DA_TRIAGEM = ["ouvidor", "diretoria_executiva"];
@@ -108,10 +110,88 @@ export function avisoDosExcedentes(
   return email.motivo_dos_excedentes ? `${rotulo}: ${email.motivo_dos_excedentes}` : rotulo;
 }
 
+const ROTULO_DO_ESTADO: Record<EstadoDaTriagem, string | null> = {
+  pendente: null,
+  virou_manifestacao: "Virou manifestação",
+  juntado: "Juntado a um caso",
+  descartado: "Descartado",
+};
+
+/** O que a lista diz do item já decidido. Pendente não tem marca. */
+export function rotuloDoEstado(estado: EstadoDaTriagem): string | null {
+  return ROTULO_DO_ESTADO[estado] ?? null;
+}
+
 /**
  * As marcas do item. "Interno" é remetente do domínio do hospital (resposta de
  * área, colega); "Incompleto" é corpo ou anexo que não veio do Resend.
  */
 export function marcasDoEmail(email: Pick<EmailRecebidoResumo, "interno" | "incompleto">): string[] {
   return [...(email.interno ? ["Interno"] : []), ...(email.incompleto ? ["Incompleto"] : [])];
+}
+
+// ─── Virar manifestação (issue #650, ADR 0051 decisão 2) ────────────────────
+
+/**
+ * Os valores com que o registro manual abre quando o e-mail vira manifestação,
+ * como a pré-carga da API devolve. Quem cria o caso continua sendo o registro
+ * manual, com o `email_recebido_id` daqui.
+ */
+export interface PreCargaDoEmail {
+  email_recebido_id: string;
+  canal: "email";
+  /** A chegada do e-mail, em ISO: é o T0 do caso, e não a hora do clique. */
+  contato_em: string;
+  manifestante_nome: string;
+  manifestante_contato: string;
+  resumo: string;
+  relato_integral: string;
+  /** Os anexos do e-mail: os que estão guardados passam a ser do caso. */
+  anexos: AnexoDoEmail[];
+}
+
+const PARTES_DO_CAMPO = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "America/Sao_Paulo",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+  hour: "2-digit",
+  minute: "2-digit",
+  second: "2-digit",
+  hourCycle: "h23",
+});
+
+/**
+ * A chegada do e-mail no formato do campo datetime-local, em hora de
+ * Brasília, que é como o backend lê o valor sem fuso. Os segundos ficam: o T0
+ * é a chegada exata, e não o minuto arredondado.
+ */
+export function chegadaParaCampoLocal(iso: string): string {
+  const data = new Date(iso);
+  if (Number.isNaN(data.getTime())) return "";
+  const partes = Object.fromEntries(PARTES_DO_CAMPO.formatToParts(data).map((p) => [p.type, p.value]));
+  return `${partes.year}-${partes.month}-${partes.day}T${partes.hour}:${partes.minute}:${partes.second}`;
+}
+
+/**
+ * O formulário do modal "Nova manifestação" preenchido com o e-mail. Tipo,
+ * setor e resumo ficam para o ouvidor; nenhum campo é trava, e o que vale é o
+ * que ele salvar.
+ */
+export function formularioDaPreCarga(pre: PreCargaDoEmail): FormularioRegistro {
+  return {
+    canal: pre.canal,
+    contatoEm: chegadaParaCampoLocal(pre.contato_em),
+    tipoManifestacao: "",
+    categoria: "",
+    setor: "",
+    resumo: pre.resumo,
+    relatoIntegral: pre.relato_integral,
+    manifestanteNome: pre.manifestante_nome,
+    manifestanteContato: pre.manifestante_contato,
+    manifestanteVinculo: "",
+    pacienteNome: "",
+    pacienteReferencia: "",
+    anonimo: false,
+  };
 }

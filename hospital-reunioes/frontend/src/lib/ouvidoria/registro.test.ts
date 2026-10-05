@@ -133,3 +133,13 @@ describe("registro manual da ouvidoria (issue #321)", () => {
     );
   });
 });
+
+describe("registro que nasce de um e-mail da triagem (issue #650)", () => {
+  it("leva o e-mail de origem quando o caso nasce dele", () => {
+    expect(montarRegistro(FORMULARIO, "e1").email_recebido_id).toBe("e1");
+  });
+
+  it("o registro de telefone e balcão não leva e-mail de origem nenhum", () => {
+    expect("email_recebido_id" in montarRegistro(FORMULARIO)).toBe(false);
+  });
+});

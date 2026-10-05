@@ -61,6 +61,7 @@ from app.services import (
     ouvidoria_respostas,
     ouvidoria_retencao,
     ouvidoria_setor_tokens,
+    ouvidoria_triagem_email,
     ouvidoria_trilha,
     storage,
 )
@@ -829,6 +830,11 @@ class RegistroManual(BaseModel):
     paciente_referencia: str | None = Field(default=None, max_length=200)
     anonimo: bool = False
     sigilo_reforcado: bool = False
+    # O e-mail da Triagem de e-mail de onde o caso nasce (issue #650, ADR 0051
+    # decisão 2). Virar manifestação não é um segundo caminho de criação: é
+    # este registro, aberto com os valores do e-mail. Sem ele (telefone,
+    # balcão, e-mail digitado à mão), o registro é o de sempre.
+    email_recebido_id: str | None = None
 
     @field_validator("resumo", "relato_integral")
     @classmethod
@@ -919,6 +925,8 @@ async def registrar_manifestacao(
     # A área digitada no balcão passa pela mesma lista fechada do cadastro de
     # responsáveis, e o que é gravado é a grafia da taxonomia (issue #419).
     setor = exigir_setor_da_taxonomia(supabase, registro.setor)
+    if registro.email_recebido_id is not None:
+        exigir_email_pendente(supabase, registro.email_recebido_id)
 
     linha = {
         "canal": registro.canal,
@@ -961,12 +969,48 @@ async def registrar_manifestacao(
 
     row = result.data[0]
     registrar_movimento_de_abertura(supabase, me, row, registro.canal)
+    if registro.email_recebido_id is not None and not ouvidoria_triagem_email.virar_manifestacao(
+        supabase, me, registro.email_recebido_id, row, agora_utc()
+    ):
+        # A marca não pegou: ou dois cliques concorrentes passaram juntos pela
+        # conferência de pendente (o outro ligou o e-mail ao caso dele), ou o
+        # banco falhou no meio. Este caso já existe e manifestação não se
+        # apaga (ADR 0047): segue de pé, com o acuse, e o par fica no log para
+        # o ouvidor conferir.
+        logger.error(
+            "Triagem de e-mail: o e-mail %s não ficou ligado ao caso %s que nasceu dele",
+            registro.email_recebido_id,
+            row.get("id"),
+        )
     # O acuse ao manifestante, com o protocolo (issue #493, ADR 0042). Vale
     # também para o caso digitado no balcão: o acuse é do CASO, não do canal,
     # e quem ditou o email no telefone tem o mesmo direito de saber que a
     # manifestação entrou. `acusar_recebimento` não levanta.
     ouvidoria_acuse.acusar_recebimento(supabase, row, agora_utc(), tarefas)
     return {campo: row.get(campo) for campo in _CAMPOS_DOSSIE_TUPLA}
+
+
+def exigir_email_pendente(supabase, email_id: str) -> None:
+    """O e-mail de origem existe e ainda está pendente na triagem. Conferido
+    ANTES de o caso nascer: manifestação não se apaga (ADR 0047), então o
+    e-mail já decidido não pode virar caso de novo.
+
+    Banco ou rede que falham aqui são 503, e não 404: o e-mail pode estar lá,
+    e "não encontrado" mandaria o ouvidor procurar um problema que não existe.
+    Nos dois casos nenhum caso nasce. As três falhas são as do fail-open do
+    módulo (`carimbar_visto_da_ouvidoria`), e só o tipo vai para o log."""
+    try:
+        estado = ouvidoria_triagem_email.estado_do_email(supabase, email_id)
+    except (HTTPError, APIError, OSError) as exc:
+        logger.warning("Falha ao conferir o e-mail de origem %s (%s)", email_id, type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível conferir o e-mail de origem agora. Tente de novo em instantes.",
+        ) from None
+    if estado is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="E-mail não encontrado")
+    if estado != ouvidoria_triagem_email.PENDENTE:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=ouvidoria_triagem_email.RECUSA_JA_DECIDIDO)
 
 
 def registrar_movimento_de_abertura(supabase, me: dict, row: dict, canal: str) -> None:

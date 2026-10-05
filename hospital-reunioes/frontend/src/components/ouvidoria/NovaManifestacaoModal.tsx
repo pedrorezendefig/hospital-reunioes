@@ -14,6 +14,7 @@ import {
   type FormularioRegistro,
 } from "@/lib/ouvidoria/registro";
 import { AVISO_PACIENTE_PODE_IDENTIFICAR } from "@/lib/ouvidoria/publico";
+import { formularioDaPreCarga, type PreCargaDoEmail } from "@/lib/ouvidoria/triagem-email";
 import {
   LABEL_TIPO,
   TIPOS_MANIFESTACAO,
@@ -39,11 +40,23 @@ const VAZIO: FormularioRegistro = {
   anonimo: false,
 };
 
+/** O caso que o registro acabou de criar. */
+export interface ManifestacaoRegistrada {
+  id: string;
+  protocolo: string;
+}
+
 interface NovaManifestacaoModalProps {
   aberto: boolean;
   token: string | null;
   onClose: () => void;
-  onRegistrada: () => void;
+  onRegistrada: (criada: ManifestacaoRegistrada) => void;
+  /**
+   * O e-mail da Triagem de e-mail que está virando manifestação (issue #650).
+   * O modal abre com os valores dele e nenhum campo travado: o que vale é o
+   * que o ouvidor salvar. Sem ele, o registro manual de sempre.
+   */
+  preCarga?: PreCargaDoEmail | null;
 }
 
 const CAMPO =
@@ -57,12 +70,17 @@ const ROTULO = "block text-xs font-semibold text-slate-500 uppercase tracking-wi
  * REAIS do contato: o T0 é quando chegou ao hospital, não quando foi digitado.
  * Os anexos sobem depois que o caso existe, porque cada um se liga ao
  * protocolo já gerado pelo banco.
+ *
+ * Virar manifestação, na Triagem de e-mail, abre este mesmo modal com a
+ * pré-carga do e-mail (ADR 0051, decisão 2): não há segundo caminho de
+ * criação. Os anexos do e-mail não sobem daqui: o backend os passa ao caso.
  */
 export function NovaManifestacaoModal({
   aberto,
   token,
   onClose,
   onRegistrada,
+  preCarga = null,
 }: NovaManifestacaoModalProps) {
   const [form, setForm] = useState<FormularioRegistro>(VAZIO);
   const [arquivos, setArquivos] = useState<File[]>([]);
@@ -101,14 +119,15 @@ export function NovaManifestacaoModal({
   useEffect(() => {
     if (aberto) {
       // O padrão é "agora": o registro em tempo real é o caso comum, e o
-      // ouvidor recua a data quando está digitando algo de ontem.
-      setForm({ ...VAZIO, contatoEm: agoraParaCampoLocal() });
+      // ouvidor recua a data quando está digitando algo de ontem. Vindo de um
+      // e-mail, o T0 é a chegada dele, e não o clique.
+      setForm(preCarga ? formularioDaPreCarga(preCarga) : { ...VAZIO, contatoEm: agoraParaCampoLocal() });
       setArquivos([]);
       setErro(null);
       setProtocolo(null);
       setAvisoAnexos(null);
     }
-  }, [aberto]);
+  }, [aberto, preCarga]);
 
   function alterar<K extends keyof FormularioRegistro>(campo: K, valor: FormularioRegistro[K]) {
     setForm((atual) => ({ ...atual, [campo]: valor }));
@@ -163,13 +182,15 @@ export function NovaManifestacaoModal({
       const res = await fetch("/api/ouvidoria/manifestacoes", {
         method: "POST",
         headers: { "Content-Type": "application/json", Authorization: `Bearer ${token}` },
-        body: JSON.stringify(montarRegistro(form)),
+        body: JSON.stringify(montarRegistro(form, preCarga?.email_recebido_id)),
       });
       if (!res.ok) {
         setErro(
           res.status === 422
             ? "Confira os campos: relato, tipo, setor e resumo são obrigatórios, a data do contato não pode estar no futuro, e o nome do paciente e a referência do atendimento têm no máximo 200 caracteres."
-            : "Não foi possível registrar a manifestação. Tente novamente."
+            : res.status === 409
+              ? "Este e-mail já foi decidido na triagem, talvez em outra aba. Feche a janela e atualize a lista."
+              : "Não foi possível registrar a manifestação. Tente novamente."
         );
         setSalvando(false);
         return;
@@ -191,7 +212,7 @@ export function NovaManifestacaoModal({
     }
     setProtocolo(criada.protocolo);
     setSalvando(false);
-    onRegistrada();
+    onRegistrada(criada);
   }
 
   const podeRegistrar =
@@ -206,7 +227,13 @@ export function NovaManifestacaoModal({
       open={aberto}
       onClose={onClose}
       title="Nova manifestação"
-      description={protocolo ? "Registro concluído" : "Registro manual da ouvidoria"}
+      description={
+        protocolo
+          ? "Registro concluído"
+          : preCarga
+            ? "Registro a partir do e-mail recebido"
+            : "Registro manual da ouvidoria"
+      }
       icon={<Megaphone className="w-5 h-5" />}
       size="lg"
       scrollable
@@ -487,9 +514,29 @@ export function NovaManifestacaoModal({
             )}
           </div>
 
+          {preCarga && preCarga.anexos.length > 0 && (
+            <div>
+              <p className={ROTULO}>Anexos do e-mail</p>
+              <ul className="space-y-1">
+                {preCarga.anexos.map((anexo) => (
+                  <li
+                    key={anexo.id}
+                    className="flex items-center gap-2 text-sm text-slate-600 px-3 py-1.5 rounded-lg bg-slate-50"
+                  >
+                    <Paperclip className="w-3.5 h-3.5 shrink-0 text-slate-400" />
+                    <span className="truncate flex-1">{anexo.filename}</span>
+                    <span className="text-xs text-slate-400 shrink-0">
+                      {anexo.disponivel ? "vai com o caso" : "fica no e-mail"}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
           <div>
             <label className={ROTULO} htmlFor="anexos">
-              Anexos
+              {preCarga ? "Outros anexos" : "Anexos"}
             </label>
             <input
               id="anexos"

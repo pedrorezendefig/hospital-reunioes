@@ -10,10 +10,13 @@ import { describe, expect, it } from "vitest";
 
 import {
   avisoDosExcedentes,
+  chegadaParaCampoLocal,
   formatarChegada,
+  formularioDaPreCarga,
   marcasDoEmail,
   nomeDoRemetente,
   podeVerTriagemDeEmail,
+  rotuloDoEstado,
   rotuloDosAnexos,
 } from "./triagem-email";
 
@@ -72,5 +75,51 @@ describe("como o e-mail aparece na lista", () => {
     expect(marcasDoEmail({ interno: false, incompleto: false })).toEqual([]);
     expect(marcasDoEmail({ interno: true, incompleto: false })).toEqual(["Interno"]);
     expect(marcasDoEmail({ interno: true, incompleto: true })).toEqual(["Interno", "Incompleto"]);
+  });
+});
+
+describe("a pré-carga de virar manifestação (issue #650)", () => {
+  const PRE_CARGA = {
+    email_recebido_id: "e1",
+    canal: "email" as const,
+    contato_em: "2026-09-10T14:02:10.000Z",
+    manifestante_nome: "Joana da Silva",
+    manifestante_contato: "joana.silva@gmail.com",
+    resumo: "",
+    relato_integral: "Esperei três horas na recepção sem informação nenhuma.",
+    anexos: [],
+  };
+
+  it("a chegada em UTC vira a hora de Brasília do campo, com os segundos", () => {
+    // 14h02 em UTC é 11h02 em Brasília. Os segundos ficam: o T0 é a chegada
+    // exata, e não o minuto arredondado.
+    expect(chegadaParaCampoLocal("2026-09-10T14:02:10.000Z")).toBe("2026-09-10T11:02:10");
+  });
+
+  it("a chegada de madrugada em UTC cai no dia anterior em Brasília", () => {
+    expect(chegadaParaCampoLocal("2026-09-11T01:30:00+00:00")).toBe("2026-09-10T22:30:00");
+  });
+
+  it("o formulário nasce com o e-mail e deixa tipo, setor e resumo para o ouvidor", () => {
+    const form = formularioDaPreCarga(PRE_CARGA);
+
+    expect(form.canal).toBe("email");
+    expect(form.contatoEm).toBe("2026-09-10T11:02:10");
+    expect(form.manifestanteNome).toBe("Joana da Silva");
+    expect(form.manifestanteContato).toBe("joana.silva@gmail.com");
+    expect(form.relatoIntegral).toBe("Esperei três horas na recepção sem informação nenhuma.");
+    expect(form.resumo).toBe("");
+    expect(form.tipoManifestacao).toBe("");
+    expect(form.setor).toBe("");
+    expect(form.anonimo).toBe(false);
+  });
+});
+
+describe("o estado do item na lista", () => {
+  it("pendente não tem marca; os decididos dizem o que viraram", () => {
+    expect(rotuloDoEstado("pendente")).toBeNull();
+    expect(rotuloDoEstado("virou_manifestacao")).toBe("Virou manifestação");
+    expect(rotuloDoEstado("juntado")).toBe("Juntado a um caso");
+    expect(rotuloDoEstado("descartado")).toBe("Descartado");
   });
 });
