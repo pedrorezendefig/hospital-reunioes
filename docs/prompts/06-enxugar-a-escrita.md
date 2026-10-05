@@ -49,7 +49,7 @@ O QUE PROCURAR, em ordem de valor
 
 O QUE NÃO TOCAR
 - Frontmatter: título, descrição, selos de papel, `video`, `draft`, `sidebar.order`. Mexer ali muda estrutura, não escrita.
-- As entradas de Novidades: as datas foram lidas do CHANGELOG uma a uma e os números de PRD conferidos.
+- As entradas de Novidades: as datas foram lidas do `history.json` uma a uma e os números de PRD conferidos.
 - Os rótulos de tela reproduzidos do app, mesmo os feios. "Concluido" sem acento no badge de Pendências e "Area" em /perfil estão assim NA TELA: o manual reproduz para a pessoa achar o que está vendo. Não "conserte".
 - Os avisos de limite (o que o app não faz, o cadastro sem efeito, a tela sem botão). Eles custaram rodadas de revisão para nascer certos.
 - hospital-reunioes/, tools/, astro.config.mjs, manual.yml, publicar.sh, rotulos-da-sidebar.ts.

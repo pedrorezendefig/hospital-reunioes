@@ -160,14 +160,12 @@ Não mexa nos invariantes: 3 gates, PR, OK humano citando o PR# antes do rabo, P
 Gere `.claude/skills/deploy/SKILL.md` para a plataforma da P3. Use o da ORIGEM como modelo de **estrutura** (modos, passos numerados, o que grava onde), não de conteúdo. O contrato que não pode quebrar, porque a aba Produção e o `/ship` dependem dele:
 
 - Lê `docs/spec/deploy/project.json` (serviços, health check, plataforma).
-- Modo `ship`: dispara ou acompanha o deploy, roda o health check, grava `state.json` (status por serviço, `last_deploy_sha`, `last_deploy_at`, `last_health_check`) e prepend em `history.json` (`at`, `sha`, `app_version`, `subject`, `raw_subject`, `scope`, `result`, `duration_seconds`, `services_touched`, `env_changes`, `migrations_applied`, `rollback_target_sha`, `notes`), prepend no `docs/spec/CHANGELOG.md` via `scripts/changelog_prepend.py`, commita o bookkeeping, roda `/snapshot`.
+- Modo `ship`: dispara ou acompanha o deploy, roda o health check, grava `state.json` (status por serviço, `last_deploy_sha`, `last_deploy_at`, `last_health_check`) e prepend em `history.json` (`at`, `sha`, `app_version`, `subject`, `raw_subject`, `scope`, `result`, `duration_seconds`, `services_touched`, `env_changes`, `migrations_applied`, `rollback_target_sha`, `notes`; sem teto, é a timeline inteira), commita o bookkeeping, roda `/snapshot`.
 - Modo `status`: health check e leitura do estado, sem escrever nada além de `state.json`.
 - Modo `rollback`: volta para `rollback_target_sha` e registra em `history.json`.
 - Modo `setup`: o que a plataforma precisa uma vez (tokens, serviço, domínio).
 
-**Stub (sem plataforma):** os modos existem, `ship` grava `history.json` e `CHANGELOG.md` com `result: "not-deployed"` e `state.json` com `status: "not-deployed"`; `status` diz que não há deploy configurado e aponta o `setup`; `setup` explica que é preciso escolher plataforma e reabrir esta parte do roteiro. A aba Produção mostra a timeline mesmo assim.
-
-Copie `scripts/changelog_prepend.py` da ORIGEM e conserte o título da entrada: ele sai com travessão e sem versão. O formato certo é `## v0.X.Y - AAAA-MM-DD HH:MM - descrição` (hífen com espaços, nunca U+2014).
+**Stub (sem plataforma):** os modos existem, `ship` grava `history.json` com `result: "not-deployed"` e `state.json` com `status: "not-deployed"`; `status` diz que não há deploy configurado e aponta o `setup`; `setup` explica que é preciso escolher plataforma e reabrir esta parte do roteiro. A aba Produção mostra a timeline mesmo assim.
 
 ### 4.5 `/snapshot`
 
@@ -205,7 +203,7 @@ Um commit por bloco, para o diff contar a história:
 
 1. **`CONTEXT.md`**: no formato de `.claude/skills/domain-modeling/CONTEXT-FORMAT.md`. Um verbete por termo de domínio que a ficha achou (nome, definição de uma linha tirada do código, "evitar" quando existe sinônimo no código). Título com o aviso: "Rascunho gerado na instalação do fluxo. Curar no primeiro `/grill-with-docs`." Sem detalhe de implementação: glossário, só.
 2. **`docs/adr/README.md`** e **`docs/adr/0001-instalacao-do-fluxo-de-trabalho.md`**: formato de `docs/agents/domain.md` (frontmatter com `status: accepted`). A ADR registra: de onde veio (ORIGEM, SHA da Fase 0, data), as decisões da entrevista (P1 a P9, uma linha cada), e um parágrafo de resumo por ADR da ORIGEM que explica o fluxo (0013 travessão, 0020 ciclo de vida da issue, 0022 onda, 0025 diagramas do painel, 0027 wayfinder, 0028 bloqueio nativo, 0043 skills locais, 0044 layout do repo), cada um com link para o arquivo no GitHub da ORIGEM. Rode `python3 tools/lint_adr.py` e deixe verde.
-3. **`docs/spec/deploy/*.json`**, **`VERSIONING.md`**, **`CHANGELOG.md`**: conforme o manifesto, com os valores da entrevista.
+3. **`docs/spec/deploy/*.json`** e **`VERSIONING.md`**: conforme o manifesto, com os valores da entrevista.
 4. **Snapshot**: rode o `/snapshot` gerado. Confira que os 7 arquivos existem em `docs/spec/snapshots/`.
 5. **`README.md`** da raiz: mapa de pastas no formato da ORIGEM. Toda pasta de nível 1 e 2 que o git conhece precisa estar na tabela e no bloco `cobertura`; o `/setup-maquina` confere isso.
 

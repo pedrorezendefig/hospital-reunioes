@@ -44,5 +44,5 @@ O dashboard usa esses labels para calcular o **tempo típico** de cada fatia: a 
 
 Estas convivem com as de triage — descrevem **o que** é a mudança, não o estado dela:
 
-- `type:feature` · `type:fix` · `type:chore` · `type:refactor` · `type:docs` — natureza da mudança (alimenta o PR e o CHANGELOG).
+- `type:feature` · `type:fix` · `type:chore` · `type:refactor` · `type:docs`: natureza da mudança (alimenta o tipo do PR e do commit).
 - `area:backend` · `area:frontend` · `area:supabase` · `area:infra` · `area:docs` · `area:skills` · `area:spec` — onde a mudança incide.

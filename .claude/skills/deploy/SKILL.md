@@ -25,8 +25,7 @@ Uma skill, cinco modos. Invocação por subcomando:
 **Fonte única de verdade por projeto:**
 - `<repo>/docs/spec/deploy/project.json` — **spec do projeto** (o "v0"): stack, portas, fqdn, build, env vars, secrets, gates. Lido em todos os modos. Editável manualmente; `setup`/`migrate` o gera.
 - `<repo>/docs/spec/deploy/state.json` — **snapshot do estado atual**. Reescrito pelo ship/rollback/setup. Não editar à mão.
-- `<repo>/docs/spec/deploy/history.json` — **timeline**. Reescrito pelo ship/rollback. Não editar à mão.
-- `<repo>/docs/spec/CHANGELOG.md` — **cronologia flat** (append-only). Prepended pelo ship a cada deploy. Tem 100% do histórico em uma página, offline.
+- `<repo>/docs/spec/deploy/history.json`: **timeline**, com todos os deploys (sem teto, ADR 0062). Reescrito pelo ship/rollback. Não editar à mão.
 
 Schema completo do `project.json` em `.claude/skills/deploy/references/project-schema.md`.
 
@@ -36,7 +35,7 @@ Schema completo do `project.json` em `.claude/skills/deploy/references/project-s
 
 **Esta skill é metodologia pura. Zero conhecimento sobre projetos específicos.** Tudo que varia entre projetos (paths, portas, domínios, comandos de build/lint, env vars, secrets, gates) vem de `project.json` no repo. Se você está editando esta skill e sente vontade de escrever `Hospital`, `mala-ia.cloud`, `8000`, `/api/health`, ou um caminho `/Users/...` — pare. Esse valor pertence ao `project.json`.
 
-A skill executa sempre o mesmo algoritmo (pre-flight → commit → push → monitor → migrations → health → rollback se falhar → reescrever JSONs → atualizar CHANGELOG + snapshot). Cada passo é completamente parametrizado pelo `project.json` do repo atual.
+A skill executa sempre o mesmo algoritmo (pre-flight → commit → push → monitor → migrations → health → rollback se falhar → reescrever JSONs → snapshot). Cada passo é completamente parametrizado pelo `project.json` do repo atual.
 
 ---
 
@@ -597,7 +596,7 @@ done | tr -d '#' | sort -un
 #### 9.3 — (removido) Chronicles aposentados
 
 > O sistema de chronicles (🟡/🟢/🔴) foi descontinuado na migração para o modelo Pocock.
-> O registro factual de cada deploy vive em `history.json` (9.2) + `CHANGELOG.md` (9.5); a
+> O registro factual de cada deploy vive em `history.json` (9.2); a
 > narrativa do trabalho vive na própria **GitHub Issue** + no PR. Não criar nem renomear
 > arquivos em `docs/spec/chronicles/`.
 
@@ -609,7 +608,7 @@ done | tr -d '#' | sort -un
 
 #### 9.4 Regenerar snapshot da aplicação (skill `/snapshot`)
 
-Logo após o health check pós-deploy passar verde (e antes do prepend no CHANGELOG), invocar o script `snapshot.py` pra manter `docs/spec/snapshots/` fresco:
+Logo após o health check pós-deploy passar verde, invocar o script `snapshot.py` pra manter `docs/spec/snapshots/` fresco:
 
 ```bash
 python3 .claude/skills/snapshot/scripts/snapshot.py
@@ -626,34 +625,14 @@ Se mudou, a skill:
    ```
 4. **Não dispara novo `/deploy ship`** — o `commit_inference.scope_map` no `project.json` mapeia `docs/spec/snapshots/**` pra escopo `spec`, e commits `chore(spec):` que tocam só `.md` não geram trigger de service (heurística no Passo 5 do ship).
 
-Se a skill `/snapshot` falhar (ex: parser SQL quebrou em migration nova), **não bloqueia o deploy** — registra warning no output do `/deploy` e segue pra 9.5 (CHANGELOG). O usuário pode rodar `/snapshot --check` depois pra diagnosticar.
+Se a skill `/snapshot` falhar (ex: parser SQL quebrou em migration nova), **não bloqueia o deploy**: registra warning no output do `/deploy` e segue pra 9.6. O usuário pode rodar `/snapshot --check` depois pra diagnosticar.
 
 Detalhes da skill: `.claude/skills/snapshot/SKILL.md`.
 
-#### 9.5 Prepend em `docs/spec/CHANGELOG.md`
+#### 9.5 (removido) Sem cronologia em Markdown
 
-> **Esta é a ÚNICA skill que escreve em `docs/spec/CHANGELOG.md`.** A skill `/ship` Passo 11 propositalmente NÃO prependa — display only. Único caminho de escrita: `/deploy ship` (modo ship) ou `/deploy rollback` (modo rollback). Edição manual fora dessas duas skills é desencorajada (cria divergência com `history.json`).
-
-Cronologia flat, append-only (prepend, mais recente no topo). 1 entrada por deploy concluído.
-
-```bash
-CHANGELOG="$REPO_ROOT/docs/spec/CHANGELOG.md"
-
-# Cria com header se não existir
-if [ ! -f "$CHANGELOG" ]; then
-  printf '# Changelog Hospital Reuniões\n\nCronologia de deploys em ordem reversa (mais recente no topo).\nPrepended pelo /deploy ship ao final do ciclo.\n\n---\n\n' > "$CHANGELOG"
-fi
-
-python3 "$REPO_ROOT/.claude/skills/deploy/scripts/changelog_prepend.py"
-```
-
-Ver `scripts/changelog_prepend.py` na própria skill — gera entrada com autor (git config), SHA, serviços tocados, resultado e link para a issue/PR.
-
-Reportar ao usuário:
-
-```
-CHANGELOG: <REPO_ROOT>/docs/spec/CHANGELOG.md (entrada nova no topo)
-```
+> A timeline dos deploys é o `history.json` (9.2), com todos os deploys, e o painel a
+> desenha (ADR 0062, decisão 9). Não criar arquivo de cronologia em `docs/spec/`.
 
 #### 9.6 Manual do usuário: tirar o draft do que subiu
 
@@ -671,7 +650,7 @@ Três saídas, e só uma delas mexe em arquivo:
 
 - **0, sem página em draft** (o caso normal, a maioria dos deploys): o script diz "nenhuma página em draft do PRD #N" e não escreve nada. Nada a commitar, nada a publicar; siga para o Passo 10.
 - **2, bloqueado**: o script **não tocou em arquivo nenhum** e listou o que falta. São dois motivos: MP4 de Vídeo de tarefa que não existe nesta árvore (ele é regerável, fica fora do controle de versão e não vem no clone: renderize a composição de `docs/manual/video/<modulo>/<slug>/` pela receita em `.claude/skills/manual/references/video-de-tarefa.md` e rode o passo de novo) ou ferramenta de publicação ausente na máquina (Node >= 22.12, corepack, ffmpeg, todos nível 2 do `/setup-maquina`). **Não dispare rollback:** o app está no ar e saudável, o que ficou pendente é o manual. Termine o bookkeeping e registre a pendência como issue `ready-for-human` (Passo 10.5 do `/ship`), dizendo qual página e qual vídeo faltam.
-- **0, com páginas listadas**: elas saíram do draft. Entra tudo no **mesmo commit e no mesmo push do bookkeeping** (9.1 a 9.5), e só então o site republica:
+- **0, com páginas listadas**: elas saíram do draft. Entra tudo no **mesmo commit e no mesmo push do bookkeeping** (9.1 a 9.4), e só então o site republica:
 
   ```bash
   bash docs/manual/publicar.sh

@@ -7,7 +7,7 @@ Como a versão do Hospital Reuniões é decidida, exibida e documentada.
 - **Versão semântica** (`vMAJOR.MINOR.PATCH`, ex: `v0.2.1`) é o identificador da app.
 - **Fonte da verdade**: `hospital-reunioes/frontend/package.json` campo `version`.
 - **Backend espelha** via env `APP_VERSION` (injetada pelo `/deploy ship` antes do build).
-- **Rodapé da app** exibe `v0.2.1` em todas as páginas (clicável → abre este CHANGELOG.md no GitHub).
+- **Rodapé da app** exibe `v0.2.1` em todas as páginas.
 - **Bump é automático** a cada PR via `/ship`, baseado no tipo do commit.
 
 ## Esquema de versão
@@ -33,7 +33,7 @@ A skill `/ship` lê os commits do PR (`git log main..HEAD`) e decide o bump pelo
 | `feat:` ou `feat(<scope>):` | minor (`0.1.0` → `0.2.0`) |
 | `fix:`, `refactor:`, `perf:`, `chore:`, `docs:`, `style:`, `test:`, `build:`, `ci:` | patch (`0.1.0` → `0.1.1`) |
 
-Se o PR tem 1 `feat:` + 3 `fix:`, **vale o mais alto**: minor. O CHANGELOG da versão lista todas as mudanças.
+Se o PR tem 1 `feat:` + 3 `fix:`, **vale o mais alto**: minor.
 
 A skill `/ship` adiciona um último commit `chore(release): bump v0.2.0` no PR antes do `gh pr create`. O squash merge consolida tudo num commit só no main.
 
@@ -63,21 +63,10 @@ A skill `/ship` respeita: sempre lê a versão atual de `package.json` e increme
 
 ## Release notes
 
-O **`docs/spec/CHANGELOG.md`** é a lista completa de versões, prepended automaticamente pelo `/deploy ship` a cada deploy. Formato:
+A lista completa de versões é o **`docs/spec/deploy/history.json`**: o rabo (`fechar_onda.py`) grava uma entrada por deploy, sem teto (ADR 0062), com versão, SHA, PRs, PRDs, serviços, duração, migrations, resultado e health. O painel local desenha essa timeline na aba Produção.
 
-```markdown
-## v0.2.0 — 2026-05-21 — feat(app): acrescentar versionamento visível
-- Autor: Pedro Rezende <pmrdef@gmail.com>
-- SHA: `abc1234`
-- Serviços: backend, frontend
-- Resultado: 🟢 healthy (142s)
-- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/abc1234
-```
-
-Detalhes ricos de cada mudança vivem na **GitHub Issue + PR** (contexto, critérios de aceite, discussão) e no **`docs/spec/deploy/history.json`** (registro factual de cada deploy: SHA, serviços, duração, resultado, health).
+Detalhes ricos de cada mudança vivem na **GitHub Issue + PR** (contexto, critérios de aceite, discussão).
 
 ## Mapeamento versão ↔ SHA
 
-Cada versão (`v0.2.1`) = 1 entrada no `CHANGELOG.md` = 1 commit no `main` = 1 registro no `docs/spec/deploy/history.json`. O SHA do commit é o identificador único técnico; a versão é o identificador semântico humano.
-
-Quem clica no rodapé da app vai pro `CHANGELOG.md` no GitHub e vê todas as versões com link pro commit de cada uma.
+Cada versão (`v0.2.1`) = 1 commit no `main` = 1 registro no `docs/spec/deploy/history.json`. O SHA do commit é o identificador único técnico; a versão é o identificador semântico humano.

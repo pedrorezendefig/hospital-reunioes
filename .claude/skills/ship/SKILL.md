@@ -368,7 +368,7 @@ python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER" --d
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER"
 ```
 
-Um PR só e sem `--sessao` é o modo PR avulso (chave do semáforo `pr-<N>`). O script faz, nesta ordem: pré-condições (PR verde e mergeável, número e `sha256` das migrations), semáforo, bump pelo tipo dos commits como commit na branch do PR (com a `origin/main` trazida antes, se a branch ficou atrás), CI verde nesse head, `APP_VERSION` no Coolify antes do merge, merge pela API do GitHub (a `main` é protegida, ADR 0061), um build, health com conferência de versão, registro (`state.json`, `history.json`, `CHANGELOG`, snapshot, draft do manual) num PR só de docs mergeado do mesmo jeito, e limpeza. O registro nomeia o PR e a issue. Códigos de saída e o que fazer em cada um: docstring do script.
+Um PR só e sem `--sessao` é o modo PR avulso (chave do semáforo `pr-<N>`). O script faz, nesta ordem: pré-condições (PR verde e mergeável, número e `sha256` das migrations), semáforo, bump pelo tipo dos commits como commit na branch do PR (com a `origin/main` trazida antes, se a branch ficou atrás), CI verde nesse head, `APP_VERSION` no Coolify antes do merge, merge pela API do GitHub (a `main` é protegida, ADR 0061), um build, health com conferência de versão, registro (`state.json` e `history.json`) num PR só de docs mergeado do mesmo jeito, e limpeza. Snapshot e draft do Manual não são do rabo: uma Action no push da `main` cuida deles depois do registro (ADR 0062). O registro nomeia o PR e a issue. Códigos de saída e o que fazer em cada um: docstring do script.
 
 ---
 
@@ -391,7 +391,7 @@ Pular se o ciclo não deixou pendência nenhuma.
 
 Imprime ao usuário o estado final do ciclo, no formato da seção "Output final" abaixo: o PR verde, os gates, a issue e o comando do rabo. Não cria commit. Não pushea. Não escreve em arquivo. É display puro.
 
-O `CHANGELOG.md`, o `history.json` e o `state.json` são escritos pelo rabo, no mesmo push do merge; o `/ship` não toca em nenhum deles.
+O `history.json` e o `state.json` são escritos pelo rabo, no PR de registro depois do health; o `/ship` não toca em nenhum deles.
 
 ---
 
