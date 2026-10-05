@@ -51,6 +51,15 @@ export const CHAVE_RESUMO = "resumo";
 export const CHAVE_RELATO = "relato_integral";
 export const CHAVE_NOTA = "nota_da_ouvidoria";
 
+/**
+ * O Paciente do caso (issue #664, ADR 0052): nome e, se houver, a referência
+ * do atendimento (data, setor ou leito).
+ */
+export interface PacienteDoCaso {
+  nome: string;
+  referencia: string | null;
+}
+
 /** O que o GET público devolve para o titular. */
 export interface CasoDoPortal {
   protocolo: string;
@@ -59,6 +68,12 @@ export interface CasoDoPortal {
   gravidade: string | null;
   extrato: string;
   identificacao: string | null;
+  /**
+   * `null` quando o servidor não manda o paciente: caso sem paciente informado
+   * ou caso sob sigilo reforçado (quem decide é a guarda do servidor). Ausente
+   * quando o backend está uma versão atrás do frontend.
+   */
+  paciente?: PacienteDoCaso | null;
   sigiloso: boolean;
   destinatario_nome: string;
   aceita_resposta: boolean;

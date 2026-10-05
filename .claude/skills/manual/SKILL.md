@@ -39,7 +39,7 @@ Tecnologia fica fora de propósito (a divulgação do #634 cobre).
    matéria-prima de Novidades, com a data de cada entrega.
 
 O manual só mostra **o que está no ar**. Funcionalidade que ainda não subiu
-nasce em `draft: true` e o `/deploy ship` tira o draft quando ela sobe.
+nasce em `draft: true` e o rabo (`fechar_onda.py`) tira o draft quando ela sobe.
 
 ## O molde da Página de tarefa
 

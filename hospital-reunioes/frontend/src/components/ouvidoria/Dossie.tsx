@@ -195,6 +195,30 @@ interface DossieProps {
   token: string | null;
 }
 
+/**
+ * Os canais que PERGUNTAM o nome do paciente (issue #662).
+ *
+ * `qr` e `site` são o canal aberto (issue #666), e os sete canais do Registro
+ * manual do ouvidor perguntam o paciente desde a issue #663. A API da Ana grava
+ * o vínculo `acompanhante` sem nunca pedir o paciente: o canal não pergunta,
+ * então o aviso acenderia em todo caso de acompanhante que viesse dela.
+ * Guarda-corpo que vira ruído treina o olho a ignorar o banner, e aí ele
+ * também para de funcionar onde importa.
+ * A Ana entra nesta lista quando o payload dela tiver os campos (fora do
+ * escopo do PRD #659).
+ */
+const CANAIS_QUE_PERGUNTAM_O_PACIENTE = [
+  "qr",
+  "site",
+  "telefone",
+  "presencial",
+  "email",
+  "whatsapp",
+  "instagram",
+  "reclame_aqui",
+  "google",
+];
+
 function formatarDataHora(iso: string): string {
   return new Date(iso).toLocaleString("pt-BR", {
     day: "2-digit",
@@ -1090,6 +1114,37 @@ export function Dossie({ protocolo, token }: DossieProps) {
               </div>
             </div>
           )}
+
+          {/* Relato em nome de outra pessoa sem o nome do paciente (issue #662,
+              ADR 0052 decisão 5). Fica DEPOIS da devolução: a devolução é a
+              tarefa do ouvidor agora, e este aviso é contexto do caso. Só
+              sinaliza, e de propósito: quem decide se aciona assim mesmo é o
+              ouvidor, e o botão continua ali. Amarelo, e não o azul do
+              "Cadastro incompleto", porque aqui há algo a CONFIRMAR com o
+              manifestante antes de o caso seguir, enquanto o cadastro
+              incompleto se resolve na própria validação.
+
+              `podeValidar` pela mesma razão do aviso de trilha ilegível logo
+              abaixo: "confirme antes de acionar" só é um pedido enquanto há o
+              que acionar. E não perde o caso que originou o PRD, porque a área
+              que devolve por "não achei o atendimento" manda o caso de volta
+              para `em_classificacao`, e o aviso reacende na hora em que o
+              ouvidor decide de novo.
+
+              O nome é aparado antes de julgar: espaço em branco é nome nenhum,
+              e o aviso fala do nome que falta, não da coluna que é nula. */}
+          {CANAIS_QUE_PERGUNTAM_O_PACIENTE.includes(dossie.canal ?? "") &&
+            dossie.manifestante_vinculo === "acompanhante" &&
+            !dossie.paciente_nome?.trim() &&
+            podeValidar(dossie.status) && (
+              <div className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  Relato em nome de outra pessoa sem o nome do paciente. Confirme com o
+                  manifestante antes de acionar.
+                </span>
+              </div>
+            )}
 
           {/* A trilha carrega a devolução, então trilha ilegível é informação
               FALTANDO na decisão de despachar, e não silêncio (issue #601). O

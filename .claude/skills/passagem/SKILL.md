@@ -53,7 +53,7 @@ Estruture com estas seções (omita as que não se aplicarem):
 - `/pegar-issue <N>` se a próxima sessão continua uma fatia da fila
 - `/tdd` se há testes RED pendentes ou implementação em andamento
 - `/diagnose` se a próxima fase é debugging
-- `/onda` se a fila ready-for-agent deve rodar em modo AFK
+- `/onda-enxuta` se a fila ready-for-agent deve rodar em modo AFK
 - outras conforme contexto
 ```
 

@@ -416,6 +416,21 @@ export default function PortalDoSetorPage() {
                 {caso.identificacao ?? "Sem identificação"}
               </dd>
             </dl>
+
+            {/* O Paciente do caso (issue #664, ADR 0052), logo abaixo de quem
+                manifestou. Quem decide se ele vem é o servidor: caso sob sigilo
+                reforçado chega com `paciente: null`. Ao contrário da linha de
+                cima, caso sem paciente não desenha nada, porque aqui a ausência
+                não é informação. */}
+            {caso.paciente && (
+              <dl data-testid="paciente-do-caso" className="mt-1 flex justify-between gap-3 text-sm">
+                <dt className="text-slate-500">Paciente</dt>
+                <dd className="font-semibold text-slate-800 text-right">
+                  {caso.paciente.nome}
+                  {caso.paciente.referencia ? ` (${caso.paciente.referencia})` : ""}
+                </dd>
+              </dl>
+            )}
           </div>
         </div>
 

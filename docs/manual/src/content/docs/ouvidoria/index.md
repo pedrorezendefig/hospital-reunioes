@@ -24,7 +24,7 @@ chegada. É o que a pessoa guarda e o que a Ouvidoria usa para achar o caso.
 responsável e cobra a resposta. Nenhuma dessas decisões é automática.
 
 **Responsável do setor** é quem responde pela sua área quando um caso chega
-nela. Não precisa de conta nem de senha: recebe um e-mail com um botão e
+nela. Não precisa de conta nem de senha: recebe um email com um botão e
 responde por ali mesmo.
 
 **Gravidade** é o tamanho do problema, em quatro degraus: crítico, alto, médio e
@@ -47,15 +47,15 @@ ouvidor, depois de ler.
    na internet, o QR do cartaz, a conversa com a Ana ou o registro feito pela
    própria Ouvidoria. Ela recebe o protocolo na hora.
 2. **O ouvidor lê e encaminha.** Ele decide do que se trata, qual setor responde
-   e o tamanho do problema. No mesmo clique, o setor recebe o e-mail com o prazo.
-3. **O setor conta o que fez**, pelo link do e-mail, sem entrar no sistema.
+   e o tamanho do problema. No mesmo clique, o setor recebe o email com o prazo.
+3. **O setor conta o que fez**, pelo link do email, sem entrar no sistema.
 4. **O sistema cobra sozinho, se precisar.** Perto do vencimento avisa; depois
    cobra; se continua parado, sobe para o gestor e para a Diretoria.
 5. **A Ouvidoria encerra e avisa a pessoa**, com uma conclusão escrita em
    linguagem simples.
 
-O que o sistema nunca faz sozinho é acordar um setor. O que ele faz sozinho é
-cobrar quem já foi acionado e avisar quem precisa saber.
+O sistema nunca aciona um setor sozinho. Sozinho, ele só cobra quem já foi
+acionado e avisa quem precisa saber.
 
 ## Os sete vídeos do módulo
 
@@ -74,14 +74,14 @@ A tarefa está em [Registrar uma manifestação pela Ouvidoria](/ouvidoria/regis
 
 <video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-2.mp4"></video>
 
-O ponto azul, a tela de classificar e o caso mudando de faixa com o e-mail
+O ponto azul, a tela de classificar e o caso mudando de faixa com o email
 saindo. A tarefa está em [Classificar e acionar um caso](/ouvidoria/classificar-e-acionar-um-caso/).
 
 ### 3. O setor responde
 
 <video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-3.mp4"></video>
 
-O e-mail de acionamento, a tela de quem responde e a resposta curta que não liga
+O email de acionamento, a tela de quem responde e a resposta curta que não liga
 o botão. A tarefa está em [Responder um caso pelo portal do setor](/ouvidoria/responder-um-caso-pelo-portal-do-setor/).
 
 ### 4. O relógio e a cobrança
@@ -95,7 +95,7 @@ escada de cobrança. A tarefa está em [Decidir um pedido de mais prazo](/ouvido
 
 <video controls muted playsinline preload="metadata" src="/video/ouvidoria/cap-5.mp4"></video>
 
-O aviso de que chegou e o aviso de que terminou, os dois únicos e-mails que saem
+O aviso de que chegou e o aviso de que terminou, os dois únicos emails que saem
 do hospital. A tarefa está em [Encerrar um caso e avisar a pessoa](/ouvidoria/encerrar-um-caso-e-avisar-a-pessoa/).
 
 ### 6. Quem faz o quê

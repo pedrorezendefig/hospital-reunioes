@@ -20,7 +20,7 @@ você pediu ou não resolve o caso. O caso volta para a mesma área.
 
    ![Resposta da área e o campo do motivo da devolução](../../../assets/ouvidoria/caso-respondido.png)
 
-2. Escreva o motivo da devolução. Ele é obrigatório e vai inteiro no e-mail ao
+2. Escreva o motivo da devolução. Ele é obrigatório e vai inteiro no email ao
    setor.
 3. Clique em **Devolver por insuficiência**.
 4. A área recebe um link novo e volta a ter metade do prazo da gravidade,
@@ -30,7 +30,7 @@ você pediu ou não resolve o caso. O caso volta para a mesma área.
 
 - **O prazo já estava estourado:** continua estourado. A devolução não limpa o
   atraso que já corria.
-- **O caso não é daquela área:** aí não é devolução por insuficiência, e sim
+- **O caso não é daquela área:** aí o caminho é
   [Redirecionar o caso para outra área](/ouvidoria/redirecionar-o-caso-para-outra-area/).
 - **As respostas antigas sumiram:** não somem. Cada ida e volta vira um ciclo, e
   o bloco **Respostas anteriores** guarda todas.

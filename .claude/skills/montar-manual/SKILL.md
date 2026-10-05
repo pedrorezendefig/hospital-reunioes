@@ -5,7 +5,7 @@ description: Inventaria o passivo do Manual módulo por módulo (página, print,
 
 # Montar manual: plano de terminais por módulo
 
-Planejador da `/manual`, como a `/montar-ondas` é da `/onda`. A `/manual` produz **um** módulo; esta skill decide **quantos** terminais abrir, **o que** cada um produz e **o que sobra para o humano**. Sai daqui um arquivo com um prompt por terminal. Nada roda: o Pedro abre os terminais e cola.
+Planejador da `/manual`, como a `/montar-ondas-enxutas` é da `/onda-enxuta`. A `/manual` produz **um** módulo; esta skill decide **quantos** terminais abrir, **o que** cada um produz e **o que sobra para o humano**. Sai daqui um arquivo com um prompt por terminal. Nada roda: o Pedro abre os terminais e cola.
 
 A meta é sair com **toda lacuna do manual em exatamente um lugar**: dentro do prompt de um módulo, ou na lista curta do que só o humano faz. Lacuna sem dono no fim do plano é falha do plano.
 
@@ -134,7 +134,7 @@ Regras:
   cd docs/manual && corepack pnpm@9 install --frozen-lockfile && corepack pnpm@9 build
   python3 tools/checar_build_manual.py --dir docs/manual
 - Pare no draft de cada vídeo e me mande o caminho do MP4: o OK é meu, e só depois vem o render final.
-- Feche com /ship "docs: manual do módulo <modulo>" --issue <N> --no-deploy
+- Feche com /ship "docs: manual do módulo <modulo>" --issue <N>
 ```
 
 A linha "Draft a tirar" só entra quando o inventário achou `draft-entregue` naquele módulo. A linha de Novidades repete o número do PRD e a data que você leu do `history.json`: o terminal não vai adivinhar isso sozinho.
@@ -158,5 +158,5 @@ A resposta final, nesta ordem:
 
 - Não escreve página, não tira print, não renderiza vídeo e não publica: quem produz é a `/manual` em cada terminal, e quem publica é o humano, uma vez, no fim.
 - Não abre nem tria issue: as Fatias de módulo já nascem do `/to-issues`. Se um módulo não tem fatia, o plano diz isso e o prompt começa direto na `/manual <modulo>`.
-- Não mergeia, não faz deploy e não roda `/onda`.
+- Não mergeia, não faz deploy e não roda `/onda-enxuta`.
 - Não planeja a aba Tecnologia (fora do manual, ADR 0057, decisão 1).

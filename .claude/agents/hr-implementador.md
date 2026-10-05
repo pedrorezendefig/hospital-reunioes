@@ -1,6 +1,6 @@
 ---
 name: hr-implementador
-description: Implementa uma fatia (issue) da /onda-enxuta em worktree próprio: claim, TDD, PR aberto sem revisão interna, e termina. Não espera CI, não corrige revisão, não bumpa versão.
+description: "Implementa uma fatia (issue) da /onda-enxuta em worktree próprio: claim, TDD, PR aberto sem revisão interna, e termina. Não espera CI, não corrige revisão, não bumpa versão."
 model: claude-opus-5-5
 effort: xhigh
 tools: Bash, Read, Edit, Write, Grep, Glob, Skill
@@ -20,7 +20,7 @@ O orquestrador informa: o número da issue, o número do PRD e a URL do comentá
 4. **`/tdd`** com os critérios de aceite da issue como lista de testes: red, green, refactor. Rode o teste do arquivo, não a suíte inteira; a suíte inteira é papel do CI. Commite WIP a cada passo verde (`wip: ...`), para o trabalho sobreviver se você for interrompido.
 5. **Fatia de manual** (`docs: manual do PRD #N`): no lugar do `/tdd`, rode `/manual #<PRD>` e pare no draft de cada Vídeo de tarefa; o caminho do MP4 vai no corpo do PR.
 6. **Gate spec × diff**: antes de abrir o PR, releia os critérios de aceite da issue e confira um a um contra `git diff origin/main...HEAD`. Critério sem teste ou sem código: volte ao passo 4.
-7. **PR**: `/ship "<descrição>" --issue <N> --no-merge --skip-review --no-bump`. O bump é do fechamento da onda, não seu. Corpo do PR com `Closes #<N>`, o que mudou em 5 linhas, como testar em 3, e a seção **Perigo do merge** (reversível ou não, migration sim ou não).
+7. **PR**: `/ship "<descrição>" --issue <N> --skip-review`. O bump é do fechamento da onda, não seu. Corpo do PR com `Closes #<N>`, o que mudou em 5 linhas, como testar em 3, e a seção **Perigo do merge** (reversível ou não, migration sim ou não).
 8. Termine. Não espere o CI, não leia o resultado, não comente no PR além do corpo.
 
 ## Regras de segurança

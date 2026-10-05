@@ -10,16 +10,52 @@ on:
       - 'docs/**'
       - '.claude/**'
       - '**/*.md'
+  # Sem paths-ignore no PR (issue #910): o ruleset da main exige os três jobs
+  # abaixo, e workflow pulado por filtro de caminho não reporta check nenhum. O
+  # PR só de docs (o registro do fechar_onda.py, ADR, skill) ficaria esperando
+  # para sempre. Quem pula o trabalho pesado é o job `mudancas`, e job pulado
+  # por `if` conta como verde para o ruleset.
   pull_request:
     branches: [main]
-    paths-ignore:
-      - 'docs/**'
-      - '.claude/**'
-      - '**/*.md'
 
 jobs:
+  mudancas:
+    name: Mudanças fora de docs
+    runs-on: ubuntu-latest
+    outputs:
+      codigo: ${{ steps.diff.outputs.codigo }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+      - name: O PR muda algo fora de docs/, .claude/ e Markdown?
+        # Mesma regra do paths-ignore do push e do docs-only do fechar_onda.py.
+        # Se o git diff falhar, o passo falha e os jobs rodam (ver o if deles).
+        id: diff
+        env:
+          EVENTO: ${{ github.event_name }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENTO" != "pull_request" ]; then
+            echo "codigo=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          # --no-renames: num rename o diff lista só o caminho novo, e mover
+          # código para docs/ pularia os checks obrigatórios.
+          arquivos="$(git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA")"
+          if printf '%s\n' "$arquivos" | grep -qvE '^(docs/|\.claude/)|\.md$'; then
+            echo "codigo=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "codigo=false" >> "$GITHUB_OUTPUT"
+          fi
+
   backend:
     name: Backend Lint, Format & Tests
+    needs: mudancas
+    # Pulado por if = verde no ruleset. Detector quebrado roda o job: pular o
+    # CI de um PR de código por erro do detector passaria pelo ruleset sem teste.
+    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.codigo == 'true') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -36,6 +72,10 @@ jobs:
       ENVIRONMENT: ci
     steps:
       - uses: actions/checkout@v6
+        with:
+          # Histórico completo: a guarda de migration repetida compara a branch
+          # com origin/main e precisa do ponto em que elas se separaram.
+          fetch-depth: 0
       - name: Lint travessão (templates de documento e email)
         # Trava travessão (U+2014) e meia-risca (U+2013) nos templates que viram
         # PDF/email (ADR 0013). Só superfície que o usuário lê: NÃO inclui
@@ -49,6 +89,13 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+      - name: Migration com número repetido
+        # Duas sessões em paralelo podem escolher o mesmo próximo número
+        # (issue #903). Recusa migration que o PR adiciona com número que a
+        # main já usa; o fechar_onda.py repete a conferência contra a main da
+        # hora do merge, porque ela pode ter andado desde este CI.
+        if: github.event_name == 'pull_request'
+        run: python ../../tools/checar_migration_repetida.py --base origin/main
       - name: Install uv
         run: pip install uv
       - name: Install dependencies
@@ -62,6 +109,8 @@ jobs:
 
   frontend-lint:
     name: Frontend Lint & Type Check
+    needs: mudancas
+    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.codigo == 'true') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -90,6 +139,8 @@ jobs:
 
   build:
     name: Docker Build (sanity)
+    needs: mudancas
+    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.codigo == 'true') }}
     runs-on: ubuntu-latest
     # Sanity check: garante que os 2 Dockerfiles ainda buildam.
     # NAO faz push — Coolify cuida do build de producao via webhook do GitHub App.

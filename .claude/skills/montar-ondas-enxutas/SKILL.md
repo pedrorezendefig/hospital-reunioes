@@ -1,11 +1,11 @@
 ---
 name: montar-ondas-enxutas
-description: Planeja sessões /onda-enxuta paralelas sem conflito, presta contas de toda issue aberta e entrega um comando de lançamento por sessão (sessão de fundo, zero MCP, Opus 5.5). Não executa. Sintaxe `/montar-ondas-enxutas [--exceto #PRD] [--max-sessoes N]`.
+description: Planeja sessões /onda-enxuta sem conflito, presta contas de cada issue aberta, um comando de lançamento por sessão. Não executa. Sintaxe `/montar-ondas-enxutas [--exceto #PRD] [--max-sessoes N]`.
 ---
 
 # Montar ondas enxutas: plano de sessões paralelas
 
-Planejador da `/onda-enxuta` (cópia da `/montar-ondas`, com os passos 5 e 6 reescritos; a original não muda). A `/onda-enxuta` executa **uma** fila em **várias ondas**, uma sessão de fundo por onda; esta skill decide **quantas** filas abrir, **o que** vai em cada uma e **em que ordem** o humano aprova os merges. Sai daqui um arquivo de prompt por sessão e **um comando de lançamento** por sessão. Nada roda aqui: o Pedro roda os comandos num terminal, cada sessão nasce em segundo plano, faz a onda 1 até PR verde e para no checkpoint; ele entra com `claude attach` e escreve `vai`.
+Planejador da `/onda-enxuta`. A `/onda-enxuta` executa **uma** fila em **várias ondas**, uma sessão de fundo por onda; esta skill decide **quantas** filas abrir, **o que** vai em cada uma e **em que ordem** o humano aprova os merges. Sai daqui um arquivo de prompt por sessão e **um comando de lançamento** por sessão. Nada roda aqui: o Pedro roda os comandos num terminal, cada sessão nasce em segundo plano, faz a onda 1 até PR verde e para no checkpoint; ele entra com `claude attach` e escreve `vai`.
 
 A meta é sair com **toda issue aberta em um de dois lugares**: dentro de um prompt (`ready-for-agent`) ou numa lista curta do que só o humano faz. Issue "esperando triagem" no fim do plano é falha do plano.
 
@@ -196,7 +196,7 @@ A resposta final tem esta forma, nesta ordem. É o que o Pedro lê do celular.
 6. **Passo a passo:**
    1. Num terminal na raiz do repositório, rodar o comando de lançamento de cada sessão (todos de uma vez, se quiser). Cada uma nasce em segundo plano, monta a fila, escreve o Mapa do terreno do PRD se ainda não existir e roda a onda 1 até PR verde. `claude agents` lista as sessões vivas; `claude logs <id>` mostra o andamento.
    2. Quando chegar a notificação de checkpoint: `claude attach <id>` e escrever `vai #a #b` (ou com condição, ou `abortar`). **Uma sessão por vez**: o semáforo enfileira os deploys sozinho, mas aprovar uma de cada vez evita corrida de versão na sua cabeça. Liste a sequência onda a onda, alternando sessões, e marque na linha certa "aplique a migration 0XX no Studio antes do vai" e "ela audita o PRD #X em seguida". Ordem: a sessão menor primeiro, a onda com migration quando o Pedro estiver perto do Studio, a fatia que reabre auditoria de PRD por último.
-   3. Depois do "vai", a sessão fecha a onda (um push, um build), imprime a conta de tokens e lança sozinha a sessão da onda seguinte. Nada a fazer até a próxima notificação.
+   3. Depois do "vai", a sessão fecha a onda (um merge pela API, um build), imprime a conta de tokens e lança sozinha a sessão da onda seguinte. Nada a fazer até a próxima notificação.
    4. **Divulgação:** para cada PRD que fecha, a linha "cole o prompt de `/divulgar #X` num terminal próprio" no momento certo (agora, ou logo após o deploy da onda que sobe a última tela) e, depois do link publicado, "mande o link ao diretor e aos usuários do módulo".
    5. "No tempo morto": as tarefas do item 3.
 

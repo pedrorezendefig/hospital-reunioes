@@ -125,7 +125,7 @@ jobs:
             // corpo, na forma literal `<!-- revisor-app autor="Pessoa do hospital" demanda="id" -->`
             // (um espaço só depois de `<!--`). Sem a âncora, qualquer comentário que
             // CITASSE o marcador (as issues #673, #675 e #680 o citam no corpo) acendia
-            // a label e travava a /onda. O texto do autor chega com `<!--` neutralizado
+            // a label e travava a onda. O texto do autor chega com `<!--` neutralizado
             // pelo app, então um marcador digitado à mão na resposta nunca começa o corpo.
             const doRevisorNoApp = /^<!-- revisor-app autor="[^"]*" demanda="[^"]*" -->[ \t]*(\r?\n|$)/.test(corpo);
 

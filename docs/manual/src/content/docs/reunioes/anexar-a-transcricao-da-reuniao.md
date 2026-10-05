@@ -46,8 +46,8 @@ com a ata.
 - **A reunião fica em Processando IA e não sai:** a tela diz que pode levar até
   30 segundos. Passando disso, recarregue; se aparecer
   **Erro no Processamento**, anexe o arquivo outra vez.
-- **Aparece Participantes Não Cadastrados:** é esperado. O assistente achou
-  nomes que não batem com o cadastro. Resolva cada um e clique em
+- **Aparece Participantes Não Cadastrados:** o assistente achou nomes que não
+  batem com o cadastro. Resolva cada um e clique em
   **Confirmar e Continuar**, ou em **Ignorar Todos**.
 - **Não existe transcrição desta reunião:** use
   [Montar a ata conversando](/reunioes/montar-a-ata-conversando/).
