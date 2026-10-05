@@ -1397,24 +1397,21 @@ class TestVoz:
         assert resposta.status_code == 403
 
     def test_super_admin_so_pela_flag_legada_nao_passa_e_isso_esta_escrito(self, monkeypatch):
-        """O LIMITE do gate de hoje, pinado. **Issue #752** e quem vai consertar.
+        """Perfil de acesso nulo com a flag legada ligada NAO e Super admin.
 
-        Os dois eixos sao lidos de colunas diferentes: `is_super_admin`
-        (`dependencies.py:171`) cai na flag legada quando `access_profile` e
-        NULO, e `tem_acesso_reunioes` (`:278`) trata NULO como "sem papel".
+        Este estado (perfil zerado, `is_super_admin = true` esquecido) e o de
+        quem teve o acesso tirado pela metade. O risco dele nunca foi o 403 no
+        microfone, que e o que este teste mostra; foi a CONCESSAO: enquanto
+        `is_super_admin` caia na flag legada quando o perfil era NULO e
+        `tem_acesso_reunioes` lia NULO como "sem papel", a pessoa levava 403
+        aqui e seguia passando em TODO `require_super_admin` do app. Retencao de
+        Super admin depois de uma revogacao que parecia completa.
 
-        O que este teste mostra e a metade MENOR do problema: quem esta nesse
-        estado entra na aba e leva 403 no microfone. A metade que importa e a
-        outra, e ela e de CONCESSAO: nesse estado a pessoa continua passando em
-        TODO `require_super_admin` do app, e nao so na aba Tecnologia. Nao e
-        escalada a partir do zero (a flag precisa ja estar ligada); e retencao
-        de Super admin depois de uma revogacao que parecia completa.
-
-        Como se chega la, que e onde quem pegar o assunto vai ter que mexer:
-        `_normalize_access_profile_fields` (`routers/admin/usuarios.py:81-82`)
-        faz `if ap is None: return` ANTES de espelhar a flag, entao um
-        `PATCH {"access_profile": null}` apaga o perfil e deixa
-        `is_super_admin = true` intacto. Nao e "o schema aceita": e esse return.
+        A issue #752 fechou as duas pontas: os dois gates leem NULO explicito
+        como "sem papel" (a tabela que os amarra mora em `test_super_admin.py`,
+        `TestAsDuasLeiturasDoPerfilNulo`), e o `PATCH {"access_profile": null}`
+        de `/admin/usuarios` zera a flag junto, em vez de sair antes do espelho
+        (`test_admin_usuarios.py`, `TestPerfilZeradoTiraOSuperAdmin`).
         """
         so_a_flag = {**_pessoa("p4"), "access_profile": None, "is_super_admin": True}
         cliente = _montar_transcricao(logado=so_a_flag, monkeypatch=monkeypatch)

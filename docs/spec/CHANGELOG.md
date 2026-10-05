@@ -7,6 +7,30 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.161.2 - 2026-10-05 15:22 - PR #898, issue #852: Imagem e CI do backend instalam pelo uv.lock
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `1ef79ab`
+- PRs: [#898](https://github.com/pedrorezendefig/hospital-reunioes/pull/898)
+- Serviços: backend
+- Resultado: 🟢 healthy (928s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/1ef79ab
+
+## v0.161.1 - 2026-10-05 15:04 - PR #897, issue #752: Perfil zerado pela API deixa de reter Super admin pela flag legada
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `9485c6e`
+- PRs: [#897](https://github.com/pedrorezendefig/hospital-reunioes/pull/897)
+- Serviços: backend
+- Resultado: 🟢 healthy (918s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/9485c6e
+
+## v0.161.0 (sem bump) - 2026-10-05 14:46 - PR #881, sem issue: Aspas na descrição de três agentes hr-* para o YAML carregar
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e0cccf3`
+- PRs: [#881](https://github.com/pedrorezendefig/hospital-reunioes/pull/881)
+- Serviços: nenhum
+- Resultado: 🟢 healthy (233s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e0cccf3
+
 ## v0.161.0 - 2026-10-05 12:40 - PR #930, sem issue: Responsável cai em quem criou a issue quando ninguém assumiu
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `b64bf9f`

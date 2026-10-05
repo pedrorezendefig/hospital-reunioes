@@ -18,9 +18,15 @@ WORKDIR /app
 # Install uv for fast dependency resolution
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /usr/local/bin/uv
 
-# Install dependencies
-COPY pyproject.toml .
-RUN uv pip install --system --no-cache -r pyproject.toml
+# Dependencias pelo uv.lock (issue #852): o `uv export --frozen` le o lock como
+# esta, sem re-resolver, e o `--require-hashes` recusa qualquer pacote cuja
+# versao e hash nao sejam os do lock. Sem o extra de dev. Instala no Python do
+# sistema, como antes: o CMD e o interpretador do container nao mudam.
+# `pyproject.toml` e `uv.lock` fora de sincronia reprovam no CI (`uv lock --check`).
+COPY pyproject.toml uv.lock ./
+RUN uv export --quiet --frozen --no-dev --no-emit-project --format requirements-txt -o /tmp/requirements.txt \
+    && uv pip install --system --no-cache --require-hashes -r /tmp/requirements.txt \
+    && rm /tmp/requirements.txt
 
 # Copy application code
 COPY app/ app/

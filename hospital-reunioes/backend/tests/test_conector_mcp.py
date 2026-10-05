@@ -851,7 +851,7 @@ class TestPythonJoseSemAsVersoesDasCves:
     """CVE-2024-33663 (confusão de algoritmo) e CVE-2024-33664 (JWE que infla)
     não são exploráveis aqui: o conector só aceita RS256 com a chave RSA do
     JWKS e nunca decifra JWE. O pin `>=3.4.0` trava a regressão mesmo assim,
-    no `pyproject.toml` (de onde a imagem instala) e no `uv.lock`."""
+    no `pyproject.toml` e no `uv.lock` (de onde a imagem instala, issue #852)."""
 
     _BACKEND = Path(__file__).resolve().parents[1]
     _CORRIGIDA = Version("3.4.0")
