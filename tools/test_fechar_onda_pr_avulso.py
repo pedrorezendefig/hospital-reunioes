@@ -32,6 +32,7 @@ MIGRATIONS = "hospital-reunioes/supabase/migrations"
 
 TRAVESSAO = "\u2014"
 MEIA_RISCA = "\u2013"
+SEM_RUNNER = "The job was not acquired by Runner of type hosted even after multiple attempts"
 
 ENV_GIT = {
     "GIT_CONFIG_GLOBAL": os.devnull,
@@ -144,6 +145,9 @@ class Cenario:
         # PRs que o GitHub conhece: o do autor e os que o script abrir pela API
         self.prs: dict[int, dict] = {numero: self.pr}
         self.ci_vermelho: set[str] = set()  # heads em que o CI falha
+        # quantas rodadas do CI do bump o GitHub cancela por falta de runner (#953)
+        self.sem_runner = 0
+        self.anotacao_do_cancelamento = SEM_RUNNER
         self.merges: list[dict] = []
         self.gh_chamadas: list[list[str]] = []
         self.builds: list[str] = []
@@ -217,6 +221,10 @@ class Cenario:
         pr["headRefOid"] = head
         pr["statusCheckRollup"] = [{"name": "Backend Lint, Format & Tests", "status": "COMPLETED",
                                     "conclusion": "FAILURE" if head in self.ci_vermelho else "SUCCESS"}]
+        if head != self.head_do_pr and self.sem_runner:
+            pr["statusCheckRollup"] = [{"name": "Backend Lint, Format & Tests", "status": "COMPLETED",
+                                        "conclusion": "CANCELLED", "workflowName": "CI",
+                                        "detailsUrl": "https://github.com/dono/repo/actions/runs/555/job/9"}]
         pr["mergeStateStatus"] = "CLEAN" if self._em_dia(head) else "BEHIND"
         return {k: v for k, v in pr.items() if k in campos}
 
@@ -279,6 +287,9 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
             return c.ver_pr(int(args[2]), args[args.index("--json") + 1].split(","))
         if args[:2] == ["issue", "view"]:
             return {"body": "## Pai\n\n`#902`, PRD da esteira.\n"}
+        if args == ["api", "repos/{owner}/{repo}/check-runs/9/annotations"]:
+            return [{"annotation_level": "notice", "message": "The ubuntu-latest label will migrate"},
+                    {"annotation_level": "failure", "message": c.anotacao_do_cancelamento}]
         if args[:3] in (["api", "-X", "POST"], ["api", "-X", "PUT"]):
             campos = dict(a.split("=", 1) for a in args[5::2])
             assert args[4::2] == ["-f"] * len(campos), args
@@ -299,6 +310,8 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
                 branch = c.prs[int(cmd[3])]["headRefName"]
                 if "--delete-branch" in cmd and c._tip(branch):
                     git(c.remoto, "update-ref", "-d", f"refs/heads/{branch}")
+            if cmd[1:] == ["run", "rerun", "555", "--failed"]:
+                c.sem_runner -= 1
             return subprocess.CompletedProcess(cmd, 0, "", "")
         return run_real(cmd, *args, **kwargs)
 
@@ -474,6 +487,54 @@ def test_ci_vermelho_depois_do_bump_para_sem_merge_e_sem_app_version(
     assert c.coolify() == []
     assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
     assert "#7" in capsys.readouterr().out
+
+
+def test_ci_cancelado_sem_runner_e_repetido_e_o_pr_entra_quando_fica_verde(
+    tmp_path, monkeypatch
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
+    c.sem_runner = 2
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert c.gh_chamadas.count(["run", "rerun", "555", "--failed"]) == 2
+    assert len(c.merges) == 2  # o código e o registro
+
+
+def test_sem_runner_esgotado_para_sem_merge_e_aponta_o_incidente_nao_o_codigo(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
+    c.sem_runner = 99
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
+
+    assert c.gh_chamadas.count(["run", "rerun", "555", "--failed"]) == 3
+    assert c.merges == [] and c.coolify() == []
+    saida = capsys.readouterr().out
+    assert "githubstatus.com" in saida and "CI vermelho" not in saida
+
+
+def test_cancelamento_que_nao_e_falta_de_runner_continua_ci_vermelho_sem_rerun(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
+    c.sem_runner = 99
+    c.anotacao_do_cancelamento = "The operation was canceled."
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
+
+    assert ["run", "rerun", "555", "--failed"] not in c.gh_chamadas
+    assert "CI vermelho" in capsys.readouterr().out
 
 
 def test_registro_que_nao_entra_sai_com_5_semaforo_solto_e_producao_intacta(
