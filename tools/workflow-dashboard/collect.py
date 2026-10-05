@@ -16,12 +16,15 @@ from pathlib import Path
 
 from areas import fundir_colunas_no_er, parse_area
 from diagramas import extrair_diagramas
+from fases import montar_fases, timeline_da_issue, vereditos_dos_comentarios
 from plano import bloqueios_do_corpo, montar_plano
 
 GH_TIMEOUT = 20
 
 ISSUE_FIELDS = "number,title,state,labels,createdAt,closedAt,assignees,author,body,url"
-PR_FIELDS = "number,title,state,mergedAt,headRefName,closingIssuesReferences,url"
+PR_FIELDS = "number,title,state,mergedAt,headRefName,closingIssuesReferences,url,createdAt,closedAt,author,isDraft"
+# Campos pesados só dos PRs abertos: pedidos para a lista inteira, o GraphQL do GitHub estoura (HTTP 504).
+PR_ABERTO_FIELDS = "number,statusCheckRollup,mergeStateStatus,reviews,comments"
 # Sem teto prático: o total de issues e o filtro por responsável contam o histórico inteiro.
 GH_LIMIT = "10000"
 
@@ -64,6 +67,49 @@ query($owner:String!,$name:String!,$after:String){
   }
 }
 """
+
+# Linha do tempo da issue (ADR 0062, decisão 6): eventos dela e os PRs que a fecham,
+# com o rollup de CI por commit (quantas vezes ficou vermelho) e os comentários (vereditos).
+_LINHA_FRAGMENT = """
+fragment Linha on Issue {
+  timelineItems(itemTypes:[ASSIGNED_EVENT,CLOSED_EVENT,REOPENED_EVENT],last:50){
+    nodes{
+      __typename
+      ... on AssignedEvent{ createdAt assignee{ ... on User{ login } } }
+      ... on ClosedEvent{ createdAt }
+      ... on ReopenedEvent{ createdAt }
+    }
+  }
+  closedByPullRequestsReferences(first:10,includeClosedPrs:true){
+    nodes{
+      number state createdAt closedAt mergedAt headRefName
+      commits(last:30){ nodes{ commit{ committedDate statusCheckRollup{ state } } } }
+      comments(last:30){ nodes{ createdAt body } }
+    }
+  }
+}
+"""
+
+TIMELINE_QUERY = """
+query($owner:String!,$name:String!,$after:String){
+  repository(owner:$owner,name:$name){
+    issues(first:50,states:[OPEN],orderBy:{field:CREATED_AT,direction:DESC},after:$after){
+      pageInfo{ hasNextPage endCursor }
+      nodes{ number ...Linha }
+    }
+  }
+}
+""" + _LINHA_FRAGMENT
+
+TIMELINE_ISSUE_QUERY = """
+query($owner:String!,$name:String!,$number:Int!){
+  repository(owner:$owner,name:$name){
+    issue(number:$number){ number createdAt ...Linha }
+  }
+}
+""" + _LINHA_FRAGMENT
+
+_EVENTOS_DA_ISSUE = {"AssignedEvent": "designada", "ClosedEvent": "fechada", "ReopenedEvent": "reaberta"}
 
 
 def _run(cmd: list[str], cwd: Path, timeout: int = GH_TIMEOUT) -> str:
@@ -152,7 +198,115 @@ def _gh_prs(root: Path) -> list[dict]:
         "head_ref": it.get("headRefName"),
         "url": it.get("url"),
         "closes": [r["number"] for r in it.get("closingIssuesReferences") or []],
+        "created_at": it.get("createdAt"),
+        "closed_at": it.get("closedAt"),
+        "author": (it.get("author") or {}).get("login"),
+        "is_draft": bool(it.get("isDraft")),
+        # Só os abertos ganham estes campos (_enriquecer_prs_abertos).
+        "checks": [],
+        "merge_state": None,
+        "reviews": [],
+        "comentarios": None,
+        "vereditos": [],
     } for it in items]
+
+
+def _check(c: dict) -> dict:
+    """Um item do statusCheckRollup: CheckRun (Actions) ou StatusContext (status de commit)."""
+    if c.get("__typename") == "StatusContext":
+        estado = c.get("state")
+        status = "PENDING" if estado in ("PENDING", "EXPECTED") else "COMPLETED"
+        return {"nome": c.get("context"), "status": status, "conclusao": estado, "inicio": c.get("startedAt"),
+                "fim": c.get("startedAt") if status == "COMPLETED" else None}
+    return {"nome": c.get("name"), "status": c.get("status"), "conclusao": c.get("conclusion"),
+            "inicio": c.get("startedAt"), "fim": c.get("completedAt")}
+
+
+def _enriquecer_prs_abertos(root: Path, prs: list[dict]) -> None:
+    """Checks, mergeStateStatus, reviews e comentários dos PRs abertos, numa chamada só.
+
+    Falha degrada para os PRs sem esses campos (fase "aberto sem CI"), sem
+    derrubar a coleta.
+    """
+    try:
+        items = json.loads(_run(["gh", "pr", "list", "--state", "open", "--limit", GH_LIMIT,
+                                 "--json", PR_ABERTO_FIELDS], root))
+    except Exception:
+        return
+    abertos = {it["number"]: it for it in items}
+    for p in prs:
+        it = abertos.get(p["number"])
+        if not it:
+            continue
+        comentarios = [{"created_at": c.get("createdAt"), "body": c.get("body")} for c in it.get("comments") or []]
+        p.update(
+            checks=[_check(c) for c in it.get("statusCheckRollup") or []],
+            merge_state=it.get("mergeStateStatus"),
+            reviews=[{"autor": (r.get("author") or {}).get("login"), "estado": r.get("state"),
+                      "em": r.get("submittedAt")} for r in it.get("reviews") or []],
+            comentarios=len(comentarios),
+            vereditos=vereditos_dos_comentarios(comentarios),
+        )
+
+
+def _linha_do_no(node: dict) -> dict:
+    """Nó GraphQL (fragmento Linha) no shape que fases.timeline_da_issue espera."""
+    eventos = []
+    for ev in (node.get("timelineItems") or {}).get("nodes") or []:
+        tipo = _EVENTOS_DA_ISSUE.get(ev.get("__typename"))
+        if not tipo:
+            continue
+        e = {"tipo": tipo, "em": ev.get("createdAt")}
+        if tipo == "designada":
+            e["quem"] = (ev.get("assignee") or {}).get("login")
+        eventos.append(e)
+    prs = []
+    for p in (node.get("closedByPullRequestsReferences") or {}).get("nodes") or []:
+        commits = [c.get("commit") or {} for c in (p.get("commits") or {}).get("nodes") or []]
+        vermelhos = [c for c in commits if (c.get("statusCheckRollup") or {}).get("state") in ("FAILURE", "ERROR")]
+        comentarios = [{"created_at": c.get("createdAt"), "body": c.get("body")}
+                       for c in (p.get("comments") or {}).get("nodes") or []]
+        prs.append({
+            "number": p["number"],
+            "state": p.get("state"),
+            "created_at": p.get("createdAt"),
+            "closed_at": p.get("closedAt"),
+            "merged_at": p.get("mergedAt"),
+            "head_ref": p.get("headRefName"),
+            "ci_vermelho": len(vermelhos),
+            "ci_vermelho_em": vermelhos[-1].get("committedDate") if vermelhos else None,
+            "vereditos": vereditos_dos_comentarios(comentarios),
+        })
+    return {"eventos": eventos, "prs": prs}
+
+
+def _gh_timelines(root: Path, slug: str) -> dict[int, dict]:
+    """Linha do tempo de todas as issues abertas, em lote (GraphQL paginado)."""
+    owner, name = slug.split("/", 1)
+    linhas: dict[int, dict] = {}
+    cursor = None
+    while True:
+        cmd = ["gh", "api", "graphql", "-f", f"query={TIMELINE_QUERY}",
+               "-F", f"owner={owner}", "-F", f"name={name}"]
+        if cursor:
+            cmd += ["-F", f"after={cursor}"]
+        page = json.loads(_run(cmd, root))["data"]["repository"]["issues"]
+        for node in page["nodes"]:
+            linhas[node["number"]] = _linha_do_no(node)
+        if not page["pageInfo"]["hasNextPage"]:
+            break
+        cursor = page["pageInfo"]["endCursor"]
+    return linhas
+
+
+def _branches_remotas(root: Path) -> list[str]:
+    """Branches do origin: a "branch criada" da fase Em andamento vale para qualquer sócio."""
+    try:
+        saida = _run(["git", "ls-remote", "--heads", "origin"], root)
+    except Exception:
+        return []
+    return [linha.split("\t", 1)[1].removeprefix("refs/heads/")
+            for linha in saida.splitlines() if "\t" in linha]
 
 
 def _gh_subissues(root: Path, slug: str) -> dict[int, list[int]]:
@@ -244,6 +398,26 @@ def issue_detail(root: Path, number: int) -> dict:
         } for c in data.get("comments") or []]}
     except Exception as e:
         return {"number": number, "error": str(e), "comments": []}
+
+
+def _repo_slug(state: dict | None) -> str:
+    return ((state or {}).get("production") or {}).get("repo") or "pedrorezendefig/hospital-reunioes"
+
+
+def issue_timeline(root: Path, number: int) -> dict:
+    """Linha do tempo de uma issue sob demanda: a das fechadas não vem na coleta (ADR 0062, decisão 6)."""
+    try:
+        owner, name = _repo_slug(_spec_json_fresh(root, "docs/spec/deploy/state.json")).split("/", 1)
+        history = (_spec_json_fresh(root, "docs/spec/deploy/history.json") or {}).get("deploys") or []
+        raw = _run(["gh", "api", "graphql", "-f", f"query={TIMELINE_ISSUE_QUERY}",
+                    "-F", f"owner={owner}", "-F", f"name={name}", "-F", f"number={number}"], root)
+        node = json.loads(raw)["data"]["repository"]["issue"]
+        if not node:
+            return {"number": number, "error": f"issue #{number} não encontrada no GitHub.", "timeline": []}
+        issue = {"number": number, "created_at": node.get("createdAt")}
+        return {"number": number, "error": None, "timeline": timeline_da_issue(issue, _linha_do_no(node), history)}
+    except Exception as e:
+        return {"number": number, "error": _gh_failure(e)[1], "timeline": []}
 
 
 # ---------- Correlação issue -> PR -> deploy ----------
@@ -434,6 +608,27 @@ def _montar_plano_seguro(github: dict):
         return {"levas": [], "tempos_tipicos": {}, "erro": str(e)[:300]}
 
 
+def _montar_fases_seguro(root: Path, slug: str, github: dict, history: list[dict]):
+    """Fases com a mesma degradação do Plano: gh fora → None; timeline fora → fases sem timeline."""
+    if github["error"]:
+        return None
+    try:
+        timelines = _gh_timelines(root, slug)
+    except Exception:
+        timelines = {}
+    try:
+        return montar_fases(github["issues"], github["prs"], history, _branches_remotas(root), timelines)
+    except Exception as e:
+        return {"issues": {}, "prs": {}, "timelines": {}, "ondas": {}, "funil": None, "erro": str(e)[:300]}
+
+
+def _linhas_do_funil(fases: dict | None) -> list[str]:
+    funil = (fases or {}).get("funil")
+    if not funil:
+        return ["funil       indisponível (gh)"]
+    return ["funil       " + " · ".join(f"{fase} {n}" for fase, n in funil["total"].items())]
+
+
 # ---------- Montagem ----------
 
 def collect(root: Path) -> dict:
@@ -447,7 +642,7 @@ def collect(root: Path) -> dict:
     history = history_doc.get("deploys") or []
     project = _project_light(_read_json(spec / "deploy" / "project.json"))
 
-    slug = ((state or {}).get("production") or {}).get("repo") or "pedrorezendefig/hospital-reunioes"
+    slug = _repo_slug(state)
 
     github = {"error": None, "error_kind": None, "issues": [], "prs": [], "prds": []}
     try:
@@ -479,6 +674,7 @@ def collect(root: Path) -> dict:
             i["is_prd"] = i["number"] in prds
         _correlate(history, issues, prs)
         _enrich_claims(root, slug, issues)
+        _enriquecer_prs_abertos(root, prs)
         github.update(issues=issues, prs=prs, prds=sorted(prds))
     except Exception as e:
         kind, friendly = _gh_failure(e)
@@ -503,6 +699,7 @@ def collect(root: Path) -> dict:
         "context_md": _read_text(root / "CONTEXT.md"),
         "snapshots": _snapshots(root),
         "git": _git_info(root),
+        "fases": _montar_fases_seguro(root, slug, github, history),
     }
 
 
@@ -527,3 +724,5 @@ if __name__ == "__main__":
         if i["number"] == 49:
             print(f"#49 sample  parent={i['parent']} prs={[p['number'] for p in i['prs']]} "
                   f"deploys={[d['app_version'] for d in i['deploys']]} criteria={i['criteria']}")
+    for linha in _linhas_do_funil(data["fases"]):
+        print(linha)
