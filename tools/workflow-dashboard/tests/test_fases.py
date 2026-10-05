@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fases import montar_fases  # noqa: E402
+from fases import montar_fases, vereditos_dos_comentarios  # noqa: E402
 
 AGORA = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
 
@@ -258,3 +258,144 @@ def test_merge_anterior_ao_historico_conta_como_em_producao_sem_versao():
     fase = _fase(issue, prs=[_merged(136, [36], merged_at="2026-01-01T10:00:00Z")], deploys=deploys)
     assert fase["fase"] == "em_producao"
     assert fase["versao"] is None
+
+
+# ---------- veredito dos agentes revisores ----------
+
+MARCADOR = "<!-- automacao -->\n"
+
+
+def _comentario(corpo, em="2026-10-04T10:00:00Z"):
+    return {"author": "pedro", "created_at": em, "body": corpo}
+
+
+def test_veredito_so_conta_no_comentario_com_marcador_de_automacao():
+    comentarios = [
+        _comentario("Achei bom.\nVEREDITO: LIMPO"),
+        _comentario(MARCADOR + "## Veredito da revisão\n\n**must-fix**\n- nada\n\nVEREDITO: LIMPO",
+                    em="2026-10-04T11:00:00Z"),
+        _comentario(MARCADOR + "## Veredito de segurança\n\nVEREDITO SEGURANCA: MUST-FIX (2)",
+                    em="2026-10-04T12:00:00Z"),
+        _comentario(MARCADOR + "Corretor: os dois must-fix fechados.", em="2026-10-04T13:00:00Z"),
+    ]
+    assert vereditos_dos_comentarios(comentarios) == [
+        {"tipo": "revisao", "valor": "limpo", "em": "2026-10-04T11:00:00Z"},
+        {"tipo": "seguranca", "valor": "must_fix", "em": "2026-10-04T12:00:00Z"},
+    ]
+
+
+# ---------- fase do PR ----------
+
+
+def _fase_pr(pr, *, deploys=()):
+    return montar_fases([], [pr], list(deploys), [], agora=AGORA)["prs"][pr["number"]]
+
+
+def _limpo(em="2026-10-06T12:00:00Z", tipo="revisao"):
+    return {"tipo": tipo, "valor": "limpo", "em": em}
+
+
+def _must_fix(em="2026-10-06T12:00:00Z", tipo="revisao"):
+    return {"tipo": tipo, "valor": "must_fix", "em": em}
+
+
+def test_pr_sem_check_fica_aberto_sem_ci_desde_a_abertura():
+    fase = _fase_pr(_pr(200, [1], created_at="2026-10-03T10:00:00Z"))
+    assert fase["fase"] == "aberto_sem_ci"
+    assert fase["desde"] == "2026-10-03T10:00:00Z"
+    assert fase["dias_na_coluna"] == 7
+
+
+def test_ci_rodando_ainda_e_aberto_sem_ci():
+    checks = [_check(), _check(None, status="IN_PROGRESS", inicio="2026-10-08T12:00:00Z")]
+    fase = _fase_pr(_pr(201, [1], checks=checks))
+    assert fase["fase"] == "aberto_sem_ci"
+    assert fase["ci"] == "pendente"
+
+
+def test_check_vermelho_poe_o_pr_em_ci_vermelho_desde_a_falha():
+    checks = [_check(), _check("FAILURE", fim="2026-10-05T12:00:00Z")]
+    fase = _fase_pr(_pr(202, [1], checks=checks, vereditos=[_limpo()]))
+    assert fase["fase"] == "ci_vermelho"
+    assert fase["desde"] == "2026-10-05T12:00:00Z"
+    assert fase["dias_na_coluna"] == 5
+
+
+def test_ci_verde_sem_veredito_espera_o_revisor_desde_o_fim_do_ci():
+    checks = [_check(fim="2026-10-04T12:00:00Z"), _check(fim="2026-10-08T12:00:00Z")]
+    fase = _fase_pr(_pr(203, [1], checks=checks))
+    assert fase["fase"] == "esperando_revisor"
+    assert fase["ci"] == "verde"
+    assert fase["desde"] == "2026-10-08T12:00:00Z"
+    assert fase["dias_na_coluna"] == 2
+
+
+def test_ci_verde_e_veredito_limpo_fica_verde_esperando_merge_desde_o_veredito():
+    pr = _pr(204, [1], checks=[_check(fim="2026-10-04T12:00:00Z")], vereditos=[_limpo("2026-10-09T12:00:00Z")])
+    fase = _fase_pr(pr)
+    assert fase["fase"] == "verde_esperando_merge"
+    assert fase["veredito"] == "limpo"
+    assert fase["desde"] == "2026-10-09T12:00:00Z"
+    assert fase["dias_na_coluna"] == 1
+
+
+def test_must_fix_depois_do_limpo_volta_a_esperar_o_revisor():
+    vereditos = [_limpo("2026-10-05T12:00:00Z"), _must_fix("2026-10-06T12:00:00Z")]
+    fase = _fase_pr(_pr(205, [1], checks=[_check()], vereditos=vereditos))
+    assert fase["fase"] == "esperando_revisor"
+    assert fase["veredito"] == "must_fix"
+
+
+def test_limpo_da_rodada_seguinte_libera_o_merge():
+    vereditos = [_must_fix("2026-10-05T12:00:00Z"), _limpo("2026-10-06T12:00:00Z")]
+    assert _fase_pr(_pr(206, [1], checks=[_check()], vereditos=vereditos))["fase"] == "verde_esperando_merge"
+
+
+def test_must_fix_de_seguranca_segura_o_merge_mesmo_com_revisao_limpa():
+    vereditos = [_limpo("2026-10-06T12:00:00Z"), _must_fix("2026-10-05T12:00:00Z", tipo="seguranca")]
+    assert _fase_pr(_pr(207, [1], checks=[_check()], vereditos=vereditos))["fase"] == "esperando_revisor"
+
+
+def test_review_aprovado_no_github_conta_como_veredito_limpo():
+    reviews = [{"autor": "rib", "estado": "APPROVED", "em": "2026-10-07T12:00:00Z"}]
+    assert _fase_pr(_pr(208, [1], checks=[_check()], reviews=reviews))["fase"] == "verde_esperando_merge"
+
+
+def test_conflito_e_sinal_e_nao_muda_a_coluna():
+    fase = _fase_pr(_pr(209, [1], checks=[_check()], merge_state="DIRTY"))
+    assert fase["fase"] == "esperando_revisor"
+    assert fase["conflito"] is True
+    assert _fase_pr(_pr(210, [1], checks=[_check()], merge_state="BEHIND"))["conflito"] is False
+
+
+def test_pr_mergeado_sem_deploy_fica_mergeado_sem_deploy_desde_o_merge():
+    fase = _fase_pr(_merged(211, [1], merged_at="2026-10-08T12:00:00Z"))
+    assert fase["fase"] == "mergeado_sem_deploy"
+    assert fase["desde"] == "2026-10-08T12:00:00Z"
+    assert fase["dias_na_coluna"] == 2
+
+
+def test_pr_citado_num_deploy_de_onda_fica_em_producao_com_a_versao_e_a_data():
+    deploys = [
+        _deploy("0.157.0", "2026-10-09T12:00:00-03:00", "onda-b: PRs #212 #213 #214"),
+        _deploy("0.156.0", "2026-10-08T12:00:00-03:00", "PR #99"),
+    ]
+    fase = _fase_pr(_merged(213, [1], merged_at="2026-10-08T15:00:00Z"), deploys=deploys)
+    assert fase["fase"] == "em_producao"
+    assert fase["versao"] == "0.157.0"
+    assert fase["desde"] == "2026-10-09T12:00:00-03:00"
+    assert fase["dias_na_coluna"] == 0
+
+
+def test_pr_fechado_sem_merge_vira_tentativa_desde_o_fechamento():
+    fase = _fase_pr(_pr(215, [1], state="CLOSED", closed_at="2026-10-07T12:00:00Z"))
+    assert fase["fase"] == "fechado_sem_merge"
+    assert fase["desde"] == "2026-10-07T12:00:00Z"
+    assert fase["dias_na_coluna"] == 3
+
+
+def test_issue_em_pr_aberto_traz_o_sinal_do_pr():
+    issue = _issue(40, labels=["in-progress"], assignees=["bia"])
+    pr = _pr(140, [40], checks=[_check("FAILURE")], merge_state="DIRTY")
+    sinal = _fase(issue, prs=[pr])["sinal"]
+    assert sinal == {"ci": "vermelho", "veredito": None, "conflito": True, "tentativa_anterior": False}
