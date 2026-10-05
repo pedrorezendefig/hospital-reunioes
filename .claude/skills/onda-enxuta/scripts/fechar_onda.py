@@ -3,7 +3,7 @@
 `/onda-enxuta` a producao com UM merge na main e UM build.
 
 Uso:
-    python fechar_onda.py --prs 850 851 852 --sessao onda-a-1 [--dry-run] [--sem-snapshot] [--raiz <repo>]
+    python fechar_onda.py --prs 850 851 852 --sessao onda-a-1 [--dry-run] [--raiz <repo>]
     python fechar_onda.py --prs 907 [--dry-run]     # PR avulso: sem --sessao, a chave e pr-907
 
 A ordem dos PRs e a ordem de merge. O script nunca toca na arvore principal
@@ -31,9 +31,11 @@ Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
   8. merge pela API do GitHub (squash, conferindo o sha do head)
   9. monitorar o build de cada service (webhook), forcar se nao disparar
  10. health com version match
- 11. registro num PR so de docs (history.json, state.json, CHANGELOG.md,
-     snapshot best-effort #844, draft do manual ADR 0057), mergeado pela API;
-     o build que o webhook do Coolify dispara para ele e cancelado (issue #851)
+ 11. registro num PR so de docs, so com history.json (todos os deploys, sem
+     teto) e state.json (ADR 0062, decisao 9), mergeado pela API; o build que o
+     webhook do Coolify dispara para ele e cancelado (issue #851). Snapshot e
+     draft do Manual nao sao do rabo: a Action do push da main roda os dois
+     depois do registro (ADR 0062, decisao 10)
  12. limpeza (worktrees, branches pr-*, worktrees de agente ja entregues) e soltar o semaforo
 
 Commits que chegam a main (dois squashes):
@@ -42,9 +44,9 @@ Commits que chegam a main (dois squashes):
     dentro dele, o commit `chore(release): bump vX.Y.Z (...)` quando ha bump
   - o do registro: "chore(deploy): registro do PR #N (vX.Y.Z) (#R)" ou
     "chore(deploy): registro da onda <sessao> (vX.Y.Z) (#R)"
-No PR avulso, o registro do history.json e do CHANGELOG nomeia PR e issue,
-sem a onda. O campo `sha` do history.json e o do squash do codigo: o commit
-que foi para producao. O registro vem depois, so com docs.
+No PR avulso, o registro do history.json nomeia PR e issue, sem a onda. O
+campo `sha` do history.json e o do squash do codigo: o commit que foi para
+producao. O registro vem depois, so com docs.
 
 Codigos de saida:
   0  PR ou onda fechados, health verde, registro na main
@@ -60,7 +62,7 @@ Codigos de saida:
 issue e tipo de bump) e o que faria nos demais; nao pega semaforo, nao toca no
 Coolify, nao pusha.
 
-Windows: `bash` do Git no PATH (para o semaforo.sh), `PYTHONUTF8=1` no snapshot.
+Windows: `bash` do Git no PATH (para o semaforo.sh).
 """
 
 from __future__ import annotations
@@ -89,6 +91,7 @@ if hasattr(sys.stderr, "reconfigure"):
 # do mesmo checkout deste script.
 sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "tools"))
 import checar_migration_repetida  # noqa: E402
+import ci_sem_runner  # noqa: E402
 
 EXIT_PRECOND = 1
 EXIT_MERGE = 2
@@ -98,12 +101,10 @@ EXIT_REGISTRO = 5
 
 PACKAGE_JSON = "hospital-reunioes/frontend/package.json"
 SEMAFORO = ".claude/skills/deploy/scripts/semaforo.sh"
-SNAPSHOT = ".claude/skills/snapshot/scripts/snapshot.py"
-TIRAR_DRAFT = "tools/tirar_draft_manual.py"
-PUBLICAR_MANUAL = "docs/manual/publicar.sh"
 SPEC = "docs/spec"
+HISTORY = f"{SPEC}/deploy/history.json"
+STATE = f"{SPEC}/deploy/state.json"
 DOCS_ONLY_PREFIXES = ("docs/", ".claude/")
-HISTORY_MAX = 50
 BUILD_WAIT_WEBHOOK_S = 120
 BUILD_POLL_S = 10
 BUILD_TIMEOUT_S = 40 * 60
@@ -390,17 +391,33 @@ def _resultado(check: dict) -> str:
 def esperar_checks(raiz: Path, pr: int, sha: str) -> None:
     """Espera o CI do head `sha` do PR ficar verde e o GitHub liberar o merge
     (mergeStateStatus CLEAN). Com o ruleset, check obrigatorio pendente deixa o
-    PR em BLOCKED; branch atras da base, em BEHIND."""
+    PR em BLOCKED; branch atras da base, em BEHIND. Job que o GitHub cancelou
+    por falta de runner (incidente do Actions, issue #953) e repetido, nao e
+    vermelho de codigo."""
     inicio = time.time()
+    repeticoes = 0
     while True:
         info = gh_json(["pr", "view", str(pr), "--json", "headRefOid,statusCheckRollup,mergeStateStatus"],
                        cwd=raiz)
         estado = (info.get("mergeStateStatus") or "").upper()
         checks = info.get("statusCheckRollup") or []
         if info.get("headRefOid") == sha:
-            vermelhos = [c.get("name") or c.get("context") or "?" for c in checks if _resultado(c) in VERMELHO]
-            if vermelhos:
-                raise EntregaFalhou(f"CI vermelho no PR #{pr}: {', '.join(vermelhos[:4])}")
+            vermelhos = [c for c in checks if _resultado(c) in VERMELHO]
+            runs = ci_sem_runner.runs_sem_runner(vermelhos, lambda job: [
+                a.get("message") or "" for a in gh_json(
+                    ["api", f"repos/{{owner}}/{{repo}}/check-runs/{job}/annotations"], cwd=raiz)])
+            if runs and repeticoes >= ci_sem_runner.REPETICOES_MAX:
+                raise EntregaFalhou(f"PR #{pr}: o GitHub Actions ficou sem runner {repeticoes} vezes seguidas "
+                                    "(incidente, veja githubstatus.com); nada do codigo falhou")
+            if runs:
+                if all(run(["gh", "run", "rerun", r, "--failed"], cwd=raiz, check=False).returncode == 0
+                       for r in sorted(runs)):
+                    repeticoes += 1
+                    print(f"CI do PR #{pr} cancelado sem runner do GitHub: rerun {repeticoes} de "
+                          f"{ci_sem_runner.REPETICOES_MAX}")
+            elif vermelhos:
+                nomes = [c.get("name") or c.get("context") or "?" for c in vermelhos]
+                raise EntregaFalhou(f"CI vermelho no PR #{pr}: {', '.join(nomes[:4])}")
             if estado in ("BEHIND", "DIRTY"):
                 raise EntregaFalhou(f"PR #{pr} em {estado}: a main andou durante o CI")
             if checks and all(_resultado(c) in VERDE for c in checks) and estado in ("CLEAN", "HAS_HOOKS"):
@@ -523,13 +540,14 @@ def rotulo_issues(info: dict) -> str:
     return ("issue " if len(nums) == 1 else "issues ") + " ".join(f"#{n}" for n in nums)
 
 
-def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | None, versao_antiga: str,
+def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | None,
                       sha_codigo: str, prds: list[int], migs: list[str], servicos: list[str],
                       duracoes: dict[str, int | None], healths: dict[str, dict], resultado: str,
                       houve_bump: bool, avulso: bool = False, pr_entrega: int | None = None) -> None:
-    spec = wt / SPEC / "deploy"
-    history = ler_json(spec / "history.json")
-    state = ler_json(spec / "state.json")
+    """A verdade do deploy que o GitHub nao tem (ADR 0062, decisao 9): history.json,
+    com todos os deploys, e state.json."""
+    history = ler_json(wt / HISTORY)
+    state = ler_json(wt / STATE)
     when = agora_iso()
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
     como = "Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
@@ -563,8 +581,7 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
     }
     deploys = history.setdefault("deploys", [])
     deploys.insert(0, entrada)
-    del deploys[HISTORY_MAX:]
-    escrever_json(spec / "history.json", history)
+    escrever_json(wt / HISTORY, history)
 
     modo = "pr-avulso" if avulso else "onda-enxuta"
     state["updated_at"] = when
@@ -583,68 +600,7 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
     state["last_run"] = {"mode": modo, "sha": sha_codigo, "result": resultado,
                          "duration_seconds": int(time.time() - T0)}
     state.pop("next_actions", None)
-    escrever_json(spec / "state.json", state)
-
-    changelog = wt / SPEC / "CHANGELOG.md"
-    txt = changelog.read_text(encoding="utf-8") if changelog.exists() else "# Changelog Hospital Reuniões\n\n---\n\n"
-    autor = run(["git", "config", "user.name"], cwd=wt, check=False).stdout.strip() or "desconhecido"
-    email = run(["git", "config", "user.email"], cwd=wt, check=False).stdout.strip() or "?"
-    repo = (state.get("production") or {}).get("repo") or ""
-    emoji = {"healthy": "🟢", "failed": "🔴", "rolled-back": "🟡"}.get(resultado, "⚪")
-    cabec = f"## v{versao} - " if versao else f"## v{versao_antiga} (sem bump) - "
-    entrada_md = "\n".join([
-        f"{cabec}{when[:16].replace('T', ' ')} - {subject}",
-        f"- Autor: {autor} <{email}>",
-        f"- SHA: `{sha_codigo[:7]}`",
-        f"- PRs: " + ", ".join(f"[#{i['number']}]({i['url']})" for i in infos),
-        f"- Serviços: {', '.join(servicos) or 'nenhum'}",
-        f"- Resultado: {emoji} {resultado} ({int(time.time() - T0)}s)",
-        f"- Commit: https://github.com/{repo}/commit/{sha_codigo[:7]}",
-        "",
-    ])
-    linhas = txt.split("\n")
-    pos = next((i + 1 for i, ln in enumerate(linhas) if ln.strip() == "---"), None)
-    if pos is None:
-        txt = txt.rstrip() + "\n\n" + entrada_md
-    else:
-        while pos < len(linhas) and linhas[pos].strip() == "":
-            pos += 1
-        linhas.insert(pos, entrada_md)
-        txt = "\n".join(linhas)
-    changelog.write_text(txt, encoding="utf-8")
-
-
-def rodar_snapshot(wt: Path) -> str:
-    script = wt / SNAPSHOT
-    if not script.exists():
-        return "snapshot ausente"
-    proc = run([sys.executable, str(script), "--no-commit", "--root", str(wt)], cwd=wt, check=False,
-               timeout=600, env={"PYTHONUTF8": "1"})
-    if proc.returncode == 0:
-        return "snapshot ok"
-    if proc.returncode == 4:
-        return "snapshot parcial (sem venv, codigo 4)"
-    return f"snapshot pulado (#844, codigo {proc.returncode})"
-
-
-def tirar_draft_manual(wt: Path, prds: list[int]) -> tuple[str, bool]:
-    """Devolve (linha, houve_pagina)."""
-    script = wt / TIRAR_DRAFT
-    if not prds or not script.exists():
-        return ("manual: nenhum PRD no lote" if not prds else "manual: script ausente"), False
-    args = []
-    for p in prds:
-        args += ["--prd", str(p)]
-    proc = run([sys.executable, str(script), *args], cwd=wt, check=False, timeout=300, env={"PYTHONUTF8": "1"})
-    saida = (proc.stdout or "").strip().replace("\n", " | ")[:200]
-    if proc.returncode == 2:
-        return f"manual: bloqueado, nada tocado ({saida})", False
-    if proc.returncode != 0:
-        return f"manual: script falhou ({proc.returncode})", False
-    mudou = run(["git", "status", "--porcelain", "--", "docs/manual"], cwd=wt, check=False).stdout.strip()
-    if mudou:
-        return f"manual: paginas sairam do draft ({saida})", True
-    return "manual: nenhuma pagina em draft", False
+    escrever_json(wt / STATE, state)
 
 
 def commitar(wt: Path, msg: str, paths: list[str]) -> str:
@@ -881,7 +837,6 @@ def main() -> int:
     ap.add_argument("--prs", nargs="+", type=int, required=True, help="PRs na ordem de merge")
     ap.add_argument("--sessao", help="nome da sessao (chave do semaforo); sem ela, um PR so e um PR avulso (pr-<N>)")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--sem-snapshot", action="store_true")
     ap.add_argument("--raiz", help="raiz do repositorio (default: git rev-parse)")
     args = ap.parse_args()
 
@@ -1029,17 +984,16 @@ def main() -> int:
         try:
             run(["git", "fetch", "-q", "origin", "main"], cwd=raiz)
             wt_reg = criar_worktree(raiz, f"{args.sessao}-registro")
-            linha_snap = "snapshot pulado (--sem-snapshot)" if args.sem_snapshot else rodar_snapshot(wt_reg)
-            linha_manual, houve_pagina = tirar_draft_manual(wt_reg, prds)
-            escrever_registro(wt_reg, args.sessao, infos, versao_nova, versao_antiga, sha_main, prds, migs,
+            escrever_registro(wt_reg, args.sessao, infos, versao_nova, sha_main, prds, migs,
                               servicos, duracoes, healths, "healthy", bool(versao_nova), avulso, pr_entrega)
             do_lote = f"do PR {prs_txt}" if avulso else f"da onda {args.sessao}"
             titulo_reg = f"chore(deploy): registro {do_lote} (v{versao})"
-            commitar(wt_reg, titulo_reg, [SPEC, "docs/manual", "docs/ARQUITETURA.md"])
+            commitar(wt_reg, titulo_reg, [HISTORY, STATE])
             pr_reg, head_reg = entregar(raiz, wt_reg, f"registro/{args.sessao}-{sha_main[:8]}", None, titulo_reg,
-                                        "<!-- automacao -->\nRegistro do deploy de producao (history.json, "
-                                        "state.json, CHANGELOG, snapshot e draft do Manual), aberto e mergeado "
-                                        "pelo `fechar_onda.py` depois do health (ADR 0061). So docs.\n")
+                                        "<!-- automacao -->\nRegistro do deploy de producao (history.json e "
+                                        "state.json), aberto e mergeado pelo `fechar_onda.py` depois do health "
+                                        "(ADR 0061). Snapshot e draft do Manual sao da Action do push da main "
+                                        "(ADR 0062). So docs.\n")
             sha_reg = mergear_pela_api(raiz, pr_reg, head_reg, f"{titulo_reg} (#{pr_reg})")
         except Exception as e:  # noqa: BLE001
             if wt_reg:
@@ -1050,12 +1004,8 @@ def main() -> int:
             print(f"registro: {e}. Producao ok e semaforo solto; {falta}.")
             return EXIT_REGISTRO
         cancelados = cancelar_build_do_registro(servicos_cfg, sha_reg)
-        print(f"registro: PR #{pr_reg} so de docs na main ({sha_reg[:8]}), {linha_snap}, {linha_manual}"
+        print(f"registro: PR #{pr_reg} so de docs na main ({sha_reg[:8]})"
               + (f", build do registro cancelado ({', '.join(cancelados)})" if cancelados else ""))
-
-        if houve_pagina and (raiz / PUBLICAR_MANUAL).exists():
-            pub = run([BASH, bash_path(wt_reg / PUBLICAR_MANUAL)], cwd=wt_reg, check=False, timeout=900)
-            print("manual publicado" if pub.returncode == 0 else f"manual: publicar.sh falhou ({pub.returncode}); rode a mao depois")
 
         conferir_prs_fechados(raiz, infos, args.sessao, avulso, pr_entrega)
         remover_worktree(raiz, wt_reg, [])

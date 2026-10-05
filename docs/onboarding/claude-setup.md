@@ -284,7 +284,7 @@ open http://localhost:3000                  # esperado: tela de login do app
 | `fechar_onda.py --prs <N>` | O rabo único (ADR 0061): bump na branch do PR, `APP_VERSION`, merge pela API, um build, health e registro em PR só de docs. |
 | `/deploy` | Opera a produção no Coolify: `status`, `rollback`, `setup`. O `ship` só imprime o comando do rabo. |
 | `/diagnose` | Investigação raiz de bug (reproduz → minimiza → corrige → regressão). |
-| `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Invocado pelo rabo (`fechar_onda.py`) no commit de registro. |
+| `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Roda numa Action no push da `main`, depois do registro do rabo (ADR 0062). |
 | `/atualizar-app` | Rebuild docker-compose local (opcional). **Não toca produção.** |
 | `/ask-pedro` | Router: responde "qual skill eu uso agora?". |
 | `/setup-maquina` | Confere a máquina (binários, acessos, chaves) e diz o que falta e onde pegar. |
@@ -339,7 +339,6 @@ O que a memória do Claude Code do Pedro aprendeu em produção e que nenhuma sk
 | Precisa provar uma tela sem subir Playwright | Chrome headless executa o JS e despeja o DOM | `"/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --disable-gpu --virtual-time-budget=20000 --dump-dom <url>` ou `--screenshot=<png> --window-size=1440,1900`. Achatar com `tr '\n' ' '` antes de grepar |
 | Playwright acusa erro em todo `<video>` MP4 | O Chromium do Playwright não tem H.264 | `p.chromium.launch(channel="chrome")` e servir por HTTP (`python3 -m http.server`); confirmar por `readyState >= 1` e `duration > 0` |
 | Dois ADRs com o mesmo número em sessões paralelas | O lint indexa por número e um sobrescreve o outro em silêncio | Antes de numerar: `git log origin/main --oneline -5` e `git worktree list`. Quem chega depois renumera e vira emenda em prosa (citação abaixo do frontmatter) |
-| Entrada nova do `CHANGELOG.md` sai com travessão e sem versão | `changelog_prepend.py` monta o título no formato errado | Depois do rabo, reescrever a entrada à mão no formato das anteriores (`## vX.Y.Z - DATA - assunto`) |
 | Classifier nega remoção em massa (worktrees, branches, arquivos) | Loops de remoção são barrados comando a comando | Calcular as listas em arquivo, gravar um script idempotente que só lê as listas, mostrar o resumo e pedir `! bash <script>` |
 | Pasta nova nasceu no caminho aposentado | A árvore principal fica atrás de `origin/main`; o `.gitignore` só cobre o layout novo | `git ls-tree -d --name-only origin/main docs/` antes de criar; `git check-ignore -v` no primeiro arquivo gerado (MP4, render, build) |
 | Comando devolvido ao humano com `! ...` deu 404 | O UUID ou SHA veio "de cabeça" | Valor lido no mesmo turno: `jq -r '.services[] \| select(.id=="backend") \| .uuid' docs/spec/deploy/project.json` |

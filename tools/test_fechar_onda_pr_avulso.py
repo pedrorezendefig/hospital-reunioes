@@ -32,6 +32,7 @@ MIGRATIONS = "hospital-reunioes/supabase/migrations"
 
 TRAVESSAO = "\u2014"
 MEIA_RISCA = "\u2013"
+SEM_RUNNER = "The job was not acquired by Runner of type hosted even after multiple attempts"
 
 ENV_GIT = {
     "GIT_CONFIG_GLOBAL": os.devnull,
@@ -84,19 +85,28 @@ PROJECT = {
     ]
 }
 
-CHANGELOG = (
-    "# Changelog Hospital Reuniões\n\n---\n\n"
-    "## v0.10.0 - 2026-10-01 10:00 - Entrada anterior\n- SHA: `abc1234`\n"
-)
+def script_falso(log: Path, nome: str, alvo: str) -> str:
+    """O snapshot e o tirar-draft do Manual moram no repo, mas saíram do rabo para
+    a Action do push da main (ADR 0062, decisão 10). O falso anota quem o chamou
+    e suja a árvore como o de verdade sujaria."""
+    return (
+        "import pathlib, sys\n"
+        f"with open({str(log)!r}, 'a', encoding='utf-8') as f:\n"
+        f"    f.write({nome!r} + ' ' + ' '.join(sys.argv[1:]) + '\\n')\n"
+        f"alvo = pathlib.Path({alvo!r})\n"
+        "alvo.parent.mkdir(parents=True, exist_ok=True)\n"
+        "alvo.write_text('gerado\\n', encoding='utf-8')\n"
+    )
 
 
 class Cenario:
     """O remoto, o clone em que o script roda e o que os dublês anotaram."""
 
     def __init__(self, tmp_path: Path, numero: int, titulo: str, issue: int | None,
-                 arquivos: dict[str, str], corpo: str = ""):
+                 arquivos: dict[str, str], corpo: str = "", deploys: list[dict] | None = None):
         self.numero = numero
         self.issue = issue
+        self.log_scripts = tmp_path / "scripts-chamados.log"
         repo = tmp_path / "repo"
         repo.mkdir()
         git(repo, "init", "-q", "-b", "main")
@@ -109,8 +119,11 @@ class Cenario:
             "production": {"repo": "dono/repo"},
             "services": [{"id": "backend"}, {"id": "frontend"}],
         }))
-        escrever(repo, "docs/spec/deploy/history.json", json_txt({"deploys": []}))
-        escrever(repo, "docs/spec/CHANGELOG.md", CHANGELOG)
+        escrever(repo, "docs/spec/deploy/history.json", json_txt({"deploys": deploys or []}))
+        escrever(repo, ".claude/skills/snapshot/scripts/snapshot.py",
+                 script_falso(self.log_scripts, "snapshot", "docs/spec/snapshots/ROTAS.md"))
+        escrever(repo, "tools/tirar_draft_manual.py",
+                 script_falso(self.log_scripts, "tirar_draft", "docs/manual/pagina.mdx"))
         git(repo, "add", "-A")
         git(repo, "commit", "-q", "-m", "base")
         git(repo, "checkout", "-q", "-b", "feature")
@@ -144,6 +157,9 @@ class Cenario:
         # PRs que o GitHub conhece: o do autor e os que o script abrir pela API
         self.prs: dict[int, dict] = {numero: self.pr}
         self.ci_vermelho: set[str] = set()  # heads em que o CI falha
+        # quantas rodadas do CI do bump o GitHub cancela por falta de runner (#953)
+        self.sem_runner = 0
+        self.anotacao_do_cancelamento = SEM_RUNNER
         self.merges: list[dict] = []
         self.gh_chamadas: list[list[str]] = []
         self.builds: list[str] = []
@@ -184,6 +200,11 @@ class Cenario:
     def na_main(self, caminho: str) -> str:
         return git(self.remoto, "show", f"main:{caminho}")
 
+    def scripts_chamados(self) -> list[str]:
+        if not self.log_scripts.exists():
+            return []
+        return self.log_scripts.read_text(encoding="utf-8").splitlines()
+
     def coolify(self) -> list[str]:
         if not self.log_coolify.exists():
             return []
@@ -217,6 +238,10 @@ class Cenario:
         pr["headRefOid"] = head
         pr["statusCheckRollup"] = [{"name": "Backend Lint, Format & Tests", "status": "COMPLETED",
                                     "conclusion": "FAILURE" if head in self.ci_vermelho else "SUCCESS"}]
+        if head != self.head_do_pr and self.sem_runner:
+            pr["statusCheckRollup"] = [{"name": "Backend Lint, Format & Tests", "status": "COMPLETED",
+                                        "conclusion": "CANCELLED", "workflowName": "CI",
+                                        "detailsUrl": "https://github.com/dono/repo/actions/runs/555/job/9"}]
         pr["mergeStateStatus"] = "CLEAN" if self._em_dia(head) else "BEHIND"
         return {k: v for k, v in pr.items() if k in campos}
 
@@ -279,6 +304,9 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
             return c.ver_pr(int(args[2]), args[args.index("--json") + 1].split(","))
         if args[:2] == ["issue", "view"]:
             return {"body": "## Pai\n\n`#902`, PRD da esteira.\n"}
+        if args == ["api", "repos/{owner}/{repo}/check-runs/9/annotations"]:
+            return [{"annotation_level": "notice", "message": "The ubuntu-latest label will migrate"},
+                    {"annotation_level": "failure", "message": c.anotacao_do_cancelamento}]
         if args[:3] in (["api", "-X", "POST"], ["api", "-X", "PUT"]):
             campos = dict(a.split("=", 1) for a in args[5::2])
             assert args[4::2] == ["-f"] * len(campos), args
@@ -299,6 +327,8 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
                 branch = c.prs[int(cmd[3])]["headRefName"]
                 if "--delete-branch" in cmd and c._tip(branch):
                     git(c.remoto, "update-ref", "-d", f"refs/heads/{branch}")
+            if cmd[1:] == ["run", "rerun", "555", "--failed"]:
+                c.sem_runner -= 1
             return subprocess.CompletedProcess(cmd, 0, "", "")
         return run_real(cmd, *args, **kwargs)
 
@@ -429,6 +459,55 @@ def test_registro_sobe_depois_do_health_num_pr_so_de_docs_e_o_build_dele_e_cance
     assert c.main_remota() == registro["main"]
 
 
+@pytest.mark.parametrize("extra", [(), ("--sessao", "onda-x")], ids=["avulso", "onda"])
+def test_registro_leva_so_history_e_state_sem_snapshot_nem_draft_do_manual(
+    tmp_path, monkeypatch, extra
+):
+    """ADR 0062, decisões 9 e 10: o rabo grava só a verdade do deploy. Snapshot e
+    draft do Manual são da Action do push da main, em nenhum caminho do rabo."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, *extra) == 0
+
+    assert c.scripts_chamados() == []
+    codigo, registro = c.merges[0]["main"], c.merges[1]["main"]
+    mudados = git(c.remoto, "diff", "--name-only", codigo, registro).splitlines()
+    assert mudados == ["docs/spec/deploy/history.json", "docs/spec/deploy/state.json"], mudados
+
+
+def test_history_guarda_todos_os_deploys_sem_teto(tmp_path, monkeypatch):
+    """ADR 0062, decisão 9: o `history.json` é a timeline inteira, sem o teto de 50."""
+    fo = carregar_fechar_onda()
+    antigos = [{"app_version": f"0.9.{n}", "sha": f"{n:040x}"} for n in range(60, 0, -1)]
+    c = pr_de_codigo(tmp_path, deploys=antigos)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    deploys = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"]
+    assert len(deploys) == 61, len(deploys)
+    assert deploys[0]["app_version"] == "0.10.1"
+    assert deploys[1:] == antigos, "nenhum deploy antigo some nem muda de ordem"
+    assert deploys[-1]["app_version"] == "0.9.1"
+
+
+def test_sem_snapshot_saiu_da_cli_e_da_docstring(tmp_path, monkeypatch, capsys):
+    """Sem snapshot no rabo, a opção que o pulava não tem o que pular."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    with pytest.raises(SystemExit) as e:
+        rodar_main(fo, monkeypatch, c, "--sem-snapshot")
+
+    assert e.value.code == 2  # argparse: opção desconhecida
+    assert "--sem-snapshot" in capsys.readouterr().err
+    assert c.gh_chamadas == [] and c.semaforo == []
+    assert "sem-snapshot" not in fo.__doc__
+
+
 def test_pr_atras_da_main_recebe_a_main_antes_do_bump(tmp_path, monkeypatch):
     """O ruleset exige a branch em dia com a base: a main andou depois do CI do
     PR, e o script traz a main para a branch antes do bump."""
@@ -474,6 +553,54 @@ def test_ci_vermelho_depois_do_bump_para_sem_merge_e_sem_app_version(
     assert c.coolify() == []
     assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
     assert "#7" in capsys.readouterr().out
+
+
+def test_ci_cancelado_sem_runner_e_repetido_e_o_pr_entra_quando_fica_verde(
+    tmp_path, monkeypatch
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
+    c.sem_runner = 2
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert c.gh_chamadas.count(["run", "rerun", "555", "--failed"]) == 2
+    assert len(c.merges) == 2  # o código e o registro
+
+
+def test_sem_runner_esgotado_para_sem_merge_e_aponta_o_incidente_nao_o_codigo(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
+    c.sem_runner = 99
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
+
+    assert c.gh_chamadas.count(["run", "rerun", "555", "--failed"]) == 3
+    assert c.merges == [] and c.coolify() == []
+    saida = capsys.readouterr().out
+    assert "githubstatus.com" in saida and "CI vermelho" not in saida
+
+
+def test_cancelamento_que_nao_e_falta_de_runner_continua_ci_vermelho_sem_rerun(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
+    c.sem_runner = 99
+    c.anotacao_do_cancelamento = "The operation was canceled."
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
+
+    assert ["run", "rerun", "555", "--failed"] not in c.gh_chamadas
+    assert "CI vermelho" in capsys.readouterr().out
 
 
 def test_registro_que_nao_entra_sai_com_5_semaforo_solto_e_producao_intacta(
@@ -651,18 +778,11 @@ def test_registro_do_pr_avulso_nomeia_pr_e_issue_sem_onda_e_sem_travessao(
         assert sem_a_palavra_onda(entrada[campo]), (campo, entrada[campo])
     assert "PR #7" in entrada["subject"] and "issue #5" in entrada["subject"], entrada["subject"]
     assert TRAVESSAO not in entrada["subject"] and MEIA_RISCA not in entrada["subject"]
+    assert "Prazo do caso, conta dias uteis" in entrada["subject"], entrada["subject"]
     # contrato do painel (`tools/workflow-dashboard/collect.py`, `_correlate`)
     assert re.search(r"\(#7\)", entrada["raw_subject"]), entrada["raw_subject"]
     assert re.search(r"PRs? #7\b", entrada["notes"]), entrada["notes"]
     assert re.search(r"(?:[Ii]ssues? |Closes )#5\b", entrada["notes"]), entrada["notes"]
-
-    titulo = next(li for li in c.na_main("docs/spec/CHANGELOG.md").splitlines()
-                  if li.startswith("## "))
-    assert titulo.startswith("## v0.10.1 - "), titulo
-    assert "PR #7" in titulo and "issue #5" in titulo, titulo
-    assert sem_a_palavra_onda(titulo), titulo
-    assert TRAVESSAO not in titulo and MEIA_RISCA not in titulo, titulo
-    assert "Prazo do caso, conta dias uteis" in titulo, titulo
 
 
 def test_com_sessao_o_registro_continua_sendo_da_onda(tmp_path, monkeypatch):

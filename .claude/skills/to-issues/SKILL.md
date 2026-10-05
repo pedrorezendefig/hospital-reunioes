@@ -51,7 +51,7 @@ O PRD traz a seção **"Manual: páginas que nascem ou mudam"**. Quando ela list
 - **Título:** `docs: manual do PRD #<PRD>`.
 - **Labels:** `type:docs` e `area:docs`, além de `ready-for-agent` e do tamanho.
 - **Bloqueada nativamente por todas as fatias de código** do PRD: a página precisa da tela pronta para o print e o vídeo, então ela roda depois, não no mesmo PR (é isto que emenda a regra "mesmo PR" do ADR 0056).
-- **Corpo:** manda rodar `/manual #<PRD>`, cita a seção "Manual" do PRD como a lista do que escrever e lembra que tudo nasce em `draft: true`, porque quem tira o draft é o rabo (`fechar_onda.py`) quando a funcionalidade sobe.
+- **Corpo:** manda rodar `/manual #<PRD>`, cita a seção "Manual" do PRD como a lista do que escrever e lembra que tudo nasce em `draft: true`, porque quem tira o draft é a Action do push da `main` quando a funcionalidade sobe (ADR 0062).
 
 PRD cuja seção "Manual" diz "Nenhuma: este PRD não muda tela" não ganha esta fatia.
 

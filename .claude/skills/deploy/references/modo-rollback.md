@@ -17,7 +17,7 @@ Invocação: `/deploy rollback [--dry-run]`.
    - Pedir ao humano rodar `! coolify app rollback run <uuid> --commit <SHA-alvo>`.
    - Monitorar (Passo 5 do ship).
    - Health check (Passo 7).
-6. Reescrever `state.json` (9.1) com `last_run.mode = "rollback"`. Prepend em `history.json` (9.2) com `rollback_target_sha = <sha-alvo>` e `result = "rollback-manual"`. Prepend em CHANGELOG (9.5).
+6. Reescrever `state.json` (9.1) com `last_run.mode = "rollback"`. Prepend em `history.json` (9.2) com `rollback_target_sha = <sha-alvo>` e `result = "rollback-manual"`.
 
 Dry-run: mostrar alvo e deployments, sem executar.
 

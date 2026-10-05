@@ -2,6 +2,202 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-05T19:41:22-03:00",
+      "sha": "58c73b9f08909923d0b5e25ae3a98103b67afeae",
+      "app_version": "0.161.6",
+      "subject": "PR #949, issue #939: Rabo enxuto grava só history.json e state.json, fim do CHANGELOG e ADR 0062",
+      "raw_subject": "chore(deploy): registro do PR avulso (#949)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        938
+      ],
+      "result": "healthy",
+      "duration_seconds": 755,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #949, issue #939. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
+      "at": "2026-10-05T19:19:05-03:00",
+      "sha": "2bb89d591f5cffa1e088ff151c3d77b388874f0f",
+      "app_version": "0.161.5",
+      "subject": "PR #954, issue #953: CI cancelado por falta de runner do GitHub não é falha de código",
+      "raw_subject": "chore(deploy): registro do PR avulso (#954)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 773,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #954, issue #953. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
+      "at": "2026-10-05T19:03:33-03:00",
+      "sha": "9fe20d051dc3e61e1bb94b01b7a6343458cd8aee",
+      "app_version": "0.161.4",
+      "subject": "PR #950, issue #941: Hospital OS, módulo de fases (issue, PR, timeline, ondas, funil) e coletor com campos novos",
+      "raw_subject": "chore(deploy): registro do PR avulso (#950)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        938
+      ],
+      "result": "healthy",
+      "duration_seconds": 819,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #950, issue #941. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
+      "at": "2026-10-05T15:41:18-03:00",
+      "sha": "c0293c8583812c8fe0fa55bac160581610273879",
+      "app_version": "0.161.3",
+      "subject": "PR #896, issue #807: Aspas no cabeçalho YAML de 7 skills e trava no CI",
+      "raw_subject": "chore(deploy): registro do PR avulso (#896)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 989,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #896, issue #807. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
+      "at": "2026-10-05T15:22:07-03:00",
+      "sha": "1ef79ab923e5880d0d94cec9266ef311c6351026",
+      "app_version": "0.161.2",
+      "subject": "PR #898, issue #852: Imagem e CI do backend instalam pelo uv.lock",
+      "raw_subject": "chore(deploy): registro do PR avulso (#898)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 928,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #898, issue #852. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
+      "at": "2026-10-05T15:04:26-03:00",
+      "sha": "9485c6e6b9eea8510ac81d5952c74da9ff8aec9e",
+      "app_version": "0.161.1",
+      "subject": "PR #897, issue #752: Perfil zerado pela API deixa de reter Super admin pela flag legada",
+      "raw_subject": "chore(deploy): registro do PR avulso (#897)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 918,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #897, issue #752. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
+      "at": "2026-10-05T14:46:19-03:00",
+      "sha": "e0cccf35b323a24344986be01cdf64d030fa3d08",
+      "app_version": null,
+      "subject": "PR #881, sem issue: Aspas na descrição de três agentes hr-* para o YAML carregar",
+      "raw_subject": "chore(deploy): registro do PR avulso (#881)",
+      "scope": [],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 233,
+      "services_touched": [],
+      "env_changes": [],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #881, sem issue. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
       "at": "2026-10-05T12:40:21-03:00",
       "sha": "b64bf9f4fe40ef9c0e7177b0ccfa8a11044981a8",
       "app_version": "0.161.0",
@@ -1361,219 +1557,6 @@
       "migrations_applied": [],
       "rollback_target_sha": "0964585",
       "notes": "Deploy fora de onda, pedido pelo humano depois que o PRD #731 fechou e o Manual foi publicado. O item Ajuda da sidebar apontava para manual.hospitalsaomatheus.cloud e abria ABA EM BRANCO para todos os usuarios: o registro DNS nunca foi criado (DNS_PROBE_FINISHED_NXDOMAIN, nao propagacao pendente), e a consequencia do ADR 0057 supunha zona na Hostinger quando ela e Cloudflare. O humano decidiu ABANDONAR o dominio proprio em 16/09/2026 em vez de criar o registro: o endereco definitivo do Manual passa a ser https://manual-hsm.vercel.app, sem env var e sem DNS pendente. O ADR 0057 foi emendado em prosa (decisao 1 e decisao 11), no padrao do 0054, sem apagar a decisao original; o lint_adr nao exige frontmatter para auto-emenda, porque o INVERSE so cobre ponteiro entre ADRs distintas. SEGUNDO DEFEITO, achado ao responder a pergunta do humano e nao por issue: o painel Admin NAO TINHA item Ajuda nenhum. A AppShell troca a Sidebar pela AdminSidebar em variant=admin, e a AdminSidebar nao tinha nenhuma referencia ao manual, entao o ramo 'admin' de secaoDoManual estava escrito e era INALCANCAVEL pela barra: a secao Admin do manual existia, publicada, sem porta. O site do Manual ja estava no ar quando este deploy saiu, entao o conserto do app fechou a ponte dos dois lados. O astro.config.mjs (site:) tambem trocou, que e de onde saem as canonicas e o sitemap-index.xml; sem republicar o site, o app aponta certo e o sitemap continua apontando para o dominio morto. LICAO DE TESTE, a mesma que se repetiu a onda inteira: o revisor achou que o criterio 'fecha a gaveta pelo onNavigate' estava marcado [x] SEM TESTE. O describe.each rodava a variante drawer e nunca passava a prop, entao os quatro testes da gaveta eram copia byte a byte dos quatro do desktop, e apagar o onClick deixava a suite 16/16 VERDE. Ao consertar, descobriu-se que a divida era maior: grep por onNavigate em *.test.tsx no frontend inteiro voltava VAZIO, nenhum teste tocava a prop. Foram presos os dois itens Ajuda (Sidebar e AdminSidebar), com mutantes INDEPENDENTES, cada um matando so o teste da sua barra, que e o que prova que um nao carrega o outro. Fica a divida: os demais itens de navegacao das duas barras seguem com onClick={onNavigate} sem teste. A varredura do dominio morto achou que ele so vivia em 7 pontos; o resto do repo ja usava manual-hsm.vercel.app por decisao tomada no inicio da onda. Sobraram 5 linhas em 3 arquivos, todas de proposito: CHANGELOG.md:30 e este history.json (registro factual de deploy, nao se reescreve), e tres no ADR 0057 (decisao 1, consequencia do DNS e a propria emenda, que precisa nomear o dominio para dizer qual foi abandonado). NEXT_PUBLIC_MANUAL_URL NAO existe no Coolify (o frontend lista quatro NEXT_PUBLIC_*, nenhuma de manual), entao o default novo do codigo vale sem concorrencia. A variavel continua existindo no codigo para apontar para previa. PROVA DE CODIGO NOVO NO AR, nao so restart: /api/health passou de 0.137.0 para 0.137.1, e o HTML servido pelo frontend traz o carimbo <!--v0.137.1_...-->, que o next.config.ts gera a partir de pkg.version em BUILD TIME (generateBuildId), ou seja, o bundle so pode ter vindo do commit que tem version 0.137.1, que e o mesmo commit que trocou o default do endereco. O /login nao serve prova direta do endereco porque nao renderiza a sidebar e os chunks dele nao a carregam. Corrida de bump resolvida por conversa entre sessoes: a sessao vizinha tinha #751 em 0.138.0 e #765 em 0.139.0, os dois em rascunho e longe do merge, e liberou o 0.137.1 passar na frente. Ela tambem lembrou de subir APP_VERSION antes do merge, o que evitou o gate de version match disparar rollback por motivo errado."
-    },
-    {
-      "at": "2026-09-16T14:00:00-03:00",
-      "sha": "0964585",
-      "app_version": "0.137.0",
-      "subject": "O Assistente de Tecnologia monta a Demanda conversando, e a pessoa e quem grava",
-      "raw_subject": "feat(tecnologia): o Assistente monta a Demanda conversando, e a pessoa e quem grava (#744)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "prds": [
-        726,
-        731
-      ],
-      "result": "healthy",
-      "duration_seconds": 420,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 do PRD #726 (issue #727). Cinco rodadas de revisao independente ate LIMPO nas duas lentes: 9 must-fix, e o que destravou foi trocar 'corrija estes dois' por varredura de toda leitura de corpo HTTP. O intervalo desde o deploy anterior carrega tambem tres merges de skills do PRD #731 (PRs #745, #746, #747) de outra sessao, que ja tinham buildado e nunca foram registrados aqui, por isso prds traz os dois numeros. O passo 9.6 rodou SO com --prd 726 (no-op, o #726 nao tem pagina de manual): o #731 tem seis paginas em draft e NAO esta concluido, entao tirar o draft dele publicaria secao que a outra sessao ainda esta escrevendo. Esse draft segue pendente e e dela."
-    },
-    {
-      "at": "2026-09-16T00:05:00-03:00",
-      "sha": "e4db875",
-      "app_version": "0.136.0",
-      "subject": "Fundacao do site do Manual do usuario e o item Ajuda na sidebar, que abre a secao do modulo em que a pessoa esta",
-      "raw_subject": "feat(manual): fundacao do site do Manual do usuario (#743) + feat(frontend): item Ajuda na sidebar (#742)",
-      "scope": [
-        "frontend",
-        "docs",
-        "skills"
-      ],
-      "result": "healthy",
-      "duration_seconds": 239,
-      "services_touched": [
-        "frontend",
-        "backend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 do PRD #731, duas fatias mergeadas em sequencia com um deploy so. O #743 nao toca a app: site Astro Starlight em docs/manual/, publicar.sh, dois conferidores em tools/ e um workflow novo no CI. As pastas legadas docs/manual/ouvidoria/ e docs/manual/tecnologia/ ficaram intocadas, ao lado do site. O #742 e a unica mudanca de app da onda: tres arquivos do frontend e a env var publica NEXT_PUBLIC_MANUAL_URL, opcional, com default https://manual.hospitalsaomatheus.cloud. Nada a criar no Coolify. O build do backend em 63d24609 (merge do #743) falhou por 'Failed to get installation token' do GitHub App, timeout transitorio da API do GitHub, nao por codigo: o build seguinte (e4db8759) passou e prod ficou em 0.136.0. Os dois gates de revisao acharam achado real, cada um em um PR. No #742, o teste do link externo asseria toContain('noopener') e sobrevivia a remocao do noreferrer, que e o que impede o protocolo da manifestacao de vazar no Referer a partir de /ouvidoria/m/[protocolo]. No #743, nenhum teste exercitava o main() dos dois conferidores, e e do returncode deles que o CI depende: trocar return 1 por return 0 em lint_manual.main() deixava travessao e jargao passarem com a suite verde, e o mesmo em checar_build_manual.main() desligava a unica prova de que pagina em draft nao vai para o ar. Os dois foram corrigidos com prova por mutacao. Achado que virou codigo: no content layer do Starlight o id de ouvidoria/index.md e 'ouvidoria', sem /index, entao o filtro startsWith('ouvidoria/') nao enxergava a Visao geral e o cartao da home ficava sem link mesmo com a pagina publicada; o filtro passou a aceitar id === pasta. FALTA ATO HUMANO: o site ainda nao esta no ar. O DNS que a Vercel pede e A, host manual, valor 76.76.21.21, e a zona de hospitalsaomatheus.cloud hoje e servida pela Cloudflare, nao pela Hostinger, entao o registro nasce la e sem proxy. A publicacao e 'bash docs/manual/publicar.sh', negada ao agente pelo classifier. Ate isso acontecer o item Ajuda abre uma aba vazia. O redirecionamento do manual-ouvidoria-hsm esta versionado em docs/manual/redirecionamento/ e NAO foi publicado de proposito: enquanto /ouvidoria/ for draft, publicar trocaria um manual que funciona por uma pagina nao encontrada. Ele sobe com a fatia #738."
-    },
-    {
-      "at": "2026-09-15T18:32:00-03:00",
-      "sha": "8890493",
-      "app_version": "0.135.0",
-      "subject": "O registro manual da Ouvidoria aceita WhatsApp, Instagram, Reclame Aqui e Google como canal de origem",
-      "raw_subject": "feat(ouvidoria): registro manual aceita WhatsApp, Instagram, Reclame Aqui e Google (#724)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 223,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "109_ouvidoria_canais_manuais.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Primeira fatia do PRD #720. O select do registro manual passa de tres para sete canais e nasce em WhatsApp, nao mais em Telefone. A 109 so alarga o CHECK, e por ser superconjunto estrito dos seis valores da 067 pode ser aplicada antes do merge sem quebrar o codigo que ja estava no ar, que foi o que o humano fez. Ordem de subida registrada no corpo do PR e obrigatoria: migration, backend, frontend. Se o frontend subisse antes do backend, o caminho PADRAO quebraria, porque o modal nasce em whatsapp e o backend antigo devolveria 422 com uma tela que culpa relato, tipo, setor e resumo, causa que nao e a real. Corrida com a sessao B no meio da onda: ela mergeou a #717 e deployou v0.134.1, o PR ficou CONFLICTING no package.json e foi rebaseado mantendo 0.135.0. O Gate 1.5 nasceu carimbado [x] no corpo do PR antes de a revisao rodar, o que esvazia o gate; foi corrigido no mesmo turno e o corpo hoje diz quando cada gate rodou de verdade."
-    },
-    {
-      "at": "2026-09-15T18:20:00-03:00",
-      "sha": "671a273",
-      "app_version": "0.134.1",
-      "subject": "As marcas de erro que a tela do redirecionamento le viram constantes com teste",
-      "raw_subject": "chore(ouvidoria): marcas de erro do redirecionamento viram constantes com teste (#723)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 195,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Acabamento das #708/#710, sem mudanca de comportamento: as tres frases seguem byte a byte iguais. O front casa por prefixo e ninguem protegia isso; agora cada marca e constante nomeada com teste que morre se o prefixo sumir. Limite conhecido e assumido: o teste compara backend contra backend, entao esvaziar a constante ou reescrever frase e constante no mesmo edit ainda passa verde. O frontend so rebuildou por causa do bump; o webhook rebuilda os dois com watch_paths nulo."
-    },
-    {
-      "at": "2026-09-15T17:05:00-03:00",
-      "sha": "49a3b8d",
-      "app_version": "0.134.0",
-      "subject": "O Perfil da Ouvidoria inteiro mantem o cadastro de responsaveis por setor",
-      "raw_subject": "feat(ouvidoria): o Perfil da Ouvidoria inteiro mantém o cadastro de responsáveis (#711) (#718)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 273,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Ultima fatia do PRD #706 (ADR 0055, decisao 5). O critério do histórico de vigência com autor foi renegociado para audit_log: a coluna de autor nunca existiu. Achado do code-review deixado em aberto na issue #719: a RLS do audit_log so libera super admin, entao o rastro e gravado e ninguem da Ouvidoria o le no app."
-    },
-    {
-      "at": "2026-09-15T13:20:00-03:00",
-      "sha": "a173716",
-      "app_version": "0.133.0",
-      "subject": "a area que perdeu o caso e avisada, e o ouvidor redireciona pela fila e pelo Dossie",
-      "raw_subject": "feat(ouvidoria): aviso a area antiga (#709) e botao Redirecionar (#710)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "108_ouvidoria_aviso_a_area_antiga.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda AFK, issues #709 (PR #716) e #710 (PR #715), fatias 3 e 4 do PRD #706 (ADR 0055), mergeadas em sequencia com um deploy so. A 108 e SO o CHECK de gatilho: DROP + ADD com a lista inteira, 15 gatilhos da 098 mais redirecionamento_area. Conferido item a item pelo orquestrador: nada perdido. Sem ela o aviso NUNCA nasce, em silencio, porque o INSERT volta 23514 e o registrar engole a excecao e devolve None; a fumaca certa e a AUSENCIA da segunda linha de notificacao, nao um ultimo_erro (que nao existiria). A #709 tinha uma armadilha herdada da #707: a guarda do despachar so deixa emitir para quem PERTENCE ao cadastro do setor ATUAL, e o aviso vai para a area ANTIGA, que por definicao ja nao e o setor do caso. Resolvido mantendo o gatilho FORA de GATILHOS_COM_PORTAL, sem excecao na guarda, o que tambem e a decisao certa de dominio: a area antiga nao deve receber link de portal nenhum, porque a #707 acabou de derrubar os dela. Mutante que poe o gatilho dentro da tupla derruba 15 testes. Privacidade do email auditada campo a campo: 5 campos, e o motivo do ouvidor, o relato, o extrato, o manifestante, a resposta da area e o nome da area NOVA nenhum entra (mesma decisao do ADR 0055, nao divergencia). Protocolo e setor sao congelados no ato: lidos na hora do envio seriam os da area nova, e o email diria a Recepcao que ela e o Centro Medico. A #709 tambem consertou um vacuo que nao era dela: o duble do PostgREST mentia na ordenacao (\"\" > \"\" devolvia a linha mais antiga) e o teste do destinatario da #708 era vacuo; com o carimbo de criada_em o mutante passou de 1 morte para 15. Na #710 o MUST-FIX era heranca da #708: a tela deduzia \"o caso se moveu\" da FAIXA do status (>= 500), mas o backend devolve 409 DEPOIS de escritas aplicadas em dois caminhos, e a modal fechava sem reler, deixando o Dossie mostrar a area antiga com o botao Redirecionar oferecido. Pior, um teste TRAVAVA a regra errada; foi consertado no lugar, nao apagado, e os arquivos foram de 64 para 82 testes. A releitura passou a ser decidida pela MARCA que o servidor emite. Corrida de bump resolvida a mao: os dois PRs pediam 0.132.0 com a mesma mudanca na mesma base, entao o git NAO acusa conflito e o auto-resolve deixaria as duas fatias na mesma versao, fazendo a fumaca da segunda passar verde sem ela ter subido; o #716 levou 0.132.0 e o #715 foi rebumpado para 0.133.0 antes do merge. Acoplamento registrado na issue #717 (sub-issue do #706): o front casa as marcas de erro do backend por prefixo de frase e nenhum teste do backend assere o literal, entao uma reescrita de texto mata a releitura em silencio. Lacuna de spec registrada no PR #716: o aviso vai para o destinatario da ultima nova_demanda, mas resposta_devolvida e caso_reaberto re-escolhem destinatario do cadastro sem registrar nova_demanda, entao quem esta com o link vivo pode nao ser avisado. Prova do codigo novo em producao sem login: o botao Redirecionar aparece no bundle JS servido."
-    },
-    {
-      "at": "2026-09-15T12:05:00-03:00",
-      "sha": "f1b3966",
-      "app_version": "0.131.0",
-      "subject": "o ouvidor move o caso de uma area para outra num clique, com motivo obrigatorio",
-      "raw_subject": "feat(ouvidoria): rota de redirecionamento pelo ouvidor (#708) (#714)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "107_ouvidoria_redirecionamento_pelo_ouvidor.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda AFK, issue #708, segunda fatia do PRD #706 (ADR 0055). A migration 107 e um CREATE OR REPLACE da funcao de transicao com o corpo da 098 mais UMA aresta (respondido -> em_classificacao); nao e SECURITY DEFINER e o par REVOKE/GRANT repete o da 095/097/098. O PR nasceu verde no CI e levou TRES rodadas de fix; o CI nunca reclamou de nada do que foi consertado. Achado 1, o mais caro: caso `respondido` redirecionado chegava na area nova carregando o T2 da area ERRADA, porque nada limpava respondida_em. A propria API devolvia cumprimento=cumprido no instante zero, e continuava dizendo isso duas semanas depois do vencimento, porque cumprimento_da_area corta em `if respondida_em is not None`. O caso sumia das pendencias por area da Diretoria (_esta_com_a_area exige `not respondida_em`), o ranking de tempo de resposta calculava fim ANTES do inicio, e a linha do tempo mostrava T2 antes de T1, tudo enquanto a cobranca por email continuava saindo (os jobs nao leem respondida_em). Era omissao e nao decisao: as duas portas irmas (devolucao por insuficiencia e reabertura por reincidencia) limpam de proposito, e o comentario de uma delas descreve exatamente esta falha. Conserto com opt-in `limpar_a_resposta` em parar/restaurar, escolhido para que o payload da DEVOLUCAO (rota publica sem login) ficasse byte a byte identico. Achado 2: a aresta nova fez a RPC aceitar o caminho, e com isso a Devolucao a Ouvidoria (ja em producao) podia entrar com o relogio da area nunca parado. Regressao introduzida pela aresta numa rota que ja rodava, nao pelo redirecionamento. Verificado depois que em NENHUM dos quatro estados alcancaveis da corrida um 200 virou 409. Achado 3: respondida_por_nome fora do select fazia o rollback gravar None em cima de quem respondeu, apagando o nome em silencio. Achado 4: a mensagem de falha afirmava estado que o codigo nao conferiu e mandava o ouvidor no Validar e acionar, que a API recusa com 409 nesse estado; a fronteira certa nao e o marco T1 e sim a transicao de ENTRADA, porque entre as duas o caso esta em aguardando_area com a area ANTIGA e sem vencimento. O campo virou `o_caso_continua_em_classificacao` (so True enquanto o codigo SABE) em vez de `saiu_da_classificacao`, que teria que mentir para acertar a frase. Achado 5: DUAS vezes o par `except APIError` sem HTTPError, um deles pre-existente; na rota de VALIDACAO esses pontos viravam 500 sem corpo e agora respondem com frase. Decisoes do Pedro: porta dos fundos FECHADA (a rota generica do painel recusa as arestas de redirecionamento, o que de quebra impediu travessao cru de entrar na trilha imutavel pela observacao, ADR 0013), e redirecionar para a MESMA area RECUSADO (o ato previsto e a devolucao por insuficiencia, que da meio prazo de proposito). 46 mutantes mortos. Assimetria ACEITA e declarada: o rollback devolve o prazo mas nao os carimbos dos jobs, herdada do _restaurar_prazo da devolucao; custa cobranca repetida, nunca cobranca perdida. Item conhecido registrado: o postgrest-py transforma qualquer nao-2xx sem JSON de erro em APIError com code igual ao status HTTP, entao um 504 de proxy pode ter commitado e ser lido como falha; pre-existente e identico antes e depois. Prova do codigo novo em producao sem login: a rota nova devolve 401 e uma rota inexistente devolve 404."
     }
   ]
 }
