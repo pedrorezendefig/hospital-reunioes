@@ -11,8 +11,17 @@ import re
 from datetime import datetime, timedelta, timezone
 
 # Régua da issue na ordem do funil (ADR 0062, decisão 4); a precedência fica em _fase_issue.
-FASES_ISSUE = ("triagem", "fila", "bloqueada", "em_andamento", "pr_aberto", "mergeada", "em_producao",
-               "humana", "encerrada_sem_pr")
+FASES_ISSUE = (
+    "triagem",
+    "fila",
+    "bloqueada",
+    "em_andamento",
+    "pr_aberto",
+    "mergeada",
+    "em_producao",
+    "humana",
+    "encerrada_sem_pr",
+)
 # Mesmo valor do SEM_RESP do app.js: o filtro "ninguém assumiu" da aba Issues.
 SEM_RESPONSAVEL = "(sem)"
 MARCADOR_AUTOMACAO = "<!-- automacao -->"
@@ -22,8 +31,14 @@ _VEREDITO = re.compile(r"(?m)^VEREDITO( SEGURANCA)?:\s*(LIMPO|MUST-FIX)\b")
 _FALHAS = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"}
 
 
-def montar_fases(issues: list[dict], prs: list[dict], deploys: list[dict], branches: list[str],
-                 timelines: dict | None = None, agora: datetime | None = None) -> dict:
+def montar_fases(
+    issues: list[dict],
+    prs: list[dict],
+    deploys: list[dict],
+    branches: list[str],
+    timelines: dict | None = None,
+    agora: datetime | None = None,
+) -> dict:
     agora = agora or datetime.now(timezone.utc)
     abertas = {i["number"] for i in issues if i["state"] == "OPEN"}
     producao = _Producao(deploys)
@@ -32,23 +47,26 @@ def montar_fases(issues: list[dict], prs: list[dict], deploys: list[dict], branc
     for p in prs:
         for n in p["closes"]:
             prs_por_issue.setdefault(n, []).append(p)
-    fases_issue = {i["number"]: _fase_issue(i, prs_por_issue.get(i["number"], []), abertas, producao,
-                                            branches, fases_pr)
-                   for i in issues}
+    fases_issue = {
+        i["number"]: _fase_issue(i, prs_por_issue.get(i["number"], []), abertas, branches, fases_pr) for i in issues
+    }
     por_numero = {i["number"]: i for i in issues}
     return {
         "issues": fases_issue,
         "prs": fases_pr,
-        "timelines": {n: _timeline(por_numero[n], linha, producao, branches)
-                      for n, linha in (timelines or {}).items() if n in por_numero},
+        "timelines": {
+            n: _timeline(por_numero[n], linha, producao, branches)
+            for n, linha in (timelines or {}).items()
+            if n in por_numero
+        },
         "ondas": {i["number"]: _ondas(i, por_numero, abertas) for i in issues if i.get("children")},
         "funil": _funil(issues, fases_issue),
     }
 
 
-def timeline_da_issue(issue: dict, linha: dict, deploys: list[dict], branches: list[str] = ()) -> list[dict]:
+def timeline_da_issue(issue: dict, linha: dict, deploys: list[dict], branches: list[str] | None = None) -> list[dict]:
     """Linha do tempo de uma issue (a das fechadas sai sob demanda, uma por vez)."""
-    return _timeline(issue, linha, _Producao(deploys), list(branches))
+    return _timeline(issue, linha, _Producao(deploys), branches or [])
 
 
 def _timeline(issue: dict, linha: dict, producao: _Producao, branches: list[str]) -> list[dict]:
@@ -68,14 +86,16 @@ def _timeline(issue: dict, linha: dict, producao: _Producao, branches: list[str]
         if p.get("ci_vermelho"):
             eventos.append({"tipo": "ci_vermelho", "em": p.get("ci_vermelho_em"), "pr": n, "vezes": p["ci_vermelho"]})
         for v in p.get("vereditos") or []:
-            eventos.append({"tipo": "revisor_comentou", "em": v.get("em"), "pr": n, "lente": v["tipo"],
-                            "veredito": v["valor"]})
+            eventos.append(
+                {"tipo": "revisor_comentou", "em": v.get("em"), "pr": n, "lente": v["tipo"], "veredito": v["valor"]}
+            )
         if p["state"] == "MERGED":
             eventos.append({"tipo": "mergeado", "em": p.get("merged_at"), "pr": n})
             _, deploy = producao.do_pr({**p, "closes": [issue["number"]]})
             if deploy:
-                eventos.append({"tipo": "em_producao", "em": deploy["at"], "pr": n,
-                                "versao": deploy.get("app_version")})
+                eventos.append(
+                    {"tipo": "em_producao", "em": deploy["at"], "pr": n, "versao": deploy.get("app_version")}
+                )
         elif p["state"] == "CLOSED":
             eventos.append({"tipo": "pr_fechado", "em": p.get("closed_at"), "pr": n})
             houve_tentativa = True
@@ -98,8 +118,7 @@ def _ondas(prd: dict, por_numero: dict[int, dict], abertas: set[int]) -> list[li
     pendentes = dict.fromkeys(sorted(fatias))
     colunas: list[list[int]] = []
     while pendentes:
-        coluna = [n for n in pendentes
-                  if not any(b in pendentes and b in abertas for b in por_numero[n]["blocked_by"])]
+        coluna = [n for n in pendentes if not any(b in pendentes and b in abertas for b in por_numero[n]["blocked_by"])]
         coluna = coluna or list(pendentes)  # ciclo: o que sobrou vira uma coluna, nada some
         colunas.append(coluna)
         for n in coluna:
@@ -134,9 +153,13 @@ def vereditos_dos_comentarios(comentarios: list[dict]) -> list[dict]:
         achados = _VEREDITO.findall(corpo) if corpo.startswith(MARCADOR_AUTOMACAO) else []
         if achados:
             seguranca, valor = achados[-1]
-            out.append({"tipo": "seguranca" if seguranca else "revisao",
-                        "valor": "limpo" if valor == "LIMPO" else "must_fix",
-                        "em": c.get("created_at")})
+            out.append(
+                {
+                    "tipo": "seguranca" if seguranca else "revisao",
+                    "valor": "limpo" if valor == "LIMPO" else "must_fix",
+                    "em": c.get("created_at"),
+                }
+            )
     return out
 
 
@@ -213,8 +236,9 @@ def _veredito(pr: dict) -> tuple[str | None, str | None]:
     vereditos = list(pr.get("vereditos") or [])
     for r in pr.get("reviews") or []:
         if r.get("estado") in ("APPROVED", "CHANGES_REQUESTED"):
-            vereditos.append({"tipo": "revisao", "em": r.get("em"),
-                              "valor": "limpo" if r["estado"] == "APPROVED" else "must_fix"})
+            vereditos.append(
+                {"tipo": "revisao", "em": r.get("em"), "valor": "limpo" if r["estado"] == "APPROVED" else "must_fix"}
+            )
     ultimo: dict[str, dict] = {}
     for v in sorted(vereditos, key=lambda v: _dt(v.get("em")) or datetime.min.replace(tzinfo=timezone.utc)):
         ultimo[v["tipo"]] = v
@@ -285,35 +309,50 @@ def _branch_sem_pr(numero: int, prs: list[dict], branches: list[str]) -> str | N
     return next((b for b in branches if sufixo.search(b) and b not in com_pr), None)
 
 
-def _fase_issue(issue: dict, prs: list[dict], abertas: set[int], producao: _Producao,
-                branches: list[str], fases_pr: dict[int, dict]) -> dict:
+def _fase_issue(
+    issue: dict, prs: list[dict], abertas: set[int], branches: list[str], fases_pr: dict[int, dict]
+) -> dict:
     """Régua da issue, na precedência da ADR 0062: a primeira regra que vale decide."""
     labels = set(issue["labels"])
     prs = _por_data(prs)
     mergeados = [p for p in prs if p["state"] == "MERGED"]
     abertos = [p for p in prs if p["state"] == "OPEN"]
     tentativas = [p["number"] for p in prs if p["state"] == "CLOSED"]
-    out = {"fase": None, "sub": None, "branch": None, "pr": None, "sinal": None,
-           "tentativas": tentativas, "versao": None, "em_producao_em": None}
+    out = {
+        "fase": None,
+        "sub": None,
+        "branch": None,
+        "pr": None,
+        "sinal": None,
+        "tentativas": tentativas,
+        "versao": None,
+        "em_producao_em": None,
+    }
     if "ready-for-human" in labels:
         out["fase"] = "humana"
     elif issue["state"] != "OPEN" and not mergeados:
         out["fase"] = "encerrada_sem_pr"
     elif mergeados:
         out["pr"] = mergeados[-1]["number"]
-        no_ar = [producao.do_pr(p) for p in mergeados]
-        deploys = [d for _, d in no_ar if d]
-        if deploys:
-            primeiro = min(deploys, key=lambda d: _dt(d["at"]))
-            out.update(fase="em_producao", versao=primeiro.get("app_version"), em_producao_em=primeiro["at"])
-        else:
-            out["fase"] = "em_producao" if any(ok for ok, _ in no_ar) else "mergeada"
+        no_ar = [fases_pr[p["number"]] for p in mergeados if fases_pr[p["number"]]["fase"] == "em_producao"]
+        out["fase"] = "em_producao" if no_ar else "mergeada"
+        com_data = [f for f in no_ar if f["desde"]]  # sem data = merge anterior ao history.json
+        if com_data:
+            primeiro = min(com_data, key=lambda f: _dt(f["desde"]))
+            out.update(versao=primeiro["versao"], em_producao_em=primeiro["desde"])
     elif abertos:
         pr = abertos[-1]
         do_pr = fases_pr[pr["number"]]
-        out.update(fase="pr_aberto", pr=pr["number"], sinal={
-            "ci": do_pr["ci"], "veredito": do_pr["veredito"], "conflito": do_pr["conflito"],
-            "tentativa_anterior": any(t < pr["number"] for t in tentativas)})
+        out.update(
+            fase="pr_aberto",
+            pr=pr["number"],
+            sinal={
+                "ci": do_pr["ci"],
+                "veredito": do_pr["veredito"],
+                "conflito": do_pr["conflito"],
+                "tentativa_anterior": any(t < pr["number"] for t in tentativas),
+            },
+        )
     elif "blocked" in labels or any(b in abertas for b in issue["blocked_by"]):
         out["fase"] = "bloqueada"
     elif "in-progress" in labels or issue["assignees"]:

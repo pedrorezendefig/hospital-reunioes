@@ -18,31 +18,65 @@ import collect  # noqa: E402
 MARCADOR = "<!-- automacao -->\n"
 
 PR_BASE = [
-    {"number": 10, "title": "aberto", "state": "OPEN", "mergedAt": None, "headRefName": "feat/x-1",
-     "closingIssuesReferences": [{"number": 1}], "url": "u10", "createdAt": "2026-10-03T10:00:00Z",
-     "closedAt": None, "author": {"login": "bia"}, "isDraft": True},
-    {"number": 11, "title": "mergeado", "state": "MERGED", "mergedAt": "2026-10-02T10:00:00Z",
-     "headRefName": "feat/y-2", "closingIssuesReferences": [{"number": 2}], "url": "u11",
-     "createdAt": "2026-10-01T10:00:00Z", "closedAt": "2026-10-02T10:00:00Z", "author": {"login": "caio"},
-     "isDraft": False},
+    {
+        "number": 10,
+        "title": "aberto",
+        "state": "OPEN",
+        "mergedAt": None,
+        "headRefName": "feat/x-1",
+        "closingIssuesReferences": [{"number": 1}],
+        "url": "u10",
+        "createdAt": "2026-10-03T10:00:00Z",
+        "closedAt": None,
+        "author": {"login": "bia"},
+        "isDraft": True,
+    },
+    {
+        "number": 11,
+        "title": "mergeado",
+        "state": "MERGED",
+        "mergedAt": "2026-10-02T10:00:00Z",
+        "headRefName": "feat/y-2",
+        "closingIssuesReferences": [{"number": 2}],
+        "url": "u11",
+        "createdAt": "2026-10-01T10:00:00Z",
+        "closedAt": "2026-10-02T10:00:00Z",
+        "author": {"login": "caio"},
+        "isDraft": False,
+    },
 ]
 
-PR_ABERTOS = [{
-    "number": 10,
-    "mergeStateStatus": "DIRTY",
-    "statusCheckRollup": [
-        {"__typename": "CheckRun", "name": "Backend", "status": "COMPLETED", "conclusion": "FAILURE",
-         "startedAt": "2026-10-03T10:05:00Z", "completedAt": "2026-10-03T10:20:00Z"},
-        {"__typename": "StatusContext", "context": "vercel", "state": "PENDING",
-         "startedAt": "2026-10-03T10:06:00Z"},
-    ],
-    "reviews": [{"author": {"login": "rib"}, "state": "APPROVED", "submittedAt": "2026-10-03T11:00:00Z"}],
-    "comments": [
-        {"author": {"login": "pedro"}, "createdAt": "2026-10-03T12:00:00Z",
-         "body": MARCADOR + "## Veredito da revisão\n\nVEREDITO: MUST-FIX (1)"},
-        {"author": {"login": "rib"}, "createdAt": "2026-10-03T13:00:00Z", "body": "olhei"},
-    ],
-}]
+PR_ABERTOS = [
+    {
+        "number": 10,
+        "mergeStateStatus": "DIRTY",
+        "statusCheckRollup": [
+            {
+                "__typename": "CheckRun",
+                "name": "Backend",
+                "status": "COMPLETED",
+                "conclusion": "FAILURE",
+                "startedAt": "2026-10-03T10:05:00Z",
+                "completedAt": "2026-10-03T10:20:00Z",
+            },
+            {
+                "__typename": "StatusContext",
+                "context": "vercel",
+                "state": "PENDING",
+                "startedAt": "2026-10-03T10:06:00Z",
+            },
+        ],
+        "reviews": [{"author": {"login": "rib"}, "state": "APPROVED", "submittedAt": "2026-10-03T11:00:00Z"}],
+        "comments": [
+            {
+                "author": {"login": "pedro"},
+                "createdAt": "2026-10-03T12:00:00Z",
+                "body": MARCADOR + "## Veredito da revisão\n\nVEREDITO: MUST-FIX (1)",
+            },
+            {"author": {"login": "rib"}, "createdAt": "2026-10-03T13:00:00Z", "body": "olhei"},
+        ],
+    }
+]
 
 
 def _fake_gh(chamadas, *, abertos=PR_ABERTOS, falha=None):
@@ -53,6 +87,7 @@ def _fake_gh(chamadas, *, abertos=PR_ABERTOS, falha=None):
         if cmd[:3] == ["gh", "pr", "list"]:
             return json.dumps(abertos if "open" in cmd else PR_BASE)
         raise AssertionError(f"chamada inesperada: {cmd}")
+
     return run
 
 
@@ -68,10 +103,14 @@ def test_pr_traz_os_campos_novos_normalizados(monkeypatch):
     assert aberto["is_draft"] is True
     assert aberto["merge_state"] == "DIRTY"
     assert aberto["checks"] == [
-        {"nome": "Backend", "status": "COMPLETED", "conclusao": "FAILURE",
-         "inicio": "2026-10-03T10:05:00Z", "fim": "2026-10-03T10:20:00Z"},
-        {"nome": "vercel", "status": "PENDING", "conclusao": "PENDING", "inicio": "2026-10-03T10:06:00Z",
-         "fim": None},
+        {
+            "nome": "Backend",
+            "status": "COMPLETED",
+            "conclusao": "FAILURE",
+            "inicio": "2026-10-03T10:05:00Z",
+            "fim": "2026-10-03T10:20:00Z",
+        },
+        {"nome": "vercel", "status": "PENDING", "conclusao": "PENDING", "inicio": "2026-10-03T10:06:00Z", "fim": None},
     ]
     assert aberto["reviews"] == [{"autor": "rib", "estado": "APPROVED", "em": "2026-10-03T11:00:00Z"}]
     assert aberto["comentarios"] == 2
@@ -107,34 +146,73 @@ def test_falha_na_consulta_dos_abertos_mantem_os_prs_sem_os_campos_pesados(monke
 
 
 def _no_issue(number, *, eventos=(), prs=()):
-    return {"number": number, "createdAt": "2026-10-01T10:00:00Z",
-            "timelineItems": {"nodes": list(eventos)},
-            "closedByPullRequestsReferences": {"nodes": list(prs)}}
+    return {
+        "number": number,
+        "createdAt": "2026-10-01T10:00:00Z",
+        "timelineItems": {"nodes": list(eventos)},
+        "closedByPullRequestsReferences": {"nodes": list(prs)},
+    }
 
 
 def _no_pr(number, *, state="OPEN", rollups=(), comentarios=()):
-    return {"number": number, "state": state, "createdAt": "2026-10-02T10:00:00Z", "closedAt": None,
-            "mergedAt": None, "headRefName": f"feat/x-{number}",
-            "commits": {"nodes": [{"commit": {"committedDate": em, "statusCheckRollup": {"state": s} if s else None}}
-                                  for em, s in rollups]},
-            "comments": {"nodes": [{"createdAt": em, "body": b} for em, b in comentarios]}}
+    return {
+        "number": number,
+        "state": state,
+        "createdAt": "2026-10-02T10:00:00Z",
+        "closedAt": None,
+        "mergedAt": None,
+        "headRefName": f"feat/x-{number}",
+        "commits": {
+            "nodes": [
+                {"commit": {"committedDate": em, "statusCheckRollup": {"state": s} if s else None}} for em, s in rollups
+            ]
+        },
+        "comments": {"nodes": [{"createdAt": em, "body": b} for em, b in comentarios]},
+    }
 
 
 def _pagina(nodes, proxima=None):
-    return json.dumps({"data": {"repository": {"issues": {
-        "pageInfo": {"hasNextPage": bool(proxima), "endCursor": proxima}, "nodes": nodes}}}})
+    return json.dumps(
+        {
+            "data": {
+                "repository": {
+                    "issues": {"pageInfo": {"hasNextPage": bool(proxima), "endCursor": proxima}, "nodes": nodes}
+                }
+            }
+        }
+    )
 
 
 def test_timeline_vem_em_lote_so_das_issues_abertas_e_normalizada(monkeypatch):
     chamadas = []
-    pr = _no_pr(20, rollups=[("2026-10-02T11:00:00Z", "FAILURE"), ("2026-10-02T12:00:00Z", None),
-                             ("2026-10-02T13:00:00Z", "ERROR"), ("2026-10-02T14:00:00Z", "SUCCESS")],
-                comentarios=[("2026-10-02T15:00:00Z", MARCADOR + "VEREDITO: LIMPO")])
+    pr = _no_pr(
+        20,
+        rollups=[
+            ("2026-10-02T11:00:00Z", "FAILURE"),
+            ("2026-10-02T12:00:00Z", None),
+            ("2026-10-02T13:00:00Z", "ERROR"),
+            ("2026-10-02T14:00:00Z", "SUCCESS"),
+        ],
+        comentarios=[("2026-10-02T15:00:00Z", MARCADOR + "VEREDITO: LIMPO")],
+    )
     paginas = [
-        _pagina([_no_issue(1, eventos=[
-            {"__typename": "AssignedEvent", "createdAt": "2026-10-01T11:00:00Z", "assignee": {"login": "bia"}},
-            {"__typename": "ReopenedEvent", "createdAt": "2026-10-01T12:00:00Z"},
-        ], prs=[pr])], proxima="CUR1"),
+        _pagina(
+            [
+                _no_issue(
+                    1,
+                    eventos=[
+                        {
+                            "__typename": "AssignedEvent",
+                            "createdAt": "2026-10-01T11:00:00Z",
+                            "assignee": {"login": "bia"},
+                        },
+                        {"__typename": "ReopenedEvent", "createdAt": "2026-10-01T12:00:00Z"},
+                    ],
+                    prs=[pr],
+                )
+            ],
+            proxima="CUR1",
+        ),
         _pagina([_no_issue(2)]),
     ]
 
@@ -153,11 +231,19 @@ def test_timeline_vem_em_lote_so_das_issues_abertas_e_normalizada(monkeypatch):
         {"tipo": "designada", "em": "2026-10-01T11:00:00Z", "quem": "bia"},
         {"tipo": "reaberta", "em": "2026-10-01T12:00:00Z"},
     ]
-    assert linhas[1]["prs"] == [{
-        "number": 20, "state": "OPEN", "created_at": "2026-10-02T10:00:00Z", "closed_at": None,
-        "merged_at": None, "head_ref": "feat/x-20", "ci_vermelho": 2, "ci_vermelho_em": "2026-10-02T13:00:00Z",
-        "vereditos": [{"tipo": "revisao", "valor": "limpo", "em": "2026-10-02T15:00:00Z"}],
-    }]
+    assert linhas[1]["prs"] == [
+        {
+            "number": 20,
+            "state": "OPEN",
+            "created_at": "2026-10-02T10:00:00Z",
+            "closed_at": None,
+            "merged_at": None,
+            "head_ref": "feat/x-20",
+            "ci_vermelho": 2,
+            "ci_vermelho_em": "2026-10-02T13:00:00Z",
+            "vereditos": [{"tipo": "revisao", "valor": "limpo", "em": "2026-10-02T15:00:00Z"}],
+        }
+    ]
     assert linhas[2] == {"eventos": [], "prs": []}
 
 
@@ -184,11 +270,30 @@ def test_ls_remote_falhando_devolve_lista_vazia(monkeypatch):
 # ---------- coleta inteira ----------
 
 ISSUES = [
-    {"number": 1, "title": "Fatia", "state": "OPEN", "labels": [{"name": "in-progress"}],
-     "createdAt": "2026-10-01T10:00:00Z", "closedAt": None, "assignees": [{"login": "bia"}],
-     "author": {"login": "ana"}, "body": "", "url": "i1"},
-    {"number": 2, "title": "Outra", "state": "CLOSED", "labels": [], "createdAt": "2026-09-01T10:00:00Z",
-     "closedAt": "2026-10-02T10:00:00Z", "assignees": [], "author": {"login": "ana"}, "body": "", "url": "i2"},
+    {
+        "number": 1,
+        "title": "Fatia",
+        "state": "OPEN",
+        "labels": [{"name": "in-progress"}],
+        "createdAt": "2026-10-01T10:00:00Z",
+        "closedAt": None,
+        "assignees": [{"login": "bia"}],
+        "author": {"login": "ana"},
+        "body": "",
+        "url": "i1",
+    },
+    {
+        "number": 2,
+        "title": "Outra",
+        "state": "CLOSED",
+        "labels": [],
+        "createdAt": "2026-09-01T10:00:00Z",
+        "closedAt": "2026-10-02T10:00:00Z",
+        "assignees": [],
+        "author": {"login": "ana"},
+        "body": "",
+        "url": "i2",
+    },
 ]
 
 
@@ -212,6 +317,7 @@ def _fake_coleta(*, falha_gh=False, falha_timeline=False):
         if "subIssues" in query or "blockedBy" in query:
             return _pagina([])
         return json.dumps({"data": {"repository": {"issues": {"nodes": []}}}})
+
     return run
 
 
@@ -263,6 +369,7 @@ def _fake_timeline_issue(chamadas, *, erro=None):
         no = _no_issue(5, prs=[_no_pr(55, rollups=[("2026-10-02T11:00:00Z", "FAILURE")])])
         no["closedAt"] = "2026-10-03T10:00:00Z"
         return json.dumps({"data": {"repository": {"issue": no}}})
+
     return run
 
 
@@ -286,8 +393,11 @@ def test_timeline_sob_demanda_com_erro_amigavel(monkeypatch, tmp_path):
 def test_rota_da_timeline_responde_pelo_servidor(monkeypatch):
     import serve
 
-    monkeypatch.setattr(serve.collector, "issue_timeline",
-                        lambda root, n: {"number": n, "error": None, "timeline": [{"tipo": "criada"}]})
+    monkeypatch.setattr(
+        serve.collector,
+        "issue_timeline",
+        lambda root, n: {"number": n, "error": None, "timeline": [{"tipo": "criada"}]},
+    )
     servidor = serve.ThreadingHTTPServer(("127.0.0.1", 0), serve.Handler)
     threading.Thread(target=servidor.serve_forever, daemon=True).start()
     try:

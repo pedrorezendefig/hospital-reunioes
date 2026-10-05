@@ -82,14 +82,26 @@ def _pr(
 
 
 def _check(conclusao="SUCCESS", *, status="COMPLETED", inicio="2026-10-03T10:05:00Z", fim="2026-10-03T10:20:00Z"):
-    return {"nome": "CI", "status": status, "conclusao": conclusao, "inicio": inicio,
-            "fim": fim if status == "COMPLETED" else None}
+    return {
+        "nome": "CI",
+        "status": status,
+        "conclusao": conclusao,
+        "inicio": inicio,
+        "fim": fim if status == "COMPLETED" else None,
+    }
 
 
 def _deploy(versao, at, texto, duracao=None):
     """Deploy no shape do history.json; o texto cita PRs e issues como o rabo escreve."""
-    return {"app_version": versao, "at": at, "result": "healthy", "subject": texto,
-            "raw_subject": "chore(deploy): registro", "notes": "", "duration_seconds": duracao}
+    return {
+        "app_version": versao,
+        "at": at,
+        "result": "healthy",
+        "subject": texto,
+        "raw_subject": "chore(deploy): registro",
+        "notes": "",
+        "duration_seconds": duracao,
+    }
 
 
 def _merged(number, closes, merged_at="2026-10-04T10:00:00Z"):
@@ -165,11 +177,15 @@ DEPLOY_DO_120 = _deploy("0.162.0", "2026-10-04T12:00:00-03:00", "PR #120, issue 
 
 
 def test_ready_for_human_vence_tudo():
-    issue = _issue(20, state="CLOSED", labels=["ready-for-human", "in-progress", "ready-for-agent"],
-                   assignees=["bia"], blocked_by=[21])
+    issue = _issue(
+        20,
+        state="CLOSED",
+        labels=["ready-for-human", "in-progress", "ready-for-agent"],
+        assignees=["bia"],
+        blocked_by=[21],
+    )
     prs = [_merged(120, [20]), _pr(121, [20])]
-    fase = _fase(issue, outras=[_issue(21)], prs=prs, deploys=[DEPLOY_DO_120],
-                 branches=["feat/x-20"])
+    fase = _fase(issue, outras=[_issue(21)], prs=prs, deploys=[DEPLOY_DO_120], branches=["feat/x-20"])
     assert fase["fase"] == "humana"
 
 
@@ -272,10 +288,12 @@ def _comentario(corpo, em="2026-10-04T10:00:00Z"):
 def test_veredito_so_conta_no_comentario_com_marcador_de_automacao():
     comentarios = [
         _comentario("Achei bom.\nVEREDITO: LIMPO"),
-        _comentario(MARCADOR + "## Veredito da revisão\n\n**must-fix**\n- nada\n\nVEREDITO: LIMPO",
-                    em="2026-10-04T11:00:00Z"),
-        _comentario(MARCADOR + "## Veredito de segurança\n\nVEREDITO SEGURANCA: MUST-FIX (2)",
-                    em="2026-10-04T12:00:00Z"),
+        _comentario(
+            MARCADOR + "## Veredito da revisão\n\n**must-fix**\n- nada\n\nVEREDITO: LIMPO", em="2026-10-04T11:00:00Z"
+        ),
+        _comentario(
+            MARCADOR + "## Veredito de segurança\n\nVEREDITO SEGURANCA: MUST-FIX (2)", em="2026-10-04T12:00:00Z"
+        ),
         _comentario(MARCADOR + "Corretor: os dois must-fix fechados.", em="2026-10-04T13:00:00Z"),
     ]
     assert vereditos_dos_comentarios(comentarios) == [
@@ -397,16 +415,20 @@ def test_deploy_que_cita_a_issue_do_pr_poe_o_pr_em_producao():
 
 def test_deploy_anterior_ao_merge_que_cita_a_issue_nao_conta():
     # issue reaberta: a versão antiga citou a issue, o PR novo ainda não subiu
-    deploys = [_deploy("0.150.0", "2026-09-18T12:00:00-03:00", "PR #830, issue #820"),
-               _deploy("0.140.0", "2026-09-01T12:00:00-03:00", "PR #700")]
+    deploys = [
+        _deploy("0.150.0", "2026-09-18T12:00:00-03:00", "PR #830, issue #820"),
+        _deploy("0.140.0", "2026-09-01T12:00:00-03:00", "PR #700"),
+    ]
     fase = _fase_pr(_merged(841, [820], merged_at="2026-09-20T12:00:00Z"), deploys=deploys)
     assert fase["fase"] == "mergeado_sem_deploy"
 
 
 def test_pr_que_nenhum_deploy_cita_sobe_no_primeiro_build_depois_do_merge():
     # PR de registro do rabo e PR só de docs não ganham deploy próprio: o seguinte sobe a main com eles
-    deploys = [_deploy("0.162.0", "2026-10-06T12:00:00Z", "PR #300", duracao=900),
-               _deploy("0.161.3", "2026-10-05T18:41:18Z", "PR #896")]
+    deploys = [
+        _deploy("0.162.0", "2026-10-06T12:00:00Z", "PR #300", duracao=900),
+        _deploy("0.161.3", "2026-10-05T18:41:18Z", "PR #896"),
+    ]
     fase = _fase_pr(_merged(948, [], merged_at="2026-10-05T18:41:56Z"), deploys=deploys)
     assert fase["fase"] == "em_producao"
     assert fase["versao"] == "0.162.0"
@@ -414,9 +436,17 @@ def test_pr_que_nenhum_deploy_cita_sobe_no_primeiro_build_depois_do_merge():
 
 def test_pr_mergeado_durante_o_build_de_outro_deploy_nao_entra_nele():
     # o build de 15 min começou 11:45; o merge das 11:50 fica para o próximo deploy
-    deploys = [_deploy("0.162.0", "2026-10-06T12:00:00Z", "PR #300", duracao=900),
-               _deploy("0.161.0", "2026-10-01T12:00:00Z", "PR #200", duracao=900)]
+    deploys = [
+        _deploy("0.162.0", "2026-10-06T12:00:00Z", "PR #300", duracao=900),
+        _deploy("0.161.0", "2026-10-01T12:00:00Z", "PR #200", duracao=900),
+    ]
     fase = _fase_pr(_merged(301, [], merged_at="2026-10-06T11:50:00Z"), deploys=deploys)
+    assert fase["fase"] == "mergeado_sem_deploy"
+
+
+def test_deploy_que_nao_ficou_saudavel_nao_poe_o_pr_em_producao():
+    falhou = {**_deploy("0.163.0", "2026-10-09T12:00:00Z", "PR #216"), "result": "rolled_back"}
+    fase = _fase_pr(_merged(216, [1], merged_at="2026-10-09T11:00:00Z"), deploys=[falhou])
     assert fase["fase"] == "mergeado_sem_deploy"
 
 
@@ -488,8 +518,17 @@ def test_funil_conta_as_nove_fases_no_total_e_por_responsavel():
         _issue(94, labels=["ready-for-agent"], author=None),
     ]
     funil = montar_fases(issues, [], [], [], agora=AGORA)["funil"]
-    assert list(funil["total"]) == ["triagem", "fila", "bloqueada", "em_andamento", "pr_aberto",
-                                    "mergeada", "em_producao", "humana", "encerrada_sem_pr"]
+    assert list(funil["total"]) == [
+        "triagem",
+        "fila",
+        "bloqueada",
+        "em_andamento",
+        "pr_aberto",
+        "mergeada",
+        "em_producao",
+        "humana",
+        "encerrada_sem_pr",
+    ]
     assert funil["total"]["fila"] == 2
     assert funil["total"]["em_andamento"] == 1
     assert funil["total"]["humana"] == 1
@@ -509,32 +548,72 @@ def test_funil_conta_as_nove_fases_no_total_e_por_responsavel():
 # ---------- timeline normalizada ----------
 
 
-def _pr_da_linha(number, state, created_at, *, closed_at=None, merged_at=None, ci_vermelho=0,
-                 ci_vermelho_em=None, vereditos=(), head_ref=None):
+def _pr_da_linha(
+    number,
+    state,
+    created_at,
+    *,
+    closed_at=None,
+    merged_at=None,
+    ci_vermelho=0,
+    ci_vermelho_em=None,
+    vereditos=(),
+    head_ref=None,
+):
     """PR no shape que o coletor tira da consulta de timeline (GraphQL)."""
-    return {"number": number, "state": state, "created_at": created_at, "closed_at": closed_at,
-            "merged_at": merged_at, "head_ref": head_ref or f"feat/x-{number}", "ci_vermelho": ci_vermelho,
-            "ci_vermelho_em": ci_vermelho_em, "vereditos": list(vereditos)}
+    return {
+        "number": number,
+        "state": state,
+        "created_at": created_at,
+        "closed_at": closed_at,
+        "merged_at": merged_at,
+        "head_ref": head_ref or f"feat/x-{number}",
+        "ci_vermelho": ci_vermelho,
+        "ci_vermelho_em": ci_vermelho_em,
+        "vereditos": list(vereditos),
+    }
 
 
 def test_timeline_conta_a_historia_da_issue_em_ordem():
     issue = _issue(300, state="CLOSED", created_at="2026-10-01T10:00:00Z", closed_at="2026-10-05T10:00:00Z")
     linha = {
-        "eventos": [{"tipo": "designada", "em": "2026-10-01T11:00:00Z", "quem": "bia"},
-                    {"tipo": "fechada", "em": "2026-10-05T10:00:00Z"}],
+        "eventos": [
+            {"tipo": "designada", "em": "2026-10-01T11:00:00Z", "quem": "bia"},
+            {"tipo": "fechada", "em": "2026-10-05T10:00:00Z"},
+        ],
         "prs": [
-            _pr_da_linha(302, "MERGED", "2026-10-03T10:00:00Z", merged_at="2026-10-05T10:00:00Z",
-                         closed_at="2026-10-05T10:00:00Z",
-                         vereditos=[_must_fix("2026-10-04T10:00:00Z"), _limpo("2026-10-04T18:00:00Z")]),
-            _pr_da_linha(301, "CLOSED", "2026-10-02T10:00:00Z", closed_at="2026-10-02T20:00:00Z",
-                         ci_vermelho=2, ci_vermelho_em="2026-10-02T15:00:00Z"),
+            _pr_da_linha(
+                302,
+                "MERGED",
+                "2026-10-03T10:00:00Z",
+                merged_at="2026-10-05T10:00:00Z",
+                closed_at="2026-10-05T10:00:00Z",
+                vereditos=[_must_fix("2026-10-04T10:00:00Z"), _limpo("2026-10-04T18:00:00Z")],
+            ),
+            _pr_da_linha(
+                301,
+                "CLOSED",
+                "2026-10-02T10:00:00Z",
+                closed_at="2026-10-02T20:00:00Z",
+                ci_vermelho=2,
+                ci_vermelho_em="2026-10-02T15:00:00Z",
+            ),
         ],
     }
     deploys = [_deploy("0.170.0", "2026-10-05T09:00:00-03:00", "PR #302, issue #300")]
     tl = montar_fases([issue], [], deploys, [], timelines={300: linha}, agora=AGORA)["timelines"][300]
     assert [e["tipo"] for e in tl] == [
-        "criada", "designada", "pr_aberto", "ci_vermelho", "pr_fechado", "novo_pr", "revisor_comentou",
-        "revisor_comentou", "mergeado", "fechada", "em_producao",
+        "criada",
+        "designada",
+        "pr_aberto",
+        "ci_vermelho",
+        "pr_fechado",
+        "novo_pr",
+        "revisor_comentou",
+        "revisor_comentou",
+        "mergeado",
+        "fechada",
+        "em_producao",
     ]
     assert tl[1]["quem"] == "bia"
     assert tl[3] == {"tipo": "ci_vermelho", "em": "2026-10-02T15:00:00Z", "pr": 301, "vezes": 2}
@@ -552,6 +631,7 @@ def test_timeline_termina_na_branch_quando_ela_ainda_nao_virou_pr():
 
 
 def test_timeline_so_sai_para_as_issues_que_vieram_com_linha():
-    fases = montar_fases([_issue(320), _issue(321)], [], [], [], timelines={320: {"eventos": [], "prs": []}},
-                         agora=AGORA)
+    fases = montar_fases(
+        [_issue(320), _issue(321)], [], [], [], timelines={320: {"eventos": [], "prs": []}}, agora=AGORA
+    )
     assert list(fases["timelines"]) == [320]
