@@ -519,11 +519,18 @@ def pre_carga(item: dict) -> dict:
 
 
 def estado_do_email(supabase, email_id: str) -> str | None:
-    """O estado do item na triagem, ou None quando ele não existe."""
+    """O estado do item na triagem, ou None quando ele não existe.
+
+    Só o id que não é UUID vira "não existe": o PostgREST o recusa com 22P02,
+    e do lado de fora isso é o mesmo que item inexistente. Qualquer outra
+    falha sobe, porque banco fora do ar não é e-mail que não existe, e quem
+    chama precisa dizer "tente de novo", e não "não encontrado"."""
     try:
         resultado = supabase.table(TABELA).select("estado").eq("id", email_id).execute()
-    except APIError:
-        return None
+    except APIError as exc:
+        if getattr(exc, "code", None) == "22P02":
+            return None
+        raise
     return resultado.data[0]["estado"] if resultado.data else None
 
 

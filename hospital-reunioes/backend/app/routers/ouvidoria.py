@@ -993,8 +993,20 @@ async def registrar_manifestacao(
 def exigir_email_pendente(supabase, email_id: str) -> None:
     """O e-mail de origem existe e ainda está pendente na triagem. Conferido
     ANTES de o caso nascer: manifestação não se apaga (ADR 0047), então o
-    e-mail já decidido não pode virar caso de novo."""
-    estado = ouvidoria_triagem_email.estado_do_email(supabase, email_id)
+    e-mail já decidido não pode virar caso de novo.
+
+    Banco ou rede que falham aqui são 503, e não 404: o e-mail pode estar lá,
+    e "não encontrado" mandaria o ouvidor procurar um problema que não existe.
+    Nos dois casos nenhum caso nasce. As três falhas são as do fail-open do
+    módulo (`carimbar_visto_da_ouvidoria`), e só o tipo vai para o log."""
+    try:
+        estado = ouvidoria_triagem_email.estado_do_email(supabase, email_id)
+    except (HTTPError, APIError, OSError) as exc:
+        logger.warning("Falha ao conferir o e-mail de origem %s (%s)", email_id, type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível conferir o e-mail de origem agora. Tente de novo em instantes.",
+        ) from None
     if estado is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="E-mail não encontrado")
     if estado != ouvidoria_triagem_email.PENDENTE:

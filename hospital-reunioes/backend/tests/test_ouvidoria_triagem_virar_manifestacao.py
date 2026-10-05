@@ -23,6 +23,7 @@ from __future__ import annotations
 import os
 import sys
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -83,6 +84,9 @@ class _TabelaDaFatia(_TabelaFake):
         quebra = self.dono.update_quebra.get(self.nome)
         if self._update is not None and quebra is not None:
             raise quebra
+        leitura = self.dono.leitura_quebra.get(self.nome)
+        if self._insert is None and self._update is None and leitura is not None:
+            raise leitura
         if self._insert is not None and self.nome == "ouvidoria_protocolos":
             numero = 7 + len(self.rows)
             self._insert = {
@@ -106,6 +110,8 @@ class _BancoDaFatia(_SupabaseFake):
         }
         # O update que o teste manda falhar, por tabela.
         self.update_quebra: dict[str, Exception] = {}
+        # A leitura que o teste manda falhar, por tabela.
+        self.leitura_quebra: dict[str, Exception] = {}
 
     def table(self, nome: str):
         return _TabelaDaFatia(self, nome)
@@ -436,3 +442,47 @@ class TestFalhaNaMarcaNaoDerrubaOCaso:
         # O log diz o que aconteceu sem levar o dado de quem escreveu.
         assert email_id in caplog.text
         assert "Joana" not in caplog.text
+
+
+class TestFalhaDoBancoNaConferenciaNaoViraNaoEncontrado:
+    """Conferir o e-mail de origem é a porta do registro: se o banco não
+    responde, a resposta honesta é "tente de novo" (503), e não "o e-mail não
+    existe" (404). Nos dois casos nenhum caso nasce."""
+
+    def _registro(self, cliente, email_id: str) -> dict:
+        pre_carga = cliente.get(f"/api/ouvidoria/triagem-email/{email_id}/pre-carga").json()
+        return _o_ouvidor_salva(pre_carga)
+
+    @pytest.mark.parametrize(
+        "falha",
+        [
+            APIError({"code": "08006", "message": "conexão caiu", "details": "Failing row contains (Joana)"}),
+            httpx.ConnectError("sem rota até o banco"),
+        ],
+        ids=["postgrest-recusou", "rede-caiu"],
+    )
+    def test_falha_do_banco_ao_conferir_o_email_responde_503_sem_criar_caso(self, monkeypatch, emails, falha):
+        cliente, banco, email_id = _email_na_triagem(monkeypatch)
+        corpo = self._registro(cliente, email_id)
+        banco.leitura_quebra["ouvidoria_emails_recebidos"] = falha
+
+        r = cliente.post("/api/ouvidoria/manifestacoes", json=corpo)
+
+        assert r.status_code == 503
+        assert "Tente de novo" in r.json()["detail"]
+        assert banco.tabelas["ouvidoria_protocolos"] == []
+        assert banco.tabelas["ouvidoria_emails_recebidos"][0]["estado"] == "pendente"
+
+    def test_id_que_nao_e_uuid_continua_404(self, monkeypatch, emails):
+        """O PostgREST recusa com 22P02 o filtro por texto que não é UUID: do
+        lado de fora isso é o mesmo que e-mail inexistente."""
+        cliente, banco, email_id = _email_na_triagem(monkeypatch)
+        corpo = self._registro(cliente, email_id) | {"email_recebido_id": "nao-e-uuid"}
+        banco.leitura_quebra["ouvidoria_emails_recebidos"] = APIError(
+            {"code": "22P02", "message": "invalid input syntax for type uuid"}
+        )
+
+        r = cliente.post("/api/ouvidoria/manifestacoes", json=corpo)
+
+        assert r.status_code == 404
+        assert banco.tabelas["ouvidoria_protocolos"] == []
