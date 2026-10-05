@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.161.1 - 2026-10-05 15:04 - PR #897, issue #752: Perfil zerado pela API deixa de reter Super admin pela flag legada
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `9485c6e`
+- PRs: [#897](https://github.com/pedrorezendefig/hospital-reunioes/pull/897)
+- Serviços: backend
+- Resultado: 🟢 healthy (918s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/9485c6e
+
 ## v0.161.0 (sem bump) - 2026-10-05 14:46 - PR #881, sem issue: Aspas na descrição de três agentes hr-* para o YAML carregar
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `e0cccf3`
