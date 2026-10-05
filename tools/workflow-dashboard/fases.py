@@ -10,6 +10,11 @@ from __future__ import annotations
 import re
 from datetime import datetime, timezone
 
+# Régua da issue na ordem do funil (ADR 0062, decisão 4); a precedência fica em _fase_issue.
+FASES_ISSUE = ("triagem", "fila", "bloqueada", "em_andamento", "pr_aberto", "mergeada", "em_producao",
+               "humana", "encerrada_sem_pr")
+# Mesmo valor do SEM_RESP do app.js: o filtro "ninguém assumiu" da aba Issues.
+SEM_RESPONSAVEL = "(sem)"
 MARCADOR_AUTOMACAO = "<!-- automacao -->"
 # Última linha do comentário dos agentes hr-revisor e hr-revisor-seguranca.
 _VEREDITO = re.compile(r"(?m)^VEREDITO( SEGURANCA)?:\s*(LIMPO|MUST-FIX)\b")
@@ -27,12 +32,54 @@ def montar_fases(issues: list[dict], prs: list[dict], deploys: list[dict], branc
     for p in prs:
         for n in p["closes"]:
             prs_por_issue.setdefault(n, []).append(p)
-    return {
-        "issues": {i["number"]: _fase_issue(i, prs_por_issue.get(i["number"], []), abertas, producao,
+    fases_issue = {i["number"]: _fase_issue(i, prs_por_issue.get(i["number"], []), abertas, producao,
                                             branches, fases_pr)
-                   for i in issues},
+                   for i in issues}
+    por_numero = {i["number"]: i for i in issues}
+    return {
+        "issues": fases_issue,
         "prs": fases_pr,
+        "ondas": {i["number"]: _ondas(i, por_numero, abertas) for i in issues if i.get("children")},
+        "funil": _funil(issues, fases_issue),
     }
+
+
+def _ondas(prd: dict, por_numero: dict[int, dict], abertas: set[int]) -> list[list[int]]:
+    """Colunas do desenho do PRD: fatia vai uma coluna depois da bloqueadora aberta do mesmo PRD.
+
+    Bloqueadora fechada não bloqueia; bloqueio de fora do PRD não cria coluna (a
+    fatia fica Bloqueada na régua, mas o desenho só sequencia o próprio PRD).
+    """
+    fatias = {n for n in prd["children"] if n in por_numero}
+    pendentes = dict.fromkeys(sorted(fatias))
+    colunas: list[list[int]] = []
+    while pendentes:
+        coluna = [n for n in pendentes
+                  if not any(b in pendentes and b in abertas for b in por_numero[n]["blocked_by"])]
+        coluna = coluna or list(pendentes)  # ciclo: o que sobrou vira uma coluna, nada some
+        colunas.append(coluna)
+        for n in coluna:
+            del pendentes[n]
+    return colunas
+
+
+def _funil(issues: list[dict], fases_issue: dict[int, dict]) -> dict:
+    """Contagem por fase, no total e por responsável.
+
+    Responsável segue a aba Issues: quem assumiu; sem assignee, quem criou
+    (emenda de 05/10 da ADR 0061). SEM_RESPONSAVEL junta as sem assignee.
+    """
+    total = dict.fromkeys(FASES_ISSUE, 0)
+    por_responsavel: dict[str, dict[str, int]] = {}
+    for i in issues:
+        fase = fases_issue[i["number"]]["fase"]
+        total[fase] += 1
+        pessoas = list(i["assignees"]) or ([i["author"]] if i.get("author") else [])
+        if not i["assignees"]:
+            pessoas.append(SEM_RESPONSAVEL)
+        for p in pessoas:
+            por_responsavel.setdefault(p, dict.fromkeys(FASES_ISSUE, 0))[fase] += 1
+    return {"total": total, "por_responsavel": por_responsavel}
 
 
 def vereditos_dos_comentarios(comentarios: list[dict]) -> list[dict]:

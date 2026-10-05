@@ -399,3 +399,75 @@ def test_issue_em_pr_aberto_traz_o_sinal_do_pr():
     pr = _pr(140, [40], checks=[_check("FAILURE")], merge_state="DIRTY")
     sinal = _fase(issue, prs=[pr])["sinal"]
     assert sinal == {"ci": "vermelho", "veredito": None, "conflito": True, "tentativa_anterior": False}
+
+
+# ---------- ondas por PRD ----------
+
+
+def _ondas(issues):
+    return montar_fases(issues, [], [], [], agora=AGORA)["ondas"]
+
+
+def test_fatias_sem_dependencia_ficam_na_mesma_coluna_e_dependencia_aberta_empurra():
+    issues = [
+        _issue(50, is_prd=True, children=[51, 52, 53, 54]),
+        _issue(51),
+        _issue(52),
+        _issue(53, blocked_by=[51]),
+        _issue(54, blocked_by=[53, 52]),
+    ]
+    assert _ondas(issues) == {50: [[51, 52], [53], [54]]}
+
+
+def test_bloqueadora_fechada_nao_empurra_a_fatia_para_a_coluna_seguinte():
+    issues = [
+        _issue(60, is_prd=True, children=[61, 62]),
+        _issue(61, state="CLOSED", closed_at="2026-10-02T10:00:00Z"),
+        _issue(62, blocked_by=[61]),
+    ]
+    assert _ondas(issues) == {60: [[61, 62]]}
+
+
+def test_bloqueio_de_fora_do_prd_nao_cria_coluna():
+    issues = [_issue(70, is_prd=True, children=[71]), _issue(71, blocked_by=[99]), _issue(99)]
+    assert _ondas(issues) == {70: [[71]]}
+
+
+def test_ciclo_de_dependencia_degrada_numa_coluna_com_o_que_sobrou():
+    issues = [
+        _issue(80, is_prd=True, children=[81, 82, 83]),
+        _issue(81),
+        _issue(82, blocked_by=[83]),
+        _issue(83, blocked_by=[82]),
+    ]
+    assert _ondas(issues) == {80: [[81], [82, 83]]}
+
+
+# ---------- funil ----------
+
+
+def test_funil_conta_as_nove_fases_no_total_e_por_responsavel():
+    issues = [
+        _issue(90, labels=["needs-triage"], author="ana"),
+        _issue(91, labels=["ready-for-agent"], author="ana"),
+        _issue(92, labels=["in-progress"], assignees=["bia", "caio"], author="ana"),
+        _issue(93, labels=["ready-for-human"], assignees=["bia"]),
+        _issue(94, labels=["ready-for-agent"], author=None),
+    ]
+    funil = montar_fases(issues, [], [], [], agora=AGORA)["funil"]
+    assert list(funil["total"]) == ["triagem", "fila", "bloqueada", "em_andamento", "pr_aberto",
+                                    "mergeada", "em_producao", "humana", "encerrada_sem_pr"]
+    assert funil["total"]["fila"] == 2
+    assert funil["total"]["em_andamento"] == 1
+    assert funil["total"]["humana"] == 1
+    assert funil["total"]["pr_aberto"] == 0
+    # responsável é quem assumiu; sem assignee, quem criou (emenda de 05/10 da ADR 0061)
+    assert funil["por_responsavel"]["bia"]["em_andamento"] == 1
+    assert funil["por_responsavel"]["bia"]["humana"] == 1
+    assert funil["por_responsavel"]["caio"]["em_andamento"] == 1
+    assert funil["por_responsavel"]["ana"]["triagem"] == 1
+    assert funil["por_responsavel"]["ana"]["fila"] == 1
+    assert funil["por_responsavel"]["ana"]["em_andamento"] == 0
+    # "(sem)" é a fila sem claim, o mesmo valor do filtro "ninguém assumiu" da aba Issues
+    assert funil["por_responsavel"]["(sem)"]["fila"] == 2
+    assert funil["por_responsavel"]["(sem)"]["triagem"] == 1
