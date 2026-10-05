@@ -631,6 +631,80 @@ def _mover_anexos_para_o_caso(supabase, me: dict, email_id: str, caso_id: str) -
             logger.error("Triagem de e-mail: anexo %s ficou também no e-mail %s", anexo["id"], email_id)
 
 
+# ─── Descartar (issue #649) ─────────────────────────────────────────────────
+
+DESCARTADO = "descartado"
+
+# O que o descarte faz com o item: descartou (ou já estava descartado), o item
+# não existe, ou ele já virou caso ou foi juntado a um.
+DESCARTE_FEITO = "feito"
+DESCARTE_SEM_ITEM = "sem_item"
+DESCARTE_RECUSADO = "recusado"
+
+
+def descartar(supabase, me: dict, email_id: str, agora: datetime) -> str:
+    """Descarta o item e apaga o conteúdo dele (ADR 0051, decisão 5).
+
+    Fica o que responde "sumiu o e-mail de fulano, quem descartou?":
+    remetente, assunto, data, quem descartou e quando. Saem o corpo em texto e
+    em HTML, os cabeçalhos técnicos, os destinatários e os anexos, linha e
+    binário. Item descartado não é manifestação, e o ADR 0047 não o alcança.
+
+    Idempotente: a marca só pega item pendente, e a limpeza dos anexos roda
+    sempre que o item está descartado. Descartar de novo completa o que uma
+    falha do storage deixou para trás, e sem nada a completar não muda nada.
+
+    O e-mail que virou caso ou foi juntado a um é recusado: o conteúdo dele é
+    parte do caso, e o caso não se apaga."""
+    estado = estado_do_email(supabase, email_id)
+    if estado is None:
+        return DESCARTE_SEM_ITEM
+    if estado == PENDENTE:
+        supabase.table(TABELA).update(
+            {
+                "estado": DESCARTADO,
+                "decidido_por": me["id"],
+                "decidido_por_nome": me.get("nome_completo") or me["id"],
+                "decidido_em": agora.isoformat(),
+                "corpo_texto": None,
+                "corpo_html": None,
+                "cabecalhos": {},
+                "destinatarios": [],
+                "incompleto": False,
+                "anexos_excedentes": 0,
+            }
+        ).eq("id", email_id).eq("estado", PENDENTE).execute()
+        # Entre a leitura e a marca, outro clique pode ter virado o e-mail em
+        # caso: quem decide é o estado que ficou gravado.
+        estado = estado_do_email(supabase, email_id)
+    if estado != DESCARTADO:
+        return DESCARTE_RECUSADO
+    _apagar_anexos(supabase, email_id)
+    return DESCARTE_FEITO
+
+
+def _apagar_anexos(supabase, email_id: str) -> None:
+    """Apaga os anexos do item descartado, binário e linha.
+
+    A linha de cada anexo sai logo depois de o binário dele sair, e não todas
+    no fim: o storage responde igual para "já saiu" e para "recusou"
+    (`storage.delete_file`), então uma linha que sobrasse apontando para um
+    binário já removido travaria a tentativa seguinte para sempre. O binário
+    que não sai deixa a linha, e o próximo descarte tenta de novo."""
+    bucket = settings.supabase_storage_bucket_anexos_ouvidoria
+    anexos = (
+        supabase.table(TABELA_ANEXOS).select("id, storage_path").eq("email_recebido_id", email_id).execute().data or []
+    )
+    for anexo in anexos:
+        path = anexo.get("storage_path")
+        if path and not storage.delete_file(supabase, bucket, path):
+            logger.error(
+                "Triagem de e-mail: o binário do anexo %s do e-mail descartado %s não saiu", anexo["id"], email_id
+            )
+            continue
+        supabase.table(TABELA_ANEXOS).delete().eq("id", anexo["id"]).execute()
+
+
 def caminho_do_anexo(supabase, email_id: str, anexo_id: str) -> dict | None:
     """O anexo DESTE e-mail, com o caminho no storage. Sem o casamento dos dois
     ids, o id de um anexo viraria caminho lateral para o anexo de outro e-mail.

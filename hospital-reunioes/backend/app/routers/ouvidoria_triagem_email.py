@@ -12,7 +12,12 @@ juntar a um caso chegam nas fatias seguintes.
 
 from __future__ import annotations
 
+import logging
+from datetime import UTC, datetime
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
+from httpx import HTTPError
+from postgrest.exceptions import APIError
 
 from app.config import settings
 from app.dependencies import get_supabase_client
@@ -20,6 +25,8 @@ from app.limiter import limiter
 from app.routers.ouvidoria import EXPIRACAO_URL_ANEXO_SEGUNDOS, require_perfil_ouvidoria
 from app.services import ouvidoria_triagem_email as triagem
 from app.services import storage
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/ouvidoria/triagem-email", tags=["ouvidoria-triagem-email"])
 
@@ -100,3 +107,36 @@ async def abrir_anexo_do_email(
         )
     triagem.registrar_acesso_ao_email(supabase, me, email_id, "abrir_anexo_email")
     return {"url": url, "filename": anexo["filename"], "expira_em_segundos": EXPIRACAO_URL_ANEXO_SEGUNDOS}
+
+
+@router.post("/{email_id}/descarte")
+@limiter.limit("60/minute")
+async def descartar_email_recebido(
+    request: Request,
+    email_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Descarta o item: fica só o cabeçalho e quem descartou (issue #649, ADR
+    0051 decisão 5). Sem motivo obrigatório, e idempotente."""
+    try:
+        desfecho = triagem.descartar(supabase, me, email_id, datetime.now(UTC))
+    except (HTTPError, APIError, OSError) as exc:
+        # Banco que não responde é "tente de novo", e não erro de servidor: a
+        # mesma régua do registro manual (#650). O descarte é idempotente, e a
+        # nova tentativa completa o que tiver ficado pela metade. Só o tipo vai
+        # para o log: o `details` do `APIError` traz a linha, com o corpo.
+        logger.warning("Falha ao descartar o e-mail recebido %s (%s)", email_id, type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível descartar o e-mail agora. Tente de novo em instantes.",
+        ) from None
+    if desfecho == triagem.DESCARTE_SEM_ITEM:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="E-mail não encontrado")
+    if desfecho == triagem.DESCARTE_RECUSADO:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este e-mail já virou manifestação ou foi juntado a um caso, e não pode ser descartado",
+        )
+    triagem.registrar_acesso_ao_email(supabase, me, email_id, "descartar_email")
+    return triagem.carregar_item(supabase, email_id)
