@@ -40,8 +40,7 @@ registro sai da resposta imediatamente, mas continua na tela para você reativar
 
 ## Por onde a Ana atende hoje
 
-Isto costuma surpreender: **a Ana ainda não está no WhatsApp oficial do
-hospital**. Aquele número continua sendo atendido por gente, na ferramenta de
+**A Ana ainda não está no WhatsApp oficial do hospital.** Aquele número continua sendo atendido por gente, na ferramenta de
 atendimento que a equipe já usava. O canal vivo da assistente hoje é um
 Telegram de teste, e é lá que ela conversa de verdade com quem a procura.
 

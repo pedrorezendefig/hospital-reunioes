@@ -22,11 +22,15 @@ on:
       - '.claude/skills/montar-manual/**'
       - '.claude/skills/to-prd/**'
       - '.claude/skills/to-issues/**'
-      - '.claude/skills/onda/**'
+      - '.claude/agents/**'
       - '.claude/skills/deploy/**'
       - '.claude/skills/setup-maquina/**'
       - '.claude/skills/ask-pedro/**'
+      - '.claude/skills/onda-enxuta/**'
+      - '.claude/skills/pegar-issue/**'
       - '.github/workflows/manual.yml'
+      - '.github/workflows/ci.yml'
+      - '.github/rulesets/**'
   pull_request:
     branches: [main]
     paths:
@@ -44,11 +48,21 @@ on:
       # renomeia um deles.
       - '.claude/skills/to-prd/**'
       - '.claude/skills/to-issues/**'
-      - '.claude/skills/onda/**'
+      - '.claude/agents/**'
       - '.claude/skills/deploy/**'
       - '.claude/skills/setup-maquina/**'
       - '.claude/skills/ask-pedro/**'
+      # O fechar_onda.py chama a guarda de migration repetida nas pré-condições
+      # (issue #903), e o teste que prova a chamada mora em tools/.
+      - '.claude/skills/onda-enxuta/**'
+      # O dono do PRD (issue #904): o teste em tools/ roda o script da skill e
+      # lê o SKILL.md dela; um PR que mexa só na skill também acorda o job.
+      - '.claude/skills/pegar-issue/**'
       - '.github/workflows/manual.yml'
+      # O ruleset da main exige os jobs do ci.yml pelo nome (issue #910): o
+      # teste em tools/ que amarra os dois roda quando qualquer um muda.
+      - '.github/workflows/ci.yml'
+      - '.github/rulesets/**'
 
 jobs:
   manual:

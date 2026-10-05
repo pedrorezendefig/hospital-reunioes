@@ -13,7 +13,7 @@ sidebar:
 
 Depois de cadastrar alguém, e sempre que alguém perder a senha. A plataforma
 não manda email de boas-vindas nem link de primeiro acesso: quem entrega a
-senha é você, e ela aparece uma vez só.
+senha é você.
 
 ## Passo a passo
 
@@ -46,7 +46,7 @@ A senha não volta a aparecer depois que você fechar a janela.
 - **A tela recusa com "Participante sem email cadastrado":** a ficha está sem
   endereço, e é o endereço que identifica a pessoa na entrada. Preencha o
   **Email** pelo lápis, **Editar**, e repita. Quem nunca entrou na plataforma
-  não é problema: o próprio **Resetar senha** cria a conta dessa pessoa na
+  não precisa de mais nada: o próprio **Resetar senha** cria a conta dela na
   hora.
 - **A pessoa continua sem entrar depois de receber a senha:** confira se a
   ficha dela está com **Ativo** marcado. Quem está desligado é recusado na

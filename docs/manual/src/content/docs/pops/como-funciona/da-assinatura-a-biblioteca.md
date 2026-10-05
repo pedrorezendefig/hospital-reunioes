@@ -33,8 +33,8 @@ aparece na Biblioteca com o documento assinado.
 O envio depende de cada uma das três pessoas ter email no cadastro. Faltando
 um, o documento não sai e a Versão fica parada em **Em Assinatura**.
 
-Aqui vale saber do limite: **não há botão de reenviar em tela nenhuma**, e
-corrigir o cadastro depois não faz o documento sair sozinho. Quem estiver nessa
+**Não há botão de reenviar em tela nenhuma**, e corrigir o cadastro depois não
+faz o documento sair sozinho. Quem estiver nessa
 situação avisa quem cuida da plataforma, e o reenvio é feito fora da tela.
 
 Nada do que já foi aprovado se perde. A Versão não volta para trás, o conteúdo

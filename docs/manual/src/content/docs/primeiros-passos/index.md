@@ -21,12 +21,11 @@ Ouvidoria. Um endereço só, uma conta só.
 **Conta** é o seu acesso, formado pelo seu email e pela sua senha. Ela é
 pessoal: o que você faz na plataforma fica registrado no seu nome.
 
-**Perfil de acesso** é o que a sua conta pode fazer. Ele não é escolhido por
-você: quem administra a plataforma é que define, e é ele que decide o que
-aparece no seu menu.
+**Perfil de acesso** é o que a sua conta pode fazer. Quem administra a
+plataforma define o seu, e é ele que decide o que aparece no seu menu.
 
 **Menu** é a lista da esquerda, com os módulos que a sua conta alcança. Dois
-colegas abrem a mesma plataforma e veem menus diferentes, e isso é esperado.
+colegas abrem a mesma plataforma e veem menus diferentes.
 
 **Participante** é toda pessoa cadastrada, com conta ou sem conta. Quem é
 citado numa reunião ou fica responsável por uma ação não precisa ter conta para
@@ -37,7 +36,7 @@ aparecer na plataforma.
 Nem todo mundo que aparece na plataforma precisa entrar nela.
 
 - **Quem entra** é quem conduz o trabalho: Facilitador, Secretária, quem cuida
-  da Gestão de POPs, quem cuida da Ouvidoria e o Super admin.
+  da Gestão de POPs, quem cuida da Ouvidoria e o Super Admin.
 - **Quem não entra** é quem só é citado numa reunião ou fica responsável por
   uma ação. Essa pessoa recebe o convite da reunião por email e, quando a ata
   vai a assinatura, o email de assinar. Quem precisa aceitar uma ata ganha um

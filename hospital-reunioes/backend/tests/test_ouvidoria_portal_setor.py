@@ -1773,3 +1773,140 @@ class TestRespostaEmCasoApagado:
 
         assert resposta.status_code == 200, resposta.text
         assert len(sb.storage.arquivos) == 1
+
+
+# O Paciente do caso (issue #664, ADR 0052): outra pessoa que não quem
+# manifestou, e por isso com outra guarda.
+PACIENTE = "Maria Aparecida Souza"
+REFERENCIA = "leito 12, 20/08"
+LINHA_DO_PACIENTE = f"Paciente: {PACIENTE} ({REFERENCIA})"
+
+
+def _com_paciente(**overrides) -> dict:
+    return _manifestacao(7, paciente_nome=PACIENTE, paciente_referencia=REFERENCIA, **overrides)
+
+
+class TestPacienteNaRotaDoToken:
+    """Issue #664: a tela do responsável recebe o paciente pela mesma guarda
+    do email. O fake projeta só as colunas pedidas, então sem as duas colunas
+    em `_CAMPOS_DO_PORTAL` o paciente não chega aqui."""
+
+    def _abrir(self, monkeypatch, enviados, caso: dict):
+        client, _ = _client(monkeypatch, supabase=_SupabaseFake(manifestacoes=[caso]))
+        _acionar(client)
+        resposta = client.get(f"/api/ouvidoria-setor/{_token_do_email(enviados)}")
+        assert resposta.status_code == 200, resposta.text
+        return resposta
+
+    def test_caso_comum_traz_o_paciente(self, monkeypatch, _nunca_envia_email_de_verdade):
+        corpo = self._abrir(monkeypatch, _nunca_envia_email_de_verdade, _com_paciente()).json()
+
+        assert corpo["paciente"] == {"nome": PACIENTE, "referencia": REFERENCIA}
+        assert corpo["identificacao"] == "Joana da Silva"
+
+    def test_caso_anonimo_traz_o_paciente_e_nao_quem_manifestou(self, monkeypatch, _nunca_envia_email_de_verdade):
+        resposta = self._abrir(
+            monkeypatch, _nunca_envia_email_de_verdade, _com_paciente(anonimo=True, manifestante_nome=None)
+        )
+        corpo = resposta.json()
+
+        assert corpo["paciente"] == {"nome": PACIENTE, "referencia": REFERENCIA}
+        assert corpo["identificacao"] is None
+
+    def test_caso_sigiloso_nao_traz_o_paciente(self, monkeypatch, _nunca_envia_email_de_verdade):
+        resposta = self._abrir(monkeypatch, _nunca_envia_email_de_verdade, _com_paciente(sigilo_reforcado=True))
+        corpo = resposta.json()
+
+        assert corpo["paciente"] is None
+        # A resposta INTEIRA, e não só o campo: chave nova pendurada no payload
+        # não pode levar o paciente por outro caminho.
+        assert PACIENTE not in resposta.text
+        assert REFERENCIA not in resposta.text
+        assert corpo["extrato"] == EXTRATO, "a página continuou de pé: o teste mede o corte"
+
+    def test_caso_sem_paciente_vem_sem_paciente(self, monkeypatch, _nunca_envia_email_de_verdade):
+        corpo = self._abrir(monkeypatch, _nunca_envia_email_de_verdade, _manifestacao(7)).json()
+
+        assert corpo["paciente"] is None
+
+
+class TestPacienteNoEmailDoFluxoReal:
+    """O email que sai do acionamento de verdade, com as colunas que a leitura
+    do caso pediu ao banco (`_CAMPOS_DO_EMAIL`)."""
+
+    def _email(self, monkeypatch, enviados, caso: dict) -> dict:
+        client, _ = _client(monkeypatch, supabase=_SupabaseFake(manifestacoes=[caso]))
+        _acionar(client)
+        return next(e for e in enviados if e["destinatario"] == "carlos@hsm.br")
+
+    def test_acionamento_comum_leva_o_paciente(self, monkeypatch, _nunca_envia_email_de_verdade):
+        email = self._email(monkeypatch, _nunca_envia_email_de_verdade, _com_paciente())
+
+        for pedaco in (email["html"], email["texto"]):
+            assert LINHA_DO_PACIENTE in pedaco
+
+    def test_acionamento_anonimo_leva_o_paciente(self, monkeypatch, _nunca_envia_email_de_verdade):
+        email = self._email(
+            monkeypatch, _nunca_envia_email_de_verdade, _com_paciente(anonimo=True, manifestante_nome=None)
+        )
+
+        for pedaco in (email["html"], email["texto"]):
+            assert LINHA_DO_PACIENTE in pedaco
+
+    def test_acionamento_sigiloso_nao_leva_o_paciente(self, monkeypatch, _nunca_envia_email_de_verdade):
+        email = self._email(monkeypatch, _nunca_envia_email_de_verdade, _com_paciente(sigilo_reforcado=True))
+
+        for pedaco in (email["html"], email["texto"]):
+            assert EXTRATO in pedaco
+            assert PACIENTE not in pedaco
+            assert REFERENCIA not in pedaco
+
+    def test_acionamento_sem_paciente_nao_desenha_a_linha(self, monkeypatch, _nunca_envia_email_de_verdade):
+        email = self._email(monkeypatch, _nunca_envia_email_de_verdade, _manifestacao(7))
+
+        for pedaco in (email["html"], email["texto"]):
+            assert EXTRATO in pedaco
+            assert "Paciente:" not in pedaco
+
+
+class TestPacienteNoReenvio:
+    """O reenvio relê o caso e passa pela mesma guarda: manda o mesmo que o
+    envio original e, se o sigilo subiu depois do acionamento, o paciente não
+    vai mais."""
+
+    def _reenviar(self, client, sb, enviados) -> dict:
+        gatilho = ouvidoria_notificacoes.GATILHO_NOVA_DEMANDA
+        notificacao = next(n for n in sb.tabelas["ouvidoria_notificacoes"] if n["gatilho"] == gatilho)
+        resposta = client.post(f"/api/ouvidoria/manifestacoes/uuid-7/notificacoes/{notificacao['id']}/reenviar")
+        assert resposta.status_code == 201, resposta.text
+        return [e for e in enviados if e["destinatario"] == "carlos@hsm.br"][-1]
+
+    def test_reenvio_leva_o_mesmo_paciente_do_envio_original(self, monkeypatch, _nunca_envia_email_de_verdade):
+        client, sb = _client(monkeypatch, supabase=_SupabaseFake(manifestacoes=[_com_paciente()]))
+        _acionar(client)
+        primeiro = next(e for e in _nunca_envia_email_de_verdade if e["destinatario"] == "carlos@hsm.br")
+
+        segundo = self._reenviar(client, sb, _nunca_envia_email_de_verdade)
+
+        assert segundo is not primeiro
+        for email in (primeiro, segundo):
+            for pedaco in (email["html"], email["texto"]):
+                assert LINHA_DO_PACIENTE in pedaco
+
+    def test_caso_elevado_a_sigilo_depois_do_acionamento_nao_leva_o_paciente(
+        self, monkeypatch, _nunca_envia_email_de_verdade
+    ):
+        client, sb = _client(monkeypatch, supabase=_SupabaseFake(manifestacoes=[_com_paciente()]))
+        _acionar(client)
+        primeiro = next(e for e in _nunca_envia_email_de_verdade if e["destinatario"] == "carlos@hsm.br")
+        assert LINHA_DO_PACIENTE in primeiro["texto"], "o envio original levou o paciente"
+        # O ouvidor eleva o sigilo DEPOIS do acionamento: é assim que o
+        # reenvio encontra o caso.
+        sb.tabelas["ouvidoria_protocolos"][0]["sigilo_reforcado"] = True
+
+        segundo = self._reenviar(client, sb, _nunca_envia_email_de_verdade)
+
+        for pedaco in (segundo["html"], segundo["texto"]):
+            assert EXTRATO in pedaco
+            assert PACIENTE not in pedaco
+            assert REFERENCIA not in pedaco

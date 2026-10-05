@@ -35,9 +35,8 @@ hoje. É este campo, e não a Role, que decide o que a pessoa alcança no app.
 
 - **A pessoa continua vendo as reuniões antigas:** ela precisa sair e entrar de
   novo. O perfil é lido quando ela abre a plataforma.
-- **Você marcou Secretária e o Cargo sumiu:** é assim mesmo. Secretária é
-  função de sistema, não de organograma, e por isso Cargo e Role deixam de ser
-  pedidos.
+- **Você marcou Secretária e o Cargo sumiu:** Secretária é função de sistema,
+  não de organograma, e por isso Cargo e Role deixam de ser pedidos.
 - **A pessoa virou Super Admin e mesmo assim não abre uma manifestação:** ela
   enxerga a lista da Ouvidoria, mas abrir o caso é o **Acesso à Ouvidoria**,
   que se concede à parte.
