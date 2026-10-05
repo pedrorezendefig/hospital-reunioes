@@ -10,7 +10,7 @@
  * token), e o identificador inexistente, que cai na página de não encontrado.
  */
 
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { LenteDoObjetivo, type LentePayload } from "./LenteDoObjetivo";
@@ -41,6 +41,7 @@ function lente(parcial: Partial<LentePayload> = {}): LentePayload {
       descricao: "Aumentar o número de seguidores da conta.",
     },
     periodo: parcial.periodo ?? { chave: "28d", dias: 28 },
+    periodos: parcial.periodos ?? ["7d", "28d"],
     numeros: parcial.numeros ?? [
       { chave: "followers", rotulo: "Seguidores", valor: 18420, crescimento: 312, crescimento_anterior: 248 },
       { chave: "reach", rotulo: "Alcance", valor: 41280, anterior: 37650, variacao: 0.0964 },
@@ -142,6 +143,72 @@ describe("a lente de um Objetivo", () => {
         autorizacao: "Bearer token-de-teste",
       },
     ]);
+  });
+
+  it("o identificador vai codificado no endereço da leitura e nos links do seletor", async () => {
+    servidor(200, lente());
+
+    render(<LenteDoObjetivo identificador="a b/c?d" periodo="28d" />);
+    await screen.findByText("18.420");
+
+    expect(chamadas.map((c) => c.url)).toEqual(["/api/admin/central-de-comando/objetivos/a%20b%2Fc%3Fd?periodo=28d"]);
+    const seletor = screen.getByRole("navigation", { name: "Período" });
+    expect(within(seletor).getByText("7 dias").closest("a")?.getAttribute("href")).toBe(
+      "/admin/central-de-comando/objetivos/a%20b%2Fc%3Fd?periodo=7d",
+    );
+  });
+
+  it("o seletor mostra os períodos que o backend mandou, sem decidir pelo nome do Objetivo", async () => {
+    // Um Objetivo novo, fora do Instagram, que só tem 7 e 28 dias: a tela não
+    // precisa saber disso, o payload diz (issue #847).
+    servidor(200, lente({ periodos: ["7d", "28d"] }));
+
+    render(<LenteDoObjetivo identificador="site-novo" periodo="28d" />);
+    await screen.findByText("18.420");
+
+    const seletor = screen.getByRole("navigation", { name: "Período" });
+    expect(within(seletor).getAllByRole("link").map((a) => a.textContent)).toEqual(["7 dias", "28 dias"]);
+  });
+
+  it("um Objetivo do Instagram com os três períodos no payload mostra os três", async () => {
+    servidor(200, lente({ periodos: ["7d", "28d", "90d"] }));
+
+    render(<LenteDoObjetivo identificador="instagram-seguidores" periodo="28d" />);
+    await screen.findByText("18.420");
+
+    const seletor = screen.getByRole("navigation", { name: "Período" });
+    expect(within(seletor).getAllByRole("link").map((a) => a.textContent)).toEqual([
+      "7 dias",
+      "28 dias",
+      "90 dias",
+    ]);
+  });
+
+  it("o período que a lente não tem (422) cai no padrão de 28, sem tela de erro", async () => {
+    chamadas = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string) => {
+        chamadas.push({ url, autorizacao: null });
+        if (url.endsWith("periodo=90d")) {
+          return new Response(JSON.stringify({ detail: "O Objetivo instagram-seguidores não tem o período 90d." }), {
+            status: 422,
+          });
+        }
+        return new Response(JSON.stringify(lente()), { status: 200 });
+      }),
+    );
+
+    render(<LenteDoObjetivo identificador="instagram-seguidores" periodo="90d" />);
+
+    expect(await screen.findByText("18.420")).toBeTruthy();
+    expect(chamadas.map((c) => c.url)).toEqual([
+      "/api/admin/central-de-comando/objetivos/instagram-seguidores?periodo=90d",
+      "/api/admin/central-de-comando/objetivos/instagram-seguidores?periodo=28d",
+    ]);
+    expect(screen.queryByRole("alert")).toBeNull();
+    const seletor = screen.getByRole("navigation", { name: "Período" });
+    expect(within(seletor).getByText("28 dias").closest("a")?.getAttribute("aria-current")).toBe("page");
   });
 
   it("identificador inexistente (404) cai na página de não encontrado", async () => {
@@ -247,7 +314,7 @@ describe("a lente de um Objetivo: o Atualizar agora (issue #861)", () => {
     expect(pedidos.filter((p) => p.metodo === "POST")).toEqual([
       {
         metodo: "POST",
-        url: "/api/admin/central-de-comando/atualizar-agora?tela=objetivos/instagram-seguidores&periodo=28d",
+        url: "/api/admin/central-de-comando/atualizar-agora?tela=objetivos%2Finstagram-seguidores&periodo=28d",
         autorizacao: "Bearer token-de-teste",
       },
     ]);

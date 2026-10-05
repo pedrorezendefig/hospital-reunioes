@@ -171,13 +171,52 @@ class TestTokenVencido:
         assert "renov" in motivo
         assert "instagram" in motivo
 
-    def test_sem_numero_guardado_e_erro_honesto(self, cliente, instagram_falso, relogio_da_central):
-        """Token vencido e nada guardado: 502, como qualquer falha da fonte sem
-        último valor bom. Nunca zero, nunca lista vazia."""
+    @pytest.mark.parametrize("pedido", [_ler, _atualizar], ids=["leitura", "atualizar-agora"])
+    def test_sem_numero_guardado_diz_que_e_para_renovar(self, cliente, instagram_falso, relogio_da_central, pedido):
+        """Token vencido e nada guardado (issue #846): segue 502, porque não há
+        número para mostrar, mas com a MESMA frase de renovação do caso com
+        número guardado e a causa `token-vencido`, que a tela lê para mostrar o
+        aviso calmo de renovação, e não o erro técnico. Nunca zero, nunca lista
+        vazia."""
         instagram_falso.forcar = erro_do_instagram(400, 190, "OAuthException", "Session has expired.")
+
+        resposta = pedido(cliente)
+
+        assert resposta.status_code == 502
+        assert resposta.json() == {
+            "detail": "O acesso ao Instagram expirou. Renove o token para voltar a atualizar os números.",
+            "causa": "token-vencido",
+        }
+
+    def test_outra_falha_sem_numero_guardado_segue_502_sem_causa(self, cliente, instagram_falso, relogio_da_central):
+        """Só o token vencido ganha a causa: a fonte fora continua o 502 de
+        sempre, com o `detail` e mais nada, e a tela mostra o erro honesto."""
+        instagram_falso.forcar = erro_do_instagram(500, 1, "InternalError", "Please retry.")
 
         resposta = _ler(cliente)
 
         assert resposta.status_code == 502
         assert set(resposta.json()) == {"detail"}
-        assert "seguidores" not in resposta.json()
+
+
+class TestDoFonteSempreLevanta:
+    def test_token_vencido_levanta_a_falha_com_causa_e_nao_devolve_resposta(self):
+        """O `_do_fonte` levanta em toda falha, inclusive no token vencido: quem
+        embrulha o retorno (o Ao vivo faz `{"pessoas": await _do_fonte(...)}`)
+        nunca recebe uma resposta pronta no lugar do dado. A causa viaja na
+        exceção, e a rota escreve `detail` + `causa` (revisão do PR #884)."""
+        import anyio
+        from fastapi import HTTPException
+
+        from app.routers.admin import central_de_comando as central_router
+
+        def falha():
+            raise provedor_instagram.InstagramTokenExpiradoError("O acesso ao Instagram expirou.")
+
+        with pytest.raises(HTTPException) as capturada:
+            anyio.run(central_router._do_fonte, falha)
+
+        assert isinstance(capturada.value, central_router.FalhaComCausa)
+        assert capturada.value.status_code == 502
+        assert capturada.value.detail == "O acesso ao Instagram expirou."
+        assert capturada.value.causa == "token-vencido"

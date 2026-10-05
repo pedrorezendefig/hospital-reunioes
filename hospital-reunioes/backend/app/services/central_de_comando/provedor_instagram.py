@@ -34,13 +34,14 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from datetime import date
+from datetime import UTC, date, datetime
 from typing import Any, Literal
 
 import httpx
 
 from app.config import settings
 from app.services.central_de_comando.periodo import (
+    FUSO_DO_HOSPITAL,
     Intervalo,
     Periodo,
     intervalo_anterior,
@@ -251,12 +252,21 @@ def tipo_de_midia(media_type: str, media_product_type: str | None) -> TipoDeMidi
 
 
 def dentro_do_periodo(timestamp: str, intervalo: Intervalo) -> bool:
-    """A publicação está na janela, comparando só a DATA do timestamp, inclusive
-    nas duas pontas. Publicação das 23h do último dia entra."""
+    """A publicação está na janela, comparando só a DATA dela no fuso do
+    hospital, inclusive nas duas pontas (issue #873).
+
+    A Graph API manda o instante em UTC (`2026-09-20T01:00:00+0000`); o período
+    é de datas de Brasília desde a #857. Por isso o instante vira hora do
+    hospital antes de virar data: a publicação das 22h de Brasília do último dia
+    (01h UTC do dia seguinte) entra. Sem offset, o instante é UTC, como a Graph
+    API fala, e nunca a hora local do servidor. Timestamp inválido fica de fora."""
     try:
-        dia = date.fromisoformat(timestamp[:10])
+        instante = datetime.fromisoformat(timestamp)
     except ValueError:
         return False
+    if instante.tzinfo is None:
+        instante = instante.replace(tzinfo=UTC)
+    dia = instante.astimezone(FUSO_DO_HOSPITAL).date()
     return intervalo.inicio <= dia <= intervalo.fim
 
 

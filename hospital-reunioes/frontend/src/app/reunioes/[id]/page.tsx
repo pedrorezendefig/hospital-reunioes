@@ -49,6 +49,7 @@ import TrocarFacilitadorModal from "@/components/reunioes/TrocarFacilitadorModal
 import { DeleteButton } from "@/components/DeleteButton";
 import { ConfirmDialog } from "@/components/ConfirmDialog";
 import { isSecretaria, isSuperAdmin } from "@/lib/auth";
+import { copiaDaRecorrencia, falhaDaRecorrencia } from "@/lib/reunioes/copiaDaRecorrencia";
 import { seloAssinaturas } from "@/lib/reunioes/seloAssinaturas";
 import { getErrorMessage } from "@/lib/errors";
 import { useCurrentParticipante } from "@/hooks/useCurrentParticipante";
@@ -408,26 +409,16 @@ function RecorrenciaPanel({
 
   const datas = open ? gerarDatas(reuniao.data, diaSemana, frequencia, quantidade) : [];
 
-  const participanteIds = (reuniao.participantes_programada ?? []).map((p) => p.id);
-
   const handleCriar = async () => {
     setCriando(true);
     setErro(null);
     const token = await getToken();
     let criados = 0;
+    let motivo: string | null = null;
     const idGrupo = crypto.randomUUID();
 
     for (const data of datas) {
-      const payload = {
-        titulo: reuniao.titulo || reuniao.tipo || "Reunião",
-        data,
-        hora_inicio: horario || null,
-        tipo: reuniao.tipo ?? null,
-        objetivo: reuniao.objetivo || null,
-        participante_ids: participanteIds,
-        id_grupo_recorrencia: idGrupo,
-        nome_grupo_recorrencia: nomeGrupo.trim() || null,
-      };
+      const payload = copiaDaRecorrencia(reuniao, data, { horario, idGrupo, nomeGrupo });
       const res = await fetch("/api/reunioes/agendar", {
         method: "POST",
         headers: {
@@ -436,14 +427,19 @@ function RecorrenciaPanel({
         },
         body: JSON.stringify(payload),
       });
-      if (res.ok) criados++;
+      if (res.ok) {
+        criados++;
+      } else if (motivo === null) {
+        const corpo = await res.json().catch(() => null);
+        motivo = typeof corpo?.detail === "string" ? corpo.detail : null;
+      }
     }
 
     setCriando(false);
     if (criados === datas.length) {
       setSucesso(criados);
     } else {
-      setErro(`Apenas ${criados} de ${datas.length} reuniões foram criadas.`);
+      setErro(falhaDaRecorrencia(criados, datas.length, motivo));
     }
   };
 

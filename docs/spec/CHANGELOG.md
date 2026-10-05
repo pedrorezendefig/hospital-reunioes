@@ -7,8 +7,161 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.161.0 - 2026-10-05 12:40 - PR #930, sem issue: Responsável cai em quem criou a issue quando ninguém assumiu
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `b64bf9f`
+- PRs: [#930](https://github.com/pedrorezendefig/hospital-reunioes/pull/930)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (803s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/b64bf9f
+
+## v0.160.0 - 2026-10-04 21:49 - PR #899, issue #648: Triagem de e-mail, fundação: o e-mail chega e aparece na tela
+- Autor: Lucas Sampaio <lucassampaioc1@gmail.com>
+- SHA: `cb45ec6`
+- PRs: [#899](https://github.com/pedrorezendefig/hospital-reunioes/pull/899)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (334s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/cb45ec6
+
+## v0.159.0 - 2026-10-02 21:41 - PR #928, sem issue: Filtro por um responsável com visor da pessoa e issues sem teto de 200
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e6abd15`
+- PRs: [#928](https://github.com/pedrorezendefig/hospital-reunioes/pull/928)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (889s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e6abd15
+
+## v0.158.6 - 2026-10-02 20:01 - Onda onda-a: Main protegida, o rabo entra por PR e mergeia pela API
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `d11e2ce`
+- PRs: [#925](https://github.com/pedrorezendefig/hospital-reunioes/pull/925)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/d11e2ce
+
+## v0.158.5 - 2026-10-02 19:20 - PR #923, issue #909: Um pipeline só no /ask-pedro, CLAUDE.md, dev.md e README do painel
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `f63e3d8`
+- PRs: [#923](https://github.com/pedrorezendefig/hospital-reunioes/pull/923)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f63e3d8
+
+## v0.158.4 - 2026-10-02 19:00 - PR #922, issue #921: Nível 2 confere claude --version >= 2.1.280 para a /onda-enxuta
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `76e0aec`
+- PRs: [#922](https://github.com/pedrorezendefig/hospital-reunioes/pull/922)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/76e0aec
+
+## v0.158.3 - 2026-10-02 18:52 - PR #919, issue #907: Fechar_onda.py com um PR só e /ship parando no PR verde
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `c565aab`
+- PRs: [#919](https://github.com/pedrorezendefig/hospital-reunioes/pull/919)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/c565aab
+
+## v0.158.2 - 2026-10-02 18:36 - Onda onda-b: Botão agrupar por responsável na aba Issues
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `28450d6`
+- PRs: [#920](https://github.com/pedrorezendefig/hospital-reunioes/pull/920)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/28450d6
+
+## v0.158.1 - 2026-10-02 18:30 - Onda pr-918: Aposentar /onda e /montar-ondas e redirecionar os ponteiros para a enxuta
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `2435b22`
+- PRs: [#918](https://github.com/pedrorezendefig/hospital-reunioes/pull/918)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (231s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/2435b22
+
+## v0.158.0 - 2026-10-02 18:26 - Onda onda-c: O Dossiê avisa quando o relato é sobre outra pessoa sem o nome do paciente; O paciente viaja para a área no email, na tela do responsável e no reenvio, com a guarda do sigilo
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `13cb8b3`
+- PRs: [#795](https://github.com/pedrorezendefig/hospital-reunioes/pull/795), [#917](https://github.com/pedrorezendefig/hospital-reunioes/pull/917)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (6s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/13cb8b3
+
+## v0.157.2 - 2026-10-02 18:08 - Onda onda-b: PRD nasce com dono e o /pegar-issue avisa fatia de PRD alheio; Confere identidade do git, CLI do Coolify e acesso ao Studio; Coletor e módulo puro do agrupamento por responsável
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `53bacf0`
+- PRs: [#912](https://github.com/pedrorezendefig/hospital-reunioes/pull/912), [#913](https://github.com/pedrorezendefig/hospital-reunioes/pull/913), [#914](https://github.com/pedrorezendefig/hospital-reunioes/pull/914)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (10s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/53bacf0
+
+## v0.157.1 - 2026-10-02 17:55 - Onda onda-a: Guarda de migration com número repetido no CI e no fechar_onda.py
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `89ccaaf`
+- PRs: [#911](https://github.com/pedrorezendefig/hospital-reunioes/pull/911)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (4s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/89ccaaf
+
+## v0.157.0 - 2026-10-02 17:49 - Onda onda-c: O menu de reticências deixa de ser recortado pelo card da fila; A Retenção apaga o Paciente do caso nas duas portas; O registro manual do ouvidor ganha o paciente do caso; Enxugar a escri
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `712789f`
+- PRs: [#778](https://github.com/pedrorezendefig/hospital-reunioes/pull/778), [#798](https://github.com/pedrorezendefig/hospital-reunioes/pull/798), [#796](https://github.com/pedrorezendefig/hospital-reunioes/pull/796), [#801](https://github.com/pedrorezendefig/hospital-reunioes/pull/801)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (8s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/712789f
+
+## v0.156.6 - 2026-09-28 11:36 - Recuo da continuação enxerga toda quebra de linha
+- Autor: Pedro <pedroribbe@gmail.com>
+- SHA: `e03a1ec`
+- PRs: [#894](https://github.com/pedrorezendefig/hospital-reunioes/pull/894) (issue #770)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (402s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e03a1ec
+
+## v0.156.5 - 2026-09-27 20:00 - Chamadas à IA saem do event loop nas rotas async
+- Autor: Pedro <pedroribbe@gmail.com>
+- SHA: `baa3477`
+- PRs: [#892](https://github.com/pedrorezendefig/hospital-reunioes/pull/892) (issue #773)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (220s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/baa3477
+
+## v0.156.4 - 2026-09-27 16:33 - Secretária não vira facilitadora pelo Calendário
+- Autor: Pedro <pedroribbe@gmail.com>
+- SHA: `43f4cdd`
+- PRs: [#889](https://github.com/pedrorezendefig/hospital-reunioes/pull/889) (issue #761)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (192s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/43f4cdd
+
+## v0.156.3 - 2026-09-27 15:11 - Peneira de dado pessoal no que sai para a issue pública
+- Autor: Pedro <pedroribbe@gmail.com>
+- SHA: `0ab8587`
+- PRs: [#887](https://github.com/pedrorezendefig/hospital-reunioes/pull/887) (issue #772, ADR 0060)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (281s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/0ab8587
+
+## v0.156.2 - 2026-09-25 17:51 - Onda onda-a: Acabamentos do Instagram, aviso calmo do token vencido sem número guardado, marcador de miniatura e link só https
+- Autor: Pedro <pedroribbe@gmail.com>
+- SHA: `fd5e4cc`
+- PRs: [#884](https://github.com/pedrorezendefig/hospital-reunioes/pull/884)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (12s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/fd5e4cc
+
+## v0.156.1 - 2026-09-25 16:57 - Onda onda-a: Tira o andaime da fase dormente (EmConstrucao e comentário do config); Publicações do Instagram entram no período pelo dia de Brasília; Acabamentos dos Objetivos, uma leitura do Instagram
+- Autor: Pedro <pedroribbe@gmail.com>
+- SHA: `f5383e1`
+- PRs: [#880](https://github.com/pedrorezendefig/hospital-reunioes/pull/880), [#882](https://github.com/pedrorezendefig/hospital-reunioes/pull/882), [#883](https://github.com/pedrorezendefig/hospital-reunioes/pull/883)
+- Levou junto, mergeados antes sem deploy: [#877](https://github.com/pedrorezendefig/hospital-reunioes/pull/877) (lições da primeira onda nos docstrings, #859), [#878](https://github.com/pedrorezendefig/hospital-reunioes/pull/878) (acabamentos das revisões da Central, Ao vivo, pin do python-jose e conector MCP, #843)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (15s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f5383e1
+
 ## v0.156.0 - 2026-09-23 20:54 - Onda onda-b: Limite de 60 por minuto na rota pública POST /api/mcp; Diz de onde vêm as chaves do GA4 e do Instagram; Aquecer o cache no boot, uma vez, no período padrão
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `3468a09`
 - PRs: [#874](https://github.com/pedrorezendefig/hospital-reunioes/pull/874), [#875](https://github.com/pedrorezendefig/hospital-reunioes/pull/875), [#876](https://github.com/pedrorezendefig/hospital-reunioes/pull/876)
 - Serviços: backend
@@ -16,7 +169,7 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/3468a09
 
 ## v0.155.0 - 2026-09-23 17:43 - Onda onda-a: Período termina no ontem de Brasília; Agrupamentos de Dados do Google seguem o CONTEXT.md
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `b7e6cde`
 - PRs: [#871](https://github.com/pedrorezendefig/hospital-reunioes/pull/871), [#872](https://github.com/pedrorezendefig/hospital-reunioes/pull/872)
 - Serviços: backend, frontend
@@ -24,7 +177,7 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/b7e6cde
 
 ## v0.154.2 - 2026-09-23 16:59 - Onda onda-a: Acabamentos das revisões da #815 e da #818 na Central de Comando; Barra de frescor neutra sem carimbo e motivo de bloco sem segredo
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `37e4242`
 - PRs: [#870](https://github.com/pedrorezendefig/hospital-reunioes/pull/870), [#869](https://github.com/pedrorezendefig/hospital-reunioes/pull/869)
 - Serviços: backend, frontend
@@ -32,14 +185,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/37e4242
 
 ## 2026-09-23 15:14 — Central de Comando: uma ida à fonte por tela e hora, espera depois de falha e telas em sincronia
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `f650420`
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (479s)
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f650420
 
 ## v0.154.0 - 2026-09-23 13:21 - Onda onda-central: Ligar a Central de Comando em produção e registrar o Produto no kit
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `9387074`
 - PRs: [#864](https://github.com/pedrorezendefig/hospital-reunioes/pull/864)
 - Serviços: backend, frontend, supabase
@@ -47,7 +200,7 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/9387074
 
 ## v0.153.1 - 2026-09-23 11:23 - Onda onda-central: Lentes dos Objetivos com o aviso de tudo no rumo e o Atualizar agora
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `899d583`
 - PRs: [#863](https://github.com/pedrorezendefig/hospital-reunioes/pull/863)
 - Serviços: backend, frontend
@@ -55,77 +208,77 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/899d583
 
 ## 2026-09-20 00:19 — Ferramentas de Site e Instagram no conector MCP
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `f8e47da`
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (240s)
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f8e47da
 
 ## 2026-09-19 22:22 — Visao Geral completa, com 'O que vem por ai'
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `bd198cb`
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (248s)
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/bd198cb
 
 ## 2026-09-19 20:10 — Objetivos com galeria, lente e sugestoes
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `d93bfc0`
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (235s)
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/d93bfc0
 
 ## 2026-09-19 18:09 — Provedor e tela do Instagram na Central
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `5476202`
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (284s)
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/5476202
 
 ## 2026-09-19 13:57 — Guia do conector da Central com o endereço novo
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `3ef1d8b`
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (200s)
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/3ef1d8b
 
 ## 2026-09-19 13:09 — Conector MCP da Central no backend: OAuth WorkOS e gate de Super admin
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `3303264`
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (240s)
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/3303264
 
 ## 2026-09-19 10:43 — Ao vivo, pessoas no Site agora entra na Visão Geral
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `2185b73`
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (240s)
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/2185b73
 
 ## v0.147.0 - 2026-09-19 07:57 - áreas do site, origem do público e contatos gerados entram na tela Dados do Google
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `e970e4d`
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (260s)
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e970e4d
 
 ## v0.146.0 - 2026-09-19 07:23 - a Central ganha a tela Dados do Google, com Visitantes por dia e dispositivos
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `62f4717`
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (273s)
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/62f4717
 
 ## v0.145.0 - 2026-09-19 06:27 - os números da Central ganham frescor: cache de 1 hora, Atualizar agora e último valor bom
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `7395016`
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (359s)
 - Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/7395016
 
 ## v0.144.0 - 2026-09-18 21:05 - a Central de Comando chega dormente, com guard de Super admin e Visitantes reais do GA4
-- Autor: Pedro <pedro.ribbe@gmail.com>
+- Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `214e0d7`
 - Serviços: backend, frontend
 - Resultado: 🟢 healthy (462s)

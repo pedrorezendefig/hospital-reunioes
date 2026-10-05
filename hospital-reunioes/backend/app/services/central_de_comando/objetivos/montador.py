@@ -8,9 +8,14 @@ de regras roda e devolve as sugestões, cada uma com o porquê.
 
 - A galeria (`ler_galeria`) traz o número de hoje (28 dias) dos quatro Objetivos
   com montador; os dois em construção vêm sem número e sem lente navegável.
+  Os quatro montadores rodam sobre a mesma `Carga`, então a saúde da conta do
+  Instagram é lida uma vez só por carga (issue #847).
 - A lente (`ler_lente`) traz os números de um Objetivo, o período, as sugestões
   e o frescor. Objetivo inexistente ou em construção não tem lente: a rota
   responde 404 (o `tem_lente` decide).
+- Os períodos de cada lente moram só em `PERIODOS_POR_OBJETIVO` e viajam no
+  payload da galeria e da lente (issue #847): a tela desenha o seletor com eles,
+  e Objetivo novo não exige tocar o front.
 
 Como as telas da Central, a leitura passa pelo cache de 1 hora e é tudo ou nada
 até a #821: uma falha da fonte sem número guardado sobe como exceção do provedor,
@@ -21,8 +26,9 @@ from __future__ import annotations
 
 import copy
 from collections.abc import Callable
+from dataclasses import dataclass
 from datetime import date
-from functools import partial
+from functools import cached_property, partial
 
 from app.services.central_de_comando import dados_do_google, provedor_google, provedor_instagram
 from app.services.central_de_comando import periodo as periodos
@@ -55,13 +61,32 @@ _FALHAS: tuple[type[Exception], ...] = (provedor_google.GoogleError, provedor_in
 # têm (o Instagram não tem 90 dias). Não é um seletor, é o "de hoje".
 PERIODO_DA_GALERIA: Periodo = PERIODO_PADRAO
 
+
+@dataclass
+class Carga:
+    """Uma carga dos montadores: o período, o dia e as leituras das fontes que
+    mais de um montador usa, cada uma feita uma vez só (issue #847).
+
+    A galeria roda os quatro montadores sobre a mesma carga, então os dois
+    Objetivos do Instagram dividem a leitura da saúde da conta, em vez de cada
+    um ir ao Instagram por ela. A lente cria a dela. A carga não guarda falha:
+    se a leitura levantar, a exceção sobe e a carga inteira cai (tudo ou nada)."""
+
+    periodo: Periodo
+    hoje: date
+
+    @cached_property
+    def saude_do_instagram(self) -> provedor_instagram.SaudeDaConta:
+        return provedor_instagram.saude_da_conta(self.periodo, self.hoje)
+
+
 # Um montador reúne os números e os extras de um Objetivo a partir das fontes.
-Montador = Callable[[Periodo, date], tuple[list[Numero], Extras]]
+Montador = Callable[[Carga], tuple[list[Numero], Extras]]
 
 
-def _montar_instagram_seguidores(periodo: Periodo, hoje: date) -> tuple[list[Numero], Extras]:
+def _montar_instagram_seguidores(carga: Carga) -> tuple[list[Numero], Extras]:
     """Crescer no Instagram: Seguidores (estoque), Alcance e Visualizações."""
-    saude = provedor_instagram.saude_da_conta(periodo, hoje)
+    saude = carga.saude_do_instagram
     numeros = [
         Numero(
             "followers",
@@ -76,11 +101,11 @@ def _montar_instagram_seguidores(periodo: Periodo, hoje: date) -> tuple[list[Num
     return numeros, Extras()
 
 
-def _montar_instagram_engajamento(periodo: Periodo, hoje: date) -> tuple[list[Numero], Extras]:
+def _montar_instagram_engajamento(carga: Carga) -> tuple[list[Numero], Extras]:
     """Aumentar o engajamento: Interações e Contas que engajaram, com o Alcance
     e as principais publicações nos extras (as regras leem os dois)."""
-    saude = provedor_instagram.saude_da_conta(periodo, hoje)
-    publicacoes = provedor_instagram.principais_publicacoes(periodo, hoje)
+    saude = carga.saude_do_instagram
+    publicacoes = provedor_instagram.principais_publicacoes(carga.periodo, carga.hoje)
     numeros = [
         Numero("interactions", "Interações", saude.interacoes, anterior=saude.interacoes_anterior),
         Numero(
@@ -97,22 +122,22 @@ def _montar_instagram_engajamento(periodo: Periodo, hoje: date) -> tuple[list[Nu
     return numeros, extras
 
 
-def _montar_site_visitantes(periodo: Periodo, hoje: date) -> tuple[list[Numero], Extras]:
+def _montar_site_visitantes(carga: Carga) -> tuple[list[Numero], Extras]:
     """Atrair mais visitantes: Visitantes do período, com as visitas por
     dispositivo nos extras (a regra do celular lê)."""
-    visitantes = provedor_google.visitantes_comparados(periodo, hoje)
-    (dispositivos,) = provedor_google.perguntar(provedor_google.visitas_por_dispositivo(periodo, hoje))
+    visitantes = provedor_google.visitantes_comparados(carga.periodo, carga.hoje)
+    (dispositivos,) = provedor_google.perguntar(provedor_google.visitas_por_dispositivo(carga.periodo, carga.hoje))
     numeros = [Numero("visitors", "Visitantes", visitantes.atual, anterior=visitantes.anterior)]
     return numeros, Extras(dispositivos=dispositivos)
 
 
-def _montar_contatos(periodo: Periodo, hoje: date) -> tuple[list[Numero], Extras]:
+def _montar_contatos(carga: Carga) -> tuple[list[Numero], Extras]:
     """Gerar mais contatos: os Contatos medidos do período (a soma dos canais
     que a GA4 mede), com todos os canais e o estado de cada um nos extras.
     Canal medido sem clique no período conta 0, igual à tela Dados do Google:
     havendo canal medido, a lente e o card dizem "Contatos medidos 0" (decisão
     do dono na revisão do PR #872). Só sem canal medido nenhum não há número."""
-    (cliques,) = provedor_google.perguntar(provedor_google.cliques_de_contato(periodo, hoje))
+    (cliques,) = provedor_google.perguntar(provedor_google.cliques_de_contato(carga.periodo, carga.hoje))
     canais = _canais_da_lente(cliques)
     medidos = [c.cliques for c in canais if c.estado == "medido" and c.cliques is not None]
     numeros = [Numero("contatos", "Contatos medidos", sum(medidos))] if medidos else []
@@ -138,8 +163,10 @@ MONTADORES: dict[ObjetivoId, Montador] = {
     "contatos": _montar_contatos,
 }
 
-# Os períodos que cada lente tem. O Instagram só tem 7 e 28 dias (a Graph API
-# limita os insights a 30 dias); o site tem os três.
+# Os períodos que cada lente tem, na ordem do seletor. O Instagram só tem 7 e
+# 28 dias (a Graph API limita os insights a 30 dias); o site tem os três. É a
+# fonte única (issue #847): os períodos viajam no payload da galeria e da lente,
+# e a tela desenha o seletor com eles. O aquecimento do boot também itera aqui.
 PERIODOS_POR_OBJETIVO: dict[ObjetivoId, tuple[Periodo, ...]] = {
     "site-visitantes": PERIODOS,
     "instagram-seguidores": ("7d", "28d"),
@@ -168,19 +195,25 @@ def tem_lente(identificador: str) -> bool:
     return identificador in MONTADORES
 
 
+# A recusa de um identificador sem lente. Genérica de propósito (issue #847):
+# o valor digitado no endereço não volta na resposta.
+LENTE_INEXISTENTE = "A Central não tem a lente desse Objetivo."
+
+
 def montar_lente(identificador: str, periodo: Periodo) -> dict:
     """O payload da lente de um Objetivo navegável, sem o frescor (quem o
     acrescenta é a leitura pelo cache). Roda as regras sobre os números."""
     objetivo = objetivo_por_id(identificador)
     if objetivo is None or identificador not in MONTADORES:
-        raise PedidoDeTelaInvalidoError(f"A Central não tem a lente do Objetivo {identificador!r}.")
+        raise PedidoDeTelaInvalidoError(LENTE_INEXISTENTE)
     hoje = periodos.hoje_utc()
-    numeros, extras = MONTADORES[objetivo.id](periodo, hoje)
+    numeros, extras = MONTADORES[objetivo.id](Carga(periodo, hoje))
     contexto = Contexto(numeros={n.chave: n for n in numeros}, extras=extras)
     sugestoes = rodar_regras(objetivo.id, contexto)
     return {
         "objetivo": {"id": objetivo.id, "nome": objetivo.nome, "descricao": objetivo.descricao},
         "periodo": _bloco_periodo(periodo, hoje),
+        "periodos": list(PERIODOS_POR_OBJETIVO[objetivo.id]),
         "numeros": [_numero_como_dict(n) for n in numeros],
         "sugestoes": [_sugestao_como_dict(s) for s in sugestoes],
     }
@@ -189,11 +222,15 @@ def montar_lente(identificador: str, periodo: Periodo) -> dict:
 def montar_galeria(periodo: Periodo) -> dict:
     """O payload da galeria: os seis Objetivos do catálogo, cada um com o número
     de hoje quando tem montador (o primeiro número da lente), ou nada quando está
-    em construção."""
+    em construção, e os períodos que a lente dele tem (nenhum, em construção).
+
+    Os montadores dividem a mesma carga: a saúde da conta do Instagram, que os
+    dois Objetivos do Instagram leem, vai à fonte uma vez só."""
     hoje = periodos.hoje_utc()
+    carga = Carga(periodo, hoje)
     destaques: dict[str, Numero] = {}
     for objetivo_id, montar in MONTADORES.items():
-        numeros, _extras = montar(periodo, hoje)
+        numeros, _extras = montar(carga)
         if numeros:
             destaques[objetivo_id] = numeros[0]
     objetivos = [
@@ -203,6 +240,7 @@ def montar_galeria(periodo: Periodo) -> dict:
             "descricao": o.descricao,
             "em_construcao": o.em_construcao,
             "numero": _numero_como_dict(destaques[o.id]) if o.id in destaques else None,
+            "periodos": list(PERIODOS_POR_OBJETIVO.get(o.id, ())),
         }
         for o in OBJETIVOS
     ]
@@ -215,7 +253,7 @@ def ler_lente(identificador: str, periodo: Periodo, *, forcar: bool = False) -> 
     fonte. Dentro da hora, sai do cache."""
     periodos_ok = PERIODOS_POR_OBJETIVO.get(identificador)
     if periodos_ok is None:
-        raise PedidoDeTelaInvalidoError(f"A Central não tem a lente do Objetivo {identificador!r}.")
+        raise PedidoDeTelaInvalidoError(LENTE_INEXISTENTE)
     if periodo not in periodos_ok:
         raise PedidoDeTelaInvalidoError(f"O Objetivo {identificador} não tem o período {periodo}.")
     leitura = cache_da_central.ler(

@@ -40,6 +40,22 @@ const TIPOS = [
   "Extraordinária",
 ];
 
+// O Calendário manda a Secretária para cá com o dia (e a hora do slot) que ela
+// clicou (issue #761). Link é texto livre: o que não for data ou hora de
+// verdade é ignorado e o campo fica vazio.
+function dataDoLink(valor: string | null): string {
+  if (!valor || !/^\d{4}-\d{2}-\d{2}$/.test(valor)) return "";
+  const [ano, mes, dia] = valor.split("-").map(Number);
+  const d = new Date(ano, mes - 1, dia);
+  const existe =
+    d.getFullYear() === ano && d.getMonth() === mes - 1 && d.getDate() === dia;
+  return existe ? valor : "";
+}
+
+function horaDoLink(valor: string | null): string {
+  return valor && /^([01]\d|2[0-3]):[0-5]\d$/.test(valor) ? valor : "";
+}
+
 export default function NovaReuniaoSecretaria() {
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -53,8 +69,13 @@ export default function NovaReuniaoSecretaria() {
   const [submitting, setSubmitting] = useState(false);
 
   const [titulo, setTitulo] = useState("");
-  const [data, setData] = useState("");
-  const [horaInicio, setHoraInicio] = useState("");
+  // Na edição quem preenche é a reunião do banco, não o link.
+  const [data, setData] = useState(() =>
+    editId ? "" : dataDoLink(searchParams.get("data"))
+  );
+  const [horaInicio, setHoraInicio] = useState(() =>
+    editId ? "" : horaDoLink(searchParams.get("hora"))
+  );
   const [horaFim, setHoraFim] = useState("");
   const [tipo, setTipo] = useState<string>("");
   const [objetivo, setObjetivo] = useState("");
@@ -338,10 +359,14 @@ export default function NovaReuniaoSecretaria() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label
+              htmlFor="nova-reuniao-data"
+              className="block text-sm font-medium text-slate-700 mb-1.5"
+            >
               Data <span className="text-rose-500">*</span>
             </label>
             <input
+              id="nova-reuniao-data"
               type="date"
               value={data}
               onChange={(e) => setData(e.target.value)}
@@ -350,10 +375,14 @@ export default function NovaReuniaoSecretaria() {
             />
           </div>
           <div>
-            <label className="block text-sm font-medium text-slate-700 mb-1.5">
+            <label
+              htmlFor="nova-reuniao-inicio"
+              className="block text-sm font-medium text-slate-700 mb-1.5"
+            >
               Início
             </label>
             <input
+              id="nova-reuniao-inicio"
               type="time"
               value={horaInicio}
               onChange={(e) => setHoraInicio(e.target.value)}

@@ -133,7 +133,7 @@ async def chat_elaboracao(
     except pops_dominio.TransicaoInvalidaError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
 
-    from app.services.ai_processor import chat_elaboracao_pop
+    from app.services.ai_processor import chamar_ia_fora_do_loop, chat_elaboracao_pop
 
     # Comentários de Devolução entram no contexto do agente (issue #85) — com
     # o autor resolvido (sempre o Revisor ou o Validador designados).
@@ -146,7 +146,9 @@ async def chat_elaboracao(
     # do banco em toda interação — não depende do cliente reenviar (#84).
     materiais = _materiais_da_versao(supabase, versao["id"], com_texto=True)
 
-    out = chat_elaboracao_pop(
+    # Fora do loop (issue #773, o porquê em `ai_processor._EXECUTOR_DA_IA`).
+    out = await chamar_ia_fora_do_loop(
+        chat_elaboracao_pop,
         rascunho=req.rascunho,
         messages=[{"role": m.role, "content": m.content} for m in req.messages],
         section_context=req.section_context,
@@ -169,7 +171,24 @@ async def chat_elaboracao(
         updates: dict = {"rascunho": out["rascunho"]}
         if out.get("periodicidade_sugerida"):
             updates["periodicidade_sugerida"] = out["periodicidade_sugerida"]
-        supabase.table("pops_versoes").update(updates).eq("id", versao["id"]).execute()
+        # A gravação confere o estado DE NOVO, no próprio update: com a IA fora
+        # do loop (issue #773), a Versão pode ter ido para revisão enquanto o
+        # agente respondia, e a guarda do começo da rota já não vale.
+        gravadas = (
+            supabase.table("pops_versoes")
+            .update(updates)
+            .eq("id", versao["id"])
+            .in_("estado", list(pops_dominio.ESTADOS_ELABORACAO))
+            .execute()
+        )
+        if not gravadas.data:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=(
+                    "A Versão foi enviada para revisão enquanto o agente respondia, "
+                    "então esta resposta não foi gravada."
+                ),
+            )
         versao = pops_dominio.iniciar_elaboracao_se_preciso(supabase, versao, actor=actor, request=request)
 
     if out.get("periodicidade_sugerida") is None:

@@ -15,15 +15,21 @@
  * O frescor, o Atualizar agora e a renovacao de hora em hora sao os das outras
  * telas (issue #861): a lente pluga o `useTelaDaCentral` com a tela
  * `objetivos/{id}` e desenha a `BarraDeFrescor`.
+ *
+ * Os periodos que a lente tem vem do backend, no payload (issue #847): o
+ * seletor desenha os que vieram, e Objetivo novo nao exige tocar aqui. O
+ * periodo do endereco que a lente nao tem (90 dias no Instagram) o backend
+ * recusa com 422, e a lente cai no padrao de 28, sem tela de erro.
  */
 
+import { useState } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Loader2, PlugZap } from "lucide-react";
 
-import type { Frescor } from "@/lib/central-de-comando/api";
+import { PREFIXO_DA_LENTE, type Frescor } from "@/lib/central-de-comando/api";
 import { formatarInteiro, formatarPercentual } from "@/lib/central-de-comando/formato";
-import { PERIODOS, PERIODOS_DO_INSTAGRAM, type Periodo } from "@/lib/central-de-comando/periodo";
+import { PERIODO_PADRAO, type Periodo } from "@/lib/central-de-comando/periodo";
 
 import { BarraDeFrescor } from "./BarraDeFrescor";
 import { CAMINHO_OBJETIVOS } from "./Objetivos";
@@ -54,6 +60,8 @@ export type SugestaoDaLente = {
 export type LentePayload = {
   objetivo: { id: string; nome: string; descricao: string };
   periodo: { chave: Periodo; dias: number };
+  /** Os periodos que esta lente tem, na ordem do seletor (a fonte unica e o backend). */
+  periodos: Periodo[];
   numeros: NumeroDaLente[];
   sugestoes: SugestaoDaLente[];
   frescor: Frescor;
@@ -73,13 +81,34 @@ const CORES_DO_TOM: Record<SugestaoDaLente["tom"], string> = {
   neutro: "border-border bg-white text-text",
 };
 
+/** O periodo do endereco que o backend recusou (422) e a resposta da recusa. */
+type PeriodoRecusado = { periodo: Periodo; resposta: unknown };
+
 export function LenteDoObjetivo({ identificador, periodo }: { identificador: string; periodo: Periodo }) {
+  // O periodo do endereco que a lente nao tem: o backend o recusou com 422, e a
+  // lente pede o padrao no lugar dele, como o `lerPeriodo` faz com o periodo que
+  // nao existe.
+  const [recusado, setRecusado] = useState<PeriodoRecusado | null>(null);
+  const pedido = recusado?.periodo === periodo ? PERIODO_PADRAO : periodo;
   const { estado, atualizando, aviso, atualizarAgora } = useTelaDaCentral<LentePayload>(
-    `objetivos/${identificador}`,
-    periodo,
+    `${PREFIXO_DA_LENTE}${identificador}`,
+    pedido,
   );
-  const caminho = `${CAMINHO_OBJETIVOS}/${identificador}`;
-  const periodos = identificador.startsWith("instagram") ? PERIODOS_DO_INSTAGRAM : PERIODOS;
+  if (estado.tipo === "falhou" && estado.status === 422 && pedido !== PERIODO_PADRAO) {
+    setRecusado({ periodo: pedido, resposta: estado });
+  }
+  // A recusa que ja virou pedido do padrao e resposta velha: a tela espera a
+  // leitura do padrao, que ja esta a caminho, em vez de piscar o erro.
+  const esperando = estado.tipo === "carregando" || estado === recusado?.resposta;
+
+  // Os periodos da lente, guardados entre leituras: trocar de periodo nao some
+  // com o seletor enquanto o numero novo carrega.
+  const [periodos, setPeriodos] = useState<readonly Periodo[] | undefined>(undefined);
+  if (estado.tipo === "pronto" && estado.dados.periodos !== periodos) {
+    setPeriodos(estado.dados.periodos);
+  }
+
+  const caminho = `${CAMINHO_OBJETIVOS}/${encodeURIComponent(identificador)}`;
 
   if (estado.tipo === "falhou" && estado.status === 404) {
     // Em producao, `notFound` lanca e a pagina de nao encontrado assume; o
@@ -98,10 +127,10 @@ export function LenteDoObjetivo({ identificador, periodo }: { identificador: str
           <ArrowLeft className="h-4 w-4" />
           Objetivos
         </Link>
-        <SeletorDePeriodo ativo={periodo} caminho={caminho} periodos={periodos} />
+        {periodos && periodos.length > 0 && <SeletorDePeriodo ativo={pedido} caminho={caminho} periodos={periodos} />}
       </div>
 
-      {estado.tipo === "carregando" && (
+      {esperando && (
         <div
           role="status"
           className="flex items-center gap-2 rounded-2xl border border-border bg-white p-6 text-sm text-text-secondary shadow-premium"
@@ -169,7 +198,7 @@ export function LenteDoObjetivo({ identificador, periodo }: { identificador: str
         </div>
       )}
 
-      {(estado.tipo === "falhou" || estado.tipo === "sem-conexao") && (
+      {(estado.tipo === "falhou" || estado.tipo === "sem-conexao") && !esperando && (
         <div role="alert" className="flex gap-3 rounded-2xl border border-red-200 bg-red-50 p-6 text-red-900">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0" />
           <div className="space-y-1">

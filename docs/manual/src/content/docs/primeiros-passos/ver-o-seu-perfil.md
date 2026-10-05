@@ -29,8 +29,8 @@ com você.
 4. Em **Resumo de Atividade** estão os quatro números do seu trabalho:
    **Reunioes**, **Pendencias Ativas**, **Concluidas** e **No Prazo**.
 
-Esta tela é só de leitura. Nada aqui se edita: quem corrige nome, cargo, setor
-ou email é quem administra a plataforma. A senha você troca em
+Esta tela é só de leitura: quem corrige nome, cargo, setor ou email é quem
+administra a plataforma. A senha você troca em
 [Trocar a sua senha](/primeiros-passos/trocar-a-sua-senha/).
 
 ## Se der errado

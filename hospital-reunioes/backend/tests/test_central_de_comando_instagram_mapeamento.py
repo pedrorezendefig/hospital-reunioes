@@ -19,7 +19,9 @@ import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+import re  # noqa: E402
 from datetime import date  # noqa: E402
+from pathlib import Path  # noqa: E402
 
 from app.services.central_de_comando import provedor_instagram as ig  # noqa: E402
 from app.services.central_de_comando.periodo import Intervalo  # noqa: E402
@@ -107,12 +109,74 @@ class TestTipoDeMidia:
 
 
 class TestDentroDoPeriodo:
-    def test_filtra_pela_janela_inclusive_pela_data_do_timestamp(self):
+    def test_filtra_pela_janela_inclusive_pelo_dia_de_brasilia(self):
         intervalo = Intervalo(inicio=date(2026, 6, 15), fim=date(2026, 6, 21))
 
         assert ig.dentro_do_periodo("2026-06-15T09:00:00Z", intervalo) is True
         assert ig.dentro_do_periodo("2026-06-21T23:00:00Z", intervalo) is True
         assert ig.dentro_do_periodo("2026-06-14T23:00:00Z", intervalo) is False
+
+    # O dia da publicação é o de Brasília (issue #873), como o fim do período
+    # desde a #857. A Graph API manda o timestamp em UTC com offset `+0000`;
+    # Brasília é UTC-3, então 01h UTC é 22h da véspera no hospital.
+
+    def test_22h_de_brasilia_do_ultimo_dia_entra(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # 19/09 às 22h em Brasília, que em UTC já é 20/09 às 01h.
+        assert ig.dentro_do_periodo("2026-09-20T01:00:00+0000", intervalo) is True
+
+    def test_virada_da_meia_noite_de_brasilia_no_fim_do_periodo(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # A virada é às 03h UTC, e não em outra hora: um fuso trocado por
+        # UTC-2 ou UTC-4 passaria nos testes de 01h UTC, mas não aqui.
+        # 19/09 às 23h59min59s em Brasília entra.
+        assert ig.dentro_do_periodo("2026-09-20T02:59:59+0000", intervalo) is True
+        # 20/09 à meia-noite em Brasília já fica de fora.
+        assert ig.dentro_do_periodo("2026-09-20T03:00:00+0000", intervalo) is False
+
+    def test_timestamp_com_offset_de_brasilia_usa_o_proprio_offset(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # O instante já vem na hora de Brasília: a data do texto é a do hospital.
+        assert ig.dentro_do_periodo("2026-09-19T23:30:00-0300", intervalo) is True
+        assert ig.dentro_do_periodo("2026-09-20T00:00:00-0300", intervalo) is False
+
+    def test_22h_de_brasilia_da_vespera_do_primeiro_dia_fica_de_fora(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # 12/09 às 22h em Brasília, que em UTC já é 13/09 às 01h.
+        assert ig.dentro_do_periodo("2026-09-13T01:00:00+0000", intervalo) is False
+
+    def test_timestamp_sem_fuso_e_lido_em_utc_como_a_graph_api(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        # Sem offset, o instante é UTC, e não a hora local do servidor: o
+        # resultado não pode depender do fuso da máquina que roda a Central.
+        assert ig.dentro_do_periodo("2026-09-20T01:00:00", intervalo) is True
+
+    def test_timestamp_invalido_fica_de_fora(self):
+        intervalo = Intervalo(inicio=date(2026, 9, 13), fim=date(2026, 9, 19))
+
+        assert ig.dentro_do_periodo("", intervalo) is False
+        assert ig.dentro_do_periodo("ontem à noite", intervalo) is False
+        assert ig.dentro_do_periodo("2026-09-31T12:00:00+0000", intervalo) is False
+
+    def test_o_fuso_so_existe_no_modulo_de_periodo(self):
+        # Decisão da #857: um fuso só, fixo no código, em `periodo.py`. O
+        # provedor importa a constante; nenhum outro módulo da Central cria o
+        # fuso de novo. `ZoneInfo` guarda as instâncias em cache, então comparar
+        # objetos não pegaria um literal duplicado: quem pega é o texto. A busca
+        # é só por `ZoneInfo(` com o literal, para que uma docstring ou um
+        # comentário que apenas cite o fuso não quebre o teste.
+        cria_o_fuso = re.compile(r"""ZoneInfo\(\s*["']America/Sao_Paulo["']""")
+        pacote = Path(ig.__file__).parent
+        com_o_fuso = sorted(
+            arquivo.name for arquivo in pacote.rglob("*.py") if cria_o_fuso.search(arquivo.read_text(encoding="utf-8"))
+        )
+
+        assert com_o_fuso == ["periodo.py"]
 
 
 class TestParaPublicacao:

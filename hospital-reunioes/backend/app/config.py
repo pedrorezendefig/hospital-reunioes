@@ -88,10 +88,10 @@ class Settings(BaseSettings):
     # Super admin. Todas as variáveis da Central moram aqui desde a primeira
     # fatia do PRD #809, para as fatias paralelas não disputarem este arquivo.
     #
-    # A Central nasce DORMENTE: tudo vazio, e vazio quer dizer funcionalidade
-    # desligada com erro honesto de configuração (503), nunca número zero nem
-    # lista vazia. As credenciais só entram no Coolify na última fatia, a que
-    # liga a Central em produção (ADR 0058, decisão 8).
+    # A Central nasceu dormente, com tudo vazio, e está ligada em produção desde
+    # a issue #827 (ADR 0058, decisão 8): as credenciais já estão no Coolify.
+    # Vazio continua querendo dizer funcionalidade desligada com erro honesto
+    # de configuração (503), nunca número zero nem lista vazia.
     #
     # Google Analytics 4: o número da propriedade e o JSON inteiro da chave da
     # service account (papel Leitor na propriedade). A base da API fica fixa no
@@ -123,6 +123,24 @@ class Settings(BaseSettings):
     # Email (Resend)
     resend_api_key: str = ""
     resend_from_email: str = "noreply@hospitalsaomatheus.cloud"
+
+    # Triagem de e-mail (ADR 0051, PRD #646): o e-mail que chega em ouvidoria@
+    # é copiado para o subdomínio de recebimento do Resend, que chama o webhook
+    # `/webhooks/resend`.
+    #
+    # O segredo de assinatura do webhook (formato `whsec_...`, do painel do
+    # Resend) é o ÚNICO jeito de a rota saber que a entrega veio mesmo do
+    # Resend. Vazio = webhook indisponível: a rota responde 503 e não grava
+    # nada. Nunca um default, e nunca "sem segredo aceita tudo".
+    resend_webhook_secret: str = ""
+    # A chave que LÊ o e-mail recebido na API do Resend. A chave de envio da
+    # casa costuma ser só de envio e não lê nada; vazio = usa a RESEND_API_KEY.
+    resend_inbound_api_key: str = ""
+    resend_inbound_base_url: str = "https://api.resend.com"
+    # O domínio do hospital: remetente dele entra na triagem com a marca
+    # "interno" (resposta de área, e-mail de colega). Aceita mais de um,
+    # separados por vírgula; subdomínio conta como o domínio.
+    ouvidoria_dominio_interno: str = "hospitalsaomatheus.com.br"
 
     # Email (SMTP legacy — mantido para fallback local)
     smtp_host: str = "smtp.gmail.com"

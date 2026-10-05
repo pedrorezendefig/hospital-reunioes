@@ -24,8 +24,7 @@ esta: Secretária, Regular e Super Admin. Aqui ninguém edita nada.
 
    ![Botão Espelho da Global Health na fileira](../../../assets/admin/dados-do-atendimento-espelho.png)
 
-2. Clique em **Atualizar** para buscar a lista fresca. Nada fica gravado: é uma
-   janela, não um caderno.
+2. Clique em **Atualizar** para buscar a lista fresca. Nada fica gravado.
 
    ![Espelho aberto com a lista de especialidades](../../../assets/admin/espelho-da-global-health.png)
 

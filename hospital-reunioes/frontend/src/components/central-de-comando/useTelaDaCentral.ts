@@ -49,6 +49,7 @@ import { useCallback, useEffect, useReducer, useRef } from "react";
 import { getAuthToken } from "@/hooks/useAuth";
 import {
   BASE_CENTRAL,
+  caminhoDaTela,
   FALHA_DE_CONEXAO,
   MUITAS_ATUALIZACOES,
   SEM_SESSAO,
@@ -170,9 +171,17 @@ function avisoDa(resposta: { falha: Falha; status: number | null }): string {
   return resposta.status === 429 ? MUITAS_ATUALIZACOES : resposta.falha.mensagem;
 }
 
-/** O endereço da leitura da tela: o da abertura e o da renovação automática. */
+/**
+ * O endereço da leitura da tela: o da abertura e o da renovação automática. O
+ * identificador da lente vai codificado no caminho (`caminhoDaTela`).
+ */
 function enderecoDaLeitura(tela: TelaDaCentral, periodo: Periodo): string {
-  return `${BASE_CENTRAL}/${tela}?periodo=${periodo}`;
+  return `${BASE_CENTRAL}/${caminhoDaTela(tela)}?periodo=${periodo}`;
+}
+
+/** O endereço do Atualizar agora: a tela inteira vai codificada na query. */
+function enderecoDoAtualizar(tela: TelaDaCentral, periodo: Periodo): string {
+  return `${BASE_CENTRAL}/atualizar-agora?tela=${encodeURIComponent(tela)}&periodo=${periodo}`;
 }
 
 /**
@@ -258,7 +267,7 @@ export function useTelaDaCentral<T extends { frescor: Frescor }>(tela: TelaDaCen
       const meu = ++selo.current;
       noAr.current = meu;
       despachar({ tipo: "atualizar" });
-      const resultado = await pedir<T>(`${BASE_CENTRAL}/atualizar-agora?tela=${tela}&periodo=${periodo}`, "POST");
+      const resultado = await pedir<T>(enderecoDoAtualizar(tela, periodo), "POST");
       if (noAr.current === meu) noAr.current = null;
       if (meu !== selo.current) return;
       if ("dados" in resultado) despachar({ tipo: "atualizou", dados: resultado.dados });

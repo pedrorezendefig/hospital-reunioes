@@ -32,9 +32,9 @@ procedimentos cai em **POPs**.
 
 ## Se der errado
 
-- **A tela mostra o aviso vermelho "Invalid login credentials":** é a plataforma
-  dizendo que o email ou a senha não conferem. Confira o email, apague a senha e
-  digite de novo com o olho aberto. O aviso aparece em inglês.
+- **A tela mostra o aviso vermelho "Invalid login credentials":** o email ou a
+  senha não conferem. Confira o email, apague a senha e digite de novo com o
+  olho aberto. O aviso aparece em inglês.
 - **Você não lembra a senha:** clique em **Esqueci minha senha**, logo abaixo do
   campo. O caminho completo está em
   [Redefinir a senha que você esqueceu](/primeiros-passos/redefinir-a-senha-esquecida/).

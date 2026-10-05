@@ -26,6 +26,7 @@ from app.routers import (
     ouvidoria,
     ouvidoria_publica,
     ouvidoria_setor,
+    ouvidoria_triagem_email,
     participantes,
     pendencias,
     perfil,
@@ -120,6 +121,9 @@ app.include_router(ouvidoria.router, prefix=settings.api_prefix)
 app.include_router(ouvidoria_publica.router, prefix=settings.api_prefix)
 # Portal do setor (sem login, link tokenizado do email de acionamento).
 app.include_router(ouvidoria_setor.router, prefix=settings.api_prefix)
+# Triagem de e-mail (ADR 0051): o e-mail recebido antes de virar caso, só para o
+# Perfil da Ouvidoria. O webhook que o recebe mora no router de webhooks.
+app.include_router(ouvidoria_triagem_email.router, prefix=settings.api_prefix)
 app.include_router(perfil.router, prefix=settings.api_prefix)
 app.include_router(configuracoes.router, prefix=settings.api_prefix)
 app.include_router(admin.router, prefix=settings.api_prefix)

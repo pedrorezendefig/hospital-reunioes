@@ -184,6 +184,33 @@ class TestGaleria:
         assert not re.search(r"\bmeta\b", texto, re.IGNORECASE)
         assert not re.search(r"bra[cç]os?\b", texto, re.IGNORECASE)
 
+    def test_le_a_saude_do_instagram_uma_vez_so_por_carga(self, central_falsa):
+        """Os dois Objetivos do Instagram dividem a mesma leitura da saúde da
+        conta (issue #847): a galeria pede os Seguidores do perfil uma vez, e ao
+        Instagram vai o mesmo que a lente de engajamento sozinha (a saúde e as
+        Principais publicações), e não a saúde duas vezes."""
+        _galeria()
+        idas_da_galeria = list(central_falsa.instagram.pedidos)
+        central_falsa.instagram.pedidos.clear()
+        _lente("instagram-engajamento", "28d")
+        idas_da_lente = list(central_falsa.instagram.pedidos)
+
+        pedidos_de_seguidores = [p for p in idas_da_galeria if p.url.params.get("fields") == "followers_count"]
+        assert len(pedidos_de_seguidores) == 1
+        assert len(idas_da_galeria) == len(idas_da_lente)
+
+    def test_cada_objetivo_traz_os_periodos_que_a_lente_tem(self, central_falsa):
+        """Os períodos de cada lente vêm do backend, numa fonte só (issue #847):
+        o Instagram só tem 7 e 28 dias; o Site, os três; em construção, nenhum."""
+        por_id = {o["id"]: o for o in _galeria().json()["objetivos"]}
+
+        assert por_id["site-visitantes"]["periodos"] == ["7d", "28d", "90d"]
+        assert por_id["instagram-seguidores"]["periodos"] == ["7d", "28d"]
+        assert por_id["instagram-engajamento"]["periodos"] == ["7d", "28d"]
+        assert por_id["contatos"]["periodos"] == ["7d", "28d", "90d"]
+        assert por_id["site-area"]["periodos"] == []
+        assert por_id["google-reputacao"]["periodos"] == []
+
 
 # ─── A lente: Crescer no Instagram (Seguidores) ──────────────────────────────
 
@@ -204,6 +231,10 @@ class TestLenteInstagramSeguidores:
         assert numeros["reach"]["variacao"] == pytest.approx((41280 - 37650) / 37650)
         assert numeros["views"]["valor"] == 96540
         assert corpo["frescor"]["atualizado_em"] == "2026-09-18T13:45:00+00:00"
+
+    def test_traz_os_periodos_que_a_lente_tem(self, central_falsa):
+        """O seletor da tela sai daqui (issue #847): o Instagram não tem 90 dias."""
+        assert _lente("instagram-seguidores", "7d").json()["periodos"] == ["7d", "28d"]
 
     def test_alcance_subindo_nao_gera_sugestao(self, central_falsa):
         """Alcance padrão (41280) subiu contra o anterior (37650): estado calmo."""
@@ -264,7 +295,10 @@ class TestLenteSiteVisitantes:
         assert "dispositivo-celular-domina" in {s["id"] for s in corpo["sugestoes"]}
 
     def test_tem_os_tres_periodos(self, central_falsa):
-        assert _lente("site-visitantes", "90d").status_code == 200
+        resposta = _lente("site-visitantes", "90d")
+
+        assert resposta.status_code == 200
+        assert resposta.json()["periodos"] == ["7d", "28d", "90d"]
 
 
 # ─── A lente: Gerar mais contatos ────────────────────────────────────────────
@@ -312,6 +346,16 @@ class TestLenteNaoEncontradaEPeriodo:
 
         assert resposta.status_code == 404
         assert resposta.json()["detail"]
+
+    @pytest.mark.parametrize("identificador", ["nao-existe", "<img src=x onerror=alert(1)>", "site-area"])
+    def test_o_404_nao_ecoa_o_identificador_recebido(self, identificador):
+        """A frase do 404 é genérica (issue #847): o valor digitado no endereço
+        não volta na resposta."""
+        resposta = _lente(identificador, "28d")
+
+        assert resposta.status_code == 404
+        assert resposta.json()["detail"] == "A Central não tem esse Objetivo."
+        assert identificador not in resposta.text
 
     def test_o_instagram_nao_tem_90_dias_e_e_422(self):
         assert _lente("instagram-seguidores", "90d").status_code == 422
@@ -379,6 +423,13 @@ class TestAtualizarAgoraNaLente:
         assert resposta.status_code == 422
         assert central_falsa.google.pedidos == []
         assert central_falsa.instagram.pedidos == []
+
+    def test_a_recusa_nao_ecoa_o_identificador_recebido(self, central_falsa):
+        """Como o 404 da leitura (issue #847): a frase é genérica."""
+        resposta = _atualizar_lente("<b>nao-existe</b>")
+
+        assert resposta.status_code == 422
+        assert "nao-existe" not in resposta.text
 
     def test_o_instagram_nao_tem_90_dias_e_e_422_sem_ir_a_fonte(self, central_falsa):
         resposta = _atualizar_lente("instagram-engajamento", "90d")

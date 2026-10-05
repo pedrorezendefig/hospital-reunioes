@@ -18,6 +18,8 @@ const FORMULARIO: FormularioRegistro = {
   manifestanteNome: "Joana da Silva",
   manifestanteContato: "(31) 99999-0000",
   manifestanteVinculo: "acompanhante",
+  pacienteNome: "",
+  pacienteReferencia: "",
   anonimo: false,
 };
 
@@ -34,6 +36,41 @@ describe("registro manual da ouvidoria (issue #321)", () => {
     expect(registro.manifestante_contato).toBeNull();
     expect(registro.manifestante_vinculo).toBeNull();
     expect(registro.relato_integral).toContain("Cheguei às 8h");
+  });
+
+  it("manda o paciente do caso que o ouvidor anotou do telefonema", () => {
+    // Issue #663, historia 14 do PRD #659: o caso do telefonema fica igual ao
+    // do QR.
+    const registro = montarRegistro({
+      ...FORMULARIO,
+      pacienteNome: "Maria Souza",
+      pacienteReferencia: "Leito 12, dia 09/09",
+    });
+
+    expect(registro.paciente_nome).toBe("Maria Souza");
+    expect(registro.paciente_referencia).toBe("Leito 12, dia 09/09");
+  });
+
+  it("registro sem paciente vai com os dois campos nulos, e nao em branco", () => {
+    const registro = montarRegistro(FORMULARIO);
+
+    expect(registro.paciente_nome).toBeNull();
+    expect(registro.paciente_referencia).toBeNull();
+  });
+
+  it("manifestacao anonima preserva o paciente, que e outra pessoa", () => {
+    // Decisao 3 do ADR 0052: o anonimato protege quem manifesta. Sem o
+    // paciente, o caso do acompanhante anonimo chega inutil a area.
+    const registro = montarRegistro({
+      ...FORMULARIO,
+      anonimo: true,
+      pacienteNome: "Maria Souza",
+      pacienteReferencia: "Leito 12",
+    });
+
+    expect(registro.paciente_nome).toBe("Maria Souza");
+    expect(registro.paciente_referencia).toBe("Leito 12");
+    expect(registro.manifestante_nome).toBeNull();
   });
 
   it("campo de identificacao em branco vira ausente, e nao string vazia", () => {
