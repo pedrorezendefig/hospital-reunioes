@@ -80,6 +80,10 @@ class Handler(BaseHTTPRequestHandler):
             if m:
                 self._send(200, collector.issue_detail(ROOT, int(m.group(1))))
                 return
+            m = re.match(r"^/api/issue/(\d+)/timeline$", path)
+            if m:
+                self._send(200, collector.issue_timeline(ROOT, int(m.group(1))))
+                return
             if path == "/":
                 path = "/index.html"
             static_root = STATIC.resolve()
