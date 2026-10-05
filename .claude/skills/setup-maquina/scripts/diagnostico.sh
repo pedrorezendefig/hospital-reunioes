@@ -73,6 +73,45 @@ checa_claude_versao() { # OK se claude --version >= CLAUDE_MIN; FALTA abaixo ou 
   if versao_min "$v" "$CLAUDE_MIN"; then ok "claude >= $CLAUDE_MIN" "$v"
   else falta "claude >= $CLAUDE_MIN" "tem $v; atualize: curl -fsSL https://claude.ai/install.sh | bash"; fi
 }
+# Fluxo automático (ADR 0063): sem estas regras no settings DO USUÁRIO o modo auto para no meio
+# do rabo pedindo confirmação. Ele ignora regra ampla de interpretador (Bash(python3:*)) e não lê
+# autoMode do settings do projeto. Só pergunta ao jq se a regra existe: nada do arquivo vai para a
+# saída (o bloco env guarda token) e nada é gravado; quem edita o arquivo é a pessoa.
+checa_permissoes_claude() { # settings.json do usuário
+  local cfg="$1" tipo rotulo regra porque termo
+  while IFS='|' read -r tipo rotulo regra porque; do
+    if jq -e --arg t "$tipo" --arg r "$regra" \
+      'any((.permissions[$t] // [])[]; . == "Bash(\($r):*)" or . == "Bash(\($r) *)")' "$cfg" >/dev/null 2>&1; then
+      ok "$tipo $rotulo"
+    else
+      falta "$tipo $rotulo" "ponha \"Bash($regra:*)\" em permissions.$tipo do ~/.claude/settings.json: $porque"
+    fi
+  done <<'REGRAS'
+allow|fechar_onda.py|python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py|o modo auto ignora regra ampla de interpretador (Bash(python3:*)) e para o rabo pedindo confirmação
+allow|minhas_issues.py|python3 .claude/skills/minhas-issues/scripts/minhas_issues.py|o modo auto ignora regra ampla de interpretador (Bash(python3:*)) e para a /minhas-issues pedindo confirmação
+allow|gh issue edit|gh issue edit|o fluxo escritura na issue sozinho; sem a regra o modo auto para pedindo confirmação
+allow|gh issue comment|gh issue comment|o fluxo escritura na issue sozinho; sem a regra o modo auto para pedindo confirmação
+allow|gh issue create|gh issue create|o fluxo escritura na issue sozinho; sem a regra o modo auto para pedindo confirmação
+allow|gh pr create|gh pr create|o fluxo abre o PR sozinho; sem a regra o modo auto para pedindo confirmação
+allow|gh pr comment|gh pr comment|o fluxo comenta no PR sozinho; sem a regra o modo auto para pedindo confirmação
+deny|git push --force|git push --force|sem parada humana, o deny é o que trava o force push (ADR 0061)
+deny|git push -f|git push -f|sem parada humana, o deny é o que trava o force push (ADR 0061)
+deny|gh api -X PUT|gh api -X PUT repos/pedrorezendefig/hospital-reunioes/rulesets|sem parada humana, o deny é o que impede mexer no ruleset da main (ADR 0061)
+deny|gh api --method PUT|gh api --method PUT repos/pedrorezendefig/hospital-reunioes/rulesets|sem parada humana, o deny é o que impede mexer no ruleset da main (ADR 0061)
+REGRAS
+  while IFS='|' read -r rotulo termo; do
+    if jq -e --arg t "$termo" \
+      '[.autoMode.environment // empty | .. | strings] | join(" ") | ascii_downcase | contains($t)' "$cfg" >/dev/null 2>&1; then
+      ok "autoMode.environment: $rotulo"
+    else
+      falta "autoMode.environment: $rotulo" "descreva $rotulo ($termo) em autoMode.environment do ~/.claude/settings.json: o modo auto não lê autoMode do settings do projeto, só o seu"
+    fi
+  done <<'AMBIENTE'
+repositório|pedrorezendefig/hospital-reunioes
+Coolify|coolify
+Vercel|vercel
+AMBIENTE
+}
 # ---------------------------------------------------------------- Nível 1
 titulo "Nível 1: pipeline (issues, tdd, PR)"
 bin_ok git "xcode-select --install"
