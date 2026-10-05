@@ -39,9 +39,53 @@ def montar_fases(issues: list[dict], prs: list[dict], deploys: list[dict], branc
     return {
         "issues": fases_issue,
         "prs": fases_pr,
+        "timelines": {n: _timeline(por_numero[n], linha, producao, branches)
+                      for n, linha in (timelines or {}).items() if n in por_numero},
         "ondas": {i["number"]: _ondas(i, por_numero, abertas) for i in issues if i.get("children")},
         "funil": _funil(issues, fases_issue),
     }
+
+
+def timeline_da_issue(issue: dict, linha: dict, deploys: list[dict], branches: list[str] = ()) -> list[dict]:
+    """Linha do tempo de uma issue (a das fechadas sai sob demanda, uma por vez)."""
+    return _timeline(issue, linha, _Producao(deploys), list(branches))
+
+
+def _timeline(issue: dict, linha: dict, producao: _Producao, branches: list[str]) -> list[dict]:
+    """Eventos da issue em ordem (ADR 0062, decisão 6).
+
+    `linha` vem do coletor: eventos da própria issue (designada, fechada,
+    reaberta) e os PRs que a fecham, com quantos commits ficaram de CI vermelho
+    e os vereditos dos revisores. No empate de horário o PR vem antes da issue
+    (o merge é que fecha a issue).
+    """
+    eventos = [{"tipo": "criada", "em": issue.get("created_at")}]
+    prs = _por_data(linha.get("prs") or [])
+    houve_tentativa = False
+    for p in prs:
+        n = p["number"]
+        eventos.append({"tipo": "novo_pr" if houve_tentativa else "pr_aberto", "em": p.get("created_at"), "pr": n})
+        if p.get("ci_vermelho"):
+            eventos.append({"tipo": "ci_vermelho", "em": p.get("ci_vermelho_em"), "pr": n, "vezes": p["ci_vermelho"]})
+        for v in p.get("vereditos") or []:
+            eventos.append({"tipo": "revisor_comentou", "em": v.get("em"), "pr": n, "lente": v["tipo"],
+                            "veredito": v["valor"]})
+        if p["state"] == "MERGED":
+            eventos.append({"tipo": "mergeado", "em": p.get("merged_at"), "pr": n})
+            _, deploy = producao.do_pr(p)
+            if deploy:
+                eventos.append({"tipo": "em_producao", "em": deploy["at"], "pr": n,
+                                "versao": deploy.get("app_version")})
+        elif p["state"] == "CLOSED":
+            eventos.append({"tipo": "pr_fechado", "em": p.get("closed_at"), "pr": n})
+            houve_tentativa = True
+    eventos += [dict(e) for e in linha.get("eventos") or []]
+    datados = sorted((e for e in eventos if _dt(e.get("em"))), key=lambda e: _dt(e["em"]))
+    sem_data = [e for e in eventos if not _dt(e.get("em"))]
+    branch = _branch_sem_pr(issue["number"], prs, branches)
+    if branch:
+        sem_data.append({"tipo": "branch", "em": None, "branch": branch})
+    return datados + sem_data
 
 
 def _ondas(prd: dict, por_numero: dict[int, dict], abertas: set[int]) -> list[list[int]]:

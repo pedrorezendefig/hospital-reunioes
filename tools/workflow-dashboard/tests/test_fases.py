@@ -471,3 +471,54 @@ def test_funil_conta_as_nove_fases_no_total_e_por_responsavel():
     # "(sem)" é a fila sem claim, o mesmo valor do filtro "ninguém assumiu" da aba Issues
     assert funil["por_responsavel"]["(sem)"]["fila"] == 2
     assert funil["por_responsavel"]["(sem)"]["triagem"] == 1
+
+
+# ---------- timeline normalizada ----------
+
+
+def _pr_da_linha(number, state, created_at, *, closed_at=None, merged_at=None, ci_vermelho=0,
+                 ci_vermelho_em=None, vereditos=(), head_ref=None):
+    """PR no shape que o coletor tira da consulta de timeline (GraphQL)."""
+    return {"number": number, "state": state, "created_at": created_at, "closed_at": closed_at,
+            "merged_at": merged_at, "head_ref": head_ref or f"feat/x-{number}", "ci_vermelho": ci_vermelho,
+            "ci_vermelho_em": ci_vermelho_em, "vereditos": list(vereditos)}
+
+
+def test_timeline_conta_a_historia_da_issue_em_ordem():
+    issue = _issue(300, state="CLOSED", created_at="2026-10-01T10:00:00Z", closed_at="2026-10-05T10:00:00Z")
+    linha = {
+        "eventos": [{"tipo": "designada", "em": "2026-10-01T11:00:00Z", "quem": "bia"},
+                    {"tipo": "fechada", "em": "2026-10-05T10:00:00Z"}],
+        "prs": [
+            _pr_da_linha(302, "MERGED", "2026-10-03T10:00:00Z", merged_at="2026-10-05T10:00:00Z",
+                         closed_at="2026-10-05T10:00:00Z",
+                         vereditos=[_must_fix("2026-10-04T10:00:00Z"), _limpo("2026-10-04T18:00:00Z")]),
+            _pr_da_linha(301, "CLOSED", "2026-10-02T10:00:00Z", closed_at="2026-10-02T20:00:00Z",
+                         ci_vermelho=2, ci_vermelho_em="2026-10-02T15:00:00Z"),
+        ],
+    }
+    deploys = [_deploy("0.170.0", "2026-10-05T09:00:00-03:00", "PR #302, issue #300")]
+    tl = montar_fases([issue], [], deploys, [], timelines={300: linha}, agora=AGORA)["timelines"][300]
+    assert [e["tipo"] for e in tl] == [
+        "criada", "designada", "pr_aberto", "ci_vermelho", "pr_fechado", "novo_pr", "revisor_comentou",
+        "revisor_comentou", "mergeado", "fechada", "em_producao",
+    ]
+    assert tl[1]["quem"] == "bia"
+    assert tl[3] == {"tipo": "ci_vermelho", "em": "2026-10-02T15:00:00Z", "pr": 301, "vezes": 2}
+    assert tl[5]["pr"] == 302
+    assert (tl[6]["veredito"], tl[7]["veredito"]) == ("must_fix", "limpo")
+    assert tl[-1] == {"tipo": "em_producao", "em": "2026-10-05T09:00:00-03:00", "pr": 302, "versao": "0.170.0"}
+
+
+def test_timeline_termina_na_branch_quando_ela_ainda_nao_virou_pr():
+    issue = _issue(310, labels=["in-progress"], assignees=["bia"])
+    linha = {"eventos": [{"tipo": "designada", "em": "2026-10-01T11:00:00Z", "quem": "bia"}], "prs": []}
+    tl = montar_fases([issue], [], [], ["feat/fases-310"], timelines={310: linha}, agora=AGORA)["timelines"][310]
+    assert [e["tipo"] for e in tl] == ["criada", "designada", "branch"]
+    assert tl[-1] == {"tipo": "branch", "em": None, "branch": "feat/fases-310"}
+
+
+def test_timeline_so_sai_para_as_issues_que_vieram_com_linha():
+    fases = montar_fases([_issue(320), _issue(321)], [], [], [], timelines={320: {"eventos": [], "prs": []}},
+                         agora=AGORA)
+    assert list(fases["timelines"]) == [320]
