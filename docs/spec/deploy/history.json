@@ -2,6 +2,36 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-05T15:41:18-03:00",
+      "sha": "c0293c8583812c8fe0fa55bac160581610273879",
+      "app_version": "0.161.3",
+      "subject": "PR #896, issue #807: Aspas no cabeçalho YAML de 7 skills e trava no CI",
+      "raw_subject": "chore(deploy): registro do PR avulso (#896)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 989,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #896, issue #807. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
       "at": "2026-10-05T15:22:07-03:00",
       "sha": "1ef79ab923e5880d0d94cec9266ef311c6351026",
       "app_version": "0.161.2",
@@ -1527,34 +1557,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Primeira fatia do PRD #720. O select do registro manual passa de tres para sete canais e nasce em WhatsApp, nao mais em Telefone. A 109 so alarga o CHECK, e por ser superconjunto estrito dos seis valores da 067 pode ser aplicada antes do merge sem quebrar o codigo que ja estava no ar, que foi o que o humano fez. Ordem de subida registrada no corpo do PR e obrigatoria: migration, backend, frontend. Se o frontend subisse antes do backend, o caminho PADRAO quebraria, porque o modal nasce em whatsapp e o backend antigo devolveria 422 com uma tela que culpa relato, tipo, setor e resumo, causa que nao e a real. Corrida com a sessao B no meio da onda: ela mergeou a #717 e deployou v0.134.1, o PR ficou CONFLICTING no package.json e foi rebaseado mantendo 0.135.0. O Gate 1.5 nasceu carimbado [x] no corpo do PR antes de a revisao rodar, o que esvazia o gate; foi corrigido no mesmo turno e o corpo hoje diz quando cada gate rodou de verdade."
-    },
-    {
-      "at": "2026-09-15T18:20:00-03:00",
-      "sha": "671a273",
-      "app_version": "0.134.1",
-      "subject": "As marcas de erro que a tela do redirecionamento le viram constantes com teste",
-      "raw_subject": "chore(ouvidoria): marcas de erro do redirecionamento viram constantes com teste (#723)",
-      "scope": [
-        "backend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 195,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Acabamento das #708/#710, sem mudanca de comportamento: as tres frases seguem byte a byte iguais. O front casa por prefixo e ninguem protegia isso; agora cada marca e constante nomeada com teste que morre se o prefixo sumir. Limite conhecido e assumido: o teste compara backend contra backend, entao esvaziar a constante ou reescrever frase e constante no mesmo edit ainda passa verde. O frontend so rebuildou por causa do bump; o webhook rebuilda os dois com watch_paths nulo."
     }
   ]
 }
