@@ -480,6 +480,21 @@ def test_history_guarda_todos_os_deploys_sem_teto(tmp_path, monkeypatch):
     assert deploys[-1]["app_version"] == "0.9.1"
 
 
+def test_sem_snapshot_saiu_da_cli_e_da_docstring(tmp_path, monkeypatch, capsys):
+    """Sem snapshot no rabo, a opção que o pulava não tem o que pular."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    with pytest.raises(SystemExit) as e:
+        rodar_main(fo, monkeypatch, c, "--sem-snapshot")
+
+    assert e.value.code == 2  # argparse: opção desconhecida
+    assert "--sem-snapshot" in capsys.readouterr().err
+    assert c.gh_chamadas == [] and c.semaforo == []
+    assert "sem-snapshot" not in fo.__doc__
+
+
 def test_pr_atras_da_main_recebe_a_main_antes_do_bump(tmp_path, monkeypatch):
     """O ruleset exige a branch em dia com a base: a main andou depois do CI do
     PR, e o script traz a main para a branch antes do bump."""

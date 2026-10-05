@@ -95,7 +95,7 @@ Não fique em `AskUserQuestion`: numa sessão de fundo ninguém a vê. A pergunt
 
 1. Leia o "vai": PRs aprovados e condição. Sem condição, should-fix fica como comentário no PR e a fatia entra como está. Com condição de correção: `hr-corretor` (motivo `revisao`, com os itens pré-autorizados), nova revisão, `gh pr checks --watch`, e só então o fechamento, **sem novo checkpoint**. A condição vale só para este lote.
 2. Migration nova no lote: lembre o humano no próprio "vai" de aplicar no Studio antes do fechamento (o script não aplica SQL); se ele já disse que aplicou, siga.
-3. `python .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <a> <b> --sessao <nome>` via Bash **em segundo plano** (builds levam minutos). Ele pega o semáforo, cria um worktree descartável em `~/wt-<nome>` (caminho curto, MAX_PATH), faz merge local `--no-ff` em ordem, bump (lote só de `docs/**`, `.claude/**` e `*.md` não bumpa nem espera build), changelog, `history.json`, `state.json`, snapshot (best-effort, #844), tira do `draft` as páginas do Manual dos PRDs que fecharam e roda o `publicar.sh` (ADR 0057), `APP_VERSION`, **um push**, espera **um build**, confere health com version match, limpa worktrees de agente já mergeados e solta o semáforo. Saída de 10 linhas; leia só ela.
+3. `python .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <a> <b> --sessao <nome>` via Bash **em segundo plano** (builds levam minutos). Ele pega o semáforo, cria um worktree descartável em `~/wt-<nome>` (caminho curto, MAX_PATH), faz merge local `--no-ff` em ordem na branch `onda/<nome>`, bump como commit nela (lote só de `docs/**`, `.claude/**` e `*.md` não bumpa nem espera build), abre o PR de entrega e espera o CI dele, põe o `APP_VERSION`, mergeia pela API (a `main` é protegida, ADR 0061), espera **um build**, confere health com version match, grava o registro num PR só de docs com `history.json` (todos os deploys, sem teto) e `state.json`, limpa worktrees de agente já mergeados e solta o semáforo. O rabo grava só a verdade do deploy: o snapshot e o draft do Manual dos PRDs que fecharam saem numa Action no push da `main`, depois do registro (ADR 0062). Saída de 10 linhas; leia só ela.
    - Saída `2` (conflito ou main andou): `hr-corretor` motivo `conflito` no PR citado; rode o script de novo.
    - Saída `3` ou `4` (build ou health): pare. Semáforo fica com você; imprima a chave e a linha do script; o rollback segue o modo rollback da skill `/deploy` (única situação em que você lê aquele SKILL.md).
 4. `python .claude/skills/onda-enxuta/scripts/medir_onda.py --onda <N> --issues <...> --prs <...> --inicio <timestamp do passo 0>`: 10 linhas de conta, JSON em `~/.claude/onda-enxuta/medicoes/`.
@@ -116,7 +116,7 @@ Imprima o id que ele devolve e encerre. Fila vazia: **Sinal final** (fechadas e 
 ## Limites
 
 - Não revoga o gate de merge, não roda sem checkpoint, não mergeia por conta própria depois de um "vai" que não citou o PR.
-- Não modifica nada de `.claude/skills/` nem de `docs/` do repositório além do que o `fechar_onda.py` registra (`CHANGELOG.md`, `docs/spec/deploy/*.json`, snapshot), que já era registro do `/deploy`.
+- Não modifica nada de `.claude/skills/` nem de `docs/` do repositório além do que o `fechar_onda.py` registra (`docs/spec/deploy/history.json` e `state.json`), que já era registro do `/deploy`.
 - As medições de custo vivem em `~/.claude/onda-enxuta/medicoes/`, fora do repositório.
 - Não usa Sonnet nem Haiku em papel nenhum (restrição do dono).
 
@@ -126,7 +126,7 @@ Imprima o id que ele devolve e encerre. Fila vazia: **Sinal final** (fechadas e 
 |---|---|---|
 | `scripts/lancar_sessao.sh <nome> <prompt.md> [--dry-run]` | Lança a sessão de fundo com ambiente limpo, zero MCP (`--strict-mcp-config --no-chrome`), plugins desligados (`--settings onda-settings.json`), `--model opus --effort high` | id da sessão (`claude attach <id>`) |
 | `scripts/sensivel.py <PR>` | Cruza os arquivos do PR com `revisao-sensivel.txt` | arquivos sensíveis; exit 0 se houver |
-| `scripts/fechar_onda.py --prs ... --sessao ... [--dry-run] [--sem-snapshot]` | Integração da onda: um push, um build | 10 linhas; exit 0 ok, 1 pré-condição, 2 conflito, 3 build, 4 health |
+| `scripts/fechar_onda.py --prs ... --sessao ... [--dry-run]` | Integração da onda: um merge pela API, um build, registro só com `history.json` e `state.json` | 10 linhas; exit 0 ok, 1 pré-condição, 2 conflito, 3 build, 4 health |
 | `scripts/medir_onda.py --onda N --issues a,b --prs c,d [--inicio ISO] [--modelo claude-opus-5-5]` | Conta da onda a partir dos JSONL da sessão e dos sub-agentes (papel pelo prefixo `[papel: ...]` do prompt) | 10 linhas; JSON em `~/.claude/onda-enxuta/medicoes/`. Sub-agente nunca retomado sai como estimado |
 
 ## Em máquina nova

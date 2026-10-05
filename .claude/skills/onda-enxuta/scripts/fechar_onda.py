@@ -3,7 +3,7 @@
 `/onda-enxuta` a producao com UM merge na main e UM build.
 
 Uso:
-    python fechar_onda.py --prs 850 851 852 --sessao onda-a-1 [--dry-run] [--sem-snapshot] [--raiz <repo>]
+    python fechar_onda.py --prs 850 851 852 --sessao onda-a-1 [--dry-run] [--raiz <repo>]
     python fechar_onda.py --prs 907 [--dry-run]     # PR avulso: sem --sessao, a chave e pr-907
 
 A ordem dos PRs e a ordem de merge. O script nunca toca na arvore principal
@@ -31,9 +31,11 @@ Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
   8. merge pela API do GitHub (squash, conferindo o sha do head)
   9. monitorar o build de cada service (webhook), forcar se nao disparar
  10. health com version match
- 11. registro num PR so de docs (history.json, state.json, CHANGELOG.md,
-     snapshot best-effort #844, draft do manual ADR 0057), mergeado pela API;
-     o build que o webhook do Coolify dispara para ele e cancelado (issue #851)
+ 11. registro num PR so de docs, so com history.json (todos os deploys, sem
+     teto) e state.json (ADR 0062, decisao 9), mergeado pela API; o build que o
+     webhook do Coolify dispara para ele e cancelado (issue #851). Snapshot e
+     draft do Manual nao sao do rabo: a Action do push da main roda os dois
+     depois do registro (ADR 0062, decisao 10)
  12. limpeza (worktrees, branches pr-*, worktrees de agente ja entregues) e soltar o semaforo
 
 Commits que chegam a main (dois squashes):
@@ -42,8 +44,7 @@ Commits que chegam a main (dois squashes):
     dentro dele, o commit `chore(release): bump vX.Y.Z (...)` quando ha bump
   - o do registro: "chore(deploy): registro do PR #N (vX.Y.Z) (#R)" ou
     "chore(deploy): registro da onda <sessao> (vX.Y.Z) (#R)"
-No PR avulso, o registro do history.json e do CHANGELOG nomeia PR e issue,
-sem a onda. O campo `sha` do history.json e o do squash do codigo: o commit
+No PR avulso, o registro do history.json nomeia PR e issue, sem a onda. O campo `sha` do history.json e o do squash do codigo: o commit
 que foi para producao. O registro vem depois, so com docs.
 
 Codigos de saida:
@@ -60,7 +61,7 @@ Codigos de saida:
 issue e tipo de bump) e o que faria nos demais; nao pega semaforo, nao toca no
 Coolify, nao pusha.
 
-Windows: `bash` do Git no PATH (para o semaforo.sh), `PYTHONUTF8=1` no snapshot.
+Windows: `bash` do Git no PATH (para o semaforo.sh).
 """
 
 from __future__ import annotations
@@ -818,7 +819,6 @@ def main() -> int:
     ap.add_argument("--prs", nargs="+", type=int, required=True, help="PRs na ordem de merge")
     ap.add_argument("--sessao", help="nome da sessao (chave do semaforo); sem ela, um PR so e um PR avulso (pr-<N>)")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--sem-snapshot", action="store_true")
     ap.add_argument("--raiz", help="raiz do repositorio (default: git rev-parse)")
     args = ap.parse_args()
 

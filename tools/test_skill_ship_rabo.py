@@ -107,6 +107,28 @@ def test_quem_chama_o_ship_nao_passa_flag_que_sumiu():
     assert achados == []
 
 
+# ---------------------------------------------------------- /onda-enxuta
+
+def test_onda_enxuta_chama_o_rabo_so_com_opcoes_que_o_script_tem():
+    onda = texto("onda-enxuta")
+    ajuda = ajuda_do_rabo()
+    trechos = re.findall(r"fechar_onda\.py([^`]*)`", onda)
+    assert len(trechos) >= 2, "o fechamento e a tabela de scripts citam o comando"
+    opcoes = {o for t in trechos for o in re.findall(r"(--[a-z-]+)", t)}
+    assert "--prs" in opcoes and "--sessao" in opcoes, opcoes
+    assert sorted(o for o in opcoes if o not in ajuda) == []
+
+
+def test_onda_enxuta_descreve_o_rabo_que_grava_so_history_e_state():
+    """ADR 0062, decisões 9 e 10: o fechamento descreve o rabo enxuto."""
+    fechamento = re.search(r"^### 6\. Fechamento da onda.*?(?=^### )", texto("onda-enxuta"),
+                           re.S | re.M).group(0)
+    item = next(li for li in fechamento.splitlines() if "fechar_onda.py --prs" in li)
+    assert "history.json" in item and "state.json" in item, item
+    for termo in ("changelog", "publicar.sh", "best-effort"):
+        assert termo not in item.lower(), termo
+
+
 # -------------------------------------------------------------- /deploy
 
 def test_deploy_ship_aponta_para_o_fechar_onda_e_sai():
