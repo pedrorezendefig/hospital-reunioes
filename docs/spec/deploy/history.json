@@ -2,6 +2,40 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-04T21:49:22-03:00",
+      "sha": "cb45ec65a28f92c74703fc767e452274a7ee2ae8",
+      "app_version": "0.160.0",
+      "subject": "PR #899, issue #648: Triagem de e-mail, fundação: o e-mail chega e aparece na tela",
+      "raw_subject": "chore(deploy): registro do PR avulso (#899)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        646
+      ],
+      "result": "healthy",
+      "duration_seconds": 334,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "112_ouvidoria_triagem_email.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #899, issue #648. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
       "at": "2026-10-02T21:41:40-03:00",
       "sha": "e6abd153896356d98e9e91ada47f1c33834d8489",
       "app_version": "0.159.0",
@@ -1541,37 +1575,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda AFK, issue #707, primeira fatia do PRD #706 (ADR 0055). A coluna revogado_em e SEPARADA de usado_em de proposito: usado_em prova que alguem respondeu por aquele link, e sobrescrever apagaria o rastro de quem respondeu. Sem backfill, para nao derrubar o link que esta na caixa de entrada de quem esta com o caso agora. O PR nasceu verde no CI e os revisores acharam DOIS buracos que o CI nao pega. Primeiro: revogar fecha os tokens que EXISTEM, nao a FABRICA. Tres portas emitiam token novo para a area antiga depois da revogacao, e a pior era GATILHO_PRORROGACAO_DECIDIDA, que esta em GATILHOS_COM_PORTAL e fora de GATILHOS_QUE_COBRAM_A_AREA, logo nao tinha nem a guarda de status: pedido pendente da area A sobrevive a devolucao, e decidi-lo depois do reacionamento move o prazo de B e manda link vivo para A, sem corrida nenhuma. Fechado com guarda no despachar, ponto unico por onde as tres portas passam. Segundo: a guarda nova virou INDISPONIBILIDADE. Ela perguntava se o destinatario e vigente HOJE no setor, e nao se o email PERTENCE ao setor do caso; troca de titular no mesmo setor durante a janela comercial (o email fica agendada ate a janela abrir) fazia ninguem receber, nem o titular antigo nem o novo, com falha TERMINAL (o job le so agendada, nao incrementa tentativa, nao alerta o admin) e o prazo ja correndo. DECISAO: o criterio virou pertencimento ao cadastro do setor, sem filtro de vigencia. Perde-se barrar o ex-titular com vigencia vencida, que e higiene de cadastro e nao desta fatia; o conjunto de recusas encolheu estritamente, nenhum cenario em que o novo recuse e o antigo aceitasse. O filtro por setor e load-bearing: removido, derruba 5 testes. Terceiro achado, de tela: o motivo que a guarda grava nao aparecia em lugar nenhum (grep ultimo_erro no front voltava vazio) e o Reenviar dizia que o provedor recusou e o sistema tenta de novo, falso nas duas metades, com cada reclique criando outra linha em falha sem sair email. Agora reenviar_notificacao devolve o motivo e o Dossie o exibe. Dois mutantes sobreviviam a 2355 testes (o fail-open na leitura do cadastro, que reabria o buraco da #707 em silencio, e a normalizacao do email) e agora tem teste matando cada um. Estourei o limite de 2 rodadas de revisao da skill com OK do Pedro, porque a baixa travaria as #708, #709 e #710 junto. Migration aplicada pelo humano antes do merge, que e requisito e nao preferencia: com o codigo no ar e a coluna ausente, o portal do setor INTEIRO responde 503 e todo validar da 500 com o caso ja transicionado. Prova de que o PostgREST enxerga a coluna (o cache de schema dele, nao o information_schema): token inexistente devolve 404 Link invalido, nao 503."
-    },
-    {
-      "at": "2026-09-11T15:03:00-03:00",
-      "sha": "15f459a",
-      "app_version": "0.129.2",
-      "subject": "a correcao que acrescenta mencao deixa de reabrir Minha vez de quem ja tinha respondido aquela mesma fala",
-      "raw_subject": "fix(tecnologia): a correção que acrescenta menção não reabre a vez de quem já respondeu (#703)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 275,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "105_tecnologia_mencoes_da_correcao.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda AFK, issue #693, achado da review da #670. A linha guardava editado_em mas nao QUAIS mencoes tinham entrado na correcao, entao o carimbo valia para todas: virgula corrigida reabria a vez de quem ja respondeu. A coluna nova tem TRES estados com significados distintos, e a diferenca entre os dois ultimos e o conserto inteiro: NULL (nunca corrigida ou corrigida antes da coluna existir, vale o comportamento da #670, que e o lado seguro do erro), lista vazia (correcao sem mencao nova, nao chama ninguem) e lista com ids (so essa gente conta do editado_em). Prova: 7 mutantes do autor mais 5 do revisor, todos mortos, um deles no DETECTOR (a coluna sai do select e a regra nasce lendo None). A janela de 10 minutos foi provada pelos dois lados, pela rota (dois PATCH seguidos, a lista SUBSTITUI e nao acumula) e pela regra. RISCO ACEITO e registrado: a lista guarda so a ULTIMA correcao. Numa fatia estreita (duas correcoes na mesma janela, com a pessoa tendo falado na Demanda entre o envio e a correcao 1) ela perde o carimbo, cai na ordem do fio e SOME de Minha vez sem ter respondido, que e a #670 em miniatura. O conserto de verdade e carimbo por pessoa (id para instante), fora do escopo cravado na triagem. SEM BACKFILL, de proposito: linha antiga fica NULL e aparece a mais, nunca a menos. Quem estiver preso DENTRO da aba por linha corrigida antes da migration segue preso ate responder de novo, porque a janela ja fechou. Backfill para lista vazia seria pior, apagaria chamadas reais."
     }
   ]
 }
