@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-15T00:44-0300 -->
+<!-- last_update: 2026-10-04T21:49-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -294,6 +294,7 @@ erDiagram
         VARCHAR ator_id FK
         TEXT ator_nome
         TEXT acao
+        UUID email_recebido_id FK
     }
     ouvidoria_prazos {
         TEXT gravidade
@@ -445,6 +446,17 @@ erDiagram
         TEXT movimento_de
         _ mais_colunas "+5"
     }
+    ouvidoria_emails_recebidos_anexos {
+        UUID id PK
+        UUID email_recebido_id FK
+        TEXT resend_anexo_id
+        TEXT filename
+        TEXT content_type
+        BIGINT tamanho_bytes
+        TEXT storage_path
+        TIMESTAMPTZ created_at
+        _ mais_colunas "+1"
+    }
 ```
 
 ## Indexes principais
@@ -524,6 +536,7 @@ erDiagram
 | `reuniao_aceite_tokens` | `idx_reuniao_aceite_tokens_reuniao` | `id_reuniao` | `060_aceite_interno_tokens.sql` |
 | `ouvidoria_movimentos` | `idx_ouvidoria_movimentos_manifestacao` | `manifestacao_id, ocorrido_em` | `064_ouvidoria_manifestacao.sql` |
 | `ouvidoria_acessos` | `idx_ouvidoria_acessos_manifestacao` | `manifestacao_id, ocorrido_em DESC` | `064_ouvidoria_manifestacao.sql` |
+| `ouvidoria_acessos` | `idx_ouvidoria_acessos_email_recebido` | `email_recebido_id, ocorrido_em DESC` | `112_ouvidoria_triagem_email.sql` |
 | `ouvidoria_prazos_historico` | `idx_ouvidoria_prazos_historico_celula` | `gravidade, marco, ocorrido_em DESC` | `065_ouvidoria_prazos_calendario.sql` |
 | `ouvidoria_anexos` | `idx_ouvidoria_anexos_manifestacao` | `manifestacao_id, created_at` | `066_ouvidoria_registro_manual_anexos.sql` |
 | `ouvidoria_setor_responsaveis` | `idx_ouvidoria_setor_responsaveis_setor` | `setor, papel` | `068_ouvidoria_responsaveis_notificacoes.sql` |
@@ -549,4 +562,4 @@ erDiagram
 | `tecnologia_conversas` | `idx_tecnologia_conversas_demanda` | `demanda_id, criado_em` | `102_tecnologia_fundacao.sql` |
 
 ---
-**Resumo:** 41 tabelas · 47 relacionamentos FK detectados.
+**Resumo:** 42 tabelas · 47 relacionamentos FK detectados.
