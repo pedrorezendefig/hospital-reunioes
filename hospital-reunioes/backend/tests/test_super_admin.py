@@ -18,7 +18,7 @@ from fastapi import HTTPException
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-from app.dependencies import is_super_admin, require_super_admin  # noqa: E402
+from app.dependencies import is_super_admin, require_super_admin, tem_acesso_reunioes  # noqa: E402
 from app.services import audit  # noqa: E402
 
 # ─── Mocks ────────────────────────────────────────────────────────────────────
@@ -166,6 +166,67 @@ class TestRequireSuperAdmin:
         )
         assert me["id"] == "P20"
         assert me["is_super_admin"] is True
+
+
+# ─── Testes: as duas leituras do Perfil de acesso nulo (issue #752) ───────────
+
+
+class TestAsDuasLeiturasDoPerfilNulo:
+    """`is_super_admin` e `tem_acesso_reunioes` leem o MESMO estado da pessoa.
+
+    O defeito da issue #752 nasceu de os dois gates lerem `access_profile` nulo
+    de formas opostas: `tem_acesso_reunioes` dizia "sem papel nas Reunioes" e
+    `is_super_admin` caia na flag legada e dizia "Super admin". Quem ficava nesse
+    meio-termo levava 403 no microfone e passava em todo `require_super_admin`.
+
+    A tabela abaixo amarra as duas leituras. O valor esperado de cada linha e
+    literal, tirado do dominio (ADR 0007: NULO e "sem papel nas Reunioes"), e
+    nao recalculado do jeito que o codigo calcula.
+    """
+
+    @pytest.mark.parametrize(
+        ("pessoa", "super_admin", "papel_nas_reunioes"),
+        [
+            ({"access_profile": "super_admin", "is_super_admin": True}, True, True),
+            # O perfil e a fonte da verdade: a flag desalinhada nao tira nada.
+            ({"access_profile": "super_admin", "is_super_admin": False}, True, True),
+            # O estado da issue: perfil zerado com a flag esquecida ligada.
+            ({"access_profile": None, "is_super_admin": True}, False, False),
+            ({"access_profile": None, "is_super_admin": False}, False, False),
+            ({"access_profile": "regular", "is_super_admin": True}, False, True),
+            ({"access_profile": "secretaria", "is_super_admin": False}, False, True),
+            # Caller antigo que nao carregou a coluna: segue lendo a flag.
+            ({"is_super_admin": True}, True, True),
+            ({"is_super_admin": False}, False, True),
+        ],
+    )
+    def test_os_dois_gates_concordam_sobre_o_mesmo_estado(self, pessoa, super_admin, papel_nas_reunioes):
+        pessoa = {"id": "P1", **pessoa}
+        assert (is_super_admin(pessoa), tem_acesso_reunioes(pessoa)) == (super_admin, papel_nas_reunioes)
+
+    @pytest.mark.asyncio
+    async def test_perfil_zerado_com_a_flag_ligada_leva_403_em_rota_de_super_admin(self):
+        """A linha que ja esta no banco nesse estado, gravada antes do conserto
+        do PATCH, tambem perde a porta: nao depende de alguem editar de novo."""
+        sb = _SupabaseMock(
+            participantes=[
+                {
+                    "id": "P30",
+                    "auth_user_id": "auth-30",
+                    "email": "revogada@ex.com",
+                    "role": "coordenador",
+                    "is_super_admin": True,
+                    "access_profile": None,
+                    "nome_completo": "Revogada Pela Metade",
+                }
+            ]
+        )
+        with pytest.raises(HTTPException) as exc:
+            await require_super_admin(
+                current_user={"id": "auth-30", "email": "revogada@ex.com", "metadata": {}},
+                supabase=sb,
+            )
+        assert exc.value.status_code == 403
 
 
 # ─── Testes: audit.log_action ─────────────────────────────────────────────────

@@ -1957,8 +1957,19 @@ def _entregue(numero: int = 673) -> dict:
 
 
 def _pessoa(pid: str = "P1", nome: str | None = "Diretor Geral", **campos) -> dict:
-    """Quem ve a aba: ativo e Super admin (`e_pessoa_da_aba`)."""
-    return {"id": pid, "nome_completo": nome, "ativo": True, "is_super_admin": True, "access_profile": None, **campos}
+    """Quem ve a aba: ativo e Super admin (`e_pessoa_da_aba`).
+
+    Super admin pelo Perfil de acesso, e nao so pela flag legada: desde a issue
+    #752 o perfil nulo com a flag ligada e "sem papel" e fica fora da aba.
+    """
+    return {
+        "id": pid,
+        "nome_completo": nome,
+        "ativo": True,
+        "is_super_admin": True,
+        "access_profile": "super_admin",
+        **campos,
+    }
 
 
 def _campos_do_fio(sb: _SupabaseMock) -> list[tuple]:
@@ -2295,7 +2306,7 @@ class TestADevolucaoPelaRota:
 
     @pytest.mark.parametrize(
         "autor",
-        (_pessoa(ativo=False), _pessoa(is_super_admin=False)),
+        (_pessoa(ativo=False), _pessoa(is_super_admin=False, access_profile="regular")),
         ids=("desativado", "sem_super_admin"),
     )
     def test_autor_que_saiu_da_aba_nao_recebe_o_card_de_volta(self, monkeypatch, _sem_email_de_verdade, caplog, autor):
