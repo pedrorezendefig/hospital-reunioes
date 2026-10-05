@@ -142,6 +142,18 @@ def test_settings_que_nao_existe_acusa_tudo(tmp_path):
     assert len(faltas(saida)) == len(ROTULOS) + 3, saida
 
 
+def test_o_trecho_do_onboarding_passa_no_diagnostico(tmp_path):
+    """O FALTA manda a pessoa ao trecho da seção 5.1; ele tem de bastar."""
+    guia = (RAIZ / "docs" / "onboarding" / "claude-setup.md").read_text(encoding="utf-8")
+    secao = guia.split("### 5.1 ", 1)[1]
+    bloco = secao.split("```json\n", 1)[1].split("```", 1)[0]
+    arquivo = tmp_path / "settings.json"
+    arquivo.write_text(bloco, encoding="utf-8")
+    saida = confere(tmp_path, arquivo)
+    assert faltas(saida) == [], saida
+    assert len(saida.splitlines()) == len(ROTULOS) + 3, saida
+
+
 # ------------------------------------------------- segredo e escrita
 
 
