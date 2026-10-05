@@ -44,8 +44,9 @@ Commits que chegam a main (dois squashes):
     dentro dele, o commit `chore(release): bump vX.Y.Z (...)` quando ha bump
   - o do registro: "chore(deploy): registro do PR #N (vX.Y.Z) (#R)" ou
     "chore(deploy): registro da onda <sessao> (vX.Y.Z) (#R)"
-No PR avulso, o registro do history.json nomeia PR e issue, sem a onda. O campo `sha` do history.json e o do squash do codigo: o commit
-que foi para producao. O registro vem depois, so com docs.
+No PR avulso, o registro do history.json nomeia PR e issue, sem a onda. O
+campo `sha` do history.json e o do squash do codigo: o commit que foi para
+producao. O registro vem depois, so com docs.
 
 Codigos de saida:
   0  PR ou onda fechados, health verde, registro na main
