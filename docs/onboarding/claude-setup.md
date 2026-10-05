@@ -235,6 +235,41 @@ Substitua `<seu-user>` pelo seu username (`whoami` mostra). `language: "pt-BR"` 
 
 **`defaultMode: "auto"`** = Claude executa ações de baixo risco sem pedir confirmação a cada vez, mas ainda pausa em ações destrutivas (rm -rf, git push --force, etc.).
 
+### 5.1 Fluxo automático (obrigatório para o nível 2)
+
+O fluxo vai da issue até produção sem parada humana (ADR 0063), e o modo auto não pode parar no meio do rabo. Ele ignora regra ampla de interpretador (o `Bash(python3:*)` acima não vale para o `fechar_onda.py`) e não lê `autoMode` do settings do projeto. Por isso estas regras vão no **seu** `~/.claude/settings.json`, somadas às de cima. O `/setup-maquina` confere uma por uma.
+
+```json
+{
+  "permissions": {
+    "allow": [
+      "Bash(python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py:*)",
+      "Bash(python3 .claude/skills/minhas-issues/scripts/minhas_issues.py:*)",
+      "Bash(gh issue edit:*)",
+      "Bash(gh issue comment:*)",
+      "Bash(gh issue create:*)",
+      "Bash(gh pr create:*)",
+      "Bash(gh pr comment:*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(gh api -X PUT repos/pedrorezendefig/hospital-reunioes/rulesets:*)",
+      "Bash(gh api --method PUT repos/pedrorezendefig/hospital-reunioes/rulesets:*)"
+    ]
+  },
+  "autoMode": {
+    "environment": [
+      "**Source control**: o repositório confiável é pedrorezendefig/hospital-reunioes e o origin dele",
+      "**CI/CD deploy targets**: Coolify (https://<coolify-do-hospital>), deploy de produção pelo fechar_onda.py",
+      "**Trusted internal domains**: manual-hsm.vercel.app e os projetos do time na Vercel"
+    ]
+  }
+}
+```
+
+O deny é a trava que fica no lugar do olho humano: force push e mudança no ruleset da `main` o fluxo nunca faz.
+
 ---
 
 ## 6. Verificação end-to-end
