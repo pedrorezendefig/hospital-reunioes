@@ -220,6 +220,11 @@ def test_em_andamento_vence_fila():
     assert _fase(issue)["fase"] == "em_andamento"
 
 
+def test_triagem_perde_para_o_bloqueio():
+    issue = _issue(19, labels=["needs-triage"], blocked_by=[18])
+    assert _fase(issue, outras=[_issue(18)])["fase"] == "bloqueada"
+
+
 def test_fila_vence_triagem():
     assert _fase(_issue(29, labels=["ready-for-agent", "needs-info"]))["fase"] == "fila"
 
