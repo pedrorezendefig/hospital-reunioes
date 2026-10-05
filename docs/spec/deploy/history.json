@@ -2,6 +2,68 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-05T19:19:05-03:00",
+      "sha": "2bb89d591f5cffa1e088ff151c3d77b388874f0f",
+      "app_version": "0.161.5",
+      "subject": "PR #954, issue #953: CI cancelado por falta de runner do GitHub não é falha de código",
+      "raw_subject": "chore(deploy): registro do PR avulso (#954)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 773,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #954, issue #953. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
+      "at": "2026-10-05T19:03:33-03:00",
+      "sha": "9fe20d051dc3e61e1bb94b01b7a6343458cd8aee",
+      "app_version": "0.161.4",
+      "subject": "PR #950, issue #941: Hospital OS, módulo de fases (issue, PR, timeline, ondas, funil) e coletor com campos novos",
+      "raw_subject": "chore(deploy): registro do PR avulso (#950)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        938
+      ],
+      "result": "healthy",
+      "duration_seconds": 819,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #950, issue #941. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
       "at": "2026-10-05T15:41:18-03:00",
       "sha": "c0293c8583812c8fe0fa55bac160581610273879",
       "app_version": "0.161.3",
@@ -1496,67 +1558,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 1 do PRD #726 (issue #727). Cinco rodadas de revisao independente ate LIMPO nas duas lentes: 9 must-fix, e o que destravou foi trocar 'corrija estes dois' por varredura de toda leitura de corpo HTTP. O intervalo desde o deploy anterior carrega tambem tres merges de skills do PRD #731 (PRs #745, #746, #747) de outra sessao, que ja tinham buildado e nunca foram registrados aqui, por isso prds traz os dois numeros. O passo 9.6 rodou SO com --prd 726 (no-op, o #726 nao tem pagina de manual): o #731 tem seis paginas em draft e NAO esta concluido, entao tirar o draft dele publicaria secao que a outra sessao ainda esta escrevendo. Esse draft segue pendente e e dela."
-    },
-    {
-      "at": "2026-09-16T00:05:00-03:00",
-      "sha": "e4db875",
-      "app_version": "0.136.0",
-      "subject": "Fundacao do site do Manual do usuario e o item Ajuda na sidebar, que abre a secao do modulo em que a pessoa esta",
-      "raw_subject": "feat(manual): fundacao do site do Manual do usuario (#743) + feat(frontend): item Ajuda na sidebar (#742)",
-      "scope": [
-        "frontend",
-        "docs",
-        "skills"
-      ],
-      "result": "healthy",
-      "duration_seconds": 239,
-      "services_touched": [
-        "frontend",
-        "backend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 do PRD #731, duas fatias mergeadas em sequencia com um deploy so. O #743 nao toca a app: site Astro Starlight em docs/manual/, publicar.sh, dois conferidores em tools/ e um workflow novo no CI. As pastas legadas docs/manual/ouvidoria/ e docs/manual/tecnologia/ ficaram intocadas, ao lado do site. O #742 e a unica mudanca de app da onda: tres arquivos do frontend e a env var publica NEXT_PUBLIC_MANUAL_URL, opcional, com default https://manual.hospitalsaomatheus.cloud. Nada a criar no Coolify. O build do backend em 63d24609 (merge do #743) falhou por 'Failed to get installation token' do GitHub App, timeout transitorio da API do GitHub, nao por codigo: o build seguinte (e4db8759) passou e prod ficou em 0.136.0. Os dois gates de revisao acharam achado real, cada um em um PR. No #742, o teste do link externo asseria toContain('noopener') e sobrevivia a remocao do noreferrer, que e o que impede o protocolo da manifestacao de vazar no Referer a partir de /ouvidoria/m/[protocolo]. No #743, nenhum teste exercitava o main() dos dois conferidores, e e do returncode deles que o CI depende: trocar return 1 por return 0 em lint_manual.main() deixava travessao e jargao passarem com a suite verde, e o mesmo em checar_build_manual.main() desligava a unica prova de que pagina em draft nao vai para o ar. Os dois foram corrigidos com prova por mutacao. Achado que virou codigo: no content layer do Starlight o id de ouvidoria/index.md e 'ouvidoria', sem /index, entao o filtro startsWith('ouvidoria/') nao enxergava a Visao geral e o cartao da home ficava sem link mesmo com a pagina publicada; o filtro passou a aceitar id === pasta. FALTA ATO HUMANO: o site ainda nao esta no ar. O DNS que a Vercel pede e A, host manual, valor 76.76.21.21, e a zona de hospitalsaomatheus.cloud hoje e servida pela Cloudflare, nao pela Hostinger, entao o registro nasce la e sem proxy. A publicacao e 'bash docs/manual/publicar.sh', negada ao agente pelo classifier. Ate isso acontecer o item Ajuda abre uma aba vazia. O redirecionamento do manual-ouvidoria-hsm esta versionado em docs/manual/redirecionamento/ e NAO foi publicado de proposito: enquanto /ouvidoria/ for draft, publicar trocaria um manual que funciona por uma pagina nao encontrada. Ele sobe com a fatia #738."
-    },
-    {
-      "at": "2026-09-15T18:32:00-03:00",
-      "sha": "8890493",
-      "app_version": "0.135.0",
-      "subject": "O registro manual da Ouvidoria aceita WhatsApp, Instagram, Reclame Aqui e Google como canal de origem",
-      "raw_subject": "feat(ouvidoria): registro manual aceita WhatsApp, Instagram, Reclame Aqui e Google (#724)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 223,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "109_ouvidoria_canais_manuais.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Primeira fatia do PRD #720. O select do registro manual passa de tres para sete canais e nasce em WhatsApp, nao mais em Telefone. A 109 so alarga o CHECK, e por ser superconjunto estrito dos seis valores da 067 pode ser aplicada antes do merge sem quebrar o codigo que ja estava no ar, que foi o que o humano fez. Ordem de subida registrada no corpo do PR e obrigatoria: migration, backend, frontend. Se o frontend subisse antes do backend, o caminho PADRAO quebraria, porque o modal nasce em whatsapp e o backend antigo devolveria 422 com uma tela que culpa relato, tipo, setor e resumo, causa que nao e a real. Corrida com a sessao B no meio da onda: ela mergeou a #717 e deployou v0.134.1, o PR ficou CONFLICTING no package.json e foi rebaseado mantendo 0.135.0. O Gate 1.5 nasceu carimbado [x] no corpo do PR antes de a revisao rodar, o que esvazia o gate; foi corrigido no mesmo turno e o corpo hoje diz quando cada gate rodou de verdade."
     }
   ]
 }

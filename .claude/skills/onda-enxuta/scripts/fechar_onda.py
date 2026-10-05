@@ -91,6 +91,7 @@ if hasattr(sys.stderr, "reconfigure"):
 # do mesmo checkout deste script.
 sys.path.insert(0, str(Path(__file__).resolve().parents[4] / "tools"))
 import checar_migration_repetida  # noqa: E402
+import ci_sem_runner  # noqa: E402
 
 EXIT_PRECOND = 1
 EXIT_MERGE = 2
@@ -390,17 +391,33 @@ def _resultado(check: dict) -> str:
 def esperar_checks(raiz: Path, pr: int, sha: str) -> None:
     """Espera o CI do head `sha` do PR ficar verde e o GitHub liberar o merge
     (mergeStateStatus CLEAN). Com o ruleset, check obrigatorio pendente deixa o
-    PR em BLOCKED; branch atras da base, em BEHIND."""
+    PR em BLOCKED; branch atras da base, em BEHIND. Job que o GitHub cancelou
+    por falta de runner (incidente do Actions, issue #953) e repetido, nao e
+    vermelho de codigo."""
     inicio = time.time()
+    repeticoes = 0
     while True:
         info = gh_json(["pr", "view", str(pr), "--json", "headRefOid,statusCheckRollup,mergeStateStatus"],
                        cwd=raiz)
         estado = (info.get("mergeStateStatus") or "").upper()
         checks = info.get("statusCheckRollup") or []
         if info.get("headRefOid") == sha:
-            vermelhos = [c.get("name") or c.get("context") or "?" for c in checks if _resultado(c) in VERMELHO]
-            if vermelhos:
-                raise EntregaFalhou(f"CI vermelho no PR #{pr}: {', '.join(vermelhos[:4])}")
+            vermelhos = [c for c in checks if _resultado(c) in VERMELHO]
+            runs = ci_sem_runner.runs_sem_runner(vermelhos, lambda job: [
+                a.get("message") or "" for a in gh_json(
+                    ["api", f"repos/{{owner}}/{{repo}}/check-runs/{job}/annotations"], cwd=raiz)])
+            if runs and repeticoes >= ci_sem_runner.REPETICOES_MAX:
+                raise EntregaFalhou(f"PR #{pr}: o GitHub Actions ficou sem runner {repeticoes} vezes seguidas "
+                                    "(incidente, veja githubstatus.com); nada do codigo falhou")
+            if runs:
+                if all(run(["gh", "run", "rerun", r, "--failed"], cwd=raiz, check=False).returncode == 0
+                       for r in sorted(runs)):
+                    repeticoes += 1
+                    print(f"CI do PR #{pr} cancelado sem runner do GitHub: rerun {repeticoes} de "
+                          f"{ci_sem_runner.REPETICOES_MAX}")
+            elif vermelhos:
+                nomes = [c.get("name") or c.get("context") or "?" for c in vermelhos]
+                raise EntregaFalhou(f"CI vermelho no PR #{pr}: {', '.join(nomes[:4])}")
             if estado in ("BEHIND", "DIRTY"):
                 raise EntregaFalhou(f"PR #{pr} em {estado}: a main andou durante o CI")
             if checks and all(_resultado(c) in VERDE for c in checks) and estado in ("CLEAN", "HAS_HOOKS"):
