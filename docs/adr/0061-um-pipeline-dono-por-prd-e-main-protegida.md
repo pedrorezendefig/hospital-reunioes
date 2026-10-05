@@ -74,3 +74,11 @@ O agrupar por responsável não mostrou quem cuida de quê: a fatia sem claim ap
 **Decisão:** a aba Issues do painel local filtra por **um** responsável de cada vez, em vez de agrupar. Responsável é quem está designado na issue (assignee), sem herdar o dono do PRD; "sem responsável" mostra as issues sem ninguém designado. Com o filtro ligado, um visor abaixo dos cards gerais mostra as contas da pessoa: abertas (e quantas em andamento), entregues (e quantas nos últimos 30 dias), lead time médio e prontas para agente. O coletor passa a trazer todas as issues e PRs, sem o teto de 200.
 
 Revoga, na decisão 5, o agrupamento ligado por padrão, a herança do dono do PRD **na visão do painel** e o "sem métrica por pessoa": o Pedro quer ver quanto cada um entregou. O dono do PRD continua valendo como responsabilidade (decisão 2 e `issue-tracker.md`); só deixa de redistribuir as fatias no painel.
+
+## Emenda de 05/10/2026: responsável cai em quem criou (decisão 5)
+
+Com o filtro da emenda de 02/10, 120 issues apareciam "sem responsável", 32 delas abertas, embora toda issue nasça do Claude Code de alguém. O Pedro quer que nenhuma issue fique sem dono no painel.
+
+**Decisão:** no painel, responsável é quem está designado (assignee) e, sem ninguém designado, quem criou a issue (author do GitHub). Quem assumiu manda sobre quem criou. Para não repetir o problema da emenda de 02/10 (fatia sem claim parecendo trabalho de quem rodou o `/to-issues`), a origem fica visível: o cartão mostra `👤 fulano` para quem assumiu e `✎ criada por fulano` para quem só criou, o visor da pessoa separa assumidas de só criadas, e o "em andamento" conta só issue com assignee. O "sem responsável" vira **"ninguém assumiu"**: as issues sem assignee, a fila sem claim. O PRD sem assignee segue marcado "sem dono", agora com quem o criou ao lado.
+
+Nada muda no GitHub: o assignee continua sendo o claim do protocolo paralelo (`issue-tracker.md`), e o painel não designa ninguém. Limite conhecido: a issue aberta pela integração do app (Demanda vira issue) tem como autor o dono do token, e conta apagada vem do `gh` como `ghost`.
