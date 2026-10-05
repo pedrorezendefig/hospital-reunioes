@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.161.3 - 2026-10-05 15:41 - PR #896, issue #807: Aspas no cabeçalho YAML de 7 skills e trava no CI
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `c0293c8`
+- PRs: [#896](https://github.com/pedrorezendefig/hospital-reunioes/pull/896)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (989s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/c0293c8
+
 ## v0.161.2 - 2026-10-05 15:22 - PR #898, issue #852: Imagem e CI do backend instalam pelo uv.lock
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `1ef79ab`
