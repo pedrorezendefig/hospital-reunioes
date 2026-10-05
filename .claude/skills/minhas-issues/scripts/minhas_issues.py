@@ -45,28 +45,46 @@ def minhas(issues: list[dict], login: str) -> list[dict]:
     ]
 
 
+def cancelados_por_runner(runs: list[dict]) -> int:
+    """Jobs cancelados porque o runner não pegou. O run costuma sair failure, não cancelled."""
+    return sum(
+        1
+        for r in runs if r["conclusion"] not in ("success", "skipped")
+        for j in r["jobs"] if j["conclusion"] == "cancelled" and any(SEM_RUNNER in a for a in j["anotacoes"])
+    )
+
+
 def semaforo(actions: dict) -> tuple[str, str]:
     comp, cancelados = actions["componente"], actions["cancelados_por_runner"]
     if comp in ("partial_outage", "major_outage"):
         cor = "vermelho"
-    elif comp != "operational" or cancelados:
+    elif comp != "operational" or cancelados or cancelados is None:
         cor = "amarelo"
     else:
         cor = "verde"
     partes = [f"Actions {comp or 'sem resposta da status page'}"]
-    if cancelados:
+    if cancelados is None:
+        partes.append("sem leitura dos runs")
+    elif cancelados:
         partes.append(f"{cancelados} job{'s' if cancelados > 1 else ''} cancelado{'s' if cancelados > 1 else ''} por falta de runner")
     return cor, " · ".join(partes)
 
 
 def _must_fix_aberto(veredito: str) -> bool:
-    achado = re.search(r"\*\*must-fix\*\*\s*\n+\s*(\S+)", veredito)
-    return bool(achado) and not achado.group(1).lower().startswith("nenhum")
+    final = re.search(r"VEREDITO:\s*(\S+)", veredito)
+    if final:
+        return final.group(1).upper().startswith("MUST-FIX")
+    achado = re.search(r"\*\*must-fix\*\*(.*?)(?=\n\s*\*\*|\Z)", veredito, re.S)
+    if not achado:
+        return False
+    corpo = re.sub(r"^\s*(\([^)]*\))?\s*:?", "", achado.group(1))
+    palavras = re.sub(r"(?m)^\s*(?:[-*]|\d+\.)\s*", "", corpo).split()
+    return bool(palavras) and not palavras[0].lower().startswith("nenhum")
 
 
 def estado_pr(pr: dict) -> dict:
     conclusoes = [c["conclusion"] for c in pr["checks"]]
-    if any(c in ("FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE") for c in conclusoes):
+    if any(c in ("FAILURE", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "ERROR") for c in conclusoes):
         motivo = "CI vermelho"
     elif "CANCELLED" in conclusoes:
         motivo = "CI cancelado"
@@ -83,18 +101,18 @@ def estado_pr(pr: dict) -> dict:
     return {"nivel": 3, "motivo": motivo}
 
 
-def _comando_pr(pr: dict, motivo: str) -> str:
-    runs = sorted({c["run_id"] for c in pr["checks"] if c["conclusion"] in ("CANCELLED", "FAILURE", "TIMED_OUT") and c["run_id"]})
+def _comando_pr(pr: dict, motivo: str) -> list[str]:
+    runs = sorted({c["run_id"] for c in pr["checks"] if c["conclusion"] in ("CANCELLED", "FAILURE", "TIMED_OUT", "ERROR") and c["run_id"]})
     if motivo == "CI cancelado":
-        return " ; ".join(f"`gh run rerun {r} --failed`" for r in runs) or "rodar o CI de novo"
+        return [f"`gh run rerun {r} --failed`" for r in runs] or ["rodar o CI de novo"]
     if motivo == "CI vermelho":
-        return " ; ".join(f"`gh run view {r} --log-failed`" for r in runs) or "ver o CI"
-    return {
+        return [f"`gh run view {r} --log-failed`" for r in runs] or ["ver o CI"]
+    return [{
         "CI rodando": "esperar o CI",
         "conflito com a main": "`/resolver-conflitos`",
         "must-fix aberto": f"corrigir o must-fix do PR #{pr['number']}",
         "sem revisão": f"`/code-review {pr['number']}`",
-    }.get(motivo, f"ver o PR #{pr['number']}")
+    }.get(motivo, f"ver o PR #{pr['number']}")]
 
 
 def medianas(mergeados: list[dict]) -> dict:
@@ -147,34 +165,35 @@ def montar(d: dict) -> str:
     linhas_and = []
     for i in andamento:
         n, pr, wt = i["number"], pr_de.get(i["number"]), wt_de.get(i["number"])
-        onde, prox = [], ""
+        onde, prox = [], []
         if pr:
             e = estado_pr(pr)
             onde.append(e["motivo"])
             if e["nivel"] == 1:
-                prox = f"`{RABO} --prs {pr['number']} --dry-run`"
+                prox = [f"`{RABO} --prs {pr['number']} --dry-run`"]
             else:
                 prox = _comando_pr(pr, e["motivo"])
             passos.setdefault(e["nivel"], []).append((f"#{pr['number']}", prox))
-        if wt and wt["sem_remoto"] and wt["ahead"]:
-            onde.insert(0, f"{wt['ahead']} commit{'s' if wt['ahead'] > 1 else ''} só local, sem push")
-            prox = f"`git -C {wt['path']} push -u origin {wt['branch']}`"
+        if wt and wt["nao_pushados"]:
+            k = wt["nao_pushados"]
+            onde.insert(0, f"{k} commit{'s' if k > 1 else ''} só local, sem push")
+            prox = [f"`git -C {wt['path']} push -u origin {wt['branch']}`"]
             passos.setdefault(2, []).append((f"#{n}", prox))
         elif wt and not pr and wt["ahead"]:
             onde.append("branch no remoto, sem PR")
-            prox = "`/ship`"
+            prox = ["`/ship`"]
             passos.setdefault(3, []).append((f"#{n}", prox))
         elif wt and not pr:
             onde.append("worktree aberto, sem commit novo")
-            prox = f"seguir no worktree `{wt['path']}`"
+            prox = [f"seguir no worktree `{wt['path']}`"]
         if wt and wt["locked"]:
             onde.append("worktree travado")
         if not onde:
             onde.append("claim sem PR nem worktree nesta máquina")
-            prox = f"retomar (`/tdd`) ou devolver ao pool"
+            prox = ["retomar (`/tdd`) ou devolver ao pool"]
             passos.setdefault(3, []).append((f"#{n}", prox))
         pr_txt = f"#{pr['number']} {pr['mergeStateStatus']}" if pr else "sem PR"
-        linhas_and.append(f"| {n} | {_curto(i['title'])} | {pr_txt} | {'; '.join(onde)} | {prox} |")
+        linhas_and.append(f"| {n} | {_curto(i['title'])} | {pr_txt} | {'; '.join(onde)} | {' ; '.join(prox)} |")
 
     triagem = [i for i in fila if "needs-triage" in i["labels"] or "needs-info" in i["labels"]]
     grupos: dict[str, list[dict]] = {}
@@ -203,16 +222,16 @@ def montar(d: dict) -> str:
     # níveis 4 a 6, a partir da fila
     agente = [i for i in fila if "ready-for-agent" in i["labels"] and i not in triagem and not i["title"].startswith("PRD")]
     for i in [i for i in agente if "priority:high" in i["labels"]]:
-        passos.setdefault(4, []).append((f"#{i['number']}", f"`/pegar-issue {i['number']}` ({_horas(mediana(i))})", mediana(i)))
+        passos.setdefault(4, []).append((f"#{i['number']}", [f"`/pegar-issue {i['number']}` ({_horas(mediana(i))})"], mediana(i)))
     for i in [i for i in fila if "ready-for-human" in i["labels"]]:
-        passos.setdefault(5, []).append((f"#{i['number']}", f"tarefa sua: {_curto(i['title'], 50)}"))
+        passos.setdefault(5, []).append((f"#{i['number']}", [f"tarefa sua: {_curto(i['title'], 50)}"]))
     resto = [i for i in agente if "priority:high" not in i["labels"]]
     if resto:
         andando = sorted({i["parent"]["number"] for i in andamento if i["parent"]})
         recorte = "".join(f" --exceto #{p}" for p in andando)
         horas = sum(mediana(i) for i in resto)
         passos.setdefault(6, []).append(
-            (f"{len(resto)} na fila de agente", f"`/montar-ondas-enxutas{recorte}` ({_horas(horas)} de PR somados)", horas)
+            (f"{len(resto)} na fila de agente", [f"`/montar-ondas-enxutas{recorte}` ({_horas(horas)} de PR somados)"], horas)
         )
 
     titulos = {
@@ -227,15 +246,12 @@ def montar(d: dict) -> str:
     for nivel in sorted(passos)[:3]:
         itens = passos[nivel]
         alvo = ", ".join(x[0] for x in itens)
-        cmds = " ; ".join(x[1] for x in itens)
-        extra = " (espera o Actions)" if nivel == 1 and cor != "verde" else ""
-        plano.append(f"{len(plano) + 1}. {titulos[nivel]} {alvo}{extra}: {cmds}")
-        if nivel <= 3:
-            estimativas.append(0.0)
-        elif nivel == 5:
-            estimativas.append(None)
-        else:
-            estimativas.append(sum(x[2] for x in itens))
+        cmds = [c for x in itens for c in x[1]]
+        precisa_ci = any("gh run" in c or "fechar_onda" in c for c in cmds)
+        extra = " (espera o Actions)" if precisa_ci and cor != "verde" else ""
+        estimativas.append(0.0 if nivel <= 3 else None if nivel == 5 else sum(x[2] for x in itens))
+        plano.append(f"{len(estimativas)}. {titulos[nivel]} {alvo}{extra}:")
+        plano += [f"   - {c}" for c in cmds]
 
     saida = [
         f"**Semáforo:** {cor} · {detalhe} · {VEREDITO[cor]}",
@@ -252,8 +268,10 @@ def montar(d: dict) -> str:
     saida += ["", "**2. Na fila**", ""]
     if linhas_fila:
         saida += ["| grupo | issues | label | parada |", "|---|---|---|---|", *linhas_fila]
-    if triagem:
-        saida.append(f"needs-triage: {', '.join('#' + str(i['number']) for i in triagem)} (`/triage`)")
+    for rotulo in ("needs-triage", "needs-info"):
+        dessa = [i for i in triagem if rotulo in i["labels"]]
+        if dessa:
+            saida.append(f"{rotulo}: {', '.join('#' + str(i['number']) for i in dessa)} (`/triage`)")
     saida += ["", "**3. Plano**", ""]
     saida += plano or ["nada a fazer"]
     validas = [(h, k) for k, h in enumerate(estimativas) if h is not None]
@@ -366,13 +384,21 @@ def _actions(repo: str) -> dict:
         componente = next((c["status"] for c in comps if c["name"] == "Actions"), None)
     except Exception:
         componente = None
-    cancelados = 0
-    runs = json.loads(gh("run", "list", "--limit", "10", "--json", "databaseId,conclusion"))
-    for run in [r for r in runs if r["conclusion"] == "cancelled"]:
-        jobs = json.loads(gh("run", "view", str(run["databaseId"]), "--json", "jobs"))["jobs"]
-        for job in [j for j in jobs if j["conclusion"] == "cancelled"]:
-            notas = json.loads(gh("api", f"repos/{repo}/check-runs/{job['databaseId']}/annotations"))
-            cancelados += any(SEM_RUNNER in (n.get("message") or "") for n in notas)
+    try:
+        runs = json.loads(gh("run", "list", "--limit", "10", "--json", "databaseId,conclusion"))
+        for run in runs:
+            run["jobs"] = []
+            if run["conclusion"] in ("success", "skipped", "", None):
+                continue
+            for job in json.loads(gh("run", "view", str(run["databaseId"]), "--json", "jobs"))["jobs"]:
+                notas = []
+                if job["conclusion"] == "cancelled":
+                    resp = gh("api", f"repos/{repo}/check-runs/{job['databaseId']}/annotations")
+                    notas = [n.get("message") or "" for n in json.loads(resp)]
+                run["jobs"].append({"conclusion": job["conclusion"], "anotacoes": notas})
+        cancelados = cancelados_por_runner(runs)
+    except (subprocess.CalledProcessError, json.JSONDecodeError, KeyError):
+        cancelados = None  # sem leitura dos runs: o semáforo fica amarelo
     return {"componente": componente, "cancelados_por_runner": cancelados}
 
 
@@ -405,11 +431,14 @@ def _worktrees() -> list[dict]:
             atual["locked"] = True
         elif not linha and atual:
             if atual["branch"]:
+                sem_remoto = atual["branch"] not in remotas
+                base = "origin/main" if sem_remoto else f"origin/{atual['branch']}"
                 try:
                     ahead = int(git("-C", atual["path"], "rev-list", "--count", "origin/main..HEAD").strip())
+                    nao_pushados = int(git("-C", atual["path"], "rev-list", "--count", f"{base}..HEAD").strip())
                 except subprocess.CalledProcessError:
-                    ahead = 0
-                saida.append({**atual, "ahead": ahead, "sem_remoto": atual["branch"] not in remotas})
+                    ahead = nao_pushados = 0
+                saida.append({**atual, "ahead": ahead, "sem_remoto": sem_remoto, "nao_pushados": nao_pushados})
             atual = {}
     return saida
 
@@ -437,4 +466,8 @@ def coletar(login: str | None) -> dict:
 
 if __name__ == "__main__":
     alvo = sys.argv[1].lstrip("@") if len(sys.argv) > 1 else None
-    print(montar(coletar(alvo)))
+    try:
+        print(montar(coletar(alvo)))
+    except subprocess.CalledProcessError as erro:
+        motivo = (erro.stderr or "").strip().splitlines()
+        sys.exit(f"falha ao consultar o GitHub ({' '.join(erro.cmd[:3])}): {motivo[0] if motivo else erro}")

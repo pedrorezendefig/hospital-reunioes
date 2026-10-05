@@ -88,10 +88,24 @@ def test_conta_atribuida_e_criada_sem_dono_e_deixa_fora_a_criada_que_outro_assum
         pytest.param("partial_outage", 0, "vermelho", id="vermelho-parcial"),
         pytest.param("major_outage", 5, "vermelho", id="vermelho-total"),
         pytest.param(None, 0, "amarelo", id="status-page-fora-do-ar"),
+        pytest.param("operational", None, "amarelo", id="runs-sem-leitura"),
     ],
 )
 def test_semaforo(componente, cancelados, cor):
     assert mi.semaforo({"componente": componente, "cancelados_por_runner": cancelados})[0] == cor
+
+
+def test_job_cancelado_sem_runner_conta_mesmo_com_o_run_em_failure():
+    """Quando o runner não pega o job, o job sai cancelled e o run sai failure (PR #954)."""
+    runs = [
+        {"conclusion": "failure", "jobs": [
+            {"conclusion": "cancelled", "anotacoes": ["The job was not acquired by Runner of type hosted even after multiple attempts"]},
+            {"conclusion": "success", "anotacoes": []},
+        ]},
+        {"conclusion": "cancelled", "jobs": [{"conclusion": "cancelled", "anotacoes": ["Canceled by user"]}]},
+        {"conclusion": "success", "jobs": []},
+    ]
+    assert mi.cancelados_por_runner(runs) == 1
 
 
 def test_veredito_do_semaforo_diz_se_da_pra_desenvolver():
@@ -119,6 +133,24 @@ def test_pr_verde_e_limpo_e_nivel_1_e_must_fix_aberto_segura():
     assert mi.estado_pr(pr(1, 9, vereditos=[sujo, limpo]))["nivel"] == 1
 
 
+@pytest.mark.parametrize(
+    "veredito,aberto",
+    [
+        pytest.param("**must-fix**\n- nenhum\n\n**should-fix**\n1. x\n\nVEREDITO: LIMPO", False, id="lista-nenhum-limpo"),
+        pytest.param("**must-fix**\n- nenhum\n", False, id="lista-nenhum-sem-linha-final"),
+        pytest.param("**must-fix** (bloqueia)\n- a.py:1 quebra\n\nVEREDITO: MUST-FIX (1)", True, id="linha-final-must-fix"),
+        pytest.param("**must-fix**: a.py:1 quebra\n", True, id="dois-pontos-na-mesma-linha"),
+        pytest.param("**must-fix**\nNenhum.\n", False, id="nenhum-ponto"),
+    ],
+)
+def test_must_fix_le_os_formatos_reais_do_veredito(veredito, aberto):
+    assert mi._must_fix_aberto(veredito) is aberto
+
+
+def test_status_de_erro_conta_como_ci_vermelho():
+    assert mi.estado_pr(pr(1, 9, checks=("SUCCESS", "ERROR")))["motivo"] == "CI vermelho"
+
+
 # Os 4 blocos
 
 
@@ -140,7 +172,7 @@ def cenario():
             pr(949, 939, checks=("SUCCESS", "CANCELLED"), mss="BLOCKED", run_id=37363765582),
         ],
         worktrees=[
-            {"path": "/wt/a", "branch": "chore/ci-runner-reserva-955", "locked": True, "ahead": 1, "sem_remoto": True},
+            {"path": "/wt/a", "branch": "chore/ci-runner-reserva-955", "locked": True, "ahead": 1, "sem_remoto": True, "nao_pushados": 1},
         ],
         componente="degraded_performance",
         cancelados=3,
@@ -175,9 +207,15 @@ def test_fila_agrupa_por_prd_com_idade_e_deixa_needs_triage_na_contagem():
     assert "needs-triage: #933" in fila and "/triage" in fila
 
 
+def plano_de(d):
+    """Cada passo numerado com as sub-linhas de comando dele."""
+    plano = mi.montar(d).split("**3. Plano**")[1]
+    return re.findall(r"^(\d)\. (.*(?:\n   - .*)*)", plano, flags=re.M)
+
+
 def test_plano_segue_a_ordem_fixa_e_tem_comando_pronto():
     plano = mi.montar(cenario()).split("**3. Plano**")[1]
-    passos = re.findall(r"^(\d)\. (.*)$", plano, flags=re.M)
+    passos = plano_de(cenario())
     assert [p[0] for p in passos] == ["1", "2", "3"]
     assert "#950" in passos[0][1] and "espera o Actions" in passos[0][1]
     assert "push" in passos[1][1] and "#955" in passos[1][1]
@@ -185,10 +223,6 @@ def test_plano_segue_a_ordem_fixa_e_tem_comando_pronto():
     assert "fechar_onda.py --prs 950 --dry-run" in plano
     assert "git -C /wt/a push -u origin chore/ci-runner-reserva-955" in plano
     assert "gh run rerun 37363765582 --failed" in plano
-
-
-def plano_de(d):
-    return re.findall(r"^(\d)\. (.*)$", mi.montar(d).split("**3. Plano**")[1], flags=re.M)
 
 
 def test_plano_desce_a_ordem_quando_os_niveis_de_cima_estao_vazios():
@@ -243,10 +277,39 @@ def test_estimativa_vem_da_mediana_da_fatia_e_marca_mais_rapido_e_melhor():
 def test_worktree_sem_pr_sempre_diz_onde_parou_e_o_proximo_passo(ahead, sem_remoto, onde, prox):
     d = dados(
         issues=[issue(956, "Skill", ["in-progress"], [EU])],
-        worktrees=[{"path": "/wt/b", "branch": "chore/minhas-issues-956", "locked": True, "ahead": ahead, "sem_remoto": sem_remoto}],
+        worktrees=[{"path": "/wt/b", "branch": "chore/minhas-issues-956", "locked": True, "ahead": ahead, "sem_remoto": sem_remoto, "nao_pushados": 0}],
     )
     linha = next(l for l in mi.montar(d).splitlines() if l.startswith("| 956 |"))
     assert onde in linha and prox in linha and "worktree travado" in linha
+
+
+def test_commit_a_frente_da_branch_ja_pushada_tambem_e_sem_push():
+    d = dados(
+        issues=[issue(939, "Rabo", ["in-progress"], [EU])],
+        prs=[pr(949, 939)],
+        worktrees=[{"path": "/wt/c", "branch": "chore/rabo-939", "locked": False, "ahead": 3, "sem_remoto": False, "nao_pushados": 1}],
+    )
+    linha = next(l for l in mi.montar(d).splitlines() if l.startswith("| 939 |"))
+    assert "1 commit só local, sem push" in linha
+
+
+def test_fora_do_verde_o_rerun_avisa_que_espera_o_actions():
+    d = cenario()
+    d["actions"] = {"componente": "major_outage", "cancelados_por_runner": 0}
+    passos = plano_de(d)
+    assert "espera o Actions" in passos[2][1]
+
+
+def test_needs_info_nao_sai_com_rotulo_de_needs_triage():
+    d = dados(issues=[issue(10, "a", ["needs-info"]), issue(11, "b", ["needs-triage"])])
+    texto = mi.montar(d)
+    assert "needs-info: #10" in texto and "needs-triage: #11" in texto
+
+
+def test_plano_poe_um_comando_por_linha():
+    plano = mi.montar(cenario()).split("**3. Plano**")[1]
+    assert " ; " not in plano
+    assert "   - `gh run rerun 37363765582 --failed`" in plano
 
 
 def test_quando_o_melhor_e_o_mais_rapido_coincidem_diz_numa_linha():
