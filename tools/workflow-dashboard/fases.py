@@ -75,9 +75,11 @@ def _timeline(issue: dict, linha: dict, producao: _Producao, branches: list[str]
     `linha` vem do coletor: eventos da própria issue (designada, fechada,
     reaberta) e os PRs que a fecham, com quantos commits ficaram de CI vermelho
     e os vereditos dos revisores. No empate de horário o PR vem antes da issue
-    (o merge é que fecha a issue).
+    (o merge é que fecha a issue), e a versão nunca vem antes do merge: a onda
+    antiga registrava o deploy segundos antes de mergear.
     """
     eventos = [{"tipo": "criada", "em": issue.get("created_at")}]
+    ordem: dict[int, datetime] = {}  # id(evento) -> instante de ordenação, quando difere de "em"
     prs = _por_data(linha.get("prs") or [])
     houve_tentativa = False
     for p in prs:
@@ -93,14 +95,14 @@ def _timeline(issue: dict, linha: dict, producao: _Producao, branches: list[str]
             eventos.append({"tipo": "mergeado", "em": p.get("merged_at"), "pr": n})
             _, deploy = producao.do_pr({**p, "closes": [issue["number"]]})
             if deploy:
-                eventos.append(
-                    {"tipo": "em_producao", "em": deploy["at"], "pr": n, "versao": deploy.get("app_version")}
-                )
+                no_ar = {"tipo": "em_producao", "em": deploy["at"], "pr": n, "versao": deploy.get("app_version")}
+                eventos.append(no_ar)
+                ordem[id(no_ar)] = max(filter(None, (_dt(deploy["at"]), _dt(p.get("merged_at")))))
         elif p["state"] == "CLOSED":
             eventos.append({"tipo": "pr_fechado", "em": p.get("closed_at"), "pr": n})
             houve_tentativa = True
     eventos += [dict(e) for e in linha.get("eventos") or []]
-    datados = sorted((e for e in eventos if _dt(e.get("em"))), key=lambda e: _dt(e["em"]))
+    datados = sorted((e for e in eventos if _dt(e.get("em"))), key=lambda e: ordem.get(id(e)) or _dt(e["em"]))
     sem_data = [e for e in eventos if not _dt(e.get("em"))]
     branch = _branch_sem_pr(issue["number"], prs, branches)
     if branch:

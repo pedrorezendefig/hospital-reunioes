@@ -11,7 +11,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from fases import montar_fases, vereditos_dos_comentarios  # noqa: E402
+from fases import montar_fases, timeline_da_issue, vereditos_dos_comentarios  # noqa: E402
 
 AGORA = datetime(2026, 10, 10, 12, 0, tzinfo=timezone.utc)
 
@@ -620,6 +620,17 @@ def test_timeline_conta_a_historia_da_issue_em_ordem():
     assert tl[5]["pr"] == 302
     assert (tl[6]["veredito"], tl[7]["veredito"]) == ("must_fix", "limpo")
     assert tl[-1] == {"tipo": "em_producao", "em": "2026-10-05T09:00:00-03:00", "pr": 302, "versao": "0.170.0"}
+
+
+def test_timeline_poe_a_versao_depois_do_merge_mesmo_com_registro_segundos_antes():
+    # onda antiga: o registro do deploy (20:01:37) saiu 4 s antes do merge do PR #925 (20:01:41)
+    issue = _issue(910, state="CLOSED", created_at="2026-10-02T17:39:40Z")
+    pr = _pr_da_linha(925, "MERGED", "2026-10-02T22:31:21Z", merged_at="2026-10-02T23:01:41Z")
+    deploys = [_deploy("0.158.6", "2026-10-02T20:01:37-03:00", "onda-a: PRs #925")]
+    linha = {"eventos": [{"tipo": "fechada", "em": "2026-10-02T23:01:42Z"}], "prs": [pr]}
+    tl = timeline_da_issue(issue, linha, deploys)
+    assert [e["tipo"] for e in tl] == ["criada", "pr_aberto", "mergeado", "em_producao", "fechada"]
+    assert tl[3]["em"] == "2026-10-02T20:01:37-03:00"  # a hora registrada não muda, só a ordem
 
 
 def test_timeline_termina_na_branch_quando_ela_ainda_nao_virou_pr():
