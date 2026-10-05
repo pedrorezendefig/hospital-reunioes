@@ -2,6 +2,34 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-05T15:22:07-03:00",
+      "sha": "1ef79ab923e5880d0d94cec9266ef311c6351026",
+      "app_version": "0.161.2",
+      "subject": "PR #898, issue #852: Imagem e CI do backend instalam pelo uv.lock",
+      "raw_subject": "chore(deploy): registro do PR avulso (#898)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 928,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #898, issue #852. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
       "at": "2026-10-05T15:04:26-03:00",
       "sha": "9485c6e6b9eea8510ac81d5952c74da9ff8aec9e",
       "app_version": "0.161.1",
@@ -1527,35 +1555,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Acabamento das #708/#710, sem mudanca de comportamento: as tres frases seguem byte a byte iguais. O front casa por prefixo e ninguem protegia isso; agora cada marca e constante nomeada com teste que morre se o prefixo sumir. Limite conhecido e assumido: o teste compara backend contra backend, entao esvaziar a constante ou reescrever frase e constante no mesmo edit ainda passa verde. O frontend so rebuildou por causa do bump; o webhook rebuilda os dois com watch_paths nulo."
-    },
-    {
-      "at": "2026-09-15T17:05:00-03:00",
-      "sha": "49a3b8d",
-      "app_version": "0.134.0",
-      "subject": "O Perfil da Ouvidoria inteiro mantem o cadastro de responsaveis por setor",
-      "raw_subject": "feat(ouvidoria): o Perfil da Ouvidoria inteiro mantém o cadastro de responsáveis (#711) (#718)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": 273,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Ultima fatia do PRD #706 (ADR 0055, decisao 5). O critério do histórico de vigência com autor foi renegociado para audit_log: a coluna de autor nunca existiu. Achado do code-review deixado em aberto na issue #719: a RLS do audit_log so libera super admin, entao o rastro e gravado e ninguem da Ouvidoria o le no app."
     }
   ]
 }
