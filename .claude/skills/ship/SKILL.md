@@ -302,7 +302,7 @@ Jobs esperados (workflow `.github/workflows/ci.yml`):
 - `Frontend Lint & Type Check` (pnpm lint + tsc)
 - `Build` (docker build dos 2 services como sanity check)
 
-Se algum check falhar → ❌ reportar logs (`gh run view <id> --log`), parar.
+Se algum check falhar, rode antes `python .claude/skills/onda-enxuta/scripts/ci_sem_runner.py "$PR_NUMBER"`. Saída 0 = o GitHub cancelou o job por falta de runner (incidente do Actions, issue #953), não é código: o script já pediu o rerun, volte ao `gh pr checks --watch` (até 3 vezes; depois, reporte "GitHub Actions sem runner, ver githubstatus.com" e pare sem mexer no código). Saída 1 = falha de verdade → ❌ reportar logs (`gh run view <id> --log`), parar.
 
 ### (substituída pelo `/tdd`) verificação final com evidência: só com `--rigoroso`
 
