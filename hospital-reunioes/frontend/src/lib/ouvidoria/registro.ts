@@ -88,6 +88,8 @@ export interface RegistroManual {
   paciente_nome: string | null;
   paciente_referencia: string | null;
   anonimo: boolean;
+  /** O e-mail da Triagem de e-mail de onde o caso nasce (issue #650). */
+  email_recebido_id?: string;
 }
 
 function textoOuNulo(valor: string): string | null {
@@ -98,10 +100,15 @@ function textoOuNulo(valor: string): string | null {
 /**
  * Monta o corpo do POST. O T0 vai como o ouvidor digitou (hora do contato
  * real, não do clique) e o backend o interpreta em horário de Brasília.
+ *
+ * `emailRecebidoId` é o e-mail da triagem que está virando manifestação: o
+ * backend liga o item ao caso, leva os anexos e o tira dos pendentes. Sem ele
+ * o registro é o de sempre.
  */
-export function montarRegistro(form: FormularioRegistro): RegistroManual {
+export function montarRegistro(form: FormularioRegistro, emailRecebidoId?: string): RegistroManual {
   const identificado = !form.anonimo;
   return {
+    ...(emailRecebidoId ? { email_recebido_id: emailRecebidoId } : {}),
     canal: form.canal,
     contato_em: form.contatoEm,
     tipo_manifestacao: form.tipoManifestacao,

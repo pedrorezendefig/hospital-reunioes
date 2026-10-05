@@ -120,13 +120,13 @@ describe("a lista da triagem", () => {
     expect(within(joana).queryByText("Incompleto")).toBeNull();
   });
 
-  it("não oferece ação nenhuma sobre o e-mail nesta fatia", async () => {
+  it("descartar e juntar a um caso ainda não aparecem: são fatias seguintes", async () => {
     montar({ e1: item(JOANA) });
 
     fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
     await screen.findByText("Esperei três horas na recepção sem informação nenhuma.");
 
-    for (const acao of [/descartar/i, /virar manifestação/i, /juntar/i]) {
+    for (const acao of [/descartar/i, /juntar/i]) {
       expect(screen.queryByRole("button", { name: acao })).toBeNull();
     }
   });
@@ -267,5 +267,146 @@ describe("o painel do item", () => {
     expect(chamadas).toContain("/api/ouvidoria/triagem-email/e1/anexos/a1/url");
     // A aba nova não guarda referência de volta à tela da Ouvidoria.
     expect(aba.opener).toBeNull();
+  });
+});
+
+// ─── Virar manifestação (issue #650) ─────────────────────────────────────────
+
+const PRE_CARGA = {
+  email_recebido_id: "e1",
+  canal: "email",
+  contato_em: "2026-09-10T14:02:10.000Z",
+  manifestante_nome: "Joana da Silva",
+  manifestante_contato: "joana.silva@gmail.com",
+  resumo: "",
+  relato_integral: "Esperei três horas na recepção sem informação nenhuma.",
+  anexos: [
+    { id: "a1", filename: "laudo.pdf", content_type: "application/pdf", tamanho_bytes: 2048, disponivel: true },
+  ],
+};
+
+let registros: Record<string, unknown>[] = [];
+
+/** A tela com o backend dublado para o gesto inteiro: lista, item, pré-carga,
+ *  setores e o registro manual. */
+function montarParaVirar(itens: Record<string, unknown>, statusDoRegistro = 201) {
+  chamadas = [];
+  registros = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      chamadas.push(url);
+      if (url === "/api/ouvidoria/triagem-email") return respostaJson({ emails: [JOANA] });
+      if (url === "/api/ouvidoria/triagem-email/e1/pre-carga") return respostaJson(PRE_CARGA);
+      if (url === "/api/participantes/setores") return respostaJson(["Recepção", "Faturamento"]);
+      if (url === "/api/ouvidoria/manifestacoes" && init?.method === "POST") {
+        registros.push(JSON.parse(String(init.body)));
+        return statusDoRegistro === 201
+          ? respostaJson({ id: "caso-7", protocolo: "2026-0007" }, 201)
+          : respostaJson({ detail: "Este e-mail já foi decidido na triagem" }, statusDoRegistro);
+      }
+      const id = url.replace("/api/ouvidoria/triagem-email/", "");
+      return itens[id] ? respostaJson(itens[id]) : respostaJson({ detail: "E-mail não encontrado" }, 404);
+    })
+  );
+  return render(<TriagemDeEmail token="token-de-teste" />);
+}
+
+async function abrirOModal() {
+  fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
+  fireEvent.click(await screen.findByRole("button", { name: /virar manifestação/i }));
+  const modal = await screen.findByRole("dialog");
+  // O formulário é preenchido no efeito de abertura do modal.
+  await within(modal).findByDisplayValue("Esperei três horas na recepção sem informação nenhuma.");
+  return modal;
+}
+
+function completarEsalvar(modal: HTMLElement) {
+  fireEvent.change(within(modal).getByLabelText("Tipo da manifestação"), { target: { value: "reclamacao" } });
+  fireEvent.change(within(modal).getByLabelText("Setor"), { target: { value: "Recepção" } });
+  fireEvent.change(within(modal).getByLabelText("Resumo"), { target: { value: "Espera longa na recepção." } });
+  fireEvent.click(within(modal).getByRole("button", { name: /registrar manifestação/i }));
+}
+
+describe("virar manifestação (issue #650)", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("o modal Nova manifestação abre com os campos do e-mail preenchidos", async () => {
+    montarParaVirar({ e1: item(JOANA) });
+
+    const modal = await abrirOModal();
+
+    expect(within(modal).getByText("Nova manifestação")).toBeTruthy();
+    expect((within(modal).getByLabelText("Canal de origem") as HTMLSelectElement).value).toBe("email");
+    // A chegada do e-mail em hora de Brasília, e não a hora do clique.
+    // O campo guarda os segundos (o jsdom ainda normaliza com milissegundos).
+    expect((within(modal).getByLabelText("Data e hora do contato") as HTMLInputElement).value).toMatch(
+      /^2026-09-10T11:02:10/
+    );
+    expect((within(modal).getByLabelText("Quem manifestou") as HTMLInputElement).value).toBe("Joana da Silva");
+    expect((within(modal).getByLabelText("Contato") as HTMLInputElement).value).toBe("joana.silva@gmail.com");
+    expect((within(modal).getByLabelText("Relato integral") as HTMLTextAreaElement).value).toBe(
+      "Esperei três horas na recepção sem informação nenhuma."
+    );
+    expect((within(modal).getByLabelText("Resumo") as HTMLInputElement).value).toBe("");
+    // Os anexos do e-mail vão com o caso, sem o ouvidor subir de novo.
+    expect(within(modal).getByText("laudo.pdf")).toBeTruthy();
+  });
+
+  it("nenhum campo é trava: o que vale é o que o ouvidor salvou", async () => {
+    montarParaVirar({ e1: item(JOANA) });
+    const modal = await abrirOModal();
+
+    fireEvent.change(within(modal).getByLabelText("Contato"), { target: { value: "joana.pereira@exemplo.com" } });
+    fireEvent.change(within(modal).getByLabelText("Canal de origem"), { target: { value: "telefone" } });
+    completarEsalvar(modal);
+
+    await screen.findByText("Protocolo gerado");
+    const [registro] = registros;
+    expect(registro.email_recebido_id).toBe("e1");
+    expect(registro.manifestante_contato).toBe("joana.pereira@exemplo.com");
+    expect(registro.canal).toBe("telefone");
+    expect(registro.contato_em).toBe("2026-09-10T11:02:10");
+  });
+
+  it("ao salvar, o item sai dos pendentes e o painel mostra o protocolo com link para o Dossiê", async () => {
+    montarParaVirar({ e1: item(JOANA) });
+    const modal = await abrirOModal();
+
+    completarEsalvar(modal);
+    expect(await within(modal).findByText("2026-0007")).toBeTruthy();
+    // O botão do rodapé (o X do cabeçalho também se chama Fechar).
+    fireEvent.click(within(modal).getByText("Fechar"));
+
+    const painel = screen.getByRole("region", { name: "E-mail recebido" });
+    const link = within(painel).getByRole("link", { name: /2026-0007/ });
+    expect(link.getAttribute("href")).toBe("/ouvidoria/m/2026-0007");
+    expect(within(painel).queryByRole("button", { name: /virar manifestação/i })).toBeNull();
+    const lista = screen.getByRole("region", { name: "E-mails recebidos" });
+    const linha = within(lista).getByText("Demora na recepção do ambulatório").closest("button") as HTMLElement;
+    expect(within(linha).getByText("Virou manifestação")).toBeTruthy();
+  });
+
+  it("e-mail que já virou caso não oferece virar de novo", async () => {
+    montarParaVirar({ e1: item({ ...JOANA, estado: "virou_manifestacao" }) });
+
+    fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
+    await screen.findByText("Esperei três horas na recepção sem informação nenhuma.");
+
+    expect(screen.queryByRole("button", { name: /virar manifestação/i })).toBeNull();
+  });
+
+  it("e-mail decidido em outra aba recebe a recusa, e não um caso a mais", async () => {
+    montarParaVirar({ e1: item(JOANA) }, 409);
+    const modal = await abrirOModal();
+
+    completarEsalvar(modal);
+
+    expect(await within(modal).findByText(/já foi decidido na triagem/i)).toBeTruthy();
+    expect(within(modal).queryByText("Protocolo gerado")).toBeNull();
   });
 });

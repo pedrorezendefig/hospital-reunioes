@@ -6,26 +6,31 @@
  * Todo e-mail que chega em ouvidoria@ aparece aqui antes de virar caso. A
  * lista mostra o cabeçalho (remetente, assunto, chegada, anexos e as marcas
  * "interno" e "incompleto"); o painel mostra o item aberto, com o corpo em
- * texto e os anexos para baixar. Nesta fatia o ouvidor só lê: as decisões
- * (descartar, virar manifestação, juntar a um caso) chegam nas seguintes.
+ * texto e os anexos para baixar. A primeira decisão é virar manifestação
+ * (issue #650): abre o modal "Nova manifestação" que já existe, pré-preenchido
+ * com o e-mail. Descartar e juntar a um caso chegam nas fatias seguintes.
  *
  * O corpo de um e-mail é texto de qualquer pessoa da internet. Ele entra na
  * página como TEXTO do React, que escapa tudo, e o HTML do e-mail nem chega do
  * servidor: não existe `dangerouslySetInnerHTML` aqui, e não pode existir.
  */
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AlertCircle, Loader2, Lock, Mail, Paperclip } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Lock, Mail, Megaphone, Paperclip } from "lucide-react";
 
+import { NovaManifestacaoModal, type ManifestacaoRegistrada } from "@/components/ouvidoria/NovaManifestacaoModal";
 import {
   avisoDosExcedentes,
   formatarChegada,
   marcasDoEmail,
   nomeDoRemetente,
+  rotuloDoEstado,
   rotuloDosAnexos,
   type AnexoDoEmail,
   type EmailRecebido,
   type EmailRecebidoResumo,
+  type PreCargaDoEmail,
 } from "@/lib/ouvidoria/triagem-email";
 
 const BASE = "/api/ouvidoria/triagem-email";
@@ -67,6 +72,12 @@ export function TriagemDeEmail({ token }: { token: string }) {
   const [erroDoItem, setErroDoItem] = useState<string | null>(null);
   const [abrindoAnexo, setAbrindoAnexo] = useState<string | null>(null);
   const [erroDoAnexo, setErroDoAnexo] = useState<string | null>(null);
+  const [preCarga, setPreCarga] = useState<PreCargaDoEmail | null>(null);
+  const [carregandoPreCarga, setCarregandoPreCarga] = useState(false);
+  const [erroDaDecisao, setErroDaDecisao] = useState<string | null>(null);
+  // O caso que nasceu de cada e-mail nesta sessão da tela, para o painel
+  // mostrar o protocolo com o caminho do Dossiê.
+  const [casosCriados, setCasosCriados] = useState<Record<string, ManifestacaoRegistrada>>({});
 
   useEffect(() => {
     let cancelado = false;
@@ -100,6 +111,7 @@ export function TriagemDeEmail({ token }: { token: string }) {
     setAberto(null);
     setErroDoItem(null);
     setErroDoAnexo(null);
+    setErroDaDecisao(null);
     setAbrindo(true);
     try {
       const res = await fetch(`${BASE}/${id}`, { headers: { Authorization: `Bearer ${token}` } });
@@ -142,6 +154,33 @@ export function TriagemDeEmail({ token }: { token: string }) {
     }
   }
 
+  /** Busca a pré-carga e abre o modal "Nova manifestação" com ela. */
+  async function virarManifestacao(emailId: string) {
+    setCarregandoPreCarga(true);
+    setErroDaDecisao(null);
+    try {
+      const res = await fetch(`${BASE}/${emailId}/pre-carga`, { headers: { Authorization: `Bearer ${token}` } });
+      if (res.ok) setPreCarga((await res.json()) as PreCargaDoEmail);
+      else
+        setErroDaDecisao(
+          res.status === 409
+            ? "Este e-mail já foi decidido na triagem, talvez em outra aba. Atualize a página."
+            : "Não foi possível abrir o registro deste e-mail. Tente novamente."
+        );
+    } catch {
+      setErroDaDecisao("Não foi possível abrir o registro deste e-mail. Tente novamente.");
+    } finally {
+      setCarregandoPreCarga(false);
+    }
+  }
+
+  /** O caso nasceu: o item sai dos pendentes, na lista e no painel. */
+  function aoRegistrar(emailId: string, criada: ManifestacaoRegistrada) {
+    setCasosCriados((atuais) => ({ ...atuais, [emailId]: criada }));
+    setEmails((atuais) => atuais.map((e) => (e.id === emailId ? { ...e, estado: "virou_manifestacao" } : e)));
+    setAberto((atual) => (atual && atual.id === emailId ? { ...atual, estado: "virou_manifestacao" } : atual));
+  }
+
   if (carga === "carregando") {
     return (
       <div className="flex items-center gap-2 text-slate-500 text-sm py-12 justify-center">
@@ -172,6 +211,7 @@ export function TriagemDeEmail({ token }: { token: string }) {
   // Os anexos além do teto de quantidade não viram anexo da lista: vêm só
   // contados, e o aviso diz quantos são e onde está o original.
   const avisoDeExcedentes = aberto ? avisoDosExcedentes(aberto) : null;
+  const casoDoAberto = aberto ? casosCriados[aberto.id] : undefined;
 
   return (
     <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
@@ -207,6 +247,11 @@ export function TriagemDeEmail({ token }: { token: string }) {
                       {rotuloDosAnexos(email.quantidade_de_anexos)}
                     </span>
                     <MarcasDoEmail email={email} />
+                    {rotuloDoEstado(email.estado) && (
+                      <span className="inline-flex items-center px-2 py-0.5 rounded-full text-[11px] font-semibold bg-emerald-50 text-emerald-700">
+                        {rotuloDoEstado(email.estado)}
+                      </span>
+                    )}
                   </span>
                 </button>
               </li>
@@ -252,6 +297,42 @@ export function TriagemDeEmail({ token }: { token: string }) {
                 <MarcasDoEmail email={aberto} />
               </div>
             </div>
+
+            {aberto.estado === "pendente" && (
+              <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => virarManifestacao(aberto.id)}
+                  disabled={carregandoPreCarga}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold bg-primary text-white hover:bg-primary/90 disabled:opacity-50 transition-colors"
+                >
+                  {carregandoPreCarga ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <Megaphone className="w-4 h-4" />
+                  )}
+                  Virar manifestação
+                </button>
+              </div>
+            )}
+            {erroDaDecisao && (
+              <p className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
+                <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
+                {erroDaDecisao}
+              </p>
+            )}
+            {casoDoAberto && (
+              <p className="flex items-start gap-2 px-3 py-2 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 text-sm">
+                <CheckCircle2 className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  Virou a manifestação{" "}
+                  <Link href={`/ouvidoria/m/${casoDoAberto.protocolo}`} className="font-mono font-semibold underline">
+                    {casoDoAberto.protocolo}
+                  </Link>
+                  . Quando o contato salvo tem e-mail, o acuse com o protocolo sai para ele.
+                </span>
+              </p>
+            )}
 
             <div>
               <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Corpo</h3>
@@ -315,6 +396,16 @@ export function TriagemDeEmail({ token }: { token: string }) {
           </div>
         )}
       </section>
+
+      <NovaManifestacaoModal
+        aberto={preCarga !== null}
+        token={token}
+        preCarga={preCarga}
+        onClose={() => setPreCarga(null)}
+        onRegistrada={(criada) => {
+          if (preCarga) aoRegistrar(preCarga.email_recebido_id, criada);
+        }}
+      />
     </div>
   );
 }
