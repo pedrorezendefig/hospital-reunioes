@@ -1002,7 +1002,7 @@ function fluxoHtml() {
     ${conn()}
 
     ${flxNode({ cmd: 'fechar_onda.py · Coolify', sub: 'merge pela API → um build → health com version-match', icon: 'cloud', cls: 'flx-wide', d: d++,
-      tip: 'O rabo único: bump como commit na branch do PR, CI verde, APP_VERSION no Coolify, merge pela API (a main é protegida), um build, health com conferência de versão; depois, docs/spec/deploy/*.json, CHANGELOG e snapshot num PR só de docs. Build ou health ruim: código 3/4 e /deploy rollback.', src: '.claude/skills/onda-enxuta/scripts' })}
+      tip: 'O rabo único: bump como commit na branch do PR, CI verde, APP_VERSION no Coolify, merge pela API (a main é protegida), um build, health com conferência de versão; depois, history.json e state.json num PR só de docs. Build ou health ruim: código 3/4 e /deploy rollback.', src: '.claude/skills/onda-enxuta/scripts' })}
     ${conn()}
 
     <div class="flx-fork" style="--d:${d++}">

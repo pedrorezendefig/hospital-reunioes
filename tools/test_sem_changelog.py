@@ -21,8 +21,13 @@ EXCECOES = [
     "docs/spec/deploy/history.json",  # notas de deploys antigos
     "docs/spec/snapshots/",  # auto-gerado; a Action do #940 refaz
     "tools/workflow-dashboard/collect.py",  # até o #945, que troca a Produção para o history.json
-    "tools/workflow-dashboard/static/app.js",  # idem
     "tools/test_sem_changelog.py",  # este arquivo
+]
+
+# Exceção de uma ocorrência só, não do arquivo: (caminho, trecho da linha).
+EXCECOES_DE_LINHA = [
+    # a fonte da aba Produção, que o #945 limpa; o resto do app.js segue varrido
+    ("tools/workflow-dashboard/static/app.js", "history.json + CHANGELOG.md"),
 ]
 
 
@@ -46,7 +51,11 @@ def citacoes(excecoes: list[str]) -> list[str]:
         errors="replace",
     )
     assert proc.returncode in (0, 1), proc.stderr  # 1: nada encontrado
-    return proc.stdout.splitlines()
+    return [
+        li
+        for li in proc.stdout.splitlines()
+        if not any(li.startswith(f"{c}:") and t in li for c, t in EXCECOES_DE_LINHA)
+    ]
 
 
 def test_a_varredura_acha_a_citacao_quando_ela_existe():
