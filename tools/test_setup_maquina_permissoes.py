@@ -16,7 +16,7 @@ import shutil
 import subprocess
 from pathlib import Path
 
-from test_setup_maquina_esteira import SCRIPT, SEGREDO, linha, roda
+from test_setup_maquina_esteira import RAIZ, SCRIPT, SEGREDO, linha, roda
 
 # A referência é o settings da máquina do Pedro em 05/10/2026 (PRD #963, decisão 10).
 ALLOW = [
@@ -37,7 +37,7 @@ DENY = [
 AMBIENTE = [
     "**Source control**: the trusted repo (pedrorezendefig/hospital-reunioes) and its origin",
     "**CI/CD deploy targets**: Coolify (coolify.exemplo.test), driven by fechar_onda.py",
-    "**Trusted internal domains**: manual-hsm.vercel.app (Vercel)",
+    "**Manual**: site publicado na Vercel pelo rabo",
 ]
 # Como cada regra aparece no rótulo da linha do diagnóstico.
 ROTULOS = {
@@ -210,3 +210,32 @@ def test_settings_do_projeto_nao_conta(tmp_path):
 def test_o_nivel_1_nao_confere_as_permissoes(tmp_path):
     (tmp_path / "casa").mkdir()
     assert "allow fechar_onda.py" not in roda_script(tmp_path, "1")
+
+
+# ------------------------------------------------- ADR 0063
+
+
+def cabecalho(caminho: Path) -> dict[str, str]:
+    bloco = caminho.read_text(encoding="utf-8").split("---\n")[1]
+    return dict(li.split(": ", 1) for li in bloco.splitlines() if ": " in li)
+
+
+def adr(numero: str) -> Path:
+    achados = sorted((RAIZ / "docs" / "adr").glob(f"{numero}-*.md"))
+    assert len(achados) == 1, f"esperava um ADR {numero}: {achados}"
+    return achados[0]
+
+
+def test_adr_0063_aceito_e_emendando_o_0061_nos_dois_sentidos():
+    nova = cabecalho(adr("0063"))
+    assert nova["status"] == "accepted"
+    assert nova["amends"] == "0061"
+    assert "0063" in cabecalho(adr("0061"))["amended_by"].split(", ")
+    assert adr("0063").name in (RAIZ / "docs" / "adr" / "README.md").read_text(encoding="utf-8")
+
+
+def test_texto_novo_sem_travessao():
+    skill = SCRIPT.parent.parent / "SKILL.md"
+    for caminho in (adr("0063"), SCRIPT, skill, Path(__file__)):
+        texto = caminho.read_text(encoding="utf-8")
+        assert "\u2014" not in texto and "\u2013" not in texto, caminho
