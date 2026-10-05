@@ -2,6 +2,36 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-05T12:40:21-03:00",
+      "sha": "b64bf9f4fe40ef9c0e7177b0ccfa8a11044981a8",
+      "app_version": "0.161.0",
+      "subject": "PR #930, sem issue: Responsável cai em quem criou a issue quando ninguém assumiu",
+      "raw_subject": "chore(deploy): registro do PR avulso (#930)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 803,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #930, sem issue. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
       "at": "2026-10-04T21:49:22-03:00",
       "sha": "cb45ec65a28f92c74703fc767e452274a7ee2ae8",
       "app_version": "0.160.0",
@@ -1544,37 +1574,6 @@
       ],
       "rollback_target_sha": null,
       "notes": "Onda AFK, issue #708, segunda fatia do PRD #706 (ADR 0055). A migration 107 e um CREATE OR REPLACE da funcao de transicao com o corpo da 098 mais UMA aresta (respondido -> em_classificacao); nao e SECURITY DEFINER e o par REVOKE/GRANT repete o da 095/097/098. O PR nasceu verde no CI e levou TRES rodadas de fix; o CI nunca reclamou de nada do que foi consertado. Achado 1, o mais caro: caso `respondido` redirecionado chegava na area nova carregando o T2 da area ERRADA, porque nada limpava respondida_em. A propria API devolvia cumprimento=cumprido no instante zero, e continuava dizendo isso duas semanas depois do vencimento, porque cumprimento_da_area corta em `if respondida_em is not None`. O caso sumia das pendencias por area da Diretoria (_esta_com_a_area exige `not respondida_em`), o ranking de tempo de resposta calculava fim ANTES do inicio, e a linha do tempo mostrava T2 antes de T1, tudo enquanto a cobranca por email continuava saindo (os jobs nao leem respondida_em). Era omissao e nao decisao: as duas portas irmas (devolucao por insuficiencia e reabertura por reincidencia) limpam de proposito, e o comentario de uma delas descreve exatamente esta falha. Conserto com opt-in `limpar_a_resposta` em parar/restaurar, escolhido para que o payload da DEVOLUCAO (rota publica sem login) ficasse byte a byte identico. Achado 2: a aresta nova fez a RPC aceitar o caminho, e com isso a Devolucao a Ouvidoria (ja em producao) podia entrar com o relogio da area nunca parado. Regressao introduzida pela aresta numa rota que ja rodava, nao pelo redirecionamento. Verificado depois que em NENHUM dos quatro estados alcancaveis da corrida um 200 virou 409. Achado 3: respondida_por_nome fora do select fazia o rollback gravar None em cima de quem respondeu, apagando o nome em silencio. Achado 4: a mensagem de falha afirmava estado que o codigo nao conferiu e mandava o ouvidor no Validar e acionar, que a API recusa com 409 nesse estado; a fronteira certa nao e o marco T1 e sim a transicao de ENTRADA, porque entre as duas o caso esta em aguardando_area com a area ANTIGA e sem vencimento. O campo virou `o_caso_continua_em_classificacao` (so True enquanto o codigo SABE) em vez de `saiu_da_classificacao`, que teria que mentir para acertar a frase. Achado 5: DUAS vezes o par `except APIError` sem HTTPError, um deles pre-existente; na rota de VALIDACAO esses pontos viravam 500 sem corpo e agora respondem com frase. Decisoes do Pedro: porta dos fundos FECHADA (a rota generica do painel recusa as arestas de redirecionamento, o que de quebra impediu travessao cru de entrar na trilha imutavel pela observacao, ADR 0013), e redirecionar para a MESMA area RECUSADO (o ato previsto e a devolucao por insuficiencia, que da meio prazo de proposito). 46 mutantes mortos. Assimetria ACEITA e declarada: o rollback devolve o prazo mas nao os carimbos dos jobs, herdada do _restaurar_prazo da devolucao; custa cobranca repetida, nunca cobranca perdida. Item conhecido registrado: o postgrest-py transforma qualquer nao-2xx sem JSON de erro em APIError com code igual ao status HTTP, entao um 504 de proxy pode ter commitado e ser lido como falha; pre-existente e identico antes e depois. Prova do codigo novo em producao sem login: a rota nova devolve 401 e uma rota inexistente devolve 404."
-    },
-    {
-      "at": "2026-09-15T00:45:00-03:00",
-      "sha": "29da463",
-      "app_version": "0.130.0",
-      "subject": "os links da area antiga param de valer quando o ouvidor reaciona o caso em outra area",
-      "raw_subject": "feat(ouvidoria): revogar links da área antiga no acionamento (#707) (#712)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "result": "healthy",
-      "duration_seconds": null,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [
-        "106_ouvidoria_token_do_setor_revogado.sql"
-      ],
-      "rollback_target_sha": null,
-      "notes": "Onda AFK, issue #707, primeira fatia do PRD #706 (ADR 0055). A coluna revogado_em e SEPARADA de usado_em de proposito: usado_em prova que alguem respondeu por aquele link, e sobrescrever apagaria o rastro de quem respondeu. Sem backfill, para nao derrubar o link que esta na caixa de entrada de quem esta com o caso agora. O PR nasceu verde no CI e os revisores acharam DOIS buracos que o CI nao pega. Primeiro: revogar fecha os tokens que EXISTEM, nao a FABRICA. Tres portas emitiam token novo para a area antiga depois da revogacao, e a pior era GATILHO_PRORROGACAO_DECIDIDA, que esta em GATILHOS_COM_PORTAL e fora de GATILHOS_QUE_COBRAM_A_AREA, logo nao tinha nem a guarda de status: pedido pendente da area A sobrevive a devolucao, e decidi-lo depois do reacionamento move o prazo de B e manda link vivo para A, sem corrida nenhuma. Fechado com guarda no despachar, ponto unico por onde as tres portas passam. Segundo: a guarda nova virou INDISPONIBILIDADE. Ela perguntava se o destinatario e vigente HOJE no setor, e nao se o email PERTENCE ao setor do caso; troca de titular no mesmo setor durante a janela comercial (o email fica agendada ate a janela abrir) fazia ninguem receber, nem o titular antigo nem o novo, com falha TERMINAL (o job le so agendada, nao incrementa tentativa, nao alerta o admin) e o prazo ja correndo. DECISAO: o criterio virou pertencimento ao cadastro do setor, sem filtro de vigencia. Perde-se barrar o ex-titular com vigencia vencida, que e higiene de cadastro e nao desta fatia; o conjunto de recusas encolheu estritamente, nenhum cenario em que o novo recuse e o antigo aceitasse. O filtro por setor e load-bearing: removido, derruba 5 testes. Terceiro achado, de tela: o motivo que a guarda grava nao aparecia em lugar nenhum (grep ultimo_erro no front voltava vazio) e o Reenviar dizia que o provedor recusou e o sistema tenta de novo, falso nas duas metades, com cada reclique criando outra linha em falha sem sair email. Agora reenviar_notificacao devolve o motivo e o Dossie o exibe. Dois mutantes sobreviviam a 2355 testes (o fail-open na leitura do cadastro, que reabria o buraco da #707 em silencio, e a normalizacao do email) e agora tem teste matando cada um. Estourei o limite de 2 rodadas de revisao da skill com OK do Pedro, porque a baixa travaria as #708, #709 e #710 junto. Migration aplicada pelo humano antes do merge, que e requisito e nao preferencia: com o codigo no ar e a coluna ausente, o portal do setor INTEIRO responde 503 e todo validar da 500 com o caso ja transicionado. Prova de que o PostgREST enxerga a coluna (o cache de schema dele, nao o information_schema): token inexistente devolve 404 Link invalido, nao 503."
     }
   ]
 }
