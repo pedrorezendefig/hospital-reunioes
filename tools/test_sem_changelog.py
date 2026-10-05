@@ -28,9 +28,22 @@ EXCECOES = [
 
 def citacoes(excecoes: list[str]) -> list[str]:
     proc = subprocess.run(
-        ["git", "grep", "-n", "-I", "-E", PADRAO, "--", ".",
-         *(f":(exclude){e}" for e in excecoes)],
-        cwd=RAIZ, capture_output=True, text=True, encoding="utf-8", errors="replace",
+        [
+            "git",
+            "grep",
+            "-n",
+            "-I",
+            "-E",
+            PADRAO,
+            "--",
+            ".",
+            *(f":(exclude){e}" for e in excecoes),
+        ],
+        cwd=RAIZ,
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
     )
     assert proc.returncode in (0, 1), proc.stderr  # 1: nada encontrado
     return proc.stdout.splitlines()
@@ -46,5 +59,8 @@ def test_nenhum_arquivo_versionado_cita_o_changelog_fora_das_excecoes():
 
 
 def test_o_changelog_e_o_script_que_o_escrevia_foram_apagados():
-    for caminho in ("docs/spec/CHANGELOG.md", ".claude/skills/deploy/scripts/changelog_prepend.py"):
+    for caminho in (
+        "docs/spec/CHANGELOG.md",
+        ".claude/skills/deploy/scripts/changelog_prepend.py",
+    ):
         assert not (RAIZ / caminho).exists(), caminho
