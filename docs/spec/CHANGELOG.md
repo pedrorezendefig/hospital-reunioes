@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.161.5 - 2026-10-05 19:19 - PR #954, issue #953: CI cancelado por falta de runner do GitHub não é falha de código
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `2bb89d5`
+- PRs: [#954](https://github.com/pedrorezendefig/hospital-reunioes/pull/954)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (773s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/2bb89d5
+
 ## v0.161.4 - 2026-10-05 19:03 - PR #950, issue #941: Hospital OS, módulo de fases (issue, PR, timeline, ondas, funil) e coletor com campos novos
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `9fe20d0`
