@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-04T21:49:22-03:00",
+  "updated_at": "2026-10-05T12:40:21-03:00",
   "updated_by": "pr-avulso@fechar_onda",
-  "last_app_version": "0.160.0",
+  "last_app_version": "0.161.0",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "cb45ec65a28f92c74703fc767e452274a7ee2ae8",
-      "last_deploy_at": "2026-10-04T21:49:22-03:00",
+      "last_deploy_sha": "b64bf9f4fe40ef9c0e7177b0ccfa8a11044981a8",
+      "last_deploy_at": "2026-10-05T12:40:21-03:00",
       "last_health_check": {
-        "at": "2026-10-04T21:49:22-03:00",
-        "latency_ms": 425,
+        "at": "2026-10-05T12:40:21-03:00",
+        "latency_ms": 274,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 111,
+      "build_duration_seconds": 186,
       "env_count": 24
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "cb45ec65a28f92c74703fc767e452274a7ee2ae8",
-      "last_deploy_at": "2026-10-04T21:49:22-03:00",
+      "last_deploy_sha": "b64bf9f4fe40ef9c0e7177b0ccfa8a11044981a8",
+      "last_deploy_at": "2026-10-05T12:40:21-03:00",
       "last_health_check": {
-        "at": "2026-10-04T21:49:22-03:00",
-        "latency_ms": 283,
+        "at": "2026-10-05T12:40:21-03:00",
+        "latency_ms": 196,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 296,
+      "build_duration_seconds": 245,
       "env_count": 5
     },
     {
@@ -208,8 +208,8 @@
   ],
   "last_run": {
     "mode": "pr-avulso",
-    "sha": "cb45ec65a28f92c74703fc767e452274a7ee2ae8",
+    "sha": "b64bf9f4fe40ef9c0e7177b0ccfa8a11044981a8",
     "result": "healthy",
-    "duration_seconds": 334
+    "duration_seconds": 803
   }
 }

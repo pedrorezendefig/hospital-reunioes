@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.161.0 - 2026-10-05 12:40 - PR #930, sem issue: Responsável cai em quem criou a issue quando ninguém assumiu
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `b64bf9f`
+- PRs: [#930](https://github.com/pedrorezendefig/hospital-reunioes/pull/930)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (803s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/b64bf9f
+
 ## v0.160.0 - 2026-10-04 21:49 - PR #899, issue #648: Triagem de e-mail, fundação: o e-mail chega e aparece na tela
 - Autor: Lucas Sampaio <lucassampaioc1@gmail.com>
 - SHA: `cb45ec6`
