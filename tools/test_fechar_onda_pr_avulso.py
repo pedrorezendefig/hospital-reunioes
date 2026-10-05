@@ -888,6 +888,29 @@ def test_fechamento_de_ferramenta_so_faz_merge_sem_coolify_nem_registro(
     assert "ferramenta" in capsys.readouterr().out
 
 
+def test_pr_misto_de_ferramenta_e_frontend_segue_o_fluxo_de_app(tmp_path, monkeypatch, capsys):
+    fo = carregar_fechar_onda()
+    c = pr_de_ferramenta(tmp_path, arquivos={
+        "tools/painel.py": "PRDS = 1\n",
+        "hospital-reunioes/frontend/src/painel.ts": "export const PRDS = 1;\n",
+    })
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+    plano = next(li for li in capsys.readouterr().out.splitlines() if li.startswith("plano:"))
+    assert "app: bump minor v0.10.0 -> v0.11.0" in plano and "ferramenta" not in plano, plano
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    # o fluxo de hoje: bump, APP_VERSION antes do merge, build, health e registro
+    assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.11.0"
+    assert c.coolify() == [f"app env update uuid-backend APP_VERSION --value 0.11.0 | main={c.base}"]
+    assert c.builds == ["frontend"]
+    assert [m["pr"] for m in c.merges] == [7, 101] and c.merges[1]["branch"].startswith("registro/")
+    entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
+    assert entrada["app_version"] == "0.11.0" and entrada["sha"] == c.merges[0]["main"]
+
+
 # ------------------------------------------- sha256 da migration no corpo do PR
 
 SQL_DO_ARQUIVO = "create table triagem (id int);\n"
