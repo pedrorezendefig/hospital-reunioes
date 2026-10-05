@@ -98,10 +98,9 @@ EXIT_REGISTRO = 5
 
 PACKAGE_JSON = "hospital-reunioes/frontend/package.json"
 SEMAFORO = ".claude/skills/deploy/scripts/semaforo.sh"
-SNAPSHOT = ".claude/skills/snapshot/scripts/snapshot.py"
-TIRAR_DRAFT = "tools/tirar_draft_manual.py"
-PUBLICAR_MANUAL = "docs/manual/publicar.sh"
 SPEC = "docs/spec"
+HISTORY = f"{SPEC}/deploy/history.json"
+STATE = f"{SPEC}/deploy/state.json"
 DOCS_ONLY_PREFIXES = ("docs/", ".claude/")
 HISTORY_MAX = 50
 BUILD_WAIT_WEBHOOK_S = 120
@@ -523,13 +522,14 @@ def rotulo_issues(info: dict) -> str:
     return ("issue " if len(nums) == 1 else "issues ") + " ".join(f"#{n}" for n in nums)
 
 
-def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | None, versao_antiga: str,
+def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | None,
                       sha_codigo: str, prds: list[int], migs: list[str], servicos: list[str],
                       duracoes: dict[str, int | None], healths: dict[str, dict], resultado: str,
                       houve_bump: bool, avulso: bool = False, pr_entrega: int | None = None) -> None:
-    spec = wt / SPEC / "deploy"
-    history = ler_json(spec / "history.json")
-    state = ler_json(spec / "state.json")
+    """A verdade do deploy que o GitHub nao tem (ADR 0062, decisao 9): history.json,
+    com todos os deploys, e state.json."""
+    history = ler_json(wt / HISTORY)
+    state = ler_json(wt / STATE)
     when = agora_iso()
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
     como = "Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
@@ -564,7 +564,7 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
     deploys = history.setdefault("deploys", [])
     deploys.insert(0, entrada)
     del deploys[HISTORY_MAX:]
-    escrever_json(spec / "history.json", history)
+    escrever_json(wt / HISTORY, history)
 
     modo = "pr-avulso" if avulso else "onda-enxuta"
     state["updated_at"] = when
@@ -583,68 +583,7 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
     state["last_run"] = {"mode": modo, "sha": sha_codigo, "result": resultado,
                          "duration_seconds": int(time.time() - T0)}
     state.pop("next_actions", None)
-    escrever_json(spec / "state.json", state)
-
-    changelog = wt / SPEC / "CHANGELOG.md"
-    txt = changelog.read_text(encoding="utf-8") if changelog.exists() else "# Changelog Hospital Reuniões\n\n---\n\n"
-    autor = run(["git", "config", "user.name"], cwd=wt, check=False).stdout.strip() or "desconhecido"
-    email = run(["git", "config", "user.email"], cwd=wt, check=False).stdout.strip() or "?"
-    repo = (state.get("production") or {}).get("repo") or ""
-    emoji = {"healthy": "🟢", "failed": "🔴", "rolled-back": "🟡"}.get(resultado, "⚪")
-    cabec = f"## v{versao} - " if versao else f"## v{versao_antiga} (sem bump) - "
-    entrada_md = "\n".join([
-        f"{cabec}{when[:16].replace('T', ' ')} - {subject}",
-        f"- Autor: {autor} <{email}>",
-        f"- SHA: `{sha_codigo[:7]}`",
-        f"- PRs: " + ", ".join(f"[#{i['number']}]({i['url']})" for i in infos),
-        f"- Serviços: {', '.join(servicos) or 'nenhum'}",
-        f"- Resultado: {emoji} {resultado} ({int(time.time() - T0)}s)",
-        f"- Commit: https://github.com/{repo}/commit/{sha_codigo[:7]}",
-        "",
-    ])
-    linhas = txt.split("\n")
-    pos = next((i + 1 for i, ln in enumerate(linhas) if ln.strip() == "---"), None)
-    if pos is None:
-        txt = txt.rstrip() + "\n\n" + entrada_md
-    else:
-        while pos < len(linhas) and linhas[pos].strip() == "":
-            pos += 1
-        linhas.insert(pos, entrada_md)
-        txt = "\n".join(linhas)
-    changelog.write_text(txt, encoding="utf-8")
-
-
-def rodar_snapshot(wt: Path) -> str:
-    script = wt / SNAPSHOT
-    if not script.exists():
-        return "snapshot ausente"
-    proc = run([sys.executable, str(script), "--no-commit", "--root", str(wt)], cwd=wt, check=False,
-               timeout=600, env={"PYTHONUTF8": "1"})
-    if proc.returncode == 0:
-        return "snapshot ok"
-    if proc.returncode == 4:
-        return "snapshot parcial (sem venv, codigo 4)"
-    return f"snapshot pulado (#844, codigo {proc.returncode})"
-
-
-def tirar_draft_manual(wt: Path, prds: list[int]) -> tuple[str, bool]:
-    """Devolve (linha, houve_pagina)."""
-    script = wt / TIRAR_DRAFT
-    if not prds or not script.exists():
-        return ("manual: nenhum PRD no lote" if not prds else "manual: script ausente"), False
-    args = []
-    for p in prds:
-        args += ["--prd", str(p)]
-    proc = run([sys.executable, str(script), *args], cwd=wt, check=False, timeout=300, env={"PYTHONUTF8": "1"})
-    saida = (proc.stdout or "").strip().replace("\n", " | ")[:200]
-    if proc.returncode == 2:
-        return f"manual: bloqueado, nada tocado ({saida})", False
-    if proc.returncode != 0:
-        return f"manual: script falhou ({proc.returncode})", False
-    mudou = run(["git", "status", "--porcelain", "--", "docs/manual"], cwd=wt, check=False).stdout.strip()
-    if mudou:
-        return f"manual: paginas sairam do draft ({saida})", True
-    return "manual: nenhuma pagina em draft", False
+    escrever_json(wt / STATE, state)
 
 
 def commitar(wt: Path, msg: str, paths: list[str]) -> str:
@@ -1029,17 +968,16 @@ def main() -> int:
         try:
             run(["git", "fetch", "-q", "origin", "main"], cwd=raiz)
             wt_reg = criar_worktree(raiz, f"{args.sessao}-registro")
-            linha_snap = "snapshot pulado (--sem-snapshot)" if args.sem_snapshot else rodar_snapshot(wt_reg)
-            linha_manual, houve_pagina = tirar_draft_manual(wt_reg, prds)
-            escrever_registro(wt_reg, args.sessao, infos, versao_nova, versao_antiga, sha_main, prds, migs,
+            escrever_registro(wt_reg, args.sessao, infos, versao_nova, sha_main, prds, migs,
                               servicos, duracoes, healths, "healthy", bool(versao_nova), avulso, pr_entrega)
             do_lote = f"do PR {prs_txt}" if avulso else f"da onda {args.sessao}"
             titulo_reg = f"chore(deploy): registro {do_lote} (v{versao})"
-            commitar(wt_reg, titulo_reg, [SPEC, "docs/manual", "docs/ARQUITETURA.md"])
+            commitar(wt_reg, titulo_reg, [HISTORY, STATE])
             pr_reg, head_reg = entregar(raiz, wt_reg, f"registro/{args.sessao}-{sha_main[:8]}", None, titulo_reg,
-                                        "<!-- automacao -->\nRegistro do deploy de producao (history.json, "
-                                        "state.json, CHANGELOG, snapshot e draft do Manual), aberto e mergeado "
-                                        "pelo `fechar_onda.py` depois do health (ADR 0061). So docs.\n")
+                                        "<!-- automacao -->\nRegistro do deploy de producao (history.json e "
+                                        "state.json), aberto e mergeado pelo `fechar_onda.py` depois do health "
+                                        "(ADR 0061). Snapshot e draft do Manual sao da Action do push da main "
+                                        "(ADR 0062). So docs.\n")
             sha_reg = mergear_pela_api(raiz, pr_reg, head_reg, f"{titulo_reg} (#{pr_reg})")
         except Exception as e:  # noqa: BLE001
             if wt_reg:
@@ -1050,12 +988,8 @@ def main() -> int:
             print(f"registro: {e}. Producao ok e semaforo solto; {falta}.")
             return EXIT_REGISTRO
         cancelados = cancelar_build_do_registro(servicos_cfg, sha_reg)
-        print(f"registro: PR #{pr_reg} so de docs na main ({sha_reg[:8]}), {linha_snap}, {linha_manual}"
+        print(f"registro: PR #{pr_reg} so de docs na main ({sha_reg[:8]})"
               + (f", build do registro cancelado ({', '.join(cancelados)})" if cancelados else ""))
-
-        if houve_pagina and (raiz / PUBLICAR_MANUAL).exists():
-            pub = run([BASH, bash_path(wt_reg / PUBLICAR_MANUAL)], cwd=wt_reg, check=False, timeout=900)
-            print("manual publicado" if pub.returncode == 0 else f"manual: publicar.sh falhou ({pub.returncode}); rode a mao depois")
 
         conferir_prs_fechados(raiz, infos, args.sessao, avulso, pr_entrega)
         remover_worktree(raiz, wt_reg, [])
