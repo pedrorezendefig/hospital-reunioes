@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.161.2 - 2026-10-05 15:22 - PR #898, issue #852: Imagem e CI do backend instalam pelo uv.lock
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `1ef79ab`
+- PRs: [#898](https://github.com/pedrorezendefig/hospital-reunioes/pull/898)
+- Serviços: backend
+- Resultado: 🟢 healthy (928s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/1ef79ab
+
 ## v0.161.1 - 2026-10-05 15:04 - PR #897, issue #752: Perfil zerado pela API deixa de reter Super admin pela flag legada
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `9485c6e`
