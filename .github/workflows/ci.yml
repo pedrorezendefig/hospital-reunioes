@@ -48,8 +48,8 @@ jobs:
             printf 'backend=true\nfrontend=true\nferramenta=true\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # --no-renames: num rename o diff lista só o caminho novo, e mover
-          # código para docs/ pularia os checks obrigatórios.
+          # --no-renames: num rename o diff lista só o caminho novo, e tirar
+          # código do backend ou do frontend pularia o job dele.
           arquivos="$(git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA")"
           muda() { printf '%s\n' "$arquivos" | grep -qE "$1"; }
           backend=false; frontend=false; ferramenta=false
