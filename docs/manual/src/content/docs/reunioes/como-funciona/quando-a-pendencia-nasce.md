@@ -7,9 +7,8 @@ sidebar:
   order: 20
 ---
 
-A pendência não nasce toda de uma vez, e isso surpreende quem chega agora. Duas
-pessoas da mesma reunião podem estar vendo coisas diferentes no painel no mesmo
-dia, e as duas estão certas.
+A pendência não nasce toda de uma vez. Duas pessoas da mesma reunião podem ver
+coisas diferentes no painel no mesmo dia, e as duas estão certas.
 
 ## A regra curta
 

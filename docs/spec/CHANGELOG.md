@@ -7,6 +7,126 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.161.1 - 2026-10-05 15:04 - PR #897, issue #752: Perfil zerado pela API deixa de reter Super admin pela flag legada
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `9485c6e`
+- PRs: [#897](https://github.com/pedrorezendefig/hospital-reunioes/pull/897)
+- Serviços: backend
+- Resultado: 🟢 healthy (918s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/9485c6e
+
+## v0.161.0 (sem bump) - 2026-10-05 14:46 - PR #881, sem issue: Aspas na descrição de três agentes hr-* para o YAML carregar
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e0cccf3`
+- PRs: [#881](https://github.com/pedrorezendefig/hospital-reunioes/pull/881)
+- Serviços: nenhum
+- Resultado: 🟢 healthy (233s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e0cccf3
+
+## v0.161.0 - 2026-10-05 12:40 - PR #930, sem issue: Responsável cai em quem criou a issue quando ninguém assumiu
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `b64bf9f`
+- PRs: [#930](https://github.com/pedrorezendefig/hospital-reunioes/pull/930)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (803s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/b64bf9f
+
+## v0.160.0 - 2026-10-04 21:49 - PR #899, issue #648: Triagem de e-mail, fundação: o e-mail chega e aparece na tela
+- Autor: Lucas Sampaio <lucassampaioc1@gmail.com>
+- SHA: `cb45ec6`
+- PRs: [#899](https://github.com/pedrorezendefig/hospital-reunioes/pull/899)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (334s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/cb45ec6
+
+## v0.159.0 - 2026-10-02 21:41 - PR #928, sem issue: Filtro por um responsável com visor da pessoa e issues sem teto de 200
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `e6abd15`
+- PRs: [#928](https://github.com/pedrorezendefig/hospital-reunioes/pull/928)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (889s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/e6abd15
+
+## v0.158.6 - 2026-10-02 20:01 - Onda onda-a: Main protegida, o rabo entra por PR e mergeia pela API
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `d11e2ce`
+- PRs: [#925](https://github.com/pedrorezendefig/hospital-reunioes/pull/925)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/d11e2ce
+
+## v0.158.5 - 2026-10-02 19:20 - PR #923, issue #909: Um pipeline só no /ask-pedro, CLAUDE.md, dev.md e README do painel
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `f63e3d8`
+- PRs: [#923](https://github.com/pedrorezendefig/hospital-reunioes/pull/923)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/f63e3d8
+
+## v0.158.4 - 2026-10-02 19:00 - PR #922, issue #921: Nível 2 confere claude --version >= 2.1.280 para a /onda-enxuta
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `76e0aec`
+- PRs: [#922](https://github.com/pedrorezendefig/hospital-reunioes/pull/922)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/76e0aec
+
+## v0.158.3 - 2026-10-02 18:52 - PR #919, issue #907: Fechar_onda.py com um PR só e /ship parando no PR verde
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `c565aab`
+- PRs: [#919](https://github.com/pedrorezendefig/hospital-reunioes/pull/919)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/c565aab
+
+## v0.158.2 - 2026-10-02 18:36 - Onda onda-b: Botão agrupar por responsável na aba Issues
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `28450d6`
+- PRs: [#920](https://github.com/pedrorezendefig/hospital-reunioes/pull/920)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (5s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/28450d6
+
+## v0.158.1 - 2026-10-02 18:30 - Onda pr-918: Aposentar /onda e /montar-ondas e redirecionar os ponteiros para a enxuta
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `2435b22`
+- PRs: [#918](https://github.com/pedrorezendefig/hospital-reunioes/pull/918)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (231s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/2435b22
+
+## v0.158.0 - 2026-10-02 18:26 - Onda onda-c: O Dossiê avisa quando o relato é sobre outra pessoa sem o nome do paciente; O paciente viaja para a área no email, na tela do responsável e no reenvio, com a guarda do sigilo
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `13cb8b3`
+- PRs: [#795](https://github.com/pedrorezendefig/hospital-reunioes/pull/795), [#917](https://github.com/pedrorezendefig/hospital-reunioes/pull/917)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (6s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/13cb8b3
+
+## v0.157.2 - 2026-10-02 18:08 - Onda onda-b: PRD nasce com dono e o /pegar-issue avisa fatia de PRD alheio; Confere identidade do git, CLI do Coolify e acesso ao Studio; Coletor e módulo puro do agrupamento por responsável
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `53bacf0`
+- PRs: [#912](https://github.com/pedrorezendefig/hospital-reunioes/pull/912), [#913](https://github.com/pedrorezendefig/hospital-reunioes/pull/913), [#914](https://github.com/pedrorezendefig/hospital-reunioes/pull/914)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (10s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/53bacf0
+
+## v0.157.1 - 2026-10-02 17:55 - Onda onda-a: Guarda de migration com número repetido no CI e no fechar_onda.py
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `89ccaaf`
+- PRs: [#911](https://github.com/pedrorezendefig/hospital-reunioes/pull/911)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (4s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/89ccaaf
+
+## v0.157.0 - 2026-10-02 17:49 - Onda onda-c: O menu de reticências deixa de ser recortado pelo card da fila; A Retenção apaga o Paciente do caso nas duas portas; O registro manual do ouvidor ganha o paciente do caso; Enxugar a escri
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `712789f`
+- PRs: [#778](https://github.com/pedrorezendefig/hospital-reunioes/pull/778), [#798](https://github.com/pedrorezendefig/hospital-reunioes/pull/798), [#796](https://github.com/pedrorezendefig/hospital-reunioes/pull/796), [#801](https://github.com/pedrorezendefig/hospital-reunioes/pull/801)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (8s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/712789f
+
 ## v0.156.6 - 2026-09-28 11:36 - Recuo da continuação enxerga toda quebra de linha
 - Autor: Pedro <pedroribbe@gmail.com>
 - SHA: `e03a1ec`

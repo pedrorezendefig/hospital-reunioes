@@ -52,6 +52,9 @@ _CAMPOS_DO_PORTAL = (
     # (issue #481, ADR 0041): a tela do responsável lê o mesmo que o email.
     "resumo, relato_integral, "
     "prazo_area_em, status, sigilo_reforcado, anonimo, manifestante_nome, "
+    # O Paciente do caso (issue #664, ADR 0052), pela mesma guarda do email:
+    # `ouvidoria_blocos.paciente_do_caso` decide se as duas colunas saem daqui.
+    "paciente_nome, paciente_referencia, "
     # `area_estourou_em` entra porque o portal projeta o prazo com a MESMA
     # função do painel: sem a coluna, as duas APIs diriam `cumprimento`
     # diferente para o mesmo caso devolvido (issue #374).
@@ -238,6 +241,10 @@ async def abrir_portal(
         # O décimo elemento da RN-59 (issue #511), pela mesma guarda que corta
         # os blocos: caso sigiloso e caso anônimo chegam sem quem manifestou.
         "identificacao": ouvidoria_blocos.identificacao_do_caso(caso),
+        # O Paciente do caso (issue #664), logo abaixo de quem manifestou e pela
+        # MESMA função do email: viaja no caso comum e no anônimo, nunca no
+        # sigilo reforçado (ADR 0052, decisão 4).
+        "paciente": ouvidoria_blocos.paciente_do_caso(caso),
         "sigiloso": bool(caso.get("sigilo_reforcado")),
         "destinatario_nome": vinculo["destinatario_nome"],
         "aceita_resposta": caso.get("status") == "aguardando_area",

@@ -86,6 +86,26 @@ def identificacao_do_caso(manifestacao: dict) -> str | None:
     return manifestacao.get("manifestante_nome") or None
 
 
+def paciente_do_caso(manifestacao: dict) -> dict | None:
+    """O Paciente do caso, quando ele viaja para a área (ADR 0052, decisão 4).
+
+    Email de acionamento, reenvio e tela do responsável leem daqui, e só daqui
+    (issue #664). A guarda é de propósito outra que a de `identificacao_do_caso`:
+    o anonimato protege QUEM MANIFESTA, e o paciente é outra pessoa, então o
+    caso anônimo leva o paciente (sem ele a área devolve o caso por não achar o
+    atendimento). Só o sigilo reforçado segura o paciente, porque ali ele pode
+    ser a vítima e quem decide o que sai é o ouvidor, pelo extrato.
+
+    Sem nome não há linha: a referência sozinha não diz de quem se fala."""
+    if sob_sigilo(manifestacao):
+        return None
+    nome = (manifestacao.get("paciente_nome") or "").strip()
+    if not nome:
+        return None
+    referencia = (manifestacao.get("paciente_referencia") or "").strip() or None
+    return {"nome": nome, "referencia": referencia}
+
+
 def aviso_do_caso(manifestacao: dict) -> str | None:
     """O que explica à área por que o caso chegou com um bloco só.
 

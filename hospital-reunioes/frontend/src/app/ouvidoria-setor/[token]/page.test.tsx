@@ -28,6 +28,10 @@ vi.mock("next/navigation", () => ({
 const RESUMO = "Paciente relata espera acima de duas horas na recepção.";
 const RELATO = "Cheguei às 8h com minha mãe e só fomos atendidas às 10h30.";
 const NOTA = "Confirmar a escala da recepção no turno da manhã e responder o que foi corrigido.";
+// O Paciente do caso (issue #664, ADR 0052): outra pessoa que não quem
+// manifestou, com guarda própria no servidor.
+const PACIENTE = "Maria Aparecida Souza";
+const REFERENCIA = "leito 12, 20/08";
 
 function caso(overrides: Record<string, unknown> = {}) {
   return {
@@ -43,6 +47,7 @@ function caso(overrides: Record<string, unknown> = {}) {
     ],
     aviso: null,
     identificacao: "Joana da Silva",
+    paciente: { nome: PACIENTE, referencia: REFERENCIA },
     sigiloso: false,
     destinatario_nome: "Carlos Titular",
     aceita_resposta: true,
@@ -146,6 +151,8 @@ describe("a ordem da RN-59 (issue #483)", () => {
       screen.getByTestId("prazo-regressivo"),
       screen.getByTestId("linha-secundaria"),
       screen.getByTestId("quem-manifestou"),
+      // O Paciente do caso, logo abaixo de quem manifestou (issue #664).
+      screen.getByTestId("paciente-do-caso"),
       screen.getByTestId("bloco-resumo"),
       screen.getByTestId("bloco-relato_integral"),
       screen.getByTestId("bloco-nota_da_ouvidoria"),
@@ -292,6 +299,56 @@ describe("a variante da RN-79: o caso protegido", () => {
     await abrirTela();
 
     expect(screen.getByRole("button", { name: /^responder/i })).toBeTruthy();
+  });
+});
+
+describe("o Paciente do caso (issue #664, ADR 0052)", () => {
+  it("caso comum mostra o paciente com a referência, logo abaixo de quem manifestou", async () => {
+    await abrirTela();
+
+    const linha = screen.getByTestId("paciente-do-caso");
+    expect(linha.textContent ?? "").toContain(`${PACIENTE} (${REFERENCIA})`);
+    expect(vemAntes(screen.getByTestId("quem-manifestou"), linha)).toBe(true);
+  });
+
+  it("caso anônimo mostra o paciente e continua sem quem manifestou", async () => {
+    // O anonimato protege quem falou; o paciente é outra pessoa, e sem ele a
+    // área devolve o caso por não achar o atendimento.
+    responderComCaso(caso({ identificacao: null }));
+    await abrirTela();
+
+    expect(screen.getByTestId("paciente-do-caso").textContent ?? "").toContain(`${PACIENTE} (${REFERENCIA})`);
+    expect(screen.getByTestId("quem-manifestou").textContent ?? "").toContain("Sem identificação");
+  });
+
+  it("caso sigiloso não mostra o paciente, mesmo com o payload trazendo as colunas cruas", async () => {
+    // Quem corta é o servidor (`paciente: null`). As colunas cruas no topo do
+    // objeto estão aí para a tela não ter com que desfazer o corte.
+    responderComCaso(
+      casoProtegido({ paciente: null, paciente_nome: PACIENTE, paciente_referencia: REFERENCIA })
+    );
+    await abrirTela();
+
+    expect(screen.queryByTestId("paciente-do-caso")).toBeNull();
+    expect(screen.queryByText(PACIENTE, { exact: false })).toBeNull();
+    expect(screen.getByTestId("quem-manifestou").textContent ?? "").toContain("Sem identificação");
+  });
+
+  it("caso sem paciente não desenha a linha: aqui a ausência não é informação", async () => {
+    responderComCaso(caso({ paciente: null }));
+    await abrirTela();
+
+    expect(screen.queryByTestId("paciente-do-caso")).toBeNull();
+    expect(screen.getByTestId("quem-manifestou").textContent ?? "").toContain("Joana da Silva");
+  });
+
+  it("sem referência, a linha leva só o nome", async () => {
+    responderComCaso(caso({ paciente: { nome: PACIENTE, referencia: null } }));
+    await abrirTela();
+
+    const linha = screen.getByTestId("paciente-do-caso");
+    expect(linha.textContent ?? "").toContain(PACIENTE);
+    expect(linha.textContent ?? "").not.toContain("(");
   });
 });
 

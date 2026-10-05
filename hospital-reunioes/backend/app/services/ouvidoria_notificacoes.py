@@ -34,6 +34,7 @@ from app.services.ouvidoria_blocos import (
     aviso_do_caso,
     identificacao_do_caso,
     montar_blocos,
+    paciente_do_caso,
 )
 from app.services.ouvidoria_contato import destinatario_e_o_manifestante
 from app.services.ouvidoria_prazos import (
@@ -230,9 +231,14 @@ CAMPOS_NOTIFICACAO = ", ".join(CAMPOS_NOTIFICACAO_TUPLA)
 # (RN-78, ADR 0041), pelo mecanismo que esta lista existe para exigir: quem lê
 # só a interpretação da Ouvidoria responde à interpretação, não ao paciente. O
 # caso com sigilo reforçado é a exceção, e quem a aplica é `ouvidoria_blocos`.
+#
+# `paciente_nome` e `paciente_referencia` entraram pelo ADR 0052 (issue #664):
+# a área acha o atendimento sem devolver o caso. Quem decide se viajam é
+# `ouvidoria_blocos.paciente_do_caso`, que segura os dois no sigilo reforçado.
 _CAMPOS_DO_EMAIL = (
     "id, protocolo, setor, categoria, resumo, relato_integral, extrato_para_o_setor, "
-    "gravidade, prazo_area_em, sigilo_reforcado, anonimo, manifestante_nome, status"
+    "gravidade, prazo_area_em, sigilo_reforcado, anonimo, manifestante_nome, status, "
+    "paciente_nome, paciente_referencia"
 )
 
 # O que o setor lê quando, por algum caminho, o caso chegou ao email sem
@@ -332,6 +338,13 @@ def montar_nova_demanda(
     vencimento_formatado = formatar_vencimento(bruto)
     protocolo = manifestacao.get("protocolo") or ""
     identificacao = identificacao_do_caso(manifestacao)
+    # A linha do Paciente do caso (issue #664), montada uma vez para as duas
+    # versões do email: o HTML e o texto dizem a mesma coisa.
+    paciente = paciente_do_caso(manifestacao)
+    linha_do_paciente = None
+    if paciente:
+        referencia = f" ({paciente['referencia']})" if paciente["referencia"] else ""
+        linha_do_paciente = f"{paciente['nome']}{referencia}"
     blocos = montar_blocos(manifestacao)
     aviso = aviso_do_caso(manifestacao)
     destino = link or _link_do_setor(manifestacao)
@@ -348,6 +361,7 @@ def montar_nova_demanda(
         vencimento=vencimento_formatado,
         rotulo_prazo=rotulo,
         identificacao=identificacao,
+        paciente=linha_do_paciente,
         link=destino,
         logo_base64=get_logo_data_uri(),
     )
@@ -357,7 +371,8 @@ def montar_nova_demanda(
         f"A Ouvidoria acionou o setor {manifestacao.get('setor')} sobre a manifestacao {protocolo}.\n\n"
         + (f"{aviso}\n\n" if aviso else "")
         + f"{corpo_dos_blocos}\n\n"
-        f"Prazo de resposta: {vencimento_formatado} ({rotulo}).\n\n"
+        + (f"Paciente: {linha_do_paciente}\n\n" if linha_do_paciente else "")
+        + f"Prazo de resposta: {vencimento_formatado} ({rotulo}).\n\n"
         f"Responda pela Ouvidoria: {destino}\n"
     )
     return (f"Ouvidoria {protocolo}: nova demanda para {manifestacao.get('setor')}", html, texto)

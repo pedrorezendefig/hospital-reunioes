@@ -1,6 +1,6 @@
 """A cadeia de skills combina com o Manual que existe de verdade (issue #735).
 
-O `/to-prd`, o `/to-issues`, a `/onda` e o `/deploy` passaram a falar do Manual,
+O `/to-prd`, o `/to-issues`, a `/onda-enxuta` e o `/deploy` passaram a falar do Manual,
 e nenhum deles executa nada aqui: são instruções que um agente vai seguir num
 terminal, meses depois. Seção renomeada, modo que não existe, script de `tools/`
 com outro nome: tudo isso só apareceria lá, no meio de um deploy. Estes testes
@@ -22,7 +22,7 @@ SKILLS = RAIZ / ".claude" / "skills"
 TETO_DA_DESCRICAO = 200
 
 # As skills que a #735 fez conhecerem o Manual.
-CADEIA = ["to-prd", "to-issues", "onda", "deploy", "setup-maquina", "ask-pedro"]
+CADEIA = ["to-prd", "to-issues", "onda-enxuta", "deploy", "setup-maquina", "ask-pedro"]
 
 # O nome da seção do PRD é contrato entre três skills: o `/to-prd` escreve, o
 # `/to-issues` decide se cria a Fatia de manual e a `/manual` lê para saber que
@@ -32,6 +32,16 @@ SECAO_DO_PRD = "Manual: páginas que nascem ou mudam"
 
 def texto(skill: str) -> str:
     return (SKILLS / skill / "SKILL.md").read_text(encoding="utf-8")
+
+
+# O `/manual #<PRD>` da fatia de manual vive no agente, não na SKILL da onda.
+AGENTES = [RAIZ / ".claude" / "agents" / "hr-implementador.md"]
+
+
+def fontes_da_cadeia() -> list[str]:
+    return [texto(skill) for skill in CADEIA] + [
+        a.read_text(encoding="utf-8") for a in AGENTES
+    ]
 
 
 def descricao(skill: str) -> str:
@@ -79,8 +89,8 @@ def moldes(citacao: str) -> set[str]:
 
 def test_a_cadeia_so_manda_rodar_modo_que_a_manual_tem():
     citados = set()
-    for skill in CADEIA:
-        for achado in re.finditer(r"`/manual ([^`]+)`", texto(skill)):
+    for fonte in fontes_da_cadeia():
+        for achado in re.finditer(r"`/manual ([^`]+)`", fonte):
             citados |= moldes(achado.group(1))
     assert citados, "alguma skill da cadeia precisa dizer que modo da /manual roda"
     declarados = {m for modo in modos_da_manual() for m in moldes(modo)}
@@ -98,7 +108,7 @@ def test_todo_caminho_de_manual_que_a_cadeia_cita_existe():
     renderizar o vídeo pela receita da `/manual`, e receita que mudou de nome
     vira instrução para um arquivo que não existe, no meio de um deploy.
     """
-    fontes = [texto(skill) for skill in CADEIA]
+    fontes = fontes_da_cadeia()
     fontes.append(
         (RAIZ / "tools" / "tirar_draft_manual.py").read_text(encoding="utf-8")
     )
@@ -156,6 +166,7 @@ def test_o_prd_do_deploy_e_campo_do_history_no_lugar_certo():
 
 def test_o_comentario_da_fatia_de_manual_nao_para_a_onda():
     """`revisor-comentou` é falso positivo quando o próprio agente comenta."""
-    linha = next(li for li in linhas_de_manual("onda") if "Fatia de manual" in li)
-    assert "<!-- automacao -->" in linha
-    assert "draft" in linha, "o checkpoint cita o draft do vídeo a aprovar"
+    linhas = [li for li in linhas_de_manual("onda-enxuta") if "Fatia de manual" in li]
+    assert any("<!-- automacao -->" in li and "draft" in li for li in linhas), (
+        "o checkpoint cita o draft do vídeo a aprovar e o carimbo do comentário"
+    )

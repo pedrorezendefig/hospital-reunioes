@@ -57,5 +57,5 @@ clique em **Registrar manifestação**.
 
 Fica registrado no histórico do caso e no registro de quem acessou. Um caso que
 entrou pelo site e foi classificado como reclamação continua sigiloso até o
-ouvidor desmarcar a caixa de propósito. E a reabertura por reincidência só
+ouvidor desmarcar a caixa. E a reabertura por reincidência só
 eleva o sigilo, nunca o diminui.

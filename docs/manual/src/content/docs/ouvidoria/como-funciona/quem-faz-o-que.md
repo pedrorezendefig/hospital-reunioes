@@ -27,7 +27,7 @@ faltando e os relatórios.
 
 ## Responsável do setor
 
-Não entra na plataforma. Recebe um e-mail com link próprio, e pode ser titular,
+Não entra na plataforma. Recebe um email com link próprio, e pode ser titular,
 substituto ou gestor da área. Lê o caso que veio para ele, responde o que foi
 feito, anexa arquivo, pede mais prazo uma vez e devolve o caso que não é da área
 dele. Não vê a lista, não vê outros casos e não sabe o nome de quem falou em
@@ -43,7 +43,7 @@ identificação de quem falou, os anexos, a resposta da área nem o histórico.
 ## Quem administra a plataforma
 
 Dá e tira o acesso à Ouvidoria, e isso fica registrado. Recebe avisos técnicos,
-como falha de envio de e-mail. Não lê caso sigiloso e não edita histórico.
+como falha de envio de email. Não lê caso sigiloso e não edita histórico.
 
 ## A Ana, a assistente de atendimento
 

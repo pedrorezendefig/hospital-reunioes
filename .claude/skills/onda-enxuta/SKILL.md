@@ -1,11 +1,11 @@
 ---
 name: onda-enxuta
-description: Executor AFK da fila de issues em ondas, versão enxuta da /onda: uma sessão de fundo por onda, mapa do terreno por PRD, implementador que morre no PR, corretor fresco, revisão por lista de arquivos, um push e um build por onda, medição automática. Sintaxe `/onda-enxuta [#PRD | --all] [--paralelo N] [--sessao <nome>] [--onda N]`.
+description: Executor AFK da fila de issues em ondas: sessão de fundo por onda, mapa por PRD, um push e um build por onda. Sintaxe `/onda-enxuta [#PRD | --all] [--paralelo N] [--sessao <nome>] [--onda N]`.
 ---
 
 # Onda enxuta
 
-Faz o mesmo que a `/onda` (ADRs 0022, 0029 e 0035): esvazia uma fila de issues em ondas, para no seu OK de merge por lote, um deploy por onda, auditoria do PRD no fim. Muda **a forma do loop**, não os gates. Nasceu da medição de três ondas de setembro de 2026 (1,05 bilhão de tokens para 11 issues, 94% releitura de contexto) e das decisões em [references/decisoes.md](references/decisoes.md). Tudo o que ela precisa vive em `.claude/skills/onda-enxuta/` e `.claude/agents/hr-*.md`, arquivos próprios: a `/onda`, a `/montar-ondas` e o `/deploy` não mudam.
+É a onda do pipeline (ADRs 0022, 0029, 0035 e 0061): esvazia uma fila de issues em ondas, para no seu OK de merge por lote, um deploy por onda, auditoria do PRD no fim. Muda **a forma do loop**, não os gates. Nasceu da medição de três ondas de setembro de 2026 (1,05 bilhão de tokens para 11 issues, 94% releitura de contexto) e das decisões em [references/decisoes.md](references/decisoes.md). Tudo o que ela precisa vive em `.claude/skills/onda-enxuta/` e `.claude/agents/hr-*.md`. A `/onda` e a `/montar-ondas` originais foram aposentadas pela ADR 0061.
 
 > **Invariantes herdados, sem exceção:** subir para produção é decisão humana por onda, citando os PR#. PR verde = CI verde + spec×diff + veredito limpo do revisor independente. Baixa em 3 tentativas. Fatia de manual para no draft do vídeo. Nada de doc de estado no repositório: o estado vive no GitHub, e o custo em `~/.claude/onda-enxuta/medicoes/`, fora do repositório.
 
@@ -17,7 +17,7 @@ Faz o mesmo que a `/onda` (ADRs 0022, 0029 e 0035): esvazia uma fila de issues e
 
 | Argumento | Default | Efeito |
 |---|---|---|
-| `#PRD` / `--all` | `--all` | Escopo da fila, como na `/onda`. Normalmente o prompt já traz a **fila-alvo fixa** escrita pelo `/montar-ondas-enxutas`. |
+| `#PRD` / `--all` | `--all` | Escopo da fila. Normalmente o prompt já traz a **fila-alvo fixa** escrita pelo `/montar-ondas-enxutas`. |
 | `--paralelo N` | 3 | Issues por onda. |
 | `--sessao <nome>` | `onda-<letra>` | Nome da sessão (`--name` do `claude --bg`). É a chave do semáforo e o prefixo das medições. |
 | `--onda N` | 1 | Número desta onda dentro da sessão. Cresce a cada passagem. |
@@ -48,7 +48,7 @@ Você, orquestrador, **não lê código, diff, PRD nem spec**. Mantém a tabela 
 
 ### 1. Fila-alvo
 
-Com fila fixa no prompt, use-a: confira só que cada issue está `ready-for-agent`, sem dono e sem bloqueio aberto (`gh issue view <N> --json labels,assignees` e `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`). Sem fila fixa, monte como a `/onda` (sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`), menores primeiro. Mostre a tabela desta onda em até 6 linhas e siga sem pedir confirmação: o lançamento foi o "vai".
+Com fila fixa no prompt, use-a: confira só que cada issue está `ready-for-agent`, sem dono e sem bloqueio aberto (`gh issue view <N> --json labels,assignees` e `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`). Sem fila fixa, monte (sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`), menores primeiro. Mostre a tabela desta onda em até 6 linhas e siga sem pedir confirmação: o lançamento foi o "vai".
 
 ### 2. Mapa do terreno (1 vez por PRD)
 
@@ -56,7 +56,7 @@ Para cada PRD das issues desta onda: `gh issue view <PRD> --json comments --jq '
 
 ### 3. Lote: implementadores em paralelo
 
-Dispare os `N` `hr-implementador` **na mesma mensagem**, um por issue, com o prompt de `references/prompts.md`. Cada um faz claim, TDD, PR (`/ship --no-merge --skip-review --no-bump`) e morre.
+Dispare os `N` `hr-implementador` **na mesma mensagem**, um por issue, com o prompt de `references/prompts.md`. Cada um faz claim, TDD, PR (`/ship --skip-review`) e morre.
 
 A cada notificação de término, **confira o GitHub**, não o relatório (ADR 0029): `gh pr list --search "<N> in:title,body" --json number,url,headRefName --state open` ou `gh issue view <N> --json labels`. Estados possíveis:
 
@@ -85,6 +85,7 @@ PR verde = `gh pr checks` verde + veredito(s) `LIMPO` + spec×diff declarado pel
 Quando todos os PRs do lote estão verdes ou baixados:
 
 1. Imprima a tabela: issue · PR · status · fatia · should-fix pendentes (n) · migration (número) · MP4 do draft (fatia de manual).
+   Fatia de manual (ADR 0057): o implementador para no draft de cada Vídeo de tarefa e o caminho do MP4 entra na tabela; aprovar o vídeo é o mesmo gate humano do merge, não um segundo toque. Todo comentário do agente no PR leva `<!-- automacao -->` na primeira linha, senão a label `revisor-comentou` acusa a própria onda.
 2. Dispare a notificação push (ferramenta `PushNotification`, uma linha: "Onda <N> de <sessão> pronta: PRs #a #b. `claude attach <id>` e `vai`").
 3. Imprima as instruções e **encerre o turno**: `claude attach <id da sessão>` e depois `vai #a #b` (todos), `vai #a` (subconjunto) ou `abortar`. Condição opcional na mesma linha: `vai #a #b, corrigir o should-fix da #b e mergear se voltar limpo`.
 
@@ -110,13 +111,13 @@ Fila ainda tem issue desbloqueada? Escreva a **passagem** (modelo em `references
 bash .claude/skills/onda-enxuta/scripts/lancar_sessao.sh <nome>-onda<N+1> "<caminho da passagem>"
 ```
 
-Imprima o id que ele devolve e encerre. Fila vazia: **Sinal final** como na `/onda` (fechadas e deployadas, ready-for-human, bloqueadas, deploys da sessão, veredito do PRD, tudo ocorreu bem ou parcial).
+Imprima o id que ele devolve e encerre. Fila vazia: **Sinal final** (fechadas e deployadas, ready-for-human, bloqueadas, deploys da sessão, veredito do PRD, tudo ocorreu bem ou parcial).
 
 ## Limites
 
 - Não revoga o gate de merge, não roda sem checkpoint, não mergeia por conta própria depois de um "vai" que não citou o PR.
 - Não modifica nada de `.claude/skills/` nem de `docs/` do repositório além do que o `fechar_onda.py` registra (`CHANGELOG.md`, `docs/spec/deploy/*.json`, snapshot), que já era registro do `/deploy`.
-- Não substitui a `/onda`: as duas coexistem. Esta é a variante medida; a comparação vive em `~/.claude/onda-enxuta/medicoes/`.
+- As medições de custo vivem em `~/.claude/onda-enxuta/medicoes/`, fora do repositório.
 - Não usa Sonnet nem Haiku em papel nenhum (restrição do dono).
 
 ## Scripts
