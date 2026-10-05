@@ -1,0 +1,41 @@
+name: Lint skills
+
+# O ci.yml ignora `.claude/**` e `**/*.md` no trigger, então um PR que mexe só
+# num SKILL.md nunca acordaria o CI principal. Este workflow roda quando uma
+# skill muda e trava o cabeçalho YAML quebrado (issue #807): `description:` sem
+# aspas com dois-pontos no meio faz o Claude Code descartar o cabeçalho inteiro
+# em silêncio, e a skill perde a descrição com os gatilhos.
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '.claude/skills/**'
+      - 'tools/lint_skills.py'
+      - 'tools/test_lint_skills.py'
+      - '.github/workflows/lint-skills.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - '.claude/skills/**'
+      - 'tools/lint_skills.py'
+      - 'tools/test_lint_skills.py'
+      - '.github/workflows/lint-skills.yml'
+
+jobs:
+  lint-skills:
+    name: Cabeçalho YAML das skills
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Dependências do lint
+        run: pip install pyyaml pytest
+      - name: Testes do lint
+        run: python -m pytest tools/test_lint_skills.py -q
+      - name: Lint skills
+        run: python3 tools/lint_skills.py --dir .claude/skills

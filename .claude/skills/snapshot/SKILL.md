@@ -1,6 +1,6 @@
 ---
 name: snapshot
-description: Mantém docs/spec/snapshots/ (rotas, entidades, schema, migrations, integrações) gerado do código; roda no fim do rabo (fechar_onda.py). Manual: `python3 .claude/skills/snapshot/scripts/snapshot.py [--check]`.
+description: 'Mantém docs/spec/snapshots/ (rotas, entidades, schema, migrations, integrações) gerado do código; roda no fim do rabo (fechar_onda.py). Manual: `python3 .claude/skills/snapshot/scripts/snapshot.py [--check]`.'
 ---
 
 # snapshot — manter `docs/spec/snapshots/` fresco
