@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-05T12:40:21-03:00",
+  "updated_at": "2026-10-05T14:46:19-03:00",
   "updated_by": "pr-avulso@fechar_onda",
   "last_app_version": "0.161.0",
   "production": {
@@ -208,8 +208,8 @@
   ],
   "last_run": {
     "mode": "pr-avulso",
-    "sha": "b64bf9f4fe40ef9c0e7177b0ccfa8a11044981a8",
+    "sha": "e0cccf35b323a24344986be01cdf64d030fa3d08",
     "result": "healthy",
-    "duration_seconds": 803
+    "duration_seconds": 233
   }
 }
