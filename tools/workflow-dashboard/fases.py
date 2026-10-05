@@ -8,7 +8,7 @@ contagens do funil saem. Nada aqui consulta rede ou disco.
 from __future__ import annotations
 
 import re
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 
 # Régua da issue na ordem do funil (ADR 0062, decisão 4); a precedência fica em _fase_issue.
 FASES_ISSUE = ("triagem", "fila", "bloqueada", "em_andamento", "pr_aberto", "mergeada", "em_producao",
@@ -72,7 +72,7 @@ def _timeline(issue: dict, linha: dict, producao: _Producao, branches: list[str]
                             "veredito": v["valor"]})
         if p["state"] == "MERGED":
             eventos.append({"tipo": "mergeado", "em": p.get("merged_at"), "pr": n})
-            _, deploy = producao.do_pr(p)
+            _, deploy = producao.do_pr({**p, "closes": [issue["number"]]})
             if deploy:
                 eventos.append({"tipo": "em_producao", "em": deploy["at"], "pr": n,
                                 "versao": deploy.get("app_version")})
@@ -160,27 +160,37 @@ class _Producao:
     def __init__(self, deploys: list[dict]):
         self.deploys = []
         for d in deploys:
-            if d.get("result", "healthy") != "healthy" or not _dt(d.get("at")):
+            at = _dt(d.get("at"))
+            if d.get("result", "healthy") != "healthy" or not at:
                 continue
             texto = " ".join(str(d.get(k) or "") for k in ("subject", "raw_subject", "notes"))
             citados = {int(n) for n in re.findall(r"#(\d+)", texto)} | set(d.get("pr_numbers") or [])
-            self.deploys.append((_dt(d["at"]), d, citados))
+            build = at - timedelta(seconds=d.get("duration_seconds") or 0)  # o build sobe a main deste instante
+            self.deploys.append((at, build, d, citados))
         self.deploys.sort(key=lambda t: t[0])
 
     def do_pr(self, pr: dict) -> tuple[bool, dict | None]:
-        """(em produção?, deploy) do PR: o primeiro deploy que o cita dá a versão.
+        """(em produção?, deploy) do PR mergeado, nesta ordem:
 
-        Merge anterior ao deploy mais antigo do history.json também está no ar (todo
-        deploy sobe a main inteira), só que sem versão conhecida: o history.json
-        guardou só os 50 últimos deploys até a ADR 0062.
+        1. o primeiro deploy que cita o PR (ou a issue dele, se o deploy é depois do merge);
+        2. merge anterior ao build mais antigo do history.json: está no ar, versão
+           desconhecida (o history.json guardou só os 50 últimos deploys até a ADR 0062);
+        3. o primeiro deploy cujo build começou depois do merge: PR só de docs e PR de
+           registro do rabo não ganham deploy próprio, e todo deploy sobe a main inteira.
         """
         if pr["state"] != "MERGED":
             return False, None
-        for _, d, citados in self.deploys:
-            if pr["number"] in citados:
-                return True, d
         merge = _dt(pr.get("merged_at"))
-        return bool(self.deploys and merge and merge < self.deploys[0][0]), None
+        issues = set(pr.get("closes") or [])
+        for at, _, d, citados in self.deploys:
+            # O /ship antigo citava só a issue ("Objetivos (#820)"); aí o deploy tem que ser depois do merge.
+            if pr["number"] in citados or (issues & citados and merge and at >= merge):
+                return True, d
+        if not merge or not self.deploys:
+            return False, None
+        if merge < self.deploys[0][1]:
+            return True, None
+        return next(((True, d) for _, build, d, _ in self.deploys if build > merge), (False, None))
 
 
 def _estado_ci(checks: list[dict]) -> str:

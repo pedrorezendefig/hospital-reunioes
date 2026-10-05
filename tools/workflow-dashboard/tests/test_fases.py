@@ -86,10 +86,10 @@ def _check(conclusao="SUCCESS", *, status="COMPLETED", inicio="2026-10-03T10:05:
             "fim": fim if status == "COMPLETED" else None}
 
 
-def _deploy(versao, at, texto):
+def _deploy(versao, at, texto, duracao=None):
     """Deploy no shape do history.json; o texto cita PRs e issues como o rabo escreve."""
     return {"app_version": versao, "at": at, "result": "healthy", "subject": texto,
-            "raw_subject": "chore(deploy): registro", "notes": ""}
+            "raw_subject": "chore(deploy): registro", "notes": "", "duration_seconds": duracao}
 
 
 def _merged(number, closes, merged_at="2026-10-04T10:00:00Z"):
@@ -385,6 +385,39 @@ def test_pr_citado_num_deploy_de_onda_fica_em_producao_com_a_versao_e_a_data():
     assert fase["versao"] == "0.157.0"
     assert fase["desde"] == "2026-10-09T12:00:00-03:00"
     assert fase["dias_na_coluna"] == 0
+
+
+def test_deploy_que_cita_a_issue_do_pr_poe_o_pr_em_producao():
+    # o /ship antigo escrevia o número da issue no título: "Objetivos com galeria (#820)"
+    deploys = [_deploy("0.151.0", "2026-09-19T20:10:13-03:00", "feat(central): Objetivos (#820)")]
+    fase = _fase_pr(_merged(840, [820], merged_at="2026-09-19T22:00:00Z"), deploys=deploys)
+    assert fase["fase"] == "em_producao"
+    assert fase["versao"] == "0.151.0"
+
+
+def test_deploy_anterior_ao_merge_que_cita_a_issue_nao_conta():
+    # issue reaberta: a versão antiga citou a issue, o PR novo ainda não subiu
+    deploys = [_deploy("0.150.0", "2026-09-18T12:00:00-03:00", "PR #830, issue #820"),
+               _deploy("0.140.0", "2026-09-01T12:00:00-03:00", "PR #700")]
+    fase = _fase_pr(_merged(841, [820], merged_at="2026-09-20T12:00:00Z"), deploys=deploys)
+    assert fase["fase"] == "mergeado_sem_deploy"
+
+
+def test_pr_que_nenhum_deploy_cita_sobe_no_primeiro_build_depois_do_merge():
+    # PR de registro do rabo e PR só de docs não ganham deploy próprio: o seguinte sobe a main com eles
+    deploys = [_deploy("0.162.0", "2026-10-06T12:00:00Z", "PR #300", duracao=900),
+               _deploy("0.161.3", "2026-10-05T18:41:18Z", "PR #896")]
+    fase = _fase_pr(_merged(948, [], merged_at="2026-10-05T18:41:56Z"), deploys=deploys)
+    assert fase["fase"] == "em_producao"
+    assert fase["versao"] == "0.162.0"
+
+
+def test_pr_mergeado_durante_o_build_de_outro_deploy_nao_entra_nele():
+    # o build de 15 min começou 11:45; o merge das 11:50 fica para o próximo deploy
+    deploys = [_deploy("0.162.0", "2026-10-06T12:00:00Z", "PR #300", duracao=900),
+               _deploy("0.161.0", "2026-10-01T12:00:00Z", "PR #200", duracao=900)]
+    fase = _fase_pr(_merged(301, [], merged_at="2026-10-06T11:50:00Z"), deploys=deploys)
+    assert fase["fase"] == "mergeado_sem_deploy"
 
 
 def test_pr_fechado_sem_merge_vira_tentativa_desde_o_fechamento():
