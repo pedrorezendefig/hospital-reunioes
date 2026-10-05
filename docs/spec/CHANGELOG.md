@@ -7,6 +7,14 @@ A partir de **v0.2.0** as entradas seguem o formato `## v0.X.Y — DATA — tipo
 
 ---
 
+## v0.161.4 - 2026-10-05 19:03 - PR #950, issue #941: Hospital OS, módulo de fases (issue, PR, timeline, ondas, funil) e coletor com campos novos
+- Autor: Pedro Rezende <pmrdef@gmail.com>
+- SHA: `9fe20d0`
+- PRs: [#950](https://github.com/pedrorezendefig/hospital-reunioes/pull/950)
+- Serviços: backend, frontend
+- Resultado: 🟢 healthy (819s)
+- Commit: https://github.com/pedrorezendefig/hospital-reunioes/commit/9fe20d0
+
 ## v0.161.3 - 2026-10-05 15:41 - PR #896, issue #807: Aspas no cabeçalho YAML de 7 skills e trava no CI
 - Autor: Pedro Rezende <pmrdef@gmail.com>
 - SHA: `c0293c8`
