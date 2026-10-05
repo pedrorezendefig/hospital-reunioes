@@ -384,12 +384,23 @@ function leadAvg(iss) {
   return closed.reduce((a, i) => a + (new Date(i.closed_at) - new Date(i.created_at)), 0) / closed.length;
 }
 
-/* Responsável = quem está designado (assignee). Um só por vez no filtro;
-   SEM_RESP filtra as issues sem ninguém designado. */
+/* Responsável = quem está designado (assignee); sem ninguém designado, quem
+   criou a issue (author), emenda de 05/10/2026 do ADR 0061. Um só por vez no
+   filtro; SEM_RESP filtra as issues que ninguém assumiu (sem assignee). O "em
+   andamento" conta só issue com assignee (claim). */
 const SEM_RESP = '(sem)';
 
+function responsaveis(i) {
+  return i.assignees.length ? i.assignees : (i.author ? [i.author] : []);
+}
+
 function doResponsavel(i, resp) {
-  return resp === SEM_RESP ? i.assignees.length === 0 : i.assignees.includes(resp);
+  return resp === SEM_RESP ? i.assignees.length === 0 : responsaveis(i).includes(resp);
+}
+
+function donoHtml(i) {
+  if (i.assignees.length) return `👤 ${i.assignees.map(esc).join(', ')}`;
+  return i.author ? `✎ criada por ${esc(i.author)}` : '';
 }
 
 function matchIssue(i) {
@@ -441,7 +452,8 @@ function issueCard(i, idx, prd = false, extra = '') {
   meta.push(`aberta ${fmtD(i.created_at)}`);
   if (i.closed_at) meta.push(`fechada ${fmtD(i.closed_at)}`);
   // no PRD o dono vai ao lado do título
-  if (!prd && i.assignees.length) meta.push(`👤 ${i.assignees.map(esc).join(', ')}`);
+  const dono = donoHtml(i);
+  if (!prd && dono) meta.push(dono);
   if (i.criteria.total) meta.push(`✓ ${i.criteria.done}/${i.criteria.total} critérios`);
   const blocked = i.blocked_by.length
     ? `<span class="blocked">⛔ bloqueada por ${i.blocked_by.map(n => `<a href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`).join(', ')}</span>` : '';
@@ -454,7 +466,7 @@ function issueCard(i, idx, prd = false, extra = '') {
         ${prd ? '<span class="prd-tag">PRD</span>' : ''}
         <span class="inum">#${i.number}</span>
         <span class="ititle">${esc(i.title)}</span>
-        ${prd ? `<span class="prd-dono">${i.assignees.length ? `👤 ${i.assignees.map(esc).join(', ')}` : 'sem dono'}</span>` : ''}
+        ${prd ? `<span class="prd-dono">${i.assignees.length ? dono : ['sem dono', dono].filter(Boolean).join(' · ')}</span>` : ''}
         ${i.labels.map(labelBadge).join('')}
         ${stateTag(i)}
         ${lead ? `<span class="chip nrow-lead">⏱ ${lead}</span>` : ''}
@@ -528,11 +540,15 @@ function visorResponsavelHtml(iss, resp, rv) {
   const mes = Date.now() - 30 * 864e5;
   const noMes = fechadas.filter(i => i.closed_at && new Date(i.closed_at) >= mes).length;
   const lead = leadAvg(dele);
-  const nome = resp === SEM_RESP ? 'sem responsável' : esc(resp);
+  const s = n => n === 1 ? '' : 's';
+  const assumidas = dele.filter(i => i.assignees.length).length;
+  const criadas = dele.length - assumidas;
+  const nome = resp === SEM_RESP ? 'ninguém assumiu' : esc(resp);
+  const origem = resp === SEM_RESP ? '' : ` · ${assumidas} assumida${s(assumidas)} · ${criadas} só criada${s(criadas)}`;
   return `
-  <div class="k-label visor-resp" ${rv()}>${nome} · ${dele.length} issue${dele.length === 1 ? '' : 's'}</div>
+  <div class="k-label visor-resp" ${rv()}>${nome} · ${dele.length} issue${s(dele.length)}${origem}</div>
   <div class="grid g12" style="margin-bottom:6px">
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">abertas</div><div class="v" style="color:var(--green)">${open.length}</div><div class="s">${open.filter(x => x.labels.includes('in-progress')).length} em andamento</div></div></div>
+    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">abertas</div><div class="v" style="color:var(--green)">${open.length}</div><div class="s">${open.filter(x => x.assignees.length && x.labels.includes('in-progress')).length} em andamento</div></div></div>
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">entregues</div><div class="v">${fechadas.length}</div><div class="s">${noMes} nos últimos 30 dias</div></div></div>
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">lead time médio</div><div class="v" style="font-size:30px; padding-top:6px">${lead ? spanH(lead) : '·'}</div><div class="s">da abertura ao fechamento</div></div></div>
     <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">prontas p/ agente</div><div class="v" style="color:var(--coral)">${open.filter(x => x.labels.includes('ready-for-agent')).length}</div><div class="s">fila ready-for-agent</div></div></div>
@@ -544,7 +560,7 @@ function renderIssues() {
   const open = iss.filter(i => i.state === 'OPEN');
   const lead = leadAvg(iss);
   const labels = [...new Set(iss.flatMap(i => i.labels))].sort();
-  const pessoas = [...new Set(iss.flatMap(i => i.assignees))].sort();
+  const pessoas = [...new Set(iss.flatMap(responsaveis))].sort();
   const f = S.fIssues;
   let i = 0;
   const rv = () => `class="rv" style="--i:${i++}"`;
@@ -566,7 +582,7 @@ function renderIssues() {
     <button class="fchip ${f.state === 'CLOSED' ? 'on' : ''}" data-act="fstate" data-v="CLOSED">fechadas</button>
     <select class="fsel" id="fresp">
       <option value="">responsável: todos</option>
-      <option value="${SEM_RESP}" ${f.resp === SEM_RESP ? 'selected' : ''}>sem responsável</option>
+      <option value="${SEM_RESP}" ${f.resp === SEM_RESP ? 'selected' : ''}>ninguém assumiu</option>
       ${pessoas.map(p => `<option value="${esc(p)}" ${f.resp === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}
     </select>
     <select class="fsel" id="flabel">
