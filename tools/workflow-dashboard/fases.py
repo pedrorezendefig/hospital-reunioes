@@ -29,6 +29,11 @@ MARCADOR_AUTOMACAO = "<!-- automacao -->"
 _VEREDITO = re.compile(r"(?m)^VEREDITO( SEGURANCA)?:\s*(LIMPO|MUST-FIX)\b")
 # Conclusões de check que deixam o CI vermelho (CheckRun e StatusContext).
 _FALHAS = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"}
+# mergeStateStatus que o PRD #938 chama de conflito (sinal sobre a fase, não fase).
+_CONFLITO = {"DIRTY", "BEHIND"}
+# A onda antiga registrava o deploy até ~6 s antes do merge; o history.json escrito à mão
+# arredonda o minuto. Deploy mais cedo que isso não contém o PR, mesmo citando-o nas notes.
+_TOLERANCIA_REGISTRO = timedelta(minutes=2)
 
 
 def montar_fases(
@@ -179,7 +184,9 @@ class _Producao:
     """Em que deploy do history.json cada PR subiu.
 
     O rabo escreve os PRs no texto do deploy ("PR #896", "PRs #874 #875 #876");
-    número de issue e de PR não colidem no GitHub, então basta o PR ser citado.
+    número de issue e de PR não colidem no GitHub. Citar não basta: as notes
+    falam de PRs futuros como contexto ("#729 (PR #751, que rebaseia por cima"),
+    então o deploy só conta se não for anterior ao merge (com a tolerância do registro).
     """
 
     def __init__(self, deploys: list[dict]):
@@ -197,7 +204,7 @@ class _Producao:
     def do_pr(self, pr: dict) -> tuple[bool, dict | None]:
         """(em produção?, deploy) do PR mergeado, nesta ordem:
 
-        1. o primeiro deploy que cita o PR (ou a issue dele, se o deploy é depois do merge);
+        1. o primeiro deploy, não anterior ao merge, que cita o PR ou a issue dele;
         2. merge anterior ao build mais antigo do history.json: está no ar, versão
            desconhecida (o history.json guardou só os 50 últimos deploys até a ADR 0062);
         3. o primeiro deploy cujo build começou depois do merge: PR só de docs e PR de
@@ -208,8 +215,8 @@ class _Producao:
         merge = _dt(pr.get("merged_at"))
         issues = set(pr.get("closes") or [])
         for at, _, d, citados in self.deploys:
-            # O /ship antigo citava só a issue ("Objetivos (#820)"); aí o deploy tem que ser depois do merge.
-            if pr["number"] in citados or (issues & citados and merge and at >= merge):
+            # O /ship antigo citava só a issue ("Objetivos (#820)"); issue reaberta já foi citada antes.
+            if (not merge or at >= merge - _TOLERANCIA_REGISTRO) and (pr["number"] in citados or issues & citados):
                 return True, d
         if not merge or not self.deploys:
             return False, None
@@ -286,7 +293,9 @@ def _fase_pr(pr: dict, producao: _Producao, agora: datetime) -> dict:
         fase, desde = "aberto_sem_ci", _mais_antiga(*(c.get("inicio") for c in checks)) or pr.get("created_at")
     else:
         fim_ci = _mais_recente(*(c.get("fim") for c in checks))
-        fase = "verde_esperando_merge" if veredito == "limpo" else "esperando_revisor"
+        # PRD #938: veredito dado ou mergeStateStatus CLEAN; must-fix de qualquer lente segura o merge.
+        liberado = veredito == "limpo" or (veredito is None and pr.get("merge_state") == "CLEAN")
+        fase = "verde_esperando_merge" if liberado else "esperando_revisor"
         desde = _mais_recente(fim_ci, quando)
     inicio = _dt(desde)
     return {
@@ -295,7 +304,7 @@ def _fase_pr(pr: dict, producao: _Producao, agora: datetime) -> dict:
         "dias_na_coluna": max(0, (agora - inicio).days) if inicio else None,
         "ci": ci,
         "veredito": veredito,
-        "conflito": pr.get("merge_state") == "DIRTY",
+        "conflito": pr.get("merge_state") in _CONFLITO,
         "versao": versao,
     }
 

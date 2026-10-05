@@ -388,7 +388,24 @@ def test_conflito_e_sinal_e_nao_muda_a_coluna():
     fase = _fase_pr(_pr(209, [1], checks=[_check()], merge_state="DIRTY"))
     assert fase["fase"] == "esperando_revisor"
     assert fase["conflito"] is True
-    assert _fase_pr(_pr(210, [1], checks=[_check()], merge_state="BEHIND"))["conflito"] is False
+
+
+def test_branch_atras_da_main_tambem_e_conflito():
+    # PRD #938: conflito = mergeStateStatus DIRTY ou BEHIND
+    assert _fase_pr(_pr(210, [1], checks=[_check()], merge_state="BEHIND"))["conflito"] is True
+    assert _fase_pr(_pr(210, [1], checks=[_check()], merge_state="BLOCKED"))["conflito"] is False
+
+
+def test_ci_verde_e_merge_state_clean_fica_verde_esperando_merge_sem_veredito():
+    # PRD #938: verde esperando merge = CI verde e veredito dado, ou mergeStateStatus CLEAN
+    fase = _fase_pr(_pr(217, [1], checks=[_check(fim="2026-10-08T12:00:00Z")], merge_state="CLEAN"))
+    assert fase["fase"] == "verde_esperando_merge"
+    assert fase["desde"] == "2026-10-08T12:00:00Z"
+
+
+def test_must_fix_segura_o_merge_mesmo_com_merge_state_clean():
+    pr = _pr(218, [1], checks=[_check()], merge_state="CLEAN", vereditos=[_must_fix()])
+    assert _fase_pr(pr)["fase"] == "esperando_revisor"
 
 
 def test_pr_mergeado_sem_deploy_fica_mergeado_sem_deploy_desde_o_merge():
@@ -426,6 +443,27 @@ def test_deploy_anterior_ao_merge_que_cita_a_issue_nao_conta():
     ]
     fase = _fase_pr(_merged(841, [820], merged_at="2026-09-20T12:00:00Z"), deploys=deploys)
     assert fase["fase"] == "mergeado_sem_deploy"
+
+
+def test_notes_que_citam_pr_futuro_nao_poem_o_pr_em_producao_antes_do_merge():
+    # history.json real: as notes da 0.137.1 e da 0.139.0 falam "#729 (PR #751, que rebaseia por
+    # cima ...)" antes do merge do #751 (03:25:31Z); o #751 subiu na 0.140.0, e o #765 na 0.139.0
+    def com_notas(versao, at, assunto, notas):
+        return {**_deploy(versao, at, assunto), "raw_subject": assunto, "notes": notas}
+
+    deploys = [
+        com_notas("0.140.0", "2026-09-17T00:30:00-03:00", "feat(tecnologia): voz e anexo (#751)", "PR #751 (#729)"),
+        com_notas("0.139.0", "2026-09-16T22:35:00-03:00", "feat(extracao): processo separado (#765)", "#729 (PR #751)"),
+        com_notas(
+            "0.137.1", "2026-09-16T20:37:00-03:00", "fix(manual): Ajuda (#766)", "#758 (PR #765), #729 (PR #751)"
+        ),
+    ]
+    pr765 = _merged(765, [758], merged_at="2026-09-17T01:22:31Z")
+    pr751 = _merged(751, [729], merged_at="2026-09-17T03:25:31Z")
+    assert _fase_pr(pr765, deploys=deploys)["versao"] == "0.139.0"
+    assert _fase_pr(pr751, deploys=deploys)["versao"] == "0.140.0"
+    issue = _fase(_issue(729, state="CLOSED"), prs=[pr751], deploys=deploys)
+    assert (issue["versao"], issue["em_producao_em"]) == ("0.140.0", "2026-09-17T00:30:00-03:00")
 
 
 def test_pr_que_nenhum_deploy_cita_sobe_no_primeiro_build_depois_do_merge():
