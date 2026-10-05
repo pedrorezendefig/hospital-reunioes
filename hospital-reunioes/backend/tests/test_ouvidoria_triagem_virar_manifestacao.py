@@ -26,6 +26,7 @@ import sys
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from postgrest.exceptions import APIError
 from slowapi import _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 
@@ -79,6 +80,9 @@ class _TabelaDaFatia(_TabelaFake):
             for r in casadas:
                 self.rows.remove(r)
             return type("R", (), {"data": [dict(r) for r in casadas]})()
+        quebra = self.dono.update_quebra.get(self.nome)
+        if self._update is not None and quebra is not None:
+            raise quebra
         if self._insert is not None and self.nome == "ouvidoria_protocolos":
             numero = 7 + len(self.rows)
             self._insert = {
@@ -100,6 +104,8 @@ class _BancoDaFatia(_SupabaseFake):
             "ouvidoria_notificacoes": [],
             "setores": [{"nome": "Recepção", "ativo": True}],
         }
+        # O update que o teste manda falhar, por tabela.
+        self.update_quebra: dict[str, Exception] = {}
 
     def table(self, nome: str):
         return _TabelaDaFatia(self, nome)
@@ -409,3 +415,24 @@ class TestSemTravessaoNoQueOHumanoLe:
             assert not any(t in lido_por_gente for t in TRAVESSOES), lido_por_gente
         # O texto continua o do e-mail, só com a tipografia da casa.
         assert "sem informação" in pre_carga["relato_integral"]
+
+
+class TestFalhaNaMarcaNaoDerrubaOCaso:
+    def test_falha_ao_marcar_o_email_ainda_devolve_o_protocolo_e_manda_o_acuse(self, monkeypatch, emails, caplog):
+        """O caso já nasceu e o protocolo vai ser dito a quem escreveu: como o
+        movimento de abertura e o acuse, a marca do item não pode derrubar o
+        registro. Um 500 aqui faria o ouvidor clicar de novo, com o e-mail
+        ainda pendente, e o mesmo e-mail viraria dois casos."""
+        cliente, banco, email_id = _email_na_triagem(monkeypatch)
+        banco.update_quebra["ouvidoria_emails_recebidos"] = APIError(
+            {"code": "08006", "message": "conexão caiu", "details": "Failing row contains (Joana da Silva)"}
+        )
+
+        r = _virar(cliente, email_id)
+
+        assert r.status_code == 201
+        assert r.json()["protocolo"] == banco.tabelas["ouvidoria_protocolos"][0]["protocolo"]
+        assert len(banco.tabelas["ouvidoria_notificacoes"]) == 1
+        # O log diz o que aconteceu sem levar o dado de quem escreveu.
+        assert email_id in caplog.text
+        assert "Joana" not in caplog.text

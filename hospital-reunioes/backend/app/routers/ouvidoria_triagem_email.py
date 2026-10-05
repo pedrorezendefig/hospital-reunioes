@@ -1,12 +1,13 @@
-"""Rotas da Triagem de e-mail (ADR 0051, PRD #646, issue #648).
+"""Rotas da Triagem de e-mail (ADR 0051, PRD #646, issues #648 e #650).
 
 Só o Perfil da Ouvidoria entra: o gate é o mesmo do Dossiê
 (`require_perfil_ouvidoria`), e Super admin fica de fora como lá. Todo acesso ao
 conteúdo de um e-mail recebido entra no log de acesso da Ouvidoria.
 
-Nesta fatia o ouvidor só lê: a lista e o item. As decisões (descartar, virar
-manifestação, juntar a um caso) chegam nas fatias seguintes, acrescentadas no
-fim deste arquivo.
+O ouvidor lê a lista e o item. Das decisões, virar manifestação (#650) mora
+aqui só como a pré-carga: quem cria o caso é o registro manual
+(`POST /ouvidoria/manifestacoes` com o `email_recebido_id`). Descartar e
+juntar a um caso chegam nas fatias seguintes.
 """
 
 from __future__ import annotations

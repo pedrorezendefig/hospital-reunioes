@@ -972,12 +972,13 @@ async def registrar_manifestacao(
     if registro.email_recebido_id is not None and not ouvidoria_triagem_email.virar_manifestacao(
         supabase, me, registro.email_recebido_id, row, agora_utc()
     ):
-        # Dois cliques concorrentes passaram juntos pela conferência de
-        # pendente: o outro ligou o e-mail ao caso dele. Este caso já existe e
-        # manifestação não se apaga (ADR 0047): segue de pé, sem os anexos, e o
-        # par fica no log para o ouvidor conferir.
+        # A marca não pegou: ou dois cliques concorrentes passaram juntos pela
+        # conferência de pendente (o outro ligou o e-mail ao caso dele), ou o
+        # banco falhou no meio. Este caso já existe e manifestação não se
+        # apaga (ADR 0047): segue de pé, com o acuse, e o par fica no log para
+        # o ouvidor conferir.
         logger.error(
-            "Triagem de e-mail: o e-mail %s foi decidido enquanto o caso %s nascia dele",
+            "Triagem de e-mail: o e-mail %s não ficou ligado ao caso %s que nasceu dele",
             registro.email_recebido_id,
             row.get("id"),
         )

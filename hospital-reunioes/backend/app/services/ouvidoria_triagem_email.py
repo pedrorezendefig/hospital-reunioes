@@ -4,8 +4,9 @@ O e-mail que chega em ouvidoria@ é copiado para o subdomínio de recebimento do
 Resend, e o Resend chama o webhook do app. Aqui ele vira um **e-mail recebido**:
 um item da Triagem de e-mail, que só o Perfil da Ouvidoria vê, e que não é
 caso nenhum. Quem decide se vira manifestação, se junta a um caso ou se é
-descartado é o ouvidor (as fatias seguintes do PRD); esta fatia faz o e-mail
-chegar e aparecer.
+descartado é o ouvidor. A fundação (#648) faz o e-mail chegar e aparecer;
+virar manifestação (#650) mora no fim deste arquivo. Descartar e juntar
+chegam nas fatias seguintes do PRD.
 
 Três garantias moram aqui, e cada uma tem teste:
 
@@ -528,10 +529,30 @@ def estado_do_email(supabase, email_id: str) -> str | None:
 
 def virar_manifestacao(supabase, me: dict, email_id: str, caso: dict, agora: datetime) -> bool:
     """Liga o item ao caso que acabou de nascer dele e o tira dos pendentes.
+    Devolve se a marca pegou. Nunca levanta.
 
     A marca só pega item ainda pendente: o filtro no próprio update é o que
     impede o segundo clique concorrente de religar o e-mail a outro caso.
-    Devolve se a marca pegou."""
+
+    Quem chama já criou o caso, e o protocolo vai ser dito a quem escreveu:
+    como o movimento de abertura e o acuse, nada aqui pode derrubar o
+    registro. Um 500 depois do caso criado faria o ouvidor clicar de novo, com
+    o e-mail ainda pendente, e o mesmo e-mail viraria dois casos."""
+    try:
+        return _virar(supabase, me, email_id, caso, agora)
+    except Exception as exc:  # noqa: BLE001
+        # Só o TIPO da exceção: o `details` do `APIError` traz a linha que
+        # falhou, com remetente e corpo do e-mail.
+        logger.error(
+            "Triagem de e-mail: falha ao ligar o e-mail %s ao caso %s (%s)",
+            email_id,
+            caso.get("id"),
+            type(exc).__name__,
+        )
+        return False
+
+
+def _virar(supabase, me: dict, email_id: str, caso: dict, agora: datetime) -> bool:
     marcado = (
         supabase.table(TABELA)
         .update(

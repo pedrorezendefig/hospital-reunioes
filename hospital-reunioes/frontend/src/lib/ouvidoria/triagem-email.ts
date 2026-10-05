@@ -2,9 +2,9 @@
  * A Triagem de e-mail da Ouvidoria (issue #648, PRD #646, ADR 0051).
  *
  * Todo e-mail que chega em ouvidoria@ entra numa lista que só o Perfil da
- * Ouvidoria vê, antes de virar caso. Nesta fatia o ouvidor só lê: a lista e o
- * item, com o corpo em texto e os anexos. Não é "caixa de entrada": o app não
- * responde e-mail por aqui.
+ * Ouvidoria vê, antes de virar caso. O ouvidor lê a lista e o item, com o
+ * corpo em texto e os anexos, e pode virar o e-mail em manifestação (issue
+ * #650). Não é "caixa de entrada": o app não responde e-mail por aqui.
  *
  * Aqui moram os tipos do que a API devolve e as regras puras da tela. O gate
  * de verdade é o backend (`require_perfil_ouvidoria`, 403 para os demais).
