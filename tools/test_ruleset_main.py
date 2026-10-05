@@ -170,7 +170,7 @@ def rodar_detector(tmp_path: Path, mudados: list[str], evento: str = "pull_reque
 
 
 @pytest.mark.parametrize("mudados, codigo", [
-    (["docs/spec/deploy/history.json", "docs/spec/CHANGELOG.md", "docs/ARQUITETURA.md"], "false"),
+    (["docs/spec/deploy/history.json", "docs/spec/deploy/state.json", "docs/ARQUITETURA.md"], "false"),
     (["docs/manual/src/content/docs/ouvidoria/index.mdx"], "false"),
     ([".claude/skills/onda-enxuta/scripts/fechar_onda.py"], "false"),
     (["README.md", "hospital-reunioes/README.md"], "false"),

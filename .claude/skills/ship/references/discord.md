@@ -41,7 +41,7 @@ EOF
 
 ```bash
 # Discussions API só permite criar discussion via GraphQL, não REST.
-# Variação simples: comentar na Issue + linkar do CHANGELOG.
+# Variação simples: comentar na Issue.
 # Ou: criar Issue tipo "release-notes" com label release.
 ```
 

@@ -92,8 +92,8 @@ Loop disciplinado: reproduz → minimiza → hipótese → instrumenta → corri
 fechar_onda.py     o rabo único (ADR 0061), rodado pelo autor do PR depois do OK:
   --prs <N>        semáforo → bump como commit na branch do PR → CI verde
                    → APP_VERSION no Coolify → merge pela API (squash) → um build → health com version-match
-                   → registro num PR só de docs: state.json + history.json + CHANGELOG + snapshot + draft do Manual
-                   → publica o Manual se tirou draft
+                   → registro num PR só de docs: state.json + history.json (ADR 0062)
+                   (snapshot e draft do Manual: Action no push da main, depois do registro)
                    (migration nova: aplicar no Studio ANTES de rodar; o script confere o sha256)
                    Na /onda-enxuta é o mesmo script, com o lote da onda em --prs
 ```
@@ -110,7 +110,7 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo autor do PR depois do O
 | Como a app funciona hoje (visão geral)? | `docs/ARQUITETURA.md` |
 | Mapa factual detalhado (rotas, schema, integrações)? | `docs/spec/snapshots/` |
 | O que está em produção? | `docs/spec/deploy/state.json` |
-| Timeline de deploys (o que mudou desde quando)? | `docs/spec/CHANGELOG.md` |
+| Timeline de deploys (o que mudou desde quando)? | `docs/spec/deploy/history.json` (aba Produção do painel) |
 
 ## Regras importantes
 
@@ -130,7 +130,7 @@ A `main` é protegida por ruleset (ADR 0061, emenda de 02/10/2026): ninguém, ad
 
 1. **Código.** O bump de versão vira um commit na branch do seu PR (na onda, numa branch `onda/<sessao>` com o lote, que vira um PR de entrega). O script espera o CI desse commit, põe o `APP_VERSION` no Coolify e mergeia pela API do GitHub, com squash.
 2. **Build e health** do que entrou.
-3. **Registro.** `history.json`, `state.json`, `CHANGELOG`, snapshot e draft do Manual sobem num **PR só de docs** que o próprio script abre e mergeia pela API depois do health. O CI desse PR pula os jobs pesados e fica verde em segundos, e o build que o Coolify dispara para ele é cancelado pelo script.
+3. **Registro.** `history.json` e `state.json` sobem num **PR só de docs** que o próprio script abre e mergeia pela API depois do health. Snapshot e draft do Manual não são do rabo: uma Action no push da `main` cuida deles depois do registro (ADR 0062). O CI desse PR pula os jobs pesados e fica verde em segundos, e o build que o Coolify dispara para ele é cancelado pelo script.
 
 Saída 5 do script: produção ok, mas o PR de registro não entrou. Mergeie o PR que ele imprime quando o CI dele ficar verde.
 

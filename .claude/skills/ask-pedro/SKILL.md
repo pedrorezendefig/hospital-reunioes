@@ -13,7 +13,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 1. **Planejar**: `/grill-with-docs` desafia o plano contra o domínio (uma pergunta por vez, recomendação destacada em cada decisão; atualiza `CONTEXT.md`/ADR via `domain-modeling`). Dúvida factual de serviço externo no meio do grilling → `/research` em background.
 2. **Especificar**: `/to-prd` vira PRD (1 issue `ready-for-agent`, com a seção "Manual: páginas que nascem ou mudam") → `/to-issues` quebra em fatias verticais com label `fatia:P/M/G` e, em PRD com tela, fecha com a **Fatia de manual** (`docs: manual do PRD #N`, bloqueada pelas fatias de código; ADR 0057).
 3. **Desenvolver**: `/pegar-issue <N>` (claim atômico + branch; sem argumento, lista a fila) → `/tdd` (red → green → refactor).
-4. **Entregar**: `/ship` leva até o **PR verde** (3 gates) e imprime o comando do rabo. **Rabo único** (ADR 0061): `python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <N>` faz merge, bump, `APP_VERSION`, um push, um build, health e registro, para um PR avulso ou para o lote de uma onda; quem roda é o autor do PR, depois do seu OK. `/deploy` só opera produção (status, rollback, setup Coolify); `/deploy ship` aponta para o rabo e sai. O rabo tira o `draft` das páginas do Manual dos PRDs que subiram no mesmo commit de registro e, com o health verde, republica o site.
+4. **Entregar**: `/ship` leva até o **PR verde** (3 gates) e imprime o comando do rabo. **Rabo único** (ADR 0061): `python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <N>` faz merge, bump, `APP_VERSION`, um push, um build, health e registro (só `history.json` e `state.json`, ADR 0062), para um PR avulso ou para o lote de uma onda; quem roda é o autor do PR, depois do seu OK. `/deploy` só opera produção (status, rollback, setup Coolify); `/deploy ship` aponta para o rabo e sai. O snapshot e o `draft` das páginas do Manual dos PRDs que subiram saem numa Action no push da `main`, depois do registro; republicar o site é `/manual publicar`.
 
 ## Modo AFK
 
@@ -32,7 +32,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 - `/divulgar <PRD> [--so-video | --so-pagina]`: a entrega pro diretor em dois passos, um comando: vídeo de percepção de valor (MP4, gate humano no draft) e página de divulgação publicada na Vercel com o vídeo embutido. Uma pasta por PRD em `docs/comunicacao/<contexto>/` (ADR 0045).
 - `/manual <módulo | #PRD | publicar>`: o Manual do usuário em `docs/manual/`. Com módulo, escreve a seção inteira; com `#PRD`, só as páginas daquele PRD em `draft` (é a receita da Fatia de manual, que para no checkpoint de merge com o draft do vídeo); com `publicar`, chama o `publicar.sh` (ADR 0057).
 - `/montar-manual [--max-sessoes N]`: antes de abrir vários terminais de `/manual`, monta o plano do passivo do manual: inventário por módulo (página que falta, print, vídeo, Novidades por PRD entregue, draft esquecido de PRD que já subiu), cada lacuna em um balde só, e um prompt por terminal, um por módulo, com as pastas que aquele terminal pode tocar e teto de 3. A publicação na Vercel fica fora dos prompts: é um passo só, depois dos merges. Não executa nada.
-- `/snapshot`: mapa factual da app (roda sozinho no fim do rabo, `fechar_onda.py`).
+- `/snapshot`: mapa factual da app (roda sozinho numa Action no push da `main`, depois do registro do rabo, ADR 0062).
 - `/atualizar-app`: rebuild local docker-compose (não toca produção).
 - **Pendência humana pós-ciclo** (import na virada, credencial, ato externo): vira issue `ready-for-human` ligada ao PRD (`/ship` Passo 10.5); o Pedro acompanha na aba **Pendências** do painel (`python3 tools/workflow-dashboard/serve.py`) e fecha a issue ao concluir.
 
@@ -51,7 +51,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 - ADRs: consuma só `status: accepted`; supersessão bidirecional travada pelo CI `lint-adr`.
 - Estado vive nas GitHub Issues + `docs/spec/deploy/*.json`; proibido criar docs paralelos de estado/processo.
 - Nada de travessão nem meia-risca em texto visível ao usuário (ADR 0013).
-- **O Manual só mostra o que está no ar** (ADR 0057): página de funcionalidade que ainda não subiu nasce em `draft`, e quem tira o draft é o rabo (`fechar_onda.py`), nunca a mão. A Fatia de manual roda depois das fatias de código, não no mesmo PR.
+- **O Manual só mostra o que está no ar** (ADR 0057): página de funcionalidade que ainda não subiu nasce em `draft`, e quem tira o draft é a Action do push da `main`, depois do registro do rabo (ADR 0062), nunca a mão. A Fatia de manual roda depois das fatias de código, não no mesmo PR.
 
 ## Manutenção deste router
 

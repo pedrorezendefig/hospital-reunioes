@@ -93,7 +93,7 @@ hospital-reunioes/backend/Dockerfile    # backend (uv → uvicorn; copia só app
 hospital-reunioes/frontend/Dockerfile   # frontend (pnpm build → Next standalone)
 hospital-reunioes/docker-compose.yml    # ambiente local (backend + frontend; Supabase local à parte)
 .github/workflows/   # CI (lint backend + frontend, type check, build)
-docs/spec/           # spec viva (este arquivo, deploy/, snapshots/, CHANGELOG)
+docs/spec/           # spec viva (este arquivo, deploy/, snapshots/)
 .claude/skills/      # skills locais do time (/grill-with-docs, /to-prd, /to-issues, /pegar-issue, /tdd, /ship, /deploy, /snapshot, /atualizar-app)
 ```
 
@@ -113,7 +113,7 @@ CONTEXT.md / CONTEXT-MAP.md   # glossários (Reuniões; mapa Reuniões × POPs �
 docs/adr/                     # decisões (consuma só status: accepted)
 docs/agents/                  # protocolo do agente (issue tracker, labels, domínio)
 docs/onboarding/              # setup de máquina e fluxo do dia a dia
-docs/spec/                    # deploy/*.json, snapshots/, CHANGELOG, VERSIONING
+docs/spec/                    # deploy/*.json, snapshots/, VERSIONING
 docs/pops/                    # glossário POPs + materiais reais de referência
 docs/comunicacao/             # material do diretor: <contexto>/<PRD>-<slug>/ com video/ + index.html (ADR 0045); _assets/ (fonte + logo únicos)
 docs/manual/                  # manual do usuário (Vercel)
