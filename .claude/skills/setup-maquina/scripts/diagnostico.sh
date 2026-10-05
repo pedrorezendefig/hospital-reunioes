@@ -198,6 +198,7 @@ done < "$LISTA"
 if [ "$NIVEL" -ge 2 ]; then
 titulo "Nível 2: deploy (ship, rabo fechar_onda.py, /deploy, /onda-enxuta)"
 checa_claude_versao
+checa_permissoes_claude "$HOME/.claude/settings.json"
 bin_ok coolify "ver docs/onboarding/claude-setup.md seção 4.1"
 # A CLI responde e tem o contexto do hospital (hsm). Lê a lista e o verify sem nunca
 # imprimir o que eles devolvem: a saída do CLI pode trazer o token.
