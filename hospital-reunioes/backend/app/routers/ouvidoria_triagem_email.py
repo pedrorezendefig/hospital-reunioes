@@ -52,6 +52,26 @@ async def ver_email_recebido(
     return item
 
 
+@router.get("/{email_id}/pre-carga")
+@limiter.limit("60/minute")
+async def pre_carga_da_manifestacao(
+    request: Request,
+    email_id: str,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Os valores com que o modal "Nova manifestação" abre quando o e-mail vira
+    manifestação (issue #650, ADR 0051 decisão 2). Quem cria o caso continua
+    sendo o registro manual, com o `email_recebido_id` desta resposta."""
+    item = triagem.carregar_item(supabase, email_id)
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="E-mail não encontrado")
+    if item["estado"] != triagem.PENDENTE:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=triagem.RECUSA_JA_DECIDIDO)
+    triagem.registrar_acesso_ao_email(supabase, me, email_id, "pre_carga_manifestacao")
+    return triagem.pre_carga(item)
+
+
 @router.get("/{email_id}/anexos/{anexo_id}/url")
 @limiter.limit("60/minute")
 async def abrir_anexo_do_email(

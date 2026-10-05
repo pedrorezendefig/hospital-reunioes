@@ -34,6 +34,7 @@ from app.config import settings
 from app.services import email_service, storage
 from app.services.ouvidoria_anexos import LIMITE_BYTES, LIMITE_LEGIVEL, TIPOS_PERMITIDOS
 from app.services.paginacao import ler_tudo
+from app.utils.text_sanitizer import sanitizar_travessao
 
 logger = logging.getLogger(__name__)
 
@@ -487,6 +488,121 @@ def carregar_item(supabase, email_id: str) -> dict | None:
     }
 
 
+# ─── Virar manifestação (issue #650) ────────────────────────────────────────
+
+# A recusa de virar caso um e-mail que já foi decidido (409). Uma frase só para
+# a pré-carga e para o registro, que são as duas portas do mesmo gesto.
+RECUSA_JA_DECIDIDO = "Este e-mail já foi decidido na triagem e não pode virar manifestação de novo"
+
+
+def pre_carga(item: dict) -> dict:
+    """Os valores com que o registro manual abre quando o e-mail vira
+    manifestação (ADR 0051, decisão 2). `item` é o que `carregar_item` devolve.
+
+    T0 é a data de chegada, e não a do clique, como já vale para o telefone. O
+    resumo fica vazio: é o ouvidor quem o escreve. Nenhum campo é trava: o que
+    vale é o que o ouvidor salvar.
+
+    O texto já sai com a tipografia da casa (ADR 0013): o registro manual
+    sanitiza ao salvar, e o modal tem de mostrar o que vai ser salvo."""
+    return {
+        "email_recebido_id": item["id"],
+        "canal": "email",
+        "contato_em": item["recebido_em"],
+        "manifestante_nome": sanitizar_travessao(item.get("remetente_nome") or ""),
+        "manifestante_contato": item.get("remetente_endereco") or "",
+        "resumo": "",
+        "relato_integral": sanitizar_travessao(item.get("corpo_texto") or ""),
+        "anexos": item["anexos"],
+    }
+
+
+def estado_do_email(supabase, email_id: str) -> str | None:
+    """O estado do item na triagem, ou None quando ele não existe."""
+    try:
+        resultado = supabase.table(TABELA).select("estado").eq("id", email_id).execute()
+    except APIError:
+        return None
+    return resultado.data[0]["estado"] if resultado.data else None
+
+
+def virar_manifestacao(supabase, me: dict, email_id: str, caso: dict, agora: datetime) -> bool:
+    """Liga o item ao caso que acabou de nascer dele e o tira dos pendentes.
+
+    A marca só pega item ainda pendente: o filtro no próprio update é o que
+    impede o segundo clique concorrente de religar o e-mail a outro caso.
+    Devolve se a marca pegou."""
+    marcado = (
+        supabase.table(TABELA)
+        .update(
+            {
+                "estado": "virou_manifestacao",
+                "manifestacao_id": caso["id"],
+                "decidido_por": me["id"],
+                "decidido_por_nome": me.get("nome_completo") or me["id"],
+                "decidido_em": agora.isoformat(),
+            }
+        )
+        .eq("id", email_id)
+        .eq("estado", PENDENTE)
+        .execute()
+    )
+    if not marcado.data:
+        return False
+    _mover_anexos_para_o_caso(supabase, me, email_id, caso["id"])
+    registrar_acesso_ao_email(supabase, me, email_id, "virar_manifestacao", manifestacao_id=caso["id"])
+    return True
+
+
+def _mover_anexos_para_o_caso(supabase, me: dict, email_id: str, caso_id: str) -> None:
+    """Os anexos do e-mail passam a ser anexos do caso, e saem do item.
+
+    O binário não se move: os dois vivem no mesmo bucket privado, e a linha
+    nova do caso aponta para o mesmo caminho. Copiar no storage seria uma
+    segunda chance de falhar sem ganho nenhum. Só vai o anexo com binário: o
+    que não veio, ou que o teto recusou, não tem o que virar anexo do caso e
+    fica no item com o motivo, apontando para o original na caixa ouvidoria@.
+
+    Um anexo por vez, e a linha do item só sai depois de a do caso entrar:
+    a falha no meio deixa o anexo no item, ainda alcançável, e nunca em lugar
+    nenhum."""
+    guardados = (
+        supabase.table(TABELA_ANEXOS)
+        .select("id, filename, content_type, tamanho_bytes, storage_path")
+        .eq("email_recebido_id", email_id)
+        .order("created_at")
+        .order("id")
+        .execute()
+        .data
+        or []
+    )
+    for anexo in guardados:
+        if not anexo.get("storage_path") or not anexo.get("tamanho_bytes"):
+            continue
+        tipo = _tipo_guardado(anexo["filename"])
+        try:
+            supabase.table("ouvidoria_anexos").insert(
+                {
+                    "manifestacao_id": caso_id,
+                    "filename": anexo["filename"],
+                    # O tipo com que o binário foi guardado (o do catálogo), e
+                    # não o que o remetente declarou.
+                    "content_type": tipo[1] if tipo else anexo["content_type"],
+                    "tamanho_bytes": anexo["tamanho_bytes"],
+                    "storage_path": anexo["storage_path"],
+                    "enviado_por": me["id"],
+                    "enviado_por_nome": me.get("nome_completo") or me["id"],
+                }
+            ).execute()
+        except APIError:
+            logger.error("Triagem de e-mail: anexo %s do e-mail %s não passou para o caso", anexo["id"], email_id)
+            continue
+        try:
+            supabase.table(TABELA_ANEXOS).delete().eq("id", anexo["id"]).execute()
+        except APIError:
+            logger.error("Triagem de e-mail: anexo %s ficou também no e-mail %s", anexo["id"], email_id)
+
+
 def caminho_do_anexo(supabase, email_id: str, anexo_id: str) -> dict | None:
     """O anexo DESTE e-mail, com o caminho no storage. Sem o casamento dos dois
     ids, o id de um anexo viraria caminho lateral para o anexo de outro e-mail.
@@ -506,18 +622,22 @@ def caminho_do_anexo(supabase, email_id: str, anexo_id: str) -> dict | None:
     return resultado.data[0]
 
 
-def registrar_acesso_ao_email(supabase, me: dict, email_id: str, acao: str) -> None:
+def registrar_acesso_ao_email(
+    supabase, me: dict, email_id: str, acao: str, *, manifestacao_id: str | None = None
+) -> None:
     """O log de acesso do Perfil da Ouvidoria, com o e-mail recebido como alvo
-    (migration 112). Falha aqui não derruba a leitura, pela mesma razão do log
+    (migration 112), e com o caso também quando o gesto liga os dois (virar
+    manifestação). Falha aqui não derruba a leitura, pela mesma razão do log
     do caso: a trilha importa, mas deixar o ouvidor sem o e-mail seria pior."""
+    linha = {
+        "email_recebido_id": email_id,
+        "ator_id": me["id"],
+        "ator_nome": me.get("nome_completo") or me["id"],
+        "acao": acao,
+    }
+    if manifestacao_id is not None:
+        linha["manifestacao_id"] = manifestacao_id
     try:
-        supabase.table("ouvidoria_acessos").insert(
-            {
-                "email_recebido_id": email_id,
-                "ator_id": me["id"],
-                "ator_nome": me.get("nome_completo") or me["id"],
-                "acao": acao,
-            }
-        ).execute()
+        supabase.table("ouvidoria_acessos").insert(linha).execute()
     except Exception:  # noqa: BLE001
         logger.warning("Falha ao registrar acesso ao e-mail recebido %s", email_id)
