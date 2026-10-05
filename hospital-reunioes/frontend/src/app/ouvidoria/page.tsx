@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/lib/supabase/client";
 import {
   AlertCircle,
@@ -8,6 +9,7 @@ import {
   CheckCircle2,
   Loader2,
   Lock,
+  Mail,
   Megaphone,
   Plus,
   Replace,
@@ -28,6 +30,7 @@ import {
 import { avisosDeDegradacao, hojeNoHospital } from "@/lib/ouvidoria/painel";
 import { type ResultadoDaCobranca } from "@/lib/ouvidoria/cobranca";
 import { classificarPrazoDaManifestacao, EM_ANDAMENTO } from "@/lib/ouvidoria/prazo";
+import { podeVerTriagemDeEmail } from "@/lib/ouvidoria/triagem-email";
 import { ALTURA_DE_TOQUE } from "@/lib/toque";
 import { EncerrarModal } from "@/components/ouvidoria/EncerrarModal";
 import { type Responsavel } from "@/lib/ouvidoria/validacao";
@@ -442,6 +445,20 @@ export default function OuvidoriaPage() {
                 backend, que recusa a tela a quem não pode; aqui só não se
                 oferece o caminho que terminaria em 403. */}
             <AtalhosDaOuvidoria perfil={participante?.perfil_ouvidoria} />
+            {/* A Triagem de e-mail (issue #648, ADR 0051): o que chegou em
+                ouvidoria@ antes de virar caso, só para o Perfil da Ouvidoria.
+                Fora da barra de atalhos de propósito: a barra é uma linha só
+                com orçamento de largura fechado (RN-77), e a sexta pílula não
+                cabe nela. Aqui o topo quebra linha quando precisa. */}
+            {podeVerTriagemDeEmail(participante?.perfil_ouvidoria) && (
+              <Link
+                href="/ouvidoria/triagem-email"
+                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-sm font-medium whitespace-nowrap bg-slate-100 text-slate-700 hover:bg-slate-200 transition-colors ${ALTURA_DE_TOQUE}`}
+              >
+                <Mail className="w-4 h-4 shrink-0" />
+                Triagem de e-mail
+              </Link>
+            )}
             {/* O volume do dia. Ficava na mesma caixa dos atalhos e o olho o
                 lia como mais uma porta, num topo que já quebrava em três
                 linhas (issue #496, D-16). Informação e navegação são coisas
