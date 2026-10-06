@@ -4,8 +4,8 @@ O ruleset vive versionado em `.github/rulesets/main.json` e é aplicado à mão
 pelo admin (`gh api`, no corpo do PR #910 e no `dev.md`). Ele exige os jobs do
 `ci.yml` pelo nome: renomear um job sem mexer no ruleset deixa todo PR em
 "Expected, waiting for status" para sempre. E workflow pulado por filtro de
-caminho não reporta check nenhum, então o PR só de docs (o registro do
-`fechar_onda.py`, ADR, skill) travaria do mesmo jeito. Estes testes amarram as
+caminho não reporta check nenhum, então o PR só de docs (ADR, skill)
+travaria do mesmo jeito. Estes testes amarram as
 duas pontas: o nome de cada check e o CI que sempre reporta.
 
 Desde a issue #966 o detector responde por pasta (backend, frontend,

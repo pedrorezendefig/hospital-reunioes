@@ -222,7 +222,8 @@ class Cenario:
         self.deploys_novos: list[str] = []  # apps cujo deploy novo (sem webhook) o rabo esperou
         # a Action pós-merge que grava o registro (ADR 0064, decisão 6b): cada
         # disparo, a conclusão de cada run (success sem nada dito; "pendente"
-        # fica na fila) e o commit que o bot empurrou na main
+        # fica na fila; "verde-sem-commit" termina success sem empurrar nada) e
+        # o commit que o bot empurrou na main
         self.tmp = tmp_path
         self.registros: list[dict] = []
         self.action_do_registro: list[str] = []
@@ -390,7 +391,7 @@ class Cenario:
 
     def runs_do_registro(self) -> list[dict]:
         return [{"databaseId": 700 + i, "status": "queued" if r["conclusao"] == "pendente" else "completed",
-                 "conclusion": None if r["conclusao"] == "pendente" else r["conclusao"]}
+                 "conclusion": {"pendente": None, "verde-sem-commit": "success"}.get(r["conclusao"], r["conclusao"])}
                 for i, r in reversed(list(enumerate(self.registros)))]
 
     def runs_do_ci(self, head: str) -> list[dict]:
@@ -741,7 +742,9 @@ def comando_do_registro(saida: str) -> list[str]:
     return shlex.split(linha[linha.index("`") + 1:linha.rindex("`")])
 
 
-@pytest.mark.parametrize("conclusao", ["failure", "pendente"], ids=["run-vermelho", "sem-fim"])
+# A conclusão do run não basta: o que confirma é a entrada no history.json da main.
+@pytest.mark.parametrize("conclusao", ["failure", "pendente", "verde-sem-commit"],
+                         ids=["run-vermelho", "sem-fim", "run-verde-sem-registro"])
 def test_action_que_nao_confirma_sai_com_5_e_imprime_o_disparo_a_mao(tmp_path, monkeypatch, capsys, conclusao):
     """Produção está certa: o rabo solta o semáforo e diz como disparar a
     Action à mão com o mesmo registro, que fica num arquivo."""

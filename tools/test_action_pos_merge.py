@@ -304,14 +304,16 @@ def test_sem_pagina_em_draft_nao_ha_aviso_para_comentar(tmp_path):
 # state.json inteiro. O `gerar` aplica antes do draft, que lê o `deploys[0]`.
 DEPLOY_ANTERIOR = {
     "at": "2026-10-06T13:38:54-03:00", "sha": "9" * 40, "app_version": "0.163.4",
-    "subject": "PR #1007, issue #1006: Uma thread por tick", "raw_subject": "chore(deploy): registro do PR avulso (#1007)",
+    "subject": "PR #1007, issue #1006: Uma thread por tick",
+    "raw_subject": "chore(deploy): registro do PR avulso (#1007)",
     "scope": ["backend"], "prds": [], "result": "healthy", "duration_seconds": 57, "services_touched": ["backend"],
     "env_changes": [{"service": "backend", "action": "update", "keys": ["APP_VERSION"]}],
     "migrations_applied": [], "rollback_target_sha": None, "notes": "PR avulso: PR #1007, issue #1006.",
 }
 ENTRADA = {
     **DEPLOY_ANTERIOR, "at": "2026-10-07T09:12:30-03:00", "sha": "a" * 40, "app_version": "0.163.5",
-    "subject": "PR #1040, issue #1000: Registro pela Action", "raw_subject": "chore(deploy): registro do PR avulso (#1040)",
+    "subject": "PR #1040, issue #1000: Registro pela Action",
+    "raw_subject": "chore(deploy): registro do PR avulso (#1040)",
     "prds": [963, 646], "duration_seconds": 312, "migrations_applied": ["115_registro.sql"],
     "notes": "PR avulso: PR #1040, issue #1000. Merge pela API do GitHub, um build.",
 }
