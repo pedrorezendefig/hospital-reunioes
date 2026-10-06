@@ -282,7 +282,7 @@ function cabecalho(eyebrow, titulo, hint = '') {
   </div>`;
 }
 
-/* ---------- PRODUÇÃO (timeline de deploys e releases) ---------- */
+/* ---------- PRODUÇÃO (versão no ar e lista de versões, ADR 0062 decisão 2) ---------- */
 
 function renderProducao() {
   return renderDeploys();
@@ -675,30 +675,65 @@ function renderPrs() {
 /* history.json mistura "v0.45.4" e "0.43.1"; a aba exibe sempre com um v só */
 const depVer = v => v ? 'v' + String(v).replace(/^v/, '') : '';
 
-function deployCard(dp, idx) {
-  const open = S.expDep.has(idx);
+/* Deploys da mesma versão juntos, na ordem do history.json (o rabo grava o
+   mais recente em [0]); deploy sem versão é linha própria. A chave da versão
+   é o índice do deploy mais recente dela no history: o mesmo que o abrirItem
+   acha pelo hash e o clique (data-act="dep") expande. */
+function versoesDoHistorico(history) {
+  const porVer = new Map(), lista = [];
+  history.forEach((dp, i) => {
+    const ver = depVer(dp.app_version);
+    if (ver && porVer.has(ver)) { porVer.get(ver).deploys.push(dp); return; }
+    const v = { i, ver, deploys: [dp] };
+    if (ver) porVer.set(ver, v);
+    lista.push(v);
+  });
+  return lista;
+}
+
+const unicos = xs => [...new Set(xs)];
+const shaCurto = sha => String(sha || '·').slice(0, 7);
+
+/* um deploy da versão, aberto: quando, health, build, env e notas */
+function deployDaVersao(dp) {
+  const env = (dp.env_changes || []).map(e => `${esc(e.service)} ${esc(e.action)} ${(e.keys || []).map(esc).join(', ')}`);
+  return `
+  <div class="pd-dep">
+    <div class="pd-chips">
+      <span class="pd-when">${esc(fmtDT(dp.at))}</span>
+      <span class="badge ${dp.result === 'healthy' ? 'b-green' : 'b-red'}">${esc(dp.result || '?')}</span>
+      <span class="chip" title="duração do build">${durS(dp.duration_seconds)}</span>
+      ${dp.sha ? `<span class="chip">${esc(shaCurto(dp.sha))}</span>` : ''}
+      ${(dp.scope || []).map(s => `<span class="chip">${esc(s)}</span>`).join('')}
+      ${dp.rollback_target_sha ? `<span class="badge b-amber">rollback → ${esc(dp.rollback_target_sha)}</span>` : ''}
+    </div>
+    ${env.length ? `<p class="pd-notes mono">env: ${env.join(' · ')}</p>` : ''}
+    ${dp.notes ? `<p class="pd-notes">${esc(dp.notes)}</p>` : ''}
+  </div>`;
+}
+
+/* card da versão: fechado, o que entrou (PRs, issues, migration) e o health
+   do deploy mais recente; aberto, cada deploy da versão */
+function versaoCard(v, pos) {
+  const dp = v.deploys[0];
+  const open = S.expDep.has(v.i);
   const ok = dp.result === 'healthy';
   const maxDur = Math.max(...S.data.history.map(x => x.duration_seconds || 0), 1);
-  const cl = S.data.changelog.find(c =>
-    (dp.app_version && c.version === dp.app_version) || (c.sha && dp.sha && c.sha === dp.sha));
+  const de = campo => unicos(v.deploys.flatMap(d => d[campo] || []));
 
   const chipsResumo = [
     `<span class="badge ${ok ? 'b-green' : 'b-red'}">${esc(dp.result || '?')}</span>`,
-    ...(dp.migrations_applied || []).map(m => `<span class="badge b-amber">⛁ ${esc(m)}</span>`),
-    ...(dp.pr_numbers || []).map(n => `<a class="chip" href="${rotaDe('prs', n)}">PR #${n}</a>`),
-    ...(dp.issue_numbers || []).map(n => `<a class="chip" href="${rotaDe('issues', n)}">#${n}</a>`),
-    dp.rollback_target_sha ? `<span class="badge b-amber">rollback → ${esc(dp.rollback_target_sha)}</span>` : '',
-  ].filter(Boolean).join('');
-  const chipsTech = [
-    dp.sha ? `<span class="chip">${esc(dp.sha)}</span>` : '',
-    ...(dp.scope || []).map(s => `<span class="chip">${esc(s)}</span>`),
+    v.deploys.length > 1 ? `<span class="chip">${v.deploys.length} deploys</span>` : '',
+    ...de('migrations_applied').map(m => `<span class="badge b-amber">⛁ ${esc(m)}</span>`),
+    ...de('pr_numbers').map(n => `<a class="chip" href="${rotaDe('prs', n)}">PR #${n}</a>`),
+    ...de('issue_numbers').map(n => `<a class="chip" href="${rotaDe('issues', n)}">#${n}</a>`),
   ].filter(Boolean).join('');
 
   return `
-  <div class="pd-item rv ${ok ? '' : 'bad'}" style="--i:${Math.min(idx, 12)}">
-    <article class="card pd-card lift"${destaque(depVer(dp.app_version))}>
-      <div class="pd-head" data-act="dep" data-i="${idx}">
-        <span class="pd-ver ${dp.app_version ? '' : 'unversioned'}">${dp.app_version ? esc(depVer(dp.app_version)) : esc(dp.sha || '·')}</span>
+  <div class="pd-item rv ${ok ? '' : 'bad'}" style="--i:${Math.min(pos, 12)}">
+    <article class="card pd-card lift"${destaque(v.ver)}>
+      <div class="pd-head" data-act="dep" data-i="${v.i}">
+        <span class="pd-ver ${v.ver ? '' : 'unversioned'}">${esc(v.ver || shaCurto(dp.sha))}</span>
         <span class="pd-subject">${esc(dp.subject || dp.raw_subject || '')}</span>
         <span class="pd-when">${esc(fmtDT(dp.at))}</span>
         ${dp.sha ? `<a class="pd-gh" href="${shaUrl(esc(dp.sha))}" target="_blank" rel="noopener" aria-label="abrir o commit ${esc(dp.sha)} no GitHub">↗</a>` : ''}
@@ -709,43 +744,42 @@ function deployCard(dp, idx) {
         <span class="rail"><span class="fill" style="width:${Math.round((dp.duration_seconds / maxDur) * 100)}%"></span></span>
         <span class="t">${durS(dp.duration_seconds)}</span>
       </div>` : ''}
-      ${open ? `
-      <div class="pd-body">
-        ${chipsTech ? `<div class="pd-chips" style="padding:0 0 12px">${chipsTech}</div>` : ''}
-        ${dp.notes ? `<p class="pd-notes">${esc(dp.notes)}</p>` : ''}
-        ${(dp.env_changes || []).length ? `<p class="pd-notes mono" style="font-size:12px">env: ${dp.env_changes.map(e => `${esc(e.service)} ${esc(e.action)} ${e.keys.map(esc).join(', ')}`).join(' · ')}</p>` : ''}
-        ${cl && cl.body_md ? `<div class="k-label" style="margin:14px 0 6px">changelog</div><div class="md">${md(cl.body_md)}</div>` : ''}
-      </div>` : ''}
+      ${open ? `<div class="pd-body">${v.deploys.map(deployDaVersao).join('')}</div>` : ''}
     </article>
   </div>`;
 }
 
+const STATUS_CLS = { healthy: 'prod-ok', warning: 'prod-warn' };
+
+/* health do serviço pelo último check gravado no state.json */
+function healthTxt(hc) {
+  const h = hc || {};
+  return [h.http_status ? `HTTP ${h.http_status}` : 'sem HTTP', h.latency_ms != null ? `${h.latency_ms} ms` : '',
+    h.at ? fmtDT(h.at) : ''].filter(Boolean).join(' · ');
+}
+
 function renderDeploys() {
   const dep = S.data.history;
-  const healthy = dep.filter(x => x.result === 'healthy');
   const durs = dep.map(x => x.duration_seconds).filter(x => x != null);
-  const avg = durs.length ? durs.reduce((a, b) => a + b, 0) / durs.length : null;
-  const first = dep[dep.length - 1], last = dep[0];
-  const pct = dep.length ? Math.round(healthy.length / dep.length * 100) : 0;
-  const pctCls = pct === 100 ? 'prod-ok' : pct >= 80 ? 'prod-warn' : 'prod-bad';
-  const ultima = last && last.app_version ? depVer(last.app_version) : '·';
+  const st = S.data.state || {};
+  // faixa do topo: a versão no ar e cada serviço com o health, do state.json
   const cells = [
-    { k: 'deploys', v: String(dep.length), s: `${fmtD(first && first.at)} → ${fmtD(last && last.at)}` },
-    { k: 'saudáveis', v: `${pct}<small>%</small>`, s: `${dep.length - healthy.length} com problema`, cls: pctCls },
-    { k: 'build médio', v: avg ? durS(avg) : '·', s: 'duração por deploy' },
-    { k: 'última versão', v: esc(ultima), s: 'no ar em produção' },
+    { k: 'no ar', v: depVer(st.last_app_version) || '·', s: `atualizado ${fmtDT(st.updated_at)}` },
+    ...(st.services || []).map(s => ({
+      k: s.id, v: s.status || '?', s: healthTxt(s.last_health_check), cls: STATUS_CLS[s.status] || 'prod-bad',
+    })),
   ];
 
   return `
   <section class="prod-band rv" style="--i:0">
     <div class="prod-band-head">
-      <span class="eyebrow">produção · linha do tempo de deploys</span>
-      <span class="prod-band-src">history.json + CHANGELOG.md</span>
+      <span class="eyebrow">produção · versão no ar e serviços</span>
+      <span class="prod-band-src">history.json + state.json</span>
     </div>
     <div class="prod-stats">
       ${cells.map((c, i) => `
       <div class="prod-cell rv ${c.cls || ''}" style="--i:${i + 1}">
-        <div class="prod-v">${c.v}</div>
+        <div class="prod-v">${esc(c.v)}</div>
         <div class="prod-k">${esc(c.k)}</div>
         <div class="prod-s">${esc(c.s)}</div>
       </div>`).join('')}
@@ -755,7 +789,7 @@ function renderDeploys() {
     <div class="k-label">duração dos builds (antigo → recente)</div>
     ${spark([...durs].reverse())}
   </div>
-  <div class="pd-timeline">${dep.map((d, idx) => deployCard(d, idx)).join('')}</div>`;
+  <div class="pd-timeline">${versoesDoHistorico(dep).map(versaoCard).join('')}</div>`;
 }
 
 /* ---------- MAPA ---------- */

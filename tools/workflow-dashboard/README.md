@@ -30,6 +30,8 @@ O método de trabalho (o que era a aba Guia) vive em `docs/onboarding/`.
 
 **Endereço**: aba, item aberto e filtros vivem no hash (`#issues/930`, `#prs/930`, `#producao/v0.161.0`, `#issues?resp=...&fase=...`); copiar a URL e abrir de novo volta ao mesmo ponto, com o card aberto em destaque. Chips de issue, PR e versão navegam dentro do painel; o GitHub é o `↗` de cada card (ADR 0062, decisão 8).
 
+**Produção** lê só `history.json` e `state.json` (ADR 0062, decisão 2): no topo, a versão no ar e cada serviço com o último health; abaixo, uma linha por versão do `history.json` inteiro, a mais recente primeiro (deploys da mesma versão juntos). Aberta, a versão mostra cada deploy dela: health, duração do build, commit, env e notas; PRs, issues e migration ficam à mostra no card.
+
 ## Vocabulário
 
 - **Fase**: em que pé está a issue, derivado só de fatos do GitHub (ADR 0062, decisão 4): Triagem, Fila, Bloqueada, Em andamento, PR aberto, Mergeada, Em produção, Humana, Encerrada sem PR. Quem calcula é o `fases.py`; o front só desenha.
@@ -41,7 +43,7 @@ O método de trabalho (o que era a aba Guia) vive em `docs/onboarding/`.
 
 ## De onde vêm os dados (ao vivo vs. do último `git pull`)
 
-- **Ao vivo (rede):** issues, PRs, comentários e a linha do tempo via `gh`; produção, deploys e releases da `origin/main` (`git fetch` + `git show`; o rabo `fechar_onda.py` pusha de um worktree próprio, então a verdade pós-merge vive no remoto); e o seu `git` local (branch, commits).
+- **Ao vivo (rede):** issues, PRs, comentários e a linha do tempo via `gh`; produção e deploys (`history.json` e `state.json`) da `origin/main` (`git fetch` + `git show`; o rabo `fechar_onda.py` pusha de um worktree próprio, então a verdade pós-merge vive no remoto); e o seu `git` local (branch, commits).
 - **Do seu clone (último `git pull`):** mapa da app (`docs/spec/snapshots/`), decisões e glossário (`docs/adr/` + `CONTEXT.md`).
 
 Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta sozinho a cada 60s. Requer `gh` autenticado para Issues; sem ele, o resto continua funcionando (o painel mostra como resolver).
