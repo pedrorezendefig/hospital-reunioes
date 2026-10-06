@@ -45,7 +45,10 @@ Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
   8. merge pela API do GitHub (squash, conferindo o sha do head) e tag vX.Y.Z
      no squash, pela API (tag que falha nao para o deploy)
   9. monitorar o build de cada service (webhook), forcar se nao disparar
- 10. health com version match
+ 10. health com version match. Health ruim: rollback automatico (issue #968),
+     cada app do lote volta a imagem anterior no Coolify (`coolify app rollback
+     images` e `rollback run`, sem forcar build) e o APP_VERSION antigo volta aos
+     apps, antes da imagem subir; o health e conferido de novo na versao antiga
  11. registro num PR so de docs, so com history.json (todos os deploys, sem
      teto) e state.json (ADR 0062, decisao 9), mergeado pela API; o build que o
      webhook do Coolify dispara para ele e cancelado (issue #851). Snapshot e
@@ -69,10 +72,17 @@ Codigos de saida:
   2  conflito, push na branch rejeitado, CI vermelho ou merge recusado: nada
      entrou na main, worktree removido, semaforo solto; rode de novo depois de corrigir
   3  build falhou no Coolify: SEMAFORO FICA PRESO, rode `/deploy rollback` com a chave impressa
-  4  health falhou (ou versao nao bate): SEMAFORO FICA PRESO, mesma instrucao do 3
+  4  health falhou (ou versao nao bate) e o rollback automatico tambem falhou (sem
+     imagem anterior, Coolify recusou, ou health ainda ruim): SEMAFORO FICA PRESO,
+     mesma instrucao do 3
   5  producao ok, mas o PR de registro nao entrou: semaforo solto; mergeie o PR impresso
      quando o CI dele ficar verde. Ferramenta: merge feito, producao intacta,
      semaforo solto, mas a arrumacao depois do merge falhou (a linha diz o que falta)
+  6  rollback feito: o health falhou, a imagem anterior e o APP_VERSION antigo
+     voltaram e o health ficou verde de novo; semaforo solto, sem registro. O merge
+     segue na main: quem chamou abre o PR de revert dele (sem rebuild), reabre a
+     issue com `ready-for-agent` e a linha `health:` (o que o health respondeu),
+     conta uma tentativa da fatia e notifica
 
 `--dry-run`: executa 1 e 3 e calcula o 4 sem escrever; imprime o plano (PR,
 issue, classe e tipo de versao: "app: bump ..." ou "ferramenta: só merge") e o

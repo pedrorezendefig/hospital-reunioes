@@ -1359,6 +1359,25 @@ def test_sem_imagem_anterior_o_rabo_nao_mexe_no_app_version_nem_sobe_imagem(tmp_
     assert c.rollbacks == []
 
 
+def codigo_na_docstring(fo, n: int) -> str:
+    saidas = fo.__doc__.split("Codigos de saida:")[1]
+    item = re.search(rf"^  {n}  (.+?)(?=^  \d  |^\S|\Z)", saidas, re.M | re.S)
+    assert item, f"o codigo {n} nao esta na docstring"
+    return " ".join(item.group(1).split())
+
+
+def test_docstring_documenta_o_rollback_feito_e_o_que_falhou():
+    fo = carregar_fechar_onda()
+    assert fo.EXIT_ROLLBACK == 6 and fo.EXIT_HEALTH == 4
+
+    feito = codigo_na_docstring(fo, 6)
+    for termo in ("rollback", "imagem anterior", "APP_VERSION antigo", "health", "semaforo solto", "revert"):
+        assert termo in feito, (termo, feito)
+    assert "SEMAFORO FICA PRESO" not in feito, feito
+    falhou = codigo_na_docstring(fo, 4)
+    assert "rollback" in falhou and "SEMAFORO FICA PRESO" in falhou, falhou
+
+
 def imagem(tag: str, criada: str, no_ar: bool = False) -> dict:
     return {"created_at": f"2026-10-06 {criada} +0000 UTC", "is_current": no_ar, "tag": tag}
 
