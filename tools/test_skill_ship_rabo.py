@@ -194,6 +194,35 @@ def test_nenhuma_referencia_viva_a_commit_de_bump():
     assert achados == [], "\n".join(achados)
 
 
+# ------------------------------------------- rabo PR a PR (#989)
+
+# ADR 0064, decisão 3: cada PR do lote entra pela API no próprio número. Texto
+# que ainda fala da branch de lote ou do PR que a embrulhava ensina o agente a
+# procurar um PR que o rabo não abre mais.
+LOTE_EMBRULHADO = re.compile(r"\bonda/|\bde entrega\b", re.I)
+
+
+@pytest.mark.parametrize("rel", [FECHAR_ONDA, ".claude/skills/onda-enxuta/SKILL.md",
+                                 ".claude/skills/ship/SKILL.md", "CLAUDE.md"])
+def test_nenhuma_referencia_viva_a_branch_onda_nem_ao_pr_de_entrega(rel):
+    assert LOTE_EMBRULHADO.search("merge local na branch `onda/<sessao>`")
+    assert LOTE_EMBRULHADO.search("abre o PR de entrega")
+    achados = [
+        f"{rel}:{n}: {li.strip()[:120]}"
+        for n, li in enumerate((RAIZ / rel).read_text(encoding="utf-8").splitlines(), 1)
+        if LOTE_EMBRULHADO.search(li)
+    ]
+    assert achados == [], "\n".join(achados)
+
+
+def test_onda_enxuta_e_claude_md_descrevem_o_merge_pr_a_pr():
+    fechamento = fechamento_da_onda()
+    item = next(li for li in fechamento.splitlines() if "fechar_onda.py --prs" in li)
+    assert "PR a PR" in item and "intermediário" in item, item
+    assert "PR a PR" in next(li for li in (RAIZ / "CLAUDE.md").read_text(encoding="utf-8").splitlines()
+                             if "Modo AFK" in li)
+
+
 def test_o_rabo_grava_app_version_nos_dois_apps_e_cria_a_tag():
     deploy = texto("deploy")
     modo = secao(deploy, "Modo `ship`")

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """fechar_onda.py: o rabo unico (ADR 0061). Leva um PR avulso ou uma onda da
-`/onda-enxuta` a producao com UM merge na main e UM build.
+`/onda-enxuta` a producao com um merge por PR na main e UM build.
 
 Uso:
     python fechar_onda.py --prs 850 851 852 --sessao onda-a-1 [--dry-run] [--raiz <repo>]
@@ -12,21 +12,23 @@ caminho curto (`~/wt-<sessao>`, por causa do MAX_PATH do Windows).
 
 A main e protegida por ruleset (issue #910, ADR 0061 decisao 3): PR
 obrigatorio, CI obrigatorio e em dia com a base, sem push direto. Por isso o
-script nunca empurra na main: tudo entra por PR, mergeado pela API do GitHub
-com squash (o unico metodo que o repositorio permite).
+script nunca empurra na main: cada PR do lote entra pela API do GitHub com
+squash (o unico metodo que o repositorio permite), no proprio numero, em ordem,
+como o PR avulso (ADR 0064, decisao 3). A onda e o avulso com mais PRs.
 
 Classe do lote, pelos arquivos (issue #965): "app" se algum esta em
 `hospital-reunioes/`, "ferramenta" se nenhum esta. Lote misto e app. Os
-arquivos sao os do `git diff --no-renames` do lote, como no detector do CI:
-mover codigo para fora de `hospital-reunioes/` conta como app.
+arquivos sao os do `git diff --no-renames` de cada PR, como no detector do CI:
+mover codigo para fora de `hospital-reunioes/` conta como app. Classe, versao
+e servicos saem do lote inteiro, antes do primeiro merge.
   - app: a sequencia inteira abaixo.
-  - ferramenta: so merge pela API depois do CI verde (passos 1 a 3, 5, 6, 8 e
-    12). Sem versao nova, sem APP_VERSION, sem tag, sem esperar build, sem health, sem PR de
+  - ferramenta: so merge pela API depois do CI verde (passos 1 a 4 e 9). Sem
+    versao nova, sem APP_VERSION, sem tag, sem esperar build, sem health, sem PR de
     registro e sem entrada no history.json. Se o webhook do Coolify disparar
-    build no merge, o rabo o cancela, como faz com o build do registro.
+    build em algum merge, o rabo o cancela, como faz com o build do registro.
 
-Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas,
-fora as da migration):
+Sequencia (cada passo imprime no maximo uma linha, o 4 uma por PR; sucesso
+cabe em 10 linhas mais uma por PR, fora as da migration):
   1. pre-condicoes (gh, coolify, PRs abertos e verdes, origin/main buscado,
      nenhuma migration nova com numero que a main ja usa, e o corpo do PR
      declarando o sha256 de cada migration nova igual ao do arquivo).
@@ -39,48 +41,57 @@ fora as da migration):
      semaforo.sh a da por velha em 60 min. Backend no ar sem o campo
      `migracao` (anterior ao #969): avisa e segue sem esperar, como antes
   2. semaforo de deploy (chave = nome da sessao, unica por construcao)
-  3. branch de entrega num worktree descartavel:
-     PR avulso: a propria branch do PR, com a origin/main por merge se ficou atras
-     onda: `onda/<sessao>` a partir da origin/main, com merges locais `--no-ff` em ordem
-  4. versao nova (semver) pelo tipo dominante dos commits do lote, a partir do
+  3. versao nova (semver) pelo tipo dominante dos commits do lote, a partir do
      `last_app_version` do state.json conferido com a maior tag vX.Y.Z
      (ferramenta nao muda a versao). Sem commit (issue #967): o package.json do
-     frontend fica congelado. Push da branch de entrega (nunca na main): no PR
-     avulso em dia com a main, o head nao muda e o CI dele ja vale
-  5. onda: abre o PR de entrega, com `Closes` de cada issue do lote
-  6. espera o CI do head da entrega ficar verde
-  7. APP_VERSION no backend e no frontend do Coolify ANTES do merge (o backend
-     a le no runtime, o frontend no build, pelo ARG do Dockerfile)
-  8. merge pela API do GitHub (squash, conferindo o sha do head) e tag vX.Y.Z
-     no squash, pela API (tag que falha nao para o deploy)
-  9. monitorar o build de cada service (webhook), forcar se nao disparar
- 10. health com version match. Health ruim: rollback automatico (issue #968),
+     frontend fica congelado
+  4. PR a PR, na ordem, num worktree descartavel na branch do PR: a origin/main
+     por merge se a branch ficou atras (o ruleset exige em dia com a base, e o
+     merge do PR anterior do lote deixa o seguinte atras), push na branch do PR
+     (nunca na main; em dia, o head nao muda e o CI dele ja vale), CI verde no
+     head e merge pela API (squash, conferindo o sha do head). Antes do primeiro
+     merge: a imagem no ar de cada app do lote (alvo do rollback) e o
+     APP_VERSION no backend e no frontend do Coolify (o backend a le no runtime,
+     o frontend no build, pelo ARG do Dockerfile). PR que nao mergeia (conflito
+     com a main depois do anterior, push recusado, CI vermelho, head que andou,
+     merge recusado, ou erro inesperado do gh ou do git depois do primeiro
+     merge) imprime uma linha `de fora:` com a causa e o lote segue sem ele; os
+     ja mergeados ficam
+  5. tag vX.Y.Z no squash do ultimo PR que entrou, pela API (tag que falha nao
+     para o deploy)
+  6. um build: o deploy que o webhook do Coolify dispara para cada squash
+     intermediario e cancelado (o mesmo mecanismo do registro, issue #851) e o
+     rabo monitora so o do ultimo, em cada service; forca se nao disparar
+  7. health com version match. Health ruim: rollback automatico (issue #968),
      cada app do lote volta a imagem anterior no Coolify, a que estava no ar
-     antes do merge (`current` do `coolify app rollback images`, lida antes do
-     merge, e `rollback run`, sem forcar build) e o APP_VERSION antigo volta aos
-     apps, antes da imagem subir; o health e conferido de novo na versao antiga
- 11. registro num PR so de docs, so com history.json (todos os deploys, sem
+     antes do primeiro merge (`current` do `coolify app rollback images`, lida
+     antes dele, e `rollback run`, sem forcar build) e o APP_VERSION antigo volta
+     aos apps, antes da imagem subir; o health e conferido de novo na versao antiga
+  8. registro num PR so de docs, so com history.json (todos os deploys, sem
      teto) e state.json (ADR 0062, decisao 9), mergeado pela API; o build que o
      webhook do Coolify dispara para ele e cancelado (issue #851). Snapshot e
      draft do Manual nao sao do rabo: a Action do push da main roda os dois
      depois do registro (ADR 0062, decisao 10)
- 12. limpeza (worktrees, branches pr-*, worktrees de agente ja entregues) e soltar o semaforo
+  9. limpeza (worktrees, worktrees de agente ja entregues) e soltar o semaforo
 
-Commits que chegam a main (dois squashes):
-  - o do codigo: "<titulo do PR> (#N)" no PR avulso, ou
-    "chore(onda): <sessao>, PRs #a #b (vX.Y.Z) (#E)" na onda (E = PR de entrega);
+Commits que chegam a main:
+  - um squash por PR que entrou, "<titulo do PR> (#N)", no PR avulso e na onda;
     a versao nao vira commit: vive no APP_VERSION do Coolify e na tag
   - o do registro: "chore(deploy): registro do PR #N (vX.Y.Z) (#R)" ou
     "chore(deploy): registro da onda <sessao> (vX.Y.Z) (#R)"
-No PR avulso, o registro do history.json nomeia PR e issue, sem a onda. O
-campo `sha` do history.json e o do squash do codigo: o commit que foi para
-producao. O registro vem depois, so com docs.
+No PR avulso, o registro do history.json nomeia PR e issue, sem a onda; na
+onda, cada PR e a issue dele. O campo `sha` do history.json e o do squash do
+ultimo PR: o commit que foi para producao. O registro vem depois, so com docs.
 
 Codigos de saida:
-  0  PR ou onda fechados, health verde, registro na main (ferramenta: merge na main)
+  0  todos os PRs na main, health verde, registro na main (ferramenta: merges na main)
   1  pre-condicao falhou ou trava velha: nada foi tocado
-  2  conflito, push na branch rejeitado, CI vermelho ou merge recusado: nada
-     entrou na main, worktree removido, semaforo solto; rode de novo depois de corrigir
+  2  algum PR ficou de fora (conflito com a main, push na branch rejeitado, CI
+     vermelho, head que andou, merge recusado ou erro inesperado do gh ou do git
+     depois do primeiro merge), cada um com a linha `de fora:`;
+     os que entraram seguem o fluxo inteiro e o semaforo e solto. Nenhum entrou:
+     nada na main, worktree removido, semaforo solto. Rode de novo so com os de
+     fora, depois de corrigir. Com 3 a 6, as linhas `de fora:` saem do mesmo jeito
   3  build falhou no Coolify: SEMAFORO FICA PRESO, rode `/deploy rollback` com a chave impressa
   4  health falhou (ou versao nao bate) e o rollback automatico tambem falhou (sem
      imagem anterior, Coolify recusou, ou health ainda ruim): SEMAFORO FICA PRESO,
@@ -90,19 +101,20 @@ Codigos de saida:
      semaforo solto, mas a arrumacao depois do merge falhou (a linha diz o que falta)
   6  rollback feito: o health falhou, a imagem anterior e o APP_VERSION antigo
      voltaram e o health ficou verde de novo; semaforo solto, sem registro. A tag
-     vX.Y.Z fica no squash ruim, e a proxima versao sai depois dela. O merge
-     segue na main: quem chamou abre o PR de revert dele (sem rebuild), reabre a
-     issue com `ready-for-agent` e a linha `health:` (o que o health respondeu),
-     conta uma tentativa da fatia e notifica
+     vX.Y.Z fica no squash ruim, e a proxima versao sai depois dela. Os squashes
+     seguem na main: quem chamou abre o PR de revert deles (sem rebuild), reabre a
+     issue de cada um com `ready-for-agent` e a linha `health:` (o que o health
+     respondeu), conta uma tentativa de cada fatia e notifica
   7  migration vencida: o /api/health nao devolveu o numero da migration do lote
      em 24 h: nada entrou na main, o semaforo nao chegou a ser pego e os PRs
      seguem abertos; quem chamou notifica, e o rabo roda de novo depois que a
      migration for colada no Studio
 
-`--dry-run`: executa 1 e 3 e calcula o 4 sem escrever; imprime o plano (PR,
+`--dry-run`: executa 1 e calcula o 3 sem escrever; imprime o plano (PR,
 issue, classe e tipo de versao: "app: bump ..." ou "ferramenta: só merge") e o
-que faria nos demais (com a espera da migration, sem consultar o health); nao
-pega semaforo, nao toca no Coolify, nao pusha.
+que faria nos demais (um merge pela API por PR, em ordem, com a espera da
+migration, sem consultar o health); nao pega semaforo, nao toca no Coolify,
+nao pusha.
 
 Windows: `bash` do Git no PATH (para o semaforo.sh).
 """
@@ -437,36 +449,14 @@ def criar_worktree(raiz: Path, sessao: str) -> Path:
     return wt
 
 
-def remover_worktree(raiz: Path, wt: Path | None, prs: list[int]) -> None:
+def remover_worktree(raiz: Path, wt: Path | None) -> None:
     if wt and wt.exists():
         run(["git", "worktree", "remove", "--force", str(wt)], cwd=raiz, check=False)
         shutil.rmtree(wt, ignore_errors=True)
     run(["git", "worktree", "prune"], cwd=raiz, check=False)
-    for n in prs:
-        run(["git", "branch", "-D", f"pr-{n}"], cwd=raiz, check=False)
 
 
 # ------------------------------------------------------------------- merges
-
-def mergear(wt: Path, infos: list[dict]) -> list[str]:
-    shas = []
-    for info in infos:
-        n = info["number"]
-        run(["git", "fetch", "-q", "origin", f"pull/{n}/head:pr-{n}"], cwd=wt)
-        # um push no PR durante a espera da migration entraria sem a conferencia do sha256
-        ponta = run(["git", "rev-parse", f"pr-{n}"], cwd=wt).stdout.strip()
-        if info.get("head_conferido") and ponta != info["head_conferido"]:
-            raise EntregaFalhou(f"#{n} andou depois das pre-condicoes ({ponta[:8]}): rode de novo")
-        titulo = info["title"].strip()
-        msg = titulo if f"(#{n})" in titulo else f"{titulo} (#{n})"
-        proc = run(["git", "merge", "--no-ff", f"pr-{n}", "-m", msg], cwd=wt, check=False)
-        if proc.returncode != 0:
-            conflitos = run(["git", "diff", "--name-only", "--diff-filter=U"], cwd=wt, check=False).stdout.split()
-            run(["git", "merge", "--abort"], cwd=wt, check=False)
-            raise MergeConflito(n, conflitos)
-        shas.append(run(["git", "rev-parse", "--short=8", "HEAD"], cwd=wt).stdout.strip())
-    return shas
-
 
 class MergeConflito(Exception):
     def __init__(self, pr: int, arquivos: list[str]):
@@ -476,14 +466,17 @@ class MergeConflito(Exception):
 
 
 def entrar_na_branch_do_pr(wt: Path, info: dict) -> bool:
-    """PR avulso: o worktree vai para a ponta da branch do PR, que e a entrega.
-    O ruleset exige a branch em dia com a base: se a main andou, ela vem
-    por merge. Devolve True quando precisou trazer a main."""
+    """O worktree vai para a ponta da branch do PR, que e o que entra na main.
+    O ruleset exige a branch em dia com a base: se a main andou (inclusive pelo
+    merge do PR anterior do lote), ela vem por merge. Devolve True quando
+    precisou trazer a main."""
     n, branch = info["number"], info["headRefName"]
     run(["git", "fetch", "-q", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}"], cwd=wt)
     run(["git", "checkout", "-q", "--detach", f"origin/{branch}"], cwd=wt)
     ponta = run(["git", "rev-parse", "HEAD"], cwd=wt).stdout.strip()
-    if info.get("headRefOid") and ponta != info["headRefOid"]:
+    # um push no PR durante a espera da migration entraria sem a conferencia do sha256
+    conferido = info.get("head_conferido") or info.get("headRefOid")
+    if conferido and ponta != conferido:
         raise EntregaFalhou(f"#{n} andou depois das pre-condicoes ({ponta[:8]}): rode de novo")
     if run(["git", "merge-base", "--is-ancestor", "origin/main", "HEAD"], cwd=wt, check=False).returncode == 0:
         return False
@@ -498,10 +491,8 @@ def entrar_na_branch_do_pr(wt: Path, info: dict) -> bool:
 # ------------------------------------------------- entrega por PR (#910)
 
 class EntregaFalhou(Exception):
-    """Nada entrou na main: push na branch recusado, CI vermelho, merge recusado.
-    `pr` e o PR ja aberto quando a falha veio depois dele (o handler o fecha)."""
-
-    pr: int | None = None
+    """O PR nao entrou na main: push na branch recusado, CI vermelho, head que
+    andou, merge recusado."""
 
 
 def empurrar_branch(wt: Path, branch: str) -> str:
@@ -583,12 +574,18 @@ def entregar(raiz: Path, wt: Path, branch: str, pr: int | None, titulo: str, cor
     head = empurrar_branch(wt, branch)
     if pr is None:
         pr = abrir_pr(raiz, branch, titulo, corpo)
-    try:
-        esperar_checks(raiz, pr, head)
-    except EntregaFalhou as e:
-        e.pr = pr
-        raise
+    esperar_checks(raiz, pr, head)
     return pr, head
+
+
+def preparar_pr(raiz: Path, wt: Path, info: dict) -> tuple[str, bool]:
+    """Leva um PR do lote ao ponto de merge: a branch dele no worktree, com a
+    origin/main por merge se ficou atras, push na branch (em dia, o head nao
+    muda e o CI dele ja vale) e CI verde no head. Devolve (head, trouxe a main)."""
+    run(["git", "fetch", "-q", "origin", "main"], cwd=wt)  # o squash do PR anterior do lote
+    trouxe = entrar_na_branch_do_pr(wt, info)
+    _, head = entregar(raiz, wt, info["headRefName"], info["number"], "", "")
+    return head, trouxe
 
 
 # --------------------------------------------------------------------- bump
@@ -662,12 +659,6 @@ def prds_do_lote(raiz: Path, infos: list[dict]) -> list[int]:
     return sorted(prds)
 
 
-def migrations_novas(wt: Path, base: str) -> list[str]:
-    out = run(["git", "diff", "--name-only", "--diff-filter=A", f"{base}..HEAD", "--",
-               "hospital-reunioes/supabase/migrations/"], cwd=wt, check=False).stdout.split()
-    return [Path(p).name for p in out]
-
-
 def humanizar(subject: str) -> str:
     s = re.sub(r"^\w+(\([^)]*\))?!?:\s*", "", subject)
     s = re.sub(r"\s*\(#\d+\)\s*$", "", s)
@@ -690,7 +681,7 @@ def rotulo_issues(info: dict) -> str:
 def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | None,
                       sha_codigo: str, prds: list[int], migs: list[str], servicos: list[str],
                       duracoes: dict[str, int | None], healths: dict[str, dict], resultado: str,
-                      com_app_version: list[str], avulso: bool = False, pr_entrega: int | None = None) -> None:
+                      com_app_version: list[str], avulso: bool = False) -> None:
     """A verdade do deploy que o GitHub nao tem (ADR 0062, decisao 9): history.json,
     com todos os deploys, e state.json."""
     history = ler_json(wt / HISTORY)
@@ -707,8 +698,9 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
     else:
         subject = f"Onda {sessao}: " + "; ".join(humanizar(i["title"]) for i in infos)
         raw_subject = f"chore(deploy): registro da onda {sessao} ({prs_txt})"
-        entrega = f", entregues pelo PR #{pr_entrega}" if pr_entrega else ""
-        notes = f"onda-enxuta {sessao}: PRs {prs_txt}{entrega}. {como}"
+        # um "PR #N (issue #M)" por PR: o painel correlaciona cada um (`_correlate`)
+        lote = ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in infos)
+        notes = f"onda-enxuta {sessao}: {lote}, mergeados PR a PR. {como}"
     subject = sem_travessao(subject)[:200]
     entrada = {
         "at": when,
@@ -827,8 +819,10 @@ def _parse_ts(v) -> float | None:
         return None
 
 
-def esperar_build(service: dict, desde: float, sha_push: str) -> tuple[str, int | None]:
-    """Espera o deploy disparado pelo webhook. Devolve (status, duracao_s)."""
+def esperar_build(service: dict, desde: float, sha_push: str, ignorar: tuple[str, ...] = ()) -> tuple[str, int | None]:
+    """Espera o deploy disparado pelo webhook. Devolve (status, duracao_s).
+    `ignorar`: os squashes intermediarios da onda, cujo deploy o rabo cancelou e
+    que a janela de horario pegaria."""
     uuid = service["uuid"]
     dep = None
     limite = time.time() + BUILD_WAIT_WEBHOOK_S
@@ -837,6 +831,8 @@ def esperar_build(service: dict, desde: float, sha_push: str) -> tuple[str, int 
         for d in _lista(coolify_json(["app", "deployments", "list", uuid])):
             criado = _parse_ts(_campo(d, "created_at", "createdAt"))
             commit = str(_campo(d, "commit", "git_commit_sha", default=""))
+            if commit and any(commit.startswith(s) or s.startswith(commit) for s in ignorar):
+                continue  # squash intermediario da onda: o deploy dele foi cancelado
             if (criado and criado >= desde - 60) or (sha_push and commit.startswith(sha_push)):
                 dep = d
                 break
@@ -1057,19 +1053,6 @@ def limpar_worktrees_de_agente(raiz: Path, entregues: dict[str, str] | None = No
     return removidos
 
 
-def conferir_prs_fechados(raiz: Path, infos: list[dict], sessao: str, avulso: bool = False,
-                          pr_entrega: int | None = None) -> None:
-    como = ("pelo `fechar_onda.py` como PR avulso (merge pela API)" if avulso
-            else f"pelo PR de entrega #{pr_entrega} da onda-enxuta {sessao} (merge pela API, um build por onda)")
-    for info in infos:
-        n = info["number"]
-        estado = gh_json(["pr", "view", str(n), "--json", "state"], cwd=raiz).get("state")
-        if estado == "OPEN":
-            run(["gh", "pr", "close", str(n), "--comment",
-                 f"<!-- automacao -->\nIntegrado na main {como}."],
-                cwd=raiz, check=False)
-
-
 # --------------------------------------------------------------------- main
 
 def resolver_sessao(prs: list[int], sessao: str | None) -> tuple[str, bool]:
@@ -1084,7 +1067,7 @@ def resolver_sessao(prs: list[int], sessao: str | None) -> tuple[str, bool]:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="Fecha um PR avulso ou uma onda: um merge pela API, um build.")
+    ap = argparse.ArgumentParser(description="Fecha um PR avulso ou uma onda: merge pela API PR a PR, um build.")
     ap.add_argument("--prs", nargs="+", type=int, required=True, help="PRs na ordem de merge")
     ap.add_argument("--sessao", help="nome da sessao (chave do semaforo); sem ela, um PR so e um PR avulso (pr-<N>)")
     ap.add_argument("--dry-run", action="store_true")
@@ -1100,8 +1083,9 @@ def main() -> int:
     servicos_cfg = {s["id"]: s for s in projeto["services"]}
 
     infos, novas = checar_pre_condicoes(raiz, args.prs, args.dry_run)
-    if avulso and infos[0].get("isCrossRepository"):
-        falhar(f"pre-condicao: #{infos[0]['number']} vem de um fork; a main entra na branch do PR, "
+    de_fork = " ".join(f"#{i['number']}" for i in infos if i.get("isCrossRepository"))
+    if de_fork:
+        falhar(f"pre-condicao: {de_fork} vem de um fork; a main entra na branch do PR, "
                "que precisa estar neste repositorio.", EXIT_PRECOND)
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
     print(f"pre-condicoes ok: {prs_txt}, migrations sem numero repetido contra origin/main e com o sha256 do corpo"
@@ -1115,8 +1099,7 @@ def main() -> int:
     wt = None
     wt_reg = None
     semaforo_pego = False
-    mergeou = False
-    pr_entrega = None
+    mergeados: list[tuple[dict, str, float]] = []  # (PR, squash na main, hora do merge)
     try:
         if not args.dry_run:
             pegar_semaforo(raiz, args.sessao, args.prs, avulso)
@@ -1124,30 +1107,14 @@ def main() -> int:
         wt = criar_worktree(raiz, args.sessao)
         base = run(["git", "rev-parse", "--short=8", "HEAD"], cwd=wt).stdout.strip()
 
-        try:
-            if avulso:
-                branch = infos[0]["headRefName"]
-                pr_entrega = infos[0]["number"]
-                atualizou = entrar_na_branch_do_pr(wt, infos[0])
-                print(f"branch do PR: {branch}" + (f", com a main {base} por merge (estava atras)"
-                                                   if atualizou else f", em dia com a main {base}"))
-            else:
-                branch = f"onda/{args.sessao}"
-                shas_merge = mergear(wt, infos)
-                print(f"merges ok: {len(shas_merge)} PRs sobre {base}, na branch {branch}")
-        except MergeConflito as e:
-            remover_worktree(raiz, wt, args.prs)
-            wt = None
-            if semaforo_pego:
-                semaforo(raiz, "soltar", args.sessao)
-            falhar(f"conflito no merge de #{e.pr} em: {', '.join(e.arquivos) or '?'}. "
-                   f"Mande um corretor rebasear o PR sobre origin/main e rode de novo.", EXIT_MERGE)
-
+        # classe, versao e servicos saem do lote inteiro, antes do primeiro merge
         versao_antiga = versao_em_producao(wt, base)
         # --no-renames, como o detector do CI: o `files` do gh mostra um rename so
         # pelo caminho novo, e tirar codigo do app passaria por ferramenta
-        arquivos = set(run(["git", "diff", "--no-renames", "--name-only", f"{base}...HEAD"], cwd=wt).stdout.split())
+        arquivos = set()
         for i in infos:
+            arquivos.update(run(["git", "diff", "--no-renames", "--name-only", f"{base}...{i['head_conferido']}"],
+                                cwd=wt).stdout.split())
             arquivos.update(f["path"] for f in i.get("files") or [])
         ferramenta = classe_do_lote(arquivos) == "ferramenta"
         tipo = None if ferramenta else tipo_de_bump(infos)
@@ -1158,25 +1125,28 @@ def main() -> int:
                            for a in arquivos for tp in (s.get("diff_routing") or {}).get("trigger_paths") or [])]
         if not ferramenta and not servicos:
             servicos = [sid for sid, s in servicos_cfg.items() if s.get("type") in ("nextjs", "fastapi", "node", "python", "generic")]
-        prds = prds_do_lote(raiz, infos)
-        migs = migrations_novas(wt, base)
 
         if args.dry_run:
+            prds = prds_do_lote(raiz, infos)
+            migs = [Path(c).name for _, c in novas]
             classe = (f"ferramenta: só merge, versao segue v{versao_antiga}" if ferramenta
                       else f"app: bump {tipo} v{versao_antiga} -> v{versao_nova}")
             print("plano: " + ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in infos)
                   + f"; {classe}; chave {args.sessao}")
-            entrega = ("faria: " + (f"esperar a {max(numeros)} no /api/health (teto {MIGRACAO_TIMEOUT_S // 3600} h), "
-                                    if numeros else "")
-                       + f"push na branch {branch}" + ("" if avulso else " e PR de entrega") + ", CI verde, ")
+            faria = ("faria: " + (f"esperar a {max(numeros)} no /api/health (teto {MIGRACAO_TIMEOUT_S // 3600} h), "
+                                  if numeros else "")
+                     + ("" if ferramenta else f"APP_VERSION v{versao_nova} no "
+                        + " e no ".join(apps_do_coolify(servicos_cfg)) + ", ")
+                     + "em ordem: " + ", ".join(f"merge pela API do PR #{i['number']}" for i in infos)
+                     + " (squash, com a main trazida por merge no PR que estiver atras e o CI verde no head), ")
             if ferramenta:
-                print(entrega + "merge pela API, cancela o build que o webhook disparar, limpeza; "
+                print(faria + "cancela o build que o webhook disparar em cada merge, limpeza; "
                       "sem bump, APP_VERSION, build, health nem registro.")
             else:
-                print(entrega + f"APP_VERSION v{versao_nova} no " + " e no ".join(apps_do_coolify(servicos_cfg))
-                      + f", merge pela API, tag v{versao_nova}, build, health, registro em PR so de docs "
+                print(faria + ("cancela o build dos squashes intermediarios, " if len(infos) > 1 else "")
+                      + f"tag v{versao_nova} no squash do ultimo, um build, health, registro em PR so de docs "
                       f"(prds {prds or '[]'}, migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
-            remover_worktree(raiz, wt, args.prs)
+            remover_worktree(raiz, wt)
             wt = None
             print("dry-run terminou sem tocar em nada.")
             return 0
@@ -1187,76 +1157,106 @@ def main() -> int:
         else:
             print(f"versao: segue v{versao_antiga} (ferramenta)")
 
+        # PR a PR, na ordem (ADR 0064, decisao 3). PR que nao mergeia fica de fora
+        # e o lote segue sem ele; os ja mergeados ficam.
+        no_ar: dict[str, str | None] = {}
+        com_app_version: list[str] = []
+        antes_do_primeiro = True
+        de_fora: list[int] = []
+        for info in infos:
+            n = info["number"]
+            try:
+                head, trouxe_main = preparar_pr(raiz, wt, info)
+                if antes_do_primeiro:
+                    # a imagem no ar antes do primeiro merge e o alvo de um rollback (issue #968)
+                    no_ar = {sid: imagem_no_ar(servicos_cfg[sid]["uuid"]) for sid in servicos}
+                    com_app_version = setar_app_version_nos_apps(servicos_cfg, versao_nova) if versao_nova else []
+                    antes_do_primeiro = False
+                titulo = info["title"].strip()
+                titulo = titulo if f"(#{n})" in titulo else f"{titulo} (#{n})"
+                t = time.time()
+                sha = mergear_pela_api(raiz, n, head, titulo)
+            except MergeConflito as e:
+                de_fora.append(n)
+                print(f"de fora: conflito no merge de #{e.pr} em: {', '.join(e.arquivos) or '?'}. "
+                      "Mande um corretor rebasear o PR sobre origin/main e rode o rabo de novo com ele.")
+                continue
+            except EntregaFalhou as e:
+                de_fora.append(n)
+                print(f"de fora: PR #{n}, {e}.")
+                continue
+            except Exception as e:  # noqa: BLE001
+                # antes do primeiro squash nada entrou: segue o tratamento de fora do laco (saida 2).
+                # Depois dele, um 502 do gh ou um git que falhou nao pode largar na main o que
+                # ja entrou sem build, health nem registro: o PR fica de fora com a causa
+                if not mergeados:
+                    raise
+                de_fora.append(n)
+                print(f"de fora: PR #{n}, falha inesperada ao preparar ou mergear ({str(e)[:200]}).")
+                continue
+            mergeados.append((info, sha, t))
+            print(f"merge: PR #{n} na main pela API, squash {sha[:8]}"
+                  + (f", com a main trazida por merge e o CI verde no head {head[:8]}" if trouxe_main else ""))
+        remover_worktree(raiz, wt)
+        wt = None
+
+        fora = " ".join(f"#{n}" for n in de_fora)
+        if not mergeados:
+            semaforo(raiz, "soltar", args.sessao)
+            semaforo_pego = False
+            print(f"nada entrou na main: {fora} de fora, semaforo solto. Rode de novo depois de corrigir.")
+            return EXIT_MERGE
+        lote = [i for i, _, _ in mergeados]
+        entraram = " ".join(f"#{i['number']}" for i in lote)
+        sha_main, t_merge = mergeados[-1][1], mergeados[-1][2]
+        intermediarios = tuple(s for _, s, _ in mergeados[:-1])
+        squashes = " ".join(s[:8] for _, s, _ in mergeados)
         if avulso:
-            titulo = infos[0]["title"].strip()
-            titulo = titulo if f"(#{pr_entrega})" in titulo else f"{titulo} (#{pr_entrega})"
-            corpo = ""
+            fechou = f"PR {entraram} fechado"
         else:
-            titulo = f"chore(onda): {args.sessao}, PRs {prs_txt} (v{versao})"
-            issues = sorted({ref["number"] for i in infos for ref in i.get("closingIssuesReferences") or []})
-            corpo = ("<!-- automacao -->\n"
-                     f"PR de entrega da onda {args.sessao}, aberto pelo `fechar_onda.py` (ADR 0061): os PRs "
-                     f"{prs_txt} integrados por merge local sobre a main"
-                     + (f", na versao v{versao_nova} (APP_VERSION e tag, sem commit)" if versao_nova else "")
-                     + ". A main e protegida: o merge sai pela API do GitHub.\n\n"
-                     + "".join(f"Closes #{n}\n" for n in issues))
-        pr_entrega, head = entregar(raiz, wt, branch, pr_entrega, titulo, corpo)
-        if not avulso:
-            titulo = f"{titulo} (#{pr_entrega})"
-        print(f"entrega: PR #{pr_entrega} com CI verde no head {head[:8]}")
-
-        # a imagem no ar antes do merge e o alvo de um rollback (issue #968)
-        no_ar = {sid: imagem_no_ar(servicos_cfg[sid]["uuid"]) for sid in servicos}
-        com_app_version = setar_app_version_nos_apps(servicos_cfg, versao_nova) if versao_nova else []
-
-        t_merge = time.time()
-        sha_main = mergear_pela_api(raiz, pr_entrega, head, titulo)
-        mergeou = True
-        tag = ""
+            fechou = f"onda {args.sessao} fechada" + (f" sem {fora} (de fora, saida 2)" if de_fora else "")
         if versao_nova:
             try:
                 criar_tag(raiz, versao_nova, sha_main)
-                tag = f", tag v{versao_nova}"
+                print(f"tag: v{versao_nova} no squash {sha_main[:8]} do PR #{lote[-1]['number']}")
             except RuntimeError as e:
                 # a tag e conferencia, nao deploy: falhar aqui nao para o build
-                tag = (f"; a tag v{versao_nova} falhou ({str(e)[:120]}), crie depois com `gh api -X POST "
-                       f"repos/{{owner}}/{{repo}}/git/refs -f ref=refs/tags/v{versao_nova} -f sha={sha_main}`")
-        print(f"merge: PR #{pr_entrega} na main pela API, squash {sha_main[:8]}{tag}")
-        remover_worktree(raiz, wt, args.prs)
-        wt = None
+                print(f"tag: a tag v{versao_nova} falhou ({str(e)[:120]}), crie depois com `gh api -X POST "
+                      f"repos/{{owner}}/{{repo}}/git/refs -f ref=refs/tags/v{versao_nova} -f sha={sha_main}`")
 
         if ferramenta:
             # producao nao muda: sem build, health nem registro (issue #965). Falha
             # daqui em diante e codigo 5, nunca o 3: nada a reverter no Coolify
             try:
-                cancelados = cancelar_build_do_registro(servicos_cfg, sha_main)
-                conferir_prs_fechados(raiz, infos, args.sessao, avulso, pr_entrega)
-                n_wt = limpar_worktrees_de_agente(raiz, {i["headRefName"]: i.get("headRefOid") for i in infos})
+                cancelados = [sid for _, s, _ in mergeados for sid in cancelar_build_do_registro(servicos_cfg, s)]
+                n_wt = limpar_worktrees_de_agente(raiz, {i["headRefName"]: i.get("headRefOid") for i in lote})
             except Exception as e:  # noqa: BLE001
                 semaforo(raiz, "soltar", args.sessao)
                 print(f"pos-merge: {e}; merge feito, producao intacta e semaforo solto; confira no Coolify "
-                      f"se o webhook rodou build do {sha_main[:8]} e feche a mao os PRs {prs_txt} que ficaram abertos.")
+                      f"se o webhook rodou build de {squashes}.")
                 return EXIT_REGISTRO
             semaforo(raiz, "soltar", args.sessao)
             semaforo_pego = False
-            fechou = f"PR {prs_txt} fechado" if avulso else f"onda {args.sessao} fechada"
-            print(f"{fechou} (ferramenta: só merge): versao segue v{versao_antiga} · merge {sha_main[:7]} · "
-                  "sem build, health nem registro"
+            print(f"{fechou} (ferramenta: só merge): versao segue v{versao_antiga} · PRs {entraram} · "
+                  f"squash {squashes} · sem build, health nem registro"
                   + (f" · build do webhook cancelado ({', '.join(cancelados)})" if cancelados else "")
                   + f" · {n_wt} worktrees limpos · {dur(time.time() - T0)}")
-            return 0
+            return EXIT_MERGE if de_fora else 0
 
+        # um build: o webhook dispara um deploy por merge, e so o do ultimo roda (issue #851)
+        cancelados = [sid for s in intermediarios for sid in cancelar_build_do_registro(servicos_cfg, s)]
         duracoes: dict[str, int | None] = {}
         falhas = []
         for sid in servicos:
-            status, d = esperar_build(servicos_cfg[sid], t_merge, sha_main)
+            status, d = esperar_build(servicos_cfg[sid], t_merge, sha_main, intermediarios)
             duracoes[sid] = d
             if status != "finished":
                 falhas.append(f"{sid}: {status}")
         if falhas:
             print("build: " + "; ".join(falhas) + f". Semaforo preso na chave {args.sessao}: rode `/deploy rollback` com ela.")
             return EXIT_BUILD
-        print("build: " + ", ".join(f"{sid} {dur(duracoes.get(sid))}" for sid in servicos))
+        print("build: " + ", ".join(f"{sid} {dur(duracoes.get(sid))}" for sid in servicos)
+              + (f", build dos squashes intermediarios cancelado ({', '.join(cancelados)})" if cancelados else ""))
 
         healths = {}
         for sid in (servicos or [s for s in servicos_cfg if s != "supabase"]):
@@ -1272,8 +1272,9 @@ def main() -> int:
             semaforo(raiz, "soltar", args.sessao)
             semaforo_pego = False
             print(f"rollback: {como}, APP_VERSION v{versao_antiga}, health ok e semaforo solto. "
-                  f"Reverter o merge {sha_main[:8]} e reabrir: "
-                  + ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in infos) + ".")
+                  f"Reverter na main: {squashes}; reabrir: "
+                  + ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in lote) + "."
+                  + (f" De fora: {fora}." if de_fora else ""))
             return EXIT_ROLLBACK
         vm = " (version match)" if versao_nova else ""
         print(f"health: ok{vm}")
@@ -1284,9 +1285,11 @@ def main() -> int:
         try:
             run(["git", "fetch", "-q", "origin", "main"], cwd=raiz)
             wt_reg = criar_worktree(raiz, f"{args.sessao}-registro")
-            escrever_registro(wt_reg, args.sessao, infos, versao_nova, sha_main, prds, migs,
-                              servicos, duracoes, healths, "healthy", com_app_version, avulso, pr_entrega)
-            do_lote = f"do PR {prs_txt}" if avulso else f"da onda {args.sessao}"
+            heads = {i.get("head_conferido") for i in lote}
+            migs = [Path(c).name for h, c in novas if h in heads]
+            escrever_registro(wt_reg, args.sessao, lote, versao_nova, sha_main, prds_do_lote(raiz, lote), migs,
+                              servicos, duracoes, healths, "healthy", com_app_version, avulso)
+            do_lote = f"do PR {entraram}" if avulso else f"da onda {args.sessao}"
             titulo_reg = f"chore(deploy): registro {do_lote} (v{versao})"
             commitar(wt_reg, titulo_reg, [HISTORY, STATE])
             pr_reg, head_reg = entregar(raiz, wt_reg, f"registro/{args.sessao}-{sha_main[:8]}", None, titulo_reg,
@@ -1297,7 +1300,7 @@ def main() -> int:
             sha_reg = mergear_pela_api(raiz, pr_reg, head_reg, f"{titulo_reg} (#{pr_reg})")
         except Exception as e:  # noqa: BLE001
             if wt_reg:
-                remover_worktree(raiz, wt_reg, [])
+                remover_worktree(raiz, wt_reg)
             semaforo(raiz, "soltar", args.sessao)
             falta = (f"mergeie o PR #{pr_reg} quando o CI dele ficar verde" if pr_reg
                      else f"o registro nao virou PR; registre a mao o merge {sha_main[:8]} (v{versao})")
@@ -1307,39 +1310,23 @@ def main() -> int:
         print(f"registro: PR #{pr_reg} so de docs na main ({sha_reg[:8]})"
               + (f", build do registro cancelado ({', '.join(cancelados)})" if cancelados else ""))
 
-        conferir_prs_fechados(raiz, infos, args.sessao, avulso, pr_entrega)
-        remover_worktree(raiz, wt_reg, [])
+        remover_worktree(raiz, wt_reg)
         wt_reg = None
-        n_wt = limpar_worktrees_de_agente(raiz, {i["headRefName"]: i.get("headRefOid") for i in infos})
+        n_wt = limpar_worktrees_de_agente(raiz, {i["headRefName"]: i.get("headRefOid") for i in lote})
         semaforo(raiz, "soltar", args.sessao)
         semaforo_pego = False
         builds = ", ".join(f"{sid} {dur(duracoes.get(sid))}" for sid in servicos) or "sem build"
-        fechou = f"PR {prs_txt} fechado" if avulso else f"onda {args.sessao} fechada"
-        print(f"{fechou}: v{versao_antiga} -> v{versao} · PRs {prs_txt} · merge {sha_main[:7]} · "
+        print(f"{fechou}: v{versao_antiga} -> v{versao} · PRs {entraram} · squash {squashes} · "
               f"build {builds} · health ok{vm} · {n_wt} worktrees limpos · {dur(time.time() - T0)}")
-        return 0
+        return EXIT_MERGE if de_fora else 0
     except SystemExit:
         raise
-    except EntregaFalhou as e:
-        # antes do merge: nada entrou na main
-        if wt:
-            remover_worktree(raiz, wt, args.prs)
-        pr_entrega = pr_entrega or e.pr
-        if not avulso and pr_entrega:
-            run(["gh", "pr", "close", str(pr_entrega), "--delete-branch", "--comment",
-                 f"<!-- automacao -->\nEntrega abandonada: {e}. A proxima rodada abre outro PR."],
-                cwd=raiz, check=False)
-        if semaforo_pego:
-            semaforo(raiz, "soltar", args.sessao)
-        sobra = " A main trazida ficou na branch do PR; a proxima rodada a reaproveita." if avulso else ""
-        print(f"entrega: {e}. Nada entrou na main.{sobra}")
-        return EXIT_MERGE
     except Exception as e:  # noqa: BLE001
         print(f"erro: {e}")
         for w in (wt, wt_reg):
             if w:
-                remover_worktree(raiz, w, args.prs)
-        if mergeou:
+                remover_worktree(raiz, w)
+        if mergeados:
             print(f"o merge ja aconteceu. Semaforo preso na chave {args.sessao}: confira o Coolify e o health, "
                   f"depois `semaforo.sh soltar {args.sessao}` ou `/deploy rollback`.")
             return EXIT_BUILD
