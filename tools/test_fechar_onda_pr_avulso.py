@@ -184,6 +184,7 @@ class Cenario:
         self.prs: dict[int, dict] = {numero: self.pr}
         self.ci_vermelho: set[str] = set()  # heads em que o CI falha
         self.sem_checks = False  # o CI nunca rodou: nenhum check no PR
+        self.bloqueadoras: dict[int, list[dict]] = {}  # issue -> o `blocked_by` dela (issue #999)
         # quantas rodadas do CI do head que o rabo empurra o GitHub cancela por
         # falta de runner (#953)
         self.sem_runner = 0
@@ -472,6 +473,9 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
 
     def gh_json(args, cwd=None):
         c.gh_chamadas.append(list(args))
+        bloqueio = re.fullmatch(r"repos/\{owner\}/\{repo\}/issues/(\d+)/dependencies/blocked_by", args[-1])
+        if args[:1] == ["api"] and len(args) == 2 and bloqueio:
+            return c.bloqueadoras.get(int(bloqueio.group(1)), [])
         if args[:2] == ["pr", "view"]:
             # como o gh de verdade: só os campos pedidos no --json
             return c.ver_pr(int(args[2]), args[args.index("--json") + 1].split(","))
@@ -1600,8 +1604,8 @@ def test_health_ruim_volta_a_imagem_anterior_e_o_app_version_antigo_e_sai_com_ro
     assert c.rollbacks == ["backend"]
     assert c.healths == [("backend", "0.10.1"), ("backend", "0.10.0")]
     assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
-    # sem registro: o merge segue na main e quem chamou abre o revert
-    assert [m["pr"] for m in c.merges] == [7] and c.main_remota() == merge
+    # sem registro: o próprio rabo mergeia o revert antes de soltar a trava (issue #999)
+    assert [m["branch"] for m in c.merges] == ["feature", "revert/pr-7"], c.merges
     saida = capsys.readouterr().out
     health = next(li for li in saida.splitlines() if li.startswith("health:"))
     assert "http 500" in health and 'relation \\"prazos\\" does not exist' in health, health
@@ -1637,7 +1641,8 @@ def test_rollback_que_falha_sai_com_4_e_o_semaforo_fica_preso(tmp_path, monkeypa
 
     assert rodar_main(fo, monkeypatch, c) == fo.EXIT_HEALTH == 4
 
-    assert c.semaforo == [("pegar", "pr-7")]
+    # presa e marcada parada: o rabo seguinte sai com 8 na hora (issue #999)
+    assert c.semaforo == [("pegar", "pr-7"), ("parar", "pr-7")]
     assert [m["pr"] for m in c.merges] == [7]
     saida = capsys.readouterr().out
     rollback = next(li for li in saida.splitlines() if li.startswith("rollback:"))
@@ -2131,7 +2136,7 @@ def test_imagem_que_nao_sai_do_workflow_para_com_3_sem_trocar_a_tag_no_coolify(
 
     assert [li for li in c.coolify_sem_leituras() if "--docker-tag" in li or li.startswith("deploy ")] == []
     assert c.deploys_novos == [] and c.healths == []
-    assert c.semaforo == [("pegar", "pr-7")]
+    assert c.semaforo == [("pegar", "pr-7"), ("parar", "pr-7")]
     [build] = linhas_com(capsys.readouterr().out, "build:")
     assert "backend" in build and "failure" in build and "Semaforo preso na chave pr-7" in build, build
 
@@ -2276,7 +2281,7 @@ def test_rollback_em_modo_imagem_sem_deploy_anterior_no_state_sai_com_4(tmp_path
     assert rodar_main(fo, monkeypatch, c) == fo.EXIT_HEALTH
 
     assert [li for li in c.coolify_sem_leituras() if "--value 0.10.0" in li or "rollback" in li] == []
-    assert c.rollbacks == [] and c.semaforo == [("pegar", "pr-7")]
+    assert c.rollbacks == [] and c.semaforo == [("pegar", "pr-7"), ("parar", "pr-7")]
 
 
 # ------------------------- digest de ponta a ponta (revisão do PR #1016)
@@ -2337,7 +2342,7 @@ def test_rollback_em_modo_imagem_com_a_tag_anterior_sobrescrita_nao_mexe_em_nada
         f"app update uuid-backend --docker-tag {squash} | main={squash}",
         f"deploy uuid uuid-backend | main={squash}",
     ]
-    assert c.rollbacks == [] and c.semaforo == [("pegar", "pr-7")]
+    assert c.rollbacks == [] and c.semaforo == [("pegar", "pr-7"), ("parar", "pr-7")]
     [rollback] = linhas_com(capsys.readouterr().out, "rollback:")
     assert DIGEST_FORJADO in rollback and DIGEST_ANTERIOR in rollback, rollback
 
