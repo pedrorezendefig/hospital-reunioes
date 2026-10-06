@@ -164,7 +164,7 @@ def rodar(trecho: str, cwd: Path, env: dict[str, str] | None = None,
     script = cwd.parent / "passo.sh"
     script.write_text(passo(trecho, job)["run"], encoding="utf-8")
     return subprocess.run([*BASH, str(script)], cwd=cwd, env={**ENV_GIT, **(env or {})},
-                          capture_output=True, text=True, check=False)
+                          capture_output=True, text=True, errors="surrogateescape", check=False)
 
 
 TIRAR_DRAFT_FALSO = """\
@@ -571,7 +571,8 @@ def test_patch_com_caminho_de_fora_so_entra_nos_tres_caminhos(tmp_path):
     assert git(origem, "show", f"main:{CODIGO}") == "antes"
 
 
-def commitar_patch_adulterado(tmp_path: Path, origem: Path, adulterar) -> subprocess.CompletedProcess:
+def commitar_patch_adulterado(tmp_path: Path, origem: Path, adulterar,
+                              env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     """O `commitar` sobre um patch montado à mão, com detecção de rename."""
     gerador = clonar(tmp_path, origem, "adulterado")
     adulterar(gerador)
@@ -580,7 +581,8 @@ def commitar_patch_adulterado(tmp_path: Path, origem: Path, adulterar) -> subpro
     patch.parent.mkdir(parents=True)
     patch.write_text(git(gerador, "diff", "--cached", "--binary", "-M") + "\n", encoding="utf-8")
     commitador = clonar(tmp_path, origem, "commitar")
-    return rodar("Commitar", commitador, {"RUNNER_TEMP": str(tmp_path / "temp-commitar")}, job="commitar")
+    return rodar("Commitar", commitador, {"RUNNER_TEMP": str(tmp_path / "temp-commitar"), **(env or {})},
+                 job="commitar")
 
 
 def test_rename_de_fora_para_dentro_dos_tres_caminhos_e_recusado(tmp_path):
@@ -679,6 +681,38 @@ def test_snapshot_so_aceita_reescrita_dos_arquivos_que_o_script_escreve(tmp_path
     assert proc.returncode != 0
     assert "::error::O patch cria, apaga ou toca arquivo que a Action não escreve:" in proc.stdout
     assert caminho in proc.stdout
+    assert git(origem, "rev-parse", "main") == antes
+
+
+# Um CLAUDE.md numa pasta cujo nome não é UTF-8 válido, e que vem antes do
+# CLAUDE.md da raiz do snapshot na ordem do índice. O ext4 do runner aceita o
+# nome; o APFS do macOS recusa.
+NOME_INVALIDO = os.fsdecode(b"docs/spec/snapshots/!\xff/CLAUDE.md")
+
+
+@pytest.mark.parametrize("depois", [[], ["docs/spec/snapshots/CLAUDE.md"]], ids=["sozinho", "seguido-de-outro"])
+def test_nome_com_byte_invalido_nao_passa_pelo_filtro(tmp_path, depois):
+    """Issue #1031: no locale UTF-8 do runner, o GNU grep trata a linha com
+    byte inválido como binária e não a imprime (o aviso vai para o stderr,
+    fora do `$(...)`). Sozinho, o filtro saía vazio e o arquivo entrava na
+    `main`; com outro arquivo de fora, ele sumia da recusa."""
+    try:
+        (tmp_path / os.fsdecode(b"\xff")).touch()
+    except OSError:
+        pytest.skip("este sistema de arquivos recusa nome que não é UTF-8; o do runner aceita")
+    origem, _ = main_de_brinquedo(tmp_path)
+    antes = git(origem, "rev-parse", "main")
+
+    def adulterar(gerador: Path) -> None:
+        for caminho in (NOME_INVALIDO, *depois):
+            criar(caminho)(gerador)
+
+    proc = commitar_patch_adulterado(tmp_path, origem, adulterar, {"LC_ALL": "C.UTF-8"})
+
+    assert proc.returncode != 0
+    assert "::error::O patch cria, apaga ou toca arquivo que a Action não escreve:" in proc.stdout
+    for caminho in (NOME_INVALIDO, *depois):
+        assert caminho in proc.stdout
     assert git(origem, "rev-parse", "main") == antes
 
 
