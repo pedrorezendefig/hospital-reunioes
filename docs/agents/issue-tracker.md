@@ -46,9 +46,9 @@ A Action `.github/workflows/pos-merge.yml` dispara em todo push na `main` e faz 
 
 1. Tira do `draft` as páginas do Manual dos PRDs do último deploy do `history.json` (`tools/tirar_draft_manual.py`). Deploy sem PRD (PR avulso) pula o passo; página com Vídeo de tarefa fica em draft com um aviso no run, porque o MP4 não vem no clone (issue #951).
 2. Regenera o mapa factual (`docs/spec/snapshots/` e os blocos AUTO do `docs/ARQUITETURA.md`) com o backend montado como no CI, sem o modo parcial da máquina local.
-3. Com diff, commita direto na `main` como `github-actions[bot]`, com `[skip ci]`. O ruleset da `main` dá bypass a esse ator e a mais ninguém (`.github/rulesets/main.json`).
+3. Com diff, commita direto na `main` como `github-actions[bot]`, com `[skip ci]`. Quem empurra é a deploy key da Action, num job separado que não instala nada; o ruleset da `main` dá bypass a ela e a mais ninguém (`.github/rulesets/main.json`, ADR 0065).
 
-O push do bot não redispara workflow nenhum, e o filtro de caminhos da Action ignora o que ela mesma escreve. Nenhuma skill nem o rabo roda snapshot ou draft.
+O `[skip ci]` impede o push do bot de redisparar workflow, e o filtro de caminhos da Action ignora o que ela mesma escreve. Nenhuma skill nem o rabo roda snapshot ou draft.
 
 ## Loop do revisor (ADR 0020, decisão 5)
 

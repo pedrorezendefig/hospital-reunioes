@@ -2,10 +2,14 @@
 
 ADR 0062, decisão 10: o rabo deixou de rodar o `snapshot.py` e o
 `tirar_draft_manual.py` (#939), e quem roda os dois é um workflow no push da
-`main`, que commita como `github-actions[bot]` pelo bypass do ruleset. Estes
-testes amarram o contrato do workflow (evento, branch, autor, `[skip ci]`, o
-filtro que impede a Action de acordar com o próprio commit) e rodam os passos
-de shell dele de verdade, num repo git de brinquedo.
+`main`, que commita como `github-actions[bot]` pelo bypass do ruleset. A ADR
+0065 separou o workflow em dois jobs: o `gerar` instala e roda tudo sem
+credencial e entrega um patch por artefato; o `commitar`, que não instala
+nada, aplica o patch e empurra com a deploy key de um Environment restrito à
+`main`. Estes testes amarram o contrato do workflow (evento, branch, autor,
+`[skip ci]`, onde mora a credencial, o filtro que impede a Action de acordar
+com o próprio commit) e rodam os passos de shell dele de verdade, num repo
+git de brinquedo.
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ from __future__ import annotations
 import json
 import os
 import re
+import shutil
 import subprocess
 from pathlib import Path
 
@@ -39,7 +44,37 @@ def test_dispara_no_push_da_main_e_nunca_em_pull_request():
     assert on["push"]["branches"] == ["main"]
     assert "pull_request" not in on
     assert "pull_request_target" not in on
-    assert workflow()["permissions"] == {"contents": "write"}
+    assert "workflow_run" not in on
+
+
+def test_credencial_de_escrita_so_no_job_que_nao_instala_nada():
+    """ADR 0065: o `GITHUB_TOKEN` só lê, e a deploy key (o ator do bypass) só
+    existe no `commitar`, num Environment restrito à `main`. O `gerar` roda
+    pip, uv sync e o import do app sem token no `.git/config`; o `commitar`
+    só usa checkout, download do artefato e git."""
+    w = workflow()
+    assert w["permissions"] == {"contents": "read"}
+    assert set(w["jobs"]) == {"gerar", "commitar"}
+    for nome, job in w["jobs"].items():
+        assert "permissions" not in job, nome
+    gerar, commitar = w["jobs"]["gerar"], w["jobs"]["commitar"]
+
+    assert "environment" not in gerar
+    assert gerar["steps"][0]["uses"].startswith("actions/checkout@")
+    assert gerar["steps"][0]["with"]["persist-credentials"] is False
+    assert "secrets." not in yaml.safe_dump(gerar)
+
+    assert commitar["environment"] == "pos-merge"
+    assert commitar["needs"] == "gerar"
+    usos = [p["uses"].split("@")[0] for p in commitar["steps"] if "uses" in p]
+    assert usos == ["actions/checkout", "actions/download-artifact"]
+    checkout = commitar["steps"][0]["with"]
+    assert checkout["ssh-key"] == "${{ secrets.POS_MERGE_DEPLOY_KEY }}"
+    assert checkout["ref"] == "main"
+    scripts = " ".join(p["run"] for p in commitar["steps"] if "run" in p)
+    for instalador in ("pip", "uv ", "npm", "pnpm", "corepack", "apt", "python", "curl", "wget"):
+        assert instalador not in scripts, instalador
+    assert WORKFLOW.read_text(encoding="utf-8").count("secrets.") == 1
 
 
 def casa(padrao: str, caminho: str) -> bool:
@@ -67,8 +102,8 @@ def acorda(mudados: list[str]) -> bool:
 
 
 def test_push_que_so_toca_snapshot_e_paginas_do_manual_nao_acorda_a_action():
-    """É o que a própria Action escreve. Push do `GITHUB_TOKEN` já não dispara
-    workflow; o filtro cobre quem rodar o snapshot à mão e empurrar."""
+    """É o que a própria Action escreve. O push da deploy key dispara
+    workflow: o filtro e o `[skip ci]` impedem o loop."""
     assert not acorda(["docs/spec/snapshots/ROTAS.md", "docs/spec/snapshots/SCHEMA.md"])
     assert not acorda(["docs/ARQUITETURA.md"])
     assert not acorda(["docs/manual/src/content/docs/ouvidoria/manifestacoes/registrar.mdx"])
@@ -87,9 +122,9 @@ def test_merge_do_registro_e_de_codigo_acordam_a_action():
 
 # --------------------------------------------------- os passos de shell, rodados
 
-def passo(trecho: str) -> dict:
+def passo(trecho: str, job: str = "gerar") -> dict:
     """O passo do job cujo nome contém o trecho."""
-    passos = workflow()["jobs"]["pos-merge"]["steps"]
+    passos = workflow()["jobs"][job]["steps"]
     achados = [p for p in passos if trecho in p.get("name", "")]
     assert len(achados) == 1, [p.get("name") for p in passos]
     return achados[0]
@@ -103,10 +138,11 @@ ENV_GIT = {
 }
 
 
-def rodar(trecho: str, cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+def rodar(trecho: str, cwd: Path, env: dict[str, str] | None = None,
+          job: str = "gerar") -> subprocess.CompletedProcess:
     """Roda o `run:` do passo como o GitHub Actions roda: `bash -e {0}`."""
     script = cwd.parent / "passo.sh"
-    script.write_text(passo(trecho)["run"], encoding="utf-8")
+    script.write_text(passo(trecho, job)["run"], encoding="utf-8")
     return subprocess.run(["bash", "-e", str(script)], cwd=cwd, env={**ENV_GIT, **(env or {})},
                           capture_output=True, text=True, check=False)
 
@@ -176,7 +212,7 @@ Path("args.txt").write_text(" ".join(sys.argv[1:]))
 
 def test_snapshot_roda_sem_commitar_sozinho(tmp_path):
     """Sem `--no-commit` o `snapshot.py` commita por conta própria, com outra
-    mensagem e sem `[skip ci]`; quem commita aqui é o passo do bot."""
+    mensagem e sem `[skip ci]`; quem commita aqui é o job do bot."""
     raiz = tmp_path / "repo"
     scripts = raiz / ".claude" / "skills" / "snapshot" / "scripts"
     scripts.mkdir(parents=True)
@@ -191,7 +227,7 @@ def test_backend_montado_com_o_mesmo_ambiente_do_ci():
     `.venv` do backend). Sem o venv, ou sem as variáveis que o Settings exige,
     ele cai no parser AST e rebaixa o ROTAS.md (o modo parcial do macOS)."""
     ci = workflow(RAIZ / ".github" / "workflows" / "ci.yml")
-    assert workflow()["jobs"]["pos-merge"]["env"] == ci["jobs"]["backend"]["env"]
+    assert workflow()["jobs"]["gerar"]["env"] == ci["jobs"]["backend"]["env"]
     venv = passo("backend")
     assert venv["working-directory"] == "hospital-reunioes/backend"
     assert "uv sync --frozen" in venv["run"]
@@ -203,6 +239,8 @@ ESCRITOS = [
     "docs/ARQUITETURA.md",
     "docs/manual/src/content/docs/ouvidoria/index.mdx",
 ]
+APAGAVEL = "docs/spec/snapshots/VELHO.md"
+CODIGO = "hospital-reunioes/backend/app/main.py"
 
 
 def git(cwd: Path, *args: str) -> str:
@@ -218,30 +256,87 @@ def escrever(raiz: Path, caminho: str, texto: str) -> None:
     arq.write_text(texto, encoding="utf-8")
 
 
-def main_com_runner(tmp_path: Path) -> tuple[Path, Path, Path]:
-    """A `main` (repo bare), um clone de quem mergeia PR e o clone do runner."""
+def main_de_brinquedo(tmp_path: Path) -> tuple[Path, Path]:
+    """A `main` (repo bare) e um clone de quem mergeia PR."""
     origem = tmp_path / "origem.git"
     git(tmp_path, "init", "-q", "--bare", "-b", "main", str(origem))
     outro = tmp_path / "outro"
     git(tmp_path, "clone", "-q", str(origem), str(outro))
-    for caminho in [*ESCRITOS, "hospital-reunioes/backend/uv.lock"]:
+    for caminho in [*ESCRITOS, APAGAVEL, CODIGO, "hospital-reunioes/backend/uv.lock"]:
         escrever(outro, caminho, "antes\n")
     git(outro, "add", "-A")
     git(outro, "commit", "-q", "-m", "base")
     git(outro, "push", "-q", "origin", "HEAD:main")
-    runner = tmp_path / "repo"
-    git(tmp_path, "clone", "-q", "-b", "main", str(origem), str(runner))
-    return origem, outro, runner
+    return origem, outro
+
+
+def clonar(tmp_path: Path, origem: Path, nome: str) -> Path:
+    """O checkout de um job: a ponta da `main` naquela hora."""
+    destino = tmp_path / nome / "repo"
+    destino.parent.mkdir()
+    git(tmp_path, "clone", "-q", "-b", "main", str(origem), str(destino))
+    return destino
+
+
+def resolver_runner_temp(valor: str, temp: Path) -> Path:
+    return Path(valor.replace("${{ runner.temp }}", str(temp)))
+
+
+def passar_artefato(temp_gerar: Path, temp_commitar: Path) -> None:
+    """O upload do `gerar` e o download do `commitar`, lidos do YAML: um
+    arquivo só, zipado no upload e extraído com o mesmo nome no `path`."""
+    w = workflow()
+    upload = [p for p in w["jobs"]["gerar"]["steps"] if p.get("uses", "").startswith("actions/upload-artifact@")]
+    download = [p for p in w["jobs"]["commitar"]["steps"]
+                if p.get("uses", "").startswith("actions/download-artifact@")]
+    assert len(upload) == 1 and len(download) == 1
+    assert upload[0]["with"]["name"] == download[0]["with"]["name"]
+    arquivo = resolver_runner_temp(upload[0]["with"]["path"], temp_gerar)
+    destino = resolver_runner_temp(download[0]["with"]["path"], temp_commitar)
+    destino.mkdir(parents=True, exist_ok=True)
+    shutil.copy(arquivo, destino / arquivo.name)
+
+
+def gerar_e_commitar(tmp_path: Path, origem: Path, mexer, entre_os_jobs=None,
+                     durante_o_commit=None) -> subprocess.CompletedProcess:
+    """O run inteiro: checkout e escrita no `gerar`, empacotar, artefato,
+    checkout do `commitar` e o passo do commit."""
+    gerador = clonar(tmp_path, origem, "gerar")
+    mexer(gerador)
+    temp_gerar = tmp_path / "temp-gerar"
+    temp_gerar.mkdir()
+    proc = rodar("Empacotar", gerador, {"RUNNER_TEMP": str(temp_gerar)})
+    assert proc.returncode == 0, proc.stderr
+    if entre_os_jobs:
+        entre_os_jobs()
+    commitador = clonar(tmp_path, origem, "commitar")
+    temp_commitar = tmp_path / "temp-commitar"
+    passar_artefato(temp_gerar, temp_commitar)
+    if durante_o_commit:
+        durante_o_commit()
+    return rodar("Commitar", commitador, {"RUNNER_TEMP": str(temp_commitar)}, job="commitar")
+
+
+def mergear_pr(outro: Path, caminho: str, mensagem: str) -> str:
+    git(outro, "pull", "-q", "origin", "main")
+    escrever(outro, caminho, f"{mensagem}\n")
+    git(outro, "add", "-A")
+    git(outro, "commit", "-q", "-m", mensagem)
+    git(outro, "push", "-q", "origin", "HEAD:main")
+    return git(outro, "rev-parse", "HEAD")
 
 
 def test_commit_do_bot_com_skip_ci_so_do_que_a_action_escreve(tmp_path):
-    origem, _, runner = main_com_runner(tmp_path)
-    escrever(runner, "docs/spec/snapshots/ROTAS.md", "rota nova\n")
-    escrever(runner, "docs/manual/src/content/docs/ouvidoria/index.mdx", "draft: false\n")
-    escrever(runner, "hospital-reunioes/backend/uv.lock", "mexido pelo ambiente\n")
-    escrever(runner, "lixo-do-runner.txt", "fora do git\n")
+    origem, _ = main_de_brinquedo(tmp_path)
 
-    proc = rodar("Commitar", runner)
+    def mexer(gerador: Path) -> None:
+        for caminho in ESCRITOS:
+            escrever(gerador, caminho, "novo\n")
+        (gerador / APAGAVEL).unlink()
+        escrever(gerador, "hospital-reunioes/backend/uv.lock", "mexido pelo ambiente\n")
+        escrever(gerador, "lixo-do-runner.txt", "fora do git\n")
+
+    proc = gerar_e_commitar(tmp_path, origem, mexer)
 
     assert proc.returncode == 0, proc.stderr
     autor, email, assunto = git(origem, "log", "-1", "--format=%an|%ae|%s", "main").split("|")
@@ -249,55 +344,88 @@ def test_commit_do_bot_com_skip_ci_so_do_que_a_action_escreve(tmp_path):
     assert email == "41898282+github-actions[bot]@users.noreply.github.com"
     assert "[skip ci]" in assunto
     arquivos = git(origem, "show", "--name-only", "--format=", "main").splitlines()
-    assert sorted(arquivos) == ["docs/manual/src/content/docs/ouvidoria/index.mdx",
-                                "docs/spec/snapshots/ROTAS.md"]
+    assert sorted(arquivos) == sorted([*ESCRITOS, APAGAVEL])
+    assert APAGAVEL not in git(origem, "ls-tree", "-r", "--name-only", "main").splitlines()
     assert not acorda(arquivos), "o commit do bot acordaria a própria Action"
 
 
-def test_sem_diff_nao_commita(tmp_path):
-    origem, _, runner = main_com_runner(tmp_path)
-    antes = git(origem, "rev-parse", "main")
-    escrever(runner, "hospital-reunioes/backend/uv.lock", "mexido pelo ambiente\n")
+def test_patch_com_caminho_de_fora_so_entra_nos_tres_caminhos(tmp_path):
+    """O `gerar` roda pacote do PyPI e pode entregar artefato adulterado: o
+    `commitar` aplica só o que cai nos caminhos da Action."""
+    origem, _ = main_de_brinquedo(tmp_path)
+    gerador = clonar(tmp_path, origem, "adulterado")
+    escrever(gerador, CODIGO, "codigo malicioso\n")
+    escrever(gerador, ".github/workflows/x.yml", "on: push\n")
+    escrever(gerador, "docs/spec/snapshots/ROTAS.md", "rota nova\n")
+    git(gerador, "add", "-A")
+    patch = tmp_path / "temp-commitar" / "pos-merge" / "pos-merge.patch"
+    patch.parent.mkdir(parents=True)
+    patch.write_text(git(gerador, "diff", "--cached", "--binary") + "\n", encoding="utf-8")
+    commitador = clonar(tmp_path, origem, "commitar")
 
-    proc = rodar("Commitar", runner)
+    proc = rodar("Commitar", commitador, {"RUNNER_TEMP": str(tmp_path / "temp-commitar")}, job="commitar")
+
+    assert proc.returncode == 0, proc.stderr
+    arquivos = git(origem, "show", "--name-only", "--format=", "main").splitlines()
+    assert arquivos == ["docs/spec/snapshots/ROTAS.md"]
+    assert git(origem, "show", f"main:{CODIGO}") == "antes"
+
+
+def test_sem_diff_nao_commita(tmp_path):
+    origem, _ = main_de_brinquedo(tmp_path)
+    antes = git(origem, "rev-parse", "main")
+
+    def mexer(gerador: Path) -> None:
+        escrever(gerador, "hospital-reunioes/backend/uv.lock", "mexido pelo ambiente\n")
+
+    proc = gerar_e_commitar(tmp_path, origem, mexer)
 
     assert proc.returncode == 0, proc.stderr
     assert git(origem, "rev-parse", "main") == antes
 
 
 def test_merge_que_entra_durante_a_action_nao_derruba_o_push(tmp_path):
-    """Entre o checkout e o push outro PR pode entrar na `main`: sem rebase o
-    push seria recusado (non_fast_forward no ruleset)."""
-    origem, outro, runner = main_com_runner(tmp_path)
-    escrever(outro, "hospital-reunioes/backend/app/novo.py", "x = 1\n")
-    git(outro, "add", "-A")
-    git(outro, "commit", "-q", "-m", "PR que entrou no meio")
-    git(outro, "push", "-q", "origin", "HEAD:main")
-    do_pr = git(outro, "rev-parse", "HEAD")
-    escrever(runner, "docs/ARQUITETURA.md", "bloco AUTO novo\n")
+    """Um PR pode entrar na `main` entre os dois jobs (o patch aplica sobre a
+    ponta nova) e outro durante o commit: sem rebase o push seria recusado
+    (non_fast_forward no ruleset)."""
+    origem, outro = main_de_brinquedo(tmp_path)
+    shas: list[str] = []
 
-    proc = rodar("Commitar", runner)
+    def mexer(gerador: Path) -> None:
+        escrever(gerador, "docs/ARQUITETURA.md", "bloco AUTO novo\n")
+
+    proc = gerar_e_commitar(
+        tmp_path, origem, mexer,
+        entre_os_jobs=lambda: shas.append(mergear_pr(outro, "hospital-reunioes/backend/app/a.py", "PR 1")),
+        durante_o_commit=lambda: shas.append(mergear_pr(outro, "hospital-reunioes/backend/app/b.py", "PR 2")),
+    )
 
     assert proc.returncode == 0, proc.stderr
-    assert git(origem, "rev-parse", "main~1") == do_pr
+    assert git(origem, "rev-parse", "main~1") == shas[1]
+    assert git(origem, "rev-parse", "main~2") == shas[0]
     assert git(origem, "log", "-1", "--format=%an", "main") == "github-actions[bot]"
+    assert git(origem, "show", "main:docs/ARQUITETURA.md") == "bloco AUTO novo"
 
 
 def test_um_run_por_vez_e_o_draft_nao_se_perde_com_o_snapshot_vermelho():
     """Runs na fila partem da ponta da `main` (o commit do run anterior), não
-    do commit do evento. O draft vem antes do backend e o commit roda mesmo
-    com o snapshot vermelho: o próximo registro troca os PRDs do último
-    deploy, e o draft que não entrou agora não entraria mais."""
+    do commit do evento. O draft vem antes do backend e o patch sai e é
+    commitado mesmo com o snapshot vermelho: o próximo registro troca os PRDs
+    do último deploy, e o draft que não entrou agora não entraria mais."""
     w = workflow()
     assert w["concurrency"]["cancel-in-progress"] is False
-    passos = w["jobs"]["pos-merge"]["steps"]
+    passos = w["jobs"]["gerar"]["steps"]
     assert passos[0]["uses"].startswith("actions/checkout@") and passos[0]["with"]["ref"] == "main"
     ordem = [p.get("name") for p in passos]
     assert (ordem.index(passo("Tirar do draft")["name"])
             < ordem.index(passo("backend")["name"])
             < ordem.index(passo("Snapshot")["name"])
-            < ordem.index(passo("Commitar")["name"]))
-    assert passo("Commitar")["if"] == "${{ !cancelled() }}"
+            < ordem.index(passo("Empacotar")["name"]))
+    sempre = "${{ !cancelled() }}"
+    assert passo("Empacotar")["if"] == sempre
+    upload = [p for p in passos if p.get("uses", "").startswith("actions/upload-artifact@")]
+    assert upload[0]["if"] == sempre
+    assert w["jobs"]["commitar"]["if"] == sempre
 
 
 def test_estes_testes_rodam_quando_so_o_workflow_muda():

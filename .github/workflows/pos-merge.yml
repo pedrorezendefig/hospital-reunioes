@@ -1,25 +1,32 @@
 name: Pós-merge
 
 # Snapshot e draft do Manual depois de cada push na main (ADR 0062, decisão
-# 10; issue #940). O rabo (fechar_onda.py) grava só a verdade do deploy; o
-# mapa factual (docs/spec/snapshots/, blocos AUTO do docs/ARQUITETURA.md) e o
-# draft das páginas do Manual saem daqui, com o ambiente completo do backend.
-# O commit vai direto na main como github-actions[bot], pelo bypass do ruleset
-# que só o GitHub Actions tem (.github/rulesets/main.json).
+# 10, emendada pela ADR 0065; issue #940). O rabo (fechar_onda.py) grava só a
+# verdade do deploy; o mapa factual (docs/spec/snapshots/, blocos AUTO do
+# docs/ARQUITETURA.md) e o draft das páginas do Manual saem daqui, com o
+# ambiente completo do backend.
+#
+# Dois jobs (ADR 0065). O `gerar` instala o backend e roda os scripts, sem
+# credencial nenhuma: token só de leitura, que nem fica no .git/config. O
+# `commitar` não instala nada: recebe por artefato só o patch dos três
+# caminhos e empurra direto na main com a deploy key, o único ator em
+# `bypass_actors` do ruleset (.github/rulesets/main.json). A chave vive num
+# secret do Environment `pos-merge`, restrito à branch main.
 on:
   push:
     branches: [main]
-    # O que a própria Action escreve. Push pelo GITHUB_TOKEN já não dispara
-    # workflow; o filtro cobre quem rodar o snapshot à mão e empurrar. O merge
-    # que importa é o do PR de registro (docs/spec/deploy/), quando o
-    # history.json com a versão nova já está na main.
+    # O que a própria Action escreve. Push pela deploy key dispara workflow
+    # (ao contrário do GITHUB_TOKEN): o [skip ci] do commit e este filtro
+    # impedem o loop. O merge que importa é o do PR de registro
+    # (docs/spec/deploy/), quando o history.json com a versão nova já está na
+    # main.
     paths-ignore:
       - 'docs/spec/snapshots/**'
       - 'docs/ARQUITETURA.md'
       - 'docs/manual/src/content/docs/**'
 
 permissions:
-  contents: write
+  contents: read
 
 # Um por vez, sem cancelar o que já começou: dois runs empurrando snapshot ao
 # mesmo tempo brigariam pelos mesmos arquivos.
@@ -28,7 +35,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  pos-merge:
+  gerar:
     name: Snapshot e draft do Manual
     runs-on: ubuntu-latest
     env:
@@ -44,6 +51,9 @@ jobs:
           # A ponta da main na hora do run, e não o commit do evento: o run que
           # esperou na fila já parte do commit que o run anterior empurrou.
           ref: main
+          # O pip, o uv sync e o import do app rodam aqui: nenhum token fica
+          # no .git/config para um pacote comprometido ler.
+          persist-credentials: false
 
       - uses: actions/setup-python@v6
         with:
@@ -92,26 +102,68 @@ jobs:
 
       - name: Snapshot (docs/spec/snapshots e blocos AUTO do ARQUITETURA.md)
         # --no-commit: sem ele o snapshot.py commita sozinho, com outra
-        # mensagem e sem [skip ci]. Quem commita é o passo de baixo.
+        # mensagem e sem [skip ci]. Quem commita é o job de baixo.
         run: python3 .claude/skills/snapshot/scripts/snapshot.py --root . --no-commit
 
-      - name: Commitar na main como github-actions[bot]
+      - name: Empacotar o patch dos três caminhos
         # Roda mesmo com o snapshot vermelho: o draft tirado acima não se perde
-        # (o run fica vermelho do mesmo jeito). Só entra o que a Action
-        # escreve, os mesmos caminhos do paths-ignore. [skip ci] e o push pelo
-        # GITHUB_TOKEN não acordam workflow nenhum. O rebase pega o PR que
-        # entrou na main durante o run; sem ele o push seria recusado. O
-        # --autostash é para o que o ambiente mexeu fora desses caminhos não
-        # travar o rebase.
+        # (o run fica vermelho do mesmo jeito). Patch, e não os arquivos: leva
+        # arquivo apagado e aplica sobre a ponta da main que o outro job vê.
         if: ${{ !cancelled() }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add -A -- docs/spec/snapshots docs/ARQUITETURA.md docs/manual/src/content/docs
-          if git diff --cached --quiet; then
+          git diff --cached --binary > "$RUNNER_TEMP/pos-merge.patch"
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: pos-merge
+          path: ${{ runner.temp }}/pos-merge.patch
+          if-no-files-found: error
+          retention-days: 1
+
+  commitar:
+    name: Commitar na main pela deploy key
+    needs: gerar
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    # O secret da deploy key só existe neste Environment, que só aceita job
+    # da branch main: YAML de outra branch (ou de um workflow_dispatch nela)
+    # não chega à chave.
+    environment: pos-merge
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          ssh-key: ${{ secrets.POS_MERGE_DEPLOY_KEY }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: pos-merge
+          path: ${{ runner.temp }}/pos-merge
+
+      - name: Commitar na main como github-actions[bot]
+        # Só entra o que a Action escreve, os mesmos caminhos do paths-ignore:
+        # o --include descarta do patch qualquer outro caminho. [skip ci] no
+        # assunto: o push da deploy key acorda workflow. O rebase pega o PR que
+        # entrou na main durante o run; sem ele o push seria recusado.
+        run: |
+          patch="$RUNNER_TEMP/pos-merge/pos-merge.patch"
+          if [ ! -s "$patch" ]; then
             echo "Snapshot e draft em dia: nada a commitar."
             exit 0
           fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git apply --index \
+            --include='docs/spec/snapshots/*' \
+            --include='docs/ARQUITETURA.md' \
+            --include='docs/manual/src/content/docs/*' \
+            "$patch"
+          if git diff --cached --quiet; then
+            echo "O patch não toca os caminhos da Action: nada a commitar."
+            exit 0
+          fi
           git commit -q -m "chore(spec): snapshot e draft do Manual pós-merge $(git rev-parse --short HEAD) [skip ci]"
-          git pull --rebase --autostash -q origin main
+          git pull --rebase -q origin main
           git push -q origin HEAD:main
