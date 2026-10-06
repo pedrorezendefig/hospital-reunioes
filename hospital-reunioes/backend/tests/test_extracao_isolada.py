@@ -384,6 +384,13 @@ def _pico_do_worker_durante(chamada):
 
 
 class TestOsDoisAtaquesMedidos:
+    # Rodar sozinho (issue #971): os testes marcados aqui medem o RSS do worker
+    # com `_pico_do_worker_durante` contra o teto de 12 MB. Com `-n auto` (12
+    # workers na mesma máquina) a medida acusou 20 a 23 MB que não vêm do
+    # documento, em dois deles, e os dois passaram em série na mesma ordem de
+    # testes do worker que falhou. Os outros quatro usam a mesma medida e o
+    # mesmo teto, então vão juntos.
+    @pytest.mark.rodar_sozinho
     def test_pdf_ascii85_em_cima_do_flate_e_recusado_sem_tocar_o_worker(self, client, pdf_ataque):
         """Sem isolamento este arquivo custa 29 s e 1.584 MB DENTRO do worker.
 
@@ -404,6 +411,7 @@ class TestOsDoisAtaquesMedidos:
         )
         assert decorrido < extrator.PRAZO_DA_EXTRACAO, "o teto de memoria tem que morder antes do prazo"
 
+    @pytest.mark.rodar_sozinho
     def test_docx_com_membro_isca_e_recusado_sem_tocar_o_worker(self, client, docx_ataque):
         """A isca de CRC no primeiro membro não ajuda mais: não há conferência
         de zip para desarmar, o orçamento é do processo inteiro."""
@@ -444,6 +452,7 @@ class TestOsDoisAtaquesMedidos:
             assert espera < 2.0, f"a requisicao curta esperou {espera:.1f}s pela longa"
             assert (await lenta).status_code == 200
 
+    @pytest.mark.rodar_sozinho
     def test_o_texto_devolvido_tambem_tem_teto(self, client):
         """O terceiro caminho, que nenhum dos dois ataques acima usa.
 
@@ -463,6 +472,7 @@ class TestOsDoisAtaquesMedidos:
             f"o worker cresceu {crescimento // (1024 * 1024)} MB: o texto entrou assim mesmo"
         )
 
+    @pytest.mark.rodar_sozinho
     def test_o_canal_de_erro_do_filho_tambem_tem_teto(self, client):
         """O terceiro canal de volta, e o único que não tinha número nenhum.
 
@@ -486,6 +496,7 @@ class TestOsDoisAtaquesMedidos:
         )
         assert decorrido < extrator.PRAZO_DA_EXTRACAO, "quem recusou tem que ser o teto do canal"
 
+    @pytest.mark.rodar_sozinho
     def test_o_canal_de_saida_tem_teto_mesmo_com_filho_que_nao_para_de_escrever(self, client, monkeypatch, tmp_path):
         """O teto do texto vive no filho, que mede antes de escrever. Esta é a rede.
 
@@ -522,6 +533,7 @@ class TestOsDoisAtaquesMedidos:
         # do teto do canal sobreviveu na primeira versao deste teste.
         assert decorrido < 10, f"levou {decorrido:.1f}s: quem matou foi o prazo, nao o teto do canal"
 
+    @pytest.mark.rodar_sozinho
     def test_o_filho_que_despeja_e_sai_e_recusado_em_vez_de_cortado(self, client, monkeypatch, tmp_path):
         """A corrida entre a escrita e a amostra do vigia, e o que se faz com ela.
 
