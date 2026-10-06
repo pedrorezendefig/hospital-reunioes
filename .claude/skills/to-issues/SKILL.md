@@ -82,8 +82,11 @@ Apresente a divisão como uma **lista numerada em pt-BR**. Para cada fatia, most
 - **O que entrega**: o comportamento ponta-a-ponta que esta fatia faz funcionar
 - **Bloqueada por**: quais outras fatias (se houver) precisam terminar antes
 - **Histórias cobertas**: quais histórias de usuário esta fatia atende (se a fonte tiver)
+- **Arquivo de costura**: os que ela toca, ou "nenhum"
 
-Pergunte ao usuário: a granularidade está boa (grossa/fina demais)? As dependências estão corretas? Alguma fatia deve ser unida ou dividida? As marcações HITL/AFK estão certas? Itere até aprovar.
+Depois da lista, as **ondas previstas**: uma linha por onda com as fatias que andam juntas e, quando uma onda espera a anterior, o arquivo de costura ou a dependência que separa (ex.: "Onda 1: fatias 1 e 2. Onda 2: fatia 3, divide `main.py` com a 1").
+
+Pergunte ao usuário: a granularidade está boa (grossa/fina demais)? As dependências estão corretas? Alguma fatia deve ser unida ou dividida? As marcações HITL/AFK estão certas? As ondas previstas fazem sentido? Itere até aprovar.
 
 ### 5. Publish the issues
 
@@ -91,7 +94,7 @@ Antes de publicar, determine o **número da issue-PRD pai** (`$PRD`): a issue cr
 
 Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o template de corpo abaixo (**em pt-BR**), com a label `ready-for-agent` salvo instrução em contrário. Publique em ordem de dependência (bloqueadores primeiro) pra poder criar as **dependências nativas** com números reais.
 
-**Classifique o tamanho de cada fatia** e aplique o label `fatia:P`, `fatia:M` ou `fatia:G` junto com `ready-for-agent` (uma por fatia; nunca no PRD pai). Critério: **P** = poucas horas, escopo contido, 1 camada dominante; **M** = fatia vertical completa de escopo conhecido (meio período); **G** = dia cheio ou mais (muitas camadas, UI nova ou integração externa). Labels e critério vivem em `docs/agents/triage-labels.md`; o dashboard usa esses labels pra medir lead time real por tamanho: classifique pelo escopo, não pela pressa.
+**Classifique o tamanho de cada fatia** e aplique o label `fatia:P`, `fatia:M` ou `fatia:G` junto com `ready-for-agent` (uma por fatia; nunca no PRD pai). Critério: **P** = poucas horas, escopo contido, 1 camada dominante; **M** = fatia vertical completa de escopo conhecido (meio período); **G** = dia cheio ou mais (muitas camadas, UI nova ou integração externa). Labels e critério vivem em `docs/agents/triage-labels.md`; o dashboard usa esses labels pra medir lead time real por tamanho, e a `/onda-enxuta` escolhe por eles o esforço do implementador (`xhigh` na G, `high` na P e na M): classifique pelo escopo, não pela pressa.
 
 **Toda issue abre com o bloco "Para o diretor"** (ADR 0020, decisão 7): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada do revisor não-técnico, que lê as issues direto no GitHub — sem ele, a parte técnica é só ruído pra essa pessoa. Formato fixo, mínimo de palavras, zero jargão:
 
@@ -146,8 +149,22 @@ Evite caminhos de arquivo e trechos de código — envelhecem rápido. Exceção
 
 </issue-template>
 
-Não feche nem edite o corpo/labels do PRD pai — apenas vincule as fatias como sub-issues. Quando a última sub-issue aberta fechar, a Action de higiene (`.github/workflows/higiene-issues.yml`) fecha o PRD sozinha, com um comentário.
+**Ondas previstas no PRD.** Com todas as fatias publicadas, acrescente ao fim do corpo do PRD a seção `## Ondas previstas` aprovada no passo 4, agora com os números reais:
+
+```bash
+gh issue view "$PRD" --json body --jq .body > "$TMPDIR/prd-$PRD.md"
+cat >> "$TMPDIR/prd-$PRD.md" <<'EOF'
+
+## Ondas previstas
+
+- Onda 1: #<a>, #<b>
+- Onda 2: #<c> (divide `main.py` com #<a>)
+EOF
+gh issue edit "$PRD" --body-file "$TMPDIR/prd-$PRD.md"
+```
+
+Fora essa seção, não feche o PRD pai nem mexa no corpo e nos labels dele: só vincule as fatias como sub-issues. Quando a última sub-issue aberta fechar, a Action de higiene (`.github/workflows/higiene-issues.yml`) fecha o PRD sozinha, com um comentário.
 
 ### Paralelismo
 
-Estas fatias são independentes: várias sessões Claude Code podem pegá-las em paralelo (uma por sessão). Registre a **dependência nativa** (blocked by) sempre que houver dependência real: o pool paralelo filtra com `-is:blocked` e só oferece issues sem bloqueio aberto. Protocolo de claim em `docs/agents/issue-tracker.md`.
+As fatias de uma mesma onda prevista são independentes: várias sessões Claude Code podem pegá-las em paralelo (uma por sessão). Registre a **dependência nativa** (blocked by) sempre que houver dependência real: o pool paralelo filtra com `-is:blocked` e só oferece issues sem bloqueio aberto. Protocolo de claim em `docs/agents/issue-tracker.md`.

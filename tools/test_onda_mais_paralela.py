@@ -47,3 +47,19 @@ def test_o_to_issues_nao_poe_arquivo_de_costura_em_comum_na_mesma_onda():
     # confere o arquivo compartilhado antes de propor a divisão, não depois
     assert "antes de propor a divisão" in regra and "Mapa do terreno" in regra, regra
     assert "git grep" in regra, regra
+
+
+def test_o_to_issues_divide_a_fatia_g_que_nao_bloqueia_ninguem_em_duas_m():
+    assert "fatia G que não bloqueia ninguém vira duas M" in regra_do_paralelismo()
+
+
+def test_o_to_issues_lista_as_ondas_previstas_ao_usuario_e_no_prd():
+    md = ler(TO_ISSUES)
+    quiz = secao(md, "4. Quiz the user", "###")
+    assert "**ondas previstas**" in quiz and "arquivo de costura" in quiz, quiz
+
+    publicar = secao(md, "5. Publish the issues", "###")
+    # o PRD leva o agrupamento com os números reais, no corpo
+    bloco = next(b for b in re.findall(r"```bash\n(.*?)```", publicar, re.S) if "Ondas previstas" in b)
+    assert "## Ondas previstas" in bloco and 'gh issue edit "$PRD" --body-file' in bloco, bloco
+    assert "Não feche nem edite o corpo" not in publicar, publicar
