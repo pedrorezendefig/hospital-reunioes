@@ -103,7 +103,8 @@ class Cenario:
     """O remoto, o clone em que o script roda e o que os dublês anotaram."""
 
     def __init__(self, tmp_path: Path, numero: int, titulo: str, issue: int | None,
-                 arquivos: dict[str, str], corpo: str = "", deploys: list[dict] | None = None):
+                 arquivos: dict[str, str], corpo: str = "", deploys: list[dict] | None = None,
+                 versao_em_producao: str = "0.10.0"):
         self.numero = numero
         self.issue = issue
         self.log_scripts = tmp_path / "scripts-chamados.log"
@@ -116,6 +117,7 @@ class Cenario:
         escrever(repo, f"{MIGRATIONS}/111_base.sql", "select 1;\n")
         escrever(repo, "docs/spec/deploy/project.json", json_txt(PROJECT))
         escrever(repo, "docs/spec/deploy/state.json", json_txt({
+            "last_app_version": versao_em_producao,
             "production": {"repo": "dono/repo"},
             "services": [{"id": "backend"}, {"id": "frontend"}],
         }))
@@ -158,7 +160,8 @@ class Cenario:
         self.prs: dict[int, dict] = {numero: self.pr}
         self.ci_vermelho: set[str] = set()  # heads em que o CI falha
         self.sem_checks = False  # o CI nunca rodou: nenhum check no PR
-        # quantas rodadas do CI do bump o GitHub cancela por falta de runner (#953)
+        # quantas rodadas do CI do head que o rabo empurra o GitHub cancela por
+        # falta de runner (#953)
         self.sem_runner = 0
         self.anotacao_do_cancelamento = SEM_RUNNER
         self.merges: list[dict] = []
@@ -167,6 +170,7 @@ class Cenario:
         self.healths: list[tuple[str, str | None]] = []
         self.semaforo: list[tuple[str, str]] = []
         self.cancelamentos: list[str] = []
+        self.tags: list[tuple[str, str]] = []  # (ref, sha) criados pela API
         self.log_push_main = tmp_path / "push-na-main.log"
         hook = self.remoto / "hooks" / "pre-receive"
         hook.write_text(
@@ -258,6 +262,20 @@ class Cenario:
                        "url": f"https://github.com/dono/repo/pull/{n}"}
         return {"number": n, "html_url": self.prs[n]["url"]}
 
+    def criar_ref(self, campos: dict) -> dict:
+        """POST /git/refs como o GitHub: recusa ref que já existe e sha que o
+        repositório não tem (o squash só existe depois do merge)."""
+        ref, sha = campos["ref"], campos["sha"]
+        if subprocess.run(["git", "rev-parse", "--verify", "-q", ref], cwd=self.remoto,
+                          capture_output=True).returncode == 0:
+            raise RuntimeError("gh api -> 422: Reference already exists")
+        if subprocess.run(["git", "cat-file", "-e", f"{sha}^{{commit}}"], cwd=self.remoto,
+                          capture_output=True).returncode != 0:
+            raise RuntimeError("gh api -> 422: Object does not exist")
+        git(self.remoto, "update-ref", ref, sha)
+        self.tags.append((ref, sha))
+        return {"ref": ref, "object": {"sha": sha}}
+
     def mergear_pela_api(self, n: int, campos: dict) -> dict:
         """PUT /pulls/N/merge como o GitHub com o ruleset: squash (o único método
         que o repositório permite), recusa head que mudou, branch atrás da base e
@@ -315,6 +333,8 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
             assert args[4::2] == ["-f"] * len(campos), args
             if args[2] == "POST" and args[3] == "repos/{owner}/{repo}/pulls":
                 return c.abrir_pr(campos)
+            if args[2] == "POST" and args[3] == "repos/{owner}/{repo}/git/refs":
+                return c.criar_ref(campos)
             m = re.fullmatch(r"repos/\{owner\}/\{repo\}/pulls/(\d+)/merge", args[3])
             if args[2] == "PUT" and m:
                 return c.mergear_pela_api(int(m.group(1)), campos)
@@ -388,12 +408,17 @@ def test_um_pr_so_sem_sessao_faz_merge_bump_app_version_build_health_e_registro(
     codigo = c.merges[0]["main"]
     assert git(c.remoto, "show", f"{codigo}:hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
     assert git(c.remoto, "log", "-1", "--format=%s", codigo).endswith("(#7)")
-    # bump: patch, pelo tipo do commit
-    assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.10.1"
-    # APP_VERSION no Coolify, ANTES do merge (a main remota ainda era a base)
+    # versão nova: patch, pelo tipo do commit, sem commit de bump (issue #967):
+    # o package.json do frontend fica congelado
+    assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.10.0"
+    # APP_VERSION no backend E no frontend do Coolify, ANTES do merge (a main
+    # remota ainda era a base)
     assert c.coolify() == [
-        f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}"
+        f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}",
     ]
+    # a tag da versão, DEPOIS do merge: no squash que foi para a main
+    assert c.tags == [("refs/tags/v0.10.1", codigo)]
     # build e health só do serviço tocado, com conferência de versão
     assert c.builds == ["backend"]
     assert ("backend", "0.10.1") in c.healths
@@ -408,7 +433,7 @@ def test_um_pr_so_sem_sessao_faz_merge_bump_app_version_build_health_e_registro(
 
 # ------------------------------------------------ main sob o ruleset (#910)
 
-def test_main_protegida_o_pr_entra_pela_api_com_o_bump_na_branch_dele(tmp_path, monkeypatch):
+def test_main_protegida_o_pr_entra_pela_api_sem_commit_na_branch_dele(tmp_path, monkeypatch):
     fo = carregar_fechar_onda()
     c = pr_de_codigo(tmp_path)
     preparar(fo, monkeypatch, c)
@@ -417,14 +442,11 @@ def test_main_protegida_o_pr_entra_pela_api_com_o_bump_na_branch_dele(tmp_path, 
 
     # ninguém tentou empurrar na main: o ruleset recusaria
     assert c.pushes_na_main() == []
-    # o primeiro merge é o do próprio PR, e o head mergeado já trazia o bump
+    # o primeiro merge é o do próprio PR, no head com que ele chegou: a versão
+    # não é commitada (issue #967), e o CI verde do PR já vale
     entrega = c.merges[0]
     assert entrega["pr"] == 7 and entrega["branch"] == "feature"
-    versao = git(c.remoto, "show", f"{entrega['head']}:hospital-reunioes/frontend/package.json")
-    assert json.loads(versao)["version"] == "0.10.1"
-    # o bump é um commit em cima do head do PR, não uma reescrita dele
-    assert git(c.remoto, "merge-base", "--is-ancestor", c.head_do_pr, entrega["head"]) == ""
-    assert git(c.remoto, "log", "-1", "--format=%s", entrega["head"]) == "chore(release): bump v0.10.1 (PR #7)"
+    assert entrega["head"] == c.head_do_pr
     # o PR fechou como mergeado, sem `gh pr close`
     assert c.prs[7]["state"] == "MERGED"
     assert [a for a in c.gh_chamadas if a[:2] == ["pr", "close"]] == []
@@ -511,10 +533,9 @@ def test_sem_snapshot_saiu_da_cli_e_da_docstring(tmp_path, monkeypatch, capsys):
     assert "sem-snapshot" not in fo.__doc__
 
 
-def test_pr_atras_da_main_recebe_a_main_antes_do_bump(tmp_path, monkeypatch):
-    """O ruleset exige a branch em dia com a base: a main andou depois do CI do
-    PR, e o script traz a main para a branch antes do bump."""
-    fo = carregar_fechar_onda()
+def pr_atras_da_main(tmp_path: Path) -> Cenario:
+    """A main andou depois do CI do PR: o rabo traz a main por merge e empurra
+    um head novo na branch do PR, que roda o CI de novo."""
     c = pr_de_codigo(tmp_path)
     repo = tmp_path / "repo"
     git(repo, "checkout", "-q", "main")
@@ -522,6 +543,14 @@ def test_pr_atras_da_main_recebe_a_main_antes_do_bump(tmp_path, monkeypatch):
     git(repo, "add", "-A")
     git(repo, "commit", "-q", "-m", "fix: outro PR que entrou antes")
     c.avancar_main(repo)
+    return c
+
+
+def test_pr_atras_da_main_recebe_a_main_antes_do_merge(tmp_path, monkeypatch):
+    """O ruleset exige a branch em dia com a base: a main andou depois do CI do
+    PR, e o script traz a main para a branch antes do merge."""
+    fo = carregar_fechar_onda()
+    c = pr_atras_da_main(tmp_path)
     main_antes = c.main_remota()
     preparar(fo, monkeypatch, c)
 
@@ -533,27 +562,28 @@ def test_pr_atras_da_main_recebe_a_main_antes_do_bump(tmp_path, monkeypatch):
     assert git(c.remoto, "show", f"{codigo}:hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
 
 
-def test_ci_vermelho_depois_do_bump_para_sem_merge_e_sem_app_version(
+def test_ci_vermelho_depois_de_trazer_a_main_para_sem_merge_e_sem_app_version(
     tmp_path, monkeypatch, capsys
 ):
     fo = carregar_fechar_onda()
-    c = pr_de_codigo(tmp_path)
+    c = pr_atras_da_main(tmp_path)
+    main_antes = c.main_remota()
     preparar(fo, monkeypatch, c)
     ver = c.ver_pr
 
-    def ver_com_ci_vermelho_no_bump(n, campos):
+    def ver_com_ci_vermelho_no_head_novo(n, campos):
         info = ver(n, campos)
         if info.get("headRefOid") and info["headRefOid"] != c.head_do_pr:
             c.ci_vermelho.add(info["headRefOid"])
             info = ver(n, campos)
         return info
 
-    c.ver_pr = ver_com_ci_vermelho_no_bump
+    c.ver_pr = ver_com_ci_vermelho_no_head_novo
 
     assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
 
-    assert c.merges == [] and c.main_remota() == c.base
-    assert c.coolify() == []
+    assert c.merges == [] and c.main_remota() == main_antes
+    assert c.coolify() == [] and c.tags == []
     assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
     assert "#7" in capsys.readouterr().out
 
@@ -562,7 +592,7 @@ def test_ci_cancelado_sem_runner_e_repetido_e_o_pr_entra_quando_fica_verde(
     tmp_path, monkeypatch
 ):
     fo = carregar_fechar_onda()
-    c = pr_de_codigo(tmp_path)
+    c = pr_atras_da_main(tmp_path)
     preparar(fo, monkeypatch, c)
     monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
     c.sem_runner = 2
@@ -577,7 +607,7 @@ def test_sem_runner_esgotado_para_sem_merge_e_aponta_o_incidente_nao_o_codigo(
     tmp_path, monkeypatch, capsys
 ):
     fo = carregar_fechar_onda()
-    c = pr_de_codigo(tmp_path)
+    c = pr_atras_da_main(tmp_path)
     preparar(fo, monkeypatch, c)
     monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
     c.sem_runner = 99
@@ -594,7 +624,7 @@ def test_cancelamento_que_nao_e_falta_de_runner_continua_ci_vermelho_sem_rerun(
     tmp_path, monkeypatch, capsys
 ):
     fo = carregar_fechar_onda()
-    c = pr_de_codigo(tmp_path)
+    c = pr_atras_da_main(tmp_path)
     preparar(fo, monkeypatch, c)
     monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
     c.sem_runner = 99
@@ -630,11 +660,13 @@ def test_registro_que_nao_entra_sai_com_5_semaforo_solto_e_producao_intacta(
     assert "#101" in capsys.readouterr().out
 
 
-def test_rodada_seguinte_reaproveita_o_bump_que_ficou_na_branch_sem_pular_versao(
+def test_rodada_seguinte_a_um_ci_vermelho_sai_na_mesma_versao_sem_pular(
     tmp_path, monkeypatch
 ):
+    """Sem commit de versão, nada fica na branch para a rodada seguinte contar
+    de novo: ela parte do mesmo state.json e a primeira não criou tag."""
     fo = carregar_fechar_onda()
-    c = pr_de_codigo(tmp_path)
+    c = pr_atras_da_main(tmp_path)
     preparar(fo, monkeypatch, c)
     ver = c.ver_pr
     vermelho = {"ligado": True}
@@ -648,16 +680,17 @@ def test_rodada_seguinte_reaproveita_o_bump_que_ficou_na_branch_sem_pular_versao
 
     c.ver_pr = ver_com_ci_vermelho_na_primeira
     assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
-    head_com_bump = git(c.remoto, "rev-parse", "feature")
-    # o CI do bump ficou verde depois (flaky corrigido); o PR segue com o bump
+    head_com_a_main = git(c.remoto, "rev-parse", "feature")
+    # o CI ficou verde depois (flaky corrigido); o PR segue com a main trazida
     vermelho["ligado"] = False
     c.ci_vermelho.clear()
-    c.pr["headRefOid"] = head_com_bump
+    c.pr["headRefOid"] = head_com_a_main
 
     assert rodar_main(fo, monkeypatch, c) == 0
 
-    assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.10.1"
-    assert c.merges[0]["head"] == head_com_bump, "nenhum segundo commit de bump"
+    assert c.merges[0]["head"] == head_com_a_main
+    assert c.tags == [("refs/tags/v0.10.1", c.merges[0]["main"])]
+    assert all("--value 0.10.1 " in li for li in c.coolify()), c.coolify()
 
 
 def test_onda_entra_por_um_pr_de_entrega_que_fecha_as_issues_do_lote(tmp_path, monkeypatch):
@@ -676,6 +709,10 @@ def test_onda_entra_por_um_pr_de_entrega_que_fecha_as_issues_do_lote(tmp_path, m
     assert len(fechar) == 1 and f"#{entrega['pr']}" in " ".join(fechar[0]), fechar
     assert git(c.remoto, "show", f"{entrega['main']}:hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
     assert c.builds == ["backend"]
+    # APP_VERSION nos dois apps antes do merge da entrega, tag no squash dela
+    assert c.coolify() == [f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
+                           f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}"]
+    assert c.tags == [("refs/tags/v0.10.1", entrega["main"])]
 
 
 def test_onda_com_ci_vermelho_fecha_o_pr_de_entrega_e_a_rodada_seguinte_entra(
@@ -877,8 +914,9 @@ def test_fechamento_de_ferramenta_so_faz_merge_sem_coolify_nem_registro(
     # sem bump: a versão do app é a da base
     assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.10.0"
     assert "chore(release)" not in git(c.remoto, "log", "--format=%s", f"{c.base}..{c.merges[0]['head']}")
-    # coolify falso sem nenhuma chamada: nem APP_VERSION, nem deploy forçado
-    assert c.coolify() == []
+    # coolify falso sem nenhuma chamada: nem APP_VERSION, nem deploy forçado;
+    # e sem versão nova, sem tag
+    assert c.coolify() == [] and c.tags == []
     assert c.builds == [] and c.healths == []
     # nenhum PR de registro: o único POST de PR é o de entrega da onda
     abertos = [a for a in c.gh_chamadas if a[:4] == ["api", "-X", "POST", "repos/{owner}/{repo}/pulls"]]
@@ -905,9 +943,12 @@ def test_pr_misto_de_ferramenta_e_frontend_segue_o_fluxo_de_app(tmp_path, monkey
 
     assert rodar_main(fo, monkeypatch, c) == 0
 
-    # o fluxo de hoje: bump, APP_VERSION antes do merge, build, health e registro
-    assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.11.0"
-    assert c.coolify() == [f"app env update uuid-backend APP_VERSION --value 0.11.0 | main={c.base}"]
+    # o fluxo de app: versão nova sem commit, APP_VERSION nos dois apps antes do
+    # merge, tag, build, health e registro
+    assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.10.0"
+    assert c.coolify() == [f"app env update uuid-backend APP_VERSION --value 0.11.0 | main={c.base}",
+                           f"app env update uuid-frontend APP_VERSION --value 0.11.0 | main={c.base}"]
+    assert c.tags == [("refs/tags/v0.11.0", c.merges[0]["main"])]
     assert c.builds == ["frontend"]
     assert [m["pr"] for m in c.merges] == [7, 101] and c.merges[1]["branch"].startswith("registro/")
     entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
