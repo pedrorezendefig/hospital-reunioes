@@ -60,10 +60,11 @@ def test_credencial_de_escrita_so_no_job_que_nao_instala_nada():
     só usa checkout, download do artefato e git."""
     w = workflow()
     assert w["permissions"] == {"contents": "read"}
-    assert set(w["jobs"]) == {"gerar", "commitar"}
-    for nome, job in w["jobs"].items():
-        assert "permissions" not in job, nome
+    # O terceiro job, `avisar`, só escreve em issue (issue #951).
+    assert set(w["jobs"]) == {"gerar", "commitar", "avisar"}
     gerar, commitar = w["jobs"]["gerar"], w["jobs"]["commitar"]
+    for nome, job in (("gerar", gerar), ("commitar", commitar)):
+        assert "permissions" not in job, nome
 
     assert "environment" not in gerar
     assert gerar["steps"][0]["uses"].startswith("actions/checkout@")
@@ -170,6 +171,8 @@ TIRAR_DRAFT_FALSO = """\
 import os, sys
 from pathlib import Path
 Path("chamadas.txt").open("a").write(" ".join(sys.argv[1:]) + "\\n")
+if "--resumo" in sys.argv and os.environ.get("AVISO_DO_DRAFT"):
+    Path(sys.argv[sys.argv.index("--resumo") + 1]).write_text(os.environ["AVISO_DO_DRAFT"])
 sys.exit(int(os.environ.get("SAIDA_DO_DRAFT", "0")))
 """
 
@@ -186,31 +189,76 @@ def arvore_do_draft(tmp_path: Path, prds: list[int]) -> Path:
 
 
 def chamadas(raiz: Path) -> list[str]:
+    """Os `--prd` de cada chamada ao tirar-draft; o `--resumo` aponta para a
+    pasta temporária do runner e é conferido pelo aviso que ele escreve."""
     arq = raiz / "chamadas.txt"
-    return arq.read_text(encoding="utf-8").splitlines() if arq.exists() else []
+    linhas = arq.read_text(encoding="utf-8").splitlines() if arq.exists() else []
+    return [re.sub(r" --resumo \S+", "", linha) for linha in linhas]
+
+
+def rodar_draft(raiz: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """O passo do draft com os arquivos que o runner dá a todo passo."""
+    temp = raiz.parent / "runner-temp"
+    temp.mkdir(exist_ok=True)
+    return rodar("Tirar do draft", raiz, {
+        "RUNNER_TEMP": str(temp),
+        "GITHUB_STEP_SUMMARY": str(raiz.parent / "resumo-do-run.md"),
+        "GITHUB_OUTPUT": str(raiz.parent / "saidas.txt"),
+        **(env or {}),
+    })
+
+
+def resumo_do_run(raiz: Path) -> str:
+    arq = raiz.parent / "resumo-do-run.md"
+    return arq.read_text(encoding="utf-8") if arq.exists() else ""
+
+
+def saidas(raiz: Path) -> dict[str, str]:
+    """O `GITHUB_OUTPUT` lido como o runner lê: `chave=valor`, ou
+    `chave<<FIM` com as linhas até a que é só `FIM`."""
+    arq = raiz.parent / "saidas.txt"
+    linhas = arq.read_text(encoding="utf-8").split("\n") if arq.exists() else []
+    lidas, i = {}, 0
+    while i < len(linhas):
+        chave, sep, valor = linhas[i].partition("=")
+        if "<<" in chave or not sep:
+            chave, _, fim = linhas[i].partition("<<")
+            if not fim:
+                i += 1
+                continue
+            j = linhas.index(fim, i + 1)
+            lidas[chave] = "\n".join(linhas[i + 1:j])
+            i = j + 1
+        else:
+            lidas[chave] = valor
+            i += 1
+    return lidas
 
 
 def test_draft_sai_para_os_prds_do_ultimo_deploy(tmp_path):
     raiz = arvore_do_draft(tmp_path, [963, 646])
-    proc = rodar("Tirar do draft", raiz)
+    proc = rodar_draft(raiz)
     assert proc.returncode == 0, proc.stderr
     assert chamadas(raiz) == ["--prd 963 --prd 646"]
 
 
 def test_ultimo_deploy_sem_prd_nao_chama_o_tirar_draft(tmp_path):
     """PR avulso registra `prds: []`. Sem `--prd` o argparse sai com 2, e o
-    passo não pode confundir isso com o bloqueio do MP4."""
+    passo não pode confundir isso com o bloqueio do MP4. O resumo do run diz
+    isso, e não há aviso para comentar em PRD nenhum."""
     raiz = arvore_do_draft(tmp_path, [])
-    proc = rodar("Tirar do draft", raiz)
+    proc = rodar_draft(raiz)
     assert proc.returncode == 0, proc.stderr
     assert chamadas(raiz) == []
+    assert "nenhuma página a tirar do draft" in resumo_do_run(raiz)
+    assert "aviso" not in saidas(raiz)
 
 
 def test_bloqueio_do_mp4_avisa_e_nao_derruba_a_action(tmp_path):
     """Saída 2: o tirar-draft não escreveu nada (o MP4 do Vídeo de tarefa não
     vem no clone, issue #951). A página fica em draft e o snapshot segue."""
     raiz = arvore_do_draft(tmp_path, [963])
-    proc = rodar("Tirar do draft", raiz, {"SAIDA_DO_DRAFT": "2"})
+    proc = rodar_draft(raiz, {"SAIDA_DO_DRAFT": "2"})
     assert proc.returncode == 0, proc.stderr
     assert "::warning::" in proc.stdout
     assert chamadas(raiz) == ["--prd 963"]
@@ -218,8 +266,129 @@ def test_bloqueio_do_mp4_avisa_e_nao_derruba_a_action(tmp_path):
 
 def test_pasta_errada_do_manual_derruba_a_action(tmp_path):
     raiz = arvore_do_draft(tmp_path, [963])
-    proc = rodar("Tirar do draft", raiz, {"SAIDA_DO_DRAFT": "1"})
+    proc = rodar_draft(raiz, {"SAIDA_DO_DRAFT": "1"})
     assert proc.returncode == 1
+
+
+# O que o `tirar_draft_manual.py --resumo` escreve quando a página com Vídeo
+# de tarefa fica em draft (o formato é dele; aqui só importa que passe inteiro).
+AVISO = ("## Manual do PRD #963\n\nFicaram em draft:\n- `ouvidoria/registrar.mdx`\n\n"
+         "Próximo passo: rode `/manual publicar` da sua máquina.\n")
+
+
+@pytest.mark.parametrize("saida_do_draft", ["0", "2"], ids=["saiu-do-draft", "ficou-em-draft"])
+def test_aviso_do_manual_vai_para_o_resumo_do_run_e_para_o_job_que_comenta(tmp_path, saida_do_draft):
+    """Issue #951: a Action não publica. Ela diz no run o que saiu e o que
+    ficou em draft, e passa o aviso, os PRDs e a versão ao job `avisar`."""
+    raiz = arvore_do_draft(tmp_path, [963, 646])
+    proc = rodar_draft(raiz, {"SAIDA_DO_DRAFT": saida_do_draft, "AVISO_DO_DRAFT": AVISO})
+    assert proc.returncode == 0, proc.stderr
+    assert AVISO in resumo_do_run(raiz)
+    assert saidas(raiz) == {"prds": "963 646", "versao": "0.2.0", "aviso": AVISO.rstrip("\n")}
+
+
+def test_sem_pagina_em_draft_nao_ha_aviso_para_comentar(tmp_path):
+    raiz = arvore_do_draft(tmp_path, [963])
+    proc = rodar_draft(raiz)
+    assert proc.returncode == 0, proc.stderr
+    assert "aviso" not in saidas(raiz)
+
+
+# ------------------------------------------------- o aviso no PRD (#951)
+
+GH_FALSO = """\
+#!/usr/bin/env python3
+# O gh de mentira: o estado e os comentários de cada issue moram em arquivos
+# ao lado dele; o comentário novo é acrescentado ao arquivo da issue.
+import sys
+from pathlib import Path
+pasta = Path(__file__).parent
+args = sys.argv[1:]
+n = args[2]
+comentarios = pasta / f"comentarios-{n}.txt"
+if args[:2] == ["issue", "view"] and "state" in args:
+    print((pasta / f"estado-{n}.txt").read_text())
+elif args[:2] == ["issue", "view"] and "comments" in args:
+    print(comentarios.read_text() if comentarios.exists() else "")
+elif args[:2] == ["issue", "comment"]:
+    if "--body-file" in args:
+        arquivo = args[args.index("--body-file") + 1]
+        corpo = sys.stdin.read() if arquivo == "-" else Path(arquivo).read_text()
+    else:
+        corpo = args[args.index("--body") + 1]
+    (pasta / f"novos-{n}.txt").open("a").write(corpo + "\\0")
+    with comentarios.open("a") as f:
+        f.write(corpo + "\\n")
+else:
+    sys.exit(f"gh inesperado: {args}")
+"""
+
+
+def github_de_brinquedo(tmp_path: Path, estados: dict[int, str]) -> Path:
+    pasta = tmp_path / "gh"
+    pasta.mkdir()
+    (pasta / "gh").write_text(GH_FALSO, encoding="utf-8")
+    (pasta / "gh").chmod(0o755)
+    for n, estado in estados.items():
+        (pasta / f"estado-{n}.txt").write_text(estado, encoding="utf-8")
+    return pasta
+
+
+def avisar(tmp_path: Path, gh: Path, prds: str, versao: str = "0.2.0") -> subprocess.CompletedProcess:
+    """O passo do job `avisar`, com as saídas do `gerar` no ambiente."""
+    cwd = tmp_path / f"avisar-{versao}"
+    cwd.mkdir(exist_ok=True)
+    return rodar("Comentar", cwd, {"PATH": f"{gh}{os.pathsep}{os.environ['PATH']}",
+                                   "AVISO": AVISO.rstrip("\n"), "PRDS": prds, "VERSAO": versao},
+                 job="avisar")
+
+
+def novos(gh: Path, n: int) -> list[str]:
+    arq = gh / f"novos-{n}.txt"
+    return arq.read_text(encoding="utf-8").split("\0")[:-1] if arq.exists() else []
+
+
+def test_prd_fechado_ganha_o_aviso_marcado_como_automacao(tmp_path):
+    """Só o PRD fechado: o aberto ainda tem fatia por vir. A primeira linha
+    `<!-- automacao -->` é o que impede a Action de higiene de tomar o aviso
+    por comentário de revisor."""
+    gh = github_de_brinquedo(tmp_path, {963: "CLOSED", 646: "OPEN"})
+    proc = avisar(tmp_path, gh, "963 646")
+    assert proc.returncode == 0, proc.stderr
+    [comentario] = novos(gh, 963)
+    assert comentario.splitlines()[0] == "<!-- automacao -->"
+    assert AVISO.rstrip("\n") in comentario
+    assert novos(gh, 646) == []
+
+
+def test_aviso_sai_uma_vez_por_deploy(tmp_path):
+    """A Action roda em todo push na `main`, e a página com vídeo segue em
+    draft até alguém publicar: sem a trava, cada merge comentaria de novo."""
+    gh = github_de_brinquedo(tmp_path, {963: "CLOSED"})
+    for _ in range(2):
+        assert avisar(tmp_path, gh, "963").returncode == 0
+    assert len(novos(gh, 963)) == 1
+    assert avisar(tmp_path, gh, "963", versao="0.3.0").returncode == 0
+    assert len(novos(gh, 963)) == 2
+
+
+def test_o_job_que_comenta_so_escreve_em_issue_e_nao_roda_codigo_do_repo():
+    """O `GITHUB_TOKEN` com `issues: write` fica num job sem checkout e sem
+    instalação. O aviso vem do passo do draft, que roda antes do `uv sync`:
+    pacote de terceiros não escreve no PRD."""
+    w = workflow()
+    job = w["jobs"]["avisar"]
+    assert job["permissions"] == {"issues": "write"}
+    assert set(job["needs"]) == {"gerar", "commitar"}
+    assert job["if"] == ("${{ !cancelled() && needs.commitar.result == 'success'"
+                         " && needs.gerar.outputs.aviso != '' }}")
+    assert all("uses" not in p for p in job["steps"])
+    comentar = passo("Comentar", "avisar")
+    assert "${{" not in comentar["run"]
+    draft = passo("Tirar do draft")["id"]
+    for chave, var in (("aviso", "AVISO"), ("prds", "PRDS"), ("versao", "VERSAO")):
+        assert w["jobs"]["gerar"]["outputs"][chave] == f"${{{{ steps.{draft}.outputs.{chave} }}}}"
+        assert comentar["env"][var] == f"${{{{ needs.gerar.outputs.{chave} }}}}"
 
 
 SNAPSHOT_FALSO = """\

@@ -6,12 +6,19 @@ name: Pós-merge
 # docs/ARQUITETURA.md) e o draft das páginas do Manual saem daqui, com o
 # ambiente completo do backend.
 #
-# Dois jobs (ADR 0065). O `gerar` instala o backend e roda os scripts, sem
+# Três jobs (ADR 0065). O `gerar` instala o backend e roda os scripts, sem
 # credencial nenhuma: token só de leitura, que nem fica no .git/config. O
 # `commitar` não instala nada: recebe por artefato só o patch dos três
 # caminhos e empurra direto na main com a deploy key, o único ator em
 # `bypass_actors` do ruleset (.github/rulesets/main.json). A chave vive num
 # secret do Environment `pos-merge`, restrito à branch main.
+#
+# A Action não publica o Manual (issue #951): o MP4 do Vídeo de tarefa não vem
+# no clone e a Vercel não tem token aqui. Quem põe no ar é o humano, com
+# `/manual publicar` da máquina que tem os MP4. A Action avisa: o resumo do run
+# diz o que saiu e o que ficou em draft, e o terceiro job, `avisar`, comenta no
+# PRD fechado. Ele só tem `issues: write`, não faz checkout nem instala nada, e
+# o aviso que ele publica sai do passo do draft, que roda antes do `uv sync`.
 on:
   push:
     branches: [main]
@@ -45,6 +52,12 @@ jobs:
       SUPABASE_URL: http://localhost:54321
       SUPABASE_SERVICE_ROLE_KEY: dummy-key-for-ci
       ENVIRONMENT: ci
+    # O aviso do Manual para o job `avisar`. Saída de passo é gravada quando o
+    # passo termina: o que roda depois (o uv sync) não a reescreve.
+    outputs:
+      aviso: ${{ steps.draft.outputs.aviso }}
+      prds: ${{ steps.draft.outputs.prds }}
+      versao: ${{ steps.draft.outputs.versao }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -68,26 +81,41 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y ffmpeg
 
       - name: Tirar do draft as páginas do último deploy
+        id: draft
         # Os PRDs do deploy mais recente do history.json (ADR 0057: só sai do
         # draft o que está em produção). PR avulso registra prds vazio, e sem
         # --prd o argparse sairia com 2: lista vazia pula o passo. Saída 2 do
         # tirar-draft é bloqueio sem escrever nada (o MP4 do Vídeo de tarefa
         # não vem no clone, issue #951): a página fica em draft, a Action avisa
-        # e segue para o snapshot.
+        # e segue para o snapshot. O --resumo só existe com página em draft do
+        # PRD: sem ele, não há aviso nem comentário.
         run: |
-          prds="$(python3 -c 'import json; print(" ".join(str(n) for n in json.load(open("docs/spec/deploy/history.json"))["deploys"][0]["prds"]))')"
+          ultimo='import json; d = json.load(open("docs/spec/deploy/history.json"))["deploys"][0]'
+          prds="$(python3 -c "$ultimo; print(*d['prds'])")"
+          versao="$(python3 -c "$ultimo; print(d['app_version'])")"
           if [ -z "$prds" ]; then
-            echo "O último deploy não traz PRD: nenhuma página a tirar do draft."
+            echo "O último deploy não traz PRD: nenhuma página a tirar do draft." | tee -a "$GITHUB_STEP_SUMMARY"
             exit 0
           fi
           args=""
           for n in $prds; do args="$args --prd $n"; done
+          aviso="$RUNNER_TEMP/aviso-manual.md"
           set +e
-          python3 tools/tirar_draft_manual.py $args
+          python3 tools/tirar_draft_manual.py $args --resumo "$aviso"
           status=$?
           set -e
+          if [ -s "$aviso" ]; then
+            cat "$aviso" >> "$GITHUB_STEP_SUMMARY"
+            {
+              echo "prds=$prds"
+              echo "versao=$versao"
+              echo "aviso<<FIM_DO_AVISO"
+              cat "$aviso"
+              echo "FIM_DO_AVISO"
+            } >> "$GITHUB_OUTPUT"
+          fi
           if [ "$status" -eq 2 ]; then
-            echo "::warning::O draft dos PRDs $prds ficou como está; a saída acima diz o que falta (Vídeo de tarefa sem MP4 no clone: issue #951)."
+            echo "::warning::O draft dos PRDs $prds ficou como está; o resumo do run diz o que falta, e quem tira é o /manual publicar (issue #951)."
             exit 0
           fi
           exit "$status"
@@ -217,3 +245,44 @@ jobs:
           git commit -q -m "chore(spec): snapshot e draft do Manual pós-merge $(git rev-parse --short HEAD) [skip ci]"
           git pull --rebase -q origin main
           git push -q origin HEAD:main
+
+  avisar:
+    name: Avisar no PRD o que falta no Manual
+    needs: [gerar, commitar]
+    # Depois do commit: o "saiu do draft" do aviso só é verdade com o draft na
+    # main. Sem página em draft do PRD, não há aviso e o job nem sobe.
+    if: ${{ !cancelled() && needs.commitar.result == 'success' && needs.gerar.outputs.aviso != '' }}
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+    steps:
+      - name: Comentar no PRD fechado
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          AVISO: ${{ needs.gerar.outputs.aviso }}
+          PRDS: ${{ needs.gerar.outputs.prds }}
+          VERSAO: ${{ needs.gerar.outputs.versao }}
+        # Só o PRD fechado: o aberto ainda tem fatia por vir. A Action roda em
+        # todo push na main e a página com vídeo fica em draft até alguém
+        # publicar: a marca da versão deixa um aviso por PRD e por deploy. A
+        # primeira linha é a marca de automação, que a Action de higiene não
+        # toma por comentário de revisor. Os comentários vão para uma variável,
+        # e não para um grep -q no pipe: com pipefail o grep que sai cedo
+        # derruba o gh e o aviso sairia de novo.
+        run: |
+          marca="<!-- aviso-manual v$VERSAO -->"
+          for n in $PRDS; do
+            if [ "$(gh issue view "$n" --json state --jq .state)" != "CLOSED" ]; then
+              echo "PRD #$n segue aberto: o aviso fica só no resumo do run."
+              continue
+            fi
+            comentarios="$(gh issue view "$n" --json comments --jq '.comments[].body')"
+            case "$comentarios" in
+              *"$marca"*)
+                echo "PRD #$n já tem o aviso do deploy v$VERSAO."
+                continue
+                ;;
+            esac
+            printf '<!-- automacao -->\n%s\n\n%s\n' "$marca" "$AVISO" | gh issue comment "$n" --body-file -
+          done
