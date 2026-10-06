@@ -133,8 +133,21 @@ jobs:
         run: ruff check .
       - name: Format check (ruff)
         run: ruff format --check .
-      - name: Tests (pytest)
-        run: pytest --maxfail=3 -q --no-header
+      - name: Tests (pytest, em paralelo)
+        # pytest-xdist, um worker por CPU (issue #971). O que tem o marcador
+        # `rodar_sozinho` fica para o passo de baixo. Nenhum retry: teste que
+        # falha só em paralelo ganha o marcador, não uma segunda tentativa.
+        run: pytest -n auto -m "not rodar_sozinho" --maxfail=3 -q --no-header
+      - name: Tests (pytest, rodar sozinho)
+        # A lista do marcador `rodar_sozinho`, em série. Sem teste marcado o
+        # pytest sai com 5 (nada coletado): lista vazia é o estado bom, então
+        # só o 5 vira verde; qualquer outro código reprova.
+        run: |
+          set +e
+          pytest -m rodar_sozinho --maxfail=3 -q --no-header
+          codigo=$?
+          if [ "$codigo" -eq 5 ]; then exit 0; fi
+          exit "$codigo"
 
   frontend-lint:
     name: Frontend Lint & Type Check
