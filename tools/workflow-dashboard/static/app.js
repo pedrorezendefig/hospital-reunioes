@@ -513,8 +513,8 @@ function issueCard(i, idx, prd = false) {
     pessoasDoCard(i),
     `<span class="chip">${idadeTxt(i)}</span>`,
     i.criteria.total ? `<span class="chip" title="critérios de aceite">✓ ${i.criteria.done}/${i.criteria.total}</span>` : '',
-    fs && fs.pr ? `<a class="chip" href="${prUrl(fs.pr)}" target="_blank" rel="noopener">PR #${fs.pr}</a>` : '',
-    fs && fs.versao ? `<span class="chip chip-versao">${esc(depVer(fs.versao))}</span>` : '',
+    fs && fs.pr ? `<a class="chip" href="${montarHash({ aba: 'prs', item: fs.pr })}">PR #${fs.pr}</a>` : '',
+    fs && fs.versao ? `<a class="chip chip-versao" href="${esc(montarHash({ aba: 'producao', item: depVer(fs.versao) }))}">${esc(depVer(fs.versao))}</a>` : '',
   ].filter(Boolean).join('');
 
   return `
@@ -536,7 +536,7 @@ function issueCard(i, idx, prd = false) {
         ${commentsHtml(i.number)}
       </div>` : ''}
     </div>
-    <a class="nrow-go" href="${issUrl(i.number)}" target="_blank" rel="noopener" aria-label="abrir a issue #${i.number} no GitHub"><span class="nrow-arrow">→</span></a>
+    <a class="nrow-go" href="${issUrl(i.number)}" target="_blank" rel="noopener" aria-label="abrir a issue #${i.number} no GitHub"><span class="nrow-arrow">↗</span></a>
   </article>`;
 }
 
@@ -650,7 +650,8 @@ async function ensureTimeline(n) {
 function renderPrs() {
   return `
   ${cabecalho('acompanhar', 'PRs', 'quadro por fase, uma raia por pessoa')}
-  <div class="empty rv">em construção: o quadro dos PRs por fase chega na próxima fatia do Hospital OS</div>`;
+  <div class="empty rv">em construção: o quadro dos PRs por fase chega na próxima fatia do Hospital OS</div>
+  ${S.item ? `<a class="ghlink rv" href="${prUrl(esc(S.item))}" target="_blank" rel="noopener">abrir o PR #${esc(S.item)} no GitHub ↗</a>` : ''}`;
 }
 
 /* ---------- DEPLOYS ---------- */
@@ -668,12 +669,12 @@ function deployCard(dp, idx) {
   const chipsResumo = [
     `<span class="badge ${ok ? 'b-green' : 'b-red'}">${esc(dp.result || '?')}</span>`,
     ...(dp.migrations_applied || []).map(m => `<span class="badge b-amber">⛁ ${esc(m)}</span>`),
-    ...(dp.pr_numbers || []).map(n => `<a class="chip" href="${prUrl(n)}" target="_blank" rel="noopener">PR #${n}</a>`),
-    ...(dp.issue_numbers || []).map(n => `<a class="chip" href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`),
+    ...(dp.pr_numbers || []).map(n => `<a class="chip" href="${montarHash({ aba: 'prs', item: n })}">PR #${n}</a>`),
+    ...(dp.issue_numbers || []).map(n => `<a class="chip" href="${montarHash({ aba: 'issues', item: n })}">#${n}</a>`),
     dp.rollback_target_sha ? `<span class="badge b-amber">rollback → ${esc(dp.rollback_target_sha)}</span>` : '',
   ].filter(Boolean).join('');
   const chipsTech = [
-    dp.sha ? `<a class="chip" href="${shaUrl(dp.sha)}" target="_blank" rel="noopener">${esc(dp.sha)}</a>` : '',
+    dp.sha ? `<span class="chip">${esc(dp.sha)}</span>` : '',
     ...(dp.scope || []).map(s => `<span class="chip">${esc(s)}</span>`),
   ].filter(Boolean).join('');
 
@@ -684,6 +685,7 @@ function deployCard(dp, idx) {
         <span class="pd-ver ${dp.app_version ? '' : 'unversioned'}">${dp.app_version ? esc(depVer(dp.app_version)) : esc(dp.sha || '·')}</span>
         <span class="pd-subject">${esc(dp.subject || dp.raw_subject || '')}</span>
         <span class="pd-when">${esc(fmtDT(dp.at))}</span>
+        ${dp.sha ? `<a class="pd-gh" href="${shaUrl(esc(dp.sha))}" target="_blank" rel="noopener" aria-label="abrir o commit ${esc(dp.sha)} no GitHub">↗</a>` : ''}
       </div>
       <div class="pd-chips">${chipsResumo}</div>
       ${dp.duration_seconds ? `

@@ -321,3 +321,82 @@ def test_abrir_com_hash_de_versao_expande_o_deploy_com_destaque(tmp_path):
     (novo_em_destaque, novo), (velho_em_destaque, velho) = _cards(html)
     assert velho_em_destaque and "pd-body" in velho and "def5678" in velho
     assert not novo_em_destaque and "pd-body" not in novo
+
+
+# ---------- chips navegam dentro do painel ----------
+
+
+def _chips(html):
+    """{texto: href} de cada chip que é link."""
+    return {
+        m.group(2): m.group(1)
+        for m in re.finditer(r'<a class="chip[^"]*" href="([^"]*)"[^>]*>([^<]*)</a>', html)
+    }
+
+
+@com_node
+def test_chips_de_issue_pr_e_versao_apontam_para_o_hash_de_cada_um(tmp_path):
+    producao, aberta, em_producao = _app(
+        tmp_path,
+        "[_view.innerHTML, issueCard(S.data.github.issues[2], 0), issueCard(S.data.github.issues[3], 0)]",
+        hash_inicial="#producao",
+    )
+    assert _chips(producao) == {"PR #70": "#prs/70", "#904": "#issues/904", "PR #69": "#prs/69", "#903": "#issues/903"}
+    assert _chips(aberta) == {"PR #77": "#prs/77"}
+    assert _chips(em_producao) == {"PR #70": "#prs/70", "v0.163.4": "#producao/v0.163.4"}
+
+
+@com_node
+def test_chip_de_issue_abre_o_card_certo_na_aba_issues_com_destaque(tmp_path):
+    tab, html = _app(tmp_path, "[S.tab, _view.innerHTML]", hash_inicial="#producao", antes="_navegar('#issues/904');")
+    assert tab == "issues"
+    em_destaque, card = _card(html, 904)
+    assert em_destaque and "corpo da 904" in card
+
+
+@com_node
+def test_chip_de_pr_e_de_versao_levam_a_aba_e_ao_item_do_hash(tmp_path):
+    no_pr, na_versao = _app(
+        tmp_path,
+        "[_noPr, [S.tab, S.item, _cards(_view.innerHTML)]]",
+        hash_inicial="#issues",
+        antes="""
+        _navegar('#prs/77'); const _noPr = [S.tab, S.item, _view.innerHTML];
+        _navegar('#producao/v0.163.4');
+        const _cards = h => [...h.matchAll(/<article[^>]*>/g)].map(m => m[0].includes('aria-current="true"'));
+        """,
+    )
+    assert no_pr[:2] == ["prs", "77"]
+    assert "#77" in no_pr[2]
+    assert na_versao == ["producao", "v0.163.4", [True, False]]
+
+
+# ---------- o GitHub é o ↗ de cada card, nunca o chip ----------
+
+
+@com_node
+def test_todo_card_de_issue_tem_o_link_do_github_e_nenhum_chip_abre_o_github(tmp_path):
+    issues, producao = _app(
+        tmp_path,
+        "[_issues, _view.innerHTML]",
+        hash_inicial="#issues",
+        antes="""
+        _clicar({ act: 'prd', n: '900', open: '0' });
+        [900, 901, 902, 904, 910].forEach(n => _clicar({ act: 'iss', n: String(n) }));
+        const _issues = _els['#ilist'].innerHTML;  // card clicado redesenha só a lista
+        _navegar('#producao'); _clicar({ act: 'dep', i: '0' }); _clicar({ act: 'dep', i: '1' });
+        """,
+    )
+    for n in (900, 901, 902, 904, 910):
+        card = _card(issues, n)[1]
+        gh = re.findall(r'<a class="nrow-go" href="([^"]+)"[^>]*>([\s\S]*?)</a>', card)
+        assert len(gh) == 1, f"#{n} sem o link do GitHub"
+        href, conteudo = gh[0]
+        assert href == f"https://github.com/x/y/issues/{n}" and "↗" in conteudo
+    chips = re.findall(r'<a class="chip[^"]*" href="([^"]*)"', issues + producao)
+    assert len(chips) >= 7
+    assert all(h.startswith("#") for h in chips), f"chip para fora do painel: {chips}"
+    # o deploy também leva o ↗, para o commit; o sha segue visível como texto
+    for sha in ("abc1234", "def5678"):
+        assert re.search(rf'<a class="pd-gh" href="https://github.com/x/y/commit/{sha}"[^>]*>↗</a>', producao)
+        assert f'<span class="chip">{sha}</span>' in producao
