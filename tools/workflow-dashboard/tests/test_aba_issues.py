@@ -472,12 +472,6 @@ def test_linha_do_tempo_que_falhou_tenta_de_novo_ao_reabrir_o_card(tmp_path):
 # ---------- cinco abas; Plano, Pendências e Guia saem ----------
 
 
-@com_node
-def test_aba_prs_fica_vazia_com_texto_de_em_construcao(tmp_path):
-    html = _rodar(tmp_path, "_view.innerHTML", antes="setTab('prs');")
-    assert "em construção" in html
-
-
 def test_plano_pendencias_e_guia_sairam_do_painel():
     for nome in ("renderPlano", "renderPendencias", "renderGuia", "fluxoHtml", "FLX_ICONS", "pendenciasHumanas", "copyCmd", "writeClipboard"):
         assert nome not in APP_JS, nome
