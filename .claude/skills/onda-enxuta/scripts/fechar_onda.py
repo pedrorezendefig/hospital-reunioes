@@ -46,8 +46,9 @@ Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
      no squash, pela API (tag que falha nao para o deploy)
   9. monitorar o build de cada service (webhook), forcar se nao disparar
  10. health com version match. Health ruim: rollback automatico (issue #968),
-     cada app do lote volta a imagem anterior no Coolify (`coolify app rollback
-     images` e `rollback run`, sem forcar build) e o APP_VERSION antigo volta aos
+     cada app do lote volta a imagem anterior no Coolify, a que estava no ar
+     antes do merge (`current` do `coolify app rollback images`, lida antes do
+     merge, e `rollback run`, sem forcar build) e o APP_VERSION antigo volta aos
      apps, antes da imagem subir; o health e conferido de novo na versao antiga
  11. registro num PR so de docs, so com history.json (todos os deploys, sem
      teto) e state.json (ADR 0062, decisao 9), mergeado pela API; o build que o
@@ -787,18 +788,13 @@ def cancelar_build_do_registro(servicos_cfg: dict, sha: str) -> list[str]:
 
 # ----------------------------------------------------------------- rollback
 
-def imagem_anterior(uuid: str, sha_ruim: str) -> str | None:
-    """A imagem mais nova do app no Coolify que nao e a do merge ruim (issue
-    #968). Se o build ruim nem virou a imagem no ar, devolve a que esta no ar: o
-    rollback so a reinicia, com o APP_VERSION antigo."""
+def imagem_no_ar(uuid: str) -> str | None:
+    """A imagem que o app roda agora (`current` do Coolify), lida antes do merge:
+    e para ela que o rollback volta (issue #968). A mais nova da lista nao serve:
+    a imagem ruim que um rollback anterior tirou do ar segue la, mais nova."""
     dado = coolify_json(["app", "rollback", "images", uuid])
-    imagens = dado.get("images") if isinstance(dado, dict) else None
-    imagens = [i for i in imagens or [] if isinstance(i, dict) and i.get("tag")]
-    for img in sorted(imagens, key=lambda i: str(i.get("created_at") or ""), reverse=True):
-        tag = str(img["tag"])
-        if not (tag.startswith(sha_ruim) or sha_ruim.startswith(tag)):
-            return tag
-    return None
+    atual = dado.get("current") if isinstance(dado, dict) else None
+    return str(atual) if atual else None
 
 
 def ids_de_deploy(uuid: str) -> set[str]:
@@ -821,16 +817,17 @@ def esperar_rollback(service: dict, antes: set[str]) -> str:
         time.sleep(BUILD_POLL_S)
 
 
-def reverter(servicos_cfg: dict, servicos: list[str], sha_ruim: str, versao_antiga: str | None,
+def reverter(servicos_cfg: dict, servicos: list[str], alvos: dict[str, str | None], versao_antiga: str | None,
              com_app_version: list[str]) -> tuple[bool, str]:
-    """Rollback automatico (issue #968): cada app do lote volta a imagem anterior
-    no Coolify, o APP_VERSION antigo volta aos apps em que o rabo o trocou e o
-    health e conferido de novo. Devolve (deu certo, o que aconteceu)."""
+    """Rollback automatico (issue #968): cada app do lote volta a imagem que
+    estava no ar antes do merge (`alvos`, de `imagem_no_ar`), o APP_VERSION
+    antigo volta aos apps em que o rabo o trocou e o health e conferido de novo.
+    Devolve (deu certo, o que aconteceu)."""
     try:
-        alvos = {sid: imagem_anterior(servicos_cfg[sid]["uuid"], sha_ruim) for sid in servicos}
+        alvos = {sid: alvos.get(sid) for sid in servicos}
         sem = [sid for sid, alvo in alvos.items() if not alvo]
         if sem:
-            return False, "sem imagem anterior no Coolify para " + ", ".join(sem)
+            return False, "sem imagem anterior no Coolify (lida antes do merge) para " + ", ".join(sem)
         # antes de subir a imagem: o backend le o APP_VERSION no start do container
         for sid in com_app_version:
             setar_app_version(servicos_cfg[sid]["uuid"], versao_antiga)
@@ -1085,6 +1082,8 @@ def main() -> int:
             titulo = f"{titulo} (#{pr_entrega})"
         print(f"entrega: PR #{pr_entrega} com CI verde no head {head[:8]}")
 
+        # a imagem no ar antes do merge e o alvo de um rollback (issue #968)
+        no_ar = {sid: imagem_no_ar(servicos_cfg[sid]["uuid"]) for sid in servicos}
         com_app_version = setar_app_version_nos_apps(servicos_cfg, versao_nova) if versao_nova else []
 
         t_merge = time.time()
@@ -1142,7 +1141,7 @@ def main() -> int:
         ruins = [f"{sid}: {linha_de_health(h)}" for sid, h in healths.items() if not h["ok"]]
         if ruins:
             print("health: " + "; ".join(ruins))
-            voltou, como = reverter(servicos_cfg, servicos, sha_main, versao_antiga if versao_nova else None,
+            voltou, como = reverter(servicos_cfg, servicos, no_ar, versao_antiga if versao_nova else None,
                                     com_app_version)
             if not voltou:
                 print(f"rollback: falhou, {como}. Semaforo preso na chave {args.sessao}: rode `/deploy rollback` com ela.")

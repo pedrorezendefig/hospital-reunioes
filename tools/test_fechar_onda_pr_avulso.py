@@ -192,8 +192,7 @@ class Cenario:
         bin_falso = tmp_path / "bin"
         bin_falso.mkdir()
         self.log_coolify = tmp_path / "coolify.log"
-        # o que o `coolify app rollback images` devolve por app (issue #968):
-        # `@main@` vira a main da hora, a imagem que o build do merge deixou no ar
+        # o que o `coolify app rollback images` devolve por app (issue #968)
         self.dir_coolify = tmp_path / "coolify-dados"
         self.dir_coolify.mkdir()
         coolify = bin_falso / "coolify"
@@ -203,8 +202,7 @@ class Cenario:
             f'echo "$* | main=$main" >> {self.log_coolify}\n'
             'case "$1 $2 $3" in\n'
             '  "app rollback images")\n'
-            f'    [ -f "{self.dir_coolify}/imagens-$4.json" ] && '
-            f'sed "s/@main@/$main/g" "{self.dir_coolify}/imagens-$4.json" ;;\n'
+            f'    [ -f "{self.dir_coolify}/imagens-$4.json" ] && cat "{self.dir_coolify}/imagens-$4.json" ;;\n'
             '  "app rollback run")\n'
             f'    [ -f "{self.dir_coolify}/rollback-recusado" ] && exit 1 ;;\n'
             "esac\n"
@@ -216,14 +214,16 @@ class Cenario:
         self.home = tmp_path / "home"
         self.home.mkdir()
 
-    def imagens_no_coolify(self, uuid: str, anteriores: list[str]) -> None:
+    def imagens_no_coolify(self, uuid: str, no_ar: str | None, revertidas: tuple[str, ...] = ()) -> None:
         """Lista do `coolify app rollback images`, no formato real (conferido em
-        06/10/2026): a imagem do merge no ar e as anteriores, mais nova primeiro."""
-        imagens = [{"created_at": "2026-10-06 04:26:37 +0000 UTC", "is_current": True, "tag": "@main@"}]
-        imagens += [{"created_at": f"2026-10-05 2{9 - i}:00:00 +0000 UTC", "is_current": False, "tag": tag}
-                    for i, tag in enumerate(anteriores)]
+        06/10/2026), como o rabo a le ANTES do merge: a imagem no ar e, mais novas
+        que ela, as que um rollback anterior tirou do ar."""
+        imagens = [{"created_at": f"2026-10-06 0{5 - i}:00:00 +0000 UTC", "is_current": False, "tag": tag}
+                   for i, tag in enumerate(revertidas)]
+        if no_ar:
+            imagens.append({"created_at": "2026-10-05 22:00:00 +0000 UTC", "is_current": True, "tag": no_ar})
         (self.dir_coolify / f"imagens-{uuid}.json").write_text(
-            json.dumps({"current": "@main@", "images": imagens}), encoding="utf-8")
+            json.dumps({"current": no_ar, "images": imagens}), encoding="utf-8")
 
     def recusar_rollback(self) -> None:
         (self.dir_coolify / "rollback-recusado").write_text("", encoding="utf-8")
@@ -451,6 +451,7 @@ def test_um_pr_so_sem_sessao_faz_merge_bump_app_version_build_health_e_registro(
     # APP_VERSION no backend E no frontend do Coolify, ANTES do merge (a main
     # remota ainda era a base)
     assert c.coolify() == [
+        f"app rollback images uuid-backend --format json | main={c.base}",
         f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
         f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}",
     ]
@@ -727,7 +728,8 @@ def test_rodada_seguinte_a_um_ci_vermelho_sai_na_mesma_versao_sem_pular(
 
     assert c.merges[0]["head"] == head_com_a_main
     assert c.tags == [("refs/tags/v0.10.1", c.merges[0]["main"])]
-    assert all("--value 0.10.1 " in li for li in c.coolify()), c.coolify()
+    app_version = [li for li in c.coolify() if " APP_VERSION " in li]
+    assert app_version and all("--value 0.10.1 " in li for li in app_version), c.coolify()
 
 
 def test_onda_entra_por_um_pr_de_entrega_que_fecha_as_issues_do_lote(tmp_path, monkeypatch):
@@ -747,7 +749,8 @@ def test_onda_entra_por_um_pr_de_entrega_que_fecha_as_issues_do_lote(tmp_path, m
     assert git(c.remoto, "show", f"{entrega['main']}:hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
     assert c.builds == ["backend"]
     # APP_VERSION nos dois apps antes do merge da entrega, tag no squash dela
-    assert c.coolify() == [f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
+    assert c.coolify() == [f"app rollback images uuid-backend --format json | main={c.base}",
+                           f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
                            f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}"]
     assert c.tags == [("refs/tags/v0.10.1", entrega["main"])]
 
@@ -1048,7 +1051,8 @@ def test_pr_misto_de_ferramenta_e_frontend_segue_o_fluxo_de_app(tmp_path, monkey
     # o fluxo de app: versão nova sem commit, APP_VERSION nos dois apps antes do
     # merge, tag, build, health e registro
     assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.10.0"
-    assert c.coolify() == [f"app env update uuid-backend APP_VERSION --value 0.11.0 | main={c.base}",
+    assert c.coolify() == [f"app rollback images uuid-frontend --format json | main={c.base}",
+                           f"app env update uuid-backend APP_VERSION --value 0.11.0 | main={c.base}",
                            f"app env update uuid-frontend APP_VERSION --value 0.11.0 | main={c.base}"]
     assert c.tags == [("refs/tags/v0.11.0", c.merges[0]["main"])]
     assert c.builds == ["frontend"]
@@ -1266,6 +1270,9 @@ def test_rabo_rodado_do_worktree_do_autor_nao_remove_o_proprio_checkout(
 
 IMAGEM_ANTERIOR = "cab8930958d1f89545d688418f37745936cc576f"
 IMAGEM_MAIS_VELHA = "9428a0263e43d81cbbe32891fee5a1af9f5879a2"
+# a imagem de um merge ruim que um rollback anterior tirou do ar: segue na
+# lista do Coolify, mais nova que a do ar
+IMAGEM_REVERTIDA = "be11c0de5a1d0b9a2e3f4c5d6e7f8a9b0c1d2e3f"
 
 
 def coolify_sem_leitura_de_deploys(c: Cenario) -> list[str]:
@@ -1275,13 +1282,15 @@ def coolify_sem_leitura_de_deploys(c: Cenario) -> list[str]:
 def test_health_ruim_volta_a_imagem_anterior_e_o_app_version_antigo_e_sai_com_rollback_feito(
     tmp_path, monkeypatch, capsys
 ):
-    """O backend da v0.10.1 responde 500: o rabo pede ao Coolify a imagem
-    anterior do app do lote, devolve o APP_VERSION v0.10.0 aos dois apps ANTES
-    de subir a imagem (o backend o lê no start do container), confere o health
-    de novo, agora na versão antiga, e solta o semáforo."""
+    """O backend da v0.10.1 responde 500: o rabo volta o app do lote à imagem
+    que estava no ar ANTES do merge (lida antes dele, não a mais nova da lista:
+    a de um rollback anterior é mais nova e tem defeito), devolve o APP_VERSION
+    v0.10.0 aos dois apps ANTES de subir a imagem (o backend o lê no start do
+    container), confere o health de novo, agora na versão antiga, e solta o
+    semáforo."""
     fo = carregar_fechar_onda()
     c = pr_de_codigo(tmp_path)
-    c.imagens_no_coolify("uuid-backend", [IMAGEM_ANTERIOR, IMAGEM_MAIS_VELHA])
+    c.imagens_no_coolify("uuid-backend", IMAGEM_ANTERIOR, revertidas=(IMAGEM_REVERTIDA,))
     c.health_ruim_em.add("0.10.1")
     preparar(fo, monkeypatch, c)
 
@@ -1289,9 +1298,9 @@ def test_health_ruim_volta_a_imagem_anterior_e_o_app_version_antigo_e_sai_com_ro
 
     merge = c.merges[0]["main"]
     assert coolify_sem_leitura_de_deploys(c) == [
+        f"app rollback images uuid-backend --format json | main={c.base}",
         f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
         f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}",
-        f"app rollback images uuid-backend --format json | main={merge}",
         f"app env update uuid-backend APP_VERSION --value 0.10.0 | main={merge}",
         f"app env update uuid-frontend APP_VERSION --value 0.10.0 | main={merge}",
         f"app rollback run uuid-backend --commit {IMAGEM_ANTERIOR} | main={merge}",
@@ -1312,16 +1321,16 @@ def test_health_ruim_volta_a_imagem_anterior_e_o_app_version_antigo_e_sai_com_ro
 
 
 def sem_imagem_anterior(c: Cenario) -> None:
-    c.imagens_no_coolify("uuid-backend", [])
+    c.imagens_no_coolify("uuid-backend", None)
 
 
 def coolify_recusa_o_rollback(c: Cenario) -> None:
-    c.imagens_no_coolify("uuid-backend", [IMAGEM_ANTERIOR])
+    c.imagens_no_coolify("uuid-backend", IMAGEM_ANTERIOR)
     c.recusar_rollback()
 
 
 def health_segue_ruim_na_versao_antiga(c: Cenario) -> None:
-    c.imagens_no_coolify("uuid-backend", [IMAGEM_ANTERIOR])
+    c.imagens_no_coolify("uuid-backend", IMAGEM_ANTERIOR)
     c.health_ruim_em.add("0.10.0")
 
 
@@ -1382,25 +1391,26 @@ def imagem(tag: str, criada: str, no_ar: bool = False) -> dict:
     return {"created_at": f"2026-10-06 {criada} +0000 UTC", "is_current": no_ar, "tag": tag}
 
 
-@pytest.mark.parametrize("imagens, esperada", [
-    # a lista fora de ordem: vale a mais nova que não é a do merge ruim
-    ([imagem(IMAGEM_MAIS_VELHA, "00:37:08"), imagem("f" * 40, "04:26:37", True),
-      imagem(IMAGEM_ANTERIOR, "02:10:00")], IMAGEM_ANTERIOR),
-    # o build ruim nem virou imagem: volta a que está no ar, com o APP_VERSION antigo
-    ([imagem(IMAGEM_ANTERIOR, "02:10:00", True), imagem(IMAGEM_MAIS_VELHA, "00:37:08")], IMAGEM_ANTERIOR),
-    ([imagem("f" * 40, "04:26:37", True)], None),
-], ids=["fora-de-ordem", "build-ruim-sem-imagem", "so-a-ruim"])
-def test_imagem_anterior_e_a_mais_nova_que_nao_e_a_do_merge_ruim(monkeypatch, imagens, esperada):
+@pytest.mark.parametrize("dado, esperada", [
+    # depois de um rollback, a imagem ruim que ele tirou do ar segue na lista,
+    # mais nova que a do ar: vale a `current`, nunca a mais nova
+    ({"current": IMAGEM_ANTERIOR,
+      "images": [imagem(IMAGEM_REVERTIDA, "04:26:37"), imagem(IMAGEM_ANTERIOR, "02:10:00", True),
+                 imagem(IMAGEM_MAIS_VELHA, "00:37:08")]}, IMAGEM_ANTERIOR),
+    ({"current": None, "images": []}, None),
+    (None, None),  # o Coolify não respondeu
+], ids=["revertida-mais-nova", "sem-imagem", "coolify-fora"])
+def test_imagem_no_ar_e_a_current_do_coolify_e_nao_a_mais_nova(monkeypatch, dado, esperada):
     fo = carregar_fechar_onda()
     pedidos = []
 
     def coolify_json(args, timeout=120):
         pedidos.append(args)
-        return {"current": next(i["tag"] for i in imagens if i["is_current"]), "images": imagens}
+        return dado
 
     monkeypatch.setattr(fo, "coolify_json", coolify_json)
 
-    assert fo.imagem_anterior("uuid-backend", "f" * 40) == esperada
+    assert fo.imagem_no_ar("uuid-backend") == esperada
     assert pedidos == [["app", "rollback", "images", "uuid-backend"]]
 
 
