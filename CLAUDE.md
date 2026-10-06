@@ -9,10 +9,17 @@ Todo conteúdo voltado ao time é em **pt-BR**: PRDs, issues (título + corpo), 
 ## Fluxo de trabalho
 Pipeline GitHub-issue-centric (skills do Matt Pocock + deploy próprio). O mapa completo de roteamento (on-ramps, pós-entrega, travessia de sessões, invariantes) vive no router **`/ask-pedro`**. Espinha dorsal:
 - **Planejar:** `/grill-with-docs` (desafia o plano contra o domínio: uma pergunta por vez, com recomendação destacada em cada decisão; atualiza `CONTEXT.md`/ADR) → `/to-prd` → `/to-issues`. Esse estilo vale inclusive sob o plan mode nativo do Claude Code (ele hospeda o fluxo, não o substitui).
-- **Desenvolver:** `/pegar-issue <N>` → `/tdd` → `/ship` (3 gates; gate reprovado chama o `hr-corretor`) → **rabo único** `fechar_onda.py --prs <N>`, que o `/ship` roda sozinho (versão sem commit, `APP_VERSION` e tag, merge pela API, um build, health, registro em PR só de docs; `main` protegida, ADR 0061). Sem parada humana até produção, exceto migration (ADR 0063). **Modo AFK:** `/onda-enxuta` (ADRs 0022 e 0061), mesmo rabo por lote, PR a PR pela API e um build no fim (ADR 0064). Estado de deploy em `docs/spec/deploy/*.json`.
+- **Desenvolver:** `/pegar-issue <N>` → `/tdd` → `/ship` (3 gates; gate reprovado chama o `hr-corretor`) → **rabo único** `fechar_onda.py --prs <N>`, que o `/ship` roda sozinho (versão sem commit, `APP_VERSION` e tag, merge pela API, um build, health, registro; `main` protegida). Sem parada humana até produção, exceto migration. **Modo AFK:** `/onda-enxuta`, mesmo rabo por lote, PR a PR pela API e um build no fim. O fluxo inteiro em uma página: ADR 0068. Estado de deploy em `docs/spec/deploy/*.json`.
 - Criou, renomeou ou apagou skill do pipeline? Atualize o `/ask-pedro` no mesmo commit.
 
 > Roteamento detalhado e o "como fazer" vivem nas **descrições das skills** e no `/ask-pedro`. Mantenha este arquivo mínimo.
+
+## Cultura dos agentes
+- O objetivo é fechar a issue.
+- Uma revisão, só must-fix; sem re-revisão.
+- Nunca parar para perguntar: dúvida vira `ready-for-human` com uma linha de motivo.
+- Sem ADR de ferramenta: decisão de fluxo vai no corpo do PR (ADR 0068).
+- PR de ferramenta com CI verde mergeia sem revisor.
 
 ## Agent skills
 - **Issue tracker:** GitHub Issues via `gh`. Veja `docs/agents/issue-tracker.md` (inclui o protocolo de claim para sessões paralelas).
@@ -32,4 +39,4 @@ Várias sessões Claude Code rodam issues `ready-for-agent` distintas ao mesmo t
 - `docs/spec/deploy/`: contrato e estado de deploy (`project.json` · `state.json` · `history.json`, a timeline de todos os deploys) · `docs/spec/VERSIONING.md`: versão semântica.
 - Layout do repo (o que fica no git, `local/` fora, `docs/comunicacao/`, `references/` nas skills): ADR 0044.
 - `docs/ARQUITETURA.md`: visão de arquitetura com blocos auto-gerados pelo `/snapshot` · `docs/onboarding/`: setup de máquina e fluxo do dia a dia (`/setup-maquina` confere).
-- `docs/manual/`: o **site do Manual do usuário** (Astro Starlight, um endereço só, seções na ordem do menu do app), escrito pela `/manual` e publicado na Vercel. Só entra no ar o que está em produção: a página nasce em `draft` e quem tira é a Action do push da `main` (ADR 0057, emendada pela 0062). Não é doc de estado: quem diz o estado das issues é o GitHub.
+- `docs/manual/`: o **site do Manual do usuário** (Astro Starlight, um endereço só, seções na ordem do menu do app), escrito pela `/manual` e publicado na Vercel. Só entra no ar o que está em produção: a página nasce em `draft` e quem tira é a Action do push da `main` (ADRs 0057 e 0068). Não é doc de estado: quem diz o estado das issues é o GitHub.
