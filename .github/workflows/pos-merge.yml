@@ -262,7 +262,10 @@ jobs:
           # com a entrada do input no topo, as antigas iguais e na mesma
           # ordem, e o state.json do input. O `gerar` roda pacote de terceiros
           # depois de aplicar o registro: a conferência é contra o input, e
-          # não contra o que ele entregou.
+          # não contra o que ele entregou. Token a token (o --stream do jq,
+          # que não junta nada): a igualdade de JSON do jq deixaria passar
+          # chave repetida (fica a última) e um valor a mais no fim do
+          # arquivo, texto que vai cru para a main (PR #1035).
           deploy=docs/spec/deploy
           registro=""
           if ! git diff --cached --quiet -- "$deploy"; then
@@ -270,13 +273,16 @@ jobs:
               echo "::error::O patch muda $deploy num run sem registro (só o run que o rabo dispara traz um): recusado."
               exit 1
             fi
-            if ! jq -e -n \
-                --slurpfile antes <(git show "HEAD:$deploy/history.json") \
-                --slurpfile history <(git show ":$deploy/history.json") \
-                --slurpfile state <(git show ":$deploy/state.json") \
-                '($ENV.REGISTRO | fromjson) as $r
-                 | $history[0] == ($antes[0] | .deploys = [$r.entrada] + .deploys)
-                   and $state[0] == $r.state' > /dev/null; then
+            tokens="$RUNNER_TEMP/registro-tokens"
+            mkdir -p "$tokens"
+            if ! jq -cn --slurpfile antes <(git show "HEAD:$deploy/history.json") \
+                  '$antes[0] | .deploys = [$ENV.REGISTRO | fromjson | .entrada] + .deploys | tostream' \
+                  > "$tokens/history-esperado" \
+                || ! jq -cn '$ENV.REGISTRO | fromjson | .state | tostream' > "$tokens/state-esperado" \
+                || ! git show ":$deploy/history.json" | jq -c --stream . > "$tokens/history" \
+                || ! git show ":$deploy/state.json" | jq -c --stream . > "$tokens/state" \
+                || ! cmp -s "$tokens/history-esperado" "$tokens/history" \
+                || ! cmp -s "$tokens/state-esperado" "$tokens/state"; then
               echo "::error::O history.json ou o state.json do patch não é o registro que o rabo mandou: recusado."
               exit 1
             fi
