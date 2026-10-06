@@ -16,6 +16,7 @@ const GX = 56, GY = 20;      // vão entre colunas (onde correm as setas) e entr
 const ANEL = 4;              // folga do anel da fase em volta do nó
 const TOPO = 26, MARGEM = 8; // faixa dos rótulos das colunas e borda do desenho
 const MAX_TITULO = 21;
+const xDaColuna = c => MARGEM + ANEL + c * (W + GX);
 
 /* seta de uma coluna para a seguinte: um S no vão. Pulando colunas, ela
    desce (ou sobe) no primeiro vão até a faixa livre entre duas linhas de nós
@@ -42,7 +43,7 @@ function tituloCurto(t) {
 
 /* `fases` é a régua [chave, nome, badge] do app.js, para nomear a borda */
 export function renderOndas(prd, dados, fases) {
-  const doPayload = (dados.fases || {});
+  const doPayload = dados.fases || {};
   const ondas = prd.state === 'OPEN' && (doPayload.ondas || {})[prd.number];
   const porN = Object.fromEntries(((dados.github || {}).issues || []).map(i => [i.number, i]));
   const colunas = (ondas || []).map(c => c.filter(n => porN[n])).filter(c => c.length);
@@ -52,14 +53,14 @@ export function renderOndas(prd, dados, fases) {
   const nomeDaFase = k => (fases.find(([f]) => f === k) || [k, k || 'sem fase'])[1];
   const pos = new Map();
   colunas.forEach((col, c) => col.forEach((n, r) => pos.set(n, {
-    x: MARGEM + ANEL + c * (W + GX), y: TOPO + ANEL + r * (H + GY), c,
+    x: xDaColuna(c), y: TOPO + ANEL + r * (H + GY), c,
   })));
   const linhas = Math.max(...colunas.map(c => c.length));
   const largura = 2 * (MARGEM + ANEL) + colunas.length * W + (colunas.length - 1) * GX;
   const altura = TOPO + 2 * ANEL + MARGEM + linhas * (H + GY) - GY;
 
   const rotulos = colunas.map((_, c) =>
-    `<text class="onda-col" x="${MARGEM + ANEL + c * (W + GX) + W / 2}" y="14">onda ${c + 1}</text>`).join('');
+    `<text class="onda-col" x="${xDaColuna(c) + W / 2}" y="14">onda ${c + 1}</text>`).join('');
 
   const setas = [];
   for (const [n, p] of pos) {
@@ -73,11 +74,10 @@ export function renderOndas(prd, dados, fases) {
     }
   }
 
-  let idx = 0;
-  const nos = [...pos].map(([n, p]) => {
+  const nos = [...pos].map(([n, p], idx) => {
     const i = porN[n], fase = faseDe(n);
     const quem = i.assignees.length ? i.assignees.join(', ') : 'ninguém assumiu';
-    return `<g class="onda-no onda-f-${esc(fase)}" data-act="onda" data-n="${n}" data-prd="${prd.number}" data-col="${p.c}" style="--pessoa:${corDaPessoa(i.assignees[0] || null)};--i:${idx++}">
+    return `<g class="onda-no onda-f-${esc(fase)}" data-act="onda" data-n="${n}" data-prd="${prd.number}" data-col="${p.c}" style="--pessoa:${corDaPessoa(i.assignees[0] || null)};--i:${idx}">
       <title>#${n} ${esc(i.title)} · ${esc(nomeDaFase(fase))} · ${esc(quem)}</title>
       <rect class="onda-anel" x="${p.x - ANEL}" y="${p.y - ANEL}" width="${W + 2 * ANEL}" height="${H + 2 * ANEL}" rx="13"/>
       <rect class="onda-corpo" x="${p.x}" y="${p.y}" width="${W}" height="${H}" rx="10"/>

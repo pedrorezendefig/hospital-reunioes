@@ -208,9 +208,7 @@ def _fatias_abertas(html):
     if len(filhos) < 2:
         return []
     cards = re.split(r'<article class="nrow', filhos[1])[1:]
-    return [
-        int(re.search(r'data-act="iss" data-n="(\d+)"', c).group(1)) for c in cards if 'class="iss-body"' in c
-    ]
+    return [int(re.search(r'data-act="iss" data-n="(\d+)"', c).group(1)) for c in cards if 'class="iss-body"' in c]
 
 
 @com_node
