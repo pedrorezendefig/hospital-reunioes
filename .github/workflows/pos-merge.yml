@@ -215,9 +215,11 @@ jobs:
           # docs/spec/snapshots/ vira instrução de quem lê o snapshot, agente
           # sem humano incluído. O --include só olha o nome novo: um rename de
           # fora para dentro passaria e apagaria a origem. Sem renames, cada
-          # caminho do índice aparece e tem que ser um M da lista.
+          # caminho do índice aparece e tem que ser um M da lista. LC_ALL=C e
+          # -a: no locale UTF-8 do runner, o GNU grep não imprime a linha com
+          # nome que não é UTF-8 válido, e o arquivo sairia do fora (#1031).
           fora=$(git -c core.quotePath=false diff --cached --name-status --no-renames \
-            | grep -Ev '^M[[:space:]]+(docs/spec/snapshots/(ROTAS|ENTIDADES|SCHEMA|MIGRATIONS|INTEGRACOES)\.md|docs/ARQUITETURA\.md|docs/manual/src/content/docs/.+)$' || true)
+            | LC_ALL=C grep -a -Ev '^M[[:space:]]+(docs/spec/snapshots/(ROTAS|ENTIDADES|SCHEMA|MIGRATIONS|INTEGRACOES)\.md|docs/ARQUITETURA\.md|docs/manual/src/content/docs/.+)$' || true)
           if [ -n "$fora" ]; then
             echo "::error::O patch cria, apaga ou toca arquivo que a Action não escreve: $fora"
             exit 1
