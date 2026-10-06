@@ -205,21 +205,10 @@ O Claude Code pede confirmação pra cada comando Bash novo. Pra reduzir prompts
   "permissions": {
     "defaultMode": "auto",
     "allow": [
-      "Bash(git:*)",
       "Bash(jq:*)",
-      "Bash(uv:*)",
-      "Bash(coolify:*)",
-      "Bash(python3:*)",
-      "Bash(pnpm:*)",
-      "Bash(npm:*)",
-      "Bash(npx:*)",
-      "Bash(docker:*)",
-      "Bash(docker-compose:*)",
-      "Bash(curl -sf http://localhost:*)",
       "Bash(ls:*)",
       "Bash(cat:*)",
       "Bash(grep:*)",
-      "Bash(find:*)",
       "Bash(date:*)",
       "Read(/Users/<seu-user>/PedroDev/Hospital/**)",
       "Edit(/Users/<seu-user>/PedroDev/Hospital/**)",
@@ -233,6 +222,8 @@ O Claude Code pede confirmação pra cada comando Bash novo. Pra reduzir prompts
 Substitua `<seu-user>` pelo seu username (`whoami` mostra). `language: "pt-BR"` faz o Claude responder em português brasileiro (o `CLAUDE.md` também força isso, redundância intencional).
 
 **`defaultMode: "auto"`** = Claude executa ações de baixo risco sem pedir confirmação a cada vez, mas ainda pausa em ações destrutivas (rm -rf, git push --force, etc.).
+
+O trecho só libera comandos de leitura. `git`, `gh`, `uv`, `pnpm`, `npx`, `docker`, `coolify`, `curl` e até `find` (que roda programa com `-exec`) ficam de fora: no modo auto o classificador libera esses comandos olhando cada um, e o allow amplo tiraria o classificador de quem publica num repositório público, mexe em produção ou roda código do repositório (ADR 0063). Vale também para o `.claude/settings.local.json` do projeto, que o Claude Code lê junto.
 
 ### 5.1 Fluxo automático (obrigatório para o nível 2)
 
@@ -272,14 +263,15 @@ Quem trava a `main` é o ruleset, e só quem tem Administration consegue mudar o
    if [ -f "$HOME/.claude/.env" ]; then set -a; . "$HOME/.claude/.env"; set +a; fi
    ```
 
-8. Feche e reabra o terminal. Tire o login antigo do `gh`, que tem Administration e que o agente alcançaria com `env -u GH_TOKEN`: `env -u GH_TOKEN gh auth logout -h github.com`. Depois `gh auth setup-git`, para o `git push` usar o mesmo token. Se o macOS guarda senha do GitHub no **Acesso às Chaves**, apague a entrada `github.com`.
-9. Reabra o Claude Code e rode `/setup-maquina`: `gh da sessão sem Administration` e `gh do chaveiro sem Administration` têm de dar OK.
+8. Se o `tokens/.env` tem a linha `GITHUB_PERSONAL_ACCESS_TOKEN` (PAT clássico com escopo `repo`, do modelo antigo), apague a linha e revogue esse PAT no GitHub (**Developer settings** > **Personal access tokens** > **Tokens (classic)** > **Delete**). Na conta de quem é admin ele administra o repositório, e o arquivo é exportado inteiro para a sessão. O fluxo não usa essa variável.
+9. Feche e reabra o terminal. Tire o login antigo do `gh`, que tem Administration e que o agente alcançaria com `env -u GH_TOKEN`: `env -u GH_TOKEN gh auth logout -h github.com`. Depois `gh auth setup-git`, para o `git push` usar o mesmo token. Se o macOS guarda senha do GitHub no **Acesso às Chaves**, apague a entrada `github.com`.
+10. Reabra o Claude Code e rode `/setup-maquina`: as linhas que terminam em `sem Administration` têm de dar OK.
 
 Mudar o ruleset depois disso é pela tela do GitHub (**Settings** > **Rules** > **Rulesets** do repositório), com você logado no navegador.
 
 **Passo 2: regras do `~/.claude/settings.json`**
 
-O modo auto não lê `autoMode` do settings do projeto, então estas regras vão no **seu** `~/.claude/settings.json`, somadas às de cima:
+O modo auto não lê `autoMode` do settings do projeto, então estas regras vão no **seu** `~/.claude/settings.json`, somadas às de cima. Tire também do `permissions.allow` (o seu e o `.claude/settings.local.json` do projeto) as regras que o `/setup-maquina` acusa como `allow aberto` (todo allow de Bash com curinga que não é leitura, como `Bash(git:*)` ou `Bash(coolify deploy uuid:*)`; comando exato, sem `*`, pode ficar):
 
 ```json
 {
@@ -287,10 +279,11 @@ O modo auto não lê `autoMode` do settings do projeto, então estas regras vão
     "deny": [
       "Bash(git push *-f* main*)",
       "Bash(git push *-f*:main*)",
+      "Bash(git push *-f*/main*)",
       "Bash(git push * main*-f*)",
       "Bash(git push *:main*-f*)",
-      "Bash(git push *+main*)",
-      "Bash(git push *+*:main*)"
+      "Bash(git push */main*-f*)",
+      "Bash(git push *+*main*)"
     ]
   },
   "autoMode": {
@@ -314,7 +307,7 @@ O modo auto não lê `autoMode` do settings do projeto, então estas regras vão
 Por que assim:
 
 - **Nada de `gh` nem de script do repositório em `permissions.allow`.** Ali a regra pula o classificador. O repositório é público e qualquer conta comenta: um comentário malicioso poderia levar o agente a publicar o `tokens/.env` num `gh issue create` sem ninguém olhar. E o allow por caminho relativo rodaria o `fechar_onda.py` que o agente acabou de editar num worktree. Em `autoMode.allow` o classificador segue olhando destino e conteúdo. Por isso o `Bash(gh:*)` também saiu do trecho de cima.
-- **O deny de force push é só contra a `main`.** O corretor sobe rebase com `--force-with-lease` na branch do próprio PR, e isso continua. Na `main` a trava de verdade é o ruleset (sem force push, sem apagar, sem bypass); o deny é um alarme a mais.
+- **O deny de force push é só contra a `main`.** O corretor sobe rebase com `--force-with-lease` na branch do próprio PR, e isso continua. Na `main` a trava de verdade é o ruleset (sem force push, sem apagar, sem bypass); o deny é um alarme a mais e não pega forma escrita de outro jeito, como `git -C <pasta> push`.
 - **Não existe regra de deny para o ruleset.** Regra de deny casa pelo começo do texto do comando e se contorna com `-X DELETE`, `--method=PUT`, `gh api graphql` ou `curl`. A trava é o token sem Administration do passo 1.
 - **`"$defaults"`** mantém as regras de fábrica do modo auto; sem ele, a lista substitui as de fábrica.
 
@@ -440,21 +433,10 @@ Pra quem quer copiar e ajustar de uma vez. Substitua `<seu-user>` por `whoami`.
   "permissions": {
     "defaultMode": "auto",
     "allow": [
-      "Bash(git:*)",
       "Bash(jq:*)",
-      "Bash(uv:*)",
-      "Bash(coolify:*)",
-      "Bash(python3:*)",
-      "Bash(pnpm:*)",
-      "Bash(npm:*)",
-      "Bash(npx:*)",
-      "Bash(docker:*)",
-      "Bash(docker-compose:*)",
-      "Bash(curl -sf http://localhost:*)",
       "Bash(ls:*)",
       "Bash(cat:*)",
       "Bash(grep:*)",
-      "Bash(find:*)",
       "Bash(date:*)",
       "Read(/Users/<seu-user>/PedroDev/Hospital/**)",
       "Edit(/Users/<seu-user>/PedroDev/Hospital/**)",

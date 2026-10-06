@@ -76,23 +76,35 @@ checa_claude_versao() { # OK se claude --version >= CLAUDE_MIN; FALTA abaixo ou 
 # Fluxo automático (ADR 0063): o settings DO USUÁRIO precisa do deny de force push contra a main e
 # do autoMode (o modo auto não lê autoMode do settings do projeto). O rabo, a /minhas-issues e a
 # escrituração em issue e PR vão em autoMode.allow, em prosa, para o classificador seguir olhando
-# destino e conteúdo; em permissions.allow eles pulariam o classificador. Só pergunta ao jq se a
-# regra existe: nada do arquivo vai para a saída (o bloco env guarda token) e nada é gravado.
-checa_permissoes_claude() { # settings.json do usuário
-  local cfg="$1" regra rotulo termo secao porque abertas
+# destino e conteúdo; em permissions.allow eles pulariam o classificador, e esse allow vale também
+# no settings do projeto, então os do projeto entram na varredura. Só pergunta ao jq se a regra
+# existe: nada do arquivo vai para a saída (o bloco env guarda token) e nada é gravado.
+checa_permissoes_claude() { # settings.json do usuário (também varrido), settings do projeto...
+  local cfg="$1" regra rotulo termo secao porque abertas achadas f onde
+  # Allow de Bash com curinga que pode ficar: leitura, mais repetir job do CI (não publica texto nem
+  # roda código do repositório na máquina).
+  local leitura='["git status","git diff","git log","git show","git fetch","git worktree list","git rev-parse",
+    "gh issue view","gh issue list","gh pr view","gh pr list","gh pr diff","gh pr checks","gh run view","gh run list",
+    "gh run rerun",
+    "jq","ls","cat","grep","head","tail","wc","date","pwd","which"]'
+  if [ -f "$cfg" ] && ! jq empty "$cfg" >/dev/null 2>&1; then
+    falta "settings.json do usuário é JSON válido" "o ~/.claude/settings.json não abre como JSON (o Claude Code também não o lê): conserte a sintaxe e rode de novo"
+    return
+  fi
   while IFS= read -r regra; do
     if jq -e --arg r "$regra" 'any((.permissions.deny // [])[]; . == $r)' "$cfg" >/dev/null 2>&1; then
       ok "deny ${regra:5:${#regra}-6}"
     else
-      falta "deny ${regra:5:${#regra}-6}" "ponha \"$regra\" em permissions.deny do ~/.claude/settings.json: trava force push contra a main (a main tem ainda o ruleset)"
+      falta "deny ${regra:5:${#regra}-6}" "ponha \"$regra\" em permissions.deny do ~/.claude/settings.json: alarme de force push contra a main (a trava é o ruleset)"
     fi
   done <<'DENY'
 Bash(git push *-f* main*)
 Bash(git push *-f*:main*)
+Bash(git push *-f*/main*)
 Bash(git push * main*-f*)
 Bash(git push *:main*-f*)
-Bash(git push *+main*)
-Bash(git push *+*:main*)
+Bash(git push */main*-f*)
+Bash(git push *+*main*)
 DENY
   while IFS='|' read -r secao rotulo termo; do
     if jq -e --arg s "$secao" --arg t "$termo" \
@@ -112,40 +124,71 @@ allow|minhas_issues.py|minhas_issues.py
 allow|gh issue|gh issue
 allow|gh pr|gh pr
 AUTO
-  # Allow que tira o classificador do canal que publica texto num repositório público, ou que
-  # libera o script do cwd (num worktree, o agente roda a versão que ele mesmo editou).
-  abertas="$(jq -r '(.permissions.allow // [])[] | select(
-      test("^Bash\\(gh( (issue|pr))?(\\)|[ :]?\\*)") or test("^Bash\\(gh (issue (create|comment|edit)|pr (create|comment))")
-      or test("^Bash\\(python3? \\.claude/"))' "$cfg" 2>/dev/null)"
+  # Todo allow de Bash com curinga que não é só leitura tira o classificador de quem publica (gh,
+  # git push, curl e coolify num repositório público e em produção) ou roda código do repositório
+  # (num worktree, o agente roda a versão que ele mesmo editou). Comando exato, sem curinga, fica.
+  abertas=""
+  for f in "$@"; do
+    [ -f "$f" ] || continue
+    case "$f" in "$HOME"/*) onde="~${f#"$HOME"}" ;; *) onde="$f" ;; esac
+    if ! jq empty "$f" >/dev/null 2>&1; then
+      abertas="$abertas$onde|(arquivo não é JSON válido)"$'\n'
+      continue
+    fi
+    achadas="$(jq -r --arg onde "$onde" --argjson leitura "$leitura" '(.permissions.allow // [])[]
+      | select(. == "Bash" or (startswith("Bash(") and contains("*")
+          and ((ltrimstr("Bash(") | split("*")[0]) as $c | ($c | rtrimstr(" ") | rtrimstr(":")) as $p
+            | $leitura | any(.[]; . as $l | ($p == $l and $c != $p) or ($p | startswith($l + " "))) | not)))
+      | "\($onde)|\(.)"' "$f" 2>/dev/null)" || achadas="$onde|(não consegui ler o permissions.allow)"
+    abertas="$abertas$achadas"$'\n'
+  done
+  abertas="$(printf '%s' "$abertas" | sed '/^$/d')"
   if [ -z "$abertas" ]; then
     ok "sem allow que pula o classificador"
   else
-    while IFS= read -r regra; do
-      falta "allow aberto" "tire \"$regra\" de permissions.allow: ali ele pula o classificador; descreva em autoMode.allow (seção 5.1)"
+    while IFS='|' read -r onde regra; do
+      falta "allow aberto" "tire \"$regra\" de permissions.allow em $onde: ali ele pula o classificador; descreva em autoMode.allow (seção 5.1)"
     done <<<"$abertas"
   fi
 }
-# A trava do ruleset é do servidor (ADR 0063): nenhuma credencial do gh que o agente alcança pode
+# A trava do ruleset é do servidor (ADR 0063): nenhuma credencial do GitHub que o agente alcança pode
 # ter Administration. Pergunta ao GitHub pelas deploy keys, que só respondem com Administration,
 # e só olha o código de saída e o HTTP do erro: nunca lê nem imprime o token.
-checa_gh_sem_admin() {
-  local onde rotulo erro conserto
-  for onde in sessao chaveiro; do
-    if [ "$onde" = sessao ]; then
-      rotulo="gh da sessão sem Administration"
-      erro="$(gh api 'repos/{owner}/{repo}/keys' --silent 2>&1 >/dev/null)" && erro=ADMIN
-      conserto="o gh desta sessão administra o repositório: crie o token fine-grained sem Administration e ponha GH_TOKEN no tokens/.env (docs/onboarding/claude-setup.md seção 5.1)"
-    else
-      [ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ] || return 0   # sem GH_TOKEN, a sessão já é o chaveiro
-      rotulo="gh do chaveiro sem Administration"
-      erro="$(env -u GH_TOKEN -u GITHUB_TOKEN gh api 'repos/{owner}/{repo}/keys' --silent 2>&1 >/dev/null)" && erro=ADMIN
-      conserto="o login guardado no gh administra o repositório e o agente chega nele com env -u GH_TOKEN: rode env -u GH_TOKEN gh auth logout -h github.com (ruleset se muda pela tela do GitHub)"
-    fi
+admin_responde() { # rotulo conserto comando... -> FALTA se o comando lê as deploy keys
+  local rotulo="$1" conserto="$2" erro
+  shift 2
+  if erro="$("$@" api repos/pedrorezendefig/hospital-reunioes/keys --silent 2>&1 >/dev/null)"; then
+    falta "$rotulo" "$conserto"
+  else
     case "$erro" in
-      ADMIN) falta "$rotulo" "$conserto" ;;
-      *"HTTP 403"*|*"HTTP 404"*|*"gh auth login"*) ok "$rotulo" ;;
+      *"HTTP 401"*|*"Resource not accessible"*|*"HTTP 404"*|*"gh auth login"*) ok "$rotulo" ;;
       *) aviso "$rotulo" "não consegui perguntar ao GitHub agora; rode de novo com rede" ;;
     esac
+  fi
+}
+checa_gh_sem_admin() {
+  local nome
+  admin_responde "gh da sessão sem Administration" \
+    "o gh desta sessão administra o repositório: crie o token fine-grained sem Administration e ponha GH_TOKEN no tokens/.env (docs/onboarding/claude-setup.md seção 5.1)" gh
+  # Sem GH_TOKEN a sessão já é o chaveiro; com ele, o agente chega no chaveiro com env -u GH_TOKEN.
+  [ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ] && admin_responde "gh do chaveiro sem Administration" \
+    "o login guardado no gh administra o repositório: rode env -u GH_TOKEN gh auth logout -h github.com (ruleset se muda pela tela do GitHub)" \
+    env -u GH_TOKEN -u GITHUB_TOKEN gh
+  # Credencial do GitHub guardada fora do gh, que o agente lê sem passar pelo GH_TOKEN. Só presença.
+  if [ "${perm:-}" = ADMIN ]; then
+    if command -v security >/dev/null 2>&1 && security find-internet-password -s github.com >/dev/null 2>&1; then
+      falta "Acesso às Chaves sem senha do GitHub" "apague a entrada github.com no app Acesso às Chaves e rode gh auth setup-git (seção 5.1)"
+    fi
+    if [ -f "$HOME/.git-credentials" ] && grep -q "github.com" "$HOME/.git-credentials" 2>/dev/null; then
+      falta "~/.git-credentials sem GitHub" "apague a linha do github.com do ~/.git-credentials e rode gh auth setup-git (seção 5.1)"
+    fi
+  fi
+  # Outro token do GitHub exportado (o PAT clássico do tokens/.env, por exemplo) contorna o GH_TOKEN.
+  for nome in $(env | cut -d= -f1 | grep -E '^(GH|GITHUB)[A-Z_]*TOKEN[A-Z_]*$' | grep -vxE 'GH_TOKEN|GITHUB_TOKEN'); do
+    [ -n "${!nome}" ] || continue
+    admin_responde "$nome sem Administration" \
+      "$nome está no ambiente e administra o repositório: tire do tokens/.env e revogue no GitHub (docs/onboarding/claude-setup.md seção 5.1)" \
+      env GH_TOKEN="${!nome}" gh
   done
 }
 # ---------------------------------------------------------------- Nível 1
@@ -234,7 +277,11 @@ done < "$LISTA"
 if [ "$NIVEL" -ge 2 ]; then
 titulo "Nível 2: deploy (ship, rabo fechar_onda.py, /deploy, /onda-enxuta)"
 checa_claude_versao
-checa_permissoes_claude "$HOME/.claude/settings.json"
+# O allow do projeto também vale: o da árvore onde o script roda e o da árvore principal (worktree).
+PRINCIPAL="$(cd "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/.." 2>/dev/null && pwd)"
+CFGS=("$HOME/.claude/settings.json" "$REPO_ROOT/.claude/settings.json" "$REPO_ROOT/.claude/settings.local.json")
+[ -n "$PRINCIPAL" ] && [ "$PRINCIPAL" != "$REPO_ROOT" ] && CFGS+=("$PRINCIPAL/.claude/settings.json" "$PRINCIPAL/.claude/settings.local.json")
+checa_permissoes_claude "${CFGS[@]}"   # o primeiro é o do usuário
 [ "$GH_OK" -eq 1 ] && checa_gh_sem_admin
 bin_ok coolify "ver docs/onboarding/claude-setup.md seção 4.1"
 # A CLI responde e tem o contexto do hospital (hsm). Lê a lista e o verify sem nunca
@@ -286,6 +333,11 @@ if [ -f "$TOK" ]; then
     chave_preenchida "$TOK" "$k" && ok "tokens/.env: $k" "preenchida" || falta "tokens/.env: $k" "ver references/chaves.md"
   done
   chave_preenchida "$TOK" ANA_API_KEY && ok "tokens/.env: ANA_API_KEY" "preenchida" || aviso "tokens/.env: ANA_API_KEY" "só para smoke test contra prod; ver references/chaves.md"
+  # PAT clássico com escopo repo: na conta de quem é admin ele administra o repositório (ADR 0063).
+  if chave_preenchida "$TOK" GITHUB_PERSONAL_ACCESS_TOKEN; then
+    if [ "${perm:-}" = ADMIN ]; then falta "tokens/.env sem PAT clássico" "apague GITHUB_PERSONAL_ACCESS_TOKEN e revogue o PAT no GitHub: na sua conta ele administra o repositório; o gh usa o GH_TOKEN (seção 5.1)"
+    else aviso "tokens/.env sem PAT clássico" "GITHUB_PERSONAL_ACCESS_TOKEN não é usado pelo fluxo; pode apagar (seção 5.1)"; fi
+  fi
 else
   falta "tokens/.env existe" "cp tokens/.env.example tokens/.env e preencher (references/chaves.md)"
 fi

@@ -35,10 +35,11 @@ from test_setup_maquina_esteira import (
 DENY = [
     "Bash(git push *-f* main*)",
     "Bash(git push *-f*:main*)",
+    "Bash(git push *-f*/main*)",
     "Bash(git push * main*-f*)",
     "Bash(git push *:main*-f*)",
-    "Bash(git push *+main*)",
-    "Bash(git push *+*:main*)",
+    "Bash(git push */main*-f*)",
+    "Bash(git push *+*main*)",
 ]
 AMBIENTE = [
     "$defaults",
@@ -62,6 +63,22 @@ ABERTAS = [
     "Bash(gh pr create:*)",
     "Bash(gh pr comment *)",
     "Bash(gh:*)",
+    "Bash(gh api:*)",
+    "Bash(git:*)",
+    "Bash(git push *)",
+    "Bash(coolify deploy uuid:*)",
+    "Bash(curl -sf http://localhost:*)",
+    "Bash(python3 *)",
+    "Bash(python3 ./.claude/skills/onda-enxuta/scripts/fechar_onda.py *)",
+    "Bash(npx:*)",
+    "Bash(uv *)",
+    "Bash(git add:*)",
+    "Bash(lsof *)",
+    "Bash(cat*)",
+    "Bash(find:*)",
+    "Bash(vercel *)",
+    "Bash(*)",
+    "Bash",
 ]
 ROTULOS_DENY = [f"deny {r[5:-1]}" for r in DENY]
 ROTULOS_AMBIENTE = ["repositório", "Coolify", "Vercel"]
@@ -108,16 +125,16 @@ def test_settings_completo_passa_regra_por_regra(tmp_path):
 def test_settings_incompleto_aponta_cada_regra_que_falta_e_o_conserto(tmp_path):
     arquivo = settings(
         tmp_path,
-        deny=[r for r in DENY if r != "Bash(git push *+main*)"],
+        deny=[r for r in DENY if r != "Bash(git push *+*main*)"],
         ambiente=[a for a in AMBIENTE if "vercel" not in a],
         auto=[a for a in AUTO_ALLOW if "gh issue" not in a],
     )
     saida = confere(tmp_path, arquivo)
     assert len(faltas(saida)) == 3, saida
 
-    mais = linha(saida, "deny git push *+main*")
+    mais = linha(saida, "deny git push *+*main*")
     assert mais.startswith("FALTA")
-    assert '"Bash(git push *+main*)"' in mais and "permissions.deny" in mais, (
+    assert '"Bash(git push *+*main*)"' in mais and "permissions.deny" in mais, (
         "diz a regra exata e onde pôr"
     )
     assert "~/.claude/settings.json" in mais, (
@@ -173,7 +190,17 @@ def test_cada_allow_aberto_acusa_e_diz_por_que(tmp_path):
 
 
 def test_allow_de_leitura_e_de_outra_ferramenta_nao_acusa(tmp_path):
-    allow = ["Bash(gh issue list:*)", "Bash(gh pr view *)", "Bash(git:*)", "Bash(jq:*)"]
+    allow = [
+        "Bash(gh issue list:*)",
+        "Bash(gh pr view *)",
+        "Bash(git status:*)",
+        "Bash(git diff *)",
+        "Bash(ls ~/.claude/mcp*)",
+        "Bash(curl -sf http://localhost:8000/api/health)",
+        "Bash(jq:*)",
+        "Read(/Users/fulana/PedroDev/Hospital/**)",
+        "mcp__coolify__*",
+    ]
     saida = confere(tmp_path, settings(tmp_path, allow=allow))
     assert faltas(saida) == [], saida
 
@@ -197,6 +224,9 @@ FORCA_NA_MAIN = [
     "git push -f origin HEAD:main",
     "git push origin +main",
     "git push origin +HEAD:main",
+    "git push --force origin HEAD:refs/heads/main",
+    "git push origin HEAD:refs/heads/main --force",
+    "git push origin +HEAD:refs/heads/main",
 ]
 PUSH_DO_FLUXO = [
     "git push -u origin docs/adr-0063-setup-maquina-permissoes-964",
@@ -263,7 +293,7 @@ def test_o_guia_base_nao_libera_gh_inteiro(tmp_path):
 # ------------------------------------------------- o token do gh sem Administration
 
 
-def gh_admin(tmp_path: Path, sessao: str, chaveiro: str) -> None:
+def gh_admin(tmp_path: Path, sessao: str, chaveiro: str, classico: str = "401") -> None:
     """`gh api .../keys` (deploy keys exigem Administration) responde conforme a credencial.
 
     Com GH_TOKEN no ambiente, o gh usa o token da sessão; sem ele, o do chaveiro.
@@ -273,13 +303,16 @@ def gh_admin(tmp_path: Path, sessao: str, chaveiro: str) -> None:
     falso(
         tmp_path,
         "gh",
-        'case "$*" in *"repos/{owner}/{repo}/keys"*) ;; *) exit 0 ;; esac\n'
-        f'if [ -n "${{GH_TOKEN:-}}${{GITHUB_TOKEN:-}}" ]; then m="{sessao}"; else m="{chaveiro}"; fi\n'
+        'case "$*" in *"repos/pedrorezendefig/hospital-reunioes/keys"*) ;; *) exit 0 ;; esac\n'
+        f'if [ "${{GH_TOKEN:-}}" = pat_classico ]; then m="{classico}"\n'
+        f'elif [ -n "${{GH_TOKEN:-}}${{GITHUB_TOKEN:-}}" ]; then m="{sessao}"; else m="{chaveiro}"; fi\n'
         f'echo "{SEGREDO}"; echo "{SEGREDO}" >&2\n'
         'case "$m" in\n'
         "  admin) exit 0 ;;\n"
         "  403) echo 'gh: Resource not accessible by personal access token (HTTP 403)' >&2; exit 1 ;;\n"
         "  404) echo 'gh: Not Found (HTTP 404)' >&2; exit 1 ;;\n"
+        "  401) echo 'gh: Bad credentials (HTTP 401)' >&2; exit 1 ;;\n"
+        "  limite) echo 'gh: API rate limit exceeded (HTTP 403)' >&2; exit 1 ;;\n"
         "  semlogin) echo 'To get started with GitHub CLI, please run:  gh auth login' >&2; exit 4 ;;\n"
         "  rede) echo 'error connecting to api.github.com' >&2; exit 1 ;;\n"
         "esac",
@@ -290,13 +323,24 @@ SESSAO = "gh da sessão sem Administration"
 CHAVEIRO = "gh do chaveiro sem Administration"
 
 
-def admin(tmp_path: Path, com_token: bool) -> str:
+def admin(tmp_path: Path, com_token: bool, **outros: str) -> str:
     """Como o `roda`, mas com ou sem GH_TOKEN no ambiente da conferência."""
+    if not (tmp_path / "bin" / "security").exists():
+        falso(tmp_path, "security", "exit 44")  # nada guardado no Acesso às Chaves
     env = {"PATH": f"{tmp_path / 'bin'}:/usr/bin:/bin", "HOME": str(tmp_path)}
     if com_token:
         env["GH_TOKEN"] = "github_pat_falso"
+    env.update(outros)
     r = subprocess.run(
-        ["bash", "-c", SAIDAS + funcao("checa_gh_sem_admin") + "\ncheca_gh_sem_admin"],
+        [
+            "bash",
+            "-c",
+            SAIDAS
+            + funcao("admin_responde")
+            + "\n"
+            + funcao("checa_gh_sem_admin")
+            + "\ncheca_gh_sem_admin",
+        ],
         cwd=tmp_path,
         env=env,
         capture_output=True,
@@ -348,11 +392,93 @@ def test_sem_GH_TOKEN_e_admin_no_chaveiro_acusa(tmp_path):
     assert li.startswith("FALTA") and "GH_TOKEN" in li, li
 
 
+def test_403_de_limite_de_taxa_nao_vale_como_sem_admin(tmp_path):
+    gh_admin(tmp_path, sessao="limite", chaveiro="semlogin")
+    assert linha(admin(tmp_path, com_token=True), SESSAO).startswith("AVISO")
+
+
 def test_sem_rede_avisa_e_nao_da_ok(tmp_path):
     gh_admin(tmp_path, sessao="rede", chaveiro="rede")
     saida = admin(tmp_path, com_token=True)
     assert linha(saida, SESSAO).startswith("AVISO"), saida
     assert linha(saida, CHAVEIRO).startswith("AVISO"), saida
+
+
+def test_outro_token_do_github_exportado_com_admin_acusa(tmp_path):
+    """O tokens/.env vai inteiro para a sessão: um PAT clássico ali contorna o GH_TOKEN."""
+    gh_admin(tmp_path, sessao="403", chaveiro="semlogin", classico="admin")
+    saida = admin(tmp_path, com_token=True, GITHUB_PERSONAL_ACCESS_TOKEN="pat_classico")
+    li = linha(saida, "GITHUB_PERSONAL_ACCESS_TOKEN sem Administration")
+    assert li.startswith("FALTA") and "tokens/.env" in li, li
+    assert linha(saida, SESSAO).startswith("OK"), saida
+    assert "pat_classico" not in saida and SEGREDO not in saida
+
+
+def test_outro_token_sem_admin_ou_vazio_passa(tmp_path):
+    gh_admin(tmp_path, sessao="403", chaveiro="semlogin", classico="401")
+    saida = admin(
+        tmp_path,
+        com_token=True,
+        GITHUB_PERSONAL_ACCESS_TOKEN="pat_classico",
+        GH_TOKEN_VAZIO="",
+    )
+    assert linha(saida, "GITHUB_PERSONAL_ACCESS_TOKEN sem Administration").startswith(
+        "OK"
+    )
+    assert "GH_TOKEN_VAZIO" not in saida
+
+
+def test_allow_que_o_jq_nao_le_acusa_em_vez_de_dar_ok(tmp_path):
+    """JSON válido com item que não é texto: o jq falha, e a falha não pode virar OK."""
+    arquivo = settings(tmp_path, allow=["Bash(gh:*)", 5])
+    saida = confere(tmp_path, arquivo)
+    assert "sem allow que pula o classificador" not in saida, saida
+    assert linha(saida, "allow aberto").startswith("FALTA")
+
+
+def test_settings_invalido_acusa_o_json_e_nao_da_ok_falso(tmp_path):
+    arquivo = tmp_path / "settings.json"
+    arquivo.write_text('{"permissions": {"allow": ["Bash(gh:*)"],}', encoding="utf-8")
+    saida = confere(tmp_path, arquivo)
+    assert linha(saida, "JSON válido").startswith("FALTA"), saida
+    assert "sem allow que pula o classificador" not in saida
+    assert len(faltas(saida)) == 1, "uma falta só, com o conserto certo"
+
+
+def test_allow_do_projeto_tambem_conta(tmp_path):
+    usuario = settings(tmp_path / "usuario")
+    projeto = tmp_path / "projeto" / "settings.local.json"
+    projeto.parent.mkdir()
+    projeto.write_text(
+        json.dumps({"permissions": {"allow": ["Bash(gh:*)"]}}), encoding="utf-8"
+    )
+    saida = roda(tmp_path, f'checa_permissoes_claude "{usuario}" "{projeto}"')
+    li = linha(saida, "allow aberto")
+    assert (
+        li.startswith("FALTA") and "settings.local.json" in li and '"Bash(gh:*)"' in li
+    ), li
+
+
+def test_credencial_guardada_fora_do_gh_acusa_quem_e_admin(tmp_path):
+    gh_admin(tmp_path, sessao="403", chaveiro="semlogin")
+    falso(tmp_path, "security", "exit 0")
+    (tmp_path / ".git-credentials").write_text(
+        f"https://fulana:{SEGREDO}@github.com\n", encoding="utf-8"
+    )
+    saida = admin(tmp_path, com_token=True, perm="ADMIN")
+    assert linha(saida, "Acesso às Chaves").startswith("FALTA"), saida
+    assert linha(saida, "git-credentials").startswith("FALTA"), saida
+    assert SEGREDO not in saida
+
+
+def test_credencial_guardada_de_quem_nao_e_admin_nao_acusa(tmp_path):
+    gh_admin(tmp_path, sessao="403", chaveiro="semlogin")
+    falso(tmp_path, "security", "exit 0")
+    (tmp_path / ".git-credentials").write_text(
+        "https://x:y@github.com\n", encoding="utf-8"
+    )
+    saida = admin(tmp_path, com_token=True, perm="WRITE")
+    assert "Acesso às Chaves" not in saida and "git-credentials" not in saida, saida
 
 
 # ------------------------------------------------- segredo e escrita
@@ -424,7 +550,7 @@ def test_o_script_confere_o_token_do_gh_no_nivel_2(tmp_path):
         'case "$*" in\n'
         '  "auth status") exit 0 ;;\n'
         '  "repo view"*) echo ADMIN ;;\n'
-        '  *"repos/{owner}/{repo}/keys"*) echo "[]" ;;\n'
+        '  *"repos/pedrorezendefig/hospital-reunioes/keys"*) echo "[]" ;;\n'
         "  *) exit 1 ;;\n"
         "esac"
     )
@@ -434,12 +560,40 @@ def test_o_script_confere_o_token_do_gh_no_nivel_2(tmp_path):
     assert linha(saida, SESSAO).split()[0] == "FALTA", saida
 
 
+def test_o_script_varre_o_allow_do_projeto_e_o_pat_do_tokens_env(tmp_path):
+    (tmp_path / "casa" / ".local").mkdir(parents=True)
+    corpo = (
+        'case "$*" in\n'
+        '  "auth status") exit 0 ;;\n'
+        '  "repo view"*) echo ADMIN ;;\n'
+        "  *) exit 1 ;;\n"
+        "esac"
+    )
+    falso(tmp_path, "gh", corpo)
+    falso(tmp_path / "casa" / ".local", "gh", corpo)
+    settings(tmp_path / "casa" / ".claude")
+    local = tmp_path / "repo" / ".claude" / "settings.local.json"
+    local.parent.mkdir(parents=True)
+    local.write_text(
+        json.dumps({"permissions": {"allow": ["Bash(git:*)"]}}), encoding="utf-8"
+    )
+    (tmp_path / "repo" / "tokens").mkdir()
+    (tmp_path / "repo" / "tokens" / ".env").write_text(
+        f"GITHUB_PERSONAL_ACCESS_TOKEN={SEGREDO}\n", encoding="utf-8"
+    )
+    saida = roda_script(tmp_path, "2")
+    li = linha(saida, "allow aberto")
+    assert li.split()[0] == "FALTA" and "settings.local.json" in li, saida
+    assert linha(saida, "tokens/.env sem PAT clássico").split()[0] == "FALTA", saida
+    assert SEGREDO not in saida
+
+
 def test_settings_do_projeto_nao_conta(tmp_path):
     """O modo auto não lê `autoMode` do projeto: só o arquivo do usuário vale."""
     (tmp_path / "casa").mkdir()
     settings(tmp_path / "repo" / ".claude")
     saida = roda_script(tmp_path, "2")
-    assert linha(saida, "deny git push *+main*").split()[0] == "FALTA", saida
+    assert linha(saida, "deny git push *+*main*").split()[0] == "FALTA", saida
     assert linha(saida, "autoMode.environment: Coolify").split()[0] == "FALTA", saida
 
 
