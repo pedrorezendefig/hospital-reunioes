@@ -152,7 +152,7 @@ Abra `.claude/skills/ship/SKILL.md` e faça, nesta ordem:
 4. Passo de migrations pré-merge: caminho de migrations do DESTINO e como elas são aplicadas em produção. Sem banco, "não se aplica".
 5. O fim do `/ship` imprime o comando do rabo (`fechar_onda.py`, da skill `onda-enxuta`, ADR 0061). Este roteiro ainda não leva a `onda-enxuta`: até isso entrar, troque o Passo 10 do `/ship` do DESTINO por uma chamada ao `/deploy ship` gerado na Fase 4.4, para o comando impresso apontar para algo que existe.
 
-Não mexa nos invariantes: 3 gates, PR, OK humano citando o PR# antes do rabo, Passo 10.5 (issue `ready-for-human` para pendência humana pós-ciclo).
+Não mexa nos invariantes: 3 gates, PR, OK humano citando o PR# antes do rabo, Passo 10 do `/ship` (issue `ready-for-human` para pendência humana pós-ciclo).
 
 ### 4.4 `/deploy`
 

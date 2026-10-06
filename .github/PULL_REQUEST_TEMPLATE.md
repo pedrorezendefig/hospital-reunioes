@@ -30,11 +30,9 @@ _gerado por `/snapshot --diff`_
 
 ## 🤖 Gates (3)
 
-- [ ] Gate 1 — `/code-review` passou (sempre)
-- [ ] Gate 2 — `/security-review` passou (condicional: toca auth/RLS/migrations/env/webhook)
-- [ ] Gate 3 — CI verde (lint + tests + build no GitHub Actions)
-
-Self-approval acontece quando os 3 derem verde. (`/ship --rigoroso` adiciona dois gates extras: review rigorosa independente + verificação final com evidência.) Pós-merge, `/deploy ship` regenera `docs/spec/snapshots/` + `ARQUITETURA.md`.
+- [ ] Gate 1: `hr-revisor` (só PR do app)
+- [ ] Gate 2: `sensivel.py` (rota sem login ou migration vira `Sensível:` no revisor)
+- [ ] Gate 3: CI verde
 
 ## Closes
 
