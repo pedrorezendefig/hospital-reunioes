@@ -181,7 +181,7 @@ Sem Discord, sem Slack.
 - **`/tdd` vermelho e não fecha?** O teste é a spec — confira o critério de aceite na Issue. Se o critério está errado, ajuste a Issue primeiro.
 - **`/ship` reprovou num gate?** A saída diz qual (code-review, security-review ou CI). Corrija e rode `/ship` de novo — ele retoma.
 - **Conflito com a `main`?** `git pull --rebase origin main` na sua branch, resolve os conflitos, segue.
-- **Deploy falhou em produção?** O `fechar_onda.py` sai com código 3 (build) ou 4 (health) e segura o semáforo; a saída dele é a fonte de verdade (o `history.json` já foi escrito no push, como `healthy`, e não é corrigido). `/deploy rollback` reverte e `/deploy status` mostra o estado.
+- **Deploy falhou em produção?** Com health ruim, o `fechar_onda.py` já volta sozinho a imagem anterior e o `APP_VERSION` antigo: sai com código 6, semáforo solto, e quem o rodou abre o PR de revert, reabre a issue e notifica (Passo 10 do `/ship`). Build que falha sai com 3, e health cujo rollback também falhou sai com 4: os dois seguram o semáforo; a saída dele é a fonte de verdade (o `history.json` já foi escrito no push, como `healthy`, e não é corrigido). `/deploy rollback` reverte e `/deploy status` mostra o estado.
 - **Snapshot desatualizado?** `/snapshot --force`.
 - Na dúvida, pergunta pro Claude — ele puxa o conhecimento daqui.
 

@@ -486,7 +486,7 @@ Se mismatch → Passo 8 (rollback). Mensagem: "APP_VERSION do Coolify não bate 
 
 ### Passo 8 — Rollback (se health falhou)
 
-> **A sessão detecta e prepara; o disparo é humano.** O comando de rollback dispara build e é negado pelo classifier, então esta skill não reverte sozinha: ela para, entrega o comando pronto e espera. Em modo AFK (`/onda-enxuta`), isso significa produção parada no build ruim até alguém rodar o comando: reportar isso em alto e bom som, não seguir em silêncio.
+> **O rabo já tenta sozinho; este passo é o que sobra.** Com health ruim, o `fechar_onda.py` volta cada app do lote à imagem anterior e ao `APP_VERSION` antigo e confere o health de novo (saída 6, semáforo solto; issue #968). Este passo é para quando isso não deu: saída 4 (o rollback automático falhou) ou 3 (build). Aqui a sessão detecta e prepara, e o disparo é humano: fora do rabo, o comando de rollback é negado pelo classifier, então a skill para, entrega o comando pronto e espera. Em modo AFK (`/onda-enxuta`), isso significa produção parada no build ruim até alguém rodar o comando: reportar isso em alto e bom som, não seguir em silêncio.
 
 Executar 1×:
 1. Ler `<repo>/docs/spec/deploy/history.json` → último deploy com `result == "healthy"` por service afetado.
@@ -715,7 +715,7 @@ Algo down → ❌ destacado.
 
 ## Modo `rollback`
 
-Invocação: `/deploy rollback [--dry-run]`. Reverte para o último deploy `healthy` anterior. O `rollback run` é sempre do humano (`! coolify app rollback run ...`). Passo a passo em `references/modo-rollback.md`.
+Invocação: `/deploy rollback [--dry-run]`. Reverte para o último deploy `healthy` anterior, quando o rabo não voltou sozinho (saída 3 do `fechar_onda.py`, build, ou 4, rollback automático que falhou). Aqui o `rollback run` é sempre do humano (`! coolify app rollback run ...`). Passo a passo em `references/modo-rollback.md`.
 
 ---
 
