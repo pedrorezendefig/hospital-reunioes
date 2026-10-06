@@ -1,0 +1,91 @@
+name: Imagem do backend
+
+# A imagem do squash que vai para produção (issue #1001, ADR 0064 decisão 6c).
+# O rabo (fechar_onda.py) dispara este workflow depois do merge e acha o run
+# pelo sha no título; quando ele termina verde, aponta o Coolify para a tag do
+# squash, e o Coolify só puxa e reinicia. Quem escreve no GHCR é o GITHUB_TOKEN
+# daqui: o gh da máquina do rabo não tem `write:packages`.
+#
+# `origens`: heads de PR, do mais novo ao mais velho, com a pasta do backend
+# igual à do squash (o rabo compara). O CI publicou a imagem de cada um com a
+# tag do sha dele, então a primeira que existir no GHCR é a imagem do squash:
+# ganha as tags do sha e `latest` sem build. Nenhuma existe (o PR não mudou o
+# backend, ou o lote juntou PRs que nunca rodaram juntos no CI): constrói do
+# squash, com o cache de camadas do registry.
+run-name: Imagem do backend ${{ inputs.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit da main que vai para produção (o squash), sha completo
+        required: true
+      origens:
+        description: Heads de PR com a mesma pasta do backend que o squash, separados por espaço
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publicar:
+    name: Publicar a imagem do squash
+    runs-on: ubuntu-latest
+    env:
+      IMAGEM_BACKEND: ghcr.io/pedrorezendefig/hospital-reunioes-backend
+      # Entrada vai por env, nunca interpolada no shell (injeção de script).
+      SHA: ${{ inputs.sha }}
+      ORIGENS: ${{ inputs.origens }}
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag da imagem de um head (sem build)
+        id: retag
+        run: |
+          sha_completo() { printf '%s' "$1" | grep -qE '^[0-9a-f]{40}$'; }
+          if ! sha_completo "$SHA"; then
+            echo "::error::sha '$SHA' não é um sha completo de commit."
+            exit 1
+          fi
+          for origem in $ORIGENS; do
+            if ! sha_completo "$origem"; then
+              echo "::error::origem '$origem' não é um sha completo de commit."
+              exit 1
+            fi
+          done
+          for origem in $ORIGENS; do
+            if docker buildx imagetools inspect "$IMAGEM_BACKEND:$origem" > /dev/null 2>&1; then
+              docker buildx imagetools create -t "$IMAGEM_BACKEND:$SHA" -t "$IMAGEM_BACKEND:latest" "$IMAGEM_BACKEND:$origem"
+              echo "Imagem do head $origem publicada como $SHA e latest."
+              echo "feito=true" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "Nenhum head com imagem no GHCR: o build do squash vem a seguir."
+          echo "feito=false" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout do squash
+        if: steps.retag.outputs.feito != 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.sha }}
+      - name: Build do squash (nenhum head serviu)
+        if: steps.retag.outputs.feito != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: hospital-reunioes/backend
+          push: true
+          tags: |
+            ${{ env.IMAGEM_BACKEND }}:${{ inputs.sha }}
+            ${{ env.IMAGEM_BACKEND }}:latest
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=registry,ref=${{ env.IMAGEM_BACKEND }}:buildcache
+          cache-to: type=registry,ref=${{ env.IMAGEM_BACKEND }}:buildcache,mode=max

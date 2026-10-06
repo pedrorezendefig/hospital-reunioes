@@ -50,9 +50,15 @@ Este documento define o "v0" de cada projeto consumido pela skill `/deploy`. Viv
 
       // ─── Build ──
       "build": {
-        "build_pack": "dockerfile",         // "dockerfile" | "nixpacks" | "static"
-        "base_directory": "/",              // Build context relativo ao repo.
+        "build_pack": "dockerfile",         // "dockerfile" | "nixpacks" | "static" | "dockerimage"
+                                            // "dockerimage": o Coolify roda a imagem que o CI
+                                            // publicou no GHCR, sem build nem webhook (issue #1001).
+        "base_directory": "/",              // Build context relativo ao repo. Em "dockerimage", a
+                                            // pasta que o rabo compara entre o head e o squash.
         "dockerfile_location": "/site-next/Dockerfile", // null se nixpacks/static.
+        "image": "ghcr.io/<dono>/<imagem>", // Só "dockerimage". A tag de cada deploy é o sha do squash.
+        "publish_workflow": "imagem-x.yml", // Só "dockerimage". Workflow (workflow_dispatch, entradas
+                                            // `sha` e `origens`) que publica a imagem do squash.
         "ports_exposes": "3000",
         "build_args_from_env_keys": [       // Lista de chaves de env_keys.build_time
           "NEXT_PUBLIC_FOO"                 // que viram ARG no Dockerfile.

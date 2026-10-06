@@ -74,6 +74,7 @@ Todo acesso ao Coolify passa pelo **CLI oficial** `coolify` (binário no PATH, c
 | Disparar deploy manual | `coolify deploy uuid <uuid>` (ver pegadinha 2) |
 | Imagens disponíveis para rollback | `coolify app rollback images <uuid>` |
 | Rollback para um commit | `coolify app rollback run <uuid> --commit <SHA>` (ver pegadinha 7) |
+| Rollback de app em modo imagem (`dockerimage`) | `coolify app update <uuid> --docker-tag <SHA-alvo>` e `coolify deploy uuid <uuid>` (ver pegadinha 7) |
 | Listar projetos e servidores | `coolify project list`, `coolify server list` |
 
 ### Pegadinhas (ler antes de rodar)
@@ -92,7 +93,7 @@ Todo acesso ao Coolify passa pelo **CLI oficial** `coolify` (binário no PATH, c
 4. **`--format json` imprime um banner antes do JSON.** A linha `A new version (x.y.z) is available` quebra o `jq`. Filtre sempre: `coolify app get <uuid> --format json | sed -n '/^[[{]/,$p' | jq ...`.
 5. **`env list` esconde os valores.** Sem `-s`, todo `value` volta como `********`. Para **conferir keys** isso basta; para **comparar valores** é preciso `coolify app env list <uuid> -s --format json`. O valor real fica só em memória: nunca logar, commitar ou gravar em arquivo (invariante 5).
 6. **O JSON de app traz segredo.** `coolify app list` e `coolify app get` devolvem os campos `manual_webhook_secret_*`, e `env list -s` devolve todos os secrets do service. Nunca colar a saída crua em log, commit, PR, issue ou nos JSONs de `docs/spec/deploy/`.
-7. **Rollback precisa da imagem, não do commit.** `coolify app rollback run --commit <SHA>` só funciona enquanto a imagem daquele build existir. Confira antes com `coolify app rollback images <uuid>`: o histórico de deploy pode ter o SHA e a imagem já ter sido podada.
+7. **Rollback precisa da imagem, não do commit.** `coolify app rollback run --commit <SHA>` só funciona enquanto a imagem daquele build existir. Confira antes com `coolify app rollback images <uuid>`: o histórico de deploy pode ter o SHA e a imagem já ter sido podada. App em modo imagem (`build_pack: "dockerimage"` no `project.json`, issue #1001) não tem build no Coolify: a imagem de cada deploy fica no GHCR com a tag do sha, e o rollback é por tag (`coolify app update <uuid> --docker-tag <SHA-alvo>`, depois `coolify deploy uuid <uuid>`).
 
 ### Auto-deploy por webhook é o caminho normal
 
@@ -715,7 +716,7 @@ Algo down → ❌ destacado.
 
 ## Modo `rollback`
 
-Invocação: `/deploy rollback [--dry-run]`. Reverte para o último deploy `healthy` anterior, quando o rabo não voltou sozinho (saída 3 do `fechar_onda.py`, build, ou 4, rollback automático que falhou). Aqui o `rollback run` é sempre do humano (`! coolify app rollback run ...`). Passo a passo em `references/modo-rollback.md`.
+Invocação: `/deploy rollback [--dry-run]`. Reverte para o último deploy `healthy` anterior, quando o rabo não voltou sozinho (saída 3 do `fechar_onda.py`, build, ou 4, rollback automático que falhou). Aqui o `rollback run` é sempre do humano (`! coolify app rollback run ...`); app em modo imagem (`dockerimage`) volta por tag, com o `deploy uuid` também do humano. Passo a passo em `references/modo-rollback.md`.
 
 ---
 

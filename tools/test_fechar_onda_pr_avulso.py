@@ -481,9 +481,9 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
     monkeypatch.setattr(fo, "esperar_build", esperar_build)
     monkeypatch.setattr(fo, "checar_health", checar_health)
     monkeypatch.setattr(fo, "esperar_rollback", esperar_rollback)
-    monkeypatch.setattr(fo, "esperar_deploy_novo", esperar_deploy_novo, raising=False)
+    monkeypatch.setattr(fo, "esperar_deploy_novo", esperar_deploy_novo)
     monkeypatch.setattr(fo, "cancelar_build_do_registro", cancelar_build_do_registro)
-    monkeypatch.setattr(fo, "IMAGEM_POLL_S", 0, raising=False)
+    monkeypatch.setattr(fo, "IMAGEM_POLL_S", 0)
 
 
 def rodar_main(fo, monkeypatch, c: Cenario, *extra: str) -> int:
@@ -2100,6 +2100,20 @@ def test_rollback_em_modo_imagem_volta_a_tag_do_ultimo_deploy_sem_build(tmp_path
     assert c.rollbacks == ["backend"]
     assert c.healths == [("backend", "0.10.1"), ("backend", "0.10.0")]
     assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+
+
+def test_dry_run_em_modo_imagem_diz_que_o_backend_vai_por_imagem_sem_disparar_nada(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+
+    [faria] = linhas_com(capsys.readouterr().out, "faria:")
+    assert "backend: imagem do GHCR com a tag do squash, sem build" in faria, faria
+    assert c.publicacoes == [] and c.coolify() == [] and c.semaforo == []
 
 
 def test_rollback_em_modo_imagem_sem_deploy_anterior_no_state_sai_com_4(tmp_path, monkeypatch):

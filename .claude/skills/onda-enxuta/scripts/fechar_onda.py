@@ -50,7 +50,8 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      merge do PR anterior do lote deixa o seguinte atras), push na branch do PR
      (nunca na main; em dia, o head nao muda e o CI dele ja vale), CI verde no
      head e merge pela API (squash, conferindo o sha do head). Antes do primeiro
-     merge: a imagem no ar de cada app do lote (alvo do rollback) e o
+     merge: a imagem no ar de cada app do lote (alvo do rollback; em modo
+     imagem, a tag do ultimo deploy dele no state.json) e o
      APP_VERSION no backend e no frontend do Coolify (o backend a le no runtime,
      o frontend no build, pelo ARG do Dockerfile). PR que nao mergeia (conflito
      com a main depois do anterior, push recusado, CI vermelho, head que andou,
@@ -61,11 +62,17 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      para o deploy)
   6. um build: o deploy que o webhook do Coolify dispara para cada squash
      intermediario e cancelado (o mesmo mecanismo do registro, issue #851) e o
-     rabo monitora so o do ultimo, em cada service; forca se nao disparar
+     rabo monitora so o do ultimo, em cada service; forca se nao disparar.
+     App em modo imagem (`build_pack` dockerimage no project.json, issue #1001)
+     nao tem build nem webhook: o rabo dispara o workflow que publica a imagem
+     do squash no GHCR (retag da que o CI publicou para um head do lote com a
+     mesma pasta do app; sem nenhum, build do squash), espera o run e so entao
+     aponta o Coolify para a tag do squash, que so puxa e reinicia
   7. health com version match. Health ruim: rollback automatico (issue #968),
      cada app do lote volta a imagem anterior no Coolify, a que estava no ar
      antes do primeiro merge (`current` do `coolify app rollback images`, lida
-     antes dele, e `rollback run`, sem forcar build) e o APP_VERSION antigo volta
+     antes dele, e `rollback run`, sem forcar build; em modo imagem, a tag
+     anterior, pelo mesmo caminho do deploy) e o APP_VERSION antigo volta
      aos apps, antes da imagem subir; o health e conferido de novo na versao antiga
   8. registro num PR so de docs, so com history.json (todos os deploys, sem
      teto) e state.json (ADR 0062, decisao 9), mergeado pela API; o build que o
@@ -1236,8 +1243,11 @@ def main() -> int:
                 print(faria + "cancela o build que o webhook disparar em cada merge, limpeza; "
                       "sem bump, APP_VERSION, build, health nem registro.")
             else:
+                imagem = [sid for sid in servicos if em_modo_imagem(servicos_cfg[sid])]
                 print(faria + ("cancela o build dos squashes intermediarios, " if len(infos) > 1 else "")
-                      + f"tag v{versao_nova} no squash do ultimo, um build, health, registro em PR so de docs "
+                      + f"tag v{versao_nova} no squash do ultimo, um build"
+                      + "".join(f" ({sid}: imagem do GHCR com a tag do squash, sem build)" for sid in imagem)
+                      + ", health, registro em PR so de docs "
                       f"(prds {prds or '[]'}, migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
             remover_worktree(raiz, wt)
             wt = None
