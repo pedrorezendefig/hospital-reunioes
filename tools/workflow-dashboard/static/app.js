@@ -121,7 +121,6 @@ function adrPointerBadge(a) {
 }
 
 const issUrl = n => `${S.data.repo_url}/issues/${n}`;
-const prUrl = n => `${S.data.repo_url}/pull/${n}`;
 const shaUrl = sha => `${S.data.repo_url}/commit/${sha}`;
 /* chip navega dentro do painel pelo hash; o GitHub fica no ↗ de cada card */
 const rotaDe = (aba, item) => esc(montarHash({ aba, item }));
