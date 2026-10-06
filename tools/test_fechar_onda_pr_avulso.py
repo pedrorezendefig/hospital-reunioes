@@ -846,6 +846,65 @@ def test_segundo_pr_com_merge_recusado_fica_de_fora_e_o_primeiro_sobe_com_saida_
     assert fechou.startswith("onda onda-x fechada sem #8") and "PRs #7 " in fechou, fechou
 
 
+def test_history_da_onda_lista_os_prs_e_as_issues_do_lote(tmp_path, monkeypatch):
+    fo = carregar_fechar_onda()
+    c = onda_de_dois(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_onda(fo, monkeypatch, c, [7, 8]) == 0
+
+    entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
+    # o commit que foi para produção é o squash do último PR
+    assert entrada["sha"] == c.merges[1]["main"] and entrada["app_version"] == "0.10.1"
+    assert entrada["subject"].startswith("Onda onda-x: "), entrada["subject"]
+    assert "Limite de anexos por caso" in entrada["subject"], entrada["subject"]
+    # contrato do painel (`tools/workflow-dashboard/collect.py`, `_correlate`): cada
+    # PR e cada issue do lote achados nas notas
+    assert {int(n) for n in re.findall(r"PRs? #(\d+)", entrada["notes"])} == {7, 8}, entrada["notes"]
+    assert {int(n) for n in re.findall(r"(?:[Ii]ssues? |Closes )#(\d+)", entrada["notes"])} == {5, 6}, entrada["notes"]
+    state = json.loads(c.na_main("docs/spec/deploy/state.json"))
+    assert state["last_run"]["sha"] == c.merges[1]["main"]
+
+
+def test_dry_run_da_onda_lista_um_merge_por_pr_sem_branch_de_lote(tmp_path, monkeypatch, capsys):
+    fo = carregar_fechar_onda()
+    c = onda_de_dois(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_onda(fo, monkeypatch, c, [7, 8], "--dry-run") == 0
+
+    saida = capsys.readouterr().out
+    [faria] = linhas_com(saida, "faria:")
+    assert re.findall(r"merge pela API do PR #(\d+)", faria) == ["7", "8"], faria
+    assert "tag v0.10.1 no squash do ultimo" in faria and "um build" in faria, faria
+    assert "onda/" not in saida and "entrega" not in saida.lower(), saida
+    # nada sai da máquina
+    assert c.main_remota() == c.base and c.coolify() == [] and c.semaforo == []
+    assert [a for a in c.gh_chamadas if a[:3] in (["api", "-X", "POST"], ["api", "-X", "PUT"])] == []
+    assert c._tip("feature-8") == c.prs[8]["headRefOid"]
+
+
+def test_segundo_pr_em_conflito_com_o_primeiro_imprime_a_linha_que_chama_o_corretor(
+    tmp_path, monkeypatch, capsys
+):
+    """O #8 mexe no mesmo arquivo que o #7: depois do squash do #7, a main não
+    entra na branch do #8. A `/onda-enxuta` e o `/ship` distinguem o conflito
+    pela linha `conflito no merge de #N em: <arquivos>`."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    c.outro_pr(8, "fix(ouvidoria): prazo de vinte dias", 6, {"hospital-reunioes/backend/app/prazo.py": "PRAZO = 20\n"})
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_onda(fo, monkeypatch, c, [7, 8]) == fo.EXIT_MERGE
+
+    assert [m["pr"] for m in c.merges][0] == 7 and len(c.merges) == 2, c.merges
+    assert c.na_main("hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
+    # nada foi empurrado na branch do #8: o corretor rebaseia a partir dela
+    assert c._tip("feature-8") == c.prs[8]["headRefOid"] and c.prs[8]["state"] == "OPEN"
+    conflito = [li for li in capsys.readouterr().out.splitlines() if "conflito no merge de #8 em:" in li]
+    assert len(conflito) == 1 and "hospital-reunioes/backend/app/prazo.py" in conflito[0], conflito
+
+
 def test_limpeza_remove_o_worktree_de_agente_da_branch_entregue_por_squash(tmp_path, monkeypatch):
     """Com squash, a branch do PR não vira ancestral da main e o `--merged` não a
     acha; o worktree do agente nessa branch, no head que entrou, sai assim mesmo."""
