@@ -157,3 +157,33 @@ def test_pasta_errada_do_manual_derruba_a_action(tmp_path):
     raiz = arvore_do_draft(tmp_path, [963])
     proc = rodar("Tirar do draft", raiz, {"SAIDA_DO_DRAFT": "1"})
     assert proc.returncode == 1
+
+
+SNAPSHOT_FALSO = """\
+import sys
+from pathlib import Path
+Path("args.txt").write_text(" ".join(sys.argv[1:]))
+"""
+
+
+def test_snapshot_roda_sem_commitar_sozinho(tmp_path):
+    """Sem `--no-commit` o `snapshot.py` commita por conta própria, com outra
+    mensagem e sem `[skip ci]`; quem commita aqui é o passo do bot."""
+    raiz = tmp_path / "repo"
+    scripts = raiz / ".claude" / "skills" / "snapshot" / "scripts"
+    scripts.mkdir(parents=True)
+    (scripts / "snapshot.py").write_text(SNAPSHOT_FALSO, encoding="utf-8")
+    proc = rodar("Snapshot", raiz)
+    assert proc.returncode == 0, proc.stderr
+    assert (raiz / "args.txt").read_text(encoding="utf-8").split() == ["--root", ".", "--no-commit"]
+
+
+def test_backend_montado_com_o_mesmo_ambiente_do_ci():
+    """O snapshot lê as rotas do app montado (`introspect_routes.py`, pelo
+    `.venv` do backend). Sem o venv, ou sem as variáveis que o Settings exige,
+    ele cai no parser AST e rebaixa o ROTAS.md (o modo parcial do macOS)."""
+    ci = yaml.safe_load((RAIZ / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
+    assert workflow()["jobs"]["pos-merge"]["env"] == ci["jobs"]["backend"]["env"]
+    venv = passo("backend")
+    assert venv["working-directory"] == "hospital-reunioes/backend"
+    assert "uv sync --frozen" in venv["run"]

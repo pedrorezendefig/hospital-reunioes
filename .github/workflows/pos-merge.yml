@@ -25,12 +25,27 @@ jobs:
   pos-merge:
     name: Snapshot e draft do Manual
     runs-on: ubuntu-latest
+    env:
+      # As mesmas do job backend do ci.yml: o Settings exige as duas primeiras
+      # e recusa subir sem ENVIRONMENT. Sem elas o import do app falha e o
+      # snapshot cai no parser AST, que rebaixa o ROTAS.md.
+      SUPABASE_URL: http://localhost:54321
+      SUPABASE_SERVICE_ROLE_KEY: dummy-key-for-ci
+      ENVIRONMENT: ci
     steps:
       - uses: actions/checkout@v6
 
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
+      - name: Ambiente do backend (pelo uv.lock, como no CI)
+        # O snapshot lê as rotas do app montado pelo .venv de
+        # hospital-reunioes/backend (introspect_routes.py).
+        working-directory: hospital-reunioes/backend
+        run: |
+          pip install uv
+          uv sync --frozen --extra dev --python "$(command -v python)"
 
       # O tirar_draft_manual.py só tira o draft se a publicação for possível em
       # seguida: confere node >= 22.12, corepack e ffmpeg antes de escrever.
@@ -64,3 +79,8 @@ jobs:
             exit 0
           fi
           exit "$status"
+
+      - name: Snapshot (docs/spec/snapshots e blocos AUTO do ARQUITETURA.md)
+        # --no-commit: sem ele o snapshot.py commita sozinho, com outra
+        # mensagem e sem [skip ci]. Quem commita é o passo de baixo.
+        run: python3 .claude/skills/snapshot/scripts/snapshot.py --root . --no-commit
