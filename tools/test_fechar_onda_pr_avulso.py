@@ -1466,3 +1466,248 @@ def test_health_ruim_guarda_o_que_o_health_respondeu(monkeypatch):
     assert h["ok"] is False and h["status"] == 500
     assert h["corpo"] == '{"detail": "db fora do ar"}'
     assert fo.linha_de_health(h) == 'http 500 {"detail": "db fora do ar"}'
+
+
+# --------------------------- migration com recibo: o rabo espera o número (#969)
+
+SQL_COM_RECIBO = (
+    "create table triagem (id int);\n"
+    "alter table triagem enable row level security;\n"
+    "insert into migracoes_aplicadas (numero) values (112) on conflict (numero) do nothing;\n"
+)
+SHA_COM_RECIBO = hashlib.sha256(SQL_COM_RECIBO.encode("utf-8")).hexdigest()
+HORA = 60 * 60
+
+
+class Relogio:
+    """O relógio do rabo: `sleep` só anda o ponteiro, e 24 h passam num instante."""
+
+    def __init__(self):
+        import time as _time
+
+        self.agora = _time.time()
+        self.inicio = self.agora
+
+    def time(self) -> float:
+        return self.agora
+
+    def sleep(self, s: float) -> None:
+        self.agora += s
+
+
+class _Resposta:
+    def __init__(self, corpo: str, status: int = 200):
+        self.status = status
+        self._corpo = corpo.encode("utf-8")
+
+    def read(self) -> bytes:
+        return self._corpo
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc):
+        return False
+
+
+class HealthDoBackend:
+    """O `/api/health` de produção visto pelo rabo. `coladas` diz, em segundos
+    desde o início, quando o Pedro colou cada migration no Studio; antes de
+    todas, o banco tem só a 111. `sem_campo`: o backend no ar é anterior ao
+    #969 e não informa o número."""
+
+    def __init__(self, relogio: Relogio, coladas: dict[int, float] | None = None, sem_campo: bool = False):
+        self.relogio = relogio
+        self.coladas = coladas or {}
+        self.sem_campo = sem_campo
+        self.leituras: list[tuple[float, str]] = []
+
+    def __call__(self, req, timeout):
+        self.leituras.append((self.relogio.agora, req.full_url))
+        corpo = {"status": "healthy", "db": "healthy", "app": "Hospital", "version": "0.10.0"}
+        if not self.sem_campo:
+            passou = self.relogio.agora - self.relogio.inicio
+            corpo["migracao"] = max([111] + [n for n, quando in self.coladas.items() if passou >= quando])
+        return _Resposta(json.dumps(corpo, separators=(",", ":")))
+
+
+def pr_com_migration_com_recibo(tmp_path: Path, *outras: str) -> Cenario:
+    arquivos = {f"{MIGRATIONS}/112_triagem.sql": SQL_COM_RECIBO}
+    arquivos.update({f"{MIGRATIONS}/{nome}": SQL_COM_RECIBO.replace("(112)", f"({nome[:3]})")
+                     for nome in outras})
+    shas = [hashlib.sha256(sql.encode("utf-8")).hexdigest() for sql in arquivos.values()]
+    arquivos["hospital-reunioes/backend/app/prazo.py"] = "PRAZO = 15\n"
+    return Cenario(tmp_path, 8, "feat(ouvidoria): triagem", 6, arquivos,
+                   corpo="## Migrations (conferência por hash)\n\n" + "\n".join(shas) + "\n")
+
+
+def preparar_com_relogio(fo, monkeypatch, c: Cenario, health: HealthDoBackend) -> list[float]:
+    """`preparar` com o relógio controlado e o health falso do backend; devolve
+    os instantes em que o rabo pegou o semáforo."""
+    preparar(fo, monkeypatch, c)
+    monkeypatch.setattr(fo, "time", health.relogio)
+    monkeypatch.setattr(fo.urllib.request, "urlopen", health)
+    pegou_em: list[float] = []
+    semaforo_do_preparar = fo.semaforo
+
+    def semaforo(raiz, acao, chave, descricao=""):
+        if acao == "pegar":
+            pegou_em.append(health.relogio.agora)
+        return semaforo_do_preparar(raiz, acao, chave, descricao)
+
+    monkeypatch.setattr(fo, "semaforo", semaforo)
+    return pegou_em
+
+
+def linhas_com(saida: str, prefixo: str) -> list[str]:
+    return [li for li in saida.splitlines() if li.startswith(prefixo)]
+
+
+def test_rabo_espera_a_migration_aparecer_no_health_e_so_entao_pega_o_semaforo_e_mergeia(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_com_migration_com_recibo(tmp_path)
+    relogio = Relogio()
+    health = HealthDoBackend(relogio, coladas={112: 3 * HORA})
+    pegou_em = preparar_com_relogio(fo, monkeypatch, c, health)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    # o merge saiu, como em qualquer PR de app
+    assert c.merges[0]["pr"] == 8  # depois dele, o PR de registro
+    assert c.semaforo == [("pegar", "pr-8"), ("soltar", "pr-8")]
+    # mas só depois de o /api/health do backend devolver a 112: o semáforo
+    # (e com ele o APP_VERSION e o merge) não ficou preso durante a espera
+    assert {url for _, url in health.leituras} == {"https://exemplo.invalid/api/health"}
+    assert relogio.inicio + 3 * HORA <= pegou_em[0] <= relogio.inicio + 3 * HORA + fo.MIGRACAO_POLL_S
+    saida = capsys.readouterr().out
+    # o humano recebe o caminho clicável do arquivo, com o SQL do head do PR
+    [cole] = linhas_com(saida, "migration: cole no Studio")
+    caminho = re.search(r"(\S+112_triagem\.sql):1\b", cole)
+    assert caminho, cole
+    assert Path(caminho.group(1)).read_text(encoding="utf-8") == SQL_COM_RECIBO
+    assert SHA_COM_RECIBO[:12] in cole and "3 linhas" in cole, cole
+    assert linhas_com(saida, "migration: 112 aplicada"), saida
+    assert "vencida" not in saida, saida
+
+
+def test_lote_com_duas_migrations_espera_a_maior(tmp_path, monkeypatch, capsys):
+    fo = carregar_fechar_onda()
+    c = pr_com_migration_com_recibo(tmp_path, "113_triagem_anexos.sql")
+    relogio = Relogio()
+    health = HealthDoBackend(relogio, coladas={112: 1 * HORA, 113: 5 * HORA})
+    pegou_em = preparar_com_relogio(fo, monkeypatch, c, health)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert relogio.inicio + 5 * HORA <= pegou_em[0] <= relogio.inicio + 5 * HORA + fo.MIGRACAO_POLL_S
+    saida = capsys.readouterr().out
+    assert len(linhas_com(saida, "migration: cole no Studio")) == 2, saida
+    assert linhas_com(saida, "migration: 113 aplicada"), saida
+
+
+def test_migration_que_nao_aparece_em_24_h_vence_com_codigo_proprio_sem_merge(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_com_migration_com_recibo(tmp_path)
+    relogio = Relogio()
+    health = HealthDoBackend(relogio)  # o Pedro nunca cola a 112
+    preparar_com_relogio(fo, monkeypatch, c, health)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MIGRACAO == 7
+
+    # vence no teto, nem antes nem um dia depois
+    esperou = relogio.agora - relogio.inicio
+    assert 24 * HORA <= esperou <= 24 * HORA + fo.MIGRACAO_POLL_S, esperou
+    # nada entrou na main, nada no Coolify, semáforo livre e o PR devolvido aberto
+    assert c.merges == [] and c.main_remota() == c.base
+    assert c.coolify() == []
+    assert c.semaforo == []
+    assert c.prs[8]["state"] == "OPEN"
+    saida = capsys.readouterr().out
+    [vencida] = linhas_com(saida, "migration: vencida")
+    for trecho in ("112", "24 h", "111", "#8", "Nada entrou na main"):
+        assert trecho in vencida, (trecho, vencida)
+
+
+def test_health_de_backend_anterior_ao_recibo_nao_prende_o_rabo(tmp_path, monkeypatch, capsys):
+    """O deploy do próprio #969: o backend no ar ainda não informa o número, e a
+    114 foi colada no Studio pelo fluxo antigo. O rabo avisa e segue sem esperar."""
+    fo = carregar_fechar_onda()
+    c = pr_com_migration_com_recibo(tmp_path)
+    health = HealthDoBackend(Relogio(), sem_campo=True)
+    preparar_com_relogio(fo, monkeypatch, c, health)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert len(health.leituras) == 1
+    assert c.merges[0]["pr"] == 8  # depois dele, o PR de registro
+    [aviso] = linhas_com(capsys.readouterr().out, "migration: o /api/health")
+    assert "112" in aviso and "nao informa" in aviso, aviso
+
+
+def test_pr_sem_migration_nao_consulta_o_health_antes_do_merge(tmp_path, monkeypatch):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    health = HealthDoBackend(Relogio())
+    preparar_com_relogio(fo, monkeypatch, c, health)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert health.leituras == []
+
+
+def test_dry_run_com_migration_diz_que_esperaria_sem_consultar_o_health(tmp_path, monkeypatch, capsys):
+    fo = carregar_fechar_onda()
+    c = pr_com_migration_com_recibo(tmp_path)
+    health = HealthDoBackend(Relogio())
+    preparar_com_relogio(fo, monkeypatch, c, health)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+
+    assert health.leituras == []
+    [faria] = linhas_com(capsys.readouterr().out, "faria:")
+    assert "esperar a 112 no /api/health (teto 24 h)" in faria, faria
+
+
+CORPO_DEGRADADO = b'{"status":"degraded","db":"degraded","app":"a","version":"1","migracao":113}'
+
+
+@pytest.mark.parametrize("resposta, esperado", [
+    (_Resposta('{"status":"healthy","db":"healthy","app":"a","version":"1","migracao":114}'), 114),
+    ("503", 113),  # banco degradado: o 503 ainda traz o número
+    (_Resposta('{"status":"healthy","db":"healthy","app":"a","version":"1","migracao":null}'), None),
+    (_Resposta('{"status":"healthy","db":"healthy","app":"a","version":"1"}'), "sem-campo"),
+    # resposta que não é o health (proxy, rota errada): não vale como backend antigo
+    (_Resposta('{"detail":"Not Found"}', 404), None),
+    (_Resposta("<html>Bad Gateway</html>", 502), None),
+    ("fora-do-ar", None),
+], ids=["numero", "503-com-numero", "tabela-vazia", "backend-antigo", "outra-rota", "nao-json", "fora-do-ar"])
+def test_migracao_no_health_le_o_numero_do_corpo(monkeypatch, resposta, esperado):
+    fo = carregar_fechar_onda()
+
+    def urlopen(req, timeout):
+        if resposta == "fora-do-ar":
+            raise fo.urllib.error.URLError("connection refused")
+        if resposta == "503":
+            raise fo.urllib.error.HTTPError(req.full_url, 503, "Service Unavailable", {},
+                                            io.BytesIO(CORPO_DEGRADADO))
+        return resposta
+
+    monkeypatch.setattr(fo.urllib.request, "urlopen", urlopen)
+
+    lido = fo.migracao_no_health("https://exemplo.invalid/api/health")
+
+    assert lido == (fo.SEM_CAMPO if esperado == "sem-campo" else esperado)
+
+
+def test_docstring_documenta_a_migration_vencida():
+    fo = carregar_fechar_onda()
+
+    vencida = codigo_na_docstring(fo, 7)
+
+    for termo in ("migration", "/api/health", "24 h", "nada entrou na main", "semaforo"):
+        assert termo in vencida, (termo, vencida)
+    assert "SEMAFORO FICA PRESO" not in vencida, vencida

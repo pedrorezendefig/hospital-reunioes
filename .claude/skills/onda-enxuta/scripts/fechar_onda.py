@@ -25,10 +25,19 @@ mover codigo para fora de `hospital-reunioes/` conta como app.
     registro e sem entrada no history.json. Se o webhook do Coolify disparar
     build no merge, o rabo o cancela, como faz com o build do registro.
 
-Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
+Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas,
+fora as da migration):
   1. pre-condicoes (gh, coolify, PRs abertos e verdes, origin/main buscado,
      nenhuma migration nova com numero que a main ja usa, e o corpo do PR
-     declarando o sha256 de cada migration nova igual ao do arquivo)
+     declarando o sha256 de cada migration nova igual ao do arquivo).
+     Migration nova no lote (issue #969): imprime o caminho clicavel
+     `<arquivo>:1` de cada uma (copia do head do PR, fora do repositorio) e
+     consulta o /api/health do backend ate ele devolver o numero da maior, com
+     teto de 24 h: toda migration termina gravando o proprio numero em
+     `migracoes_aplicadas`, e o health devolve o maior. A espera vem ANTES do
+     semaforo: 24 h com a trava pega parariam os outros deploys, e o
+     semaforo.sh a da por velha em 60 min. Backend no ar sem o campo
+     `migracao` (anterior ao #969): avisa e segue sem esperar, como antes
   2. semaforo de deploy (chave = nome da sessao, unica por construcao)
   3. branch de entrega num worktree descartavel:
      PR avulso: a propria branch do PR, com a origin/main por merge se ficou atras
@@ -85,10 +94,15 @@ Codigos de saida:
      segue na main: quem chamou abre o PR de revert dele (sem rebuild), reabre a
      issue com `ready-for-agent` e a linha `health:` (o que o health respondeu),
      conta uma tentativa da fatia e notifica
+  7  migration vencida: o /api/health nao devolveu o numero da migration do lote
+     em 24 h: nada entrou na main, o semaforo nao chegou a ser pego e os PRs
+     seguem abertos; quem chamou notifica, e o rabo roda de novo depois que a
+     migration for colada no Studio
 
 `--dry-run`: executa 1 e 3 e calcula o 4 sem escrever; imprime o plano (PR,
 issue, classe e tipo de versao: "app: bump ..." ou "ferramenta: só merge") e o
-que faria nos demais; nao pega semaforo, nao toca no Coolify, nao pusha.
+que faria nos demais (com a espera da migration, sem consultar o health); nao
+pega semaforo, nao toca no Coolify, nao pusha.
 
 Windows: `bash` do Git no PATH (para o semaforo.sh).
 """
@@ -104,6 +118,7 @@ import re
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 import urllib.error
 import urllib.request
@@ -127,6 +142,7 @@ EXIT_BUILD = 3
 EXIT_HEALTH = 4
 EXIT_REGISTRO = 5
 EXIT_ROLLBACK = 6
+EXIT_MIGRACAO = 7
 
 SEMAFORO = ".claude/skills/deploy/scripts/semaforo.sh"
 SPEC = "docs/spec"
@@ -140,6 +156,9 @@ CHECKS_POLL_S = 15
 CHECKS_TIMEOUT_S = 40 * 60
 HEAD_ATRASADO_S = 120  # o GitHub registra o push no PR em segundos
 REGISTRO_JANELA_S = 90  # o webhook do Coolify dispara em segundos
+MIGRACAO_TIMEOUT_S = 24 * 60 * 60  # teto da espera pela migration colada no Studio (issue #969)
+MIGRACAO_POLL_S = 60
+SEM_CAMPO = "sem-campo"  # o /api/health no ar e anterior ao #969: nao informa a migration
 VERDE = ("SUCCESS", "NEUTRAL", "SKIPPED")
 VERMELHO = ("FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "STALE", "ERROR")
 COAUTHOR = "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
@@ -201,7 +220,8 @@ def bash_path(p: Path) -> str:
 
 # ------------------------------------------------------------- pre-condicoes
 
-def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> list[dict]:
+def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> tuple[list[dict], list[tuple[str, str]]]:
+    """Devolve as infos dos PRs e (head, caminho) de cada migration nova do lote."""
     if run(["gh", "auth", "status"], check=False).returncode != 0:
         falhar("pre-condicao: `gh auth status` falhou.", EXIT_PRECOND)
     if not shutil.which("coolify"):
@@ -245,17 +265,18 @@ def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> list[dict]:
         infos.append(info)
     if problemas:
         falhar("pre-condicao: " + "; ".join(problemas) + ".", EXIT_PRECOND)
-    conferir_migrations(raiz, infos)
-    return infos
+    return infos, conferir_migrations(raiz, infos)
 
 
-def conferir_migrations(raiz: Path, infos: list[dict]) -> None:
+def conferir_migrations(raiz: Path, infos: list[dict]) -> list[tuple[str, str]]:
     """Para se algum PR adiciona migration com numero que a origin/main ja usa,
-    ou se o sha256 que o corpo do PR declara nao e o do arquivo.
+    ou se o sha256 que o corpo do PR declara nao e o do arquivo. Devolve
+    (head, caminho) de cada migration nova do lote.
 
     Roda depois do `git fetch origin main`: o CI conferiu contra a main da hora
     do push, e ela pode ter andado desde entao. Renumerar e do autor.
     """
+    novas = []
     for info in infos:
         n = info["number"]
         run(["git", "fetch", "-q", "origin", f"pull/{n}/head"], cwd=raiz)
@@ -263,11 +284,13 @@ def conferir_migrations(raiz: Path, infos: list[dict]) -> None:
         achadas = checar_migration_repetida.colisoes(raiz, "origin/main", head)
         if achadas:
             falhar(f"pre-condicao: #{n}: " + checar_migration_repetida.mensagem(achadas), EXIT_PRECOND)
-        conferir_hash_das_migrations(raiz, n, head, info.get("body") or "")
+        novas += [(head, caminho) for caminho in conferir_hash_das_migrations(raiz, n, head, info.get("body") or "")]
+    return novas
 
 
-def conferir_hash_das_migrations(raiz: Path, n: int, head: str, corpo: str) -> None:
+def conferir_hash_das_migrations(raiz: Path, n: int, head: str, corpo: str) -> list[str]:
     """Para se o corpo do PR nao traz o sha256 de cada migration nova do head.
+    Devolve o caminho de cada uma.
 
     O SQL que o humano cola no Studio e o que a review leu no corpo do PR, e o
     hash do corpo e a prova de que e o mesmo arquivo que vai entrar na main.
@@ -275,6 +298,7 @@ def conferir_hash_das_migrations(raiz: Path, n: int, head: str, corpo: str) -> N
     novas = run(["git", "diff", "--name-only", "-M", "--diff-filter=A", f"origin/main...{head}", "--",
                  checar_migration_repetida.PASTA], cwd=raiz).stdout.split()
     declarados = sorted({h.lower() for h in re.findall(r"\b[0-9a-fA-F]{64}\b", corpo)})
+    conferidas = []
     for caminho in novas:
         if run(["git", "cat-file", "-e", f"origin/main:{caminho}"], cwd=raiz, check=False).returncode == 0:
             continue  # ja esta na main (PR empilhado sobre um que entrou por squash)
@@ -282,6 +306,7 @@ def conferir_hash_das_migrations(raiz: Path, n: int, head: str, corpo: str) -> N
                                   capture_output=True, check=True).stdout
         sha = hashlib.sha256(conteudo).hexdigest()
         if sha in declarados:
+            conferidas.append(caminho)
             continue
         nome = Path(caminho).name
         if not declarados:
@@ -290,6 +315,87 @@ def conferir_hash_das_migrations(raiz: Path, n: int, head: str, corpo: str) -> N
         falhar(f"pre-condicao: #{n}: o sha256 de {nome} no corpo do PR ({', '.join(declarados)}) "
                f"nao bate com o arquivo no head ({sha}). Atualize o SQL e o hash do corpo e rode de novo.",
                EXIT_PRECOND)
+    return conferidas
+
+
+# ---------------------------------------------------------------- migration
+
+def migracao_no_health(url: str) -> int | str | None:
+    """O numero da ultima migration aplicada que o /api/health devolve (issue #969).
+    None: o health nao respondeu, a resposta nao e a do health, ou a tabela
+    `migracoes_aplicadas` esta vazia ou ainda nao existe. SEM_CAMPO: a resposta e
+    a do health, sem o campo `migracao` (backend anterior ao #969)."""
+    try:
+        with urllib.request.urlopen(urllib.request.Request(url, headers={"User-Agent": "fechar_onda"}),
+                                    timeout=15) as r:
+            body = r.read()
+    except urllib.error.HTTPError as e:
+        try:
+            body = e.read()  # o 503 do banco degradado ainda traz o numero
+        except Exception:
+            return None
+    except Exception:
+        return None
+    try:
+        dado = json.loads(body)
+    except ValueError:
+        return None
+    if not isinstance(dado, dict) or "status" not in dado or "db" not in dado:
+        return None
+    if "migracao" not in dado:
+        return SEM_CAMPO
+    numero = dado["migracao"]
+    return numero if isinstance(numero, int) and not isinstance(numero, bool) else None
+
+
+def esperar_migracao(url: str, numero: int) -> tuple[str, int | None]:
+    """Consulta o /api/health ate ele devolver `numero` ou mais, com teto de
+    MIGRACAO_TIMEOUT_S. Devolve ("aplicada", SEM_CAMPO ou "vencida", o ultimo
+    numero lido)."""
+    limite = time.time() + MIGRACAO_TIMEOUT_S
+    ultimo = None
+    while True:
+        lido = migracao_no_health(url)
+        if lido == SEM_CAMPO:
+            return SEM_CAMPO, None
+        if lido is not None:
+            ultimo = lido
+            if lido >= numero:
+                return "aplicada", lido
+        if time.time() >= limite:
+            return "vencida", ultimo
+        time.sleep(MIGRACAO_POLL_S)
+
+
+def esperar_migrations_do_lote(raiz: Path, backend: dict, novas: list[tuple[str, str]], numero: int,
+                               sessao: str, prs_txt: str) -> bool:
+    """Pede ao humano cada migration nova pelo caminho clicavel e espera a maior
+    aparecer no /api/health (issue #969). False se venceu o teto."""
+    pasta = Path(tempfile.gettempdir()) / "fechar_onda" / sessao
+    pasta.mkdir(parents=True, exist_ok=True)
+    for head, caminho in novas:
+        # o arquivo do head do PR, nunca o corpo do PR: e o que vai entrar na main
+        conteudo = subprocess.run(["git", "show", f"{head}:{caminho}"], cwd=str(raiz),
+                                  capture_output=True, check=True).stdout
+        arquivo = pasta / Path(caminho).name
+        arquivo.write_bytes(conteudo)
+        linhas = conteudo.count(b"\n")
+        print(f"migration: cole no Studio {arquivo}:1 ({linhas} linhas, sha256 "
+              f"{hashlib.sha256(conteudo).hexdigest()[:12]}); o rabo espera o {numero} no /api/health",
+              flush=True)
+    t = time.time()
+    status, ultimo = esperar_migracao(url_do_health(backend), numero)
+    if status == SEM_CAMPO:
+        print(f"migration: o /api/health no ar nao informa a migration aplicada (backend anterior ao #969); "
+              f"o rabo segue sem esperar, confira que a {numero} foi colada no Studio.", flush=True)
+    elif status == "aplicada":
+        print(f"migration: {numero} aplicada, o /api/health devolveu {ultimo} em {dur(time.time() - t)}", flush=True)
+    else:
+        print(f"migration: vencida, o /api/health nao chegou a {numero} em {MIGRACAO_TIMEOUT_S // 3600} h "
+              f"(ultimo: {ultimo}). Nada entrou na main e o semaforo nao foi pego; PRs {prs_txt} seguem abertos. "
+              "Cole a migration no Studio e rode o rabo de novo.")
+        return False
+    return True
 
 
 # ----------------------------------------------------------------- semaforo
@@ -855,9 +961,14 @@ def linha_de_health(h: dict) -> str:
     return " ".join(p for p in (f"http {h.get('status')}", h.get("nota"), h.get("corpo")) if p)
 
 
+def url_do_health(service: dict) -> str:
+    hc = (service.get("deploy") or {}).get("health_check") or {}
+    return hc.get("url") or ((service.get("deploy") or {}).get("fqdn") or "") + (hc.get("path") or "/")
+
+
 def checar_health(service: dict, versao_esperada: str | None) -> dict:
     hc = (service.get("deploy") or {}).get("health_check") or {}
-    url = hc.get("url") or ((service.get("deploy") or {}).get("fqdn") or "") + (hc.get("path") or "/")
+    url = url_do_health(service)
     if not url:
         return {"ok": True, "status": None, "latency_ms": None, "nota": "sem health"}
     resultado = {"ok": False, "status": None, "latency_ms": None}
@@ -983,13 +1094,18 @@ def main() -> int:
     projeto = ler_json(raiz / SPEC / "deploy" / "project.json")
     servicos_cfg = {s["id"]: s for s in projeto["services"]}
 
-    infos = checar_pre_condicoes(raiz, args.prs, args.dry_run)
+    infos, novas = checar_pre_condicoes(raiz, args.prs, args.dry_run)
     if avulso and infos[0].get("isCrossRepository"):
         falhar(f"pre-condicao: #{infos[0]['number']} vem de um fork; a main entra na branch do PR, "
                "que precisa estar neste repositorio.", EXIT_PRECOND)
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
     print(f"pre-condicoes ok: {prs_txt}, migrations sem numero repetido contra origin/main e com o sha256 do corpo"
-          + (" (dry-run)" if args.dry_run else ""))
+          + (" (dry-run)" if args.dry_run else ""), flush=True)
+    numeros = [n for n in (checar_migration_repetida._numero(Path(c).name) for _, c in novas) if n is not None]
+    # antes do semaforo: a espera pode levar horas (issue #969)
+    if numeros and not args.dry_run and not esperar_migrations_do_lote(
+            raiz, servicos_cfg["backend"], novas, max(numeros), args.sessao, prs_txt):
+        return EXIT_MIGRACAO
 
     wt = None
     wt_reg = None
@@ -1045,7 +1161,9 @@ def main() -> int:
                       else f"app: bump {tipo} v{versao_antiga} -> v{versao_nova}")
             print("plano: " + ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in infos)
                   + f"; {classe}; chave {args.sessao}")
-            entrega = f"faria: push na branch {branch}" + ("" if avulso else " e PR de entrega") + ", CI verde, "
+            entrega = ("faria: " + (f"esperar a {max(numeros)} no /api/health (teto {MIGRACAO_TIMEOUT_S // 3600} h), "
+                                    if numeros else "")
+                       + f"push na branch {branch}" + ("" if avulso else " e PR de entrega") + ", CI verde, ")
             if ferramenta:
                 print(entrega + "merge pela API, cancela o build que o webhook disparar, limpeza; "
                       "sem bump, APP_VERSION, build, health nem registro.")
