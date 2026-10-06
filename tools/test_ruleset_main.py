@@ -7,6 +7,11 @@ pelo admin (`gh api`, no corpo do PR #910 e no `dev.md`). Ele exige os jobs do
 caminho não reporta check nenhum, então o PR só de docs (o registro do
 `fechar_onda.py`, ADR, skill) travaria do mesmo jeito. Estes testes amarram as
 duas pontas: o nome de cada check e o CI que sempre reporta.
+
+Desde a issue #966 o detector responde por pasta (backend, frontend,
+ferramenta) e cada job pesado roda só com a parte dele. Os testes rodam o
+script do detector num repo git de verdade e avaliam o `if:` de cada job com as
+saídas dele, como o GitHub avalia: a pergunta é quais jobs rodam.
 """
 
 from __future__ import annotations
@@ -97,19 +102,15 @@ def test_pr_so_de_docs_tambem_dispara_o_ci():
     assert "branches: [main]" in pr
 
 
-def test_jobs_obrigatorios_pulam_por_if_e_rodam_se_o_detector_falhar():
-    """Job pulado por `if` reporta sucesso, e é isso que libera o PR só de docs.
-    Se o detector falhar, os jobs rodam: pular o CI de um PR de código porque o
-    detector quebrou passaria pelo ruleset sem teste nenhum."""
-    obrigatorios = jobs_obrigatorios()
-    assert len(obrigatorios) == 3, sorted(obrigatorios)
-    for job, bloco in obrigatorios.items():
-        se = re.search(r"^    if: (.+)$", bloco, re.M)
-        assert se, f"{job} sem if"
-        expr = se.group(1)
-        assert "!cancelled()" in expr, (job, expr)
-        assert "needs.mudancas.result != 'success'" in expr, (job, expr)
-        assert "needs.mudancas.outputs.codigo == 'true'" in expr, (job, expr)
+def test_jobs_obrigatorios_pulam_por_if_e_rodam_todos_se_o_detector_falhar():
+    """Job pulado por `if` reporta sucesso, e é isso que libera o PR só de
+    ferramenta. Se o detector falhar (sem saída nenhuma), os três rodam: pular
+    o CI de um PR de código porque o detector quebrou passaria pelo ruleset sem
+    teste nenhum. Workflow cancelado não roda nada."""
+    assert len(jobs_obrigatorios()) == 3, sorted(jobs_obrigatorios())
+    assert jobs_que_rodam("success", {"backend": "false", "frontend": "false", "ferramenta": "true"}) == set()
+    assert jobs_que_rodam("failure", {}) == TUDO
+    assert jobs_que_rodam("failure", {}, cancelado=True) == set()
 
 
 def passo_do_detector() -> tuple[str, dict[str, str]]:
@@ -169,51 +170,124 @@ def rodar_detector(tmp_path: Path, mudados: list[str], evento: str = "pull_reque
     return proc
 
 
-@pytest.mark.parametrize("mudados, codigo", [
-    (["docs/spec/deploy/history.json", "docs/spec/deploy/state.json", "docs/ARQUITETURA.md"], "false"),
-    (["docs/manual/src/content/docs/ouvidoria/index.mdx"], "false"),
-    ([".claude/skills/onda-enxuta/scripts/fechar_onda.py"], "false"),
-    (["README.md", "hospital-reunioes/README.md"], "false"),
-    (["hospital-reunioes/frontend/package.json"], "true"),
-    ([".github/workflows/ci.yml"], "true"),
-    (["docs/adr/0061-x.md", "tools/checar_migration_repetida.py"], "true"),
-    ([], "true"),
+def saidas_do_passo(proc: subprocess.CompletedProcess) -> dict[str, str]:
+    return dict(li.split("=", 1) for li in proc.stdout.splitlines())
+
+
+def repasse_do_job_mudancas() -> dict[str, str]:
+    """saída do job `mudancas` -> saída do passo `diff` que ela repassa."""
+    bloco = jobs_do_ci()["mudancas"]
+    trecho = re.search(r"^    outputs:\n((?:      .*\n)+)", bloco, re.M).group(1)
+    return dict(re.findall(r"^      (\w+): \$\{\{ steps\.diff\.outputs\.(\w+) \}\}$", trecho, re.M))
+
+
+def avaliar_if(expr: str, resultado: str, saidas_job: dict[str, str], cancelado: bool = False) -> bool:
+    """Avalia o `if:` de um job como o GitHub Actions avalia, no vocabulário
+    que este CI usa: `!`, `&&`, `||`, `==`, `!=`, `cancelled()` e o resultado e
+    as saídas do job `mudancas`. Saída que não existe vale '' no GitHub. Sem
+    função de status no `if`, o GitHub soma um `success() &&` implícito, que
+    pula o job quando o detector falha: é isso que o `!cancelled()` desliga."""
+    corpo = re.fullmatch(r"\$\{\{ (.+) \}\}", expr.strip()).group(1)
+    if not re.search(r"\b(success|failure|cancelled|always)\(\)", corpo):
+        corpo = f"success() && ({corpo})"
+    corpo = corpo.replace("success()", repr(resultado == "success" and not cancelado))
+    corpo = corpo.replace("cancelled()", repr(cancelado))
+    corpo = corpo.replace("needs.mudancas.result", repr(resultado))
+    corpo = re.sub(r"needs\.mudancas\.outputs\.(\w+)", lambda m: repr(saidas_job.get(m.group(1), "")), corpo)
+    corpo = corpo.replace("&&", " and ").replace("||", " or ")
+    corpo = re.sub(r"!(?!=)", " not ", corpo)
+    sobra = set(re.findall(r"[A-Za-z_.]+", re.sub(r"'[^']*'", "", corpo)))
+    assert sobra <= {"True", "False", "and", "or", "not"}, f"if fora do vocabulário: {expr}"
+    return eval(corpo, {"__builtins__": {}})
+
+
+def jobs_que_rodam(resultado: str, saidas_passo: dict[str, str], cancelado: bool = False) -> set[str]:
+    repasse = repasse_do_job_mudancas()
+    saidas_job = {saida: saidas_passo.get(passo, "") for saida, passo in repasse.items()}
+    rodam = set()
+    for job, bloco in jobs_obrigatorios().items():
+        se = re.search(r"^    if: (.+)$", bloco, re.M)
+        assert se, f"{job} sem if: sem ele o job roda sempre e o detector não serve"
+        if avaliar_if(se.group(1), resultado, saidas_job, cancelado):
+            rodam.add(job)
+    return rodam
+
+
+TUDO = {"backend", "frontend-lint", "build"}
+BACKEND = {"backend", "build"}
+FRONTEND = {"frontend-lint", "build"}
+
+
+@pytest.mark.parametrize("mudados, rodam, ferramenta", [
+    (["docs/spec/deploy/history.json", "docs/spec/deploy/state.json", "docs/ARQUITETURA.md"], set(), "true"),
+    (["docs/manual/src/content/docs/ouvidoria/index.mdx"], set(), "true"),
+    ([".claude/skills/onda-enxuta/scripts/fechar_onda.py"], set(), "true"),
+    (["docs/adr/0061-x.md", "tools/checar_migration_repetida.py"], set(), "true"),
+    ([".github/rulesets/main.json"], set(), "true"),
+    (["README.md"], set(), "true"),
+    (["hospital-reunioes/README.md"], set(), "false"),
+    (["hospital-reunioes/frontend/package.json"], FRONTEND, "false"),
+    (["hospital-reunioes/backend/app/main.py"], BACKEND, "false"),
+    (["hospital-reunioes/supabase/migrations/114_x.sql"], BACKEND, "false"),
+    # Acento: com core.quotePath ligado (o padrão) o git devolve o caminho
+    # entre aspas, e nenhum ^hospital-reunioes/ casaria.
+    (["hospital-reunioes/backend/app/serviço.py"], BACKEND, "false"),
+    (["hospital-reunioes/supabase/migrations/115_manifestação.sql"], BACKEND, "false"),
+    (["hospital-reunioes/frontend/src/app/reunião/page.tsx"], FRONTEND, "false"),
+    # Aspa no nome continua entre aspas mesmo sem quotePath: roda tudo.
+    (['hospital-reunioes/backend/app/a"b.py'], TUDO, "true"),
+    (["hospital-reunioes/backend/README.md", "hospital-reunioes/frontend/src/app/page.tsx"], TUDO, "false"),
+    (["tools/x.py", "hospital-reunioes/frontend/package.json"], FRONTEND, "true"),
+    ([".github/workflows/ci.yml"], TUDO, "true"),
+    ([".github/workflows/manual.yml"], TUDO, "true"),
+    ([], TUDO, "true"),
 ])
-def test_detector_classifica_como_o_paths_ignore_do_push(tmp_path, mudados, codigo):
+def test_cada_pasta_liga_so_os_jobs_dela(tmp_path, mudados, rodam, ferramenta):
+    """A tabela do PRD #963 (decisão 4): backend roda com `backend/` ou
+    `supabase/`, frontend com `frontend/`, docker build com qualquer um dos
+    dois, `.github/workflows/` roda tudo. Ferramenta (fora de
+    `hospital-reunioes/`, a mesma fronteira do rabo) não liga job nenhum daqui:
+    os testes de `tools/` rodam no `manual.yml`."""
     proc = rodar_detector(tmp_path, mudados)
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout == f"codigo={codigo}\n"
+    saidas = saidas_do_passo(proc)
+    assert jobs_que_rodam("success", saidas) == rodam, saidas
+    assert saidas["ferramenta"] == ferramenta, saidas
 
 
-@pytest.mark.parametrize("origem, destino", [
-    ("hospital-reunioes/backend/app/main.py", "docs/main.py"),
-    ("hospital-reunioes/backend/app/main.py", "hospital-reunioes/backend/app/main.md"),
+@pytest.mark.parametrize("origem, destino, rodam", [
+    ("hospital-reunioes/backend/app/main.py", "docs/main.py", BACKEND),
+    # Cruza pastas: sem --no-renames só o destino (frontend) apareceria.
+    ("hospital-reunioes/backend/app/x.py", "hospital-reunioes/frontend/src/x.py", TUDO),
 ])
-def test_detector_ve_o_caminho_antigo_de_um_rename(tmp_path, origem, destino):
-    """Num rename o `git diff --name-only` lista só o caminho novo: mover código
-    para docs/ pularia os três checks obrigatórios e o merge subiria sem teste."""
+def test_detector_ve_o_caminho_antigo_de_um_rename(tmp_path, origem, destino, rodam):
+    """Num rename o `git diff --name-only` lista só o caminho novo: tirar código
+    do backend pularia o job dele e o merge subiria sem teste."""
     proc = rodar_detector(tmp_path, [], renomeados=((origem, destino),))
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout == "codigo=true\n"
+    assert jobs_que_rodam("success", saidas_do_passo(proc)) == rodam
 
 
-def test_detector_no_push_da_main_sempre_roda(tmp_path):
+def test_detector_no_push_da_main_sempre_roda_tudo(tmp_path):
     proc = rodar_detector(tmp_path, ["docs/x.md"], evento="push")
     assert proc.returncode == 0, proc.stderr
-    assert proc.stdout == "codigo=true\n"
+    assert jobs_que_rodam("success", saidas_do_passo(proc)) == TUDO
 
 
-def test_detector_que_nao_acha_a_base_falha_em_vez_de_pular(tmp_path):
+def test_detector_que_nao_acha_a_base_falha_e_roda_tudo(tmp_path):
     proc = rodar_detector(tmp_path, ["hospital-reunioes/backend/app/main.py"], base="0" * 40)
     assert proc.returncode != 0
-    assert "codigo=false" not in proc.stdout
+    assert jobs_que_rodam("failure", saidas_do_passo(proc)) == TUDO
 
 
-def test_estes_testes_rodam_quando_o_ci_ou_o_ruleset_mudam():
-    """Os testes de `tools/` rodam no `manual.yml`, que só acorda pelos caminhos dele."""
+def test_estes_testes_rodam_quando_tools_o_ci_ou_o_ruleset_mudam():
+    """Os testes de `tools/` rodam no `manual.yml`, que só acorda pelos caminhos
+    dele. O `ci.yml` pula PR só de ferramenta (issue #966): sem `tools/**` aqui,
+    mudança em `tools/` entraria sem teste nenhum."""
     texto = MANUAL.read_text(encoding="utf-8")
     on = texto.split("\non:\n", 1)[1].split("\njobs:\n", 1)[0]
     for evento in ("push", "pull_request"):
         bloco = re.search(rf"^  {evento}:\n((?:    .*\n|\n)*)", on, re.M).group(1)
+        assert "- 'tools/**'" in bloco, evento
         assert "- '.github/workflows/ci.yml'" in bloco, evento
         assert "- '.github/rulesets/**'" in bloco, evento
