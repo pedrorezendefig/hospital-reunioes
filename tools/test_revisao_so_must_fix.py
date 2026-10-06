@@ -210,8 +210,11 @@ def test_o_gatilho_de_seguranca_e_rota_sem_login_ou_migration_nos_textos_do_flux
 def test_o_auditor_do_prd_passa_a_lente_de_seguranca_no_diff_acumulado():
     auditor = ler(AGENTES / "hr-auditor-prd.md")
     lente = secao(auditor, "Segurança do diff acumulado")
-    assert "/sub_issues" in lente and "closedByPullRequestsReferences" in lente, lente
-    assert "gh pr diff <PR>" in lente and "uma rodada" in lente.lower(), lente
+    assert "uma rodada" in lente.lower(), lente
+    # os PRs vêm de todas as sub-issues do PRD, não só das desta sessão
+    prs = item(lente, "1. ")
+    assert "issues/<PRD>/sub_issues --jq" in prs and "closedByPullRequestsReferences" in prs, prs
+    assert "gh pr diff <PR>" in prs, prs
     assert "gh issue create" in lente and "must-fix" in lente, lente
     assert "`ready-for-agent`" in lente and "`ready-for-human` se for grave" in lente, lente
     assert "Segurança: MUST-FIX (n)" in secao(auditor, "Veredito"), "o comentário do PRD conta os achados"
