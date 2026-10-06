@@ -101,3 +101,23 @@ def test_o_implementador_recebe_o_mapa_e_o_mergeado_na_onda_anterior():
     entrada = secao(ler(AGENTES / "hr-implementador.md"), "Entrada")
     linha = next(li for li in entrada.splitlines() if "Mergeado na onda anterior" in li)
     assert "depois do Mapa" in linha and "origin/main" in linha, linha
+
+
+# ------------------------------------------- (c) teto de mutantes
+
+TETO = "um mutante por critério de aceite, não por teste"
+
+
+def test_o_teto_de_um_mutante_por_criterio_vale_no_implementador_no_tdd_e_no_revisor():
+    passo_4 = next(
+        li for li in secao(ler(AGENTES / "hr-implementador.md"), "Ciclo").splitlines() if li.startswith("4. ")
+    )
+    tdd = next(li for li in ler(SKILLS / "tdd" / "SKILL.md").splitlines() if li.startswith("> **Prova por mutação"))
+    lente_1 = next(li for li in secao(ler(AGENTES / "hr-revisor.md"), "Lentes").splitlines() if li.startswith("1. "))
+
+    for nome, texto in (("hr-implementador", passo_4), ("/tdd", tdd), ("hr-revisor", lente_1)):
+        assert TETO in texto, nome
+    # quem escreve o teto escreve a regra inteira: uma coisa só por mutante, e o detector
+    for nome, texto in (("hr-implementador", passo_4), ("/tdd", tdd)):
+        assert "mexe em uma coisa só" in texto and "detector" in texto, nome
+    assert "não peça mutante além do teto" in lente_1, lente_1
