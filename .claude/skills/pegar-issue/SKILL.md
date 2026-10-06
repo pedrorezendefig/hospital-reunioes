@@ -44,11 +44,11 @@ gh api "repos/$REPO/issues/<N>/dependencies/blocked_by" --jq '.[] | select(.stat
 ```
 Se retornar alguma bloqueadora **aberta**, avise e **não pegue**; sugira pegar outra issue desbloqueada. (Texto "Bloqueada por: #X" em corpo de issue antiga é histórico; a fonte da verdade é a relação nativa.)
 
-### 3. Recusar issue com arquivo em comum
+### 3. Avisar arquivo em comum (não bloqueia)
 ```bash
 python3 .claude/skills/pegar-issue/scripts/arquivo_em_comum.py <N>
 ```
-Duas issues que tocam o mesmo arquivo não andam ao mesmo tempo (ADR 0063): o conflito só apareceria no rabo. O script cruza os caminhos que o corpo da issue cita entre crases com os das issues `in-progress` (corpo e arquivos do PR aberto que as fecha). Saída `1`: ele já marcou a issue como "Bloqueada por" cada uma delas (dependência nativa, ADR 0028) e imprime uma linha por bloqueadora; repasse as linhas, **não pegue** e sugira outra. Ela volta à fila sozinha quando a bloqueadora fecha. Saída `0`, sem nada impresso: siga.
+Arquivo em comum não separa fatias (ADR 0066): o único separador é a dependência, que quem fatia escreve como `blocked_by` nativo (passo 2), e o conflito de texto se resolve no rabo, PR a PR. O script cruza os caminhos que o corpo da issue cita entre crases com os das issues `in-progress` (corpo e arquivos do PR aberto que as fecha) e, se algum coincide, imprime uma linha de aviso com as issues e os arquivos. Repasse a linha ao usuário e **siga para o claim**; o script não grava dependência e sempre sai `0`.
 
 ### 4. Avisar fatia de PRD alheio (não bloqueia)
 ```bash

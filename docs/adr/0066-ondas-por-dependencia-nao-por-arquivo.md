@@ -21,9 +21,10 @@ Rejeitado: manter o arquivo como separador. Custava ondas em série por um confl
 
 ## Emenda à ADR 0063
 
-- **Fluxo sem humano no merge.** A regra derivada dela no `/montar-ondas-enxutas` ("arquivo em comum entre sessões também não roda junto, porque o conflito só apareceria no rabo") sai: o conflito aparece no rabo e é resolvido lá, PR a PR, pelo `hr-corretor`.
+- **Fluxo sem humano no merge.** A regra derivada dela no `/pegar-issue` (passo 3: "duas issues que tocam o mesmo arquivo não andam ao mesmo tempo (ADR 0063): o conflito só apareceria no rabo", com o `arquivo_em_comum.py` gravando `blocked_by` e recusando o claim) e o eco dela no `/montar-ondas-enxutas` saem: o conflito aparece no rabo e é resolvido lá, PR a PR, pelo `hr-corretor`.
 
 ## Consequências
 
 - Mudam `/montar-ondas-enxutas` (passo 1, balde "Bloqueada"; passo 4; template da fila), `/to-issues` (paralelismo real, quiz e ondas previstas no PRD), `/onda-enxuta` (passos 1 e 7) e a passagem em `references/prompts.md`.
+- O `/pegar-issue` foi alinhado: no passo 3, o `arquivo_em_comum.py` só imprime um aviso de uma linha com os arquivos que coincidem com issues `in-progress`, não grava `blocked_by` e não impede o claim. Dependência real continua sendo o `blocked_by` que quem fatia escreve, e o passo 2 do `/pegar-issue` segue recusando issue com bloqueadora aberta.
 - Mais conflitos no rabo, cada um custando uma rodada do `hr-corretor` e uma tentativa da fatia (teto de 3, ADR 0022), contra uma onda inteira a menos.

@@ -1,10 +1,11 @@
-"""O `/pegar-issue` recusa issue que toca arquivo de outra em andamento (issue #970).
+"""O `/pegar-issue` avisa, sem bloquear, a issue que toca arquivo de outra em andamento.
 
-ADR 0063: sem parada humana até produção, duas fatias que mexem no mesmo
-arquivo não podem andar ao mesmo tempo, senão o conflito aparece só no rabo. A
-segunda ganha a dependência nativa "Bloqueada por" da primeira (ADR 0028) e não
-recebe o claim. Quem decide é `arquivo_em_comum.py`, que estes testes rodam
-como o agente roda, com um `gh` de mentira no PATH.
+Nasceu no #970 recusando o claim e gravando "Bloqueada por" (ADR 0063). A ADR
+0066 tirou o arquivo como separador: o único separador é a dependência, escrita
+como `blocked_by` por quem fatia, e o conflito de texto se resolve no rabo PR a
+PR. Agora `arquivo_em_comum.py` só imprime um aviso de uma linha com os arquivos
+que coincidem, sai 0 e não grava dependência nenhuma. Estes testes o rodam como
+o agente roda, com um `gh` de mentira no PATH.
 """
 
 from __future__ import annotations
@@ -79,7 +80,7 @@ def bloqueios(tmp_path: Path) -> list[str]:
     return [li for li in log if "dependencies/blocked_by" in li]
 
 
-def test_arquivo_do_pr_de_outra_em_andamento_recusa_e_marca_bloqueada_por(tmp_path):
+def test_arquivo_do_pr_de_outra_em_andamento_avisa_sem_bloquear(tmp_path):
     feito = rodar(
         tmp_path,
         resposta(
@@ -89,14 +90,12 @@ def test_arquivo_do_pr_de_outra_em_andamento_recusa_e_marca_bloqueada_por(tmp_pa
         "970",
     )
 
-    assert feito.returncode == 1, feito.stderr
-    assert feito.stdout.strip() == (
-        "bloqueada por #988: arquivo em comum com a fatia em andamento "
-        "(.claude/skills/ship/SKILL.md)"
+    assert feito.returncode == 0, feito.stderr
+    assert feito.stdout == (
+        "aviso, sem bloqueio (ADR 0066): arquivo em comum com fatia em andamento: "
+        "#988 (.claude/skills/ship/SKILL.md)\n"
     )
-    assert bloqueios(tmp_path) == [
-        f"api --method POST repos/{REPO}/issues/970/dependencies/blocked_by -F issue_id=5001"
-    ]
+    assert bloqueios(tmp_path) == []
 
 
 def test_citacao_curta_com_linha_casa_com_o_caminho_inteiro_do_corpo_da_outra(tmp_path):
@@ -110,10 +109,9 @@ def test_citacao_curta_com_linha_casa_com_o_caminho_inteiro_do_corpo_da_outra(tm
         "970",
     )
 
-    assert feito.returncode == 1, feito.stderr
-    assert "bloqueada por #989" in feito.stdout
-    assert ".claude/skills/onda-enxuta/scripts/fechar_onda.py" in feito.stdout
-    assert len(bloqueios(tmp_path)) == 1
+    assert feito.returncode == 0, feito.stderr
+    assert "#989 (.claude/skills/onda-enxuta/scripts/fechar_onda.py)" in feito.stdout
+    assert bloqueios(tmp_path) == []
 
 
 def test_sem_arquivo_em_comum_pega_sem_marcar_nada(tmp_path):
@@ -142,6 +140,7 @@ def test_mesmo_nome_em_pasta_diferente_nao_e_o_mesmo_arquivo(tmp_path):
     )
 
     assert feito.returncode == 0, feito.stdout
+    assert feito.stdout == ""
     assert bloqueios(tmp_path) == []
 
 
@@ -156,10 +155,11 @@ def test_a_propria_issue_ja_em_andamento_nao_se_bloqueia(tmp_path):
     )
 
     assert feito.returncode == 0, feito.stdout
+    assert feito.stdout == ""
     assert bloqueios(tmp_path) == []
 
 
-def test_cada_fatia_em_andamento_com_arquivo_em_comum_vira_um_bloqueio(tmp_path):
+def test_todas_as_fatias_com_arquivo_em_comum_cabem_num_aviso_de_uma_linha(tmp_path):
     feito = rodar(
         tmp_path,
         resposta(
@@ -171,12 +171,12 @@ def test_cada_fatia_em_andamento_com_arquivo_em_comum_vira_um_bloqueio(tmp_path)
         "970",
     )
 
-    assert feito.returncode == 1, feito.stderr
-    assert [li.split(":")[0] for li in feito.stdout.splitlines()] == [
-        "bloqueada por #988",
-        "bloqueada por #990",
-    ]
-    assert [li.rsplit("=", 1)[1] for li in bloqueios(tmp_path)] == ["5001", "5003"]
+    assert feito.returncode == 0, feito.stderr
+    assert feito.stdout == (
+        "aviso, sem bloqueio (ADR 0066): arquivo em comum com fatia em andamento: "
+        "#988 (CLAUDE.md); #990 (docs/onboarding/dev.md)\n"
+    )
+    assert bloqueios(tmp_path) == []
 
 
 def test_a_busca_e_so_das_abertas_em_andamento_do_repositorio(tmp_path):
@@ -187,16 +187,17 @@ def test_a_busca_e_so_das_abertas_em_andamento_do_repositorio(tmp_path):
     assert "n=970" in chamada
 
 
-def test_o_pegar_issue_roda_a_recusa_antes_do_claim_e_nao_pega_quando_recusa():
+def test_o_pegar_issue_roda_o_aviso_antes_do_claim_e_segue_sem_bloquear():
     com_argumento = SKILL.read_text(encoding="utf-8").split("## Com argumento", 1)[1]
     chamada = re.search(r"python3 (\S+/arquivo_em_comum\.py) <N>", com_argumento)
     assert chamada, "o /pegar-issue roda o script com o número da issue"
     assert RAIZ / chamada.group(1) == SCRIPT
     claim = com_argumento.index("gh issue edit <N> --remove-label ready-for-agent")
     assert chamada.start() < claim
-    passo = com_argumento[chamada.start():claim]
-    assert re.search(r"[Ss]aída `?1`?.*não (pegue|faça o claim)", passo), passo
-    assert "Bloqueada por" in passo, passo
+    passo = com_argumento[chamada.start():com_argumento.index("### 4.")]
+    assert "ADR 0066" in passo, passo
+    assert re.search(r"\*\*siga para o claim\*\*", passo), passo
+    assert "não pegue" not in passo and "Bloqueada por" not in passo, passo
 
 
 def test_o_script_novo_nao_tem_travessao():
