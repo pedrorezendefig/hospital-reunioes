@@ -8,6 +8,7 @@ import { abaValida, aoMudarRota, gravarRota, lerRota, montarHash } from './route
 import { renderDiagrama, wireDiagramas } from './diagramas.js';
 import { renderArea, wireArea } from './areas.js';
 import { corDaPessoa } from './pessoas.js';
+import { renderOndas } from './ondas.js';
 
 const filtrosVazios = () => ({ state: 'all', fase: '', resp: '', prd: null, label: '', q: '', humana: false });
 
@@ -529,6 +530,7 @@ function issueCard(i, idx, prd = false) {
         <span class="ititle">${esc(i.title)}</span>
       </div>
       <div class="iss-chips">${chips}</div>
+      ${prd ? renderOndas(i, S.data, FASES) : ''}
       ${open ? `
       <div class="iss-body">
         ${linhaDoTempoHtml(i.number)}
@@ -645,6 +647,18 @@ async function ensureTimeline(n) {
     S.timelines[n] = { loading: false, list: [], error: String(e) };
   }
   if (S.tab === 'issues') refreshIssueList();
+}
+
+/* nó do desenho das ondas (#943): abre o card da fatia na lista, com as
+   fatias do PRD à mostra; filtro que esconderia a fatia sai do caminho */
+function abrirFatia(n, prd) {
+  const fatia = (S.data.github.issues || []).find(i => i.number === n);
+  if (fatia && !matchIssue(fatia)) S.fIssues = filtrosVazios();
+  S.expPrd.set(prd, true);
+  if (!S.expIss.has(n)) { S.expIss.add(n); ensureComments(n); ensureTimeline(n); }
+  render();
+  const card = view.querySelector(`.iss-head[data-n="${n}"]`);
+  if (card) card.scrollIntoView({ block: 'center', behavior: reduceMotion() ? 'auto' : 'smooth' });
 }
 
 /* ---------- PRS (o quadro por fase chega na fatia própria) ---------- */
@@ -873,6 +887,8 @@ view.addEventListener('click', e => {
     const n = Number(t.dataset.n);
     S.expPrd.set(n, t.dataset.open !== '1');
     refreshIssueList();
+  } else if (act === 'onda') {
+    abrirFatia(Number(t.dataset.n), Number(t.dataset.prd));
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);
     const ver = depVer(S.data.history[i].app_version);

@@ -37,6 +37,7 @@ O método de trabalho (o que era a aba Guia) vive em `docs/onboarding/`.
 - **Responsável**: quem assumiu a issue (assignee). Quem só criou aparece no card como informação, mas não conta; "ninguém assumiu" são as issues sem assignee.
 - **Tentativa**: PR fechado sem merge; o próximo PR da mesma issue aparece na linha do tempo como "novo PR".
 - **Cor da pessoa**: os três sócios têm cor fixa; quem mais aparecer ganha a próxima cor da paleta (`static/pessoas.js`).
+- **Onda**: rodada de execução de um PRD; a fatia entra uma onda depois da bloqueadora aberta do mesmo PRD. O card de cada PRD aberto desenha as ondas em colunas: o nó é a fatia na cor de quem assumiu, a borda é a fase, a seta é o `blocked_by` aberto, e clicar no nó abre o card da fatia.
 
 ## De onde vêm os dados (ao vivo vs. do último `git pull`)
 
@@ -58,6 +59,7 @@ Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta s
   - `ui.js` — componentes (tooltip, copiar, recolhível).
   - `pessoas.js`: a cor fixa de cada pessoa (`corDaPessoa`), reusada por chips, raias e nós.
   - `router.js`: o router de hash (`#aba/item?filtros`), único módulo que lê e grava o `location.hash`.
+  - `ondas.js`: o desenho das ondas no card do PRD (SVG próprio, um gancho só no `issueCard`).
   - `content/`: textos estáveis (glossário, verbetes das tabelas).
   - `style.css` — identidade visual (papel/indigo/coral; Fraunces + IBM Plex).
   - `vendor/marked.min.js` — render de Markdown ([marked](https://github.com/markedjs/marked), licença MIT).
