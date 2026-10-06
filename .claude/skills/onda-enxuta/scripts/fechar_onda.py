@@ -507,10 +507,15 @@ class EntregaFalhou(Exception):
 
 def fechar_pr_de_entrega(raiz: Path, pr: int, motivo) -> None:
     """Fecha o PR de entrega da onda e apaga a branch `onda/<sessao>`, senao a
-    rodada seguinte trava no push sem force e no 422 do PR ja aberto (#926)."""
-    run(["gh", "pr", "close", str(pr), "--delete-branch", "--comment",
-         f"<!-- automacao -->\nEntrega abandonada: {motivo}. A proxima rodada abre outro PR."],
-        cwd=raiz, check=False)
+    rodada seguinte trava no push sem force e no 422 do PR ja aberto (#926).
+    Nunca levanta: quem chama ainda precisa soltar o semaforo."""
+    try:
+        run(["gh", "pr", "close", str(pr), "--delete-branch", "--comment",
+             f"<!-- automacao -->\nEntrega abandonada: {str(motivo)[:200]}. A proxima rodada abre outro PR."],
+            cwd=raiz, check=False)
+    except Exception as e:  # noqa: BLE001
+        print(f"nao consegui fechar o PR #{pr} ({str(e)[:120]}): feche a mao com "
+              f"`gh pr close {pr} --delete-branch` antes de rodar de novo.")
 
 
 def empurrar_branch(wt: Path, branch: str) -> str:

@@ -813,10 +813,11 @@ def app_version_cai(fo, monkeypatch, c: Cenario, ligado: dict) -> None:
     monkeypatch.setattr(fo, "setar_app_version_nos_apps", setar_que_cai)
 
 
-@pytest.mark.parametrize("falha", [gh_cai_no_ci_da_entrega, app_version_cai],
+@pytest.mark.parametrize(("falha", "motivo"), [(gh_cai_no_ci_da_entrega, "502 Bad Gateway"),
+                                               (app_version_cai, "timed out after 30 seconds")],
                          ids=["gh-no-esperar-checks", "app-version-timeout"])
 def test_onda_com_erro_generico_antes_do_merge_fecha_o_pr_de_entrega_e_a_rodada_seguinte_entra(
-    tmp_path, monkeypatch, falha
+    tmp_path, monkeypatch, falha, motivo
 ):
     """Erro que não é EntregaFalhou entre o push e o merge (rede no poll do CI,
     APP_VERSION): o PR de entrega fecha com a branch, senão a rodada seguinte
@@ -833,7 +834,7 @@ def test_onda_com_erro_generico_antes_do_merge_fecha_o_pr_de_entrega_e_a_rodada_
     fechar = [a for a in c.gh_chamadas if a[:2] == ["pr", "close"]]
     assert len(fechar) == 1 and fechar[0][2] == str(entrega) and "--delete-branch" in fechar[0], fechar
     comentario = fechar[0][fechar[0].index("--comment") + 1]
-    assert "<!-- automacao -->" in comentario and ("502" in comentario or "timed out" in comentario), comentario
+    assert comentario.startswith("<!-- automacao -->\nEntrega abandonada: ") and motivo in comentario, comentario
     assert c.prs[entrega]["state"] == "CLOSED" and c._tip("onda/onda-x") is None
     assert c.prs[7]["state"] == "OPEN"
     assert c.merges == [] and c.main_remota() == c.base
@@ -844,6 +845,48 @@ def test_onda_com_erro_generico_antes_do_merge_fecha_o_pr_de_entrega_e_a_rodada_
 
     assert c.merges[0]["branch"] == "onda/onda-x" and c.merges[0]["pr"] != entrega
     assert c.na_main("hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
+
+
+def test_onda_com_gh_pr_close_travado_solta_o_semaforo_e_diz_como_fechar_a_mao(
+    tmp_path, monkeypatch, capsys
+):
+    """O fechamento é arrumação: se o próprio `gh pr close` estoura o timeout,
+    o semáforo ainda solta, porque nada entrou na main."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    gh_cai_no_ci_da_entrega(fo, monkeypatch, c, {"sim": True})
+    run = fo.run
+
+    def run_com_close_travado(cmd, *args, **kwargs):
+        if cmd[:3] == ["gh", "pr", "close"]:
+            raise subprocess.TimeoutExpired(cmd, 600)
+        return run(cmd, *args, **kwargs)
+
+    monkeypatch.setattr(fo, "run", run_com_close_travado)
+
+    assert rodar_main(fo, monkeypatch, c, "--sessao", "onda-x") == fo.EXIT_MERGE
+
+    entrega = next(n for n, p in c.prs.items() if p["headRefName"] == "onda/onda-x")
+    assert c.semaforo == [("pegar", "onda-x"), ("soltar", "onda-x")]
+    assert f"gh pr close {entrega} --delete-branch" in capsys.readouterr().out
+
+
+def test_onda_com_erro_generico_depois_do_merge_nao_fecha_o_pr_de_entrega(tmp_path, monkeypatch):
+    """Depois do merge o PR de entrega já entrou: o handler genérico não o fecha."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    def build_que_cai(service, desde, sha_push):
+        raise RuntimeError("coolify -> 502 Bad Gateway")
+
+    monkeypatch.setattr(fo, "esperar_build", build_que_cai)
+
+    assert rodar_main(fo, monkeypatch, c, "--sessao", "onda-x") == fo.EXIT_BUILD
+
+    assert [m["branch"] for m in c.merges] == ["onda/onda-x"]
+    assert [a for a in c.gh_chamadas if a[:2] == ["pr", "close"]] == []
 
 
 def test_avulso_com_erro_generico_antes_do_merge_nao_fecha_o_pr_da_fatia(tmp_path, monkeypatch):
