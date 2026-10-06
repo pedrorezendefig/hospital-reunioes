@@ -106,6 +106,19 @@ class TestLevarParaDesenvolvimento:
         assert criada["titulo"] == "[NOME]: leito 12"
         assert "**O que muda:** \\[NOME]: leito 12" in criada["corpo"]
 
+    def test_arroba_seguido_de_digito_chega_ao_github_sem_mencao_viva(self, monkeypatch):
+        """Issue #888: a peneira troca o `@` seguido de letra, mas `@1abc`
+        notificava a conta `1abc`. Descricao e titulo ganham o mesmo espaco
+        depois do `@` do comentario espelhado."""
+        demanda = _demanda("d-1", titulo="Avisar @2fulano", descricao="Fala com @1abc amanha")
+        client, _, gh = _montar(logado=PEDRO, demandas=[demanda], monkeypatch=monkeypatch)
+
+        assert client.post(ROTA_LEVAR).status_code == 200
+
+        criada = gh.criadas[0]
+        assert "**O que muda:** Fala com @ 1abc amanha" in criada["corpo"]
+        assert criada["titulo"] == "Avisar @ 2fulano"
+
     def test_a_demanda_no_app_mantem_titulo_e_descricao_originais(self, monkeypatch):
         """A peneira age so no que sai para o GitHub. A Demanda e o card
         continuam com o texto de quem escreveu."""

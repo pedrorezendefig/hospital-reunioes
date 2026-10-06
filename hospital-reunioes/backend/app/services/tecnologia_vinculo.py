@@ -562,9 +562,13 @@ def texto_do_diretor(bruto: str | None) -> str:
     nascimento, nome e o resto por marcador. Desde o #730 a descricao pode ser
     a transcricao de um print de sistema hospitalar, e o diretor tambem digita.
     A Demanda no app guarda o texto original: a peneira age so no que sai.
+
+    **E o `@` que a peneira nao pega** (o seguido de digito, issue #888) sai com
+    um espaco depois, a mesma neutralizacao do comentario espelhado
+    (`_trecho_do_autor`): `@1abc` notificaria a conta `1abc`.
     """
     texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
-    return _escapar_para_o_github(pseudonimizar(texto))
+    return _escapar_para_o_github(_trecho_do_autor(texto))
 
 
 def titulo_da_issue(bruto: str | None) -> str:
@@ -578,7 +582,7 @@ def titulo_da_issue(bruto: str | None) -> str:
     ganha a barra la, onde ela vale.
     """
     texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
-    return _escapar_para_o_github(pseudonimizar(texto), marcador_vira_link=False)
+    return _escapar_para_o_github(_trecho_do_autor(texto), marcador_vira_link=False)
 
 
 def _escapar_para_o_github(texto: str, *, marcador_vira_link: bool = True) -> str:
@@ -741,9 +745,15 @@ ROTULO_SEM_LOGIN = "Pessoa do hospital"
 # evita depender de onde o CommonMark decide abrir enfase.
 _MENCAO_DO_GITHUB = re.compile(r"(?<![A-Za-z0-9])@[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9_-]+)?")
 
-# Depois do nome mencionado tem de vir algo que nao e letra (ou o fim): sem
-# isso, "Ana" mencionada casaria o comeco de "@Anastácia".
-_FIM_DO_NOME = r"(?![^\W_])"
+# Depois do nome mencionado tem de vir algo que nao continua um login: nem
+# letra, nem digito, nem hifen (ou o fim). Sem isso, "Ana" mencionada casaria
+# o comeco de "@Anastácia", e "Ana Silva" (login `ana`) em `@Ana Silva-bob`
+# sairia `@ana-bob`, mencao viva a uma conta que ninguem escolheu (issue #888).
+_FIM_DO_NOME = r"(?![^\W_]|-)"
+
+# O texto montado que termina num `@` (seguido ou nao de um login) emenda no
+# rotulo que vem depois e acende mencao a uma conta que ninguem escolheu.
+_COLA_NO_ROTULO = re.compile(r"@[A-Za-z0-9_-]*\Z")
 
 
 def rotulo_no_github(participante: dict[str, Any] | None) -> str:
@@ -783,9 +793,9 @@ def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> 
     """O texto da resposta, pronto para um comentario em repositorio publico.
 
     O mesmo funil do `texto_do_diretor` (peneira de dado pessoal, `<` vira
-    `&lt;`, estrutura em coluna zero desligada, travessao sanitizado), com o
-    `@` tratado no meio, que aquele funil nao conhece porque no corpo da issue
-    nova nao ha mencao:
+    `&lt;`, estrutura em coluna zero desligada, travessao sanitizado, `@`
+    solto com espaco), com a mencao do app tratada no meio, que aquele funil
+    nao conhece porque no corpo da issue nova nao ha mencao do app:
 
     1. a **mencao do app** (o `@Nome Completo` que o autocomplete grava, com o
        id da pessoa em `mencoes`) vira o rotulo dessa pessoa: `@login` quando
@@ -821,6 +831,12 @@ def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> 
     fim = 0
     for achado in padrao.finditer(texto):
         partes.append(_trecho_do_autor(texto[fim : achado.start()]))
+        # Um `@` solto, ou o `@login` da mencao anterior, colado ao rotulo
+        # neutro sairia `@Pessoa` ou `@anaPessoa`, mencao viva (issue #888).
+        # Quem decide e o texto ja montado, nao so o trecho do autor. O espaco
+        # e o mesmo do `_neutralizar_mencoes`.
+        if _COLA_NO_ROTULO.search("".join(partes)):
+            partes.append(" ")
         partes.append(rotulos[achado.group(0)[1:]])
         fim = achado.end()
     partes.append(_trecho_do_autor(texto[fim:]))
