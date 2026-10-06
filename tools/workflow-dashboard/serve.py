@@ -140,7 +140,7 @@ def main():
     if FIXTURE:
         print(f"  /api/data servido de {FIXTURE} (sem coleta)")
     else:
-        print("  primeira carga consulta o gh — pode levar alguns segundos")
+        print("  primeira carga consulta o gh, pode levar alguns segundos")
     def _open():
         try:
             webbrowser.open(url)
