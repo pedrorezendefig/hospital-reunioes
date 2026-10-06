@@ -1123,6 +1123,7 @@ def main() -> int:
                            for a in arquivos for tp in (s.get("diff_routing") or {}).get("trigger_paths") or [])]
         if not ferramenta and not servicos:
             servicos = [sid for sid, s in servicos_cfg.items() if s.get("type") in ("nextjs", "fastapi", "node", "python", "generic")]
+
         if args.dry_run:
             prds = prds_do_lote(raiz, infos)
             migs = [Path(c).name for _, c in novas]
@@ -1188,7 +1189,7 @@ def main() -> int:
         remover_worktree(raiz, wt)
         wt = None
 
-        fora =" ".join(f"#{n}" for n in de_fora)
+        fora = " ".join(f"#{n}" for n in de_fora)
         if not mergeados:
             semaforo(raiz, "soltar", args.sessao)
             semaforo_pego = False
@@ -1260,7 +1261,7 @@ def main() -> int:
             semaforo(raiz, "soltar", args.sessao)
             semaforo_pego = False
             print(f"rollback: {como}, APP_VERSION v{versao_antiga}, health ok e semaforo solto. "
-                  f"Reverter o squash {squashes} e reabrir: "
+                  f"Reverter na main: {squashes}; reabrir: "
                   + ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in lote) + "."
                   + (f" De fora: {fora}." if de_fora else ""))
             return EXIT_ROLLBACK
