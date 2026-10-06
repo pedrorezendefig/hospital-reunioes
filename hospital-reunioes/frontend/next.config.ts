@@ -2,7 +2,11 @@ import type { NextConfig } from "next";
 import withSerwistInit from "@serwist/next";
 import pkg from "./package.json";
 
-const APP_VERSION = pkg.version;
+// Versão do rodapé (issue #967): o rabo grava APP_VERSION no Coolify antes do
+// merge e o Dockerfile a entrega ao build. Sem ela (build local, CI) ou vazia
+// (ARG sem valor), vale o package.json, que fica congelado: a versão não é
+// mais commitada.
+const APP_VERSION = process.env.APP_VERSION || pkg.version;
 
 // `cacheOnNavigation` fica DESLIGADO de propósito (issue #508).
 //
