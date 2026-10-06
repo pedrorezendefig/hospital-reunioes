@@ -3,8 +3,9 @@
 Home do painel: funil das nove fases no topo (contagens do payload, clicável),
 filtros em chips (estado, fase, responsável na cor da pessoa, PRD, labels por
 prefixo, busca), chip `ready-for-human` com contador, card compacto e, aberto,
-a linha do tempo datada. Responsável é só quem assumiu (assignee): "ninguém
-assumiu" lista as issues sem assignee, mesmo que alguém tenha criado.
+a linha do tempo datada. Responsável é quem assumiu (assignee) e, sem
+assignee, quem criou, com a marca "criou" no card (#1039); "ninguém assumiu"
+lista as issues sem assignee, mesmo que alguém tenha criado.
 
 O app.js roda de verdade no Node, inteiro: o módulo é carregado com um DOM
 mínimo de mentira, os cliques passam pelo mesmo ouvinte que o navegador usa e
@@ -79,7 +80,7 @@ def _iss(n, *, state="OPEN", assignees=(), author="ana", labels=(), parent=None,
 ISSUES = [
     _iss(900, assignees=["pedrorezendefig"], author="pedrorezendefig", children=range(901, 906)),
     _iss(901, labels=["ready-for-agent", "type:feature", "fatia:M"], parent=900),
-    _iss(902, assignees=["lucassampaioc1"], labels=["in-progress", "area:infra"], parent=900),
+    _iss(902, assignees=["lucassampaioc1"], author="pedrorezendefig", labels=["in-progress", "area:infra"], parent=900),
     _iss(903, assignees=["pedroribbe"], author="bia", labels=["type:fix"], parent=900, criteria=(3, 8)),
     _iss(904, state="CLOSED", assignees=["pedrorezendefig"], labels=["type:feature"], parent=900),
     _iss(905, author="pedrorezendefig", labels=["ready-for-human"], parent=900),
@@ -327,7 +328,7 @@ def test_chip_de_responsavel_usa_a_cor_da_pessoa(tmp_path):
     chips = {v: tag for v, tag, _ in _botoes(html, "fresp")}
     assert f"--pessoa:{cor}" in chips["lucassampaioc1"]
     assert "(sem)" in chips  # o chip "ninguém assumiu"
-    assert "ana" not in chips  # só criou issues: não é responsável de nenhuma
+    assert "ana" in chips  # não assumiu nada, mas criou issues que ninguém assumiu
 
 
 @com_node
@@ -339,11 +340,27 @@ def test_ninguem_assumiu_lista_as_issues_sem_assignee_mesmo_com_autor(tmp_path):
 
 
 @com_node
-def test_filtro_por_pessoa_nao_cai_em_quem_criou(tmp_path):
+def test_filtro_por_pessoa_traz_o_que_assumiu_e_o_que_criou_sem_assignee(tmp_path):
     expr = "['ana', 'pedrorezendefig'].map(p => (S.fIssues.resp = p, S.data.github.issues.filter(matchIssue).map(i => i.number)))"
     ana, pedro = _rodar(tmp_path, expr)
-    assert ana == []  # criou quase tudo, não assumiu nada
-    assert pedro == [900, 904]  # a 905 ele só criou
+    assert ana == [901, 911, 912]  # criou sem assignee; a 904 ela criou e o pedro assumiu
+    assert pedro == [900, 904, 905]  # assumiu a 900 e a 904, criou a 905; a 902 ele criou e o lucas assumiu
+
+
+@com_node
+def test_contagens_do_funil_batem_com_a_lista_filtrada_pela_pessoa(tmp_path):
+    import fases
+
+    por_numero = {int(n): f for n, f in DADOS["fases"]["issues"].items()}
+    dados = {**DADOS, "fases": {**DADOS["fases"], "funil": fases._funil(ISSUES, por_numero)}}
+    pessoas = ["pedrorezendefig", "ana", "lucassampaioc1", "(sem)"]
+    expr = (
+        f"{json.dumps(pessoas)}.map(p => (S.fIssues.resp = p, "
+        "[renderIssues(), S.data.github.issues.filter(matchIssue).map(i => faseDe(i).fase)]))"
+    )
+    for pessoa, (html, fases_da_lista) in zip(pessoas, _rodar(tmp_path, expr, dados=dados)):
+        funil = {v: n for v, n, _ in _passos_do_funil(html)}
+        assert funil == {f: fases_da_lista.count(f) for f in FASES}, pessoa
 
 
 @com_node
@@ -405,9 +422,12 @@ def test_card_compacto_mostra_fase_pessoa_idade_criterios_pr_e_versao(tmp_path):
 
 
 @com_node
-def test_card_sem_assignee_diz_ninguem_assumiu_e_mostra_o_autor_como_informacao(tmp_path):
-    card = _rodar(tmp_path, _card_expr(905))
-    assert "ninguém assumiu" in card and "criada por pedrorezendefig" in card
+def test_card_sem_assignee_diz_ninguem_assumiu_e_marca_quem_criou(tmp_path):
+    criou, assumiu, atribuiu = _rodar(tmp_path, f"[{_card_expr(905)}, {_card_expr(900)}, {_card_expr(902)}]")
+    assert "ninguém assumiu" in criou
+    assert re.search(r'class="chip autor"[^>]*>✎ criou: pedrorezendefig<', criou)
+    assert "criou" not in assumiu  # o pedro assumiu e criou: a marca é só de quem entrou pelo autor
+    assert "criou" not in atribuiu  # o pedro criou, o lucas assumiu
 
 
 @com_node
