@@ -384,6 +384,13 @@ def _pico_do_worker_durante(chamada):
 
 
 class TestOsDoisAtaquesMedidos:
+    # Rodar sozinho (issue #971): os testes marcados aqui medem o RSS do worker
+    # com `_pico_do_worker_durante` contra o teto de 12 MB. Com `-n auto` (12
+    # workers na mesma máquina) a medida acusou 20 a 23 MB que não vêm do
+    # documento, em dois deles, e os dois passaram em série na mesma ordem de
+    # testes do worker que falhou. Os outros quatro usam a mesma medida e o
+    # mesmo teto, então vão juntos.
+    @pytest.mark.rodar_sozinho
     def test_pdf_ascii85_em_cima_do_flate_e_recusado_sem_tocar_o_worker(self, client, pdf_ataque):
         """Sem isolamento este arquivo custa 29 s e 1.584 MB DENTRO do worker.
 
@@ -404,6 +411,7 @@ class TestOsDoisAtaquesMedidos:
         )
         assert decorrido < extrator.PRAZO_DA_EXTRACAO, "o teto de memoria tem que morder antes do prazo"
 
+    @pytest.mark.rodar_sozinho
     def test_docx_com_membro_isca_e_recusado_sem_tocar_o_worker(self, client, docx_ataque):
         """A isca de CRC no primeiro membro não ajuda mais: não há conferência
         de zip para desarmar, o orçamento é do processo inteiro."""
@@ -417,6 +425,12 @@ class TestOsDoisAtaquesMedidos:
             f"o worker cresceu {crescimento // (1024 * 1024)} MB: a extracao nao foi isolada"
         )
 
+    # Rodar sozinho (issue #971): o PDF honesto leva 7 s numa CPU livre e passa
+    # pela rota com o prazo de verdade (`PRAZO_DA_EXTRACAO`, 45 s). Com `-n auto`
+    # no runner do Actions, disputando CPU com os outros workers, a leitura
+    # passou dos 45 s e o filho foi morto por tempo (run 37411095749). Os testes
+    # que mandam o PDF honesto pela rota vao juntos.
+    @pytest.mark.rodar_sozinho
     async def test_o_resto_do_app_responde_durante_uma_extracao_longa(self, app, pdf_honesto):
         """O worker é um só, e o event loop dele não pode ficar preso na leitura.
 
@@ -444,6 +458,7 @@ class TestOsDoisAtaquesMedidos:
             assert espera < 2.0, f"a requisicao curta esperou {espera:.1f}s pela longa"
             assert (await lenta).status_code == 200
 
+    @pytest.mark.rodar_sozinho
     def test_o_texto_devolvido_tambem_tem_teto(self, client):
         """O terceiro caminho, que nenhum dos dois ataques acima usa.
 
@@ -463,6 +478,7 @@ class TestOsDoisAtaquesMedidos:
             f"o worker cresceu {crescimento // (1024 * 1024)} MB: o texto entrou assim mesmo"
         )
 
+    @pytest.mark.rodar_sozinho
     def test_o_canal_de_erro_do_filho_tambem_tem_teto(self, client):
         """O terceiro canal de volta, e o único que não tinha número nenhum.
 
@@ -486,6 +502,7 @@ class TestOsDoisAtaquesMedidos:
         )
         assert decorrido < extrator.PRAZO_DA_EXTRACAO, "quem recusou tem que ser o teto do canal"
 
+    @pytest.mark.rodar_sozinho
     def test_o_canal_de_saida_tem_teto_mesmo_com_filho_que_nao_para_de_escrever(self, client, monkeypatch, tmp_path):
         """O teto do texto vive no filho, que mede antes de escrever. Esta é a rede.
 
@@ -522,6 +539,7 @@ class TestOsDoisAtaquesMedidos:
         # do teto do canal sobreviveu na primeira versao deste teste.
         assert decorrido < 10, f"levou {decorrido:.1f}s: quem matou foi o prazo, nao o teto do canal"
 
+    @pytest.mark.rodar_sozinho
     def test_o_filho_que_despeja_e_sai_e_recusado_em_vez_de_cortado(self, client, monkeypatch, tmp_path):
         """A corrida entre a escrita e a amostra do vigia, e o que se faz com ela.
 
@@ -594,6 +612,9 @@ class TestOsDoisAtaquesMedidos:
 
 
 class TestEntradaLegitimaAtravessa:
+    # Rodar sozinho (issue #971): PDF honesto pela rota, contra o prazo de 45 s.
+    # O motivo esta em `test_o_resto_do_app_responde_durante_uma_extracao_longa`.
+    @pytest.mark.rodar_sozinho
     def test_pdf_honesto_grande_atravessa_inteiro(self, client, pdf_honesto):
         """O PDF honesto de centenas de páginas continua passando, e passa
         INTEIRO: o número de caracteres é o mesmo de antes do isolamento."""
@@ -877,6 +898,9 @@ class TestAsGuardasDoIsolamento:
         assert apertado.returncode != 0
         assert folgado.stdout.startswith(b"OK"), folgado.stderr.decode()[-400:]
 
+    # Rodar sozinho (issue #971): PDF honesto pela rota, contra o prazo de 45 s.
+    # O motivo esta em `test_o_resto_do_app_responde_durante_uma_extracao_longa`.
+    @pytest.mark.rodar_sozinho
     async def test_uploads_simultaneos_nao_multiplicam_o_orcamento(self, app, pdf_honesto):
         """Teto por filho não é teto da máquina.
 
@@ -1041,6 +1065,11 @@ class TestAsGuardasDoIsolamento:
         assert extrator.FORMATOS_DE_TEXTO_PURO == {".txt", ".md"}
         assert extrator.FORMATOS_DE_TEXTO_PURO < extrator.SUPPORTED_EXTENSIONS
 
+    # Rodar sozinho (issue #971): este teste e o de baixo comparam as pastas
+    # `extracao-*` do tempdir da MÁQUINA antes e depois de uma extração. Em
+    # paralelo, outro worker extraindo ao mesmo tempo cria a pasta dele ali, e a
+    # comparação acusa uma sobra que não é deste teste.
+    @pytest.mark.rodar_sozinho
     def test_o_temporario_do_filho_nao_fica_para_tras(self, client, docx_honesto):
         """O conteúdo do upload passa pelo disco para chegar no filho. Passa, não fica.
 
@@ -1066,6 +1095,7 @@ class TestAsGuardasDoIsolamento:
         assert r.status_code == 200
         assert depois == antes, f"sobrou no disco: {depois - antes}"
 
+    @pytest.mark.rodar_sozinho
     def test_o_temporario_some_tambem_quando_o_filho_e_morto(self, client, monkeypatch, pdf_honesto):
         """O caminho de limpeza que importa é o que roda quando algo dá errado.
 

@@ -48,7 +48,7 @@ Agora há issues na fila pra qualquer um pegar.
 /ship                 # 3 gates, para no PR verde e imprime o comando do rabo
 # migration nova? aplique no Studio de produção ANTES do rabo (o script confere o sha256)
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR> --dry-run   # o plano, sem tocar em nada
-python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>             # merge + bump + deploy + registro (a issue fecha pelo Closes #42)
+python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>             # merge + versão + deploy + registro (a issue fecha pelo Closes #42)
 ```
 
 ### Cenário C — Estava trabalhando, sessão fechou, abro outro terminal
@@ -87,11 +87,12 @@ Loop disciplinado: reproduz → minimiza → hipótese → instrumenta → corri
 /ship              Gate 1 — code-review (sempre)
                    Gate 2 — security-review (se toca auth/RLS/migrations/env/webhook)
                    Gate 3 — CI verde (GitHub Actions)
-                   → para no PR verde e imprime o comando do rabo (sem bump no PR)
+                   → para no PR verde e imprime o comando do rabo (sem versão no PR)
                    ▼
 fechar_onda.py     o rabo único (ADR 0061), rodado pelo autor do PR depois do OK:
-  --prs <N>        semáforo → bump como commit na branch do PR → CI verde
-                   → APP_VERSION no Coolify → merge pela API (squash) → um build → health com version-match
+  --prs <N>        semáforo → versão nova sem commit → CI verde
+                   → APP_VERSION no backend e no frontend → merge pela API (squash) → tag vX.Y.Z
+                   → um build → health com version-match
                    → registro num PR só de docs: state.json + history.json (ADR 0062)
                    (snapshot e draft do Manual: Action no push da main, depois do registro)
                    (migration nova: aplicar no Studio ANTES de rodar; o script confere o sha256)
@@ -128,7 +129,7 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo autor do PR depois do O
 
 A `main` é protegida por ruleset (ADR 0061, emenda de 02/10/2026): ninguém, admin inclusive, dá push direto nela, e todo PR precisa dos três jobs do CI verdes e da branch em dia com a base. Por isso o rabo (`fechar_onda.py`) entra sempre por PR, em três tempos:
 
-1. **Código.** O bump de versão vira um commit na branch do seu PR (na onda, numa branch `onda/<sessao>` com o lote, que vira um PR de entrega). O script espera o CI desse commit, põe o `APP_VERSION` no Coolify e mergeia pela API do GitHub, com squash.
+1. **Código.** A versão nova sai do tipo dos commits e não vira commit (issue #967): o `package.json` fica congelado. O seu PR entra como está (na onda, numa branch `onda/<sessao>` com o lote, que vira um PR de entrega). O script espera o CI verde, põe o `APP_VERSION` no backend e no frontend do Coolify, mergeia pela API do GitHub, com squash, e cria a tag `vX.Y.Z` no squash.
 2. **Build e health** do que entrou.
 3. **Registro.** `history.json` e `state.json` sobem num **PR só de docs** que o próprio script abre e mergeia pela API depois do health. Snapshot e draft do Manual não são do rabo: uma Action no push da `main` cuida deles depois do registro (ADR 0062). O CI desse PR pula os jobs pesados e fica verde em segundos, e o build que o Coolify dispara para ele é cancelado pelo script.
 
@@ -167,7 +168,7 @@ Sem Discord, sem Slack.
 | `/pegar-issue` | Sem arg: lista a fila. Com `<N>`: claim + branch + spec |
 | `/tdd` | Red → green → refactor (testes a partir dos critérios de aceite) |
 | `/ship` | Commit → PR → 3 gates → para no PR verde e imprime o comando do rabo |
-| `fechar_onda.py --prs <N>` | O rabo único: bump na branch do PR, APP_VERSION, merge pela API, um build, health, registro em PR só de docs (ADR 0061) |
+| `fechar_onda.py --prs <N>` | O rabo único: versão sem commit, APP_VERSION nos dois apps, merge pela API, tag, um build, health, registro em PR só de docs (ADR 0061) |
 | `/deploy status` | Ver estado de produção (sem alterar) |
 | `/deploy rollback` | Reverte produção pro deploy anterior |
 | `/diagnose` | Investigação raiz de bug |

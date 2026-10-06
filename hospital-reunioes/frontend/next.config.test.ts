@@ -6,7 +6,10 @@
  * rate limit por IP do backend vira um balde único. Com API_PROXY_URL, o Next
  * fala com o backend pela rede interna do Docker e o IP chega vivo.
  */
-import { afterEach, describe, expect, it } from "vitest";
+import { readFileSync } from "node:fs";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import nextConfig from "./next.config";
 
@@ -42,5 +45,74 @@ describe("rewrite do /api", () => {
 
     expect(mapa.get("/api/:path*")).toBe("https://api.exemplo.cloud/api/:path*");
     expect(mapa.get("/ouvidoria/qr")).toBe("https://api.exemplo.cloud/api/ouvidoria/qr");
+  });
+});
+
+/**
+ * Versão do app no rodapé (issue #967).
+ *
+ * A versão não é mais commitada: o rabo grava APP_VERSION no Coolify antes do
+ * merge, o Dockerfile a passa ao build e o next.config a grava no bundle. Sem
+ * ela (build local, CI), vale o package.json, que fica congelado.
+ */
+const VERSAO_DO_PACKAGE_JSON: string = JSON.parse(readFileSync("package.json", "utf-8")).version;
+
+async function rodapeDoBuild(): Promise<{ rodape: string; buildId: string | null }> {
+  vi.resetModules();
+  const { default: config } = await import("./next.config");
+  // O Next troca process.env.NEXT_PUBLIC_* pelo valor de config.env no bundle:
+  // é o que o Footer lê.
+  process.env.NEXT_PUBLIC_APP_VERSION = config.env?.NEXT_PUBLIC_APP_VERSION;
+  const { Footer } = await import("@/components/layout/Footer");
+  return {
+    rodape: renderToStaticMarkup(createElement(Footer)),
+    buildId: (await config.generateBuildId?.()) ?? null,
+  };
+}
+
+describe("versão do rodapé", () => {
+  afterEach(() => {
+    delete process.env.APP_VERSION;
+    delete process.env.NEXT_PUBLIC_APP_VERSION;
+  });
+
+  it("build com APP_VERSION=9.9.9 mostra 9.9.9 no rodapé", async () => {
+    process.env.APP_VERSION = "9.9.9";
+
+    const { rodape, buildId } = await rodapeDoBuild();
+
+    expect(rodape).toContain(">v9.9.9<");
+    expect(buildId).toMatch(/^v9\.9\.9-/);
+  });
+
+  it("sem APP_VERSION, cai no package.json", async () => {
+    delete process.env.APP_VERSION;
+
+    const { rodape } = await rodapeDoBuild();
+
+    expect(VERSAO_DO_PACKAGE_JSON).toMatch(/^\d+\.\d+\.\d+$/);
+    expect(rodape).toContain(`>v${VERSAO_DO_PACKAGE_JSON}<`);
+  });
+
+  it("APP_VERSION vazia, o ARG do Dockerfile sem valor, também cai no package.json", async () => {
+    process.env.APP_VERSION = "";
+
+    const { rodape } = await rodapeDoBuild();
+
+    expect(rodape).toContain(`>v${VERSAO_DO_PACKAGE_JSON}<`);
+  });
+
+  it("o Dockerfile entrega APP_VERSION ao build do Next", () => {
+    const dockerfile = readFileSync("Dockerfile", "utf-8");
+    const builder = dockerfile.split(/^FROM /m).find((estagio) => /AS builder\b/.test(estagio)) ?? "";
+    const linhas = builder.split("\n").map((l) => l.trim());
+    const arg = linhas.indexOf("ARG APP_VERSION");
+    const env = linhas.indexOf("ENV APP_VERSION=$APP_VERSION");
+    const build = linhas.indexOf("RUN pnpm build");
+
+    expect(build).toBeGreaterThan(-1);
+    expect(arg).toBeGreaterThan(-1);
+    expect(env).toBeGreaterThan(arg);
+    expect(build).toBeGreaterThan(env);
   });
 });

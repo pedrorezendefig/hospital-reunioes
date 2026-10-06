@@ -21,7 +21,7 @@ arquivos sao os do `git diff --no-renames` do lote, como no detector do CI:
 mover codigo para fora de `hospital-reunioes/` conta como app.
   - app: a sequencia inteira abaixo.
   - ferramenta: so merge pela API depois do CI verde (passos 1 a 3, 5, 6, 8 e
-    12). Sem bump, sem APP_VERSION, sem esperar build, sem health, sem PR de
+    12). Sem versao nova, sem APP_VERSION, sem tag, sem esperar build, sem health, sem PR de
     registro e sem entrada no history.json. Se o webhook do Coolify disparar
     build no merge, o rabo o cancela, como faz com o build do registro.
 
@@ -33,12 +33,17 @@ Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
   3. branch de entrega num worktree descartavel:
      PR avulso: a propria branch do PR, com a origin/main por merge se ficou atras
      onda: `onda/<sessao>` a partir da origin/main, com merges locais `--no-ff` em ordem
-  4. bump semver pelo tipo dominante dos commits do lote (ferramenta nao bumpa),
-     como commit na branch de entrega, e push dela (nunca na main)
+  4. versao nova (semver) pelo tipo dominante dos commits do lote, a partir do
+     `last_app_version` do state.json conferido com a maior tag vX.Y.Z
+     (ferramenta nao muda a versao). Sem commit (issue #967): o package.json do
+     frontend fica congelado. Push da branch de entrega (nunca na main): no PR
+     avulso em dia com a main, o head nao muda e o CI dele ja vale
   5. onda: abre o PR de entrega, com `Closes` de cada issue do lote
-  6. espera o CI do head com o bump ficar verde
-  7. APP_VERSION no Coolify ANTES do merge
-  8. merge pela API do GitHub (squash, conferindo o sha do head)
+  6. espera o CI do head da entrega ficar verde
+  7. APP_VERSION no backend e no frontend do Coolify ANTES do merge (o backend
+     a le no runtime, o frontend no build, pelo ARG do Dockerfile)
+  8. merge pela API do GitHub (squash, conferindo o sha do head) e tag vX.Y.Z
+     no squash, pela API (tag que falha nao para o deploy)
   9. monitorar o build de cada service (webhook), forcar se nao disparar
  10. health com version match
  11. registro num PR so de docs, so com history.json (todos os deploys, sem
@@ -51,7 +56,7 @@ Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
 Commits que chegam a main (dois squashes):
   - o do codigo: "<titulo do PR> (#N)" no PR avulso, ou
     "chore(onda): <sessao>, PRs #a #b (vX.Y.Z) (#E)" na onda (E = PR de entrega);
-    dentro dele, o commit `chore(release): bump vX.Y.Z (...)` quando ha bump
+    a versao nao vira commit: vive no APP_VERSION do Coolify e na tag
   - o do registro: "chore(deploy): registro do PR #N (vX.Y.Z) (#R)" ou
     "chore(deploy): registro da onda <sessao> (vX.Y.Z) (#R)"
 No PR avulso, o registro do history.json nomeia PR e issue, sem a onda. O
@@ -70,7 +75,7 @@ Codigos de saida:
      semaforo solto, mas a arrumacao depois do merge falhou (a linha diz o que falta)
 
 `--dry-run`: executa 1 e 3 e calcula o 4 sem escrever; imprime o plano (PR,
-issue, classe e tipo de bump: "app: bump ..." ou "ferramenta: só merge") e o
+issue, classe e tipo de versao: "app: bump ..." ou "ferramenta: só merge") e o
 que faria nos demais; nao pega semaforo, nao toca no Coolify, nao pusha.
 
 Windows: `bash` do Git no PATH (para o semaforo.sh).
@@ -110,7 +115,6 @@ EXIT_BUILD = 3
 EXIT_HEALTH = 4
 EXIT_REGISTRO = 5
 
-PACKAGE_JSON = "hospital-reunioes/frontend/package.json"
 SEMAFORO = ".claude/skills/deploy/scripts/semaforo.sh"
 SPEC = "docs/spec"
 HISTORY = f"{SPEC}/deploy/history.json"
@@ -348,8 +352,8 @@ class MergeConflito(Exception):
 
 
 def entrar_na_branch_do_pr(wt: Path, info: dict) -> bool:
-    """PR avulso: o worktree vai para a ponta da branch do PR, que e onde o bump
-    entra. O ruleset exige a branch em dia com a base: se a main andou, ela vem
+    """PR avulso: o worktree vai para a ponta da branch do PR, que e a entrega.
+    O ruleset exige a branch em dia com a base: se a main andou, ela vem
     por merge. Devolve True quando precisou trazer a main."""
     n, branch = info["number"], info["headRefName"]
     run(["git", "fetch", "-q", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}"], cwd=wt)
@@ -495,19 +499,25 @@ def proxima_versao(atual: str, tipo: str) -> str:
     return f"{major}.{minor}.{patch + 1}"
 
 
-def ler_versao(wt: Path, ref: str) -> str:
-    """Versao no `ref`, nao na arvore: a branch do PR pode trazer o bump de uma
-    rodada anterior que parou antes do merge, e bumpar de novo pularia versao."""
-    return json.loads(run(["git", "show", f"{ref}:{PACKAGE_JSON}"], cwd=wt).stdout)["version"]
+def _semver(v: str) -> tuple[int, int, int]:
+    return tuple(int(x) for x in v.split(".")[:3])  # type: ignore[return-value]
 
 
-def escrever_versao(wt: Path, nova: str) -> None:
-    p = wt / PACKAGE_JSON
-    txt = p.read_text(encoding="utf-8")
-    novo, n = re.subn(r'("version"\s*:\s*")[^"]+(")', rf"\g<1>{nova}\g<2>", txt, count=1)
-    if n != 1:
-        raise RuntimeError("nao achei o campo version no package.json")
-    p.write_text(novo, encoding="utf-8")
+def versao_em_producao(wt: Path, ref: str) -> str:
+    """Versao de onde a proxima sai (issue #967): o `last_app_version` do
+    state.json no `ref`, conferido com a maior tag vX.Y.Z do remoto. A versao
+    nao e mais commitada: o package.json do frontend fica congelado. Vale a
+    maior das duas: tag a frente do state.json e um rabo que mergeou e
+    etiquetou mas nao registrou, e repetir a versao dele confundiria o health."""
+    do_state = json.loads(run(["git", "show", f"{ref}:{STATE}"], cwd=wt).stdout).get("last_app_version")
+    tags = re.findall(r"refs/tags/v(\d+\.\d+\.\d+)$", run(["git", "ls-remote", "--tags", "origin"], cwd=wt).stdout,
+                      re.M)
+    maior_tag = max(tags, key=_semver, default=None)
+    if not do_state and not maior_tag:
+        raise RuntimeError("sem versao de partida: o state.json nao tem last_app_version e nao ha tag vX.Y.Z")
+    if do_state and maior_tag and _semver(maior_tag) > _semver(do_state):
+        print(f"versao: o state.json diz v{do_state} e a maior tag e v{maior_tag}; sigo da tag")
+    return max((v for v in (do_state, maior_tag) if v), key=_semver)
 
 
 # -------------------------------------------------------------- bookkeeping
@@ -556,7 +566,7 @@ def rotulo_issues(info: dict) -> str:
 def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | None,
                       sha_codigo: str, prds: list[int], migs: list[str], servicos: list[str],
                       duracoes: dict[str, int | None], healths: dict[str, dict], resultado: str,
-                      houve_bump: bool, avulso: bool = False, pr_entrega: int | None = None) -> None:
+                      com_app_version: list[str], avulso: bool = False, pr_entrega: int | None = None) -> None:
     """A verdade do deploy que o GitHub nao tem (ADR 0062, decisao 9): history.json,
     com todos os deploys, e state.json."""
     history = ler_json(wt / HISTORY)
@@ -587,7 +597,7 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
         "result": resultado,
         "duration_seconds": int(time.time() - T0),
         "services_touched": servicos,
-        "env_changes": ([{"service": "backend", "action": "update", "keys": ["APP_VERSION"]}] if houve_bump else []),
+        "env_changes": [{"service": sid, "action": "update", "keys": ["APP_VERSION"]} for sid in com_app_version],
         "migrations_applied": migs,
         "rollback_target_sha": None,
         "notes": notes,
@@ -642,6 +652,27 @@ def setar_app_version(backend_uuid: str, versao: str) -> None:
     proc = run(["coolify", "app", "env", "update", backend_uuid, "APP_VERSION", "--value", versao], check=False)
     if proc.returncode != 0:
         run(["coolify", "app", "env", "create", backend_uuid, "--key", "APP_VERSION", "--value", versao])
+
+
+def apps_do_coolify(servicos_cfg: dict) -> list[str]:
+    return [sid for sid, s in servicos_cfg.items() if s.get("type") != "supabase" and s.get("uuid")]
+
+
+def setar_app_version_nos_apps(servicos_cfg: dict, versao: str) -> list[str]:
+    """APP_VERSION em todo app do Coolify (issue #967): o backend a le no
+    runtime e devolve no /api/health; o frontend a recebe no build (ARG do
+    Dockerfile) e a grava no rodape. Devolve os servicos gravados."""
+    apps = apps_do_coolify(servicos_cfg)
+    for sid in apps:
+        setar_app_version(servicos_cfg[sid]["uuid"], versao)
+    return apps
+
+
+def criar_tag(raiz: Path, versao: str, sha: str) -> None:
+    """Tag vX.Y.Z no squash que foi para a main, pela API (o commit so existe
+    no GitHub). E a conferencia da proxima versao_em_producao."""
+    gh_json(["api", "-X", "POST", "repos/{owner}/{repo}/git/refs", "-f", f"ref=refs/tags/v{versao}",
+             "-f", f"sha={sha}"], cwd=raiz)
 
 
 def _lista(d):
@@ -861,11 +892,10 @@ def main() -> int:
         run(["git", "rev-parse", "--show-toplevel"]).stdout.strip()).resolve()
     projeto = ler_json(raiz / SPEC / "deploy" / "project.json")
     servicos_cfg = {s["id"]: s for s in projeto["services"]}
-    backend = servicos_cfg.get("backend")
 
     infos = checar_pre_condicoes(raiz, args.prs, args.dry_run)
     if avulso and infos[0].get("isCrossRepository"):
-        falhar(f"pre-condicao: #{infos[0]['number']} vem de um fork; o bump entra na branch do PR, "
+        falhar(f"pre-condicao: #{infos[0]['number']} vem de um fork; a main entra na branch do PR, "
                "que precisa estar neste repositorio.", EXIT_PRECOND)
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
     print(f"pre-condicoes ok: {prs_txt}, migrations sem numero repetido contra origin/main e com o sha256 do corpo"
@@ -902,7 +932,7 @@ def main() -> int:
             falhar(f"conflito no merge de #{e.pr} em: {', '.join(e.arquivos) or '?'}. "
                    f"Mande um corretor rebasear o PR sobre origin/main e rode de novo.", EXIT_MERGE)
 
-        versao_antiga = ler_versao(wt, base)
+        versao_antiga = versao_em_producao(wt, base)
         # --no-renames, como o detector do CI: o `files` do gh mostra um rename so
         # pelo caminho novo, e tirar codigo do app passaria por ferramenta
         arquivos = set(run(["git", "diff", "--no-renames", "--name-only", f"{base}...HEAD"], cwd=wt).stdout.split())
@@ -930,9 +960,9 @@ def main() -> int:
                 print(entrega + "merge pela API, cancela o build que o webhook disparar, limpeza; "
                       "sem bump, APP_VERSION, build, health nem registro.")
             else:
-                print(entrega + "APP_VERSION no Coolify, "
-                      + f"merge pela API, build, health, registro em PR so de docs (prds {prds or '[]'}, "
-                      f"migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
+                print(entrega + f"APP_VERSION v{versao_nova} no " + " e no ".join(apps_do_coolify(servicos_cfg))
+                      + f", merge pela API, tag v{versao_nova}, build, health, registro em PR so de docs "
+                      f"(prds {prds or '[]'}, migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
             remover_worktree(raiz, wt, args.prs)
             wt = None
             print("dry-run terminou sem tocar em nada.")
@@ -940,12 +970,9 @@ def main() -> int:
 
         versao = versao_nova or versao_antiga
         if versao_nova:
-            escrever_versao(wt, versao_nova)
-            origem = f"PR {prs_txt}" if avulso else f"onda {args.sessao}: {prs_txt}"
-            sha_bump = commitar(wt, f"chore(release): bump v{versao_nova} ({origem})", [PACKAGE_JSON])
-            print(f"bump: v{versao_antiga} -> v{versao_nova} ({tipo}) em {sha_bump}, na branch {branch}")
+            print(f"versao: v{versao_antiga} -> v{versao_nova} ({tipo}), sem commit: vai no APP_VERSION e na tag")
         else:
-            print(f"bump: nenhum (ferramenta), versao segue v{versao_antiga}")
+            print(f"versao: segue v{versao_antiga} (ferramenta)")
 
         if avulso:
             titulo = infos[0]["title"].strip()
@@ -957,7 +984,7 @@ def main() -> int:
             corpo = ("<!-- automacao -->\n"
                      f"PR de entrega da onda {args.sessao}, aberto pelo `fechar_onda.py` (ADR 0061): os PRs "
                      f"{prs_txt} integrados por merge local sobre a main"
-                     + (f", mais o bump para v{versao_nova}" if versao_nova else "")
+                     + (f", na versao v{versao_nova} (APP_VERSION e tag, sem commit)" if versao_nova else "")
                      + ". A main e protegida: o merge sai pela API do GitHub.\n\n"
                      + "".join(f"Closes #{n}\n" for n in issues))
         pr_entrega, head = entregar(raiz, wt, branch, pr_entrega, titulo, corpo)
@@ -965,13 +992,21 @@ def main() -> int:
             titulo = f"{titulo} (#{pr_entrega})"
         print(f"entrega: PR #{pr_entrega} com CI verde no head {head[:8]}")
 
-        if versao_nova and backend:
-            setar_app_version(backend["uuid"], versao_nova)
+        com_app_version = setar_app_version_nos_apps(servicos_cfg, versao_nova) if versao_nova else []
 
         t_merge = time.time()
         sha_main = mergear_pela_api(raiz, pr_entrega, head, titulo)
         mergeou = True
-        print(f"merge: PR #{pr_entrega} na main pela API, squash {sha_main[:8]}")
+        tag = ""
+        if versao_nova:
+            try:
+                criar_tag(raiz, versao_nova, sha_main)
+                tag = f", tag v{versao_nova}"
+            except RuntimeError as e:
+                # a tag e conferencia, nao deploy: falhar aqui nao para o build
+                tag = (f"; a tag v{versao_nova} falhou ({str(e)[:120]}), crie depois com `gh api -X POST "
+                       f"repos/{{owner}}/{{repo}}/git/refs -f ref=refs/tags/v{versao_nova} -f sha={sha_main}`")
+        print(f"merge: PR #{pr_entrega} na main pela API, squash {sha_main[:8]}{tag}")
         remover_worktree(raiz, wt, args.prs)
         wt = None
 
@@ -1025,7 +1060,7 @@ def main() -> int:
             run(["git", "fetch", "-q", "origin", "main"], cwd=raiz)
             wt_reg = criar_worktree(raiz, f"{args.sessao}-registro")
             escrever_registro(wt_reg, args.sessao, infos, versao_nova, sha_main, prds, migs,
-                              servicos, duracoes, healths, "healthy", bool(versao_nova), avulso, pr_entrega)
+                              servicos, duracoes, healths, "healthy", com_app_version, avulso, pr_entrega)
             do_lote = f"do PR {prs_txt}" if avulso else f"da onda {args.sessao}"
             titulo_reg = f"chore(deploy): registro {do_lote} (v{versao})"
             commitar(wt_reg, titulo_reg, [HISTORY, STATE])
@@ -1071,7 +1106,7 @@ def main() -> int:
                 cwd=raiz, check=False)
         if semaforo_pego:
             semaforo(raiz, "soltar", args.sessao)
-        sobra = " O bump ficou na branch do PR; a proxima rodada o reaproveita." if avulso else ""
+        sobra = " A main trazida ficou na branch do PR; a proxima rodada a reaproveita." if avulso else ""
         print(f"entrega: {e}. Nada entrou na main.{sobra}")
         return EXIT_MERGE
     except Exception as e:  # noqa: BLE001
