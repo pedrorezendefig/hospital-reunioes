@@ -103,3 +103,33 @@ def test_implementador_de_fatia_bloqueada_pela_onda_em_deploy_so_sai_depois_que_
     # as outras não esperam por ela
     disparo = next(li for li in lote.splitlines() if li.startswith("Dispare os"))
     assert "sem bloqueio aberto" in disparo, disparo
+
+
+# ------------------------------------------- o semáforo segue ordenando os deploys
+
+
+def test_o_rabo_de_cada_onda_usa_chave_propria_no_semaforo():
+    # duas ondas da mesma sessão se sobrepõem no deploy; com a chave da sessão, o
+    # semáforo (reentrante pela chave) deixaria o rabo da seguinte entrar junto, e o
+    # worktree `~/wt-<chave>` de um seria apagado pelo outro
+    # (o PR avulso, como o da fatia de manual, não leva `--sessao`: a chave é `pr-<N>`)
+    for numero in (5, 6):
+        comandos = re.findall(r"fechar_onda\.py --prs[^`]*--sessao[^`]*`", passo(numero))
+        assert comandos, numero
+        assert all("--sessao <nome>-onda<N>" in c for c in comandos), comandos
+
+
+# ------------------------------------------- o intervalo vai para o comentário da onda
+
+
+def test_o_comentario_da_onda_registra_o_intervalo_dos_prs_verdes_ao_primeiro_implementador():
+    # a hora dos PRs verdes viaja na passagem; a sessão seguinte mede contra ela
+    assert re.search(r"^Sessão <nome>, onda <N> com os PRs verdes em <data hora ISO>\.$", bloco_da_passagem(), re.M)
+
+    disparo = next(li for li in passo(3).splitlines() if li.startswith("Dispare os"))
+    assert "date -u" in disparo and "primeiro implementador" in disparo, disparo
+
+    relatorio = next(li for li in passo(7).splitlines() if li.startswith("Relatório de até"))
+    assert re.search(r"intervalo entre os PRs verdes da onda anterior .* e o primeiro implementador desta", relatorio), (
+        relatorio
+    )

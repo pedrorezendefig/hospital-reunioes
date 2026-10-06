@@ -56,7 +56,7 @@ Para cada PRD das issues desta onda: `gh issue view <PRD> --json comments --jq '
 
 ### 3. Lote: implementadores em paralelo
 
-Dispare os implementadores das fatias sem bloqueio aberto **na mesma mensagem**, um por issue, com o prompt de `references/prompts.md`; o label de tamanho da issue (passo 1) escolhe o agente: `fatia:G` no `hr-implementador-xhigh` (`xhigh`), `fatia:P`, `fatia:M` ou sem label no `hr-implementador` (`high`). O esforço vive no frontmatter do agente; o disparo não o muda por chamada. Cada um faz claim, TDD, PR (`/ship --skip-review`) e morre.
+Dispare os implementadores das fatias sem bloqueio aberto **na mesma mensagem**, um por issue, com o prompt de `references/prompts.md`; o label de tamanho da issue (passo 1) escolhe o agente: `fatia:G` no `hr-implementador-xhigh` (`xhigh`), `fatia:P`, `fatia:M` ou sem label no `hr-implementador` (`high`). O esforço vive no frontmatter do agente; o disparo não o muda por chamada. Cada um faz claim, TDD, PR (`/ship --skip-review`) e morre. Registre a hora do primeiro implementador (`date -u +%Y-%m-%dT%H:%M:%SZ` logo depois do disparo): vai para o comentário da onda (passo 7).
 
 Fatia bloqueada por issue em deploy (passo 1) só é disparada depois que a bloqueadora fecha (o rabo da onda anterior a fecha no merge): na mesma mensagem do lote, um laço via Bash com `run_in_background: true` que termina quando `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by --jq '[.[] | select(.state == "open")] | length'` dá `0`, com teto de 60 min. Na notificação, confira o bloqueio de novo e dispare o implementador dela: o worktree nasce da `origin/main` do momento, já com o squash da bloqueadora. Teto estourado (o rabo da onda anterior parou em migration, conflito ou rollback): a fatia sai desta onda sem contar tentativa e vai para a passagem como bloqueada.
 
@@ -114,7 +114,7 @@ Não use `AskUserQuestion` nem encerre o turno esperando resposta: numa sessão 
 
 ### 7. Resultado do rabo, comentário na onda e fim da sessão
 
-Relatório de até 15 linhas: linha final do `fechar_onda.py`, tabela de issues (fechada · PR · versão), baixas, veredito do auditor se houve, as 10 linhas da medição.
+Relatório de até 15 linhas: linha final do `fechar_onda.py`, tabela de issues (fechada · PR · versão), baixas, veredito do auditor se houve, as 10 linhas da medição, a hora dos PRs verdes desta onda e, se a sessão nasceu de uma passagem, o intervalo entre os PRs verdes da onda anterior (a primeira linha da passagem) e o primeiro implementador desta (passo 3), em minutos e segundos. A meta é menos de 2 min.
 
 1. Com passagem lançada no passo 5, ela registra o resultado: acrescente ao arquivo dela (`%TEMP%\onda-enxuta\<nome>-onda<N+1>.md`) a linha `Rabo da onda <N>: <linha final do fechar_onda.py>`. A sessão seguinte a lê quando escreve a própria passagem.
 2. Comente o relatório na onda: em cada PRD das issues desta onda (issue sem PRD: no PR dela), com `<!-- automacao -->` na primeira linha e `## Onda <nome> <N>` na segunda.
