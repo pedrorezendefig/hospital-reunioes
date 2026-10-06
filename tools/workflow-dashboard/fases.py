@@ -25,7 +25,7 @@ FASES_ISSUE = (
 # Mesmo valor do SEM_RESP do app.js: o filtro "ninguém assumiu" da aba Issues.
 SEM_RESPONSAVEL = "(sem)"
 MARCADOR_AUTOMACAO = "<!-- automacao -->"
-# Última linha do comentário dos agentes hr-revisor e hr-revisor-seguranca.
+# Última linha do comentário dos agente hr-revisor.
 _VEREDITO = re.compile(r"(?m)^VEREDITO( SEGURANCA)?:\s*(LIMPO|MUST-FIX)\b")
 # Conclusões de check que deixam o CI vermelho (CheckRun e StatusContext).
 _FALHAS = {"FAILURE", "ERROR", "TIMED_OUT", "CANCELLED", "ACTION_REQUIRED", "STARTUP_FAILURE"}

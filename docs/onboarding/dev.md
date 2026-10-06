@@ -84,7 +84,7 @@ Loop disciplinado: reproduz → minimiza → hipótese → instrumenta → corri
 /tdd               red → green → refactor; critérios de aceite = testes de integração
    ▼
 /ship              Gate 1: hr-revisor (sempre)
-                   Gate 2: hr-revisor-seguranca (se o sensivel.py acusa rota sem login ou migration)
+                   Gate 2: sensivel.py (rota sem login ou migration vira linha Sensível: no revisor)
                    Gate 3 — CI verde (GitHub Actions)
                    → gate reprovado chama o hr-corretor; com o PR verde, roda o rabo sozinho (sem versão no PR)
                    ▼
@@ -117,9 +117,9 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo /ship ou pelo fechament
 ## Regras importantes
 
 1. **Nunca commitar em `main` direto.** Sempre PR via `/ship`; quem leva o PR à `main` é o rabo (`fechar_onda.py`).
-2. **Self-approval é OK**: os 3 gates (hr-revisor + hr-revisor-seguranca + CI) validam. Cada um aprova o próprio PR.
+2. **Self-approval é OK**: os 3 gates (hr-revisor + sensivel.py + CI) validam. Cada um aprova o próprio PR.
    - **Emenda (ADR 0061, 01/10/2026):** cada sócio **mergeia e sobe para produção o próprio PR**, sem esperar ninguém. Quem mergeia aplica a migration em produção (Studio) e cuida do `APP_VERSION` no Coolify, então todo sócio precisa de acesso aos dois. PR verde parado esperando o Pedro é erro de processo, não cautela.
-3. **Nunca pular o `hr-revisor-seguranca`** quando o `sensivel.py` acusa rota sem login ou migration (canal público da Ouvidoria, webhook, e-mail recebido, RLS). O resto da segurança é a lente do `hr-auditor-prd` sobre o diff acumulado, no fechamento do PRD (ADR 0064).
+3. **Nunca pular o `sensivel.py`**: rota sem login ou migration (canal público da Ouvidoria, webhook, e-mail recebido, RLS) leva a linha `Sensível:` ao `hr-revisor`.
 4. **O contexto do trabalho vive na Issue**, não em arquivo de plano. Os critérios de aceite da Issue viram os seus testes no `/tdd`.
 5. **Uma Issue por vez, uma branch por Issue.** Em paralelo (vários terminais), use **1 git worktree por issue** — o claim atômico evita que duas sessões peguem a mesma. Protocolo em `docs/agents/issue-tracker.md`.
    - **Emenda (ADR 0061):** a **árvore principal do seu clone fica sempre na `main`** e só recebe `git pull`. Todo trabalho, inclusive doc e ADR, acontece em worktree. Voltou de uma pausa? `git pull` na árvore principal antes de qualquer coisa.
@@ -190,7 +190,7 @@ Sem Discord, sem Slack.
 ## Quando algo dá errado
 
 - **`/tdd` vermelho e não fecha?** O teste é a spec — confira o critério de aceite na Issue. Se o critério está errado, ajuste a Issue primeiro.
-- **`/ship` reprovou num gate?** O gate chama o `hr-corretor` sozinho; só a baixa (`ready-for-human`, com o diagnóstico na issue) volta para você. A saída diz qual gate (hr-revisor, hr-revisor-seguranca ou CI). Corrija e rode `/ship --resume`.
+- **`/ship` reprovou num gate?** O gate chama o `hr-corretor` sozinho; só a baixa (`ready-for-human`, com o diagnóstico na issue) volta para você. A saída diz qual gate (hr-revisor ou CI). Corrija e rode `/ship --resume`.
 - **Conflito com a `main`?** O rabo sai com 2 e chama o `hr-corretor`, que rebaseia pela `/resolver-conflitos` e conta tentativa; só a terceira falha (`ready-for-human`) volta para você.
 - **Deploy falhou em produção?** Com health ruim, o `fechar_onda.py` já volta sozinho a imagem anterior e o `APP_VERSION` antigo: sai com código 6, semáforo solto, e quem o rodou abre o PR de revert, reabre a issue e notifica (Passo 10 do `/ship`). Build que falha sai com 3, e health cujo rollback também falhou sai com 4: os dois seguram o semáforo; a saída dele é a fonte de verdade (o `history.json` já foi escrito no push, como `healthy`, e não é corrigido). `/deploy rollback` reverte e `/deploy status` mostra o estado.
 - **Snapshot desatualizado ou página do Manual presa em draft?** Olhe o último run da Action Pós-merge na aba Actions: a saída dele diz o que faltou. Corrigida a causa, **Re-run** no run (ele parte da ponta da `main`). Página com Vídeo de tarefa não sai do draft na Action: é o `/manual publicar` da sua máquina.
