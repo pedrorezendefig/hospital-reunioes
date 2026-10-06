@@ -77,7 +77,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0061](0061-um-pipeline-dono-por-prd-e-main-protegida.md) | accepted | Um pipeline só, dono por PRD e `main` protegida: a esteira para três sócios em paralelo (emenda 0022, 0035) |
 | [0062](0062-hospital-os-le-o-github-e-o-rabo-grava-so-a-verdade-do-deploy.md) | accepted | Hospital OS lê o GitHub ao vivo; o rabo grava só a verdade do deploy (emenda 0022, 0057, 0061) |
 | [0063](0063-fluxo-automatico-ate-producao-so-a-migration-para.md) | accepted | Fluxo automático até produção: só a migration para no humano (emenda 0061) |
-| [0064](0064-revisao-so-must-fix-e-merge-pr-a-pr-sem-em-dia-com-a-base.md) | accepted | Revisão só de must-fix em uma rodada, segurança por PRD; merge PR a PR sem "em dia com a base" (emenda 0061, 0063) |
+| [0064](0064-revisao-so-must-fix-e-merge-pr-a-pr-sem-em-dia-com-a-base.md) | accepted | Revisão só de must-fix em uma rodada, segurança por PRD; merge PR a PR sem "em dia com a base" (emenda 0061, 0062, 0063) |
 | [0043](0043-skills-locais-sao-o-kit-do-workflow.md) | accepted | Skills locais são o kit completo do workflow, duplicata com as globais é intencional |
 | [0049](0049-wayfinder-instalada-e-lock-com-ref.md) | accepted | A wayfinder entra instalada no clone, e o `skills-lock.json` fixa o commit de origem |
 | [0053](0053-fluxo-exportavel-por-roteiro-versionado.md) | accepted | O fluxo de trabalho é exportável por um roteiro versionado no repositório, não por prompt solto |
