@@ -79,7 +79,8 @@ Codigos de saida:
      quando o CI dele ficar verde. Ferramenta: merge feito, producao intacta,
      semaforo solto, mas a arrumacao depois do merge falhou (a linha diz o que falta)
   6  rollback feito: o health falhou, a imagem anterior e o APP_VERSION antigo
-     voltaram e o health ficou verde de novo; semaforo solto, sem registro. O merge
+     voltaram e o health ficou verde de novo; semaforo solto, sem registro. A tag
+     vX.Y.Z fica no squash ruim, e a proxima versao sai depois dela. O merge
      segue na main: quem chamou abre o PR de revert dele (sem rebuild), reabre a
      issue com `ready-for-agent` e a linha `health:` (o que o health respondeu),
      conta uma tentativa da fatia e notifica
