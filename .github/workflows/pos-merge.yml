@@ -1,0 +1,29 @@
+name: Pós-merge
+
+# Snapshot e draft do Manual depois de cada push na main (ADR 0062, decisão
+# 10; issue #940). O rabo (fechar_onda.py) grava só a verdade do deploy; o
+# mapa factual (docs/spec/snapshots/, blocos AUTO do docs/ARQUITETURA.md) e o
+# draft das páginas do Manual saem daqui, com o ambiente completo do backend.
+# O commit vai direto na main como github-actions[bot], pelo bypass do ruleset
+# que só o GitHub Actions tem (.github/rulesets/main.json).
+on:
+  push:
+    branches: [main]
+    # O que a própria Action escreve. Push pelo GITHUB_TOKEN já não dispara
+    # workflow; o filtro cobre quem rodar o snapshot à mão e empurrar. O merge
+    # que importa é o do PR de registro (docs/spec/deploy/), quando o
+    # history.json com a versão nova já está na main.
+    paths-ignore:
+      - 'docs/spec/snapshots/**'
+      - 'docs/ARQUITETURA.md'
+      - 'docs/manual/src/content/docs/**'
+
+permissions:
+  contents: write
+
+jobs:
+  pos-merge:
+    name: Snapshot e draft do Manual
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
