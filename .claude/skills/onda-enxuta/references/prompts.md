@@ -78,8 +78,8 @@ Chave do semáforo: <nome>. Está solta.
 
 Fila-alvo FIXA desta sessão (o que sobrou):
 - Onda <N+1>: #d, #e
-- Onda <N+2>: #f
-Ordem obrigatória: <as mesmas regras do plano original>.
+- Onda <N+2>: #f, depois da #e
+Dependências: <a de cada issue, como o plano original escreveu>. A onda é toda issue desta fila já desbloqueada, até o --paralelo.
 Não toque nas issues #.., #.. (outra sessão está rodando).
 
 Mapas do terreno já escritos: PRD #<X> (<URL>).
@@ -90,6 +90,8 @@ Decisões de triagem: <as mesmas linhas do plano original>.
 Baixas até aqui (ready-for-human): <issue e motivo, ou "nenhuma">.
 Prod hoje: v<nova>. Última migration em origin/main: <0XX>.
 ```
+
+A fila leva a dependência de cada issue ("#945, depois da #944"), nunca arquivo em comum: o único separador de ondas é a dependência (ADR 0066). A próxima sessão roda toda issue já desbloqueada (`blocked_by` todo fechado), mesmo a que está numa onda posterior da lista. `<P>` é o número de issues da fila desbloqueadas quando você escreve a passagem, com teto 3.
 
 O Mapa do terreno é um por PRD e atravessa as ondas: a passagem leva o que mudou depois dele. A linha `Mergeado na onda anterior` acumula desde o Mapa: os PRs da passagem que você recebeu mais os da sua onda; Mapa refeito nesta sessão zera a conta.
 
