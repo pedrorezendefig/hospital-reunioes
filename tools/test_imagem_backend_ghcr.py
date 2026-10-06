@@ -29,6 +29,8 @@ SKILL_DEPLOY = RAIZ / ".claude" / "skills" / "deploy"
 SHA = "a" * 40
 HEAD_SEM_IMAGEM = "b" * 40
 HEAD_COM_IMAGEM = "c" * 40
+DIGEST_SEM_IMAGEM = "sha256:" + "d" * 64
+DIGEST_COM_IMAGEM = "sha256:" + "e" * 64
 
 
 def servico(sid: str) -> dict:
@@ -94,9 +96,34 @@ def test_ci_publica_a_imagem_do_backend_com_o_sha_do_head_em_todo_pr_do_reposito
     back = passo(job["steps"], "Build backend image")["with"]
     assert back["push"] == "${{ env.PUBLICA == 'true' }}"
     assert back["tags"] == "${{ env.IMAGEM_BACKEND }}:" + head
-    assert back["cache-from"] == "type=registry,ref=${{ env.IMAGEM_BACKEND }}:buildcache"
-    assert "type=registry,ref={0}:buildcache,mode=max" in back["cache-to"]
-    assert "env.PUBLICA == 'true'" in back["cache-to"]
+
+
+def test_cache_de_camadas_e_do_github_actions_isolado_por_ref_e_nao_do_registry():
+    """Revisão do PR #1016: um `:buildcache` no GHCR é compartilhado, e um PR
+    gravaria nele um manifesto forjado que o build de reserva e os PRs seguintes
+    herdariam. O cache `gha` é isolado por ref: o PR só escreve no dele."""
+    builds = [passo(job_build()["steps"], "Build backend image")["with"]]
+    [job] = publicador()["jobs"].values()
+    builds.append(passo(job["steps"], "Build do squash (nenhum head serviu)")["with"])
+    for b in builds:
+        assert (b["cache-from"], b["cache-to"]) == ("type=gha,scope=backend", "type=gha,scope=backend,mode=max")
+    for caminho in (CI, WORKFLOWS / backend()["build"]["publish_workflow"]):
+        assert "type=registry" not in caminho.read_text(encoding="utf-8"), caminho.name
+
+
+def test_ci_guarda_o_digest_da_imagem_do_head_para_o_rabo():
+    """A tag `:<head>` é mutável; o digest do que o build publicou vai para o
+    artefato que o rabo lê (`digest-<serviço>`), só quando o CI publica."""
+    passos = job_build()["steps"]
+    assert passo(passos, "Build backend image")["id"] == "backend"
+    digest = passo(passos, "Digest da imagem do backend")
+    assert digest["if"] == "env.PUBLICA == 'true'"
+    assert digest["env"]["DIGEST"] == "${{ steps.backend.outputs.digest }}"
+    assert "digest/digest" in digest["run"]
+    guarda = passo(passos, "Guarda o digest para o rabo")
+    assert guarda["if"] == "env.PUBLICA == 'true'"
+    assert guarda["uses"].startswith("actions/upload-artifact@")
+    assert guarda["with"] == {"name": f"digest-{backend()['id']}", "path": "digest/digest"}
 
 
 def test_ci_nao_publica_a_imagem_do_frontend_construida_com_valores_falsos():
@@ -129,15 +156,46 @@ def test_build_de_reserva_constroi_o_squash_e_publica_sha_e_latest():
     assert checkout["if"] == "steps.retag.outputs.feito != 'true'"
     build = passo(job["steps"], "Build do squash (nenhum head serviu)")
     assert build["if"] == "steps.retag.outputs.feito != 'true'"
+    assert build["id"] == "build"
     assert build["with"]["context"] == backend()["build"]["base_directory"].strip("/")
     assert build["with"]["push"] is True
     assert build["with"]["tags"].strip().splitlines() == ["${{ env.IMAGEM_BACKEND }}:${{ inputs.sha }}",
                                              "${{ env.IMAGEM_BACKEND }}:latest"]
 
 
+def test_workflow_guarda_o_digest_publicado_para_o_rabo():
+    """O digest do retag (o da origem) ou o do build vai para o artefato que o
+    rabo lê, confere no GHCR e grava no state.json."""
+    [job] = publicador()["jobs"].values()
+    digest = passo(job["steps"], "Digest publicado")
+    assert digest["env"]["DIGEST"] == "${{ steps.retag.outputs.digest || steps.build.outputs.digest }}"
+    guarda = passo(job["steps"], "Guarda o digest para o rabo")
+    assert guarda["uses"].startswith("actions/upload-artifact@")
+    assert guarda["with"] == {"name": f"digest-{backend()['id']}", "path": "digest/digest"}
+
+
+@pytest.mark.parametrize("digest, gravado", [
+    (DIGEST_COM_IMAGEM, DIGEST_COM_IMAGEM),
+    ("", None),
+    (f"{DIGEST_COM_IMAGEM}\nx", None),
+], ids=["digest", "vazio", "com-quebra-de-linha"])
+def test_passo_do_digest_so_grava_um_digest_inteiro(tmp_path, digest, gravado):
+    [job] = publicador()["jobs"].values()
+    script = passo(job["steps"], "Digest publicado")["run"]
+    proc = subprocess.run(["bash", "-e", "-c", script], env={**os.environ, "DIGEST": digest},
+                          cwd=tmp_path, capture_output=True, text=True)
+    arq = tmp_path / "digest" / "digest"
+    if gravado:
+        assert proc.returncode == 0, proc.stderr
+        assert arq.read_text(encoding="utf-8") == gravado + "\n"
+    else:
+        assert proc.returncode != 0 and not arq.exists()
+
+
 def rodar_retag(tmp_path: Path, sha: str, origens: str, existentes: set[str]) -> tuple[int, list[str], str]:
     """Roda o `run` do passo de retag com um `docker` falso que anota cada
-    chamada e só acha no GHCR as tags de `existentes`."""
+    chamada e só acha no GHCR as referências de `existentes` (`:<tag>` ou
+    `@<digest>`)."""
     [job] = publicador()["jobs"].values()
     script = passo(job["steps"], "Retag da imagem de um head (sem build)")["run"]
     imagem = backend()["build"]["image"]
@@ -160,26 +218,40 @@ def rodar_retag(tmp_path: Path, sha: str, origens: str, existentes: set[str]) ->
     saida.write_text("", encoding="utf-8")
     env = {**os.environ, "PATH": f"{bin_falso}{os.pathsep}{os.environ['PATH']}",
            "IMAGEM_BACKEND": imagem, "SHA": sha, "ORIGENS": origens, "GITHUB_OUTPUT": str(saida),
-           "EXISTENTES": " ".join(f"{imagem}:{t}" for t in existentes)}
+           "EXISTENTES": " ".join(f"{imagem}{t}" for t in existentes)}
     proc = subprocess.run(["bash", "-e", "-c", script], env=env, capture_output=True, text=True)
     chamadas = log.read_text(encoding="utf-8").splitlines() if log.exists() else []
     return proc.returncode, chamadas, saida.read_text(encoding="utf-8")
 
 
-def test_retag_usa_a_primeira_origem_que_existe_no_ghcr_e_da_a_ela_o_sha_e_latest(tmp_path):
+def test_retag_usa_pelo_digest_a_primeira_origem_que_existe_no_ghcr_e_da_a_ela_o_sha_e_latest(tmp_path):
     imagem = backend()["build"]["image"]
 
-    codigo, chamadas, saida = rodar_retag(tmp_path, SHA, f"{HEAD_SEM_IMAGEM} {HEAD_COM_IMAGEM}",
-                                          {HEAD_COM_IMAGEM})
+    codigo, chamadas, saida = rodar_retag(
+        tmp_path, SHA, f"{HEAD_SEM_IMAGEM}@{DIGEST_SEM_IMAGEM} {HEAD_COM_IMAGEM}@{DIGEST_COM_IMAGEM}",
+        {f"@{DIGEST_COM_IMAGEM}"})
 
     assert codigo == 0
     assert chamadas[-1] == (f"buildx imagetools create -t {imagem}:{SHA} -t {imagem}:latest "
-                            f"{imagem}:{HEAD_COM_IMAGEM}")
+                            f"{imagem}@{DIGEST_COM_IMAGEM}")
     assert [c for c in chamadas if "create" in c] == [chamadas[-1]]
     assert "feito=true" in saida.splitlines()
+    assert f"digest={DIGEST_COM_IMAGEM}" in saida.splitlines()
 
 
-@pytest.mark.parametrize("origens", ["", HEAD_SEM_IMAGEM], ids=["sem-origem", "origem-sem-imagem"])
+def test_retag_nao_confia_na_tag_do_head(tmp_path):
+    """Revisão do PR #1016: a tag `:<head>` existe, mas foi sobrescrita e não
+    aponta para o digest que o CI guardou; o retag procura o digest, não a tag."""
+    codigo, chamadas, saida = rodar_retag(tmp_path, SHA, f"{HEAD_COM_IMAGEM}@{DIGEST_COM_IMAGEM}",
+                                          {f":{HEAD_COM_IMAGEM}"})
+
+    assert codigo == 0
+    assert [c for c in chamadas if "create" in c] == []
+    assert "feito=false" in saida.splitlines()
+
+
+@pytest.mark.parametrize("origens", ["", f"{HEAD_SEM_IMAGEM}@{DIGEST_SEM_IMAGEM}"],
+                         ids=["sem-origem", "origem-sem-imagem"])
 def test_sem_origem_no_ghcr_o_retag_cede_a_vez_ao_build(tmp_path, origens):
     codigo, chamadas, saida = rodar_retag(tmp_path, SHA, origens, set())
 
@@ -188,10 +260,17 @@ def test_sem_origem_no_ghcr_o_retag_cede_a_vez_ao_build(tmp_path, origens):
     assert "feito=false" in saida.splitlines()
 
 
-@pytest.mark.parametrize("sha, origens", [("main", ""), (SHA, "x; rm -rf /"), (SHA[:12], "")],
-                         ids=["ref-de-branch", "origem-que-nao-e-sha", "sha-curto"])
-def test_retag_recusa_entrada_que_nao_e_sha_completo(tmp_path, sha, origens):
-    codigo, chamadas, _ = rodar_retag(tmp_path, sha, origens, {"main"})
+@pytest.mark.parametrize("sha, origens", [
+    ("main", ""),
+    (SHA, "x; rm -rf /"),
+    (SHA[:12], ""),
+    (f"{SHA}\nx", ""),
+    (SHA, HEAD_COM_IMAGEM),
+    (SHA, f"{HEAD_COM_IMAGEM}@sha256:{'e' * 12}"),
+], ids=["ref-de-branch", "origem-que-nao-e-sha", "sha-curto", "sha-com-quebra-de-linha",
+        "origem-sem-digest", "digest-curto"])
+def test_retag_recusa_entrada_que_nao_e_sha_completo_ou_origem_sem_digest(tmp_path, sha, origens):
+    codigo, chamadas, _ = rodar_retag(tmp_path, sha, origens, {":main", f":{HEAD_COM_IMAGEM}"})
 
     assert codigo != 0
     assert chamadas == []

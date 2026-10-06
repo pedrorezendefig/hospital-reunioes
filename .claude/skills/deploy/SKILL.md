@@ -536,6 +536,7 @@ Snapshot completo:
       "health_path": "<service.deploy.health_check.path>",
       "status": "healthy|warning|down",
       "last_deploy_sha": "<sha curto>",
+      "last_deploy_digest": "<sha256:...>, só app em modo imagem: o digest que foi para o ar, que o rollback confere no GHCR",
       "last_deploy_at": "<ISO>",
       "last_health_check": { "at": "<ISO>", "latency_ms": <int|null>, "http_status": <int>, "body_ok": <bool> },
       "build_duration_seconds": <int|null>,

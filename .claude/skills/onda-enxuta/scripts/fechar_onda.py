@@ -65,18 +65,20 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      rabo monitora so o do ultimo, em cada service; forca se nao disparar.
      App em modo imagem (`build_pack` dockerimage no project.json, issue #1001)
      nao tem build nem webhook: o rabo dispara o workflow que publica a imagem
-     do squash no GHCR (retag da que o CI publicou para um head do lote com a
-     mesma pasta do app; sem nenhum, build do squash), espera o run e so entao
-     aponta o Coolify para a tag do squash, que so puxa e reinicia. Antes do
-     primeiro merge confere no `coolify app get` que a troca na tela foi feita;
-     sem ela, o app segue pelo webhook, com uma linha `aviso:`; leitura que
-     falha (sem resposta, sem JSON, sem build pack) para ali, com saida 2 e
-     nada na main
+     do squash no GHCR (retag, pelo digest que o CI guardou, da imagem de um
+     head do lote com a mesma pasta do app; sem nenhum, build do squash),
+     espera o run, confere no GHCR que a tag do squash aponta para o digest que
+     o run guardou e so entao aponta o Coolify para ela, que so puxa e reinicia;
+     o digest vai para o state.json. Antes do primeiro merge confere no
+     `coolify app get` que a troca na tela foi feita; sem ela, o app segue pelo
+     webhook, com uma linha `aviso:`; leitura que falha (sem resposta, sem JSON,
+     sem build pack) ou imagem de outro nome para ali, com saida 2 e nada na main
   7. health com version match. Health ruim: rollback automatico (issue #968),
      cada app do lote volta a imagem anterior no Coolify, a que estava no ar
      antes do primeiro merge (`current` do `coolify app rollback images`, lida
      antes dele, e `rollback run`, sem forcar build; em modo imagem, a tag
-     anterior, pelo mesmo caminho do deploy) e o APP_VERSION antigo volta
+     anterior, pelo mesmo caminho do deploy, se ainda apontar no GHCR para o
+     digest do state.json) e o APP_VERSION antigo volta
      aos apps, antes da imagem subir; o health e conferido de novo na versao antiga
   8. registro num PR so de docs, so com history.json (todos os deploys, sem
      teto) e state.json (ADR 0062, decisao 9), mergeado pela API; o build que o
@@ -177,6 +179,12 @@ BUILD_POLL_S = 10
 BUILD_TIMEOUT_S = 40 * 60
 IMAGEM_POLL_S = 10
 IMAGEM_TIMEOUT_S = 20 * 60  # o retag leva segundos; o build de reserva do workflow, minutos
+CI_WORKFLOW = "ci.yml"  # publica a imagem do head do PR e guarda o digest (issue #1001)
+DIGEST_RE = re.compile(r"sha256:[0-9a-f]{64}")
+# o que o GHCR responde no HEAD do manifesto: o digest da imagem multi-arquitetura ou da simples
+TIPOS_DE_MANIFESTO = ", ".join([
+    "application/vnd.oci.image.index.v1+json", "application/vnd.docker.distribution.manifest.list.v2+json",
+    "application/vnd.oci.image.manifest.v1+json", "application/vnd.docker.distribution.manifest.v2+json"])
 CHECKS_POLL_S = 15
 CHECKS_TIMEOUT_S = 40 * 60
 HEAD_ATRASADO_S = 120  # o GitHub registra o push no PR em segundos
@@ -694,9 +702,11 @@ def rotulo_issues(info: dict) -> str:
 def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | None,
                       sha_codigo: str, prds: list[int], migs: list[str], servicos: list[str],
                       duracoes: dict[str, int | None], healths: dict[str, dict], resultado: str,
-                      com_app_version: list[str], avulso: bool = False) -> None:
+                      com_app_version: list[str], avulso: bool = False,
+                      digests: dict[str, str | None] | None = None) -> None:
     """A verdade do deploy que o GitHub nao tem (ADR 0062, decisao 9): history.json,
-    com todos os deploys, e state.json."""
+    com todos os deploys, e state.json. App em modo imagem leva o digest do que
+    foi para o ar (`last_deploy_digest`): e o que o rollback confere no GHCR."""
     history = ler_json(wt / HISTORY)
     state = ler_json(wt / STATE)
     when = agora_iso()
@@ -743,6 +753,10 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
     for svc in state.get("services") or []:
         if svc.get("id") in servicos:
             svc["last_deploy_sha"] = sha_codigo
+            if (digests or {}).get(svc["id"]):
+                svc["last_deploy_digest"] = digests[svc["id"]]
+            else:
+                svc.pop("last_deploy_digest", None)  # o deploy pelo webhook nao tem digest
             svc["last_deploy_at"] = when
             h = healths.get(svc["id"]) or {}
             svc["status"] = "healthy" if h.get("ok") else "warning"
@@ -923,7 +937,10 @@ def conferir_modo_imagem_no_coolify(servicos_cfg: dict) -> None:
     com aviso. So um build pack lido e diferente de dockerimage rebaixa: leitura
     que falha levanta RuntimeError antes do primeiro merge, porque depois da troca
     o app nao tem webhook e o deploy forcado repuxaria a tag velha (revisao do
-    PR #1016). Muda `servicos_cfg` no lugar."""
+    PR #1016). Em modo imagem, confere tambem o nome da imagem: outro namespace
+    no GHCR (um `pedrorezende` sem o `fig`) tem tags previsiveis que qualquer um
+    publica, e o Coolify puxaria de la; nome diferente, ou nao lido, tambem
+    levanta RuntimeError antes do primeiro merge. Muda `servicos_cfg` no lugar."""
     for sid in apps_do_coolify(servicos_cfg):
         if not em_modo_imagem(servicos_cfg[sid]):
             continue
@@ -938,6 +955,12 @@ def conferir_modo_imagem_no_coolify(servicos_cfg: dict) -> None:
             print(f"aviso: o project.json diz que o {sid} roda a imagem do GHCR, mas o Coolify responde "
                   f"build pack {real}; segue pelo build do webhook ate a troca na tela (issue #1001)")
             servicos_cfg[sid] = {**servicos_cfg[sid], "build": {**servicos_cfg[sid]["build"], "build_pack": real}}
+            continue
+        esperada = servicos_cfg[sid]["build"]["image"]
+        lida = str(dado.get("docker_registry_image_name") or "").strip()
+        if lida != esperada:
+            raise RuntimeError(f"o Coolify puxa o {sid} de '{lida or '(sem nome)'}', e a imagem do project.json "
+                               f"e '{esperada}'; corrija o nome na tela, nada entrou na main (issue #1001)")
 
 
 def origens_da_imagem(raiz: Path, service: dict, sha: str, heads: list[str]) -> list[str]:
@@ -953,54 +976,132 @@ def origens_da_imagem(raiz: Path, service: dict, sha: str, heads: list[str]) -> 
     return [h for h in reversed(heads) if alvo and arvore(h) == alvo]
 
 
-def publicar_imagem(raiz: Path, service: dict, sha: str, origens: list[str]) -> str:
+def artefato_do_digest(service: dict) -> str:
+    """O artefato em que o ci.yml (imagem do head) e o workflow da imagem (a do
+    squash) guardam o digest do que publicaram."""
+    return f"digest-{service['id']}"
+
+
+def digest_do_run(raiz: Path, service: dict, run_id) -> str | None:
+    """O digest que o run `run_id` guardou no artefato, ou None. A tag no GHCR e
+    mutavel (um run com `packages: write` de qualquer branch a sobrescreve); o
+    digest do artefato e o do que o run publicou (revisao do PR #1016)."""
+    with tempfile.TemporaryDirectory() as d:
+        proc = run(["gh", "run", "download", str(run_id), "-n", artefato_do_digest(service), "-D", d],
+                   cwd=raiz, check=False)
+        arq = Path(d) / "digest"
+        texto = arq.read_text(encoding="utf-8").strip() if proc.returncode == 0 and arq.exists() else ""
+    return texto if DIGEST_RE.fullmatch(texto) else None
+
+
+def digest_do_ci(raiz: Path, service: dict, head: str) -> str | None:
+    """O digest da imagem que o CI do PR publicou para o `head`."""
+    runs = gh_json(["run", "list", "--workflow", CI_WORKFLOW, "--commit", head, "--event", "pull_request",
+                    "--status", "success", "--limit", "5", "--json", "databaseId"], cwd=raiz) or []
+    for r in runs:
+        digest = digest_do_run(raiz, service, r.get("databaseId"))
+        if digest:
+            return digest
+    return None
+
+
+def runs_da_imagem(raiz: Path, service: dict) -> list[dict]:
+    # so os da main: um run disparado de outra branch roda outro workflow
+    return gh_json(["run", "list", "--workflow", service["build"]["publish_workflow"], "--branch", "main",
+                    "--event", "workflow_dispatch", "--limit", "20",
+                    "--json", "databaseId,displayTitle,status,conclusion"], cwd=raiz) or []
+
+
+def digest_publicado(raiz: Path, service: dict, sha: str) -> str | None:
+    """O digest que o workflow da imagem publicou para o squash `sha`: o do
+    primeiro deploy por imagem, que o state.json ainda nao registra."""
+    for r in runs_da_imagem(raiz, service):
+        if sha in (r.get("displayTitle") or "") and (r.get("conclusion") or "").lower() == "success":
+            digest = digest_do_run(raiz, service, r.get("databaseId"))
+            if digest:
+                return digest
+    return None
+
+
+def publicar_imagem(raiz: Path, service: dict, sha: str, origens: list[str]) -> tuple[str, object]:
     """Dispara o workflow que publica a imagem do squash `sha` no GHCR (tag do
-    sha e `latest`) e espera o run terminar. O workflow retagueia a primeira das
-    `origens` que existir no GHCR; sem nenhuma, constroi do `sha`. Quem escreve
-    no GHCR e o GITHUB_TOKEN do workflow: o gh da maquina do rabo nao tem
-    `write:packages`. Devolve a conclusao do run."""
+    sha e `latest`) e espera o run terminar. O workflow retagueia pelo digest a
+    primeira das `origens` (`<head>@<digest>`) que existir no GHCR; sem nenhuma,
+    constroi do `sha`. Quem escreve no GHCR e o GITHUB_TOKEN do workflow: o gh
+    da maquina do rabo nao tem `write:packages`. Devolve (conclusao, id do run)."""
     wf = service["build"]["publish_workflow"]
-    listar = ["run", "list", "--workflow", wf, "--event", "workflow_dispatch", "--limit", "20",
-              "--json", "databaseId,displayTitle,status,conclusion"]
-    antes = {r.get("databaseId") for r in gh_json(listar, cwd=raiz) or []}
+    antes = {r.get("databaseId") for r in runs_da_imagem(raiz, service)}
     proc = run(["gh", "workflow", "run", wf, "--ref", "main", "-f", f"sha={sha}",
                 "-f", f"origens={' '.join(origens)}"], cwd=raiz, check=False)
     if proc.returncode != 0:
-        return f"recusada pelo gh ({(proc.stderr or proc.stdout).strip()[:160]})"
+        return f"recusada pelo gh ({(proc.stderr or proc.stdout).strip()[:160]})", None
     limite = time.time() + IMAGEM_TIMEOUT_S
     while time.time() < limite:
         try:
-            runs = gh_json(listar, cwd=raiz) or []
+            runs = runs_da_imagem(raiz, service)
         except RuntimeError:
             runs = []  # um 502 no polling nao derruba o deploy
         # o run-name do workflow leva o sha: e assim que o run deste disparo aparece
         novo = next((r for r in runs if r.get("databaseId") not in antes
                      and sha in (r.get("displayTitle") or "")), None)
         if novo and (novo.get("status") or "").lower() == "completed":
-            return (novo.get("conclusion") or "?").lower()
+            return (novo.get("conclusion") or "?").lower(), novo.get("databaseId")
         time.sleep(IMAGEM_POLL_S)
-    return f"sem fim em {IMAGEM_TIMEOUT_S // 60} min"
+    return f"sem fim em {IMAGEM_TIMEOUT_S // 60} min", None
 
 
-def trocar_tag(uuid: str, tag: str) -> bool:
+def digest_no_ghcr(imagem: str, tag: str) -> str | None:
+    """O digest para o qual a tag aponta agora no GHCR (o `imagetools inspect`
+    sem docker), lido sem login: o pacote e publico. None se nao der para ler."""
+    repo = imagem.removeprefix("ghcr.io/")
+    try:
+        with urllib.request.urlopen(f"https://ghcr.io/token?scope=repository:{repo}:pull", timeout=30) as r:
+            token = json.loads(r.read())["token"]
+        pedido = urllib.request.Request(f"https://ghcr.io/v2/{repo}/manifests/{tag}", method="HEAD",
+                                        headers={"Authorization": f"Bearer {token}", "Accept": TIPOS_DE_MANIFESTO})
+        with urllib.request.urlopen(pedido, timeout=30) as r:
+            return r.headers.get("Docker-Content-Digest")
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def trocar_tag(service: dict, tag: str, digest: str | None) -> str | None:
     """Aponta o app em modo imagem para a tag e dispara o deploy, que so puxa a
-    imagem e reinicia o container."""
-    return (run(["coolify", "app", "update", uuid, "--docker-tag", tag], check=False).returncode == 0
-            and run(["coolify", "deploy", "uuid", uuid], check=False).returncode == 0)
+    imagem e reinicia o container. Antes, confere no GHCR que a tag ainda aponta
+    para o `digest` registrado: tag sobrescrita nao vai para o ar (revisao do PR
+    #1016). Devolve o motivo da recusa, ou None."""
+    if not digest:
+        return f"sem o digest da imagem {tag[:8]} para conferir no GHCR"
+    no_ghcr = digest_no_ghcr(service["build"]["image"], tag)
+    if no_ghcr != digest:
+        return (f"a tag {tag[:8]} aponta no GHCR para {no_ghcr or '(ilegivel)'}, nao para o digest "
+                f"registrado {digest}; nada foi para o ar")
+    uuid = service["uuid"]
+    if (run(["coolify", "app", "update", uuid, "--docker-tag", tag], check=False).returncode != 0
+            or run(["coolify", "deploy", "uuid", uuid], check=False).returncode != 0):
+        return "o Coolify recusou a tag"
+    return None
 
 
-def subir_imagem(raiz: Path, service: dict, sha: str, heads: list[str]) -> tuple[str, int | None]:
+def subir_imagem(raiz: Path, service: dict, sha: str, heads: list[str]) -> tuple[str, int | None, str | None]:
     """O deploy de um app em modo imagem: publica a imagem do squash e poe a tag
-    dele no ar. Devolve (status, duracao_s), como o esperar_build."""
+    dele no ar. Devolve (status, duracao_s, digest): os dois primeiros como o
+    esperar_build, o digest para o state.json."""
     t = time.time()
     run(["git", "fetch", "-q", "origin", "main"], cwd=raiz)  # o squash, para comparar a pasta do app
-    publicada = publicar_imagem(raiz, service, sha, origens_da_imagem(raiz, service, sha, heads))
+    origens = [f"{h}@{d}" for h in origens_da_imagem(raiz, service, sha, heads)
+               if (d := digest_do_ci(raiz, service, h))]
+    publicada, run_id = publicar_imagem(raiz, service, sha, origens)
     if publicada != "success":
-        return f"imagem no GHCR {publicada}", None
+        return f"imagem no GHCR {publicada}", None, None
+    digest = digest_do_run(raiz, service, run_id)
+    if not digest:
+        return "o run da imagem nao guardou o digest", None, None
     antes = ids_de_deploy(service["uuid"])
-    if not trocar_tag(service["uuid"], sha):
-        return "o Coolify recusou a tag", None
-    return esperar_deploy_novo(service, antes), int(time.time() - t)
+    recusa = trocar_tag(service, sha, digest)
+    if recusa:
+        return recusa, None, None
+    return esperar_deploy_novo(service, antes), int(time.time() - t), digest
 
 
 # ----------------------------------------------------------------- rollback
@@ -1014,13 +1115,18 @@ def imagem_no_ar(uuid: str) -> str | None:
     return str(atual) if atual else None
 
 
-def tag_no_ar(wt: Path, ref: str, sid: str) -> str | None:
-    """A tag que o app em modo imagem roda agora (issue #1001): o sha do ultimo
-    deploy dele no state.json, que e a tag que o rabo pos no ar. O CLI do Coolify
-    nao devolve a tag configurada, e o `rollback images` e de build do git."""
+def tag_no_ar(raiz: Path, wt: Path, ref: str, service: dict) -> tuple[str | None, str | None]:
+    """A tag que o app em modo imagem roda agora (issue #1001) e o digest dela:
+    o sha e o digest do ultimo deploy dele no state.json, que o rabo pos no ar.
+    O CLI do Coolify nao devolve a tag configurada, e o `rollback images` e de
+    build do git. Sem digest no state.json (o primeiro deploy por imagem), o do
+    run do workflow que publicou a tag."""
     state = json.loads(run(["git", "show", f"{ref}:{STATE}"], cwd=wt).stdout)
-    svc = next((s for s in state.get("services") or [] if s.get("id") == sid), {})
-    return svc.get("last_deploy_sha") or None
+    svc = next((s for s in state.get("services") or [] if s.get("id") == service["id"]), {})
+    sha = svc.get("last_deploy_sha") or None
+    if not sha:
+        return None, None
+    return sha, svc.get("last_deploy_digest") or digest_publicado(raiz, service, sha)
 
 
 def ids_de_deploy(uuid: str) -> set[str]:
@@ -1049,7 +1155,7 @@ def esperar_deploy_novo(service: dict, antes: set[str]) -> str:
 
 
 def reverter(servicos_cfg: dict, servicos: list[str], alvos: dict[str, str | None], versao_antiga: str | None,
-             com_app_version: list[str]) -> tuple[bool, str]:
+             com_app_version: list[str], digests: dict[str, str | None] | None = None) -> tuple[bool, str]:
     """Rollback automatico (issue #968): cada app do lote volta a imagem que
     estava no ar antes do merge (`alvos`, de `imagem_no_ar`), o APP_VERSION
     antigo volta aos apps em que o rabo o trocou e o health e conferido de novo.
@@ -1059,6 +1165,15 @@ def reverter(servicos_cfg: dict, servicos: list[str], alvos: dict[str, str | Non
         sem = [sid for sid, alvo in alvos.items() if not alvo]
         if sem:
             return False, "sem imagem anterior no Coolify (lida antes do merge) para " + ", ".join(sem)
+        # a imagem anterior segue no GHCR (issue #1001), mas a tag dela e mutavel: so volta
+        # se ainda apontar para o digest registrado, e isso se confere antes de mexer em app
+        digests = digests or {}
+        for sid, alvo in alvos.items():
+            if em_modo_imagem(servicos_cfg[sid]):
+                no_ghcr = digest_no_ghcr(servicos_cfg[sid]["build"]["image"], alvo)
+                if not digests.get(sid) or no_ghcr != digests[sid]:
+                    return False, (f"a tag {alvo[:8]} do {sid} aponta no GHCR para {no_ghcr or '(ilegivel)'}, "
+                                   f"nao para o digest registrado {digests.get(sid) or '(nenhum)'}")
         # antes de subir a imagem: o backend le o APP_VERSION no start do container
         for sid in com_app_version:
             setar_app_version(servicos_cfg[sid]["uuid"], versao_antiga)
@@ -1066,10 +1181,10 @@ def reverter(servicos_cfg: dict, servicos: list[str], alvos: dict[str, str | Non
             uuid = servicos_cfg[sid]["uuid"]
             antes = ids_de_deploy(uuid)
             if em_modo_imagem(servicos_cfg[sid]):
-                voltou = trocar_tag(uuid, alvo)  # a imagem anterior segue no GHCR (issue #1001)
-            else:
-                voltou = run(["coolify", "app", "rollback", "run", uuid, "--commit", alvo], check=False).returncode == 0
-            if not voltou:
+                recusa = trocar_tag(servicos_cfg[sid], alvo, digests.get(sid))
+                if recusa:
+                    return False, f"rollback do {sid} para {alvo[:8]}: {recusa}"
+            elif run(["coolify", "app", "rollback", "run", uuid, "--commit", alvo], check=False).returncode != 0:
                 return False, f"o Coolify recusou o rollback do {sid} para {alvo[:8]}"
             status = esperar_rollback(servicos_cfg[sid], antes)
             if status != "finished":
@@ -1292,6 +1407,7 @@ def main() -> int:
         # PR a PR, na ordem (ADR 0064, decisao 3). PR que nao mergeia fica de fora
         # e o lote segue sem ele; os ja mergeados ficam.
         no_ar: dict[str, str | None] = {}
+        digests_no_ar: dict[str, str | None] = {}  # em modo imagem, o digest de cada tag de `no_ar`
         com_app_version: list[str] = []
         antes_do_primeiro = True
         de_fora: list[int] = []
@@ -1301,8 +1417,11 @@ def main() -> int:
                 head, trouxe_main = preparar_pr(raiz, wt, info)
                 if antes_do_primeiro:
                     # a imagem no ar antes do primeiro merge e o alvo de um rollback (issue #968)
-                    no_ar = {sid: tag_no_ar(wt, base, sid) if em_modo_imagem(servicos_cfg[sid])
-                             else imagem_no_ar(servicos_cfg[sid]["uuid"]) for sid in servicos}
+                    for sid in servicos:
+                        if em_modo_imagem(servicos_cfg[sid]):
+                            no_ar[sid], digests_no_ar[sid] = tag_no_ar(raiz, wt, base, servicos_cfg[sid])
+                        else:
+                            no_ar[sid] = imagem_no_ar(servicos_cfg[sid]["uuid"])
                     com_app_version = setar_app_version_nos_apps(servicos_cfg, versao_nova) if versao_nova else []
                     antes_do_primeiro = False
                 titulo = info["title"].strip()
@@ -1382,11 +1501,12 @@ def main() -> int:
         # Coolify so a puxa (issue #1001)
         cancelados = [sid for s in intermediarios for sid in cancelar_build_do_registro(servicos_cfg, s)]
         duracoes: dict[str, int | None] = {}
+        digests: dict[str, str | None] = {}
         falhas = []
         heads = [i["head_mergeado"] for i in lote]
         for sid in servicos:
             if em_modo_imagem(servicos_cfg[sid]):
-                status, d = subir_imagem(raiz, servicos_cfg[sid], sha_main, heads)
+                status, d, digests[sid] = subir_imagem(raiz, servicos_cfg[sid], sha_main, heads)
             else:
                 status, d = esperar_build(servicos_cfg[sid], t_merge, sha_main, intermediarios)
             duracoes[sid] = d
@@ -1405,7 +1525,7 @@ def main() -> int:
         if ruins:
             print("health: " + "; ".join(ruins))
             voltou, como = reverter(servicos_cfg, servicos, no_ar, versao_antiga if versao_nova else None,
-                                    com_app_version)
+                                    com_app_version, digests_no_ar)
             if not voltou:
                 print(f"rollback: falhou, {como}. Semaforo preso na chave {args.sessao}: rode `/deploy rollback` com ela.")
                 return EXIT_HEALTH
@@ -1428,7 +1548,7 @@ def main() -> int:
             heads = {i.get("head_conferido") for i in lote}
             migs = [Path(c).name for h, c in novas if h in heads]
             escrever_registro(wt_reg, args.sessao, lote, versao_nova, sha_main, prds_do_lote(raiz, lote), migs,
-                              servicos, duracoes, healths, "healthy", com_app_version, avulso)
+                              servicos, duracoes, healths, "healthy", com_app_version, avulso, digests)
             do_lote = f"do PR {entraram}" if avulso else f"da onda {args.sessao}"
             titulo_reg = f"chore(deploy): registro {do_lote} (v{versao})"
             commitar(wt_reg, titulo_reg, [HISTORY, STATE])
