@@ -97,6 +97,10 @@ def test_fatia_bloqueada_pela_onda_em_deploy_fica_na_onda_em_vez_de_sair_da_fila
     fila = passo(1)
     regra = next(li for li in fila.splitlines() if "dependencies/blocked_by" in li)
     assert re.search(r"bloqueio por issue da linha `Em deploy`.*fica na onda", regra), regra
+    # a conferência não pode barrar a fatia que a exceção segura na onda
+    conferencia = re.search(r"Confira só que (.*?)\(`gh issue view", regra)
+    assert conferencia, regra
+    assert re.search(r"sem bloqueio aberto, fora o da linha `Em deploy`", conferencia.group(1)), conferencia.group(1)
 
 
 def test_implementador_de_fatia_bloqueada_pela_onda_em_deploy_so_sai_depois_que_a_bloqueadora_fecha():
