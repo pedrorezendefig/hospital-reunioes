@@ -22,13 +22,13 @@ RAIZ = Path(__file__).resolve().parent.parent
 WORKFLOW = RAIZ / ".github" / "workflows" / "pos-merge.yml"
 
 
-def workflow() -> dict:
-    return yaml.safe_load(WORKFLOW.read_text(encoding="utf-8"))
+def workflow(arquivo: Path = WORKFLOW) -> dict:
+    return yaml.safe_load(arquivo.read_text(encoding="utf-8"))
 
 
-def gatilhos() -> dict:
+def gatilhos(arquivo: Path = WORKFLOW) -> dict:
     # O PyYAML segue o YAML 1.1, em que `on` é booleano: a chave vira True.
-    w = workflow()
+    w = workflow(arquivo)
     return w["on"] if "on" in w else w[True]
 
 
@@ -190,7 +190,7 @@ def test_backend_montado_com_o_mesmo_ambiente_do_ci():
     """O snapshot lê as rotas do app montado (`introspect_routes.py`, pelo
     `.venv` do backend). Sem o venv, ou sem as variáveis que o Settings exige,
     ele cai no parser AST e rebaixa o ROTAS.md (o modo parcial do macOS)."""
-    ci = yaml.safe_load((RAIZ / ".github" / "workflows" / "ci.yml").read_text(encoding="utf-8"))
+    ci = workflow(RAIZ / ".github" / "workflows" / "ci.yml")
     assert workflow()["jobs"]["pos-merge"]["env"] == ci["jobs"]["backend"]["env"]
     venv = passo("backend")
     assert venv["working-directory"] == "hospital-reunioes/backend"
@@ -303,7 +303,6 @@ def test_um_run_por_vez_e_o_draft_nao_se_perde_com_o_snapshot_vermelho():
 def test_estes_testes_rodam_quando_so_o_workflow_muda():
     """Os testes de `tools/` rodam no `manual.yml`, que só acorda pelos caminhos
     dele: PR que mexesse só no YAML entraria sem este contrato rodar."""
-    manual = yaml.safe_load((RAIZ / ".github" / "workflows" / "manual.yml").read_text(encoding="utf-8"))
-    on = manual["on"] if "on" in manual else manual[True]
+    on = gatilhos(RAIZ / ".github" / "workflows" / "manual.yml")
     for evento in ("push", "pull_request"):
         assert ".github/workflows/pos-merge.yml" in on[evento]["paths"], evento
