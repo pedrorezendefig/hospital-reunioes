@@ -137,7 +137,9 @@ def test_router_claude_md_e_onboarding_descrevem_o_fluxo_novo(caminho):
 # ------------------------------------------- conflito resolvido por agente
 
 def test_o_rabo_imprime_a_linha_de_conflito_que_as_skills_procuram():
-    assert 'falhar(f"conflito no merge de #{e.pr} em:' in ler(FECHAR_ONDA)
+    # o PR em conflito fica de fora e o lote segue (issue #989); o comportamento
+    # está em tools/test_fechar_onda_pr_avulso.py
+    assert 'print(f"de fora: conflito no merge de #{e.pr} em:' in ler(FECHAR_ONDA)
 
 
 @pytest.mark.parametrize("skill", ["ship", "onda-enxuta"])

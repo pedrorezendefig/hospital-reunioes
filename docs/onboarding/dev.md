@@ -129,8 +129,8 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo /ship ou pelo fechament
 
 A `main` é protegida por ruleset (ADR 0061, emenda de 02/10/2026): ninguém, admin inclusive, dá push direto nela, e todo PR precisa dos três jobs do CI verdes e da branch em dia com a base. Por isso o rabo (`fechar_onda.py`) entra sempre por PR, em três tempos:
 
-1. **Código.** A versão nova sai do tipo dos commits e não vira commit (issue #967): o `package.json` fica congelado. O seu PR entra como está (na onda, numa branch `onda/<sessao>` com o lote, que vira um PR de entrega). O script espera o CI verde, põe o `APP_VERSION` no backend e no frontend do Coolify, mergeia pela API do GitHub, com squash, e cria a tag `vX.Y.Z` no squash.
-2. **Build e health** do que entrou.
+1. **Código.** A versão nova sai do tipo dos commits e não vira commit (issue #967): o `package.json` fica congelado. O seu PR entra como está, no próprio número (na onda, cada PR do lote do mesmo jeito, em ordem, ADR 0064). O script espera o CI verde, põe o `APP_VERSION` no backend e no frontend do Coolify, mergeia pela API do GitHub, com squash, e cria a tag `vX.Y.Z` no squash do último PR. PR da onda que não entra (conflito, CI vermelho) fica de fora sozinho.
+2. **Build e health** do que entrou: um build só, o do último squash; o script cancela o dos intermediários.
 3. **Registro.** `history.json` e `state.json` sobem num **PR só de docs** que o próprio script abre e mergeia pela API depois do health. Snapshot e draft do Manual não são do rabo: uma Action no push da `main` cuida deles depois do registro (ADR 0062). O CI desse PR pula os jobs pesados e fica verde em segundos, e o build que o Coolify dispara para ele é cancelado pelo script.
 
 Saída 5 do script: produção ok, mas o PR de registro não entrou. Mergeie o PR que ele imprime quando o CI dele ficar verde.
