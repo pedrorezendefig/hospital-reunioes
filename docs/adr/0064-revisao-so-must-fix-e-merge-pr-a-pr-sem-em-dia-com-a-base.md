@@ -1,6 +1,6 @@
 ---
 status: accepted
-amends: 0061, 0063
+amends: 0061, 0062, 0063
 ---
 
 # Revisão só de must-fix em uma rodada, segurança por PRD, e merge PR a PR sem exigir "em dia com a base"
@@ -19,6 +19,12 @@ Decisão do Pedro (06/out/2026, grilling sobre o tempo do rabo). Um dia depois d
 
 5. **Ondas mais paralelas, implementador mais leve.** Medido em 06/10 no PRD #963: 18,5 min de implementação de uma fatia G (17 testes, 12 mutantes) e 4 min de mapa do terreno refeito por onda; as 8 fatias tocavam todas o `fechar_onda.py`, e o `--paralelo 3` virou 4 ondas em série de uma issue. Quatro regras: (a) o `/to-issues` fatia para paralelismo real: fatias da mesma onda não compartilham arquivo de costura, fatia G que não bloqueia ninguém vira duas M, e o PRD nasce com as ondas previstas no corpo; (b) o mapa do terreno é feito uma vez por PRD e herdado pela passagem entre ondas, com a lista do que a onda anterior mergeou; refaz só se a passagem disser que a estrutura mudou; (c) teto de mutantes: um mutante por critério de aceite, não por teste; a prova por mutação continua, para de provar o mesmo detector várias vezes; (d) `hr-implementador` em `effort: high` para fatia P e M, `xhigh` só em G. Rejeitado: sub-agentes por camada dentro da fatia (reintroduz o corte horizontal que a fatia vertical evita, e a integração come o ganho; o mesmo ganho vem do fatiamento); tirar a mutação (é o que separa teste de teste vácuo).
 
+6. **Deploy fora do caminho crítico.** Depois das decisões 1 a 5, uma fatia G de app com uma correção leva cerca de 36 min de máquina: 18:30 de implementação, 5:00 de revisão, 5:30 de correção, 5:30 de build, 1:30 de registro. Três cortes, em ordem de retorno por risco: (a) **a onda seguinte começa no PR verde**, não no deploy: a sessão da `/onda-enxuta` escreve a passagem e lança a próxima sessão assim que os PRs ficam verdes e limpos, e o rabo roda em paralelo com os implementadores novos; fatia bloqueada por issue em deploy espera o `blocked_by` fechar, as outras começam na hora (-7 min por onda; o deploy deixa de atrasar o trabalho seguinte); (b) **o registro é gravado pela Action do bot**: o rabo termina no health e dispara a Action pós-merge da ADR 0062 (decisão 10, fatia #940), que já tem bypass do ruleset para `github-actions[bot]`, e ela commita `history.json` e `state.json` direto na `main`; some o PR de registro, o CI dele e o cancelamento do build que ele disparava (-1:30 por lote); (c) **a imagem é construída no CI e publicada no GHCR**, pelo sha do head do PR, e o Coolify só puxa e reinicia: o rabo retagueia a imagem para o sha do squash e dispara o deploy (5:30 de build viram cerca de 0:30); backend primeiro, frontend depois com a versão do rodapé lida em tempo de execução, porque a imagem nasce antes de a versão existir. Rejeitado: pular o health (10 s, única prova de prod viva); fatia P em modelo menor (o must-fix que volta custa mais que os 2 min); corretor sendo o próprio implementador (ADR 0035); tirar o revisor de código (1 em 3 PRs tem must-fix real). Meta: fatia G com uma correção em cerca de 29 min de caminho crítico; onda de 3 fatias M em cerca de 13 min; PRD de 8 fatias em 3 ondas em cerca de 45 min, contra cerca de 10 h de relógio medidas no PRD #963 em 05 e 06/10.
+
+## Emenda à ADR 0062
+
+- **Decisão 9 (o rabo grava só `history.json` e `state.json`).** Continua sendo o rabo quem sabe a verdade do deploy; muda quem escreve: o PR de docs por lote sai, e os dois JSONs entram na `main` pela Action do bot da decisão 10, com o registro que o rabo lhe entrega. A alternativa "Action abrir PR automático com auto-merge" segue rejeitada pelo mesmo motivo.
+
 ## Emenda à ADR 0061
 
 - **Decisão 3 (`main` protegida).** "CI obrigatório e atualizado com a base" passa a "CI obrigatório no head do PR". O resto da decisão continua.
@@ -32,6 +38,6 @@ Decisão do Pedro (06/out/2026, grilling sobre o tempo do rabo). Um dia depois d
 
 ## Consequências
 
-- Quatro fatias: ondas mais paralelas (`/to-issues`, `/onda-enxuta` mapa e passagem, `hr-implementador`, `/tdd`); revisor e `/ship` com veredito só de must-fix e uma rodada, mais a segurança por PRD (prompts dos agentes `hr-revisor`, `hr-revisor-seguranca`, `hr-corretor`, `hr-auditor-prd`, skill `/onda-enxuta` e `/ship`); ruleset sem "em dia com a base" (`main.json`, `tools/test_ruleset_main.py`, `docs/onboarding/dev.md`; aplicar é do admin, à mão, pela tela do GitHub, porque o token do agente não tem Administration, ADR 0063); rabo PR a PR (`fechar_onda.py` e os testes dele, docstring, `/onda-enxuta`, `/ship`, `CLAUDE.md`).
+- Oito fatias: onda seguinte no PR verde, registro pela Action, imagem do backend no CI, imagem do frontend no CI (decisão 6); ondas mais paralelas (`/to-issues`, `/onda-enxuta` mapa e passagem, `hr-implementador`, `/tdd`); revisor e `/ship` com veredito só de must-fix e uma rodada, mais a segurança por PRD (prompts dos agentes `hr-revisor`, `hr-revisor-seguranca`, `hr-corretor`, `hr-auditor-prd`, skill `/onda-enxuta` e `/ship`); ruleset sem "em dia com a base" (`main.json`, `tools/test_ruleset_main.py`, `docs/onboarding/dev.md`; aplicar é do admin, à mão, pela tela do GitHub, porque o token do agente não tem Administration, ADR 0063); rabo PR a PR (`fechar_onda.py` e os testes dele, docstring, `/onda-enxuta`, `/ship`, `CLAUDE.md`).
 - A ordem dos PRs no `--prs` continua sendo a ordem de merge. Conflito de um PR com a `main` depois do merge do anterior é exit 2 só daquele PR: os já mergeados ficam, e o rabo sobe o que entrou.
 - Meta: PR de app com a `main` quieta ou não, do PR verde à produção em 6 a 8 min (build + health + registro), sem CI dentro do rabo; onda de N PRs no mesmo tempo de um PR.
