@@ -1,11 +1,11 @@
 ---
 name: pegar-issue
-description: Faz o claim atômico de uma issue ready-for-agent (label + assignee), cria a branch e carrega a spec para o /tdd. Sem argumento, lista a fila. Sintaxe `/pegar-issue [N]`.
+description: 'Claim atômico de uma issue ready-for-agent, branch e spec, e daí sem parar: /tdd, /ship e rabo até produção. Sem argumento, lista a fila. Sintaxe `/pegar-issue [N]`.'
 ---
 
 # Pegar issue
 
-Entry point de **desenvolvimento**. Pega uma issue da fila `ready-for-agent`, dá "claim" para evitar colisão entre sessões paralelas, cria a branch e carrega a spec no contexto. Protocolo completo em `docs/agents/issue-tracker.md`.
+Entry point de **desenvolvimento**. Pega uma issue da fila `ready-for-agent`, dá "claim" para evitar colisão entre sessões paralelas, cria a branch, carrega a spec no contexto e encadeia `/tdd`, `/ship` e o rabo até produção, sem parar para perguntar (ADR 0063). Protocolo completo em `docs/agents/issue-tracker.md`.
 
 ## Sem argumento — listar a fila
 
@@ -41,19 +41,25 @@ gh api "repos/$REPO/issues/<N>/dependencies/blocked_by" --jq '.[] | select(.stat
 ```
 Se retornar alguma bloqueadora **aberta**, avise e **não pegue**; sugira pegar outra issue desbloqueada. (Texto "Bloqueada por: #X" em corpo de issue antiga é histórico; a fonte da verdade é a relação nativa.)
 
-### 3. Avisar fatia de PRD alheio (não bloqueia)
+### 3. Recusar issue com arquivo em comum
+```bash
+python3 .claude/skills/pegar-issue/scripts/arquivo_em_comum.py <N>
+```
+Duas issues que tocam o mesmo arquivo não andam ao mesmo tempo (ADR 0063): o conflito só apareceria no rabo. O script cruza os caminhos que o corpo da issue cita entre crases com os das issues `in-progress` (corpo e arquivos do PR aberto que as fecha). Saída `1`: ele já marcou a issue como "Bloqueada por" cada uma delas (dependência nativa, ADR 0028) e imprime uma linha por bloqueadora; repasse as linhas, **não pegue** e sugira outra. Ela volta à fila sozinha quando a bloqueadora fecha. Saída `0`, sem nada impresso: siga.
+
+### 4. Avisar fatia de PRD alheio (não bloqueia)
 ```bash
 python3 .claude/skills/pegar-issue/scripts/dono_do_prd.py <N>
 ```
 Se a fatia é de um PRD cujo dono (assignee do PRD pai) é outro login, o script imprime uma linha, `fatia do PRD de @fulano; combine antes`: repasse o aviso ao usuário e **siga para o claim** (ADR 0061, decisão 4: pegar fatia de PRD alheio não é proibido, se combina). Fatia do próprio PRD, PRD sem dono ou issue avulsa: o script não imprime nada.
 
-### 4. Claim atômico (o "lock")
+### 5. Claim atômico (o "lock")
 ```bash
 gh issue edit <N> --remove-label ready-for-agent --add-label in-progress --add-assignee @me
 ```
 Se o `--remove-label` falhar porque `ready-for-agent` já não estava lá, **outra sessão pegou primeiro** — avise e pare.
 
-### 5. Verificação anti-corrida
+### 6. Verificação anti-corrida
 ```bash
 gh issue view <N> --json assignees --jq '.assignees[].login'
 ```
@@ -62,14 +68,14 @@ Se aparecer **mais de um dono**, abra mão e pegue a próxima:
 gh issue edit <N> --remove-assignee @me
 ```
 
-### 6. Criar a branch
+### 7. Criar a branch
 Derive o tipo do label `type:*` (feature→`feat`, fix→`fix`, etc.) e um slug curto do título. Branch determinística por número (nunca colide):
 ```bash
 git checkout -b <type>/<slug>-<N>
 ```
 
-### 7. Carregar contexto e ir para o TDD
-Carregue no contexto **O que construir** + **Critérios de aceite** (cada critério vira um teste). Leia `CONTEXT.md` e os ADRs relevantes em `docs/adr/`. Então invoque **`/tdd`** — cada critério de aceite é um teste RED.
+### 8. Carregar contexto e seguir sem parar
+Carregue no contexto **O que construir** + **Critérios de aceite** (cada critério vira um teste). Leia `CONTEXT.md` e os ADRs relevantes em `docs/adr/`. Então invoque **`/tdd`** (cada critério de aceite é um teste RED) e, com os testes verdes, **`/ship`**, que roda o rabo sozinho (veja "Fechar o loop"). Não espere mensagem entre um e outro: pegar a issue foi a ordem.
 
 ## Sessões paralelas (worktree)
 
@@ -81,7 +87,7 @@ Abra o Claude Code dentro de `../hospital-issue-<N>`. Veja `docs/agents/issue-tr
 
 ## Fechar o loop
 
-Terminado o `/tdd` (testes verdes), invoque **`/ship`**: abre o PR com `Closes #N`, roda os gates até o PR verde e imprime o comando do rabo (`python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>`), que mergeia e faz o deploy (ADR 0061). Ao mergear, a issue fecha e a Action de higiene (`.github/workflows/higiene-issues.yml`) remove o `in-progress` sozinha.
+Terminado o `/tdd` (testes verdes), invoque **`/ship`**: abre o PR com `Closes #N`, roda os gates até o PR verde (gate reprovado chama o `hr-corretor`) e roda o rabo (`python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>`), que mergeia e faz o deploy (ADRs 0061 e 0063). Conflito no rabo chama o `hr-corretor` com a `/resolver-conflitos` e conta tentativa; a terceira falha manda a issue para `ready-for-human` (`/ship` Passo 10). O humano só é chamado por notificação em migration, nessa terceira falha e em rollback. Ao mergear, a issue fecha e a Action de higiene (`.github/workflows/higiene-issues.yml`) remove o `in-progress` sozinha.
 
 Abandonou? Devolva ao pool:
 ```bash
