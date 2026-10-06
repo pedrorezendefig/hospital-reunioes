@@ -170,3 +170,29 @@ def test_o_comentario_da_fatia_de_manual_nao_para_a_onda():
     assert any("<!-- automacao -->" in li and "draft" in li for li in linhas), (
         "o checkpoint cita o draft do vídeo a aprovar e o carimbo do comentário"
     )
+
+
+def test_manual_publicar_tira_o_draft_que_a_action_deixou_antes_de_subir():
+    """Issue #951: a Action pós-merge não publica e manda rodar `/manual
+    publicar` da máquina que tem os MP4. É esse modo que tira o draft das
+    páginas com Vídeo de tarefa; publicar antes subiria o site sem elas."""
+    receita = (SKILLS / "manual" / "references" / "publicar.md").read_text(
+        encoding="utf-8"
+    )
+    chamadas = [
+        b
+        for b in re.findall(r"```bash\n(.*?)```", receita, re.S)
+        if "tirar_draft_manual.py" in b
+    ]
+    assert len(chamadas) == 1, "a receita mostra uma chamada do tirar-draft"
+    ajuda = subprocess.run(
+        [sys.executable, str(RAIZ / "tools" / "tirar_draft_manual.py"), "--help"],
+        capture_output=True,
+        text=True,
+    ).stdout
+    opcoes = set(re.findall(r"(--[a-z-]+)", chamadas[0]))
+    assert "--prd" in opcoes
+    assert [o for o in opcoes if o not in ajuda] == []
+    assert receita.index("tirar_draft_manual.py") < receita.index(
+        "bash docs/manual/publicar.sh"
+    )
