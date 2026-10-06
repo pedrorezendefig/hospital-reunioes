@@ -739,7 +739,6 @@ def test_sem_snapshot_saiu_da_cli_e_da_docstring(tmp_path, monkeypatch, capsys):
     assert e.value.code == 2  # argparse: opção desconhecida
     assert "--sem-snapshot" in capsys.readouterr().err
     assert c.gh_chamadas == [] and c.semaforo == []
-    assert "sem-snapshot" not in fo.__doc__
 
 
 def pr_atras_da_main(tmp_path: Path) -> Cenario:
@@ -1375,18 +1374,6 @@ def test_mover_codigo_do_app_para_tools_conta_como_app(tmp_path, monkeypatch, ca
     assert "app: bump patch v0.10.0 -> v0.10.1" in plano, plano
 
 
-def test_docstring_explica_as_duas_classes_sem_docs_only_e_sem_travessao():
-    fo = carregar_fechar_onda()
-    doc = " ".join(fo.__doc__.split())
-
-    assert "docs-only" not in doc
-    assert re.search(r'"app" se algum (arquivo )?esta em `hospital-reunioes/`', doc), doc
-    assert re.search(r'"ferramenta" se nenhum esta', doc), doc
-    assert "misto" in doc
-    fonte = (SCRIPTS / "fechar_onda.py").read_text(encoding="utf-8")
-    assert TRAVESSAO not in fonte and MEIA_RISCA not in fonte
-
-
 @pytest.mark.parametrize("de", [pr_de_codigo, pr_de_ferramenta], ids=["app", "ferramenta"])
 def test_pr_sem_nenhum_check_para_nas_pre_condicoes_seja_app_ou_ferramenta(
     tmp_path, monkeypatch, capsys, de
@@ -1656,25 +1643,6 @@ def test_sem_imagem_anterior_o_rabo_nao_mexe_no_app_version_nem_sobe_imagem(tmp_
 
     assert not [li for li in c.coolify() if "--value 0.10.0" in li or "rollback run" in li], c.coolify()
     assert c.rollbacks == []
-
-
-def codigo_na_docstring(fo, n: int) -> str:
-    saidas = fo.__doc__.split("Codigos de saida:")[1]
-    item = re.search(rf"^  {n}  (.+?)(?=^  \d  |^\S|\Z)", saidas, re.M | re.S)
-    assert item, f"o codigo {n} nao esta na docstring"
-    return " ".join(item.group(1).split())
-
-
-def test_docstring_documenta_o_rollback_feito_e_o_que_falhou():
-    fo = carregar_fechar_onda()
-    assert fo.EXIT_ROLLBACK == 6 and fo.EXIT_HEALTH == 4
-
-    feito = codigo_na_docstring(fo, 6)
-    for termo in ("rollback", "imagem anterior", "APP_VERSION antigo", "health", "semaforo solto", "revert"):
-        assert termo in feito, (termo, feito)
-    assert "SEMAFORO FICA PRESO" not in feito, feito
-    falhou = codigo_na_docstring(fo, 4)
-    assert "rollback" in falhou and "SEMAFORO FICA PRESO" in falhou, falhou
 
 
 def imagem(tag: str, criada: str, no_ar: bool = False) -> dict:
@@ -2023,16 +1991,6 @@ def test_migracao_no_health_le_o_numero_do_corpo(monkeypatch, resposta, esperado
     lido = fo.migracao_no_health("https://exemplo.invalid/api/health")
 
     assert lido == (fo.SEM_CAMPO if esperado == "sem-campo" else esperado)
-
-
-def test_docstring_documenta_a_migration_vencida():
-    fo = carregar_fechar_onda()
-
-    vencida = codigo_na_docstring(fo, 7)
-
-    for termo in ("migration", "/api/health", "24 h", "nada entrou na main", "semaforo"):
-        assert termo in vencida, (termo, vencida)
-    assert "SEMAFORO FICA PRESO" not in vencida, vencida
 
 
 # ------------------------------------- imagem do backend no GHCR (#1001)

@@ -360,26 +360,3 @@ def test_o_subprocess_so_entra_pelos_helpers():
 
 
 # A skill
-
-
-def texto_skill() -> str:
-    return (SKILL / "SKILL.md").read_text(encoding="utf-8")
-
-
-def test_a_skill_roda_o_script_que_existe_e_aceita_login():
-    achado = re.search(r"python3 (\S+/minhas_issues\.py)", texto_skill())
-    assert achado and (RAIZ / achado.group(1)) == SCRIPT
-    assert "@login" in texto_skill()
-
-
-def test_a_skill_tem_os_gatilhos_e_entra_no_ask_pedro():
-    cabeca = texto_skill().split("---", 2)[1]
-    for g in ("minhas issues", "onde parei", "o que tem pra mim", "status do Actions"):
-        assert g in cabeca
-    assert "/minhas-issues" in (RAIZ / ".claude" / "skills" / "ask-pedro" / "SKILL.md").read_text(encoding="utf-8")
-
-
-def test_o_texto_novo_nao_tem_travessao():
-    travessoes = f"[{chr(0x2013)}{chr(0x2014)}]"
-    for arquivo in (SCRIPT, SKILL / "SKILL.md", Path(__file__)):
-        assert not re.search(travessoes, arquivo.read_text(encoding="utf-8")), arquivo

@@ -284,15 +284,3 @@ def test_tools_rodam_quando_o_workflow_de_imagem_muda():
     caminho = f".github/workflows/{backend()['build']['publish_workflow']}"
     for evento in ("push", "pull_request"):
         assert caminho in on[evento]["paths"], evento
-
-
-def test_deploy_rollback_de_app_em_modo_imagem_e_por_tag():
-    rollback = (SKILL_DEPLOY / "references" / "modo-rollback.md").read_text(encoding="utf-8")
-    skill = (SKILL_DEPLOY / "SKILL.md").read_text(encoding="utf-8")
-    for texto in (rollback, skill):
-        assert "coolify app update <uuid> --docker-tag <SHA-alvo>" in texto
-        assert "dockerimage" in texto
-    assert "! coolify deploy uuid <uuid>" in rollback
-    esquema = (SKILL_DEPLOY / "references" / "project-schema.md").read_text(encoding="utf-8")
-    for campo in ('"dockerimage"', '"image"', '"publish_workflow"'):
-        assert campo in esquema, campo

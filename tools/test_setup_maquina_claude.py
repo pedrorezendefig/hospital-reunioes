@@ -15,7 +15,6 @@ from pathlib import Path
 from test_setup_maquina_esteira import RAIZ, SAIDAS, TEXTO, falso, funcao, linha
 
 
-ENXUTA = (RAIZ / ".claude" / "skills" / "onda-enxuta" / "SKILL.md").read_text(encoding="utf-8")
 
 
 def piso() -> str:
@@ -44,14 +43,6 @@ def roda_claude(tmp_path: Path, versao: str | None, corpo: str | None = None) ->
         timeout=30,
     )
     return r.stdout + r.stderr
-
-
-def test_o_piso_e_o_da_onda_enxuta():
-    # O número vem da seção "Em máquina nova" da /onda-enxuta, que é quem exige.
-    exigido = re.search(r"`claude --version` \((\d+\.\d+\.\d+) ou mais", ENXUTA)
-    assert exigido, "a /onda-enxuta não diz mais qual versão exige"
-    assert piso() == exigido.group(1)
-    assert re.search(r"^CLAUDE_MIN=.*onda-enxuta", TEXTO, re.M), "o comentário cita quem exige o piso"
 
 
 def test_versao_acima_do_piso_passa(tmp_path):

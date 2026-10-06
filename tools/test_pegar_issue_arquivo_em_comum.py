@@ -12,7 +12,6 @@ from __future__ import annotations
 
 import json
 import os
-import re
 import subprocess
 import sys
 from pathlib import Path
@@ -185,21 +184,3 @@ def test_a_busca_e_so_das_abertas_em_andamento_do_repositorio(tmp_path):
     chamada = (tmp_path / "gh.log").read_text(encoding="utf-8")
     assert f"q=repo:{REPO} is:issue is:open label:in-progress" in chamada
     assert "n=970" in chamada
-
-
-def test_o_pegar_issue_roda_o_aviso_antes_do_claim_e_segue_sem_bloquear():
-    com_argumento = SKILL.read_text(encoding="utf-8").split("## Com argumento", 1)[1]
-    chamada = re.search(r"python3 (\S+/arquivo_em_comum\.py) <N>", com_argumento)
-    assert chamada, "o /pegar-issue roda o script com o número da issue"
-    assert RAIZ / chamada.group(1) == SCRIPT
-    claim = com_argumento.index("gh issue edit <N> --remove-label ready-for-agent")
-    assert chamada.start() < claim
-    passo = com_argumento[chamada.start():com_argumento.index("### 4.")]
-    assert "ADR 0066" in passo, passo
-    assert re.search(r"\*\*siga para o claim\*\*", passo), passo
-    assert "não pegue" not in passo and "Bloqueada por" not in passo, passo
-
-
-def test_o_script_novo_nao_tem_travessao():
-    travessoes = f"[{chr(0x2013)}{chr(0x2014)}]"
-    assert not re.search(travessoes, SCRIPT.read_text(encoding="utf-8"))

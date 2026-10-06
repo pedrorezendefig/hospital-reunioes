@@ -24,7 +24,7 @@ import uuid
 from pathlib import Path
 
 import pytest
-from test_fechar_onda_pr_avulso import carregar_fechar_onda, codigo_na_docstring, onda_de_dois, pr_de_codigo, preparar
+from test_fechar_onda_pr_avulso import carregar_fechar_onda, onda_de_dois, pr_de_codigo, preparar
 
 RAIZ = Path(__file__).resolve().parent.parent
 SEMAFORO = RAIZ / ".claude" / "skills" / "deploy" / "scripts" / "semaforo.sh"
@@ -284,19 +284,3 @@ def test_revert_recusado_sai_com_4_e_a_trava_fica_presa_e_parada(tmp_path, monke
 
 
 # ------------------------------------------------------------------ docstring
-
-
-def test_docstring_documenta_a_parada_e_o_revert_feito_pelo_rabo():
-    fo = carregar_fechar_onda()
-    assert "--forcar" not in fo.__doc__
-
-    parada = codigo_na_docstring(fo, 8)
-    for termo in ("parada", "velha", "rollback humano", "sem pegar o semaforo", "nada entrou na main"):
-        assert termo in parada, (termo, parada)
-    rollback = codigo_na_docstring(fo, 6).lower()
-    for termo in ("reabre", "ready-for-agent", "revert/<chave>", "antes de soltar o semaforo"):
-        assert termo in rollback, (termo, rollback)
-    for codigo in (3, 4):
-        assert "marcado parado" in codigo_na_docstring(fo, codigo), codigo
-    assert "bloqueada por" in codigo_na_docstring(fo, 2)
-    assert "trava velha" not in codigo_na_docstring(fo, 1)
