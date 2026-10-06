@@ -2,6 +2,41 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-06T20:40:56-03:00",
+      "sha": "48bc83ed7b7abda96fdb1fad4284715bc54b5d3e",
+      "app_version": "0.163.5",
+      "subject": "Onda medida-onda1: Menção viva não escapa mais pelo hífen depois do nome nem pelo @ com dígito na issue nova",
+      "raw_subject": "chore(deploy): registro da onda medida-onda1 (#1041)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 66,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta medida-onda1: PR #1041 (issue #888), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health."
+    },
+    {
       "at": "2026-10-06T13:38:54-03:00",
       "sha": "99259efee4be6fb8d82943d8c94cf9e8eddfe855",
       "app_version": "0.163.4",
