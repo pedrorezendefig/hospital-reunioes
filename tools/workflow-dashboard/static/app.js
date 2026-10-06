@@ -4,15 +4,27 @@
    lazy) e /api/issue/<n>/timeline (linha do tempo das fechadas, lazy). */
 
 import { closeTips, reduceMotion, revealOnScroll } from './ui.js';
+import { abaValida, aoMudarRota, gravarRota, lerRota, montarHash } from './router.js';
 import { renderDiagrama, wireDiagramas } from './diagramas.js';
 import { renderArea, wireArea } from './areas.js';
 import { corDaPessoa } from './pessoas.js';
 
 const filtrosVazios = () => ({ state: 'all', fase: '', resp: '', prd: null, label: '', q: '', humana: false });
 
+/* filtros da aba Issues <-> filtros da rota (texto; vazio = sem filtro) */
+const filtrosDaRota = p => ({
+  state: p.state || 'all', fase: p.fase || '', resp: p.resp || '', prd: Number(p.prd) || null,
+  label: p.label || '', q: p.q || '', humana: p.humana === '1',
+});
+const filtrosNaRota = f => ({
+  state: f.state === 'all' ? '' : f.state, fase: f.fase, resp: f.resp, prd: f.prd ? String(f.prd) : '',
+  label: f.label, humana: f.humana ? '1' : '', q: f.q,
+});
+
 const S = {
   data: null,
   tab: 'issues',
+  item: null,   // item aberto que o hash aponta (#issues/930, #producao/v0.161.0)
   fIssues: filtrosVazios(),
   expIss: new Set(),
   expPrd: new Map(),
@@ -180,24 +192,57 @@ function tick() {
   if (el && S.data) el.textContent = `coletado ${ago(S.data.generated_at)}`;
 }
 
-const TABS = ['issues', 'prs', 'producao', 'mapa', 'dominio'];
-/* hashes da navegação antiga (bookmarks) caem na aba que herdou o conteúdo;
-   Plano, Pendências e Guia saíram (ADR 0062, decisão 3) e caem na home */
-const TAB_ALIAS = {
-  plano: 'issues', pendencias: 'issues', guia: 'issues',
-  setup: 'issues', workflow: 'issues', fluxo: 'issues', bastidores: 'issues',
-  agora: 'producao', deploys: 'producao',
-};
+/* ---------- rota (o hash é do router.js; aqui só o estado da tela) ---------- */
 
 function setTab(t) {
-  t = TAB_ALIAS[t] || t;
-  if (!TABS.includes(t)) t = 'issues';
   S.erFull = false;   // trocar de aba sai da tela cheia; voltar ao Mapa não a reabre
-  S.tab = t;
-  if (location.hash !== '#' + t) history.replaceState(null, '', '#' + t);
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  S.tab = abaValida(t);
+  S.item = null;      // o item aberto é da aba que ficou para trás
+  sincronizarHash();
+  marcarAba();
   render();
   window.scrollTo({ top: 0 });
+}
+
+function marcarAba() {
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+}
+
+/* estado da tela -> hash; os filtros só existem na aba Issues */
+function sincronizarHash() {
+  gravarRota({ aba: S.tab, item: S.item, filtros: S.tab === 'issues' ? filtrosNaRota(S.fIssues) : {} });
+}
+
+/* hash -> estado da tela: no boot, no chip clicado e no voltar do navegador */
+function irPara(rota) {
+  S.erFull = false;
+  S.tab = rota.aba;
+  S.item = rota.item;
+  if (rota.aba === 'issues') S.fIssues = filtrosDaRota(rota.filtros);
+  abrirItem();
+  sincronizarHash();
+  marcarAba();
+  render();
+  const alvo = view.querySelector('.destaque');
+  if (alvo) alvo.scrollIntoView({ block: 'center' });
+  else window.scrollTo({ top: 0 });
+}
+
+/* o item da rota abre expandido; a fatia aparece com o PRD dela aberto */
+function abrirItem() {
+  if (!S.item || !S.data) return;
+  if (S.tab === 'issues') {
+    const n = Number(S.item);
+    const i = (S.data.github.issues || []).find(x => x.number === n);
+    if (!i) return;
+    S.expIss.add(n);
+    ensureComments(n);
+    ensureTimeline(n);
+    if (i.parent) S.expPrd.set(i.parent, true);
+  } else if (S.tab === 'producao') {
+    const idx = S.data.history.findIndex(d => depVer(d.app_version) === S.item);
+    if (idx >= 0) S.expDep.add(idx);
+  }
 }
 
 function render() {
@@ -552,7 +597,7 @@ function renderIssues() {
 
 function wireIssues() {
   const q = $('#fq');
-  if (q) q.addEventListener('input', () => { S.fIssues.q = q.value; refreshIssueList(); });
+  if (q) q.addEventListener('input', () => { S.fIssues.q = q.value; sincronizarHash(); refreshIssueList(); });
 }
 
 /* chip clicado de novo desliga o filtro */
@@ -814,8 +859,8 @@ view.addEventListener('click', e => {
     t.setAttribute('aria-expanded', on ? 'true' : 'false');
   } else if (act === 'iss') {
     const n = Number(t.dataset.n);
-    if (S.expIss.has(n)) S.expIss.delete(n);
-    else { S.expIss.add(n); ensureComments(n); ensureTimeline(n); }
+    if (S.expIss.has(n)) { S.expIss.delete(n); if (S.item === String(n)) S.item = null; }
+    else { S.expIss.add(n); S.item = String(n); ensureComments(n); ensureTimeline(n); }
     refreshIssueList();
   } else if (act === 'prd') {
     const n = Number(t.dataset.n);
@@ -823,7 +868,9 @@ view.addEventListener('click', e => {
     refreshIssueList();
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);
-    S.expDep.has(i) ? S.expDep.delete(i) : S.expDep.add(i);
+    const ver = depVer(S.data.history[i].app_version);
+    if (S.expDep.has(i)) { S.expDep.delete(i); if (S.item === ver) S.item = null; }
+    else { S.expDep.add(i); if (ver) S.item = ver; }
     render();
   } else if (act === 'adr') {
     const i = Number(t.dataset.i);
@@ -862,6 +909,7 @@ view.addEventListener('click', e => {
     S.fIssues = { ...filtrosVazios(), label: t.dataset.label || '' };
     setTab(t.dataset.go);
   }
+  sincronizarHash();   // card aberto e filtro trocado vão para o hash
 });
 
 $('#tabs').addEventListener('click', e => {
@@ -869,10 +917,7 @@ $('#tabs').addEventListener('click', e => {
   if (b) setTab(b.dataset.tab);
 });
 
-window.addEventListener('hashchange', () => {
-  const t = location.hash.slice(1);
-  if (t && t !== S.tab) setTab(t);
-});
+aoMudarRota(irPara);
 
 /* tooltips: fecham com Escape ou clique fora; Escape também sai da tela cheia */
 document.addEventListener('keydown', e => {
@@ -885,10 +930,10 @@ document.addEventListener('click', e => { if (!e.target.closest('.tip')) closeTi
 /* ---------- boot ---------- */
 
 (async function init() {
-  const t = location.hash.slice(1);
-  if (t) S.tab = TAB_ALIAS[t] || (TABS.includes(t) ? t : S.tab);
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+  S.tab = lerRota().aba;   // a aba certa já marcada enquanto coleta
+  marcarAba();
   await load(false);
+  irPara(lerRota());       // relido: uma aba clicada durante a coleta vale
   setInterval(tick, 5000);
   setInterval(() => load(false, true), 60000);
 })();

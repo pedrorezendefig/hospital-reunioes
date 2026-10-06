@@ -32,3 +32,23 @@ export function lerHash(hash) {
   const filtros = Object.fromEntries(new URLSearchParams(q < 0 ? '' : h.slice(q + 1)));
   return { aba: abaValida(aba), item: item || null, filtros };
 }
+
+/* o inverso do lerHash; filtro vazio não entra no hash */
+export function montarHash({ aba, item, filtros }) {
+  const q = new URLSearchParams(Object.entries(filtros || {}).filter(([, v]) => v)).toString();
+  return `#${aba}${item ? '/' + encodeURIComponent(item) : ''}${q ? '?' + q : ''}`;
+}
+
+/* a rota do endereço atual */
+export const lerRota = () => lerHash(location.hash);
+
+/* grava a rota no endereço sem entrada nova no histórico e sem hashchange */
+export function gravarRota(rota) {
+  const h = montarHash(rota);
+  if (location.hash !== h) history.replaceState(null, '', h);
+}
+
+/* endereço trocado por fora (link de chip, voltar do navegador, URL colada) */
+export function aoMudarRota(fn) {
+  window.addEventListener('hashchange', () => fn(lerRota()));
+}

@@ -44,6 +44,160 @@ def _router(tmp_path, expr):
     return _node(tmp_path, prog)
 
 
+def _fase(fase, **extra):
+    base = {"fase": fase, "sub": None, "branch": None, "pr": None, "sinal": None, "tentativas": []}
+    return {**base, "versao": None, "em_producao_em": None, **extra}
+
+
+def _iss(n, *, state="OPEN", assignees=(), parent=None, children=()):
+    return {
+        "number": n,
+        "title": f"Fatia {n}",
+        "state": state,
+        "labels": [],
+        "assignees": list(assignees),
+        "author": "ana",
+        "url": f"https://github.com/x/y/issues/{n}",
+        "body": f"corpo da {n}",
+        "created_at": "2026-10-01T10:00:00Z",
+        "closed_at": "2026-10-03T18:00:00Z" if state == "CLOSED" else None,
+        "blocked_by": [],
+        "parent": parent,
+        "children": list(children),
+        "is_prd": bool(children),
+        "criteria": {"done": 0, "total": 0},
+        "prs": [],
+        "deploys": [],
+    }
+
+
+def _deploy(versao, sha, prs, issues):
+    return {
+        "at": "2026-10-03T18:05:00Z",
+        "sha": sha,
+        "app_version": versao,
+        "subject": f"onda da {versao}",
+        "result": "healthy",
+        "duration_seconds": 120,
+        "pr_numbers": prs,
+        "issue_numbers": issues,
+        "scope": ["backend"],
+    }
+
+
+DADOS = {
+    "generated_at": "2026-10-06T10:00:00Z",
+    "repo_url": "https://github.com/x/y",
+    "repo_slug": "x/y",
+    "github": {
+        "error": None,
+        "error_kind": None,
+        "issues": [
+            _iss(900, assignees=["pedrorezendefig"], children=(901, 902, 904)),
+            _iss(901, parent=900),
+            _iss(902, assignees=["lucassampaioc1"], parent=900),
+            _iss(904, state="CLOSED", assignees=["pedroribbe"], parent=900),
+            _iss(910),
+        ],
+        "prs": [],
+        "prds": [900],
+    },
+    "fases": {
+        "issues": {
+            "900": _fase("triagem"),
+            "901": _fase("fila"),
+            "902": _fase("pr_aberto", pr=77),
+            "904": _fase("em_producao", pr=70, versao="0.163.4", em_producao_em="2026-10-03T18:05:00Z"),
+            "910": _fase("triagem"),
+        },
+        "prs": {},
+        "timelines": {},
+        "ondas": {},
+        "funil": {"total": {}, "por_responsavel": {}},
+    },
+    "history": [_deploy("0.163.4", "abc1234", [70], [904]), _deploy("v0.163.3", "def5678", [69], [903])],
+    "changelog": [],
+    "state": {},
+    "snapshots": [],
+    "adrs": [],
+}
+
+# DOM mínimo: cada seletor devolve sempre o mesmo elemento (com os ouvintes
+# dele); location/history guardam o hash; window guarda os ouvintes por tipo.
+PRELUDIO = r"""
+const _el = () => ({
+  innerHTML: '', textContent: '', value: '', dataset: {}, style: {}, _ouvintes: [],
+  classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+  addEventListener(tipo, fn) { this._ouvintes.push(fn); },
+  querySelector: () => null, querySelectorAll: () => [], setAttribute() {}, closest: () => null,
+});
+const _view = _el();
+const _els = { '#view': _view };
+globalThis.document = {
+  querySelector: s => (_els[s] ||= _el()),
+  querySelectorAll: () => [], addEventListener() {}, body: _el(), activeElement: null, createElement: _el,
+};
+const _janela = {};
+globalThis.window = {
+  addEventListener(tipo, fn) { (_janela[tipo] ||= []).push(fn); },
+  scrollTo() {}, matchMedia: () => ({ matches: true }),
+};
+globalThis.matchMedia = window.matchMedia;
+globalThis.location = { hash: _HASH_INICIAL };
+globalThis.history = { replaceState(_s, _t, url) { location.hash = url; } };
+const _intervalos = {};
+globalThis.setInterval = (fn, ms) => { _intervalos[ms] = fn; return 0; };
+const _buscas = [];
+const _respostas = { '/api/data': _DADOS, '/api/data?fresh=1': { ..._DADOS, generated_at: '2026-10-06T10:01:00Z' } };
+globalThis.fetch = url => {
+  _buscas.push(url);
+  if (url in _respostas) return Promise.resolve({ json: () => Promise.resolve(_respostas[url]) });
+  return new Promise(() => {});
+};
+const _esperar = () => new Promise(r => setTimeout(r, 0));
+/* clique de verdade: o mesmo ouvinte delegado que o navegador chama no #view */
+function _clicar(dataset) {
+  const alvo = { dataset, classList: { contains: () => false } };
+  const ev = { target: { closest: sel => (sel === '[data-act]' ? alvo : null) } };
+  _view._ouvintes.forEach(fn => fn(ev));
+}
+function _aba(tab) {
+  const ev = { target: { closest: () => ({ dataset: { tab } }) } };
+  _els['#tabs']._ouvintes.forEach(fn => fn(ev));
+}
+function _buscar(texto) {
+  _els['#fq'].value = texto;
+  _els['#fq']._ouvintes.forEach(fn => fn());
+}
+/* o endereço trocado por fora: link do chip, voltar do navegador, URL colada */
+function _navegar(hash) {
+  location.hash = hash;
+  (_janela.hashchange || []).forEach(fn => fn());
+}
+"""
+
+
+def _app(tmp_path, expr, antes="", hash_inicial="", dados=None):
+    """Roda o app.js inteiro (boot incluso) e avalia `expr` depois de `antes`."""
+    modulo = APP_JS.replace("from './", f"from '{STATIC.as_uri()}/")
+    prog = (
+        f"const _HASH_INICIAL = {json.dumps(hash_inicial)};\nconst _DADOS = {json.dumps(dados or DADOS)};\n"
+        + PRELUDIO
+        + modulo
+        + f"\nawait _esperar();\n{antes}\n"
+        + f"console.log('@@' + JSON.stringify({expr}));\n"
+    )
+    return _node(tmp_path, prog)
+
+
+def _card(html, n):
+    """O <article> do card da issue n."""
+    for m in re.finditer(r"<article class=\"([^\"]*)\"[\s\S]*?</article>", html):
+        if f'data-n="{n}"' in m.group(0):
+            return m.group(1).split(), m.group(0)
+    raise AssertionError(f"card #{n} fora da lista")
+
+
 # ---------- o router lê e monta o hash ----------
 
 
@@ -60,4 +214,68 @@ def test_hash_vira_aba_item_e_filtros(tmp_path):
         {"aba": "producao", "item": "v0.161.0", "filtros": {}},
         {"aba": "mapa", "item": None, "filtros": {}},
         {"aba": "issues", "item": None, "filtros": {}},
+    ]
+
+
+@com_node
+def test_rota_vira_hash_sem_filtro_vazio_e_volta_igual(tmp_path):
+    hashes, volta = _router(
+        tmp_path,
+        "(() => { const rotas = ["
+        "{ aba: 'issues', item: '930', filtros: { fase: 'pr_aberto', resp: '', q: 'router de hash' } },"
+        "{ aba: 'issues', item: null, filtros: { resp: '(sem)' } },"
+        "{ aba: 'producao', item: 'v0.161.0', filtros: {} },"
+        "{ aba: 'prs', item: null },"
+        "]; const hs = rotas.map(R.montarHash); return [hs, hs.map(R.lerHash)]; })()",
+    )
+    assert hashes[0].startswith("#issues/930?") and "resp=" not in hashes[0]
+    assert hashes[1:] == ["#issues?resp=%28sem%29", "#producao/v0.161.0", "#prs"]
+    assert volta[0] == {"aba": "issues", "item": "930", "filtros": {"fase": "pr_aberto", "q": "router de hash"}}
+    assert volta[1]["filtros"] == {"resp": "(sem)"}
+
+
+def test_so_o_router_le_e_escreve_o_hash():
+    router = ROUTER.read_text(encoding="utf-8")
+    assert "location.hash" in router and "hashchange" in router and "replaceState" in router
+    assert re.search(r"from '\./router\.js'", APP_JS), "app.js não importa o router"
+    for arq in sorted(STATIC.glob("*.js")):
+        if arq.name == "router.js":
+            continue
+        js = arq.read_text(encoding="utf-8")
+        for proibido in ("location.hash", "hashchange", "replaceState", "pushState"):
+            assert proibido not in js, f"{arq.name} mexe no hash por fora do router: {proibido}"
+
+
+# ---------- o estado da tela vai para o hash ----------
+
+
+@com_node
+def test_trocar_de_aba_expandir_card_e_mudar_filtro_atualizam_o_hash(tmp_path):
+    passos = _app(
+        tmp_path,
+        "_h",
+        antes="""
+        const _h = [];
+        const _anotar = () => _h.push(location.hash);
+        _aba('producao'); _anotar();
+        _clicar({ act: 'dep', i: '0' }); _anotar();
+        _clicar({ act: 'dep', i: '0' }); _anotar();
+        _aba('issues'); _anotar();
+        _clicar({ act: 'iss', n: '902' }); _anotar();
+        _clicar({ act: 'ffase', v: 'pr_aberto' }); _anotar();
+        _clicar({ act: 'fresp', v: '(sem)' }); _anotar();
+        _buscar('fatia 9'); _anotar();
+        _clicar({ act: 'iss', n: '902' }); _anotar();
+        """,
+    )
+    assert passos == [
+        "#producao",
+        "#producao/v0.163.4",
+        "#producao",
+        "#issues",
+        "#issues/902",
+        "#issues/902?fase=pr_aberto",
+        "#issues/902?fase=pr_aberto&resp=%28sem%29",
+        "#issues/902?fase=pr_aberto&resp=%28sem%29&q=fatia+9",
+        "#issues?fase=pr_aberto&resp=%28sem%29&q=fatia+9",
     ]
