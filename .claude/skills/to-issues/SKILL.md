@@ -152,15 +152,15 @@ Evite caminhos de arquivo e trechos de código — envelhecem rápido. Exceção
 **Ondas previstas no PRD.** Com todas as fatias publicadas, acrescente ao fim do corpo do PRD a seção `## Ondas previstas` aprovada no passo 4, agora com os números reais:
 
 ```bash
-gh issue view "$PRD" --json body --jq .body > "$TMPDIR/prd-$PRD.md"
-cat >> "$TMPDIR/prd-$PRD.md" <<'EOF'
+gh issue view "$PRD" --json body --jq .body > "${TMPDIR:-/tmp}/prd-$PRD.md"
+cat >> "${TMPDIR:-/tmp}/prd-$PRD.md" <<'EOF'
 
 ## Ondas previstas
 
 - Onda 1: #<a>, #<b>
 - Onda 2: #<c> (divide `main.py` com #<a>)
 EOF
-gh issue edit "$PRD" --body-file "$TMPDIR/prd-$PRD.md"
+gh issue edit "$PRD" --body-file "${TMPDIR:-/tmp}/prd-$PRD.md"
 ```
 
 Fora essa seção, não feche o PRD pai nem mexa no corpo e nos labels dele: só vincule as fatias como sub-issues. Quando a última sub-issue aberta fechar, a Action de higiene (`.github/workflows/higiene-issues.yml`) fecha o PRD sozinha, com um comentário.
