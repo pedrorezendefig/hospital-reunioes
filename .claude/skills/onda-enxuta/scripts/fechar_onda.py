@@ -1030,7 +1030,11 @@ def reverter(servicos_cfg: dict, servicos: list[str], alvos: dict[str, str | Non
         for sid, alvo in alvos.items():
             uuid = servicos_cfg[sid]["uuid"]
             antes = ids_de_deploy(uuid)
-            if run(["coolify", "app", "rollback", "run", uuid, "--commit", alvo], check=False).returncode != 0:
+            if em_modo_imagem(servicos_cfg[sid]):
+                voltou = trocar_tag(uuid, alvo)  # a imagem anterior segue no GHCR (issue #1001)
+            else:
+                voltou = run(["coolify", "app", "rollback", "run", uuid, "--commit", alvo], check=False).returncode == 0
+            if not voltou:
                 return False, f"o Coolify recusou o rollback do {sid} para {alvo[:8]}"
             status = esperar_rollback(servicos_cfg[sid], antes)
             if status != "finished":

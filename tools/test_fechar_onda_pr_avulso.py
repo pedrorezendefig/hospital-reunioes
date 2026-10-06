@@ -2072,3 +2072,43 @@ def test_app_em_modo_imagem_fica_fora_do_cancelamento_do_webhook(monkeypatch):
 
     assert fo.cancelar_build_do_registro(servicos, sha) == ["frontend"]
     assert pedidos == ["uuid-frontend"]
+
+
+def test_rollback_em_modo_imagem_volta_a_tag_do_ultimo_deploy_sem_build(tmp_path, monkeypatch):
+    """O health da v0.10.1 falhou: o backend volta à tag que estava no ar, o sha
+    do último deploy dele no state.json (o CLI do Coolify não devolve a tag
+    configurada), pelo mesmo caminho do deploy: troca a tag e puxa. Nada de
+    `rollback run --commit`, que é de imagem construída do git."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM, sha_no_ar=IMAGEM_ANTERIOR)
+    c.health_ruim_em.add("0.10.1")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_ROLLBACK
+
+    squash = c.merges[0]["main"]
+    assert c.coolify_sem_leituras() == [
+        f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app update uuid-backend --docker-tag {squash} | main={squash}",
+        f"deploy uuid uuid-backend | main={squash}",
+        f"app env update uuid-backend APP_VERSION --value 0.10.0 | main={squash}",
+        f"app env update uuid-frontend APP_VERSION --value 0.10.0 | main={squash}",
+        f"app update uuid-backend --docker-tag {IMAGEM_ANTERIOR} | main={squash}",
+        f"deploy uuid uuid-backend | main={squash}",
+    ]
+    assert c.rollbacks == ["backend"]
+    assert c.healths == [("backend", "0.10.1"), ("backend", "0.10.0")]
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+
+
+def test_rollback_em_modo_imagem_sem_deploy_anterior_no_state_sai_com_4(tmp_path, monkeypatch):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    c.health_ruim_em.add("0.10.1")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_HEALTH
+
+    assert [li for li in c.coolify_sem_leituras() if "--value 0.10.0" in li or "rollback" in li] == []
+    assert c.rollbacks == [] and c.semaforo == [("pegar", "pr-7")]
