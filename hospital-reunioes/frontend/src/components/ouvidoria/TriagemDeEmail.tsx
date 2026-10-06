@@ -198,7 +198,7 @@ export function TriagemDeEmail({ token }: { token: string }) {
           res.status === 409
             ? "Este e-mail já virou manifestação ou foi juntado a um caso, e não pode ser descartado."
             : res.status === 503
-              ? "Não foi possível descartar o e-mail agora. Tente de novo em instantes."
+              ? "Não foi possível terminar o descarte agora. Tente de novo em instantes."
               : "Não foi possível descartar este e-mail. Tente novamente."
         );
         return;
@@ -395,14 +395,30 @@ export function TriagemDeEmail({ token }: { token: string }) {
               </div>
             )}
             {aberto.estado === "descartado" && (
-              <p className="flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-border text-slate-700 text-sm">
-                <Trash2 className="w-4 h-4 shrink-0 mt-0.5" />
-                <span>
-                  Descartado por {aberto.decidido_por_nome ?? "alguém da Ouvidoria"}
-                  {aberto.decidido_em ? ` em ${formatarChegada(aberto.decidido_em)}` : ""}. O texto e os anexos
-                  foram apagados; fica só o cabeçalho.
-                </span>
-              </p>
+              <div className="space-y-2">
+                <p className="flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-border text-slate-700 text-sm">
+                  <Trash2 className="w-4 h-4 shrink-0 mt-0.5" />
+                  <span>
+                    Descartado por {aberto.decidido_por_nome ?? "alguém da Ouvidoria"}
+                    {aberto.decidido_em ? ` em ${formatarChegada(aberto.decidido_em)}` : ""}.{" "}
+                    {aberto.anexos.length > 0
+                      ? "O texto foi apagado, mas algum anexo ainda não saiu do armazenamento."
+                      : "O texto e os anexos foram apagados; fica só o cabeçalho."}
+                  </span>
+                </p>
+                {/* O storage recusou algum binário num descarte anterior: o
+                    descarte é idempotente, e terminar é descartar de novo. */}
+                {aberto.anexos.length > 0 && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmandoDescarte(true)}
+                    className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border border-border text-slate-700 hover:bg-slate-50 transition-colors"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                    Terminar o descarte
+                  </button>
+                )}
+              </div>
             )}
             {erroDaDecisao && (
               <p className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">

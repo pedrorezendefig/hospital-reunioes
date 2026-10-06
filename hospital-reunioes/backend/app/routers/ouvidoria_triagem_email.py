@@ -1,4 +1,4 @@
-"""Rotas da Triagem de e-mail (ADR 0051, PRD #646, issues #648 e #650).
+"""Rotas da Triagem de e-mail (ADR 0051, PRD #646, issues #648, #649 e #650).
 
 Só o Perfil da Ouvidoria entra: o gate é o mesmo do Dossiê
 (`require_perfil_ouvidoria`), e Super admin fica de fora como lá. Todo acesso ao
@@ -6,8 +6,9 @@ conteúdo de um e-mail recebido entra no log de acesso da Ouvidoria.
 
 O ouvidor lê a lista e o item. Das decisões, virar manifestação (#650) mora
 aqui só como a pré-carga: quem cria o caso é o registro manual
-(`POST /ouvidoria/manifestacoes` com o `email_recebido_id`). Descartar e
-juntar a um caso chegam nas fatias seguintes.
+(`POST /ouvidoria/manifestacoes` com o `email_recebido_id`). Descartar (#649)
+é a rota `descarte`, no fim deste arquivo. Juntar a um caso chega na fatia
+seguinte.
 """
 
 from __future__ import annotations
@@ -139,4 +140,12 @@ async def descartar_email_recebido(
             detail="Este e-mail já virou manifestação ou foi juntado a um caso, e não pode ser descartado",
         )
     triagem.registrar_acesso_ao_email(supabase, me, email_id, "descartar_email")
+    if desfecho == triagem.DESCARTE_INCOMPLETO:
+        # O item já está descartado e sem corpo, mas algum binário não saiu do
+        # storage. 200 diria ao ouvidor que o anexo foi apagado; o descarte é
+        # idempotente, e a nova tentativa termina o serviço.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="O e-mail foi descartado, mas algum anexo não saiu do armazenamento. Tente de novo em instantes.",
+        )
     return triagem.carregar_item(supabase, email_id)

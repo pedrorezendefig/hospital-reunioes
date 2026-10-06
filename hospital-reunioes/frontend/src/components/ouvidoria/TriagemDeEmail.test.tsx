@@ -546,3 +546,37 @@ describe("descartar (issue #649)", () => {
     expect(screen.getByText("Esperei três horas na recepção sem informação nenhuma.")).toBeTruthy();
   });
 });
+
+describe("descarte que não terminou (issue #649)", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+  });
+
+  it("o descartado que ainda tem anexo oferece terminar o descarte", async () => {
+    const comSobra = {
+      ...descartado(JOANA),
+      anexos: [
+        { id: "a1", filename: "laudo.pdf", content_type: "application/pdf", tamanho_bytes: 2048, disponivel: true },
+      ],
+    };
+    // Descartado numa visita anterior, com um anexo que o storage não soltou.
+    montarParaDescartar({ e1: comSobra });
+    fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
+
+    const painel = screen.getByRole("region", { name: "E-mail recebido" });
+    await within(painel).findByText(/Descartado por Marta Ouvidora/);
+    expect(within(painel).getByRole("button", { name: "Terminar o descarte" })).toBeTruthy();
+    expect(within(painel).queryByText(/foram apagados/)).toBeNull();
+  });
+
+  it("o descartado limpo não oferece descartar de novo", async () => {
+    montarParaDescartar({ e1: descartado(JOANA) });
+    fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
+
+    const painel = screen.getByRole("region", { name: "E-mail recebido" });
+    await within(painel).findByText(/Descartado por Marta Ouvidora/);
+    expect(within(painel).queryByRole("button", { name: /descart/i })).toBeNull();
+  });
+});

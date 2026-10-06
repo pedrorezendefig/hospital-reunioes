@@ -75,16 +75,20 @@ class TestDescartarGuardaSoOCabecalho:
         # Quem descartou e quando continuam os do primeiro descarte.
         assert banco.tabelas["ouvidoria_emails_recebidos"][0] == depois_do_primeiro
 
-    def test_descartar_de_novo_completa_o_binario_que_o_storage_recusou(self, monkeypatch):
+    def test_binario_recusado_responde_503_e_o_descarte_seguinte_termina(self, monkeypatch):
         """O storage recusou o binário no primeiro descarte: a linha do anexo
-        fica, e o segundo descarte termina o serviço."""
+        fica, e a resposta é "tente de novo" (503), e não 200, porque 200
+        diria ao ouvidor que o anexo foi apagado. O descarte seguinte termina
+        o serviço."""
         cliente, banco, email_id = _email_na_triagem(monkeypatch)
         [anexo] = banco.tabelas["ouvidoria_emails_recebidos_anexos"]
         caminho = f"{BUCKET}/{anexo['storage_path']}"
         remover = banco.storage.from_(BUCKET).__class__.remove
         monkeypatch.setattr(banco.storage.from_(BUCKET).__class__, "remove", lambda self, paths: [])
 
-        assert _descartar(cliente, email_id).status_code == 200
+        r = _descartar(cliente, email_id)
+        assert r.status_code == 503
+        assert "Tente de novo" in r.json()["detail"]
         assert len(banco.tabelas["ouvidoria_emails_recebidos_anexos"]) == 1
         assert caminho in banco.storage.arquivos
 
@@ -178,3 +182,41 @@ class TestFalhaDoBancoNoDescarte:
         assert "Tente de novo" in r.json()["detail"]
         assert banco.tabelas["ouvidoria_emails_recebidos"][0]["corpo_texto"] is not None
         assert len(banco.tabelas["ouvidoria_emails_recebidos_anexos"]) == 1
+
+
+class TestAReentregaNaoDesfazODescarte:
+    def test_descarte_no_meio_da_reentrega_nao_ganha_corpo_nem_anexo_de_volta(self, monkeypatch):
+        """A reentrega de um item incompleto confere o estado uma vez, antes de
+        ler o Resend e baixar os anexos, que é o trecho lento. O ouvidor que
+        descarta nessa janela não pode ver o corpo e os anexos voltarem: o
+        descarte promete que fica só o cabeçalho (ADR 0051, decisão 5)."""
+        from datetime import UTC, datetime
+
+        from test_ouvidoria_triagem_email import _entregar, _evento, _lido
+        from test_ouvidoria_triagem_virar_manifestacao import _client
+
+        from app.services import email_service
+        from app.services import ouvidoria_triagem_email as triagem
+
+        cliente, banco, resend = _client(monkeypatch)
+        # Primeira entrega: o Resend não devolve o corpo, e o item fica
+        # pendente e incompleto. O 503 é o webhook pedindo a reentrega.
+        assert _entregar(cliente, _evento()).status_code == 503
+        [item] = banco.tabelas["ouvidoria_emails_recebidos"]
+        assert item["incompleto"] is True
+
+        def ler_com_descarte_no_meio(email_id):
+            # A leitura lenta do Resend, com o ouvidor descartando no meio.
+            assert triagem.descartar(banco, OUVIDOR, item["id"], datetime.now(UTC)) == triagem.DESCARTE_FEITO
+            return _lido()
+
+        monkeypatch.setattr(email_service, "ler_email_recebido", ler_com_descarte_no_meio)
+        _entregar(cliente, _evento())
+
+        [item] = banco.tabelas["ouvidoria_emails_recebidos"]
+        assert item["estado"] == "descartado"
+        assert item["corpo_texto"] is None
+        assert item["corpo_html"] is None
+        assert item["cabecalhos"] == {}
+        assert banco.tabelas["ouvidoria_emails_recebidos_anexos"] == []
+        assert not any(caminho.startswith(f"{BUCKET}/") for caminho in banco.storage.arquivos)
