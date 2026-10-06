@@ -2034,3 +2034,41 @@ def test_frontend_no_lote_segue_o_build_do_webhook_e_o_backend_vai_por_imagem(tm
     squash = c.merges[0]["main"]
     assert c.builds == ["frontend"] and c.esperados == [squash]
     assert c.deploys_novos == ["backend"] and [p["sha"] for p in c.publicacoes] == [squash]
+
+
+def test_imagem_que_nao_sai_do_workflow_para_com_3_sem_trocar_a_tag_no_coolify(
+    tmp_path, monkeypatch, capsys
+):
+    """O run do workflow terminou vermelho: o Coolify nunca recebe a tag de uma
+    imagem que não existe, e o rabo sai como um build que falhou."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    c.publicacao_falha = True
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_BUILD
+
+    assert [li for li in c.coolify_sem_leituras() if "--docker-tag" in li or li.startswith("deploy ")] == []
+    assert c.deploys_novos == [] and c.healths == []
+    assert c.semaforo == [("pegar", "pr-7")]
+    [build] = linhas_com(capsys.readouterr().out, "build:")
+    assert "backend" in build and "failure" in build and "Semaforo preso na chave pr-7" in build, build
+
+
+def test_app_em_modo_imagem_fica_fora_do_cancelamento_do_webhook(monkeypatch):
+    """Sem webhook, nenhum deploy do commit do registro aparece no backend em
+    modo imagem: esperar por ele gastaria a janela inteira a cada squash."""
+    fo = carregar_fechar_onda()
+    sha = "a" * 40
+    pedidos = []
+
+    def coolify_json(args, timeout=120):
+        pedidos.append(args[3])
+        return [{"deployment_uuid": "d-registro", "commit": sha, "status": "queued"}]
+
+    monkeypatch.setattr(fo, "coolify_json", coolify_json)
+    monkeypatch.setattr(fo, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, "", ""))
+    servicos = {s["id"]: s for s in PROJECT_IMAGEM["services"]}
+
+    assert fo.cancelar_build_do_registro(servicos, sha) == ["frontend"]
+    assert pedidos == ["uuid-frontend"]

@@ -873,8 +873,10 @@ def cancelar_build_do_registro(servicos_cfg: dict, sha: str) -> list[str]:
     webhook do Coolify rebuilda os apps mesmo com o commit fora do app (issues
     #851 e #965). Cancela o deploy desse
     commit, e so dele, se aparecer na janela; com filtro de caminho no Coolify,
-    nao aparece nenhum. Devolve os servicos cancelados."""
-    apps = {sid: s["uuid"] for sid, s in servicos_cfg.items() if s.get("type") != "supabase" and s.get("uuid")}
+    nao aparece nenhum. App em modo imagem nao tem webhook (issue #1001). Devolve
+    os servicos cancelados."""
+    apps = {sid: s["uuid"] for sid, s in servicos_cfg.items()
+            if s.get("type") != "supabase" and s.get("uuid") and not em_modo_imagem(s)}
     cancelados = []
     limite = time.time() + REGISTRO_JANELA_S
     while apps:
