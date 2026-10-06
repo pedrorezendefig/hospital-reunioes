@@ -841,9 +841,9 @@ def pr_de_ferramenta(tmp_path: Path, **kw) -> Cenario:
                                        ".claude/skills/painel/SKILL.md": "# painel\n"}), **kw)
 
 
-def test_dry_run_de_pr_so_de_ferramenta_diz_ferramenta_so_merge(tmp_path, monkeypatch, capsys):
+def test_dry_run_de_pr_so_de_tools_diz_ferramenta_so_merge(tmp_path, monkeypatch, capsys):
     fo = carregar_fechar_onda()
-    c = pr_de_ferramenta(tmp_path)
+    c = pr_de_ferramenta(tmp_path, arquivos={"tools/painel.py": "PRDS = 1\n"})
     preparar(fo, monkeypatch, c)
 
     assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
