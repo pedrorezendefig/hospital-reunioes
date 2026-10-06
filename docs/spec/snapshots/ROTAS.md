@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-09-28T11:42-0300 -->
+<!-- last_update: 2026-10-06T01:37-0300 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -211,6 +211,16 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/ouvidoria-setor/{token}/prorrogacao` | O pedido de mais prazo, feito pelo próprio link do email (issue #333). | ❌ |
 | POST | `/ouvidoria-setor/{token}/responder` | A resposta da área: o que foi FEITO para corrigir. Grava o marco T2, | ❌ |
 
+## ouvidoria-triagem-email (`app/routers/ouvidoria_triagem_email.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/ouvidoria/triagem-email` | Os e-mails recebidos, pendentes primeiro, na ordem de chegada. Só o | ✅ |
+| GET | `/ouvidoria/triagem-email/{email_id}` | O item aberto: cabeçalho, corpo em texto e anexos. O HTML do e-mail fica | ✅ |
+| GET | `/ouvidoria/triagem-email/{email_id}/anexos/{anexo_id}/url` | URL assinada, com expiração, para abrir o anexo do e-mail. O bucket é o | ✅ |
+| POST | `/ouvidoria/triagem-email/{email_id}/descarte` | Descarta o item: fica só o cabeçalho e quem descartou (issue #649, ADR | ✅ |
+| GET | `/ouvidoria/triagem-email/{email_id}/pre-carga` | Os valores com que o modal "Nova manifestação" abre quando o e-mail vira | ✅ |
+
 ## participantes (`app/routers/participantes.py`)
 
 | Método | Rota | O que faz | Auth |
@@ -393,7 +403,8 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 |--------|------|-----------|------|
 | POST | `/webhooks/clicksign` | Recebe notificações da ClickSign sobre assinaturas e fechamento de documentos. | ❌ |
 | POST | `/webhooks/github` | A Demanda vinculada aprendendo do GitHub em segundos (ADR 0054, decisão 2). | ❌ |
+| POST | `/webhooks/resend` | O e-mail que chegou em ouvidoria@ entra na Triagem de e-mail (ADR 0051). | ❌ |
 
 ---
 
-**Totais:** 230 endpoints em 32 routers · 93% exigem auth.
+**Totais:** 236 endpoints em 33 routers · 93% exigem auth.
