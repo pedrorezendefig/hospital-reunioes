@@ -109,7 +109,7 @@ class Cenario:
         self.numero = numero
         self.issue = issue
         self.log_scripts = tmp_path / "scripts-chamados.log"
-        repo = tmp_path / "repo"
+        repo = self.repo = tmp_path / "repo"
         repo.mkdir()
         git(repo, "init", "-q", "-b", "main")
         escrever(repo, "hospital-reunioes/frontend/package.json",
@@ -168,6 +168,7 @@ class Cenario:
         self.merges: list[dict] = []
         self.gh_chamadas: list[list[str]] = []
         self.builds: list[str] = []
+        self.esperados: list[str] = []  # sha do squash cujo deploy o rabo esperou
         self.healths: list[tuple[str, str | None]] = []
         # versões em que o /api/health do backend responde 500 (issue #968)
         self.health_ruim_em: set[str | None] = set()
@@ -213,6 +214,28 @@ class Cenario:
         self.path = f"{bin_falso}{os.pathsep}{os.environ.get('PATH', '')}"
         self.home = tmp_path / "home"
         self.home.mkdir()
+
+    def outro_pr(self, numero: int, titulo: str, issue: int, arquivos: dict[str, str]) -> dict:
+        """Mais um PR do lote, numa branch própria a partir da base."""
+        branch = f"feature-{numero}"
+        git(self.repo, "checkout", "-q", "-b", branch, "main")
+        for caminho, texto in arquivos.items():
+            escrever(self.repo, caminho, texto)
+        git(self.repo, "add", "-A")
+        git(self.repo, "commit", "-q", "-m", titulo)
+        git(self.repo, "push", "-q", str(self.remoto), branch, f"{branch}:refs/pull/{numero}/head")
+        self.prs[numero] = {
+            **self.pr,
+            "number": numero,
+            "headRefName": branch,
+            "headRefOid": git(self.remoto, "rev-parse", branch),
+            "title": titulo,
+            "files": [{"path": p} for p in arquivos],
+            "commits": [{"messageHeadline": titulo, "messageBody": ""}],
+            "url": f"https://github.com/dono/repo/pull/{numero}",
+            "closingIssuesReferences": [{"number": issue}],
+        }
+        return self.prs[numero]
 
     def imagens_no_coolify(self, uuid: str, no_ar: str | None, revertidas: tuple[str, ...] = ()) -> None:
         """Lista do `coolify app rollback images`, no formato real (conferido em
@@ -388,8 +411,9 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
         c.semaforo.append((acao, chave))
         return 0
 
-    def esperar_build(service, desde, sha_push):
+    def esperar_build(service, desde, sha_push, ignorar=()):
         c.builds.append(service["id"])
+        c.esperados.append(sha_push)
         return "finished", 42
 
     def checar_health(service, versao_esperada):
@@ -418,6 +442,12 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
 
 def rodar_main(fo, monkeypatch, c: Cenario, *extra: str) -> int:
     monkeypatch.setattr(sys, "argv", ["fechar_onda.py", "--prs", str(c.numero),
+                                      "--raiz", str(c.clone), *extra])
+    return fo.main()
+
+
+def rodar_onda(fo, monkeypatch, c: Cenario, prs: list[int], *extra: str) -> int:
+    monkeypatch.setattr(sys, "argv", ["fechar_onda.py", "--prs", *map(str, prs), "--sessao", "onda-x",
                                       "--raiz", str(c.clone), *extra])
     return fo.main()
 
@@ -722,6 +752,8 @@ def test_rodada_seguinte_a_um_ci_vermelho_sai_na_mesma_versao_sem_pular(
     # o CI ficou verde depois (flaky corrigido); o PR segue com a main trazida
     vermelho["ligado"] = False
     c.ci_vermelho.clear()
+    # o GitHub move o `refs/pull/7/head` e o `headRefOid` com a branch do PR
+    git(c.remoto, "update-ref", "refs/pull/7/head", head_com_a_main)
     c.pr["headRefOid"] = head_com_a_main
 
     assert rodar_main(fo, monkeypatch, c) == 0
@@ -732,63 +764,86 @@ def test_rodada_seguinte_a_um_ci_vermelho_sai_na_mesma_versao_sem_pular(
     assert app_version and all("--value 0.10.1 " in li for li in app_version), c.coolify()
 
 
-def test_onda_entra_por_um_pr_de_entrega_que_fecha_as_issues_do_lote(tmp_path, monkeypatch):
-    fo = carregar_fechar_onda()
+# ------------------------------------------ onda PR a PR (#989, ADR 0064)
+
+def onda_de_dois(tmp_path: Path) -> Cenario:
+    """O PR #7 (issue #5) e o PR #8 (issue #6), em arquivos diferentes do backend."""
     c = pr_de_codigo(tmp_path)
+    c.outro_pr(8, "fix(ouvidoria): limite de anexos por caso", 6,
+               {"hospital-reunioes/backend/app/limite.py": "LIMITE = 3\n"})
+    return c
+
+
+def test_onda_mergeia_pr_a_pr_em_ordem_com_um_build_so(tmp_path, monkeypatch):
+    """ADR 0064, decisão 3: cada PR entra pela API no próprio número, em ordem,
+    como o avulso. O webhook do Coolify dispara um deploy por merge: o do squash
+    intermediário é cancelado e só o do último roda."""
+    fo = carregar_fechar_onda()
+    c = onda_de_dois(tmp_path)
     preparar(fo, monkeypatch, c)
 
-    assert rodar_main(fo, monkeypatch, c, "--sessao", "onda-x") == 0
+    assert rodar_onda(fo, monkeypatch, c, [7, 8]) == 0
 
     assert c.pushes_na_main() == []
-    entrega = c.merges[0]
-    assert entrega["branch"] == "onda/onda-x" and entrega["pr"] != 7
-    assert re.search(r"^Closes #5$", entrega["corpo"], re.M), entrega["corpo"]
-    # o PR do lote fecha apontando o PR de entrega
-    fechar = [a for a in c.gh_chamadas if a[:3] == ["pr", "close", "7"]]
-    assert len(fechar) == 1 and f"#{entrega['pr']}" in " ".join(fechar[0]), fechar
-    assert git(c.remoto, "show", f"{entrega['main']}:hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
-    assert c.builds == ["backend"]
-    # APP_VERSION nos dois apps antes do merge da entrega, tag no squash dela
+    primeiro, segundo, registro = c.merges
+    assert (primeiro["pr"], primeiro["branch"]) == (7, "feature")
+    assert (segundo["pr"], segundo["branch"]) == (8, "feature-8")
+    assert registro["branch"].startswith("registro/"), registro["branch"]
+    # em ordem, um squash por PR no próprio número
+    assert git(c.remoto, "rev-parse", f"{segundo['main']}^") == primeiro["main"]
+    assert git(c.remoto, "log", "-1", "--format=%s", primeiro["main"]).endswith("(#7)")
+    assert git(c.remoto, "log", "-1", "--format=%s", segundo["main"]).endswith("(#8)")
+    assert git(c.remoto, "show", f"{segundo['main']}:hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
+    assert git(c.remoto, "show", f"{segundo['main']}:hospital-reunioes/backend/app/limite.py") == "LIMITE = 3"
+    # os PRs do lote fecham como mergeados, sem `gh pr close`
+    assert c.prs[7]["state"] == c.prs[8]["state"] == "MERGED"
+    assert [a for a in c.gh_chamadas if a[:2] == ["pr", "close"]] == []
+    # APP_VERSION nos dois apps antes do primeiro merge: a main remota ainda era a base
     assert c.coolify() == [f"app rollback images uuid-backend --format json | main={c.base}",
                            f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
                            f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}"]
-    assert c.tags == [("refs/tags/v0.10.1", entrega["main"])]
+    # um deploy cancelado (o do squash do #7, além do registro), um esperado (o do #8)
+    assert c.cancelamentos == [primeiro["main"], registro["main"]]
+    assert c.esperados == [segundo["main"]]
+    assert c.tags == [("refs/tags/v0.10.1", segundo["main"])]
 
 
-def test_onda_com_ci_vermelho_fecha_o_pr_de_entrega_e_a_rodada_seguinte_entra(
+def test_segundo_pr_com_merge_recusado_fica_de_fora_e_o_primeiro_sobe_com_saida_2(
     tmp_path, monkeypatch, capsys
 ):
-    """CI vermelho no PR de entrega: o PR fecha e a branch `onda/<sessao>` some,
-    senão a rodada seguinte trava no push (non-fast-forward) e no 422 do PR."""
+    """Só o PR que não mergeia fica de fora: o que entrou sobe inteiro (build,
+    health e registro), sem cancelar o build dele, e a saída é 2."""
     fo = carregar_fechar_onda()
-    c = pr_de_codigo(tmp_path)
+    c = onda_de_dois(tmp_path)
     preparar(fo, monkeypatch, c)
-    ver = c.ver_pr
-    vermelho = {"ligado": True}
+    mergear = c.mergear_pela_api
 
-    def ver_com_ci_vermelho_na_entrega(n, campos):
-        if vermelho["ligado"] and c.prs[n]["headRefName"] == "onda/onda-x":
-            c.ci_vermelho.add(c._tip("onda/onda-x"))
-        return ver(n, campos)
+    def recusar_o_8(n, campos):
+        if n == 8:
+            raise RuntimeError("gh api -> 405: Pull Request is not mergeable")
+        return mergear(n, campos)
 
-    c.ver_pr = ver_com_ci_vermelho_na_entrega
+    c.mergear_pela_api = recusar_o_8
 
-    assert rodar_main(fo, monkeypatch, c, "--sessao", "onda-x") == fo.EXIT_MERGE
+    assert rodar_onda(fo, monkeypatch, c, [7, 8]) == fo.EXIT_MERGE
 
-    entrega = next(n for n, p in c.prs.items() if p["headRefName"] == "onda/onda-x")
-    fechar = [a for a in c.gh_chamadas if a[:3] == ["pr", "close", str(entrega)]]
-    assert len(fechar) == 1 and "--delete-branch" in fechar[0], fechar
-    assert c.prs[entrega]["state"] == "CLOSED" and c._tip("onda/onda-x") is None
-    assert c.merges == [] and c.main_remota() == c.base and c.coolify() == []
+    primeiro, registro = c.merges
+    assert primeiro["pr"] == 7 and registro["branch"].startswith("registro/"), c.merges
+    assert c.main_remota() == registro["main"]
+    assert c.prs[8]["state"] == "OPEN"
+    # o build e o health do que entrou: o squash do #7 é o último, e o deploy dele roda
+    assert c.esperados == [primeiro["main"]] and c.builds == ["backend"]
+    assert c.healths == [("backend", "0.10.1")]
+    assert c.cancelamentos == [registro["main"]]
+    assert c.tags == [("refs/tags/v0.10.1", primeiro["main"])]
     assert c.semaforo == [("pegar", "onda-x"), ("soltar", "onda-x")]
-    assert f"#{entrega}" in capsys.readouterr().out
-
-    vermelho["ligado"] = False
-    c.ci_vermelho.clear()
-    assert rodar_main(fo, monkeypatch, c, "--sessao", "onda-x") == 0
-
-    assert c.merges[0]["branch"] == "onda/onda-x" and c.merges[0]["pr"] != entrega
-    assert c.na_main("hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
+    entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
+    assert entrada["sha"] == primeiro["main"] and "#8" not in entrada["notes"], entrada
+    saida = capsys.readouterr().out
+    fora = [li for li in saida.splitlines() if li.startswith("de fora:")]
+    assert len(fora) == 1 and "PR #8" in fora[0] and "405" in fora[0], fora
+    fechou = saida.strip().splitlines()[-1]
+    assert fechou.startswith("onda onda-x fechada sem #8") and "PRs #7 " in fechou, fechou
 
 
 def test_limpeza_remove_o_worktree_de_agente_da_branch_entregue_por_squash(tmp_path, monkeypatch):
@@ -1023,10 +1078,10 @@ def test_fechamento_de_ferramenta_so_faz_merge_sem_coolify_nem_registro(
     # e sem versão nova, sem tag
     assert c.coolify() == [] and c.tags == []
     assert c.builds == [] and c.healths == []
-    # nenhum PR de registro: o único POST de PR é o de entrega da onda
+    # nenhum PR aberto pelo rabo: nem de registro, nem um que embrulhe a onda
     abertos = [a for a in c.gh_chamadas if a[:4] == ["api", "-X", "POST", "repos/{owner}/{repo}/pulls"]]
-    assert len(abertos) == (0 if not extra else 1), abertos
-    assert not any("head=registro/" in " ".join(a) for a in abertos), abertos
+    assert abertos == [], abertos
+    assert c.merges[0]["pr"] == 7
     assert c.na_main("docs/spec/deploy/history.json") == history_antes
     # o build que o webhook disparar para o merge é cancelado, como o do registro
     assert c.cancelamentos == [codigo]
@@ -1121,19 +1176,15 @@ def falhar_no_cancelamento(fo, monkeypatch, c: Cenario) -> None:
     monkeypatch.setattr(fo, "cancelar_build_do_registro", cancelar)
 
 
-def falhar_no_gh_depois_do_merge(fo, monkeypatch, c: Cenario) -> None:
-    ver = c.ver_pr
+def falhar_na_limpeza(fo, monkeypatch, c: Cenario) -> None:
+    def limpar(raiz, entregues=None):
+        raise RuntimeError("git worktree remove -> 128: permission denied")
 
-    def ver_que_cai_no_estado(n, campos):
-        if campos == ["state"]:
-            raise RuntimeError("gh pr view -> 502 Bad Gateway")
-        return ver(n, campos)
-
-    c.ver_pr = ver_que_cai_no_estado
+    monkeypatch.setattr(fo, "limpar_worktrees_de_agente", limpar)
 
 
-@pytest.mark.parametrize("falha", [falhar_no_cancelamento, falhar_no_gh_depois_do_merge],
-                         ids=["coolify-timeout", "gh-pr-view"])
+@pytest.mark.parametrize("falha", [falhar_no_cancelamento, falhar_na_limpeza],
+                         ids=["coolify-timeout", "limpeza"])
 def test_ferramenta_que_falha_depois_do_merge_solta_o_semaforo_e_diz_producao_intacta(
     tmp_path, monkeypatch, capsys, falha
 ):
