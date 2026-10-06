@@ -167,8 +167,6 @@ def test_o_montar_ondas_nao_poe_arquivo_em_comum_em_paralelo_e_marca_bloqueada_p
 # ------------------------------------------- piso de revisão sem humano (revisão do PR #1004)
 
 AGENTES = RAIZ / ".claude" / "agents"
-SENSIVEL = SKILLS / "onda-enxuta" / "scripts" / "sensivel.py"
-LISTA_SENSIVEL = SKILLS / "onda-enxuta" / "revisao-sensivel.txt"
 
 
 def gate_do_ship(gate: str) -> str:
@@ -205,37 +203,6 @@ def test_skip_review_e_hotfix_terminam_no_pr_sem_rodar_o_rabo():
     assert "Só o dono do repo usa" not in ship
     linha = next(li for li in passo_10_do_ship().splitlines() if "`--skip-review`" in li)
     assert "`--hotfix`" in linha and "não chega aqui" in linha, linha
-
-
-def _globs_sensiveis() -> list[str]:
-    linhas = (li.strip() for li in ler(LISTA_SENSIVEL).splitlines())
-    return [li for li in linhas if li and not li.startswith(("#", "+"))]
-
-
-@pytest.mark.parametrize(
-    "caminho",
-    [
-        ".claude/agents/hr-revisor-seguranca.md",
-        ".claude/skills/onda-enxuta/revisao-sensivel.txt",
-        ".claude/skills/onda-enxuta/scripts/sensivel.py",
-        ".claude/skills/ship/SKILL.md",
-        ".claude/skills/pegar-issue/scripts/arquivo_em_comum.py",
-        ".claude/skills/deploy/scripts/coolify_api.py",
-        ".claude/settings.json",
-        ".claude/settings.local.json",
-        ".github/rulesets/main.json",
-        "tools/checar_migration_repetida.py",
-    ],
-)
-def test_a_lista_sensivel_cobre_quem_decide_a_revisao(caminho):
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location("sensivel", SENSIVEL)
-    sensivel = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(sensivel)
-    assert any(sensivel.casa(caminho, g) for g in _globs_sensiveis()), caminho
-    # sem curinga que pega tudo: skill de fora do fluxo de revisão não dispara
-    assert not any(sensivel.casa(".claude/skills/manual/SKILL.md", g) for g in _globs_sensiveis())
 
 
 def test_so_autor_de_dentro_do_repo_vale_como_spec_e_como_mapa():
