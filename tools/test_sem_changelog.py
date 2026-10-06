@@ -15,7 +15,7 @@ from pathlib import Path
 RAIZ = Path(__file__).resolve().parent.parent
 PADRAO = r"CHANGELOG|changelog_prepend"
 
-# Onde a citação é história ou fica para outra fatia.
+# Onde a citação é história (o painel entrou na varredura com o #945).
 EXCECOES = [
     "docs/adr/",  # registro do que foi decidido; a ADR 0062 cita o arquivo que apagou
     "docs/spec/deploy/history.json",  # notas de deploys antigos
