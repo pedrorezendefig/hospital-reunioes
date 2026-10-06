@@ -12,11 +12,12 @@ PRD #<PRD>. Escreva o Mapa do terreno como comentário no PRD e devolva a URL.
 Fatias abertas nesta sessão: #<a>, #<b>, #<c>.
 ```
 
-## hr-implementador
+## hr-implementador / hr-implementador-xhigh
 
 ```
 [papel: implementador]
 Issue #<N> do PRD #<PRD>. Mapa do terreno: <URL do comentário>.
+<Se a passagem traz o PRD em "Mergeado na onda anterior": "Mergeado na onda anterior: PRs #a #b.">
 Tentativa <k> de 3.
 <Se houver decisão de triagem que o corpo não traz: uma linha.>
 <Se a issue cria migration: "o número é <0XX>; a <0XX-1> já existe em origin/main".>
@@ -82,8 +83,14 @@ Ordem obrigatória: <as mesmas regras do plano original>.
 Não toque nas issues #.., #.. (outra sessão está rodando).
 
 Mapas do terreno já escritos: PRD #<X> (<URL>).
+Mergeado na onda anterior: PRD #<X>: PRs #a #b.
+Estrutura mudou: PRD #<X>: <sim|não>.
 Auditorias de PRD desta sessão: <quando #f fechar, audite o PRD #X>.
 Decisões de triagem: <as mesmas linhas do plano original>.
 Baixas até aqui (ready-for-human): <issue e motivo, ou "nenhuma">.
 Prod hoje: v<nova>. Última migration em origin/main: <0XX>.
 ```
+
+O Mapa do terreno é um por PRD e atravessa as ondas: a passagem leva o que mudou depois dele. A linha `Mergeado na onda anterior` acumula desde o Mapa: os PRs da passagem que você recebeu mais os da sua onda; Mapa refeito nesta sessão zera a conta.
+
+`Estrutura mudou` é por PRD: `sim` quando algum PR mergeado na onda apagou ou renomeou arquivo que não é teste (`gh api --paginate repos/{owner}/{repo}/pulls/<PR>/files --jq '.[] | select(.status == "removed" or .status == "renamed") | .filename'`); arquivo novo ou editado é `não`, porque o implementador recebe a lista do `Mergeado na onda anterior` e confere o que ela tocou. Só `sim` faz a próxima sessão disparar o `hr-mapeador` (passo 2 da skill).

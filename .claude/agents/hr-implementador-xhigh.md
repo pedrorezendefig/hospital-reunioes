@@ -1,8 +1,8 @@
 ---
-name: hr-implementador
-description: "Implementa uma fatia (issue) da /onda-enxuta em worktree próprio: claim, TDD, PR aberto sem revisão interna, e termina. Não espera CI, não corrige revisão, não bumpa versão. Fatia P, M ou sem label; a G vai no hr-implementador-xhigh."
+name: hr-implementador-xhigh
+description: "Variante em esforço xhigh do hr-implementador, para fatia G da /onda-enxuta. Mesmo contrato: claim, TDD, PR aberto sem revisão interna, e termina."
 model: claude-opus-5-5
-effort: high
+effort: xhigh
 tools: Bash, Read, Edit, Write, Grep, Glob, Skill
 isolation: worktree
 maxTurns: 200
