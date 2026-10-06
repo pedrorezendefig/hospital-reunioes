@@ -12,7 +12,7 @@ on:
       - '**/*.md'
   # Sem paths-ignore no PR (issue #910): o ruleset da main exige os três jobs
   # abaixo, e workflow pulado por filtro de caminho não reporta check nenhum. O
-  # PR só de docs (o registro do fechar_onda.py, ADR, skill) ficaria esperando
+  # PR só de docs (ADR, skill) ficaria esperando
   # para sempre. Quem pula o trabalho pesado é o job `mudancas`, e job pulado
   # por `if` conta como verde para o ruleset.
   pull_request:

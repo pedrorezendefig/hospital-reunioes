@@ -22,6 +22,7 @@ import io
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 from pathlib import Path
@@ -219,6 +220,14 @@ class Cenario:
         if sha_no_ar and digest_no_ar:
             self.ghcr[sha_no_ar] = digest_no_ar
         self.deploys_novos: list[str] = []  # apps cujo deploy novo (sem webhook) o rabo esperou
+        # a Action pós-merge que grava o registro (ADR 0064, decisão 6b): cada
+        # disparo, a conclusão de cada run (success sem nada dito; "pendente"
+        # fica na fila; "verde-sem-commit" termina success sem empurrar nada) e
+        # o commit que o bot empurrou na main
+        self.tmp = tmp_path
+        self.registros: list[dict] = []
+        self.action_do_registro: list[str] = []
+        self.commits_do_bot: list[str] = []
         self.log_push_main = tmp_path / "push-na-main.log"
         hook = self.remoto / "hooks" / "pre-receive"
         hook.write_text(
@@ -356,6 +365,34 @@ class Cenario:
         return [{"databaseId": 900 + i, "displayTitle": f"Imagem do backend {p['sha']}",
                  "status": "completed", "conclusion": "failure" if self.publicacao_falha else "success"}
                 for i, p in reversed(list(enumerate(self.publicacoes)))] + self.runs_anteriores
+
+    def disparar_registro(self, cmd: list[str]) -> None:
+        """`gh workflow run pos-merge.yml --ref main -F registro=@<arquivo>`, como a
+        Action: o `gerar` roda o `tools/aplicar_registro.py` de verdade num checkout
+        da ponta da main, e o `commitar` empurra o commit do bot pela deploy key,
+        que o ruleset deixa passar (aqui, o lado do servidor, sem o hook)."""
+        nome, _, valor = cmd[cmd.index("-F") + 1].partition("=")
+        assert nome == "registro" and valor.startswith("@"), cmd
+        texto = Path(valor[1:]).read_text(encoding="utf-8")
+        conclusao = self.action_do_registro.pop(0) if self.action_do_registro else "success"
+        self.registros.append({"ref": cmd[cmd.index("--ref") + 1], "registro": json.loads(texto),
+                               "conclusao": conclusao, "healths": list(self.healths)})
+        if conclusao != "success":
+            return
+        checkout = self.tmp / f"action-{len(self.registros)}"
+        git(self.tmp, "clone", "-q", str(self.remoto), str(checkout))
+        proc = subprocess.run([sys.executable, str(RAIZ / "tools" / "aplicar_registro.py")], cwd=checkout,
+                              env={**os.environ, "REGISTRO": texto}, capture_output=True, text=True)
+        assert proc.returncode == 0, proc.stdout + proc.stderr
+        git(checkout, "add", "-A")
+        git(checkout, "commit", "-q", "-m", "chore(spec): registro, snapshot e draft do Manual pós-merge [skip ci]")
+        self.avancar_main(checkout)
+        self.commits_do_bot.append(self.main_remota())
+
+    def runs_do_registro(self) -> list[dict]:
+        return [{"databaseId": 700 + i, "status": "queued" if r["conclusao"] == "pendente" else "completed",
+                 "conclusion": {"pendente": None, "verde-sem-commit": "success"}.get(r["conclusao"], r["conclusao"])}
+                for i, r in reversed(list(enumerate(self.registros)))]
 
     def runs_do_ci(self, head: str) -> list[dict]:
         """O CI verde do PR no `head`, que publicou a imagem e guardou o digest."""
@@ -506,6 +543,9 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
                 return c.runs_do_ci(args[args.index("--commit") + 1])
             # um run disparado de outra branch roda outro workflow: só os da main valem
             assert args[args.index("--branch") + 1] == "main", args
+            if wf == "pos-merge.yml":
+                assert args[args.index("--event") + 1] == "workflow_dispatch", args
+                return c.runs_do_registro()
             return c.runs_do_workflow()
         if args == ["api", "repos/{owner}/{repo}/check-runs/9/annotations"]:
             return [{"annotation_level": "notice", "message": "The ubuntu-latest label will migrate"},
@@ -534,7 +574,9 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
                     git(c.remoto, "update-ref", "-d", f"refs/heads/{branch}")
             if cmd[1:] == ["run", "rerun", "555", "--failed"]:
                 c.sem_runner -= 1
-            if cmd[1:3] == ["workflow", "run"]:
+            if cmd[1:4] == ["workflow", "run", "pos-merge.yml"]:
+                c.disparar_registro(cmd)
+            elif cmd[1:3] == ["workflow", "run"]:
                 c.disparar_workflow(cmd)
             if cmd[1:3] == ["run", "download"]:
                 return subprocess.CompletedProcess(cmd, c.baixar_artefato(cmd), "", "")
@@ -661,36 +703,85 @@ def test_main_protegida_o_pr_entra_pela_api_sem_commit_na_branch_dele(tmp_path, 
     assert [a for a in c.gh_chamadas if a[:2] == ["pr", "close"]] == []
 
 
-def test_registro_sobe_depois_do_health_num_pr_so_de_docs_e_o_build_dele_e_cancelado(
-    tmp_path, monkeypatch
+def test_registro_vai_pela_action_na_main_depois_do_health_sem_pr_de_registro(
+    tmp_path, monkeypatch, capsys
 ):
+    """ADR 0064, decisão 6b: o rabo termina no health e dispara a Action
+    pós-merge na `main` com o registro; quem grava os dois JSONs é o bot, pela
+    deploy key. O rabo só sai depois de ver a entrada no `history.json` da
+    `main`, e cancela o build que o webhook do Coolify dispara para o commit do
+    bot (issue #851)."""
     fo = carregar_fechar_onda()
     c = pr_de_codigo(tmp_path)
     preparar(fo, monkeypatch, c)
-    healths_no_merge_do_registro = []
-    mergear = c.mergear_pela_api
-
-    def mergear_anotando(n, campos):
-        healths_no_merge_do_registro.append(list(c.healths))
-        return mergear(n, campos)
-
-    c.mergear_pela_api = mergear_anotando
 
     assert rodar_main(fo, monkeypatch, c) == 0
 
-    assert [m["pr"] for m in c.merges] == [7, 101]
-    registro = c.merges[1]
-    assert registro["branch"].startswith("registro/"), registro["branch"]
-    # depois do health verde, não antes
-    assert healths_no_merge_do_registro[1] == [("backend", "0.10.1")]
-    # só docs: o CI pula os jobs pesados e o PR não espera build
-    mudados = git(c.remoto, "diff", "--name-only", c.merges[0]["main"], registro["main"]).splitlines()
-    assert mudados and all(m.startswith("docs/") for m in mudados), mudados
-    assert "docs/spec/deploy/history.json" in mudados
-    assert registro["titulo"].startswith("chore(deploy): registro do PR #7 (v0.10.1)"), registro["titulo"]
-    # o push do registro na main dispara o webhook do Coolify: o script cancela esse build
-    assert c.cancelamentos == [registro["main"]]
-    assert c.main_remota() == registro["main"]
+    # nenhum PR além do do autor: o único merge é o do código
+    assert [m["pr"] for m in c.merges] == [7]
+    assert [a for a in c.gh_chamadas if a[:4] == ["api", "-X", "POST", "repos/{owner}/{repo}/pulls"]] == []
+    # um disparo, na main, depois do health verde
+    [disparo] = c.registros
+    assert disparo["ref"] == "main" and disparo["healths"] == [("backend", "0.10.1")]
+    codigo, bot = c.merges[0]["main"], c.commits_do_bot[0]
+    assert disparo["registro"]["entrada"]["sha"] == codigo
+    assert c.main_remota() == bot and git(c.remoto, "rev-parse", f"{bot}^") == codigo
+    entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
+    assert entrada == disparo["registro"]["entrada"]
+    assert json.loads(c.na_main("docs/spec/deploy/state.json"))["last_run"]["sha"] == codigo
+    # o commit do bot é push na main: o build que o webhook dispara é cancelado
+    assert c.cancelamentos == [bot]
+    [registro] = linhas_com(capsys.readouterr().out, "registro:")
+    assert "Action pos-merge" in registro and bot[:8] in registro, registro
+    # o arquivo do registro é de quem dispara à mão; com o registro na main, sai
+    assert list(c.home.glob("registro-*")) == []
+
+
+def comando_do_registro(saida: str) -> list[str]:
+    [linha] = linhas_com(saida, "registro:")
+    return shlex.split(linha[linha.index("`") + 1:linha.rindex("`")])
+
+
+# A conclusão do run não basta: o que confirma é a entrada no history.json da main.
+@pytest.mark.parametrize("conclusao", ["failure", "pendente", "verde-sem-commit"],
+                         ids=["run-vermelho", "sem-fim", "run-verde-sem-registro"])
+def test_action_que_nao_confirma_sai_com_5_e_imprime_o_disparo_a_mao(tmp_path, monkeypatch, capsys, conclusao):
+    """Produção está certa: o rabo solta o semáforo e diz como disparar a
+    Action à mão com o mesmo registro, que fica num arquivo."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    monkeypatch.setattr(fo, "REGISTRO_POLL_S", 0)
+    monkeypatch.setattr(fo, "REGISTRO_TIMEOUT_S", 0)
+    c.action_do_registro = [conclusao]
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_REGISTRO
+
+    assert [m["pr"] for m in c.merges] == [7] and c.main_remota() == c.merges[0]["main"]
+    assert c.builds == ["backend"] and c.cancelamentos == []
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+    cmd = comando_do_registro(capsys.readouterr().out)
+    assert cmd[:5] == ["gh", "workflow", "run", "pos-merge.yml", "--ref"], cmd
+    # o comando impresso grava o mesmo registro
+    c.disparar_registro(cmd)
+    entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
+    assert entrada == c.registros[0]["registro"]["entrada"] and entrada["sha"] == c.merges[0]["main"]
+
+
+def test_run_do_registro_cancelado_na_fila_e_disparado_de_novo(tmp_path, monkeypatch):
+    """Um push que chega com o disparo na fila do grupo `pos-merge` cancela o
+    disparo: o rabo dispara de novo, e a entrada entra uma vez."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    monkeypatch.setattr(fo, "REGISTRO_POLL_S", 0)
+    c.action_do_registro = ["cancelled"]
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert [r["conclusao"] for r in c.registros] == ["cancelled", "success"]
+    deploys = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"]
+    assert [d["sha"] for d in deploys] == [c.merges[0]["main"]]
 
 
 @pytest.mark.parametrize("extra", [(), ("--sessao", "onda-x")], ids=["avulso", "onda"])
@@ -706,7 +797,7 @@ def test_registro_leva_so_history_e_state_sem_snapshot_nem_draft_do_manual(
     assert rodar_main(fo, monkeypatch, c, *extra) == 0
 
     assert c.scripts_chamados() == []
-    codigo, registro = c.merges[0]["main"], c.merges[1]["main"]
+    codigo, registro = c.merges[0]["main"], c.commits_do_bot[0]
     mudados = git(c.remoto, "diff", "--name-only", codigo, registro).splitlines()
     assert mudados == ["docs/spec/deploy/history.json", "docs/spec/deploy/state.json"], mudados
 
@@ -776,34 +867,42 @@ def test_pr_atras_da_main_entra_no_head_verde_sem_trazer_a_main_nem_ci_novo(
     assert "main trazida" not in merge, merge
 
 
-# O PR do lote entra no head que já estava verde (ADR 0064, decisão 2): o único
-# head que o rabo empurra e cujo CI ele espera é o do PR de registro.
+# O PR do lote entra no head que já estava verde (ADR 0064, decisão 2), e o
+# registro vai pela Action (decisão 6b): o único head que o rabo empurra e cujo
+# CI ele espera é o do PR `revert/<chave>`, depois de um rollback.
+
+def revert_depois_do_rollback(tmp_path: Path) -> Cenario:
+    c = pr_atras_da_main(tmp_path)
+    c.imagens_no_coolify("uuid-backend", IMAGEM_ANTERIOR)
+    c.health_ruim_em.add("0.10.1")
+    return c
+
 
 def test_ci_cancelado_sem_runner_e_repetido_e_o_pr_entra_quando_fica_verde(
     tmp_path, monkeypatch
 ):
     fo = carregar_fechar_onda()
-    c = pr_atras_da_main(tmp_path)
+    c = revert_depois_do_rollback(tmp_path)
     preparar(fo, monkeypatch, c)
     monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
     c.sem_runner = 2
 
-    assert rodar_main(fo, monkeypatch, c) == 0
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_ROLLBACK
 
     assert c.gh_chamadas.count(["run", "rerun", "555", "--failed"]) == 2
-    assert len(c.merges) == 2  # o código e o registro
+    assert [m["branch"] for m in c.merges] == ["feature", "revert/pr-7"]
 
 
-def test_sem_runner_esgotado_no_registro_sai_com_5_e_aponta_o_incidente_nao_o_codigo(
+def test_sem_runner_esgotado_no_revert_sai_com_4_e_aponta_o_incidente_nao_o_codigo(
     tmp_path, monkeypatch, capsys
 ):
     fo = carregar_fechar_onda()
-    c = pr_atras_da_main(tmp_path)
+    c = revert_depois_do_rollback(tmp_path)
     preparar(fo, monkeypatch, c)
     monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
     c.sem_runner = 99
 
-    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_REGISTRO
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_HEALTH
 
     assert c.gh_chamadas.count(["run", "rerun", "555", "--failed"]) == 3
     assert [m["pr"] for m in c.merges] == [7]
@@ -815,40 +914,16 @@ def test_cancelamento_que_nao_e_falta_de_runner_continua_ci_vermelho_sem_rerun(
     tmp_path, monkeypatch, capsys
 ):
     fo = carregar_fechar_onda()
-    c = pr_atras_da_main(tmp_path)
+    c = revert_depois_do_rollback(tmp_path)
     preparar(fo, monkeypatch, c)
     monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
     c.sem_runner = 99
     c.anotacao_do_cancelamento = "The operation was canceled."
 
-    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_REGISTRO
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_HEALTH
 
     assert ["run", "rerun", "555", "--failed"] not in c.gh_chamadas
     assert "CI vermelho" in capsys.readouterr().out
-
-
-def test_registro_que_nao_entra_sai_com_5_semaforo_solto_e_producao_intacta(
-    tmp_path, monkeypatch, capsys
-):
-    fo = carregar_fechar_onda()
-    c = pr_de_codigo(tmp_path)
-    preparar(fo, monkeypatch, c)
-    ver = c.ver_pr
-
-    def ver_com_ci_vermelho_no_registro(n, campos):
-        if c.prs[n]["headRefName"].startswith("registro/"):
-            c.ci_vermelho.add(c._tip(c.prs[n]["headRefName"]))
-        return ver(n, campos)
-
-    c.ver_pr = ver_com_ci_vermelho_no_registro
-
-    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_REGISTRO
-
-    assert [m["pr"] for m in c.merges] == [7]
-    assert c.main_remota() == c.merges[0]["main"]
-    assert c.builds == ["backend"] and c.cancelamentos == []
-    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
-    assert "#101" in capsys.readouterr().out
 
 
 def test_ruleset_antigo_deixa_o_pr_atras_de_fora_e_a_rodada_seguinte_sai_na_mesma_versao(
@@ -902,10 +977,9 @@ def test_onda_mergeia_pr_a_pr_em_ordem_com_um_build_so(tmp_path, monkeypatch):
     assert rodar_onda(fo, monkeypatch, c, [7, 8]) == 0
 
     assert c.pushes_na_main() == []
-    primeiro, segundo, registro = c.merges
+    primeiro, segundo = c.merges
     assert (primeiro["pr"], primeiro["branch"]) == (7, "feature")
     assert (segundo["pr"], segundo["branch"]) == (8, "feature-8")
-    assert registro["branch"].startswith("registro/"), registro["branch"]
     # em ordem, um squash por PR no próprio número
     assert git(c.remoto, "rev-parse", f"{segundo['main']}^") == primeiro["main"]
     assert git(c.remoto, "log", "-1", "--format=%s", primeiro["main"]).endswith("(#7)")
@@ -919,8 +993,8 @@ def test_onda_mergeia_pr_a_pr_em_ordem_com_um_build_so(tmp_path, monkeypatch):
     assert c.coolify() == [f"app rollback images uuid-backend --format json | main={c.base}",
                            f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
                            f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}"]
-    # um deploy cancelado (o do squash do #7, além do registro), um esperado (o do #8)
-    assert c.cancelamentos == [primeiro["main"], registro["main"]]
+    # um deploy cancelado (o do squash do #7, além do commit do bot), um esperado (o do #8)
+    assert c.cancelamentos == [primeiro["main"], c.commits_do_bot[0]]
     assert c.esperados == [segundo["main"]]
     assert c.tags == [("refs/tags/v0.10.1", segundo["main"])]
 
@@ -944,14 +1018,14 @@ def test_segundo_pr_com_merge_recusado_fica_de_fora_e_o_primeiro_sobe_com_saida_
 
     assert rodar_onda(fo, monkeypatch, c, [7, 8]) == fo.EXIT_MERGE
 
-    primeiro, registro = c.merges
-    assert primeiro["pr"] == 7 and registro["branch"].startswith("registro/"), c.merges
-    assert c.main_remota() == registro["main"]
+    [primeiro] = c.merges
+    assert primeiro["pr"] == 7 and len(c.registros) == 1, c.merges
+    assert c.main_remota() == c.commits_do_bot[0]
     assert c.prs[8]["state"] == "OPEN"
     # o build e o health do que entrou: o squash do #7 é o último, e o deploy dele roda
     assert c.esperados == [primeiro["main"]] and c.builds == ["backend"]
     assert c.healths == [("backend", "0.10.1")]
-    assert c.cancelamentos == [registro["main"]]
+    assert c.cancelamentos == [c.commits_do_bot[0]]
     assert c.tags == [("refs/tags/v0.10.1", primeiro["main"])]
     assert c.semaforo == [("pegar", "onda-x"), ("soltar", "onda-x")]
     entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
@@ -984,8 +1058,8 @@ def test_falha_inesperada_do_gh_no_segundo_pr_fica_de_fora_e_o_primeiro_sobe(
 
     assert rodar_onda(fo, monkeypatch, c, [7, 8]) == fo.EXIT_MERGE
 
-    primeiro, registro = c.merges
-    assert primeiro["pr"] == 7 and registro["branch"].startswith("registro/"), c.merges
+    [primeiro] = c.merges
+    assert primeiro["pr"] == 7 and len(c.registros) == 1, c.merges
     assert c.prs[8]["state"] == "OPEN"
     assert c.esperados == [primeiro["main"]] and c.healths == [("backend", "0.10.1")]
     assert c.semaforo == [("pegar", "onda-x"), ("soltar", "onda-x")]
@@ -1026,6 +1100,7 @@ def test_dry_run_da_onda_lista_um_merge_por_pr_sem_branch_de_lote(tmp_path, monk
     [faria] = linhas_com(saida, "faria:")
     assert re.findall(r"merge pela API do PR #(\d+)", faria) == ["7", "8"], faria
     assert "tag v0.10.1 no squash do ultimo" in faria and "um build" in faria, faria
+    assert "registro pela Action pos-merge" in faria and "PR so de docs" not in faria, faria
     assert "onda/" not in saida and "entrega" not in saida.lower(), saida
     # nada sai da máquina
     assert c.main_remota() == c.base and c.coolify() == [] and c.semaforo == []
@@ -1046,7 +1121,7 @@ def test_segundo_pr_em_conflito_com_o_primeiro_imprime_a_linha_que_chama_o_corre
 
     assert rodar_onda(fo, monkeypatch, c, [7, 8]) == fo.EXIT_MERGE
 
-    assert [m["pr"] for m in c.merges][0] == 7 and len(c.merges) == 2, c.merges
+    assert [m["pr"] for m in c.merges] == [7] and len(c.registros) == 1, c.merges
     assert c.na_main("hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
     # nada foi empurrado na branch do #8: o corretor rebaseia a partir dela
     assert c._tip("feature-8") == c.prs[8]["headRefOid"] and c.prs[8]["state"] == "OPEN"
@@ -1237,7 +1312,7 @@ def test_tag_que_falha_nao_para_o_deploy_e_diz_como_criar_depois(tmp_path, monke
 
     assert rodar_main(fo, monkeypatch, c) == 0
 
-    assert c.builds == ["backend"] and len(c.merges) == 2
+    assert c.builds == ["backend"] and len(c.merges) == 1 and len(c.commits_do_bot) == 1
     saida = capsys.readouterr().out
     assert "tag v0.10.1 falhou" in saida, saida
     assert f"ref=refs/tags/v0.10.1 -f sha={c.merges[0]['main']}" in saida, saida
@@ -1348,7 +1423,7 @@ def test_pr_misto_de_ferramenta_e_frontend_segue_o_fluxo_de_app(tmp_path, monkey
                            f"app env update uuid-frontend APP_VERSION --value 0.11.0 | main={c.base}"]
     assert c.tags == [("refs/tags/v0.11.0", c.merges[0]["main"])]
     assert c.builds == ["frontend"]
-    assert [m["pr"] for m in c.merges] == [7, 101] and c.merges[1]["branch"].startswith("registro/")
+    assert [m["pr"] for m in c.merges] == [7] and len(c.commits_do_bot) == 1
     entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
     assert entrada["app_version"] == "0.11.0" and entrada["sha"] == c.merges[0]["main"]
 
@@ -1833,7 +1908,7 @@ def test_rabo_espera_a_migration_aparecer_no_health_e_so_entao_pega_o_semaforo_e
     assert rodar_main(fo, monkeypatch, c) == 0
 
     # o merge saiu, como em qualquer PR de app
-    assert c.merges[0]["pr"] == 8  # depois dele, o PR de registro
+    assert [m["pr"] for m in c.merges] == [8]  # o registro vai pela Action, sem PR
     assert c.semaforo == [("pegar", "pr-8"), ("soltar", "pr-8")]
     # mas só depois de o /api/health do backend devolver a 112: o semáforo
     # (e com ele o APP_VERSION e o merge) não ficou preso durante a espera
@@ -1933,7 +2008,7 @@ def test_health_de_backend_anterior_ao_recibo_nao_prende_o_rabo(tmp_path, monkey
     assert rodar_main(fo, monkeypatch, c) == 0
 
     assert len(health.leituras) == 1
-    assert c.merges[0]["pr"] == 8  # depois dele, o PR de registro
+    assert [m["pr"] for m in c.merges] == [8]  # o registro vai pela Action, sem PR
     [aviso] = linhas_com(capsys.readouterr().out, "migration: o /api/health")
     assert "112" in aviso and "nao informa" in aviso, aviso
 
@@ -2046,7 +2121,7 @@ def test_onda_em_modo_imagem_so_retagueia_head_com_a_mesma_pasta_do_backend_do_s
 
     assert rodar_onda(fo, monkeypatch, c, [7, 8]) == 0
 
-    primeiro, segundo, _ = c.merges
+    primeiro, segundo = c.merges
     assert [(p["sha"], p["origens"]) for p in c.publicacoes] == [
         (segundo["main"], f"{primeiro['head']}@{digest_de(primeiro['head'])}")]
     assert segundo["head"] not in c.publicacoes[0]["origens"]

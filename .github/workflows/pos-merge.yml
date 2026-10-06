@@ -1,15 +1,18 @@
 name: Pós-merge
 
 # Snapshot e draft do Manual depois de cada push na main (ADR 0062, decisão
-# 10, emendada pela ADR 0065; issue #940). O rabo (fechar_onda.py) grava só a
-# verdade do deploy; o mapa factual (docs/spec/snapshots/, blocos AUTO do
-# docs/ARQUITETURA.md) e o draft das páginas do Manual saem daqui, com o
-# ambiente completo do backend.
+# 10, emendada pela ADR 0065; issue #940), e o registro do deploy que o rabo
+# dispara depois do health (ADR 0064, decisão 6b; issue #1000). O rabo
+# (fechar_onda.py) monta só a verdade do deploy e a entrega aqui; o
+# history.json e o state.json com ela, o mapa factual (docs/spec/snapshots/,
+# blocos AUTO do docs/ARQUITETURA.md) e o draft das páginas do Manual saem
+# daqui, com o ambiente completo do backend.
 #
 # Três jobs (ADR 0065). O `gerar` instala o backend e roda os scripts, sem
 # credencial nenhuma: token só de leitura, que nem fica no .git/config. O
 # `commitar` não instala nada: recebe por artefato só o patch dos três
-# caminhos e empurra direto na main com a deploy key, o único ator em
+# caminhos e dos dois JSONs do registro, confere estes contra o input do
+# rabo e empurra direto na main com a deploy key, o único ator em
 # `bypass_actors` do ruleset (.github/rulesets/main.json). A chave vive num
 # secret do Environment `pos-merge`, restrito à branch main.
 #
@@ -24,13 +27,24 @@ on:
     branches: [main]
     # O que a própria Action escreve. Push pela deploy key dispara workflow
     # (ao contrário do GITHUB_TOKEN): o [skip ci] do commit e este filtro
-    # impedem o loop. O merge que importa é o do PR de registro
-    # (docs/spec/deploy/), quando o history.json com a versão nova já está na
-    # main.
+    # impedem o loop.
     paths-ignore:
       - 'docs/spec/snapshots/**'
       - 'docs/ARQUITETURA.md'
       - 'docs/manual/src/content/docs/**'
+      - 'docs/spec/deploy/history.json'
+      - 'docs/spec/deploy/state.json'
+  # O registro do deploy (ADR 0064, decisão 6b): o fechar_onda.py termina no
+  # health e dispara este workflow na main com o registro, sem PR. O run grava
+  # os dois JSONs e, com a versão nova no history.json, tira o draft dos PRDs
+  # que subiram. O push do squash de código também acorda a Action, mas com o
+  # history.json de antes do health.
+  workflow_dispatch:
+    inputs:
+      registro:
+        description: 'JSON com "entrada" (a do history.json) e "state" (o state.json inteiro), do fechar_onda.py'
+        required: true
+        type: string
 
 permissions:
   contents: read
@@ -71,6 +85,16 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
+      - name: Aplicar o registro do deploy
+        # Só no run que o rabo dispara (ADR 0064, decisão 6b): a entrada nova
+        # vai para o topo do history.json e o state.json passa a ser o do
+        # registro, antes do draft, que lê o deploys[0]. O input entra por
+        # env e o script recusa tudo fora do esquema sem escrever nada.
+        if: ${{ github.event_name == 'workflow_dispatch' }}
+        env:
+          REGISTRO: ${{ inputs.registro }}
+        run: python3 tools/aplicar_registro.py
 
       # O tirar_draft_manual.py só tira o draft se a publicação for possível em
       # seguida: confere node >= 22.12, corepack e ffmpeg antes de escrever.
@@ -133,13 +157,15 @@ jobs:
         # mensagem e sem [skip ci]. Quem commita é o job de baixo.
         run: python3 .claude/skills/snapshot/scripts/snapshot.py --root . --no-commit
 
-      - name: Empacotar o patch dos três caminhos
-        # Roda mesmo com o snapshot vermelho: o draft tirado acima não se perde
-        # (o run fica vermelho do mesmo jeito). Patch, e não os arquivos: leva
-        # arquivo apagado e aplica sobre a ponta da main que o outro job vê.
+      - name: Empacotar o patch dos três caminhos e do registro
+        # Roda mesmo com o snapshot vermelho: o draft tirado acima e o registro
+        # não se perdem (o run fica vermelho do mesmo jeito). Patch, e não os
+        # arquivos: leva arquivo apagado e aplica sobre a ponta da main que o
+        # outro job vê.
         if: ${{ !cancelled() }}
         run: |
-          git add -A -- docs/spec/snapshots docs/ARQUITETURA.md docs/manual/src/content/docs
+          git add -A -- docs/spec/snapshots docs/ARQUITETURA.md docs/manual/src/content/docs \
+            docs/spec/deploy/history.json docs/spec/deploy/state.json
           git diff --cached --binary > "$RUNNER_TEMP/pos-merge.patch"
 
       - uses: actions/upload-artifact@v7
@@ -174,7 +200,11 @@ jobs:
         # Só entra o que a Action escreve, os mesmos caminhos do paths-ignore:
         # o --include descarta do patch qualquer outro caminho. [skip ci] no
         # assunto: o push da deploy key acorda workflow. O rebase pega o PR que
-        # entrou na main durante o run; sem ele o push seria recusado.
+        # entrou na main durante o run; sem ele o push seria recusado. O
+        # registro do run disparado pelo rabo entra por env, como no `gerar`:
+        # é com ele que os dois JSONs do patch são conferidos.
+        env:
+          REGISTRO: ${{ inputs.registro }}
         run: |
           patch="$RUNNER_TEMP/pos-merge/pos-merge.patch"
           if [ ! -s "$patch" ]; then
@@ -187,6 +217,8 @@ jobs:
             --include='docs/spec/snapshots/*' \
             --include='docs/ARQUITETURA.md' \
             --include='docs/manual/src/content/docs/*' \
+            --include='docs/spec/deploy/history.json' \
+            --include='docs/spec/deploy/state.json' \
             "$patch"
           # As checagens com awk saem pelo exit do próprio awk, e não por um
           # grep -q depois dele: com shell: bash, o encadeamento falha quando
@@ -210,8 +242,9 @@ jobs:
             exit 1
           fi
           # Nada nasce nem morre nos três caminhos: o snapshot.py só reescreve
-          # os arquivos do TARGET_FILES e os blocos AUTO do ARQUITETURA.md, e
-          # o draft só modifica página. Um CLAUDE.md ou uma skill dentro de
+          # os arquivos do TARGET_FILES e os blocos AUTO do ARQUITETURA.md, o
+          # draft só modifica página e o registro só os dois JSONs. Um
+          # CLAUDE.md ou uma skill dentro de
           # docs/spec/snapshots/ vira instrução de quem lê o snapshot, agente
           # sem humano incluído. O --include só olha o nome novo: um rename de
           # fora para dentro passaria e apagaria a origem. Sem renames, cada
@@ -219,10 +252,41 @@ jobs:
           # -a: no locale UTF-8 do runner, o GNU grep não imprime a linha com
           # nome que não é UTF-8 válido, e o arquivo sairia do fora (#1031).
           fora=$(git -c core.quotePath=false diff --cached --name-status --no-renames \
-            | LC_ALL=C grep -a -Ev '^M[[:space:]]+(docs/spec/snapshots/(ROTAS|ENTIDADES|SCHEMA|MIGRATIONS|INTEGRACOES)\.md|docs/ARQUITETURA\.md|docs/manual/src/content/docs/.+)$' || true)
+            | LC_ALL=C grep -a -Ev '^M[[:space:]]+(docs/spec/snapshots/(ROTAS|ENTIDADES|SCHEMA|MIGRATIONS|INTEGRACOES)\.md|docs/ARQUITETURA\.md|docs/spec/deploy/(history|state)\.json|docs/manual/src/content/docs/.+)$' || true)
           if [ -n "$fora" ]; then
             echo "::error::O patch cria, apaga ou toca arquivo que a Action não escreve: $fora"
             exit 1
+          fi
+          # O registro do deploy (ADR 0064, decisão 6b) só muda no run que o
+          # rabo dispara, e só para o que ele mandou: o history.json da main
+          # com a entrada do input no topo, as antigas iguais e na mesma
+          # ordem, e o state.json do input. O `gerar` roda pacote de terceiros
+          # depois de aplicar o registro: a conferência é contra o input, e
+          # não contra o que ele entregou. Token a token (o --stream do jq,
+          # que não junta nada): a igualdade de JSON do jq deixaria passar
+          # chave repetida (fica a última) e um valor a mais no fim do
+          # arquivo, texto que vai cru para a main (PR #1035).
+          deploy=docs/spec/deploy
+          registro=""
+          if ! git diff --cached --quiet -- "$deploy"; then
+            if [ -z "$REGISTRO" ]; then
+              echo "::error::O patch muda $deploy num run sem registro (só o run que o rabo dispara traz um): recusado."
+              exit 1
+            fi
+            tokens="$RUNNER_TEMP/registro-tokens"
+            mkdir -p "$tokens"
+            if ! jq -cn --slurpfile antes <(git show "HEAD:$deploy/history.json") \
+                  '$antes[0] | .deploys = [$ENV.REGISTRO | fromjson | .entrada] + .deploys | tostream' \
+                  > "$tokens/history-esperado" \
+                || ! jq -cn '$ENV.REGISTRO | fromjson | .state | tostream' > "$tokens/state-esperado" \
+                || ! git show ":$deploy/history.json" | jq -c --stream . > "$tokens/history" \
+                || ! git show ":$deploy/state.json" | jq -c --stream . > "$tokens/state" \
+                || ! cmp -s "$tokens/history-esperado" "$tokens/history" \
+                || ! cmp -s "$tokens/state-esperado" "$tokens/state"; then
+              echo "::error::O history.json ou o state.json do patch não é o registro que o rabo mandou: recusado."
+              exit 1
+            fi
+            registro="registro v$(jq -nr '$ENV.REGISTRO | fromjson | .entrada.app_version'), "
           fi
           troca='
             function apara(s) { gsub(/^[ \t\r]+|[ \t\r]+$/, "", s); return s }
@@ -244,7 +308,7 @@ jobs:
             echo "O patch não toca os caminhos da Action: nada a commitar."
             exit 0
           fi
-          git commit -q -m "chore(spec): snapshot e draft do Manual pós-merge $(git rev-parse --short HEAD) [skip ci]"
+          git commit -q -m "chore(spec): ${registro}snapshot e draft do Manual pós-merge $(git rev-parse --short HEAD) [skip ci]"
           git pull --rebase -q origin main
           git push -q origin HEAD:main
 

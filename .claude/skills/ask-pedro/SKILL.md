@@ -48,7 +48,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 
 ## Invariantes (não re-litigar)
 
-- **Subir para prod não espera humano, exceto migration** (ADR 0068): o gate é CI, revisores agentes, health e rollback automático. O `/ship` e o fechamento da onda rodam o rabo (`fechar_onda.py`) sozinhos; ele faz o merge pela API (a `main` é protegida), o deploy e o registro num PR só de docs. O humano só é chamado por notificação em migration, em fatia que esgotou as 3 tentativas e em rollback. Cada sócio sobe o próprio PR (ADR 0068).
+- **Subir para prod não espera humano, exceto migration** (ADR 0068): o gate é CI, revisores agentes, health e rollback automático. O `/ship` e o fechamento da onda rodam o rabo (`fechar_onda.py`) sozinhos; ele faz o merge pela API (a `main` é protegida), o deploy e o registro, que a Action pós-merge grava na `main` sem PR. O humano só é chamado por notificação em migration, em fatia que esgotou as 3 tentativas e em rollback. Cada sócio sobe o próprio PR (ADR 0068).
 - ADRs: consuma só `status: accepted`; supersessão bidirecional travada pelo CI `lint-adr`.
 - Estado vive nas GitHub Issues + `docs/spec/deploy/*.json`; proibido criar docs paralelos de estado/processo.
 - Nada de travessão nem meia-risca em texto visível ao usuário (ADR 0013).

@@ -153,7 +153,7 @@ $S status                                # quem segura e há quanto tempo
 
 ## Modo `ship` (default, sem argumento)
 
-O caminho para produção é um só, o `fechar_onda.py` (ADR 0061): versão nova pelo tipo dos commits, sem commit (issue #967), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida), tag `vX.Y.Z` no squash, um build, health com conferência de versão e registro num PR só de docs, para um PR avulso ou para o lote de uma onda. Este modo não executa passo nenhum: imprime o comando e sai.
+O caminho para produção é um só, o `fechar_onda.py` (ADR 0061): versão nova pelo tipo dos commits, sem commit (issue #967), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida), tag `vX.Y.Z` no squash, um build, health com conferência de versão e registro gravado pela Action pós-merge, sem PR, para um PR avulso ou para o lote de uma onda. Este modo não executa passo nenhum: imprime o comando e sai.
 
 ```bash
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <N>

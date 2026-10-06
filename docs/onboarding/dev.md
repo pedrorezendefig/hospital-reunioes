@@ -92,8 +92,8 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo /ship ou pelo fechament
   --prs <N>        migration nova no /api/health → semáforo → versão nova sem commit → CI verde
                    → APP_VERSION no backend e no frontend → merge pela API (squash) → tag vX.Y.Z
                    → um build → health com version-match
-                   → registro num PR só de docs: state.json + history.json (ADR 0062)
-                   (snapshot e draft do Manual: Action pos-merge.yml no push da main, depois do registro)
+                   → registro pela Action pos-merge.yml, sem PR: state.json + history.json (ADR 0064)
+                   (no mesmo run da Action: snapshot e draft do Manual, depois do registro)
                    (Manual no ar: /manual publicar, da máquina com os MP4; a Action só avisa no PRD)
                    (migration nova: o script confere o sha256, imprime o arquivo para colar no
                     Studio e espera o número dela no /api/health; 24 h sem ele, sai com 7)
@@ -132,12 +132,12 @@ A `main` é protegida por ruleset (ADR 0061, emenda de 02/10/2026): nenhuma pess
 
 1. **Código.** A versão nova sai do tipo dos commits e não vira commit (issue #967): o `package.json` fica congelado. O seu PR entra como está, no próprio número (na onda, cada PR do lote do mesmo jeito, em ordem, ADR 0064). O script espera o CI verde, põe o `APP_VERSION` no backend e no frontend do Coolify, mergeia pela API do GitHub, com squash, e cria a tag `vX.Y.Z` no squash do último PR. PR da onda que não entra (conflito, CI vermelho) fica de fora sozinho.
 2. **Build e health** do que entrou: um build só, o do último squash; o script cancela o dos intermediários.
-3. **Registro.** `history.json` e `state.json` sobem num **PR só de docs** que o próprio script abre e mergeia pela API depois do health. Snapshot e draft do Manual não são do rabo (ADR 0062). O CI desse PR pula os jobs pesados e fica verde em segundos, e o build que o Coolify dispara para ele é cancelado pelo script.
-4. **Snapshot e draft do Manual.** O merge do registro dispara a Action `.github/workflows/pos-merge.yml` (ela roda em todo push na `main`, mas é esse que traz a versão nova no `history.json`). Um job sem credencial monta o backend como o CI, roda o `snapshot.py` e o `tirar_draft_manual.py` com os PRDs do último deploy e passa o patch por artefato; outro, com a deploy key, aplica só os três caminhos e, se houver diff, commita direto na `main` como `github-actions[bot]`, com `[skip ci]`. Ninguém roda nada na própria máquina. A Action não publica o Manual (issue #951): o resumo do run lista as páginas que saíram do draft e as que ficaram (página com Vídeo de tarefa, porque o MP4 não vem no clone), e um terceiro job, só com `issues: write`, deixa esse aviso no PRD fechado, uma vez por deploy.
+3. **Registro.** Depois do health, o script monta a entrada nova do `history.json` e o `state.json` e dispara a Action `.github/workflows/pos-merge.yml` na `main` (`workflow_dispatch`), com os dois no input `registro`, sem PR (ADR 0064, decisão 6b). Ele só sai quando vê a entrada no `history.json` da `main`, e cancela o build que o Coolify dispara para o commit do bot. Snapshot e draft do Manual não são do rabo (ADR 0062).
+4. **Snapshot e draft do Manual.** A Action roda em todo push na `main`, mas é o run do registro que traz a versão nova no `history.json`. Um job sem credencial valida o registro e o aplica aos dois JSONs, monta o backend como o CI, roda o `snapshot.py` e o `tirar_draft_manual.py` com os PRDs do último deploy e passa o patch por artefato; outro, com a deploy key, aplica só os três caminhos e os dois JSONs (conferidos contra o registro do input) e, se houver diff, commita direto na `main` como `github-actions[bot]`, com `[skip ci]`. Ninguém roda nada na própria máquina. A Action não publica o Manual (issue #951): o resumo do run lista as páginas que saíram do draft e as que ficaram (página com Vídeo de tarefa, porque o MP4 não vem no clone), e um terceiro job, só com `issues: write`, deixa esse aviso no PRD fechado, uma vez por deploy.
 
 **Depois do deploy que fecha PRD com Fatia de manual, o Manual no ar é com você.** Rode `/manual publicar` de uma máquina com os MP4 dos Vídeos de tarefa: ele tira o draft das páginas com vídeo (`tirar_draft_manual.py` com os PRDs do aviso), republica o site na Vercel (`https://manual-hsm.vercel.app`) e leva a troca do draft à `main` por PR. O aviso da Action no PRD é o lembrete; o registro do link fica em comentário no mesmo PRD.
 
-Saída 5 do script: produção ok, mas o PR de registro não entrou. Mergeie o PR que ele imprime quando o CI dele ficar verde.
+Saída 5 do script: produção ok, mas a Action não confirmou o registro em 15 min. A linha `registro:` traz o comando para disparar à mão com o mesmo arquivo (`gh workflow run pos-merge.yml --ref main -F registro=@<arquivo>`).
 
 O ruleset está versionado em `.github/rulesets/main.json`, com a deploy key (`actor_type: DeployKey`) como único ator em `bypass_actors`; o `tools/test_ruleset_main.py` reprova pessoa, equipe, papel ou integration ali. O tipo `DeployKey` vale para toda deploy key do repo, então o repo tem uma só com escrita, a da Action. Antes de aplicar, o admin cria na tela do GitHub (uma vez): a deploy key com escrita (Settings, Deploy keys), o Environment `pos-merge` com "Deployment branches" só na `main` (Settings, Environments) e, nele, o secret `POS_MERGE_DEPLOY_KEY` com a chave privada. Aplicar e conferir:
 
@@ -179,7 +179,7 @@ Sem Discord, sem Slack.
 | `/pegar-issue` | Sem arg: lista a fila. Com `<N>`: claim + branch + spec |
 | `/tdd` | Red → green → refactor (testes a partir dos critérios de aceite) |
 | `/ship` | Commit → PR → 3 gates → com o PR verde, roda o rabo sozinho |
-| `fechar_onda.py --prs <N>` | O rabo único: versão sem commit, APP_VERSION nos dois apps, merge pela API, tag, um build, health, registro em PR só de docs (ADR 0061) |
+| `fechar_onda.py --prs <N>` | O rabo único: versão sem commit, APP_VERSION nos dois apps, merge pela API, tag, um build, health, registro gravado pela Action pós-merge, sem PR (ADR 0061, ADR 0064) |
 | `/deploy status` | Ver estado de produção (sem alterar) |
 | `/deploy rollback` | Reverte produção pro deploy anterior |
 | `/diagnose` | Investigação raiz de bug |

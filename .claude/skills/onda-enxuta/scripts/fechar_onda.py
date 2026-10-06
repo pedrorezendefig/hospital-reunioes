@@ -24,9 +24,9 @@ mover codigo para fora de `hospital-reunioes/` conta como app. Classe, versao
 e servicos saem do lote inteiro, antes do primeiro merge.
   - app: a sequencia inteira abaixo.
   - ferramenta: so merge pela API depois do CI verde (passos 1 a 4 e 9). Sem
-    versao nova, sem APP_VERSION, sem tag, sem esperar build, sem health, sem PR de
-    registro e sem entrada no history.json. Se o webhook do Coolify disparar
-    build em algum merge, o rabo o cancela, como faz com o build do registro.
+    versao nova, sem APP_VERSION, sem tag, sem esperar build, sem health e sem
+    registro (nenhuma entrada no history.json). Se o webhook do Coolify disparar
+    build em algum merge, o rabo o cancela, como faz com o do commit do registro.
 
 Sequencia (cada passo imprime no maximo uma linha, o 4 uma por PR; sucesso
 cabe em 10 linhas mais uma por PR, fora as da migration):
@@ -89,18 +89,25 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      Com prod de volta e ainda com a trava (issue #999): reabre cada issue do
      lote e mergeia pela API o PR `revert/<chave>` com o revert dos squashes,
      depois do CI dele, cancelando o build que esse merge dispara
-  8. registro num PR so de docs, so com history.json (todos os deploys, sem
-     teto) e state.json (ADR 0062, decisao 9), mergeado pela API; o build que o
-     webhook do Coolify dispara para ele e cancelado (issue #851). Snapshot e
-     draft do Manual nao sao do rabo: a Action do push da main roda os dois
-     depois do registro (ADR 0062, decisao 10)
+  8. registro sem PR (ADR 0064, decisao 6b): o rabo monta a entrada nova do
+     history.json (todos os deploys, sem teto) e o state.json (ADR 0062,
+     decisao 9), grava os dois num arquivo `~/registro-<chave>-<sha>.json` e
+     dispara a Action pos-merge na main por workflow_dispatch, com o arquivo
+     no input `registro`. Ela commita os dois JSONs na main pela deploy key,
+     como github-actions[bot], e no mesmo run tira o draft do Manual dos PRDs
+     do lote e roda o snapshot (ADR 0062, decisao 10). O rabo espera a entrada
+     aparecer no history.json da main, e nao so o fim do run: um push que
+     chega com o disparo na fila do grupo pos-merge o cancela, e o rabo
+     dispara de novo. O build que o webhook do Coolify dispara para o commit do
+     bot e cancelado (issue #851)
   9. limpeza (worktrees, worktrees de agente ja entregues) e soltar o semaforo
 
 Commits que chegam a main:
   - um squash por PR que entrou, "<titulo do PR> (#N)", no PR avulso e na onda;
     a versao nao vira commit: vive no APP_VERSION do Coolify e na tag
-  - o do registro: "chore(deploy): registro do PR #N (vX.Y.Z) (#R)" ou
-    "chore(deploy): registro da onda <sessao> (vX.Y.Z) (#R)"
+  - o do bot da Action pos-merge, com o registro, o snapshot e o draft do
+    Manual: "chore(spec): registro vX.Y.Z, snapshot e draft do Manual
+    pos-merge <sha> [skip ci]"
 No PR avulso, o registro do history.json nomeia PR e issue, sem a onda; na
 onda, cada PR e a issue dele. O campo `sha` do history.json e o do squash do
 ultimo PR: o commit que foi para producao. O registro vem depois, so com docs.
@@ -122,9 +129,12 @@ Codigos de saida:
      imagem anterior, Coolify recusou, ou health ainda ruim), ou o rollback deu
      certo e o revert da saida 6 nao entrou (conflito, CI vermelho ou merge
      recusado): SEMAFORO FICA PRESO e marcado parado, mesma instrucao do 3
-  5  producao ok, mas o PR de registro nao entrou: semaforo solto; mergeie o PR impresso
-     quando o CI dele ficar verde. Ferramenta: merge feito, producao intacta,
-     semaforo solto, mas a arrumacao depois do merge falhou (a linha diz o que falta)
+  5  producao ok, mas a Action nao confirmou o registro em REGISTRO_TIMEOUT_S
+     (15 min) ou o run dela terminou sem ele na main: semaforo solto; a linha
+     `registro:` traz o disparo a mao com o mesmo arquivo, `gh workflow run
+     pos-merge.yml --ref main -F registro=@<arquivo>`. Ferramenta: merge feito,
+     producao intacta, semaforo solto, mas a arrumacao depois do merge falhou
+     (a linha diz o que falta)
   6  rollback feito: o health falhou, a imagem anterior e o APP_VERSION antigo
      voltaram e o health ficou verde de novo; sem registro. A tag vX.Y.Z fica no
      squash ruim, e a proxima versao sai depois dela. Antes de soltar o semaforo,
@@ -208,12 +218,14 @@ CHECKS_POLL_S = 15
 CHECKS_TIMEOUT_S = 40 * 60
 HEAD_ATRASADO_S = 120  # o GitHub registra o push no PR em segundos
 REGISTRO_JANELA_S = 90  # o webhook do Coolify dispara em segundos
+POS_MERGE_WORKFLOW = "pos-merge.yml"  # grava o registro na main pela deploy key (ADR 0064, decisao 6b)
+REGISTRO_TIMEOUT_S = 15 * 60  # o run do push do squash na fila do grupo pos-merge, mais o do registro
+REGISTRO_POLL_S = 15
 MIGRACAO_TIMEOUT_S = 24 * 60 * 60  # teto da espera pela migration colada no Studio (issue #969)
 MIGRACAO_POLL_S = 60
 SEM_CAMPO = "sem-campo"  # o /api/health no ar e anterior ao #969: nao informa a migration
 VERDE = ("SUCCESS", "NEUTRAL", "SKIPPED")
 VERMELHO = ("FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE", "STALE", "ERROR")
-COAUTHOR = "Co-Authored-By: Claude Fable 5.1 <noreply@anthropic.com>"
 
 # Windows: "bash" nu no subprocess cai no System32 (WSL) antes do PATH.
 BASH = shutil.which("bash") or "bash"
@@ -249,10 +261,6 @@ def gh_json(args: list[str], cwd: Path | None = None):
 
 def ler_json(path: Path):
     return json.loads(path.read_text(encoding="utf-8"))
-
-
-def escrever_json(path: Path, data) -> None:
-    path.write_text(json.dumps(data, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def agora_iso() -> str:
@@ -766,19 +774,19 @@ def rotulo_issues(info: dict) -> str:
     return ("issue " if len(nums) == 1 else "issues ") + " ".join(f"#{n}" for n in nums)
 
 
-def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | None,
-                      sha_codigo: str, prds: list[int], migs: list[str], servicos: list[str],
-                      duracoes: dict[str, int | None], healths: dict[str, dict], resultado: str,
-                      com_app_version: list[str], avulso: bool = False,
-                      digests: dict[str, str | None] | None = None) -> None:
-    """A verdade do deploy que o GitHub nao tem (ADR 0062, decisao 9): history.json,
-    com todos os deploys, e state.json. App em modo imagem leva o digest do que
-    foi para o ar (`last_deploy_digest`): e o que o rollback confere no GHCR."""
-    history = ler_json(wt / HISTORY)
-    state = ler_json(wt / STATE)
+def montar_registro(state: dict, sessao: str, infos: list[dict], versao: str | None,
+                    sha_codigo: str, prds: list[int], migs: list[str], servicos: list[str],
+                    duracoes: dict[str, int | None], healths: dict[str, dict], resultado: str,
+                    com_app_version: list[str], avulso: bool = False,
+                    digests: dict[str, str | None] | None = None) -> dict:
+    """A verdade do deploy que o GitHub nao tem (ADR 0062, decisao 9), como a
+    Action pos-merge a recebe (ADR 0064, decisao 6b): a entrada nova do
+    history.json, que guarda todos os deploys, e o `state` (o state.json da main,
+    atualizado). App em modo imagem leva o digest do que foi para o ar
+    (`last_deploy_digest`): e o que o rollback confere no GHCR."""
     when = agora_iso()
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
-    como = "Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    como = "Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health."
     if avulso:
         # PR avulso (ADR 0061): o registro nomeia PR e issue, e a palavra onda nao aparece.
         pr = infos[0]
@@ -808,9 +816,6 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
         "rollback_target_sha": None,
         "notes": notes,
     }
-    deploys = history.setdefault("deploys", [])
-    deploys.insert(0, entrada)
-    escrever_json(wt / HISTORY, history)
 
     modo = "pr-avulso" if avulso else "onda-enxuta"
     state["updated_at"] = when
@@ -833,17 +838,59 @@ def escrever_registro(wt: Path, sessao: str, infos: list[dict], versao: str | No
     state["last_run"] = {"mode": modo, "sha": sha_codigo, "result": resultado,
                          "duration_seconds": int(time.time() - T0)}
     state.pop("next_actions", None)
-    escrever_json(wt / STATE, state)
+    return {"entrada": entrada, "state": state}
 
 
-def commitar(wt: Path, msg: str, paths: list[str]) -> str:
-    existentes = [p for p in paths if (wt / p).exists()]
-    if existentes:
-        run(["git", "add", "--", *existentes], cwd=wt)
-    if not run(["git", "status", "--porcelain"], cwd=wt).stdout.strip():
-        return run(["git", "rev-parse", "--short=8", "HEAD"], cwd=wt).stdout.strip()
-    run(["git", "commit", "-q", "-m", msg, "-m", COAUTHOR], cwd=wt)
-    return run(["git", "rev-parse", "--short=8", "HEAD"], cwd=wt).stdout.strip()
+def commit_do_registro(raiz: Path, entrada: dict) -> str | None:
+    """O commit da main que trouxe a `entrada` ao history.json, ou None se ela
+    ainda nao esta la. So o bot da Action escreve o history.json."""
+    run(["git", "fetch", "-q", "origin", "main"], cwd=raiz, check=False)
+    proc = run(["git", "show", f"origin/main:{HISTORY}"], cwd=raiz, check=False)
+    try:
+        deploys = json.loads(proc.stdout).get("deploys") or []
+    except (json.JSONDecodeError, AttributeError):
+        return None
+    if entrada not in deploys:
+        return None
+    return run(["git", "log", "-1", "--format=%H", "origin/main", "--", HISTORY], cwd=raiz).stdout.strip()
+
+
+def runs_do_registro(raiz: Path) -> list[dict]:
+    return gh_json(["run", "list", "--workflow", POS_MERGE_WORKFLOW, "--branch", "main",
+                    "--event", "workflow_dispatch", "--limit", "20",
+                    "--json", "databaseId,status,conclusion"], cwd=raiz) or []
+
+
+def registrar_pela_action(raiz: Path, arquivo: Path, entrada: dict) -> str:
+    """Dispara a Action pos-merge na main com o registro do `arquivo` (ADR 0064,
+    decisao 6b) e espera a `entrada` no history.json da main. Devolve o sha do
+    commit do bot. A conclusao do run nao basta: no grupo de concorrencia
+    `pos-merge` um push que chega com o disparo na fila o cancela, e o rabo
+    dispara de novo. Run que termina de outro jeito sem o registro na main, e o
+    teto, levantam RuntimeError."""
+    limite = time.time() + REGISTRO_TIMEOUT_S
+    while True:
+        antes = {r.get("databaseId") for r in runs_do_registro(raiz)}
+        proc = run(["gh", "workflow", "run", POS_MERGE_WORKFLOW, "--ref", "main", "-F", f"registro=@{arquivo}"],
+                   cwd=raiz, check=False)
+        if proc.returncode != 0:
+            raise RuntimeError(f"o gh recusou o disparo ({(proc.stderr or proc.stdout).strip()[:160]})")
+        while True:
+            try:
+                novo = next((r for r in runs_do_registro(raiz) if r.get("databaseId") not in antes), None)
+            except RuntimeError:
+                novo = None  # um 502 no polling nao derruba o registro
+            sha = commit_do_registro(raiz, entrada)  # depois do run: o push vem antes do fim dele
+            if sha:
+                return sha
+            if novo and (novo.get("status") or "").lower() == "completed":
+                if (novo.get("conclusion") or "").lower() == "cancelled":
+                    break
+                raise RuntimeError(f"o run {novo.get('databaseId')} da Action terminou "
+                                   f"{(novo.get('conclusion') or '?').lower()} sem o registro na main")
+            if time.time() >= limite:
+                raise RuntimeError(f"a Action nao confirmou o registro em {REGISTRO_TIMEOUT_S // 60} min")
+            time.sleep(REGISTRO_POLL_S)
 
 
 # ------------------------------------------------------------------ coolify
@@ -1440,7 +1487,6 @@ def main() -> int:
         return EXIT_MIGRACAO
 
     wt = None
-    wt_reg = None
     semaforo_pego = False
     mergeados: list[tuple[dict, str, float]] = []  # (PR, squash na main, hora do merge)
     de_fora: list[int] = []
@@ -1499,7 +1545,7 @@ def main() -> int:
                 print(faria + ("cancela o build dos squashes intermediarios, " if len(infos) > 1 else "")
                       + f"tag v{versao_nova} no squash do ultimo, um build"
                       + "".join(f" ({sid}: imagem do GHCR com a tag do squash, sem build)" for sid in imagem)
-                      + ", health, registro em PR so de docs "
+                      + ", health, registro pela Action pos-merge na main "
                       f"(prds {prds or '[]'}, migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
             remover_worktree(raiz, wt)
             wt = None
@@ -1665,39 +1711,30 @@ def main() -> int:
         vm = " (version match)" if versao_nova else ""
         print(f"health: ok{vm}")
 
-        # registro: so depois do health, num PR so de docs (o CI pula os jobs pesados).
-        # Daqui em diante producao esta certa: falha aqui e codigo 5, nunca o 3.
-        pr_reg = None
+        # registro: so depois do health, pela Action pos-merge na main, sem PR (ADR 0064,
+        # decisao 6b). Daqui em diante producao esta certa: falha aqui e codigo 5, nunca o 3.
+        arquivo_reg = Path.home() / f"registro-{args.sessao}-{sha_main[:8]}.json"
         try:
             run(["git", "fetch", "-q", "origin", "main"], cwd=raiz)
-            wt_reg = criar_worktree(raiz, f"{args.sessao}-registro")
             heads = {i.get("head_conferido") for i in lote}
             migs = [Path(c).name for h, c in novas if h in heads]
-            escrever_registro(wt_reg, args.sessao, lote, versao_nova, sha_main, prds_do_lote(raiz, lote), migs,
-                              servicos, duracoes, healths, "healthy", com_app_version, avulso, digests)
-            do_lote = f"do PR {entraram}" if avulso else f"da onda {args.sessao}"
-            titulo_reg = f"chore(deploy): registro {do_lote} (v{versao})"
-            commitar(wt_reg, titulo_reg, [HISTORY, STATE])
-            pr_reg, head_reg = entregar(raiz, wt_reg, f"registro/{args.sessao}-{sha_main[:8]}", None, titulo_reg,
-                                        "<!-- automacao -->\nRegistro do deploy de producao (history.json e "
-                                        "state.json), aberto e mergeado pelo `fechar_onda.py` depois do health "
-                                        "(ADR 0061). Snapshot e draft do Manual sao da Action do push da main "
-                                        "(ADR 0062). So docs.\n")
-            sha_reg = mergear_pela_api(raiz, pr_reg, head_reg, f"{titulo_reg} (#{pr_reg})")
+            registro = montar_registro(json.loads(run(["git", "show", f"origin/main:{STATE}"], cwd=raiz).stdout),
+                                       args.sessao, lote, versao_nova, sha_main, prds_do_lote(raiz, lote), migs,
+                                       servicos, duracoes, healths, "healthy", com_app_version, avulso, digests)
+            arquivo_reg.write_text(json.dumps(registro, ensure_ascii=False), encoding="utf-8")
+            sha_reg = registrar_pela_action(raiz, arquivo_reg, registro["entrada"])
         except Exception as e:  # noqa: BLE001
-            if wt_reg:
-                remover_worktree(raiz, wt_reg)
             semaforo(raiz, "soltar", args.sessao)
-            falta = (f"mergeie o PR #{pr_reg} quando o CI dele ficar verde" if pr_reg
-                     else f"o registro nao virou PR; registre a mao o merge {sha_main[:8]} (v{versao})")
+            falta = (f"dispare a Action a mao, com o mesmo registro: `gh workflow run {POS_MERGE_WORKFLOW} "
+                     f"--ref main -F registro=@{arquivo_reg.as_posix()}`" if arquivo_reg.exists()
+                     else f"o registro nao foi montado; registre a mao o merge {sha_main[:8]} (v{versao})")
             print(f"registro: {e}. Producao ok e semaforo solto; {falta}.")
             return EXIT_REGISTRO
+        arquivo_reg.unlink(missing_ok=True)
         cancelados = cancelar_build_do_registro(servicos_cfg, sha_reg)
-        print(f"registro: PR #{pr_reg} so de docs na main ({sha_reg[:8]})"
-              + (f", build do registro cancelado ({', '.join(cancelados)})" if cancelados else ""))
+        print(f"registro: pela Action pos-merge na main ({sha_reg[:8]})"
+              + (f", build do commit do bot cancelado ({', '.join(cancelados)})" if cancelados else ""))
 
-        remover_worktree(raiz, wt_reg)
-        wt_reg = None
         n_wt = limpar_worktrees_de_agente(raiz, {i["headRefName"]: i.get("headRefOid") for i in lote})
         semaforo(raiz, "soltar", args.sessao)
         semaforo_pego = False
@@ -1709,9 +1746,8 @@ def main() -> int:
         raise
     except Exception as e:  # noqa: BLE001
         print(f"erro: {e}")
-        for w in (wt, wt_reg):
-            if w:
-                remover_worktree(raiz, w)
+        if wt:
+            remover_worktree(raiz, wt)
         if mergeados:
             return parar_a_trava(raiz, args.sessao, f"o merge ja aconteceu. Semaforo preso na chave {args.sessao}: "
                                  f"confira o Coolify e o health, depois `semaforo.sh soltar {args.sessao}` ou "
