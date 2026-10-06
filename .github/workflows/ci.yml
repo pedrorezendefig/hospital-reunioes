@@ -20,17 +20,24 @@ on:
 
 jobs:
   mudancas:
-    name: Mudanças fora de docs
+    name: Partes que o PR muda
     runs-on: ubuntu-latest
     outputs:
-      codigo: ${{ steps.diff.outputs.codigo }}
+      backend: ${{ steps.diff.outputs.backend }}
+      frontend: ${{ steps.diff.outputs.frontend }}
+      ferramenta: ${{ steps.diff.outputs.ferramenta }}
     steps:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0
-      - name: O PR muda algo fora de docs/, .claude/ e Markdown?
-        # Mesma regra do paths-ignore do push e do docs-only do fechar_onda.py.
-        # Se o git diff falhar, o passo falha e os jobs rodam (ver o if deles).
+      - name: O PR muda backend, frontend ou ferramenta?
+        # Cada job pesado roda só com a parte dele (PRD #963, decisão 4):
+        # backend com backend/ ou supabase/, frontend com frontend/, build com
+        # qualquer um dos dois. Ferramenta é o que fica fora de
+        # hospital-reunioes/, a mesma fronteira do rabo (fechar_onda.py);
+        # nenhum job daqui a consome, porque os testes de tools/ rodam no
+        # manual.yml. Se o git diff falhar, o passo falha e os jobs rodam (ver
+        # o if deles).
         id: diff
         env:
           EVENTO: ${{ github.event_name }}
@@ -38,24 +45,32 @@ jobs:
           HEAD_SHA: ${{ github.event.pull_request.head.sha }}
         run: |
           if [ "$EVENTO" != "pull_request" ]; then
-            echo "codigo=true" >> "$GITHUB_OUTPUT"
+            printf 'backend=true\nfrontend=true\nferramenta=true\n' >> "$GITHUB_OUTPUT"
             exit 0
           fi
-          # --no-renames: num rename o diff lista só o caminho novo, e mover
-          # código para docs/ pularia os checks obrigatórios.
-          arquivos="$(git diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA")"
-          if printf '%s\n' "$arquivos" | grep -qvE '^(docs/|\.claude/)|\.md$'; then
-            echo "codigo=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "codigo=false" >> "$GITHUB_OUTPUT"
+          # --no-renames: num rename o diff lista só o caminho novo, e tirar
+          # código do backend ou do frontend pularia o job dele.
+          # core.quotePath=false: no padrão o git põe entre aspas caminho com
+          # acento, e nenhum ^hospital-reunioes/ casaria (pularia os jobs).
+          arquivos="$(git -c core.quotePath=false diff --no-renames --name-only "$BASE_SHA...$HEAD_SHA")"
+          muda() { printf '%s\n' "$arquivos" | grep -qE "$1"; }
+          backend=false; frontend=false; ferramenta=false
+          if muda '^hospital-reunioes/(backend|supabase)/'; then backend=true; fi
+          if muda '^hospital-reunioes/frontend/'; then frontend=true; fi
+          if printf '%s\n' "$arquivos" | grep -qv '^hospital-reunioes/'; then ferramenta=true; fi
+          # Mexeu no próprio CI, o diff veio vazio, ou um caminho continua entre
+          # aspas (aspa, barra invertida, caractere de controle): roda tudo.
+          if [ -z "$arquivos" ] || muda '^\.github/workflows/' || muda '^"'; then
+            backend=true; frontend=true
           fi
+          printf 'backend=%s\nfrontend=%s\nferramenta=%s\n' "$backend" "$frontend" "$ferramenta" >> "$GITHUB_OUTPUT"
 
   backend:
     name: Backend Lint, Format & Tests
     needs: mudancas
     # Pulado por if = verde no ruleset. Detector quebrado roda o job: pular o
     # CI de um PR de código por erro do detector passaria pelo ruleset sem teste.
-    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.codigo == 'true') }}
+    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.backend == 'true') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -124,7 +139,7 @@ jobs:
   frontend-lint:
     name: Frontend Lint & Type Check
     needs: mudancas
-    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.codigo == 'true') }}
+    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.frontend == 'true') }}
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -154,7 +169,7 @@ jobs:
   build:
     name: Docker Build (sanity)
     needs: mudancas
-    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.codigo == 'true') }}
+    if: ${{ !cancelled() && (needs.mudancas.result != 'success' || needs.mudancas.outputs.backend == 'true' || needs.mudancas.outputs.frontend == 'true') }}
     runs-on: ubuntu-latest
     # Sanity check: garante que os 2 Dockerfiles ainda buildam.
     # NAO faz push — Coolify cuida do build de producao via webhook do GitHub App.
