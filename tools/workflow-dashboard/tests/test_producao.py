@@ -60,6 +60,250 @@ def test_coletor_le_da_origin_main_so_o_history_e_o_state_e_nao_tem_changelog(mo
     assert not hasattr(collect, "_parse_changelog")
 
 
+# ---------- front: o app.js inteiro no Node ----------
+
+
+def _deploy(versao, sha, *, at, prs=(), issues=(), result="healthy", dur=120, migrations=(), notes="", env=()):
+    """Deploy no shape do history.json, já correlacionado pelo coletor."""
+    return {
+        "at": at,
+        "sha": sha,
+        "app_version": versao,
+        "subject": f"onda da {versao or sha}",
+        "raw_subject": "chore(deploy): registro",
+        "scope": ["backend"],
+        "prds": [],
+        "result": result,
+        "duration_seconds": dur,
+        "services_touched": ["backend"],
+        "env_changes": list(env),
+        "migrations_applied": list(migrations),
+        "rollback_target_sha": None,
+        "notes": notes,
+        "pr_numbers": list(prs),
+        "issue_numbers": list(issues),
+    }
+
+
+def _servico(sid, status, http=200, ms=140):
+    return {
+        "id": sid,
+        "domain": f"{sid}.exemplo",
+        "status": status,
+        "last_deploy_at": "2026-10-06T13:38:54-03:00",
+        "last_health_check": {"at": "2026-10-06T16:38:54Z", "latency_ms": ms, "http_status": http, "body_ok": http == 200},
+    }
+
+
+ENV_APP_VERSION = {"service": "backend", "action": "update", "keys": ["APP_VERSION"]}
+
+# history.json mais recente primeiro (o rabo grava em [0]); a 0.161.0 subiu
+# duas vezes, uma com "v" e outra sem, e o deploy sem versão vira linha própria
+HISTORY = [
+    _deploy("0.163.4", "aaa1111", at="2026-10-06T16:38:54Z", prs=[70], issues=[904], dur=57),
+    _deploy(
+        "v0.161.0",
+        "ccc3333",
+        at="2026-10-05T18:00:00Z",
+        prs=[69],
+        issues=[903],
+        dur=45,
+        notes="redeploy depois do health vermelho",
+        env=[ENV_APP_VERSION],
+    ),
+    _deploy(
+        "0.161.0",
+        "bbb2222",
+        at="2026-10-05T17:00:00Z",
+        prs=[68],
+        issues=[902],
+        result="failed",
+        dur=300,
+        migrations=["114_migracoes_aplicadas.sql"],
+        notes="primeira subida da onda",
+    ),
+    _deploy(None, "ddd4444", at="2026-10-05T14:46:19Z"),
+    _deploy("0.160.0", "eee5555", at="2026-10-04T10:00:00Z", prs=[60]),
+]
+
+
+def _iss(n, *, state="OPEN"):
+    return {
+        "number": n,
+        "title": f"Fatia {n}",
+        "state": state,
+        "labels": [],
+        "assignees": [],
+        "author": "ana",
+        "url": f"https://github.com/x/y/issues/{n}",
+        "body": f"corpo da {n}",
+        "created_at": "2026-10-01T10:00:00Z",
+        "closed_at": "2026-10-05T18:00:00Z" if state == "CLOSED" else None,
+        "blocked_by": [],
+        "parent": None,
+        "children": [],
+        "is_prd": False,
+        "criteria": {"done": 0, "total": 0},
+        "prs": [],
+        "deploys": [],
+    }
+
+
+DADOS = {
+    "generated_at": "2026-10-06T17:00:00Z",
+    "repo_url": "https://github.com/x/y",
+    "repo_slug": "x/y",
+    "github": {"error": None, "error_kind": None, "issues": [_iss(903, state="CLOSED")], "prs": [], "prds": []},
+    "fases": {
+        "issues": {
+            "903": {
+                "fase": "em_producao",
+                "sub": None,
+                "branch": None,
+                "pr": 69,
+                "sinal": None,
+                "tentativas": [],
+                "versao": "0.161.0",
+                "em_producao_em": "2026-10-05T18:00:00Z",
+            }
+        },
+        "prs": {},
+        "timelines": {},
+        "ondas": {},
+        "funil": {"total": {}, "por_responsavel": {}},
+    },
+    "history": HISTORY,
+    "state": {
+        "updated_at": "2026-10-06T13:38:54-03:00",
+        "last_app_version": "0.163.4",
+        "services": [
+            _servico("backend", "healthy", ms=143),
+            _servico("frontend", "healthy", ms=151),
+            _servico("supabase", "warning", http=None, ms=None),
+        ],
+    },
+    "snapshots": [],
+    "adrs": [],
+}
+
+# DOM mínimo: cada seletor devolve sempre o mesmo elemento (com os ouvintes
+# dele); location/history guardam o hash; window guarda os ouvintes por tipo.
+PRELUDIO = r"""
+const _el = () => ({
+  innerHTML: '', textContent: '', value: '', dataset: {}, style: {}, _ouvintes: [],
+  classList: { add() {}, remove() {}, toggle() {}, contains() { return false; } },
+  addEventListener(tipo, fn) { this._ouvintes.push(fn); },
+  querySelector: () => null, querySelectorAll: () => [], setAttribute() {}, closest: () => null,
+});
+const _view = _el();
+const _els = { '#view': _view };
+globalThis.document = {
+  querySelector: s => (_els[s] ||= _el()),
+  querySelectorAll: () => [], addEventListener() {}, body: _el(), activeElement: null, createElement: _el,
+};
+const _janela = {};
+globalThis.window = {
+  addEventListener(tipo, fn) { (_janela[tipo] ||= []).push(fn); },
+  scrollTo() {}, matchMedia: () => ({ matches: true }),
+};
+globalThis.matchMedia = window.matchMedia;
+globalThis.location = { hash: _HASH_INICIAL };
+globalThis.history = { replaceState(_s, _t, url) { location.hash = url; } };
+globalThis.setInterval = () => 0;
+globalThis.fetch = url => url.startsWith('/api/data')
+  ? Promise.resolve({ json: () => Promise.resolve(_DADOS) })
+  : new Promise(() => {});
+const _esperar = () => new Promise(r => setTimeout(r, 0));
+/* clique de verdade: o mesmo ouvinte delegado que o navegador chama no #view */
+function _clicar(dataset) {
+  const alvo = { dataset, classList: { contains: () => false } };
+  const ev = { target: { closest: sel => (sel === '[data-act]' ? alvo : null) } };
+  _view._ouvintes.forEach(fn => fn(ev));
+}
+/* o endereço trocado por fora: link do chip, voltar do navegador, URL colada */
+function _navegar(hash) {
+  location.hash = hash;
+  (_janela.hashchange || []).forEach(fn => fn());
+}
+"""
+
+
+def _app(tmp_path, expr, antes="", hash_inicial="#producao", dados=None):
+    """Roda o app.js inteiro (boot incluso) e avalia `expr` depois de `antes`."""
+    modulo = APP_JS.replace("from './", f"from '{STATIC.as_uri()}/")
+    prog = (
+        f"const _HASH_INICIAL = {json.dumps(hash_inicial)};\nconst _DADOS = {json.dumps(dados or DADOS)};\n"
+        + PRELUDIO
+        + modulo
+        + f"\nawait _esperar();\n{antes}\n"
+        + f"console.log('@@' + JSON.stringify({expr}));\n"
+    )
+    arq = tmp_path / "harness.mjs"
+    arq.write_text(prog, encoding="utf-8")
+    out = subprocess.run(["node", str(arq)], capture_output=True, text=True, check=False, env={**os.environ, "TZ": "UTC"})
+    assert out.returncode == 0, out.stderr
+    linha = [x for x in out.stdout.splitlines() if x.startswith("@@")][-1]
+    return json.loads(linha[2:])
+
+
+def _versoes(html):
+    """(rótulo da versão, em destaque?, html do card) de cada versão, na ordem da tela."""
+    return [
+        (re.search(r'class="pd-ver[^"]*">([^<]*)<', m.group(0)).group(1), 'aria-current="true"' in m.group(1), m.group(0))
+        for m in re.finditer(r"(<article[^>]*>)[\s\S]*?</article>", html)
+    ]
+
+
+def _chips(html):
+    """{texto: href} de cada chip que é link."""
+    return {m.group(2): m.group(1) for m in re.finditer(r'<a class="chip[^"]*" href="([^"]*)"[^>]*>([^<]*)</a>', html)}
+
+
+# ---------- lista de versões ----------
+
+
+@com_node
+def test_producao_lista_uma_linha_por_versao_a_mais_recente_primeiro(tmp_path):
+    html = _app(tmp_path, "_view.innerHTML")
+    assert [v for v, _, _ in _versoes(html)] == ["v0.163.4", "v0.161.0", "ddd4444", "v0.160.0"]
+
+
+@com_node
+def test_producao_mostra_o_history_inteiro_sem_teto(tmp_path):
+    # o history.json perdeu o teto de 50 no #939; a aba não pode cortar de novo
+    longo = [_deploy(f"0.{200 - n}.0", f"{n:07d}", at="2026-10-01T10:00:00Z") for n in range(75)]
+    html = _app(tmp_path, "_view.innerHTML", dados={**DADOS, "history": longo})
+    versoes = [v for v, _, _ in _versoes(html)]
+    assert len(versoes) == 75
+    assert (versoes[0], versoes[-1]) == ("v0.200.0", "v0.126.0")
+
+
+@com_node
+def test_versao_aberta_mostra_prs_issues_migration_health_duracao_env_e_notas(tmp_path):
+    fechada, aberta = _app(
+        tmp_path,
+        "[_fechada, _view.innerHTML]",
+        antes="const _fechada = _view.innerHTML; _clicar({ act: 'dep', i: '1' });",
+    )
+    _, _, card_fechado = _versoes(fechada)[1]
+    rotulo, _, card = _versoes(aberta)[1]
+    assert rotulo == "v0.161.0"
+    # o que entrou nas duas subidas da versão, com chips que ficam no painel
+    assert _chips(card) == {"PR #69": "#prs/69", "PR #68": "#prs/68", "#903": "#issues/903", "#902": "#issues/902"}
+    assert "⛁ 114_migracoes_aplicadas.sql" in card
+    # cada deploy da versão: health, build, commit, env e notas
+    deploys = re.findall(r'<div class="pd-dep">[\s\S]*?</p>\s*</div>', card)
+    assert len(deploys) == 2
+    novo, velho = deploys
+    assert ">healthy<" in novo and "45s" in novo and "ccc3333" in novo
+    assert "env: backend update APP_VERSION" in novo and "redeploy depois do health vermelho" in novo
+    assert ">failed<" in velho and "5m00s" in velho and "bbb2222" in velho
+    assert "primeira subida da onda" in velho and "env:" not in velho
+    # fechada, a versão não mostra o miolo dos deploys
+    for so_aberta in ("pd-dep", "redeploy depois", "primeira subida", "env:", "bbb2222"):
+        assert so_aberta not in card_fechado, so_aberta
+
+
 def _bloco_producao():
     """O bloco de CSS delimitado da aba Produção, do marcador de abertura ao de fim."""
     m = re.search(r"/\* =+ PRODUÇÃO[^*]*\*/(.*?)/\* =+ fim PRODUÇÃO[^*]*\*/", CSS, re.S)
@@ -116,15 +360,6 @@ def test_timeline_em_cartoes_claros_com_hairlines():
     assert "var(--hairline)" in cartao, "cartão do deploy sem hairline dos tokens"
     corpo = _regra(bloco, ".pd-body")
     assert "var(--hairline)" in corpo, "corpo expandido sem hairline de separação"
-
-
-def test_deploy_card_tem_chips_e_changelog_inline():
-    m = re.search(r"function deployCard[\s\S]*?\n\}", APP_JS)
-    assert m, "deployCard sumiu do app.js"
-    corpo = m.group(0)
-    assert 'class="chip"' in corpo, "deployCard sem chips de PR/issue/sha"
-    assert "badge" in corpo, "deployCard sem badge de estado"
-    assert "changelog" in corpo, "deployCard sem changelog inline"
 
 
 # ---------- sparkline ----------
