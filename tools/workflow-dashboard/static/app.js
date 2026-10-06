@@ -1,20 +1,25 @@
 'use strict';
 
-/* Fluxo vivo, SPA vanilla. Lê /api/data (agregado) e /api/issue/<n> (comentários lazy). */
+/* Fluxo vivo, SPA vanilla. Lê /api/data (agregado), /api/issue/<n> (comentários
+   lazy) e /api/issue/<n>/timeline (linha do tempo das fechadas, lazy). */
 
-import { tip, copyBlock, closeTips, reduceMotion, revealOnScroll } from './ui.js';
+import { closeTips, reduceMotion, revealOnScroll } from './ui.js';
 import { renderDiagrama, wireDiagramas } from './diagramas.js';
 import { renderArea, wireArea } from './areas.js';
+import { corDaPessoa } from './pessoas.js';
+
+const filtrosVazios = () => ({ state: 'all', fase: '', resp: '', prd: null, label: '', q: '', humana: false });
 
 const S = {
   data: null,
-  tab: 'plano',
-  fIssues: { state: 'all', label: '', q: '', resp: '' },
+  tab: 'issues',
+  fIssues: filtrosVazios(),
   expIss: new Set(),
   expPrd: new Map(),
   expDep: new Set(),
   expAdr: new Set(),
   comments: {},
+  timelines: {},
   mapaDoc: null,
   rotasQ: '',
   entTab: null,
@@ -68,12 +73,6 @@ function ago(iso) {
   if (ms < 48 * 3.6e6) return `há ${Math.round(ms / 3.6e6)} h`;
   return `há ${Math.round(ms / 86.4e6)} dias`;
 }
-function spanH(msNum) {
-  const h = msNum / 3.6e6;
-  if (h < 1) return `${Math.max(1, Math.round(msNum / 6e4))} min`;
-  if (h < 48) return `${h.toFixed(1).replace('.', ',')} h`;
-  return `${(h / 24).toFixed(1).replace('.', ',')} dias`;
-}
 function durS(sec) {
   if (sec == null) return '·';
   const m = Math.floor(sec / 60), s = Math.round(sec % 60);
@@ -109,12 +108,6 @@ function adrPointerBadge(a) {
 const issUrl = n => `${S.data.repo_url}/issues/${n}`;
 const prUrl = n => `${S.data.repo_url}/pull/${n}`;
 const shaUrl = sha => `${S.data.repo_url}/commit/${sha}`;
-
-function stateTag(i) {
-  return i.state === 'OPEN'
-    ? '<span class="istate"><span class="dot ok"></span>aberta</span>'
-    : '<span class="istate"><span class="dot" style="background:var(--purple)"></span>fechada</span>';
-}
 
 function spark(vals, w = 360, h = 46) {
   if (vals.length < 2) return '';
@@ -166,12 +159,6 @@ function renderMast() {
     <span class="ago" id="ago">coletado ${ago(S.data.generated_at)}</span>
     <button class="iconbtn" id="refresh" title="recoletar agora (gh + arquivos)">⟳</button>`;
   $('#refresh').addEventListener('click', () => load(true));
-  const pbtn = document.querySelector('#tabs button[data-tab="pendencias"]');
-  if (pbtn) {
-    // gh fora do ar = "não sei", nunca "zero": o badge vira "?".
-    const n = (S.data.github && S.data.github.error) ? '?' : pendenciasHumanas().length;
-    pbtn.innerHTML = n ? `Pendências <span class="tab-count">${n}</span>` : 'Pendências';
-  }
 }
 
 function renderBanner() {
@@ -193,16 +180,18 @@ function tick() {
   if (el && S.data) el.textContent = `coletado ${ago(S.data.generated_at)}`;
 }
 
-const TABS = ['plano', 'issues', 'producao', 'pendencias', 'mapa', 'dominio', 'guia'];
-/* hashes da navegação antiga (bookmarks) caem na aba que herdou o conteúdo */
+const TABS = ['issues', 'prs', 'producao', 'mapa', 'dominio'];
+/* hashes da navegação antiga (bookmarks) caem na aba que herdou o conteúdo;
+   Plano, Pendências e Guia saíram (ADR 0062, decisão 3) e caem na home */
 const TAB_ALIAS = {
-  setup: 'guia', workflow: 'guia', fluxo: 'guia', bastidores: 'guia',
+  plano: 'issues', pendencias: 'issues', guia: 'issues',
+  setup: 'issues', workflow: 'issues', fluxo: 'issues', bastidores: 'issues',
   agora: 'producao', deploys: 'producao',
 };
 
 function setTab(t) {
   t = TAB_ALIAS[t] || t;
-  if (!TABS.includes(t)) t = 'plano';
+  if (!TABS.includes(t)) t = 'issues';
   S.erFull = false;   // trocar de aba sai da tela cheia; voltar ao Mapa não a reabre
   S.tab = t;
   if (location.hash !== '#' + t) history.replaceState(null, '', '#' + t);
@@ -214,8 +203,7 @@ function setTab(t) {
 function render() {
   if (!S.data) return;
   const fn = {
-    plano: renderPlano, issues: renderIssues, producao: renderProducao,
-    pendencias: renderPendencias, mapa: renderMapa, dominio: renderDominio, guia: renderGuia,
+    issues: renderIssues, prs: renderPrs, producao: renderProducao, mapa: renderMapa, dominio: renderDominio,
   }[S.tab];
   view.innerHTML = fn ? fn() : '';
   if (S.tab === 'issues') wireIssues();
@@ -235,138 +223,12 @@ function render() {
 const sec = (n, title, hint = '') =>
   `<div class="sec rv"><span class="n">${n}</span><h2 class="clip"><span class="clip-inner">${title}</span></h2>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
 
-/* cabeçalho de seção com eyebrow (padrão Baseline · abas Plano e Issues, #260) */
+/* cabeçalho de seção com eyebrow (padrão Baseline, #260) */
 function cabecalho(eyebrow, titulo, hint = '') {
   return `<div class="sec-ey rv">
     <span class="eyebrow">${eyebrow}</span>
     <div class="sec-ey-row"><h2 class="clip"><span class="clip-inner">${titulo}</span></h2>${hint ? `<span class="hint">${hint}</span>` : ''}</div>
   </div>`;
-}
-
-/* ---------- PLANO (home) ---------- */
-
-const fmtHoras = h => spanH(h * 3.6e6);
-
-function tempoTipicoHtml(t) {
-  if (!t) return '<span class="ftempo vazio">⏱ sem histórico ainda</span>';
-  const marca = t.fonte === 'geral'
-    ? `<em class="ftempo-fonte">· mediana geral</em>${tip('mediana geral')}` : '';
-  return `<span class="ftempo">⏱ ~${esc(fmtHoras(t.horas))} ${marca}</span>`;
-}
-
-const ESTADO_FATIA = {
-  pronta: { cls: 'pronta', badge: '<span class="badge b-green">pronta</span>' },
-  bloqueada: { cls: 'bloq', badge: '<span class="badge b-red">bloqueada</span>' },
-  em_andamento: { cls: 'andamento', badge: '<span class="badge b-amber">● em andamento</span>' },
-  concluida: { cls: 'feita', badge: '<span class="badge b-purple">concluída ✓</span>' },
-  aguardando_triage: { cls: 'triage', badge: '<span class="badge b-blue">aguardando triage</span>' },
-};
-
-function fatiaRow(f, j) {
-  const e = ESTADO_FATIA[f.estado] || ESTADO_FATIA.pronta;
-  const bloqueio = f.estado === 'bloqueada' && f.bloqueada_por.length
-    ? `<span class="fbloq">⛔ espera ${f.bloqueada_por.map(n =>
-      `<a href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`).join(', ')}</span>` : '';
-  const triage = f.estado === 'aguardando_triage'
-    ? '<span class="ftriage">⏳ fora da fila, rode <code>/triage</code> para liberar</span>' : '';
-  const copia = f.estado === 'pronta' && f.copiaveis ? `
-    <div class="fcopia">
-      ${copyBlock(f.copiaveis.terminal, { lang: 'bash' })}
-      <a class="fslash" data-act="copytxt" data-txt="${esc(f.copiaveis.slash)}">copiar só o <code>${esc(f.copiaveis.slash)}</code></a>
-    </div>` : '';
-  return `
-  <article class="nrow nrow-${e.cls} rv" style="--i:${j}">
-    <span class="nrow-idx">${String(j + 1).padStart(2, '0')}</span>
-    <div class="nrow-main">
-      <div class="fhead">
-        <a class="fnum" href="${esc(f.url)}" target="_blank" rel="noopener">#${f.number}</a>
-        <a class="ftitle" href="${esc(f.url)}" target="_blank" rel="noopener">${esc(f.title)}</a>
-      </div>
-      <div class="fmeta">${e.badge}${f.tamanho ? labelBadge('fatia:' + f.tamanho) : ''}${tempoTipicoHtml(f.tempo_tipico)}${bloqueio}${triage}</div>
-      ${f.explicacao ? `<p class="fexp">${esc(f.explicacao)}</p>` : ''}
-      ${copia}
-    </div>
-    <a class="nrow-go" href="${esc(f.url)}" target="_blank" rel="noopener" aria-label="abrir a issue #${f.number} no GitHub"><span class="nrow-arrow">→</span></a>
-  </article>`;
-}
-
-function ondaHtml(onda, i) {
-  const hint = i === 0 ? 'dá para começar agora' : `destrava quando a onda ${i} fechar`;
-  const paralelo = onda.length > 1 ? ` · ${onda.length} em paralelo` : '';
-  return `
-  <div class="onda ${onda.length > 1 ? 'paralela' : 'serial'} rv" style="--i:${i + 1}">
-    <div class="onda-rotulo"><span class="onda-n">onda ${i + 1}</span><span class="onda-hint">${hint}${paralelo}</span></div>
-    <div class="nrows">${onda.map((f, j) => fatiaRow(f, j)).join('')}</div>
-  </div>`;
-}
-
-function levaHtml(leva, idx) {
-  const abertas = leva.ondas.reduce((a, o) => a + o.length, 0);
-  const cc = leva.caminho_critico_horas;
-  const chips = [
-    `<span class="capsule"><b>${abertas}</b>&nbsp;aberta${abertas === 1 ? '' : 's'}</span>`,
-    leva.concluidas.length ? `<span class="capsule">✓&nbsp;<b>${leva.concluidas.length}</b>&nbsp;entregue${leva.concluidas.length === 1 ? '' : 's'}</span>` : '',
-    cc != null ? `<span class="capsule">caminho crítico&nbsp;<b>~${esc(fmtHoras(cc))}</b>${tip('caminho crítico')}</span>` : '',
-  ].filter(Boolean).join('');
-  const avisos = (leva.avisos || []).map(a => `<div class="banner plano-aviso">⚠ ${esc(a)}</div>`).join('');
-  const feitas = leva.concluidas.length ? `
-    <div class="feitas rv">
-      <span class="k-label">já entregues</span>
-      <div class="feitas-row">${leva.concluidas.map(f =>
-        `<a class="feita-chip" href="${esc(f.url)}" target="_blank" rel="noopener">✓ #${f.number} ${esc(f.title)}</a>`).join('')}</div>
-    </div>` : '';
-  return `
-  <section class="leva">
-    <div class="leva-head rv" style="--i:${idx}">
-      <span class="prd-tag">PRD</span>
-      <a class="leva-title" href="${esc(leva.prd.url)}" target="_blank" rel="noopener">#${leva.prd.number} · ${esc(leva.prd.title)} ↗</a>
-      <div class="leva-chips">${chips}</div>
-    </div>
-    ${avisos}
-    ${leva.ondas.length ? `<div class="ondas">${leva.ondas.map(ondaHtml).join('')}</div>`
-      : '<div class="empty">todas as fatias desta leva foram entregues: feche o PRD ou abra a próxima leva</div>'}
-    ${feitas}
-  </section>`;
-}
-
-function avulsasHtml(av) {
-  if (!av || !av.ondas.length) return '';
-  const avisos = (av.avisos || []).map(a => `<div class="banner plano-aviso">⚠ ${esc(a)}</div>`).join('');
-  return `
-  <section class="leva">
-    <div class="leva-head rv">
-      <span class="prd-tag avulsa-tag">AVULSAS</span>
-      <span class="leva-title">Issues fora de PRD</span>
-    </div>
-    ${avisos}
-    <div class="ondas">${av.ondas.map(ondaHtml).join('')}</div>
-  </section>`;
-}
-
-function renderPlano() {
-  return `<div class="tab-plano">${planoBody()}</div>`;
-}
-
-function planoBody() {
-  const cab = cabecalho('planejar', 'Plano', 'a leva atual, em ondas de execução');
-  const p = S.data.plano;
-  if (!p) {
-    return `${cab}<div class="empty">O Plano lê as issues pelo <span class="mono">gh</span>, que está indisponível agora, veja o aviso no topo. As outras abas seguem com os dados locais.</div>`;
-  }
-  if (p.erro) return `${cab}<div class="banner"><b>Plano indisponível</b>: ${esc(p.erro)}</div>`;
-  const temAvulsas = p.avulsas && p.avulsas.ondas.length;
-  if (!p.levas.length && !temAvulsas) {
-    return `${cab}
-    <div class="card plano-vazio rv">
-      <h3>Nenhum PRD ativo agora.</h3>
-      <p>O plano nasce do pipeline: lapide a ideia, publique o PRD e corte em fatias: esta aba desenha o resto sozinha.</p>
-      ${copyBlock('/grill-with-docs\n/to-prd\n/to-issues', { lang: 'text', label: 'numa sessão claude, na ordem' })}
-    </div>`;
-  }
-  const lead = `<p class="lead rv">As fatias do PRD ativo, organizadas em <b>ondas</b>${tip('onda')} pela dependência:
-    o que divide uma onda anda <b>em paralelo</b>: cada sessão pega uma fatia (claim atômico${tip('claim atômico')},
-    1 worktree por issue${tip('worktree')}). Copie o comando de um card <b>pronta</b> e cole num terminal novo.</p>`;
-  return cab + lead + p.levas.map(levaHtml).join('') + avulsasHtml(p.avulsas);
 }
 
 /* ---------- PRODUÇÃO (timeline de deploys e releases) ---------- */
@@ -376,38 +238,50 @@ function renderProducao() {
 }
 
 
-/* ---------- ISSUES ---------- */
+/* ---------- ISSUES (home: funil de fases, filtros em chips, card compacto) ---------- */
 
-function leadAvg(iss) {
-  const closed = iss.filter(i => i.closed_at && i.created_at);
-  if (!closed.length) return null;
-  return closed.reduce((a, i) => a + (new Date(i.closed_at) - new Date(i.created_at)), 0) / closed.length;
-}
+/* Régua de nove fases do fases.py (ADR 0062, decisão 4), na ordem do funil:
+   [chave do payload, nome na tela, badge]. */
+const FASES = [
+  ['triagem', 'Triagem', 'b-ghost'],
+  ['fila', 'Fila', 'b-indigo'],
+  ['bloqueada', 'Bloqueada', 'b-red'],
+  ['em_andamento', 'Em andamento', 'b-amber'],
+  ['pr_aberto', 'PR aberto', 'b-blue'],
+  ['mergeada', 'Mergeada', 'b-purple'],
+  ['em_producao', 'Em produção', 'b-green'],
+  ['humana', 'Humana', 'b-coral'],
+  ['encerrada_sem_pr', 'Encerrada sem PR', 'b-ghost'],
+];
+const PREFIXOS_LABEL = ['type', 'area', 'fatia'];
+const LABEL_HUMANA = 'ready-for-human';
 
-/* Responsável = quem está designado (assignee); sem ninguém designado, quem
-   criou a issue (author), emenda de 05/10/2026 do ADR 0061. Um só por vez no
-   filtro; SEM_RESP filtra as issues que ninguém assumiu (sem assignee). O "em
-   andamento" conta só issue com assignee (claim). */
+/* Responsável = quem assumiu (assignee); quem só criou a issue não conta.
+   SEM_RESP é o "ninguém assumiu": issues sem assignee. Mesmo valor do
+   SEM_RESPONSAVEL do fases.py, chave das contagens do funil. */
 const SEM_RESP = '(sem)';
 
-function responsaveis(i) {
-  return i.assignees.length ? i.assignees : (i.author ? [i.author] : []);
-}
-
 function doResponsavel(i, resp) {
-  return resp === SEM_RESP ? i.assignees.length === 0 : responsaveis(i).includes(resp);
+  return resp === SEM_RESP ? i.assignees.length === 0 : i.assignees.includes(resp);
 }
 
-function donoHtml(i) {
-  if (i.assignees.length) return `👤 ${i.assignees.map(esc).join(', ')}`;
-  return i.author ? `✎ criada por ${esc(i.author)}` : '';
+function faseDe(i) {
+  return ((S.data.fases || {}).issues || {})[i.number] || null;
+}
+
+/* pendência humana: issue aberta com ready-for-human (era a aba Pendências) */
+function ehPendenciaHumana(i) {
+  return i.state === 'OPEN' && i.labels.includes(LABEL_HUMANA);
 }
 
 function matchIssue(i) {
   const f = S.fIssues;
   if (f.state !== 'all' && i.state !== f.state) return false;
-  if (f.label && !i.labels.includes(f.label)) return false;
+  if (f.fase && (faseDe(i) || {}).fase !== f.fase) return false;
   if (f.resp && !doResponsavel(i, f.resp)) return false;
+  if (f.prd && i.number !== f.prd && i.parent !== f.prd) return false;
+  if (f.label && !i.labels.includes(f.label)) return false;
+  if (f.humana && !ehPendenciaHumana(i)) return false;
   if (f.q) {
     const q = f.q.toLowerCase();
     if (!(`#${i.number} ${i.title}`.toLowerCase().includes(q))) return false;
@@ -415,20 +289,156 @@ function matchIssue(i) {
   return true;
 }
 
-function chainHtml(i) {
-  const parts = [];
-  parts.push(`<span class="node">aberta ${fmtD(i.created_at)}</span>`);
-  for (const p of i.prs) {
-    parts.push('<span class="arrow">→</span>');
-    parts.push(`<a class="node" href="${prUrl(p.number)}" target="_blank" rel="noopener">PR #${p.number}${p.merged_at ? ' ✓ merged' : ` · ${p.state.toLowerCase()}`}</a>`);
+/* contagens do payload: o total, ou as da pessoa filtrada (zeradas se ela não tem nenhuma) */
+function contagensDoFunil(funil, resp) {
+  if (!resp) return funil.total;
+  return funil.por_responsavel[resp] || {};
+}
+
+function nomeDoResponsavel(resp) {
+  return resp === SEM_RESP ? 'ninguém assumiu' : esc(resp);
+}
+
+function funilHtml() {
+  const fases = S.data.fases;
+  if (!fases || !fases.funil) {
+    const motivo = fases && fases.erro
+      ? `funil indisponível: ${esc(fases.erro)}`
+      : 'o funil lê as issues pelo <span class="mono">gh</span>, que está indisponível agora, veja o aviso no topo';
+    return `<div class="empty funil-vazio rv">${motivo}</div>`;
   }
-  for (const dp of i.deploys) {
-    parts.push('<span class="arrow">→</span>');
-    const ok = dp.result === 'healthy';
-    parts.push(`<span class="node ${ok ? 'deploy' : 'rolled'}">● v${esc(dp.app_version || dp.sha)} · ${fmtD(dp.at)}</span>`);
+  const f = S.fIssues;
+  const n = contagensDoFunil(fases.funil, f.resp);
+  const dono = f.resp ? `<div class="k-label funil-dono rv">contagens de ${nomeDoResponsavel(f.resp)}</div>` : '';
+  return `${dono}
+  <div class="funil rv" role="group" aria-label="fases das issues">
+    ${FASES.map(([k, nome]) => `
+    <button type="button" class="funil-passo ${f.fase === k ? 'on' : ''}" data-act="ffase" data-v="${k}" aria-pressed="${f.fase === k}">
+      <span class="funil-n">${n[k] || 0}</span><span class="funil-nome">${nome}</span>
+    </button>`).join('')}
+  </div>`;
+}
+
+function chipFiltro(act, v, on, txt, attrs = '') {
+  return `<button type="button" class="fchip ${on ? 'on' : ''}" data-act="${act}" data-v="${esc(v)}" aria-pressed="${on}"${attrs}>${txt}</button>`;
+}
+
+function chipPessoa(login) {
+  const on = S.fIssues.resp === login;
+  return `<button type="button" class="fchip fpessoa ${on ? 'on' : ''}" data-act="fresp" data-v="${esc(login)}" aria-pressed="${on}" style="--pessoa:${corDaPessoa(login === SEM_RESP ? null : login)}"><span class="pessoa-dot"></span>${nomeDoResponsavel(login)}</button>`;
+}
+
+/* labels das issues agrupadas por prefixo (type:, area:, fatia:) e o resto */
+function gruposDeLabels(iss) {
+  const todas = [...new Set(iss.flatMap(i => i.labels))].filter(l => l !== LABEL_HUMANA).sort();
+  const doPrefixo = p => todas.filter(l => l.startsWith(p + ':'));
+  const grupos = PREFIXOS_LABEL.map(p => [p, doPrefixo(p)]);
+  grupos.push(['outras', todas.filter(l => !PREFIXOS_LABEL.some(p => l.startsWith(p + ':')))]);
+  return grupos.filter(([, ls]) => ls.length);
+}
+
+function filtrosHtml(iss) {
+  const f = S.fIssues;
+  const linha = (rot, chips) => chips
+    ? `<div class="filtro"><span class="filtro-rot">${rot}</span><div class="filtro-chips">${chips}</div></div>` : '';
+  // gh fora do ar = "não sei", nunca "zero": o contador vira "?"
+  const humanas = S.data.github.error ? '?' : iss.filter(ehPendenciaHumana).length;
+  const estados = [['all', 'todas'], ['OPEN', 'abertas'], ['CLOSED', 'fechadas']]
+    .map(([v, t]) => chipFiltro('fstate', v, f.state === v, t)).join('');
+  const humana = `<button type="button" class="fchip fhumana ${f.humana ? 'on' : ''}" data-act="fhumana" data-v="1" aria-pressed="${f.humana}">${LABEL_HUMANA} <span class="tab-count">${humanas}</span></button>`;
+  const pessoas = [...new Set(iss.flatMap(i => i.assignees))].sort();
+  const prds = iss.filter(i => i.is_prd && i.state === 'OPEN').sort((a, b) => b.number - a.number);
+  return `
+  <div class="filtros rv">
+    ${linha('estado', estados + humana)}
+    ${linha('responsável', pessoas.map(chipPessoa).join('') + chipPessoa(SEM_RESP))}
+    ${linha('PRD', prds.map(p => chipFiltro('fprd', p.number, f.prd === p.number, `#${p.number}`, ` title="${esc(p.title)}"`)).join(''))}
+    ${gruposDeLabels(iss).map(([pref, ls]) => linha(pref, ls.map(l =>
+      chipFiltro('flabel', l, f.label === l, esc(pref === 'outras' ? l : l.slice(pref.length + 1)))).join(''))).join('')}
+    <div class="filtro"><span class="filtro-rot">busca</span>
+      <input class="search" id="fq" type="search" placeholder="buscar por título ou #número…" value="${esc(f.q)}"></div>
+  </div>`;
+}
+
+/* ---------- card da issue ---------- */
+
+const SINAL_CI = { vermelho: 'CI vermelho', verde: 'CI verde', pendente: 'CI pendente', sem_ci: 'sem CI' };
+
+function detalheDaFase(fs, i) {
+  if (fs.sub === 'branch_criada') return 'branch criada';
+  if (fs.fase === 'bloqueada' && i.blocked_by.length) return `espera ${i.blocked_by.map(n => `#${n}`).join(', ')}`;
+  if (fs.fase !== 'pr_aberto' || !fs.sinal) return '';
+  const s = fs.sinal;
+  return [
+    SINAL_CI[s.ci] || '',
+    s.veredito === 'must_fix' ? 'revisor: must-fix' : s.veredito === 'limpo' ? 'revisor: limpo' : '',
+    s.conflito ? 'conflito' : '',
+    s.tentativa_anterior ? 'nova tentativa' : '',
+  ].filter(Boolean).join(' · ');
+}
+
+function faseBadge(fs, i) {
+  if (!fs) return '';
+  const [, nome, cls] = FASES.find(([k]) => k === fs.fase) || [fs.fase, fs.fase, 'b-ghost'];
+  const det = detalheDaFase(fs, i);
+  return `<span class="badge ${cls}">${esc(nome)}${det ? ` · ${esc(det)}` : ''}</span>`;
+}
+
+function pessoaHtml(login) {
+  return `<span class="pessoa" style="--pessoa:${corDaPessoa(login)}"><span class="pessoa-dot"></span>${login ? esc(login) : 'ninguém assumiu'}</span>`;
+}
+
+function pessoasDoCard(i) {
+  if (i.assignees.length) return i.assignees.map(pessoaHtml).join('');
+  // sem assignee: ninguém assumiu; quem criou fica só como informação
+  return pessoaHtml(null) + (i.author ? `<span class="chip autor">✎ criada por ${esc(i.author)}</span>` : '');
+}
+
+const idadeTxt = i => i.state === 'OPEN' ? `aberta ${ago(i.created_at)}` : `fechada ${fmtD(i.closed_at)}`;
+
+/* ---------- linha do tempo (ADR 0062, decisão 6) ---------- */
+
+const LENTE = { revisao: 'revisão', seguranca: 'segurança' };
+
+function eventoTexto(e) {
+  const pr = e.pr ? `PR #${e.pr}` : 'PR';
+  const vezes = n => `${n} ${n === 1 ? 'vez' : 'vezes'}`;
+  const txt = {
+    criada: () => 'criada',
+    designada: () => e.quem ? `designada para ${e.quem}` : 'designada',
+    branch: () => `branch ${e.branch}`,
+    pr_aberto: () => `${pr} aberto`,
+    novo_pr: () => `novo ${pr}`,
+    ci_vermelho: () => `CI vermelho ${vezes(e.vezes || 1)} no ${pr}`,
+    revisor_comentou: () => `revisor de ${LENTE[e.lente] || e.lente} comentou: ${e.veredito === 'must_fix' ? 'must-fix' : 'limpo'}`,
+    pr_fechado: () => `${pr} fechado sem merge`,
+    mergeado: () => `${pr} mergeado`,
+    em_producao: () => `em produção${e.versao ? ` na ${depVer(e.versao)}` : ''}`,
+    fechada: () => 'issue fechada',
+    reaberta: () => 'issue reaberta',
+  }[e.tipo];
+  return esc(txt ? txt() : e.tipo);
+}
+
+/* abertas: a linha vem na coleta; fechadas (ou coleta sem ela): busca ao expandir */
+function timelineDe(n) {
+  const pronta = ((S.data.fases || {}).timelines || {})[n];
+  return pronta ? { list: pronta } : S.timelines[n];
+}
+
+function linhaDoTempoHtml(n) {
+  const t = timelineDe(n);
+  const cab = '<div class="k-label">linha do tempo</div>';
+  let corpo;
+  if (!t || t.loading) corpo = '<span class="ago">carregando a linha do tempo…</span>';
+  else if (t.error) corpo = `<span class="ago">linha do tempo indisponível: ${esc(t.error)}</span>`;
+  else if (!t.list.length) corpo = '<span class="ago">sem eventos</span>';
+  else {
+    corpo = `<ol class="eventos">${t.list.map(e => `
+      <li class="evento"><span class="evento-quando">${e.em ? esc(fmtDT(e.em)) : 'sem data'}</span>
+        <span class="evento-o-que">${eventoTexto(e)}</span></li>`).join('')}</ol>`;
   }
-  if (i.prs.length === 0 && i.state === 'OPEN') parts.push('<span class="arrow">→</span><span class="node">sem PR ainda</span>');
-  return parts.join('');
+  return `<div class="linha-tempo">${cab}${corpo}</div>`;
 }
 
 function commentsHtml(n) {
@@ -445,18 +455,19 @@ function commentsHtml(n) {
       </div>`).join('') + '</div>';
 }
 
-function issueCard(i, idx, prd = false, extra = '') {
+/* card compacto (ADR 0062, decisão 6): fase, pessoa, idade, critérios, PR e
+   versão; aberto, a linha do tempo, as labels, o corpo e os comentários */
+function issueCard(i, idx, prd = false) {
   const open = S.expIss.has(i.number);
-  const lead = i.closed_at ? spanH(new Date(i.closed_at) - new Date(i.created_at)) : null;
-  const meta = [];
-  meta.push(`aberta ${fmtD(i.created_at)}`);
-  if (i.closed_at) meta.push(`fechada ${fmtD(i.closed_at)}`);
-  // no PRD o dono vai ao lado do título
-  const dono = donoHtml(i);
-  if (!prd && dono) meta.push(dono);
-  if (i.criteria.total) meta.push(`✓ ${i.criteria.done}/${i.criteria.total} critérios`);
-  const blocked = i.blocked_by.length
-    ? `<span class="blocked">⛔ bloqueada por ${i.blocked_by.map(n => `<a href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`).join(', ')}</span>` : '';
+  const fs = faseDe(i);
+  const chips = [
+    faseBadge(fs, i),
+    pessoasDoCard(i),
+    `<span class="chip">${idadeTxt(i)}</span>`,
+    i.criteria.total ? `<span class="chip" title="critérios de aceite">✓ ${i.criteria.done}/${i.criteria.total}</span>` : '',
+    fs && fs.pr ? `<a class="chip" href="${prUrl(fs.pr)}" target="_blank" rel="noopener">PR #${fs.pr}</a>` : '',
+    fs && fs.versao ? `<span class="chip chip-versao">${esc(depVer(fs.versao))}</span>` : '',
+  ].filter(Boolean).join('');
 
   return `
   <article class="nrow ${prd ? 'prd-row' : ''} rv" style="--i:${idx}">
@@ -466,16 +477,12 @@ function issueCard(i, idx, prd = false, extra = '') {
         ${prd ? '<span class="prd-tag">PRD</span>' : ''}
         <span class="inum">#${i.number}</span>
         <span class="ititle">${esc(i.title)}</span>
-        ${prd ? `<span class="prd-dono">${i.assignees.length ? dono : ['sem dono', dono].filter(Boolean).join(' · ')}</span>` : ''}
-        ${i.labels.map(labelBadge).join('')}
-        ${stateTag(i)}
-        ${lead ? `<span class="chip nrow-lead">⏱ ${lead}</span>` : ''}
       </div>
-      <div class="iss-meta">${meta.map(m => `<span>${m}</span>`).join('')}${blocked}</div>
-      ${extra}
-      <div class="chain">${chainHtml(i)}</div>
+      <div class="iss-chips">${chips}</div>
       ${open ? `
       <div class="iss-body">
+        ${linhaDoTempoHtml(i.number)}
+        ${i.labels.length ? `<div class="iss-labels">${i.labels.map(labelBadge).join('')}</div>` : ''}
         <a class="ghlink" href="${issUrl(i.number)}" target="_blank" rel="noopener">abrir no GitHub ↗</a>
         <div class="md" style="margin-top:10px">${md(i.body)}</div>
         ${commentsHtml(i.number)}
@@ -493,7 +500,7 @@ function issueListHtml() {
   let idx = 0;
   const groups = [];
   const f = S.fIssues;
-  const filtroAtivo = !!(f.q || f.label || f.resp || f.state !== 'all');
+  const filtroAtivo = !!(f.q || f.fase || f.resp || f.prd || f.label || f.humana || f.state !== 'all');
 
   for (const prd of prds) {
     used.add(prd.number);
@@ -532,75 +539,26 @@ function issueListHtml() {
   return groups.join('') || '<div class="empty">nenhuma issue bate com o filtro</div>';
 }
 
-/* Visor de um responsável: aparece só com o filtro de responsável ligado. */
-function visorResponsavelHtml(iss, resp, rv) {
-  const dele = iss.filter(i => doResponsavel(i, resp));
-  const open = dele.filter(i => i.state === 'OPEN');
-  const fechadas = dele.filter(i => i.state === 'CLOSED');
-  const mes = Date.now() - 30 * 864e5;
-  const noMes = fechadas.filter(i => i.closed_at && new Date(i.closed_at) >= mes).length;
-  const lead = leadAvg(dele);
-  const s = n => n === 1 ? '' : 's';
-  const assumidas = dele.filter(i => i.assignees.length).length;
-  const criadas = dele.length - assumidas;
-  const nome = resp === SEM_RESP ? 'ninguém assumiu' : esc(resp);
-  const origem = resp === SEM_RESP ? '' : ` · ${assumidas} assumida${s(assumidas)} · ${criadas} só criada${s(criadas)}`;
-  return `
-  <div class="k-label visor-resp" ${rv()}>${nome} · ${dele.length} issue${s(dele.length)}${origem}</div>
-  <div class="grid g12" style="margin-bottom:6px">
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">abertas</div><div class="v" style="color:var(--green)">${open.length}</div><div class="s">${open.filter(x => x.assignees.length && x.labels.includes('in-progress')).length} em andamento</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">entregues</div><div class="v">${fechadas.length}</div><div class="s">${noMes} nos últimos 30 dias</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">lead time médio</div><div class="v" style="font-size:30px; padding-top:6px">${lead ? spanH(lead) : '·'}</div><div class="s">da abertura ao fechamento</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">prontas p/ agente</div><div class="v" style="color:var(--coral)">${open.filter(x => x.labels.includes('ready-for-agent')).length}</div><div class="s">fila ready-for-agent</div></div></div>
-  </div>`;
-}
-
 function renderIssues() {
   const iss = S.data.github.issues || [];
-  const open = iss.filter(i => i.state === 'OPEN');
-  const lead = leadAvg(iss);
-  const labels = [...new Set(iss.flatMap(i => i.labels))].sort();
-  const pessoas = [...new Set(iss.flatMap(responsaveis))].sort();
-  const f = S.fIssues;
-  let i = 0;
-  const rv = () => `class="rv" style="--i:${i++}"`;
-
   return `
   <div class="tab-issues">
-  ${cabecalho('acompanhar', 'Issues, tudo que aconteceu', 'gh · PRD → fatias → PR → deploy')}
-  <div class="grid g12" style="margin-bottom:6px">
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">issues</div><div class="v">${iss.length}</div><div class="s">desde ${fmtD(iss[iss.length - 1] && iss[iss.length - 1].created_at)}</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">abertas</div><div class="v" style="color:var(--green)">${open.length}</div><div class="s">${iss.length - open.length} fechadas</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">lead time médio</div><div class="v" style="font-size:30px; padding-top:6px">${lead ? spanH(lead) : '·'}</div><div class="s">da abertura ao fechamento</div></div></div>
-    <div class="card lift sp3" ${rv()}><div class="stat"><div class="k">prontas p/ agente</div><div class="v" style="color:var(--coral)">${open.filter(x => x.labels.includes('ready-for-agent')).length}</div><div class="s">fila ready-for-agent</div></div></div>
-  </div>
-  ${f.resp ? visorResponsavelHtml(iss, f.resp, rv) : ''}
-
-  <div class="controls rv" style="--i:${i++}">
-    <button class="fchip ${f.state === 'all' ? 'on' : ''}" data-act="fstate" data-v="all">todas</button>
-    <button class="fchip ${f.state === 'OPEN' ? 'on' : ''}" data-act="fstate" data-v="OPEN">abertas</button>
-    <button class="fchip ${f.state === 'CLOSED' ? 'on' : ''}" data-act="fstate" data-v="CLOSED">fechadas</button>
-    <select class="fsel" id="fresp">
-      <option value="">responsável: todos</option>
-      <option value="${SEM_RESP}" ${f.resp === SEM_RESP ? 'selected' : ''}>ninguém assumiu</option>
-      ${pessoas.map(p => `<option value="${esc(p)}" ${f.resp === p ? 'selected' : ''}>${esc(p)}</option>`).join('')}
-    </select>
-    <select class="fsel" id="flabel">
-      <option value="">label: todas</option>
-      ${labels.map(l => `<option value="${esc(l)}" ${f.label === l ? 'selected' : ''}>${esc(l)}</option>`).join('')}
-    </select>
-    <input class="search" id="fq" type="search" placeholder="buscar por título ou #número…" value="${esc(f.q)}">
-  </div>
+  ${cabecalho('acompanhar', 'Issues', 'gh · cada issue na sua fase, do pedido à produção')}
+  ${funilHtml()}
+  ${filtrosHtml(iss)}
   <div id="ilist">${issueListHtml()}</div>
   </div>`;
 }
 
 function wireIssues() {
-  const q = $('#fq'), sel = $('#flabel'), resp = $('#fresp');
+  const q = $('#fq');
   if (q) q.addEventListener('input', () => { S.fIssues.q = q.value; refreshIssueList(); });
-  if (sel) sel.addEventListener('change', () => { S.fIssues.label = sel.value; refreshIssueList(); });
-  // o visor do responsável fica acima dos controles: trocar a pessoa redesenha a aba
-  if (resp) resp.addEventListener('change', () => { S.fIssues.resp = resp.value; render(); });
+}
+
+/* chip clicado de novo desliga o filtro */
+function alternarFiltro(chave, v) {
+  S.fIssues[chave] = S.fIssues[chave] === v ? filtrosVazios()[chave] : v;
+  render();
 }
 
 function refreshIssueList() {
@@ -623,6 +581,27 @@ async function ensureComments(n) {
     S.comments[n] = { loading: false, list: [], error: String(e) };
   }
   if (S.tab === 'issues') refreshIssueList();
+}
+
+async function ensureTimeline(n) {
+  if (timelineDe(n)) return;
+  S.timelines[n] = { loading: true };
+  try {
+    const r = await fetch(`/api/issue/${n}/timeline`);
+    const j = await r.json();
+    S.timelines[n] = { loading: false, list: j.timeline || [], error: j.error };
+  } catch (e) {
+    S.timelines[n] = { loading: false, list: [], error: String(e) };
+  }
+  if (S.tab === 'issues') refreshIssueList();
+}
+
+/* ---------- PRS (o quadro por fase chega na fatia própria) ---------- */
+
+function renderPrs() {
+  return `
+  ${cabecalho('acompanhar', 'PRs', 'quadro por fase, uma raia por pessoa')}
+  <div class="empty rv">em construção: o quadro dos PRs por fase chega na próxima fatia do Hospital OS</div>`;
 }
 
 /* ---------- DEPLOYS ---------- */
@@ -792,74 +771,6 @@ function desenharDiagramas(root) {
   });
 }
 
-/* ---------- PENDÊNCIAS (fila humana: issues ready-for-human) ---------- */
-
-function pendenciasHumanas() {
-  const issues = (S.data && S.data.github && S.data.github.issues) || [];
-  return issues
-    .filter(i => i.state === 'OPEN' && i.labels.includes('ready-for-human'))
-    .sort((a, b) => new Date(a.created_at) - new Date(b.created_at));
-}
-
-function pendPrdChip(p, byN) {
-  const prd = p.parent && byN[p.parent];
-  // só rotula PRD quando o pai É um PRD: parent falso (regex frouxa do corpo)
-  // não ganha rastro mentiroso.
-  if (!prd || !prd.is_prd) return '<span class="badge b-ghost">sem PRD</span>';
-  return `<a class="pend-prd" href="${esc(prd.url)}" target="_blank" rel="noopener">
-    <span class="prd-tag">PRD</span> #${prd.number} · ${esc(prd.title)} ↗</a>`;
-}
-
-function pendCard(p, j, byN) {
-  const outras = p.labels.filter(l => l !== 'ready-for-human');
-  const prs = (p.prs || []).map(pr =>
-    `<a class="badge b-ghost" href="${esc(pr.url)}" target="_blank" rel="noopener">PR #${pr.number}</a>`).join('');
-  return `
-  <article class="pend-card rv" style="--i:${j}">
-    <div class="fhead">
-      <a class="fnum" href="${esc(p.url)}" target="_blank" rel="noopener">#${p.number}</a>
-      <a class="ftitle" href="${esc(p.url)}" target="_blank" rel="noopener">${esc(p.title)}</a>
-    </div>
-    <div class="fmeta">
-      ${labelBadge('ready-for-human')}
-      ${outras.map(labelBadge).join('')}
-      ${prs}
-      <span class="pend-ago">aberta ${ago(p.created_at)}</span>
-      ${p.criteria.total ? `<span class="capsule">${p.criteria.done}/${p.criteria.total} passos</span>` : ''}
-    </div>
-    <div class="pend-rastro">${pendPrdChip(p, byN)}</div>
-    ${p.body ? `<div class="md pend-body">${md(p.body)}</div>` : ''}
-  </article>`;
-}
-
-function renderPendencias() {
-  const cab = cabecalho('agir', 'Pendências humanas', 'o que só você pode fazer, com o rastro do PRD');
-  // Avisos do último deploy vêm do state.json (local, via git): renderizam
-  // mesmo com o gh fora do ar.
-  const avisos = (((S.data.state || {}).next_actions) || []).filter(a => a.kind && a.kind !== 'ok');
-  const painelAvisos = avisos.length ? `
-    <div class="pend-avisos rv">
-      <span class="k-label">avisos do último deploy · docs/spec/deploy/state.json</span>
-      ${avisos.map(a => `<div class="banner plano-aviso">${a.kind === 'warn' ? '⚠' : 'ℹ'}
-        <b>${esc(a.title || '')}</b> ${esc(a.text || '')}</div>`).join('')}
-    </div>` : '';
-  if (S.data.github.error) {
-    return `<div class="tab-pend">${cab}
-      <div class="empty">As pendências são as issues abertas com o label <span class="mono">ready-for-human</span>,
-      lidas pelo <span class="mono">gh</span>, que está indisponível agora, veja o aviso no topo.</div>
-      ${painelAvisos}</div>`;
-  }
-  const pend = pendenciasHumanas();
-  const byN = {};
-  (S.data.github.issues || []).forEach(i => { byN[i.number] = i; });
-  const lista = pend.length
-    ? `<div class="pend-lista">${pend.map((p, j) => pendCard(p, j, byN)).join('')}</div>`
-    : `<div class="empty">Nenhuma pendência humana aberta 🎉 &nbsp;·&nbsp; quando um ciclo de trabalho terminar
-       deixando uma ação que só você pode fazer, ela vira uma issue com o label
-       <span class="mono">ready-for-human</span> ligada ao PRD, e aparece aqui.</div>`;
-  return `<div class="tab-pend">${cab}${lista}${painelAvisos}</div>`;
-}
-
 /* ---------- DOMÍNIO ---------- */
 
 function renderDominio() {
@@ -883,146 +794,6 @@ function renderDominio() {
     <span class="tst-quote" aria-hidden="true">&ldquo;</span>
     <div class="md">${md(S.data.context_md || '_CONTEXT.md não encontrado_')}</div>
     <div class="tst-foot"><span class="tst-ref">CONTEXT.md · curado por humano</span></div>
-  </div>`;
-}
-
-/* ---------- GUIA (fluxograma do pipeline) ---------- */
-
-const FLX_ICONS = {
-  bulb: '<path d="M9 18h6M10 21h4"/><path d="M12 2a7 7 0 0 0-4 12c1 1 1 2 1 3h6c0-1 0-2 1-3a7 7 0 0 0-4-12z"/>',
-  list: '<path d="M8 6h12M8 12h12M8 18h12"/><circle cx="3.6" cy="6" r="1"/><circle cx="3.6" cy="12" r="1"/><circle cx="3.6" cy="18" r="1"/>',
-  target: '<circle cx="12" cy="12" r="9"/><circle cx="12" cy="12" r="4.5"/><circle cx="12" cy="12" r="1"/>',
-  file: '<path d="M7 2h8l4 4v16H7z"/><path d="M15 2v4h4"/><path d="M10 12h6M10 16h6"/>',
-  branch: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="9" r="2"/><path d="M6 7v10M6 13h6a4 4 0 0 0 4-4"/>',
-  claim: '<path d="M6 3h12v19l-6-4-6 4z"/>',
-  flask: '<path d="M9 2h6M10 2v6l-5 10a2 2 0 0 0 2 4h10a2 2 0 0 0 2-4l-5-10V2"/><path d="M7.5 15h9"/>',
-  rocket: '<path d="M12 2c3 2.5 4.5 6.5 4.5 10L14 15h-4l-2.5-3c0-3.5 1.5-7.5 4.5-10z"/><path d="M9.5 15L7 19M14.5 15L17 19"/><circle cx="12" cy="9" r="1.4"/>',
-  search: '<circle cx="11" cy="11" r="7"/><path d="M21 21l-4.5-4.5"/>',
-  shield: '<path d="M12 2l8 3v6c0 5-3.5 8.5-8 10.5C7.5 19.5 4 16 4 11V5z"/><path d="M9 11.5l2 2 4-4"/>',
-  check: '<path d="M4 12.5l5 5L20 6.5"/>',
-  usercheck: '<circle cx="9" cy="7" r="4"/><path d="M2 21c0-4 3.5-6 7-6c1.4 0 2.7.3 3.8.9"/><path d="M15.5 12l2 2 4-4"/>',
-  cloud: '<path d="M7 18a4 4 0 0 1-.5-8 6 6 0 0 1 11.5 1.5A3.5 3.5 0 0 1 18 18"/><path d="M12 21v-8M9 15l3-3 3 3"/>',
-  live: '<circle cx="12" cy="12" r="2.4"/><path d="M7.5 7.5a6 6 0 0 0 0 9M16.5 7.5a6 6 0 0 1 0 9"/>',
-  rewind: '<path d="M11 6L5 12l6 6M19 6l-6 6 6 6"/>',
-  camera: '<path d="M4 8h3l1.5-2.5h7L17 8h3v12H4z"/><circle cx="12" cy="13" r="3.4"/>',
-};
-const flxIcon = n => (n && FLX_ICONS[n])
-  ? `<svg class="flx-ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.9" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${FLX_ICONS[n]}</svg>`
-  : '';
-
-/* respaldo de cada skill: resumo curto + de onde vem (SKILL.md real ou skill nativa) */
-function flxPop(o) {
-  const title = o.cmd || o.t;
-  const src = o.src
-    ? `<div class="flx-pop-src">fonte <code>${o.src}</code></div>`
-    : `<div class="flx-pop-src flx-pop-rule">${o.rule || 'regra do fluxo'}</div>`;
-  return `<div class="flx-pop ${o.up ? 'flx-pop-up' : ''}" role="tooltip">
-    <div class="flx-pop-h">${flxIcon(o.icon)}<span>${title}</span></div>
-    <p>${o.tip}</p>${src}</div>`;
-}
-function flxNode(o) {
-  const head = o.cmd
-    ? `<span class="cmdpill ${o.hot ? 'cmdpill-hot' : ''}">${o.cmd}</span>`
-    : `<span class="flx-et">${o.t}</span>`;
-  const sub = o.sub ? `<div class="flx-nd">${o.sub}</div>` : '';
-  const inter = o.tip ? 'tabindex="0" data-tip' : '';
-  return `<div class="flx-node ${o.cls || ''}" ${inter} style="--d:${o.d || 0}">
-    ${flxIcon(o.icon)}<div class="flx-nbody">${head}${sub}</div>${o.tip ? flxPop(o) : ''}</div>`;
-}
-
-function fluxoHtml() {
-  let d = 0;
-  const conn = (cls = '', label = '') =>
-    `<div class="flx-conn ${cls}" style="--d:${d++}"><i></i><b></b>${label ? `<em>${label}</em>` : ''}</div>`;
-  const phase = (n, txt) =>
-    `<div class="flx-phase" style="--d:${d++}"><span class="flx-phase-n">${n}</span>${txt}</div>`;
-  return `
-  <div class="flx">
-    ${phase('1', 'planejar')}
-    <div class="flx-entries">
-      <div class="flx-lane flx-left">
-        ${flxNode({ t: 'Tenho uma ideia nova', sub: 'feature · melhoria · mudança', icon: 'bulb', cls: 'flx-is-entry', d: d++,
-          tip: 'A porta de entrada quando o trabalho ainda não existe: uma feature, melhoria ou mudança que vira plano, PRD e issues.', rule: 'ponto de partida do fluxo' })}
-        ${conn()}
-        ${flxNode({ cmd: '/grill-with-docs', sub: 'afia a ideia contra o domínio', icon: 'target', d: d++,
-          tip: 'Sessão de grilling: te entrevista sem dó sobre cada ramo do plano, uma decisão por vez com recomendação destacada, desafiando contra o domínio. Atualiza CONTEXT.md e ADRs inline conforme as decisões fecham.', src: '.claude/skills/grill-with-docs' })}
-        ${conn()}
-        ${flxNode({ cmd: '/to-prd', sub: 'vira 1 issue PRD (ready-for-agent)', icon: 'file', d: d++,
-          tip: 'Sintetiza a conversa atual num PRD (não te entrevista de novo): problema, solução, histórias de usuário e critérios de aceite, em pt-BR com a terminologia do CONTEXT.md. Publica como 1 issue ready-for-agent no GitHub.', src: '.claude/skills/to-prd' })}
-        ${conn()}
-        ${flxNode({ cmd: '/to-issues', sub: 'corta em N fatias verticais', icon: 'branch', d: d++,
-          tip: 'Quebra o PRD em fatias verticais independentes (tracer bullets), cada uma pegável sozinha, com tamanho (P/M/G) e "Bloqueada por: #X" explícito.', src: '.claude/skills/to-issues' })}
-        ${conn()}
-      </div>
-      <div class="flx-lane">
-        ${flxNode({ t: 'Vou pegar da fila', sub: 'issue já especificada', icon: 'list', cls: 'flx-is-entry', d: 1,
-          tip: 'Atalho pra quando a issue já está especificada e triada: você entra direto na fila, sem passar pelo planejamento.', rule: 'ponto de partida do fluxo' })}
-        ${conn('flx-tall')}
-      </div>
-    </div>
-
-    <div class="flx-fila" tabindex="0" data-tip style="--d:${d++}">
-      ${flxIcon('list')}
-      <div class="flx-nbody"><div class="flx-ft">Fila de issues <code>ready-for-agent</code></div><div class="flx-es">sem dono · sem bloqueio aberto</div></div>
-      ${flxPop({ t: 'Fila ready-for-agent', icon: 'list', tip: 'Só entram issues sem dono e sem bloqueio aberto ("Bloqueada por: #X"). É daqui que cada sessão puxa trabalho, com claim atômico pra não colidir.', src: 'docs/agents/issue-tracker.md' })}
-    </div>
-    ${conn('flx-dash', 'claim + 1 worktree')}
-
-    ${phase('2', 'desenvolver · em paralelo')}
-    <div class="flx-group" style="--d:${d++}">
-      <div class="flx-cap"><span class="flx-em">×N em paralelo</span>, 1 worktree por issue</div>
-      <div class="flx-row">
-        ${flxNode({ cmd: '/pegar-issue', sub: 'claim + branch', icon: 'claim', d: d++,
-          tip: 'Entry point de desenvolvimento: pega uma issue da fila, dá claim atômico (label + assignee) pra não colidir com sessões paralelas, cria a branch e carrega a spec no contexto pro /tdd.', src: '.claude/skills/pegar-issue' })}
-        <span class="flx-chev">›</span>
-        ${flxNode({ cmd: '/tdd', sub: 'red → green → refactor', icon: 'flask', d: d++,
-          tip: 'Red-green-refactor: cada critério de aceite da issue vira um teste que falha primeiro; o código vem só pra fazê-lo passar. Nomes de teste descrevem o comportamento de domínio em pt-BR.', src: '.claude/skills/tdd' })}
-        <span class="flx-chev">›</span>
-        ${flxNode({ cmd: '/ship', sub: 'roda os 3 gates → PR', icon: 'rocket', d: d++,
-          tip: 'Leva a mudança até o PR verde: branch, commit, PR e 3 gates. Dispara /code-review e /security-review automaticamente e imprime o comando do rabo (fechar_onda.py). Trabalho ancorado na issue (Closes #N fecha no merge).', src: '.claude/skills/ship' })}
-      </div>
-
-      <div class="flx-subcap">o <code>/ship</code> dispara os 3 gates, em sequência</div>
-      <div class="flx-gaterow">
-        ${flxNode({ cmd: '/code-review', sub: 'bugs + limpezas', icon: 'search', cls: 'flx-gate-step', d: d++,
-          tip: 'Revisa o diff atual atrás de bugs de correção e limpezas de reuso, simplificação e eficiência, no nível de esforço pedido. Primeiro gate do /ship.', src: 'Claude Code (skill nativa)' })}
-        <span class="flx-chev flx-chev-sm">›</span>
-        ${flxNode({ cmd: '/security-review', sub: 'segurança do diff', icon: 'shield', cls: 'flx-gate-step flx-gate-hot', hot: true, d: d++,
-          tip: 'Revisão de segurança das mudanças pendentes da branch. Segundo gate do /ship. Atenção conhecida: em worktree lê o diff da árvore principal (incidente #112); o agente escopa o diff manualmente.', src: 'Claude Code (skill nativa)' })}
-        <span class="flx-chev flx-chev-sm">›</span>
-        ${flxNode({ cmd: 'CI verde', sub: 'testes + lint', icon: 'check', cls: 'flx-gate-step flx-gate-ci', d: d++,
-          tip: 'A suite de testes e o lint (ruff no backend, ESLint no front) precisam ficar verdes no GitHub Actions antes do merge. Terceiro gate.', src: '.github/workflows' })}
-      </div>
-    </div>
-    ${conn()}
-
-    ${phase('3', 'revisão humana & deploy')}
-    ${flxNode({ t: 'Gate humano: OK de merge', sub: 'subir é decisão humana · rabo único por PR ou lote', icon: 'usercheck', cls: 'flx-humangate', d: d++,
-      tip: 'O único toque humano obrigatório: você aprova o PR (ou o lote da onda) citando o número. Quem leva à main é o rabo, fechar_onda.py: bump na branch do PR, APP_VERSION, merge pela API, um build, health e registro (ADR 0061).', rule: 'regra: main protegida, só entra por PR' })}
-    ${conn()}
-
-    ${flxNode({ cmd: 'fechar_onda.py · Coolify', sub: 'merge pela API → um build → health com version-match', icon: 'cloud', cls: 'flx-wide', d: d++,
-      tip: 'O rabo único: bump como commit na branch do PR, CI verde, APP_VERSION no Coolify, merge pela API (a main é protegida), um build, health com conferência de versão; depois, history.json e state.json num PR só de docs. Build ou health ruim: código 3/4 e /deploy rollback.', src: '.claude/skills/onda-enxuta/scripts' })}
-    ${conn()}
-
-    <div class="flx-fork" style="--d:${d++}">
-      ${flxNode({ t: 'No ar (produção)', sub: 'health verde · /snapshot atualiza o mapa', icon: 'live', cls: 'flx-out flx-ok', up: true,
-        tip: 'Health check verde: a versão nova assume produção. Logo depois o /snapshot regenera o mapa vivo da app (rotas, entidades, schema) direto do código.', src: '.claude/skills/snapshot' })}
-      ${flxNode({ t: 'Rollback automático', sub: 'health vermelho · volta à versão anterior', icon: 'rewind', cls: 'flx-out flx-bad', up: true,
-        tip: 'Health check vermelho: o /deploy reverte sozinho pra versão anterior. Produção nunca fica quebrada esperando intervenção.', src: '.claude/skills/deploy' })}
-    </div>
-  </div>`;
-}
-
-function renderGuia() {
-  return `
-  ${cabecalho('aprender', 'Guia', 'do brainstorm ao deploy')}
-  <div class="card rv guia-flow-card">
-    <div class="guia-flow-head">
-      <span class="eyebrow">método de trabalho</span>
-      <h3 class="guia-flow-title">O fluxo inteiro, num desenho</h3>
-    </div>
-    ${fluxoHtml()}
   </div>`;
 }
 
@@ -1066,18 +837,10 @@ view.addEventListener('click', e => {
     t.setAttribute('aria-expanded', on ? 'true' : 'false');
   } else if (act === 'copy') {
     copyCmd(t);
-  } else if (act === 'copytxt') {
-    if (t.classList.contains('ok')) return;  // clique duplo: não capturar o "copiado ✓" como prev
-    writeClipboard(t.dataset.txt || '', () => {
-      const prev = t.innerHTML;
-      t.classList.add('ok');
-      t.textContent = 'copiado ✓';
-      setTimeout(() => { t.classList.remove('ok'); t.innerHTML = prev; }, 1400);
-    });
   } else if (act === 'iss') {
     const n = Number(t.dataset.n);
     if (S.expIss.has(n)) S.expIss.delete(n);
-    else { S.expIss.add(n); ensureComments(n); }
+    else { S.expIss.add(n); ensureComments(n); ensureTimeline(n); }
     refreshIssueList();
   } else if (act === 'prd') {
     const n = Number(t.dataset.n);
@@ -1093,6 +856,17 @@ view.addEventListener('click', e => {
     render();
   } else if (act === 'fstate') {
     S.fIssues.state = t.dataset.v;
+    render();
+  } else if (act === 'ffase') {
+    alternarFiltro('fase', t.dataset.v);
+  } else if (act === 'fresp') {
+    alternarFiltro('resp', t.dataset.v);
+  } else if (act === 'fprd') {
+    alternarFiltro('prd', Number(t.dataset.v));
+  } else if (act === 'flabel') {
+    alternarFiltro('label', t.dataset.v);
+  } else if (act === 'fhumana') {
+    S.fIssues.humana = !S.fIssues.humana;
     render();
   } else if (act === 'doc') {
     S.mapaDoc = t.dataset.doc;
@@ -1110,7 +884,7 @@ view.addEventListener('click', e => {
     S.entTab = t.dataset.t;
     render();
   } else if (act === 'gotab') {
-    S.fIssues = { state: 'all', label: t.dataset.label || '', q: '', resp: '' };
+    S.fIssues = { ...filtrosVazios(), label: t.dataset.label || '' };
     setTab(t.dataset.go);
   }
 });
