@@ -4,7 +4,8 @@ A aba lê só `history.json` e `state.json` da `origin/main`: no topo, a versão
 no ar e os serviços com o health; abaixo, uma linha por versão (deploys da
 mesma versão juntos), a mais recente primeiro e sem teto. Aberta, a versão
 mostra PRs, issues, migration, health, duração, env e notas, com chips que
-navegam dentro do painel. O coletor não lê mais o CHANGELOG (apagado no #939).
+navegam dentro do painel. O coletor não lê mais as notas de versão em Markdown
+(o arquivo saiu no #939) e o /api/data não tem mais o campo `changelog`.
 
 O app.js roda de verdade no Node (molde do test_router.py): DOM mínimo de
 mentira, `location`/`history` que guardam o hash e o `fetch` do /api/data
@@ -91,7 +92,12 @@ def _servico(sid, status, http=200, ms=140):
         "domain": f"{sid}.exemplo",
         "status": status,
         "last_deploy_at": "2026-10-06T13:38:54-03:00",
-        "last_health_check": {"at": "2026-10-06T16:38:54Z", "latency_ms": ms, "http_status": http, "body_ok": http == 200},
+        "last_health_check": {
+            "at": "2026-10-06T16:38:54Z",
+            "latency_ms": ms,
+            "http_status": http,
+            "body_ok": http == 200,
+        },
     }
 
 
@@ -240,7 +246,9 @@ def _app(tmp_path, expr, antes="", hash_inicial="#producao", dados=None):
     )
     arq = tmp_path / "harness.mjs"
     arq.write_text(prog, encoding="utf-8")
-    out = subprocess.run(["node", str(arq)], capture_output=True, text=True, check=False, env={**os.environ, "TZ": "UTC"})
+    out = subprocess.run(
+        ["node", str(arq)], capture_output=True, text=True, check=False, env={**os.environ, "TZ": "UTC"}
+    )
     assert out.returncode == 0, out.stderr
     linha = [x for x in out.stdout.splitlines() if x.startswith("@@")][-1]
     return json.loads(linha[2:])
@@ -249,7 +257,11 @@ def _app(tmp_path, expr, antes="", hash_inicial="#producao", dados=None):
 def _versoes(html):
     """(rótulo da versão, em destaque?, html do card) de cada versão, na ordem da tela."""
     return [
-        (re.search(r'class="pd-ver[^"]*">([^<]*)<', m.group(0)).group(1), 'aria-current="true"' in m.group(1), m.group(0))
+        (
+            re.search(r'class="pd-ver[^"]*">([^<]*)<', m.group(0)).group(1),
+            'aria-current="true"' in m.group(1),
+            m.group(0),
+        )
         for m in re.finditer(r"(<article[^>]*>)[\s\S]*?</article>", html)
     ]
 

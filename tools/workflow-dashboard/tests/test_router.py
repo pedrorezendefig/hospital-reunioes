@@ -135,7 +135,6 @@ DADOS = {
         _deploy("0.163.4", "abc1234", [70], [904]),
         _deploy("v0.163.3", "def5678", [69], [903]),
     ],
-    "changelog": [],
     "state": {},
     "snapshots": [],
     "adrs": [],

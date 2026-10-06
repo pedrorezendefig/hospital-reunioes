@@ -282,7 +282,7 @@ function cabecalho(eyebrow, titulo, hint = '') {
   </div>`;
 }
 
-/* ---------- PRODUÇÃO (timeline de deploys e releases) ---------- */
+/* ---------- PRODUÇÃO (versão no ar e lista de versões, ADR 0062 decisão 2) ---------- */
 
 function renderProducao() {
   return renderDeploys();
