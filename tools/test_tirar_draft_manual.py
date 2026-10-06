@@ -270,3 +270,51 @@ def test_nada_e_escrito_quando_uma_pagina_do_lote_trava(tmp_path):
 
     assert saida.returncode == 2
     assert sem_video.read_text(encoding="utf-8") == antes
+
+
+# ------------------------------------------- o aviso da Action pós-merge (#951)
+# A Action tira o draft no runner, mas não publica: quem põe no ar é o humano,
+# com `/manual publicar` da máquina que tem os MP4. O `--resumo` é o aviso que
+# ela deixa no run e no PRD.
+
+PROXIMO_PASSO = "rode `/manual publicar` da sua máquina"
+
+
+def test_resumo_lista_o_que_saiu_do_draft_e_manda_publicar(tmp_path):
+    escrever(tmp_path, "ouvidoria/registrar.md", "731")
+    resumo = tmp_path / "resumo.md"
+
+    saida = rodar(tmp_path, "--prd", "731", "--resumo", str(resumo))
+
+    assert saida.returncode == 0, saida.stderr
+    texto = resumo.read_text(encoding="utf-8")
+    assert "Saíram do draft:\n- `ouvidoria/registrar.md`\n" in texto
+    assert "Ficaram em draft" not in texto
+    assert PROXIMO_PASSO in texto
+
+
+def test_resumo_lista_o_que_ficou_em_draft_por_falta_de_mp4(tmp_path):
+    """Saída 2: nada sai do draft, nem a página sem vídeo do mesmo PRD."""
+    escrever(tmp_path, "ouvidoria/registrar.md", "731")
+    escrever(tmp_path, "ouvidoria/encaminhar.md", "731", video="encaminhar")
+    resumo = tmp_path / "resumo.md"
+
+    saida = rodar(tmp_path, "--prd", "731", "--resumo", str(resumo))
+
+    assert saida.returncode == 2
+    texto = resumo.read_text(encoding="utf-8")
+    assert "Ficaram em draft:\n- `ouvidoria/encaminhar.md`\n- `ouvidoria/registrar.md`\n" in texto
+    assert "Saíram do draft" not in texto
+    assert "public/video/ouvidoria/encaminhar.mp4" in texto
+    assert PROXIMO_PASSO in texto
+
+
+def test_sem_pagina_em_draft_nao_ha_aviso(tmp_path):
+    """PRD sem página no Manual não ganha comentário mandando publicar."""
+    escrever(tmp_path, "ouvidoria/registrar.md", "731", draft="false")
+    resumo = tmp_path / "resumo.md"
+
+    saida = rodar(tmp_path, "--prd", "731", "--resumo", str(resumo))
+
+    assert saida.returncode == 0, saida.stderr
+    assert not resumo.exists()
