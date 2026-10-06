@@ -576,16 +576,15 @@ def test_funil_conta_as_nove_fases_no_total_e_por_responsavel():
     assert funil["total"]["em_andamento"] == 1
     assert funil["total"]["humana"] == 1
     assert funil["total"]["pr_aberto"] == 0
-    # responsável é quem assumiu; sem assignee, quem criou (emenda de 05/10 da ADR 0061)
+    # responsável é só quem assumiu (#942): quem apenas criou não ganha contagem
     assert funil["por_responsavel"]["bia"]["em_andamento"] == 1
     assert funil["por_responsavel"]["bia"]["humana"] == 1
     assert funil["por_responsavel"]["caio"]["em_andamento"] == 1
-    assert funil["por_responsavel"]["ana"]["triagem"] == 1
-    assert funil["por_responsavel"]["ana"]["fila"] == 1
-    assert funil["por_responsavel"]["ana"]["em_andamento"] == 0
+    assert "ana" not in funil["por_responsavel"]
     # "(sem)" é a fila sem claim, o mesmo valor do filtro "ninguém assumiu" da aba Issues
     assert funil["por_responsavel"]["(sem)"]["fila"] == 2
     assert funil["por_responsavel"]["(sem)"]["triagem"] == 1
+    assert sum(funil["por_responsavel"]["(sem)"].values()) == 3
 
 
 # ---------- timeline normalizada ----------

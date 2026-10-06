@@ -53,3 +53,11 @@ Decisão do Pedro (05/out/2026, grilling). O painel local `tools/workflow-dashbo
 - Os testes de `tools/workflow-dashboard/tests/` que cobrem Plano, Pendências e o visor por responsável saem com o código.
 - O `lint-adr` e o grep de travessão do CI deixam de ter o CHANGELOG no escopo.
 - Quem roda o rabo deixa de precisar de venv, WeasyPrint e `DYLD` locais para o snapshot: a Action tem o ambiente.
+
+## Emenda de 06/10/2026: responsável é só quem assumiu (issue #942)
+
+A triagem do PRD #938 deixou em aberto qual regra de responsável vale no Hospital OS: a da decisão 5 desta ADR ("ninguém assumiu" = sem assignee) ou a da emenda de 05/10/2026 da ADR 0061 (sem ninguém designado, conta quem criou a issue, PR #930). O Pedro decidiu na triagem da #942 (comentário de 06/10/2026 na issue).
+
+**Decisão:** no painel, responsável é só quem está designado (assignee). O filtro de responsável, a cor da pessoa nos nós das ondas e nas raias da aba PRs e o "ninguém assumiu" leem só o assignee; issue sem assignee é "ninguém assumiu", tenha o autor que tiver. O autor pode continuar no card como informação (`✎ criada por fulano`), sem contar como responsável em lugar nenhum.
+
+Revoga a emenda de 05/10/2026 da ADR 0061 ("responsável cai em quem criou"). O visor da pessoa que separava assumidas de só criadas já tinha saído com a decisão 5 desta ADR.

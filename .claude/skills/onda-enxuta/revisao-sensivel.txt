@@ -1,50 +1,38 @@
-# Caminhos que disparam o revisor de segurança (hr-revisor-seguranca, esforço max).
+# Caminhos que disparam o revisor de segurança por PR (hr-revisor-seguranca, uma vez, esforço high).
 # Um glob por linha, relativo à raiz do repositório. Linhas com # são comentário.
 # Prefixo "+" = só dispara quando o PR CRIA o arquivo (status "added" em
 #   gh api repos/{owner}/{repo}/pulls/<N>/files), não quando só edita.
-# Conferido contra a árvore real do repositório em 22/09/2026.
+# ADR 0064, decisão 4 (06/10/2026): só rota sem login e migration. Rota nova,
+# middleware, env, workflows e o próprio fluxo de revisão saíram; a segurança
+# do resto é a lente do hr-auditor-prd sobre o diff acumulado do PRD.
 
-# Banco e políticas
+# Migration
 hospital-reunioes/supabase/migrations/**
 
-# Backend: autenticação, permissões, configuração, limites
-hospital-reunioes/backend/app/config.py
-hospital-reunioes/backend/app/dependencies.py
-hospital-reunioes/backend/app/limiter.py
-hospital-reunioes/backend/app/main.py
-hospital-reunioes/backend/app/middleware/**
-hospital-reunioes/backend/app/routers/auth.py
-hospital-reunioes/backend/app/routers/configuracoes.py
-hospital-reunioes/backend/app/services/auth_provisioning.py
-hospital-reunioes/backend/app/services/*token*
-hospital-reunioes/backend/scripts/sync_auth_ids.py
-+hospital-reunioes/backend/app/routers/*.py
-
-# Frontend: middleware de sessão, auth, route handlers, config de build
-hospital-reunioes/frontend/src/middleware.ts
+# Rota sem login: canal público da Ouvidoria, webhooks (ClickSign, GitHub,
+# e-mail recebido pelo Resend), o e-mail recebido em si, link público do Aceite,
+# portal do setor, API da Ana, conector MCP, callback do login.
+# Todo router com rota cuja cadeia de Depends não chega a get_current_user tem
+# de estar aqui (health.py é a exceção explícita). O sensivel.py também varre o
+# head do PR: router tocado com rota sem login, route.ts e "use server" do
+# frontend disparam mesmo fora da lista; tools/test_revisao_so_must_fix.py
+# confere que a lista cobre o que a varredura acha hoje.
+hospital-reunioes/backend/app/routers/ouvidoria_publica.py
+hospital-reunioes/backend/app/routers/webhooks.py
+hospital-reunioes/backend/app/routers/aceite.py
+hospital-reunioes/backend/app/routers/ouvidoria_setor.py
+hospital-reunioes/backend/app/routers/ana.py
+hospital-reunioes/backend/app/routers/conector_mcp.py
 hospital-reunioes/frontend/src/app/auth/**
-hospital-reunioes/frontend/src/components/auth/**
-hospital-reunioes/frontend/src/app/api/**
-hospital-reunioes/frontend/next.config.ts
+hospital-reunioes/frontend/src/app/actions/auth.ts
 
-# Infra e segredos
-hospital-reunioes/backend/Dockerfile
-hospital-reunioes/frontend/Dockerfile
-docker-compose.yml
-.github/workflows/**
-**/.env*
-**/*secret*
-**/*token*
-**/*credenci*
-**/*senha*
-
-# Quem decide a revisão e o rabo: sem humano antes de produção (ADR 0063),
-# afrouxar um destes desligaria o revisor de segurança dos PRs seguintes.
-.claude/agents/**
-.claude/skills/onda-enxuta/**
-.claude/skills/ship/**
-.claude/skills/pegar-issue/**
-.claude/skills/deploy/scripts/**
-.claude/settings*.json
-.github/rulesets/**
-tools/checar_migration_repetida.py
+# O gate dessas portas, que vive fora do router (o teste exige aqui o arquivo
+# que define cada Depends das rotas sem login)
+hospital-reunioes/backend/app/services/ouvidoria_triagem_email.py
+hospital-reunioes/backend/app/services/aceite_service.py
+hospital-reunioes/backend/app/services/ouvidoria_setor_tokens.py
+hospital-reunioes/backend/app/services/ouvidoria_anexos.py
+hospital-reunioes/backend/app/services/central_de_comando/conector_mcp.py
+hospital-reunioes/backend/app/services/clicksign_service.py
+hospital-reunioes/backend/app/dependencies.py
+hospital-reunioes/frontend/src/lib/login/destino.ts

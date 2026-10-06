@@ -1,10 +1,13 @@
 # Aplicativo Hospital — painel do fluxo
 
-Painel local e **somente leitura** do projeto. Abre direto no **Plano**: o mapa vivo do trabalho pendente, na ordem certa, com o comando de cada passo pronto para copiar.
+Painel local e **somente leitura** do projeto. Abre direto em **Issues**: o funil das nove fases no topo, cada issue com a fase, quem assumiu e há quanto tempo, e filtros de um clique.
 
 ```bash
 python3 tools/workflow-dashboard/serve.py   # abre http://localhost:8765
+python3 tools/workflow-dashboard/serve.py --no-open --fixture dados.json   # /api/data de um arquivo, sem coletar
 ```
+
+O `--fixture` serve a saída de `collect.py --json` (editada ou não): render repetível no Chrome headless, sem depender do `gh`.
 
 Zero dependências (só a stdlib do Python). Bind apenas em `127.0.0.1` (ninguém na rede alcança). Nunca escreve na working tree (o `git fetch` da coleta só atualiza referências remotas).
 
@@ -21,34 +24,42 @@ Porta fixa `8799` (a 8765 fica livre pra rodadas manuais), logs em `~/Library/Lo
 
 ## Abas
 
-**Plano** (home): a leva atual: as fatias do PRD ativo em **ondas** de execução, com tamanho, tempo típico, estado e o comando copiável para pegar cada uma; issues **avulsas** abertas (fora de PRD) fecham a aba em seção própria, com os mesmos estados · **Issues**: tudo que aconteceu (PRD → fatias → PR → deploy); as fatias de cada PRD nascem **colapsadas** atrás de um toggle `▸ N fatias · M fechadas` (filtro/busca ativos forçam a exibição do que bate); o filtro de **um responsável** (quem está designado; sem designado, quem criou a issue; ou "ninguém assumiu", a fila sem claim) liga um visor com as contas da pessoa: abertas, entregues, lead time e fila · **Produção**: estado de produção + timeline de deploys e releases · **Pendências**, a fila humana: issues abertas com o label `ready-for-human` (ações que só o Pedro pode fazer, criadas no fim de um ciclo pelo `/ship` Passo 10.5), cada card com o rastro do PRD pai e o corpo com o passo a passo; fecha a issue, some do painel · **Mapa**: snapshots factuais da app · **Domínio**: ADRs + glossário · **Guia**: o método em 6 passos, o setup de máquina nova e os bastidores do painel.
+**Issues** (home): o **funil** das nove fases no topo, com a contagem de cada uma; clicar numa fase filtra a lista. Abaixo, os filtros em chips: estado, o chip `ready-for-human` com o contador da fila humana (era a aba Pendências), responsável (um chip por pessoa, na cor dela, mais "ninguém assumiu"), PRD aberto, labels agrupadas por prefixo (`type:`, `area:`, `fatia:` e as outras) e busca. Com um responsável filtrado, o funil mostra as contagens dele; não há lead time nem métrica por pessoa (ADR 0061, decisão 5). A lista segue a árvore PRD → fatias; o card fechado mostra fase, pessoa, idade, critérios feitos/total, PR e versão; aberto, a linha do tempo com data e hora, o corpo e os comentários · **PRs**: em construção (quadro por fase, uma raia por pessoa) · **Produção**: estado de produção + timeline de deploys · **Mapa**: snapshots factuais da app · **Domínio**: ADRs + glossário.
 
-## Vocabulário do Plano
+O método de trabalho (o que era a aba Guia) vive em `docs/onboarding/`.
 
-- **Leva** — o conjunto de fatias de um PRD aberto; o painel desenha uma leva por PRD ativo.
-- **Onda** — camada de fatias sem dependência entre si: tudo na mesma onda anda **em paralelo** (1 worktree por issue, claim atômico). A onda seguinte destrava quando as dependências fecham.
-- **Fatia P/M/G** — label de tamanho aplicado pelo `/to-issues` na quebra do PRD (catálogo em `docs/agents/triage-labels.md`).
-- **Tempo típico** — mediana do lead time real (claim → fechamento) das fatias fechadas do mesmo tamanho; bucket com menos de 3 amostras cai na **mediana geral** (o card avisa). Nunca é estimativa a priori.
-- **Caminho crítico** — soma dos tempos típicos no caminho mais longo de dependências: o tempo mínimo até a leva fechar, mesmo com paralelismo máximo.
+**Endereço**: aba, item aberto e filtros vivem no hash (`#issues/930`, `#prs/930`, `#producao/v0.161.0`, `#issues?resp=...&fase=...`); copiar a URL e abrir de novo volta ao mesmo ponto, com o card aberto em destaque. Chips de issue, PR e versão navegam dentro do painel; o GitHub é o `↗` de cada card (ADR 0062, decisão 8).
+
+## Vocabulário
+
+- **Fase**: em que pé está a issue, derivado só de fatos do GitHub (ADR 0062, decisão 4): Triagem, Fila, Bloqueada, Em andamento, PR aberto, Mergeada, Em produção, Humana, Encerrada sem PR. Quem calcula é o `fases.py`; o front só desenha.
+- **Funil**: a faixa das nove fases com a contagem de cada uma, no total ou de um responsável.
+- **Responsável**: quem assumiu a issue (assignee). Quem só criou aparece no card como informação, mas não conta; "ninguém assumiu" são as issues sem assignee.
+- **Tentativa**: PR fechado sem merge; o próximo PR da mesma issue aparece na linha do tempo como "novo PR".
+- **Cor da pessoa**: os três sócios têm cor fixa; quem mais aparecer ganha a próxima cor da paleta (`static/pessoas.js`).
+- **Onda**: rodada de execução de um PRD; a fatia entra uma onda depois da bloqueadora aberta do mesmo PRD. O card de cada PRD aberto desenha as ondas em colunas: o nó é a fatia na cor de quem assumiu, a borda é a fase, a seta é o `blocked_by` aberto, e clicar no nó abre o card da fatia.
 
 ## De onde vêm os dados (ao vivo vs. do último `git pull`)
 
-- **Ao vivo (rede):** issues, PRs e comentários via `gh` (o Plano nasce daí); produção, deploys e releases da `origin/main` (`git fetch` + `git show`; o rabo `fechar_onda.py` pusha de um worktree próprio, então a verdade pós-merge vive no remoto); e o seu `git` local (branch, commits).
+- **Ao vivo (rede):** issues, PRs, comentários e a linha do tempo via `gh`; produção, deploys e releases da `origin/main` (`git fetch` + `git show`; o rabo `fechar_onda.py` pusha de um worktree próprio, então a verdade pós-merge vive no remoto); e o seu `git` local (branch, commits).
 - **Do seu clone (último `git pull`):** mapa da app (`docs/spec/snapshots/`), decisões e glossário (`docs/adr/` + `CONTEXT.md`).
 
-Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta sozinho a cada 60s. Requer `gh` autenticado para issues e para o Plano — sem ele, o resto continua funcionando (o painel mostra como resolver).
+Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta sozinho a cada 60s. Requer `gh` autenticado para Issues; sem ele, o resto continua funcionando (o painel mostra como resolver).
 
 ## Estrutura
 
 - `serve.py` — servidor HTTP (stdlib), só leitura, bind 127.0.0.1.
 - `collect.py` — agrega `gh` + arquivos de `docs/spec` + `git` num único `/api/data`.
-- `plano.py` — módulo puro do Plano: ondas, caminho crítico, tempo típico e copiáveis por fatia (o front não calcula nada).
+- `fases.py`: módulo puro das fases: fase por issue e por PR, linha do tempo, ondas por PRD e contagens do funil (o front não calcula nada).
 - `areas.py`: parse dos snapshots de área para as capas interativas (degrada para `None`, nunca quebra).
 - `diagramas.py`: parse do subset Mermaid dos snapshots (ADR 0025).
-- `tests/` — pytest do módulo plano e da estrutura do shell (`python3 -m pytest tests/`).
+- `tests/`: pytest dos módulos e do front (`cd tools/workflow-dashboard && python3 -m pytest tests -q`; o front roda no Node).
 - `static/` — front vanilla em ES modules (sem build):
   - `app.js` — SPA, render de cada aba.
   - `ui.js` — componentes (tooltip, copiar, recolhível).
-  - `content/` — textos estáveis (guia, setup, glossário).
+  - `pessoas.js`: a cor fixa de cada pessoa (`corDaPessoa`), reusada por chips, raias e nós.
+  - `router.js`: o router de hash (`#aba/item?filtros`), único módulo que lê e grava o `location.hash`.
+  - `ondas.js`: o desenho das ondas no card do PRD (SVG próprio, um gancho só no `issueCard`).
+  - `content/`: textos estáveis (glossário, verbetes das tabelas).
   - `style.css` — identidade visual (papel/indigo/coral; Fraunces + IBM Plex).
   - `vendor/marked.min.js` — render de Markdown ([marked](https://github.com/markedjs/marked), licença MIT).

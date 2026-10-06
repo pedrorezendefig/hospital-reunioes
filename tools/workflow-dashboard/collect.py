@@ -17,7 +17,6 @@ from pathlib import Path
 from areas import fundir_colunas_no_er, parse_area
 from diagramas import extrair_diagramas
 from fases import montar_fases, timeline_da_issue, vereditos_dos_comentarios
-from plano import bloqueios_do_corpo, montar_plano
 
 GH_TIMEOUT = 20
 
@@ -29,22 +28,6 @@ PR_ABERTO_FIELDS = "number,statusCheckRollup,mergeStateStatus,reviews,comments"
 GH_LIMIT = "10000"
 
 SNAPSHOT_ORDER = ["ROTAS", "ENTIDADES", "SCHEMA", "MIGRATIONS", "INTEGRACOES", "ESTRUTURA", "FLUXOGRAMAS"]
-
-CLAIMS_QUERY = """
-query($owner:String!,$name:String!){
-  repository(owner:$owner,name:$name){
-    issues(first:100,states:[CLOSED],labels:["fatia:P","fatia:M","fatia:G"],
-           orderBy:{field:UPDATED_AT,direction:DESC}){
-      nodes{
-        number
-        timelineItems(itemTypes:[ASSIGNED_EVENT],first:1){
-          nodes{ ... on AssignedEvent { createdAt } }
-        }
-      }
-    }
-  }
-}
-"""
 
 SUBISSUES_QUERY = """
 query($owner:String!,$name:String!,$after:String){
@@ -156,6 +139,22 @@ def _spec_text_fresh(root: Path, rel: str):
 
 
 # ---------- GitHub ----------
+
+def bloqueios_do_corpo(body: str) -> list[int]:
+    """Números das issues bloqueadoras declaradas no corpo.
+
+    Cobre os dois formatos do pipeline: a seção "## Bloqueada por" com bullets
+    nas linhas seguintes e a forma inline "Bloqueada por: #X".
+    """
+    nums: set[int] = set()
+    m = re.search(r"(?ims)^#+\s*Bloqueada por:?\s*$(.*?)(?=^#|\Z)", body or "")
+    if m:
+        nums |= {int(n) for n in re.findall(r"#(\d+)", m.group(1))}
+    for line in (body or "").splitlines():
+        if re.search(r"[Bb]loqueada por\b[^\n]*#", line):
+            nums |= {int(n) for n in re.findall(r"#(\d+)", line)}
+    return sorted(nums)
+
 
 def _gh_issues(root: Path) -> list[dict]:
     items = json.loads(_run(["gh", "issue", "list", "--state", "all", "--limit", GH_LIMIT,
@@ -360,30 +359,6 @@ def _gh_blocked(root: Path, slug: str) -> dict[int, list[int]]:
             break
         cursor = page["pageInfo"]["endCursor"]
     return rel
-
-
-def _enrich_claims(root: Path, slug: str, issues: list[dict]) -> None:
-    """claimed_at nas fechadas com label fatia:* — base do lead time real do Plano.
-
-    Uma única chamada GraphQL em lote (1º evento assigned por issue), independente
-    de quantas fechadas existam. Falha degrada para "sem claim" (lead time cai no
-    fallback abertura→fechamento) sem envenenar coletas futuras.
-    """
-    try:
-        owner, name = slug.split("/", 1)
-        raw = _run(["gh", "api", "graphql", "-f", f"query={CLAIMS_QUERY}",
-                    "-F", f"owner={owner}", "-F", f"name={name}"], root)
-        nodes = json.loads(raw)["data"]["repository"]["issues"]["nodes"]
-        claims = {}
-        for node in nodes:
-            items = node["timelineItems"]["nodes"]
-            if items and items[0].get("createdAt"):
-                claims[node["number"]] = items[0]["createdAt"]
-    except Exception:
-        return
-    for i in issues:
-        if i["number"] in claims:
-            i["claimed_at"] = claims[i["number"]]
 
 
 def issue_detail(root: Path, number: int) -> dict:
@@ -594,22 +569,12 @@ def _project_light(pj: dict | None) -> dict | None:
     }
 
 
-def _montar_plano_seguro(github: dict):
-    """Plano com a mesma degradação do resto do payload.
-
-    gh indisponível → None (a UI distingue "sem dados" de "sem PRD ativo");
-    erro inesperado no módulo → estrutura vazia com o erro, sem derrubar /api/data.
-    """
-    if github["error"]:
-        return None
-    try:
-        return montar_plano(github["issues"])
-    except Exception as e:
-        return {"levas": [], "tempos_tipicos": {}, "erro": str(e)[:300]}
-
-
 def _montar_fases_seguro(root: Path, slug: str, github: dict, history: list[dict]):
-    """Fases com a mesma degradação do Plano: gh fora → None; timeline fora → fases sem timeline."""
+    """Fases com a mesma degradação do resto do payload.
+
+    gh fora → None (a UI distingue "sem dados" de "funil zerado"); timeline fora
+    → fases sem timeline; erro inesperado no módulo → estrutura vazia com o erro.
+    """
     if github["error"]:
         return None
     try:
@@ -673,7 +638,6 @@ def collect(root: Path) -> dict:
             i["children"] = sorted(children.get(i["number"], []))
             i["is_prd"] = i["number"] in prds
         _correlate(history, issues, prs)
-        _enrich_claims(root, slug, issues)
         _enriquecer_prs_abertos(root, prs)
         github.update(issues=issues, prs=prs, prds=sorted(prds))
     except Exception as e:
@@ -689,7 +653,6 @@ def collect(root: Path) -> dict:
         "repo_slug": slug,
         "repo_url": f"https://github.com/{slug}",
         "github": github,
-        "plano": _montar_plano_seguro(github),
         "state": _state_public(state),
         "history": history,
         "project": project,

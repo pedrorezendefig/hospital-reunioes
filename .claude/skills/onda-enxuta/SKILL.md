@@ -28,12 +28,12 @@ description: 'Executor AFK da fila de issues em ondas: sessão de fundo por onda
 
 | Agente | Esforço | Quando | Nasce com |
 |---|---|---|---|
-| `hr-mapeador` | high | 1 vez por PRD, antes da primeira onda | número do PRD |
-| `hr-implementador` | xhigh | 1 por issue, `isolation: worktree` | issue, PRD, URL do Mapa |
+| `hr-mapeador` | high | 1 vez por PRD, antes da primeira onda; de novo só com `Estrutura mudou: sim` na passagem | número do PRD |
+| `hr-implementador` / `hr-implementador-xhigh` | high / xhigh | 1 por issue, `isolation: worktree`; o label `fatia:*` escolhe (passo 3) | issue, PRD, URL do Mapa, mergeado na onda anterior |
 | `hr-corretor` / `hr-corretor-max` | high / max | must-fix, CI vermelho, conflito, retomada | PR, issue, motivo, achado |
 | `hr-revisor` | high | todo PR, assim que abre | PR, issue |
-| `hr-revisor-seguranca` | max | PR com caminho sensível, ou pedido do revisor | PR, issue, motivo |
-| `hr-auditor-prd` | high | depois do último deploy do PRD | PRD, versão |
+| `hr-revisor-seguranca` | high | PR que toca rota sem login ou migration, uma vez só | PR, issue, motivo |
+| `hr-auditor-prd` | high | depois do último deploy do PRD, com a lente de segurança do diff acumulado; issue sem PRD, depois do deploy dela, só a lente, com `PR #<N>` no lugar do PRD. Detalhe de segurança que vier no relatório vai ao humano por `PushNotification`, nunca ao GitHub | PRD (ou PR), versão |
 
 Você, orquestrador, **não lê código, diff, PRD nem spec**. Mantém a tabela da fila e o status por issue. Fato do código? Delegue. Os prompts de cada disparo estão em [references/prompts.md](references/prompts.md); use-os literalmente, preenchendo os campos.
 
@@ -48,37 +48,38 @@ Você, orquestrador, **não lê código, diff, PRD nem spec**. Mantém a tabela 
 
 ### 1. Fila-alvo
 
-Com fila fixa no prompt, use-a: confira só que cada issue está `ready-for-agent`, sem dono e sem bloqueio aberto (`gh issue view <N> --json labels,assignees` e `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`) e que o autor é de dentro do repositório (`gh api repos/{owner}/{repo}/issues/<N> --jq .author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`; o repositório é público). Issue de autor externo sai da fila, com uma linha no relatório. Sem fila fixa, monte (sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`), menores primeiro. Mostre a tabela desta onda em até 6 linhas e siga direto: o lançamento foi a ordem.
+Com fila fixa no prompt, use-a: **a onda é toda issue da fila fixa já desbloqueada** (`blocked_by` todo fechado), até `--paralelo`, mesmo que a passagem a tenha posto numa onda posterior; a que ainda tem bloqueio aberto espera a próxima sessão. O único separador de ondas é a dependência, não o arquivo (ADR 0066). Confira só que cada issue está `ready-for-agent`, sem dono e sem bloqueio aberto (`gh issue view <N> --json labels,assignees` e `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`) e que o autor é de dentro do repositório (`gh api repos/{owner}/{repo}/issues/<N> --jq .author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`; o repositório é público). Issue de autor externo sai da fila, com uma linha no relatório. Sem fila fixa, monte (sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`), menores primeiro. Mostre a tabela desta onda em até 6 linhas e siga direto: o lançamento foi a ordem.
 
 ### 2. Mapa do terreno (1 vez por PRD)
 
-Para cada PRD das issues desta onda: `gh issue view <PRD> --json comments --jq '[.comments[] | select(.authorAssociation == "OWNER" or .authorAssociation == "MEMBER" or .authorAssociation == "COLLABORATOR") | select(.body | startswith("<!-- automacao -->\n## Mapa do terreno"))] | last | .url'`. O filtro de autor é obrigatório (repositório público). Sem Mapa, ou com Mapa anterior ao último PR mergeado do PRD: dispare `hr-mapeador` e espere. Issue sem PRD não tem Mapa; o implementador explora sozinho e você diz isso no prompt dele.
+Para cada PRD das issues desta onda: `gh issue view <PRD> --json comments --jq '[.comments[] | select(.authorAssociation == "OWNER" or .authorAssociation == "MEMBER" or .authorAssociation == "COLLABORATOR") | select(.body | startswith("<!-- automacao -->\n## Mapa do terreno"))] | last | .url'`. O filtro de autor é obrigatório (repositório público). Sem Mapa: dispare `hr-mapeador` e espere. Com Mapa, ele vale para o PRD inteiro: o que mudou depois dele vem na passagem (`Mergeado na onda anterior` e `Estrutura mudou`), e só `Estrutura mudou: sim` daquele PRD dispara o `hr-mapeador` de novo. Issue sem PRD não tem Mapa; o implementador explora sozinho e você diz isso no prompt dele.
 
 ### 3. Lote: implementadores em paralelo
 
-Dispare os `N` `hr-implementador` **na mesma mensagem**, um por issue, com o prompt de `references/prompts.md`. Cada um faz claim, TDD, PR (`/ship --skip-review`) e morre.
+Dispare os `N` implementadores **na mesma mensagem**, um por issue, com o prompt de `references/prompts.md`; o label de tamanho da issue (passo 1) escolhe o agente: `fatia:G` no `hr-implementador-xhigh` (`xhigh`), `fatia:P`, `fatia:M` ou sem label no `hr-implementador` (`high`). O esforço vive no frontmatter do agente; o disparo não o muda por chamada. Cada um faz claim, TDD, PR (`/ship --skip-review`) e morre.
 
 A cada notificação de término, **confira o GitHub**, não o relatório (ADR 0029): `gh pr list --search "<N> in:title,body" --json number,url,headRefName --state open` ou `gh issue view <N> --json labels`. Estados possíveis:
 
 - **PR aberto:** vá ao passo 4 para essa issue.
 - **Sem PR, com branch e commits `wip:`** (agente morreu no teto de turnos ou falhou): dispare `hr-corretor` com motivo `retomar`. Conta como tentativa.
-- **Sem PR nem branch:** conta como tentativa; redispare um `hr-implementador` fresco com a linha "tentativa 2 de 3: o anterior não abriu PR, motivo desconhecido".
+- **Sem PR nem branch:** conta como tentativa; redispare um implementador fresco (o mesmo agente, pelo label) com a linha "tentativa 2 de 3: o anterior não abriu PR, motivo desconhecido".
 
 ### 4. Por PR: CI, revisão, correção
 
 Assim que o PR abre, **na mesma mensagem**:
 
 1. Espera do CI em segundo plano, sem acordar por evento: `gh pr checks <PR> --watch --fail-fast` via Bash com `run_in_background: true`. Uma notificação no fim.
-2. `python .claude/skills/onda-enxuta/scripts/sensivel.py <PR>`: imprime os arquivos sensíveis tocados (lista em `revisao-sensivel.txt`); saída 0 = sensível.
-3. Dispare `hr-revisor`. Se sensível, dispare também `hr-revisor-seguranca`, em paralelo.
+2. `uv run --no-project --python ">=3.12" python .claude/skills/onda-enxuta/scripts/sensivel.py <PR>` (o script exige Python 3.12+; o `python3` do macOS é 3.9): imprime os arquivos de rota sem login e de migration tocados (lista em `revisao-sensivel.txt`, mais a varredura do head do PR: router com rota fora da cadeia de `get_current_user`, `route.ts` e `"use server"`); saída 0 = sensível, 1 = não sensível. Qualquer outra saída (2: erro do `gh`, do `git`, da varredura ou Python abaixo do 3.12) é erro, nunca "não sensível": rode de novo uma vez e, na segunda falha, a fatia é baixa (`ready-for-human`, comentário `<!-- automacao -->` com "classificação de segurança falhou").
+3. Dispare `hr-revisor`. Se sensível, dispare também `hr-revisor-seguranca`, em paralelo, **uma vez só** por PR (ADR 0064, decisão 4).
 
 Depois, por notificação:
 
-- **Veredito** (confirme com `gh pr view <PR> --json comments` que a última linha do comentário é `VEREDITO: ...`): `MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário inteiro; quando ele terminar, nova rodada de `hr-revisor` (e de segurança, se havia). **Máximo 2 rodadas.** `PEDE_REVISOR_SEGURANCA` no veredito → dispare `hr-revisor-seguranca` sem julgar.
+- **Veredito do `hr-revisor`** (confirme com `gh pr view <PR> --json comments` que a última linha do comentário é `VEREDITO: ...`): `MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário inteiro, sem esperar o veredito de segurança (com outro corretor no PR, vai quando ele terminar), e a rodada 2 só do `hr-revisor` vai **só quando não houver corretor no PR** (todo corretor terminou, o de segurança inclusive) e, com segurança no PR, com o `VEREDITO SEGURANCA:` já dado: ela confere as duas correções de uma vez e não há rodada 3. **Uma rodada de correção** (ADR 0064): rodada 2 com must-fix é baixa na hora, sem esperar a terceira tentativa: `gh issue edit <N> --remove-label in-progress --add-label ready-for-human` e comentário `<!-- automacao -->` com o que ficou (os must-fix da rodada 2 e o link do comentário); o lote segue sem ela.
+- **Veredito de segurança** (última linha `VEREDITO SEGURANCA: ...`): o `hr-revisor-seguranca` não roda de novo depois da correção. `MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário de segurança, uma rodada de correção a mais dentro do mesmo teto de 3 tentativas (com um corretor já no PR, este vai quando ele terminar); quem confere é a rodada 2 do `hr-revisor`, que espera este corretor terminar, com a linha `Veredito de segurança a conferir: <URL>` no prompt (cada must-fix dele vira spec da rodada), com a mesma regra da baixa.
 - **CI vermelho:** antes de tudo, `python .claude/skills/onda-enxuta/scripts/ci_sem_runner.py <PR>`. Saída 0 = o GitHub cancelou o job por falta de runner (incidente do Actions, issue #953): o script já pediu o rerun, dispare outro `gh pr checks --watch` em segundo plano, **sem corretor e sem contar tentativa**. Na terceira vez seguida na mesma fatia, pare a fatia com `ready-for-human` e "GitHub Actions sem runner, ver githubstatus.com". Saída 1 = vermelho de código: `hr-corretor` motivo `ci` com o trecho de `gh run view <id> --log-failed | tail -60`. Segunda falha de CI na mesma fatia: `hr-corretor-max`. Depois da correção, novo `gh pr checks --watch` em segundo plano.
 - **Notificação que não muda estado** (agente terminou mas você já conferiu, mensagem de progresso): responda em uma linha e não faça nada.
 
-PR verde = `gh pr checks` verde + veredito(s) `LIMPO` + spec×diff declarado pelo implementador. Issue que não fecha em **3 tentativas** (implementação, correções e rodadas somadas): `gh issue edit <N> --remove-label in-progress --add-label ready-for-human` e comentário `<!-- automacao -->` com branch, gate que falhou e hipótese. A onda segue.
+PR verde = `gh pr checks` verde + `VEREDITO: LIMPO` na última rodada do `hr-revisor`, depois de toda correção + com segurança no PR, o `VEREDITO SEGURANCA:` dado e, se `MUST-FIX`, corrigido antes dessa rodada + spec×diff declarado pelo implementador. Issue que não fecha em **3 tentativas** (implementação, correções e rodadas somadas): `gh issue edit <N> --remove-label in-progress --add-label ready-for-human` e comentário `<!-- automacao -->` com branch, gate que falhou e hipótese. A onda segue.
 
 ### 5. Lote pronto
 
@@ -90,7 +91,7 @@ Não use `AskUserQuestion` nem encerre o turno esperando resposta: numa sessão 
 
 ### 6. Fechamento da onda
 
-1. Entram os PRs verdes do lote (`gh pr checks` verde e veredito `LIMPO`), todos num rabo só, na ordem da tabela; fatia baixada e fatia de manual (passo 5) ficam de fora. Should-fix fica como comentário no PR e a fatia entra como está.
+1. Entram os PRs verdes do lote (`gh pr checks` verde e veredito `LIMPO`), todos num rabo só, na ordem da tabela; fatia baixada e fatia de manual (passo 5) ficam de fora.
 2. Migration nova no lote: o script não aplica SQL, mas espera (issue #969). Ele imprime uma linha `migration: cole no Studio <arquivo>:1` por migration e só pega o semáforo quando o `/api/health` devolve o número da maior (toda migration termina gravando o próprio número em `migracoes_aplicadas`). Assim que a linha aparecer na saída do passo 3, repasse-a ao humano por `PushNotification`.
 3. `python .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <a> <b> --sessao <nome>` via Bash **em segundo plano** (builds levam minutos). Ele pega o semáforo, cria um worktree descartável em `~/wt-<nome>` (caminho curto, MAX_PATH), calcula a versão nova sem commit (issue #967; lote só de `docs/**`, `.claude/**` e `*.md` não muda a versão nem espera build), põe o `APP_VERSION` no backend e no frontend e mergeia PR a PR pela API, na ordem, cada um com squash no próprio número (a `main` é protegida, ADR 0061; ADR 0064, decisão 3): o PR que ficou atrás da `main` recebe a `origin/main` por merge e espera o CI dele antes do merge. Depois cancela o build de cada squash intermediário, cria a tag `vX.Y.Z` no squash do último, espera **um build**, confere health com version match, grava o registro num PR só de docs com `history.json` (todos os deploys, sem teto) e `state.json`, limpa worktrees de agente já mergeados e solta o semáforo. O rabo grava só a verdade do deploy: o snapshot e o draft do Manual dos PRDs que fecharam saem numa Action no push da `main`, depois do registro (ADR 0062). Saída de 10 linhas mais uma por PR; leia só ela.
    - Saída `2` (PR de fora): os PRs que entraram já subiram (build, health e registro) e cada PR que ficou de fora tem uma linha `de fora:`. Com a linha `conflito no merge de #N em: <arquivos>`, dispare o `hr-corretor` motivo `conflito` no #N com os arquivos da linha; ele rebaseia pela skill `resolver-conflitos`. Quando ele terminar, `gh pr checks <N> --watch` em segundo plano, para o CI rodar sobre o código combinado (vermelho segue o passo 4), e rode o script de novo só com os PRs de fora. Cada conflito conta uma tentativa da fatia; na terceira, `ready-for-human` como toda baixa (passo 4), com o diagnóstico (a linha do rabo, os arquivos e o que o corretor tentou), `PushNotification` de uma linha, e o script roda de novo sem o #N. Linha `de fora:` sem conflito (push rejeitado, CI vermelho, head que andou ou merge recusado): ela diz a causa; CI vermelho segue o passo 4, o resto roda o script de novo com aquele PR, e também conta tentativa.
@@ -104,7 +105,7 @@ Não use `AskUserQuestion` nem encerre o turno esperando resposta: numa sessão 
 
 Relatório de até 15 linhas: linha final do `fechar_onda.py`, tabela de issues (fechada · PR · versão), baixas, veredito do auditor se houve, as 10 linhas da medição.
 
-Fila ainda tem issue desbloqueada? Escreva a **passagem** (modelo em `references/prompts.md`, seção "Passagem"): é o prompt da próxima sessão, começando por `/onda-enxuta --sessao <nome> --onda <N+1>`, com a fila que sobrou, as ondas fechadas, a versão de prod e a chave do semáforo. Salve em `%TEMP%\onda-enxuta\<nome>-onda<N+1>.md` e lance:
+Fila ainda tem issue desbloqueada? Escreva a **passagem** (modelo em `references/prompts.md`, seção "Passagem"): é o prompt da próxima sessão, começando por `/onda-enxuta --sessao <nome> --onda <N+1>`, com a fila que sobrou e a dependência de cada issue ("#945, depois da #944"), as ondas fechadas, a versão de prod e a chave do semáforo. O `--paralelo` da passagem é o número de issues da fila desbloqueadas quando você a escreve, com teto 3. Salve em `%TEMP%\onda-enxuta\<nome>-onda<N+1>.md` e lance:
 
 ```bash
 bash .claude/skills/onda-enxuta/scripts/lancar_sessao.sh <nome>-onda<N+1> "<caminho da passagem>"

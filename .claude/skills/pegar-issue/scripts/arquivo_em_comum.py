@@ -1,9 +1,10 @@
-"""Recusa issue que toca arquivo de outra em andamento, para o `/pegar-issue` (issue #970).
+"""Avisa, sem bloquear, a issue que toca arquivo de outra em andamento, para o `/pegar-issue`.
 
-Sem parada humana até produção (ADR 0063), duas fatias que mexem no mesmo
-arquivo não andam ao mesmo tempo: a segunda ganha a dependência nativa
-"Bloqueada por" da primeira (ADR 0028) e o `/pegar-issue` não faz o claim. Ela
-volta à fila sozinha quando a primeira fecha.
+Nasceu no #970 recusando o claim (ADR 0063). Pela ADR 0066, arquivo em comum
+não separa fatias: o único separador é a dependência, que quem fatia escreve
+como `blocked_by` nativo (ADR 0028), e o conflito de texto se resolve no rabo
+PR a PR. Por isso o script só imprime um aviso de uma linha com os arquivos que
+coincidem, não grava dependência e não impede o claim.
 
 Os arquivos de uma issue são os caminhos que o corpo cita entre crases
 (`ship/SKILL.md`, `ouvidoria_setor.py:102`); os de uma fatia em andamento somam
@@ -12,9 +13,9 @@ os do PR aberto que a fecha. Um caminho casa com outro quando é igual a ele ou
 `.claude/skills/ship/SKILL.md`, e `tdd/SKILL.md` não.
 
 Uso:
-  python3 arquivo_em_comum.py <N>   sem arquivo em comum: nada, saída 0
-                                     com arquivo em comum: marca "Bloqueada por"
-                                     em cada fatia, uma linha por fatia, saída 1
+  python3 arquivo_em_comum.py <N>   sem arquivo em comum: nada
+                                     com arquivo em comum: uma linha de aviso
+                                     sempre saída 0
 """
 
 from __future__ import annotations
@@ -28,7 +29,7 @@ CONSULTA = """
 query($owner: String!, $repo: String!, $n: Int!, $q: String!) {
   repository(owner: $owner, name: $repo) { issue(number: $n) { body } }
   search(query: $q, type: ISSUE, first: 100) {
-    nodes { ... on Issue { number databaseId body
+    nodes { ... on Issue { number body
       closedByPullRequestsReferences(first: 5) { nodes { files(first: 100) { nodes { path } } } }
     } }
   }
@@ -74,19 +75,17 @@ def main(argv: list[str]) -> int:
         "-f", f"q=repo:{repo} is:issue is:open label:in-progress",
     ))["data"]
     meus = citados(dados["repository"]["issue"]["body"])
-    recusada = False
+    coincidencias = []
     for outra in dados["search"]["nodes"]:
         if outra["number"] == n:
             continue
         comuns = em_comum(meus, arquivos_da_fatia(outra))
-        if not comuns:
-            continue
-        gh("api", "--method", "POST", f"repos/{repo}/issues/{n}/dependencies/blocked_by",
-           "-F", f"issue_id={outra['databaseId']}")
-        print(f"bloqueada por #{outra['number']}: arquivo em comum com a fatia em andamento "
-              f"({', '.join(comuns)})")
-        recusada = True
-    return 1 if recusada else 0
+        if comuns:
+            coincidencias.append(f"#{outra['number']} ({', '.join(comuns)})")
+    if coincidencias:
+        print("aviso, sem bloqueio (ADR 0066): arquivo em comum com fatia em andamento: "
+              + "; ".join(coincidencias))
+    return 0
 
 
 if __name__ == "__main__":

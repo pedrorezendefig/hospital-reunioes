@@ -160,17 +160,18 @@ def test_o_prompt_do_corretor_de_conflito_cita_a_skill_e_a_tentativa():
     assert "resolver-conflitos" in conflito and "Tentativa <k> de 3" in conflito, conflito
 
 
-def test_o_montar_ondas_nao_poe_arquivo_em_comum_em_paralelo_e_marca_bloqueada_por():
+def test_o_montar_ondas_separa_por_dependencia_e_marca_bloqueada_por_no_mesmo_ponto():
+    # ADR 0066: arquivo em comum não separa onda nem sessão; o mesmo ponto vira blocked_by
     agrupar = secao(texto("montar-ondas-enxutas"), "4. Reinventariar", "###")
     assert "dependencies/blocked_by" in agrupar and "Bloqueada por" in agrupar, agrupar
+    assert "**Arquivo em comum, dentro da sessão ou entre sessões, não separa onda nem sessão.**" in agrupar
+    assert "**Mesmo ponto é dependência**" in agrupar, agrupar
     assert "é aceitável" not in agrupar, "conflito entre sessões deixou de ser aceitável"
 
 
 # ------------------------------------------- piso de revisão sem humano (revisão do PR #1004)
 
 AGENTES = RAIZ / ".claude" / "agents"
-SENSIVEL = SKILLS / "onda-enxuta" / "scripts" / "sensivel.py"
-LISTA_SENSIVEL = SKILLS / "onda-enxuta" / "revisao-sensivel.txt"
 
 
 def gate_do_ship(gate: str) -> str:
@@ -180,12 +181,13 @@ def gate_do_ship(gate: str) -> str:
 def test_o_ship_avulso_revisa_com_os_agentes_e_o_sensivel_decide_o_gate_2():
     # ADR 0063, decisão 1: sem humano, o piso é hr-revisor e, em caminho
     # sensível, hr-revisor-seguranca; o /security-review lia o diff errado em worktree.
+    # ADR 0064, decisão 4: quem decide o Gate 2 é só o sensivel.py (o pedido do
+    # Gate 1 saiu); tools/test_revisao_so_must_fix.py cobre o gatilho novo.
     gate1 = gate_do_ship("Gate 1:")
     assert "hr-revisor" in gate1 and "VEREDITO: LIMPO" in gate1, gate1
-    assert "PEDE_REVISOR_SEGURANCA" in gate1, gate1
 
     gate2 = gate_do_ship("Gate 2:")
-    assert "sensivel.py" in gate2 and "PEDE_REVISOR_SEGURANCA" in gate2, gate2
+    assert "sensivel.py" in gate2, gate2
     assert "hr-revisor-seguranca" in gate2 and "VEREDITO SEGURANCA: LIMPO" in gate2, gate2
     assert "Invoca a skill `security-review`" not in gate2, gate2
 
@@ -206,37 +208,6 @@ def test_skip_review_e_hotfix_terminam_no_pr_sem_rodar_o_rabo():
     assert "Só o dono do repo usa" not in ship
     linha = next(li for li in passo_10_do_ship().splitlines() if "`--skip-review`" in li)
     assert "`--hotfix`" in linha and "não chega aqui" in linha, linha
-
-
-def _globs_sensiveis() -> list[str]:
-    linhas = (li.strip() for li in ler(LISTA_SENSIVEL).splitlines())
-    return [li for li in linhas if li and not li.startswith(("#", "+"))]
-
-
-@pytest.mark.parametrize(
-    "caminho",
-    [
-        ".claude/agents/hr-revisor-seguranca.md",
-        ".claude/skills/onda-enxuta/revisao-sensivel.txt",
-        ".claude/skills/onda-enxuta/scripts/sensivel.py",
-        ".claude/skills/ship/SKILL.md",
-        ".claude/skills/pegar-issue/scripts/arquivo_em_comum.py",
-        ".claude/skills/deploy/scripts/coolify_api.py",
-        ".claude/settings.json",
-        ".claude/settings.local.json",
-        ".github/rulesets/main.json",
-        "tools/checar_migration_repetida.py",
-    ],
-)
-def test_a_lista_sensivel_cobre_quem_decide_a_revisao(caminho):
-    import importlib.util
-
-    spec = importlib.util.spec_from_file_location("sensivel", SENSIVEL)
-    sensivel = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(sensivel)
-    assert any(sensivel.casa(caminho, g) for g in _globs_sensiveis()), caminho
-    # sem curinga que pega tudo: skill de fora do fluxo de revisão não dispara
-    assert not any(sensivel.casa(".claude/skills/manual/SKILL.md", g) for g in _globs_sensiveis())
 
 
 def test_so_autor_de_dentro_do_repo_vale_como_spec_e_como_mapa():

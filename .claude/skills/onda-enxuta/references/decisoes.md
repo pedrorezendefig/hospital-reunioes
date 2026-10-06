@@ -1,6 +1,10 @@
 # Decisões e por quê
 
 > Emenda de 02/10/2026: a ADR 0061 (decisão 2) aposentou a `/onda` e a `/montar-ondas` e fez da `/onda-enxuta` o único pipeline; o `/ask-pedro` passou a apontar para ela (PR #918). A decisão 6 abaixo ("nada existente muda", coexistência) descreve o contexto de setembro e está superada nesse ponto. O resto segue valendo.
+>
+> Emenda de 06/10/2026: a ADR 0064 (decisões 1 e 4, issue #988) deixou no veredito só o must-fix, com uma rodada de correção, e restringiu o `hr-revisor-seguranca` a rota sem login e migration, uma vez por PR, em esforço `high`, sem ninguém esperar por ele; a segurança do resto é a lente do `hr-auditor-prd` sobre o diff acumulado do PRD. Superadas nesses pontos: a decisão 4 (o que restava da condição no "vai"), a 5 (revisor de segurança em `max`) e a 7 (rota nova e pedido do revisor padrão).
+>
+> Emenda de 06/10/2026: a ADR 0064 (decisão 5, issue #995) pôs o implementador em `high` na fatia P e M e em `xhigh` só na G, pelo par `hr-implementador` / `hr-implementador-xhigh` que o label `fatia:*` escolhe (o disparo não muda o esforço por chamada; é o desenho do `hr-corretor` / `hr-corretor-max`), e fez o Mapa do terreno valer para o PRD inteiro, refeito só quando a passagem diz que a estrutura mudou. Superada nesse ponto: a decisão 5 (implementador `xhigh`).
 
 Registro das decisões que desenharam a `/onda-enxuta`, tomadas em `/grill-with-docs` em 22/09/2026 sobre a análise `ANALISE-EFICIENCIA-ONDAS-2026-09-22.md` (três sessões de `/onda`, 18 a 20/09, 11 issues, 1,05 bilhão de tokens, US$ 801 a preço de API). Fazem o papel de ADR sem tocar em `docs/adr/` do repositório (restrição do dono: nada existente muda). Referências em prosa: ADR 0022 (onda com checkpoint por lote), 0029 (goal do PRD, fonte de verdade no GitHub, orquestrador magro), 0035 (gates de review pertencem ao orquestrador), 0013 (tipografia), 0057 (fatia de manual).
 

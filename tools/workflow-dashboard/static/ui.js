@@ -18,18 +18,6 @@ export function tip(key, literal) {
   return `<button type="button" class="tip" data-act="tip" aria-label="O que é: ${esc(key)}" aria-expanded="false"><span class="tip-q" aria-hidden="true">?</span><span class="tip-pop" role="tooltip">${esc(txt)}</span></button>`;
 }
 
-/* bloco de comando copia-e-cola. opts: {label, note, lang} */
-let _cp = 0;
-export function copyBlock(code, opts = {}) {
-  const id = 'cp' + (++_cp);
-  const label = opts.label ? `<div class="cmd-label">${esc(opts.label)}</div>` : '';
-  const note = opts.note ? `<div class="cmd-note">${esc(opts.note)}</div>` : '';
-  return `${label}<div class="cmd" data-lang="${esc(opts.lang || 'bash')}">
-    <button class="cmd-copy" data-act="copy" data-cp="${id}" aria-label="Copiar comando"><span class="cc-ico" aria-hidden="true">⧉</span><span class="cc-txt">copiar</span></button>
-    <pre class="cmd-code" id="${id}"><code>${esc(code)}</code></pre>
-  </div>${note}`;
-}
-
 /* sub-bloco técnico recolhível (<details> nativo: acessível por teclado) */
 export function techDetails(html, label = 'detalhes técnicos') {
   return html
