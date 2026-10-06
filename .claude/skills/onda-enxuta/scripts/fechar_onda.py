@@ -809,8 +809,10 @@ def _parse_ts(v) -> float | None:
         return None
 
 
-def esperar_build(service: dict, desde: float, sha_push: str) -> tuple[str, int | None]:
-    """Espera o deploy disparado pelo webhook. Devolve (status, duracao_s)."""
+def esperar_build(service: dict, desde: float, sha_push: str, ignorar: tuple[str, ...] = ()) -> tuple[str, int | None]:
+    """Espera o deploy disparado pelo webhook. Devolve (status, duracao_s).
+    `ignorar`: os squashes intermediarios da onda, cujo deploy o rabo cancelou e
+    que a janela de horario pegaria."""
     uuid = service["uuid"]
     dep = None
     limite = time.time() + BUILD_WAIT_WEBHOOK_S
@@ -819,6 +821,8 @@ def esperar_build(service: dict, desde: float, sha_push: str) -> tuple[str, int 
         for d in _lista(coolify_json(["app", "deployments", "list", uuid])):
             criado = _parse_ts(_campo(d, "created_at", "createdAt"))
             commit = str(_campo(d, "commit", "git_commit_sha", default=""))
+            if commit and any(commit.startswith(s) or s.startswith(commit) for s in ignorar):
+                continue  # squash intermediario da onda: o deploy dele foi cancelado
             if (criado and criado >= desde - 60) or (sha_push and commit.startswith(sha_push)):
                 dep = d
                 break

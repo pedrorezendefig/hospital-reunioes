@@ -921,6 +921,35 @@ def test_limpeza_remove_o_worktree_de_agente_da_branch_entregue_por_squash(tmp_p
     assert "feature" not in git(c.clone, "branch", "--list", "feature")
 
 
+def test_esperar_build_ignora_o_deploy_cancelado_do_squash_intermediario(monkeypatch):
+    """Os merges da onda saem segundos um depois do outro: o deploy do squash
+    intermediário, já cancelado, cai na janela de horário do último. O rabo
+    espera o do último, nunca o cancelado."""
+    fo = carregar_fechar_onda()
+    intermediario, ultimo = "a" * 40, "b" * 40
+    agora = fo.datetime.now(fo.timezone.utc).isoformat()
+    cancelado = {"deployment_uuid": "d-intermediario", "commit": intermediario, "status": "cancelled",
+                 "created_at": agora}
+    rodando = {"deployment_uuid": "d-ultimo", "commit": ultimo, "status": "in_progress", "created_at": agora}
+    listas = iter([[cancelado], [rodando, cancelado]])
+    pedidos = []
+
+    def coolify_json(args, timeout=120):
+        pedidos.append(args)
+        if args[:3] == ["app", "deployments", "list"]:
+            return next(listas)
+        return {"deployment_uuid": args[2], "status": "finished"}
+
+    monkeypatch.setattr(fo, "coolify_json", coolify_json)
+    monkeypatch.setattr(fo, "BUILD_POLL_S", 0)
+    monkeypatch.setattr(fo, "run", lambda cmd, **kw: pytest.fail(f"comando inesperado: {cmd}"))
+
+    status, _ = fo.esperar_build(PROJECT["services"][0], fo.time.time(), ultimo, (intermediario,))
+
+    assert status == "finished"
+    assert pedidos[-1] == ["deploy", "get", "d-ultimo"], pedidos
+
+
 def test_cancelar_build_do_registro_so_cancela_o_deploy_do_commit_do_registro(monkeypatch):
     fo = carregar_fechar_onda()
     sha = "a" * 40
