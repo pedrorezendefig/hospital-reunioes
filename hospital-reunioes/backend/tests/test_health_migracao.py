@@ -135,3 +135,42 @@ def test_banco_fora_continua_503_degraded(monkeypatch, tabelas):
 
     assert resp.status_code == 503
     assert resp.json()["db"] == "degraded"
+
+
+def test_as_duas_leituras_do_health_nunca_correm_em_paralelo_no_mesmo_cliente(monkeypatch):
+    """Incidente da v0.163.3: `asyncio.gather` punha o ping e a leitura de
+    `migracoes_aplicadas` em duas threads sobre o mesmo cliente Supabase
+    (HTTP/2, singleton), e o backend travava por minutos. Aqui o dublê conta
+    quantas consultas estão dentro de `execute` ao mesmo tempo."""
+    import threading
+    import time
+
+    trava = threading.Lock()
+    estado = {"dentro": 0, "pico": 0}
+
+    class _Lenta(_Consulta):
+        def execute(self):
+            with trava:
+                estado["dentro"] += 1
+                estado["pico"] = max(estado["pico"], estado["dentro"])
+            time.sleep(0.05)
+            try:
+                return super().execute()
+            finally:
+                with trava:
+                    estado["dentro"] -= 1
+
+    class _BancoLento(_BancoFalso):
+        def table(self, nome):
+            return _Lenta(self.tabelas, nome)
+
+    monkeypatch.setattr(
+        health, "get_supabase_client", lambda: _BancoLento({**PARTICIPANTES, "migracoes_aplicadas": [{"numero": 114}]})
+    )
+    app = FastAPI()
+    app.include_router(health.router, prefix=settings.api_prefix)
+    resp = TestClient(app).get("/api/health")
+
+    assert resp.status_code == 200
+    assert resp.json()["migracao"] == 114
+    assert estado["pico"] == 1
