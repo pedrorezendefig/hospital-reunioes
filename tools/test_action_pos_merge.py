@@ -19,9 +19,14 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
+import pytest
 import yaml
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from tirar_draft_manual import sem_draft  # noqa: E402
 
 RAIZ = Path(__file__).resolve().parent.parent
 WORKFLOW = RAIZ / ".github" / "workflows" / "pos-merge.yml"
@@ -233,12 +238,12 @@ def test_backend_montado_com_o_mesmo_ambiente_do_ci():
     assert "uv sync --frozen" in venv["run"]
 
 
-# O que a Action escreve, um caminho de cada filtro.
-ESCRITOS = [
-    "docs/spec/snapshots/ROTAS.md",
-    "docs/ARQUITETURA.md",
-    "docs/manual/src/content/docs/ouvidoria/index.mdx",
-]
+# O que a Action escreve, um caminho de cada filtro. A página do Manual só
+# muda pelo draft: o resto dela é o que o PR revisado deixou na `main`.
+SNAPSHOTS = ["docs/spec/snapshots/ROTAS.md", "docs/ARQUITETURA.md"]
+PAGINA = "docs/manual/src/content/docs/ouvidoria/index.mdx"
+ESCRITOS = [*SNAPSHOTS, PAGINA]
+PAGINA_EM_DRAFT = "---\ntitle: Ouvidoria\nprd: [646]\ndraft: true\n---\n\nTexto da página.\n"
 APAGAVEL = "docs/spec/snapshots/VELHO.md"
 CODIGO = "hospital-reunioes/backend/app/main.py"
 
@@ -262,8 +267,9 @@ def main_de_brinquedo(tmp_path: Path) -> tuple[Path, Path]:
     git(tmp_path, "init", "-q", "--bare", "-b", "main", str(origem))
     outro = tmp_path / "outro"
     git(tmp_path, "clone", "-q", str(origem), str(outro))
-    for caminho in [*ESCRITOS, APAGAVEL, CODIGO, "hospital-reunioes/backend/uv.lock"]:
+    for caminho in [*SNAPSHOTS, APAGAVEL, CODIGO, "hospital-reunioes/backend/uv.lock"]:
         escrever(outro, caminho, "antes\n")
+    escrever(outro, PAGINA, PAGINA_EM_DRAFT)
     git(outro, "add", "-A")
     git(outro, "commit", "-q", "-m", "base")
     git(outro, "push", "-q", "origin", "HEAD:main")
@@ -330,8 +336,9 @@ def test_commit_do_bot_com_skip_ci_so_do_que_a_action_escreve(tmp_path):
     origem, _ = main_de_brinquedo(tmp_path)
 
     def mexer(gerador: Path) -> None:
-        for caminho in ESCRITOS:
+        for caminho in SNAPSHOTS:
             escrever(gerador, caminho, "novo\n")
+        escrever(gerador, PAGINA, sem_draft(PAGINA_EM_DRAFT))
         (gerador / APAGAVEL).unlink()
         escrever(gerador, "hospital-reunioes/backend/uv.lock", "mexido pelo ambiente\n")
         escrever(gerador, "lixo-do-runner.txt", "fora do git\n")
@@ -346,6 +353,7 @@ def test_commit_do_bot_com_skip_ci_so_do_que_a_action_escreve(tmp_path):
     arquivos = git(origem, "show", "--name-only", "--format=", "main").splitlines()
     assert sorted(arquivos) == sorted([*ESCRITOS, APAGAVEL])
     assert APAGAVEL not in git(origem, "ls-tree", "-r", "--name-only", "main").splitlines()
+    assert git(origem, "show", f"main:{PAGINA}") + "\n" == PAGINA_EM_DRAFT.replace("draft: true", "draft: false")
     assert not acorda(arquivos), "o commit do bot acordaria a própria Action"
 
 
@@ -411,6 +419,73 @@ def test_symlink_nos_tres_caminhos_e_recusado(tmp_path):
 
     assert "new file mode 120000" in (tmp_path / "temp-commitar" / "pos-merge" / "pos-merge.patch").read_text()
     assert proc.returncode != 0
+    assert git(origem, "rev-parse", "main") == antes
+
+
+def test_gitlink_nos_tres_caminhos_e_recusado(tmp_path):
+    """Gitlink (modo 160000) sem `.gitmodules` faz o `git submodule update` do
+    clone sair com 128: nenhum build sobe até alguém apagar o gitlink."""
+    origem, _ = main_de_brinquedo(tmp_path)
+    antes = git(origem, "rev-parse", "main")
+
+    def adulterar(gerador: Path) -> None:
+        sub = gerador / "docs/spec/snapshots/sub"
+        sub.mkdir()
+        git(sub, "init", "-q")
+        git(sub, "commit", "-q", "--allow-empty", "-m", "sub")
+
+    proc = commitar_patch_adulterado(tmp_path, origem, adulterar)
+
+    assert "new file mode 160000" in (tmp_path / "temp-commitar" / "pos-merge" / "pos-merge.patch").read_text()
+    assert proc.returncode != 0
+    assert "modo" in proc.stdout
+    assert git(origem, "rev-parse", "main") == antes
+
+
+# O que executa no `pnpm build` de quem roda o `publicar.sh` depois do draft.
+CODIGO_NA_MDX = {
+    "import": 'import { execSync } from "node:child_process";\nexport const x = execSync("id");\n',
+    "expressao": '{require("node:child_process").execSync("id")}\n',
+}
+
+
+@pytest.mark.parametrize("codigo", CODIGO_NA_MDX.values(), ids=CODIGO_NA_MDX.keys())
+def test_pagina_do_manual_que_muda_alem_do_draft_e_recusada(tmp_path, codigo):
+    """O `tirar_draft_manual.py` só troca `true` por `false` na linha
+    `draft:`. Qualquer outra linha que o patch traga para a MDX é código no
+    build de quem publica, com o login da Vercel e o `gh` na máquina."""
+    origem, _ = main_de_brinquedo(tmp_path)
+    antes = git(origem, "rev-parse", "main")
+
+    def adulterar(gerador: Path) -> None:
+        escrever(gerador, PAGINA, sem_draft(PAGINA_EM_DRAFT) + codigo)
+
+    proc = commitar_patch_adulterado(tmp_path, origem, adulterar)
+
+    assert proc.returncode != 0
+    assert PAGINA in proc.stdout
+    assert git(origem, "rev-parse", "main") == antes
+
+
+def nova_pagina(gerador: Path) -> None:
+    escrever(gerador, "docs/manual/src/content/docs/ouvidoria/nova.mdx",
+             "---\ntitle: Nova\ndraft: false\n---\n\n" + CODIGO_NA_MDX["import"])
+
+
+def apagar_pagina(gerador: Path) -> None:
+    (gerador / PAGINA).unlink()
+
+
+@pytest.mark.parametrize("adulterar", [nova_pagina, apagar_pagina], ids=["nova", "apagada"])
+def test_pagina_nova_ou_apagada_no_manual_e_recusada(tmp_path, adulterar):
+    """Página do Manual nasce e morre por PR revisado; a Action só tira draft."""
+    origem, _ = main_de_brinquedo(tmp_path)
+    antes = git(origem, "rev-parse", "main")
+
+    proc = commitar_patch_adulterado(tmp_path, origem, adulterar)
+
+    assert proc.returncode != 0
+    assert "cria ou apaga" in proc.stdout
     assert git(origem, "rev-parse", "main") == antes
 
 

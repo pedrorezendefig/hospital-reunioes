@@ -162,17 +162,46 @@ jobs:
             "$patch"
           # O --include só olha o nome novo: um rename de fora para dentro
           # passaria e apagaria a origem. Sem renames, cada caminho do índice
-          # aparece e tem que cair num dos três; symlink não entra.
+          # aparece e tem que cair num dos três.
           fora=$(git -c core.quotePath=false diff --cached --name-only --no-renames \
             | grep -Ev '^(docs/spec/snapshots/|docs/ARQUITETURA\.md$|docs/manual/src/content/docs/)' || true)
           if [ -n "$fora" ]; then
             echo "::error::O patch toca caminho fora dos três da Action: $fora"
             exit 1
           fi
-          if git diff --cached --raw --no-renames | awk '$2 == "120000"' | grep -q .; then
-            echo "::error::O patch traz symlink: recusado."
+          # Modo novo só de arquivo comum, ou o 000000 da deleção: symlink
+          # aponta para fora, e gitlink faz o submodule update do clone sair
+          # com 128.
+          if git diff --cached --raw --no-renames | awk '$2 != "100644" && $2 != "000000"' | grep -q .; then
+            echo "::error::O patch traz modo que não é de arquivo comum (symlink, gitlink, executável): recusado."
             exit 1
           fi
+          # No Manual a Action só tira o draft (o sem_draft do
+          # tirar_draft_manual.py): a página já existe na main e volta igual,
+          # com o true da linha draft: do frontmatter trocado por false.
+          # Compara o arquivo inteiro: import, export e {...} no corpo da MDX
+          # executam no build de quem roda o publicar.sh.
+          manual=docs/manual/src/content/docs/
+          if git diff --cached --name-status --no-renames -- "$manual" | awk '$1 != "M"' | grep -q .; then
+            echo "::error::O patch cria ou apaga página do Manual: só a troca do draft entra."
+            exit 1
+          fi
+          troca='
+            function apara(s) { gsub(/^[ \t\r]+|[ \t\r]+$/, "", s); return s }
+            NR == 1 { fm = (apara($0) == "---"); print; next }
+            fm && apara($0) == "---" { fm = 0 }
+            fm && tolower(substr($0, 1, 6)) == "draft:" {
+              i = index(tolower($0), "true")
+              if (i) $0 = substr($0, 1, i - 1) "false" substr($0, i + 4)
+              fm = 0
+            }
+            { print }'
+          while IFS= read -r -d '' pagina; do
+            if ! git show "HEAD:$pagina" | awk "$troca" | cmp -s - <(git show ":$pagina"); then
+              echo "::error::$pagina muda além da linha draft: recusado."
+              exit 1
+            fi
+          done < <(git diff --cached --name-only -z --no-renames --diff-filter=M -- "$manual")
           if git diff --cached --quiet; then
             echo "O patch não toca os caminhos da Action: nada a commitar."
             exit 0
