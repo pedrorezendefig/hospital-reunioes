@@ -78,6 +78,8 @@ Revoga, na decisão 5, o agrupamento ligado por padrão, a herança do dono do P
 
 ## Emenda de 05/10/2026: responsável cai em quem criou (decisão 5)
 
+> **Revogada** pela emenda de 06/10/2026 da ADR 0062 (issue #942): no painel, responsável é só quem está designado; sem assignee, a issue é "ninguém assumiu", e o autor fica no card só como informação. O texto abaixo é histórico.
+
 Com o filtro da emenda de 02/10, 120 issues apareciam "sem responsável", 32 delas abertas, embora toda issue nasça do Claude Code de alguém. O Pedro quer que nenhuma issue fique sem dono no painel.
 
 **Decisão:** no painel, responsável é quem está designado (assignee) e, sem ninguém designado, quem criou a issue (author do GitHub). Quem assumiu manda sobre quem criou. Para não repetir o problema da emenda de 02/10 (fatia sem claim parecendo trabalho de quem rodou o `/to-issues`), a origem fica visível: o cartão mostra `👤 fulano` para quem assumiu e `✎ criada por fulano` para quem só criou, o visor da pessoa separa assumidas de só criadas, e o "em andamento" conta só issue com assignee. O "sem responsável" vira **"ninguém assumiu"**: as issues sem assignee, a fila sem claim. O PRD sem assignee segue marcado "sem dono", agora com quem o criou ao lado.

@@ -136,18 +136,15 @@ def _ondas(prd: dict, por_numero: dict[int, dict], abertas: set[int]) -> list[li
 def _funil(issues: list[dict], fases_issue: dict[int, dict]) -> dict:
     """Contagem por fase, no total e por responsável.
 
-    Responsável segue a aba Issues: quem assumiu; sem assignee, quem criou
-    (emenda de 05/10 da ADR 0061). SEM_RESPONSAVEL junta as sem assignee.
+    Responsável segue a aba Issues: só quem assumiu (assignee); quem apenas
+    criou não conta (#942). SEM_RESPONSAVEL junta as sem assignee.
     """
     total = dict.fromkeys(FASES_ISSUE, 0)
     por_responsavel: dict[str, dict[str, int]] = {}
     for i in issues:
         fase = fases_issue[i["number"]]["fase"]
         total[fase] += 1
-        pessoas = list(i["assignees"]) or ([i["author"]] if i.get("author") else [])
-        if not i["assignees"]:
-            pessoas.append(SEM_RESPONSAVEL)
-        for p in pessoas:
+        for p in i["assignees"] or [SEM_RESPONSAVEL]:
             por_responsavel.setdefault(p, dict.fromkeys(FASES_ISSUE, 0))[fase] += 1
     return {"total": total, "por_responsavel": por_responsavel}
 

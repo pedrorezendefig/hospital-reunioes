@@ -35,9 +35,10 @@ def _fora_do_root():
 # ---------- navegação e branding ----------
 
 
-def test_navegacao_tem_exatamente_7_abas_sem_grupos():
+def test_navegacao_tem_exatamente_5_abas_sem_grupos():
+    # ADR 0062, decisão 3: Plano, Pendências e Guia saem; Issues é a home
     abas = re.findall(r'data-tab="([^"]+)"', INDEX)
-    assert abas == ["plano", "issues", "producao", "pendencias", "mapa", "dominio", "guia"]
+    assert abas == ["issues", "prs", "producao", "mapa", "dominio"]
     assert "tabgroup" not in INDEX  # sem rótulos nem separadores de grupo
 
 
@@ -271,11 +272,10 @@ def test_index_so_carrega_script_local():
         assert not src.startswith(("http:", "https:", "//")), f"script de CDN: {src}"
 
 
-def test_aba_pendencias_le_a_fila_humana_com_rastro_de_prd():
-    """A aba Pendências agrega as issues abertas ready-for-human (fonte GitHub,
-    sem doc de estado paralelo) e cada card carrega o rastro do PRD pai."""
-    assert "renderPendencias" in APP_JS
+def test_fila_humana_virou_filtro_da_aba_issues():
+    """Pendências saiu (ADR 0062, decisão 3): as issues abertas ready-for-human
+    são um chip com contador na aba Issues, lidas do GitHub como o resto."""
+    assert "renderPendencias" not in APP_JS
+    assert 'data-act="fhumana"' in APP_JS
     assert "ready-for-human" in APP_JS
-    assert "pendPrdChip" in APP_JS
-    assert "next_actions" in APP_JS  # avisos do último deploy (state.json) na mesma aba
-    assert ".pend-card" in CSS
+    assert ".pend-card" not in CSS
