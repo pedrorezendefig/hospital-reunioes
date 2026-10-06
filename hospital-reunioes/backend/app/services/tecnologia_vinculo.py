@@ -562,9 +562,13 @@ def texto_do_diretor(bruto: str | None) -> str:
     nascimento, nome e o resto por marcador. Desde o #730 a descricao pode ser
     a transcricao de um print de sistema hospitalar, e o diretor tambem digita.
     A Demanda no app guarda o texto original: a peneira age so no que sai.
+
+    **E o `@` que a peneira nao pega** (o seguido de digito, issue #888) sai com
+    um espaco depois, a mesma neutralizacao do comentario espelhado
+    (`_trecho_do_autor`): `@1abc` notificaria a conta `1abc`.
     """
     texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
-    return _escapar_para_o_github(pseudonimizar(texto))
+    return _escapar_para_o_github(_trecho_do_autor(texto))
 
 
 def titulo_da_issue(bruto: str | None) -> str:
@@ -578,7 +582,7 @@ def titulo_da_issue(bruto: str | None) -> str:
     ganha a barra la, onde ela vale.
     """
     texto = _QUEBRA_DE_LINHA.sub("\n", bruto or "")
-    return _escapar_para_o_github(pseudonimizar(texto), marcador_vira_link=False)
+    return _escapar_para_o_github(_trecho_do_autor(texto), marcador_vira_link=False)
 
 
 def _escapar_para_o_github(texto: str, *, marcador_vira_link: bool = True) -> str:
@@ -785,9 +789,9 @@ def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> 
     """O texto da resposta, pronto para um comentario em repositorio publico.
 
     O mesmo funil do `texto_do_diretor` (peneira de dado pessoal, `<` vira
-    `&lt;`, estrutura em coluna zero desligada, travessao sanitizado), com o
-    `@` tratado no meio, que aquele funil nao conhece porque no corpo da issue
-    nova nao ha mencao:
+    `&lt;`, estrutura em coluna zero desligada, travessao sanitizado, `@`
+    solto com espaco), com a mencao do app tratada no meio, que aquele funil
+    nao conhece porque no corpo da issue nova nao ha mencao do app:
 
     1. a **mencao do app** (o `@Nome Completo` que o autocomplete grava, com o
        id da pessoa em `mencoes`) vira o rotulo dessa pessoa: `@login` quando
