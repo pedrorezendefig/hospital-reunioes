@@ -741,9 +741,11 @@ ROTULO_SEM_LOGIN = "Pessoa do hospital"
 # evita depender de onde o CommonMark decide abrir enfase.
 _MENCAO_DO_GITHUB = re.compile(r"(?<![A-Za-z0-9])@[A-Za-z0-9][A-Za-z0-9_-]*(?:/[A-Za-z0-9_-]+)?")
 
-# Depois do nome mencionado tem de vir algo que nao e letra (ou o fim): sem
-# isso, "Ana" mencionada casaria o comeco de "@Anastácia".
-_FIM_DO_NOME = r"(?![^\W_])"
+# Depois do nome mencionado tem de vir algo que nao continua um login: nem
+# letra, nem digito, nem hifen (ou o fim). Sem isso, "Ana" mencionada casaria
+# o comeco de "@Anastácia", e "Ana Silva" (login `ana`) em `@Ana Silva-bob`
+# sairia `@ana-bob`, mencao viva a uma conta que ninguem escolheu (issue #888).
+_FIM_DO_NOME = r"(?![^\W_]|-)"
 
 
 def rotulo_no_github(participante: dict[str, Any] | None) -> str:
@@ -820,7 +822,10 @@ def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> 
     partes: list[str] = []
     fim = 0
     for achado in padrao.finditer(texto):
-        partes.append(_trecho_do_autor(texto[fim : achado.start()]))
+        antes = _trecho_do_autor(texto[fim : achado.start()])
+        # Um `@` solto colado ao rotulo neutro sairia `@Pessoa`, mencao viva
+        # (issue #888). O espaco e o mesmo do `_neutralizar_mencoes`.
+        partes.append(f"{antes} " if antes.endswith("@") else antes)
         partes.append(rotulos[achado.group(0)[1:]])
         fim = achado.end()
     partes.append(_trecho_do_autor(texto[fim:]))
