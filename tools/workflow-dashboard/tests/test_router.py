@@ -371,6 +371,33 @@ def test_chip_de_pr_e_de_versao_levam_a_aba_e_ao_item_do_hash(tmp_path):
     assert na_versao == ["producao", "v0.163.4", [True, False]]
 
 
+# ---------- ⟳ e recoleta de 60 s preservam o hash ----------
+
+
+@com_node
+def test_botao_recoletar_e_recoleta_de_60s_preservam_o_hash_e_o_card_aberto(tmp_path):
+    hash_ = "#issues/902?fase=pr_aberto"
+    depois_do_botao, depois_dos_60s, buscas = _app(
+        tmp_path,
+        "[_botao, _estado(), _buscas.filter(u => u.startsWith('/api/data'))]",
+        hash_inicial=hash_,
+        antes="""
+        const _estado = () => [location.hash, S.tab, S.item, S.fIssues.fase, _card902()];
+        const _card902 = () => (_view.innerHTML.match(/<article[^>]*>[\\s\\S]*?<\\/article>/g) || [])
+          .filter(a => a.includes('data-n="902"')).map(a => [a.includes('aria-current="true"'), a.includes('corpo da 902')])[0];
+        const _ouvintes = _els['#refresh']._ouvintes;
+        _ouvintes[_ouvintes.length - 1]();  // ⟳ (o último ouvinte é o do botão em tela)
+        await _esperar();
+        const _botao = _estado();
+        _intervalos[60000]();
+        await _esperar();
+        """,
+    )
+    assert buscas == ["/api/data", "/api/data?fresh=1", "/api/data"]
+    assert depois_do_botao == [hash_, "issues", "902", "pr_aberto", [True, True]]
+    assert depois_dos_60s == [hash_, "issues", "902", "pr_aberto", [True, True]]
+
+
 # ---------- o GitHub é o ↗ de cada card, nunca o chip ----------
 
 
