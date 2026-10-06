@@ -2,6 +2,45 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-06T11:02:15-03:00",
+      "sha": "61e6484b99f50ffca0649b5569fb8abafe847cae",
+      "app_version": "0.163.3",
+      "subject": "Onda onda-a: Migration com recibo, número no /api/health e rabo esperando sozinho",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#996)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        963
+      ],
+      "result": "healthy",
+      "duration_seconds": 544,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "114_migracoes_aplicadas.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #996, entregues pelo PR #997. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
       "at": "2026-10-06T01:27:26-03:00",
       "sha": "4824bb6693bcc5b120b3bc4a71596cb118218a26",
       "app_version": "0.163.2",
