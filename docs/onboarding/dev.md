@@ -84,7 +84,7 @@ Loop disciplinado: reproduz → minimiza → hipótese → instrumenta → corri
 /tdd               red → green → refactor; critérios de aceite = testes de integração
    ▼
 /ship              Gate 1: hr-revisor (sempre)
-                   Gate 2: hr-revisor-seguranca (se o sensivel.py acusa caminho sensível)
+                   Gate 2: hr-revisor-seguranca (se o sensivel.py acusa rota sem login ou migration)
                    Gate 3 — CI verde (GitHub Actions)
                    → gate reprovado chama o hr-corretor; com o PR verde, roda o rabo sozinho (sem versão no PR)
                    ▼
@@ -118,7 +118,7 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo /ship ou pelo fechament
 1. **Nunca commitar em `main` direto.** Sempre PR via `/ship`; quem leva o PR à `main` é o rabo (`fechar_onda.py`).
 2. **Self-approval é OK**: os 3 gates (hr-revisor + hr-revisor-seguranca + CI) validam. Cada um aprova o próprio PR.
    - **Emenda (ADR 0061, 01/10/2026):** cada sócio **mergeia e sobe para produção o próprio PR**, sem esperar ninguém. Quem mergeia aplica a migration em produção (Studio) e cuida do `APP_VERSION` no Coolify, então todo sócio precisa de acesso aos dois. PR verde parado esperando o Pedro é erro de processo, não cautela.
-3. **Nunca pular o `hr-revisor-seguranca`** quando o `sensivel.py` acusa caminho sensível (auth, RLS, migrations, env vars, webhooks, o próprio fluxo de revisão).
+3. **Nunca pular o `hr-revisor-seguranca`** quando o `sensivel.py` acusa rota sem login ou migration (canal público da Ouvidoria, webhook, e-mail recebido, RLS). O resto da segurança é a lente do `hr-auditor-prd` sobre o diff acumulado, no fechamento do PRD (ADR 0064).
 4. **O contexto do trabalho vive na Issue**, não em arquivo de plano. Os critérios de aceite da Issue viram os seus testes no `/tdd`.
 5. **Uma Issue por vez, uma branch por Issue.** Em paralelo (vários terminais), use **1 git worktree por issue** — o claim atômico evita que duas sessões peguem a mesma. Protocolo em `docs/agents/issue-tracker.md`.
    - **Emenda (ADR 0061):** a **árvore principal do seu clone fica sempre na `main`** e só recebe `git pull`. Todo trabalho, inclusive doc e ADR, acontece em worktree. Voltou de uma pausa? `git pull` na árvore principal antes de qualquer coisa.

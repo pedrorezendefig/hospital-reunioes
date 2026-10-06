@@ -28,13 +28,14 @@ Tentativa <k> de 3.
 ```
 [papel: revisor]
 PR #<PR>, issue #<N>. Ache problemas, não aprove, não edite. Rodada <1|2>.
+<Se o PR teve VEREDITO SEGURANCA: MUST-FIX: "Veredito de segurança a conferir: <URL do comentário>.">
 ```
 
 ## hr-revisor-seguranca
 
 ```
 [papel: revisor-seguranca]
-PR #<PR>, issue #<N>. Motivo: <arquivos sensíveis tocados, um por linha | pedido do revisor padrão: "<motivo>">.
+PR #<PR>, issue #<N>. Motivo: <arquivos de rota sem login ou de migration tocados, um por linha>.
 ```
 
 ## hr-corretor / hr-corretor-max
@@ -52,7 +53,14 @@ PR #<PR>, issue #<N>. Motivo: <revisao|ci|conflito|retomar>.
 
 ```
 [papel: auditor-prd]
-PRD #<PRD>. Versão em produção: v<X.Y.Z>. Audite os critérios do PRD contra o app no ar e comente o veredito.
+PRD #<PRD>. Versão em produção: v<X.Y.Z>. Audite os critérios do PRD contra o app no ar, passe a lente de segurança no diff acumulado dos PRs do PRD e comente o veredito.
+```
+
+Issue sem PRD, ou PR sem issue (o PR já em produção):
+
+```
+[papel: auditor-prd]
+PR #<PR> (issue sem PRD). Versão em produção: v<X.Y.Z>. Passe só a lente de segurança no diff desse PR e comente o veredito no PR.
 ```
 
 ## Passagem (prompt da próxima sessão)
