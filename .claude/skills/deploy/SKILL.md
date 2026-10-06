@@ -99,6 +99,8 @@ Todo acesso ao Coolify passa pelo **CLI oficial** `coolify` (binário no PATH, c
 
 Desde 27/08/2026 os webhooks do GitHub estão religados (um por app, com secret próprio): **push na branch de produção rebuilda os services sozinho**. O papel desta skill no deploy é **monitorar** o build que o push disparou, não disparar build.
 
+Exceção: app em modo imagem (`build_pack: "dockerimage"`, o backend desde a issue #1001) não tem webhook nem build no Coolify. O CI publica a imagem no GHCR com a tag do sha do head do PR, e o `fechar_onda.py` dispara o workflow do `build.publish_workflow`, que dá a ela a tag do squash, e aponta o Coolify para essa tag (`coolify app update <uuid> --docker-tag <sha>`, depois `coolify deploy uuid <uuid>`).
+
 Deploy manual (`coolify deploy uuid`, rodado pelo humano com `!`) é **exceção**. Só nestes casos: o webhook não disparou (nenhum deploy novo em `coolify app deployments list` depois do push), o build precisa ser refeito sem commit novo (env var trocada), ou é rollback.
 
 ---

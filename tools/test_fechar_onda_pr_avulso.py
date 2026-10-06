@@ -221,6 +221,10 @@ class Cenario:
             "#!/bin/sh\n"
             f"main=$(git --git-dir={self.remoto} rev-parse main)\n"
             f'echo "$* | main=$main" >> {self.log_coolify}\n'
+            'if [ "$1 $2" = "app get" ]; then\n'
+            f'  [ -f "{self.dir_coolify}/app-$3.json" ] && cat "{self.dir_coolify}/app-$3.json"\n'
+            "  exit 0\n"
+            "fi\n"
             'case "$1 $2 $3" in\n'
             '  "app rollback images")\n'
             f'    [ -f "{self.dir_coolify}/imagens-$4.json" ] && cat "{self.dir_coolify}/imagens-$4.json" ;;\n'
@@ -231,6 +235,9 @@ class Cenario:
             encoding="utf-8",
         )
         coolify.chmod(0o755)
+        # o `coolify app get` de cada app diz o build pack que o Coolify roda de verdade
+        for s in (project or PROJECT)["services"]:
+            self.build_pack_no_coolify(s["uuid"], (s.get("build") or {}).get("build_pack", "dockerfile"))
         self.path = f"{bin_falso}{os.pathsep}{os.environ.get('PATH', '')}"
         self.home = tmp_path / "home"
         self.home.mkdir()
@@ -268,6 +275,10 @@ class Cenario:
         (self.dir_coolify / f"imagens-{uuid}.json").write_text(
             json.dumps({"current": no_ar, "images": imagens}), encoding="utf-8")
 
+    def build_pack_no_coolify(self, uuid: str, build_pack: str) -> None:
+        (self.dir_coolify / f"app-{uuid}.json").write_text(
+            json.dumps({"uuid": uuid, "build_pack": build_pack, "status": "running:healthy"}), encoding="utf-8")
+
     def recusar_rollback(self) -> None:
         (self.dir_coolify / "rollback-recusado").write_text("", encoding="utf-8")
 
@@ -288,7 +299,7 @@ class Cenario:
         return self.log_coolify.read_text(encoding="utf-8").splitlines()
 
     def coolify_sem_leituras(self) -> list[str]:
-        return [li for li in self.coolify() if not li.startswith("app deployments list")]
+        return [li for li in self.coolify() if not li.startswith(("app deployments list", "app get "))]
 
     def disparar_workflow(self, cmd: list[str]) -> None:
         """`gh workflow run <arquivo> --ref main -f k=v ...`, como o GitHub: o run
@@ -1993,6 +2004,8 @@ def test_backend_em_modo_imagem_sobe_a_imagem_do_head_retagueada_para_o_squash_s
     assert c.healths == [("backend", "0.10.1")]
     entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
     assert entrada["sha"] == squash and entrada["result"] == "healthy"
+    # o Coolify confirmou o modo imagem: nenhum aviso de troca pendente
+    assert linhas_com(capsys.readouterr().out, "aviso:") == []
 
 
 def test_onda_em_modo_imagem_so_retagueia_head_com_a_mesma_pasta_do_backend_do_squash(
@@ -2100,6 +2113,29 @@ def test_rollback_em_modo_imagem_volta_a_tag_do_ultimo_deploy_sem_build(tmp_path
     assert c.rollbacks == ["backend"]
     assert c.healths == [("backend", "0.10.1"), ("backend", "0.10.0")]
     assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+
+
+def test_backend_que_o_coolify_ainda_constroi_do_git_segue_pelo_webhook_com_aviso(
+    tmp_path, monkeypatch, capsys
+):
+    """O project.json já diz modo imagem, mas a troca no Coolify é pela tela e
+    ainda não foi feita: trocar a tag de um app do git dispararia um segundo
+    build, e o rollback por tag reconstruiria a main com o defeito. O rabo
+    confere o build pack no Coolify antes do primeiro merge e segue pelo
+    webhook, avisando."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    c.build_pack_no_coolify("uuid-backend", "dockerfile")
+    c.imagens_no_coolify("uuid-backend", IMAGEM_ANTERIOR)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert c.publicacoes == [] and c.deploys_novos == []
+    assert c.builds == ["backend"] and c.esperados == [c.merges[0]["main"]]
+    assert not [li for li in c.coolify() if "--docker-tag" in li], c.coolify()
+    [aviso] = linhas_com(capsys.readouterr().out, "aviso:")
+    assert "backend" in aviso and "Coolify" in aviso and "webhook" in aviso, aviso
 
 
 def test_dry_run_em_modo_imagem_diz_que_o_backend_vai_por_imagem_sem_disparar_nada(

@@ -67,7 +67,9 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      nao tem build nem webhook: o rabo dispara o workflow que publica a imagem
      do squash no GHCR (retag da que o CI publicou para um head do lote com a
      mesma pasta do app; sem nenhum, build do squash), espera o run e so entao
-     aponta o Coolify para a tag do squash, que so puxa e reinicia
+     aponta o Coolify para a tag do squash, que so puxa e reinicia. Antes do
+     primeiro merge confere no `coolify app get` que a troca na tela foi feita;
+     sem ela, o app segue pelo webhook, com uma linha `aviso:`
   7. health com version match. Health ruim: rollback automatico (issue #968),
      cada app do lote volta a imagem anterior no Coolify, a que estava no ar
      antes do primeiro merge (`current` do `coolify app rollback images`, lida
@@ -912,6 +914,22 @@ def em_modo_imagem(service: dict) -> bool:
     return (service.get("build") or {}).get("build_pack") == "dockerimage"
 
 
+def conferir_modo_imagem_no_coolify(servicos_cfg: dict) -> None:
+    """A troca de build do git para imagem e na tela do Coolify, a mao. Ate ela,
+    trocar a tag dispararia um segundo build do git e o rollback por tag
+    reconstruiria a main: o app que o Coolify ainda constroi segue pelo webhook,
+    com aviso. Muda `servicos_cfg` no lugar."""
+    for sid in apps_do_coolify(servicos_cfg):
+        if not em_modo_imagem(servicos_cfg[sid]):
+            continue
+        dado = coolify_json(["app", "get", servicos_cfg[sid]["uuid"]])
+        real = dado.get("build_pack") if isinstance(dado, dict) else None
+        if real != "dockerimage":
+            print(f"aviso: o project.json diz que o {sid} roda a imagem do GHCR, mas o Coolify responde "
+                  f"build pack {real or '?'}; segue pelo build do webhook ate a troca na tela (issue #1001)")
+            servicos_cfg[sid] = {**servicos_cfg[sid], "build": {**servicos_cfg[sid]["build"], "build_pack": real}}
+
+
 def origens_da_imagem(raiz: Path, service: dict, sha: str, heads: list[str]) -> list[str]:
     """Os heads mergeados, do mais novo ao mais velho, cuja pasta do app (o
     contexto do build) e a mesma do squash `sha`: a imagem que o CI publicou
@@ -1259,6 +1277,7 @@ def main() -> int:
             print(f"versao: v{versao_antiga} -> v{versao_nova} ({tipo}), sem commit: vai no APP_VERSION e na tag")
         else:
             print(f"versao: segue v{versao_antiga} (ferramenta)")
+        conferir_modo_imagem_no_coolify(servicos_cfg)
 
         # PR a PR, na ordem (ADR 0064, decisao 3). PR que nao mergeia fica de fora
         # e o lote segue sem ele; os ja mergeados ficam.
