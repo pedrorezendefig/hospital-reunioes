@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: superseded
 amends: 0022, 0035
 amended_by: 0062, 0063, 0064
+superseded_by: 0068
 ---
 
 # Um pipeline só, dono por PRD e `main` protegida: a esteira para três sócios em paralelo

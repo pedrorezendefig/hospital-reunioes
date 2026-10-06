@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: superseded
 amends: 0061
 amended_by: 0064, 0066
+superseded_by: 0068
 ---
 
 # Fluxo automático até produção: só a migration para no humano

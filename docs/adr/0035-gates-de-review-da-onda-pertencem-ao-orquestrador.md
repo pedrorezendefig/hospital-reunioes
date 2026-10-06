@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: superseded
 amends: 0029
 amended_by: 0061
+superseded_by: 0068
 ---
 
 # Gates de review da onda pertencem ao orquestrador
