@@ -93,13 +93,16 @@ def test_ruleset_pr_obrigatorio_zero_aprovacoes_em_dia_com_a_base_sem_force_push
     regra("deletion")
 
 
-def test_bypass_so_do_github_actions_nenhuma_pessoa_nem_equipe():
+def test_bypass_so_da_deploy_key_nenhuma_pessoa_nem_equipe():
     """A Action pós-merge commita snapshot e draft do Manual direto na `main`
-    (issue #940, ADR 0062 decisão 10). O bypass é do GitHub Actions e de mais
-    ninguém: pessoa, equipe, papel ou admin da organização continuam entrando
-    por PR, admin inclusive (ADR 0061)."""
+    (issue #940, ADR 0065, que emenda a decisão 10 da ADR 0062). O bypass é da
+    deploy key, cujo secret vive num Environment restrito à `main` e só o job
+    que não instala nada lê. O GitHub Actions (integration 15368) não entra:
+    valeria para o GITHUB_TOKEN de qualquer workflow de qualquer branch. Pessoa,
+    equipe, papel ou admin da organização continuam entrando por PR, admin
+    inclusive (ADR 0061)."""
     assert ruleset()["bypass_actors"] == [
-        {"actor_id": GITHUB_ACTIONS_APP, "actor_type": "Integration", "bypass_mode": "always"}
+        {"actor_id": None, "actor_type": "DeployKey", "bypass_mode": "always"}
     ]
 
 
