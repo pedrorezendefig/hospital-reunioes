@@ -255,16 +255,17 @@ def test_cada_pasta_liga_so_os_jobs_dela(tmp_path, mudados, rodam, ferramenta):
     assert saidas["ferramenta"] == ferramenta, saidas
 
 
-@pytest.mark.parametrize("origem, destino", [
-    ("hospital-reunioes/backend/app/main.py", "docs/main.py"),
-    ("hospital-reunioes/backend/app/main.py", "hospital-reunioes/backend/app/main.md"),
+@pytest.mark.parametrize("origem, destino, rodam", [
+    ("hospital-reunioes/backend/app/main.py", "docs/main.py", BACKEND),
+    # Cruza pastas: sem --no-renames só o destino (frontend) apareceria.
+    ("hospital-reunioes/backend/app/x.py", "hospital-reunioes/frontend/src/x.py", TUDO),
 ])
-def test_detector_ve_o_caminho_antigo_de_um_rename(tmp_path, origem, destino):
+def test_detector_ve_o_caminho_antigo_de_um_rename(tmp_path, origem, destino, rodam):
     """Num rename o `git diff --name-only` lista só o caminho novo: tirar código
     do backend pularia o job dele e o merge subiria sem teste."""
     proc = rodar_detector(tmp_path, [], renomeados=((origem, destino),))
     assert proc.returncode == 0, proc.stderr
-    assert jobs_que_rodam("success", saidas_do_passo(proc)) == BACKEND
+    assert jobs_que_rodam("success", saidas_do_passo(proc)) == rodam
 
 
 def test_detector_no_push_da_main_sempre_roda_tudo(tmp_path):
