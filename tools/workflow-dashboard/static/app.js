@@ -8,6 +8,7 @@ import { abaValida, aoMudarRota, gravarRota, lerRota, montarHash } from './route
 import { renderDiagrama, wireDiagramas } from './diagramas.js';
 import { renderArea, wireArea } from './areas.js';
 import { corDaPessoa } from './pessoas.js';
+import { renderOndas } from './ondas.js';
 
 const filtrosVazios = () => ({ state: 'all', fase: '', resp: '', prd: null, label: '', q: '', humana: false });
 
@@ -529,6 +530,7 @@ function issueCard(i, idx, prd = false) {
         <span class="ititle">${esc(i.title)}</span>
       </div>
       <div class="iss-chips">${chips}</div>
+      ${prd ? renderOndas(i, S.data, FASES) : ''}
       ${open ? `
       <div class="iss-body">
         ${linhaDoTempoHtml(i.number)}
