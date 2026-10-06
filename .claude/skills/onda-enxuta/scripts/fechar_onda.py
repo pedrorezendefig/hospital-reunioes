@@ -15,6 +15,16 @@ obrigatorio, CI obrigatorio e em dia com a base, sem push direto. Por isso o
 script nunca empurra na main: tudo entra por PR, mergeado pela API do GitHub
 com squash (o unico metodo que o repositorio permite).
 
+Classe do lote, pelos arquivos (issue #965): "app" se algum esta em
+`hospital-reunioes/`, "ferramenta" se nenhum esta. Lote misto e app. Os
+arquivos sao os do `git diff --no-renames` do lote, como no detector do CI:
+mover codigo para fora de `hospital-reunioes/` conta como app.
+  - app: a sequencia inteira abaixo.
+  - ferramenta: so merge pela API depois do CI verde (passos 1 a 3, 5, 6, 8 e
+    12). Sem bump, sem APP_VERSION, sem esperar build, sem health, sem PR de
+    registro e sem entrada no history.json. Se o webhook do Coolify disparar
+    build no merge, o rabo o cancela, como faz com o build do registro.
+
 Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
   1. pre-condicoes (gh, coolify, PRs abertos e verdes, origin/main buscado,
      nenhuma migration nova com numero que a main ja usa, e o corpo do PR
@@ -23,7 +33,7 @@ Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
   3. branch de entrega num worktree descartavel:
      PR avulso: a propria branch do PR, com a origin/main por merge se ficou atras
      onda: `onda/<sessao>` a partir da origin/main, com merges locais `--no-ff` em ordem
-  4. bump semver pelo tipo dominante dos commits do lote (docs-only nao bumpa),
+  4. bump semver pelo tipo dominante dos commits do lote (ferramenta nao bumpa),
      como commit na branch de entrega, e push dela (nunca na main)
   5. onda: abre o PR de entrega, com `Closes` de cada issue do lote
   6. espera o CI do head com o bump ficar verde
@@ -49,18 +59,19 @@ campo `sha` do history.json e o do squash do codigo: o commit que foi para
 producao. O registro vem depois, so com docs.
 
 Codigos de saida:
-  0  PR ou onda fechados, health verde, registro na main
+  0  PR ou onda fechados, health verde, registro na main (ferramenta: merge na main)
   1  pre-condicao falhou ou trava velha: nada foi tocado
   2  conflito, push na branch rejeitado, CI vermelho ou merge recusado: nada
      entrou na main, worktree removido, semaforo solto; rode de novo depois de corrigir
   3  build falhou no Coolify: SEMAFORO FICA PRESO, rode `/deploy rollback` com a chave impressa
   4  health falhou (ou versao nao bate): SEMAFORO FICA PRESO, mesma instrucao do 3
   5  producao ok, mas o PR de registro nao entrou: semaforo solto; mergeie o PR impresso
-     quando o CI dele ficar verde
+     quando o CI dele ficar verde. Ferramenta: merge feito, producao intacta,
+     semaforo solto, mas a arrumacao depois do merge falhou (a linha diz o que falta)
 
 `--dry-run`: executa 1 e 3 e calcula o 4 sem escrever; imprime o plano (PR,
-issue e tipo de bump) e o que faria nos demais; nao pega semaforo, nao toca no
-Coolify, nao pusha.
+issue, classe e tipo de bump: "app: bump ..." ou "ferramenta: só merge") e o
+que faria nos demais; nao pega semaforo, nao toca no Coolify, nao pusha.
 
 Windows: `bash` do Git no PATH (para o semaforo.sh).
 """
@@ -104,7 +115,7 @@ SEMAFORO = ".claude/skills/deploy/scripts/semaforo.sh"
 SPEC = "docs/spec"
 HISTORY = f"{SPEC}/deploy/history.json"
 STATE = f"{SPEC}/deploy/state.json"
-DOCS_ONLY_PREFIXES = ("docs/", ".claude/")
+APP = "hospital-reunioes/"
 BUILD_WAIT_WEBHOOK_S = 120
 BUILD_POLL_S = 10
 BUILD_TIMEOUT_S = 40 * 60
@@ -197,10 +208,6 @@ def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> list[dict]:
             if info.get("mergeable") != "UNKNOWN":
                 break
             time.sleep(5)
-        info["docs_only"] = all(
-            f["path"].startswith(DOCS_ONLY_PREFIXES) or f["path"].endswith(".md")
-            for f in info.get("files") or []
-        )
         if info.get("state") != "OPEN":
             problemas.append(f"#{n} esta {info.get('state')}")
         if info.get("baseRefName") not in (None, "main"):
@@ -214,8 +221,10 @@ def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> list[dict]:
         if ruins:
             nomes = ", ".join((c.get("name") or c.get("context") or "?") for c in ruins[:4])
             problemas.append(f"#{n} com check nao verde: {nomes}")
-        elif not checks and not info["docs_only"]:
-            problemas.append(f"#{n} sem nenhum check e nao e docs-only")
+        elif not checks:
+            # o CI nao rodou: o ruleset exige os checks e o esperar_checks nao
+            # aceita lista vazia, entao vale para app e ferramenta (issue #965)
+            problemas.append(f"#{n} sem nenhum check (o CI nao rodou)")
         infos.append(info)
     if problemas:
         falhar("pre-condicao: " + "; ".join(problemas) + ".", EXIT_PRECOND)
@@ -456,9 +465,13 @@ def entregar(raiz: Path, wt: Path, branch: str, pr: int | None, titulo: str, cor
 
 # --------------------------------------------------------------------- bump
 
-def tipo_de_bump(infos: list[dict]) -> str | None:
-    if all(i["docs_only"] for i in infos):
-        return None
+def classe_do_lote(caminhos) -> str:
+    """"app" se algum arquivo esta em hospital-reunioes/, "ferramenta" se nenhum
+    esta (issue #965). Lote misto e app."""
+    return "app" if any(c.startswith(APP) for c in caminhos) else "ferramenta"
+
+
+def tipo_de_bump(infos: list[dict]) -> str:
     nivel = "patch"
     for info in infos:
         for c in info.get("commits") or []:
@@ -698,8 +711,9 @@ def esperar_build(service: dict, desde: float, sha_push: str) -> tuple[str, int 
 
 
 def cancelar_build_do_registro(servicos_cfg: dict, sha: str) -> list[str]:
-    """O merge do registro e um push na main, e o webhook do Coolify rebuilda os
-    apps mesmo com o commit so mudando docs (issue #851). Cancela o deploy desse
+    """O merge do registro e o de um lote de ferramenta sao push na main, e o
+    webhook do Coolify rebuilda os apps mesmo com o commit fora do app (issues
+    #851 e #965). Cancela o deploy desse
     commit, e so dele, se aparecer na janela; com filtro de caminho no Coolify,
     nao aparece nenhum. Devolve os servicos cancelados."""
     apps = {sid: s["uuid"] for sid, s in servicos_cfg.items() if s.get("type") != "supabase" and s.get("uuid")}
@@ -889,30 +903,36 @@ def main() -> int:
                    f"Mande um corretor rebasear o PR sobre origin/main e rode de novo.", EXIT_MERGE)
 
         versao_antiga = ler_versao(wt, base)
-        tipo = tipo_de_bump(infos)
-        versao_nova = proxima_versao(versao_antiga, tipo) if tipo else None
-        docs_only = tipo is None
-        arquivos = set()
+        # --no-renames, como o detector do CI: o `files` do gh mostra um rename so
+        # pelo caminho novo, e tirar codigo do app passaria por ferramenta
+        arquivos = set(run(["git", "diff", "--no-renames", "--name-only", f"{base}...HEAD"], cwd=wt).stdout.split())
         for i in infos:
             arquivos.update(f["path"] for f in i.get("files") or [])
+        ferramenta = classe_do_lote(arquivos) == "ferramenta"
+        tipo = None if ferramenta else tipo_de_bump(infos)
+        versao_nova = proxima_versao(versao_antiga, tipo) if tipo else None
         # supabase nao tem build: migration se aplica a mao no Studio (o deploy nao aplica SQL)
         servicos = [sid for sid, s in servicos_cfg.items()
                     if s.get("type") != "supabase" and any(re.match(tp.replace("**", ".*").replace("*", "[^/]*"), a)
                            for a in arquivos for tp in (s.get("diff_routing") or {}).get("trigger_paths") or [])]
-        if not docs_only and not servicos:
+        if not ferramenta and not servicos:
             servicos = [sid for sid, s in servicos_cfg.items() if s.get("type") in ("nextjs", "fastapi", "node", "python", "generic")]
         prds = prds_do_lote(raiz, infos)
         migs = migrations_novas(wt, base)
 
         if args.dry_run:
-            bump = (f"bump {tipo} v{versao_antiga} -> v{versao_nova}" if tipo
-                    else f"sem bump (lote docs-only), versao segue v{versao_antiga}")
+            classe = (f"ferramenta: só merge, versao segue v{versao_antiga}" if ferramenta
+                      else f"app: bump {tipo} v{versao_antiga} -> v{versao_nova}")
             print("plano: " + ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in infos)
-                  + f"; {bump}; chave {args.sessao}")
-            print(f"faria: push na branch {branch}" + ("" if avulso else " e PR de entrega")
-                  + ", CI verde, " + ("APP_VERSION no Coolify, " if versao_nova else "")
-                  + f"merge pela API, build, health, registro em PR so de docs (prds {prds or '[]'}, "
-                  f"migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
+                  + f"; {classe}; chave {args.sessao}")
+            entrega = f"faria: push na branch {branch}" + ("" if avulso else " e PR de entrega") + ", CI verde, "
+            if ferramenta:
+                print(entrega + "merge pela API, cancela o build que o webhook disparar, limpeza; "
+                      "sem bump, APP_VERSION, build, health nem registro.")
+            else:
+                print(entrega + "APP_VERSION no Coolify, "
+                      + f"merge pela API, build, health, registro em PR so de docs (prds {prds or '[]'}, "
+                      f"migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
             remover_worktree(raiz, wt, args.prs)
             wt = None
             print("dry-run terminou sem tocar em nada.")
@@ -925,7 +945,7 @@ def main() -> int:
             sha_bump = commitar(wt, f"chore(release): bump v{versao_nova} ({origem})", [PACKAGE_JSON])
             print(f"bump: v{versao_antiga} -> v{versao_nova} ({tipo}) em {sha_bump}, na branch {branch}")
         else:
-            print(f"bump: nenhum (lote docs-only), versao segue v{versao_antiga}")
+            print(f"bump: nenhum (ferramenta), versao segue v{versao_antiga}")
 
         if avulso:
             titulo = infos[0]["title"].strip()
@@ -955,18 +975,38 @@ def main() -> int:
         remover_worktree(raiz, wt, args.prs)
         wt = None
 
+        if ferramenta:
+            # producao nao muda: sem build, health nem registro (issue #965). Falha
+            # daqui em diante e codigo 5, nunca o 3: nada a reverter no Coolify
+            try:
+                cancelados = cancelar_build_do_registro(servicos_cfg, sha_main)
+                conferir_prs_fechados(raiz, infos, args.sessao, avulso, pr_entrega)
+                n_wt = limpar_worktrees_de_agente(raiz, {i["headRefName"]: i.get("headRefOid") for i in infos})
+            except Exception as e:  # noqa: BLE001
+                semaforo(raiz, "soltar", args.sessao)
+                print(f"pos-merge: {e}; merge feito, producao intacta e semaforo solto; confira no Coolify "
+                      f"se o webhook rodou build do {sha_main[:8]} e feche a mao os PRs {prs_txt} que ficaram abertos.")
+                return EXIT_REGISTRO
+            semaforo(raiz, "soltar", args.sessao)
+            semaforo_pego = False
+            fechou = f"PR {prs_txt} fechado" if avulso else f"onda {args.sessao} fechada"
+            print(f"{fechou} (ferramenta: só merge): versao segue v{versao_antiga} · merge {sha_main[:7]} · "
+                  "sem build, health nem registro"
+                  + (f" · build do webhook cancelado ({', '.join(cancelados)})" if cancelados else "")
+                  + f" · {n_wt} worktrees limpos · {dur(time.time() - T0)}")
+            return 0
+
         duracoes: dict[str, int | None] = {}
         falhas = []
-        if not docs_only:
-            for sid in servicos:
-                status, d = esperar_build(servicos_cfg[sid], t_merge, sha_main)
-                duracoes[sid] = d
-                if status != "finished":
-                    falhas.append(f"{sid}: {status}")
+        for sid in servicos:
+            status, d = esperar_build(servicos_cfg[sid], t_merge, sha_main)
+            duracoes[sid] = d
+            if status != "finished":
+                falhas.append(f"{sid}: {status}")
         if falhas:
             print("build: " + "; ".join(falhas) + f". Semaforo preso na chave {args.sessao}: rode `/deploy rollback` com ela.")
             return EXIT_BUILD
-        print("build: " + (", ".join(f"{sid} {dur(duracoes.get(sid))}" for sid in servicos) if servicos else "nenhum (docs-only)"))
+        print("build: " + ", ".join(f"{sid} {dur(duracoes.get(sid))}" for sid in servicos))
 
         healths = {}
         for sid in (servicos or [s for s in servicos_cfg if s != "supabase"]):
