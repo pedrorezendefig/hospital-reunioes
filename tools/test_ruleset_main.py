@@ -83,15 +83,24 @@ def test_ruleset_exige_os_tres_jobs_do_ci_pelo_nome_vindos_do_github_actions():
     assert {c.get("integration_id") for c in checks} == {GITHUB_ACTIONS_APP}
 
 
-def test_ruleset_pr_obrigatorio_zero_aprovacoes_em_dia_com_a_base_sem_force_push_delete_nem_bypass():
+def test_ruleset_pr_obrigatorio_zero_aprovacoes_em_dia_com_a_base_sem_force_push_nem_delete():
     r = ruleset()
     assert r["target"] == "branch" and r["enforcement"] == "active"
     assert r["conditions"]["ref_name"]["include"] == ["refs/heads/main"]
-    assert r["bypass_actors"] == [], "sem bypass, nem para admin"
     assert regra("pull_request")["parameters"]["required_approving_review_count"] == 0
     assert regra("required_status_checks")["parameters"]["strict_required_status_checks_policy"] is True
     regra("non_fast_forward")
     regra("deletion")
+
+
+def test_bypass_so_do_github_actions_nenhuma_pessoa_nem_equipe():
+    """A Action pós-merge commita snapshot e draft do Manual direto na `main`
+    (issue #940, ADR 0062 decisão 10). O bypass é do GitHub Actions e de mais
+    ninguém: pessoa, equipe, papel ou admin da organização continuam entrando
+    por PR, admin inclusive (ADR 0061)."""
+    assert ruleset()["bypass_actors"] == [
+        {"actor_id": GITHUB_ACTIONS_APP, "actor_type": "Integration", "bypass_mode": "always"}
+    ]
 
 
 # ---------------------------------------------- CI que sempre reporta no PR
