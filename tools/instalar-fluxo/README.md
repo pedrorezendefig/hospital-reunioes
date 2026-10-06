@@ -28,7 +28,7 @@ Só isso. O resto está no roteiro.
 
 ## Como provar que o roteiro funciona
 
-Rode o roteiro num repositório de brinquedo (um projeto pequeno com README, um `package.json` ou `pyproject.toml` e um remoto no GitHub). No fim, o painel tem que subir com as 7 abas cheias, o CI do PR tem que passar e a aba Pendências tem que mostrar a issue "Curar o CONTEXT.md e rodar o primeiro /grill-with-docs".
+Rode o roteiro num repositório de brinquedo (um projeto pequeno com README, um `package.json` ou `pyproject.toml` e um remoto no GitHub). No fim, o painel tem que subir com as 5 abas cheias, o CI do PR tem que passar e o chip `ready-for-human` da aba Issues tem que contar a issue "Curar o CONTEXT.md e rodar o primeiro /grill-with-docs".
 
 ## Manutenção
 

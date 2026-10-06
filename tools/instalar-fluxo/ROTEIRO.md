@@ -131,13 +131,12 @@ Use a ficha e as respostas da entrevista. Para cada item **adaptar** e **gerar**
 - `static/style.css`: só o bloco `:root` (paleta da P7, fonte da P8) e o comentário da linha 1. Nenhuma outra linha muda. Confira com `git diff --stat`: o arquivo tem que mudar em um único bloco.
 - `static/index.html`: `<title>Aplicativo <Nome> · painel do fluxo</title>`, o `<h1>` com `Aplicativo <span class="accent">Nome</span>`, e as duas cores do favicon (`fill` do retângulo = `--navy`, do círculo = `--brand-light`).
 - `static/areas.js`: `ORDEM_DOM_ROTAS` e as descrições viram as áreas da P6; os dois regex de classificação (por rota e por entidade) viram as regras da P6; o nome no diagrama de contexto vira o nome do projeto. Não mexa no resto do arquivo.
+- `static/pessoas.js`: os logins do dicionário `SOCIOS` viram os de quem trabalha no DESTINO.
 - `static/content/glossary.js`: "Pedro" vira o nome de quem cuida do repositório.
 - `static/content/tabelas.js`: exporte `TABELAS` com um resumo de uma linha por tabela do banco do DESTINO. Sem banco, `export const TABELAS = {};`.
 - `install-launchd.sh`: label do plist.
 - `README.md` do painel: nome do projeto e de quem cuida da fila humana.
 - `tests/`: troque os textos que citam o Hospital pelos do DESTINO. Mantenha as asserções. Rode `python3 -m pytest tools/workflow-dashboard/tests -q` e deixe verde.
-
-Se alguma tela da aba Guia (`static/app.js`, função `renderGuia`) citar nome, caminho ou serviço do Hospital, troque só o texto. Não altere estrutura, classes ou lógica.
 
 ### 4.2 `CLAUDE.md` e router
 
@@ -258,11 +257,11 @@ Mate o servidor ao fim. Os gates da P5 (lint, testes, build do app do DESTINO) v
 gh issue create --label ready-for-human --title "Curar o CONTEXT.md e rodar o primeiro /grill-with-docs" --body-file <arquivo>
 ```
 
-   Corpo: passo a passo (abrir `CONTEXT.md`, corrigir os verbetes que o rascunho errou, apagar os que não são domínio, depois abrir uma ideia com `/grill-with-docs`), o link do PR, e a frase "Fecha esta issue quando terminar; ela some da aba Pendências sozinha."
+   Corpo: passo a passo (abrir `CONTEXT.md`, corrigir os verbetes que o rascunho errou, apagar os que não são domínio, depois abrir uma ideia com `/grill-with-docs`), o link do PR, e a frase "Fecha esta issue quando terminar; ela sai do contador `ready-for-human` da aba Issues sozinha."
 
 5. Mensagem final para a pessoa, curta:
    - o link do PR e a instrução: "O merge é seu. Confere o diff, mergeia pela interface do GitHub."
-   - depois do merge: `git switch <branch padrão> && git pull`, depois `python3 tools/workflow-dashboard/serve.py`. A aba Pendências mostra a issue que você criou. Esse é o fluxo funcionando: pendência humana entra na fila, humano fecha, some do painel.
+   - depois do merge: `git switch <branch padrão> && git pull`, depois `python3 tools/workflow-dashboard/serve.py`. O chip `ready-for-human` da aba Issues conta a issue que você criou. Esse é o fluxo funcionando: pendência humana entra na fila, humano fecha, some do painel.
    - o próximo comando dela: `/ask-<nome>`.
 
 Você **não** roda `gh pr merge`. Nunca.

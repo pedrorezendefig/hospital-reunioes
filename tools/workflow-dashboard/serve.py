@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 """Dashboard local do workflow — zero dependências (stdlib).
 
-  python3 tools/workflow-dashboard/serve.py [--port 8765] [--no-open]
+  python3 tools/workflow-dashboard/serve.py [--port 8765] [--no-open] [--fixture dados.json]
 
 Somente leitura: consulta `gh`, lê deploys/releases da origin/main (git
 fetch + show) e o resto de docs/spec/*, CONTEXT.md, docs/adr/ do clone.
 Nunca escreve na working tree. Bind apenas em 127.0.0.1.
+
+`--fixture` serve o /api/data de um arquivo (a saída de `collect.py --json`,
+editada ou não), sem coletar: render repetível no Chrome headless.
 """
 from __future__ import annotations
 
@@ -39,9 +42,16 @@ MIME = {
 
 _cache: dict = {"ts": 0.0, "data": None}
 _lock = threading.Lock()
+FIXTURE: Path | None = None  # --fixture: o /api/data sai deste arquivo, sem coletar
+
+
+def fixture_dos_args(args: list[str]) -> Path | None:
+    return Path(args[args.index("--fixture") + 1]) if "--fixture" in args else None
 
 
 def get_data(fresh: bool) -> dict:
+    if FIXTURE:
+        return json.loads(FIXTURE.read_text(encoding="utf-8"))
     with _lock:
         if not fresh and _cache["data"] is not None and time.time() - _cache["ts"] < TTL_SECONDS:
             return _cache["data"]
@@ -107,7 +117,9 @@ class Handler(BaseHTTPRequestHandler):
 
 
 def main():
+    global FIXTURE
     args = sys.argv[1:]
+    FIXTURE = fixture_dos_args(args)
     port = 8765
     if "--port" in args:
         port = int(args[args.index("--port") + 1])
@@ -125,7 +137,10 @@ def main():
 
     url = f"http://localhost:{port}"
     print(f"✓ Dashboard do workflow em {url}  (Ctrl+C para parar)")
-    print("  primeira carga consulta o gh — pode levar alguns segundos")
+    if FIXTURE:
+        print(f"  /api/data servido de {FIXTURE} (sem coleta)")
+    else:
+        print("  primeira carga consulta o gh, pode levar alguns segundos")
     def _open():
         try:
             webbrowser.open(url)

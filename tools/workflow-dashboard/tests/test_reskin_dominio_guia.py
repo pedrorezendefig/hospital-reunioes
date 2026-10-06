@@ -94,23 +94,13 @@ def test_glossario_no_mesmo_cartao_testimonial():
         "rodapé do glossário sem a fonte CONTEXT.md"
 
 
-# ---------- Guia: eyebrow + cartão em Onest ----------
+# ---------- Guia: saiu do painel (ADR 0062, decisão 3) ----------
 
 
-def test_guia_com_cabecalho_de_eyebrow_e_cartao():
-    fn = re.search(r"function renderGuia\(\)[\s\S]*?\n\}", APP_JS)
-    assert fn, "app.js sem renderGuia"
-    corpo = fn.group(0)
-    assert "cabecalho(" in corpo, "Guia fora do padrão de cabeçalho com eyebrow"
-    assert "guia-flow-card" in corpo, "fluxo do Guia fora do cartão"
-    assert 'class="eyebrow"' in corpo, "cartão do Guia sem eyebrow interna"
-
-
-def test_eyebrow_do_cartao_do_guia_legivel_no_plano_claro():
-    # a eyebrow base é branca translúcida (navy); dentro do cartão claro
-    # precisa da variante em tinta suave com ponto brand
-    assert re.search(r"\.guia-flow-head \.eyebrow[^{]*\{[^}]*var\(--ink-soft\)", CSS), \
-        "eyebrow do Guia ilegível sobre o cartão claro"
+def test_guia_saiu_e_o_conteudo_foi_apagado():
+    # o método vive no docs/onboarding/ e no README do painel
+    assert "renderGuia" not in APP_JS and "fluxoHtml" not in APP_JS
+    assert "guia-flow" not in CSS and ".flx" not in CSS
 
 
 def test_pesos_de_fonte_so_400_e_500():
@@ -121,17 +111,12 @@ def test_pesos_de_fonte_so_400_e_500():
     assert pesos <= {"400", "500"}, f"pesos fora dos carregados: {sorted(pesos)}"
 
 
-# ---------- tooltips, copiar e recolhíveis no estilo novo ----------
+# ---------- tooltips e recolhíveis no estilo novo ----------
 
 
 def test_tooltip_no_estilo_novo():
     pop = _bloco(".tip-pop")
     assert "var(--ink)" in pop, "tooltip fora do fundo de tinta"
-
-
-def test_botao_copiar_no_estilo_novo():
-    assert "var(--green)" in _bloco(".cmd-copy.ok"), "feedback de cópia fora do verde dos tokens"
-    assert "copyBlock" in UI_JS and "cmd-copy" in UI_JS
 
 
 def test_recolhivel_com_caret_brand():
@@ -197,6 +182,10 @@ def test_css_sem_regras_orfas_das_telas_aposentadas():
         ".has-desc", ".desc-pop", ".wf-golink",
         # pontos de status sem uso
         ".dot.info", ".dot.muted", ".dot.warn",
+        # Plano, Pendências, Guia e visor do responsável (aposentados na #942)
+        ".tab-plano", ".leva", ".fcopia", ".fslash", ".ftempo",
+        ".feita-chip", ".plano-", ".pend-", ".flx", ".guia-flow", ".cmdpill",
+        ".visor-resp", ".prd-dono", "select.fsel", ".nrow-lead", ".chain",
     )
     for sel in orfas:
         assert sel not in CSS, f"regra órfã sobrou no style.css: {sel}"
