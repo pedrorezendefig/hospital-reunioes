@@ -4,7 +4,7 @@ Você é o agente que vai instalar, **neste repositório**, o fluxo de trabalho 
 
 O que você entrega no fim:
 
-1. O painel local de 7 abas (Plano, Issues, Produção, Pendências, Mapa, Domínio, Guia) de pé, com o mesmo design system da ORIGEM e a paleta do DESTINO.
+1. O painel local de 5 abas (Issues, PRs, Produção, Mapa, Domínio), o Hospital OS da ORIGEM, de pé, com o mesmo design system da ORIGEM e a paleta do DESTINO.
 2. As skills do pipeline instaladas e adaptadas à stack do DESTINO.
 3. As labels, os CIs de higiene e o contrato de deploy no lugar.
 4. O domínio semeado: `CONTEXT.md` rascunho, ADR 0001 da instalação, primeiro snapshot.
@@ -73,7 +73,7 @@ Quando terminar, mostre a ficha para a pessoa em uma mensagem só, curta, em tab
 
 Faça as perguntas abaixo, **nesta ordem**, uma por mensagem. Cada uma traz a recomendação derivada da ficha. Anote cada resposta na ficha: a Fase 4 usa tudo.
 
-**P1. Nome e slug.** "Como o painel chama o projeto?" Recomende o nome do `package.json`/README, capitalizado, e um slug em minúsculas com hífen. O título do painel vira "Aplicativo <Nome>" e o plist do serviço vira `com.<slug>.workflow-dashboard`.
+**P1. Nome e slug.** "Como o painel chama o projeto?" Recomende o nome do `package.json`/README, capitalizado, e um slug em minúsculas com hífen. O painel vira "<Nome> OS" (na ORIGEM, Hospital OS) e o plist do serviço vira `com.<slug>.workflow-dashboard`.
 
 **P2. Nome do router.** Na ORIGEM a skill que responde "qual skill eu uso agora?" chama `/ask-pedro`. Aqui vira `/ask-<primeiro-nome-de-quem-instala>`. Recomende o login do `gh api user --jq .login` ou o primeiro nome do `git config user.name`.
 
@@ -129,13 +129,13 @@ Use a ficha e as respostas da entrevista. Para cada item **adaptar** e **gerar**
 ### 4.1 Painel
 
 - `static/style.css`: só o bloco `:root` (paleta da P7, fonte da P8) e o comentário da linha 1. Nenhuma outra linha muda. Confira com `git diff --stat`: o arquivo tem que mudar em um único bloco.
-- `static/index.html`: `<title>Aplicativo <Nome> · painel do fluxo</title>`, o `<h1>` com `Aplicativo <span class="accent">Nome</span>`, e as duas cores do favicon (`fill` do retângulo = `--navy`, do círculo = `--brand-light`).
+- `static/index.html`: `<title><Nome> OS</title>`, o `<h1>` com `<Nome> <span class="accent">OS</span>`, e as duas cores do favicon (`fill` do retângulo = `--navy`, do círculo = `--brand-light`).
 - `static/areas.js`: `ORDEM_DOM_ROTAS` e as descrições viram as áreas da P6; os dois regex de classificação (por rota e por entidade) viram as regras da P6; o nome no diagrama de contexto vira o nome do projeto. Não mexa no resto do arquivo.
 - `static/pessoas.js`: os logins do dicionário `SOCIOS` viram os de quem trabalha no DESTINO.
 - `static/content/glossary.js`: "Pedro" vira o nome de quem cuida do repositório.
 - `static/content/tabelas.js`: exporte `TABELAS` com um resumo de uma linha por tabela do banco do DESTINO. Sem banco, `export const TABELAS = {};`.
 - `install-launchd.sh`: label do plist.
-- `README.md` do painel: nome do projeto e de quem cuida da fila humana.
+- `README.md` do painel: o título vira `# <Nome> OS`; nome do projeto e de quem cuida da fila humana.
 - `tests/`: troque os textos que citam o Hospital pelos do DESTINO. Mantenha as asserções. Rode `python3 -m pytest tools/workflow-dashboard/tests -q` e deixe verde.
 
 ### 4.2 `CLAUDE.md` e router

@@ -24,7 +24,7 @@ Várias sessões Claude Code rodam issues `ready-for-agent` distintas ao mesmo t
 
 ## Proibido criar
 - Docs de estado/processo paralelos (`PRODUCAO.md`, `deploy-history.md`, `dashboard.html`, pastas `planos/`, `implementacoes/`, `blueprint/`, chronicles): estado vive em `docs/spec/deploy/*.json` e o trabalho nas **GitHub Issues**.
-- Exceção: `tools/workflow-dashboard/` — painel local **read-only** desses JSONs + `gh` (`python3 tools/workflow-dashboard/serve.py`).
+- Exceção: o **Hospital OS** (`tools/workflow-dashboard/`), painel local **read-only** desses JSONs + `gh` (`python3 tools/workflow-dashboard/serve.py`).
 
 ## Docs vivos
 - `CONTEXT.md` + `docs/adr/` — domínio e decisões (curado por humano). ADR: consuma só `status: accepted` (`superseded`/`deprecated` = histórico); supersessão é bidirecional (`supersedes`/`superseded_by`, `amends`/`amended_by`), travada pelo CI `lint-adr`.

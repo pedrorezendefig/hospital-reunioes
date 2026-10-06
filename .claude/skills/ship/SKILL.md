@@ -408,7 +408,7 @@ Se o ciclo terminou deixando ações que **só o humano pode fazer** (import de 
 - Corpo em pt-BR com: o que fazer (comandos prontos quando houver), por que ficou pendente e links de rastreio (PR, deploy, ADR).
 - Nunca duplicar: se a pendência já tem issue aberta, comentar nela em vez de criar outra.
 
-Essas issues alimentam a aba **Pendências** do painel (`tools/workflow-dashboard`), que lê a fila `ready-for-human` direto do GitHub, sem nenhum arquivo de estado paralelo. Elas ficam fora do Plano por inteiro (ondas, entregues e medianas de lead time: fila humana, não de agente); ao concluir, o humano fecha a issue e a pendência some do painel.
+Essas issues alimentam o chip `ready-for-human` da aba Issues do Hospital OS (`tools/workflow-dashboard`), que lê a fila direto do GitHub, sem nenhum arquivo de estado paralelo; ao concluir, o humano fecha a issue e a pendência some do chip.
 
 Pular se o ciclo não deixou pendência nenhuma.
 

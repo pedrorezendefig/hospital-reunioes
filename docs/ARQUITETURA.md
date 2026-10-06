@@ -126,7 +126,7 @@ hospital-reunioes/
 └── supabase/  migrations/ (schema) · templates/ (e-mails do Auth) · snippets/ (SQL de diagnóstico) · seed.sql
 docs/          ARQUITETURA.md · adr/ · agents/ · spec/ · onboarding/ · pops/ · comunicacao/ · manual/
 CONTEXT.md · CONTEXT-MAP.md   glossário e mapa dos contextos (raiz)
-.claude/skills/ skills do time (workflow) · local/ insumo humano fora do git · tools/ lint de ADR e painel local
+.claude/skills/ skills do time (workflow) · local/ insumo humano fora do git · tools/ lint de ADR e Hospital OS
 ```
 
 - **`backend/pipeline/`** é o coração: transcrição → LLM (extração → resumo → estrutura → ata PT) → PDF.
@@ -135,7 +135,7 @@ CONTEXT.md · CONTEXT-MAP.md   glossário e mapa dos contextos (raiz)
 
 ## 7. Skills & Workflow (como desenvolvemos)
 
-O desenvolvimento é **GitHub-issue-centric** (modelo Matt Pocock). O guia visual completo é o painel local: `python3 tools/workflow-dashboard/serve.py` (abas "Aprender" + dados vivos de issues/deploys).
+O desenvolvimento é **GitHub-issue-centric** (modelo Matt Pocock). Issues, PRs e deploys ao vivo ficam no Hospital OS, o painel local: `python3 tools/workflow-dashboard/serve.py`. O método de trabalho vive em `docs/onboarding/`.
 
 **Fluxo:** `/grill-with-docs` → `/to-prd` → `/to-issues` → `/pegar-issue` → `/tdd` → `/ship` → `/deploy`.
 

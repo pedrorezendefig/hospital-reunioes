@@ -111,7 +111,7 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo /ship ou pelo fechament
 | Como a app funciona hoje (visão geral)? | `docs/ARQUITETURA.md` |
 | Mapa factual detalhado (rotas, schema, integrações)? | `docs/spec/snapshots/` |
 | O que está em produção? | `docs/spec/deploy/state.json` |
-| Timeline de deploys (o que mudou desde quando)? | `docs/spec/deploy/history.json` (aba Produção do painel) |
+| Timeline de deploys (o que mudou desde quando)? | `docs/spec/deploy/history.json` (aba Produção do Hospital OS) |
 
 ## Regras importantes
 
@@ -122,7 +122,7 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo /ship ou pelo fechament
 4. **O contexto do trabalho vive na Issue**, não em arquivo de plano. Os critérios de aceite da Issue viram os seus testes no `/tdd`.
 5. **Uma Issue por vez, uma branch por Issue.** Em paralelo (vários terminais), use **1 git worktree por issue** — o claim atômico evita que duas sessões peguem a mesma. Protocolo em `docs/agents/issue-tracker.md`.
    - **Emenda (ADR 0061):** a **árvore principal do seu clone fica sempre na `main`** e só recebe `git pull`. Todo trabalho, inclusive doc e ADR, acontece em worktree. Voltou de uma pausa? `git pull` na árvore principal antes de qualquer coisa.
-6. **Dono do PRD (ADR 0061).** Todo PRD tem um assignee: quem fez o grilling (o `/to-prd` põe). Fatia sem claim conta como do dono do PRD; pegar fatia de PRD de outro sócio se combina antes com ele. Quem está puxando o quê aparece no painel local (`python3 tools/workflow-dashboard/serve.py`, aba Issues, agrupado por responsável).
+6. **Dono do PRD (ADR 0061).** Todo PRD tem um assignee: quem fez o grilling (o `/to-prd` põe). Fatia sem claim conta como do dono do PRD; pegar fatia de PRD de outro sócio se combina antes com ele. Quem está puxando o quê aparece no Hospital OS, o painel local (`python3 tools/workflow-dashboard/serve.py`, aba Issues, filtro por responsável).
 7. **Skills locais ficam em `.claude/skills/`** — não mexa sem confirmar comigo (Pedro). Mudanças aqui são "skills do time".
 
 ## Como o código e o registro chegam à `main`
@@ -189,7 +189,7 @@ Sem Discord, sem Slack.
 ## Pra aprofundar
 
 - **[`claude-setup.md`](./claude-setup.md)** — setup do Claude Code pra este projeto (plugins, CLI do Coolify, permissions). Faça uma vez.
-- **Painel do workflow** — guia visual do fluxo + dados vivos: `python3 tools/workflow-dashboard/serve.py` (abre em http://localhost:8765).
+- **Hospital OS**: o painel local com issues, PRs e deploys ao vivo: `python3 tools/workflow-dashboard/serve.py` (abre em http://localhost:8765). Vocabulário e fonte de cada aba no README dele.
 - `CLAUDE.md` (raiz) — regras gerais do projeto.
 - `CONTEXT.md` + `docs/adr/` — domínio e decisões.
 - `docs/agents/` — `issue-tracker.md` (claim/paralelismo), `triage-labels.md`, `domain.md`.
