@@ -5,10 +5,10 @@ Como a versão do Hospital Reuniões é decidida, exibida e documentada.
 ## TL;DR
 
 - **Versão semântica** (`vMAJOR.MINOR.PATCH`, ex: `v0.2.1`) é o identificador da app.
-- **Fonte da verdade**: `hospital-reunioes/frontend/package.json` campo `version`.
-- **Backend espelha** via env `APP_VERSION` (injetada pelo `/deploy ship` antes do build).
+- **Fonte da verdade**: o `last_app_version` do `docs/spec/deploy/state.json`, conferido com a maior tag `vX.Y.Z` do repositório (vale a maior).
+- **A versão não vira commit** (issue #967): o rabo (`fechar_onda.py`) grava `APP_VERSION` no backend e no frontend do Coolify antes do merge e cria a tag `vX.Y.Z` no squash depois. O `hospital-reunioes/frontend/package.json` fica congelado.
 - **Rodapé da app** exibe `v0.2.1` em todas as páginas.
-- **Bump é automático** a cada PR via `/ship`, baseado no tipo do commit.
+- **A versão sobe sozinha** a cada entrega de app, pelo tipo dos commits.
 
 ## Esquema de versão
 
@@ -23,9 +23,9 @@ v0.2.1
 
 Hoje estamos em `v0.x.y` (pré-1.0). Quando `v1.0.0` for batido, a app entra em modo "API estável" — toda mudança breaking exige major bump explícito.
 
-## Regra de bump automático
+## Regra da versão nova
 
-A skill `/ship` lê os commits do PR (`git log main..HEAD`) e decide o bump pelo tipo dominante (BREAKING > feat > fix/chore/refactor):
+O rabo lê os commits dos PRs do lote e decide pelo tipo dominante (BREAKING > feat > fix/chore/refactor). Lote só de ferramenta (nada em `hospital-reunioes/`) não muda a versão:
 
 | Tipo de commit | Bump |
 |---|---|
@@ -35,21 +35,16 @@ A skill `/ship` lê os commits do PR (`git log main..HEAD`) e decide o bump pelo
 
 Se o PR tem 1 `feat:` + 3 `fix:`, **vale o mais alto**: minor.
 
-A skill `/ship` adiciona um último commit `chore(release): bump v0.2.0` no PR antes do `gh pr create`. O squash merge consolida tudo num commit só no main.
+Nenhum commit de versão entra no PR: o CI verde do PR vale para o merge, e dois PRs não disputam a mesma linha do `package.json`.
 
-## Bump manual em marcos editoriais
+## Marco editorial
 
-Se você quiser marcar um marco (ex: chegou um módulo grande novo, vai de `v0.x.y` direto pra `v1.0.0`), edite à mão no PR:
-
-1. `hospital-reunioes/frontend/package.json` campo `version`
-2. Commit `chore(release): bump v1.0.0 — primeiro release oficial`
-
-A skill `/ship` respeita: sempre lê a versão atual de `package.json` e incrementa a partir dela. Bump manual ≠ versão "fora do controle".
+Para ir de `v0.x.y` direto pra `v1.0.0`, marque o commit do PR como breaking (`feat!:` ou `BREAKING CHANGE:` no corpo): o rabo sobe o major.
 
 ## Como a versão chega na app rodando
 
 **Frontend (build-time, inlined no bundle)**:
-- `frontend/next.config.ts` importa `package.json` e injeta `process.env.NEXT_PUBLIC_APP_VERSION` na build.
+- O `Dockerfile` recebe `APP_VERSION` como `ARG` do build, e o `frontend/next.config.ts` a injeta em `process.env.NEXT_PUBLIC_APP_VERSION`. Sem ela (build local, CI), cai no `package.json`.
 - `Footer.tsx` lê `process.env.NEXT_PUBLIC_APP_VERSION` e renderiza `v0.2.1`.
 - O `generateBuildId` é a versão + timestamp do build → invalida cache do Service Worker (`@serwist/next`) a cada nova versão.
 
@@ -57,8 +52,8 @@ A skill `/ship` respeita: sempre lê a versão atual de `package.json` e increme
 - `Settings.app_version` (em `backend/app/config.py`) lê `APP_VERSION` de env. Default `"0.1.0"` se a env não estiver setada.
 - `/api/health` retorna `{ "version": "0.2.1", ... }`.
 
-**Coolify (injetado pelo `/deploy ship`)**:
-- Antes do build (que o push na main dispara pelo webhook), a skill roda `coolify app env update <uuid-do-backend> APP_VERSION --value "<versão atual do package.json>"` pelo CLI do Coolify. A chave é **posicional**: `--key` é o flag de rename, não serve pra apontar a variável.
+**Coolify (gravado pelo rabo)**:
+- Antes do merge (que dispara o build pelo webhook), o `fechar_onda.py` roda `coolify app env update <uuid> APP_VERSION --value "<versão nova>"` no backend e no frontend. A chave é **posicional**: `--key` é o flag de rename, não serve pra apontar a variável.
 - Pós-health, valida que `GET /api/health` retorna a versão esperada. Mismatch → rollback: a skill para e entrega o comando pronto (`coolify app rollback run`); quem dispara é o humano, porque comando de build é negado na sessão.
 
 ## Release notes
@@ -69,4 +64,4 @@ Detalhes ricos de cada mudança vivem na **GitHub Issue + PR** (contexto, crité
 
 ## Mapeamento versão ↔ SHA
 
-Cada versão (`v0.2.1`) = 1 commit no `main` = 1 registro no `docs/spec/deploy/history.json`. O SHA do commit é o identificador único técnico; a versão é o identificador semântico humano.
+Cada versão (`v0.2.1`) = 1 commit no `main` (o squash, com a tag `v0.2.1`) = 1 registro no `docs/spec/deploy/history.json`. O SHA do commit é o identificador único técnico; a versão é o identificador semântico humano.

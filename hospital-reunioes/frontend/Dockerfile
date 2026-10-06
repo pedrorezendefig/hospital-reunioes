@@ -20,11 +20,15 @@ ARG NEXT_PUBLIC_ENVIRONMENT
 # Caminho interno até o backend para o rewrite do /api (issue #349). Os
 # rewrites são gravados no build, então a variável entra aqui, não no runtime.
 ARG API_PROXY_URL
+# Versão do rodapé (issue #967): o rabo grava APP_VERSION no Coolify antes do
+# merge e o next.config a grava no bundle. Sem valor, vale o package.json.
+ARG APP_VERSION
 ENV NEXT_PUBLIC_SUPABASE_URL=$NEXT_PUBLIC_SUPABASE_URL
 ENV NEXT_PUBLIC_SUPABASE_ANON_KEY=$NEXT_PUBLIC_SUPABASE_ANON_KEY
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_ENVIRONMENT=$NEXT_PUBLIC_ENVIRONMENT
 ENV API_PROXY_URL=$API_PROXY_URL
+ENV APP_VERSION=$APP_VERSION
 
 RUN pnpm build
 

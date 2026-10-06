@@ -357,7 +357,7 @@ open http://localhost:3000                  # esperado: tela de login do app
 | `/pegar-issue` | **Sem arg:** lista a fila. **Com `<N>`:** claim atômico + branch + carrega a spec. |
 | `/tdd` | Red → green → refactor. Critérios de aceite da Issue viram testes. |
 | `/ship` | Commit → PR → 3 gates; para no PR verde e imprime o comando do rabo. |
-| `fechar_onda.py --prs <N>` | O rabo único (ADR 0061): bump na branch do PR, `APP_VERSION`, merge pela API, um build, health e registro em PR só de docs. |
+| `fechar_onda.py --prs <N>` | O rabo único (ADR 0061): versão sem commit, `APP_VERSION` no backend e no frontend, merge pela API, tag `vX.Y.Z`, um build, health e registro em PR só de docs. |
 | `/deploy` | Opera a produção no Coolify: `status`, `rollback`, `setup`. O `ship` só imprime o comando do rabo. |
 | `/diagnose` | Investigação raiz de bug (reproduz → minimiza → corrige → regressão). |
 | `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Roda numa Action no push da `main`, depois do registro do rabo (ADR 0062). |
@@ -401,7 +401,6 @@ O que a memória do Claude Code do Pedro aprendeu em produção e que nenhuma sk
 
 | Sintoma ou situação | O que está acontecendo | O que fazer |
 |---|---|---|
-| PR mergeado, prod com código novo e versão velha no `/api/health` | Bump fantasma: o rebase descartou o commit do bump (`patch contents already upstream`) e o PR entrou sem mexer na versão | Antes de todo merge: `gh pr diff <N> \| grep '"version"'`; a linha `-` tem que ser a versão que está hoje em `origin/main`. Corrigir com re-bump em commit novo |
 | Duas migrations com o mesmo número mergeiam limpo | Sessões paralelas numeraram igual; o git não vê | Antes do push final: `git ls-tree origin/main:hospital-reunioes/supabase/migrations/ \| tail`; renumerar com `git mv` + cabeçalho + corpo do PR |
 | PR com `no checks reported` | Ou está `CONFLICTING` (o GitHub não roda CI sem merge ref) ou é PR empilhado (o `ci.yml` só roda em `main`) | Rebase + `push --force-with-lease`; commit vazio e close/reopen não resolvem. Pilha: rodar os 3 jobs à mão e esperar o PR de baixo mergear |
 | Mergear pilha de PRs após squash | Cada squash cria SHA novo; `git rebase <base>` puro reaplica os commits de baixo | `git rebase --onto origin/main <sha-do-topo-antigo-da-base> <branch-de-cima>` a cada merge. `git rebase --skip` é negado: resolva à mão e `--continue` |

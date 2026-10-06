@@ -145,7 +145,7 @@ Regras:
 - Hard-excluded da `/deploy` (project.json `hard_excluded`) NUNCA entram.
 - Mensagem do commit segue Conventional Commits (`fix(scope): ...`, `feat(scope): ...`).
 - Body inclui resumo da Issue e `Closes #N` se houver.
-- Sem bump no PR: `hospital-reunioes/frontend/package.json` não muda aqui. A versão sobe no rabo, pelo tipo dos commits, na hora do merge (ADR 0061).
+- Sem versão no PR: `hospital-reunioes/frontend/package.json` fica congelado. A versão sobe no rabo, pelo tipo dos commits, na hora do merge, sem commit: vai no `APP_VERSION` do Coolify e na tag `vX.Y.Z` (ADR 0061, issue #967).
 
 ---
 
@@ -368,7 +368,7 @@ python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER" --d
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER"
 ```
 
-Um PR só e sem `--sessao` é o modo PR avulso (chave do semáforo `pr-<N>`). O script faz, nesta ordem: pré-condições (PR verde e mergeável, número e `sha256` das migrations), semáforo, bump pelo tipo dos commits como commit na branch do PR (com a `origin/main` trazida antes, se a branch ficou atrás), CI verde nesse head, `APP_VERSION` no Coolify antes do merge, merge pela API do GitHub (a `main` é protegida, ADR 0061), um build, health com conferência de versão, registro (`state.json` e `history.json`) num PR só de docs mergeado do mesmo jeito, e limpeza. Snapshot e draft do Manual não são do rabo: uma Action no push da `main` cuida deles depois do registro (ADR 0062). O registro nomeia o PR e a issue. Códigos de saída e o que fazer em cada um: docstring do script.
+Um PR só e sem `--sessao` é o modo PR avulso (chave do semáforo `pr-<N>`). O script faz, nesta ordem: pré-condições (PR verde e mergeável, número e `sha256` das migrations), semáforo, versão nova pelo tipo dos commits, sem commit (issue #967), a `origin/main` trazida por merge se a branch ficou atrás (e o CI verde nesse head novo), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida, ADR 0061), tag `vX.Y.Z` no squash, um build, health com conferência de versão, registro (`state.json` e `history.json`) num PR só de docs mergeado do mesmo jeito, e limpeza. Snapshot e draft do Manual não são do rabo: uma Action no push da `main` cuida deles depois do registro (ADR 0062). O registro nomeia o PR e a issue. Códigos de saída e o que fazer em cada um: docstring do script.
 
 ---
 

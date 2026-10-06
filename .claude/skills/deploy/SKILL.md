@@ -150,13 +150,13 @@ $S status                                # quem segura e há quanto tempo
 
 ## Modo `ship` (default, sem argumento)
 
-O caminho para produção é um só, o `fechar_onda.py` (ADR 0061): bump na branch do PR, `APP_VERSION` no Coolify antes do merge, merge pela API do GitHub (a `main` é protegida), um build, health com conferência de versão e registro num PR só de docs, para um PR avulso ou para o lote de uma onda. Este modo não executa passo nenhum: imprime o comando e sai.
+O caminho para produção é um só, o `fechar_onda.py` (ADR 0061): versão nova pelo tipo dos commits, sem commit (issue #967), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida), tag `vX.Y.Z` no squash, um build, health com conferência de versão e registro num PR só de docs, para um PR avulso ou para o lote de uma onda. Este modo não executa passo nenhum: imprime o comando e sai.
 
 ```bash
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <N>
 ```
 
-Com `--dry-run` o script mostra o plano (PR, issue, tipo de bump) sem tocar em nada. Sem PR não há o que subir: abra um pelo `/ship`.
+Com `--dry-run` o script mostra o plano (PR, issue, versão nova) sem tocar em nada. Sem PR não há o que subir: abra um pelo `/ship`.
 
 ## Passos do ship (referência)
 
@@ -334,27 +334,23 @@ Continuar? [enter=sim / e=editar msg / n=abortar]
 
 ### Passo 3.5 — Sincronizar `APP_VERSION` no Coolify
 
-Antes do commit + push (que vai disparar o build no Coolify via webhook), garantir que `APP_VERSION` no service backend bate com a versão atual de `hospital-reunioes/frontend/package.json` (fonte da verdade — ver `docs/spec/VERSIONING.md`).
+Antes do merge (que vai disparar o build no Coolify via webhook), gravar a versão nova no `APP_VERSION` de **todo app do Coolify** (backend e frontend). A versão não vira commit (issue #967): o `package.json` do frontend fica congelado e não é fonte de nada. A versão de partida é o `last_app_version` do `state.json`, conferido com a maior tag `vX.Y.Z` do remoto (vale a maior); a nova sai do tipo dos commits.
 
-**Quando esse passo importa:** `/deploy ship` invocado **standalone** (sem `/ship`). Quando o `/ship` orquestra o ciclo completo, o Passo 8.5 do `/ship` já sincronizou antes do merge — aqui é defensivo puro (no-op se já bate).
+O backend lê `APP_VERSION` no runtime e a devolve no `/api/health`; o frontend a recebe no build (`ARG APP_VERSION` do `Dockerfile`) e o `next.config.ts` a grava no rodapé, caindo no `package.json` só se ela faltar.
 
 ```bash
-APP_VERSION=$(python3 -c "import json; print(json.load(open('hospital-reunioes/frontend/package.json'))['version'])")
-BACKEND_UUID=$(jq -r '.services[] | select(.id == "backend") | .uuid' <<< "$PROJECT_JSON")
-
-# Setar env no Coolify ANTES do push pra evitar race com webhook auto-deploy
-# update é update-only: se a key ainda não existe, o CLI falha e o create resolve.
-coolify app env update "$BACKEND_UUID" APP_VERSION --value "$APP_VERSION" 2>/dev/null \
-  || coolify app env create "$BACKEND_UUID" --key APP_VERSION --value "$APP_VERSION"
+for UUID in $(jq -r '.services[] | select(.type != "supabase" and .uuid) | .uuid' <<< "$PROJECT_JSON"); do
+  # update é update-only: se a key ainda não existe, o CLI falha e o create resolve.
+  coolify app env update "$UUID" APP_VERSION --value "$NOVA" 2>/dev/null \
+    || coolify app env create "$UUID" --key APP_VERSION --value "$NOVA"
+done
 ```
-
-**Idempotente** — se a env já está com o valor certo (comparar com `state.json:last_app_version`), pular silenciosamente sem chamar o CLI.
 
 > Forma **posicional**: a chave vem depois do UUID, sem `--key` (ver pegadinha 1).
 
-Salvar `expected_app_version = $APP_VERSION` em memória — usado no Passo 7.2 pra validar match pós-deploy.
+Depois do merge, a tag `vX.Y.Z` vai no squash pela API do GitHub (`POST repos/{owner}/{repo}/git/refs`). Ela é a conferência da próxima versão de partida; se falhar, o deploy segue e o rabo imprime o comando para criá-la depois.
 
-Se o usuário rodar `/deploy ship` em projeto sem `frontend/package.json` (improvável aqui, mas a skill é universal): pular este passo silenciosamente.
+Salvar `expected_app_version = $NOVA` em memória: usado no Passo 7.2 pra validar match pós-deploy.
 
 ---
 
@@ -528,7 +524,7 @@ Snapshot completo:
     "branch": "<project.git.branch>",
     "project_name": "<project.project.name>"
   },
-  "last_app_version": "<vX.Y.Z lida de frontend/package.json — versão semântica humana>",
+  "last_app_version": "<X.Y.Z que o rabo calculou e gravou no APP_VERSION, versão semântica humana>",
   "services": [
     {
       "id": "<service.id>", "uuid": "<service.uuid>",
