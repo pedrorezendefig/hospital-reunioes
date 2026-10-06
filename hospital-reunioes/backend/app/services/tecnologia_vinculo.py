@@ -751,6 +751,10 @@ _MENCAO_DO_GITHUB = re.compile(r"(?<![A-Za-z0-9])@[A-Za-z0-9][A-Za-z0-9_-]*(?:/[
 # sairia `@ana-bob`, mencao viva a uma conta que ninguem escolheu (issue #888).
 _FIM_DO_NOME = r"(?![^\W_]|-)"
 
+# O texto montado que termina num `@` (seguido ou nao de um login) emenda no
+# rotulo que vem depois e acende mencao a uma conta que ninguem escolheu.
+_COLA_NO_ROTULO = re.compile(r"@[A-Za-z0-9_-]*\Z")
+
 
 def rotulo_no_github(participante: dict[str, Any] | None) -> str:
     """Como esta pessoa aparece num texto publicado no GitHub: `@login` quando
@@ -826,10 +830,13 @@ def texto_espelhado(bruto: str | None, *, mencionados: list[dict[str, Any]]) -> 
     partes: list[str] = []
     fim = 0
     for achado in padrao.finditer(texto):
-        antes = _trecho_do_autor(texto[fim : achado.start()])
-        # Um `@` solto colado ao rotulo neutro sairia `@Pessoa`, mencao viva
-        # (issue #888). O espaco e o mesmo do `_neutralizar_mencoes`.
-        partes.append(f"{antes} " if antes.endswith("@") else antes)
+        partes.append(_trecho_do_autor(texto[fim : achado.start()]))
+        # Um `@` solto, ou o `@login` da mencao anterior, colado ao rotulo
+        # neutro sairia `@Pessoa` ou `@anaPessoa`, mencao viva (issue #888).
+        # Quem decide e o texto ja montado, nao so o trecho do autor. O espaco
+        # e o mesmo do `_neutralizar_mencoes`.
+        if _COLA_NO_ROTULO.search("".join(partes)):
+            partes.append(" ")
         partes.append(rotulos[achado.group(0)[1:]])
         fim = achado.end()
     partes.append(_trecho_do_autor(texto[fim:]))

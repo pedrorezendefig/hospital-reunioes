@@ -343,6 +343,18 @@ class TestArrobaNoTextoEspelhado:
         assert texto == "@ Pessoa do hospital, veja"
         assert _mencoes_vivas(texto) == []
 
+    def test_rotulo_neutro_colado_ao_login_da_mencao_anterior_nao_vira_outra_conta(self):
+        """Issue #888, revisao do PR #1041: duas mencoes coladas, a segunda sem
+        login. `@Ana Silva@Diretor do Hospital` saia `@anaPessoa do hospital`,
+        mencao viva a conta `anaPessoa`. O que encosta no rotulo e o texto ja
+        montado, nao so o trecho do autor."""
+        ana = {**DIRETOR, "id": "P3", "nome_completo": "Ana Silva", "github_login": "ana"}
+
+        texto = texto_espelhado("@Ana Silva@Diretor do Hospital, veja", mencionados=[ana, DIRETOR])
+
+        assert texto == "@ana Pessoa do hospital, veja"
+        assert _mencoes_vivas(texto, postas_pelo_app=("ana",)) == []
+
     def test_nome_de_cadastro_com_sinal_de_menor_ainda_casa(self):
         """A troca roda sobre o texto BRUTO: o funil do `texto_do_diretor`
         transforma o texto (`<` vira `&lt;`) e nao o nome do cadastro."""
