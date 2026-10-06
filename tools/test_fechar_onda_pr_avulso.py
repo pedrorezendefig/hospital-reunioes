@@ -17,6 +17,7 @@ que anota cada chamada, e o build e o health devolvem verde sem rede.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
@@ -411,7 +412,7 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
     monkeypatch.setattr(fo, "semaforo", semaforo)
     monkeypatch.setattr(fo, "esperar_build", esperar_build)
     monkeypatch.setattr(fo, "checar_health", checar_health)
-    monkeypatch.setattr(fo, "esperar_rollback", esperar_rollback, raising=False)
+    monkeypatch.setattr(fo, "esperar_rollback", esperar_rollback)
     monkeypatch.setattr(fo, "cancelar_build_do_registro", cancelar_build_do_registro)
 
 
@@ -1356,3 +1357,83 @@ def test_sem_imagem_anterior_o_rabo_nao_mexe_no_app_version_nem_sobe_imagem(tmp_
 
     assert not [li for li in c.coolify() if "--value 0.10.0" in li or "rollback run" in li], c.coolify()
     assert c.rollbacks == []
+
+
+def imagem(tag: str, criada: str, no_ar: bool = False) -> dict:
+    return {"created_at": f"2026-10-06 {criada} +0000 UTC", "is_current": no_ar, "tag": tag}
+
+
+@pytest.mark.parametrize("imagens, esperada", [
+    # a lista fora de ordem: vale a mais nova que não é a do merge ruim
+    ([imagem(IMAGEM_MAIS_VELHA, "00:37:08"), imagem("f" * 40, "04:26:37", True),
+      imagem(IMAGEM_ANTERIOR, "02:10:00")], IMAGEM_ANTERIOR),
+    # o build ruim nem virou imagem: volta a que está no ar, com o APP_VERSION antigo
+    ([imagem(IMAGEM_ANTERIOR, "02:10:00", True), imagem(IMAGEM_MAIS_VELHA, "00:37:08")], IMAGEM_ANTERIOR),
+    ([imagem("f" * 40, "04:26:37", True)], None),
+], ids=["fora-de-ordem", "build-ruim-sem-imagem", "so-a-ruim"])
+def test_imagem_anterior_e_a_mais_nova_que_nao_e_a_do_merge_ruim(monkeypatch, imagens, esperada):
+    fo = carregar_fechar_onda()
+    pedidos = []
+
+    def coolify_json(args, timeout=120):
+        pedidos.append(args)
+        return {"current": next(i["tag"] for i in imagens if i["is_current"]), "images": imagens}
+
+    monkeypatch.setattr(fo, "coolify_json", coolify_json)
+
+    assert fo.imagem_anterior("uuid-backend", "f" * 40) == esperada
+    assert pedidos == [["app", "rollback", "images", "uuid-backend"]]
+
+
+def test_esperar_rollback_acompanha_o_deploy_novo_e_nao_o_antigo_do_mesmo_commit(monkeypatch):
+    """O deploy que pôs a imagem anterior no ar da primeira vez tem o mesmo
+    commit do rollback: casar por commit acharia o antigo, já `finished`."""
+    fo = carregar_fechar_onda()
+    antigo = {"deployment_uuid": "d-antigo", "commit": IMAGEM_ANTERIOR, "status": "finished"}
+    novo = {"deployment_uuid": "d-rollback", "commit": IMAGEM_ANTERIOR, "status": "in_progress"}
+    listas = iter([[antigo], [novo, antigo]])
+    pedidos = []
+
+    def coolify_json(args, timeout=120):
+        pedidos.append(args)
+        if args[:3] == ["app", "deployments", "list"]:
+            return next(listas)
+        return {"deployment_uuid": args[2], "status": "finished"}
+
+    monkeypatch.setattr(fo, "coolify_json", coolify_json)
+    monkeypatch.setattr(fo, "BUILD_POLL_S", 0)
+    monkeypatch.setattr(fo, "run", lambda cmd, **kw: pytest.fail(f"comando inesperado: {cmd}"))
+
+    assert fo.esperar_rollback(PROJECT["services"][0], {"d-antigo"}) == "finished"
+    assert pedidos[-1] == ["deploy", "get", "d-rollback"], pedidos
+
+
+def test_esperar_rollback_sem_deploy_novo_desiste_sem_forcar_build(monkeypatch):
+    """`coolify deploy uuid` rebuildaria a main, que ainda tem o defeito."""
+    fo = carregar_fechar_onda()
+    chamadas = []
+    monkeypatch.setattr(fo, "coolify_json", lambda args, timeout=120: [{"deployment_uuid": "d-antigo"}])
+    monkeypatch.setattr(fo, "BUILD_WAIT_WEBHOOK_S", 0)
+    monkeypatch.setattr(fo, "BUILD_POLL_S", 0)
+    monkeypatch.setattr(fo, "run", lambda cmd, **kw: chamadas.append(cmd))
+
+    assert fo.esperar_rollback(PROJECT["services"][0], {"d-antigo"}) == "sem-deploy"
+    assert chamadas == []
+
+
+def test_health_ruim_guarda_o_que_o_health_respondeu(monkeypatch):
+    """O corpo da resposta vai na linha do rabo e, dali, no comentário da issue reaberta."""
+    fo = carregar_fechar_onda()
+
+    def urlopen(req, timeout):
+        raise fo.urllib.error.HTTPError(req.full_url, 500, "Internal Server Error", {},
+                                        io.BytesIO(b'{"detail":\n  "db fora do ar"}'))
+
+    monkeypatch.setattr(fo.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(fo.time, "sleep", lambda s: None)
+
+    h = fo.checar_health(PROJECT["services"][0], "0.10.1")
+
+    assert h["ok"] is False and h["status"] == 500
+    assert h["corpo"] == '{"detail": "db fora do ar"}'
+    assert fo.linha_de_health(h) == 'http 500 {"detail": "db fora do ar"}'
