@@ -225,17 +225,15 @@ sleep 3; curl -s 'http://localhost:8765/api/data?fresh' | python3 -c 'import jso
 
 O `/api/data` tem que voltar sem `error` no bloco `github`, com `adrs` (1 item), `context_md` (texto), `snapshots` (7 arquivos), `state` e `history` (contrato de deploy) e `github` com `issues` (lista, pode estar vazia).
 
-Depois, peça para a pessoa abrir `http://localhost:8765` e passar pelas 7 abas. Pergunte, uma por vez se precisar, se cada aba mostra o que se espera:
+Depois, peça para a pessoa abrir `http://localhost:8765` e passar pelas 5 abas. Pergunte, uma por vez se precisar, se cada aba mostra o que se espera:
 
 | Aba | O que tem que aparecer |
 |---|---|
-| Plano | "sem PRD ativo" (normal no primeiro dia) e a seção de avulsas vazia |
-| Issues | vazio ou as issues que já existiam |
+| Issues | vazio ou as issues que já existiam, e o chip `ready-for-human` sem a issue da Fase 7 (ela entra depois) |
+| PRs | quadro vazio ou os PRs que já existiam (o PR da Fase 7 ainda não foi aberto) |
 | Produção | o estado do `state.json` e a timeline vazia (ou o stub) |
-| Pendências | vazio (a issue da Fase 7 vai aparecer depois) |
 | Mapa | as áreas da P6 e os arquivos do snapshot |
 | Domínio | a ADR 0001 e o glossário rascunho |
-| Guia | o método em 6 passos com o nome do projeto |
 
 Mate o servidor ao fim. Os gates da P5 (lint, testes, build do app do DESTINO) você não precisa rodar aqui: o CI do PR roda.
 
