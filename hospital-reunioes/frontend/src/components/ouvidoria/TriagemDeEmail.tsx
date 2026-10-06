@@ -8,7 +8,10 @@
  * "interno" e "incompleto"); o painel mostra o item aberto, com o corpo em
  * texto e os anexos para baixar. A primeira decisão é virar manifestação
  * (issue #650): abre o modal "Nova manifestação" que já existe, pré-preenchido
- * com o e-mail. Descartar e juntar a um caso chegam nas fatias seguintes.
+ * com o e-mail. A segunda é descartar (issue #649), com a confirmação do app:
+ * fica só o cabeçalho e quem descartou. Juntar a um caso chega na seguinte.
+ * A lista abre nos pendentes; o filtro "Decididos" mostra o resto, só com o
+ * cabeçalho.
  *
  * O corpo de um e-mail é texto de qualquer pessoa da internet. Ele entra na
  * página como TEXTO do React, que escapa tudo, e o HTML do e-mail nem chega do
@@ -17,8 +20,9 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { AlertCircle, CheckCircle2, Loader2, Lock, Mail, Megaphone, Paperclip } from "lucide-react";
+import { AlertCircle, CheckCircle2, Loader2, Lock, Mail, Megaphone, Paperclip, Trash2 } from "lucide-react";
 
+import ConfirmDialog from "@/components/ConfirmDialog";
 import { NovaManifestacaoModal, type ManifestacaoRegistrada } from "@/components/ouvidoria/NovaManifestacaoModal";
 import {
   avisoDosExcedentes,
@@ -36,6 +40,8 @@ import {
 const BASE = "/api/ouvidoria/triagem-email";
 
 type Carga = "carregando" | "pronta" | "sem_acesso" | "erro";
+
+type Filtro = "pendentes" | "decididos";
 
 function MarcasDoEmail({ email }: { email: Pick<EmailRecebidoResumo, "interno" | "incompleto"> }) {
   const marcas = marcasDoEmail(email);
@@ -78,6 +84,8 @@ export function TriagemDeEmail({ token }: { token: string }) {
   // O caso que nasceu de cada e-mail nesta sessão da tela, para o painel
   // mostrar o protocolo com o caminho do Dossiê.
   const [casosCriados, setCasosCriados] = useState<Record<string, ManifestacaoRegistrada>>({});
+  const [filtro, setFiltro] = useState<Filtro>("pendentes");
+  const [confirmandoDescarte, setConfirmandoDescarte] = useState(false);
 
   useEffect(() => {
     let cancelado = false;
@@ -174,6 +182,48 @@ export function TriagemDeEmail({ token }: { token: string }) {
     }
   }
 
+  /**
+   * Descarta o item já confirmado. Nunca levanta: com erro, o diálogo fecha e
+   * o motivo aparece no painel, com o item intacto.
+   */
+  async function descartar(emailId: string) {
+    setErroDaDecisao(null);
+    try {
+      const res = await fetch(`${BASE}/${emailId}/descarte`, {
+        method: "POST",
+        headers: { Authorization: `Bearer ${token}` },
+      });
+      if (!res.ok) {
+        setErroDaDecisao(
+          res.status === 409
+            ? "Este e-mail já virou manifestação ou foi juntado a um caso, e não pode ser descartado."
+            : res.status === 503
+              ? "Não foi possível descartar o e-mail agora. Tente de novo em instantes."
+              : "Não foi possível descartar este e-mail. Tente novamente."
+        );
+        return;
+      }
+      const decidido = (await res.json()) as EmailRecebido;
+      setAberto((atual) => (atual && atual.id === emailId ? decidido : atual));
+      setEmails((atuais) =>
+        atuais.map((e) =>
+          e.id === emailId
+            ? {
+                ...e,
+                estado: "descartado",
+                quantidade_de_anexos: 0,
+                incompleto: false,
+                decidido_em: decidido.decidido_em,
+                decidido_por_nome: decidido.decidido_por_nome,
+              }
+            : e
+        )
+      );
+    } catch {
+      setErroDaDecisao("Não foi possível descartar este e-mail. Tente novamente.");
+    }
+  }
+
   /** O caso nasceu: o item sai dos pendentes, na lista e no painel. */
   function aoRegistrar(emailId: string, criada: ManifestacaoRegistrada) {
     setCasosCriados((atuais) => ({ ...atuais, [emailId]: criada }));
@@ -212,17 +262,38 @@ export function TriagemDeEmail({ token }: { token: string }) {
   // contados, e o aviso diz quantos são e onde está o original.
   const avisoDeExcedentes = aberto ? avisoDosExcedentes(aberto) : null;
   const casoDoAberto = aberto ? casosCriados[aberto.id] : undefined;
+  const visiveis = emails.filter((e) => (filtro === "pendentes" ? e.estado === "pendente" : e.estado !== "pendente"));
 
   return (
     <div className="grid gap-4 md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
       <section aria-label="E-mails recebidos" className="min-w-0">
-        {emails.length === 0 ? (
+        <div className="flex gap-1 mb-3" role="group" aria-label="Filtro da triagem">
+          {(
+            [
+              ["pendentes", "Pendentes"],
+              ["decididos", "Decididos"],
+            ] as const
+          ).map(([valor, rotulo]) => (
+            <button
+              key={valor}
+              type="button"
+              aria-pressed={filtro === valor}
+              onClick={() => setFiltro(valor)}
+              className={`px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                filtro === valor ? "bg-primary text-white" : "bg-white border border-border text-slate-600 hover:bg-slate-50"
+              }`}
+            >
+              {rotulo}
+            </button>
+          ))}
+        </div>
+        {visiveis.length === 0 ? (
           <p className="px-4 py-8 rounded-xl bg-white border border-border text-center text-sm text-slate-500">
-            Nenhum e-mail recebido para triar.
+            {filtro === "pendentes" ? "Nenhum e-mail recebido para triar." : "Nenhum e-mail decidido ainda."}
           </p>
         ) : (
           <ul className="space-y-2">
-            {emails.map((email) => (
+            {visiveis.map((email) => (
               <li key={email.id}>
                 <button
                   type="button"
@@ -313,7 +384,25 @@ export function TriagemDeEmail({ token }: { token: string }) {
                   )}
                   Virar manifestação
                 </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmandoDescarte(true)}
+                  className="inline-flex items-center gap-2 px-3 py-2 rounded-lg text-sm font-semibold border border-border text-slate-700 hover:bg-slate-50 transition-colors"
+                >
+                  <Trash2 className="w-4 h-4" />
+                  Descartar
+                </button>
               </div>
+            )}
+            {aberto.estado === "descartado" && (
+              <p className="flex items-start gap-2 px-3 py-2 rounded-lg bg-slate-50 border border-border text-slate-700 text-sm">
+                <Trash2 className="w-4 h-4 shrink-0 mt-0.5" />
+                <span>
+                  Descartado por {aberto.decidido_por_nome ?? "alguém da Ouvidoria"}
+                  {aberto.decidido_em ? ` em ${formatarChegada(aberto.decidido_em)}` : ""}. O texto e os anexos
+                  foram apagados; fica só o cabeçalho.
+                </span>
+              </p>
             )}
             {erroDaDecisao && (
               <p className="flex items-start gap-2 px-3 py-2 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm">
@@ -334,15 +423,17 @@ export function TriagemDeEmail({ token }: { token: string }) {
               </p>
             )}
 
-            <div>
-              <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Corpo</h3>
-              {aberto.corpo_texto ? (
-                // Texto do React: tudo o que o e-mail trouxer sai escapado.
-                <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{aberto.corpo_texto}</p>
-              ) : (
-                <p className="text-sm text-slate-500">O corpo deste e-mail não veio do provedor.</p>
-              )}
-            </div>
+            {aberto.estado !== "descartado" && (
+              <div>
+                <h3 className="text-xs font-semibold text-slate-400 uppercase tracking-wide mb-1">Corpo</h3>
+                {aberto.corpo_texto ? (
+                  // Texto do React: tudo o que o e-mail trouxer sai escapado.
+                  <p className="text-sm text-slate-700 whitespace-pre-wrap break-words">{aberto.corpo_texto}</p>
+                ) : (
+                  <p className="text-sm text-slate-500">O corpo deste e-mail não veio do provedor.</p>
+                )}
+              </div>
+            )}
 
             {(aberto.anexos.length > 0 || avisoDeExcedentes) && (
               <div>
@@ -396,6 +487,20 @@ export function TriagemDeEmail({ token }: { token: string }) {
           </div>
         )}
       </section>
+
+      {/* A confirmação é a do app (ConfirmDialog), e não o diálogo nativo do
+          navegador: é o padrão da casa para ato que apaga. */}
+      <ConfirmDialog
+        open={confirmandoDescarte && aberto !== null}
+        onClose={() => setConfirmandoDescarte(false)}
+        onConfirm={async () => {
+          if (aberto) await descartar(aberto.id);
+        }}
+        title="Descartar este e-mail?"
+        description="O texto e os anexos são apagados. Fica só o cabeçalho (remetente, assunto e data) e quem descartou. Use para spam, propaganda e o que não é manifestação."
+        confirmLabel="Descartar"
+        confirmVariant="danger"
+      />
 
       <NovaManifestacaoModal
         aberto={preCarga !== null}

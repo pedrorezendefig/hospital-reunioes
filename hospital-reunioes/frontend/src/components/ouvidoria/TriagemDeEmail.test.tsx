@@ -120,13 +120,13 @@ describe("a lista da triagem", () => {
     expect(within(joana).queryByText("Incompleto")).toBeNull();
   });
 
-  it("descartar e juntar a um caso ainda não aparecem: são fatias seguintes", async () => {
+  it("juntar a um caso ainda não aparece: é fatia seguinte", async () => {
     montar({ e1: item(JOANA) });
 
     fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
     await screen.findByText("Esperei três horas na recepção sem informação nenhuma.");
 
-    for (const acao of [/descartar/i, /juntar/i]) {
+    for (const acao of [/juntar/i]) {
       expect(screen.queryByRole("button", { name: acao })).toBeNull();
     }
   });
@@ -386,7 +386,10 @@ describe("virar manifestação (issue #650)", () => {
     const link = within(painel).getByRole("link", { name: /2026-0007/ });
     expect(link.getAttribute("href")).toBe("/ouvidoria/m/2026-0007");
     expect(within(painel).queryByRole("button", { name: /virar manifestação/i })).toBeNull();
+    // O item sai dos pendentes e vai para os decididos, com a marca.
     const lista = screen.getByRole("region", { name: "E-mails recebidos" });
+    expect(within(lista).queryByText("Demora na recepção do ambulatório")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Decididos" }));
     const linha = within(lista).getByText("Demora na recepção do ambulatório").closest("button") as HTMLElement;
     expect(within(linha).getByText("Virou manifestação")).toBeTruthy();
   });
@@ -408,5 +411,138 @@ describe("virar manifestação (issue #650)", () => {
 
     expect(await within(modal).findByText(/já foi decidido na triagem/i)).toBeTruthy();
     expect(within(modal).queryByText("Protocolo gerado")).toBeNull();
+  });
+});
+
+// ─── Descartar (issue #649) ──────────────────────────────────────────────────
+
+const SPAM = {
+  id: "e3",
+  remetente_endereco: "promo@lojaqualquer.com",
+  remetente_nome: "Loja Qualquer",
+  assunto: "Ofertas da semana",
+  recebido_em: "2026-09-09T12:00:00.000Z",
+  estado: "descartado",
+  incompleto: false,
+  interno: false,
+  quantidade_de_anexos: 0,
+  decidido_em: "2026-09-09T13:10:00.000Z",
+  decidido_por_nome: "Marta Ouvidora",
+};
+
+/** O item como a API devolve depois do descarte: só o cabeçalho. */
+function descartado(resumo: typeof JOANA) {
+  return item(
+    { ...resumo, estado: "descartado" },
+    {
+      corpo_texto: null,
+      anexos: [],
+      cabecalhos: {},
+      destinatarios: [],
+      decidido_em: "2026-09-10T15:00:00.000Z",
+      decidido_por_nome: "Marta Ouvidora",
+    }
+  );
+}
+
+let descartes: string[] = [];
+
+function montarParaDescartar(itens: Record<string, unknown>, statusDoDescarte = 200) {
+  chamadas = [];
+  descartes = [];
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      chamadas.push(url);
+      if (url === "/api/ouvidoria/triagem-email") return respostaJson({ emails: [JOANA, SPAM] });
+      const descarte = url.match(/^\/api\/ouvidoria\/triagem-email\/([^/]+)\/descarte$/);
+      if (descarte && init?.method === "POST") {
+        descartes.push(descarte[1]);
+        return statusDoDescarte === 200
+          ? respostaJson(descartado(JOANA))
+          : respostaJson({ detail: "Este e-mail já virou manifestação" }, statusDoDescarte);
+      }
+      const id = url.replace("/api/ouvidoria/triagem-email/", "");
+      return itens[id] ? respostaJson(itens[id]) : respostaJson({ detail: "E-mail não encontrado" }, 404);
+    })
+  );
+  return render(<TriagemDeEmail token="token-de-teste" />);
+}
+
+async function pedirDescarte() {
+  fireEvent.click(await linhaDe("Demora na recepção do ambulatório"));
+  await screen.findByText("Esperei três horas na recepção sem informação nenhuma.");
+  fireEvent.click(screen.getByRole("button", { name: "Descartar" }));
+  return screen.findByRole("dialog");
+}
+
+describe("descartar (issue #649)", () => {
+  beforeEach(() => vi.unstubAllGlobals());
+  afterEach(() => {
+    cleanup();
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+  });
+
+  it("a lista abre nos pendentes, e o filtro Decididos mostra o descartado só com o cabeçalho", async () => {
+    montarParaDescartar({});
+
+    const lista = await screen.findByRole("region", { name: "E-mails recebidos" });
+    await within(lista).findByText("Demora na recepção do ambulatório");
+    expect(within(lista).queryByText("Ofertas da semana")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Decididos" }));
+
+    const linha = within(lista).getByText("Ofertas da semana").closest("button") as HTMLElement;
+    expect(within(linha).getByText("Descartado")).toBeTruthy();
+    expect(within(lista).queryByText("Demora na recepção do ambulatório")).toBeNull();
+  });
+
+  it("o botão Descartar pede confirmação do app, e não do navegador", async () => {
+    const confirmDoNavegador = vi.spyOn(window, "confirm");
+    montarParaDescartar({ e1: item(JOANA) });
+
+    const dialogo = await pedirDescarte();
+
+    expect(within(dialogo).getByText(/descartar este e-mail/i)).toBeTruthy();
+    expect(confirmDoNavegador).not.toHaveBeenCalled();
+    expect(descartes).toEqual([]);
+  });
+
+  it("cancelar a confirmação não descarta nada", async () => {
+    montarParaDescartar({ e1: item(JOANA) });
+    const dialogo = await pedirDescarte();
+
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Cancelar" }));
+
+    expect(descartes).toEqual([]);
+    expect(screen.getByText("Esperei três horas na recepção sem informação nenhuma.")).toBeTruthy();
+  });
+
+  it("confirmado, o item sai dos pendentes e o painel fica só com o cabeçalho e quem descartou", async () => {
+    montarParaDescartar({ e1: item(JOANA) });
+    const dialogo = await pedirDescarte();
+
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Descartar" }));
+
+    const painel = screen.getByRole("region", { name: "E-mail recebido" });
+    expect(await within(painel).findByText(/Descartado por Marta Ouvidora/)).toBeTruthy();
+    expect(descartes).toEqual(["e1"]);
+    expect(within(painel).queryByText("Esperei três horas na recepção sem informação nenhuma.")).toBeNull();
+    expect(within(painel).queryByText("O corpo deste e-mail não veio do provedor.")).toBeNull();
+    expect(within(painel).queryByRole("button", { name: "Descartar" })).toBeNull();
+    expect(within(painel).queryByRole("button", { name: /virar manifestação/i })).toBeNull();
+    const lista = screen.getByRole("region", { name: "E-mails recebidos" });
+    expect(within(lista).queryByText("Demora na recepção do ambulatório")).toBeNull();
+  });
+
+  it("descarte recusado pelo servidor mostra o motivo e não muda o item", async () => {
+    montarParaDescartar({ e1: item(JOANA) }, 409);
+    const dialogo = await pedirDescarte();
+
+    fireEvent.click(within(dialogo).getByRole("button", { name: "Descartar" }));
+
+    expect(await screen.findByText(/não pode ser descartado/i)).toBeTruthy();
+    expect(screen.getByText("Esperei três horas na recepção sem informação nenhuma.")).toBeTruthy();
   });
 });
