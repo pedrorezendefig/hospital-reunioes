@@ -871,6 +871,71 @@ def test_dry_run_do_pr_avulso_imprime_o_plano_com_pr_issue_e_tipo_de_bump(
     assert c.builds == []
 
 
+def test_dry_run_de_app_mostra_a_versao_nova_sem_commit_de_bump(tmp_path, monkeypatch, capsys):
+    """Issue #967: a versão nova vai para o APP_VERSION dos dois apps e para a
+    tag do squash; nenhum commit de versão na branch, nenhum package.json."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+
+    saida = capsys.readouterr().out
+    plano = next(li for li in saida.splitlines() if li.startswith("plano:"))
+    assert "v0.10.0 -> v0.10.1" in plano, plano
+    faria = next(li for li in saida.splitlines() if li.startswith("faria:"))
+    assert "APP_VERSION v0.10.1 no backend e no frontend" in faria, faria
+    assert "tag v0.10.1" in faria, faria
+    for proibido in ("chore(release)", "commit", "package.json"):
+        assert proibido not in saida, (proibido, saida)
+    assert c.coolify() == [] and c.tags == []
+
+
+def test_tag_que_falha_nao_para_o_deploy_e_diz_como_criar_depois(tmp_path, monkeypatch, capsys):
+    """A tag é conferência da próxima versão, não deploy: o merge já aconteceu,
+    e o build e o health seguem."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+
+    def criar_ref_fora_do_ar(campos):
+        raise RuntimeError("gh api -> 502: Bad Gateway")
+
+    c.criar_ref = criar_ref_fora_do_ar
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert c.builds == ["backend"] and len(c.merges) == 2
+    saida = capsys.readouterr().out
+    assert "tag v0.10.1 falhou" in saida, saida
+    assert f"ref=refs/tags/v0.10.1 -f sha={c.merges[0]['main']}" in saida, saida
+
+
+@pytest.mark.parametrize("tags, de, para", [
+    ([], "0.20.4", "0.20.5"),
+    (["v0.20.1", "v0.9.30"], "0.20.4", "0.20.5"),
+    (["v0.20.4", "v0.20.6"], "0.20.6", "0.20.7"),
+], ids=["sem-tag", "tag-atras-do-state", "tag-a-frente-do-state"])
+def test_versao_de_partida_vem_do_state_json_conferida_pela_tag(
+    tmp_path, monkeypatch, capsys, tags, de, para
+):
+    """O package.json fica congelado (0.10.0 no cenário) e não conta. Tag à
+    frente do state.json é um rabo que etiquetou e não registrou: vale a tag,
+    para a versão não se repetir."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, versao_em_producao="0.20.4")
+    for tag in tags:
+        git(c.remoto, "tag", tag, c.base)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+
+    saida = capsys.readouterr().out
+    plano = next(li for li in saida.splitlines() if li.startswith("plano:"))
+    assert f"v{de} -> v{para}" in plano, plano
+    assert ("maior tag" in saida) == (de != "0.20.4"), saida
+
+
 # ----------------------------------- classe do lote: app ou ferramenta (#965)
 
 def pr_de_ferramenta(tmp_path: Path, **kw) -> Cenario:

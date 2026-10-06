@@ -510,8 +510,8 @@ def versao_em_producao(wt: Path, ref: str) -> str:
     maior_tag = max(tags, key=_semver, default=None)
     if not do_state and not maior_tag:
         raise RuntimeError("sem versao de partida: o state.json nao tem last_app_version e nao ha tag vX.Y.Z")
-    if do_state and maior_tag and maior_tag != do_state:
-        print(f"versao: o state.json diz v{do_state} e a maior tag e v{maior_tag}; sigo da maior")
+    if do_state and maior_tag and _semver(maior_tag) > _semver(do_state):
+        print(f"versao: o state.json diz v{do_state} e a maior tag e v{maior_tag}; sigo da tag")
     return max((v for v in (do_state, maior_tag) if v), key=_semver)
 
 
@@ -649,11 +649,15 @@ def setar_app_version(backend_uuid: str, versao: str) -> None:
         run(["coolify", "app", "env", "create", backend_uuid, "--key", "APP_VERSION", "--value", versao])
 
 
+def apps_do_coolify(servicos_cfg: dict) -> list[str]:
+    return [sid for sid, s in servicos_cfg.items() if s.get("type") != "supabase" and s.get("uuid")]
+
+
 def setar_app_version_nos_apps(servicos_cfg: dict, versao: str) -> list[str]:
     """APP_VERSION em todo app do Coolify (issue #967): o backend a le no
     runtime e devolve no /api/health; o frontend a recebe no build (ARG do
     Dockerfile) e a grava no rodape. Devolve os servicos gravados."""
-    apps = [sid for sid, s in servicos_cfg.items() if s.get("type") != "supabase" and s.get("uuid")]
+    apps = apps_do_coolify(servicos_cfg)
     for sid in apps:
         setar_app_version(servicos_cfg[sid]["uuid"], versao)
     return apps
@@ -951,9 +955,9 @@ def main() -> int:
                 print(entrega + "merge pela API, cancela o build que o webhook disparar, limpeza; "
                       "sem bump, APP_VERSION, build, health nem registro.")
             else:
-                print(entrega + "APP_VERSION no Coolify, "
-                      + f"merge pela API, build, health, registro em PR so de docs (prds {prds or '[]'}, "
-                      f"migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
+                print(entrega + f"APP_VERSION v{versao_nova} no " + " e no ".join(apps_do_coolify(servicos_cfg))
+                      + f", merge pela API, tag v{versao_nova}, build, health, registro em PR so de docs "
+                      f"(prds {prds or '[]'}, migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
             remover_worktree(raiz, wt, args.prs)
             wt = None
             print("dry-run terminou sem tocar em nada.")
