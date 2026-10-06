@@ -3,7 +3,7 @@ status: accepted
 amends: 0061, 0063
 ---
 
-# Revisão só de must-fix em uma rodada, e merge PR a PR sem exigir "em dia com a base"
+# Revisão só de must-fix em uma rodada, segurança por PRD, e merge PR a PR sem exigir "em dia com a base"
 
 Decisão do Pedro (06/out/2026, grilling sobre o tempo do rabo). Um dia depois da ADR 0063, com a versão sem commit já em produção (#967, v0.163.2), os três últimos PRs de app levaram 918, 928 e 989 segundos do `fechar_onda.py`. O semáforo em si custa segundos (é um `mkdir` em `/tmp` que serializa builds na mesma máquina) e fica. O que resta de tempo é o CI que roda de novo sobre código que já passou no CI, e o que resta de atenção humana é a lista de should-fix que o revisor escreve e que, sem condição no "vai" (que a 0063 já tirou), não muda o que entra. Esta ADR corta os dois.
 
@@ -15,6 +15,8 @@ Decisão do Pedro (06/out/2026, grilling sobre o tempo do rabo). Um dia depois d
 
 3. **O rabo mergeia PR a PR pela API, em ordem, sem branch `onda/<sessão>` e sem PR de entrega.** Cada PR do lote entra com squash no próprio número ("<título> (#N)"), como o avulso. A onda continua um build: o rabo cancela o deploy que o webhook do Coolify dispara para cada merge intermediário e deixa buildar só o último (o mesmo mecanismo que já cancela o build do registro, issue #851). A tag `vX.Y.Z` vai no squash do último PR do lote; `history.json` e `CHANGELOG` listam todos os PRs e issues do lote, como hoje. Rejeitado: manter a branch de entrega (ela existia para atender "em dia com a base" com um CI só; sem a exigência, é um CI, um PR e dois commits de merge a mais por onda).
 
+4. **Segurança por PRD, não por PR, com uma exceção estreita.** Medido em 06/10 nos últimos 80 PRs: cerca de 20 rodadas do `hr-revisor-seguranca` (11 min cada, em esforço máximo, repetida após toda correção, com o corretor esperando) e um único must-fix de segurança real (#899, anexo de e-mail anônimo sem teto, no canal público da Ouvidoria). O revisor de segurança por PR sai do fluxo padrão; o `hr-auditor-prd`, que já roda quando o PRD fecha, ganha a lente de segurança sobre o diff acumulado dos PRs do PRD, uma rodada, e o que achar vira issue `ready-for-agent` no PRD (`ready-for-human` se for grave). **Exceção:** PR que toca rota sem login (canal público da Ouvidoria, webhook, e-mail recebido) ou migration mantém o `hr-revisor-seguranca` por PR, uma vez só (não repete depois da correção), em esforço `high`, em paralelo com o corretor: ninguém espera por ele. Saem do gatilho "rota nova", "middleware", "env" e "workflows". Rejeitado: tirar de vez (o único achado real foi num canal público, onde o custo de descobrir depois é o backend fora do ar para o hospital); só por PRD (a auditoria acontece depois de produção, horas de janela aberta no canal público); manter por PR (19 rodadas limpas em 20 para um achado).
+
 ## Emenda à ADR 0061
 
 - **Decisão 3 (`main` protegida).** "CI obrigatório e atualizado com a base" passa a "CI obrigatório no head do PR". O resto da decisão continua.
@@ -23,11 +25,11 @@ Decisão do Pedro (06/out/2026, grilling sobre o tempo do rabo). Um dia depois d
 
 ## Emenda à ADR 0063
 
-- **Decisão 1.** O humano continua acionado só em migration, fatia que esgotou as tentativas e rollback; "esgotou" agora inclui a segunda revisão com must-fix. O teto de 3 tentativas por fatia (ADR 0022) continua para CI vermelho e conflito.
+- **Decisão 1.** O humano continua acionado só em migration, fatia que esgotou as tentativas e rollback; "esgotou" agora inclui a segunda revisão com must-fix. "Em caminho sensível, `hr-revisor-seguranca`" passa a valer só para rota sem login e migration; o resto da segurança é a lente do `hr-auditor-prd` no fechamento do PRD. O teto de 3 tentativas por fatia (ADR 0022) continua para CI vermelho e conflito.
 - **Decisão 4 (rabo automático).** "Mergeia os PRs verdes e limpos da onda num rabo só" continua, agora PR a PR, sem PR de entrega.
 
 ## Consequências
 
-- Três fatias: revisor e `/ship` com veredito só de must-fix e uma rodada (prompts dos agentes `hr-revisor`, `hr-revisor-seguranca`, `hr-corretor`, skill `/onda-enxuta` e `/ship`); ruleset sem "em dia com a base" (`main.json`, `tools/test_ruleset_main.py`, `docs/onboarding/dev.md`; aplicar é do admin, à mão, pela tela do GitHub, porque o token do agente não tem Administration, ADR 0063); rabo PR a PR (`fechar_onda.py` e os testes dele, docstring, `/onda-enxuta`, `/ship`, `CLAUDE.md`).
+- Três fatias: revisor e `/ship` com veredito só de must-fix e uma rodada, mais a segurança por PRD (prompts dos agentes `hr-revisor`, `hr-revisor-seguranca`, `hr-corretor`, `hr-auditor-prd`, skill `/onda-enxuta` e `/ship`); ruleset sem "em dia com a base" (`main.json`, `tools/test_ruleset_main.py`, `docs/onboarding/dev.md`; aplicar é do admin, à mão, pela tela do GitHub, porque o token do agente não tem Administration, ADR 0063); rabo PR a PR (`fechar_onda.py` e os testes dele, docstring, `/onda-enxuta`, `/ship`, `CLAUDE.md`).
 - A ordem dos PRs no `--prs` continua sendo a ordem de merge. Conflito de um PR com a `main` depois do merge do anterior é exit 2 só daquele PR: os já mergeados ficam, e o rabo sobe o que entrou.
 - Meta: PR de app com a `main` quieta ou não, do PR verde à produção em 6 a 8 min (build + health + registro), sem CI dentro do rabo; onda de N PRs no mesmo tempo de um PR.
