@@ -584,7 +584,8 @@ async function ensureComments(n) {
 }
 
 async function ensureTimeline(n) {
-  if (timelineDe(n)) return;
+  const t = timelineDe(n);
+  if (t && !t.error) return;  // erro não fica no cache: reabrir o card tenta de novo
   S.timelines[n] = { loading: true };
   try {
     const r = await fetch(`/api/issue/${n}/timeline`);
@@ -799,30 +800,6 @@ function renderDominio() {
 
 /* ---------- eventos ---------- */
 
-function writeClipboard(text, done) {
-  const fallback = () => {
-    const ta = document.createElement('textarea');
-    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
-    document.body.appendChild(ta); ta.select();
-    try { document.execCommand('copy'); done(); } catch { /* sem clipboard */ }
-    ta.remove();
-  };
-  if (navigator.clipboard && window.isSecureContext) {
-    navigator.clipboard.writeText(text).then(done).catch(fallback);
-  } else fallback();
-}
-
-function copyCmd(btn) {
-  const pre = document.getElementById(btn.dataset.cp);
-  writeClipboard(pre ? pre.innerText : '', () => {
-    btn.classList.add('ok');
-    const txt = btn.querySelector('.cc-txt');
-    const prev = txt ? txt.textContent : '';
-    if (txt) txt.textContent = 'copiado ✓';
-    setTimeout(() => { btn.classList.remove('ok'); if (txt) txt.textContent = prev; }, 1400);
-  });
-}
-
 view.addEventListener('click', e => {
   const t = e.target.closest('[data-act]');
   if (!t) return;
@@ -835,8 +812,6 @@ view.addEventListener('click', e => {
     });
     const on = t.classList.toggle('open');
     t.setAttribute('aria-expanded', on ? 'true' : 'false');
-  } else if (act === 'copy') {
-    copyCmd(t);
   } else if (act === 'iss') {
     const n = Number(t.dataset.n);
     if (S.expIss.has(n)) S.expIss.delete(n);

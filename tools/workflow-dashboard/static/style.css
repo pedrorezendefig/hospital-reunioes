@@ -30,7 +30,6 @@
   --paper:var(--bg); --paper-2:var(--surface); --card:#ffffff;
   --indigo:var(--brand); --indigo-2:var(--brand-light); --indigo-wash:var(--brand-wash);
   --line:var(--hairline); --line-2:var(--ghost);
-  --code-bg:#0f2f63; --code-line:rgba(255,255,255,.16); --code-ink:#e8eefb;
   --shadow:0 1px 0 rgba(15,47,99,.04), 0 18px 40px -28px rgba(15,47,99,.35);
   --shadow-up:0 1px 0 rgba(15,47,99,.05), 0 24px 48px -26px rgba(15,47,99,.4);
   --shadow-modal:0 30px 80px -20px rgba(15,47,99,.55);
@@ -192,23 +191,6 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 .tip-pop::after{content:""; position:absolute; top:100%; left:50%; transform:translateX(-50%);
   border:6px solid transparent; border-top-color:var(--ink)}
 .tip:hover .tip-pop,.tip:focus-visible .tip-pop,.tip.open .tip-pop{opacity:1; visibility:visible; transform:translateX(-50%)}
-
-.cmd{position:relative; margin:9px 0}
-.cmd-label{font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.1em;
-  text-transform:uppercase; color:var(--ink-soft); margin:13px 0 5px}
-.cmd-code{margin:0; background:var(--code-bg); border:1px solid var(--code-line); border-radius:var(--r-inner);
-  padding:14px 16px; overflow-x:auto; font:500 12.5px/1.65 var(--mono); color:var(--code-ink);
-  white-space:pre; tab-size:2}
-.cmd-code code{background:none; border:0; padding:0; color:inherit; font-size:inherit}
-.cmd-copy{position:absolute; top:8px; right:8px; display:inline-flex; align-items:center; gap:6px;
-  font:500 11px/1 var(--mono); letter-spacing:.04em; color:var(--indigo); background:var(--card);
-  border:1px solid var(--line-2); border-radius:8px; padding:6px 10px; cursor:pointer;
-  opacity:.9; transition:all .15s ease}
-.cmd:hover .cmd-copy{opacity:1}
-.cmd-copy:hover{border-color:var(--indigo); background:var(--indigo-wash)}
-.cmd-copy:active{transform:scale(.96)}
-.cmd-copy.ok{color:var(--green); border-color:var(--green); background:var(--green-wash)}
-.cmd-note{font-size:12.5px; color:var(--ink-soft); margin:6px 2px 0; line-height:1.5}
 
 .techbox{margin-top:12px; border-top:1px dashed var(--line)}
 .techbox > summary{list-style:none; cursor:pointer; font-family:var(--mono); font-size:11px;
@@ -457,7 +439,7 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 .hero-title .clip-inner{transform:none; animation:clipUp .95s var(--ease-expo) .06s backwards}
 
 /* micro-interação de toque */
-.fchip:active,.iconbtn:active,.tabs-row button:active,.tip:active,.cmd-copy:active{transform:scale(.96)}
+.fchip:active,.iconbtn:active,.tabs-row button:active,.tip:active{transform:scale(.96)}
 
 /* hovers de efeito só acima de 768px (e nada de hover em toque) */
 @media (min-width:769px){

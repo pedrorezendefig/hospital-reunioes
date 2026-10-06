@@ -111,17 +111,12 @@ def test_pesos_de_fonte_so_400_e_500():
     assert pesos <= {"400", "500"}, f"pesos fora dos carregados: {sorted(pesos)}"
 
 
-# ---------- tooltips, copiar e recolhíveis no estilo novo ----------
+# ---------- tooltips e recolhíveis no estilo novo ----------
 
 
 def test_tooltip_no_estilo_novo():
     pop = _bloco(".tip-pop")
     assert "var(--ink)" in pop, "tooltip fora do fundo de tinta"
-
-
-def test_botao_copiar_no_estilo_novo():
-    assert "var(--green)" in _bloco(".cmd-copy.ok"), "feedback de cópia fora do verde dos tokens"
-    assert "copyBlock" in UI_JS and "cmd-copy" in UI_JS
 
 
 def test_recolhivel_com_caret_brand():

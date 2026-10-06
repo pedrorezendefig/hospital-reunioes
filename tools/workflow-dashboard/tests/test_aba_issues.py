@@ -449,6 +449,26 @@ def test_issue_fechada_busca_a_linha_do_tempo_ao_expandir(tmp_path):
     assert re.search(r'evento-quando">3 out, 17:58</span>\s*<span class="evento-o-que">PR #70 mergeado<', card)
 
 
+@com_node
+def test_linha_do_tempo_que_falhou_tenta_de_novo_ao_reabrir_o_card(tmp_path):
+    falha = {"number": 904, "error": "gh: HTTP 502", "timeline": []}
+    certa = {"number": 904, "error": None, "timeline": [{"tipo": "mergeado", "em": "2026-10-03T17:58:00Z", "pr": 70}]}
+    antes = (
+        f"_respostas['/api/issue/904/timeline'] = {json.dumps(falha)};"
+        "_clicar({ act: 'iss', n: '904' }); await _esperar(); await _esperar();"
+        "const _naFalha = linhaDoTempoHtml(904);"
+        "_clicar({ act: 'iss', n: '904' });"  # fecha
+        f"_respostas['/api/issue/904/timeline'] = {json.dumps(certa)};"
+        "_clicar({ act: 'iss', n: '904' }); await _esperar(); await _esperar();"  # reabre
+    )
+    buscas, na_falha, card = _rodar(
+        tmp_path, f"[_buscas.filter(u => u.endsWith('/timeline')), _naFalha, {_card_expr(904)}]", antes=antes
+    )
+    assert "linha do tempo indisponível: gh: HTTP 502" in na_falha
+    assert buscas == ["/api/issue/904/timeline", "/api/issue/904/timeline"]
+    assert "PR #70 mergeado" in card
+
+
 # ---------- cinco abas; Plano, Pendências e Guia saem ----------
 
 
@@ -459,9 +479,9 @@ def test_aba_prs_fica_vazia_com_texto_de_em_construcao(tmp_path):
 
 
 def test_plano_pendencias_e_guia_sairam_do_painel():
-    for nome in ("renderPlano", "renderPendencias", "renderGuia", "fluxoHtml", "FLX_ICONS", "pendenciasHumanas"):
+    for nome in ("renderPlano", "renderPendencias", "renderGuia", "fluxoHtml", "FLX_ICONS", "pendenciasHumanas", "copyCmd", "writeClipboard"):
         assert nome not in APP_JS, nome
-    for seletor in (".tab-plano", ".leva", ".pend-", ".flx", ".guia-flow", ".visor-resp", ".cmdpill"):
+    for seletor in (".tab-plano", ".leva", ".pend-", ".flx", ".guia-flow", ".visor-resp", ".cmdpill", ".cmd-copy"):
         assert seletor not in CSS, seletor
     assert not (DASH / "plano.py").exists()
     for teste in ("test_plano.py", "test_front_plano_issues.py", "test_filtro_responsavel.py"):
@@ -477,6 +497,92 @@ def test_issues_seguem_em_linhas_numeradas_com_a_arvore_do_prd():
     assert "nrow-idx" in APP_JS and "nrow-go" in APP_JS and "padStart(2" in APP_JS
     assert "prd-group" in APP_JS and 'class="children"' in APP_JS
     assert ".tab-issues .comment .md" in CSS
+
+
+# ---------- estilo da lista que segue vivo (vinha do test_front_plano_issues.py, #260) ----------
+
+
+def _fn(nome):
+    """Corpo de uma function declarada do app.js, por contagem de chaves."""
+    i = APP_JS.find(f"function {nome}(")
+    assert i >= 0, f"app.js sem function {nome}"
+    j = APP_JS.index("{", i)
+    depth = 0
+    for k in range(j, len(APP_JS)):
+        if APP_JS[k] == "{":
+            depth += 1
+        elif APP_JS[k] == "}":
+            depth -= 1
+            if depth == 0:
+                return APP_JS[i : k + 1]
+    raise AssertionError(f"function {nome} sem fechamento")
+
+
+def _blocos_media(cond):
+    """Todos os blocos @media com a condição dada, por contagem de chaves."""
+    blocos = []
+    for m in re.finditer(re.escape(cond), CSS):
+        j = CSS.index("{", m.end())
+        depth = 0
+        for k in range(j, len(CSS)):
+            if CSS[k] == "{":
+                depth += 1
+            elif CSS[k] == "}":
+                depth -= 1
+                if depth == 0:
+                    blocos.append(CSS[j : k + 1])
+                    break
+    return blocos
+
+
+def test_hairline_entre_linhas_e_entre_fatias_vem_dos_tokens():
+    for seletor in (r"\.nrows > \.nrow \+ \.nrow", r"\.children > \.nrow \+ \.nrow"):
+        m = re.search(seletor + r"[^{]*\{[^}]*\}", CSS)
+        assert m, f"sem hairline em {seletor}"
+        assert "var(--hairline)" in m.group(0)
+
+
+def test_seta_em_circulo_de_hairline():
+    go = re.search(r"\.nrow-go\{[^}]*\}", CSS)
+    assert go, "seta sem círculo (.nrow-go)"
+    assert "var(--hairline)" in go.group(0), "círculo sem borda hairline"
+    assert "var(--r-pill)" in go.group(0), "círculo fora do raio pill"
+    assert 'class="nrow-go"' in _fn("issueCard") and 'class="nrow-arrow"' in _fn("issueCard")
+
+
+def test_hover_da_seta_desliza_so_no_desktop():
+    desktop = "".join(_blocos_media("@media (min-width:769px)"))
+    assert ".nrow:hover .nrow-arrow" in desktop, "deslize fora do gate desktop"
+    assert "translateX" in desktop
+    assert ".nrow:hover .nrow-go" in desktop and "opacity:1" in desktop
+    fora = CSS
+    for b in _blocos_media("@media (min-width:769px)"):
+        fora = fora.replace(b, "")
+    assert ".nrow:hover" not in fora, "hover de deslize vazando pra fora do desktop"
+
+
+def test_reveals_escalonados_nas_linhas():
+    card = _fn("issueCard")
+    assert re.search(r'<article class="nrow [^"]*\brv"', card), "card sem reveal .rv"
+    assert 'style="--i:${idx}"' in card, "card sem stagger por índice"
+
+
+def test_cabecalho_da_aba_com_eyebrow_legivel():
+    assert 'class="eyebrow"' in _fn("cabecalho") and "clip-inner" in _fn("cabecalho")
+    assert "cabecalho(" in _fn("renderIssues"), "Issues fora do cabeçalho com eyebrow"
+    m = re.search(r"\.sec-ey \.eyebrow\{[^}]*\}", CSS)
+    assert m and "var(--ink-soft)" in m.group(0), "eyebrow com a cor do plano navy"
+
+
+def test_comentarios_com_tipografia_da_aba():
+    assert 'class="comment"' in _fn("commentsHtml")
+    assert 'class="md"' in _fn("commentsHtml")
+    m = re.search(r"\.tab-issues \.comment \.md\{[^}]*\}", CSS)
+    assert m and "var(--sans)" in m.group(0), "comentários sem tipografia re-estilizada"
+
+
+def test_aba_embrulhada_para_escopo_de_estilo():
+    assert 'class="tab-issues"' in _fn("renderIssues")
 
 
 # ---------- fixture para o render no Chrome headless ----------

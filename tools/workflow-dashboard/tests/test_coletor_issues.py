@@ -70,7 +70,8 @@ def test_corpo_da_issue_vira_blocked_by_na_coleta(monkeypatch):
     assert collect._gh_issues(DASH)[0]["blocked_by"] == [5]
 
 
-def test_coletor_nao_depende_mais_do_modulo_do_plano():
+def test_coletor_nao_calcula_mais_o_claimed_at_do_plano():
+    # A chave "plano" fora do /api/data é conferida no payload, em
+    # test_coletor_fases.py::test_coleta_entrega_as_fases_no_payload.
     fonte = (DASH / "collect.py").read_text(encoding="utf-8")
-    assert "plano" not in fonte.lower()
     assert "claimed_at" not in fonte  # base do lead time do Plano, que saiu
