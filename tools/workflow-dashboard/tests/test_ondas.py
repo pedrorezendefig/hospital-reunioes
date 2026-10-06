@@ -18,9 +18,10 @@ from pathlib import Path
 import pytest
 
 DASH = Path(__file__).resolve().parents[1]
+CSS = (DASH / "static" / "style.css").read_text(encoding="utf-8")
 sys.path.insert(0, str(DASH))
 
-from fases import montar_fases  # noqa: E402
+from fases import FASES_ISSUE, montar_fases  # noqa: E402
 from test_aba_issues import PRELUDIO, _modulo_app, com_node  # noqa: E402
 
 
@@ -123,3 +124,71 @@ def test_prd_aberto_com_fatias_mostra_o_desenho_e_sem_fatias_ou_fechado_nao(tmp_
     assert _svg(com_fatias)
     assert not _svg(sem_fatias)
     assert not _svg(fechado)
+
+
+def _nos(svg):
+    """{fatia: (coluna, classes, style)} de cada nó do desenho."""
+    nos = {}
+    for tag in re.findall(r"<g class=\"onda-no[^>]*>", svg):
+        n = int(re.search(r'data-n="(\d+)"', tag).group(1))
+        col = int(re.search(r'data-col="(\d+)"', tag).group(1))
+        classes = re.search(r'class="([^"]*)"', tag).group(1).split()
+        style = re.search(r'style="([^"]*)"', tag).group(1)
+        nos[n] = (col, classes, style)
+    return nos
+
+
+def _setas(svg):
+    return {(int(a), int(b)) for a, b in re.findall(r'class="onda-seta" data-de="(\d+)" data-para="(\d+)"', svg)}
+
+
+# ---------- nós, bordas e setas ----------
+
+
+@com_node
+def test_tres_ondas_e_fatia_sem_dependencia_na_primeira_coluna(tmp_path):
+    svg = _svg(_rodar(tmp_path, _card(PRD)))
+    colunas = {n: c for n, (c, _, _) in _nos(svg).items()}
+    assert colunas == {951: 0, 952: 0, 955: 0, 956: 0, 957: 0, 953: 1, 954: 2}
+    assert re.findall(r'class="onda-col"[^>]*>([^<]+)<', svg) == ["onda 1", "onda 2", "onda 3"]
+
+
+@com_node
+def test_no_na_cor_de_quem_assumiu_e_ninguem_assumiu_na_cor_sem_dono(tmp_path):
+    html, cores = _rodar(
+        tmp_path,
+        f"[{_card(PRD)}, ['pedrorezendefig', 'lucassampaioc1', 'pedroribbe', null].map(corDaPessoa)]",
+    )
+    pedro, lucas, rib, ninguem = cores
+    nos = _nos(_svg(html))
+    pessoa = {n: re.search(r"--pessoa:([^;]+)", s).group(1) for n, (_, _, s) in nos.items()}
+    assert pessoa == {951: pedro, 952: ninguem, 953: lucas, 954: rib, 955: pedro, 956: ninguem, 957: ninguem}
+    assert re.search(r"\.onda-corpo\{[^}]*fill:var\(--pessoa\)", CSS)
+
+
+@com_node
+def test_borda_do_no_segue_a_fase_do_payload(tmp_path):
+    nos = _nos(_svg(_rodar(tmp_path, _card(PRD))))
+    fase = {n: [c for c in classes if c.startswith("onda-f-")] for n, (_, classes, _) in nos.items()}
+    assert fase == {
+        951: ["onda-f-em_andamento"],
+        952: ["onda-f-fila"],
+        953: ["onda-f-bloqueada"],
+        954: ["onda-f-bloqueada"],
+        955: ["onda-f-encerrada_sem_pr"],
+        956: ["onda-f-fila"],
+        957: ["onda-f-bloqueada"],
+    }
+    cores = {}
+    for f in FASES_ISSUE:
+        m = re.search(rf"\.onda-f-{f}\{{--fase:(var\(--[\w-]+\))\}}", CSS)
+        assert m, f"fase {f} sem cor de borda"
+        cores[f] = m.group(1)
+    assert cores["bloqueada"] != cores["fila"] != cores["em_andamento"]
+    assert re.search(r"\.onda-anel\{[^}]*stroke:var\(--fase\)", CSS)
+
+
+@com_node
+def test_setas_seguem_so_o_blocked_by_aberto_dentro_do_prd(tmp_path):
+    # 955 -> 956: bloqueadora fechada; 999 -> 957: bloqueadora de fora do PRD
+    assert _setas(_svg(_rodar(tmp_path, _card(PRD)))) == {(951, 953), (952, 954), (953, 954)}

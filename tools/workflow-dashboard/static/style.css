@@ -831,3 +831,40 @@ body.er-lock main{z-index:130}
   .filtro-rot{min-width:0; width:100%}
 }
 /* ============ fim aba Issues (issue 942) ============ */
+
+/* ============ desenho das ondas no card do PRD (issue 943) ============ */
+/* Só tokens do :root. A cor da pessoa chega como --pessoa no style do nó
+   (corDaPessoa) e pinta o corpo; a da fase chega como --fase pela classe
+   onda-f-<fase> e pinta o anel. Animação e transição só existem sob
+   .onda-anima, que o ondas.js não põe quando reduceMotion() é verdadeiro. */
+.ondas{margin:12px 0 2px}
+.ondas-canvas{overflow-x:auto; margin-top:8px}
+.onda-svg{display:block; max-width:100%; height:auto}
+.onda-col{font:500 10.5px var(--mono); letter-spacing:.08em; fill:var(--ink-soft); text-anchor:middle}
+.onda-seta path{fill:none; stroke:var(--ink-soft); stroke-width:1.4; opacity:.7}
+.onda-seta .onda-ponta{fill:var(--ink-soft); stroke:none}
+.onda-no{cursor:pointer}
+.onda-anel{fill:var(--card); stroke:var(--fase); stroke-width:2.5}
+.onda-corpo{fill:var(--pessoa)}
+.onda-num{font:500 12px var(--mono); fill:var(--card)}
+.onda-tit{font:400 10.5px var(--mono); fill:var(--card)}
+.onda-f-triagem{--fase:var(--ink-soft)}
+.onda-f-fila{--fase:var(--brand)}
+.onda-f-bloqueada{--fase:var(--red)}
+.onda-f-em_andamento{--fase:var(--amber)}
+.onda-f-pr_aberto{--fase:var(--blue)}
+.onda-f-mergeada{--fase:var(--purple)}
+.onda-f-em_producao{--fase:var(--green)}
+.onda-f-humana{--fase:var(--coral)}
+.onda-f-encerrada_sem_pr{--fase:var(--ghost)}
+.ondas-legenda{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px}
+.onda-leg{display:inline-flex; align-items:center; font-family:var(--mono); font-size:11.5px; color:var(--ink);
+  border:2px solid var(--fase); border-radius:var(--r-pill); padding:1px 10px}
+.onda-anima .onda-no{animation:erIn .45s var(--ease-expo) backwards; animation-delay:calc(var(--i,0)*40ms)}
+.onda-anima .onda-seta{animation:ondaSeta .5s ease .25s backwards}
+@keyframes ondaSeta{from{opacity:0}}
+@media (min-width:769px){
+  .onda-no:hover .onda-anel{stroke-width:4}
+  .onda-anima .onda-anel{transition:stroke-width .15s ease}
+}
+/* ============ fim desenho das ondas (issue 943) ============ */
