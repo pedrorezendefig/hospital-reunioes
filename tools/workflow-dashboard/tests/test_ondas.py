@@ -11,8 +11,12 @@ teste; o app.js roda inteiro no Node com o DOM de mentira do test_aba_issues.
 import json
 import os
 import re
+import shutil
+import signal
 import subprocess
 import sys
+import threading
+import time
 from pathlib import Path
 
 import pytest
@@ -23,6 +27,7 @@ sys.path.insert(0, str(DASH))
 
 from fases import FASES_ISSUE, montar_fases  # noqa: E402
 from test_aba_issues import PRELUDIO, _modulo_app, com_node  # noqa: E402
+from test_reskin_mapa import _cores_fixas  # noqa: E402
 
 
 def _iss(n, *, state="OPEN", assignees=(), labels=(), blocked_by=(), parent=None, children=()):
@@ -229,3 +234,134 @@ def test_clicar_no_no_de_fatia_escondida_pelo_filtro_limpa_o_filtro(tmp_path):
 def test_clicar_de_novo_no_mesmo_no_nao_fecha_o_card(tmp_path):
     antes = "_clicar({ act: 'onda', n: '953', prd: '950' }); _clicar({ act: 'onda', n: '953', prd: '950' });"
     assert _fatias_abertas(_rodar(tmp_path, "issueListHtml()", antes=antes)) == [953]
+
+
+# ---------- reduceMotion ----------
+
+
+@com_node
+def test_reduce_motion_desenha_sem_a_classe_que_anima(tmp_path):
+    parado = _svg(_rodar(tmp_path, _card(PRD)))  # o DOM de mentira pede movimento reduzido
+    animado = _svg(_rodar(tmp_path, _card(PRD), antes="globalThis.matchMedia = () => ({ matches: false });"))
+    assert "onda-anima" not in parado
+    assert re.match(r'<svg class="onda-svg onda-anima"', animado)
+
+
+def test_toda_animacao_do_desenho_depende_da_classe_que_anima():
+    bloco = CSS.split("desenho das ondas no card do PRD (issue 943)", 1)[1].split("fim desenho das ondas", 1)[0]
+    bloco = re.sub(r"/\*.*?\*/", "", bloco, flags=re.S)
+    regras = re.findall(r"([^{}]+)\{([^{}]*)\}", bloco)
+    animadas = [sel.strip() for sel, corpo in regras if re.search(r"\b(animation|transition)\s*:", corpo)]
+    assert animadas, "o desenho não anima nada: o critério de reduceMotion ficaria vácuo"
+    for sel in animadas:
+        assert all(".onda-anima" in s for s in sel.split(",")), f"animação fora de .onda-anima: {sel}"
+
+
+# ---------- estrutura do módulo ----------
+
+ONDAS_JS = (DASH / "static" / "ondas.js").read_text(encoding="utf-8")
+APP_JS = (DASH / "static" / "app.js").read_text(encoding="utf-8")
+
+
+def test_modulo_proprio_entra_no_app_por_um_gancho_so_no_card_do_prd():
+    assert "export function renderOndas(" in ONDAS_JS
+    assert APP_JS.count("from './ondas.js'") == 1
+    assert "import { renderOndas } from './ondas.js';" in APP_JS
+    assert len(re.findall(r"\brenderOndas\(", APP_JS)) == 1
+    assert "${prd ? renderOndas(i, S.data, FASES) : ''}" in _funcao(APP_JS, "issueCard")
+    outros = [p.name for p in (DASH / "static").glob("*.js") if p.name != "app.js" and "ondas.js" in p.read_text()]
+    assert outros == []
+
+
+def test_modulo_sem_dependencia_externa():
+    origens = re.findall(r"^import [^;]+ from '([^']+)';", ONDAS_JS, re.M)
+    assert origens, "ondas.js sem import: o teste ficaria vácuo"
+    for origem in origens:
+        assert origem.startswith("./") and (DASH / "static" / origem).is_file(), origem
+    assert len(origens) == ONDAS_JS.count("import ")
+    for proibido in ("import(", "http:", "https:", "window.", "<script", "fetch("):
+        assert proibido not in ONDAS_JS, proibido
+
+
+def test_modulo_sem_cor_fixa_e_com_tokens_que_existem():
+    assert _cores_fixas(ONDAS_JS) == []
+    root = re.search(r":root\{(.*?)\}", CSS, re.S).group(1)
+    for var in set(re.findall(r"var\((--[\w-]+)\)", ONDAS_JS)):
+        assert f"{var}:" in root, var
+
+
+# ---------- render no Chrome headless, contra o serve.py com fixture ----------
+
+CHROME = next(
+    (
+        c
+        for c in ("/Applications/Google Chrome.app/Contents/MacOS/Google Chrome", "google-chrome", "chromium")
+        if Path(c).is_file() or shutil.which(c)
+    ),
+    None,
+)
+com_chrome = pytest.mark.skipif(not CHROME, reason="Chrome ausente")
+
+
+def _dom_no_chrome(tmp_path, monkeypatch, *flags):
+    """DOM da home renderizada pelo Chrome headless, com o /api/data da fixture.
+
+    O Chrome novo imprime o DOM e às vezes não sai (o updater segura o
+    processo): lê a saída até o </html> e derruba o grupo de processos.
+    """
+    import serve
+
+    fixture = tmp_path / "dados.json"
+    fixture.write_text(json.dumps(DADOS), encoding="utf-8")
+    monkeypatch.setattr(serve, "FIXTURE", fixture)
+    servidor = serve.ThreadingHTTPServer(("127.0.0.1", 0), serve.Handler)
+    threading.Thread(target=servidor.serve_forever, daemon=True).start()
+    url = f"http://127.0.0.1:{servidor.server_address[1]}/"
+    saida = tmp_path / "dom.html"
+    cmd = [CHROME, "--headless=new", "--disable-gpu", "--no-first-run", f"--user-data-dir={tmp_path / 'perfil'}"]
+    cmd += [*flags, "--virtual-time-budget=3000", "--dump-dom", url]
+    with saida.open("wb") as f:
+        p = subprocess.Popen(cmd, stdout=f, stderr=subprocess.DEVNULL, start_new_session=True)
+    try:
+        prazo = time.monotonic() + 60
+        while time.monotonic() < prazo and p.poll() is None and b"</html>" not in saida.read_bytes():
+            time.sleep(0.2)
+    finally:
+        try:
+            os.killpg(p.pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        p.wait()
+        servidor.shutdown()
+    dom = saida.read_text(encoding="utf-8")
+    assert "</html>" in dom, "o Chrome não devolveu o DOM"
+    return dom
+
+
+@com_chrome
+def test_chrome_headless_desenha_as_tres_ondas_do_prd_da_fixture(tmp_path, monkeypatch):
+    dom = _dom_no_chrome(tmp_path, monkeypatch)
+    assert dom.count('<svg class="onda-svg') == 1  # só o PRD aberto com fatias
+    svg = _svg(dom)
+    assert 'aria-label="Ondas do PRD #950: 3 ondas, 7 fatias"' in svg
+    assert {n: c for n, (c, _, _) in _nos(svg).items()} == {951: 0, 952: 0, 955: 0, 956: 0, 957: 0, 953: 1, 954: 2}
+    assert _setas(svg) == {(951, 953), (952, 954), (953, 954)}
+    assert re.match(r'<svg class="onda-svg onda-anima"', svg)
+
+
+@com_chrome
+def test_chrome_headless_com_movimento_reduzido_desenha_parado(tmp_path, monkeypatch):
+    svg = _svg(_dom_no_chrome(tmp_path, monkeypatch, "--force-prefers-reduced-motion"))
+    assert re.match(r'<svg class="onda-svg"', svg)
+    assert len(_nos(svg)) == 7
+
+
+def _funcao(js, nome):
+    i = js.index(f"function {nome}(")
+    j = js.index("{", i)
+    fundo = 0
+    for k in range(j, len(js)):
+        fundo += {"{": 1, "}": -1}.get(js[k], 0)
+        if fundo == 0:
+            return js[i : k + 1]
+    raise AssertionError(nome)

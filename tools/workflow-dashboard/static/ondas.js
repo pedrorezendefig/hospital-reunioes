@@ -12,10 +12,26 @@ import { esc, reduceMotion } from './ui.js';
 import { corDaPessoa } from './pessoas.js';
 
 const W = 148, H = 42;       // nó
-const GX = 56, GY = 16;      // vão entre colunas (onde correm as setas) e entre nós
+const GX = 56, GY = 20;      // vão entre colunas (onde correm as setas) e entre nós
 const ANEL = 4;              // folga do anel da fase em volta do nó
 const TOPO = 26, MARGEM = 8; // faixa dos rótulos das colunas e borda do desenho
 const MAX_TITULO = 21;
+
+/* seta de uma coluna para a seguinte: um S no vão. Pulando colunas, ela
+   desce (ou sobe) no primeiro vão até a faixa livre entre duas linhas de nós
+   mais perto do meio do caminho, corre por ela e só sobe no último vão: assim
+   não passa por baixo de um nó do meio, que parece ser a origem da seta. */
+function caminho(x1, y1, x2, y2, linhas) {
+  if (x2 - x1 <= GX) {
+    const mx = (x1 + x2) / 2;
+    return `M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2 - 6} ${y2}`;
+  }
+  const g = GX / 2 - ANEL, topo = TOPO + ANEL - GY / 2;
+  const k = Math.min(linhas, Math.max(0, Math.round(((y1 + y2) / 2 - topo) / (H + GY))));
+  const yf = topo + k * (H + GY);
+  return `M ${x1} ${y1} C ${x1 + g / 2} ${y1}, ${x1 + g / 2} ${yf}, ${x1 + g} ${yf} L ${x2 - g} ${yf}`
+    + ` C ${x2 - g / 2} ${yf}, ${x2 - g / 2} ${y2}, ${x2 - 6} ${y2}`;
+}
 
 /* o rótulo do PRD ("Hospital OS: ") se repete em toda fatia; o título
    inteiro fica no <title> do nó */
@@ -38,8 +54,9 @@ export function renderOndas(prd, dados, fases) {
   colunas.forEach((col, c) => col.forEach((n, r) => pos.set(n, {
     x: MARGEM + ANEL + c * (W + GX), y: TOPO + ANEL + r * (H + GY), c,
   })));
+  const linhas = Math.max(...colunas.map(c => c.length));
   const largura = 2 * (MARGEM + ANEL) + colunas.length * W + (colunas.length - 1) * GX;
-  const altura = TOPO + 2 * ANEL + MARGEM + Math.max(...colunas.map(c => c.length)) * (H + GY) - GY;
+  const altura = TOPO + 2 * ANEL + MARGEM + linhas * (H + GY) - GY;
 
   const rotulos = colunas.map((_, c) =>
     `<text class="onda-col" x="${MARGEM + ANEL + c * (W + GX) + W / 2}" y="14">onda ${c + 1}</text>`).join('');
@@ -49,9 +66,9 @@ export function renderOndas(prd, dados, fases) {
     for (const b of porN[n].blocked_by || []) {
       const q = pos.get(b);
       if (!q || porN[b].state !== 'OPEN') continue;   // bloqueadora fechada ou de fora do PRD: sem seta
-      const x1 = q.x + W + ANEL, y1 = q.y + H / 2, x2 = p.x - ANEL, y2 = p.y + H / 2, mx = (x1 + x2) / 2;
+      const x1 = q.x + W + ANEL, y1 = q.y + H / 2, x2 = p.x - ANEL, y2 = p.y + H / 2;
       setas.push(`<g class="onda-seta" data-de="${b}" data-para="${n}">
-        <path d="M ${x1} ${y1} C ${mx} ${y1}, ${mx} ${y2}, ${x2 - 6} ${y2}"/>
+        <path d="${caminho(x1, y1, x2, y2, linhas)}"/>
         <path class="onda-ponta" d="M ${x2 - 7} ${y2 - 4} L ${x2} ${y2} L ${x2 - 7} ${y2 + 4} Z"/></g>`);
     }
   }
