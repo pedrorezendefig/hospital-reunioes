@@ -72,9 +72,9 @@ Salve em `%TEMP%\onda-enxuta\<nome>-onda<N+1>.md`. A primeira linha precisa ser 
 /onda-enxuta --sessao <nome> --onda <N+1> --paralelo <P>
 
 ## Passagem
-Sessão <nome>, onda <N> fechada em <data hora>: v<antiga> -> v<nova>, PRs #a #b, build ok, health ok.
-Ondas anteriores: <lista curta ou "nenhuma">.
-Chave do semáforo: <nome>. Está solta.
+Sessão <nome>, onda <N> com os PRs verdes em <data hora ISO>.
+Em deploy: PRs #a #b (issues #x #y), versão esperada v<antiga> -> v<nova>, rabo na chave <nome>-onda<N>.
+Ondas anteriores: <cada uma com a linha `Rabo da onda`, ou "nenhuma">.
 
 Fila-alvo FIXA desta sessão (o que sobrou):
 - Onda <N+1>: #d, #e
@@ -88,9 +88,11 @@ Estrutura mudou: PRD #<X>: <sim|não>.
 Auditorias de PRD desta sessão: <quando #f fechar, audite o PRD #X>.
 Decisões de triagem: <as mesmas linhas do plano original>.
 Baixas até aqui (ready-for-human): <issue e motivo, ou "nenhuma">.
-Prod hoje: v<nova>. Última migration em origin/main: <0XX>.
+Prod hoje: v<antiga>; a onda <N> leva a v<nova>. Última migration: <0XX>, contando a da onda em deploy.
 ```
 
-O Mapa do terreno é um por PRD e atravessa as ondas: a passagem leva o que mudou depois dele. A linha `Mergeado na onda anterior` acumula desde o Mapa: os PRs da passagem que você recebeu mais os da sua onda; Mapa refeito nesta sessão zera a conta.
+A passagem sai com os PRs verdes, e a sessão que a escreve sobe a onda depois: `Em deploy` diz o que o rabo dela ainda leva à `main` e a versão que o `fechar_onda.py --dry-run` calculou. Fatia da fila bloqueada por uma das issues dessa linha fica na onda e espera a bloqueadora fechar (passo 3 da skill); as outras começam na hora, da `origin/main` do momento. Quando o rabo termina, a sessão anterior acrescenta a este arquivo a linha `Rabo da onda <N>: ...`; ao escrever a sua passagem, leve-a para `Ondas anteriores` (sem ela ainda, `onda <N>: em deploy`).
+
+O Mapa do terreno é um por PRD e atravessa as ondas: a passagem leva o que mudou depois dele. A linha `Mergeado na onda anterior` acumula desde o Mapa: os PRs da passagem que você recebeu mais os da sua onda, que ainda estão em deploy quando a passagem sai (por isso o implementador confere em `origin/main`); Mapa refeito nesta sessão zera a conta.
 
 `Estrutura mudou` é por PRD: `sim` quando algum PR mergeado na onda apagou ou renomeou arquivo que não é teste (`gh api --paginate repos/{owner}/{repo}/pulls/<PR>/files --jq '.[] | select(.status == "removed" or .status == "renamed") | .filename'`); arquivo novo ou editado é `não`, porque o implementador recebe a lista do `Mergeado na onda anterior` e confere o que ela tocou. Só `sim` faz a próxima sessão disparar o `hr-mapeador` (passo 2 da skill).
