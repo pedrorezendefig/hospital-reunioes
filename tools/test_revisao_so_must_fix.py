@@ -89,12 +89,13 @@ def item(trecho: str, inicio: str) -> str:
     return itens[0]
 
 
-def test_a_onda_corrige_uma_vez_e_a_segunda_revisao_com_must_fix_tira_a_fatia():
-    assert not re.search(r"\b(2|duas|dois) rodadas", ler(ONDA), re.I)
-    veredito = item(passo_4_da_onda(), "- **Veredito do `hr-revisor`**")
-    assert "**Uma rodada de correção**" in veredito, veredito
-    assert "rodada 2 com must-fix é baixa na hora" in veredito, veredito
-    assert "--add-label ready-for-human" in veredito and "o que ficou" in veredito, veredito
+def test_a_onda_revisa_uma_vez_e_ninguem_revisa_a_correcao():
+    # ADR 0067, decisão 2: uma revisão, uma correção, o CI confere.
+    assert not re.search(r"rodada (2|3)|(2|duas|dois) rodadas", ler(ONDA), re.I)
+    veredito = item(passo_4_da_onda(), "- **Veredito**")
+    assert "**Uma revisão, uma correção, sem re-revisão**" in veredito, veredito
+    assert "nenhum revisor roda de novo" in veredito and "quem confere é o CI" in veredito, veredito
+    assert "`pendente`" in veredito and "--add-label ready-for-human" in veredito, veredito
     assert "o lote segue sem ela" in veredito, veredito
 
 
@@ -103,19 +104,36 @@ def test_a_onda_corrige_uma_vez_e_a_segunda_revisao_com_must_fix_tira_a_fatia():
 def test_a_onda_dispara_a_seguranca_uma_vez_e_ninguem_espera_por_ela():
     assert "e de segurança, se havia" not in ler(ONDA)
     passo = passo_4_da_onda()
-    assert "**uma vez só**" in item(passo, "3. Dispare `hr-revisor`")
-
-    veredito = item(passo, "- **Veredito do `hr-revisor`**")
-    assert "sem esperar o veredito de segurança" in veredito, veredito
-    assert "rodada 2 só do `hr-revisor`" in veredito, veredito
-
-    seguranca = item(passo, "- **Veredito de segurança**")
-    assert "não roda de novo depois da correção" in seguranca, seguranca
-    assert "`hr-corretor`" in seguranca and "mesmo teto de 3 tentativas" in seguranca, seguranca
+    assert "**uma vez só**" in item(passo, "4. Dispare `hr-revisor`")
+    assert "sem esperar o outro veredito" in item(passo, "- **Veredito**")
 
     papel = item(ler(ONDA), "| `hr-revisor-seguranca` |")
     assert papel.startswith("| `hr-revisor-seguranca` | high |"), papel
     assert "rota sem login" in papel and "migration" in papel, papel
+
+
+# ------------------------------------------- ADR 0067: ferramenta sem revisor, nunca perguntar
+
+def test_pr_de_ferramenta_nao_tem_revisor_na_onda_nem_no_ship():
+    classifica = item(passo_4_da_onda(), "2. Classifique")
+    assert "`gh pr diff <PR> --name-only | grep -q '^hospital-reunioes/'`" in classifica, classifica
+    assert "não há revisor nenhum, o CI é o gate" in classifica, classifica
+    assert "PR do app" in item(ler(ONDA), "| `hr-revisor` |")
+
+    passo8 = secao(ler(SKILLS / "ship" / "SKILL.md"), "Passo 8 ")
+    ferramenta = item(passo8, "**PR de ferramenta**")
+    assert "^hospital-reunioes/" in ferramenta and "Não há Gate 1, 1.5 nem 2" in ferramenta, ferramenta
+
+
+def test_nenhum_agente_para_para_perguntar_e_achado_fora_do_diff_e_descartado():
+    assert "**Nunca pare para perguntar**" in passo_4_da_onda()
+    assert "- **Revisor sem veredito**" in passo_4_da_onda()
+    assert "**Nunca pare para perguntar**" in secao(ler(SKILLS / "ship" / "SKILL.md"), "Passo 8 ")
+    for agente in ("hr-revisor.md", "hr-revisor-seguranca.md"):
+        corpo = ler(AGENTES / agente)
+        assert "Nunca peça decisão nem ofereça opções" in corpo, agente
+        assert "é descartado, não vira must-fix nem issue" in corpo, agente
+    assert "não execute o código, o workflow nem um ataque simulado" in ler(AGENTES / "hr-revisor-seguranca.md")
 
 
 def test_o_revisor_de_seguranca_roda_em_high_so_em_rota_sem_login_e_migration():
@@ -504,51 +522,20 @@ def test_o_auditor_do_prd_passa_a_lente_de_seguranca_no_diff_acumulado():
     assert "lente de segurança" in papel, papel
 
 
-# ------------------------------------------- o must-fix de segurança é conferido
+# ------------------------------------------- ninguém revisa a correção (ADR 0067)
 
 REVISOR = AGENTES / "hr-revisor.md"
-LINHA_DO_VEREDITO = "Veredito de segurança a conferir: <URL do comentário>"
 
 
-def test_a_rodada_seguinte_do_revisor_recebe_e_confere_o_veredito_de_seguranca():
+def test_a_correcao_e_conferida_pelo_ci_e_nao_por_outra_revisao():
     prompts = ler(SKILLS / "onda-enxuta" / "references" / "prompts.md")
     bloco = secao(prompts, "hr-revisor\n")
-    assert LINHA_DO_VEREDITO in bloco, bloco
-
-    revisor = ler(REVISOR)
-    entrada = secao(revisor, "Entrada")
-    assert "`Veredito de segurança a conferir: <URL>`" in entrada, entrada
-    assert "issues/comments/" in entrada, entrada
-    spec = item(secao(revisor, "Lentes"), "1. ")
-    assert "cada must-fix do veredito de segurança a conferir" in spec, spec
-    assert "sem teste que prove" in spec, spec
-
-    seguranca = item(passo_4_da_onda(), "- **Veredito de segurança**")
-    assert "`Veredito de segurança a conferir: <URL>`" in seguranca, seguranca
+    assert "Revisão única: ninguém revisa a correção." in bloco, bloco
+    for md in (prompts, ler(REVISOR), ler(ONDA), ler(SKILLS / "ship" / "SKILL.md")):
+        assert "a conferir" not in md
+    assert "quem confere a correção é o CI" in ler(AGENTES / "hr-revisor-seguranca.md")
     gate2 = gate_do_ship("Gate 2:")
-    assert "`Veredito de segurança a conferir: <URL>`" in gate2, gate2
-
-
-RODADA_2_ESPERA_OS_CORRETORES = (
-    "**só quando não houver corretor no PR**",
-    "o de segurança inclusive",
-    "com o `VEREDITO SEGURANCA:` já dado",
-    "não há rodada 3",
-)
-
-
-def test_a_rodada_2_so_sai_depois_de_todo_corretor_e_do_veredito_de_seguranca():
-    """O corretor de segurança e a rodada 2 saem do mesmo evento; a rodada 2 não corre com ele."""
-    veredito = item(passo_4_da_onda(), "- **Veredito do `hr-revisor`**")
-    gate1 = gate_do_ship("Gate 1:")
-    for trecho in RODADA_2_ESPERA_OS_CORRETORES:
-        assert trecho in veredito, trecho
-        assert trecho in gate1, trecho
-    assert "quando ele terminar, rodada 2" not in veredito + gate1
-
-    seguranca = item(passo_4_da_onda(), "- **Veredito de segurança**")
-    assert "quem confere é a rodada 2 do `hr-revisor`" in seguranca, seguranca
-    assert "quem confere é a rodada 2 do Gate 1" in gate_do_ship("Gate 2:")
+    assert "nenhum revisor confere a correção: quem confere é o CI" in gate2, gate2
 
 
 def test_afrouxar_o_proprio_fluxo_de_revisao_e_must_fix_do_revisor():

@@ -1,7 +1,7 @@
 ---
 status: accepted
 amends: 0061, 0062, 0063
-amended_by: 0066
+amended_by: 0066, 0067
 ---
 
 # Revisão só de must-fix em uma rodada, segurança por PRD, e merge PR a PR sem exigir "em dia com a base"
