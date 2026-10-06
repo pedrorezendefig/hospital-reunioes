@@ -677,6 +677,10 @@ body.er-lock main{z-index:130}
 .pd-body{border-top:1px solid var(--hairline); padding:18px 20px;
   background:color-mix(in srgb, var(--surface) 35%, var(--card))}
 .pd-notes{font-size:13.5px; color:var(--ink-soft); line-height:1.55; margin:0 0 6px}
+.pd-notes.mono{font-size:12px}
+/* cada deploy da versão aberta (issue 945) */
+.pd-dep .pd-chips{padding:0 0 10px}
+.pd-dep + .pd-dep{border-top:1px dashed var(--hairline); margin-top:12px; padding-top:14px}
 
 @media (max-width:768px){
   .prod-stats{grid-template-columns:1fr 1fr; gap:18px}
