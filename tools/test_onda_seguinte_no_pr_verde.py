@@ -153,3 +153,56 @@ def test_as_decisoes_da_onda_registram_a_emenda_da_ordem():
     emenda = next(li for li in ler(SKILLS / "onda-enxuta" / "references" / "decisoes.md").splitlines()
                   if "decisão 6a" in li)
     assert "issue #999" in emenda and "decisão 2" in emenda, emenda
+
+
+# ------------------------------------------- a sessão seguinte sabe da onda anterior antes do próprio rabo
+# (revisão do PR #1019: com a onda seguinte já viva, rollback e parada da anterior precisam chegar a ela)
+
+
+def _antes_do_rabo() -> str:
+    fechamento = passo(6)
+    achado = re.search(r"^Primeiro, a onda anterior.*?(?=^1\. )", fechamento, re.S | re.M)
+    assert achado, fechamento
+    return achado.group(0)
+
+
+def test_a_sessao_seguinte_espera_a_linha_da_onda_anterior_antes_do_proprio_rabo():
+    regra = _antes_do_rabo()
+    assert "`Em deploy` diferente de `nenhum`" in regra, regra
+    # espera por evento, no arquivo da própria passagem, com teto que cobre a espera de migration (24 h)
+    assert "`Rabo da onda <N-1>:`" in regra and "<nome>-onda<N>.md" in regra, regra
+    assert "run_in_background: true" in regra and "teto de 25 h" in regra, regra
+    # a regra vem antes do comando do rabo, não depois
+    fechamento = passo(6)
+    assert fechamento.index("Primeiro, a onda anterior") < fechamento.index("fechar_onda.py --prs <a> <b>")
+
+
+def test_rollback_da_onda_anterior_poe_o_revert_primeiro_no_rabo_da_seguinte():
+    regra = _antes_do_rabo()
+    revert = next(li for li in regra.splitlines() if li.startswith("- `saída 6"))
+    assert "gh pr checks <R> --watch" in revert, revert
+    assert "o revert entra primeiro e sem revisor no comando do item 3: `--prs <R> <a> <b>`" in revert, revert
+    # a fatia desta onda que dependia da issue reaberta não sobe sem a bloqueadora
+    assert "bloqueada por uma das issues da linha fica de fora" in revert, revert
+
+    # e quem fez o rollback avisa pela passagem lançada, logo depois de abrir o revert
+    saida6 = next(li for li in passo(6).splitlines() if li.lstrip().startswith("- Saída `6`"))
+    assert "`Rabo da onda <N>: saída 6, revert no PR #<R>, issues <#x #y>`" in saida6, saida6
+    assert "na frente do próximo `fechar_onda.py`" not in saida6, saida6
+
+
+def test_onda_anterior_parada_segura_o_rabo_da_seguinte_e_ninguem_forca_a_trava():
+    regra = _antes_do_rabo()
+    parada = next(li for li in regra.splitlines() if li.startswith("- `parada`"))
+    assert "Não rode o rabo" in parada and "teto estourado" in parada, parada
+    # a parada se propaga para a onda depois desta
+    assert "`Rabo da onda <N>: parada, a onda <N-1> não fechou`" in parada, parada
+    # a trava velha de outra onda é prod quebrada esperando humano: nunca --forcar, mesmo que o script mande
+    assert re.search(r"[Nn]unca rode `semaforo\.sh soltar .*--forcar`", regra), regra
+
+    saida34 = next(li for li in passo(6).splitlines() if li.lstrip().startswith("- Saída `3` ou `4`"))
+    assert "`Rabo da onda <N>: saída <3|4>, parada, semáforo preso na chave <nome>-onda<N>" in saida34, saida34
+
+    # o registro vai para a passagem assim que o rabo termina, não no fim da sessão
+    registro = next(li for li in passo(7).splitlines() if li.startswith("1. Com passagem lançada"))
+    assert "assim que o rabo termina" in registro and "espera por ela antes do próprio rabo" in registro, registro
