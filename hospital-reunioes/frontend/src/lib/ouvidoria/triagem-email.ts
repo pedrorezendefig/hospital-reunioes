@@ -28,6 +28,9 @@ export interface EmailRecebidoResumo {
   incompleto: boolean;
   interno: boolean;
   quantidade_de_anexos: number;
+  /** Quem decidiu e quando: null enquanto o item está pendente. */
+  decidido_em?: string | null;
+  decidido_por_nome?: string | null;
 }
 
 export interface AnexoDoEmail {

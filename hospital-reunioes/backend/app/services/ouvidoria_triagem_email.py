@@ -5,8 +5,8 @@ Resend, e o Resend chama o webhook do app. Aqui ele vira um **e-mail recebido**:
 um item da Triagem de e-mail, que só o Perfil da Ouvidoria vê, e que não é
 caso nenhum. Quem decide se vira manifestação, se junta a um caso ou se é
 descartado é o ouvidor. A fundação (#648) faz o e-mail chegar e aparecer;
-virar manifestação (#650) mora no fim deste arquivo. Descartar e juntar
-chegam nas fatias seguintes do PRD.
+virar manifestação (#650) e descartar (#649) moram no fim deste arquivo.
+Juntar a um caso chega na fatia seguinte do PRD.
 
 Três garantias moram aqui, e cada uma tem teste:
 
@@ -385,19 +385,30 @@ def receber_email(supabase, dados: dict) -> Recebimento:
     else:
         linha = existente
         corpo_ja_lido = existente.get("corpo_texto") is not None or existente.get("corpo_html") is not None
+        # A conferência de estado lá de cima veio antes da leitura lenta do
+        # Resend, e o ouvidor pode ter decidido o item nesse meio tempo: a
+        # escrita só pega item ainda pendente. Sem isso, o corpo voltaria a um
+        # e-mail descartado (issue #649, ADR 0051 decisão 5).
         if lido is not None:
             supabase.table(TABELA).update(
                 {"corpo_texto": lido.texto, "corpo_html": lido.html, "cabecalhos": lido.cabecalhos}
-            ).eq("id", linha["id"]).execute()
+            ).eq("id", linha["id"]).eq("estado", PENDENTE).execute()
         desfecho = COMPLETADO
 
     faltando, excedentes = _guardar_anexos(supabase, linha["id"], _metas_do_evento(dados), lido)
+    # O mesmo cuidado para os anexos, que não têm como esperar pelo estado
+    # (linha e binário nascem no meio da entrega): se o item foi descartado
+    # enquanto eles chegavam, o que esta entrega trouxe sai agora, e a entrega
+    # termina como duplicada.
+    if estado_do_email(supabase, linha["id"]) == DESCARTADO:
+        _apagar_anexos(supabase, linha["id"])
+        return Recebimento(DUPLICADO, False)
     incompleto = (lido is None and not corpo_ja_lido) or faltando > 0
     # A contagem não encolhe: a reentrega em que a leitura do Resend falhou
     # conhece menos anexos que a entrega anterior.
     excedentes = max(excedentes, int(linha.get("anexos_excedentes") or 0))
-    supabase.table(TABELA).update({"incompleto": incompleto, "anexos_excedentes": excedentes}).eq(
-        "id", linha["id"]
+    supabase.table(TABELA).update({"incompleto": incompleto, "anexos_excedentes": excedentes}).eq("id", linha["id"]).eq(
+        "estado", PENDENTE
     ).execute()
     return Recebimento(desfecho, incompleto)
 
@@ -629,6 +640,87 @@ def _mover_anexos_para_o_caso(supabase, me: dict, email_id: str, caso_id: str) -
             supabase.table(TABELA_ANEXOS).delete().eq("id", anexo["id"]).execute()
         except APIError:
             logger.error("Triagem de e-mail: anexo %s ficou também no e-mail %s", anexo["id"], email_id)
+
+
+# ─── Descartar (issue #649) ─────────────────────────────────────────────────
+
+DESCARTADO = "descartado"
+
+# O que o descarte faz com o item: descartou (ou já estava descartado), descartou
+# mas algum binário não saiu do storage, o item não existe, ou ele já virou caso
+# ou foi juntado a um.
+DESCARTE_FEITO = "feito"
+DESCARTE_INCOMPLETO = "incompleto"
+DESCARTE_SEM_ITEM = "sem_item"
+DESCARTE_RECUSADO = "recusado"
+
+
+def descartar(supabase, me: dict, email_id: str, agora: datetime) -> str:
+    """Descarta o item e apaga o conteúdo dele (ADR 0051, decisão 5).
+
+    Fica o que responde "sumiu o e-mail de fulano, quem descartou?":
+    remetente, assunto, data, quem descartou e quando. Saem o corpo em texto e
+    em HTML, os cabeçalhos técnicos, os destinatários e os anexos, linha e
+    binário. Item descartado não é manifestação, e o ADR 0047 não o alcança.
+
+    Idempotente: a marca só pega item pendente, e a limpeza dos anexos roda
+    sempre que o item está descartado. Descartar de novo completa o que uma
+    falha do storage deixou para trás, e sem nada a completar não muda nada.
+
+    O e-mail que virou caso ou foi juntado a um é recusado: o conteúdo dele é
+    parte do caso, e o caso não se apaga."""
+    estado = estado_do_email(supabase, email_id)
+    if estado is None:
+        return DESCARTE_SEM_ITEM
+    if estado == PENDENTE:
+        supabase.table(TABELA).update(
+            {
+                "estado": DESCARTADO,
+                "decidido_por": me["id"],
+                "decidido_por_nome": me.get("nome_completo") or me["id"],
+                "decidido_em": agora.isoformat(),
+                "corpo_texto": None,
+                "corpo_html": None,
+                "cabecalhos": {},
+                "destinatarios": [],
+                "incompleto": False,
+                "anexos_excedentes": 0,
+            }
+        ).eq("id", email_id).eq("estado", PENDENTE).execute()
+        # Entre a leitura e a marca, outro clique pode ter virado o e-mail em
+        # caso: quem decide é o estado que ficou gravado.
+        estado = estado_do_email(supabase, email_id)
+    if estado != DESCARTADO:
+        return DESCARTE_RECUSADO
+    # Anexo que sobrou é binário que o storage não soltou: o descarte não
+    # terminou, e quem chama tem de dizer "tente de novo", e não "apagado".
+    return DESCARTE_INCOMPLETO if _apagar_anexos(supabase, email_id) else DESCARTE_FEITO
+
+
+def _apagar_anexos(supabase, email_id: str) -> int:
+    """Apaga os anexos do item descartado, binário e linha, e devolve quantos
+    ficaram.
+
+    A linha de cada anexo sai logo depois de o binário dele sair, e não todas
+    no fim: o storage responde igual para "já saiu" e para "recusou"
+    (`storage.delete_file`), então uma linha que sobrasse apontando para um
+    binário já removido travaria a tentativa seguinte para sempre. O binário
+    que não sai deixa a linha, e o próximo descarte tenta de novo."""
+    bucket = settings.supabase_storage_bucket_anexos_ouvidoria
+    anexos = (
+        supabase.table(TABELA_ANEXOS).select("id, storage_path").eq("email_recebido_id", email_id).execute().data or []
+    )
+    ficaram = 0
+    for anexo in anexos:
+        path = anexo.get("storage_path")
+        if path and not storage.delete_file(supabase, bucket, path):
+            logger.error(
+                "Triagem de e-mail: o binário do anexo %s do e-mail descartado %s não saiu", anexo["id"], email_id
+            )
+            ficaram += 1
+            continue
+        supabase.table(TABELA_ANEXOS).delete().eq("id", anexo["id"]).execute()
+    return ficaram
 
 
 def caminho_do_anexo(supabase, email_id: str, anexo_id: str) -> dict | None:
