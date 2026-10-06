@@ -111,7 +111,7 @@ _Colunas, FKs e diagrama ER: `docs/spec/snapshots/ENTIDADES.md` e `SCHEMA.md`._
 <!-- AUTO:integracoes:start -->
 | Serviço | Para quê |
 |---|---|
-| **OpenRouter** | LLM único — atas, correções, extração e transcrição via openai/gpt-5.4-mini (configurável via LLM_MODEL) |
+| **OpenRouter** | LLM único das atas, correções e extração, pelo LLM_MODEL (prod: google/gemini-3.7-flash desde 21/08/2026; default do código: openai/gpt-5.4-mini). Transcrição de voz pelo TRANSCRICAO_MODEL (default: openai/gpt-4o-mini-transcribe) |
 | **ClickSign** | Assinatura digital de atas (sandbox em dev, app em prod) |
 | **Resend** | Emails transacionais e SMTP do Supabase Auth |
 | **Fireflies** | Sync de transcrições via webhook |

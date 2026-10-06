@@ -1,11 +1,11 @@
 # INTEGRACOES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-06T01:27-0300 -->
+<!-- last_update: 2026-10-06T01:41-0300 -->
 
 Serviços externos usados pelo Hospital Reuniões. Secrets configurados no Coolify (não no git).
 
 ## OpenRouter
-**Pra que serve:** LLM único — atas, correções, extração e transcrição via openai/gpt-5.4-mini (configurável via LLM_MODEL)
+**Pra que serve:** LLM único das atas, correções e extração, pelo LLM_MODEL (prod: google/gemini-3.7-flash desde 21/08/2026; default do código: openai/gpt-5.4-mini). Transcrição de voz pelo TRANSCRICAO_MODEL (default: openai/gpt-4o-mini-transcribe)
 **Onde aparece no código:** `app/services/ai_processor.py`, `app/services/transcricao_service.py`
 **Secret/env primária:** `OPENROUTER_API_KEY`
 
