@@ -33,7 +33,7 @@ description: 'Executor AFK da fila de issues em ondas: sessão de fundo por onda
 | `hr-corretor` / `hr-corretor-max` | high / max | must-fix, CI vermelho, conflito, retomada | PR, issue, motivo, achado |
 | `hr-revisor` | high | todo PR, assim que abre | PR, issue |
 | `hr-revisor-seguranca` | high | PR que toca rota sem login ou migration, uma vez só | PR, issue, motivo |
-| `hr-auditor-prd` | high | depois do último deploy do PRD, com a lente de segurança do diff acumulado | PRD, versão |
+| `hr-auditor-prd` | high | depois do último deploy do PRD, com a lente de segurança do diff acumulado; issue sem PRD, depois do deploy dela, só a lente, com `PR #<N>` no lugar do PRD. Detalhe de segurança que vier no relatório vai ao humano por `PushNotification`, nunca ao GitHub | PRD (ou PR), versão |
 
 Você, orquestrador, **não lê código, diff, PRD nem spec**. Mantém a tabela da fila e o status por issue. Fato do código? Delegue. Os prompts de cada disparo estão em [references/prompts.md](references/prompts.md); use-os literalmente, preenchendo os campos.
 
@@ -75,7 +75,7 @@ Assim que o PR abre, **na mesma mensagem**:
 Depois, por notificação:
 
 - **Veredito do `hr-revisor`** (confirme com `gh pr view <PR> --json comments` que a última linha do comentário é `VEREDITO: ...`): `MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário inteiro, sem esperar o veredito de segurança; quando ele terminar, rodada 2 só do `hr-revisor`. **Uma rodada de correção** (ADR 0064): rodada 2 com must-fix é baixa na hora, sem esperar a terceira tentativa: `gh issue edit <N> --remove-label in-progress --add-label ready-for-human` e comentário `<!-- automacao -->` com o que ficou (os must-fix da rodada 2 e o link do comentário); o lote segue sem ela.
-- **Veredito de segurança** (última linha `VEREDITO SEGURANCA: ...`): o `hr-revisor-seguranca` não roda de novo depois da correção. `MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário de segurança, uma rodada de correção a mais dentro do mesmo teto de 3 tentativas (com um corretor já no PR, este vai quando ele terminar); quem confere é a rodada seguinte do `hr-revisor`, com a mesma regra da baixa.
+- **Veredito de segurança** (última linha `VEREDITO SEGURANCA: ...`): o `hr-revisor-seguranca` não roda de novo depois da correção. `MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário de segurança, uma rodada de correção a mais dentro do mesmo teto de 3 tentativas (com um corretor já no PR, este vai quando ele terminar); quem confere é a rodada seguinte do `hr-revisor`, com a linha `Veredito de segurança a conferir: <URL>` no prompt (cada must-fix dele vira spec da rodada), com a mesma regra da baixa.
 - **CI vermelho:** antes de tudo, `python .claude/skills/onda-enxuta/scripts/ci_sem_runner.py <PR>`. Saída 0 = o GitHub cancelou o job por falta de runner (incidente do Actions, issue #953): o script já pediu o rerun, dispare outro `gh pr checks --watch` em segundo plano, **sem corretor e sem contar tentativa**. Na terceira vez seguida na mesma fatia, pare a fatia com `ready-for-human` e "GitHub Actions sem runner, ver githubstatus.com". Saída 1 = vermelho de código: `hr-corretor` motivo `ci` com o trecho de `gh run view <id> --log-failed | tail -60`. Segunda falha de CI na mesma fatia: `hr-corretor-max`. Depois da correção, novo `gh pr checks --watch` em segundo plano.
 - **Notificação que não muda estado** (agente terminou mas você já conferiu, mensagem de progresso): responda em uma linha e não faça nada.
 

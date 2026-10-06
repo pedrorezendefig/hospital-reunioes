@@ -11,6 +11,7 @@ agente segue: estes testes leem os textos.
 
 from __future__ import annotations
 
+import ast
 import re
 from pathlib import Path
 
@@ -146,14 +147,107 @@ def _casa(caminho: str) -> bool:
     "caminho",
     [
         "hospital-reunioes/supabase/migrations/115_qualquer.sql",
-        "hospital-reunioes/backend/app/routers/ouvidoria_publica.py",
-        "hospital-reunioes/backend/app/routers/webhooks.py",
+        # o gate de cada porta sem login vive fora do router
         "hospital-reunioes/backend/app/services/ouvidoria_triagem_email.py",
-        "hospital-reunioes/backend/app/routers/aceite.py",
+        "hospital-reunioes/backend/app/services/ouvidoria_setor_tokens.py",
+        "hospital-reunioes/backend/app/services/aceite_service.py",
+        "hospital-reunioes/backend/app/services/ouvidoria_anexos.py",
+        "hospital-reunioes/backend/app/services/central_de_comando/conector_mcp.py",
+        "hospital-reunioes/frontend/src/app/auth/callback/route.ts",
     ],
 )
-def test_a_seguranca_por_pr_dispara_em_rota_sem_login_e_migration(caminho):
+def test_a_seguranca_por_pr_dispara_em_migration_e_no_gate_das_portas_sem_login(caminho):
+    assert (RAIZ / caminho).exists() or "migrations" in caminho, f"caminho velho no teste: {caminho}"
     assert _casa(caminho), caminho
+
+
+APP = RAIZ / "hospital-reunioes" / "backend" / "app"
+METODOS_DE_ROTA = {"get", "post", "put", "patch", "delete", "head", "options", "api_route", "websocket"}
+# Rota sem login que não precisa do revisor de segurança por PR.
+FORA_DA_LISTA = {"routers/health.py"}
+
+
+def _alvo_do_depends(no: ast.AST) -> str | None:
+    """`Depends(x)`, `Depends(fabrica(...))` ou `Depends(mod.x)` devolve o nome de x."""
+    if not isinstance(no, ast.Call) or not no.args:
+        return None
+    if getattr(no.func, "id", getattr(no.func, "attr", None)) not in ("Depends", "Security"):
+        return None
+    alvo = no.args[0].func if isinstance(no.args[0], ast.Call) else no.args[0]
+    return getattr(alvo, "id", getattr(alvo, "attr", None))
+
+
+def _depends(no: ast.AST) -> set[str]:
+    return {nome for nome in map(_alvo_do_depends, ast.walk(no)) if nome}
+
+
+def rotas_sem_login(app: Path) -> dict[str, list[str]]:
+    """Router -> rotas cuja cadeia de `Depends` não chega a `get_current_user`."""
+    arvores = {p: ast.parse(p.read_text(encoding="utf-8")) for p in app.rglob("*.py")}
+    grafo: dict[str, set[str]] = {}
+    for arvore in arvores.values():
+        for no in ast.walk(arvore):
+            if isinstance(no, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                grafo.setdefault(no.name, set()).update(_depends(no))
+    com_login, cresceu = {"get_current_user"}, True
+    while cresceu:
+        novos = {nome for nome, alvos in grafo.items() if alvos & com_login} - com_login
+        com_login |= novos
+        cresceu = bool(novos)
+
+    achados = {}
+    for caminho in sorted((app / "routers").rglob("*.py")):
+        arvore = arvores[caminho]
+        do_router = set()
+        for no in arvore.body:
+            if isinstance(no, ast.Assign) and getattr(getattr(no.value, "func", None), "id", None) == "APIRouter":
+                do_router |= _depends(no.value)
+        abertas = []
+        for no in ast.walk(arvore):
+            if not isinstance(no, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                continue
+            rota = [d for d in no.decorator_list if getattr(getattr(d, "func", None), "attr", None) in METODOS_DE_ROTA]
+            if rota and not (do_router | _depends(no.args) | set().union(*map(_depends, rota))) & com_login:
+                abertas.append(no.name)
+        if abertas:
+            achados[caminho.relative_to(app).as_posix()] = abertas
+    return achados
+
+
+def test_todo_router_com_rota_sem_login_esta_na_lista():
+    achados = rotas_sem_login(APP)
+    # piso: hoje são sete; varredura que volta quase vazia é varredura quebrada
+    assert len(achados) >= 7 and FORA_DA_LISTA <= achados.keys(), achados
+    faltam = [
+        f"{router}: {rotas}"
+        for router, rotas in achados.items()
+        if router not in FORA_DA_LISTA and not _casa(f"hospital-reunioes/backend/app/{router}")
+    ]
+    assert faltam == [], "\n".join(faltam)
+
+
+def test_a_varredura_segue_a_cadeia_de_depends(tmp_path):
+    (tmp_path / "routers").mkdir()
+    (tmp_path / "dependencies.py").write_text(
+        "def get_current_user(c=Depends(bearer)): ...\n"
+        "def require_admin(u=Depends(get_current_user)): ...\n"
+        "def require_perfil(*p):\n"
+        "    def checar(u=Depends(get_current_user)): ...\n"
+        "    return checar\n"
+        "def require_api_key(x=Header(None)): ...\n",
+        encoding="utf-8",
+    )
+    rotas = {
+        "aberta.py": "router = APIRouter()\n@router.post('/x')\ndef publica(dado: dict): ...\n",
+        "api_key.py": "router = APIRouter(dependencies=[Depends(require_api_key)])\n@router.get('/x')\ndef so_chave(): ...\n",
+        "admin.py": "router = APIRouter()\n@router.get('/x')\ndef lista(u=Depends(require_admin)): ...\n",
+        "fabrica.py": "router = APIRouter()\n@router.get('/x')\ndef lista(u=Depends(require_perfil('a'))): ...\n",
+        "no_router.py": "router = APIRouter(dependencies=[Depends(get_current_user)])\n@router.get('/x')\ndef lista(): ...\n",
+        "no_decorador.py": "router = APIRouter()\n@router.get('/x', dependencies=[Depends(deps.require_admin)])\ndef lista(): ...\n",
+    }
+    for nome, codigo in rotas.items():
+        (tmp_path / "routers" / nome).write_text(codigo, encoding="utf-8")
+    assert rotas_sem_login(tmp_path) == {"routers/aberta.py": ["publica"], "routers/api_key.py": ["so_chave"]}
 
 
 @pytest.mark.parametrize(
@@ -224,3 +318,73 @@ def test_o_auditor_do_prd_passa_a_lente_de_seguranca_no_diff_acumulado():
     assert "lente de segurança no diff acumulado" in disparo, disparo
     papel = item(ler(ONDA), "| `hr-auditor-prd` |")
     assert "lente de segurança" in papel, papel
+
+
+# ------------------------------------------- o must-fix de segurança é conferido
+
+REVISOR = AGENTES / "hr-revisor.md"
+LINHA_DO_VEREDITO = "Veredito de segurança a conferir: <URL do comentário>"
+
+
+def test_a_rodada_seguinte_do_revisor_recebe_e_confere_o_veredito_de_seguranca():
+    prompts = ler(SKILLS / "onda-enxuta" / "references" / "prompts.md")
+    bloco = secao(prompts, "hr-revisor\n")
+    assert LINHA_DO_VEREDITO in bloco, bloco
+
+    revisor = ler(REVISOR)
+    entrada = secao(revisor, "Entrada")
+    assert "`Veredito de segurança a conferir: <URL>`" in entrada, entrada
+    assert "issues/comments/" in entrada, entrada
+    spec = item(secao(revisor, "Lentes"), "1. ")
+    assert "cada must-fix do veredito de segurança a conferir" in spec, spec
+    assert "sem teste que prove" in spec, spec
+
+    seguranca = item(passo_4_da_onda(), "- **Veredito de segurança**")
+    assert "`Veredito de segurança a conferir: <URL>`" in seguranca, seguranca
+    gate2 = gate_do_ship("Gate 2:")
+    assert "`Veredito de segurança a conferir: <URL>`" in gate2, gate2
+
+
+def test_afrouxar_o_proprio_fluxo_de_revisao_e_must_fix_do_revisor():
+    lente = item(secao(ler(REVISOR), "Lentes"), "3. ")
+    for trecho in (
+        "afrouxa gatilho, gate, filtro de autor ou teto",
+        "`.claude/agents/`",
+        "`.claude/skills/ship/`",
+        "`.claude/skills/onda-enxuta/`",
+        "`revisao-sensivel.txt`",
+        "`sensivel.py`",
+        "`.claude/settings*.json`",
+        "`.github/`",
+        "sem a issue pedir",
+        "é must-fix (regressão de permissão)",
+    ):
+        assert trecho in lente, trecho
+
+
+def test_o_achado_de_seguranca_do_auditor_sai_neutro_no_repositorio_publico():
+    lente = secao(ler(AGENTES / "hr-auditor-prd.md"), "Segurança do diff acumulado")
+    achado = item(lente, "3. ")
+    assert "`Segurança: correção no PRD #<PRD>`" in achado, achado
+    assert "**sem arquivo, linha nem cenário**" in achado, achado
+    assert "security-advisories" in achado and "rascunho" in achado, achado
+    assert "`PushNotification`" in achado, achado
+    assert "Segurança: <resumo>" not in lente, lente
+
+
+def test_o_ship_avulso_e_a_issue_sem_prd_tambem_passam_pela_lente_do_auditor():
+    gate2 = gate_do_ship("Gate 2:")
+    lente = [li for li in gate2.splitlines() if li.startswith("**Lente do `hr-auditor-prd` no `/ship` avulso**")]
+    assert len(lente) == 1, gate2
+    for trecho in ("rabo verde", "última fatia aberta do PRD", "issue sem PRD", "`PR #<N>` no lugar do PRD"):
+        assert trecho in lente[0], trecho
+
+    entrada = secao(ler(AGENTES / "hr-auditor-prd.md"), "Entrada")
+    assert "`PR #<N>` no lugar do PRD" in entrada, entrada
+
+    prompts = ler(SKILLS / "onda-enxuta" / "references" / "prompts.md")
+    disparo = item(prompts, "PR #<PR> (issue sem PRD).")
+    assert "lente de segurança" in disparo, disparo
+
+    papel = item(ler(ONDA), "| `hr-auditor-prd` |")
+    assert "issue sem PRD" in papel and "`PR #<N>`" in papel, papel
