@@ -114,6 +114,7 @@ EXIT_MERGE = 2
 EXIT_BUILD = 3
 EXIT_HEALTH = 4
 EXIT_REGISTRO = 5
+EXIT_ROLLBACK = 6
 
 SEMAFORO = ".claude/skills/deploy/scripts/semaforo.sh"
 SPEC = "docs/spec"
@@ -724,6 +725,11 @@ def esperar_build(service: dict, desde: float, sha_push: str) -> tuple[str, int 
             elif time.time() > limite:
                 return "sem-deploy", None
             time.sleep(BUILD_POLL_S)
+    return acompanhar_deploy(dep)
+
+
+def acompanhar_deploy(dep: dict) -> tuple[str, int | None]:
+    """Acompanha um deploy do Coolify ate terminar. Devolve (status, duracao_s)."""
     dep_id = _campo(dep, "deployment_uuid", "uuid", "id")
     fim = time.time() + BUILD_TIMEOUT_S
     status = str(_campo(dep, "status", default="")).lower()
@@ -768,7 +774,78 @@ def cancelar_build_do_registro(servicos_cfg: dict, sha: str) -> list[str]:
     return cancelados
 
 
+# ----------------------------------------------------------------- rollback
+
+def imagem_anterior(uuid: str, sha_ruim: str) -> str | None:
+    """A imagem mais nova do app no Coolify que nao e a do merge ruim (issue
+    #968). Se o build ruim nem virou a imagem no ar, devolve a que esta no ar: o
+    rollback so a reinicia, com o APP_VERSION antigo."""
+    dado = coolify_json(["app", "rollback", "images", uuid])
+    imagens = dado.get("images") if isinstance(dado, dict) else None
+    imagens = [i for i in imagens or [] if isinstance(i, dict) and i.get("tag")]
+    for img in sorted(imagens, key=lambda i: str(i.get("created_at") or ""), reverse=True):
+        tag = str(img["tag"])
+        if not (tag.startswith(sha_ruim) or sha_ruim.startswith(tag)):
+            return tag
+    return None
+
+
+def ids_de_deploy(uuid: str) -> set[str]:
+    return {str(_campo(d, "deployment_uuid", "uuid", "id"))
+            for d in _lista(coolify_json(["app", "deployments", "list", uuid]))}
+
+
+def esperar_rollback(service: dict, antes: set[str]) -> str:
+    """Espera o deploy que o `rollback run` criou (o que nao estava em `antes`)
+    terminar. Nunca forca build: um `deploy uuid` aqui rebuildaria a main, com o
+    defeito dentro."""
+    limite = time.time() + BUILD_WAIT_WEBHOOK_S
+    while True:
+        novos = [d for d in _lista(coolify_json(["app", "deployments", "list", service["uuid"]]))
+                 if str(_campo(d, "deployment_uuid", "uuid", "id")) not in antes]
+        if novos:
+            return acompanhar_deploy(novos[0])[0]
+        if time.time() > limite:
+            return "sem-deploy"
+        time.sleep(BUILD_POLL_S)
+
+
+def reverter(servicos_cfg: dict, servicos: list[str], sha_ruim: str, versao_antiga: str | None,
+             com_app_version: list[str]) -> tuple[bool, str]:
+    """Rollback automatico (issue #968): cada app do lote volta a imagem anterior
+    no Coolify, o APP_VERSION antigo volta aos apps em que o rabo o trocou e o
+    health e conferido de novo. Devolve (deu certo, o que aconteceu)."""
+    try:
+        alvos = {sid: imagem_anterior(servicos_cfg[sid]["uuid"], sha_ruim) for sid in servicos}
+        sem = [sid for sid, alvo in alvos.items() if not alvo]
+        if sem:
+            return False, "sem imagem anterior no Coolify para " + ", ".join(sem)
+        # antes de subir a imagem: o backend le o APP_VERSION no start do container
+        for sid in com_app_version:
+            setar_app_version(servicos_cfg[sid]["uuid"], versao_antiga)
+        for sid, alvo in alvos.items():
+            uuid = servicos_cfg[sid]["uuid"]
+            antes = ids_de_deploy(uuid)
+            if run(["coolify", "app", "rollback", "run", uuid, "--commit", alvo], check=False).returncode != 0:
+                return False, f"o Coolify recusou o rollback do {sid} para {alvo[:8]}"
+            status = esperar_rollback(servicos_cfg[sid], antes)
+            if status != "finished":
+                return False, f"o deploy do rollback do {sid} terminou {status}"
+        healths = {sid: checar_health(servicos_cfg[sid], versao_antiga if sid == "backend" else None)
+                   for sid in servicos}
+        ruins = [f"{sid}: {linha_de_health(h)}" for sid, h in healths.items() if not h["ok"]]
+        if ruins:
+            return False, "health ainda ruim depois do rollback (" + "; ".join(ruins) + ")"
+    except Exception as e:  # noqa: BLE001
+        return False, str(e)[:300]
+    return True, ", ".join(f"{sid} na imagem {alvo[:8]}" for sid, alvo in alvos.items())
+
+
 # ------------------------------------------------------------------- health
+
+def linha_de_health(h: dict) -> str:
+    return " ".join(p for p in (f"http {h.get('status')}", h.get("nota"), h.get("corpo")) if p)
+
 
 def checar_health(service: dict, versao_esperada: str | None) -> dict:
     hc = (service.get("deploy") or {}).get("health_check") or {}
@@ -784,7 +861,10 @@ def checar_health(service: dict, versao_esperada: str | None) -> dict:
                 resultado["status"] = r.status
         except urllib.error.HTTPError as e:
             resultado["status"] = e.code
-            body = ""
+            try:
+                body = e.read().decode("utf-8", "replace")
+            except Exception:
+                body = ""
         except Exception:
             body = ""
         resultado["latency_ms"] = int((time.time() - t) * 1000)
@@ -804,6 +884,8 @@ def checar_health(service: dict, versao_esperada: str | None) -> dict:
         resultado["ok"] = ok
         if ok:
             return resultado
+        # o que o health respondeu vai na linha do rabo e no comentario da issue reaberta (issue #968)
+        resultado["corpo"] = " ".join(body.split())[:200]
         time.sleep(10)
     return resultado
 
@@ -1046,10 +1128,20 @@ def main() -> int:
         healths = {}
         for sid in (servicos or [s for s in servicos_cfg if s != "supabase"]):
             healths[sid] = checar_health(servicos_cfg[sid], versao_nova if sid == "backend" else None)
-        ruins = [f"{sid}: http {h.get('status')} {h.get('nota', '')}".strip() for sid, h in healths.items() if not h["ok"]]
+        ruins = [f"{sid}: {linha_de_health(h)}" for sid, h in healths.items() if not h["ok"]]
         if ruins:
-            print("health: " + "; ".join(ruins) + f". Semaforo preso na chave {args.sessao}: rode `/deploy rollback` com ela.")
-            return EXIT_HEALTH
+            print("health: " + "; ".join(ruins))
+            voltou, como = reverter(servicos_cfg, servicos, sha_main, versao_antiga if versao_nova else None,
+                                    com_app_version)
+            if not voltou:
+                print(f"rollback: falhou, {como}. Semaforo preso na chave {args.sessao}: rode `/deploy rollback` com ela.")
+                return EXIT_HEALTH
+            semaforo(raiz, "soltar", args.sessao)
+            semaforo_pego = False
+            print(f"rollback: {como}, APP_VERSION v{versao_antiga}, health ok e semaforo solto. "
+                  f"Reverter o merge {sha_main[:8]} e reabrir: "
+                  + ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in infos) + ".")
+            return EXIT_ROLLBACK
         vm = " (version match)" if versao_nova else ""
         print(f"health: ok{vm}")
 

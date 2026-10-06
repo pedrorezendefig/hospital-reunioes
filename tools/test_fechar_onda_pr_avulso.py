@@ -168,6 +168,9 @@ class Cenario:
         self.gh_chamadas: list[list[str]] = []
         self.builds: list[str] = []
         self.healths: list[tuple[str, str | None]] = []
+        # versões em que o /api/health do backend responde 500 (issue #968)
+        self.health_ruim_em: set[str | None] = set()
+        self.rollbacks: list[str] = []  # apps cujo deploy de rollback o rabo esperou
         self.semaforo: list[tuple[str, str]] = []
         self.cancelamentos: list[str] = []
         self.tags: list[tuple[str, str]] = []  # (ref, sha) criados pela API
@@ -188,16 +191,41 @@ class Cenario:
         bin_falso = tmp_path / "bin"
         bin_falso.mkdir()
         self.log_coolify = tmp_path / "coolify.log"
+        # o que o `coolify app rollback images` devolve por app (issue #968):
+        # `@main@` vira a main da hora, a imagem que o build do merge deixou no ar
+        self.dir_coolify = tmp_path / "coolify-dados"
+        self.dir_coolify.mkdir()
         coolify = bin_falso / "coolify"
         coolify.write_text(
             "#!/bin/sh\n"
-            f'echo "$* | main=$(git --git-dir={self.remoto} rev-parse main)" >> {self.log_coolify}\n',
+            f"main=$(git --git-dir={self.remoto} rev-parse main)\n"
+            f'echo "$* | main=$main" >> {self.log_coolify}\n'
+            'case "$1 $2 $3" in\n'
+            '  "app rollback images")\n'
+            f'    [ -f "{self.dir_coolify}/imagens-$4.json" ] && '
+            f'sed "s/@main@/$main/g" "{self.dir_coolify}/imagens-$4.json" ;;\n'
+            '  "app rollback run")\n'
+            f'    [ -f "{self.dir_coolify}/rollback-recusado" ] && exit 1 ;;\n'
+            "esac\n"
+            "exit 0\n",
             encoding="utf-8",
         )
         coolify.chmod(0o755)
         self.path = f"{bin_falso}{os.pathsep}{os.environ.get('PATH', '')}"
         self.home = tmp_path / "home"
         self.home.mkdir()
+
+    def imagens_no_coolify(self, uuid: str, anteriores: list[str]) -> None:
+        """Lista do `coolify app rollback images`, no formato real (conferido em
+        06/10/2026): a imagem do merge no ar e as anteriores, mais nova primeiro."""
+        imagens = [{"created_at": "2026-10-06 04:26:37 +0000 UTC", "is_current": True, "tag": "@main@"}]
+        imagens += [{"created_at": f"2026-10-05 2{9 - i}:00:00 +0000 UTC", "is_current": False, "tag": tag}
+                    for i, tag in enumerate(anteriores)]
+        (self.dir_coolify / f"imagens-{uuid}.json").write_text(
+            json.dumps({"current": "@main@", "images": imagens}), encoding="utf-8")
+
+    def recusar_rollback(self) -> None:
+        (self.dir_coolify / "rollback-recusado").write_text("", encoding="utf-8")
 
     def main_remota(self) -> str:
         return git(self.remoto, "rev-parse", "main")
@@ -365,7 +393,14 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
 
     def checar_health(service, versao_esperada):
         c.healths.append((service["id"], versao_esperada))
+        if service["id"] == "backend" and versao_esperada in c.health_ruim_em:
+            return {"ok": False, "status": 500, "latency_ms": 5,
+                    "corpo": '{"detail":"relation \\"prazos\\" does not exist"}'}
         return {"ok": True, "status": 200, "latency_ms": 5}
+
+    def esperar_rollback(service, antes):
+        c.rollbacks.append(service["id"])
+        return "finished"
 
     def cancelar_build_do_registro(servicos_cfg, sha):
         c.cancelamentos.append(sha)
@@ -376,6 +411,7 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
     monkeypatch.setattr(fo, "semaforo", semaforo)
     monkeypatch.setattr(fo, "esperar_build", esperar_build)
     monkeypatch.setattr(fo, "checar_health", checar_health)
+    monkeypatch.setattr(fo, "esperar_rollback", esperar_rollback, raising=False)
     monkeypatch.setattr(fo, "cancelar_build_do_registro", cancelar_build_do_registro)
 
 
@@ -1223,3 +1259,52 @@ def test_rabo_rodado_do_worktree_do_autor_nao_remove_o_proprio_checkout(
     lista = git(c.clone, "worktree", "list", "--porcelain")
     assert f"worktree {autor.resolve()}" in lista, lista
     assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+
+
+# ---------------------------------------------- rollback automático (#968)
+
+IMAGEM_ANTERIOR = "cab8930958d1f89545d688418f37745936cc576f"
+IMAGEM_MAIS_VELHA = "9428a0263e43d81cbbe32891fee5a1af9f5879a2"
+
+
+def coolify_sem_leitura_de_deploys(c: Cenario) -> list[str]:
+    return [li for li in c.coolify() if not li.startswith("app deployments list")]
+
+
+def test_health_ruim_volta_a_imagem_anterior_e_o_app_version_antigo_e_sai_com_rollback_feito(
+    tmp_path, monkeypatch, capsys
+):
+    """O backend da v0.10.1 responde 500: o rabo pede ao Coolify a imagem
+    anterior do app do lote, devolve o APP_VERSION v0.10.0 aos dois apps ANTES
+    de subir a imagem (o backend o lê no start do container), confere o health
+    de novo, agora na versão antiga, e solta o semáforo."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    c.imagens_no_coolify("uuid-backend", [IMAGEM_ANTERIOR, IMAGEM_MAIS_VELHA])
+    c.health_ruim_em.add("0.10.1")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_ROLLBACK
+
+    merge = c.merges[0]["main"]
+    assert coolify_sem_leitura_de_deploys(c) == [
+        f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app rollback images uuid-backend --format json | main={merge}",
+        f"app env update uuid-backend APP_VERSION --value 0.10.0 | main={merge}",
+        f"app env update uuid-frontend APP_VERSION --value 0.10.0 | main={merge}",
+        f"app rollback run uuid-backend --commit {IMAGEM_ANTERIOR} | main={merge}",
+    ]
+    # o frontend não estava no lote: a imagem dele não muda
+    assert c.rollbacks == ["backend"]
+    assert c.healths == [("backend", "0.10.1"), ("backend", "0.10.0")]
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+    # sem registro: o merge segue na main e quem chamou abre o revert
+    assert [m["pr"] for m in c.merges] == [7] and c.main_remota() == merge
+    saida = capsys.readouterr().out
+    health = next(li for li in saida.splitlines() if li.startswith("health:"))
+    assert "http 500" in health and 'relation \\"prazos\\" does not exist' in health, health
+    rollback = next(li for li in saida.splitlines() if li.startswith("rollback:"))
+    for trecho in (merge[:8], "PR #7", "issue #5", "v0.10.0", "semaforo solto"):
+        assert trecho in rollback, (trecho, rollback)
+    assert "Semaforo preso" not in saida, saida
