@@ -9,7 +9,7 @@ O trabalho é **GitHub-issue-centric**: toda mudança nasce de uma Issue e morre
 - **Tem uma ideia ou melhoria nova?** → `/grill-with-docs` (lapida a ideia, vira PRD, vira issues).
 - **Vai pegar trabalho que já está na fila?** → `/pegar-issue` (sem nada lista a fila; com um número pega a issue).
 
-O resto do caminho, `/tdd` → `/ship` → rabo (`fechar_onda.py`), as skills encadeiam.
+O resto do caminho, `/tdd` → `/ship` → rabo (`fechar_onda.py`), as skills encadeiam sozinhas, sem parada até produção, exceto migration (ADR 0063).
 
 ## Setup inicial (1 vez só)
 
@@ -45,10 +45,9 @@ Agora há issues na fila pra qualquer um pegar.
 /pegar-issue          # lista as issues ready-for-agent sem dono
 /pegar-issue 42       # dá o "claim" (vira sua), cria a branch e carrega a spec
 /tdd                  # red → green → refactor: critérios de aceite viram testes
-/ship                 # 3 gates, para no PR verde e imprime o comando do rabo
+/ship                 # 3 gates e, com o PR verde, roda o rabo sozinho:
+                      # fechar_onda.py --prs <PR> = merge + versão + deploy + registro (a issue fecha pelo Closes #42)
 # migration nova? o rabo imprime <arquivo>:1, você cola no Studio de produção e ele segue quando o número aparece no /api/health (até 24 h)
-python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR> --dry-run   # o plano, sem tocar em nada
-python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>             # merge + versão + deploy + registro (a issue fecha pelo Closes #42)
 ```
 
 ### Cenário C — Estava trabalhando, sessão fechou, abro outro terminal
@@ -84,12 +83,12 @@ Loop disciplinado: reproduz → minimiza → hipótese → instrumenta → corri
    ▼
 /tdd               red → green → refactor; critérios de aceite = testes de integração
    ▼
-/ship              Gate 1 — code-review (sempre)
-                   Gate 2 — security-review (se toca auth/RLS/migrations/env/webhook)
+/ship              Gate 1: hr-revisor (sempre)
+                   Gate 2: hr-revisor-seguranca (se o sensivel.py acusa caminho sensível)
                    Gate 3 — CI verde (GitHub Actions)
-                   → para no PR verde e imprime o comando do rabo (sem versão no PR)
+                   → gate reprovado chama o hr-corretor; com o PR verde, roda o rabo sozinho (sem versão no PR)
                    ▼
-fechar_onda.py     o rabo único (ADR 0061), rodado pelo autor do PR depois do OK:
+fechar_onda.py     o rabo único (ADR 0061), rodado pelo /ship ou pelo fechamento da onda:
   --prs <N>        migration nova no /api/health → semáforo → versão nova sem commit → CI verde
                    → APP_VERSION no backend e no frontend → merge pela API (squash) → tag vX.Y.Z
                    → um build → health com version-match
@@ -117,9 +116,9 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo autor do PR depois do O
 ## Regras importantes
 
 1. **Nunca commitar em `main` direto.** Sempre PR via `/ship`; quem leva o PR à `main` é o rabo (`fechar_onda.py`).
-2. **Self-approval é OK** — os 3 gates (code-review + security-review + CI) validam. Cada um aprova o próprio PR.
+2. **Self-approval é OK**: os 3 gates (hr-revisor + hr-revisor-seguranca + CI) validam. Cada um aprova o próprio PR.
    - **Emenda (ADR 0061, 01/10/2026):** cada sócio **mergeia e sobe para produção o próprio PR**, sem esperar ninguém. Quem mergeia aplica a migration em produção (Studio) e cuida do `APP_VERSION` no Coolify, então todo sócio precisa de acesso aos dois. PR verde parado esperando o Pedro é erro de processo, não cautela.
-3. **Nunca pular `/security-review`** em mudanças que tocam auth, RLS, migrations, env vars ou webhooks.
+3. **Nunca pular o `hr-revisor-seguranca`** quando o `sensivel.py` acusa caminho sensível (auth, RLS, migrations, env vars, webhooks, o próprio fluxo de revisão).
 4. **O contexto do trabalho vive na Issue**, não em arquivo de plano. Os critérios de aceite da Issue viram os seus testes no `/tdd`.
 5. **Uma Issue por vez, uma branch por Issue.** Em paralelo (vários terminais), use **1 git worktree por issue** — o claim atômico evita que duas sessões peguem a mesma. Protocolo em `docs/agents/issue-tracker.md`.
    - **Emenda (ADR 0061):** a **árvore principal do seu clone fica sempre na `main`** e só recebe `git pull`. Todo trabalho, inclusive doc e ADR, acontece em worktree. Voltou de uma pausa? `git pull` na árvore principal antes de qualquer coisa.
@@ -168,7 +167,7 @@ Sem Discord, sem Slack.
 | `/to-issues` | Quebra o PRD em fatias verticais (1 issue cada) |
 | `/pegar-issue` | Sem arg: lista a fila. Com `<N>`: claim + branch + spec |
 | `/tdd` | Red → green → refactor (testes a partir dos critérios de aceite) |
-| `/ship` | Commit → PR → 3 gates → para no PR verde e imprime o comando do rabo |
+| `/ship` | Commit → PR → 3 gates → com o PR verde, roda o rabo sozinho |
 | `fechar_onda.py --prs <N>` | O rabo único: versão sem commit, APP_VERSION nos dois apps, merge pela API, tag, um build, health, registro em PR só de docs (ADR 0061) |
 | `/deploy status` | Ver estado de produção (sem alterar) |
 | `/deploy rollback` | Reverte produção pro deploy anterior |
@@ -180,8 +179,8 @@ Sem Discord, sem Slack.
 ## Quando algo dá errado
 
 - **`/tdd` vermelho e não fecha?** O teste é a spec — confira o critério de aceite na Issue. Se o critério está errado, ajuste a Issue primeiro.
-- **`/ship` reprovou num gate?** A saída diz qual (code-review, security-review ou CI). Corrija e rode `/ship` de novo — ele retoma.
-- **Conflito com a `main`?** `git pull --rebase origin main` na sua branch, resolve os conflitos, segue.
+- **`/ship` reprovou num gate?** O gate chama o `hr-corretor` sozinho; só a baixa (`ready-for-human`, com o diagnóstico na issue) volta para você. A saída diz qual gate (hr-revisor, hr-revisor-seguranca ou CI). Corrija e rode `/ship --resume`.
+- **Conflito com a `main`?** O rabo sai com 2 e chama o `hr-corretor`, que rebaseia pela `/resolver-conflitos` e conta tentativa; só a terceira falha (`ready-for-human`) volta para você.
 - **Deploy falhou em produção?** Com health ruim, o `fechar_onda.py` já volta sozinho a imagem anterior e o `APP_VERSION` antigo: sai com código 6, semáforo solto, e quem o rodou abre o PR de revert, reabre a issue e notifica (Passo 10 do `/ship`). Build que falha sai com 3, e health cujo rollback também falhou sai com 4: os dois seguram o semáforo; a saída dele é a fonte de verdade (o `history.json` já foi escrito no push, como `healthy`, e não é corrigido). `/deploy rollback` reverte e `/deploy status` mostra o estado.
 - **Snapshot desatualizado?** `/snapshot --force`.
 - Na dúvida, pergunta pro Claude — ele puxa o conhecimento daqui.

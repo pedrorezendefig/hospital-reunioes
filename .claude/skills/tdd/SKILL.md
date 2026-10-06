@@ -5,7 +5,7 @@ description: Test-driven development em loop red-green-refactor. Use para constr
 
 > **Hospital Reuniões:** os critérios de aceite da issue (`gh issue view <N>`) são a lista de testes a escrever (cada critério → um teste RED). Nomes de teste descrevem o comportamento de domínio em **pt-BR** (ex.: `test_facilitador_ve_status_de_assinatura`). Backend = `pytest` (TestClient/endpoints reais); frontend segue o padrão já existente no repo. Use a terminologia de `CONTEXT.md`.
 
-> **Cadência de verificação (Hospital Reuniões):** durante o ciclo, rode só o arquivo de teste em que está mexendo. Rode os linters com regularidade, não só no fim (backend `ruff check` + `ruff format --check`; frontend `tsc`/lint): `pytest` local não pega lint e o gate de CI pega. A suíte completa roda uma vez, antes de invocar `/ship`.
+> **Cadência de verificação (Hospital Reuniões):** durante o ciclo, rode só o arquivo de teste em que está mexendo. Rode os linters com regularidade, não só no fim (backend `ruff check` + `ruff format --check`; frontend `tsc`/lint): `pytest` local não pega lint e o gate de CI pega. A suíte completa roda uma vez, antes de invocar `/ship`, que vem em seguida, sem esperar mensagem (ADR 0063).
 
 # Test-Driven Development
 

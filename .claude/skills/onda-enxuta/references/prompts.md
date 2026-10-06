@@ -42,9 +42,9 @@ PR #<PR>, issue #<N>. Motivo: <arquivos sensíveis tocados, um por linha | pedid
 ```
 [papel: corretor]
 PR #<PR>, issue #<N>. Motivo: <revisao|ci|conflito|retomar>.
-<revisao: cole o comentário do veredito inteiro. Se o "vai" do humano pré-autorizou should-fix: "Pré-autorizado pelo humano: corrija também <itens>.">
+<revisao: cole o comentário do veredito inteiro.>
 <ci: cole as últimas 60 linhas de `gh run view <id> --log-failed`.>
-<conflito: "A main andou; rebase e resolva. Arquivos em conflito: <lista>.">
+<conflito: "A main andou; rebase pela skill resolver-conflitos. Arquivos em conflito: <lista da linha do rabo>. Tentativa <k> de 3.">
 <retomar: "Branch <branch> tem commits wip. Termine a fatia e abra o PR.">
 ```
 
@@ -78,22 +78,4 @@ Auditorias de PRD desta sessão: <quando #f fechar, audite o PRD #X>.
 Decisões de triagem: <as mesmas linhas do plano original>.
 Baixas até aqui (ready-for-human): <issue e motivo, ou "nenhuma">.
 Prod hoje: v<nova>. Última migration em origin/main: <0XX>.
-```
-
-## Mensagem de checkpoint (fim do turno da sessão de fundo)
-
-```
-Onda <N> da sessão <nome> pronta para o seu OK.
-
-| issue | PR | status | fatia | should-fix | migration |
-| ... |
-
-Para aprovar, num terminal:
-  claude attach <id>
-e escreva uma destas linhas:
-  vai #a #b                        (mergeia e deploya o lote inteiro)
-  vai #a                           (só um subconjunto)
-  vai #a #b, corrigir o should-fix da #b e mergear se voltar limpo
-  abortar
-Migration <0XX> no lote: depois do "vai", o rabo imprime o arquivo para colar no Studio e espera o número no /api/health (até 24 h).
 ```
