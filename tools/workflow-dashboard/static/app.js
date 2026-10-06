@@ -9,6 +9,7 @@ import { renderDiagrama, wireDiagramas } from './diagramas.js';
 import { renderArea, wireArea } from './areas.js';
 import { corDaPessoa } from './pessoas.js';
 import { renderOndas } from './ondas.js';
+import { filtrosPrsDaRota, filtrosPrsNaRota, filtrosPrsVazios, renderQuadroPrs } from './prs.js';
 
 const filtrosVazios = () => ({ state: 'all', fase: '', resp: '', prd: null, label: '', q: '', humana: false });
 
@@ -27,6 +28,7 @@ const S = {
   tab: 'issues',
   item: null,   // item aberto que o hash aponta (#issues/930, #producao/v0.161.0)
   fIssues: filtrosVazios(),
+  fPrs: filtrosPrsVazios(),
   expIss: new Set(),
   expPrd: new Map(),
   expDep: new Set(),
@@ -119,7 +121,6 @@ function adrPointerBadge(a) {
 }
 
 const issUrl = n => `${S.data.repo_url}/issues/${n}`;
-const prUrl = n => `${S.data.repo_url}/pull/${n}`;
 const shaUrl = sha => `${S.data.repo_url}/commit/${sha}`;
 /* chip navega dentro do painel pelo hash; o GitHub fica no ↗ de cada card */
 const rotaDe = (aba, item) => esc(montarHash({ aba, item }));
@@ -211,9 +212,10 @@ function marcarAba() {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
 }
 
-/* estado da tela -> hash; os filtros só existem na aba Issues */
+/* estado da tela -> hash; os filtros existem nas abas Issues e PRs */
 function sincronizarHash() {
-  gravarRota({ aba: S.tab, item: S.item, filtros: S.tab === 'issues' ? filtrosNaRota(S.fIssues) : {} });
+  const filtros = S.tab === 'issues' ? filtrosNaRota(S.fIssues) : S.tab === 'prs' ? filtrosPrsNaRota(S.fPrs) : {};
+  gravarRota({ aba: S.tab, item: S.item, filtros });
 }
 
 /* hash -> estado da tela: no boot, no chip clicado e no voltar do navegador */
@@ -222,6 +224,7 @@ function irPara(rota) {
   S.tab = rota.aba;
   S.item = rota.item;
   if (rota.aba === 'issues') S.fIssues = filtrosDaRota(rota.filtros);
+  if (rota.aba === 'prs') S.fPrs = filtrosPrsDaRota(rota.filtros);
   abrirItem();
   sincronizarHash();
   marcarAba();
@@ -661,13 +664,14 @@ function abrirFatia(n, prd) {
   if (card) card.scrollIntoView({ block: 'center', behavior: reduceMotion() ? 'auto' : 'smooth' });
 }
 
-/* ---------- PRS (o quadro por fase chega na fatia própria) ---------- */
+/* ---------- PRS (quadro por fase, uma raia por pessoa: prs.js) ---------- */
 
 function renderPrs() {
   return `
-  ${cabecalho('acompanhar', 'PRs', 'quadro por fase, uma raia por pessoa')}
-  <div class="empty rv">em construção: o quadro dos PRs por fase chega na próxima fatia do Hospital OS</div>
-  ${S.item ? `<a class="ghlink rv" href="${prUrl(esc(S.item))}" target="_blank" rel="noopener">abrir o PR #${esc(S.item)} no GitHub ↗</a>` : ''}`;
+  <div class="tab-prs">
+  ${cabecalho('acompanhar', 'PRs', 'gh · cada PR na sua fase, uma raia por pessoa')}
+  ${renderQuadroPrs({ data: S.data, filtros: S.fPrs, item: S.item, depVer, fmtD })}
+  </div>`;
 }
 
 /* ---------- DEPLOYS ---------- */
@@ -923,6 +927,19 @@ view.addEventListener('click', e => {
     refreshIssueList();
   } else if (act === 'onda') {
     abrirFatia(Number(t.dataset.n), Number(t.dataset.prd));
+  } else if (act === 'pr') {
+    S.item = S.item === t.dataset.n ? null : t.dataset.n;
+    render();
+  } else if (act === 'pfresp') {
+    S.fPrs.resp = S.fPrs.resp === t.dataset.v ? '' : t.dataset.v;
+    render();
+  } else if (act === 'pfprd') {
+    const n = Number(t.dataset.v);
+    S.fPrs.prd = S.fPrs.prd === n ? null : n;
+    render();
+  } else if (act === 'pfabertos') {
+    S.fPrs.abertos = !S.fPrs.abertos;
+    render();
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);
     const ver = depVer(S.data.history[i].app_version);

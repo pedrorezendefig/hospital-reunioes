@@ -24,7 +24,7 @@ Porta fixa `8799` (a 8765 fica livre pra rodadas manuais), logs em `~/Library/Lo
 
 ## Abas
 
-**Issues** (home): o **funil** das nove fases no topo, com a contagem de cada uma; clicar numa fase filtra a lista. Abaixo, os filtros em chips: estado, o chip `ready-for-human` com o contador da fila humana (era a aba Pendências), responsável (um chip por pessoa, na cor dela, mais "ninguém assumiu"), PRD aberto, labels agrupadas por prefixo (`type:`, `area:`, `fatia:` e as outras) e busca. Com um responsável filtrado, o funil mostra as contagens dele; não há lead time nem métrica por pessoa (ADR 0061, decisão 5). A lista segue a árvore PRD → fatias; o card fechado mostra fase, pessoa, idade, critérios feitos/total, PR e versão; aberto, a linha do tempo com data e hora, o corpo e os comentários · **PRs**: em construção (quadro por fase, uma raia por pessoa) · **Produção**: estado de produção + timeline de deploys · **Mapa**: snapshots factuais da app · **Domínio**: ADRs + glossário.
+**Issues** (home): o **funil** das nove fases no topo, com a contagem de cada uma; clicar numa fase filtra a lista. Abaixo, os filtros em chips: estado, o chip `ready-for-human` com o contador da fila humana (era a aba Pendências), responsável (um chip por pessoa, na cor dela, mais "ninguém assumiu"), PRD aberto, labels agrupadas por prefixo (`type:`, `area:`, `fatia:` e as outras) e busca. Com um responsável filtrado, o funil mostra as contagens dele; não há lead time nem métrica por pessoa (ADR 0061, decisão 5). A lista segue a árvore PRD → fatias; o card fechado mostra fase, pessoa, idade, critérios feitos/total, PR e versão; aberto, a linha do tempo com data e hora, o corpo e os comentários · **PRs**: quadro com as seis fases do PR em colunas (aberto sem CI, CI vermelho, esperando revisor, verde esperando merge, mergeado sem deploy, em produção) e uma raia por pessoa, na cor dela (quem assumiu a issue que o PR fecha; sem assignee, "ninguém assumiu"). O card mostra PR, issue, branch, dias na coluna e o sinal de conflito; a coluna mais cheia e o card parado há mais de 3 dias ganham destaque (Em produção, o fim do caminho, não conta e mostra só a última semana, ou tudo com um PRD filtrado). Tentativas (fechados sem merge) ficam na faixa cinza embaixo. Filtros: pessoa, PRD e só abertos · **Produção**: estado de produção + timeline de deploys · **Mapa**: snapshots factuais da app · **Domínio**: ADRs + glossário.
 
 O método de trabalho (o que era a aba Guia) vive em `docs/onboarding/`.
 
@@ -60,6 +60,7 @@ Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta s
   - `app.js` — SPA, render de cada aba.
   - `ui.js` — componentes (tooltip, copiar, recolhível).
   - `pessoas.js`: a cor fixa de cada pessoa (`corDaPessoa`), reusada por chips, raias e nós.
+  - `prs.js`: o quadro da aba PRs (colunas por fase, raias por pessoa, faixa das tentativas e filtros).
   - `router.js`: o router de hash (`#aba/item?filtros`), único módulo que lê e grava o `location.hash`.
   - `ondas.js`: o desenho das ondas no card do PRD (SVG próprio, um gancho só no `issueCard`).
   - `content/`: textos estáveis (glossário, verbetes das tabelas).
