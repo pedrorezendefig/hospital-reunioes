@@ -1,10 +1,7 @@
-# Caminhos que disparam o revisor de segurança por PR (hr-revisor-seguranca, uma vez, esforço high).
+# Caminhos que põem a linha `Sensível:` no prompt do hr-revisor.
 # Um glob por linha, relativo à raiz do repositório. Linhas com # são comentário.
 # Prefixo "+" = só dispara quando o PR CRIA o arquivo (status "added" em
 #   gh api repos/{owner}/{repo}/pulls/<N>/files), não quando só edita.
-# ADR 0064, decisão 4 (06/10/2026): só rota sem login e migration. Rota nova,
-# middleware, env, workflows e o próprio fluxo de revisão saíram; a segurança
-# do resto é a lente do hr-auditor-prd sobre o diff acumulado do PRD.
 
 # Migration
 hospital-reunioes/supabase/migrations/**
