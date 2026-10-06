@@ -120,6 +120,8 @@ function adrPointerBadge(a) {
 const issUrl = n => `${S.data.repo_url}/issues/${n}`;
 const prUrl = n => `${S.data.repo_url}/pull/${n}`;
 const shaUrl = sha => `${S.data.repo_url}/commit/${sha}`;
+/* chip navega dentro do painel pelo hash; o GitHub fica no ↗ de cada card */
+const rotaDe = (aba, item) => esc(montarHash({ aba, item }));
 
 function spark(vals, w = 360, h = 46) {
   if (vals.length < 2) return '';
@@ -513,8 +515,8 @@ function issueCard(i, idx, prd = false) {
     pessoasDoCard(i),
     `<span class="chip">${idadeTxt(i)}</span>`,
     i.criteria.total ? `<span class="chip" title="critérios de aceite">✓ ${i.criteria.done}/${i.criteria.total}</span>` : '',
-    fs && fs.pr ? `<a class="chip" href="${montarHash({ aba: 'prs', item: fs.pr })}">PR #${fs.pr}</a>` : '',
-    fs && fs.versao ? `<a class="chip chip-versao" href="${esc(montarHash({ aba: 'producao', item: depVer(fs.versao) }))}">${esc(depVer(fs.versao))}</a>` : '',
+    fs && fs.pr ? `<a class="chip" href="${rotaDe('prs', fs.pr)}">PR #${fs.pr}</a>` : '',
+    fs && fs.versao ? `<a class="chip chip-versao" href="${rotaDe('producao', depVer(fs.versao))}">${esc(depVer(fs.versao))}</a>` : '',
   ].filter(Boolean).join('');
 
   return `
@@ -669,8 +671,8 @@ function deployCard(dp, idx) {
   const chipsResumo = [
     `<span class="badge ${ok ? 'b-green' : 'b-red'}">${esc(dp.result || '?')}</span>`,
     ...(dp.migrations_applied || []).map(m => `<span class="badge b-amber">⛁ ${esc(m)}</span>`),
-    ...(dp.pr_numbers || []).map(n => `<a class="chip" href="${montarHash({ aba: 'prs', item: n })}">PR #${n}</a>`),
-    ...(dp.issue_numbers || []).map(n => `<a class="chip" href="${montarHash({ aba: 'issues', item: n })}">#${n}</a>`),
+    ...(dp.pr_numbers || []).map(n => `<a class="chip" href="${rotaDe('prs', n)}">PR #${n}</a>`),
+    ...(dp.issue_numbers || []).map(n => `<a class="chip" href="${rotaDe('issues', n)}">#${n}</a>`),
     dp.rollback_target_sha ? `<span class="badge b-amber">rollback → ${esc(dp.rollback_target_sha)}</span>` : '',
   ].filter(Boolean).join('');
   const chipsTech = [

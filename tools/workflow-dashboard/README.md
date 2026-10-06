@@ -28,6 +28,8 @@ Porta fixa `8799` (a 8765 fica livre pra rodadas manuais), logs em `~/Library/Lo
 
 O método de trabalho (o que era a aba Guia) vive em `docs/onboarding/`.
 
+**Endereço**: aba, item aberto e filtros vivem no hash (`#issues/930`, `#prs/930`, `#producao/v0.161.0`, `#issues?resp=...&fase=...`); copiar a URL e abrir de novo volta ao mesmo ponto, com o card aberto em destaque. Chips de issue, PR e versão navegam dentro do painel; o GitHub é o `↗` de cada card (ADR 0062, decisão 8).
+
 ## Vocabulário
 
 - **Fase**: em que pé está a issue, derivado só de fatos do GitHub (ADR 0062, decisão 4): Triagem, Fila, Bloqueada, Em andamento, PR aberto, Mergeada, Em produção, Humana, Encerrada sem PR. Quem calcula é o `fases.py`; o front só desenha.
@@ -55,6 +57,7 @@ Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta s
   - `app.js` — SPA, render de cada aba.
   - `ui.js` — componentes (tooltip, copiar, recolhível).
   - `pessoas.js`: a cor fixa de cada pessoa (`corDaPessoa`), reusada por chips, raias e nós.
+  - `router.js`: o router de hash (`#aba/item?filtros`), único módulo que lê e grava o `location.hash`.
   - `content/`: textos estáveis (glossário, verbetes das tabelas).
   - `style.css` — identidade visual (papel/indigo/coral; Fraunces + IBM Plex).
   - `vendor/marked.min.js` — render de Markdown ([marked](https://github.com/markedjs/marked), licença MIT).

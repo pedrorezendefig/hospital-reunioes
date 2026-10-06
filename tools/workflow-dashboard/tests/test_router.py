@@ -31,7 +31,11 @@ def _node(tmp_path, prog):
     arq = tmp_path / "harness.mjs"
     arq.write_text(prog, encoding="utf-8")
     out = subprocess.run(
-        ["node", str(arq)], capture_output=True, text=True, check=False, env={**os.environ, "TZ": "UTC"}
+        ["node", str(arq)],
+        capture_output=True,
+        text=True,
+        check=False,
+        env={**os.environ, "TZ": "UTC"},
     )
     assert out.returncode == 0, out.stderr
     linha = [x for x in out.stdout.splitlines() if x.startswith("@@")][-1]
@@ -45,7 +49,14 @@ def _router(tmp_path, expr):
 
 
 def _fase(fase, **extra):
-    base = {"fase": fase, "sub": None, "branch": None, "pr": None, "sinal": None, "tentativas": []}
+    base = {
+        "fase": fase,
+        "sub": None,
+        "branch": None,
+        "pr": None,
+        "sinal": None,
+        "tentativas": [],
+    }
     return {**base, "versao": None, "em_producao_em": None, **extra}
 
 
@@ -107,7 +118,12 @@ DADOS = {
             "900": _fase("triagem"),
             "901": _fase("fila"),
             "902": _fase("pr_aberto", pr=77),
-            "904": _fase("em_producao", pr=70, versao="0.163.4", em_producao_em="2026-10-03T18:05:00Z"),
+            "904": _fase(
+                "em_producao",
+                pr=70,
+                versao="0.163.4",
+                em_producao_em="2026-10-03T18:05:00Z",
+            ),
             "910": _fase("triagem"),
         },
         "prs": {},
@@ -115,7 +131,10 @@ DADOS = {
         "ondas": {},
         "funil": {"total": {}, "por_responsavel": {}},
     },
-    "history": [_deploy("0.163.4", "abc1234", [70], [904]), _deploy("v0.163.3", "def5678", [69], [903])],
+    "history": [
+        _deploy("0.163.4", "abc1234", [70], [904]),
+        _deploy("v0.163.3", "def5678", [69], [903]),
+    ],
     "changelog": [],
     "state": {},
     "snapshots": [],
@@ -193,7 +212,8 @@ def _app(tmp_path, expr, antes="", hash_inicial="", dados=None):
 def _cards(html):
     """(em destaque?, html) de cada <article> renderizado, na ordem."""
     return [
-        ('aria-current="true"' in m.group(1), m.group(0)) for m in re.finditer(r"(<article[^>]*>)[\s\S]*?</article>", html)
+        ('aria-current="true"' in m.group(1), m.group(0))
+        for m in re.finditer(r"(<article[^>]*>)[\s\S]*?</article>", html)
     ]
 
 
@@ -216,7 +236,11 @@ def test_hash_vira_aba_item_e_filtros(tmp_path):
         ".map(R.lerHash)",
     )
     assert rotas == [
-        {"aba": "issues", "item": "930", "filtros": {"resp": "lucassampaioc1", "fase": "pr_aberto"}},
+        {
+            "aba": "issues",
+            "item": "930",
+            "filtros": {"resp": "lucassampaioc1", "fase": "pr_aberto"},
+        },
         {"aba": "prs", "item": "930", "filtros": {}},
         {"aba": "producao", "item": "v0.161.0", "filtros": {}},
         {"aba": "mapa", "item": None, "filtros": {}},
@@ -237,20 +261,30 @@ def test_rota_vira_hash_sem_filtro_vazio_e_volta_igual(tmp_path):
     )
     assert hashes[0].startswith("#issues/930?") and "resp=" not in hashes[0]
     assert hashes[1:] == ["#issues?resp=%28sem%29", "#producao/v0.161.0", "#prs"]
-    assert volta[0] == {"aba": "issues", "item": "930", "filtros": {"fase": "pr_aberto", "q": "router de hash"}}
+    assert volta[0] == {
+        "aba": "issues",
+        "item": "930",
+        "filtros": {"fase": "pr_aberto", "q": "router de hash"},
+    }
     assert volta[1]["filtros"] == {"resp": "(sem)"}
 
 
 def test_so_o_router_le_e_escreve_o_hash():
     router = ROUTER.read_text(encoding="utf-8")
-    assert "location.hash" in router and "hashchange" in router and "replaceState" in router
+    assert (
+        "location.hash" in router
+        and "hashchange" in router
+        and "replaceState" in router
+    )
     assert re.search(r"from '\./router\.js'", APP_JS), "app.js não importa o router"
     for arq in sorted(STATIC.glob("*.js")):
         if arq.name == "router.js":
             continue
         js = arq.read_text(encoding="utf-8")
         for proibido in ("location.hash", "hashchange", "replaceState", "pushState"):
-            assert proibido not in js, f"{arq.name} mexe no hash por fora do router: {proibido}"
+            assert proibido not in js, (
+                f"{arq.name} mexe no hash por fora do router: {proibido}"
+            )
 
 
 # ---------- o estado da tela vai para o hash ----------
@@ -295,7 +329,9 @@ def test_trocar_de_aba_expandir_card_e_mudar_filtro_atualizam_o_hash(tmp_path):
 def test_abrir_com_hash_restaura_aba_filtros_e_card_expandido_com_destaque(tmp_path):
     hash_ = "#issues/902?fase=pr_aberto&resp=lucassampaioc1"
     tab, filtros, html, hash_depois = _app(
-        tmp_path, "[S.tab, S.fIssues, _view.innerHTML, location.hash]", hash_inicial=hash_
+        tmp_path,
+        "[S.tab, S.fIssues, _view.innerHTML, location.hash]",
+        hash_inicial=hash_,
     )
     assert tab == "issues"
     assert filtros["fase"] == "pr_aberto" and filtros["resp"] == "lucassampaioc1"
@@ -316,7 +352,9 @@ def test_fatia_do_hash_aparece_com_o_prd_aberto_e_so_ela_em_destaque(tmp_path):
 
 @com_node
 def test_abrir_com_hash_de_versao_expande_o_deploy_com_destaque(tmp_path):
-    tab, html = _app(tmp_path, "[S.tab, _view.innerHTML]", hash_inicial="#producao/v0.163.3")
+    tab, html = _app(
+        tmp_path, "[S.tab, _view.innerHTML]", hash_inicial="#producao/v0.163.3"
+    )
     assert tab == "producao"
     (novo_em_destaque, novo), (velho_em_destaque, velho) = _cards(html)
     assert velho_em_destaque and "pd-body" in velho and "def5678" in velho
@@ -330,7 +368,9 @@ def _chips(html):
     """{texto: href} de cada chip que é link."""
     return {
         m.group(2): m.group(1)
-        for m in re.finditer(r'<a class="chip[^"]*" href="([^"]*)"[^>]*>([^<]*)</a>', html)
+        for m in re.finditer(
+            r'<a class="chip[^"]*" href="([^"]*)"[^>]*>([^<]*)</a>', html
+        )
     }
 
 
@@ -341,14 +381,27 @@ def test_chips_de_issue_pr_e_versao_apontam_para_o_hash_de_cada_um(tmp_path):
         "[_view.innerHTML, issueCard(S.data.github.issues[2], 0), issueCard(S.data.github.issues[3], 0)]",
         hash_inicial="#producao",
     )
-    assert _chips(producao) == {"PR #70": "#prs/70", "#904": "#issues/904", "PR #69": "#prs/69", "#903": "#issues/903"}
+    assert _chips(producao) == {
+        "PR #70": "#prs/70",
+        "#904": "#issues/904",
+        "PR #69": "#prs/69",
+        "#903": "#issues/903",
+    }
     assert _chips(aberta) == {"PR #77": "#prs/77"}
-    assert _chips(em_producao) == {"PR #70": "#prs/70", "v0.163.4": "#producao/v0.163.4"}
+    assert _chips(em_producao) == {
+        "PR #70": "#prs/70",
+        "v0.163.4": "#producao/v0.163.4",
+    }
 
 
 @com_node
 def test_chip_de_issue_abre_o_card_certo_na_aba_issues_com_destaque(tmp_path):
-    tab, html = _app(tmp_path, "[S.tab, _view.innerHTML]", hash_inicial="#producao", antes="_navegar('#issues/904');")
+    tab, html = _app(
+        tmp_path,
+        "[S.tab, _view.innerHTML]",
+        hash_inicial="#producao",
+        antes="_navegar('#issues/904');",
+    )
     assert tab == "issues"
     em_destaque, card = _card(html, 904)
     assert em_destaque and "corpo da 904" in card
@@ -425,5 +478,8 @@ def test_todo_card_de_issue_tem_o_link_do_github_e_nenhum_chip_abre_o_github(tmp
     assert all(h.startswith("#") for h in chips), f"chip para fora do painel: {chips}"
     # o deploy também leva o ↗, para o commit; o sha segue visível como texto
     for sha in ("abc1234", "def5678"):
-        assert re.search(rf'<a class="pd-gh" href="https://github.com/x/y/commit/{sha}"[^>]*>↗</a>', producao)
+        assert re.search(
+            rf'<a class="pd-gh" href="https://github.com/x/y/commit/{sha}"[^>]*>↗</a>',
+            producao,
+        )
         assert f'<span class="chip">{sha}</span>' in producao
