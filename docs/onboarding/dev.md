@@ -46,7 +46,7 @@ Agora há issues na fila pra qualquer um pegar.
 /pegar-issue 42       # dá o "claim" (vira sua), cria a branch e carrega a spec
 /tdd                  # red → green → refactor: critérios de aceite viram testes
 /ship                 # 3 gates, para no PR verde e imprime o comando do rabo
-# migration nova? aplique no Studio de produção ANTES do rabo (o script confere o sha256)
+# migration nova? o rabo imprime <arquivo>:1, você cola no Studio de produção e ele segue quando o número aparece no /api/health (até 24 h)
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR> --dry-run   # o plano, sem tocar em nada
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>             # merge + versão + deploy + registro (a issue fecha pelo Closes #42)
 ```
@@ -90,12 +90,13 @@ Loop disciplinado: reproduz → minimiza → hipótese → instrumenta → corri
                    → para no PR verde e imprime o comando do rabo (sem versão no PR)
                    ▼
 fechar_onda.py     o rabo único (ADR 0061), rodado pelo autor do PR depois do OK:
-  --prs <N>        semáforo → versão nova sem commit → CI verde
+  --prs <N>        migration nova no /api/health → semáforo → versão nova sem commit → CI verde
                    → APP_VERSION no backend e no frontend → merge pela API (squash) → tag vX.Y.Z
                    → um build → health com version-match
                    → registro num PR só de docs: state.json + history.json (ADR 0062)
                    (snapshot e draft do Manual: Action no push da main, depois do registro)
-                   (migration nova: aplicar no Studio ANTES de rodar; o script confere o sha256)
+                   (migration nova: o script confere o sha256, imprime o arquivo para colar no
+                    Studio e espera o número dela no /api/health; 24 h sem ele, sai com 7)
                    Na /onda-enxuta é o mesmo script, com o lote da onda em --prs
 ```
 

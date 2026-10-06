@@ -95,5 +95,5 @@ e escreva uma destas linhas:
   vai #a                           (só um subconjunto)
   vai #a #b, corrigir o should-fix da #b e mergear se voltar limpo
   abortar
-Migration <0XX> no lote: aplique no Studio antes do "vai".
+Migration <0XX> no lote: depois do "vai", o rabo imprime o arquivo para colar no Studio e espera o número no /api/health (até 24 h).
 ```
