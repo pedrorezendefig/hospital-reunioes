@@ -1,0 +1,116 @@
+name: Imagem do backend
+
+# A imagem do squash que vai para produção (issue #1001, ADR 0064 decisão 6c).
+# O rabo (fechar_onda.py) dispara este workflow depois do merge e acha o run
+# pelo sha no título; quando ele termina verde, aponta o Coolify para a tag do
+# squash, e o Coolify só puxa e reinicia. Quem escreve no GHCR é o GITHUB_TOKEN
+# daqui: o gh da máquina do rabo não tem `write:packages`.
+#
+# `origens`: `<head>@<digest>` de heads de PR, do mais novo ao mais velho, com
+# a pasta do backend igual à do squash (o rabo compara). O digest é o que o CI
+# do head guardou no artefato `digest-backend`: a tag `:<head>` é mutável (um
+# run com `packages: write` de qualquer branch a sobrescreve), o digest não. A
+# primeira origem cujo digest existe no GHCR é a imagem do squash: ganha as
+# tags do sha e `latest` sem build. Nenhuma existe (o PR não mudou o backend,
+# ou o lote juntou PRs que nunca rodaram juntos no CI): constrói do squash,
+# com o cache de camadas do GitHub Actions da main (isolado por ref: PR não
+# escreve nele). O digest publicado vai para o artefato `digest-backend` deste
+# run, que o rabo lê, confere no GHCR antes de pôr no ar e grava no state.json.
+run-name: Imagem do backend ${{ inputs.sha }}
+
+on:
+  workflow_dispatch:
+    inputs:
+      sha:
+        description: Commit da main que vai para produção (o squash), sha completo
+        required: true
+      origens:
+        description: <head>@<digest> de heads de PR com a mesma pasta do backend que o squash, separados por espaço
+        required: false
+        default: ''
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publicar:
+    name: Publicar a imagem do squash
+    runs-on: ubuntu-latest
+    env:
+      IMAGEM_BACKEND: ghcr.io/pedrorezendefig/hospital-reunioes-backend
+      # Entrada vai por env, nunca interpolada no shell (injeção de script).
+      SHA: ${{ inputs.sha }}
+      ORIGENS: ${{ inputs.origens }}
+    steps:
+      - uses: docker/setup-buildx-action@v3
+      - name: Login no GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Retag da imagem de um head (sem build)
+        id: retag
+        run: |
+          # [[ =~ ]] confere a entrada inteira: o grep conferia linha a linha, e
+          # um sha seguido de quebra de linha passava
+          if [[ ! $SHA =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::sha '$SHA' não é um sha completo de commit."
+            exit 1
+          fi
+          for origem in $ORIGENS; do
+            if [[ ! $origem =~ ^[0-9a-f]{40}@sha256:[0-9a-f]{64}$ ]]; then
+              echo "::error::origem '$origem' não é <sha do head>@sha256:<digest>."
+              exit 1
+            fi
+          done
+          for origem in $ORIGENS; do
+            digest="${origem#*@}"
+            if docker buildx imagetools inspect "$IMAGEM_BACKEND@$digest" > /dev/null 2>&1; then
+              # uma origem só: o create copia o manifesto, e o digest não muda
+              docker buildx imagetools create -t "$IMAGEM_BACKEND:$SHA" -t "$IMAGEM_BACKEND:latest" "$IMAGEM_BACKEND@$digest"
+              echo "Imagem do head ${origem%@*} ($digest) publicada como $SHA e latest."
+              echo "feito=true" >> "$GITHUB_OUTPUT"
+              echo "digest=$digest" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "Nenhum head com imagem no GHCR: o build do squash vem a seguir."
+          echo "feito=false" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout do squash
+        if: steps.retag.outputs.feito != 'true'
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.sha }}
+      - name: Build do squash (nenhum head serviu)
+        id: build
+        if: steps.retag.outputs.feito != 'true'
+        uses: docker/build-push-action@v6
+        with:
+          context: hospital-reunioes/backend
+          push: true
+          tags: |
+            ${{ env.IMAGEM_BACKEND }}:${{ inputs.sha }}
+            ${{ env.IMAGEM_BACKEND }}:latest
+          labels: org.opencontainers.image.source=https://github.com/${{ github.repository }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,scope=backend,mode=max
+
+      - name: Digest publicado
+        env:
+          DIGEST: ${{ steps.retag.outputs.digest || steps.build.outputs.digest }}
+        run: |
+          if [[ ! $DIGEST =~ ^sha256:[0-9a-f]{64}$ ]]; then
+            echo "::error::a imagem do squash saiu sem digest ('$DIGEST')."
+            exit 1
+          fi
+          mkdir -p digest
+          printf '%s\n' "$DIGEST" > digest/digest
+      - name: Guarda o digest para o rabo
+        uses: actions/upload-artifact@v4
+        with:
+          name: digest-backend
+          path: digest/digest
