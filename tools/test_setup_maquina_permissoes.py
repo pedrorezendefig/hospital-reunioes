@@ -77,6 +77,7 @@ ABERTAS = [
     "Bash(cat*)",
     "Bash(find:*)",
     "Bash(vercel *)",
+    "Bash(git fetch *)",
     "Bash(*)",
     "Bash",
 ]
@@ -293,7 +294,13 @@ def test_o_guia_base_nao_libera_gh_inteiro(tmp_path):
 # ------------------------------------------------- o token do gh sem Administration
 
 
-def gh_admin(tmp_path: Path, sessao: str, chaveiro: str, classico: str = "401") -> None:
+def gh_admin(
+    tmp_path: Path,
+    sessao: str,
+    chaveiro: str,
+    classico: str = "401",
+    login: str = "fulana",
+) -> None:
     """`gh api .../keys` (deploy keys exigem Administration) responde conforme a credencial.
 
     Com GH_TOKEN no ambiente, o gh usa o token da sessão; sem ele, o do chaveiro.
@@ -303,7 +310,10 @@ def gh_admin(tmp_path: Path, sessao: str, chaveiro: str, classico: str = "401") 
     falso(
         tmp_path,
         "gh",
-        'case "$*" in *"repos/pedrorezendefig/hospital-reunioes/keys"*) ;; *) exit 0 ;; esac\n'
+        'case "$*" in *"repos/pedrorezendefig/hospital-reunioes/keys"*) ;;\n'
+        f'  "api user --jq .login") echo {login}; exit 0 ;;\n'
+        "  *) exit 0 ;;\n"
+        "esac\n"
         f'if [ "${{GH_TOKEN:-}}" = pat_classico ]; then m="{classico}"\n'
         f'elif [ -n "${{GH_TOKEN:-}}${{GITHUB_TOKEN:-}}" ]; then m="{sessao}"; else m="{chaveiro}"; fi\n'
         f'echo "{SEGREDO}"; echo "{SEGREDO}" >&2\n'
@@ -336,6 +346,8 @@ def admin(tmp_path: Path, com_token: bool, **outros: str) -> str:
             "bash",
             "-c",
             SAIDAS
+            + funcao("eh_admin")
+            + "\n"
             + funcao("admin_responde")
             + "\n"
             + funcao("checa_gh_sem_admin")
@@ -414,6 +426,29 @@ def test_outro_token_do_github_exportado_com_admin_acusa(tmp_path):
     assert "pat_classico" not in saida and SEGREDO not in saida
 
 
+def test_GITHUB_TOKEN_ao_lado_do_GH_TOKEN_tambem_e_testado(tmp_path):
+    """O gh lê o GH_TOKEN antes; `env -u GH_TOKEN gh ...` cai no GITHUB_TOKEN."""
+    gh_admin(tmp_path, sessao="403", chaveiro="semlogin", classico="admin")
+    saida = admin(tmp_path, com_token=True, GITHUB_TOKEN="pat_classico")
+    assert linha(saida, "GITHUB_TOKEN sem Administration").startswith("FALTA"), saida
+
+
+def test_token_do_github_com_outro_nome_tambem_e_testado(tmp_path):
+    gh_admin(tmp_path, sessao="403", chaveiro="semlogin", classico="admin")
+    saida = admin(tmp_path, com_token=True, HOMEBREW_GITHUB_API_TOKEN="pat_classico")
+    assert linha(saida, "HOMEBREW_GITHUB_API_TOKEN sem Administration").startswith(
+        "FALTA"
+    )
+
+
+def test_dono_com_token_fine_grained_conta_como_admin(tmp_path):
+    """Com o token sem Administration o papel pode não vir ADMIN; o login do dono decide."""
+    gh_admin(tmp_path, sessao="403", chaveiro="semlogin", login="pedrorezendefig")
+    falso(tmp_path, "security", "exit 0")
+    saida = admin(tmp_path, com_token=True)
+    assert linha(saida, "Acesso às Chaves").startswith("FALTA"), saida
+
+
 def test_outro_token_sem_admin_ou_vazio_passa(tmp_path):
     gh_admin(tmp_path, sessao="403", chaveiro="semlogin", classico="401")
     saida = admin(
@@ -426,6 +461,13 @@ def test_outro_token_sem_admin_ou_vazio_passa(tmp_path):
         "OK"
     )
     assert "GH_TOKEN_VAZIO" not in saida
+
+
+def test_regra_acusada_nao_imprime_segredo_dentro_dela(tmp_path):
+    regra = "Bash(curl -H 'Authorization: token ghp_" + "A" * 36 + "' *)"
+    saida = confere(tmp_path, settings(tmp_path, allow=[regra]))
+    li = linha(saida, "allow aberto")
+    assert li.startswith("FALTA") and "<omitido>" in li and "A" * 36 not in li, li
 
 
 def test_allow_que_o_jq_nao_le_acusa_em_vez_de_dar_ok(tmp_path):
@@ -550,6 +592,22 @@ def test_o_script_confere_o_token_do_gh_no_nivel_2(tmp_path):
         'case "$*" in\n'
         '  "auth status") exit 0 ;;\n'
         '  "repo view"*) echo ADMIN ;;\n'
+        '  *"repos/pedrorezendefig/hospital-reunioes/keys"*) echo "[]" ;;\n'
+        "  *) exit 1 ;;\n"
+        "esac"
+    )
+    falso(tmp_path, "gh", corpo)
+    falso(tmp_path / "casa" / ".local", "gh", corpo)
+    saida = roda_script(tmp_path, "2")
+    assert linha(saida, SESSAO).split()[0] == "FALTA", saida
+
+
+def test_gh_sem_autenticar_ainda_confere_o_chaveiro(tmp_path):
+    """GH_TOKEN vencido derruba o `gh auth status`, mas o login guardado segue alcançável."""
+    (tmp_path / "casa" / ".local").mkdir(parents=True)
+    corpo = (
+        'case "$*" in\n'
+        '  "auth status") exit 1 ;;\n'
         '  *"repos/pedrorezendefig/hospital-reunioes/keys"*) echo "[]" ;;\n'
         "  *) exit 1 ;;\n"
         "esac"

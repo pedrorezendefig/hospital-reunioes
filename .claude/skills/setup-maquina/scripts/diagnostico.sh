@@ -83,7 +83,7 @@ checa_permissoes_claude() { # settings.json do usuário (também varrido), setti
   local cfg="$1" regra rotulo termo secao porque abertas achadas f onde
   # Allow de Bash com curinga que pode ficar: leitura, mais repetir job do CI (não publica texto nem
   # roda código do repositório na máquina).
-  local leitura='["git status","git diff","git log","git show","git fetch","git worktree list","git rev-parse",
+  local leitura='["git status","git diff","git log","git show","git worktree list","git rev-parse",
     "gh issue view","gh issue list","gh pr view","gh pr list","gh pr diff","gh pr checks","gh run view","gh run list",
     "gh run rerun",
     "jq","ls","cat","grep","head","tail","wc","date","pwd","which"]'
@@ -139,7 +139,7 @@ AUTO
       | select(. == "Bash" or (startswith("Bash(") and contains("*")
           and ((ltrimstr("Bash(") | split("*")[0]) as $c | ($c | rtrimstr(" ") | rtrimstr(":")) as $p
             | $leitura | any(.[]; . as $l | ($p == $l and $c != $p) or ($p | startswith($l + " "))) | not)))
-      | "\($onde)|\(.)"' "$f" 2>/dev/null)" || achadas="$onde|(não consegui ler o permissions.allow)"
+      | "\($onde)|\(gsub("[A-Za-z0-9_-]{20,}"; "<omitido>"))"' "$f" 2>/dev/null)" || achadas="$onde|(não consegui ler o permissions.allow)"
     abertas="$abertas$achadas"$'\n'
   done
   abertas="$(printf '%s' "$abertas" | sed '/^$/d')"
@@ -154,6 +154,9 @@ AUTO
 # A trava do ruleset é do servidor (ADR 0063): nenhuma credencial do GitHub que o agente alcança pode
 # ter Administration. Pergunta ao GitHub pelas deploy keys, que só respondem com Administration,
 # e só olha o código de saída e o HTTP do erro: nunca lê nem imprime o token.
+eh_admin() { # quem roda é admin: o papel no repo ou, com o token fine-grained, o login do dono
+  [ "${perm:-}" = ADMIN ] || [ "$(gh api user --jq .login 2>/dev/null)" = pedrorezendefig ]
+}
 admin_responde() { # rotulo conserto comando... -> FALTA se o comando lê as deploy keys
   local rotulo="$1" conserto="$2" erro
   shift 2
@@ -175,7 +178,7 @@ checa_gh_sem_admin() {
     "o login guardado no gh administra o repositório: rode env -u GH_TOKEN gh auth logout -h github.com (ruleset se muda pela tela do GitHub)" \
     env -u GH_TOKEN -u GITHUB_TOKEN gh
   # Credencial do GitHub guardada fora do gh, que o agente lê sem passar pelo GH_TOKEN. Só presença.
-  if [ "${perm:-}" = ADMIN ]; then
+  if eh_admin; then
     if command -v security >/dev/null 2>&1 && security find-internet-password -s github.com >/dev/null 2>&1; then
       falta "Acesso às Chaves sem senha do GitHub" "apague a entrada github.com no app Acesso às Chaves e rode gh auth setup-git (seção 5.1)"
     fi
@@ -184,7 +187,10 @@ checa_gh_sem_admin() {
     fi
   fi
   # Outro token do GitHub exportado (o PAT clássico do tokens/.env, por exemplo) contorna o GH_TOKEN.
-  for nome in $(env | cut -d= -f1 | grep -E '^(GH|GITHUB)[A-Z_]*TOKEN[A-Z_]*$' | grep -vxE 'GH_TOKEN|GITHUB_TOKEN'); do
+  # O GITHUB_TOKEN só é a sessão quando não há GH_TOKEN (o gh lê o GH_TOKEN antes).
+  local ja=GH_TOKEN
+  [ -n "${GH_TOKEN:-}" ] || ja="GH_TOKEN|GITHUB_TOKEN"
+  for nome in $(env | cut -d= -f1 | grep -E '^[A-Z0-9_]+$' | grep -E 'GITHUB|(^|_)GH(_|$)' | grep -E 'TOKEN|PAT' | grep -vxE "$ja"); do
     [ -n "${!nome}" ] || continue
     admin_responde "$nome sem Administration" \
       "$nome está no ambiente e administra o repositório: tire do tokens/.env e revogue no GitHub (docs/onboarding/claude-setup.md seção 5.1)" \
@@ -282,7 +288,7 @@ PRINCIPAL="$(cd "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/
 CFGS=("$HOME/.claude/settings.json" "$REPO_ROOT/.claude/settings.json" "$REPO_ROOT/.claude/settings.local.json")
 [ -n "$PRINCIPAL" ] && [ "$PRINCIPAL" != "$REPO_ROOT" ] && CFGS+=("$PRINCIPAL/.claude/settings.json" "$PRINCIPAL/.claude/settings.local.json")
 checa_permissoes_claude "${CFGS[@]}"   # o primeiro é o do usuário
-[ "$GH_OK" -eq 1 ] && checa_gh_sem_admin
+command -v gh >/dev/null 2>&1 && checa_gh_sem_admin   # mesmo com o GH_TOKEN vencido
 bin_ok coolify "ver docs/onboarding/claude-setup.md seção 4.1"
 # A CLI responde e tem o contexto do hospital (hsm). Lê a lista e o verify sem nunca
 # imprimir o que eles devolvem: a saída do CLI pode trazer o token.
@@ -335,7 +341,7 @@ if [ -f "$TOK" ]; then
   chave_preenchida "$TOK" ANA_API_KEY && ok "tokens/.env: ANA_API_KEY" "preenchida" || aviso "tokens/.env: ANA_API_KEY" "só para smoke test contra prod; ver references/chaves.md"
   # PAT clássico com escopo repo: na conta de quem é admin ele administra o repositório (ADR 0063).
   if chave_preenchida "$TOK" GITHUB_PERSONAL_ACCESS_TOKEN; then
-    if [ "${perm:-}" = ADMIN ]; then falta "tokens/.env sem PAT clássico" "apague GITHUB_PERSONAL_ACCESS_TOKEN e revogue o PAT no GitHub: na sua conta ele administra o repositório; o gh usa o GH_TOKEN (seção 5.1)"
+    if eh_admin; then falta "tokens/.env sem PAT clássico" "apague GITHUB_PERSONAL_ACCESS_TOKEN e revogue o PAT no GitHub: na sua conta ele administra o repositório; o gh usa o GH_TOKEN (seção 5.1)"
     else aviso "tokens/.env sem PAT clássico" "GITHUB_PERSONAL_ACCESS_TOKEN não é usado pelo fluxo; pode apagar (seção 5.1)"; fi
   fi
 else
