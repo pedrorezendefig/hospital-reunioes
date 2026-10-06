@@ -114,7 +114,7 @@ Não use `AskUserQuestion` nem encerre o turno esperando resposta: numa sessão 
 
 ### 7. Resultado do rabo, comentário na onda e fim da sessão
 
-Relatório de até 15 linhas: linha final do `fechar_onda.py`, tabela de issues (fechada · PR · versão), baixas, veredito do auditor se houve, as 10 linhas da medição, a hora dos PRs verdes desta onda e, se a sessão nasceu de uma passagem, o intervalo entre os PRs verdes da onda anterior (a primeira linha da passagem) e o primeiro implementador desta (passo 3), em minutos e segundos. A meta é menos de 2 min.
+Relatório de até 15 linhas: linha final do `fechar_onda.py`, tabela de issues (fechada · PR · versão), baixas, veredito do auditor se houve, as 10 linhas da medição, a hora dos PRs verdes desta onda e, se a sessão nasceu de uma passagem, o intervalo entre os PRs verdes da onda anterior (linha `Sessão ... com os PRs verdes em` da passagem) e o primeiro implementador desta (passo 3), em minutos e segundos. A meta é menos de 2 min.
 
 1. Com passagem lançada no passo 5, ela registra o resultado: acrescente ao arquivo dela (`%TEMP%\onda-enxuta\<nome>-onda<N+1>.md`) a linha `Rabo da onda <N>: <linha final do fechar_onda.py>`. A sessão seguinte a lê quando escreve a própria passagem.
 2. Comente o relatório na onda: em cada PRD das issues desta onda (issue sem PRD: no PR dela), com `<!-- automacao -->` na primeira linha e `## Onda <nome> <N>` na segunda.
