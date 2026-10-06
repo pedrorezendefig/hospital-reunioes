@@ -157,6 +157,7 @@ class Cenario:
         # PRs que o GitHub conhece: o do autor e os que o script abrir pela API
         self.prs: dict[int, dict] = {numero: self.pr}
         self.ci_vermelho: set[str] = set()  # heads em que o CI falha
+        self.sem_checks = False  # o CI nunca rodou: nenhum check no PR
         # quantas rodadas do CI do bump o GitHub cancela por falta de runner (#953)
         self.sem_runner = 0
         self.anotacao_do_cancelamento = SEM_RUNNER
@@ -242,6 +243,8 @@ class Cenario:
             pr["statusCheckRollup"] = [{"name": "Backend Lint, Format & Tests", "status": "COMPLETED",
                                         "conclusion": "CANCELLED", "workflowName": "CI",
                                         "detailsUrl": "https://github.com/dono/repo/actions/runs/555/job/9"}]
+        if self.sem_checks:
+            pr["statusCheckRollup"] = []
         pr["mergeStateStatus"] = "CLEAN" if self._em_dia(head) else "BEHIND"
         return {k: v for k, v in pr.items() if k in campos}
 
@@ -942,6 +945,63 @@ def test_docstring_explica_as_duas_classes_sem_docs_only_e_sem_travessao():
     assert "misto" in doc
     fonte = (SCRIPTS / "fechar_onda.py").read_text(encoding="utf-8")
     assert TRAVESSAO not in fonte and MEIA_RISCA not in fonte
+
+
+@pytest.mark.parametrize("de", [pr_de_codigo, pr_de_ferramenta], ids=["app", "ferramenta"])
+def test_pr_sem_nenhum_check_para_nas_pre_condicoes_seja_app_ou_ferramenta(
+    tmp_path, monkeypatch, capsys, de
+):
+    """O ruleset exige os checks do CI e o `esperar_checks` so aceita lista nao
+    vazia: PR de ferramenta sem check esperaria os 40 min e falharia. Parar
+    antes, sem classificar pelo `files` do gh, que nao ve o caminho antigo de um
+    rename."""
+    fo = carregar_fechar_onda()
+    c = de(tmp_path)
+    c.sem_checks = True
+    monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
+    monkeypatch.setattr(fo, "CHECKS_TIMEOUT_S", 0)
+
+    saida = parar_nas_pre_condicoes(fo, monkeypatch, c, capsys)
+
+    assert "#7 sem nenhum check" in saida, saida
+    assert c.merges == []
+
+
+def falhar_no_cancelamento(fo, monkeypatch, c: Cenario) -> None:
+    def cancelar(servicos_cfg, sha):
+        raise subprocess.TimeoutExpired(["coolify", "deploy", "cancel"], 30)
+
+    monkeypatch.setattr(fo, "cancelar_build_do_registro", cancelar)
+
+
+def falhar_no_gh_depois_do_merge(fo, monkeypatch, c: Cenario) -> None:
+    ver = c.ver_pr
+
+    def ver_que_cai_no_estado(n, campos):
+        if campos == ["state"]:
+            raise RuntimeError("gh pr view -> 502 Bad Gateway")
+        return ver(n, campos)
+
+    c.ver_pr = ver_que_cai_no_estado
+
+
+@pytest.mark.parametrize("falha", [falhar_no_cancelamento, falhar_no_gh_depois_do_merge],
+                         ids=["coolify-timeout", "gh-pr-view"])
+def test_ferramenta_que_falha_depois_do_merge_solta_o_semaforo_e_diz_producao_intacta(
+    tmp_path, monkeypatch, capsys, falha
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_ferramenta(tmp_path)
+    preparar(fo, monkeypatch, c)
+    falha(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_REGISTRO
+
+    assert [m["pr"] for m in c.merges] == [7] and c.main_remota() == c.merges[0]["main"]
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+    saida = capsys.readouterr().out
+    assert "merge feito, producao intacta" in saida, saida
+    assert "rollback" not in saida and "Semaforo preso" not in saida, saida
 
 
 # ------------------------------------------- sha256 da migration no corpo do PR

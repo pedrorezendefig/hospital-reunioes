@@ -66,7 +66,8 @@ Codigos de saida:
   3  build falhou no Coolify: SEMAFORO FICA PRESO, rode `/deploy rollback` com a chave impressa
   4  health falhou (ou versao nao bate): SEMAFORO FICA PRESO, mesma instrucao do 3
   5  producao ok, mas o PR de registro nao entrou: semaforo solto; mergeie o PR impresso
-     quando o CI dele ficar verde
+     quando o CI dele ficar verde. Ferramenta: merge feito, producao intacta,
+     semaforo solto, mas a arrumacao depois do merge falhou (a linha diz o que falta)
 
 `--dry-run`: executa 1 e 3 e calcula o 4 sem escrever; imprime o plano (PR,
 issue, classe e tipo de bump: "app: bump ..." ou "ferramenta: só merge") e o
@@ -220,8 +221,10 @@ def checar_pre_condicoes(raiz: Path, prs: list[int], dry: bool) -> list[dict]:
         if ruins:
             nomes = ", ".join((c.get("name") or c.get("context") or "?") for c in ruins[:4])
             problemas.append(f"#{n} com check nao verde: {nomes}")
-        elif not checks and classe_do_lote(f["path"] for f in info.get("files") or []) == "app":
-            problemas.append(f"#{n} sem nenhum check e toca o app")
+        elif not checks:
+            # o CI nao rodou: o ruleset exige os checks e o esperar_checks nao
+            # aceita lista vazia, entao vale para app e ferramenta (issue #965)
+            problemas.append(f"#{n} sem nenhum check (o CI nao rodou)")
         infos.append(info)
     if problemas:
         falhar("pre-condicao: " + "; ".join(problemas) + ".", EXIT_PRECOND)
@@ -973,10 +976,17 @@ def main() -> int:
         wt = None
 
         if ferramenta:
-            # producao nao muda: sem build, health nem registro (issue #965)
-            cancelados = cancelar_build_do_registro(servicos_cfg, sha_main)
-            conferir_prs_fechados(raiz, infos, args.sessao, avulso, pr_entrega)
-            n_wt = limpar_worktrees_de_agente(raiz, {i["headRefName"]: i.get("headRefOid") for i in infos})
+            # producao nao muda: sem build, health nem registro (issue #965). Falha
+            # daqui em diante e codigo 5, nunca o 3: nada a reverter no Coolify
+            try:
+                cancelados = cancelar_build_do_registro(servicos_cfg, sha_main)
+                conferir_prs_fechados(raiz, infos, args.sessao, avulso, pr_entrega)
+                n_wt = limpar_worktrees_de_agente(raiz, {i["headRefName"]: i.get("headRefOid") for i in infos})
+            except Exception as e:  # noqa: BLE001
+                semaforo(raiz, "soltar", args.sessao)
+                print(f"pos-merge: {e}; merge feito, producao intacta e semaforo solto; confira no Coolify "
+                      f"se o webhook rodou build do {sha_main[:8]} e feche a mao os PRs {prs_txt} que ficaram abertos.")
+                return EXIT_REGISTRO
             semaforo(raiz, "soltar", args.sessao)
             semaforo_pego = False
             fechou = f"PR {prs_txt} fechado" if avulso else f"onda {args.sessao} fechada"
