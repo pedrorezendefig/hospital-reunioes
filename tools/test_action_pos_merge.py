@@ -332,7 +332,7 @@ HISTORY_ANTES = {"schema_version": "1.0", "deploys": [DEPLOY_ANTERIOR, {**DEPLOY
 
 
 def json_do_rabo(dado) -> str:
-    """Como o `escrever_json` do `fechar_onda.py` grava os dois arquivos."""
+    """Como o `tools/aplicar_registro.py` grava os dois arquivos (o formato de sempre do rabo)."""
     return json.dumps(dado, ensure_ascii=False, indent=2) + "\n"
 
 
