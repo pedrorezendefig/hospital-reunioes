@@ -83,14 +83,21 @@ def test_ruleset_exige_os_tres_jobs_do_ci_pelo_nome_vindos_do_github_actions():
     assert {c.get("integration_id") for c in checks} == {GITHUB_ACTIONS_APP}
 
 
-def test_ruleset_pr_obrigatorio_zero_aprovacoes_em_dia_com_a_base_sem_force_push_nem_delete():
+def test_ruleset_pr_obrigatorio_zero_aprovacoes_sem_force_push_nem_delete():
     r = ruleset()
     assert r["target"] == "branch" and r["enforcement"] == "active"
     assert r["conditions"]["ref_name"]["include"] == ["refs/heads/main"]
     assert regra("pull_request")["parameters"]["required_approving_review_count"] == 0
-    assert regra("required_status_checks")["parameters"]["strict_required_status_checks_policy"] is True
     regra("non_fast_forward")
     regra("deletion")
+
+
+def test_ruleset_exige_o_ci_verde_no_head_sem_exigir_a_branch_em_dia_com_a_base():
+    """ADR 0064, decisão 2: o CI verde no head do PR basta. Exigir a branch em
+    dia com a base repetia 5 a 9 min de CI a cada PR que a main deixou para
+    trás; o CI do push na main é o detector tardio de dois PRs que passam
+    separados e quebram juntos."""
+    assert regra("required_status_checks")["parameters"]["strict_required_status_checks_policy"] is False
 
 
 def test_bypass_so_da_deploy_key_nenhuma_pessoa_nem_equipe():

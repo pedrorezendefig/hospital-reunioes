@@ -27,7 +27,7 @@
     {
       "type": "required_status_checks",
       "parameters": {
-        "strict_required_status_checks_policy": true,
+        "strict_required_status_checks_policy": false,
         "required_status_checks": [
           { "context": "Backend Lint, Format & Tests", "integration_id": 15368 },
           { "context": "Frontend Lint & Type Check", "integration_id": 15368 },

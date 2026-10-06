@@ -9,7 +9,8 @@ rodam o `main()` do script contra ele.
 A `main` do remoto está sob o ruleset (issue #910): um hook `pre-receive` recusa
 todo push nela, como o GitHub recusa com `GH013`. Ela só anda pelo dublê do
 GitHub, que faz o squash pela API do jeito que o repositório permite: exige o
-`sha` do head, a branch em dia com a base e o CI verde, e apaga a branch depois.
+`sha` do head, o CI verde e o merge sem conflito com a main, sem exigir a branch
+em dia com a base (ADR 0064, decisão 2), e apaga a branch depois.
 Fica de fora só o que sai da máquina: o `coolify` é um executável falso no PATH
 que anota cada chamada, e o build e o health devolvem verde sem rede.
 """
@@ -183,6 +184,9 @@ class Cenario:
         # PRs que o GitHub conhece: o do autor e os que o script abrir pela API
         self.prs: dict[int, dict] = {numero: self.pr}
         self.ci_vermelho: set[str] = set()  # heads em que o CI falha
+        # o ruleset de antes da ADR 0064 (decisão 2) ainda aplicado no GitHub:
+        # o merge de branch atrás da base é recusado
+        self.ruleset_antigo = False
         self.sem_checks = False  # o CI nunca rodou: nenhum check no PR
         self.bloqueadoras: dict[int, list[dict]] = {}  # issue -> o `blocked_by` dela (issue #999)
         # quantas rodadas do CI do head que o rabo empurra o GitHub cancela por
@@ -386,9 +390,16 @@ class Cenario:
                               cwd=self.remoto, capture_output=True, text=True)
         return proc.stdout.strip() or None
 
-    def _em_dia(self, head: str) -> bool:
+    def _atras(self, head: str) -> bool:
         return subprocess.run(["git", "merge-base", "--is-ancestor", "main", head],
-                              cwd=self.remoto).returncode == 0
+                              cwd=self.remoto).returncode != 0
+
+    def _arvore_do_squash(self, head: str) -> str | None:
+        """A árvore do squash de `head` sobre a main como o GitHub monta, um
+        merge de três vias; None se conflita."""
+        proc = subprocess.run(["git", "merge-tree", "--write-tree", "main", head],
+                              cwd=self.remoto, capture_output=True, text=True, check=False)
+        return proc.stdout.split()[0] if proc.returncode == 0 else None
 
     def ver_pr(self, n: int, campos: list[str]) -> dict:
         pr = dict(self.prs[n])
@@ -402,7 +413,10 @@ class Cenario:
                                         "detailsUrl": "https://github.com/dono/repo/actions/runs/555/job/9"}]
         if self.sem_checks:
             pr["statusCheckRollup"] = []
-        pr["mergeStateStatus"] = "CLEAN" if self._em_dia(head) else "BEHIND"
+        # sem a exigência de em dia com a base o GitHub ainda pode dizer BEHIND,
+        # e o merge passa assim mesmo
+        pr["mergeStateStatus"] = ("DIRTY" if self._arvore_do_squash(head) is None
+                                  else "BEHIND" if self._atras(head) else "CLEAN")
         return {k: v for k, v in pr.items() if k in campos}
 
     def abrir_pr(self, campos: dict) -> dict:
@@ -431,20 +445,23 @@ class Cenario:
 
     def mergear_pela_api(self, n: int, campos: dict) -> dict:
         """PUT /pulls/N/merge como o GitHub com o ruleset: squash (o único método
-        que o repositório permite), recusa head que mudou, branch atrás da base e
-        CI vermelho, e apaga a branch do PR depois do merge."""
+        que o repositório permite), recusa head que mudou, CI vermelho e conflito
+        com a main, e apaga a branch do PR depois do merge. Branch atrás da base
+        entra (ADR 0064, decisão 2), salvo com o ruleset antigo ainda aplicado."""
         pr = self.prs[n]
         head = self._tip(pr["headRefName"])
         if campos.get("merge_method") != "squash":
             raise RuntimeError("gh api -> 405: Merge commits are not allowed on this repository.")
         if campos.get("sha") != head:
             raise RuntimeError("gh api -> 409: Head branch was modified. Review and try the merge again.")
-        if not self._em_dia(head):
+        if self.ruleset_antigo and self._atras(head):
             raise RuntimeError("gh api -> 405: Head branch is not up to date with the base branch.")
         if head in self.ci_vermelho:
             raise RuntimeError("gh api -> 405: Required status check is failing.")
+        arvore = self._arvore_do_squash(head)
+        if arvore is None:
+            raise RuntimeError("gh api -> 405: Pull Request is not mergeable")
         antes = self.main_remota()
-        arvore = git(self.remoto, "rev-parse", f"{head}^{{tree}}")
         novo = git(self.remoto, "commit-tree", arvore, "-p", antes, "-m", campos["commit_title"])
         git(self.remoto, "update-ref", "refs/heads/main", novo, antes)
         git(self.remoto, "update-ref", "-d", f"refs/heads/{pr['headRefName']}")
@@ -726,8 +743,7 @@ def test_sem_snapshot_saiu_da_cli_e_da_docstring(tmp_path, monkeypatch, capsys):
 
 
 def pr_atras_da_main(tmp_path: Path) -> Cenario:
-    """A main andou depois do CI do PR: o rabo traz a main por merge e empurra
-    um head novo na branch do PR, que roda o CI de novo."""
+    """A main andou depois do CI do PR, por outro PR em outro arquivo."""
     c = pr_de_codigo(tmp_path)
     repo = tmp_path / "repo"
     git(repo, "checkout", "-q", "main")
@@ -738,9 +754,12 @@ def pr_atras_da_main(tmp_path: Path) -> Cenario:
     return c
 
 
-def test_pr_atras_da_main_recebe_a_main_antes_do_merge(tmp_path, monkeypatch):
-    """O ruleset exige a branch em dia com a base: a main andou depois do CI do
-    PR, e o script traz a main para a branch antes do merge."""
+def test_pr_atras_da_main_entra_no_head_verde_sem_trazer_a_main_nem_ci_novo(
+    tmp_path, monkeypatch, capsys
+):
+    """ADR 0064, decisão 2: o ruleset não exige a branch em dia com a base. O
+    head com que o PR chegou, o do CI verde, é o que entra: nada de merge da
+    main na branch, push ou CI de novo. O squash da API junta a main que andou."""
     fo = carregar_fechar_onda()
     c = pr_atras_da_main(tmp_path)
     main_antes = c.main_remota()
@@ -748,37 +767,18 @@ def test_pr_atras_da_main_recebe_a_main_antes_do_merge(tmp_path, monkeypatch):
 
     assert rodar_main(fo, monkeypatch, c) == 0
 
-    codigo = c.merges[0]["main"]
+    entrega = c.merges[0]
+    assert entrega["pr"] == 7 and entrega["head"] == c.head_do_pr
+    codigo = entrega["main"]
     assert git(c.remoto, "rev-parse", f"{codigo}^") == main_antes
     assert git(c.remoto, "show", f"{codigo}:hospital-reunioes/backend/app/outro.py") == "OUTRO = 1"
     assert git(c.remoto, "show", f"{codigo}:hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
+    [merge] = linhas_com(capsys.readouterr().out, "merge: PR #7")
+    assert "main trazida" not in merge, merge
 
 
-def test_ci_vermelho_depois_de_trazer_a_main_para_sem_merge_e_sem_app_version(
-    tmp_path, monkeypatch, capsys
-):
-    fo = carregar_fechar_onda()
-    c = pr_atras_da_main(tmp_path)
-    main_antes = c.main_remota()
-    preparar(fo, monkeypatch, c)
-    ver = c.ver_pr
-
-    def ver_com_ci_vermelho_no_head_novo(n, campos):
-        info = ver(n, campos)
-        if info.get("headRefOid") and info["headRefOid"] != c.head_do_pr:
-            c.ci_vermelho.add(info["headRefOid"])
-            info = ver(n, campos)
-        return info
-
-    c.ver_pr = ver_com_ci_vermelho_no_head_novo
-
-    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
-
-    assert c.merges == [] and c.main_remota() == main_antes
-    assert c.coolify() == [] and c.tags == []
-    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
-    assert "#7" in capsys.readouterr().out
-
+# O PR do lote entra no head que já estava verde (ADR 0064, decisão 2): o único
+# head que o rabo empurra e cujo CI ele espera é o do PR de registro.
 
 def test_ci_cancelado_sem_runner_e_repetido_e_o_pr_entra_quando_fica_verde(
     tmp_path, monkeypatch
@@ -795,7 +795,7 @@ def test_ci_cancelado_sem_runner_e_repetido_e_o_pr_entra_quando_fica_verde(
     assert len(c.merges) == 2  # o código e o registro
 
 
-def test_sem_runner_esgotado_para_sem_merge_e_aponta_o_incidente_nao_o_codigo(
+def test_sem_runner_esgotado_no_registro_sai_com_5_e_aponta_o_incidente_nao_o_codigo(
     tmp_path, monkeypatch, capsys
 ):
     fo = carregar_fechar_onda()
@@ -804,10 +804,10 @@ def test_sem_runner_esgotado_para_sem_merge_e_aponta_o_incidente_nao_o_codigo(
     monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
     c.sem_runner = 99
 
-    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_REGISTRO
 
     assert c.gh_chamadas.count(["run", "rerun", "555", "--failed"]) == 3
-    assert c.merges == [] and c.coolify() == []
+    assert [m["pr"] for m in c.merges] == [7]
     saida = capsys.readouterr().out
     assert "githubstatus.com" in saida and "CI vermelho" not in saida
 
@@ -822,7 +822,7 @@ def test_cancelamento_que_nao_e_falta_de_runner_continua_ci_vermelho_sem_rerun(
     c.sem_runner = 99
     c.anotacao_do_cancelamento = "The operation was canceled."
 
-    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_REGISTRO
 
     assert ["run", "rerun", "555", "--failed"] not in c.gh_chamadas
     assert "CI vermelho" in capsys.readouterr().out
@@ -852,37 +852,31 @@ def test_registro_que_nao_entra_sai_com_5_semaforo_solto_e_producao_intacta(
     assert "#101" in capsys.readouterr().out
 
 
-def test_rodada_seguinte_a_um_ci_vermelho_sai_na_mesma_versao_sem_pular(
-    tmp_path, monkeypatch
+def test_ruleset_antigo_deixa_o_pr_atras_de_fora_e_a_rodada_seguinte_sai_na_mesma_versao(
+    tmp_path, monkeypatch, capsys
 ):
-    """Sem commit de versão, nada fica na branch para a rodada seguinte contar
-    de novo: ela parte do mesmo state.json e a primeira não criou tag."""
+    """Até o admin aplicar o ruleset novo (ADR 0064, decisão 2), o GitHub recusa
+    a branch atrás da base: o PR fica de fora com a causa, na hora, sem a main
+    empurrada na branch. Sem commit de versão, nada fica na branch para a
+    rodada seguinte contar de novo: ela parte do mesmo state.json e a primeira
+    não criou tag."""
     fo = carregar_fechar_onda()
     c = pr_atras_da_main(tmp_path)
     preparar(fo, monkeypatch, c)
-    ver = c.ver_pr
-    vermelho = {"ligado": True}
+    monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
+    monkeypatch.setattr(fo, "CHECKS_TIMEOUT_S", 1)
+    c.ruleset_antigo = True
 
-    def ver_com_ci_vermelho_na_primeira(n, campos):
-        info = ver(n, campos)
-        if vermelho["ligado"] and info.get("headRefOid") and info["headRefOid"] != c.head_do_pr:
-            c.ci_vermelho.add(info["headRefOid"])
-            info = ver(n, campos)
-        return info
-
-    c.ver_pr = ver_com_ci_vermelho_na_primeira
     assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
-    head_com_a_main = git(c.remoto, "rev-parse", "feature")
-    # o CI ficou verde depois (flaky corrigido); o PR segue com a main trazida
-    vermelho["ligado"] = False
-    c.ci_vermelho.clear()
-    # o GitHub move o `refs/pull/7/head` e o `headRefOid` com a branch do PR
-    git(c.remoto, "update-ref", "refs/pull/7/head", head_com_a_main)
-    c.pr["headRefOid"] = head_com_a_main
+
+    assert c.merges == [] and c.tags == [] and c._tip("feature") == c.head_do_pr
+    [fora] = linhas_com(capsys.readouterr().out, "de fora:")
+    assert "PR #7" in fora and "not up to date with the base branch" in fora, fora
+    c.ruleset_antigo = False  # o admin aplicou o .github/rulesets/main.json
 
     assert rodar_main(fo, monkeypatch, c) == 0
 
-    assert c.merges[0]["head"] == head_com_a_main
+    assert c.merges[0]["head"] == c.head_do_pr
     assert c.tags == [("refs/tags/v0.10.1", c.merges[0]["main"])]
     app_version = [li for li in c.coolify() if " APP_VERSION " in li]
     assert app_version and all("--value 0.10.1 " in li for li in app_version), c.coolify()
@@ -2083,21 +2077,21 @@ def test_backend_em_modo_imagem_sobe_a_imagem_do_head_retagueada_para_o_squash_s
 def test_onda_em_modo_imagem_so_retagueia_head_com_a_mesma_pasta_do_backend_do_squash(
     tmp_path, monkeypatch
 ):
-    """O #7 entrou primeiro: a imagem do head dele não tem o arquivo do #8. Só o
-    head com que o #8 entrou (a main trazida por merge) tem o backend do squash
-    final, e é a única origem que o workflow pode retaguear."""
+    """O #8, só de docs, entra depois do #7 no head com que chegou, sem a main
+    (ADR 0064, decisão 2): a imagem do head dele não tem o backend do #7. Só o
+    head do #7 tem o backend do squash final, e é a única origem que o workflow
+    pode retaguear."""
     fo = carregar_fechar_onda()
     c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
-    c.outro_pr(8, "fix(ouvidoria): limite de anexos por caso", 6,
-               {"hospital-reunioes/backend/app/limite.py": "LIMITE = 3\n"})
+    c.outro_pr(8, "docs(ouvidoria): prazo explicado", 6, {"docs/ouvidoria/prazo.md": "Quinze dias.\n"})
     preparar(fo, monkeypatch, c)
 
     assert rodar_onda(fo, monkeypatch, c, [7, 8]) == 0
 
     primeiro, segundo, _ = c.merges
     assert [(p["sha"], p["origens"]) for p in c.publicacoes] == [
-        (segundo["main"], f"{segundo['head']}@{digest_de(segundo['head'])}")]
-    assert primeiro["head"] not in c.publicacoes[0]["origens"]
+        (segundo["main"], f"{primeiro['head']}@{digest_de(primeiro['head'])}")]
+    assert segundo["head"] not in c.publicacoes[0]["origens"]
     assert c.coolify_sem_leituras()[-2:] == [
         f"app update uuid-backend --docker-tag {segundo['main']} | main={segundo['main']}",
         f"deploy uuid uuid-backend | main={segundo['main']}",
