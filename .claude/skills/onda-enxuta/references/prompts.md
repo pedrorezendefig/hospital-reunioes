@@ -44,7 +44,7 @@ PR #<PR>, issue #<N>. Motivo: <arquivos sensíveis tocados, um por linha | pedid
 PR #<PR>, issue #<N>. Motivo: <revisao|ci|conflito|retomar>.
 <revisao: cole o comentário do veredito inteiro. Se o "vai" do humano pré-autorizou should-fix: "Pré-autorizado pelo humano: corrija também <itens>.">
 <ci: cole as últimas 60 linhas de `gh run view <id> --log-failed`.>
-<conflito: "A main andou; rebase e resolva. Arquivos em conflito: <lista>.">
+<conflito: "A main andou; rebase pela skill resolver-conflitos. Arquivos em conflito: <lista da linha do rabo>. Tentativa <k> de 3.">
 <retomar: "Branch <branch> tem commits wip. Termine a fatia e abra o PR.">
 ```
 

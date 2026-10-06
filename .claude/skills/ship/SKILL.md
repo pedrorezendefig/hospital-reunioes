@@ -1,6 +1,6 @@
 ---
 name: ship
-description: Leva uma mudança até o PR verde (branch, commit, PR, 3 gates) e imprime o comando do rabo, o fechar_onda.py. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--skip-review]`.
+description: Leva uma mudança até o PR verde (branch, commit, PR, 3 gates) e roda o rabo, o fechar_onda.py, sem parar. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--skip-review]`.
 ---
 
 # ship — orquestrar mudança end-to-end
@@ -34,7 +34,7 @@ Não há mais opção de merge, deploy ou bump: o `/ship` nunca faz nenhum dos t
 **Esta skill é metodologia pura.** Lê config de `docs/spec/deploy/project.json` (compartilhada com `/deploy`). Não tem conhecimento hardcoded sobre projetos específicos.
 
 Relação com outras skills:
-- **`fechar_onda.py`** (`.claude/skills/onda-enxuta/scripts/`): o rabo único de merge, bump, `APP_VERSION`, push, build, health e registro, para um PR avulso ou para o lote de uma onda. O `/ship` não o roda: imprime o comando no Passo 10 para o autor rodar.
+- **`fechar_onda.py`** (`.claude/skills/onda-enxuta/scripts/`): o rabo único de merge, bump, `APP_VERSION`, push, build, health e registro, para um PR avulso ou para o lote de uma onda. O `/ship` o roda no Passo 10, com os gates verdes.
 - **`/deploy`**: não é chamado. Fica para `status`, `rollback` e `setup`.
 - **`/code-review`**: chamada no Passo 8 como gate.
 - **`/security-review`**: chamada no Passo 8 como gate.
@@ -54,7 +54,7 @@ Relação com outras skills:
    - `gh auth status` autenticado.
    - `docs/spec/deploy/project.json` existe (use `/deploy migrate-blueprint` se está vindo de blueprint legado).
    - `git config user.name` e `user.email` setados (autor do commit/PR).
-   - Branch atual é `main` OU explicitamente especificada via `--from <branch>`. Se outra branch, pedir confirmação.
+   - Branch atual é `main` (o Passo 2 cria a branch) ou a branch de trabalho já criada, como a `<type>/<slug>-<N>` do `/pegar-issue` (o Passo 2 é pulado). Siga sem perguntar.
 
 3. **Parsear args**:
    - Descrição obrigatória (primeiro argumento posicional, entre aspas).
@@ -83,7 +83,7 @@ git status --short
 ```
 
 Validar:
-- Working tree limpa OU só com mudanças relacionadas ao trabalho (perguntar se incluir).
+- Working tree limpa OU só com mudanças relacionadas ao trabalho (entram no commit; arquivo alheio fica de fora, sem perguntar).
 - `main` atualizada com origin/main (sugerir `git pull --rebase origin main` se diff).
 
 Se algum check falhar → ❌ reportar e PARAR.
@@ -98,6 +98,8 @@ BRANCH="$TYPE/$SLUG"
 
 git checkout -b "$BRANCH"
 ```
+
+Já na branch de trabalho (vinda do `/pegar-issue`): pule este passo.
 
 Convenções:
 - `fix/<slug>[-<issue>]`
@@ -372,6 +374,8 @@ python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER"
 
 Um PR só e sem `--sessao` é o modo PR avulso (chave do semáforo `pr-<N>`). O script faz, nesta ordem: pré-condições (PR verde e mergeável, número e `sha256` das migrations), espera da migration nova no `/api/health` (Passo 8.6), semáforo, versão nova pelo tipo dos commits, sem commit (issue #967), a `origin/main` trazida por merge se a branch ficou atrás (e o CI verde nesse head novo), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida, ADR 0061), tag `vX.Y.Z` no squash, um build, health com conferência de versão, registro (`state.json` e `history.json`) num PR só de docs mergeado do mesmo jeito, e limpeza. Snapshot e draft do Manual não são do rabo: uma Action no push da `main` cuida deles depois do registro (ADR 0062). O registro nomeia o PR e a issue. Códigos de saída e o que fazer em cada um: docstring do script.
 
+**Saída `2` (conflito):** com a linha `conflito no merge de #N em: <arquivos>` na saída do rabo, quem o rodou dispara o agente `hr-corretor` com motivo `conflito`, o PR e os arquivos da linha (prompt em `.claude/skills/onda-enxuta/references/prompts.md`): ele rebaseia o PR sobre a `origin/main` pela skill `resolver-conflitos` e dá push. Depois, `gh pr checks "$PR_NUMBER" --watch`, para o CI rodar sobre o código combinado (vermelho segue o Gate 3), e o rabo de novo. Cada conflito conta uma tentativa da fatia, escrita num `gh issue comment` com `<!-- automacao -->` na primeira linha (`tentativa k de 3`); na terceira, `gh issue edit <issue> --remove-label in-progress --add-label ready-for-human`, um comentário com o diagnóstico (a linha do rabo, os arquivos em conflito, o que o corretor tentou e a hipótese) e `PushNotification` de uma linha: "#<issue> foi para ready-for-human: conflito em <arquivos>". Saída `2` sem essa linha (push rejeitado, CI vermelho ou merge recusado): a linha do rabo diz a causa; CI vermelho segue o Gate 3, o resto roda o rabo de novo, e também conta tentativa.
+
 **Saída `6` (rollback feito):** o health falhou e o rabo já voltou cada app do lote à imagem anterior no Coolify e ao `APP_VERSION` antigo, conferiu o health de novo e deixou o semáforo solto; produção está boa, mas o merge ruim segue na `main`. Quem rodou o rabo faz, nesta ordem: (1) abre o PR de revert do squash que a linha `rollback:` imprime (`git revert --no-edit <sha>` numa branch `revert/pr-<N>` a partir da `origin/main`, depois `gh pr create`), sem rebuild, porque a imagem no ar já é a anterior; ele vai na frente do próximo rabo, para o próximo deploy não carregar o defeito; (2) `gh issue reopen <issue>`, `gh issue edit <issue> --remove-label in-progress --add-label ready-for-agent` e um `gh issue comment` com `<!-- automacao -->` na primeira linha e a linha `health:` do rabo (o que o health respondeu); (3) conta uma tentativa da fatia e a escreve no comentário (`tentativa k de 3`; na terceira, `ready-for-human` no lugar de `ready-for-agent`); (4) notifica pela ferramenta `PushNotification`: "rollback disparado no PR #N, versão vX.Y.Z voltou", com a versão da linha `rollback:`.
 
 Saída `4` (health) é o rollback automático que falhou: o semáforo fica preso e o caminho é o `/deploy rollback`.
@@ -472,7 +476,7 @@ A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem de
 
 ### Falha no rabo
 
-- Não é do `/ship`: o `fechar_onda.py` diz o que fazer pelo código de saída (1 pré-condição, 2 conflito ou push rejeitado, 3 build, 4 health com o rollback automático que falhou; o 3 e o 4 deixam o semáforo preso para o `/deploy rollback`; 6 rollback feito, com semáforo solto: revert, issue reaberta e notificação, como diz o Passo 10; 7 migration vencida, sem semáforo nem merge: notificação e o rabo de novo depois da colagem).
+- Não é do `/ship`: o `fechar_onda.py` diz o que fazer pelo código de saída (1 pré-condição, 2 conflito ou push rejeitado, com o `hr-corretor` e uma tentativa contada por volta, como diz o Passo 10, 3 build, 4 health com o rollback automático que falhou; o 3 e o 4 deixam o semáforo preso para o `/deploy rollback`; 6 rollback feito, com semáforo solto: revert, issue reaberta e notificação, como diz o Passo 10; 7 migration vencida, sem semáforo nem merge: notificação e o rabo de novo depois da colagem).
 
 ### Falha em Passo 11 (Resumo final / Discord)
 
