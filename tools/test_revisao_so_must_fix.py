@@ -134,13 +134,17 @@ def _globs_sensiveis() -> list[str]:
     return [li for li in linhas if li and not li.startswith("#")]
 
 
-def _casa(caminho: str) -> bool:
+def _sensivel():
     import importlib.util
 
     spec = importlib.util.spec_from_file_location("sensivel", SKILLS / "onda-enxuta" / "scripts" / "sensivel.py")
     sensivel = importlib.util.module_from_spec(spec)
     spec.loader.exec_module(sensivel)
-    return any(sensivel.casa(caminho, g.lstrip("+")) for g in _globs_sensiveis())
+    return sensivel
+
+
+def _casa(caminho: str) -> bool:
+    return any(_sensivel().casa(caminho, g.lstrip("+")) for g in _globs_sensiveis())
 
 
 @pytest.mark.parametrize(
@@ -153,7 +157,11 @@ def _casa(caminho: str) -> bool:
         "hospital-reunioes/backend/app/services/aceite_service.py",
         "hospital-reunioes/backend/app/services/ouvidoria_anexos.py",
         "hospital-reunioes/backend/app/services/central_de_comando/conector_mcp.py",
+        "hospital-reunioes/backend/app/services/clicksign_service.py",
+        "hospital-reunioes/backend/app/dependencies.py",
         "hospital-reunioes/frontend/src/app/auth/callback/route.ts",
+        "hospital-reunioes/frontend/src/app/actions/auth.ts",
+        "hospital-reunioes/frontend/src/lib/login/destino.ts",
     ],
 )
 def test_a_seguranca_por_pr_dispara_em_migration_e_no_gate_das_portas_sem_login(caminho):
@@ -162,92 +170,146 @@ def test_a_seguranca_por_pr_dispara_em_migration_e_no_gate_das_portas_sem_login(
 
 
 APP = RAIZ / "hospital-reunioes" / "backend" / "app"
-METODOS_DE_ROTA = {"get", "post", "put", "patch", "delete", "head", "options", "api_route", "websocket"}
-# Rota sem login que não precisa do revisor de segurança por PR.
-FORA_DA_LISTA = {"routers/health.py"}
+FRONT = RAIZ / "hospital-reunioes" / "frontend" / "src"
 
 
-def _alvo_do_depends(no: ast.AST) -> str | None:
-    """`Depends(x)`, `Depends(fabrica(...))` ou `Depends(mod.x)` devolve o nome de x."""
-    if not isinstance(no, ast.Call) or not no.args:
-        return None
-    if getattr(no.func, "id", getattr(no.func, "attr", None)) not in ("Depends", "Security"):
-        return None
-    alvo = no.args[0].func if isinstance(no.args[0], ast.Call) else no.args[0]
-    return getattr(alvo, "id", getattr(alvo, "attr", None))
-
-
-def _depends(no: ast.AST) -> set[str]:
-    return {nome for nome in map(_alvo_do_depends, ast.walk(no)) if nome}
-
-
-def rotas_sem_login(app: Path) -> dict[str, list[str]]:
-    """Router -> rotas cuja cadeia de `Depends` não chega a `get_current_user`."""
-    arvores = {p: ast.parse(p.read_text(encoding="utf-8")) for p in app.rglob("*.py")}
-    grafo: dict[str, set[str]] = {}
-    for arvore in arvores.values():
-        for no in ast.walk(arvore):
-            if isinstance(no, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                grafo.setdefault(no.name, set()).update(_depends(no))
-    com_login, cresceu = {"get_current_user"}, True
-    while cresceu:
-        novos = {nome for nome, alvos in grafo.items() if alvos & com_login} - com_login
-        com_login |= novos
-        cresceu = bool(novos)
-
-    achados = {}
-    for caminho in sorted((app / "routers").rglob("*.py")):
-        arvore = arvores[caminho]
-        do_router = set()
-        for no in arvore.body:
-            if isinstance(no, ast.Assign) and getattr(getattr(no.value, "func", None), "id", None) == "APIRouter":
-                do_router |= _depends(no.value)
-        abertas = []
-        for no in ast.walk(arvore):
-            if not isinstance(no, (ast.FunctionDef, ast.AsyncFunctionDef)):
-                continue
-            rota = [d for d in no.decorator_list if getattr(getattr(d, "func", None), "attr", None) in METODOS_DE_ROTA]
-            if rota and not (do_router | _depends(no.args) | set().union(*map(_depends, rota))) & com_login:
-                abertas.append(no.name)
-        if abertas:
-            achados[caminho.relative_to(app).as_posix()] = abertas
-    return achados
+def _fontes_locais(raiz: Path) -> dict[str, str]:
+    return {p.relative_to(raiz).as_posix(): p.read_text(encoding="utf-8") for p in raiz.rglob("*.py")}
 
 
 def test_todo_router_com_rota_sem_login_esta_na_lista():
-    achados = rotas_sem_login(APP)
+    sensivel = _sensivel()
+    achados = sensivel.rotas_sem_login(_fontes_locais(APP))
     # piso: hoje são sete; varredura que volta quase vazia é varredura quebrada
-    assert len(achados) >= 7 and FORA_DA_LISTA <= achados.keys(), achados
+    assert len(achados) >= 7 and sensivel.FORA_DA_LISTA <= achados.keys(), achados
     faltam = [
         f"{router}: {rotas}"
         for router, rotas in achados.items()
-        if router not in FORA_DA_LISTA and not _casa(f"hospital-reunioes/backend/app/{router}")
+        if router not in sensivel.FORA_DA_LISTA and not _casa(f"hospital-reunioes/backend/app/{router}")
     ]
     assert faltam == [], "\n".join(faltam)
 
 
-def test_a_varredura_segue_a_cadeia_de_depends(tmp_path):
-    (tmp_path / "routers").mkdir()
-    (tmp_path / "dependencies.py").write_text(
+# Alvo de Depends das rotas abertas que não é gate (só entrega o cliente do banco).
+NAO_E_GATE = {"get_supabase_client"}
+
+
+def test_o_arquivo_que_define_cada_gate_das_rotas_sem_login_esta_na_lista():
+    sensivel = _sensivel()
+    fontes = _fontes_locais(APP)
+    definido_em: dict[str, set[str]] = {}
+    for caminho, codigo in fontes.items():
+        for no in ast.parse(codigo).body:
+            if isinstance(no, (ast.FunctionDef, ast.AsyncFunctionDef)):
+                definido_em.setdefault(no.name, set()).add(caminho)
+
+    gates: set[str] = set()
+    for router, rotas in sensivel.rotas_sem_login(fontes).items():
+        arvore = ast.parse(fontes[router])
+        for no in arvore.body:
+            if isinstance(no, ast.Assign) and getattr(getattr(no.value, "func", None), "id", None) == "APIRouter":
+                gates |= sensivel.depends(no.value)
+        for no in ast.walk(arvore):
+            if isinstance(no, (ast.FunctionDef, ast.AsyncFunctionDef)) and no.name in rotas:
+                gates |= sensivel.depends(no.args) | set().union(*map(sensivel.depends, no.decorator_list))
+    assert "require_ana_api_key" in gates, gates
+
+    faltam = [
+        f"{gate} em {arquivo}"
+        for gate in sorted(gates - NAO_E_GATE)
+        for arquivo in sorted(definido_em.get(gate, ()))
+        if not _casa(f"hospital-reunioes/backend/app/{arquivo}")
+    ]
+    assert faltam == [], "\n".join(faltam)
+
+
+def test_toda_porta_do_frontend_esta_na_lista():
+    portas = [
+        p.relative_to(RAIZ).as_posix()
+        for p in FRONT.rglob("*")
+        if p.suffix in {".ts", ".tsx"} and _sensivel().porta_do_front(p.name, p.read_text(encoding="utf-8"))
+    ]
+    # piso: o callback do login e as server actions do login
+    assert len(portas) >= 2, portas
+    assert [p for p in portas if not _casa(p)] == []
+
+
+ROUTERS_DE_TESTE = {
+    "dependencies.py": (
         "def get_current_user(c=Depends(bearer)): ...\n"
         "def require_admin(u=Depends(get_current_user)): ...\n"
         "def require_perfil(*p):\n"
         "    def checar(u=Depends(get_current_user)): ...\n"
         "    return checar\n"
-        "def require_api_key(x=Header(None)): ...\n",
-        encoding="utf-8",
-    )
-    rotas = {
-        "aberta.py": "router = APIRouter()\n@router.post('/x')\ndef publica(dado: dict): ...\n",
-        "api_key.py": "router = APIRouter(dependencies=[Depends(require_api_key)])\n@router.get('/x')\ndef so_chave(): ...\n",
-        "admin.py": "router = APIRouter()\n@router.get('/x')\ndef lista(u=Depends(require_admin)): ...\n",
-        "fabrica.py": "router = APIRouter()\n@router.get('/x')\ndef lista(u=Depends(require_perfil('a'))): ...\n",
-        "no_router.py": "router = APIRouter(dependencies=[Depends(get_current_user)])\n@router.get('/x')\ndef lista(): ...\n",
-        "no_decorador.py": "router = APIRouter()\n@router.get('/x', dependencies=[Depends(deps.require_admin)])\ndef lista(): ...\n",
+        "def require_api_key(x=Header(None)): ...\n"
+    ),
+    "routers/aberta.py": "router = APIRouter()\n@router.post('/x')\ndef publica(dado: dict): ...\n",
+    "routers/api_key.py": (
+        "router = APIRouter(dependencies=[Depends(require_api_key)])\n@router.get('/x')\ndef so_chave(): ...\n"
+    ),
+    "routers/admin.py": "router = APIRouter()\n@router.get('/x')\ndef lista(u=Depends(require_admin)): ...\n",
+    "routers/fabrica.py": "router = APIRouter()\n@router.get('/x')\ndef lista(u=Depends(require_perfil('a'))): ...\n",
+    "routers/no_router.py": (
+        "router = APIRouter(dependencies=[Depends(get_current_user)])\n@router.get('/x')\ndef lista(): ...\n"
+    ),
+    "routers/no_decorador.py": (
+        "router = APIRouter()\n@router.get('/x', dependencies=[Depends(deps.require_admin)])\ndef lista(): ...\n"
+    ),
+    "routers/health.py": "router = APIRouter()\n@router.get('/health')\ndef health(): ...\n",
+}
+
+
+def test_a_varredura_segue_a_cadeia_de_depends():
+    assert _sensivel().rotas_sem_login(ROUTERS_DE_TESTE) == {
+        "routers/aberta.py": ["publica"],
+        "routers/api_key.py": ["so_chave"],
+        "routers/health.py": ["health"],
     }
-    for nome, codigo in rotas.items():
-        (tmp_path / "routers" / nome).write_text(codigo, encoding="utf-8")
-    assert rotas_sem_login(tmp_path) == {"routers/aberta.py": ["publica"], "routers/api_key.py": ["so_chave"]}
+
+
+def test_o_sensivel_varre_o_head_do_pr_e_acusa_rota_sem_login_fora_da_lista():
+    """Router fora da lista com rota sem login dispara; com login, não (ADR 0064, decisão 4)."""
+    sensivel = _sensivel()
+    globs = sensivel.ler_globs(LISTA_SENSIVEL)
+    pedidos = []
+
+    def fontes_do_head(caminhos):
+        pedidos.append(caminhos)
+        fontes = {f"hospital-reunioes/backend/app/{k}": v for k, v in ROUTERS_DE_TESTE.items()}
+        fontes["hospital-reunioes/frontend/src/app/api/x/route.ts"] = "export async function GET() {}\n"
+        fontes["hospital-reunioes/frontend/src/app/acoes.ts"] = '"use server";\nexport async function f() {}\n'
+        fontes["hospital-reunioes/frontend/src/app/tela.tsx"] = "export default function Tela() {}\n"
+        return fontes
+
+    arquivos = [
+        {"filename": f"hospital-reunioes/backend/app/routers/{nome}", "status": "added"}
+        for nome in ("aberta.py", "api_key.py", "admin.py", "no_decorador.py", "health.py")
+    ] + [
+        {"filename": "hospital-reunioes/frontend/src/app/api/x/route.ts", "status": "added"},
+        {"filename": "hospital-reunioes/frontend/src/app/acoes.ts", "status": "modified"},
+        {"filename": "hospital-reunioes/frontend/src/app/tela.tsx", "status": "modified"},
+    ]
+    acusados = [nome for nome, _ in sensivel.sensiveis(arquivos, globs, fontes_do_head)]
+    assert acusados == [
+        "hospital-reunioes/backend/app/routers/aberta.py",
+        "hospital-reunioes/backend/app/routers/api_key.py",
+        "hospital-reunioes/frontend/src/app/api/x/route.ts",
+        "hospital-reunioes/frontend/src/app/acoes.ts",
+    ], acusados
+
+    # PR sem router nem código do frontend não busca o head
+    pedidos.clear()
+    so_texto = [
+        {"filename": "docs/x.md", "status": "modified"},
+        {"filename": "hospital-reunioes/backend/app/routers/aberta.py", "status": "removed"},
+    ]
+    assert sensivel.sensiveis(so_texto, globs, fontes_do_head) == [] and pedidos == []
+
+
+def test_o_sensivel_le_o_head_pelo_git():
+    fontes = _sensivel().fontes_do_commit("HEAD", ["hospital-reunioes/backend/app"], RAIZ)
+    assert "hospital-reunioes/backend/app/routers/ana.py" in fontes, sorted(fontes)[:5]
+    assert "require_ana_api_key" in fontes["hospital-reunioes/backend/app/dependencies.py"]
 
 
 @pytest.mark.parametrize(
@@ -256,7 +318,6 @@ def test_a_varredura_segue_a_cadeia_de_depends(tmp_path):
         "hospital-reunioes/backend/app/routers/reunioes.py",
         "hospital-reunioes/backend/app/middleware/auth.py",
         "hospital-reunioes/backend/app/config.py",
-        "hospital-reunioes/backend/app/dependencies.py",
         "hospital-reunioes/backend/.env.example",
         ".github/workflows/ci.yml",
         ".claude/agents/hr-revisor-seguranca.md",
@@ -343,6 +404,28 @@ def test_a_rodada_seguinte_do_revisor_recebe_e_confere_o_veredito_de_seguranca()
     assert "`Veredito de segurança a conferir: <URL>`" in seguranca, seguranca
     gate2 = gate_do_ship("Gate 2:")
     assert "`Veredito de segurança a conferir: <URL>`" in gate2, gate2
+
+
+RODADA_2_ESPERA_OS_CORRETORES = (
+    "**só quando não houver corretor no PR**",
+    "o de segurança inclusive",
+    "com o `VEREDITO SEGURANCA:` já dado",
+    "não há rodada 3",
+)
+
+
+def test_a_rodada_2_so_sai_depois_de_todo_corretor_e_do_veredito_de_seguranca():
+    """O corretor de segurança e a rodada 2 saem do mesmo evento; a rodada 2 não corre com ele."""
+    veredito = item(passo_4_da_onda(), "- **Veredito do `hr-revisor`**")
+    gate1 = gate_do_ship("Gate 1:")
+    for trecho in RODADA_2_ESPERA_OS_CORRETORES:
+        assert trecho in veredito, trecho
+        assert trecho in gate1, trecho
+    assert "quando ele terminar, rodada 2" not in veredito + gate1
+
+    seguranca = item(passo_4_da_onda(), "- **Veredito de segurança**")
+    assert "quem confere é a rodada 2 do `hr-revisor`" in seguranca, seguranca
+    assert "quem confere é a rodada 2 do Gate 1" in gate_do_ship("Gate 2:")
 
 
 def test_afrouxar_o_proprio_fluxo_de_revisao_e_must_fix_do_revisor():
