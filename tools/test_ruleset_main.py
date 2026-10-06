@@ -229,6 +229,13 @@ FRONTEND = {"frontend-lint", "build"}
     (["hospital-reunioes/frontend/package.json"], FRONTEND, "false"),
     (["hospital-reunioes/backend/app/main.py"], BACKEND, "false"),
     (["hospital-reunioes/supabase/migrations/114_x.sql"], BACKEND, "false"),
+    # Acento: com core.quotePath ligado (o padrão) o git devolve o caminho
+    # entre aspas, e nenhum ^hospital-reunioes/ casaria.
+    (["hospital-reunioes/backend/app/serviço.py"], BACKEND, "false"),
+    (["hospital-reunioes/supabase/migrations/115_manifestação.sql"], BACKEND, "false"),
+    (["hospital-reunioes/frontend/src/app/reunião/page.tsx"], FRONTEND, "false"),
+    # Aspa no nome continua entre aspas mesmo sem quotePath: roda tudo.
+    (['hospital-reunioes/backend/app/a"b.py'], TUDO, "true"),
     (["hospital-reunioes/backend/README.md", "hospital-reunioes/frontend/src/app/page.tsx"], TUDO, "false"),
     (["tools/x.py", "hospital-reunioes/frontend/package.json"], FRONTEND, "true"),
     ([".github/workflows/ci.yml"], TUDO, "true"),
