@@ -15,6 +15,16 @@ obrigatorio, CI obrigatorio e em dia com a base, sem push direto. Por isso o
 script nunca empurra na main: tudo entra por PR, mergeado pela API do GitHub
 com squash (o unico metodo que o repositorio permite).
 
+Classe do lote, pelos arquivos (issue #965): "app" se algum esta em
+`hospital-reunioes/`, "ferramenta" se nenhum esta. Lote misto e app. Os
+arquivos sao os do `git diff --no-renames` do lote, como no detector do CI:
+mover codigo para fora de `hospital-reunioes/` conta como app.
+  - app: a sequencia inteira abaixo.
+  - ferramenta: so merge pela API depois do CI verde (passos 1 a 3, 5, 6, 8 e
+    12). Sem bump, sem APP_VERSION, sem esperar build, sem health, sem PR de
+    registro e sem entrada no history.json. Se o webhook do Coolify disparar
+    build no merge, o rabo o cancela, como faz com o build do registro.
+
 Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
   1. pre-condicoes (gh, coolify, PRs abertos e verdes, origin/main buscado,
      nenhuma migration nova com numero que a main ja usa, e o corpo do PR
@@ -23,7 +33,7 @@ Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
   3. branch de entrega num worktree descartavel:
      PR avulso: a propria branch do PR, com a origin/main por merge se ficou atras
      onda: `onda/<sessao>` a partir da origin/main, com merges locais `--no-ff` em ordem
-  4. bump semver pelo tipo dominante dos commits do lote (docs-only nao bumpa),
+  4. bump semver pelo tipo dominante dos commits do lote (ferramenta nao bumpa),
      como commit na branch de entrega, e push dela (nunca na main)
   5. onda: abre o PR de entrega, com `Closes` de cada issue do lote
   6. espera o CI do head com o bump ficar verde
@@ -49,7 +59,7 @@ campo `sha` do history.json e o do squash do codigo: o commit que foi para
 producao. O registro vem depois, so com docs.
 
 Codigos de saida:
-  0  PR ou onda fechados, health verde, registro na main
+  0  PR ou onda fechados, health verde, registro na main (ferramenta: merge na main)
   1  pre-condicao falhou ou trava velha: nada foi tocado
   2  conflito, push na branch rejeitado, CI vermelho ou merge recusado: nada
      entrou na main, worktree removido, semaforo solto; rode de novo depois de corrigir
@@ -59,8 +69,8 @@ Codigos de saida:
      quando o CI dele ficar verde
 
 `--dry-run`: executa 1 e 3 e calcula o 4 sem escrever; imprime o plano (PR,
-issue e tipo de bump) e o que faria nos demais; nao pega semaforo, nao toca no
-Coolify, nao pusha.
+issue, classe e tipo de bump: "app: bump ..." ou "ferramenta: só merge") e o
+que faria nos demais; nao pega semaforo, nao toca no Coolify, nao pusha.
 
 Windows: `bash` do Git no PATH (para o semaforo.sh).
 """
@@ -698,8 +708,9 @@ def esperar_build(service: dict, desde: float, sha_push: str) -> tuple[str, int 
 
 
 def cancelar_build_do_registro(servicos_cfg: dict, sha: str) -> list[str]:
-    """O merge do registro e um push na main, e o webhook do Coolify rebuilda os
-    apps mesmo com o commit so mudando docs (issue #851). Cancela o deploy desse
+    """O merge do registro e o de um lote de ferramenta sao push na main, e o
+    webhook do Coolify rebuilda os apps mesmo com o commit fora do app (issues
+    #851 e #965). Cancela o deploy desse
     commit, e so dele, se aparecer na janela; com filtro de caminho no Coolify,
     nao aparece nenhum. Devolve os servicos cancelados."""
     apps = {sid: s["uuid"] for sid, s in servicos_cfg.items() if s.get("type") != "supabase" and s.get("uuid")}

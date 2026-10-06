@@ -932,6 +932,18 @@ def test_mover_codigo_do_app_para_tools_conta_como_app(tmp_path, monkeypatch, ca
     assert "app: bump patch v0.10.0 -> v0.10.1" in plano, plano
 
 
+def test_docstring_explica_as_duas_classes_sem_docs_only_e_sem_travessao():
+    fo = carregar_fechar_onda()
+    doc = " ".join(fo.__doc__.split())
+
+    assert "docs-only" not in doc
+    assert re.search(r'"app" se algum (arquivo )?esta em `hospital-reunioes/`', doc), doc
+    assert re.search(r'"ferramenta" se nenhum esta', doc), doc
+    assert "misto" in doc
+    fonte = (SCRIPTS / "fechar_onda.py").read_text(encoding="utf-8")
+    assert TRAVESSAO not in fonte and MEIA_RISCA not in fonte
+
+
 # ------------------------------------------- sha256 da migration no corpo do PR
 
 SQL_DO_ARQUIVO = "create table triagem (id int);\n"
