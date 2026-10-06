@@ -12,7 +12,7 @@ from pathlib import Path
 DASH = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(DASH))
 
-import collect  # noqa: E402
+import collect
 
 
 def test_coletor_traz_o_autor_da_issue(monkeypatch):

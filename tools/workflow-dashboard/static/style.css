@@ -131,7 +131,7 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 
 .grid{display:grid; gap:16px}
 .g12{grid-template-columns:repeat(12,1fr)}
-.sp3{grid-column:span 3}.sp6{grid-column:span 6}
+.sp6{grid-column:span 6}
 
 .stat .k, .k-label{font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.14em;
   text-transform:uppercase; color:var(--ink-soft)}
@@ -159,8 +159,6 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
 
 .chip{display:inline-flex; align-items:center; gap:6px; font-family:var(--mono); font-size:11.5px;
   background:var(--paper-2); border:1px solid var(--line); border-radius:8px; padding:3px 9px; color:var(--ink-soft)}
-.cmdpill{font-family:var(--mono); font-size:12.5px; font-weight:500; color:var(--on-navy);
-  background:var(--indigo); padding:3px 11px; border-radius:8px; letter-spacing:.01em; white-space:nowrap}
 
 /* ---------- controles ---------- */
 .controls{display:flex; align-items:center; gap:10px; flex-wrap:wrap; margin:14px 0 18px}
@@ -174,9 +172,6 @@ main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
   color:var(--ink); outline:none; transition:border .15s ease}
 .search:focus{border-color:var(--indigo)}
 .search::placeholder{color:var(--ink-soft); opacity:.6}
-select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
-  border:1px solid var(--line-2); border-radius:var(--r-pill); padding:6px 13px; color:var(--ink-soft);
-  cursor:pointer; outline:none}
 
 /* ---------- banner de erro ---------- */
 .banner{margin-top:18px; background:var(--red-wash); border:1px solid color-mix(in srgb, var(--red) 35%, transparent);
@@ -225,70 +220,10 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 .techbox > summary:hover{color:var(--indigo)}
 .techbox-body{padding:11px 0 2px}
 
-/* ---------- lead de abertura das abas ---------- */
-.lead{font-size:15.5px; color:var(--ink-soft); max-width:64ch; margin:0 0 18px; line-height:1.6}
-.lead b{color:var(--ink); font-weight:500}
-
-/* ---------- PLANO (home) ---------- */
-.leva{margin:6px 0 38px}
-.leva-head{display:flex; align-items:center; gap:12px; flex-wrap:wrap; margin-bottom:16px}
-.leva-title{font-family:var(--sans); font-weight:500; font-size:clamp(17px,2.4vw,22px);
-  color:var(--ink); text-decoration:none; line-height:1.25}
-.leva-title:hover{color:var(--indigo)}
-.leva-chips{display:flex; gap:8px; flex-wrap:wrap; margin-left:auto}
-.plano-aviso{margin:0 0 16px}
-
-/* ondas: tronco vertical à esquerda; nó coral marca cada onda */
-.ondas{display:flex; flex-direction:column}
-.onda{position:relative; padding:0 0 28px 28px}
-.onda::before{content:""; position:absolute; left:7px; top:14px; bottom:-8px; width:2px;
-  background:var(--line-2)}
-.onda:last-child::before{display:none}
-.onda::after{content:""; position:absolute; left:2px; top:4px; width:12px; height:12px;
-  border-radius:var(--r-pill); background:var(--brand); box-shadow:0 0 0 4px var(--brand-wash)}
-.onda-rotulo{display:flex; align-items:baseline; gap:10px; flex-wrap:wrap; margin-bottom:11px}
-.onda-n{font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.16em;
-  text-transform:uppercase; color:var(--brand)}
-.onda-hint{font-family:var(--mono); font-size:11px; color:var(--ink-soft)}
-.fhead{display:flex; align-items:baseline; gap:9px}
-.fnum{font-family:var(--mono); font-size:13px; font-weight:500; color:var(--indigo);
-  text-decoration:none; flex:none}
-.ftitle{font-weight:500; font-size:14.5px; color:var(--ink); text-decoration:none; line-height:1.4}
-.fnum:hover,.ftitle:hover{color:var(--indigo); text-decoration:underline}
-.fmeta{display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin-top:9px}
-.ftempo{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); display:inline-flex; align-items:center; gap:4px}
-.ftempo.vazio{opacity:.7}
-.ftempo-fonte{font-style:italic; color:var(--amber)}
-.fbloq{font-family:var(--mono); font-size:11.5px; color:var(--coral)}
-.ftriage{font-family:var(--mono); font-size:11.5px; color:var(--blue)}
-.ftriage code{background:var(--blue-wash); border:1px solid var(--line); border-radius:5px; padding:0 5px}
-.fexp{margin:9px 0 0; font-size:13.5px; color:var(--ink-soft); line-height:1.5}
-.fcopia{margin-top:4px}
-.fcopia .cmd{margin-bottom:6px}
-.fslash{display:inline-block; font-family:var(--mono); font-size:11.5px; color:var(--indigo);
-  cursor:pointer; text-decoration:none}
-.fslash:hover{text-decoration:underline}
-.fslash.ok{color:var(--green)}
-.fslash code{background:var(--paper-2); border:1px solid var(--line); border-radius:5px; padding:0 5px}
-
-/* entregues: faixa compacta no fim da leva */
-.feitas{padding-left:28px; margin-top:2px}
-.feitas-row{display:flex; gap:8px; flex-wrap:wrap; margin-top:8px}
-.feita-chip{display:inline-block; font-family:var(--mono); font-size:11.5px;
-  background:var(--green-wash); color:var(--green); border:1px solid color-mix(in srgb, var(--green) 25%, transparent);
-  border-radius:8px; padding:4px 11px; text-decoration:none; max-width:440px;
-  overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-.feita-chip:hover{border-color:var(--green)}
-
-.plano-vazio{max-width:600px; padding:26px 28px}
-.plano-vazio h3{font-size:20px; margin:0 0 8px}
-.plano-vazio p{color:var(--ink-soft); font-size:14px; line-height:1.55; margin:0 0 6px}
-
 /* ---------- ISSUES ---------- */
 .prd-group{margin-bottom:26px}
 .prd-tag{font-family:var(--mono); font-size:10px; font-weight:500; letter-spacing:.14em;
   background:var(--indigo); color:var(--on-navy); border-radius:6px; padding:2.5px 8px}
-.prd-tag.avulsa-tag{background:var(--purple)}
 .children{margin:12px 0 0 24px; padding-left:20px; border-left:2px solid var(--line); display:flex;
   flex-direction:column; gap:10px}
 .fatias-toggle{appearance:none; cursor:pointer; font-family:var(--mono); font-size:11.5px; letter-spacing:.04em;
@@ -300,18 +235,6 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
 .iss-head:hover{background:color-mix(in srgb, var(--paper-2) 45%, transparent)}
 .inum{font-family:var(--mono); font-size:13px; font-weight:500; color:var(--indigo); flex:none}
 .ititle{font-weight:500; font-size:14.5px; flex:1; min-width:200px}
-.istate{font-family:var(--mono); font-size:11px; display:inline-flex; gap:6px; align-items:center; color:var(--ink-soft)}
-.iss-meta{display:flex; gap:14px; flex-wrap:wrap; padding:0 18px 12px; font-family:var(--mono);
-  font-size:11.5px; color:var(--ink-soft)}
-.iss-meta .blocked{color:var(--brand)}
-.chain{display:flex; align-items:center; gap:8px; flex-wrap:wrap; padding:0 18px 14px;
-  font-family:var(--mono); font-size:11.5px}
-.chain .node{display:inline-flex; gap:6px; align-items:center; background:var(--paper-2);
-  border:1px solid var(--line); padding:3px 10px; border-radius:8px; color:var(--ink-soft)}
-.chain .node.deploy{background:var(--green-wash); color:var(--green); border-color:color-mix(in srgb, var(--green) 25%, transparent)}
-.chain .node.rolled{background:var(--red-wash); color:var(--red)}
-.chain .arrow{color:var(--line-2)}
-.chain a{text-decoration:none}
 .iss-body{border-top:1px solid var(--line); padding:18px; background:color-mix(in srgb, var(--paper) 35%, var(--card))}
 .iss-body .ghlink{font-family:var(--mono); font-size:11.5px}
 .comments{margin-top:16px}
@@ -561,160 +484,6 @@ select.fsel{font-family:var(--mono); font-size:11.5px; background:var(--card);
   .g12 > *{grid-column:span 12 !important}
   .hero-title{font-size:clamp(24px,6vw,34px)}
   .children{margin-left:8px; padding-left:14px}
-  .leva-chips{margin-left:0}
-}
-
-/* ---------- Guia: o fluxo desenhado ---------- */
-/* card único de largura cheia; overflow visível pros tooltips de respaldo escaparem.
-   Re-tipografado na issue 262: eyebrow em tinta suave + título Onest 500. */
-.guia-flow-card{overflow:visible; padding:26px 26px 32px}
-.guia-flow-head{display:flex; flex-direction:column; gap:7px; margin:2px 0 14px}
-.guia-flow-head .eyebrow{color:var(--ink-soft)}
-.guia-flow-head .eyebrow::before{background:var(--brand)}
-.guia-flow-title{font-family:var(--sans); font-weight:500; font-size:clamp(20px,2.6vw,24px);
-  letter-spacing:-.015em; color:var(--ink); margin:0}
-
-.flx{display:flex; flex-direction:column; align-items:center; margin-top:6px; --fl:var(--indigo)}
-@keyframes flxRise{from{opacity:0; transform:translateY(16px)} to{opacity:1; transform:none}}
-.flx-phase,.flx-conn,.flx-node,.flx-fila{
-  animation:flxRise .5s cubic-bezier(.16,.8,.3,1) backwards; animation-delay:calc(var(--d,0)*55ms)}
-
-/* marcadores de fase */
-.flx-phase{display:flex; align-items:center; gap:10px; align-self:stretch; margin:14px 2px 12px;
-  font-family:var(--mono); font-size:11px; font-weight:500; letter-spacing:.14em; text-transform:uppercase; color:var(--brand)}
-.flx-phase::after{content:""; flex:1; height:1px; background:linear-gradient(90deg,var(--line-2),transparent)}
-.flx-phase-n{display:inline-grid; place-items:center; width:19px; height:19px; border-radius:50%;
-  background:var(--brand); color:var(--on-navy); font-size:10px; letter-spacing:0}
-
-.flx-entries{display:grid; grid-template-columns:1fr 1fr; gap:28px; width:100%}
-.flx-lane{display:flex; flex-direction:column; align-items:center}
-.flx-left{align-items:stretch}
-
-/* nó genérico */
-.flx-node{position:relative; background:var(--card); border:2px solid var(--indigo); border-radius:var(--r-inner);
-  padding:14px 18px 14px 40px; text-align:center; transition:transform .16s ease, box-shadow .16s ease, border-color .16s ease}
-.flx-node[data-tip]{cursor:help}
-.flx-node[data-tip]:hover,.flx-node[data-tip]:focus-visible{transform:translateY(-3px);
-  box-shadow:var(--shadow-up); border-color:var(--brand); outline:none}
-.flx-node .cmdpill{font-size:13px}
-.flx-nbody{display:flex; flex-direction:column; gap:6px}
-.flx-nd{font-family:var(--mono); font-size:11px; color:var(--ink-soft); line-height:1.45}
-.flx-wide{width:100%}
-.flx-et{font-family:var(--sans); font-weight:500; font-size:16px; color:var(--ink)}
-.flx-es{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); margin-top:5px}
-.flx-is-entry{padding:17px 24px 17px 46px; border-radius:var(--r-card)}
-.flx-is-entry .flx-nd{font-size:11.5px; margin-top:2px}
-
-/* ícone-badge */
-.flx-ic{width:16px; height:16px; flex:none}
-.flx-node > .flx-ic,.flx-fila > .flx-ic{position:absolute; top:13px; left:14px; width:18px; height:18px;
-  color:var(--indigo-2); opacity:.9; transition:color .16s ease, transform .16s ease}
-.flx-is-entry > .flx-ic{top:16px; left:16px}
-.flx-node[data-tip]:hover > .flx-ic{color:var(--brand); transform:scale(1.12)}
-
-/* conectores + dot viajando (fluxo) */
-.flx-conn{display:flex; flex-direction:column; align-items:center; height:42px; position:relative}
-.flx-conn i{width:2.5px; flex:1; background:var(--fl); border-radius:2px}
-.flx-conn b{width:0; height:0; border-left:7px solid transparent; border-right:7px solid transparent; border-top:9px solid var(--fl)}
-.flx-conn::after{content:""; position:absolute; left:50%; top:2px; width:6px; height:6px; margin-left:-3px;
-  border-radius:50%; background:var(--brand); box-shadow:0 0 6px var(--brand);
-  animation:flxTravel 2.6s cubic-bezier(.5,0,.5,1) infinite; animation-delay:calc(var(--d,0)*120ms)}
-@keyframes flxTravel{0%{top:2px; opacity:0} 12%{opacity:1} 80%{opacity:1} 100%{top:calc(100% - 10px); opacity:0}}
-.flx-conn.flx-tall{height:auto; flex:1; min-height:42px}
-.flx-conn.flx-dash i{width:0; background:none; border-left:2.5px dashed var(--fl)}
-.flx-conn em{position:absolute; left:calc(50% + 16px); top:9px; white-space:nowrap; font-family:var(--mono);
-  font-style:normal; font-size:11px; color:var(--ink-soft)}
-
-/* fila */
-.flx-fila{position:relative; background:var(--indigo-wash); border:2px solid var(--indigo); border-radius:var(--r-card);
-  padding:16px 22px 16px 44px; text-align:center; width:100%; transition:transform .16s ease, box-shadow .16s ease}
-.flx-fila[data-tip]{cursor:help}
-.flx-fila[data-tip]:hover,.flx-fila[data-tip]:focus-visible{transform:translateY(-2px); box-shadow:var(--shadow-up); outline:none}
-.flx-ft{font-family:var(--sans); font-weight:500; font-size:16px; color:var(--ink)}
-.flx-ft code{font-family:var(--mono); font-size:.9em; color:var(--indigo); font-weight:500}
-
-/* grupo de desenvolvimento */
-.flx-group{width:100%; background:var(--paper-2); border:2px solid var(--indigo); border-radius:var(--r-card);
-  padding:20px 20px 22px; box-shadow:var(--shadow)}
-.flx-cap{text-align:center; font-family:var(--mono); font-size:12px; color:var(--ink-soft); margin-bottom:16px}
-.flx-em{color:var(--brand); font-weight:500}
-.flx-row{display:flex; align-items:stretch; justify-content:center; flex-wrap:wrap; gap:2px}
-.flx-row .flx-node{flex:1; min-width:160px; background:var(--card)}
-.flx-chev{display:flex; align-items:center; padding:0 10px; font-family:var(--mono); font-size:22px;
-  color:var(--indigo-2); font-weight:500}
-.flx-chev-sm{font-size:16px; padding:0 7px}
-
-/* os 3 gates, agora como steps */
-.flx-subcap{text-align:center; font-family:var(--mono); font-size:11px; color:var(--ink-soft); margin:18px 0 12px}
-.flx-subcap code{color:var(--indigo); font-weight:500}
-.flx-gaterow{display:flex; align-items:stretch; justify-content:center; flex-wrap:wrap; gap:2px}
-.flx-gate-step{background:var(--paper); padding:11px 15px 11px 36px; min-width:140px; border-width:2px}
-.flx-gate-step .cmdpill{font-size:12px}
-.flx-gate-step .flx-nd{font-size:10.5px}
-.flx-gate-step > .flx-ic{top:11px; left:12px; width:16px; height:16px}
-.flx-gate-hot{border-color:var(--brand)}
-.cmdpill-hot{background:var(--brand)}
-.flx-gate-hot > .flx-ic{color:var(--brand); opacity:1}
-.flx-gate-ci .cmdpill{background:var(--green)}
-.flx-gate-ci{border-color:var(--green)}
-.flx-gate-ci > .flx-ic{color:var(--green); opacity:1}
-
-/* gate humano */
-.flx-humangate{position:relative; width:100%; border:2px dashed var(--indigo); border-radius:var(--r-card);
-  padding:15px 22px 15px 46px; text-align:center; background:var(--brand-wash)}
-.flx-humangate .flx-et .flx-em{color:var(--brand)}
-.flx-humangate > .flx-ic{color:var(--brand); opacity:1; top:16px}
-
-/* deploy → desfechos */
-.flx-fork{display:grid; grid-template-columns:1fr 1fr; gap:22px; width:100%}
-.flx-out{border-radius:var(--r-inner); padding:15px 18px 15px 42px}
-.flx-ok{border-color:var(--green); background:var(--green-wash)}
-.flx-bad{border-color:var(--red); background:var(--red-wash)}
-.flx-ok .flx-et{color:var(--green)}
-.flx-bad .flx-et{color:var(--red)}
-.flx-ok > .flx-ic{color:var(--green); opacity:1; animation:flxPulse 2.4s ease-in-out infinite}
-.flx-bad > .flx-ic{color:var(--red); opacity:1}
-@keyframes flxPulse{0%,100%{transform:scale(1); opacity:1} 50%{transform:scale(1.18); opacity:.65}}
-
-/* tooltip de respaldo */
-.flx-pop{position:absolute; left:50%; top:calc(100% + 12px); transform:translate(-50%,6px);
-  width:min(340px,78vw); z-index:40; background:var(--card); border:1.5px solid var(--indigo);
-  border-radius:var(--r-inner); padding:13px 15px; box-shadow:var(--shadow-up); text-align:left;
-  opacity:0; visibility:hidden; pointer-events:none; transition:opacity .18s ease, transform .18s ease, visibility .18s}
-.flx-pop-up{top:auto; bottom:calc(100% + 12px)}
-.flx-pop::before{content:""; position:absolute; left:50%; margin-left:-7px; width:12px; height:12px;
-  background:var(--card); border-left:1.5px solid var(--indigo); border-top:1.5px solid var(--indigo)}
-.flx-pop:not(.flx-pop-up)::before{top:-7px; transform:rotate(45deg)}
-.flx-pop-up::before{bottom:-7px; transform:rotate(225deg)}
-[data-tip]:hover > .flx-pop,[data-tip]:focus-visible > .flx-pop,[data-tip]:focus-within > .flx-pop{
-  opacity:1; visibility:visible; transform:translate(-50%,0)}
-.flx-pop-h{display:flex; align-items:center; gap:8px; font-family:var(--mono); font-weight:500; font-size:13px;
-  color:var(--indigo); margin-bottom:7px}
-.flx-pop-h .flx-ic{color:var(--brand)}
-.flx-pop p{margin:0; font-family:var(--sans); font-size:12.5px; line-height:1.55; color:var(--ink-soft)}
-.flx-pop-src{margin-top:9px; padding-top:8px; border-top:1px dashed var(--line-2);
-  font-family:var(--mono); font-size:10.5px; color:var(--ink-soft)}
-.flx-pop-src code{color:var(--indigo); font-weight:500}
-.flx-pop-rule{color:var(--brand)}
-
-/* empilhamento: o nó em hover (e seus contêineres) sobe acima das caixas vizinhas,
-   senão o tooltip fica atrás dos nós irmãos que vêm depois no DOM */
-.flx-entries,.flx-lane,.flx-group,.flx-row,.flx-gaterow,.flx-fork{position:relative}
-.flx-entries:has([data-tip]:is(:hover,:focus-within)),
-.flx-lane:has([data-tip]:is(:hover,:focus-within)),
-.flx-group:has([data-tip]:is(:hover,:focus-within)),
-.flx-row:has([data-tip]:is(:hover,:focus-within)),
-.flx-gaterow:has([data-tip]:is(:hover,:focus-within)),
-.flx-fork:has([data-tip]:is(:hover,:focus-within)){z-index:50}
-.flx-node[data-tip]:hover,.flx-node[data-tip]:focus-within,
-.flx-fila[data-tip]:hover,.flx-fila[data-tip]:focus-within{z-index:60}
-
-@media (max-width:768px){
-  .flx-entries{grid-template-columns:1fr; gap:6px}
-  .flx-conn.flx-tall{height:42px; flex:0 0 auto}
-  .flx-fork{grid-template-columns:1fr}
-  .flx-row .flx-node,.flx-gate-step{flex:1 1 100%}
-  .flx-chev{transform:rotate(90deg); padding:6px 0}
 }
 
 /* ============ MAPA visual-first (redesenho) ============ */
@@ -960,37 +729,15 @@ body.er-lock main{z-index:130}
   color:var(--ink); opacity:.55; transition:opacity .2s ease, border-color .2s ease}
 .nrow-arrow{display:inline-block; font-size:14px; line-height:1; transition:transform .2s var(--ease-quart)}
 
-/* estados da fatia: as badges seguem com a semântica; a linha só modula */
-.nrow-pronta .nrow-idx{color:var(--green)}
-.nrow-andamento .nrow-idx{color:var(--amber)}
-.nrow-bloq{opacity:.72}
-.nrow-triage{opacity:.85}
-.nrow-feita .ftitle{color:var(--ink-soft)}
-
-/* PLANO: as ondas listam linhas, não cards */
-.onda .nrows{margin-top:2px}
-.tab-plano .fcopia{margin-top:8px}
-.tab-plano .cmd-code{background:var(--surface); border-color:var(--hairline); color:var(--ink)}
-.tab-plano .cmd-code code{color:var(--ink)}
-.tab-plano .cmd-copy{border-radius:var(--r-pill); background:transparent; border-color:var(--ghost); color:var(--ink-soft)}
-.tab-plano .cmd-copy:hover{border-color:var(--brand); color:var(--brand); background:transparent}
-.tab-plano .cmd-copy.ok{color:var(--green); border-color:var(--green); background:transparent}
-
 /* ISSUES: árvore PRD → fatias em linhas */
 .tab-issues .prd-group{margin-bottom:0; padding:6px 0}
 .tab-issues .prd-group + .prd-group{border-top:1px solid var(--hairline)}
 .nrow.prd-row .nrow-idx{color:var(--brand)}
-.nrow-lead{margin-left:auto}
 .nrow .iss-head{padding:0; cursor:pointer}
 .nrow .iss-head:hover{background:none}
-.nrow .iss-meta{padding:6px 0 0}
-.nrow .chain{padding:8px 0 0}
 .nrow .iss-body{border-top:1px dashed var(--hairline); background:none; margin-top:12px; padding:12px 0 0}
 .tab-issues .children{gap:0; margin:8px 0 0 30px; padding-left:16px; border-left:1px solid var(--hairline)}
 .tab-issues .fatias-toggle{margin:8px 0 4px 40px}
-/* ISSUES: visor do responsável filtrado */
-.visor-resp{margin:18px 0 10px; color:var(--brand)}
-.prd-dono{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
 .tab-issues .comment{border-left:2px solid var(--hairline); padding:8px 14px; margin:10px 0}
 .tab-issues .comment .who{font-family:var(--mono); font-size:11.5px; color:var(--brand); font-weight:500}
 .tab-issues .comment .md{font-family:var(--sans); font-size:13.5px; line-height:1.65; color:var(--ink)}
@@ -1039,18 +786,58 @@ body.er-lock main{z-index:130}
 .children{border-left:0; padding-left:0}
 /* ============ fim ajustes (issue 268) ============ */
 
-/* ---------- aba Pendências (fila humana) ---------- */
+/* ---------- contador (chip ready-for-human da aba Issues) ---------- */
 .tab-count{display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px;
   padding:0 5px; margin-left:6px; border-radius:9px; font-family:var(--mono); font-size:11px; font-weight:500;
   background:var(--coral); color:var(--card); line-height:1}
-.pend-lista{display:flex; flex-direction:column; gap:14px; margin-top:18px}
-.pend-card{background:var(--card); border:1px solid var(--line); border-left:3px solid var(--coral);
-  border-radius:12px; padding:18px 20px}
-.pend-card .fmeta{margin-top:8px; display:flex; flex-wrap:wrap; align-items:center; gap:8px}
-.pend-ago{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
-.pend-rastro{margin-top:10px}
-.pend-prd{display:inline-flex; align-items:center; gap:8px; font-family:var(--mono); font-size:12px;
-  color:var(--ink); text-decoration:none; border:1px solid var(--line); border-radius:var(--r-pill); padding:4px 12px}
-.pend-prd:hover{border-color:var(--coral); color:var(--coral)}
-.pend-body{margin-top:12px; padding-top:12px; border-top:1px dashed var(--line)}
-.pend-avisos{margin-top:26px; display:flex; flex-direction:column; gap:8px}
+
+/* ============ aba Issues: funil, chips por pessoa e linha do tempo (issue 942) ============ */
+/* Só tokens do :root. A cor da pessoa chega como --pessoa no style do chip,
+   vinda de pessoas.js (corDaPessoa), que devolve sempre um var(--token). */
+.funil{display:grid; grid-template-columns:repeat(9,minmax(0,1fr)); gap:6px; margin:4px 0 18px}
+.funil-passo{appearance:none; cursor:pointer; display:flex; flex-direction:column; align-items:flex-start; gap:6px;
+  min-width:0; text-align:left; background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-inner);
+  padding:11px 12px; color:var(--ink); transition:border-color .15s ease}
+.funil-passo:hover{border-color:var(--brand)}
+.funil-passo.on{background:var(--ink); border-color:var(--ink); color:var(--paper)}
+.funil-n{font-family:var(--sans); font-weight:500; font-size:22px; line-height:1}
+.funil-nome{font-family:var(--mono); font-size:10.5px; letter-spacing:.03em; line-height:1.3; opacity:.8}
+.funil-dono{margin:6px 0 8px; color:var(--brand)}
+.funil-vazio{margin:4px 0 18px}
+
+.filtros{display:flex; flex-direction:column; gap:8px; margin:0 0 20px}
+.filtro{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.filtro-rot{font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
+  color:var(--ink-soft); min-width:104px}
+.filtro-chips{display:flex; gap:6px; flex-wrap:wrap; flex:1; min-width:0}
+.filtro .search{max-width:420px}
+
+.pessoa-dot{display:inline-block; width:8px; height:8px; border-radius:var(--r-pill); background:var(--pessoa);
+  margin-right:7px; flex:none}
+.fpessoa{display:inline-flex; align-items:center; border-color:color-mix(in srgb, var(--pessoa) 45%, transparent)}
+.fpessoa:hover{border-color:var(--pessoa); color:var(--ink)}
+.fpessoa.on{background:var(--pessoa); border-color:var(--pessoa); color:var(--card)}
+.fpessoa.on .pessoa-dot{background:var(--card)}
+.fhumana{display:inline-flex; align-items:center}
+
+.iss-chips{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:8px}
+.iss-chips a.chip{text-decoration:none}
+.iss-chips a.chip:hover{border-color:var(--brand); color:var(--brand)}
+.pessoa{display:inline-flex; align-items:center; font-family:var(--mono); font-size:11.5px; color:var(--ink);
+  background:var(--card); border:1px solid color-mix(in srgb, var(--pessoa) 45%, transparent);
+  border-radius:var(--r-pill); padding:2px 10px}
+.chip-versao{color:var(--green); background:var(--green-wash); border-color:color-mix(in srgb, var(--green) 25%, transparent)}
+.iss-labels{display:flex; gap:6px; flex-wrap:wrap; margin:0 0 12px}
+
+.linha-tempo{margin:0 0 14px}
+.eventos{list-style:none; margin:8px 0 0; padding:0 0 0 14px; border-left:1px solid var(--hairline)}
+.evento{display:flex; align-items:baseline; gap:12px; padding:4px 0; font-size:13px; color:var(--ink)}
+.evento-quando{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); min-width:104px; flex:none}
+
+@media (max-width:1024px){
+  .funil{grid-template-columns:repeat(3,minmax(0,1fr))}
+}
+@media (max-width:640px){
+  .filtro-rot{min-width:0; width:100%}
+}
+/* ============ fim aba Issues (issue 942) ============ */

@@ -175,7 +175,9 @@ def _rodar(tmp_path, expr, antes="", dados=None):
     )
     arq = tmp_path / "harness.mjs"
     arq.write_text(prog, encoding="utf-8")
-    out = subprocess.run(["node", str(arq)], capture_output=True, text=True, env={**os.environ, "TZ": "UTC"})
+    out = subprocess.run(
+        ["node", str(arq)], capture_output=True, text=True, check=False, env={**os.environ, "TZ": "UTC"}
+    )
     assert out.returncode == 0, out.stderr
     linha = [x for x in out.stdout.splitlines() if x.startswith("@@")][-1]
     return json.loads(linha[2:])
@@ -184,7 +186,7 @@ def _rodar(tmp_path, expr, antes="", dados=None):
 def _botoes(html, act):
     """(data-v, tag de abertura, conteúdo) de cada <button data-act=act>."""
     out = []
-    for m in re.finditer(r"(<button[^>]*>)(.*?)</button>", html, re.S):
+    for m in re.finditer(r"(<button[^>]*>)(.*?)</button>", html, re.DOTALL):
         tag = m.group(1)
         if f'data-act="{act}"' in tag:
             v = re.search(r'data-v="([^"]*)"', tag)
@@ -330,7 +332,9 @@ def test_chip_de_responsavel_usa_a_cor_da_pessoa(tmp_path):
 
 @com_node
 def test_ninguem_assumiu_lista_as_issues_sem_assignee_mesmo_com_autor(tmp_path):
-    numeros = _rodar(tmp_path, "S.data.github.issues.filter(matchIssue).map(i => i.number)", antes="S.fIssues.resp = SEM_RESP;")
+    numeros = _rodar(
+        tmp_path, "S.data.github.issues.filter(matchIssue).map(i => i.number)", antes="S.fIssues.resp = SEM_RESP;"
+    )
     assert numeros == [901, 905, 910, 911, 912]
 
 
@@ -431,7 +435,11 @@ def test_issue_aberta_usa_a_linha_do_tempo_da_coleta(tmp_path):
 
 @com_node
 def test_issue_fechada_busca_a_linha_do_tempo_ao_expandir(tmp_path):
-    resposta = {"number": 904, "error": None, "timeline": [{"tipo": "mergeado", "em": "2026-10-03T17:58:00Z", "pr": 70}]}
+    resposta = {
+        "number": 904,
+        "error": None,
+        "timeline": [{"tipo": "mergeado", "em": "2026-10-03T17:58:00Z", "pr": 70}],
+    }
     antes = (
         f"_respostas['/api/issue/904/timeline'] = {json.dumps(resposta)};"
         "_clicar({ act: 'iss', n: '904' }); await _esperar(); await _esperar();"
