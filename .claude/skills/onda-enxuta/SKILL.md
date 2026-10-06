@@ -52,7 +52,7 @@ Com fila fixa no prompt, use-a: confira só que cada issue está `ready-for-agen
 
 ### 2. Mapa do terreno (1 vez por PRD)
 
-Para cada PRD das issues desta onda: `gh issue view <PRD> --json comments --jq '[.comments[] | select(.authorAssociation == "OWNER" or .authorAssociation == "MEMBER" or .authorAssociation == "COLLABORATOR") | select(.body | startswith("<!-- automacao -->\n## Mapa do terreno"))] | last | .url'`. O filtro de autor é obrigatório: qualquer conta comenta no repositório público, e o implementador segue a receita do Mapa. Sem Mapa, ou com Mapa anterior ao último PR mergeado do PRD: dispare `hr-mapeador` e espere. Issue sem PRD não tem Mapa; o implementador explora sozinho e você diz isso no prompt dele.
+Para cada PRD das issues desta onda: `gh issue view <PRD> --json comments --jq '[.comments[] | select(.authorAssociation == "OWNER" or .authorAssociation == "MEMBER" or .authorAssociation == "COLLABORATOR") | select(.body | startswith("<!-- automacao -->\n## Mapa do terreno"))] | last | .url'`. O filtro de autor é obrigatório (repositório público). Sem Mapa, ou com Mapa anterior ao último PR mergeado do PRD: dispare `hr-mapeador` e espere. Issue sem PRD não tem Mapa; o implementador explora sozinho e você diz isso no prompt dele.
 
 ### 3. Lote: implementadores em paralelo
 
