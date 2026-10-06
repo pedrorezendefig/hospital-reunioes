@@ -1993,3 +1993,44 @@ def test_backend_em_modo_imagem_sobe_a_imagem_do_head_retagueada_para_o_squash_s
     assert c.healths == [("backend", "0.10.1")]
     entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
     assert entrada["sha"] == squash and entrada["result"] == "healthy"
+
+
+def test_onda_em_modo_imagem_so_retagueia_head_com_a_mesma_pasta_do_backend_do_squash(
+    tmp_path, monkeypatch
+):
+    """O #7 entrou primeiro: a imagem do head dele não tem o arquivo do #8. Só o
+    head com que o #8 entrou (a main trazida por merge) tem o backend do squash
+    final, e é a única origem que o workflow pode retaguear."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    c.outro_pr(8, "fix(ouvidoria): limite de anexos por caso", 6,
+               {"hospital-reunioes/backend/app/limite.py": "LIMITE = 3\n"})
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_onda(fo, monkeypatch, c, [7, 8]) == 0
+
+    primeiro, segundo, _ = c.merges
+    assert [(p["sha"], p["origens"]) for p in c.publicacoes] == [(segundo["main"], segundo["head"])]
+    assert primeiro["head"] not in c.publicacoes[0]["origens"]
+    assert c.coolify_sem_leituras()[-2:] == [
+        f"app update uuid-backend --docker-tag {segundo['main']} | main={segundo['main']}",
+        f"deploy uuid uuid-backend | main={segundo['main']}",
+    ]
+    assert c.builds == []
+
+
+def test_frontend_no_lote_segue_o_build_do_webhook_e_o_backend_vai_por_imagem(tmp_path, monkeypatch):
+    """Só o backend está em modo imagem (o frontend é a #1002): o frontend do
+    lote continua esperando o build que o webhook disparou."""
+    fo = carregar_fechar_onda()
+    c = Cenario(tmp_path, 7, "fix: prazo e rotulo", 5,
+                {"hospital-reunioes/backend/app/prazo.py": "PRAZO = 15\n",
+                 "hospital-reunioes/frontend/src/rotulo.ts": "export const R = 1\n"},
+                project=PROJECT_IMAGEM)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    squash = c.merges[0]["main"]
+    assert c.builds == ["frontend"] and c.esperados == [squash]
+    assert c.deploys_novos == ["backend"] and [p["sha"] for p in c.publicacoes] == [squash]
