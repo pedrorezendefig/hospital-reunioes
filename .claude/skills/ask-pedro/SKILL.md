@@ -35,7 +35,7 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 - `/montar-manual [--max-sessoes N]`: antes de abrir vários terminais de `/manual`, monta o plano do passivo do manual: inventário por módulo (página que falta, print, vídeo, Novidades por PRD entregue, draft esquecido de PRD que já subiu), cada lacuna em um balde só, e um prompt por terminal, um por módulo, com as pastas que aquele terminal pode tocar e teto de 3. A publicação na Vercel fica fora dos prompts: é um passo só, depois dos merges. Não executa nada.
 - `/snapshot`: mapa factual da app (roda sozinho numa Action no push da `main`, depois do registro do rabo, ADR 0062).
 - `/atualizar-app`: rebuild local docker-compose (não toca produção).
-- **Pendência humana pós-ciclo** (import na virada, credencial, ato externo): vira issue `ready-for-human` ligada ao PRD (`/ship` Passo 10.5); o Pedro acompanha na aba **Pendências** do painel (`python3 tools/workflow-dashboard/serve.py`) e fecha a issue ao concluir.
+- **Pendência humana pós-ciclo** (import na virada, credencial, ato externo): vira issue `ready-for-human` ligada ao PRD (`/ship` Passo 10.5); o Pedro acompanha no chip `ready-for-human` da aba Issues do **Hospital OS** (`python3 tools/workflow-dashboard/serve.py`) e fecha a issue ao concluir.
 
 ## Máquina nova
 

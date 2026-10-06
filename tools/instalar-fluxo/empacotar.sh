@@ -73,7 +73,7 @@ EOF
 cat > "$PKG/LEIA-ME.md" <<'EOF'
 # Instalar o fluxo de trabalho no seu projeto
 
-Esta pasta é a ORIGEM: o painel, as skills, os CIs e o roteiro de instalação do fluxo de trabalho do repositório `pedrorezendefig/hospital-reunioes`.
+Esta pasta é a ORIGEM: o painel (Hospital OS), as skills, os CIs e o roteiro de instalação do fluxo de trabalho do repositório `pedrorezendefig/hospital-reunioes`.
 
 ## O que você precisa antes
 

@@ -42,12 +42,13 @@ def test_navegacao_tem_exatamente_5_abas_sem_grupos():
     assert "tabgroup" not in INDEX  # sem rótulos nem separadores de grupo
 
 
-def test_titulo_do_painel_e_aplicativo_hospital():
-    assert re.search(r"<title>Aplicativo Hospital", INDEX)
+def test_titulo_do_painel_e_hospital_os():
+    # ADR 0062, decisão 1: o painel se chama Hospital OS (issue #947)
+    assert re.search(r"<title>Hospital OS</title>", INDEX)
     m = re.search(r'<h1 class="hero-title">(.*?)</h1>', INDEX, re.S)
     assert m, "hero sem h1.hero-title"
     texto = re.sub(r"<[^>]+>", "", m.group(1))  # só o texto, sem markup decorativo
-    assert "Aplicativo Hospital" in texto
+    assert texto.strip() == "Hospital OS"
 
 
 # ---------- tokens de design (bloco único) ----------
@@ -131,7 +132,7 @@ def test_hero_navy_compacto_com_titulo_em_caixa_normal():
     titulo = re.search(r"\.hero-title\{[^}]*\}", CSS)
     assert titulo, ".hero-title sumiu"
     assert "text-transform:uppercase" not in titulo.group(0), "título não pode forçar caixa alta (corta o til)"
-    assert "Aplicativo" in INDEX, "título perdeu o texto"
+    assert "Hospital OS" in INDEX, "título perdeu o texto"
 
 
 def test_clip_protege_diacriticos_em_cima_e_embaixo():
