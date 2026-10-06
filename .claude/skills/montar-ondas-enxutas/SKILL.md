@@ -58,7 +58,7 @@ Classifique **cada** issue aberta em exatamente um balde. Conte: `N abertas = ag
 | Decisão | `needs-triage` ou `ready-for-human` cujo corpo traz **duas saídas escritas** (A/B, 1/2) | pergunta ao humano (passo 2b), depois entra |
 | PRD | issue-mãe com sub-issues | não é trabalho; fecha sozinho quando as filhas fecham e a auditoria passa. Se a auditoria REPROVOU: passo 2c |
 | Só humano | ação operacional (cadastro na tela, mandar arquivo para alguém), `needs-info` que depende de terceiro, `wontfix` | fora, listar como "precisa de você" com o que exatamente fazer |
-| Bloqueada | bloqueio nativo por issue ainda aberta | entra na onda seguinte à da bloqueadora, na mesma sessão |
+| Bloqueada | bloqueio nativo por issue ainda aberta | entra na onda seguinte à da bloqueadora, na mesma sessão; o implementador dela espera a bloqueadora fechar no deploy |
 
 ### 2. Deixar tudo `ready-for-agent`
 
@@ -196,7 +196,7 @@ A resposta final tem esta forma, nesta ordem. É o que o Pedro lê do celular.
 6. **Passo a passo:**
    1. Num terminal na raiz do repositório, rodar o comando de lançamento de cada sessão (todos de uma vez, se quiser). Cada uma nasce em segundo plano, monta a fila, escreve o Mapa do terreno do PRD se ainda não existir e roda a onda 1 até produção. `claude agents` lista as sessões vivas; `claude logs <id>` mostra o andamento.
    2. Nada a aprovar: cada sessão mergeia e sobe a própria onda sozinha (ADR 0063), e o semáforo enfileira os deploys. A notificação chega em três casos: migration no lote (cole no Studio o arquivo que ela cita), fatia que foi para `ready-for-human` e rollback. Liste a sequência onda a onda, alternando sessões, e marque na linha certa "a onda N traz a migration 0XX" e "ela audita o PRD #X em seguida". Lance a sessão com migration quando o Pedro estiver perto do Studio.
-   3. Com os PRs verdes, a sessão fecha a onda (um merge pela API, um build), imprime a conta de tokens e lança sozinha a sessão da onda seguinte. Nada a fazer até a próxima notificação.
+   3. Com os PRs verdes, a sessão lança sozinha a sessão da onda seguinte e, em paralelo com ela, sobe a onda (um merge pela API por PR, um build); depois comenta o resultado do rabo no PRD, imprime a conta de tokens e encerra. Nada a fazer até a próxima notificação.
    4. **Divulgação:** para cada PRD que fecha, a linha "cole o prompt de `/divulgar #X` num terminal próprio" no momento certo (agora, ou logo após o deploy da onda que sobe a última tela) e, depois do link publicado, "mande o link ao diretor e aos usuários do módulo".
    5. "No tempo morto": as tarefas do item 3.
 

@@ -133,3 +133,23 @@ def test_o_comentario_da_onda_registra_o_intervalo_dos_prs_verdes_ao_primeiro_im
     assert re.search(r"intervalo entre os PRs verdes da onda anterior .* e o primeiro implementador desta", relatorio), (
         relatorio
     )
+
+
+# ------------------------------------------- o planejador e o registro das decisões contam a ordem nova
+
+
+def test_o_montar_ondas_diz_que_a_onda_seguinte_sai_no_pr_verde():
+    passo_a_passo = secao(ler(SKILLS / "montar-ondas-enxutas" / "SKILL.md"), "6. Relatório e ordem de comando", "###")
+    linha = next(li for li in passo_a_passo.splitlines() if li.lstrip().startswith("3. Com os PRs verdes"))
+    assert not re.search(r"fecha a onda.*lança", linha), linha
+    assert re.search(r"lança sozinha a sessão da onda seguinte.*em paralelo.*comenta o resultado", linha), linha
+
+    bloqueada = next(li for li in ler(SKILLS / "montar-ondas-enxutas" / "SKILL.md").splitlines()
+                     if li.startswith("| Bloqueada |"))
+    assert "espera a bloqueadora fechar" in bloqueada, bloqueada
+
+
+def test_as_decisoes_da_onda_registram_a_emenda_da_ordem():
+    emenda = next(li for li in ler(SKILLS / "onda-enxuta" / "references" / "decisoes.md").splitlines()
+                  if "decisão 6a" in li)
+    assert "issue #999" in emenda and "decisão 2" in emenda, emenda
