@@ -649,6 +649,18 @@ async function ensureTimeline(n) {
   if (S.tab === 'issues') refreshIssueList();
 }
 
+/* nó do desenho das ondas (#943): abre o card da fatia na lista, com as
+   fatias do PRD à mostra; filtro que esconderia a fatia sai do caminho */
+function abrirFatia(n, prd) {
+  const fatia = (S.data.github.issues || []).find(i => i.number === n);
+  if (fatia && !matchIssue(fatia)) S.fIssues = filtrosVazios();
+  S.expPrd.set(prd, true);
+  if (!S.expIss.has(n)) { S.expIss.add(n); ensureComments(n); ensureTimeline(n); }
+  render();
+  const card = view.querySelector(`.iss-head[data-n="${n}"]`);
+  if (card) card.scrollIntoView({ block: 'center', behavior: reduceMotion() ? 'auto' : 'smooth' });
+}
+
 /* ---------- PRS (o quadro por fase chega na fatia própria) ---------- */
 
 function renderPrs() {
@@ -875,6 +887,8 @@ view.addEventListener('click', e => {
     const n = Number(t.dataset.n);
     S.expPrd.set(n, t.dataset.open !== '1');
     refreshIssueList();
+  } else if (act === 'onda') {
+    abrirFatia(Number(t.dataset.n), Number(t.dataset.prd));
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);
     const ver = depVer(S.data.history[i].app_version);

@@ -192,3 +192,40 @@ def test_borda_do_no_segue_a_fase_do_payload(tmp_path):
 def test_setas_seguem_so_o_blocked_by_aberto_dentro_do_prd(tmp_path):
     # 955 -> 956: bloqueadora fechada; 999 -> 957: bloqueadora de fora do PRD
     assert _setas(_svg(_rodar(tmp_path, _card(PRD)))) == {(951, 953), (952, 954), (953, 954)}
+
+
+# ---------- clique no nó ----------
+
+
+def _fatias_abertas(html):
+    """Fatias com o card aberto dentro do grupo expandido de um PRD."""
+    filhos = html.split('<div class="children">', 1)
+    if len(filhos) < 2:
+        return []
+    cards = re.split(r'<article class="nrow', filhos[1])[1:]
+    return [
+        int(re.search(r'data-act="iss" data-n="(\d+)"', c).group(1)) for c in cards if 'class="iss-body"' in c
+    ]
+
+
+@com_node
+def test_clicar_num_no_abre_o_card_da_fatia_na_lista(tmp_path):
+    antes = "_clicar({ act: 'onda', n: '953', prd: '950' });"
+    html, buscas = _rodar(tmp_path, "[issueListHtml(), _buscas]", antes=antes)
+    assert _fatias_abertas(html) == [953]
+    assert "corpo da 953" in html
+    assert {"/api/issue/953", "/api/issue/953/timeline"} <= set(buscas)
+
+
+@com_node
+def test_clicar_no_no_de_fatia_escondida_pelo_filtro_limpa_o_filtro(tmp_path):
+    antes = "S.fIssues.state = 'CLOSED'; _clicar({ act: 'onda', n: '953', prd: '950' });"
+    html, estado = _rodar(tmp_path, "[issueListHtml(), S.fIssues.state]", antes=antes)
+    assert estado == "all"
+    assert _fatias_abertas(html) == [953]
+
+
+@com_node
+def test_clicar_de_novo_no_mesmo_no_nao_fecha_o_card(tmp_path):
+    antes = "_clicar({ act: 'onda', n: '953', prd: '950' }); _clicar({ act: 'onda', n: '953', prd: '950' });"
+    assert _fatias_abertas(_rodar(tmp_path, "issueListHtml()", antes=antes)) == [953]
