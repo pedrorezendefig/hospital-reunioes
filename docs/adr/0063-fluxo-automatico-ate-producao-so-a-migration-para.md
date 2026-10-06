@@ -25,13 +25,13 @@ Decisão do Pedro (05/out/2026, grill do PRD #963). Em 05/10 cada PR levou de 13
 
 ## Permissões na máquina de quem roda
 
-Sem parada humana, o modo auto do Claude Code não pode parar no meio do rabo nem exigir o número do PR no turno. Cada pessoa põe no próprio `~/.claude/settings.json`, porque o modo auto ignora regra ampla de interpretador (como `Bash(python3:*)`) e não lê `autoMode` do settings do projeto:
+Sem parada humana, nada na máquina pode deixar o agente desligar a proteção da `main` nem publicar segredo sem olhar. Três decisões, revistas depois da revisão de segurança do PR #973:
 
-- allow específico do `fechar_onda.py`, da `/minhas-issues` e da escrituração em issue e PR (`gh issue edit`, `comment` e `create`; `gh pr create` e `comment`);
-- deny de force push e de `PUT` no ruleset do repositório: é a trava que fica no lugar do olho humano nas duas ações que o fluxo nunca faz;
-- `autoMode.environment` descrevendo o repositório, o Coolify e a Vercel.
+- **A trava do ruleset é do servidor.** As sessões de agente de quem é admin do repositório (hoje só o Pedro, dono) usam um token fine-grained do GitHub sem a permissão Administration, na variável `GH_TOKEN` do `tokens/.env`, e o login guardado no `gh` com Administration sai da máquina. Sem Administration, o GitHub recusa mudar ou apagar ruleset, proteção de branch, colaborador ou webhook, venha o pedido de onde vier. A regra de deny do Claude Code não serve para isso: ela casa pelo começo do texto do comando, e o mesmo endpoint se alcança com `-X DELETE`, `-XPUT`, `--method=PUT`, flag depois do caminho, `gh api graphql` (`updateRepositoryRuleset`) ou `curl`. Por isso não existe deny para o ruleset, nem como alarme. Colaborador com WRITE não tem Administration e não precisa do token; mudar o ruleset passa a ser pela tela do GitHub. As permissões do token, tiradas do que o pipeline chama, estão na seção 5.1 do `docs/onboarding/claude-setup.md`: Actions, Contents, Issues, Pull requests e Workflows em escrita, Checks, Commit statuses e Metadata em leitura.
+- **A `main` é travada pelo ruleset** (sem force push, sem apagar, sem bypass), que o token não consegue desligar. O deny de force push no `~/.claude/settings.json` cobre só a `main` (`--force`, `-f`, `--force-with-lease` e refspec `+main`) e é alarme a mais; a branch do próprio PR segue recebendo `--force-with-lease` depois de rebase.
+- **Nada que publica texto ou roda script do repositório fica em `permissions.allow`.** Ali a regra pula o classificador do modo auto. O repositório é público e qualquer conta comenta em issue e PR, então `gh issue create`, `comment` e `edit` e `gh pr create` e `comment` vão em `autoMode.allow`, em prosa, restritos a `pedrorezendefig/hospital-reunioes` e a texto do próprio fluxo, para o classificador seguir olhando destino e conteúdo. O `fechar_onda.py` e a `/minhas-issues` também: o allow por caminho relativo rodaria, num worktree, a versão que o agente acabou de editar. O `autoMode` vai no settings do usuário porque o modo auto não lê `autoMode` do settings do projeto.
 
-O `/setup-maquina` (nível 2) confere regra por regra e diz o que falta e por quê. Nunca grava o arquivo e nunca imprime o que ele guarda.
+O `/setup-maquina` (nível 2) confere regra por regra e confere que nem o `gh` da sessão nem o do chaveiro administram o repositório (pergunta ao GitHub pelas deploy keys, que só respondem com Administration). Diz o que falta e por quê, nunca grava o arquivo e nunca lê nem imprime o token.
 
 ## Alternativas descartadas
 

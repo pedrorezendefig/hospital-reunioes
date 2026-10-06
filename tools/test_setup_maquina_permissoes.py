@@ -1,66 +1,84 @@
-"""O fluxo automático não pode parar na máquina de quem roda (ADR 0063, issue #964).
+"""O fluxo automático não pode parar nem abrir porta na máquina de quem roda (ADR 0063, issue #964).
 
-O modo auto do Claude Code ignora regra ampla de interpretador (`Bash(python3:*)`)
-e não lê `autoMode` do settings do projeto. Então cada pessoa precisa, no próprio
-`~/.claude/settings.json`, do allow específico do rabo, da `/minhas-issues` e da
-escrituração em issue e PR, do deny de force push e de mudança no ruleset, e do
-`autoMode.environment` descrevendo o repositório, o Coolify e a Vercel. O
+A trava contra mexer no ruleset é do servidor: o `gh` das sessões de agente usa
+um token fine-grained sem a permissão Administration, e o GitHub recusa a
+mudança por qualquer caminho. Regra de deny por prefixo não trava isso (escapa
+com `-X DELETE`, `--method=PUT`, `graphql`, `curl`), então ela não existe mais.
+No `~/.claude/settings.json` de cada pessoa ficam o deny de force push contra a
+`main` e o `autoMode` (o modo auto não lê `autoMode` do settings do projeto):
+o rabo, a `/minhas-issues` e a escrituração em issue e PR vão em
+`autoMode.allow`, em prosa, para o classificador seguir olhando destino e
+conteúdo, e nunca em `permissions.allow`, que pula o classificador. O
 `/setup-maquina` confere e diz o que falta e por quê; nunca grava o arquivo e
-nunca imprime nada dele (o bloco `env` guarda token).
+nunca imprime nada dele nem o token (o bloco `env` guarda token).
 """
 
 from __future__ import annotations
 
+import fnmatch
 import json
 import shutil
 import subprocess
 from pathlib import Path
 
-from test_setup_maquina_esteira import RAIZ, SCRIPT, SEGREDO, linha, roda
+from test_setup_maquina_esteira import (
+    RAIZ,
+    SAIDAS,
+    SCRIPT,
+    SEGREDO,
+    falso,
+    funcao,
+    linha,
+    roda,
+)
 
-# A referência é o settings da máquina do Pedro em 05/10/2026 (PRD #963, decisão 10).
-ALLOW = [
+DENY = [
+    "Bash(git push *-f* main*)",
+    "Bash(git push *-f*:main*)",
+    "Bash(git push * main*-f*)",
+    "Bash(git push *:main*-f*)",
+    "Bash(git push *+main*)",
+    "Bash(git push *+*:main*)",
+]
+AMBIENTE = [
+    "$defaults",
+    "**Source control**: o repositório confiável é pedrorezendefig/hospital-reunioes, público",
+    "**CI/CD deploy targets**: Coolify (coolify.exemplo.test), deploy de produção pelo fechar_onda.py",
+    "**Trusted internal domains**: manual-hsm.vercel.app",
+]
+AUTO_ALLOW = [
+    "$defaults",
+    "Rodar fechar_onda.py e minhas_issues.py do repositório quando o script não foi editado",
+    "Escrituração com gh issue create, comment e edit só no repositório",
+    "Escrituração com gh pr create e comment só no repositório",
+]
+# As regras que já foram do guia e pulam o classificador: nenhuma pode voltar.
+ABERTAS = [
     "Bash(python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py:*)",
     "Bash(python3 .claude/skills/minhas-issues/scripts/minhas_issues.py:*)",
     "Bash(gh issue edit:*)",
     "Bash(gh issue comment:*)",
     "Bash(gh issue create:*)",
     "Bash(gh pr create:*)",
-    "Bash(gh pr comment:*)",
+    "Bash(gh pr comment *)",
+    "Bash(gh:*)",
 ]
-DENY = [
-    "Bash(git push --force:*)",
-    "Bash(git push -f:*)",
-    "Bash(gh api -X PUT repos/pedrorezendefig/hospital-reunioes/rulesets:*)",
-    "Bash(gh api --method PUT repos/pedrorezendefig/hospital-reunioes/rulesets:*)",
-]
-AMBIENTE = [
-    "**Source control**: the trusted repo (pedrorezendefig/hospital-reunioes) and its origin",
-    "**CI/CD deploy targets**: Coolify (coolify.exemplo.test), driven by fechar_onda.py",
-    "**Manual**: site publicado na Vercel pelo rabo",
-]
-# Como cada regra aparece no rótulo da linha do diagnóstico.
-ROTULOS = {
-    ALLOW[0]: "allow fechar_onda.py",
-    ALLOW[1]: "allow minhas_issues.py",
-    ALLOW[2]: "allow gh issue edit",
-    ALLOW[3]: "allow gh issue comment",
-    ALLOW[4]: "allow gh issue create",
-    ALLOW[5]: "allow gh pr create",
-    ALLOW[6]: "allow gh pr comment",
-    DENY[0]: "deny git push --force",
-    DENY[1]: "deny git push -f",
-    DENY[2]: "deny gh api -X PUT",
-    DENY[3]: "deny gh api --method PUT",
-}
+ROTULOS_DENY = [f"deny {r[5:-1]}" for r in DENY]
+ROTULOS_AMBIENTE = ["repositório", "Coolify", "Vercel"]
+ROTULOS_AUTO = ["fechar_onda.py", "minhas_issues.py", "gh issue", "gh pr"]
+LINHAS = (
+    len(DENY) + len(ROTULOS_AMBIENTE) + len(ROTULOS_AUTO) + 1
+)  # +1: sem allow aberto
 
 
-def settings(pasta: Path, allow=ALLOW, deny=DENY, ambiente=AMBIENTE, **extra) -> Path:
+def settings(
+    pasta: Path, allow=(), deny=DENY, ambiente=AMBIENTE, auto=AUTO_ALLOW, **extra
+) -> Path:
     pasta.mkdir(parents=True, exist_ok=True)
     arquivo = pasta / "settings.json"
     dados = {
         "permissions": {"allow": list(allow), "deny": list(deny)},
-        "autoMode": {"environment": list(ambiente), "allow": [], "soft_deny": []},
+        "autoMode": {"environment": list(ambiente), "allow": list(auto)},
         **extra,
     }
     arquivo.write_text(json.dumps(dados, indent=2), encoding="utf-8")
@@ -78,80 +96,263 @@ def faltas(saida: str) -> list[str]:
 def test_settings_completo_passa_regra_por_regra(tmp_path):
     saida = confere(tmp_path, settings(tmp_path))
     assert faltas(saida) == [], saida
-    for regra, rotulo in ROTULOS.items():
-        assert linha(saida, rotulo).startswith("OK"), regra
-    for item in ("repositório", "Coolify", "Vercel"):
+    for rotulo in ROTULOS_DENY:
+        assert linha(saida, rotulo).startswith("OK"), rotulo
+    for item in ROTULOS_AMBIENTE:
         assert linha(saida, f"autoMode.environment: {item}").startswith("OK")
+    for item in ROTULOS_AUTO:
+        assert linha(saida, f"autoMode.allow: {item}").startswith("OK")
+    assert linha(saida, "sem allow que pula o classificador").startswith("OK")
 
 
 def test_settings_incompleto_aponta_cada_regra_que_falta_e_o_conserto(tmp_path):
     arquivo = settings(
         tmp_path,
-        allow=[r for r in ALLOW if "fechar_onda" not in r and "gh pr comment" not in r],
-        deny=[r for r in DENY if r != "Bash(git push -f:*)"],
-        ambiente=[a for a in AMBIENTE if "Vercel" not in a],
+        deny=[r for r in DENY if r != "Bash(git push *+main*)"],
+        ambiente=[a for a in AMBIENTE if "vercel" not in a],
+        auto=[a for a in AUTO_ALLOW if "gh issue" not in a],
     )
     saida = confere(tmp_path, arquivo)
-    assert len(faltas(saida)) == 4, saida
+    assert len(faltas(saida)) == 3, saida
 
-    rabo = linha(saida, "allow fechar_onda.py")
-    assert rabo.startswith("FALTA")
-    assert ALLOW[0] in rabo and "permissions.allow" in rabo, "diz a regra exata e onde pôr"
-    assert "~/.claude/settings.json" in rabo, "o arquivo é o do usuário, não o do projeto"
-
-    comentario = linha(saida, "allow gh pr comment")
-    assert comentario.startswith("FALTA") and ALLOW[6] in comentario
-
-    force = linha(saida, "deny git push -f")
-    assert force.startswith("FALTA")
-    assert DENY[1] in force and "permissions.deny" in force
+    mais = linha(saida, "deny git push *+main*")
+    assert mais.startswith("FALTA")
+    assert '"Bash(git push *+main*)"' in mais and "permissions.deny" in mais, (
+        "diz a regra exata e onde pôr"
+    )
+    assert "~/.claude/settings.json" in mais, (
+        "o arquivo é o do usuário, não o do projeto"
+    )
 
     vercel = linha(saida, "autoMode.environment: Vercel")
-    assert vercel.startswith("FALTA")
-    assert "não lê autoMode do settings do projeto" in vercel, "diz por que tem de ser no do usuário"
+    assert vercel.startswith("FALTA") and "manual-hsm.vercel.app" in vercel, (
+        "pede o host exato"
+    )
+    assert "não lê autoMode do settings do projeto" in vercel, (
+        "diz por que tem de ser no do usuário"
+    )
 
-    assert linha(saida, "allow gh issue edit").startswith("OK")
-    assert linha(saida, "deny git push --force").startswith("OK")
+    issue = linha(saida, "autoMode.allow: gh issue")
+    assert issue.startswith("FALTA") and "classificador" in issue
+
+    assert linha(saida, "deny git push *-f* main*").startswith("OK")
     assert linha(saida, "autoMode.environment: Coolify").startswith("OK")
+    assert linha(saida, "autoMode.allow: gh pr").startswith("OK")
 
 
-def test_regra_ampla_de_interpretador_nao_substitui_a_especifica(tmp_path):
-    amplas = ["Bash(python3:*)", "Bash(python3 *)"] + ALLOW[2:]
-    saida = confere(tmp_path, settings(tmp_path, allow=amplas))
-    for rotulo in ("allow fechar_onda.py", "allow minhas_issues.py"):
-        li = linha(saida, rotulo)
-        assert li.startswith("FALTA")
-        assert "regra ampla de interpretador" in li, "diz por que a ampla não basta"
+def test_vercel_generico_nao_basta(tmp_path):
+    """`*.vercel.app` qualquer conta registra; só o host do Manual é confiável."""
+    ambiente = AMBIENTE[:3] + [
+        "**Trusted internal domains**: os projetos do time na Vercel"
+    ]
+    saida = confere(tmp_path, settings(tmp_path, ambiente=ambiente))
+    assert linha(saida, "autoMode.environment: Vercel").startswith("FALTA")
 
 
-def test_regra_na_forma_com_espaco_tambem_vale(tmp_path):
-    """O Claude Code aceita `Bash(cmd:*)` e `Bash(cmd *)`; a máquina do Pedro tem as duas."""
-    com_espaco = [r.replace(":*)", " *)") for r in ALLOW]
-    saida = confere(tmp_path, settings(tmp_path, allow=com_espaco))
+def test_nao_ha_mais_regra_de_ruleset(tmp_path):
+    """A trava do ruleset é o token sem Administration, não um deny que se contorna."""
+    saida = confere(tmp_path, settings(tmp_path))
+    assert "ruleset" not in saida.lower(), saida
+    assert "ruleset" not in "".join(DENY)
+
+
+# ------------------------------------------------- allow que pula o classificador
+
+
+def test_cada_allow_aberto_acusa_e_diz_por_que(tmp_path):
+    saida = confere(
+        tmp_path, settings(tmp_path, allow=ABERTAS + ["Bash(gh run rerun:*)"])
+    )
+    acusadas = [li for li in faltas(saida) if "allow aberto" in li]
+    assert len(acusadas) == len(ABERTAS), saida
+    for regra in ABERTAS:
+        li = next(li for li in acusadas if f'"{regra}"' in li)
+        assert "permissions.allow" in li and "classificador" in li, li
+    assert "sem allow que pula o classificador" not in saida
+    assert "gh run rerun" not in saida, "rerun não publica texto: fica"
+
+
+def test_allow_de_leitura_e_de_outra_ferramenta_nao_acusa(tmp_path):
+    allow = ["Bash(gh issue list:*)", "Bash(gh pr view *)", "Bash(git:*)", "Bash(jq:*)"]
+    saida = confere(tmp_path, settings(tmp_path, allow=allow))
     assert faltas(saida) == [], saida
+
+
+# ------------------------------------------------- o deny de force push
+
+
+def casa(comando: str, regra: str) -> bool:
+    """Leitura da regra como o Claude Code faz: `*` é qualquer texto, o resto é literal."""
+    return fnmatch.fnmatchcase(comando, regra[len("Bash(") : -1].replace("[", "[[]"))
+
+
+FORCA_NA_MAIN = [
+    "git push --force origin main",
+    "git push origin main --force",
+    "git push -f origin main",
+    "git push origin main -f",
+    "git push --force-with-lease origin main",
+    "git push origin main --force-with-lease",
+    "git push --force origin HEAD:main",
+    "git push -f origin HEAD:main",
+    "git push origin +main",
+    "git push origin +HEAD:main",
+]
+PUSH_DO_FLUXO = [
+    "git push -u origin docs/adr-0063-setup-maquina-permissoes-964",
+    "git push --force-with-lease",
+    "git push --force-with-lease origin fix/domain-sem-main",
+    "git push origin chore/pr-de-ferramenta-so-faz-merge-965",
+    "git push -q origin HEAD:refs/heads/entrega-onda-3",
+    "git push origin main",
+]
+
+
+def test_deny_pega_force_push_na_main_em_toda_forma():
+    for comando in FORCA_NA_MAIN:
+        assert any(casa(comando, r) for r in DENY), comando
+
+
+def test_deny_nao_trava_o_push_do_fluxo():
+    """O corretor sobe rebase com --force-with-lease na branch do PR; a main tem o ruleset."""
+    for comando in PUSH_DO_FLUXO:
+        assert not any(casa(comando, r) for r in DENY), comando
+
+
+# ------------------------------------------------- casos de borda do arquivo
 
 
 def test_settings_sem_autoMode_e_sem_permissoes_acusa_tudo(tmp_path):
     arquivo = tmp_path / "settings.json"
     arquivo.write_text(json.dumps({"model": "opus"}), encoding="utf-8")
-    assert len(faltas(confere(tmp_path, arquivo))) == len(ROTULOS) + 3
+    assert len(faltas(confere(tmp_path, arquivo))) == LINHAS - 1
 
 
 def test_settings_que_nao_existe_acusa_tudo(tmp_path):
     saida = confere(tmp_path, tmp_path / "nao-existe.json")
-    assert len(faltas(saida)) == len(ROTULOS) + 3, saida
+    assert len(faltas(saida)) == LINHAS - 1, saida
 
 
 def test_o_trecho_do_onboarding_passa_no_diagnostico(tmp_path):
     """O FALTA manda a pessoa ao trecho da seção 5.1; ele tem de bastar."""
-    guia = (RAIZ / "docs" / "onboarding" / "claude-setup.md").read_text(encoding="utf-8")
-    secao = guia.split("### 5.1 ", 1)[1]
+    guia = (RAIZ / "docs" / "onboarding" / "claude-setup.md").read_text(
+        encoding="utf-8"
+    )
+    secao = guia.split("### 5.1 ", 1)[1].split("\n## ", 1)[0]
     bloco = secao.split("```json\n", 1)[1].split("```", 1)[0]
     arquivo = tmp_path / "settings.json"
     arquivo.write_text(bloco, encoding="utf-8")
     saida = confere(tmp_path, arquivo)
     assert faltas(saida) == [], saida
-    assert len(saida.splitlines()) == len(ROTULOS) + 3, saida
+    assert len(saida.splitlines()) == LINHAS, saida
+
+
+def test_o_guia_base_nao_libera_gh_inteiro(tmp_path):
+    """O `Bash(gh:*)` da seção 5 tiraria o classificador da escrituração de novo."""
+    guia = (RAIZ / "docs" / "onboarding" / "claude-setup.md").read_text(
+        encoding="utf-8"
+    )
+    for bloco in guia.split("```json\n")[1:]:
+        json_bloco = bloco.split("```", 1)[0]
+        arquivo = tmp_path / "settings.json"
+        arquivo.write_text(json_bloco, encoding="utf-8")
+        saida = confere(tmp_path, arquivo)
+        assert not [li for li in faltas(saida) if "allow aberto" in li], saida
+
+
+# ------------------------------------------------- o token do gh sem Administration
+
+
+def gh_admin(tmp_path: Path, sessao: str, chaveiro: str) -> None:
+    """`gh api .../keys` (deploy keys exigem Administration) responde conforme a credencial.
+
+    Com GH_TOKEN no ambiente, o gh usa o token da sessão; sem ele, o do chaveiro.
+    Cada modo: admin (200), 403, 404, semlogin, rede. O falso também cospe o
+    segredo nas duas saídas, para provar que a conferência não repassa nada.
+    """
+    falso(
+        tmp_path,
+        "gh",
+        'case "$*" in *"repos/{owner}/{repo}/keys"*) ;; *) exit 0 ;; esac\n'
+        f'if [ -n "${{GH_TOKEN:-}}${{GITHUB_TOKEN:-}}" ]; then m="{sessao}"; else m="{chaveiro}"; fi\n'
+        f'echo "{SEGREDO}"; echo "{SEGREDO}" >&2\n'
+        'case "$m" in\n'
+        "  admin) exit 0 ;;\n"
+        "  403) echo 'gh: Resource not accessible by personal access token (HTTP 403)' >&2; exit 1 ;;\n"
+        "  404) echo 'gh: Not Found (HTTP 404)' >&2; exit 1 ;;\n"
+        "  semlogin) echo 'To get started with GitHub CLI, please run:  gh auth login' >&2; exit 4 ;;\n"
+        "  rede) echo 'error connecting to api.github.com' >&2; exit 1 ;;\n"
+        "esac",
+    )
+
+
+SESSAO = "gh da sessão sem Administration"
+CHAVEIRO = "gh do chaveiro sem Administration"
+
+
+def admin(tmp_path: Path, com_token: bool) -> str:
+    """Como o `roda`, mas com ou sem GH_TOKEN no ambiente da conferência."""
+    env = {"PATH": f"{tmp_path / 'bin'}:/usr/bin:/bin", "HOME": str(tmp_path)}
+    if com_token:
+        env["GH_TOKEN"] = "github_pat_falso"
+    r = subprocess.run(
+        ["bash", "-c", SAIDAS + funcao("checa_gh_sem_admin") + "\ncheca_gh_sem_admin"],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=60,
+        check=False,
+    )
+    return r.stdout + r.stderr
+
+
+def test_token_fine_grained_sem_admin_e_chaveiro_vazio_passam(tmp_path):
+    gh_admin(tmp_path, sessao="403", chaveiro="semlogin")
+    saida = admin(tmp_path, com_token=True)
+    assert linha(saida, SESSAO).startswith("OK"), saida
+    assert linha(saida, CHAVEIRO).startswith("OK"), saida
+    assert SEGREDO not in saida
+
+
+def test_token_da_sessao_com_admin_acusa_e_manda_criar_o_fine_grained(tmp_path):
+    gh_admin(tmp_path, sessao="admin", chaveiro="semlogin")
+    li = linha(admin(tmp_path, com_token=True), SESSAO)
+    assert li.startswith("FALTA"), li
+    assert "Administration" in li and "GH_TOKEN" in li and "tokens/.env" in li, li
+    assert "5.1" in li, "aponta o passo a passo"
+    assert SEGREDO not in li
+
+
+def test_chaveiro_com_admin_acusa_mesmo_com_o_token_certo(tmp_path):
+    """O agente escapa do GH_TOKEN com `env -u GH_TOKEN gh ...` e cai no chaveiro."""
+    gh_admin(tmp_path, sessao="403", chaveiro="admin")
+    saida = admin(tmp_path, com_token=True)
+    assert linha(saida, SESSAO).startswith("OK"), saida
+    li = linha(saida, CHAVEIRO)
+    assert li.startswith("FALTA") and "gh auth logout" in li, li
+    assert SEGREDO not in saida
+
+
+def test_sem_GH_TOKEN_a_sessao_e_o_chaveiro(tmp_path):
+    """Colaborador sem admin no repositório: o 404 do chaveiro vale como sem Administration."""
+    gh_admin(tmp_path, sessao="admin", chaveiro="404")
+    saida = admin(tmp_path, com_token=False)
+    assert linha(saida, SESSAO).startswith("OK"), saida
+    assert CHAVEIRO not in saida, "sem GH_TOKEN, a sessão já é o chaveiro"
+
+
+def test_sem_GH_TOKEN_e_admin_no_chaveiro_acusa(tmp_path):
+    gh_admin(tmp_path, sessao="403", chaveiro="admin")
+    li = linha(admin(tmp_path, com_token=False), SESSAO)
+    assert li.startswith("FALTA") and "GH_TOKEN" in li, li
+
+
+def test_sem_rede_avisa_e_nao_da_ok(tmp_path):
+    gh_admin(tmp_path, sessao="rede", chaveiro="rede")
+    saida = admin(tmp_path, com_token=True)
+    assert linha(saida, SESSAO).startswith("AVISO"), saida
+    assert linha(saida, CHAVEIRO).startswith("AVISO"), saida
 
 
 # ------------------------------------------------- segredo e escrita
@@ -161,16 +362,18 @@ def test_nao_imprime_valor_do_env_nem_grava_o_arquivo(tmp_path):
     """O token falso fica no `env`, onde o settings de verdade guarda chave."""
     arquivo = settings(
         tmp_path,
-        allow=ALLOW[1:],
-        ambiente=AMBIENTE[:1],
-        env={"COOLIFY_ACCESS_TOKEN": SEGREDO, "GITHUB_PERSONAL_ACCESS_TOKEN": SEGREDO},
+        allow=ABERTAS[:1],
+        ambiente=AMBIENTE[:2],
+        env={"COOLIFY_ACCESS_TOKEN": SEGREDO, "GH_TOKEN": SEGREDO},
     )
     antes = arquivo.read_bytes()
     saida = confere(tmp_path, arquivo)
     assert len(faltas(saida)) == 3, saida
     assert SEGREDO not in saida
     assert arquivo.read_bytes() == antes, "nunca grava a configuração sozinho"
-    assert list((tmp_path / "casa").iterdir()) == [], "nada gravado na casa nem na pasta"
+    assert list((tmp_path / "casa").iterdir()) == [], (
+        "nada gravado na casa nem na pasta"
+    )
 
 
 # ------------------------------------------------- o script inteiro
@@ -183,7 +386,9 @@ def roda_script(tmp_path: Path, nivel: str) -> str:
     pasta_script.mkdir(parents=True, exist_ok=True)
     shutil.copy(SCRIPT, pasta_script / "diagnostico.sh")
     (pasta_script.parent / "references").mkdir(exist_ok=True)
-    (pasta_script.parent / "references" / "plugins.txt").write_text("", encoding="utf-8")
+    (pasta_script.parent / "references" / "plugins.txt").write_text(
+        "", encoding="utf-8"
+    )
     subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
     pasta = tmp_path / "bin"
     pasta.mkdir(exist_ok=True)
@@ -196,6 +401,7 @@ def roda_script(tmp_path: Path, nivel: str) -> str:
         capture_output=True,
         text=True,
         timeout=120,
+        check=False,
     )
     return r.stdout + r.stderr
 
@@ -204,10 +410,28 @@ def test_o_script_confere_o_settings_do_usuario_no_nivel_2(tmp_path):
     (tmp_path / "casa" / ".claude").mkdir(parents=True)
     settings(tmp_path / "casa" / ".claude", env={"COOLIFY_ACCESS_TOKEN": SEGREDO})
     saida = roda_script(tmp_path, "2")
-    for rotulo in ROTULOS.values():
+    for rotulo in ROTULOS_DENY:
         assert linha(saida, rotulo).split()[0] == "OK", saida
     assert linha(saida, "autoMode.environment: Vercel").split()[0] == "OK", saida
+    assert linha(saida, "autoMode.allow: gh pr").split()[0] == "OK", saida
     assert SEGREDO not in saida
+
+
+def test_o_script_confere_o_token_do_gh_no_nivel_2(tmp_path):
+    """O script põe ~/.local/bin na frente do PATH (antes do Homebrew): o falso vai lá e no PATH."""
+    (tmp_path / "casa" / ".local").mkdir(parents=True)
+    corpo = (
+        'case "$*" in\n'
+        '  "auth status") exit 0 ;;\n'
+        '  "repo view"*) echo ADMIN ;;\n'
+        '  *"repos/{owner}/{repo}/keys"*) echo "[]" ;;\n'
+        "  *) exit 1 ;;\n"
+        "esac"
+    )
+    falso(tmp_path, "gh", corpo)
+    falso(tmp_path / "casa" / ".local", "gh", corpo)
+    saida = roda_script(tmp_path, "2")
+    assert linha(saida, SESSAO).split()[0] == "FALTA", saida
 
 
 def test_settings_do_projeto_nao_conta(tmp_path):
@@ -215,13 +439,14 @@ def test_settings_do_projeto_nao_conta(tmp_path):
     (tmp_path / "casa").mkdir()
     settings(tmp_path / "repo" / ".claude")
     saida = roda_script(tmp_path, "2")
-    assert linha(saida, "allow fechar_onda.py").split()[0] == "FALTA", saida
+    assert linha(saida, "deny git push *+main*").split()[0] == "FALTA", saida
     assert linha(saida, "autoMode.environment: Coolify").split()[0] == "FALTA", saida
 
 
 def test_o_nivel_1_nao_confere_as_permissoes(tmp_path):
     (tmp_path / "casa").mkdir()
-    assert "allow fechar_onda.py" not in roda_script(tmp_path, "1")
+    saida = roda_script(tmp_path, "1")
+    assert "autoMode" not in saida and SESSAO not in saida
 
 
 # ------------------------------------------------- ADR 0063
@@ -243,7 +468,17 @@ def test_adr_0063_aceito_e_emendando_o_0061_nos_dois_sentidos():
     assert nova["status"] == "accepted"
     assert nova["amends"] == "0061"
     assert "0063" in cabecalho(adr("0061"))["amended_by"].split(", ")
-    assert adr("0063").name in (RAIZ / "docs" / "adr" / "README.md").read_text(encoding="utf-8")
+    assert adr("0063").name in (RAIZ / "docs" / "adr" / "README.md").read_text(
+        encoding="utf-8"
+    )
+
+
+def test_adr_0063_poe_a_trava_no_servidor_e_diz_por_que_o_deny_nao_serve():
+    texto = adr("0063").read_text(encoding="utf-8")
+    assert "Administration" in texto and "fine-grained" in texto
+    for contorno in ("-X DELETE", "--method=PUT", "graphql", "curl"):
+        assert contorno in texto, contorno
+    assert "rulesets:*" not in texto, "nenhuma regra de deny do ruleset sobrou"
 
 
 def test_texto_novo_sem_travessao():

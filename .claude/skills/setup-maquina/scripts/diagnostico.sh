@@ -73,44 +73,80 @@ checa_claude_versao() { # OK se claude --version >= CLAUDE_MIN; FALTA abaixo ou 
   if versao_min "$v" "$CLAUDE_MIN"; then ok "claude >= $CLAUDE_MIN" "$v"
   else falta "claude >= $CLAUDE_MIN" "tem $v; atualize: curl -fsSL https://claude.ai/install.sh | bash"; fi
 }
-# Fluxo automático (ADR 0063): sem estas regras no settings DO USUÁRIO o modo auto para no meio
-# do rabo pedindo confirmação. Ele ignora regra ampla de interpretador (Bash(python3:*)) e não lê
-# autoMode do settings do projeto. Só pergunta ao jq se a regra existe: nada do arquivo vai para a
-# saída (o bloco env guarda token) e nada é gravado; quem edita o arquivo é a pessoa.
+# Fluxo automático (ADR 0063): o settings DO USUÁRIO precisa do deny de force push contra a main e
+# do autoMode (o modo auto não lê autoMode do settings do projeto). O rabo, a /minhas-issues e a
+# escrituração em issue e PR vão em autoMode.allow, em prosa, para o classificador seguir olhando
+# destino e conteúdo; em permissions.allow eles pulariam o classificador. Só pergunta ao jq se a
+# regra existe: nada do arquivo vai para a saída (o bloco env guarda token) e nada é gravado.
 checa_permissoes_claude() { # settings.json do usuário
-  local cfg="$1" tipo rotulo regra porque termo
-  while IFS='|' read -r tipo rotulo regra porque; do
-    if jq -e --arg t "$tipo" --arg r "$regra" \
-      'any((.permissions[$t] // [])[]; . == "Bash(\($r):*)" or . == "Bash(\($r) *)")' "$cfg" >/dev/null 2>&1; then
-      ok "$tipo $rotulo"
+  local cfg="$1" regra rotulo termo secao porque abertas
+  while IFS= read -r regra; do
+    if jq -e --arg r "$regra" 'any((.permissions.deny // [])[]; . == $r)' "$cfg" >/dev/null 2>&1; then
+      ok "deny ${regra:5:${#regra}-6}"
     else
-      falta "$tipo $rotulo" "ponha \"Bash($regra:*)\" em permissions.$tipo do ~/.claude/settings.json: $porque"
+      falta "deny ${regra:5:${#regra}-6}" "ponha \"$regra\" em permissions.deny do ~/.claude/settings.json: trava force push contra a main (a main tem ainda o ruleset)"
     fi
-  done <<'REGRAS'
-allow|fechar_onda.py|python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py|o modo auto ignora regra ampla de interpretador (Bash(python3:*)) e para o rabo pedindo confirmação
-allow|minhas_issues.py|python3 .claude/skills/minhas-issues/scripts/minhas_issues.py|o modo auto ignora regra ampla de interpretador (Bash(python3:*)) e para a /minhas-issues pedindo confirmação
-allow|gh issue edit|gh issue edit|o fluxo escritura na issue sozinho; sem a regra o modo auto para pedindo confirmação
-allow|gh issue comment|gh issue comment|o fluxo escritura na issue sozinho; sem a regra o modo auto para pedindo confirmação
-allow|gh issue create|gh issue create|o fluxo escritura na issue sozinho; sem a regra o modo auto para pedindo confirmação
-allow|gh pr create|gh pr create|o fluxo abre o PR sozinho; sem a regra o modo auto para pedindo confirmação
-allow|gh pr comment|gh pr comment|o fluxo comenta no PR sozinho; sem a regra o modo auto para pedindo confirmação
-deny|git push --force|git push --force|sem parada humana, o deny é o que trava o force push (ADR 0061)
-deny|git push -f|git push -f|sem parada humana, o deny é o que trava o force push (ADR 0061)
-deny|gh api -X PUT|gh api -X PUT repos/pedrorezendefig/hospital-reunioes/rulesets|sem parada humana, o deny é o que impede mexer no ruleset da main (ADR 0061)
-deny|gh api --method PUT|gh api --method PUT repos/pedrorezendefig/hospital-reunioes/rulesets|sem parada humana, o deny é o que impede mexer no ruleset da main (ADR 0061)
-REGRAS
-  while IFS='|' read -r rotulo termo; do
-    if jq -e --arg t "$termo" \
-      '[.autoMode.environment // empty | .. | strings] | join(" ") | ascii_downcase | contains($t)' "$cfg" >/dev/null 2>&1; then
-      ok "autoMode.environment: $rotulo"
+  done <<'DENY'
+Bash(git push *-f* main*)
+Bash(git push *-f*:main*)
+Bash(git push * main*-f*)
+Bash(git push *:main*-f*)
+Bash(git push *+main*)
+Bash(git push *+*:main*)
+DENY
+  while IFS='|' read -r secao rotulo termo; do
+    if jq -e --arg s "$secao" --arg t "$termo" \
+      '[.autoMode[$s] // empty | .. | strings] | join(" ") | ascii_downcase | contains($t)' "$cfg" >/dev/null 2>&1; then
+      ok "autoMode.$secao: $rotulo"
     else
-      falta "autoMode.environment: $rotulo" "descreva $rotulo ($termo) em autoMode.environment do ~/.claude/settings.json: o modo auto não lê autoMode do settings do projeto, só o seu"
+      porque="o modo auto não lê autoMode do settings do projeto, só o seu"
+      [ "$secao" = allow ] && porque="fora de permissions.allow, para o classificador seguir olhando destino e conteúdo; $porque"
+      falta "autoMode.$secao: $rotulo" "descreva $rotulo ($termo) em autoMode.$secao do ~/.claude/settings.json (docs/onboarding/claude-setup.md seção 5.1): $porque"
     fi
-  done <<'AMBIENTE'
-repositório|pedrorezendefig/hospital-reunioes
-Coolify|coolify
-Vercel|vercel
-AMBIENTE
+  done <<'AUTO'
+environment|repositório|pedrorezendefig/hospital-reunioes
+environment|Coolify|coolify
+environment|Vercel|manual-hsm.vercel.app
+allow|fechar_onda.py|fechar_onda.py
+allow|minhas_issues.py|minhas_issues.py
+allow|gh issue|gh issue
+allow|gh pr|gh pr
+AUTO
+  # Allow que tira o classificador do canal que publica texto num repositório público, ou que
+  # libera o script do cwd (num worktree, o agente roda a versão que ele mesmo editou).
+  abertas="$(jq -r '(.permissions.allow // [])[] | select(
+      test("^Bash\\(gh( (issue|pr))?(\\)|[ :]?\\*)") or test("^Bash\\(gh (issue (create|comment|edit)|pr (create|comment))")
+      or test("^Bash\\(python3? \\.claude/"))' "$cfg" 2>/dev/null)"
+  if [ -z "$abertas" ]; then
+    ok "sem allow que pula o classificador"
+  else
+    while IFS= read -r regra; do
+      falta "allow aberto" "tire \"$regra\" de permissions.allow: ali ele pula o classificador; descreva em autoMode.allow (seção 5.1)"
+    done <<<"$abertas"
+  fi
+}
+# A trava do ruleset é do servidor (ADR 0063): nenhuma credencial do gh que o agente alcança pode
+# ter Administration. Pergunta ao GitHub pelas deploy keys, que só respondem com Administration,
+# e só olha o código de saída e o HTTP do erro: nunca lê nem imprime o token.
+checa_gh_sem_admin() {
+  local onde rotulo erro conserto
+  for onde in sessao chaveiro; do
+    if [ "$onde" = sessao ]; then
+      rotulo="gh da sessão sem Administration"
+      erro="$(gh api 'repos/{owner}/{repo}/keys' --silent 2>&1 >/dev/null)" && erro=ADMIN
+      conserto="o gh desta sessão administra o repositório: crie o token fine-grained sem Administration e ponha GH_TOKEN no tokens/.env (docs/onboarding/claude-setup.md seção 5.1)"
+    else
+      [ -n "${GH_TOKEN:-}${GITHUB_TOKEN:-}" ] || return 0   # sem GH_TOKEN, a sessão já é o chaveiro
+      rotulo="gh do chaveiro sem Administration"
+      erro="$(env -u GH_TOKEN -u GITHUB_TOKEN gh api 'repos/{owner}/{repo}/keys' --silent 2>&1 >/dev/null)" && erro=ADMIN
+      conserto="o login guardado no gh administra o repositório e o agente chega nele com env -u GH_TOKEN: rode env -u GH_TOKEN gh auth logout -h github.com (ruleset se muda pela tela do GitHub)"
+    fi
+    case "$erro" in
+      ADMIN) falta "$rotulo" "$conserto" ;;
+      *"HTTP 403"*|*"HTTP 404"*|*"gh auth login"*) ok "$rotulo" ;;
+      *) aviso "$rotulo" "não consegui perguntar ao GitHub agora; rode de novo com rede" ;;
+    esac
+  done
 }
 # ---------------------------------------------------------------- Nível 1
 titulo "Nível 1: pipeline (issues, tdd, PR)"
@@ -199,6 +235,7 @@ if [ "$NIVEL" -ge 2 ]; then
 titulo "Nível 2: deploy (ship, rabo fechar_onda.py, /deploy, /onda-enxuta)"
 checa_claude_versao
 checa_permissoes_claude "$HOME/.claude/settings.json"
+[ "$GH_OK" -eq 1 ] && checa_gh_sem_admin
 bin_ok coolify "ver docs/onboarding/claude-setup.md seção 4.1"
 # A CLI responde e tem o contexto do hospital (hsm). Lê a lista e o verify sem nunca
 # imprimir o que eles devolvem: a saída do CLI pode trazer o token.
