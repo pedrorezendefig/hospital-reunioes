@@ -2,6 +2,41 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-06T13:38:54-03:00",
+      "sha": "99259efee4be6fb8d82943d8c94cf9e8eddfe855",
+      "app_version": "0.163.4",
+      "subject": "PR #1007, issue #1006: Uma thread por tick, sem gather sobre o cliente Supabase",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1007)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 57,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1007, issue #1006. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
       "at": "2026-10-06T11:02:15-03:00",
       "sha": "61e6484b99f50ffca0649b5569fb8abafe847cae",
       "app_version": "0.163.3",
