@@ -157,6 +157,7 @@ class Cenario:
         # PRs que o GitHub conhece: o do autor e os que o script abrir pela API
         self.prs: dict[int, dict] = {numero: self.pr}
         self.ci_vermelho: set[str] = set()  # heads em que o CI falha
+        self.sem_checks = False  # o CI nunca rodou: nenhum check no PR
         # quantas rodadas do CI do bump o GitHub cancela por falta de runner (#953)
         self.sem_runner = 0
         self.anotacao_do_cancelamento = SEM_RUNNER
@@ -242,6 +243,8 @@ class Cenario:
             pr["statusCheckRollup"] = [{"name": "Backend Lint, Format & Tests", "status": "COMPLETED",
                                         "conclusion": "CANCELLED", "workflowName": "CI",
                                         "detailsUrl": "https://github.com/dono/repo/actions/runs/555/job/9"}]
+        if self.sem_checks:
+            pr["statusCheckRollup"] = []
         pr["mergeStateStatus"] = "CLEAN" if self._em_dia(head) else "BEHIND"
         return {k: v for k, v in pr.items() if k in campos}
 
@@ -829,6 +832,176 @@ def test_dry_run_do_pr_avulso_imprime_o_plano_com_pr_issue_e_tipo_de_bump(
     assert c.coolify() == []
     assert c.semaforo == []
     assert c.builds == []
+
+
+# ----------------------------------- classe do lote: app ou ferramenta (#965)
+
+def pr_de_ferramenta(tmp_path: Path, **kw) -> Cenario:
+    """PR que não toca `hospital-reunioes/`: script do time e skill. Título `feat`
+    de propósito, que num PR de app daria bump minor."""
+    return Cenario(tmp_path, 7, kw.pop("titulo", "feat(tools): painel conta PRs por PRD"), kw.pop("issue", 5),
+                   kw.pop("arquivos", {"tools/painel.py": "PRDS = 1\n",
+                                       ".claude/skills/painel/SKILL.md": "# painel\n"}), **kw)
+
+
+def test_dry_run_de_pr_so_de_tools_diz_ferramenta_so_merge(tmp_path, monkeypatch, capsys):
+    fo = carregar_fechar_onda()
+    c = pr_de_ferramenta(tmp_path, arquivos={"tools/painel.py": "PRDS = 1\n"})
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+
+    plano = [li for li in capsys.readouterr().out.splitlines() if li.startswith("plano:")]
+    assert len(plano) == 1, plano
+    assert "ferramenta: só merge" in plano[0], plano[0]
+    assert "PR #7" in plano[0] and "bump" not in plano[0] and "->" not in plano[0], plano[0]
+    assert c.main_remota() == c.base and c.coolify() == [] and c.semaforo == []
+
+
+@pytest.mark.parametrize("extra", [(), ("--sessao", "onda-x")], ids=["avulso", "onda"])
+def test_fechamento_de_ferramenta_so_faz_merge_sem_coolify_nem_registro(
+    tmp_path, monkeypatch, capsys, extra
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_ferramenta(tmp_path)
+    history_antes = c.na_main("docs/spec/deploy/history.json")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, *extra) == 0
+
+    # um merge só, o do código, pela API
+    assert len(c.merges) == 1, c.merges
+    codigo = c.merges[0]["main"]
+    assert c.main_remota() == codigo
+    assert git(c.remoto, "show", f"{codigo}:tools/painel.py") == "PRDS = 1"
+    # sem bump: a versão do app é a da base
+    assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.10.0"
+    assert "chore(release)" not in git(c.remoto, "log", "--format=%s", f"{c.base}..{c.merges[0]['head']}")
+    # coolify falso sem nenhuma chamada: nem APP_VERSION, nem deploy forçado
+    assert c.coolify() == []
+    assert c.builds == [] and c.healths == []
+    # nenhum PR de registro: o único POST de PR é o de entrega da onda
+    abertos = [a for a in c.gh_chamadas if a[:4] == ["api", "-X", "POST", "repos/{owner}/{repo}/pulls"]]
+    assert len(abertos) == (0 if not extra else 1), abertos
+    assert not any("head=registro/" in " ".join(a) for a in abertos), abertos
+    assert c.na_main("docs/spec/deploy/history.json") == history_antes
+    # o build que o webhook disparar para o merge é cancelado, como o do registro
+    assert c.cancelamentos == [codigo]
+    assert c.semaforo[-1][0] == "soltar"
+    assert "ferramenta" in capsys.readouterr().out
+
+
+def test_pr_misto_de_ferramenta_e_frontend_segue_o_fluxo_de_app(tmp_path, monkeypatch, capsys):
+    fo = carregar_fechar_onda()
+    c = pr_de_ferramenta(tmp_path, arquivos={
+        "tools/painel.py": "PRDS = 1\n",
+        "hospital-reunioes/frontend/src/painel.ts": "export const PRDS = 1;\n",
+    })
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+    plano = next(li for li in capsys.readouterr().out.splitlines() if li.startswith("plano:"))
+    assert "app: bump minor v0.10.0 -> v0.11.0" in plano and "ferramenta" not in plano, plano
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    # o fluxo de hoje: bump, APP_VERSION antes do merge, build, health e registro
+    assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.11.0"
+    assert c.coolify() == [f"app env update uuid-backend APP_VERSION --value 0.11.0 | main={c.base}"]
+    assert c.builds == ["frontend"]
+    assert [m["pr"] for m in c.merges] == [7, 101] and c.merges[1]["branch"].startswith("registro/")
+    entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
+    assert entrada["app_version"] == "0.11.0" and entrada["sha"] == c.merges[0]["main"]
+
+
+def test_mover_codigo_do_app_para_tools_conta_como_app(tmp_path, monkeypatch, capsys):
+    """O `files` do gh mostra um rename só pelo caminho novo. Sem olhar o caminho
+    antigo, tirar código de `hospital-reunioes/` passaria por ferramenta, e a
+    produção ficaria com o arquivo que a main já não tem."""
+    fo = carregar_fechar_onda()
+    c = pr_de_ferramenta(tmp_path, titulo="chore(tools): prazo vira script do time",
+                         arquivos={"tools/prazo.py": "PRAZO = 10\n"})
+    repo = tmp_path / "repo"
+    git(repo, "rm", "-q", "hospital-reunioes/backend/app/prazo.py")
+    git(repo, "commit", "-q", "-m", "chore(tools): tira o prazo do backend")
+    git(repo, "push", "-q", str(c.remoto), "feature", "feature:refs/pull/7/head")
+    c.head_do_pr = c.pr["headRefOid"] = git(c.remoto, "rev-parse", "feature")
+    assert c.pr["files"] == [{"path": "tools/prazo.py"}]
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+
+    plano = next(li for li in capsys.readouterr().out.splitlines() if li.startswith("plano:"))
+    assert "app: bump patch v0.10.0 -> v0.10.1" in plano, plano
+
+
+def test_docstring_explica_as_duas_classes_sem_docs_only_e_sem_travessao():
+    fo = carregar_fechar_onda()
+    doc = " ".join(fo.__doc__.split())
+
+    assert "docs-only" not in doc
+    assert re.search(r'"app" se algum (arquivo )?esta em `hospital-reunioes/`', doc), doc
+    assert re.search(r'"ferramenta" se nenhum esta', doc), doc
+    assert "misto" in doc
+    fonte = (SCRIPTS / "fechar_onda.py").read_text(encoding="utf-8")
+    assert TRAVESSAO not in fonte and MEIA_RISCA not in fonte
+
+
+@pytest.mark.parametrize("de", [pr_de_codigo, pr_de_ferramenta], ids=["app", "ferramenta"])
+def test_pr_sem_nenhum_check_para_nas_pre_condicoes_seja_app_ou_ferramenta(
+    tmp_path, monkeypatch, capsys, de
+):
+    """O ruleset exige os checks do CI e o `esperar_checks` so aceita lista nao
+    vazia: PR de ferramenta sem check esperaria os 40 min e falharia. Parar
+    antes, sem classificar pelo `files` do gh, que nao ve o caminho antigo de um
+    rename."""
+    fo = carregar_fechar_onda()
+    c = de(tmp_path)
+    c.sem_checks = True
+    monkeypatch.setattr(fo, "CHECKS_POLL_S", 0)
+    monkeypatch.setattr(fo, "CHECKS_TIMEOUT_S", 0)
+
+    saida = parar_nas_pre_condicoes(fo, monkeypatch, c, capsys)
+
+    assert "#7 sem nenhum check" in saida, saida
+    assert c.merges == []
+
+
+def falhar_no_cancelamento(fo, monkeypatch, c: Cenario) -> None:
+    def cancelar(servicos_cfg, sha):
+        raise subprocess.TimeoutExpired(["coolify", "deploy", "cancel"], 30)
+
+    monkeypatch.setattr(fo, "cancelar_build_do_registro", cancelar)
+
+
+def falhar_no_gh_depois_do_merge(fo, monkeypatch, c: Cenario) -> None:
+    ver = c.ver_pr
+
+    def ver_que_cai_no_estado(n, campos):
+        if campos == ["state"]:
+            raise RuntimeError("gh pr view -> 502 Bad Gateway")
+        return ver(n, campos)
+
+    c.ver_pr = ver_que_cai_no_estado
+
+
+@pytest.mark.parametrize("falha", [falhar_no_cancelamento, falhar_no_gh_depois_do_merge],
+                         ids=["coolify-timeout", "gh-pr-view"])
+def test_ferramenta_que_falha_depois_do_merge_solta_o_semaforo_e_diz_producao_intacta(
+    tmp_path, monkeypatch, capsys, falha
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_ferramenta(tmp_path)
+    preparar(fo, monkeypatch, c)
+    falha(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_REGISTRO
+
+    assert [m["pr"] for m in c.merges] == [7] and c.main_remota() == c.merges[0]["main"]
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+    saida = capsys.readouterr().out
+    assert "merge feito, producao intacta" in saida, saida
+    assert "rollback" not in saida and "Semaforo preso" not in saida, saida
 
 
 # ------------------------------------------- sha256 da migration no corpo do PR
