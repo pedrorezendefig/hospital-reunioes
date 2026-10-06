@@ -1,17 +1,63 @@
-"""Critérios da aba Produção (reskin issue 259, padrão Baseline).
+"""Aba Produção do Hospital OS (issue #945, ADR 0062, decisões 2 e 8).
 
-Consome os tokens da fundação (#258): stats band navy 4-up no topo,
-timeline de deploys em cartões claros com hairlines e chips, sparkline
-pintado só com tokens e semânticas legíveis nos dois planos (navy e claro).
-O CSS da aba vive num bloco próprio delimitado, apensado ao style.css.
+A aba lê só `history.json` e `state.json` da `origin/main`: no topo, a versão
+no ar e os serviços com o health; abaixo, uma linha por versão (deploys da
+mesma versão juntos), a mais recente primeiro e sem teto. Aberta, a versão
+mostra PRs, issues, migration, health, duração, env e notas, com chips que
+navegam dentro do painel. O coletor não lê mais o CHANGELOG (apagado no #939).
+
+O app.js roda de verdade no Node (molde do test_router.py): DOM mínimo de
+mentira, `location`/`history` que guardam o hash e o `fetch` do /api/data
+respondendo com o payload do teste. O CSS segue lido como texto, no bloco
+delimitado da aba (padrão Baseline, issue 259).
 """
 
+import json
+import os
 import re
+import shutil
+import subprocess
+import sys
 from pathlib import Path
 
-STATIC = Path(__file__).resolve().parents[1] / "static"
+import pytest
+
+DASH = Path(__file__).resolve().parents[1]
+STATIC = DASH / "static"
 CSS = (STATIC / "style.css").read_text(encoding="utf-8")
 APP_JS = (STATIC / "app.js").read_text(encoding="utf-8")
+sys.path.insert(0, str(DASH))
+
+import collect  # noqa: E402
+
+com_node = pytest.mark.skipif(not shutil.which("node"), reason="node ausente")
+
+
+# ---------- coletor: só history.json e state.json ----------
+
+
+def test_coletor_le_da_origin_main_so_o_history_e_o_state_e_nao_tem_changelog(monkeypatch, tmp_path):
+    deploy = tmp_path / "docs" / "spec" / "deploy"
+    deploy.mkdir(parents=True)
+    (deploy / "history.json").write_text(json.dumps({"deploys": [{"app_version": "0.163.4"}]}))
+    (deploy / "state.json").write_text(json.dumps({"last_app_version": "0.163.4", "services": []}))
+    pedidos = []
+
+    def run(cmd, cwd, timeout=None):
+        pedidos.append(" ".join(cmd))
+        raise RuntimeError("offline")  # git e gh fora: o coletor cai no clone
+
+    monkeypatch.setattr(collect, "_run", run)
+    data = collect.collect(tmp_path)
+
+    assert [p for p in pedidos if p.startswith("git show")] == [
+        "git show origin/main:docs/spec/deploy/state.json",
+        "git show origin/main:docs/spec/deploy/history.json",
+    ]
+    assert data["history"] == [{"app_version": "0.163.4", "pr_numbers": [], "issue_numbers": []}]
+    assert data["state"]["last_app_version"] == "0.163.4"
+    assert "changelog" not in data
+    assert not hasattr(collect, "_parse_changelog")
 
 
 def _bloco_producao():

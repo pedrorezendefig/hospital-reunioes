@@ -130,14 +130,6 @@ def _spec_json_fresh(root: Path, rel: str):
         return _read_json(root / rel)
 
 
-def _spec_text_fresh(root: Path, rel: str):
-    """Variante texto de _spec_json_fresh — mesma regra (origin/main → fallback local)."""
-    try:
-        return _run(["git", "show", f"origin/main:{rel}"], root)
-    except Exception:
-        return _read_text(root / rel)
-
-
 # ---------- GitHub ----------
 
 def bloqueios_do_corpo(body: str) -> list[int]:
@@ -430,43 +422,6 @@ def _correlate(history: list[dict], issues: list[dict], prs: list[dict]) -> None
 
 # ---------- Arquivos do repo ----------
 
-def _parse_changelog(text: str | None) -> list[dict]:
-    if not text:
-        return []
-    entries, cur = [], None
-    for line in text.splitlines():
-        if line.startswith("## "):
-            if cur:
-                entries.append(cur)
-            header = line[3:].strip()
-            version = date = time_ = None
-            title = header
-            m = re.match(r"v(\d+\.\d+\.\d+)\s*[—\-–]+\s*(\d{4}-\d{2}-\d{2})\s*[—\-–]+\s*(.*)", header)
-            if m:
-                version, date, title = m.groups()
-            else:
-                m = re.match(r"(\d{4}-\d{2}-\d{2})[ T]?(\d{2}:\d{2})?\s*[—\-–]+\s*(.*)", header)
-                if m:
-                    date, time_, title = m.groups()
-            cur = {"version": version, "date": date, "time": time_, "title": title.strip(),
-                   "sha": None, "pr": None, "issue": None, "body_md": ""}
-        elif cur is not None:
-            cur["body_md"] += line + "\n"
-    if cur:
-        entries.append(cur)
-    for e in entries:
-        body = e["body_md"]
-        m = re.search(r"(?:SHA|Commit):\s*`?([0-9a-f]{7,40})`?", body) or \
-            re.search(r"/commit/([0-9a-f]{7,40})", body)
-        e["sha"] = m.group(1)[:7] if m else None
-        m = re.search(r"/pull/(\d+)", body)
-        e["pr"] = int(m.group(1)) if m else None
-        m = re.search(r"/issues/(\d+)", body)
-        e["issue"] = int(m.group(1)) if m else None
-        e["body_md"] = body.strip()
-    return entries
-
-
 def _parse_adrs(root: Path) -> list[dict]:
     out = []
     for f in sorted((root / "docs" / "adr").glob("[0-9]*.md")):  # README.md é o índice, não uma ADR
@@ -656,7 +611,6 @@ def collect(root: Path) -> dict:
         "state": _state_public(state),
         "history": history,
         "project": project,
-        "changelog": _parse_changelog(_spec_text_fresh(root, "docs/spec/CHANGELOG.md")),
         "versioning_md": _read_text(spec / "VERSIONING.md"),
         "adrs": _parse_adrs(root),
         "context_md": _read_text(root / "CONTEXT.md"),
@@ -679,7 +633,6 @@ if __name__ == "__main__":
     print(f"prs         {len(gh['prs'])}")
     print(f"prds        {gh['prds']}")
     print(f"deploys     {len(data['history'])}")
-    print(f"changelog   {len(data['changelog'])} entradas")
     print(f"adrs        {len(data['adrs'])}")
     print(f"snapshots   {[s['name'] for s in data['snapshots']]}")
     print(f"git         branch={data['git'].get('branch')} dirty={data['git'].get('dirty')}")
