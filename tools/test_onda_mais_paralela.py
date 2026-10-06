@@ -1,7 +1,8 @@
 """Ondas mais paralelas, mapa uma vez por PRD, teto de mutantes, esforço por tamanho (issue #995).
 
-ADR 0064, decisão 5: (a) o `/to-issues` fatia para paralelismo real, sem arquivo
-de costura em comum na mesma onda, G que não bloqueia ninguém vira duas M, e as
+ADR 0064, decisão 5: (a) o `/to-issues` fatia para paralelismo real, com a onda
+separada só por dependência e não por arquivo de costura (emenda da ADR 0066),
+G que não bloqueia ninguém vira duas M, e as
 ondas previstas na lista e no PRD; (b) o Mapa do terreno é feito uma vez por PRD
 e a passagem leva o que a onda anterior mergeou e se a estrutura mudou; (c) um
 mutante por critério de aceite, não por teste; (d) implementador em `high` na
@@ -41,9 +42,12 @@ def regra_do_paralelismo() -> str:
     return secao(rascunho, "Paralelismo real", "####")
 
 
-def test_o_to_issues_nao_poe_arquivo_de_costura_em_comum_na_mesma_onda():
+def test_o_to_issues_separa_onda_por_dependencia_e_nao_por_arquivo_de_costura():
+    # ADR 0066: arquivo em comum não separa onda; o mesmo ponto de registro é dependência
     regra = regra_do_paralelismo()
-    assert "fatias da mesma onda não compartilham arquivo de costura" in regra, regra
+    assert "fatias da mesma onda não compartilham arquivo de costura" not in regra, regra
+    assert "Fatias que só compartilham o arquivo andam na mesma onda" in regra, regra
+    assert "mesmo ponto de registro" in regra and "`blocked_by`" in regra, regra
     for costura in ("main.py", "config.py", "AdminSidebar.tsx", "fechar_onda.py"):
         assert f"`{costura}`" in regra, costura
     # confere o arquivo compartilhado antes de propor a divisão, não depois
@@ -58,12 +62,14 @@ def test_o_to_issues_divide_a_fatia_g_que_nao_bloqueia_ninguem_em_duas_m():
 def test_o_to_issues_lista_as_ondas_previstas_ao_usuario_e_no_prd():
     md = ler(TO_ISSUES)
     quiz = secao(md, "4. Quiz the user", "###")
-    assert "**ondas previstas**" in quiz and "arquivo de costura" in quiz, quiz
+    assert "**ondas previstas**" in quiz and "a dependência que a segura" in quiz, quiz
+    assert "Arquivo de costura em comum não é motivo de onda" in quiz, quiz
 
     publicar = secao(md, "5. Publish the issues", "###")
     # o PRD leva o agrupamento com os números reais, no corpo
     bloco = next(b for b in re.findall(r"```bash\n(.*?)```", publicar, re.S) if "Ondas previstas" in b)
     assert "## Ondas previstas" in bloco and 'gh issue edit "$PRD" --body-file' in bloco, bloco
+    assert "- Onda 2: #<c>, depois da #<a>" in bloco and "divide" not in bloco, bloco
     assert "Não feche nem edite o corpo" not in publicar, publicar
 
 
@@ -91,6 +97,23 @@ def test_a_passagem_leva_o_mergeado_na_onda_anterior_e_se_a_estrutura_mudou():
     regra = next(li for li in passagem.splitlines() if li.startswith("`Estrutura mudou`"))
     assert "pulls/<PR>/files" in regra and "--paginate" in regra, regra
     assert '.status == "removed" or .status == "renamed"' in regra, regra
+
+
+def test_a_onda_puxa_toda_issue_desbloqueada_e_a_passagem_leva_a_dependencia():
+    # ADR 0066: a onda é a fila desbloqueada, não a lista da onda prevista
+    fila = secao(ler(ONDA), "1. Fila-alvo", "###")
+    assert "**a onda é toda issue da fila fixa já desbloqueada** (`blocked_by` todo fechado)" in fila, fila
+    assert "mesmo que a passagem a tenha posto numa onda posterior" in fila, fila
+
+    relatorio = secao(ler(ONDA), "7. Relatório da onda", "###")
+    assert '("#945, depois da #944")' in relatorio, relatorio
+    assert "número de issues da fila desbloqueadas quando você a escreve, com teto 3" in relatorio, relatorio
+
+    passagem = ler(PROMPTS).split("\n## Passagem (prompt da próxima sessão)\n", 1)[1]
+    bloco = re.search(r"```\n(.*?)```", passagem, re.S).group(1)
+    assert re.search(r"^- Onda <N\+2>: #f, depois da #e$", bloco, re.M), bloco
+    assert "Ordem obrigatória" not in bloco, bloco
+    assert "número de issues da fila desbloqueadas quando você escreve a passagem, com teto 3" in passagem
 
 
 def test_o_implementador_recebe_o_mapa_e_o_mergeado_na_onda_anterior():

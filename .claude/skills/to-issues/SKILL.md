@@ -46,11 +46,11 @@ Se nem os lotes conseguem fechar verde sozinhos, mantenha a sequência mas use u
 
 #### Paralelismo real (ADR 0064, decisão 5)
 
-A `/onda-enxuta` roda juntas as fatias de uma onda; fatia que divide arquivo com outra vai para a onda seguinte, em série. Fatie para que elas andem juntas de verdade:
+A `/onda-enxuta` roda juntas todas as fatias desbloqueadas. O único separador de ondas é a dependência, não o arquivo (ADR 0066): o rabo mergeia PR a PR, e conflito tira só aquele PR, que o `hr-corretor` rebaseia. Fatie para que elas andem juntas de verdade:
 
-- **Arquivo de costura:** fatias da mesma onda não compartilham arquivo de costura, o arquivo onde várias funcionalidades se registram (`main.py`, `config.py`, `AdminSidebar.tsx`, `fechar_onda.py` e afins). Duas fatias que precisam do mesmo vão para ondas diferentes, e a de depois ganha a dependência nativa da de antes (passo 5). Confira o arquivo compartilhado antes de propor a divisão: no Mapa do terreno do PRD (comentário `## Mapa do terreno` de autor `OWNER`, `MEMBER` ou `COLLABORATOR`) ou, sem Mapa, no código (`git grep` do ponto de registro: rota, item de menu, setting).
+- **Arquivo de costura:** o arquivo onde várias funcionalidades se registram (`main.py`, `config.py`, `AdminSidebar.tsx`, `fechar_onda.py` e afins). Fatias que só compartilham o arquivo andam na mesma onda. Só a dependência real separa: uma fatia usa o que a outra cria, ou as duas editam o mesmo ponto de registro (a mesma rota, o mesmo item de menu, a mesma setting); aí a de depois ganha o `blocked_by` nativo da de antes (passo 5). Confira o ponto de registro antes de propor a divisão: no Mapa do terreno do PRD (comentário `## Mapa do terreno` de autor `OWNER`, `MEMBER` ou `COLLABORATOR`) ou, sem Mapa, no código (`git grep` do ponto de registro: rota, item de menu, setting).
 - **G sem bloqueio:** fatia G que não bloqueia ninguém vira duas M.
-- **Ondas previstas:** agrupe as fatias em ondas (quais andam juntas) e leve o agrupamento à lista do passo 4 e ao corpo do PRD (passo 5).
+- **Ondas previstas:** agrupe as fatias pelo grafo de dependência (onda 1 é toda fatia sem bloqueio; a seguinte, as que dependem só das anteriores) e leve o agrupamento à lista do passo 4 e ao corpo do PRD (passo 5).
 
 #### A Fatia de manual (todo PRD com tela)
 
@@ -82,9 +82,9 @@ Apresente a divisão como uma **lista numerada em pt-BR**. Para cada fatia, most
 - **O que entrega**: o comportamento ponta-a-ponta que esta fatia faz funcionar
 - **Bloqueada por**: quais outras fatias (se houver) precisam terminar antes
 - **Histórias cobertas**: quais histórias de usuário esta fatia atende (se a fonte tiver)
-- **Arquivo de costura**: os que ela toca, ou "nenhum"
+- **Arquivo de costura**: os que ela toca e o ponto de registro que edita, ou "nenhum"; só o mesmo ponto de outra fatia vira "Bloqueada por"
 
-Depois da lista, as **ondas previstas**: uma linha por onda com as fatias que andam juntas e, quando uma onda espera a anterior, o arquivo de costura ou a dependência que separa (ex.: "Onda 1: fatias 1 e 2. Onda 2: fatia 3, divide `main.py` com a 1").
+Depois da lista, as **ondas previstas**: uma linha por onda com as fatias que andam juntas e, para cada fatia fora da onda 1, a dependência que a segura (ex.: "Onda 1: fatias 1, 2 e 3, as três tocam `main.py` em rotas diferentes. Onda 2: fatia 4, depois da 1, usa a setting que a 1 cria"). Arquivo de costura em comum não é motivo de onda.
 
 Pergunte ao usuário: a granularidade está boa (grossa/fina demais)? As dependências estão corretas? Alguma fatia deve ser unida ou dividida? As marcações HITL/AFK estão certas? As ondas previstas fazem sentido? Itere até aprovar.
 
@@ -158,7 +158,7 @@ cat >> "${TMPDIR:-/tmp}/prd-$PRD.md" <<'EOF'
 ## Ondas previstas
 
 - Onda 1: #<a>, #<b>
-- Onda 2: #<c> (divide `main.py` com #<a>)
+- Onda 2: #<c>, depois da #<a> (usa a rota que a #<a> cria)
 EOF
 gh issue edit "$PRD" --body-file "${TMPDIR:-/tmp}/prd-$PRD.md"
 ```

@@ -9,7 +9,7 @@ Planejador da `/onda-enxuta`. A `/onda-enxuta` executa **uma** fila em **várias
 
 A meta é sair com **toda issue aberta em um de dois lugares**: dentro de um prompt (`ready-for-agent`) ou numa lista curta do que só o humano faz. Issue "esperando triagem" no fim do plano é falha do plano.
 
-> **Por que não `/onda-enxuta --all` direto:** a fila geral mistura fatias de PRD que outra sessão já roda com avulsas que mexem no mesmo arquivo. Duas issues do mesmo arquivo na mesma onda viram conflito no merge, e duas sessões deployando ao mesmo tempo viram corrida de bump. O plano existe para separar antes de rodar.
+> **Por que não `/onda-enxuta --all` direto:** a fila geral mistura fatias de PRD que outra sessão já roda com avulsas, e não enxerga a dependência que só o corpo da issue escreve ("rodar depois da #N"). O plano existe para separar antes de rodar: pela dependência, não pelo arquivo (ADR 0066).
 
 ## Sintaxe
 
@@ -46,7 +46,7 @@ curl -s https://reunioes.hospitalsaomatheus.cloud/api/health
 
 Para cada PRD aberto, pegue as sub-issues (`gh api "repos/$REPO/issues/<PRD>/sub_issues"`) e o **último comentário inteiro** (a auditoria de conclusão diz se o PRD só espera trabalho humano, ou se foi REPROVADO com lacuna que pede decisão).
 
-Leia o corpo de toda issue candidata. É dele que saem os arquivos (passo 4) e as decisões (passo 2).
+Leia o corpo de toda issue candidata. É dele que saem as dependências (passo 4) e as decisões (passo 2).
 
 Classifique **cada** issue aberta em exatamente um balde. Conte: `N abertas = agente + decisão + PRD + só humano`. Esse somatório aparece no relatório.
 
@@ -58,7 +58,7 @@ Classifique **cada** issue aberta em exatamente um balde. Conte: `N abertas = ag
 | Decisão | `needs-triage` ou `ready-for-human` cujo corpo traz **duas saídas escritas** (A/B, 1/2) | pergunta ao humano (passo 2b), depois entra |
 | PRD | issue-mãe com sub-issues | não é trabalho; fecha sozinho quando as filhas fecham e a auditoria passa. Se a auditoria REPROVOU: passo 2c |
 | Só humano | ação operacional (cadastro na tela, mandar arquivo para alguém), `needs-info` que depende de terceiro, `wontfix` | fora, listar como "precisa de você" com o que exatamente fazer |
-| Bloqueada | bloqueio nativo por issue ainda aberta | entra na onda seguinte à da bloqueadora, na mesma sessão |
+| Bloqueada | bloqueio nativo, ou "rodar depois da #N" escrito no corpo, por issue ainda aberta | entra na mesma sessão da bloqueadora, na onda seguinte à dela, com a dependência escrita na fila (passo 5) |
 
 ### 2. Deixar tudo `ready-for-agent`
 
@@ -102,19 +102,19 @@ A `/onda-enxuta` para na largada se houver `revisor-comentou` de revisor humano.
 
 **A Action carimba os SEUS comentários também.** Cada `## Triagem` e cada `## Decisão` que você escrever recebe `revisor-comentou` segundos depois, inclusive no PRD. Depois do último comentário, rode em segundo plano um `until` que remove a label e só termina quando `gh issue list --state open --label revisor-comentou` vier vazio por 30 segundos. Confira o vazio antes de entregar os prompts. Não use `sleep` encadeado em primeiro plano.
 
-### 4. Reinventariar, depois agrupar por arquivo tocado
+### 4. Reinventariar, depois agrupar por dependência
 
 **Antes de montar a tabela, rode o inventário de novo** (o bloco do passo 1 inteiro). Enquanto você triava, outra sessão pode ter mergeado (issue que estava no plano fechou, prod mudou de versão, a numeração de migration andou) e revisores podem ter aberto issue nova. Nesta skill o mundo muda no meio: em 03/09/2026 a #489 fechou, a 096 apareceu e nasceram #546 e #547 entre o primeiro e o segundo inventário. Issue nova com critério passa pelo passo 2.
 
-O corpo das issues cita os arquivos (`ouvidoria_setor.py:102`, `page.tsx:278`). Quando cita de forma vaga ("a tupla", "a rota de reenvio"), `grep` no repo antes de agrupar. Monte a tabela issue × arquivos e aplique:
+O único separador de ondas é a **dependência**, não o arquivo (ADR 0066). O rabo mergeia PR a PR (ADR 0064, decisão 3): conflito tira só aquele PR, que o `hr-corretor` rebaseia (motivo `conflito`, skill `resolver-conflitos`), e os outros sobem. Monte o grafo de bloqueio (o nativo do passo 1 mais o "rodar depois da #N" escrito no corpo das issues) e aplique:
 
-1. **Mesma sessão, ondas diferentes**: issues que tocam o mesmo arquivo. Dentro da sessão a ordem é: quem a issue diz que vem antes ("fechar as duas em conjunto", "rodar depois da #N"), depois bloqueio nativo, depois `fatia:P` antes de `M`/`G`. Varredura de módulo inteiro (tipografia, lint) vai na última onda da sessão dona daquele módulo.
-2. **Sessões diferentes**: grupos de arquivos disjuntos. Nomeie cada sessão pelo tema (segurança e logs, portal do setor, ouvidoria backend). Issue de docs (`CONTEXT.md`, ADR) conta como arquivo: duas que mexem no `CONTEXT.md` não vão na mesma onda.
-3. **Paralelo por onda**: até 3. Sessão com 2 issues por onda roda `--paralelo 2`. Equilibre o número de ondas entre as sessões: cada onda é um deploy.
-4. Arquivo em comum **entre** sessões também não roda junto (ADR 0063): sem humano no merge, o conflito só apareceria no rabo. Dois grupos que tocam `ouvidoria_notificacoes.py`, mesmo em funções diferentes, vão para a mesma sessão em ondas diferentes (regra 1), e a issue da onda seguinte ganha "Bloqueada por" a da anterior pela dependência nativa (ADR 0028), para nenhuma outra sessão nem o `/pegar-issue` a pegarem antes: `gh api -X POST "repos/$REPO/issues/<seguinte>/dependencies/blocked_by" -F issue_id=$(gh api "repos/$REPO/issues/<anterior>" --jq .id)`. Issue que outra sessão já roda (balde "Outra sessão") e toca arquivo de uma candidata: a candidata ganha "Bloqueada por" ela do mesmo jeito e fica fora deste plano.
+1. **Ondas pelo grafo**: onda 1 é toda issue da sessão sem bloqueio aberto; a onda seguinte é a das issues cujas bloqueadoras estão todas nas ondas anteriores. **Arquivo em comum, dentro da sessão ou entre sessões, não separa onda nem sessão.** Com mais issues livres que o `--paralelo`, `fatia:P` antes de `M`/`G`. Varredura de módulo inteiro (tipografia, lint) depende de tudo que muda aquele módulo: última onda da sessão dona dele.
+2. **Mesmo ponto é dependência**: quando duas issues precisam de fato do mesmo ponto (uma registra o que a outra usa, ou as duas reescrevem o mesmo trecho de um arquivo de costura, como a lista de rotas do `main.py` ou o menu do `AdminSidebar.tsx`), a de depois ganha "Bloqueada por" a de antes pela dependência nativa (ADR 0028), para nenhuma outra sessão nem o `/pegar-issue` a pegarem antes: `gh api -X POST "repos/$REPO/issues/<seguinte>/dependencies/blocked_by" -F issue_id=$(gh api "repos/$REPO/issues/<anterior>" --jq .id)`. Dependência escrita só no corpo ("rodar depois da #N") vira nativa do mesmo jeito: é o `blocked_by` que a `/onda-enxuta` lê. Função diferente no mesmo arquivo não é o mesmo ponto. Issue que outra sessão já roda (balde "Outra sessão") e de quem uma candidata depende: a candidata ganha "Bloqueada por" ela do mesmo jeito e fica fora deste plano.
+3. **Sessões por tema ou PRD**: nomeie cada sessão pelo tema (segurança e logs, portal do setor, ouvidoria backend). Uma cadeia de dependência fica numa sessão só, para a bloqueada andar assim que a bloqueadora fechar.
+4. **Paralelo por onda**: até 3. Sessão com 2 issues por onda roda `--paralelo 2`. Equilibre o número de ondas entre as sessões: cada onda é um deploy.
 5. Issue que cria migration: **calcule o número** pelo `ls` de `origin/main` e escreva no prompt ("o número é 097; a 096 já existe"). O deploy não aplica migration; o Pedro aplica no Studio.
 
-Mostre a tabela final: sessão · onda · issues · arquivo em comum dentro da sessão (o motivo de a onda ser essa).
+Mostre a tabela final: sessão · onda · issues · dependência (de quem cada issue fora da onda 1 depende, e o ponto que as liga).
 
 ### 5. Escrever os prompts e os comandos de lançamento
 
@@ -142,9 +142,9 @@ Depois do cabeçalho, o conteúdo do arquivo de prompt. A primeira linha precisa
 
 Fila-alvo FIXA desta sessão. Não use a fila geral. Não toque nas issues #.., #.. (outra sessão está rodando).
 - Onda 1: #a, #b, #c
-- Onda 2: #d, #e
-- Onda 3: #f
-Ordem obrigatória: #a antes de #d (<arquivo em comum>). #b antes de #e e #f (<arquivo em comum>).
+- Onda 2: #d, depois da #a; #e, depois da #b
+- Onda 3: #f, depois da #e
+Dependências: #d usa <o que a #a registra>. #e reescreve <o mesmo trecho que a #b>. A onda é toda issue desta fila já desbloqueada, até o --paralelo: a que destravar antes da onda prevista entra na primeira onda que encontrar livre.
 
 Auditorias de PRD desta sessão: quando #a e #b fecharem, audite o PRD #X contra produção. Quando #f fechar, audite o PRD #Y de novo (só a lacuna N estava aberta).
 

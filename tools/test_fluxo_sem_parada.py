@@ -160,9 +160,12 @@ def test_o_prompt_do_corretor_de_conflito_cita_a_skill_e_a_tentativa():
     assert "resolver-conflitos" in conflito and "Tentativa <k> de 3" in conflito, conflito
 
 
-def test_o_montar_ondas_nao_poe_arquivo_em_comum_em_paralelo_e_marca_bloqueada_por():
+def test_o_montar_ondas_separa_por_dependencia_e_marca_bloqueada_por_no_mesmo_ponto():
+    # ADR 0066: arquivo em comum não separa onda nem sessão; o mesmo ponto vira blocked_by
     agrupar = secao(texto("montar-ondas-enxutas"), "4. Reinventariar", "###")
     assert "dependencies/blocked_by" in agrupar and "Bloqueada por" in agrupar, agrupar
+    assert "**Arquivo em comum, dentro da sessão ou entre sessões, não separa onda nem sessão.**" in agrupar
+    assert "**Mesmo ponto é dependência**" in agrupar, agrupar
     assert "é aceitável" not in agrupar, "conflito entre sessões deixou de ser aceitável"
 
 
