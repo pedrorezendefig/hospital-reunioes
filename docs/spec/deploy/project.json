@@ -44,9 +44,11 @@
       "type": "fastapi",
       "uuid": "jo6zt7h4chu7w38s4ojyuepu",
       "build": {
-        "build_pack": "dockerfile",
+        "build_pack": "dockerimage",
         "base_directory": "/hospital-reunioes/backend",
         "dockerfile_location": null,
+        "image": "ghcr.io/pedrorezendefig/hospital-reunioes-backend",
+        "publish_workflow": "imagem-backend.yml",
         "ports_exposes": "8000",
         "build_args_from_env_keys": []
       },

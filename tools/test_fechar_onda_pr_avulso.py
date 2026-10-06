@@ -86,6 +86,26 @@ PROJECT = {
     ]
 }
 
+# O backend em modo imagem (issue #1001): o Coolify roda a imagem que o CI
+# publicou no GHCR, sem build e sem webhook.
+PROJECT_IMAGEM = {
+    "services": [
+        {
+            **PROJECT["services"][0],
+            "build": {"build_pack": "dockerimage", "base_directory": "/hospital-reunioes/backend",
+                      "image": "ghcr.io/dono/repo-backend", "publish_workflow": "imagem-backend.yml"},
+        },
+        PROJECT["services"][1],
+    ]
+}
+
+def digest_de(semente: str) -> str:
+    return "sha256:" + hashlib.sha256(semente.encode()).hexdigest()
+
+
+DIGEST_FORJADO = digest_de("imagem de um run de outra branch")
+
+
 def script_falso(log: Path, nome: str, alvo: str) -> str:
     """O snapshot e o tirar-draft do Manual moram no repo, mas saíram do rabo para
     a Action do push da main (ADR 0062, decisão 10). O falso anota quem o chamou
@@ -105,7 +125,8 @@ class Cenario:
 
     def __init__(self, tmp_path: Path, numero: int, titulo: str, issue: int | None,
                  arquivos: dict[str, str], corpo: str = "", deploys: list[dict] | None = None,
-                 versao_em_producao: str = "0.10.0"):
+                 versao_em_producao: str = "0.10.0", project: dict | None = None,
+                 sha_no_ar: str | None = None, digest_no_ar: str | None = None):
         self.numero = numero
         self.issue = issue
         self.log_scripts = tmp_path / "scripts-chamados.log"
@@ -116,11 +137,13 @@ class Cenario:
                  '{\n  "name": "frontend",\n  "version": "0.10.0"\n}\n')
         escrever(repo, "hospital-reunioes/backend/app/prazo.py", "PRAZO = 10\n")
         escrever(repo, f"{MIGRATIONS}/111_base.sql", "select 1;\n")
-        escrever(repo, "docs/spec/deploy/project.json", json_txt(PROJECT))
+        escrever(repo, "docs/spec/deploy/project.json", json_txt(project or PROJECT))
         escrever(repo, "docs/spec/deploy/state.json", json_txt({
             "last_app_version": versao_em_producao,
             "production": {"repo": "dono/repo"},
-            "services": [{"id": "backend"}, {"id": "frontend"}],
+            "services": [{"id": "backend", **({"last_deploy_sha": sha_no_ar} if sha_no_ar else {}),
+                          **({"last_deploy_digest": digest_no_ar} if digest_no_ar else {})},
+                         {"id": "frontend"}],
         }))
         escrever(repo, "docs/spec/deploy/history.json", json_txt({"deploys": deploys or []}))
         escrever(repo, ".claude/skills/snapshot/scripts/snapshot.py",
@@ -176,6 +199,21 @@ class Cenario:
         self.semaforo: list[tuple[str, str]] = []
         self.cancelamentos: list[str] = []
         self.tags: list[tuple[str, str]] = []  # (ref, sha) criados pela API
+        # o workflow que publica a imagem no GHCR (issue #1001): os `-f` de cada
+        # disparo e quantas chamadas ao Coolify (fora as leituras) vieram antes dele
+        self.publicacoes: list[dict] = []
+        self.publicacao_falha = False
+        # o GHCR (revisão do PR #1016): tag -> digest para o qual ela aponta agora;
+        # os artefatos `digest-backend` de cada run (id -> digest); os runs do
+        # workflow da imagem de antes deste rabo; os heads cujo CI não guardou digest
+        self.ghcr: dict[str, str] = {}
+        self.artefatos: dict[str, str] = {}
+        self.runs_anteriores: list[dict] = []
+        self.ci_sem_digest: set[str] = set()
+        self.tag_sobrescrita = False  # um run de outra branch troca a tag do squash depois do workflow
+        if sha_no_ar and digest_no_ar:
+            self.ghcr[sha_no_ar] = digest_no_ar
+        self.deploys_novos: list[str] = []  # apps cujo deploy novo (sem webhook) o rabo esperou
         self.log_push_main = tmp_path / "push-na-main.log"
         hook = self.remoto / "hooks" / "pre-receive"
         hook.write_text(
@@ -201,6 +239,10 @@ class Cenario:
             "#!/bin/sh\n"
             f"main=$(git --git-dir={self.remoto} rev-parse main)\n"
             f'echo "$* | main=$main" >> {self.log_coolify}\n'
+            'if [ "$1 $2" = "app get" ]; then\n'
+            f'  [ -f "{self.dir_coolify}/app-$3.json" ] && cat "{self.dir_coolify}/app-$3.json"\n'
+            "  exit 0\n"
+            "fi\n"
             'case "$1 $2 $3" in\n'
             '  "app rollback images")\n'
             f'    [ -f "{self.dir_coolify}/imagens-$4.json" ] && cat "{self.dir_coolify}/imagens-$4.json" ;;\n'
@@ -211,6 +253,10 @@ class Cenario:
             encoding="utf-8",
         )
         coolify.chmod(0o755)
+        # o `coolify app get` de cada app diz o build pack que o Coolify roda de verdade
+        for s in (project or PROJECT)["services"]:
+            build = s.get("build") or {}
+            self.build_pack_no_coolify(s["uuid"], build.get("build_pack", "dockerfile"), build.get("image"))
         self.path = f"{bin_falso}{os.pathsep}{os.environ.get('PATH', '')}"
         self.home = tmp_path / "home"
         self.home.mkdir()
@@ -248,6 +294,12 @@ class Cenario:
         (self.dir_coolify / f"imagens-{uuid}.json").write_text(
             json.dumps({"current": no_ar, "images": imagens}), encoding="utf-8")
 
+    def build_pack_no_coolify(self, uuid: str, build_pack: str, imagem: str | None = None) -> None:
+        dado = {"uuid": uuid, "build_pack": build_pack, "status": "running:healthy"}
+        if imagem:
+            dado["docker_registry_image_name"] = imagem
+        (self.dir_coolify / f"app-{uuid}.json").write_text(json.dumps(dado), encoding="utf-8")
+
     def recusar_rollback(self) -> None:
         (self.dir_coolify / "rollback-recusado").write_text("", encoding="utf-8")
 
@@ -266,6 +318,54 @@ class Cenario:
         if not self.log_coolify.exists():
             return []
         return self.log_coolify.read_text(encoding="utf-8").splitlines()
+
+    def coolify_sem_leituras(self) -> list[str]:
+        return [li for li in self.coolify() if not li.startswith(("app deployments list", "app get "))]
+
+    def disparar_workflow(self, cmd: list[str]) -> None:
+        """`gh workflow run <arquivo> --ref main -f k=v ...`, como o GitHub: o run
+        nasce com o run-name do workflow, que leva o sha. Como o workflow: a
+        primeira origem `<head>@<digest>` ganha a tag do squash com o mesmo
+        digest; sem origem, o build publica um digest novo. O digest vai para o
+        artefato do run."""
+        campos = dict(cmd[i + 1].split("=", 1) for i, a in enumerate(cmd) if a == "-f")
+        ref = cmd[cmd.index("--ref") + 1] if "--ref" in cmd else None
+        self.publicacoes.append({"workflow": cmd[3], "ref": ref, **campos,
+                                 "coolify_antes": len(self.coolify_sem_leituras())})
+        if self.publicacao_falha:
+            return
+        origens = campos["origens"].split()
+        digest = origens[0].split("@", 1)[1] if origens else digest_de(f"build-{campos['sha']}")
+        self.artefatos[str(900 + len(self.publicacoes) - 1)] = digest
+        self.ghcr[campos["sha"]] = DIGEST_FORJADO if self.tag_sobrescrita else digest
+
+    def imagem_publicada_antes(self, sha: str, digest: str) -> None:
+        """Um run do workflow da imagem de antes deste rabo (o passo 2 do PR #1016)."""
+        run_id = 800 + len(self.runs_anteriores)
+        self.runs_anteriores.append({"databaseId": run_id, "displayTitle": f"Imagem do backend {sha}",
+                                     "status": "completed", "conclusion": "success"})
+        self.artefatos[str(run_id)] = digest
+        self.ghcr[sha] = digest
+
+    def runs_do_workflow(self) -> list[dict]:
+        return [{"databaseId": 900 + i, "displayTitle": f"Imagem do backend {p['sha']}",
+                 "status": "completed", "conclusion": "failure" if self.publicacao_falha else "success"}
+                for i, p in reversed(list(enumerate(self.publicacoes)))] + self.runs_anteriores
+
+    def runs_do_ci(self, head: str) -> list[dict]:
+        """O CI verde do PR no `head`, que publicou a imagem e guardou o digest."""
+        run_id = f"ci-{head}"
+        if head not in self.ci_sem_digest:
+            self.artefatos[run_id] = digest_de(head)
+        return [{"databaseId": run_id}]
+
+    def baixar_artefato(self, cmd: list[str]) -> int:
+        """`gh run download <id> -n <nome> -D <dir>`: grava `<dir>/digest`."""
+        nome, destino = cmd[cmd.index("-n") + 1], Path(cmd[cmd.index("-D") + 1])
+        if nome != "digest-backend" or cmd[3] not in self.artefatos:
+            return 1
+        (destino / "digest").write_text(self.artefatos[cmd[3]] + "\n", encoding="utf-8")
+        return 0
 
     def pushes_na_main(self) -> list[str]:
         if not self.log_push_main.exists():
@@ -377,6 +477,15 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
             return c.ver_pr(int(args[2]), args[args.index("--json") + 1].split(","))
         if args[:2] == ["issue", "view"]:
             return {"body": "## Pai\n\n`#902`, PRD da esteira.\n"}
+        if args[:2] == ["run", "list"]:
+            wf = args[args.index("--workflow") + 1]
+            if wf == "ci.yml":
+                assert args[args.index("--event") + 1] == "pull_request", args
+                assert args[args.index("--status") + 1] == "success", args
+                return c.runs_do_ci(args[args.index("--commit") + 1])
+            # um run disparado de outra branch roda outro workflow: só os da main valem
+            assert args[args.index("--branch") + 1] == "main", args
+            return c.runs_do_workflow()
         if args == ["api", "repos/{owner}/{repo}/check-runs/9/annotations"]:
             return [{"annotation_level": "notice", "message": "The ubuntu-latest label will migrate"},
                     {"annotation_level": "failure", "message": c.anotacao_do_cancelamento}]
@@ -404,6 +513,10 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
                     git(c.remoto, "update-ref", "-d", f"refs/heads/{branch}")
             if cmd[1:] == ["run", "rerun", "555", "--failed"]:
                 c.sem_runner -= 1
+            if cmd[1:3] == ["workflow", "run"]:
+                c.disparar_workflow(cmd)
+            if cmd[1:3] == ["run", "download"]:
+                return subprocess.CompletedProcess(cmd, c.baixar_artefato(cmd), "", "")
             return subprocess.CompletedProcess(cmd, 0, "", "")
         return run_real(cmd, *args, **kwargs)
 
@@ -427,6 +540,10 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
         c.rollbacks.append(service["id"])
         return "finished"
 
+    def esperar_deploy_novo(service, antes):
+        c.deploys_novos.append(service["id"])
+        return "finished"
+
     def cancelar_build_do_registro(servicos_cfg, sha):
         c.cancelamentos.append(sha)
         return []
@@ -437,7 +554,10 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
     monkeypatch.setattr(fo, "esperar_build", esperar_build)
     monkeypatch.setattr(fo, "checar_health", checar_health)
     monkeypatch.setattr(fo, "esperar_rollback", esperar_rollback)
+    monkeypatch.setattr(fo, "esperar_deploy_novo", esperar_deploy_novo)
     monkeypatch.setattr(fo, "cancelar_build_do_registro", cancelar_build_do_registro)
+    monkeypatch.setattr(fo, "IMAGEM_POLL_S", 0)
+    monkeypatch.setattr(fo, "digest_no_ghcr", lambda imagem, tag: c.ghcr.get(tag))
 
 
 def rodar_main(fo, monkeypatch, c: Cenario, *extra: str) -> int:
@@ -1914,3 +2034,383 @@ def test_docstring_documenta_a_migration_vencida():
     for termo in ("migration", "/api/health", "24 h", "nada entrou na main", "semaforo"):
         assert termo in vencida, (termo, vencida)
     assert "SEMAFORO FICA PRESO" not in vencida, vencida
+
+
+# ------------------------------------- imagem do backend no GHCR (#1001)
+
+def test_backend_em_modo_imagem_sobe_a_imagem_do_head_retagueada_para_o_squash_sem_build(
+    tmp_path, monkeypatch, capsys
+):
+    """ADR 0064, decisão 6c: o CI publicou a imagem do head do PR no GHCR. Depois
+    do merge o rabo dispara o workflow que dá a ela a tag do squash (retag, a
+    origem é o head) e só então aponta o Coolify para essa tag e dispara o
+    deploy, que só puxa e reinicia: nenhum build do webhook é esperado."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    squash = c.merges[0]["main"]
+    [publicacao] = c.publicacoes
+    assert (publicacao["workflow"], publicacao["ref"]) == ("imagem-backend.yml", "main")
+    # a origem vai pelo digest que o CI do head guardou: a tag `:<head>` é mutável
+    assert (publicacao["sha"], publicacao["origens"]) == (squash, f"{c.head_do_pr}@{digest_de(c.head_do_pr)}")
+    # antes da imagem publicada, o Coolify só recebeu o APP_VERSION
+    assert publicacao["coolify_antes"] == 2
+    assert c.coolify_sem_leituras() == [
+        f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app update uuid-backend --docker-tag {squash} | main={squash}",
+        f"deploy uuid uuid-backend | main={squash}",
+    ]
+    assert c.builds == [] and c.deploys_novos == ["backend"]
+    assert c.healths == [("backend", "0.10.1")]
+    entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
+    assert entrada["sha"] == squash and entrada["result"] == "healthy"
+    # o state.json guarda o digest do que foi para o ar: é o que o próximo rollback confere
+    back = next(s for s in json.loads(c.na_main("docs/spec/deploy/state.json"))["services"] if s["id"] == "backend")
+    assert (back["last_deploy_sha"], back["last_deploy_digest"]) == (squash, digest_de(c.head_do_pr))
+    # o Coolify confirmou o modo imagem: nenhum aviso de troca pendente
+    assert linhas_com(capsys.readouterr().out, "aviso:") == []
+
+
+def test_onda_em_modo_imagem_so_retagueia_head_com_a_mesma_pasta_do_backend_do_squash(
+    tmp_path, monkeypatch
+):
+    """O #7 entrou primeiro: a imagem do head dele não tem o arquivo do #8. Só o
+    head com que o #8 entrou (a main trazida por merge) tem o backend do squash
+    final, e é a única origem que o workflow pode retaguear."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    c.outro_pr(8, "fix(ouvidoria): limite de anexos por caso", 6,
+               {"hospital-reunioes/backend/app/limite.py": "LIMITE = 3\n"})
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_onda(fo, monkeypatch, c, [7, 8]) == 0
+
+    primeiro, segundo, _ = c.merges
+    assert [(p["sha"], p["origens"]) for p in c.publicacoes] == [
+        (segundo["main"], f"{segundo['head']}@{digest_de(segundo['head'])}")]
+    assert primeiro["head"] not in c.publicacoes[0]["origens"]
+    assert c.coolify_sem_leituras()[-2:] == [
+        f"app update uuid-backend --docker-tag {segundo['main']} | main={segundo['main']}",
+        f"deploy uuid uuid-backend | main={segundo['main']}",
+    ]
+    assert c.builds == []
+
+
+def test_frontend_no_lote_segue_o_build_do_webhook_e_o_backend_vai_por_imagem(tmp_path, monkeypatch):
+    """Só o backend está em modo imagem (o frontend é a #1002): o frontend do
+    lote continua esperando o build que o webhook disparou."""
+    fo = carregar_fechar_onda()
+    c = Cenario(tmp_path, 7, "fix: prazo e rotulo", 5,
+                {"hospital-reunioes/backend/app/prazo.py": "PRAZO = 15\n",
+                 "hospital-reunioes/frontend/src/rotulo.ts": "export const R = 1\n"},
+                project=PROJECT_IMAGEM)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    squash = c.merges[0]["main"]
+    assert c.builds == ["frontend"] and c.esperados == [squash]
+    assert c.deploys_novos == ["backend"] and [p["sha"] for p in c.publicacoes] == [squash]
+
+
+def test_imagem_que_nao_sai_do_workflow_para_com_3_sem_trocar_a_tag_no_coolify(
+    tmp_path, monkeypatch, capsys
+):
+    """O run do workflow terminou vermelho: o Coolify nunca recebe a tag de uma
+    imagem que não existe, e o rabo sai como um build que falhou."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    c.publicacao_falha = True
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_BUILD
+
+    assert [li for li in c.coolify_sem_leituras() if "--docker-tag" in li or li.startswith("deploy ")] == []
+    assert c.deploys_novos == [] and c.healths == []
+    assert c.semaforo == [("pegar", "pr-7")]
+    [build] = linhas_com(capsys.readouterr().out, "build:")
+    assert "backend" in build and "failure" in build and "Semaforo preso na chave pr-7" in build, build
+
+
+def test_app_em_modo_imagem_fica_fora_do_cancelamento_do_webhook(monkeypatch):
+    """Sem webhook, nenhum deploy do commit do registro aparece no backend em
+    modo imagem: esperar por ele gastaria a janela inteira a cada squash."""
+    fo = carregar_fechar_onda()
+    sha = "a" * 40
+    pedidos = []
+
+    def coolify_json(args, timeout=120):
+        pedidos.append(args[3])
+        return [{"deployment_uuid": "d-registro", "commit": sha, "status": "queued"}]
+
+    monkeypatch.setattr(fo, "coolify_json", coolify_json)
+    monkeypatch.setattr(fo, "run", lambda cmd, **kw: subprocess.CompletedProcess(cmd, 0, "", ""))
+    servicos = {s["id"]: s for s in PROJECT_IMAGEM["services"]}
+
+    assert fo.cancelar_build_do_registro(servicos, sha) == ["frontend"]
+    assert pedidos == ["uuid-frontend"]
+
+
+def test_rollback_em_modo_imagem_volta_a_tag_do_ultimo_deploy_sem_build(tmp_path, monkeypatch):
+    """O health da v0.10.1 falhou: o backend volta à tag que estava no ar, o sha
+    do último deploy dele no state.json (o CLI do Coolify não devolve a tag
+    configurada), pelo mesmo caminho do deploy: troca a tag e puxa. Nada de
+    `rollback run --commit`, que é de imagem construída do git."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM, sha_no_ar=IMAGEM_ANTERIOR,
+                     digest_no_ar=DIGEST_ANTERIOR)
+    c.health_ruim_em.add("0.10.1")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_ROLLBACK
+
+    squash = c.merges[0]["main"]
+    assert c.coolify_sem_leituras() == [
+        f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app update uuid-backend --docker-tag {squash} | main={squash}",
+        f"deploy uuid uuid-backend | main={squash}",
+        f"app env update uuid-backend APP_VERSION --value 0.10.0 | main={squash}",
+        f"app env update uuid-frontend APP_VERSION --value 0.10.0 | main={squash}",
+        f"app update uuid-backend --docker-tag {IMAGEM_ANTERIOR} | main={squash}",
+        f"deploy uuid uuid-backend | main={squash}",
+    ]
+    assert c.rollbacks == ["backend"]
+    assert c.healths == [("backend", "0.10.1"), ("backend", "0.10.0")]
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+
+
+def test_backend_que_o_coolify_ainda_constroi_do_git_segue_pelo_webhook_com_aviso(
+    tmp_path, monkeypatch, capsys
+):
+    """O project.json já diz modo imagem, mas a troca no Coolify é pela tela e
+    ainda não foi feita: trocar a tag de um app do git dispararia um segundo
+    build, e o rollback por tag reconstruiria a main com o defeito. O rabo
+    confere o build pack no Coolify antes do primeiro merge e segue pelo
+    webhook, avisando."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    c.build_pack_no_coolify("uuid-backend", "dockerfile")
+    c.imagens_no_coolify("uuid-backend", IMAGEM_ANTERIOR)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert c.publicacoes == [] and c.deploys_novos == []
+    assert c.builds == ["backend"] and c.esperados == [c.merges[0]["main"]]
+    assert not [li for li in c.coolify() if "--docker-tag" in li], c.coolify()
+    [aviso] = linhas_com(capsys.readouterr().out, "aviso:")
+    assert "backend" in aviso and "Coolify" in aviso and "webhook" in aviso, aviso
+
+
+@pytest.mark.parametrize("resposta", [
+    "",  # o CLI nao respondeu nada (timeout, saida vazia)
+    "Coolify CLI v1.2\nnao e json",
+    json.dumps({"uuid": "uuid-backend", "status": "running:healthy"}),  # sem o campo
+], ids=["vazio", "nao-json", "sem-build-pack"])
+def test_leitura_do_build_pack_que_falha_para_antes_do_primeiro_merge(
+    tmp_path, monkeypatch, capsys, resposta
+):
+    """Revisão do PR #1016: sem saber o build pack, o rabo não pode cair no
+    webhook. Depois da troca na tela o app não tem webhook, o deploy forçado
+    repuxaria a tag velha, o health passaria pelo APP_VERSION do runtime e o
+    registro gravaria healthy com um sha que nem existe no GHCR. Só um build
+    pack lido e diferente de dockerimage rebaixa; leitura que falha para antes
+    do primeiro merge, sem tocar no Coolify, e solta o semáforo."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    (c.dir_coolify / "app-uuid-backend.json").write_text(resposta, encoding="utf-8")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
+
+    assert c.merges == [] and c.pushes_na_main() == []
+    assert c.coolify_sem_leituras() == [] and c.publicacoes == [] and c.builds == []
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+    saida = capsys.readouterr().out
+    assert linhas_com(saida, "aviso:") == []
+    [erro] = linhas_com(saida, "erro:")
+    assert "backend" in erro and "build pack" in erro and "nada entrou" in erro, erro
+
+
+def test_build_pack_dentro_de_data_vale_como_modo_imagem(tmp_path, monkeypatch, capsys):
+    """O CLI pode embrulhar a resposta em `data`, como no `deploy get`: o build
+    pack lido ali é o real."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    (c.dir_coolify / "app-uuid-backend.json").write_text(
+        json.dumps({"data": {"uuid": "uuid-backend", "build_pack": "dockerimage",
+                             "docker_registry_image_name": "ghcr.io/dono/repo-backend"}}), encoding="utf-8")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert c.builds == [] and c.deploys_novos == ["backend"]
+    assert linhas_com(capsys.readouterr().out, "aviso:") == []
+
+
+def test_dry_run_em_modo_imagem_diz_que_o_backend_vai_por_imagem_sem_disparar_nada(
+    tmp_path, monkeypatch, capsys
+):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
+
+    [faria] = linhas_com(capsys.readouterr().out, "faria:")
+    assert "backend: imagem do GHCR com a tag do squash, sem build" in faria, faria
+    assert c.publicacoes == [] and c.coolify() == [] and c.semaforo == []
+
+
+def test_rollback_em_modo_imagem_sem_deploy_anterior_no_state_sai_com_4(tmp_path, monkeypatch):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    c.health_ruim_em.add("0.10.1")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_HEALTH
+
+    assert [li for li in c.coolify_sem_leituras() if "--value 0.10.0" in li or "rollback" in li] == []
+    assert c.rollbacks == [] and c.semaforo == [("pegar", "pr-7")]
+
+
+# ------------------------- digest de ponta a ponta (revisão do PR #1016)
+
+DIGEST_ANTERIOR = digest_de("imagem que estava no ar")
+
+
+def test_tag_do_squash_sobrescrita_depois_do_workflow_nao_vai_para_o_ar(tmp_path, monkeypatch, capsys):
+    """Um run com `packages: write` de outra branch troca a tag `:<squash>` depois
+    que o workflow a publicou: no GHCR ela já não aponta para o digest que o run
+    guardou, e o Coolify não recebe a tag."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    c.tag_sobrescrita = True
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_BUILD
+
+    assert [li for li in c.coolify_sem_leituras() if "--docker-tag" in li or li.startswith("deploy ")] == []
+    assert c.deploys_novos == [] and c.healths == []
+    [build] = linhas_com(capsys.readouterr().out, "build:")
+    assert DIGEST_FORJADO in build and digest_de(c.head_do_pr) in build, build
+
+
+def test_head_cujo_ci_nao_guardou_digest_nao_vira_origem_e_o_workflow_constroi(tmp_path, monkeypatch):
+    """Sem o digest do CI, a tag `:<head>` não prova nada: o head não vai como
+    origem, o workflow constrói do squash, e o digest do build é o que vai para
+    o ar e para o state.json."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    c.ci_sem_digest.add(c.head_do_pr)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    squash = c.merges[0]["main"]
+    assert [(p["sha"], p["origens"]) for p in c.publicacoes] == [(squash, "")]
+    assert c.deploys_novos == ["backend"]
+    back = next(s for s in json.loads(c.na_main("docs/spec/deploy/state.json"))["services"] if s["id"] == "backend")
+    assert back["last_deploy_digest"] == digest_de(f"build-{squash}")
+
+
+def test_rollback_em_modo_imagem_com_a_tag_anterior_sobrescrita_nao_mexe_em_nada(tmp_path, monkeypatch, capsys):
+    """A tag do último deploy (pública no state.json) foi sobrescrita no GHCR: o
+    rollback a poria no ar. Ele confere o digest antes de tocar em qualquer app,
+    nem o APP_VERSION volta, e sai com 4 para o humano."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM, sha_no_ar=IMAGEM_ANTERIOR,
+                     digest_no_ar=DIGEST_ANTERIOR)
+    c.ghcr[IMAGEM_ANTERIOR] = DIGEST_FORJADO
+    c.health_ruim_em.add("0.10.1")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_HEALTH
+
+    squash = c.merges[0]["main"]
+    assert c.coolify_sem_leituras()[2:] == [
+        f"app update uuid-backend --docker-tag {squash} | main={squash}",
+        f"deploy uuid uuid-backend | main={squash}",
+    ]
+    assert c.rollbacks == [] and c.semaforo == [("pegar", "pr-7")]
+    [rollback] = linhas_com(capsys.readouterr().out, "rollback:")
+    assert DIGEST_FORJADO in rollback and DIGEST_ANTERIOR in rollback, rollback
+
+
+def test_rollback_do_primeiro_deploy_por_imagem_le_o_digest_do_run_que_publicou_a_tag(tmp_path, monkeypatch):
+    """O state.json ainda não tem digest (a imagem no ar veio do passo 2, o run
+    manual do workflow): o rabo o lê do artefato daquele run, na main, e volta."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM, sha_no_ar=IMAGEM_ANTERIOR)
+    c.imagem_publicada_antes(IMAGEM_ANTERIOR, DIGEST_ANTERIOR)
+    c.health_ruim_em.add("0.10.1")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_ROLLBACK
+
+    squash = c.merges[0]["main"]
+    assert c.coolify_sem_leituras()[-2:] == [
+        f"app update uuid-backend --docker-tag {IMAGEM_ANTERIOR} | main={squash}",
+        f"deploy uuid uuid-backend | main={squash}",
+    ]
+    assert c.rollbacks == ["backend"]
+
+
+@pytest.mark.parametrize("nome", ["ghcr.io/dono-sem-fig/repo-backend", None], ids=["outro-namespace", "sem-nome"])
+def test_coolify_que_puxa_de_outra_imagem_para_antes_do_primeiro_merge(tmp_path, monkeypatch, capsys, nome):
+    """Revisão do PR #1016: no passo 3, `pedrorezende` sem o `fig` faria o Coolify
+    puxar de outro namespace, onde as tags pedidas são previsíveis. O nome lido
+    no `coolify app get` tem que ser o `build.image` do project.json; diferente,
+    ou não lido, nada entra na main."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    c.build_pack_no_coolify("uuid-backend", "dockerimage", nome)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
+
+    assert c.merges == [] and c.coolify_sem_leituras() == [] and c.publicacoes == []
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+    [erro] = linhas_com(capsys.readouterr().out, "erro:")
+    assert "ghcr.io/dono/repo-backend" in erro and "nada entrou" in erro, erro
+
+
+class RespostaFalsa(io.BytesIO):
+    def __init__(self, corpo: bytes = b"", headers: dict | None = None):
+        super().__init__(corpo)
+        self.headers = headers or {}
+
+
+def test_digest_no_ghcr_le_o_digest_da_tag_sem_login_e_none_quando_nao_le(monkeypatch):
+    """O `imagetools inspect` sem docker: token anônimo de pull e HEAD no
+    manifesto, pedindo também o índice multi-arquitetura (o digest que o
+    build-push-action devolve é o dele)."""
+    fo = carregar_fechar_onda()
+    pedidos = []
+
+    def urlopen(pedido, timeout=None):
+        pedidos.append(pedido)
+        if isinstance(pedido, str):
+            return RespostaFalsa(json.dumps({"token": "anonimo"}).encode())
+        return RespostaFalsa(headers={"Docker-Content-Digest": DIGEST_ANTERIOR})
+
+    monkeypatch.setattr(fo.urllib.request, "urlopen", urlopen)
+
+    assert fo.digest_no_ghcr("ghcr.io/dono/repo-backend", IMAGEM_ANTERIOR) == DIGEST_ANTERIOR
+    token, head = pedidos
+    assert token == "https://ghcr.io/token?scope=repository:dono/repo-backend:pull"
+    assert (head.get_method(), head.full_url) == (
+        "HEAD", f"https://ghcr.io/v2/dono/repo-backend/manifests/{IMAGEM_ANTERIOR}")
+    assert head.get_header("Authorization") == "Bearer anonimo"
+    assert "application/vnd.oci.image.index.v1+json" in head.get_header("Accept")
+
+    def recusa(pedido, timeout=None):
+        raise fo.urllib.error.HTTPError("https://ghcr.io", 401, "unauthorized", {}, None)
+
+    monkeypatch.setattr(fo.urllib.request, "urlopen", recusa)
+    assert fo.digest_no_ghcr("ghcr.io/dono/repo-backend", IMAGEM_ANTERIOR) is None
