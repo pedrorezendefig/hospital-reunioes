@@ -17,6 +17,7 @@ que anota cada chamada, e o build e o health devolvem verde sem rede.
 from __future__ import annotations
 
 import hashlib
+import io
 import json
 import os
 import re
@@ -168,6 +169,9 @@ class Cenario:
         self.gh_chamadas: list[list[str]] = []
         self.builds: list[str] = []
         self.healths: list[tuple[str, str | None]] = []
+        # versões em que o /api/health do backend responde 500 (issue #968)
+        self.health_ruim_em: set[str | None] = set()
+        self.rollbacks: list[str] = []  # apps cujo deploy de rollback o rabo esperou
         self.semaforo: list[tuple[str, str]] = []
         self.cancelamentos: list[str] = []
         self.tags: list[tuple[str, str]] = []  # (ref, sha) criados pela API
@@ -188,16 +192,41 @@ class Cenario:
         bin_falso = tmp_path / "bin"
         bin_falso.mkdir()
         self.log_coolify = tmp_path / "coolify.log"
+        # o que o `coolify app rollback images` devolve por app (issue #968)
+        self.dir_coolify = tmp_path / "coolify-dados"
+        self.dir_coolify.mkdir()
         coolify = bin_falso / "coolify"
         coolify.write_text(
             "#!/bin/sh\n"
-            f'echo "$* | main=$(git --git-dir={self.remoto} rev-parse main)" >> {self.log_coolify}\n',
+            f"main=$(git --git-dir={self.remoto} rev-parse main)\n"
+            f'echo "$* | main=$main" >> {self.log_coolify}\n'
+            'case "$1 $2 $3" in\n'
+            '  "app rollback images")\n'
+            f'    [ -f "{self.dir_coolify}/imagens-$4.json" ] && cat "{self.dir_coolify}/imagens-$4.json" ;;\n'
+            '  "app rollback run")\n'
+            f'    [ -f "{self.dir_coolify}/rollback-recusado" ] && exit 1 ;;\n'
+            "esac\n"
+            "exit 0\n",
             encoding="utf-8",
         )
         coolify.chmod(0o755)
         self.path = f"{bin_falso}{os.pathsep}{os.environ.get('PATH', '')}"
         self.home = tmp_path / "home"
         self.home.mkdir()
+
+    def imagens_no_coolify(self, uuid: str, no_ar: str | None, revertidas: tuple[str, ...] = ()) -> None:
+        """Lista do `coolify app rollback images`, no formato real (conferido em
+        06/10/2026), como o rabo a le ANTES do merge: a imagem no ar e, mais novas
+        que ela, as que um rollback anterior tirou do ar."""
+        imagens = [{"created_at": f"2026-10-06 0{5 - i}:00:00 +0000 UTC", "is_current": False, "tag": tag}
+                   for i, tag in enumerate(revertidas)]
+        if no_ar:
+            imagens.append({"created_at": "2026-10-05 22:00:00 +0000 UTC", "is_current": True, "tag": no_ar})
+        (self.dir_coolify / f"imagens-{uuid}.json").write_text(
+            json.dumps({"current": no_ar, "images": imagens}), encoding="utf-8")
+
+    def recusar_rollback(self) -> None:
+        (self.dir_coolify / "rollback-recusado").write_text("", encoding="utf-8")
 
     def main_remota(self) -> str:
         return git(self.remoto, "rev-parse", "main")
@@ -365,7 +394,14 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
 
     def checar_health(service, versao_esperada):
         c.healths.append((service["id"], versao_esperada))
+        if service["id"] == "backend" and versao_esperada in c.health_ruim_em:
+            return {"ok": False, "status": 500, "latency_ms": 5,
+                    "corpo": '{"detail":"relation \\"prazos\\" does not exist"}'}
         return {"ok": True, "status": 200, "latency_ms": 5}
+
+    def esperar_rollback(service, antes):
+        c.rollbacks.append(service["id"])
+        return "finished"
 
     def cancelar_build_do_registro(servicos_cfg, sha):
         c.cancelamentos.append(sha)
@@ -376,6 +412,7 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
     monkeypatch.setattr(fo, "semaforo", semaforo)
     monkeypatch.setattr(fo, "esperar_build", esperar_build)
     monkeypatch.setattr(fo, "checar_health", checar_health)
+    monkeypatch.setattr(fo, "esperar_rollback", esperar_rollback)
     monkeypatch.setattr(fo, "cancelar_build_do_registro", cancelar_build_do_registro)
 
 
@@ -414,6 +451,7 @@ def test_um_pr_so_sem_sessao_faz_merge_bump_app_version_build_health_e_registro(
     # APP_VERSION no backend E no frontend do Coolify, ANTES do merge (a main
     # remota ainda era a base)
     assert c.coolify() == [
+        f"app rollback images uuid-backend --format json | main={c.base}",
         f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
         f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}",
     ]
@@ -690,7 +728,8 @@ def test_rodada_seguinte_a_um_ci_vermelho_sai_na_mesma_versao_sem_pular(
 
     assert c.merges[0]["head"] == head_com_a_main
     assert c.tags == [("refs/tags/v0.10.1", c.merges[0]["main"])]
-    assert all("--value 0.10.1 " in li for li in c.coolify()), c.coolify()
+    app_version = [li for li in c.coolify() if " APP_VERSION " in li]
+    assert app_version and all("--value 0.10.1 " in li for li in app_version), c.coolify()
 
 
 def test_onda_entra_por_um_pr_de_entrega_que_fecha_as_issues_do_lote(tmp_path, monkeypatch):
@@ -710,7 +749,8 @@ def test_onda_entra_por_um_pr_de_entrega_que_fecha_as_issues_do_lote(tmp_path, m
     assert git(c.remoto, "show", f"{entrega['main']}:hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
     assert c.builds == ["backend"]
     # APP_VERSION nos dois apps antes do merge da entrega, tag no squash dela
-    assert c.coolify() == [f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
+    assert c.coolify() == [f"app rollback images uuid-backend --format json | main={c.base}",
+                           f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
                            f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}"]
     assert c.tags == [("refs/tags/v0.10.1", entrega["main"])]
 
@@ -1011,7 +1051,8 @@ def test_pr_misto_de_ferramenta_e_frontend_segue_o_fluxo_de_app(tmp_path, monkey
     # o fluxo de app: versão nova sem commit, APP_VERSION nos dois apps antes do
     # merge, tag, build, health e registro
     assert json.loads(c.na_main("hospital-reunioes/frontend/package.json"))["version"] == "0.10.0"
-    assert c.coolify() == [f"app env update uuid-backend APP_VERSION --value 0.11.0 | main={c.base}",
+    assert c.coolify() == [f"app rollback images uuid-frontend --format json | main={c.base}",
+                           f"app env update uuid-backend APP_VERSION --value 0.11.0 | main={c.base}",
                            f"app env update uuid-frontend APP_VERSION --value 0.11.0 | main={c.base}"]
     assert c.tags == [("refs/tags/v0.11.0", c.merges[0]["main"])]
     assert c.builds == ["frontend"]
@@ -1223,3 +1264,205 @@ def test_rabo_rodado_do_worktree_do_autor_nao_remove_o_proprio_checkout(
     lista = git(c.clone, "worktree", "list", "--porcelain")
     assert f"worktree {autor.resolve()}" in lista, lista
     assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+
+
+# ---------------------------------------------- rollback automático (#968)
+
+IMAGEM_ANTERIOR = "cab8930958d1f89545d688418f37745936cc576f"
+IMAGEM_MAIS_VELHA = "9428a0263e43d81cbbe32891fee5a1af9f5879a2"
+# a imagem de um merge ruim que um rollback anterior tirou do ar: segue na
+# lista do Coolify, mais nova que a do ar
+IMAGEM_REVERTIDA = "be11c0de5a1d0b9a2e3f4c5d6e7f8a9b0c1d2e3f"
+
+
+def coolify_sem_leitura_de_deploys(c: Cenario) -> list[str]:
+    return [li for li in c.coolify() if not li.startswith("app deployments list")]
+
+
+def test_health_ruim_volta_a_imagem_anterior_e_o_app_version_antigo_e_sai_com_rollback_feito(
+    tmp_path, monkeypatch, capsys
+):
+    """O backend da v0.10.1 responde 500: o rabo volta o app do lote à imagem
+    que estava no ar ANTES do merge (lida antes dele, não a mais nova da lista:
+    a de um rollback anterior é mais nova e tem defeito), devolve o APP_VERSION
+    v0.10.0 aos dois apps ANTES de subir a imagem (o backend o lê no start do
+    container), confere o health de novo, agora na versão antiga, e solta o
+    semáforo."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    c.imagens_no_coolify("uuid-backend", IMAGEM_ANTERIOR, revertidas=(IMAGEM_REVERTIDA,))
+    c.health_ruim_em.add("0.10.1")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_ROLLBACK
+
+    merge = c.merges[0]["main"]
+    assert coolify_sem_leitura_de_deploys(c) == [
+        f"app rollback images uuid-backend --format json | main={c.base}",
+        f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app env update uuid-backend APP_VERSION --value 0.10.0 | main={merge}",
+        f"app env update uuid-frontend APP_VERSION --value 0.10.0 | main={merge}",
+        f"app rollback run uuid-backend --commit {IMAGEM_ANTERIOR} | main={merge}",
+    ]
+    # o frontend não estava no lote: a imagem dele não muda
+    assert c.rollbacks == ["backend"]
+    assert c.healths == [("backend", "0.10.1"), ("backend", "0.10.0")]
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+    # sem registro: o merge segue na main e quem chamou abre o revert
+    assert [m["pr"] for m in c.merges] == [7] and c.main_remota() == merge
+    saida = capsys.readouterr().out
+    health = next(li for li in saida.splitlines() if li.startswith("health:"))
+    assert "http 500" in health and 'relation \\"prazos\\" does not exist' in health, health
+    rollback = next(li for li in saida.splitlines() if li.startswith("rollback:"))
+    for trecho in (merge[:8], "PR #7", "issue #5", "v0.10.0", "semaforo solto"):
+        assert trecho in rollback, (trecho, rollback)
+    assert "Semaforo preso" not in saida, saida
+
+
+def sem_imagem_anterior(c: Cenario) -> None:
+    c.imagens_no_coolify("uuid-backend", None)
+
+
+def coolify_recusa_o_rollback(c: Cenario) -> None:
+    c.imagens_no_coolify("uuid-backend", IMAGEM_ANTERIOR)
+    c.recusar_rollback()
+
+
+def health_segue_ruim_na_versao_antiga(c: Cenario) -> None:
+    c.imagens_no_coolify("uuid-backend", IMAGEM_ANTERIOR)
+    c.health_ruim_em.add("0.10.0")
+
+
+@pytest.mark.parametrize("falha", [sem_imagem_anterior, coolify_recusa_o_rollback,
+                                   health_segue_ruim_na_versao_antiga],
+                         ids=["sem-imagem", "coolify-recusa", "health-segue-ruim"])
+def test_rollback_que_falha_sai_com_4_e_o_semaforo_fica_preso(tmp_path, monkeypatch, capsys, falha):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    c.health_ruim_em.add("0.10.1")
+    falha(c)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_HEALTH == 4
+
+    assert c.semaforo == [("pegar", "pr-7")]
+    assert [m["pr"] for m in c.merges] == [7]
+    saida = capsys.readouterr().out
+    rollback = next(li for li in saida.splitlines() if li.startswith("rollback:"))
+    assert "falhou" in rollback and "Semaforo preso na chave pr-7" in rollback, rollback
+    assert "/deploy rollback" in rollback, rollback
+
+
+def test_sem_imagem_anterior_o_rabo_nao_mexe_no_app_version_nem_sobe_imagem(tmp_path, monkeypatch):
+    """Sem para onde voltar, o APP_VERSION novo continua batendo com a imagem no ar."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    c.health_ruim_em.add("0.10.1")
+    sem_imagem_anterior(c)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_HEALTH
+
+    assert not [li for li in c.coolify() if "--value 0.10.0" in li or "rollback run" in li], c.coolify()
+    assert c.rollbacks == []
+
+
+def codigo_na_docstring(fo, n: int) -> str:
+    saidas = fo.__doc__.split("Codigos de saida:")[1]
+    item = re.search(rf"^  {n}  (.+?)(?=^  \d  |^\S|\Z)", saidas, re.M | re.S)
+    assert item, f"o codigo {n} nao esta na docstring"
+    return " ".join(item.group(1).split())
+
+
+def test_docstring_documenta_o_rollback_feito_e_o_que_falhou():
+    fo = carregar_fechar_onda()
+    assert fo.EXIT_ROLLBACK == 6 and fo.EXIT_HEALTH == 4
+
+    feito = codigo_na_docstring(fo, 6)
+    for termo in ("rollback", "imagem anterior", "APP_VERSION antigo", "health", "semaforo solto", "revert"):
+        assert termo in feito, (termo, feito)
+    assert "SEMAFORO FICA PRESO" not in feito, feito
+    falhou = codigo_na_docstring(fo, 4)
+    assert "rollback" in falhou and "SEMAFORO FICA PRESO" in falhou, falhou
+
+
+def imagem(tag: str, criada: str, no_ar: bool = False) -> dict:
+    return {"created_at": f"2026-10-06 {criada} +0000 UTC", "is_current": no_ar, "tag": tag}
+
+
+@pytest.mark.parametrize("dado, esperada", [
+    # depois de um rollback, a imagem ruim que ele tirou do ar segue na lista,
+    # mais nova que a do ar: vale a `current`, nunca a mais nova
+    ({"current": IMAGEM_ANTERIOR,
+      "images": [imagem(IMAGEM_REVERTIDA, "04:26:37"), imagem(IMAGEM_ANTERIOR, "02:10:00", True),
+                 imagem(IMAGEM_MAIS_VELHA, "00:37:08")]}, IMAGEM_ANTERIOR),
+    ({"current": None, "images": []}, None),
+    (None, None),  # o Coolify não respondeu
+], ids=["revertida-mais-nova", "sem-imagem", "coolify-fora"])
+def test_imagem_no_ar_e_a_current_do_coolify_e_nao_a_mais_nova(monkeypatch, dado, esperada):
+    fo = carregar_fechar_onda()
+    pedidos = []
+
+    def coolify_json(args, timeout=120):
+        pedidos.append(args)
+        return dado
+
+    monkeypatch.setattr(fo, "coolify_json", coolify_json)
+
+    assert fo.imagem_no_ar("uuid-backend") == esperada
+    assert pedidos == [["app", "rollback", "images", "uuid-backend"]]
+
+
+def test_esperar_rollback_acompanha_o_deploy_novo_e_nao_o_antigo_do_mesmo_commit(monkeypatch):
+    """O deploy que pôs a imagem anterior no ar da primeira vez tem o mesmo
+    commit do rollback: casar por commit acharia o antigo, já `finished`."""
+    fo = carregar_fechar_onda()
+    antigo = {"deployment_uuid": "d-antigo", "commit": IMAGEM_ANTERIOR, "status": "finished"}
+    novo = {"deployment_uuid": "d-rollback", "commit": IMAGEM_ANTERIOR, "status": "in_progress"}
+    listas = iter([[antigo], [novo, antigo]])
+    pedidos = []
+
+    def coolify_json(args, timeout=120):
+        pedidos.append(args)
+        if args[:3] == ["app", "deployments", "list"]:
+            return next(listas)
+        return {"deployment_uuid": args[2], "status": "finished"}
+
+    monkeypatch.setattr(fo, "coolify_json", coolify_json)
+    monkeypatch.setattr(fo, "BUILD_POLL_S", 0)
+    monkeypatch.setattr(fo, "run", lambda cmd, **kw: pytest.fail(f"comando inesperado: {cmd}"))
+
+    assert fo.esperar_rollback(PROJECT["services"][0], {"d-antigo"}) == "finished"
+    assert pedidos[-1] == ["deploy", "get", "d-rollback"], pedidos
+
+
+def test_esperar_rollback_sem_deploy_novo_desiste_sem_forcar_build(monkeypatch):
+    """`coolify deploy uuid` rebuildaria a main, que ainda tem o defeito."""
+    fo = carregar_fechar_onda()
+    chamadas = []
+    monkeypatch.setattr(fo, "coolify_json", lambda args, timeout=120: [{"deployment_uuid": "d-antigo"}])
+    monkeypatch.setattr(fo, "BUILD_WAIT_WEBHOOK_S", 0)
+    monkeypatch.setattr(fo, "BUILD_POLL_S", 0)
+    monkeypatch.setattr(fo, "run", lambda cmd, **kw: chamadas.append(cmd))
+
+    assert fo.esperar_rollback(PROJECT["services"][0], {"d-antigo"}) == "sem-deploy"
+    assert chamadas == []
+
+
+def test_health_ruim_guarda_o_que_o_health_respondeu(monkeypatch):
+    """O corpo da resposta vai na linha do rabo e, dali, no comentário da issue reaberta."""
+    fo = carregar_fechar_onda()
+
+    def urlopen(req, timeout):
+        raise fo.urllib.error.HTTPError(req.full_url, 500, "Internal Server Error", {},
+                                        io.BytesIO(b'{"detail":\n  "db fora do ar"}'))
+
+    monkeypatch.setattr(fo.urllib.request, "urlopen", urlopen)
+    monkeypatch.setattr(fo.time, "sleep", lambda s: None)
+
+    h = fo.checar_health(PROJECT["services"][0], "0.10.1")
+
+    assert h["ok"] is False and h["status"] == 500
+    assert h["corpo"] == '{"detail": "db fora do ar"}'
+    assert fo.linha_de_health(h) == 'http 500 {"detail": "db fora do ar"}'
