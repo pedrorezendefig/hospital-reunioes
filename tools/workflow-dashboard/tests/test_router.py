@@ -190,11 +190,18 @@ def _app(tmp_path, expr, antes="", hash_inicial="", dados=None):
     return _node(tmp_path, prog)
 
 
+def _cards(html):
+    """(em destaque?, html) de cada <article> renderizado, na ordem."""
+    return [
+        ('aria-current="true"' in m.group(1), m.group(0)) for m in re.finditer(r"(<article[^>]*>)[\s\S]*?</article>", html)
+    ]
+
+
 def _card(html, n):
-    """O <article> do card da issue n."""
-    for m in re.finditer(r"<article class=\"([^\"]*)\"[\s\S]*?</article>", html):
-        if f'data-n="{n}"' in m.group(0):
-            return m.group(1).split(), m.group(0)
+    """(em destaque?, html) do card da issue n."""
+    for card in _cards(html):
+        if f'data-act="iss" data-n="{n}"' in card[1]:
+            return card
     raise AssertionError(f"card #{n} fora da lista")
 
 
@@ -279,3 +286,38 @@ def test_trocar_de_aba_expandir_card_e_mudar_filtro_atualizam_o_hash(tmp_path):
         "#issues/902?fase=pr_aberto&resp=%28sem%29&q=fatia+9",
         "#issues?fase=pr_aberto&resp=%28sem%29&q=fatia+9",
     ]
+
+
+# ---------- abrir o painel com o hash restaura o estado ----------
+
+
+@com_node
+def test_abrir_com_hash_restaura_aba_filtros_e_card_expandido_com_destaque(tmp_path):
+    hash_ = "#issues/902?fase=pr_aberto&resp=lucassampaioc1"
+    tab, filtros, html, hash_depois = _app(
+        tmp_path, "[S.tab, S.fIssues, _view.innerHTML, location.hash]", hash_inicial=hash_
+    )
+    assert tab == "issues"
+    assert filtros["fase"] == "pr_aberto" and filtros["resp"] == "lucassampaioc1"
+    assert re.search(r'data-act="ffase" data-v="pr_aberto" aria-pressed="true"', html)
+    em_destaque, card = _card(html, 902)
+    assert em_destaque
+    assert "corpo da 902" in card  # expandido
+    assert hash_depois == hash_
+
+
+@com_node
+def test_fatia_do_hash_aparece_com_o_prd_aberto_e_so_ela_em_destaque(tmp_path):
+    html = _app(tmp_path, "_view.innerHTML", hash_inicial="#issues/904")
+    em_destaque, card = _card(html, 904)
+    assert em_destaque and "corpo da 904" in card
+    assert [n for n in (900, 901, 902, 904, 910) if _card(html, n)[0]] == [904]
+
+
+@com_node
+def test_abrir_com_hash_de_versao_expande_o_deploy_com_destaque(tmp_path):
+    tab, html = _app(tmp_path, "[S.tab, _view.innerHTML]", hash_inicial="#producao/v0.163.3")
+    assert tab == "producao"
+    (novo_em_destaque, novo), (velho_em_destaque, velho) = _cards(html)
+    assert velho_em_destaque and "pd-body" in velho and "def5678" in velho
+    assert not novo_em_destaque and "pd-body" not in novo

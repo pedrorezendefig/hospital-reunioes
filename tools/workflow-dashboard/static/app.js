@@ -223,10 +223,13 @@ function irPara(rota) {
   sincronizarHash();
   marcarAba();
   render();
-  const alvo = view.querySelector('.destaque');
+  const alvo = view.querySelector('[aria-current="true"]');
   if (alvo) alvo.scrollIntoView({ block: 'center' });
   else window.scrollTo({ top: 0 });
 }
+
+/* o card que o hash aponta fica em destaque (e é o alvo da rolagem do irPara) */
+const destaque = item => (S.item && S.item === String(item) ? ' aria-current="true"' : '');
 
 /* o item da rota abre expandido; a fatia aparece com o PRD dela aberto */
 function abrirItem() {
@@ -515,7 +518,7 @@ function issueCard(i, idx, prd = false) {
   ].filter(Boolean).join('');
 
   return `
-  <article class="nrow ${prd ? 'prd-row' : ''} rv" style="--i:${idx}">
+  <article class="nrow ${prd ? 'prd-row' : ''} rv" style="--i:${idx}"${destaque(i.number)}>
     <span class="nrow-idx">${String(idx + 1).padStart(2, '0')}</span>
     <div class="nrow-main">
       <div class="iss-head" data-act="iss" data-n="${i.number}">
@@ -676,7 +679,7 @@ function deployCard(dp, idx) {
 
   return `
   <div class="pd-item rv ${ok ? '' : 'bad'}" style="--i:${Math.min(idx, 12)}">
-    <article class="card pd-card lift">
+    <article class="card pd-card lift"${destaque(depVer(dp.app_version))}>
       <div class="pd-head" data-act="dep" data-i="${idx}">
         <span class="pd-ver ${dp.app_version ? '' : 'unversioned'}">${dp.app_version ? esc(depVer(dp.app_version)) : esc(dp.sha || '·')}</span>
         <span class="pd-subject">${esc(dp.subject || dp.raw_subject || '')}</span>
