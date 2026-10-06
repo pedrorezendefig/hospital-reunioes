@@ -28,8 +28,7 @@ Tentativa <k> de 3.
 
 ```
 [papel: revisor]
-PR #<PR>, issue #<N>. Ache problemas, não aprove, não edite. Rodada <1|2>.
-<Se o PR teve VEREDITO SEGURANCA: MUST-FIX: "Veredito de segurança a conferir: <URL do comentário>.">
+PR #<PR>, issue #<N>. Ache problemas, não aprove, não edite. Revisão única: ninguém revisa a correção.
 ```
 
 ## hr-revisor-seguranca

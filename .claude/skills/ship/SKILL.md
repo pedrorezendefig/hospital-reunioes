@@ -201,6 +201,10 @@ A seção "Mudanças" usa o output da skill `/snapshot --diff <base>..HEAD` (ver
 
 Cada camada faz veto independente. Roda em sequência (ou paralelo onde possível). Gate reprovado não para o `/ship`: chama o agente `hr-corretor` (prompt em `.claude/skills/onda-enxuta/references/prompts.md`) e roda o gate de novo, como diz cada gate. Os 3 gates verdes levam ao rabo (Passo 10), sem esperar mensagem (ADR 0063). Na `/onda-enxuta`, o `hr-implementador` roda `/ship --skip-review` e termina no PR aberto: quem espera o CI, revisa e chama o corretor é o orquestrador da onda (passo 4 dela).
 
+**PR de ferramenta** (ADR 0067): nenhum arquivo em `hospital-reunioes/` (`gh pr diff "$PR_NUMBER" --name-only | grep -q '^hospital-reunioes/'` falha). Não há Gate 1, 1.5 nem 2: o CI (Gate 3) é o gate e, verde, segue para o Passo 9.
+
+**Nunca pare para perguntar** (ADR 0067): dúvida, impasse ou revisor sem veredito é baixa, com uma linha de motivo, nunca uma lista de opções esperando resposta.
+
 **Baixa** (o fim de uma fatia que não fecha): `gh issue edit <issue> --remove-label in-progress --add-label ready-for-human`, um `gh issue comment` com `<!-- automacao -->` na primeira linha e o diagnóstico (gate ou linha do rabo, achado, o que o corretor tentou e a hipótese), e `PushNotification` de uma linha: "#<issue> foi para ready-for-human: <motivo>". O PR fica aberto e o rabo não roda.
 
 ### Passo 8.0 — Detecção de diff cosmético (Corte 2 do plano de enxugamento)
@@ -261,9 +265,9 @@ fi
 
 ### Gate 1: `hr-revisor` (sempre)
 
-Dispara o agente `hr-revisor` com o prompt de `.claude/skills/onda-enxuta/references/prompts.md` (rodada 1). Ele lê o diff pelo GitHub, não a árvore de trabalho, e comenta o veredito no PR; confira com `gh pr view "$PR_NUMBER" --json comments` que a última linha do comentário é `VEREDITO: LIMPO` ou `VEREDITO: MUST-FIX (n)`.
+Dispara o agente `hr-revisor` com o prompt de `.claude/skills/onda-enxuta/references/prompts.md`. Ele lê o diff pelo GitHub, não a árvore de trabalho, e comenta o veredito no PR; confira com `gh pr view "$PR_NUMBER" --json comments` que a última linha do comentário é `VEREDITO: LIMPO` ou `VEREDITO: MUST-FIX (n)`.
 
-`MUST-FIX` → disparar o `hr-corretor` motivo `revisao` com o comentário inteiro, sem esperar o Gate 2 (com outro corretor no PR, vai quando ele terminar). Rodada 2 do `hr-revisor` **só quando não houver corretor no PR** (todo corretor terminou, o de segurança inclusive) e, com o Gate 2 aplicado, com o `VEREDITO SEGURANCA:` já dado: ela confere as duas correções de uma vez e não há rodada 3. O veredito traz só must-fix, e há uma rodada de correção (ADR 0064): se a rodada 2 ainda tem must-fix, é baixa (Passo 8).
+`MUST-FIX` → disparar o `hr-corretor` motivo `revisao` com o comentário inteiro, sem esperar o Gate 2 (com outro corretor no PR, vai quando ele terminar). **Uma revisão, uma correção, sem re-revisão** (ADR 0067): o `hr-revisor` não roda de novo; depois do corretor, quem confere é o CI. O veredito traz só must-fix (ADR 0064). Corretor que termina com `pendente` é baixa (Passo 8).
 
 ### Gate 1.5: Spec × diff (quando há issue vinculada)
 
@@ -282,7 +286,7 @@ Dispara um subagent **independente** (Task/general-purpose) com:
 - O corpo da issue já carregado no Passo 3 (O que construir + Critérios de aceite).
 - O brief: "Reporte só o que impede o merge (ADR 0064), como must-fix: (a) requisitos que a issue pediu e estão **faltando ou parciais** no diff; (b) requisitos que parecem implementados mas cuja implementação **tem cara de errado**. Cite a linha da spec em cada achado. Menos de 400 palavras."
 
-Achado → comentar no PR via `gh pr comment` como must-fix e disparar o `hr-corretor` motivo `revisao` na hora, com o mesmo tratamento do Gate 1 (uma rodada, depois baixa).
+Achado → comentar no PR via `gh pr comment` como must-fix e disparar o `hr-corretor` motivo `revisao` na hora, com o mesmo tratamento do Gate 1 (uma correção, sem re-revisão).
 
 ### Gate 2: `hr-revisor-seguranca` (rota sem login ou migration)
 
@@ -292,7 +296,7 @@ uv run --no-project --python ">=3.12" python .claude/skills/onda-enxuta/scripts/
 
 Saída `0` (o PR toca rota sem login ou migration, pela lista de `.claude/skills/onda-enxuta/revisao-sensivel.txt` ou pela varredura do head do PR): dispare o agente `hr-revisor-seguranca` **uma vez só**, em paralelo com o Gate 1, com o prompt de `references/prompts.md` da onda (motivo: os arquivos impressos). Ele lê o diff pelo GitHub; o `/security-review` lia o diff da árvore principal quando o trabalho estava num worktree, por isso não é mais o gate. Saída `1`: o gate não se aplica; o resto da segurança é a lente do `hr-auditor-prd` (ADR 0064, decisão 4, parágrafo abaixo). Qualquer outra saída (2: erro do `gh`, do `git`, da varredura ou Python abaixo do 3.12; o script exige 3.12+ e o `python3` do macOS é 3.9, daí o `uv run`) é erro, nunca "não sensível": o gate não passa; rode de novo, e na segunda falha é baixa.
 
-Ninguém espera por ele: o corretor do Gate 1 não aguarda este veredito. `VEREDITO SEGURANCA: MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário de segurança, uma rodada de correção a mais (com um corretor já no PR, este vai quando ele terminar); o `hr-revisor-seguranca` não roda de novo, e quem confere é a rodada 2 do Gate 1, que espera este corretor terminar, com a linha `Veredito de segurança a conferir: <URL>` no prompt (cada must-fix dele vira spec da rodada), com a mesma regra da baixa. O gate passa com a última linha do comentário em `VEREDITO SEGURANCA: LIMPO`, ou com o must-fix dele corrigido e a rodada 2 do Gate 1 em `VEREDITO: LIMPO`.
+Ninguém espera por ele: o corretor do Gate 1 não aguarda este veredito. `VEREDITO SEGURANCA: MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário de segurança (com um corretor já no PR, este vai quando ele terminar); o `hr-revisor-seguranca` não roda de novo e nenhum revisor confere a correção: quem confere é o CI (ADR 0067). Corretor que termina com `pendente` é baixa. O gate passa com `VEREDITO SEGURANCA: LIMPO`, ou com o corretor terminado sem `pendente`.
 
 **Lente do `hr-auditor-prd` no `/ship` avulso** (na onda, quem a dispara é o fechamento): com o rabo verde (Passo 10), se a issue fechou a última fatia aberta do PRD (`gh api repos/{owner}/{repo}/issues/<PRD>/sub_issues --paginate --jq '.[] | select(.state == "open") | .number'` vazio), dispare o `hr-auditor-prd` com o prompt do PRD de `references/prompts.md`; issue sem PRD, ou PR sem issue, recebe a lente no próprio PR, com o prompt `PR #<N>` no lugar do PRD. Vale com ou sem Gate 2: é a única revisão de segurança do resto do diff. Detalhe de segurança que vier no relatório do auditor vai ao humano por `PushNotification`, nunca ao GitHub.
 
@@ -375,7 +379,7 @@ No `--resume` com os gates verdes, verificar se os critérios da issue já estã
 
 O `/ship` não faz bump, não mexe em `APP_VERSION`, não mergeia e não chama o `/deploy` (ADR 0061): tudo isso é do rabo, e o `/ship` o roda assim que o Passo 9 termina, sem esperar mensagem (ADR 0063). Builds levam minutos: rode via Bash em segundo plano e leia só as 10 linhas da saída.
 
-Só roda com os três gates verdes nesta passada: o último comentário do Gate 1 termina em `VEREDITO: LIMPO`, o do Gate 2, quando ele se aplica, em `VEREDITO SEGURANCA: LIMPO` (ou com o must-fix dele corrigido antes da última rodada do Gate 1), e o CI está verde. Sem isso, o rabo não roda.
+Só roda com os gates verdes nesta passada: o CI está verde e, no PR do app, o Gate 1 em `VEREDITO: LIMPO` e o Gate 2 (quando ele se aplica) em `VEREDITO SEGURANCA: LIMPO`, ou o corretor deles terminado sem `pendente`. PR de ferramenta tem só o CI (ADR 0067). Sem isso, o rabo não roda.
 
 ```bash
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER"
