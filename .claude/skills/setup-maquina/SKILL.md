@@ -1,6 +1,6 @@
 ---
 name: setup-maquina
-description: Diagnostica a máquina de quem clonou (binários, gh, Coolify, tokens, Node do manual, permissões do Claude Code), diz o que falta, de onde vem cada chave e o que é cada pasta. `/setup-maquina [--nivel N] [--env] [--mapa]`.
+description: Diagnostica a máquina clonada (binários, gh, Coolify, tokens, Node do manual, permissões), diz o que falta, de onde vem cada chave, o que é cada pasta. `/setup-maquina [--nivel N] [--env] [--mapa]`.
 ---
 
 # Setup de máquina nova
