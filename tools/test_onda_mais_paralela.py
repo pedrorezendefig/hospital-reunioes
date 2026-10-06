@@ -21,6 +21,8 @@ AGENTES = RAIZ / ".claude" / "agents"
 TO_ISSUES = SKILLS / "to-issues" / "SKILL.md"
 ONDA = SKILLS / "onda-enxuta" / "SKILL.md"
 PROMPTS = SKILLS / "onda-enxuta" / "references" / "prompts.md"
+MONTAR = SKILLS / "montar-ondas-enxutas" / "SKILL.md"
+ADR_0066 = RAIZ / "docs" / "adr" / "0066-ondas-por-dependencia-nao-por-arquivo.md"
 
 
 def ler(caminho: Path) -> str:
@@ -47,12 +49,48 @@ def test_o_to_issues_separa_onda_por_dependencia_e_nao_por_arquivo_de_costura():
     regra = regra_do_paralelismo()
     assert "fatias da mesma onda não compartilham arquivo de costura" not in regra, regra
     assert "Fatias que só compartilham o arquivo andam na mesma onda" in regra, regra
-    assert "mesmo ponto de registro" in regra and "`blocked_by`" in regra, regra
+    assert MESMO_PONTO in regra and "`blocked_by`" in regra, regra
     for costura in ("main.py", "config.py", "AdminSidebar.tsx", "fechar_onda.py"):
         assert f"`{costura}`" in regra, costura
     # confere o arquivo compartilhado antes de propor a divisão, não depois
     assert "antes de propor a divisão" in regra and "Mapa do terreno" in regra, regra
     assert "git grep" in regra, regra
+
+
+# Revisão do PR #1021: o mesmo texto e o mesmo exemplo de "mesmo ponto" nos três lugares,
+# senão a fatia que acrescenta a própria linha no arquivo de costura sai paralela de um
+# e em série do outro.
+MESMO_PONTO = (
+    "mesmo ponto é a mesma entrada: as duas fatias editam a mesma rota, o mesmo item de menu "
+    "ou a mesma função, ou uma usa o que a outra cria. Cada fatia acrescentar a própria linha "
+    "de `include_router` no `main.py` ou o próprio item no `AdminSidebar.tsx` não é mesmo "
+    "ponto: as duas rodam juntas, e o rabo PR a PR resolve o conflito de texto."
+)
+EXEMPLO_MESMO_PONTO = (
+    "Exemplo: as fatias 1 e 2 criam as rotas `/pops` e `/ouvidoria`, cada uma com o próprio "
+    "`include_router` no `main.py`, e andam na mesma onda; a fatia 3 muda a rota `/pops` que "
+    "a 1 cria e anda depois da 1, com o `blocked_by` dela."
+)
+
+
+def test_mesmo_ponto_tem_o_mesmo_texto_e_o_mesmo_exemplo_nos_tres_lugares():
+    lugares = {
+        "to-issues": regra_do_paralelismo(),
+        "montar-ondas": secao(ler(MONTAR), "4. Reinventariar", "###"),
+        "ADR 0066": secao(ler(ADR_0066), "Decisão"),
+    }
+    for nome, texto in lugares.items():
+        plano = " ".join(texto.split())
+        assert MESMO_PONTO in plano, nome
+        assert EXEMPLO_MESMO_PONTO in plano, nome
+        assert "lista de rotas do `main.py`" not in plano, nome
+
+
+def test_a_varredura_de_modulo_ganha_blocked_by_de_cada_issue_do_modulo():
+    # sem bloqueio nativo, a /onda-enxuta puxa a varredura na onda 1 (passo 1)
+    agrupar = secao(ler(MONTAR), "4. Reinventariar", "###")
+    varredura = next(f for f in re.split(r"(?<=\.) ", agrupar) if f.startswith("Varredura de módulo"))
+    assert "`blocked_by` nativo de cada issue aberta que muda aquele módulo" in varredura, varredura
 
 
 def test_o_to_issues_divide_a_fatia_g_que_nao_bloqueia_ninguem_em_duas_m():
