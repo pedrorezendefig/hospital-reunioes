@@ -281,6 +281,7 @@ def conferir_migrations(raiz: Path, infos: list[dict]) -> list[tuple[str, str]]:
         n = info["number"]
         run(["git", "fetch", "-q", "origin", f"pull/{n}/head"], cwd=raiz)
         head = run(["git", "rev-parse", "FETCH_HEAD"], cwd=raiz).stdout.strip()
+        info["head_conferido"] = head  # o mergear recusa outro head (revisao do PR #996)
         achadas = checar_migration_repetida.colisoes(raiz, "origin/main", head)
         if achadas:
             falhar(f"pre-condicao: #{n}: " + checar_migration_repetida.mensagem(achadas), EXIT_PRECOND)
@@ -452,6 +453,10 @@ def mergear(wt: Path, infos: list[dict]) -> list[str]:
     for info in infos:
         n = info["number"]
         run(["git", "fetch", "-q", "origin", f"pull/{n}/head:pr-{n}"], cwd=wt)
+        # um push no PR durante a espera da migration entraria sem a conferencia do sha256
+        ponta = run(["git", "rev-parse", f"pr-{n}"], cwd=wt).stdout.strip()
+        if info.get("head_conferido") and ponta != info["head_conferido"]:
+            raise EntregaFalhou(f"#{n} andou depois das pre-condicoes ({ponta[:8]}): rode de novo")
         titulo = info["title"].strip()
         msg = titulo if f"(#{n})" in titulo else f"{titulo} (#{n})"
         proc = run(["git", "merge", "--no-ff", f"pr-{n}", "-m", msg], cwd=wt, check=False)

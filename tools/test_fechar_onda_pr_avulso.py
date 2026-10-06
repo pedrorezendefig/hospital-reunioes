@@ -1633,6 +1633,37 @@ def test_migration_que_nao_aparece_em_24_h_vence_com_codigo_proprio_sem_merge(
     assert TRAVESSAO not in saida and MEIA_RISCA not in saida, saida
 
 
+def test_push_no_pr_da_onda_durante_a_espera_nao_entra_na_main(tmp_path, monkeypatch, capsys):
+    """Revisão de segurança do PR #996: na espera, alguém empurra outro SQL no PR
+    do lote. O SQL colado (do head conferido) deixa de ser o que entraria na
+    main, e o rabo para sem merge, como o avulso já parava."""
+    fo = carregar_fechar_onda()
+    c = pr_com_migration_com_recibo(tmp_path)
+    relogio = Relogio()
+    health = HealthDoBackend(relogio, coladas={112: 3 * HORA})
+    preparar_com_relogio(fo, monkeypatch, c, health)
+    repo = tmp_path / "repo"
+    ler_health = health.__call__
+
+    def health_com_push_na_primeira_hora(req, timeout):
+        if relogio.agora - relogio.inicio >= HORA and c._tip("feature") == c.head_do_pr:
+            git(repo, "checkout", "-q", "feature")
+            escrever(repo, f"{MIGRATIONS}/112_triagem.sql", SQL_COM_RECIBO + "drop policy x on y;\n")
+            git(repo, "commit", "-q", "-am", "outro SQL")
+            git(repo, "push", "-q", str(c.remoto), "feature", "feature:refs/pull/8/head")
+        return ler_health(req, timeout)
+
+    monkeypatch.setattr(fo.urllib.request, "urlopen", health_com_push_na_primeira_hora)
+
+    assert rodar_main(fo, monkeypatch, c, "--sessao", "onda-x") == fo.EXIT_MERGE
+
+    assert c._tip("feature") != c.head_do_pr  # o push aconteceu
+    assert c.merges == [] and c.main_remota() == c.base and c.coolify() == []
+    assert c.semaforo == [("pegar", "onda-x"), ("soltar", "onda-x")]
+    saida = capsys.readouterr().out
+    assert "#8 andou depois das pre-condicoes" in saida, saida
+
+
 def test_health_de_backend_anterior_ao_recibo_nao_prende_o_rabo(tmp_path, monkeypatch, capsys):
     """O deploy do próprio #969: o backend no ar ainda não informa o número, e a
     114 foi colada no Studio pelo fluxo antigo. O rabo avisa e segue sem esperar."""
