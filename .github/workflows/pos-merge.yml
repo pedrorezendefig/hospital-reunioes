@@ -6,7 +6,7 @@ name: Pós-merge
 # docs/ARQUITETURA.md) e o draft das páginas do Manual saem daqui, com o
 # ambiente completo do backend.
 #
-# Dois jobs (ADR 0065). O `gerar` instala o backend e roda os scripts, sem
+# Três jobs (ADR 0065). O `gerar` instala o backend e roda os scripts, sem
 # credencial nenhuma: token só de leitura, que nem fica no .git/config. O
 # `commitar` não instala nada: recebe por artefato só o patch dos três
 # caminhos e empurra direto na main com a deploy key, o único ator em
