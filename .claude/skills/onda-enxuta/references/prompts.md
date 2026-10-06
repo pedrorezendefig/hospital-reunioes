@@ -12,7 +12,7 @@ PRD #<PRD>. Escreva o Mapa do terreno como comentário no PRD e devolva a URL.
 Fatias abertas nesta sessão: #<a>, #<b>, #<c>.
 ```
 
-## hr-implementador
+## hr-implementador / hr-implementador-xhigh
 
 ```
 [papel: implementador]

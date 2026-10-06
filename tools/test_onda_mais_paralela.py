@@ -121,3 +121,42 @@ def test_o_teto_de_um_mutante_por_criterio_vale_no_implementador_no_tdd_e_no_rev
     for nome, texto in (("hr-implementador", passo_4), ("/tdd", tdd)):
         assert "mexe em uma coisa só" in texto and "detector" in texto, nome
     assert "não peça mutante além do teto" in lente_1, lente_1
+
+
+# ------------------------------------------- (d) esforço do implementador pelo tamanho da fatia
+# O disparo da ferramenta Agent não aceita esforço por chamada: o esforço vive no
+# frontmatter, e o par de agentes é o precedente do `hr-corretor` / `hr-corretor-max`.
+
+
+def frente(agente: str) -> str:
+    return ler(AGENTES / f"{agente}.md").split("---", 2)[1]
+
+
+def corpo(agente: str) -> str:
+    return ler(AGENTES / f"{agente}.md").split("---", 2)[2]
+
+
+def test_o_implementador_roda_em_high_na_fatia_p_e_m_e_em_xhigh_na_g():
+    assert re.search(r"^effort: high$", frente("hr-implementador"), re.M)
+    assert re.search(r"^effort: xhigh$", frente("hr-implementador-xhigh"), re.M)
+
+    onda = ler(ONDA)
+    lote = secao(onda, "3. Lote: implementadores em paralelo", "###")
+    disparo = next(li for li in lote.splitlines() if li.startswith("Dispare os"))
+    assert "`fatia:G` no `hr-implementador-xhigh` (`xhigh`)" in disparo, disparo
+    assert "`fatia:P`, `fatia:M` ou sem label no `hr-implementador` (`high`)" in disparo, disparo
+
+    papel = next(li for li in onda.splitlines() if li.startswith("| `hr-implementador` "))
+    assert papel.startswith("| `hr-implementador` / `hr-implementador-xhigh` | high / xhigh |"), papel
+
+
+def test_o_implementador_xhigh_tem_o_mesmo_contrato_do_implementador():
+    assert corpo("hr-implementador-xhigh") == corpo("hr-implementador")
+
+    def campos(agente: str) -> dict[str, str]:
+        return dict(li.split(": ", 1) for li in frente(agente).strip().splitlines())
+
+    base, g = campos("hr-implementador"), campos("hr-implementador-xhigh")
+    assert base.keys() == g.keys()
+    assert {k for k in base if base[k] != g[k]} == {"name", "description", "effort"}
+    assert g["name"] == "hr-implementador-xhigh"
