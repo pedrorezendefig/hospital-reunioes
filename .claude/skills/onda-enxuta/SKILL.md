@@ -48,7 +48,7 @@ Você, orquestrador, **não lê código, diff, PRD nem spec**. Mantém a tabela 
 
 ### 1. Fila-alvo
 
-Com fila fixa no prompt, use-a: confira só que cada issue está `ready-for-agent`, sem dono e sem bloqueio aberto (`gh issue view <N> --json labels,assignees` e `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`) e que o autor é de dentro do repositório (`gh api repos/{owner}/{repo}/issues/<N> --jq .author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`; o repositório é público). Issue de autor externo sai da fila, com uma linha no relatório. Sem fila fixa, monte (sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`), menores primeiro. Mostre a tabela desta onda em até 6 linhas e siga direto: o lançamento foi a ordem.
+Com fila fixa no prompt, use-a: **a onda é toda issue da fila fixa já desbloqueada** (`blocked_by` todo fechado), até `--paralelo`, mesmo que a passagem a tenha posto numa onda posterior; a que ainda tem bloqueio aberto espera a próxima sessão. O único separador de ondas é a dependência, não o arquivo (ADR 0066). Confira só que cada issue está `ready-for-agent`, sem dono e sem bloqueio aberto (`gh issue view <N> --json labels,assignees` e `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`) e que o autor é de dentro do repositório (`gh api repos/{owner}/{repo}/issues/<N> --jq .author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`; o repositório é público). Issue de autor externo sai da fila, com uma linha no relatório. Sem fila fixa, monte (sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`), menores primeiro. Mostre a tabela desta onda em até 6 linhas e siga direto: o lançamento foi a ordem.
 
 ### 2. Mapa do terreno (1 vez por PRD)
 
@@ -105,7 +105,7 @@ Não use `AskUserQuestion` nem encerre o turno esperando resposta: numa sessão 
 
 Relatório de até 15 linhas: linha final do `fechar_onda.py`, tabela de issues (fechada · PR · versão), baixas, veredito do auditor se houve, as 10 linhas da medição.
 
-Fila ainda tem issue desbloqueada? Escreva a **passagem** (modelo em `references/prompts.md`, seção "Passagem"): é o prompt da próxima sessão, começando por `/onda-enxuta --sessao <nome> --onda <N+1>`, com a fila que sobrou, as ondas fechadas, a versão de prod e a chave do semáforo. Salve em `%TEMP%\onda-enxuta\<nome>-onda<N+1>.md` e lance:
+Fila ainda tem issue desbloqueada? Escreva a **passagem** (modelo em `references/prompts.md`, seção "Passagem"): é o prompt da próxima sessão, começando por `/onda-enxuta --sessao <nome> --onda <N+1>`, com a fila que sobrou e a dependência de cada issue ("#945, depois da #944"), as ondas fechadas, a versão de prod e a chave do semáforo. O `--paralelo` da passagem é o número de issues da fila desbloqueadas quando você a escreve, com teto 3. Salve em `%TEMP%\onda-enxuta\<nome>-onda<N+1>.md` e lance:
 
 ```bash
 bash .claude/skills/onda-enxuta/scripts/lancar_sessao.sh <nome>-onda<N+1> "<caminho da passagem>"
