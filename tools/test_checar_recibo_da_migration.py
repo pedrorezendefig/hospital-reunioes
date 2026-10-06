@@ -113,6 +113,7 @@ def test_mutante_da_migration_certa_reprova_nomeando_o_arquivo_e_o_insert(tmp_pa
     assert NOVA in proc.stdout
     # a mensagem traz o insert exato que falta, com o número do arquivo
     assert "INSERT INTO migracoes_aplicadas (numero) VALUES (115) ON CONFLICT (numero) DO NOTHING;" in proc.stdout
+    assert "—" not in proc.stdout and "–" not in proc.stdout  # ADR 0013
 
 
 @pytest.mark.parametrize(

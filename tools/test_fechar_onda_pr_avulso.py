@@ -1630,6 +1630,7 @@ def test_migration_que_nao_aparece_em_24_h_vence_com_codigo_proprio_sem_merge(
     [vencida] = linhas_com(saida, "migration: vencida")
     for trecho in ("112", "24 h", "111", "#8", "Nada entrou na main"):
         assert trecho in vencida, (trecho, vencida)
+    assert TRAVESSAO not in saida and MEIA_RISCA not in saida, saida
 
 
 def test_health_de_backend_anterior_ao_recibo_nao_prende_o_rabo(tmp_path, monkeypatch, capsys):
