@@ -19,11 +19,16 @@ from datetime import UTC, datetime
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from httpx import HTTPError
 from postgrest.exceptions import APIError
+from pydantic import BaseModel
 
 from app.config import settings
 from app.dependencies import get_supabase_client
 from app.limiter import limiter
-from app.routers.ouvidoria import EXPIRACAO_URL_ANEXO_SEGUNDOS, require_perfil_ouvidoria
+from app.routers.ouvidoria import (
+    EXPIRACAO_URL_ANEXO_SEGUNDOS,
+    barrar_caso_apagado,
+    require_perfil_ouvidoria,
+)
 from app.services import ouvidoria_triagem_email as triagem
 from app.services import storage
 
@@ -148,4 +153,113 @@ async def descartar_email_recebido(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="O e-mail foi descartado, mas algum anexo não saiu do armazenamento. Tente de novo em instantes.",
         )
+    return triagem.carregar_item(supabase, email_id)
+
+
+@router.get("/{email_id}/caso-para-juntar")
+@limiter.limit("60/minute")
+async def caso_para_juntar(
+    request: Request,
+    email_id: str,
+    protocolo: str | None = None,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """O caso a que o e-mail pode ser juntado, em resumo (protocolo, estado e
+    setor). Sem `protocolo`, a sugestão tirada do assunto e do começo do corpo;
+    com ele, o caso que o ouvidor digitou. `caso: null` quando não há."""
+    item = triagem.carregar_item(supabase, email_id)
+    if item is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="E-mail não encontrado")
+    try:
+        caso = (
+            triagem.resumo_do_caso(supabase, protocolo)
+            if protocolo is not None
+            else triagem.sugerir_caso(supabase, item)
+        )
+    except (HTTPError, APIError, OSError) as exc:
+        logger.warning("Falha ao procurar o caso do e-mail recebido %s (%s)", email_id, type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível procurar o caso agora. Tente de novo em instantes.",
+        ) from None
+    triagem.registrar_acesso_ao_email(
+        supabase, me, email_id, "procurar_caso_para_juntar", manifestacao_id=caso["id"] if caso else None
+    )
+    return {"caso": caso}
+
+
+class PedidoDeJuntada(BaseModel):
+    """O caso a que o e-mail vai ser juntado: o id, que a tela tira do resumo
+    que o ouvidor conferiu."""
+
+    manifestacao_id: str
+
+
+# O que a juntada lê do caso: o estado, para o movimento, e os carimbos que a
+# guarda do caso apagado confere (`barrar_caso_apagado`).
+_CAMPOS_DO_CASO_DA_JUNTADA = "id, protocolo, status, setor, anonimizada_em, apagamento_pedido_em"
+
+
+def _carregar_caso(supabase, manifestacao_id: str) -> dict | None:
+    try:
+        resultado = (
+            supabase.table("ouvidoria_protocolos")
+            .select(_CAMPOS_DO_CASO_DA_JUNTADA)
+            .eq("id", manifestacao_id)
+            .execute()
+        )
+    except APIError as exc:
+        # Id que não é UUID (22P02) é caso que não existe; o resto é o banco.
+        if getattr(exc, "code", None) == "22P02":
+            return None
+        raise
+    return resultado.data[0] if resultado.data else None
+
+
+@router.post("/{email_id}/juntada")
+@limiter.limit("30/minute")
+async def juntar_a_caso(
+    request: Request,
+    email_id: str,
+    pedido: PedidoDeJuntada,
+    me: dict = Depends(require_perfil_ouvidoria),
+    supabase=Depends(get_supabase_client),
+):
+    """Junta o e-mail a um caso que já existe (issue #651, ADR 0051 decisão 4):
+    o texto vira Movimento do caso e os anexos passam a ele, sem mudar estado,
+    prazo nem T1."""
+    try:
+        estado = triagem.estado_do_email(supabase, email_id)
+        caso = _carregar_caso(supabase, pedido.manifestacao_id)
+        if estado is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="E-mail não encontrado")
+        if estado != triagem.PENDENTE:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Este e-mail já foi decidido na triagem e não pode ser juntado a um caso",
+            )
+        if caso is None:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Manifestação não encontrada")
+        # O caso cujo relato a retenção apagou não recebe texto novo: o que
+        # voltar a ser trazido entra como manifestação nova (ADR 0047).
+        barrar_caso_apagado(caso, "completado com um e-mail")
+        desfecho = triagem.juntar(supabase, me, email_id, caso, datetime.now(UTC))
+    except (HTTPError, APIError, OSError) as exc:
+        logger.warning("Falha ao juntar o e-mail recebido %s (%s)", email_id, type(exc).__name__)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível juntar o e-mail agora. Tente de novo em instantes.",
+        ) from None
+    if desfecho == triagem.JUNTADA_RECUSADA:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Este e-mail já foi decidido na triagem e não pode ser juntado a um caso",
+        )
+    if desfecho == triagem.JUNTADA_FALHOU:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Não foi possível juntar o e-mail agora. Tente de novo em instantes.",
+        )
+    triagem.registrar_acesso_ao_email(supabase, me, email_id, "juntar_email", manifestacao_id=caso["id"])
     return triagem.carregar_item(supabase, email_id)

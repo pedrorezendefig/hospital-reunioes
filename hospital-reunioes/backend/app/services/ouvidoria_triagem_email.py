@@ -24,10 +24,12 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.utils import parseaddr
+from zoneinfo import ZoneInfo
 
 from postgrest.exceptions import APIError
 
@@ -721,6 +723,160 @@ def _apagar_anexos(supabase, email_id: str) -> int:
             continue
         supabase.table(TABELA_ANEXOS).delete().eq("id", anexo["id"]).execute()
     return ficaram
+
+
+# ─── Juntar a caso existente (issue #651) ───────────────────────────────────
+
+JUNTADO = "juntado"
+
+# O que a juntada faz: juntou, o e-mail já tinha sido decidido (o update
+# condicional não pegou), ou o movimento não entrou na trilha e a marca voltou.
+JUNTADA_FEITA = "feita"
+JUNTADA_RECUSADA = "recusada"
+JUNTADA_FALHOU = "falhou"
+
+_FUSO_DO_HOSPITAL = ZoneInfo("America/Sao_Paulo")
+
+
+def _quando_chegou(recebido_em) -> str:
+    """A chegada em hora de Brasília, como o ouvidor lê: 10/09/2026 11:02."""
+    try:
+        instante = datetime.fromisoformat(str(recebido_em).replace("Z", "+00:00"))
+    except ValueError:
+        return str(recebido_em)
+    return instante.astimezone(_FUSO_DO_HOSPITAL).strftime("%d/%m/%Y %H:%M")
+
+
+def observacao_da_juntada(item: dict) -> str:
+    """O texto do Movimento: a linha padronizada do PRD e, abaixo, o corpo.
+
+    "E-mail recebido de <remetente> em <data>: <assunto>". A tipografia é a da
+    casa (ADR 0013): a trilha é lida por gente."""
+    endereco = item.get("remetente_endereco") or ""
+    nome = item.get("remetente_nome")
+    remetente = f"{nome} <{endereco}>" if nome else endereco
+    linha = f"E-mail recebido de {remetente} em {_quando_chegou(item.get('recebido_em'))}: {item.get('assunto') or ''}"
+    corpo = (item.get("corpo_texto") or "").strip()
+    texto = f"{linha.rstrip()}\n\n{corpo}" if corpo else linha.rstrip()
+    return sanitizar_travessao(texto)
+
+
+def juntar(supabase, me: dict, email_id: str, caso: dict, agora: datetime) -> str:
+    """Junta o e-mail ao caso (ADR 0051, decisão 4): o texto entra na trilha
+    como Movimento, os anexos passam ao caso, e o item sai dos pendentes ligado
+    a ele. O caso não é tocado: estado, prazo e T1 ficam como estavam.
+
+    A marca vem primeiro, com o filtro de pendente no próprio update: é ela que
+    impede o mesmo e-mail de entrar duas vezes na trilha imutável. Se o
+    movimento não entra, a marca volta, e o e-mail segue pendente para a nova
+    tentativa: juntado sem movimento seria um e-mail que diz estar no caso e
+    não está."""
+    marcado = (
+        supabase.table(TABELA)
+        .update(
+            {
+                "estado": JUNTADO,
+                "manifestacao_id": caso["id"],
+                "decidido_por": me["id"],
+                "decidido_por_nome": me.get("nome_completo") or me["id"],
+                "decidido_em": agora.isoformat(),
+            }
+        )
+        .eq("id", email_id)
+        .eq("estado", PENDENTE)
+        .execute()
+    )
+    if not marcado.data:
+        return JUNTADA_RECUSADA
+    item = marcado.data[0]
+    try:
+        supabase.table("ouvidoria_movimentos").insert(
+            {
+                "manifestacao_id": caso["id"],
+                "estado_anterior": caso.get("status"),
+                "estado_novo": caso.get("status"),
+                "autor_id": me["id"],
+                "autor_nome": me.get("nome_completo") or me["id"],
+                "observacao": observacao_da_juntada(item),
+            }
+        ).execute()
+    except Exception as exc:  # noqa: BLE001
+        # Só o tipo: o `details` do `APIError` traz a linha, com o corpo.
+        logger.error(
+            "Triagem de e-mail: o movimento da juntada do e-mail %s ao caso %s não entrou (%s)",
+            email_id,
+            caso["id"],
+            type(exc).__name__,
+        )
+        supabase.table(TABELA).update(
+            {
+                "estado": PENDENTE,
+                "manifestacao_id": None,
+                "decidido_por": None,
+                "decidido_por_nome": None,
+                "decidido_em": None,
+            }
+        ).eq("id", email_id).eq("estado", JUNTADO).execute()
+        return JUNTADA_FALHOU
+    # Os anexos passam ao caso pelo mesmo caminho do virar manifestação (#650):
+    # o binário não se move, a linha do caso aponta para o mesmo arquivo.
+    _mover_anexos_para_o_caso(supabase, me, email_id, caso["id"])
+    return JUNTADA_FEITA
+
+
+# ─── Sugestão de caso (issue #651) ──────────────────────────────────────────
+
+# O Protocolo de ouvidoria no meio de um texto: ANO-NNNN, com NNNN de quatro
+# dígitos ou mais (a numeração é contínua e não reinicia por ano). Sem dígito
+# encostado dos dois lados, para não pescar pedaço de telefone ou de CPF; o
+# prefixo de exibição ("OUV-2026-0012") continua achando o número.
+_PROTOCOLO_NO_TEXTO = re.compile(r"(?<!\d)(\d{4}-\d{4,})(?!\d)")
+
+# Quantas linhas do corpo a sugestão lê quando o assunto não resolve: quem
+# responde ao acuse escreve em cima, e o e-mail citado lá embaixo traz
+# protocolos de outras conversas.
+LINHAS_DO_CORPO_PARA_A_SUGESTAO = 10
+
+CAMPOS_DO_RESUMO_DO_CASO = ("id", "protocolo", "status", "setor")
+
+
+def protocolos_citados(texto: str) -> list[str]:
+    """Os protocolos que o texto cita, na ordem, sem repetir."""
+    return list(dict.fromkeys(_PROTOCOLO_NO_TEXTO.findall(texto or "")))
+
+
+def resumo_do_caso(supabase, protocolo: str) -> dict | None:
+    """Protocolo, estado e setor do caso, o que a tela mostra antes de o
+    ouvidor confirmar a juntada. None quando o protocolo não é de caso nenhum.
+
+    Leitura curta de propósito: abrir o Dossiê carimbaria o visto da
+    Ouvidoria num caso que ninguém leu."""
+    protocolo = (protocolo or "").strip()
+    if not _PROTOCOLO_NO_TEXTO.fullmatch(protocolo):
+        return None
+    resultado = (
+        supabase.table("ouvidoria_protocolos")
+        .select(", ".join(CAMPOS_DO_RESUMO_DO_CASO))
+        .eq("protocolo", protocolo)
+        .execute()
+    )
+    if not resultado.data:
+        return None
+    return {campo: resultado.data[0].get(campo) for campo in CAMPOS_DO_RESUMO_DO_CASO}
+
+
+def sugerir_caso(supabase, item: dict) -> dict | None:
+    """O caso que o e-mail parece continuar (ADR 0051, decisão 4): o primeiro
+    protocolo do assunto que é de um caso que existe e, se o assunto não
+    resolver, o primeiro das primeiras linhas do corpo. Sem protocolo, ou com
+    protocolo de caso nenhum, None. É sugestão: quem escolhe é o ouvidor."""
+    linhas = (item.get("corpo_texto") or "").splitlines()[:LINHAS_DO_CORPO_PARA_A_SUGESTAO]
+    for texto in (item.get("assunto") or "", "\n".join(linhas)):
+        for protocolo in protocolos_citados(texto):
+            caso = resumo_do_caso(supabase, protocolo)
+            if caso is not None:
+                return caso
+    return None
 
 
 def caminho_do_anexo(supabase, email_id: str, anexo_id: str) -> dict | None:
