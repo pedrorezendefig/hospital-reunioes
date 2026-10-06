@@ -768,6 +768,14 @@ body.er-lock main{z-index:130}
 .children{border-left:0; padding-left:0}
 /* ============ fim ajustes (issue 268) ============ */
 
+/* card que o hash aponta (#issues/930, #producao/v0.161.0; issue 944): fundo
+   lavado e filete brand. Depois do bloco 268 para vencer o fundo da fatia. */
+.nrow[aria-current="true"]{background:var(--brand-wash); border-radius:14px; box-shadow:inset 3px 0 0 var(--brand)}
+.pd-card[aria-current="true"]{border-color:var(--brand); box-shadow:0 0 0 1px var(--brand)}
+/* o GitHub é o link secundário de cada card: no deploy, o ↗ do commit */
+.pd-gh{font-size:14px; line-height:1; color:var(--ink-soft); text-decoration:none; padding:2px 6px}
+.pd-gh:hover{color:var(--brand)}
+
 /* ---------- contador (chip ready-for-human da aba Issues) ---------- */
 .tab-count{display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px;
   padding:0 5px; margin-left:6px; border-radius:9px; font-family:var(--mono); font-size:11px; font-weight:500;
