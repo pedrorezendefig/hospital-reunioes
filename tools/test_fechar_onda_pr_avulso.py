@@ -1308,3 +1308,51 @@ def test_health_ruim_volta_a_imagem_anterior_e_o_app_version_antigo_e_sai_com_ro
     for trecho in (merge[:8], "PR #7", "issue #5", "v0.10.0", "semaforo solto"):
         assert trecho in rollback, (trecho, rollback)
     assert "Semaforo preso" not in saida, saida
+
+
+def sem_imagem_anterior(c: Cenario) -> None:
+    c.imagens_no_coolify("uuid-backend", [])
+
+
+def coolify_recusa_o_rollback(c: Cenario) -> None:
+    c.imagens_no_coolify("uuid-backend", [IMAGEM_ANTERIOR])
+    c.recusar_rollback()
+
+
+def health_segue_ruim_na_versao_antiga(c: Cenario) -> None:
+    c.imagens_no_coolify("uuid-backend", [IMAGEM_ANTERIOR])
+    c.health_ruim_em.add("0.10.0")
+
+
+@pytest.mark.parametrize("falha", [sem_imagem_anterior, coolify_recusa_o_rollback,
+                                   health_segue_ruim_na_versao_antiga],
+                         ids=["sem-imagem", "coolify-recusa", "health-segue-ruim"])
+def test_rollback_que_falha_sai_com_4_e_o_semaforo_fica_preso(tmp_path, monkeypatch, capsys, falha):
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    c.health_ruim_em.add("0.10.1")
+    falha(c)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_HEALTH == 4
+
+    assert c.semaforo == [("pegar", "pr-7")]
+    assert [m["pr"] for m in c.merges] == [7]
+    saida = capsys.readouterr().out
+    rollback = next(li for li in saida.splitlines() if li.startswith("rollback:"))
+    assert "falhou" in rollback and "Semaforo preso na chave pr-7" in rollback, rollback
+    assert "/deploy rollback" in rollback, rollback
+
+
+def test_sem_imagem_anterior_o_rabo_nao_mexe_no_app_version_nem_sobe_imagem(tmp_path, monkeypatch):
+    """Sem para onde voltar, o APP_VERSION novo continua batendo com a imagem no ar."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    c.health_ruim_em.add("0.10.1")
+    sem_imagem_anterior(c)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_HEALTH
+
+    assert not [li for li in c.coolify() if "--value 0.10.0" in li or "rollback run" in li], c.coolify()
+    assert c.rollbacks == []
