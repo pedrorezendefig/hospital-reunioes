@@ -34,7 +34,7 @@ PR #<PR>, issue #<N>. Ache problemas, não aprove, não edite. Rodada <1|2>.
 
 ```
 [papel: revisor-seguranca]
-PR #<PR>, issue #<N>. Motivo: <arquivos sensíveis tocados, um por linha | pedido do revisor padrão: "<motivo>">.
+PR #<PR>, issue #<N>. Motivo: <arquivos de rota sem login ou de migration tocados, um por linha>.
 ```
 
 ## hr-corretor / hr-corretor-max
@@ -52,7 +52,7 @@ PR #<PR>, issue #<N>. Motivo: <revisao|ci|conflito|retomar>.
 
 ```
 [papel: auditor-prd]
-PRD #<PRD>. Versão em produção: v<X.Y.Z>. Audite os critérios do PRD contra o app no ar e comente o veredito.
+PRD #<PRD>. Versão em produção: v<X.Y.Z>. Audite os critérios do PRD contra o app no ar, passe a lente de segurança no diff acumulado dos PRs do PRD e comente o veredito.
 ```
 
 ## Passagem (prompt da próxima sessão)

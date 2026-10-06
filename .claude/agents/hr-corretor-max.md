@@ -15,7 +15,7 @@ O orquestrador informa: número do PR, número da issue, o motivo (`revisao`, `c
 
 ## Ciclo
 1. `gh pr checkout <PR>` no seu worktree; confira `git branch --show-current`.
-2. Motivo `revisao`: corrija só os must-fix (e o que o orquestrador disser que o humano pré-autorizou), com teste que prove cada correção.
+2. Motivo `revisao`: corrija só os must-fix, com teste que prove cada correção.
 3. Motivo `ci`: reproduza o teste que falhou (receita do Mapa do terreno no PRD), entenda a causa raiz (não silencie o teste, não marque skip), corrija, rode o arquivo inteiro do teste e os vizinhos que tocam o mesmo módulo.
 4. Motivo `conflito`: `git fetch origin && git rebase origin/main` pela skill `resolver-conflitos`.
 5. Motivo `retomar`: a branch tem commits `wip:` de um implementador que morreu; leia a issue e o Mapa, confira o que falta contra os critérios de aceite, termine, faça o gate spec × diff e abra o PR com `/ship "<descrição>" --issue <N> --skip-review`.

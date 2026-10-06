@@ -15,7 +15,7 @@ O orquestrador informa: número do PR, número da issue, o motivo (`revisao`, `c
 
 ## Ciclo
 1. `gh pr checkout <PR>` no seu worktree; confira `git branch --show-current`.
-2. Motivo `revisao`: corrija **só os must-fix**. Should-fix e nits só entram se o orquestrador disser que o "vai" do humano os pré-autorizou. Cada correção com teste que a prove (`/tdd`), quando couber.
+2. Motivo `revisao`: corrija **só os must-fix** do comentário (do revisor de código ou do de segurança; o veredito não traz outra coisa, ADR 0064). Cada correção com teste que a prove (`/tdd`), quando couber.
 3. Motivo `ci`: reproduza o teste que falhou localmente (receita do Mapa do terreno no PRD, se precisar), corrija, rode só aquele arquivo.
 4. Motivo `conflito`: `git fetch origin && git rebase origin/main`, resolvendo pela skill `resolver-conflitos` (lockfile se regenera, nunca hunk a hunk). Rode os testes dos arquivos tocados.
 5. Motivo `retomar`: não há PR ainda; a branch `<type>/<slug>-<N>` tem commits `wip:` de um implementador que morreu. Faça `git checkout <branch>`, leia a issue e o Mapa do terreno do PRD, confira o que falta contra os critérios de aceite, termine com `/tdd`, faça o gate spec × diff e abra o PR com `/ship "<descrição>" --issue <N> --skip-review`.

@@ -32,8 +32,8 @@ description: 'Executor AFK da fila de issues em ondas: sessão de fundo por onda
 | `hr-implementador` | xhigh | 1 por issue, `isolation: worktree` | issue, PRD, URL do Mapa |
 | `hr-corretor` / `hr-corretor-max` | high / max | must-fix, CI vermelho, conflito, retomada | PR, issue, motivo, achado |
 | `hr-revisor` | high | todo PR, assim que abre | PR, issue |
-| `hr-revisor-seguranca` | max | PR com caminho sensível, ou pedido do revisor | PR, issue, motivo |
-| `hr-auditor-prd` | high | depois do último deploy do PRD | PRD, versão |
+| `hr-revisor-seguranca` | high | PR que toca rota sem login ou migration, uma vez só | PR, issue, motivo |
+| `hr-auditor-prd` | high | depois do último deploy do PRD, com a lente de segurança do diff acumulado | PRD, versão |
 
 Você, orquestrador, **não lê código, diff, PRD nem spec**. Mantém a tabela da fila e o status por issue. Fato do código? Delegue. Os prompts de cada disparo estão em [references/prompts.md](references/prompts.md); use-os literalmente, preenchendo os campos.
 
@@ -69,16 +69,17 @@ A cada notificação de término, **confira o GitHub**, não o relatório (ADR 0
 Assim que o PR abre, **na mesma mensagem**:
 
 1. Espera do CI em segundo plano, sem acordar por evento: `gh pr checks <PR> --watch --fail-fast` via Bash com `run_in_background: true`. Uma notificação no fim.
-2. `python .claude/skills/onda-enxuta/scripts/sensivel.py <PR>`: imprime os arquivos sensíveis tocados (lista em `revisao-sensivel.txt`); saída 0 = sensível.
-3. Dispare `hr-revisor`. Se sensível, dispare também `hr-revisor-seguranca`, em paralelo.
+2. `python .claude/skills/onda-enxuta/scripts/sensivel.py <PR>`: imprime os arquivos de rota sem login e de migration tocados (lista em `revisao-sensivel.txt`); saída 0 = sensível.
+3. Dispare `hr-revisor`. Se sensível, dispare também `hr-revisor-seguranca`, em paralelo, **uma vez só** por PR (ADR 0064, decisão 4).
 
 Depois, por notificação:
 
-- **Veredito** (confirme com `gh pr view <PR> --json comments` que a última linha do comentário é `VEREDITO: ...`): `MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário inteiro; quando ele terminar, nova rodada de `hr-revisor` (e de segurança, se havia). **Máximo 2 rodadas.** `PEDE_REVISOR_SEGURANCA` no veredito → dispare `hr-revisor-seguranca` sem julgar.
+- **Veredito do `hr-revisor`** (confirme com `gh pr view <PR> --json comments` que a última linha do comentário é `VEREDITO: ...`): `MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário inteiro, sem esperar o veredito de segurança; quando ele terminar, rodada 2 só do `hr-revisor`. **Uma rodada de correção** (ADR 0064): rodada 2 com must-fix é baixa na hora, sem esperar a terceira tentativa: `gh issue edit <N> --remove-label in-progress --add-label ready-for-human` e comentário `<!-- automacao -->` com o que ficou (os must-fix da rodada 2 e o link do comentário); o lote segue sem ela.
+- **Veredito de segurança** (última linha `VEREDITO SEGURANCA: ...`): o `hr-revisor-seguranca` não roda de novo depois da correção. `MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário de segurança, uma rodada de correção a mais dentro do mesmo teto de 3 tentativas (com um corretor já no PR, este vai quando ele terminar); quem confere é a rodada seguinte do `hr-revisor`, com a mesma regra da baixa.
 - **CI vermelho:** antes de tudo, `python .claude/skills/onda-enxuta/scripts/ci_sem_runner.py <PR>`. Saída 0 = o GitHub cancelou o job por falta de runner (incidente do Actions, issue #953): o script já pediu o rerun, dispare outro `gh pr checks --watch` em segundo plano, **sem corretor e sem contar tentativa**. Na terceira vez seguida na mesma fatia, pare a fatia com `ready-for-human` e "GitHub Actions sem runner, ver githubstatus.com". Saída 1 = vermelho de código: `hr-corretor` motivo `ci` com o trecho de `gh run view <id> --log-failed | tail -60`. Segunda falha de CI na mesma fatia: `hr-corretor-max`. Depois da correção, novo `gh pr checks --watch` em segundo plano.
 - **Notificação que não muda estado** (agente terminou mas você já conferiu, mensagem de progresso): responda em uma linha e não faça nada.
 
-PR verde = `gh pr checks` verde + veredito(s) `LIMPO` + spec×diff declarado pelo implementador. Issue que não fecha em **3 tentativas** (implementação, correções e rodadas somadas): `gh issue edit <N> --remove-label in-progress --add-label ready-for-human` e comentário `<!-- automacao -->` com branch, gate que falhou e hipótese. A onda segue.
+PR verde = `gh pr checks` verde + `VEREDITO: LIMPO` na última rodada do `hr-revisor`, depois de toda correção + com segurança no PR, o `VEREDITO SEGURANCA:` dado e, se `MUST-FIX`, corrigido antes dessa rodada + spec×diff declarado pelo implementador. Issue que não fecha em **3 tentativas** (implementação, correções e rodadas somadas): `gh issue edit <N> --remove-label in-progress --add-label ready-for-human` e comentário `<!-- automacao -->` com branch, gate que falhou e hipótese. A onda segue.
 
 ### 5. Lote pronto
 
@@ -90,7 +91,7 @@ Não use `AskUserQuestion` nem encerre o turno esperando resposta: numa sessão 
 
 ### 6. Fechamento da onda
 
-1. Entram os PRs verdes do lote (`gh pr checks` verde e veredito `LIMPO`), todos num rabo só, na ordem da tabela; fatia baixada e fatia de manual (passo 5) ficam de fora. Should-fix fica como comentário no PR e a fatia entra como está.
+1. Entram os PRs verdes do lote (`gh pr checks` verde e veredito `LIMPO`), todos num rabo só, na ordem da tabela; fatia baixada e fatia de manual (passo 5) ficam de fora.
 2. Migration nova no lote: o script não aplica SQL, mas espera (issue #969). Ele imprime uma linha `migration: cole no Studio <arquivo>:1` por migration e só pega o semáforo quando o `/api/health` devolve o número da maior (toda migration termina gravando o próprio número em `migracoes_aplicadas`). Assim que a linha aparecer na saída do passo 3, repasse-a ao humano por `PushNotification`.
 3. `python .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <a> <b> --sessao <nome>` via Bash **em segundo plano** (builds levam minutos). Ele pega o semáforo, cria um worktree descartável em `~/wt-<nome>` (caminho curto, MAX_PATH), faz merge local `--no-ff` em ordem na branch `onda/<nome>`, calcula a versão nova sem commit (issue #967; lote só de `docs/**`, `.claude/**` e `*.md` não muda a versão nem espera build), abre o PR de entrega e espera o CI dele, põe o `APP_VERSION` no backend e no frontend, mergeia pela API (a `main` é protegida, ADR 0061) e cria a tag `vX.Y.Z` no squash, espera **um build**, confere health com version match, grava o registro num PR só de docs com `history.json` (todos os deploys, sem teto) e `state.json`, limpa worktrees de agente já mergeados e solta o semáforo. O rabo grava só a verdade do deploy: o snapshot e o draft do Manual dos PRDs que fecharam saem numa Action no push da `main`, depois do registro (ADR 0062). Saída de 10 linhas; leia só ela.
    - Saída `2` (conflito ou main andou): com a linha `conflito no merge de #N em: <arquivos>`, dispare o `hr-corretor` motivo `conflito` no #N com os arquivos da linha; ele rebaseia pela skill `resolver-conflitos`. Quando ele terminar, `gh pr checks <N> --watch` em segundo plano, para o CI rodar sobre o código combinado (vermelho segue o passo 4), e rode o script de novo. Cada conflito conta uma tentativa da fatia; na terceira, `ready-for-human` como toda baixa (passo 4), com o diagnóstico (a linha do rabo, os arquivos e o que o corretor tentou), `PushNotification` de uma linha, e o script roda de novo sem o #N. Saída `2` sem essa linha (push rejeitado, CI vermelho ou merge recusado): a linha do rabo diz a causa; CI vermelho segue o passo 4, o resto roda o script de novo, e também conta tentativa.

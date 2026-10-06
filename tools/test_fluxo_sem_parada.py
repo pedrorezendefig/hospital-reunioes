@@ -178,12 +178,13 @@ def gate_do_ship(gate: str) -> str:
 def test_o_ship_avulso_revisa_com_os_agentes_e_o_sensivel_decide_o_gate_2():
     # ADR 0063, decisão 1: sem humano, o piso é hr-revisor e, em caminho
     # sensível, hr-revisor-seguranca; o /security-review lia o diff errado em worktree.
+    # ADR 0064, decisão 4: quem decide o Gate 2 é só o sensivel.py (o pedido do
+    # Gate 1 saiu); tools/test_revisao_so_must_fix.py cobre o gatilho novo.
     gate1 = gate_do_ship("Gate 1:")
     assert "hr-revisor" in gate1 and "VEREDITO: LIMPO" in gate1, gate1
-    assert "PEDE_REVISOR_SEGURANCA" in gate1, gate1
 
     gate2 = gate_do_ship("Gate 2:")
-    assert "sensivel.py" in gate2 and "PEDE_REVISOR_SEGURANCA" in gate2, gate2
+    assert "sensivel.py" in gate2, gate2
     assert "hr-revisor-seguranca" in gate2 and "VEREDITO SEGURANCA: LIMPO" in gate2, gate2
     assert "Invoca a skill `security-review`" not in gate2, gate2
 
