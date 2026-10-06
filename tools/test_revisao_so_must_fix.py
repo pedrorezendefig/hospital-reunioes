@@ -312,6 +312,129 @@ def test_o_sensivel_le_o_head_pelo_git():
     assert "require_ana_api_key" in fontes["hospital-reunioes/backend/app/dependencies.py"]
 
 
+# ------------------------------------------- o sensivel.py falha fechado
+
+CHAMADA_DO_SENSIVEL = 'uv run --no-project --python ">=3.12" python .claude/skills/onda-enxuta/scripts/sensivel.py'
+ROUTER_ABERTO = "router = APIRouter()\n@router.get('/x')\ndef publica(): ...\n"
+
+
+def _pr_de_mentira(tmp_path: Path, router: str) -> tuple[Path, dict]:
+    """Repo com o sensivel.py e um PR (migration + router) no head, e um `gh` falso no PATH.
+
+    Roda o script como o fluxo roda: processo, `gh` para o PR, `git fetch` e `git archive` do head.
+    """
+    import json
+    import os
+    import shutil
+    import subprocess
+
+    repo = tmp_path / "repo"
+    scripts = repo / ".claude" / "skills" / "onda-enxuta" / "scripts"
+    scripts.mkdir(parents=True)
+    shutil.copy(SKILLS / "onda-enxuta" / "scripts" / "sensivel.py", scripts)
+    shutil.copy(LISTA_SENSIVEL, scripts.parent)
+    arquivos = {
+        "hospital-reunioes/supabase/migrations/200_x.sql": "select 1;\n",
+        "hospital-reunioes/backend/app/routers/novo.py": router,
+    }
+    for nome, codigo in arquivos.items():
+        (repo / nome).parent.mkdir(parents=True, exist_ok=True)
+        (repo / nome).write_text(codigo, encoding="utf-8")
+
+    def git(*argumentos: str) -> str:
+        return subprocess.run(["git", "-C", str(repo), *argumentos], check=True, capture_output=True, text=True).stdout
+
+    git("init", "-q")
+    git("add", "-A")
+    git("-c", "user.name=t", "-c", "user.email=t@t", "-c", "commit.gpgsign=false", "commit", "-qm", "pr")
+    git("remote", "add", "origin", str(repo))
+    head = git("rev-parse", "HEAD").strip()
+
+    (tmp_path / "files.json").write_text(json.dumps([{"filename": n, "status": "added"} for n in arquivos]))
+    binario = tmp_path / "bin"
+    binario.mkdir()
+    gh = binario / "gh"
+    gh.write_text(
+        "#!/bin/sh\n"
+        'case "$*" in\n'
+        '  "repo view"*) echo dono/repo ;;\n'
+        f'  *"/files --paginate") cat "{tmp_path / "files.json"}" ;;\n'
+        f"  *) echo {head} ;;\n"
+        "esac\n"
+    )
+    gh.chmod(0o755)
+    return repo, {**os.environ, "PATH": f"{binario}{os.pathsep}{os.environ['PATH']}"}
+
+
+def _rodar_sensivel(python: str, repo: Path, ambiente: dict):
+    import subprocess
+
+    script = repo / ".claude" / "skills" / "onda-enxuta" / "scripts" / "sensivel.py"
+    return subprocess.run([python, str(script), "7"], cwd=repo, env=ambiente, capture_output=True, text=True, check=False)
+
+
+def test_o_sensivel_como_processo_acusa_migration_e_rota_sem_login_do_head(tmp_path):
+    """Controle: com o head legível, o mesmo arranjo sai 0 (a saída 2 do teste abaixo não é do arranjo)."""
+    import sys
+
+    repo, ambiente = _pr_de_mentira(tmp_path, ROUTER_ABERTO)
+    feito = _rodar_sensivel(sys.executable, repo, ambiente)
+    assert feito.returncode == 0, feito.stderr
+    assert "migrations/200_x.sql" in feito.stdout and "routers/novo.py" in feito.stdout, feito.stdout
+
+
+def test_o_sensivel_falha_fechado_quando_a_varredura_quebra(tmp_path):
+    """Router do head que não compila: a varredura levanta e a saída é 2, nunca 1 ("não sensível")."""
+    import sys
+
+    repo, ambiente = _pr_de_mentira(tmp_path, "def quebrado(:\n")
+    feito = _rodar_sensivel(sys.executable, repo, ambiente)
+    assert feito.returncode == 2, (feito.returncode, feito.stdout, feito.stderr)
+    assert "SyntaxError" in feito.stderr, feito.stderr
+
+
+def _python_antigo() -> str | None:
+    import shutil
+    import subprocess
+
+    for candidato in ("/usr/bin/python3", "python3.9", "python3.10", "python3.11"):
+        caminho = shutil.which(candidato)
+        if not caminho:
+            continue
+        versao = subprocess.run(
+            [caminho, "-c", "import sys; print(sys.version_info >= (3, 12))"], capture_output=True, text=True, check=False
+        ).stdout.strip()
+        if versao == "False":
+            return caminho
+    return None
+
+
+@pytest.mark.skipif(_python_antigo() is None, reason="nenhum Python abaixo do 3.12 nesta máquina")
+def test_o_sensivel_em_python_antigo_sai_2(tmp_path):
+    repo, ambiente = _pr_de_mentira(tmp_path, ROUTER_ABERTO)
+    feito = _rodar_sensivel(_python_antigo(), repo, ambiente)
+    assert feito.returncode == 2, (feito.returncode, feito.stdout, feito.stderr)
+    assert "3.12" in feito.stderr, feito.stderr
+
+
+@pytest.mark.parametrize(
+    "caminho, trecho",
+    [
+        (SKILLS / "onda-enxuta" / "SKILL.md", ("4. Por PR", "###")),
+        (SKILLS / "ship" / "SKILL.md", ("Gate 2:", "###")),
+    ],
+    ids=["onda-enxuta", "ship"],
+)
+def test_o_fluxo_chama_o_sensivel_em_python_3_12_e_para_em_saida_fora_de_0_e_1(caminho, trecho):
+    md = ler(caminho)
+    assert not re.search(r"(?<!uv run --no-project --python \">=3\.12\" )python3? \.claude/skills/onda-enxuta/scripts/sensivel\.py", md), (
+        "chamada do sensivel.py sem o Python 3.12+"
+    )
+    parte = secao(md, *trecho)
+    assert CHAMADA_DO_SENSIVEL in parte, parte
+    assert "qualquer outra saída" in parte.lower() and "não sensível" in parte, parte
+
+
 @pytest.mark.parametrize(
     "caminho",
     [

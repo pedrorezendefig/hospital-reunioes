@@ -3,7 +3,8 @@
 
 Uso: python sensivel.py <PR> [--lista <arquivo>]
 Saída: um arquivo sensível por linha (com o glob ou o motivo que casou). Exit 0
-se houver algum, 1 se não houver, 2 em erro. Globs com prefixo "+" só casam
+se houver algum, 1 se não houver, 2 em qualquer erro (falha fechada: Python
+abaixo do 3.12, `gh`, `git` ou a varredura que quebra). Globs com prefixo "+" só casam
 quando o PR criou o arquivo (status "added" na API do GitHub).
 
 Além da lista, a varredura (ADR 0064, decisão 4): router de backend tocado pelo
@@ -11,6 +12,8 @@ PR com rota cuja cadeia de Depends não chega a get_current_user, lido no head
 do PR, e arquivo do frontend tocado que é route handler (route.ts) ou server
 action ("use server"). Rota nova com login segue fora.
 """
+from __future__ import annotations
+
 import argparse
 import ast
 import fnmatch
@@ -156,17 +159,20 @@ def sensiveis(arquivos: list[dict], globs: list[tuple[str, bool]], fontes_do_hea
 
 
 def main() -> int:
+    if sys.version_info < (3, 12):
+        print(f"sensivel.py exige Python 3.12 ou mais novo (este é {sys.version.split()[0]})", file=sys.stderr)
+        return 2
     ap = argparse.ArgumentParser()
     ap.add_argument("pr", type=int)
     ap.add_argument("--lista", default=str(Path(__file__).resolve().parent.parent / "revisao-sensivel.txt"))
     args = ap.parse_args()
-    globs = ler_globs(Path(args.lista))
 
     def gh(*argumentos: str) -> str:
         return subprocess.run(["gh", *argumentos], capture_output=True, text=True, check=True,
                               encoding="utf-8").stdout
 
     try:
+        globs = ler_globs(Path(args.lista))
         repo = gh("repo", "view", "--json", "nameWithOwner", "-q", ".nameWithOwner").strip()
         saida = gh("api", f"repos/{repo}/pulls/{args.pr}/files", "--paginate")
         head = gh("api", f"repos/{repo}/pulls/{args.pr}", "--jq", ".head.sha").strip()
@@ -181,6 +187,9 @@ def main() -> int:
     except subprocess.CalledProcessError as e:
         erro = e.stderr.decode() if isinstance(e.stderr, bytes) else e.stderr
         print(f"erro ao consultar o PR #{args.pr}: {(erro or '').strip()}", file=sys.stderr)
+        return 2
+    except Exception as e:  # falha fechada: erro na varredura não vira "não sensível"
+        print(f"varredura do PR #{args.pr} falhou: {type(e).__name__}: {e}", file=sys.stderr)
         return 2
 
     for nome, motivo in achados:

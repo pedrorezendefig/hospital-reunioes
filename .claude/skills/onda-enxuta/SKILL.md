@@ -69,7 +69,7 @@ A cada notificação de término, **confira o GitHub**, não o relatório (ADR 0
 Assim que o PR abre, **na mesma mensagem**:
 
 1. Espera do CI em segundo plano, sem acordar por evento: `gh pr checks <PR> --watch --fail-fast` via Bash com `run_in_background: true`. Uma notificação no fim.
-2. `python .claude/skills/onda-enxuta/scripts/sensivel.py <PR>`: imprime os arquivos de rota sem login e de migration tocados (lista em `revisao-sensivel.txt`, mais a varredura do head do PR: router com rota fora da cadeia de `get_current_user`, `route.ts` e `"use server"`); saída 0 = sensível.
+2. `uv run --no-project --python ">=3.12" python .claude/skills/onda-enxuta/scripts/sensivel.py <PR>` (o script exige Python 3.12+; o `python3` do macOS é 3.9): imprime os arquivos de rota sem login e de migration tocados (lista em `revisao-sensivel.txt`, mais a varredura do head do PR: router com rota fora da cadeia de `get_current_user`, `route.ts` e `"use server"`); saída 0 = sensível, 1 = não sensível. Qualquer outra saída (2: erro do `gh`, do `git`, da varredura ou Python abaixo do 3.12) é erro, nunca "não sensível": rode de novo uma vez e, na segunda falha, a fatia é baixa (`ready-for-human`, comentário `<!-- automacao -->` com "classificação de segurança falhou").
 3. Dispare `hr-revisor`. Se sensível, dispare também `hr-revisor-seguranca`, em paralelo, **uma vez só** por PR (ADR 0064, decisão 4).
 
 Depois, por notificação:

@@ -287,10 +287,10 @@ Achado → comentar no PR via `gh pr comment` como must-fix e disparar o `hr-cor
 ### Gate 2: `hr-revisor-seguranca` (rota sem login ou migration)
 
 ```bash
-python3 .claude/skills/onda-enxuta/scripts/sensivel.py "$PR_NUMBER"
+uv run --no-project --python ">=3.12" python .claude/skills/onda-enxuta/scripts/sensivel.py "$PR_NUMBER"
 ```
 
-Saída `0` (o PR toca rota sem login ou migration, pela lista de `.claude/skills/onda-enxuta/revisao-sensivel.txt` ou pela varredura do head do PR): dispare o agente `hr-revisor-seguranca` **uma vez só**, em paralelo com o Gate 1, com o prompt de `references/prompts.md` da onda (motivo: os arquivos impressos). Ele lê o diff pelo GitHub; o `/security-review` lia o diff da árvore principal quando o trabalho estava num worktree, por isso não é mais o gate. Saída `1`: o gate não se aplica; o resto da segurança é a lente do `hr-auditor-prd` (ADR 0064, decisão 4, parágrafo abaixo). Saída `2` (erro do `gh` ou do `git`): o gate não passa; rode de novo, e na segunda falha é baixa.
+Saída `0` (o PR toca rota sem login ou migration, pela lista de `.claude/skills/onda-enxuta/revisao-sensivel.txt` ou pela varredura do head do PR): dispare o agente `hr-revisor-seguranca` **uma vez só**, em paralelo com o Gate 1, com o prompt de `references/prompts.md` da onda (motivo: os arquivos impressos). Ele lê o diff pelo GitHub; o `/security-review` lia o diff da árvore principal quando o trabalho estava num worktree, por isso não é mais o gate. Saída `1`: o gate não se aplica; o resto da segurança é a lente do `hr-auditor-prd` (ADR 0064, decisão 4, parágrafo abaixo). Qualquer outra saída (2: erro do `gh`, do `git`, da varredura ou Python abaixo do 3.12; o script exige 3.12+ e o `python3` do macOS é 3.9, daí o `uv run`) é erro, nunca "não sensível": o gate não passa; rode de novo, e na segunda falha é baixa.
 
 Ninguém espera por ele: o corretor do Gate 1 não aguarda este veredito. `VEREDITO SEGURANCA: MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário de segurança, uma rodada de correção a mais (com um corretor já no PR, este vai quando ele terminar); o `hr-revisor-seguranca` não roda de novo, e quem confere é a rodada 2 do Gate 1, que espera este corretor terminar, com a linha `Veredito de segurança a conferir: <URL>` no prompt (cada must-fix dele vira spec da rodada), com a mesma regra da baixa. O gate passa com a última linha do comentário em `VEREDITO SEGURANCA: LIMPO`, ou com o must-fix dele corrigido e a rodada 2 do Gate 1 em `VEREDITO: LIMPO`.
 
