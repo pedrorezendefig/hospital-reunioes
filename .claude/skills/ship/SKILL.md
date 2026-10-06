@@ -19,7 +19,7 @@ Uma skill, um comando. Do plano ao PR verde, com PR + review automatizada + CI. 
 |---|---|---|
 | `--issue <N>` | nenhuma | Vincula GitHub Issue #N. Adiciona `Closes #N` no PR. |
 | `--type <t>` | inferido | Tipo conventional. Um de: `fix`, `feature`, `chore`, `refactor`, `docs`, `test`, `spec`. Define prefixo de branch e commit. |
-| `--skip-review` | false | Pula `/code-review` e `/security-review`. Só pra emergência. |
+| `--skip-review` | false | Pula os Gates 1 e 2 e termina no PR aberto, sem rodar o rabo. É o modo do `hr-implementador` da onda. |
 | `--draft` | false | Abre PR como draft (não fica passível de merge). |
 | `--target <branch>` | `main` | Branch de destino do PR (default main). |
 | `--from-diff` | false | Pula a pausa do Passo 4. Usado quando já há mudanças no working tree. Vai direto pro commit + push + PR (código já no working tree). |
@@ -36,8 +36,8 @@ Não há mais opção de merge, deploy ou bump: o `/ship` nunca faz nenhum dos t
 Relação com outras skills:
 - **`fechar_onda.py`** (`.claude/skills/onda-enxuta/scripts/`): o rabo único de merge, bump, `APP_VERSION`, push, build, health e registro, para um PR avulso ou para o lote de uma onda. O `/ship` o roda no Passo 10, com os gates verdes.
 - **`/deploy`**: não é chamado. Fica para `status`, `rollback` e `setup`.
-- **`/code-review`**: chamada no Passo 8 como gate.
-- **`/security-review`**: chamada no Passo 8 como gate.
+- **`hr-revisor`** (`.claude/agents/`): disparado no Passo 8 como Gate 1.
+- **`hr-revisor-seguranca`** (`.claude/agents/`): disparado no Passo 8 como Gate 2, quando o `sensivel.py` acusa caminho sensível ou o Gate 1 pede.
 
 ---
 
@@ -54,7 +54,7 @@ Relação com outras skills:
    - `gh auth status` autenticado.
    - `docs/spec/deploy/project.json` existe (use `/deploy migrate-blueprint` se está vindo de blueprint legado).
    - `git config user.name` e `user.email` setados (autor do commit/PR).
-   - Branch atual é `main` (o Passo 2 cria a branch) ou a branch de trabalho já criada, como a `<type>/<slug>-<N>` do `/pegar-issue` (o Passo 2 é pulado). Siga sem perguntar.
+   - Branch atual é `main` (o Passo 2 cria a branch) ou a branch de trabalho já criada, como a `<type>/<slug>-<N>` do `/pegar-issue` (o Passo 2 é pulado). Siga sem perguntar. Com `--issue N` e fora da `main`, a branch tem que terminar em `-<N>`: senão, reporte e pare, porque a árvore pode ser compartilhada e a branch, de outra sessão.
 
 3. **Parsear args**:
    - Descrição obrigatória (primeiro argumento posicional, entre aspas).
@@ -205,7 +205,7 @@ Cada camada faz veto independente. Roda em sequência (ou paralelo onde possíve
 
 ### Passo 8.0 — Detecção de diff cosmético (Corte 2 do plano de enxugamento)
 
-Antes de invocar gates, classificar o diff. Se for puramente cosmético, **pular o security-review** (o code-review já cobre mudanças triviais).
+Antes de invocar gates, classificar o diff. Se for puramente cosmético, **pular o Gate 2** (o Gate 1 já cobre mudanças triviais). Exceção: com o `sensivel.py` em saída 0 (Gate 2), o Gate 2 roda mesmo em diff cosmético, porque `.md` em `.claude/agents/` ou `.claude/skills/ship/` muda quem revisa.
 
 **Critério de "diff cosmético"** (todos têm que bater):
 
@@ -247,27 +247,27 @@ fi
 
 **Se `COSMETIC_OK == true`:**
 
-- ✅ Pular o gate de security-review.
-- code-review e CI **continuam rodando** — só o security-review é pulado.
-- Comentar no PR: `🤖 Diff cosmético: security-review pulado; code-review + CI ativos.`
+- ✅ Pular o Gate 2, salvo a exceção do `sensivel.py` acima.
+- Gate 1 e CI **continuam rodando**: só o Gate 2 é pulado.
+- Comentar no PR: `🤖 Diff cosmético: Gate 2 pulado; hr-revisor + CI ativos.`
 
 **Se `COSMETIC_OK == false`:**
 
 - Os 3 gates rodam normalmente (comportamento padrão).
 
-**Override manual:** `/ship --skip-review` pula code-review e security (emergência); o CI nunca é pulado. `/ship --hotfix` mantém security-review + CI.
+**Override manual:** `/ship --skip-review` pula os Gates 1 e 2; `/ship --hotfix` mantém o Gate 2 e o CI. O CI nunca é pulado, e nos dois o `/ship` termina no PR, sem o Passo 10 (veja "Flags de override").
 
 ---
 
-### Gate 1 — `/code-review` (sempre)
+### Gate 1: `hr-revisor` (sempre)
 
-Invoca a skill `code-review:code-review` apontando pra branch atual ou PR.
+Dispara o agente `hr-revisor` com o prompt de `.claude/skills/onda-enxuta/references/prompts.md` (rodada 1). Ele lê o diff pelo GitHub, não a árvore de trabalho, e comenta o veredito no PR; confira com `gh pr view "$PR_NUMBER" --json comments` que a última linha do comentário é `VEREDITO: LIMPO` ou `VEREDITO: MUST-FIX (n)`.
 
-Captura output. Se levantar `must-fix` → comentar no PR via `gh pr comment` (`<!-- automacao -->` na primeira linha) e disparar o `hr-corretor` motivo `revisao` com o comentário; quando ele terminar, o gate roda de novo. Uma rodada de correção (ADR 0064): se a segunda passada ainda tem must-fix, é baixa (Passo 8).
+`MUST-FIX` → disparar o `hr-corretor` motivo `revisao` com o comentário inteiro; quando ele terminar, rodada 2 do `hr-revisor`. Uma rodada de correção (ADR 0064): se a rodada 2 ainda tem must-fix, é baixa (Passo 8). Linha `PEDE_REVISOR_SEGURANCA` no veredito dispara o Gate 2, sem julgar.
 
 ### Gate 1.5: Spec × diff (quando há issue vinculada)
 
-Verifica se o diff cumpre o que a issue pediu **antes** do merge: é o que autoriza o Passo 9 a marcar os critérios de aceite (o contrato "verde ⟹ critérios cumpridos" do ADR 0020 passa a ser verificado, não assumido). Sem issue vinculada, pular com nota no PR. Não muda a contagem dos "3 gates" (code-review, security, CI): este é condicional à existência de issue.
+Verifica se o diff cumpre o que a issue pediu **antes** do merge: é o que autoriza o Passo 9 a marcar os critérios de aceite (o contrato "verde ⟹ critérios cumpridos" do ADR 0020 passa a ser verificado, não assumido). Sem issue vinculada, pular com nota no PR. Não muda a contagem dos "3 gates" (`hr-revisor`, `hr-revisor-seguranca`, CI): este é condicional à existência de issue.
 
 **Fail-fast antes de spawnar** (barato, evita queimar um subagent com ref quebrada):
 
@@ -284,11 +284,15 @@ Dispara um subagent **independente** (Task/general-purpose) com:
 
 Achados (a) ou (c) → comentar no PR via `gh pr comment` e disparar o `hr-corretor` motivo `revisao`, com o mesmo tratamento do Gate 1 (uma rodada, depois baixa). Scope creep (b) é judgement call: reportar ao usuário sem travar, a menos que toque área sensível (aí o Gate 2 decide).
 
-### Gate 2 — `/security-review` (condicional — área sensível)
+### Gate 2: `hr-revisor-seguranca` (caminho sensível ou pedido do Gate 1)
 
-Invoca a skill `security-review` na branch.
+```bash
+python3 .claude/skills/onda-enxuta/scripts/sensivel.py "$PR_NUMBER"
+```
 
-Captura output. Se levantar vulnerabilidade crítica → comentar no PR e disparar o `hr-corretor` motivo `revisao`, com o mesmo tratamento do Gate 1 (uma rodada, depois baixa).
+Saída `0` (o PR toca caminho de `.claude/skills/onda-enxuta/revisao-sensivel.txt`) ou linha `PEDE_REVISOR_SEGURANCA` no veredito do Gate 1: dispare o agente `hr-revisor-seguranca` com o prompt de `references/prompts.md` da onda (motivo: os arquivos impressos, ou o pedido do Gate 1). Ele lê o diff pelo GitHub; o `/security-review` lia o diff da árvore principal quando o trabalho estava num worktree, por isso não é mais o gate. Saída `1` e sem pedido: o gate não se aplica. Saída `2` (erro do `gh`): o gate não passa; rode de novo, e na segunda falha é baixa.
+
+`VEREDITO SEGURANCA: MUST-FIX` → `hr-corretor` motivo `revisao` com o comentário inteiro e nova rodada do `hr-revisor-seguranca`, com o mesmo tratamento do Gate 1 (uma rodada, depois baixa). O gate só passa com a última linha do comentário em `VEREDITO SEGURANCA: LIMPO`.
 
 ### (opcional) review rigorosa: só com `--rigoroso`
 
@@ -314,9 +318,9 @@ Ver `references/rigoroso.md` (segunda parte).
 
 ### Flags de override
 
-- `--skip-review`: pula code-review e security-review. **NÃO pula** o CI. Só pra emergência.
-- `--hotfix`: mantém security-review + CI (pula o resto). Só o dono do repo usa.
-- Default: 3 gates (code-review + security-review condicional + CI). Review rigorosa e verificação final ficam opcionais (`--rigoroso`).
+- `--skip-review`: pula os Gates 1 e 2, **NÃO pula** o CI, e o `/ship` termina no PR aberto, sem o Passo 10. É o modo do `hr-implementador` da onda, onde quem revisa e roda o rabo é o orquestrador; fora da onda, subir é `/ship --resume` sem a flag, que roda os gates que faltam.
+- `--hotfix`: mantém o Gate 2 (`sensivel.py` e `hr-revisor-seguranca`) e o CI, pula o resto e termina no PR verde, sem o Passo 10 (ADR 0063, decisão 4: o rabo só roda com os gates verdes). Subir é `/ship --resume` sem a flag, que roda o Gate 1.
+- Default: 3 gates (`hr-revisor` + `hr-revisor-seguranca` condicional + CI). Review rigorosa e verificação final ficam opcionais (`--rigoroso`).
 
 ---
 
@@ -369,11 +373,15 @@ No `--resume` com os gates verdes, verificar se os critérios da issue já estã
 
 O `/ship` não faz bump, não mexe em `APP_VERSION`, não mergeia e não chama o `/deploy` (ADR 0061): tudo isso é do rabo, e o `/ship` o roda assim que o Passo 9 termina, sem esperar mensagem (ADR 0063). Builds levam minutos: rode via Bash em segundo plano e leia só as 10 linhas da saída.
 
+Só roda com os três gates verdes nesta passada: o último comentário do Gate 1 termina em `VEREDITO: LIMPO`, o do Gate 2, quando ele se aplica, em `VEREDITO SEGURANCA: LIMPO`, e o CI está verde. Sem isso, o rabo não roda.
+
 ```bash
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER"
 ```
 
-Migration nova no PR é a única parada (Passo 8.6): o rabo imprime `migration: cole no Studio <arquivo>:1` e espera; repasse a linha ao humano por `PushNotification` assim que ela aparecer. Na `/onda-enxuta`, o `hr-implementador` termina no PR aberto e não chega aqui: quem roda o rabo, com o lote inteiro, é o fechamento da onda.
+Migration nova no PR para o rabo no humano (Passo 8.6): ele imprime `migration: cole no Studio <arquivo>:1` e espera; repasse a linha ao humano por `PushNotification` assim que ela aparecer. Com `--skip-review` ou `--hotfix`, o `/ship` termina no PR e não chega aqui (veja "Flags de override"); na `/onda-enxuta`, o `hr-implementador` roda com `--skip-review`, e quem roda o rabo, com o lote inteiro, é o fechamento da onda.
+
+Fatia de manual (`docs: manual do PRD`, ADR 0057, decisões 4 e 8, que a ADR 0063 não emendou) também não chega aqui sozinha: o vídeo de tarefa pede o OK humano no draft. O `/ship` termina no PR verde, com o caminho do MP4 no corpo, e manda `PushNotification` de uma linha: "Draft do vídeo da #<issue> no PR #<PR>: <MP4>". Quem viu o vídeo sobe o PR com `fechar_onda.py --prs <PR>`.
 
 Um PR só e sem `--sessao` é o modo PR avulso (chave do semáforo `pr-<N>`). O script faz, nesta ordem: pré-condições (PR verde e mergeável, número e `sha256` das migrations), espera da migration nova no `/api/health` (Passo 8.6), semáforo, versão nova pelo tipo dos commits, sem commit (issue #967), a `origin/main` trazida por merge se a branch ficou atrás (e o CI verde nesse head novo), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida, ADR 0061), tag `vX.Y.Z` no squash, um build, health com conferência de versão, registro (`state.json` e `history.json`) num PR só de docs mergeado do mesmo jeito, e limpeza. Snapshot e draft do Manual não são do rabo: uma Action no push da `main` cuida deles depois do registro (ADR 0062). O registro nomeia o PR e a issue. Códigos de saída e o que fazer em cada um: docstring do script.
 
@@ -429,7 +437,7 @@ Bloco único de 3 linhas, com referências essenciais. Sem ruído visual de list
 **Exemplo concreto** (ciclo de mudança cosmética):
 
 ```
-✅ ship PR #9 verde · gates: code-review, spec×diff, CI · Issue #8 com critérios marcados
+✅ ship PR #9 verde · gates: hr-revisor, spec×diff, CI · Issue #8 com critérios marcados
    Rabo: python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs 9 → <a última linha da saída>
 ```
 
@@ -491,7 +499,7 @@ A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem de
 
 - ❌ **Nunca** `git push --force` à main. Apenas `--force-with-lease` na branch própria pra amend.
 - ❌ **Nunca** mergear, fazer bump ou mexer em `APP_VERSION` pelo `/ship`: é tudo do rabo (`fechar_onda.py`).
-- ❌ **Nunca** pular `/security-review` em mudanças que tocam `auth/`, `permissions/`, schema DB ou env vars.
+- ❌ **Nunca** pular o Gate 2 (`hr-revisor-seguranca`) quando o `sensivel.py` acusa caminho sensível (`auth/`, permissões, schema DB, env vars, o próprio fluxo de revisão).
 - ❌ **Nunca** rodar `/ship` em uma branch que já tem PR aberto sem `--resume` ou flag explícita.
 - ❌ **Nunca** logar token/secret em qualquer output.
 - ✅ Conventional commits sempre.

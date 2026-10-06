@@ -37,3 +37,14 @@ docker-compose.yml
 **/*token*
 **/*credenci*
 **/*senha*
+
+# Quem decide a revisão e o rabo: sem humano antes de produção (ADR 0063),
+# afrouxar um destes desligaria o revisor de segurança dos PRs seguintes.
+.claude/agents/**
+.claude/skills/onda-enxuta/**
+.claude/skills/ship/**
+.claude/skills/pegar-issue/**
+.claude/skills/deploy/scripts/**
+.claude/settings*.json
+.github/rulesets/**
+tools/checar_migration_repetida.py

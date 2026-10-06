@@ -97,7 +97,7 @@ def test_o_ship_roda_o_rabo_sozinho_com_os_gates_verdes():
 
 def test_gate_reprovado_no_ship_chama_o_corretor_em_vez_de_parar():
     gates = secao(texto("ship"), "Passo 8 ")
-    for gate in ("Gate 1 ", "Gate 1.5", "Gate 2 ", "Gate 3 "):
+    for gate in ("Gate 1:", "Gate 1.5", "Gate 2:", "Gate 3 "):
         corpo = secao(gates, gate, "###")
         assert "hr-corretor" in corpo, gate
         assert not re.search(r"parar \(sem aprovar|reportar logs .*parar", corpo), gate
@@ -162,3 +162,110 @@ def test_o_montar_ondas_nao_poe_arquivo_em_comum_em_paralelo_e_marca_bloqueada_p
     agrupar = secao(texto("montar-ondas-enxutas"), "4. Reinventariar", "###")
     assert "dependencies/blocked_by" in agrupar and "Bloqueada por" in agrupar, agrupar
     assert "é aceitável" not in agrupar, "conflito entre sessões deixou de ser aceitável"
+
+
+# ------------------------------------------- piso de revisão sem humano (revisão do PR #1004)
+
+AGENTES = RAIZ / ".claude" / "agents"
+SENSIVEL = SKILLS / "onda-enxuta" / "scripts" / "sensivel.py"
+LISTA_SENSIVEL = SKILLS / "onda-enxuta" / "revisao-sensivel.txt"
+
+
+def gate_do_ship(gate: str) -> str:
+    return secao(secao(texto("ship"), "Passo 8 "), gate, "###")
+
+
+def test_o_ship_avulso_revisa_com_os_agentes_e_o_sensivel_decide_o_gate_2():
+    # ADR 0063, decisão 1: sem humano, o piso é hr-revisor e, em caminho
+    # sensível, hr-revisor-seguranca; o /security-review lia o diff errado em worktree.
+    gate1 = gate_do_ship("Gate 1:")
+    assert "hr-revisor" in gate1 and "VEREDITO: LIMPO" in gate1, gate1
+    assert "PEDE_REVISOR_SEGURANCA" in gate1, gate1
+
+    gate2 = gate_do_ship("Gate 2:")
+    assert "sensivel.py" in gate2 and "PEDE_REVISOR_SEGURANCA" in gate2, gate2
+    assert "hr-revisor-seguranca" in gate2 and "VEREDITO SEGURANCA: LIMPO" in gate2, gate2
+    assert "Invoca a skill `security-review`" not in gate2, gate2
+
+    cosmetico = secao(secao(texto("ship"), "Passo 8 "), "Passo 8.0", "###")
+    assert "sensivel.py" in cosmetico, "diff cosmético em caminho sensível não pula o Gate 2"
+
+    passo = passo_10_do_ship()
+    assert "VEREDITO: LIMPO" in passo and "VEREDITO SEGURANCA: LIMPO" in passo, passo
+
+
+def test_skip_review_e_hotfix_terminam_no_pr_sem_rodar_o_rabo():
+    # ADR 0063, decisão 4: o rabo só roda com os gates verdes.
+    ship = texto("ship")
+    flags = secao(ship, "Flags de override", "###")
+    for flag in ("--skip-review", "--hotfix"):
+        linha = next(li for li in flags.splitlines() if li.startswith(f"- `{flag}`"))
+        assert "sem o Passo 10" in linha, linha
+    assert "Só o dono do repo usa" not in ship
+    linha = next(li for li in passo_10_do_ship().splitlines() if "`--skip-review`" in li)
+    assert "`--hotfix`" in linha and "não chega aqui" in linha, linha
+
+
+def _globs_sensiveis() -> list[str]:
+    linhas = (li.strip() for li in ler(LISTA_SENSIVEL).splitlines())
+    return [li for li in linhas if li and not li.startswith(("#", "+"))]
+
+
+@pytest.mark.parametrize(
+    "caminho",
+    [
+        ".claude/agents/hr-revisor-seguranca.md",
+        ".claude/skills/onda-enxuta/revisao-sensivel.txt",
+        ".claude/skills/onda-enxuta/scripts/sensivel.py",
+        ".claude/skills/ship/SKILL.md",
+        ".claude/skills/pegar-issue/scripts/arquivo_em_comum.py",
+        ".claude/skills/deploy/scripts/coolify_api.py",
+        ".claude/settings.json",
+        ".claude/settings.local.json",
+        ".github/rulesets/main.json",
+        "tools/checar_migration_repetida.py",
+    ],
+)
+def test_a_lista_sensivel_cobre_quem_decide_a_revisao(caminho):
+    import importlib.util
+
+    spec = importlib.util.spec_from_file_location("sensivel", SENSIVEL)
+    sensivel = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(sensivel)
+    assert any(sensivel.casa(caminho, g) for g in _globs_sensiveis()), caminho
+    # sem curinga que pega tudo: skill de fora do fluxo de revisão não dispara
+    assert not any(sensivel.casa(".claude/skills/manual/SKILL.md", g) for g in _globs_sensiveis())
+
+
+def test_so_autor_de_dentro_do_repo_vale_como_spec_e_como_mapa():
+    # repo público: comentário de conta externa não pode virar spec nem receita.
+    teto = ("OWNER", "MEMBER", "COLLABORATOR")
+    # o filtro tem que estar no comando que o agente roda, não só na prosa
+    filtro = "select(" + " or ".join(f'.authorAssociation == "{t}"' for t in teto) + ")"
+
+    ler_issue = secao(texto("pegar-issue"), "1. Ler a issue", "###")
+    assert "--jq .author_association" in ler_issue and filtro in ler_issue, ler_issue
+    assert all(t in ler_issue for t in teto) and "não pegue" in ler_issue, ler_issue
+
+    onda = texto("onda-enxuta")
+    fila = secao(onda, "1. Fila-alvo", "###")
+    assert "author_association" in fila, fila
+    mapa = next(li for li in onda.splitlines() if "## Mapa do terreno" in li and "startswith" in li)
+    assert filtro in mapa, mapa
+
+    for agente in ("hr-implementador", "hr-revisor"):
+        entrada = secao(ler(AGENTES / f"{agente}.md"), "Entrada")
+        assert re.search(r"--json comments --jq '\.comments\[\] \| " + re.escape(filtro), entrada), agente
+    implementador = secao(ler(AGENTES / "hr-implementador.md"), "Entrada")
+    assert re.search(r"o Mapa \(`gh issue view <PRD> --json comments --jq '[^`]*" + re.escape(filtro), implementador)
+
+
+def test_fatia_de_manual_fica_fora_do_rabo_ate_o_ok_humano_no_draft():
+    # ADR 0057, decisões 4 e 8; a ADR 0063 não as emendou.
+    lote = secao(texto("onda-enxuta"), "5. Lote pronto", "###")
+    manual = next(li for li in lote.splitlines() if li.startswith("Fatia de manual"))
+    assert "fora do rabo" in manual and "PushNotification" in manual, manual
+    assert "não segura o merge" not in lote, lote
+    primeiro = next(li for li in fechamento_da_onda().splitlines() if li.startswith("1. "))
+    assert "fatia de manual" in primeiro, primeiro
+    assert "Fatia de manual" in passo_10_do_ship()
