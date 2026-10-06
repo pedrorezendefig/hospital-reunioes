@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-06T01:27:26-03:00",
+      "sha": "4824bb6693bcc5b120b3bc4a71596cb118218a26",
+      "app_version": "0.163.2",
+      "subject": "Onda onda-a: Versão sem commit, APP_VERSION nos dois serviços e tag git; Testes do backend em paralelo com xdist e lista rodar_sozinho",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#981 #982)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        963
+      ],
+      "result": "healthy",
+      "duration_seconds": 602,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #981 #982, entregues pelo PR #983. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
       "at": "2026-10-05T21:51:07-03:00",
       "sha": "cab8930958d1f89545d688418f37745936cc576f",
       "app_version": "0.163.1",
@@ -1526,102 +1558,6 @@
       "migrations_applied": [],
       "rollback_target_sha": null,
       "notes": "Onda 2 do PRD #726, ultima fatia (#732), que fecha o PRD. O assistente le as Demandas abertas e avisa parecida, com Abrir essa e Ignorar, mais o capitulo do assistente no manual da aba Tecnologia (pagina HTML unica: o ADR 0057 decisao 1 deixa a Tecnologia fora do site Starlight, entao nao ha draft a tirar). Tres rodadas de revisao. Duas decisoes do orquestrador mudaram o desenho: o nome do responsavel saiu do que vai ao prompt, porque o ADR 0056 decisao 5 enumera cinco campos e o sexto era o unico dado pessoal indo ao provedor externo a cada turno (a faixa segue mostrando o nome, remontado do banco, e o criterio de aceite da issue foi corrigido com registro); e a descricao deixou de ser LIDA do banco, nao so omitida do prompt. O corte de campos virou contrato tipado, provado por execucao. A leitura do Quadro passou a degradar em vez de derrubar o turno, com httpx.HTTPError junto do APIError. Um mutante teria quebrado a feature em silencio: o duble de banco devolvia a linha inteira, entao apagar titulo da lista de colunas passava verde e em producao tiraria o titulo de toda Demanda; o duble passou a projetar e seis mutantes de coluna morrem. Ficam abertas as issues #769, #770, #772 e #773, achadas pelas revisoes desta onda e fora do escopo das fatias."
-    },
-    {
-      "at": "2026-09-17T09:42:00-03:00",
-      "sha": "7503809",
-      "app_version": "0.141.0",
-      "subject": "O print de tela vira descricao no Assistente de Tecnologia",
-      "raw_subject": "feat(tecnologia): print de tela vira descrição no Assistente (#730) (#771)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "prds": [
-        726
-      ],
-      "result": "healthy",
-      "duration_seconds": 330,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 1 do PRD #726, fatia #730. Rota descrever-imagem com o mesmo cliente e modelo do chat, tipo pela extensao, prefixo [print], nada gravado no servidor. Tres rodadas de correcao. A revisao de seguranca achou que a descricao do print alcanca o corpo de uma issue de repositorio PUBLICO sem controle em codigo no caminho, com precedente contrario ja escrito no repo (o PR #688 tirou nome civil de funcionario do mesmo corpo por decisao do diretor). Neste PR entrou so o que cabia na fatia: o prompt deixou de se contradizer e passou a valer para dado pessoal de qualquer natureza, com clausula da duvida, e a tela avisa antes de criar a Demanda. Prompt e aviso nao sao controle: a barreira em codigo e a issue #772, com tres saidas escritas e a escolha marcada como decisao do diretor. A #773 registra que a chamada ao provedor prende o event loop, o que pode derrubar o health check e disparar rollback de um deploy bom. Sete testes frouxos foram apertados, entre eles o do log, que ficava verde sobre nada sem piso de captura. Falta a fatia #732 para fechar o PRD."
-    },
-    {
-      "at": "2026-09-17T00:30:00-03:00",
-      "sha": "97e5f00",
-      "app_version": "0.140.0",
-      "subject": "Um texto por Produto no Kit de conhecimento, e falar e anexar no Assistente de Tecnologia",
-      "raw_subject": "feat(tecnologia): falar e anexar no Assistente, com a origem à mostra na conversa (#751)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "prds": [
-        726
-      ],
-      "result": "healthy",
-      "duration_seconds": 620,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 0 do PRD #726, os dois rascunhos que esperavam desde o deploy anterior: PR #750 (#728, kit de conhecimento, sem bump) e PR #751 (#729, voz e anexo, com o bump). Merge na ordem, um deploy so. O #750 passou por leitura dos sete textos por sub-agente no papel do diretor: 15 afirmacoes que o codigo nao sustentava, e a revisao do delta reprovou 4 frases NOVAS que trocavam um erro por outro (motivo da repactuacao que nao existe, perfil de POPs errado, relatorio da Ouvidoria que nao para com a IA, ata guiada omitida da lista de dependencias). O #751 teve 1 must-fix real: a tabela de cinco separadores de linha divergia do splitlines do proprio detector, e cinco separadores vazavam a cerca do prompt; virou join(splitlines()) no gargalo _cercar, que cobre as tres cercas. Dois achados fora de escopo viraram issue em vez de emenda: #769 (a recusa do acionamento diz ao ouvidor que o relato original nao sai, e ele sai desde o ADR 0041) e #770 (a cerca do Copiar para IA nao normaliza separador vindo de issue de repositorio publico). Faltam as fatias #730 e #732 para fechar o PRD."
-    },
-    {
-      "at": "2026-09-16T22:35:00-03:00",
-      "sha": "e04738f",
-      "app_version": "0.139.0",
-      "subject": "A leitura de documento passa a rodar num processo separado, com teto de memoria e prazo",
-      "raw_subject": "feat(extracao): ler .pdf e .docx num processo separado, com teto de memoria e prazo (#765)",
-      "scope": [
-        "backend",
-        "frontend"
-      ],
-      "prds": [
-        731
-      ],
-      "result": "healthy",
-      "duration_seconds": 560,
-      "services_touched": [
-        "backend",
-        "frontend"
-      ],
-      "env_changes": [
-        {
-          "service": "backend",
-          "action": "update",
-          "keys": [
-            "APP_VERSION"
-          ]
-        }
-      ],
-      "migrations_applied": [],
-      "rollback_target_sha": null,
-      "notes": "Onda 2 do PRD #726, primeira metade. A issue #758 NAO tem PRD pai: ela nasceu das revisoes do PR #751, quando ficou claro que envelope por filtro e conserto exemplo a exemplo dentro do processo que serve o app inteiro. O campo prds traz [731] porque o intervalo carrega tambem o PR #767 (achados da auditoria daquele PRD, de outra sessao), que nao foi registrado no deploy v0.137.1 dela. O passo 9.6 rodou e deu no-op: o #731 fechou e a outra sessao ja publicou o Manual. Tres fatias seguem em rascunho e bloqueadas atras desta: #729 (PR #751, que rebaseia por cima e tem 0.138.0 a re-bumpar), #730 e #732. O PR #750 (kit de conhecimento) esta verde e LIMPO em rascunho, esperando a leitura humana dos sete textos, e nao bumpa versao de proposito."
     }
   ]
 }
