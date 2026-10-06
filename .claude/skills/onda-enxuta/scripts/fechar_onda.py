@@ -21,7 +21,7 @@ arquivos sao os do `git diff --no-renames` do lote, como no detector do CI:
 mover codigo para fora de `hospital-reunioes/` conta como app.
   - app: a sequencia inteira abaixo.
   - ferramenta: so merge pela API depois do CI verde (passos 1 a 3, 5, 6, 8 e
-    12). Sem bump, sem APP_VERSION, sem esperar build, sem health, sem PR de
+    12). Sem versao nova, sem APP_VERSION, sem tag, sem esperar build, sem health, sem PR de
     registro e sem entrada no history.json. Se o webhook do Coolify disparar
     build no merge, o rabo o cancela, como faz com o build do registro.
 
@@ -33,12 +33,17 @@ Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
   3. branch de entrega num worktree descartavel:
      PR avulso: a propria branch do PR, com a origin/main por merge se ficou atras
      onda: `onda/<sessao>` a partir da origin/main, com merges locais `--no-ff` em ordem
-  4. bump semver pelo tipo dominante dos commits do lote (ferramenta nao bumpa),
-     como commit na branch de entrega, e push dela (nunca na main)
+  4. versao nova (semver) pelo tipo dominante dos commits do lote, a partir do
+     `last_app_version` do state.json conferido com a maior tag vX.Y.Z
+     (ferramenta nao muda a versao). Sem commit (issue #967): o package.json do
+     frontend fica congelado. Push da branch de entrega (nunca na main): no PR
+     avulso em dia com a main, o head nao muda e o CI dele ja vale
   5. onda: abre o PR de entrega, com `Closes` de cada issue do lote
-  6. espera o CI do head com o bump ficar verde
-  7. APP_VERSION no Coolify ANTES do merge
-  8. merge pela API do GitHub (squash, conferindo o sha do head)
+  6. espera o CI do head da entrega ficar verde
+  7. APP_VERSION no backend e no frontend do Coolify ANTES do merge (o backend
+     a le no runtime, o frontend no build, pelo ARG do Dockerfile)
+  8. merge pela API do GitHub (squash, conferindo o sha do head) e tag vX.Y.Z
+     no squash, pela API (tag que falha nao para o deploy)
   9. monitorar o build de cada service (webhook), forcar se nao disparar
  10. health com version match
  11. registro num PR so de docs, so com history.json (todos os deploys, sem
@@ -51,7 +56,7 @@ Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas):
 Commits que chegam a main (dois squashes):
   - o do codigo: "<titulo do PR> (#N)" no PR avulso, ou
     "chore(onda): <sessao>, PRs #a #b (vX.Y.Z) (#E)" na onda (E = PR de entrega);
-    dentro dele, o commit `chore(release): bump vX.Y.Z (...)` quando ha bump
+    a versao nao vira commit: vive no APP_VERSION do Coolify e na tag
   - o do registro: "chore(deploy): registro do PR #N (vX.Y.Z) (#R)" ou
     "chore(deploy): registro da onda <sessao> (vX.Y.Z) (#R)"
 No PR avulso, o registro do history.json nomeia PR e issue, sem a onda. O
@@ -70,7 +75,7 @@ Codigos de saida:
      semaforo solto, mas a arrumacao depois do merge falhou (a linha diz o que falta)
 
 `--dry-run`: executa 1 e 3 e calcula o 4 sem escrever; imprime o plano (PR,
-issue, classe e tipo de bump: "app: bump ..." ou "ferramenta: só merge") e o
+issue, classe e tipo de versao: "app: bump ..." ou "ferramenta: só merge") e o
 que faria nos demais; nao pega semaforo, nao toca no Coolify, nao pusha.
 
 Windows: `bash` do Git no PATH (para o semaforo.sh).
@@ -347,8 +352,8 @@ class MergeConflito(Exception):
 
 
 def entrar_na_branch_do_pr(wt: Path, info: dict) -> bool:
-    """PR avulso: o worktree vai para a ponta da branch do PR, que e onde o bump
-    entra. O ruleset exige a branch em dia com a base: se a main andou, ela vem
+    """PR avulso: o worktree vai para a ponta da branch do PR, que e a entrega.
+    O ruleset exige a branch em dia com a base: se a main andou, ela vem
     por merge. Devolve True quando precisou trazer a main."""
     n, branch = info["number"], info["headRefName"]
     run(["git", "fetch", "-q", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}"], cwd=wt)
@@ -890,7 +895,7 @@ def main() -> int:
 
     infos = checar_pre_condicoes(raiz, args.prs, args.dry_run)
     if avulso and infos[0].get("isCrossRepository"):
-        falhar(f"pre-condicao: #{infos[0]['number']} vem de um fork; o bump entra na branch do PR, "
+        falhar(f"pre-condicao: #{infos[0]['number']} vem de um fork; a main entra na branch do PR, "
                "que precisa estar neste repositorio.", EXIT_PRECOND)
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
     print(f"pre-condicoes ok: {prs_txt}, migrations sem numero repetido contra origin/main e com o sha256 do corpo"
@@ -1101,7 +1106,7 @@ def main() -> int:
                 cwd=raiz, check=False)
         if semaforo_pego:
             semaforo(raiz, "soltar", args.sessao)
-        sobra = " O bump ficou na branch do PR; a proxima rodada o reaproveita." if avulso else ""
+        sobra = " A main trazida ficou na branch do PR; a proxima rodada a reaproveita." if avulso else ""
         print(f"entrega: {e}. Nada entrou na main.{sobra}")
         return EXIT_MERGE
     except Exception as e:  # noqa: BLE001

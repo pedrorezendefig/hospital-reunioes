@@ -158,3 +158,43 @@ def test_deploy_mantem_status_rollback_e_setup_e_os_passos_que_eles_usam():
     assert "fechar_onda.py" in descricao
     for modo in ("status", "rollback", "setup"):
         assert modo in descricao
+
+
+# ------------------------------------------- versão sem commit (#967)
+
+# A versão não vira commit: vive no APP_VERSION dos dois apps e na tag do
+# squash. Texto que ainda manda commitar o bump, ou ler a versão do
+# package.json congelado, ensinaria o agente a refazer a corrida de bump.
+COMMIT_DE_BUMP = re.compile(
+    r"chore\(release\)|commit (de|do) bump|bump (como|vira um|em) commit|bump na branch"
+    r"|bump fantasma|re-bump|escrever_versao|PACKAGE_JSON|frontend/package\.json'\)\)\['version'\]",
+    re.I,
+)
+FONTES_DO_RABO = [
+    FECHAR_ONDA,
+    ".claude/skills/ship/SKILL.md",
+    ".claude/skills/deploy/SKILL.md",
+    ".claude/skills/onda-enxuta/SKILL.md",
+    "CLAUDE.md",
+    "docs/onboarding/dev.md",
+    "docs/onboarding/claude-setup.md",
+    "docs/spec/VERSIONING.md",
+]
+
+
+def test_nenhuma_referencia_viva_a_commit_de_bump():
+    achados = [
+        f"{rel}:{n}: {li.strip()[:120]}"
+        for rel in FONTES_DO_RABO
+        for n, li in enumerate((RAIZ / rel).read_text(encoding="utf-8").splitlines(), 1)
+        if COMMIT_DE_BUMP.search(li)
+    ]
+    assert achados == [], "\n".join(achados)
+
+
+def test_o_rabo_grava_app_version_nos_dois_apps_e_cria_a_tag():
+    deploy = texto("deploy")
+    modo = secao(deploy, "Modo `ship`")
+    assert "backend e no frontend" in modo and "tag" in modo, modo
+    ship = secao(texto("ship"), "Passo 10")
+    assert "backend e no frontend" in ship and "tag" in ship, ship
