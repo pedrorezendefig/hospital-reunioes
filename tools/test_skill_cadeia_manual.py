@@ -181,7 +181,7 @@ def test_manual_publicar_tira_o_draft_que_a_action_deixou_antes_de_subir():
     )
     chamadas = [
         b
-        for b in re.findall(r"```bash\n(.*?)```", receita, re.S)
+        for b in re.findall(r"```bash\n(.*?)```", receita, re.DOTALL)
         if "tirar_draft_manual.py" in b
     ]
     assert len(chamadas) == 1, "a receita mostra uma chamada do tirar-draft"
@@ -189,6 +189,7 @@ def test_manual_publicar_tira_o_draft_que_a_action_deixou_antes_de_subir():
         [sys.executable, str(RAIZ / "tools" / "tirar_draft_manual.py"), "--help"],
         capture_output=True,
         text=True,
+        check=True,
     ).stdout
     opcoes = set(re.findall(r"(--[a-z-]+)", chamadas[0]))
     assert "--prd" in opcoes

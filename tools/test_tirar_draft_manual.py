@@ -303,7 +303,10 @@ def test_resumo_lista_o_que_ficou_em_draft_por_falta_de_mp4(tmp_path):
 
     assert saida.returncode == 2
     texto = resumo.read_text(encoding="utf-8")
-    assert "Ficaram em draft:\n- `ouvidoria/encaminhar.md`\n- `ouvidoria/registrar.md`\n" in texto
+    assert (
+        "Ficaram em draft:\n- `ouvidoria/encaminhar.md`\n- `ouvidoria/registrar.md`\n"
+        in texto
+    )
     assert "Saíram do draft" not in texto
     assert "public/video/ouvidoria/encaminhar.mp4" in texto
     assert PROXIMO_PASSO in texto
