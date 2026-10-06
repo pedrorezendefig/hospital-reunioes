@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """fechar_onda.py: o rabo unico (ADR 0061). Leva um PR avulso ou uma onda da
-`/onda-enxuta` a producao com UM merge na main e UM build.
+`/onda-enxuta` a producao com um merge por PR na main e UM build.
 
 Uso:
     python fechar_onda.py --prs 850 851 852 --sessao onda-a-1 [--dry-run] [--raiz <repo>]
@@ -12,21 +12,23 @@ caminho curto (`~/wt-<sessao>`, por causa do MAX_PATH do Windows).
 
 A main e protegida por ruleset (issue #910, ADR 0061 decisao 3): PR
 obrigatorio, CI obrigatorio e em dia com a base, sem push direto. Por isso o
-script nunca empurra na main: tudo entra por PR, mergeado pela API do GitHub
-com squash (o unico metodo que o repositorio permite).
+script nunca empurra na main: cada PR do lote entra pela API do GitHub com
+squash (o unico metodo que o repositorio permite), no proprio numero, em ordem,
+como o PR avulso (ADR 0064, decisao 3). A onda e o avulso com mais PRs.
 
 Classe do lote, pelos arquivos (issue #965): "app" se algum esta em
 `hospital-reunioes/`, "ferramenta" se nenhum esta. Lote misto e app. Os
-arquivos sao os do `git diff --no-renames` do lote, como no detector do CI:
-mover codigo para fora de `hospital-reunioes/` conta como app.
+arquivos sao os do `git diff --no-renames` de cada PR, como no detector do CI:
+mover codigo para fora de `hospital-reunioes/` conta como app. Classe, versao
+e servicos saem do lote inteiro, antes do primeiro merge.
   - app: a sequencia inteira abaixo.
-  - ferramenta: so merge pela API depois do CI verde (passos 1 a 3, 5, 6, 8 e
-    12). Sem versao nova, sem APP_VERSION, sem tag, sem esperar build, sem health, sem PR de
+  - ferramenta: so merge pela API depois do CI verde (passos 1 a 4 e 9). Sem
+    versao nova, sem APP_VERSION, sem tag, sem esperar build, sem health, sem PR de
     registro e sem entrada no history.json. Se o webhook do Coolify disparar
-    build no merge, o rabo o cancela, como faz com o build do registro.
+    build em algum merge, o rabo o cancela, como faz com o build do registro.
 
-Sequencia (cada passo imprime no maximo uma linha; sucesso cabe em 10 linhas,
-fora as da migration):
+Sequencia (cada passo imprime no maximo uma linha, o 4 uma por PR; sucesso
+cabe em 10 linhas mais uma por PR, fora as da migration):
   1. pre-condicoes (gh, coolify, PRs abertos e verdes, origin/main buscado,
      nenhuma migration nova com numero que a main ja usa, e o corpo do PR
      declarando o sha256 de cada migration nova igual ao do arquivo).
@@ -39,48 +41,55 @@ fora as da migration):
      semaforo.sh a da por velha em 60 min. Backend no ar sem o campo
      `migracao` (anterior ao #969): avisa e segue sem esperar, como antes
   2. semaforo de deploy (chave = nome da sessao, unica por construcao)
-  3. branch de entrega num worktree descartavel:
-     PR avulso: a propria branch do PR, com a origin/main por merge se ficou atras
-     onda: `onda/<sessao>` a partir da origin/main, com merges locais `--no-ff` em ordem
-  4. versao nova (semver) pelo tipo dominante dos commits do lote, a partir do
+  3. versao nova (semver) pelo tipo dominante dos commits do lote, a partir do
      `last_app_version` do state.json conferido com a maior tag vX.Y.Z
      (ferramenta nao muda a versao). Sem commit (issue #967): o package.json do
-     frontend fica congelado. Push da branch de entrega (nunca na main): no PR
-     avulso em dia com a main, o head nao muda e o CI dele ja vale
-  5. onda: abre o PR de entrega, com `Closes` de cada issue do lote
-  6. espera o CI do head da entrega ficar verde
-  7. APP_VERSION no backend e no frontend do Coolify ANTES do merge (o backend
-     a le no runtime, o frontend no build, pelo ARG do Dockerfile)
-  8. merge pela API do GitHub (squash, conferindo o sha do head) e tag vX.Y.Z
-     no squash, pela API (tag que falha nao para o deploy)
-  9. monitorar o build de cada service (webhook), forcar se nao disparar
- 10. health com version match. Health ruim: rollback automatico (issue #968),
+     frontend fica congelado
+  4. PR a PR, na ordem, num worktree descartavel na branch do PR: a origin/main
+     por merge se a branch ficou atras (o ruleset exige em dia com a base, e o
+     merge do PR anterior do lote deixa o seguinte atras), push na branch do PR
+     (nunca na main; em dia, o head nao muda e o CI dele ja vale), CI verde no
+     head e merge pela API (squash, conferindo o sha do head). Antes do primeiro
+     merge: a imagem no ar de cada app do lote (alvo do rollback) e o
+     APP_VERSION no backend e no frontend do Coolify (o backend a le no runtime,
+     o frontend no build, pelo ARG do Dockerfile). PR que nao mergeia (conflito
+     com a main depois do anterior, push recusado, CI vermelho, head que andou,
+     merge recusado) imprime uma linha `de fora:` e o lote segue sem ele; os ja
+     mergeados ficam
+  5. tag vX.Y.Z no squash do ultimo PR que entrou, pela API (tag que falha nao
+     para o deploy)
+  6. um build: o deploy que o webhook do Coolify dispara para cada squash
+     intermediario e cancelado (o mesmo mecanismo do registro, issue #851) e o
+     rabo monitora so o do ultimo, em cada service; forca se nao disparar
+  7. health com version match. Health ruim: rollback automatico (issue #968),
      cada app do lote volta a imagem anterior no Coolify, a que estava no ar
-     antes do merge (`current` do `coolify app rollback images`, lida antes do
-     merge, e `rollback run`, sem forcar build) e o APP_VERSION antigo volta aos
-     apps, antes da imagem subir; o health e conferido de novo na versao antiga
- 11. registro num PR so de docs, so com history.json (todos os deploys, sem
+     antes do primeiro merge (`current` do `coolify app rollback images`, lida
+     antes dele, e `rollback run`, sem forcar build) e o APP_VERSION antigo volta
+     aos apps, antes da imagem subir; o health e conferido de novo na versao antiga
+  8. registro num PR so de docs, so com history.json (todos os deploys, sem
      teto) e state.json (ADR 0062, decisao 9), mergeado pela API; o build que o
      webhook do Coolify dispara para ele e cancelado (issue #851). Snapshot e
      draft do Manual nao sao do rabo: a Action do push da main roda os dois
      depois do registro (ADR 0062, decisao 10)
- 12. limpeza (worktrees, branches pr-*, worktrees de agente ja entregues) e soltar o semaforo
+  9. limpeza (worktrees, worktrees de agente ja entregues) e soltar o semaforo
 
-Commits que chegam a main (dois squashes):
-  - o do codigo: "<titulo do PR> (#N)" no PR avulso, ou
-    "chore(onda): <sessao>, PRs #a #b (vX.Y.Z) (#E)" na onda (E = PR de entrega);
+Commits que chegam a main:
+  - um squash por PR que entrou, "<titulo do PR> (#N)", no PR avulso e na onda;
     a versao nao vira commit: vive no APP_VERSION do Coolify e na tag
   - o do registro: "chore(deploy): registro do PR #N (vX.Y.Z) (#R)" ou
     "chore(deploy): registro da onda <sessao> (vX.Y.Z) (#R)"
-No PR avulso, o registro do history.json nomeia PR e issue, sem a onda. O
-campo `sha` do history.json e o do squash do codigo: o commit que foi para
-producao. O registro vem depois, so com docs.
+No PR avulso, o registro do history.json nomeia PR e issue, sem a onda; na
+onda, cada PR e a issue dele. O campo `sha` do history.json e o do squash do
+ultimo PR: o commit que foi para producao. O registro vem depois, so com docs.
 
 Codigos de saida:
-  0  PR ou onda fechados, health verde, registro na main (ferramenta: merge na main)
+  0  todos os PRs na main, health verde, registro na main (ferramenta: merges na main)
   1  pre-condicao falhou ou trava velha: nada foi tocado
-  2  conflito, push na branch rejeitado, CI vermelho ou merge recusado: nada
-     entrou na main, worktree removido, semaforo solto; rode de novo depois de corrigir
+  2  algum PR ficou de fora (conflito com a main, push na branch rejeitado, CI
+     vermelho, head que andou ou merge recusado), cada um com a linha `de fora:`;
+     os que entraram seguem o fluxo inteiro e o semaforo e solto. Nenhum entrou:
+     nada na main, worktree removido, semaforo solto. Rode de novo so com os de
+     fora, depois de corrigir. Com 3 a 6, as linhas `de fora:` saem do mesmo jeito
   3  build falhou no Coolify: SEMAFORO FICA PRESO, rode `/deploy rollback` com a chave impressa
   4  health falhou (ou versao nao bate) e o rollback automatico tambem falhou (sem
      imagem anterior, Coolify recusou, ou health ainda ruim): SEMAFORO FICA PRESO,
@@ -90,19 +99,20 @@ Codigos de saida:
      semaforo solto, mas a arrumacao depois do merge falhou (a linha diz o que falta)
   6  rollback feito: o health falhou, a imagem anterior e o APP_VERSION antigo
      voltaram e o health ficou verde de novo; semaforo solto, sem registro. A tag
-     vX.Y.Z fica no squash ruim, e a proxima versao sai depois dela. O merge
-     segue na main: quem chamou abre o PR de revert dele (sem rebuild), reabre a
-     issue com `ready-for-agent` e a linha `health:` (o que o health respondeu),
-     conta uma tentativa da fatia e notifica
+     vX.Y.Z fica no squash ruim, e a proxima versao sai depois dela. Os squashes
+     seguem na main: quem chamou abre o PR de revert deles (sem rebuild), reabre a
+     issue de cada um com `ready-for-agent` e a linha `health:` (o que o health
+     respondeu), conta uma tentativa de cada fatia e notifica
   7  migration vencida: o /api/health nao devolveu o numero da migration do lote
      em 24 h: nada entrou na main, o semaforo nao chegou a ser pego e os PRs
      seguem abertos; quem chamou notifica, e o rabo roda de novo depois que a
      migration for colada no Studio
 
-`--dry-run`: executa 1 e 3 e calcula o 4 sem escrever; imprime o plano (PR,
+`--dry-run`: executa 1 e calcula o 3 sem escrever; imprime o plano (PR,
 issue, classe e tipo de versao: "app: bump ..." ou "ferramenta: só merge") e o
-que faria nos demais (com a espera da migration, sem consultar o health); nao
-pega semaforo, nao toca no Coolify, nao pusha.
+que faria nos demais (um merge pela API por PR, em ordem, com a espera da
+migration, sem consultar o health); nao pega semaforo, nao toca no Coolify,
+nao pusha.
 
 Windows: `bash` do Git no PATH (para o semaforo.sh).
 """
@@ -437,13 +447,11 @@ def criar_worktree(raiz: Path, sessao: str) -> Path:
     return wt
 
 
-def remover_worktree(raiz: Path, wt: Path | None, prs: list[int]) -> None:
+def remover_worktree(raiz: Path, wt: Path | None) -> None:
     if wt and wt.exists():
         run(["git", "worktree", "remove", "--force", str(wt)], cwd=raiz, check=False)
         shutil.rmtree(wt, ignore_errors=True)
     run(["git", "worktree", "prune"], cwd=raiz, check=False)
-    for n in prs:
-        run(["git", "branch", "-D", f"pr-{n}"], cwd=raiz, check=False)
 
 
 # ------------------------------------------------------------------- merges
@@ -1135,7 +1143,7 @@ def main() -> int:
                 print(faria + ("cancela o build dos squashes intermediarios, " if len(infos) > 1 else "")
                       + f"tag v{versao_nova} no squash do ultimo, um build, health, registro em PR so de docs "
                       f"(prds {prds or '[]'}, migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
-            remover_worktree(raiz, wt, args.prs)
+            remover_worktree(raiz, wt)
             wt = None
             print("dry-run terminou sem tocar em nada.")
             return 0
@@ -1177,10 +1185,10 @@ def main() -> int:
             mergeados.append((info, sha, t))
             print(f"merge: PR #{n} na main pela API, squash {sha[:8]}"
                   + (f", com a main trazida por merge e o CI verde no head {head[:8]}" if trouxe_main else ""))
-        remover_worktree(raiz, wt, args.prs)
+        remover_worktree(raiz, wt)
         wt = None
 
-        fora = " ".join(f"#{n}" for n in de_fora)
+        fora =" ".join(f"#{n}" for n in de_fora)
         if not mergeados:
             semaforo(raiz, "soltar", args.sessao)
             semaforo_pego = False
@@ -1280,7 +1288,7 @@ def main() -> int:
             sha_reg = mergear_pela_api(raiz, pr_reg, head_reg, f"{titulo_reg} (#{pr_reg})")
         except Exception as e:  # noqa: BLE001
             if wt_reg:
-                remover_worktree(raiz, wt_reg, [])
+                remover_worktree(raiz, wt_reg)
             semaforo(raiz, "soltar", args.sessao)
             falta = (f"mergeie o PR #{pr_reg} quando o CI dele ficar verde" if pr_reg
                      else f"o registro nao virou PR; registre a mao o merge {sha_main[:8]} (v{versao})")
@@ -1290,7 +1298,7 @@ def main() -> int:
         print(f"registro: PR #{pr_reg} so de docs na main ({sha_reg[:8]})"
               + (f", build do registro cancelado ({', '.join(cancelados)})" if cancelados else ""))
 
-        remover_worktree(raiz, wt_reg, [])
+        remover_worktree(raiz, wt_reg)
         wt_reg = None
         n_wt = limpar_worktrees_de_agente(raiz, {i["headRefName"]: i.get("headRefOid") for i in lote})
         semaforo(raiz, "soltar", args.sessao)
@@ -1305,7 +1313,7 @@ def main() -> int:
         print(f"erro: {e}")
         for w in (wt, wt_reg):
             if w:
-                remover_worktree(raiz, w, args.prs)
+                remover_worktree(raiz, w)
         if mergeados:
             print(f"o merge ja aconteceu. Semaforo preso na chave {args.sessao}: confira o Coolify e o health, "
                   f"depois `semaforo.sh soltar {args.sessao}` ou `/deploy rollback`.")
