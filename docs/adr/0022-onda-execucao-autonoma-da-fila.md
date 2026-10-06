@@ -1,6 +1,7 @@
 ---
-status: accepted
+status: superseded
 amended_by: 0029, 0061, 0062
+superseded_by: 0068
 ---
 
 # Onda: execução autônoma da fila em ondas com checkpoint por lote e deploy único

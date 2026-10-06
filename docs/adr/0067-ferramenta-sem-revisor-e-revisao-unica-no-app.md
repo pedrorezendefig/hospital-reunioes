@@ -1,6 +1,7 @@
 ---
-status: accepted
+status: superseded
 amends: 0064
+superseded_by: 0068
 ---
 
 # PR de ferramenta sem revisor, revisão única no app e agente que nunca para para perguntar

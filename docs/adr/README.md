@@ -69,18 +69,19 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | ADR | Status | Título |
 |---|---|---|
 | [0020](0020-ciclo-de-vida-da-issue-status-fiel-e-loop-do-diretor.md) | accepted | Ciclo de vida da issue: status fiel, critérios auto-verificados e loop do diretor |
-| [0022](0022-onda-execucao-autonoma-da-fila.md) | accepted | Onda: execução autônoma da fila em ondas com checkpoint por lote e deploy único |
+| [0022](0022-onda-execucao-autonoma-da-fila.md) | superseded | Onda: execução autônoma da fila em ondas com checkpoint por lote e deploy único |
 | [0027](0027-wayfinder-on-ramp-situacional.md) | accepted | Wayfinder: on-ramp situacional para planejamento multi-sessão, sob demanda |
 | [0028](0028-bloqueio-por-dependencia-nativa.md) | accepted | Bloqueio entre issues por dependência nativa do GitHub |
-| [0029](0029-onda-goal-prd-fonte-verdade-github.md) | accepted | Onda escopada em PRD: goal de conclusão, fonte de verdade no GitHub e orquestrador magro |
-| [0035](0035-gates-de-review-da-onda-pertencem-ao-orquestrador.md) | accepted | Gates de review da onda pertencem ao orquestrador |
-| [0061](0061-um-pipeline-dono-por-prd-e-main-protegida.md) | accepted | Um pipeline só, dono por PRD e `main` protegida: a esteira para três sócios em paralelo (emenda 0022, 0035) |
-| [0062](0062-hospital-os-le-o-github-e-o-rabo-grava-so-a-verdade-do-deploy.md) | accepted | Hospital OS lê o GitHub ao vivo; o rabo grava só a verdade do deploy (emenda 0022, 0057, 0061) |
-| [0063](0063-fluxo-automatico-ate-producao-so-a-migration-para.md) | accepted | Fluxo automático até produção: só a migration para no humano (emenda 0061) |
-| [0064](0064-revisao-so-must-fix-e-merge-pr-a-pr-sem-em-dia-com-a-base.md) | accepted | Revisão só de must-fix em uma rodada, segurança por PRD; merge PR a PR sem "em dia com a base" (emenda 0061, 0062, 0063; emendada pela 0066 e 0067) |
-| [0065](0065-bypass-da-main-e-uma-deploy-key-no-job-que-nao-instala-nada.md) | accepted | O bypass da `main` é uma deploy key, usada só no job da Action que não instala nada (emenda 0062) |
-| [0066](0066-ondas-por-dependencia-nao-por-arquivo.md) | accepted | Ondas se separam por dependência, não por arquivo (emenda 0063, 0064) |
-| [0067](0067-ferramenta-sem-revisor-e-revisao-unica-no-app.md) | accepted | PR de ferramenta sem revisor, revisão única no app, agente nunca para para perguntar (emenda 0064) |
+| [0029](0029-onda-goal-prd-fonte-verdade-github.md) | superseded | Onda escopada em PRD: goal de conclusão, fonte de verdade no GitHub e orquestrador magro |
+| [0035](0035-gates-de-review-da-onda-pertencem-ao-orquestrador.md) | superseded | Gates de review da onda pertencem ao orquestrador |
+| [0061](0061-um-pipeline-dono-por-prd-e-main-protegida.md) | superseded | Um pipeline só, dono por PRD e `main` protegida: a esteira para três sócios em paralelo (emenda 0022, 0035) |
+| [0062](0062-hospital-os-le-o-github-e-o-rabo-grava-so-a-verdade-do-deploy.md) | superseded | Hospital OS lê o GitHub ao vivo; o rabo grava só a verdade do deploy (emenda 0022, 0057, 0061) |
+| [0063](0063-fluxo-automatico-ate-producao-so-a-migration-para.md) | superseded | Fluxo automático até produção: só a migration para no humano (emenda 0061) |
+| [0064](0064-revisao-so-must-fix-e-merge-pr-a-pr-sem-em-dia-com-a-base.md) | superseded | Revisão só de must-fix em uma rodada, segurança por PRD; merge PR a PR sem "em dia com a base" (emenda 0061, 0062, 0063; emendada pela 0066 e 0067) |
+| [0065](0065-bypass-da-main-e-uma-deploy-key-no-job-que-nao-instala-nada.md) | superseded | O bypass da `main` é uma deploy key, usada só no job da Action que não instala nada (emenda 0062) |
+| [0066](0066-ondas-por-dependencia-nao-por-arquivo.md) | superseded | Ondas se separam por dependência, não por arquivo (emenda 0063, 0064) |
+| [0067](0067-ferramenta-sem-revisor-e-revisao-unica-no-app.md) | superseded | PR de ferramenta sem revisor, revisão única no app, agente nunca para para perguntar (emenda 0064) |
+| [0068](0068-o-fluxo-em-uma-pagina.md) | accepted | O fluxo em uma página: de issue a produção, como roda hoje (substitui 0022, 0029, 0035, 0061 a 0067) |
 | [0043](0043-skills-locais-sao-o-kit-do-workflow.md) | accepted | Skills locais são o kit completo do workflow, duplicata com as globais é intencional |
 | [0049](0049-wayfinder-instalada-e-lock-com-ref.md) | accepted | A wayfinder entra instalada no clone, e o `skills-lock.json` fixa o commit de origem |
 | [0053](0053-fluxo-exportavel-por-roteiro-versionado.md) | accepted | O fluxo de trabalho é exportável por um roteiro versionado no repositório, não por prompt solto |

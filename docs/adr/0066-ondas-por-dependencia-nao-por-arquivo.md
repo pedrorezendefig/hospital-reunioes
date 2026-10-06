@@ -1,6 +1,7 @@
 ---
-status: accepted
+status: superseded
 amends: 0063, 0064
+superseded_by: 0068
 ---
 
 # Ondas se separam por dependência, não por arquivo

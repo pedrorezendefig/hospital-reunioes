@@ -1,7 +1,8 @@
 ---
-status: accepted
+status: superseded
 amends: 0022, 0057, 0061
 amended_by: 0064, 0065
+superseded_by: 0068
 ---
 
 # Hospital OS lê o GitHub ao vivo; o rabo grava só a verdade do deploy

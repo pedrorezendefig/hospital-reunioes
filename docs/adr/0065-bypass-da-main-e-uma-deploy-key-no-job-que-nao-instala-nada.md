@@ -1,6 +1,7 @@
 ---
-status: accepted
+status: superseded
 amends: 0062
+superseded_by: 0068
 ---
 
 # O bypass da `main` é uma deploy key, usada só no job da Action que não instala nada
