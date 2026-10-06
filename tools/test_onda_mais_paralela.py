@@ -18,6 +18,8 @@ RAIZ = Path(__file__).resolve().parent.parent
 SKILLS = RAIZ / ".claude" / "skills"
 AGENTES = RAIZ / ".claude" / "agents"
 TO_ISSUES = SKILLS / "to-issues" / "SKILL.md"
+ONDA = SKILLS / "onda-enxuta" / "SKILL.md"
+PROMPTS = SKILLS / "onda-enxuta" / "references" / "prompts.md"
 
 
 def ler(caminho: Path) -> str:
@@ -63,3 +65,39 @@ def test_o_to_issues_lista_as_ondas_previstas_ao_usuario_e_no_prd():
     bloco = next(b for b in re.findall(r"```bash\n(.*?)```", publicar, re.S) if "Ondas previstas" in b)
     assert "## Ondas previstas" in bloco and 'gh issue edit "$PRD" --body-file' in bloco, bloco
     assert "Não feche nem edite o corpo" not in publicar, publicar
+
+
+# ------------------------------------------- (b) Mapa do terreno uma vez por PRD
+
+
+def test_o_mapa_do_terreno_e_feito_uma_vez_por_prd_e_so_refeito_se_a_estrutura_mudou():
+    mapa = secao(ler(ONDA), "2. Mapa do terreno", "###")
+    assert "anterior ao último PR mergeado" not in mapa, mapa
+    assert "Sem Mapa: dispare `hr-mapeador`" in mapa, mapa
+    assert "só `Estrutura mudou: sim` daquele PRD dispara o `hr-mapeador` de novo" in mapa, mapa
+
+    papel = next(li for li in ler(ONDA).splitlines() if li.startswith("| `hr-mapeador` |"))
+    assert "1 vez por PRD" in papel and "`Estrutura mudou: sim`" in papel, papel
+
+
+def test_a_passagem_leva_o_mergeado_na_onda_anterior_e_se_a_estrutura_mudou():
+    # o bloco tem um `## Passagem` dentro: a seção vai do título até o fim do arquivo
+    passagem = ler(PROMPTS).split("\n## Passagem (prompt da próxima sessão)\n", 1)[1]
+    bloco = re.search(r"```\n(.*?)```", passagem, re.S).group(1)
+    assert re.search(r"^Mergeado na onda anterior: PRD #<X>: PRs #a #b\.$", bloco, re.M), bloco
+    assert re.search(r"^Estrutura mudou: PRD #<X>: <sim\|não>\.$", bloco, re.M), bloco
+
+    # a regra do sim/não é por arquivo apagado ou renomeado, lida da API do PR
+    regra = next(li for li in passagem.splitlines() if li.startswith("`Estrutura mudou`"))
+    assert "pulls/<PR>/files" in regra and "--paginate" in regra, regra
+    assert '.status == "removed" or .status == "renamed"' in regra, regra
+
+
+def test_o_implementador_recebe_o_mapa_e_o_mergeado_na_onda_anterior():
+    prompt = secao(ler(PROMPTS), "hr-implementador")
+    assert "Mapa do terreno: <URL do comentário>." in prompt, prompt
+    assert '"Mergeado na onda anterior: PRs #a #b."' in prompt, prompt
+
+    entrada = secao(ler(AGENTES / "hr-implementador.md"), "Entrada")
+    linha = next(li for li in entrada.splitlines() if "Mergeado na onda anterior" in li)
+    assert "depois do Mapa" in linha and "origin/main" in linha, linha

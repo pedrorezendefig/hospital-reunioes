@@ -28,7 +28,7 @@ description: 'Executor AFK da fila de issues em ondas: sessão de fundo por onda
 
 | Agente | Esforço | Quando | Nasce com |
 |---|---|---|---|
-| `hr-mapeador` | high | 1 vez por PRD, antes da primeira onda | número do PRD |
+| `hr-mapeador` | high | 1 vez por PRD, antes da primeira onda; de novo só com `Estrutura mudou: sim` na passagem | número do PRD |
 | `hr-implementador` | xhigh | 1 por issue, `isolation: worktree` | issue, PRD, URL do Mapa |
 | `hr-corretor` / `hr-corretor-max` | high / max | must-fix, CI vermelho, conflito, retomada | PR, issue, motivo, achado |
 | `hr-revisor` | high | todo PR, assim que abre | PR, issue |
@@ -52,7 +52,7 @@ Com fila fixa no prompt, use-a: confira só que cada issue está `ready-for-agen
 
 ### 2. Mapa do terreno (1 vez por PRD)
 
-Para cada PRD das issues desta onda: `gh issue view <PRD> --json comments --jq '[.comments[] | select(.authorAssociation == "OWNER" or .authorAssociation == "MEMBER" or .authorAssociation == "COLLABORATOR") | select(.body | startswith("<!-- automacao -->\n## Mapa do terreno"))] | last | .url'`. O filtro de autor é obrigatório (repositório público). Sem Mapa, ou com Mapa anterior ao último PR mergeado do PRD: dispare `hr-mapeador` e espere. Issue sem PRD não tem Mapa; o implementador explora sozinho e você diz isso no prompt dele.
+Para cada PRD das issues desta onda: `gh issue view <PRD> --json comments --jq '[.comments[] | select(.authorAssociation == "OWNER" or .authorAssociation == "MEMBER" or .authorAssociation == "COLLABORATOR") | select(.body | startswith("<!-- automacao -->\n## Mapa do terreno"))] | last | .url'`. O filtro de autor é obrigatório (repositório público). Sem Mapa: dispare `hr-mapeador` e espere. Com Mapa, ele vale para o PRD inteiro: o que mudou depois dele vem na passagem (`Mergeado na onda anterior` e `Estrutura mudou`), e só `Estrutura mudou: sim` daquele PRD dispara o `hr-mapeador` de novo. Issue sem PRD não tem Mapa; o implementador explora sozinho e você diz isso no prompt dele.
 
 ### 3. Lote: implementadores em paralelo
 
