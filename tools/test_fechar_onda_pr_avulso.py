@@ -1097,6 +1097,7 @@ def test_dry_run_da_onda_lista_um_merge_por_pr_sem_branch_de_lote(tmp_path, monk
     [faria] = linhas_com(saida, "faria:")
     assert re.findall(r"merge pela API do PR #(\d+)", faria) == ["7", "8"], faria
     assert "tag v0.10.1 no squash do ultimo" in faria and "um build" in faria, faria
+    assert "registro pela Action pos-merge" in faria and "PR so de docs" not in faria, faria
     assert "onda/" not in saida and "entrega" not in saida.lower(), saida
     # nada sai da máquina
     assert c.main_remota() == c.base and c.coolify() == [] and c.semaforo == []

@@ -24,9 +24,9 @@ mover codigo para fora de `hospital-reunioes/` conta como app. Classe, versao
 e servicos saem do lote inteiro, antes do primeiro merge.
   - app: a sequencia inteira abaixo.
   - ferramenta: so merge pela API depois do CI verde (passos 1 a 4 e 9). Sem
-    versao nova, sem APP_VERSION, sem tag, sem esperar build, sem health, sem PR de
-    registro e sem entrada no history.json. Se o webhook do Coolify disparar
-    build em algum merge, o rabo o cancela, como faz com o build do registro.
+    versao nova, sem APP_VERSION, sem tag, sem esperar build, sem health e sem
+    registro (nenhuma entrada no history.json). Se o webhook do Coolify disparar
+    build em algum merge, o rabo o cancela, como faz com o do commit do registro.
 
 Sequencia (cada passo imprime no maximo uma linha, o 4 uma por PR; sucesso
 cabe em 10 linhas mais uma por PR, fora as da migration):
@@ -89,18 +89,25 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      Com prod de volta e ainda com a trava (issue #999): reabre cada issue do
      lote e mergeia pela API o PR `revert/<chave>` com o revert dos squashes,
      depois do CI dele, cancelando o build que esse merge dispara
-  8. registro num PR so de docs, so com history.json (todos os deploys, sem
-     teto) e state.json (ADR 0062, decisao 9), mergeado pela API; o build que o
-     webhook do Coolify dispara para ele e cancelado (issue #851). Snapshot e
-     draft do Manual nao sao do rabo: a Action do push da main roda os dois
-     depois do registro (ADR 0062, decisao 10)
+  8. registro sem PR (ADR 0064, decisao 6b): o rabo monta a entrada nova do
+     history.json (todos os deploys, sem teto) e o state.json (ADR 0062,
+     decisao 9), grava os dois num arquivo `~/registro-<chave>-<sha>.json` e
+     dispara a Action pos-merge na main por workflow_dispatch, com o arquivo
+     no input `registro`. Ela commita os dois JSONs na main pela deploy key,
+     como github-actions[bot], e no mesmo run tira o draft do Manual dos PRDs
+     do lote e roda o snapshot (ADR 0062, decisao 10). O rabo espera a entrada
+     aparecer no history.json da main, e nao so o fim do run: um push que
+     chega com o disparo na fila do grupo pos-merge o cancela, e o rabo
+     dispara de novo. O build que o webhook do Coolify dispara para o commit do
+     bot e cancelado (issue #851)
   9. limpeza (worktrees, worktrees de agente ja entregues) e soltar o semaforo
 
 Commits que chegam a main:
   - um squash por PR que entrou, "<titulo do PR> (#N)", no PR avulso e na onda;
     a versao nao vira commit: vive no APP_VERSION do Coolify e na tag
-  - o do registro: "chore(deploy): registro do PR #N (vX.Y.Z) (#R)" ou
-    "chore(deploy): registro da onda <sessao> (vX.Y.Z) (#R)"
+  - o do bot da Action pos-merge, com o registro, o snapshot e o draft do
+    Manual: "chore(spec): registro vX.Y.Z, snapshot e draft do Manual
+    pos-merge <sha> [skip ci]"
 No PR avulso, o registro do history.json nomeia PR e issue, sem a onda; na
 onda, cada PR e a issue dele. O campo `sha` do history.json e o do squash do
 ultimo PR: o commit que foi para producao. O registro vem depois, so com docs.
@@ -122,9 +129,12 @@ Codigos de saida:
      imagem anterior, Coolify recusou, ou health ainda ruim), ou o rollback deu
      certo e o revert da saida 6 nao entrou (conflito, CI vermelho ou merge
      recusado): SEMAFORO FICA PRESO e marcado parado, mesma instrucao do 3
-  5  producao ok, mas o PR de registro nao entrou: semaforo solto; mergeie o PR impresso
-     quando o CI dele ficar verde. Ferramenta: merge feito, producao intacta,
-     semaforo solto, mas a arrumacao depois do merge falhou (a linha diz o que falta)
+  5  producao ok, mas a Action nao confirmou o registro em REGISTRO_TIMEOUT_S
+     (15 min) ou o run dela terminou sem ele na main: semaforo solto; a linha
+     `registro:` traz o disparo a mao com o mesmo arquivo, `gh workflow run
+     pos-merge.yml --ref main -F registro=@<arquivo>`. Ferramenta: merge feito,
+     producao intacta, semaforo solto, mas a arrumacao depois do merge falhou
+     (a linha diz o que falta)
   6  rollback feito: o health falhou, a imagem anterior e o APP_VERSION antigo
      voltaram e o health ficou verde de novo; sem registro. A tag vX.Y.Z fica no
      squash ruim, e a proxima versao sai depois dela. Antes de soltar o semaforo,
@@ -1535,7 +1545,7 @@ def main() -> int:
                 print(faria + ("cancela o build dos squashes intermediarios, " if len(infos) > 1 else "")
                       + f"tag v{versao_nova} no squash do ultimo, um build"
                       + "".join(f" ({sid}: imagem do GHCR com a tag do squash, sem build)" for sid in imagem)
-                      + ", health, registro em PR so de docs "
+                      + ", health, registro pela Action pos-merge na main "
                       f"(prds {prds or '[]'}, migrations {migs or '[]'}, services {servicos or '[]'}), limpeza.")
             remover_worktree(raiz, wt)
             wt = None

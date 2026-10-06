@@ -17,7 +17,7 @@ Uma skill, sete arquivos vivos. O time tem sempre um **mapa atualizado** da apli
 A skill executa sempre o mesmo algoritmo (detectar mudança → parsear → gerar → comparar → commit se mudou). Cada gerador é parametrizado pelo `project.json` do repo atual.
 
 Relação com outras skills:
-- **Action no push da `main`**: roda o snapshot depois do PR de registro do rabo, com o ambiente completo, e commita na `main` (ADR 0062, decisão 10). O rabo (`fechar_onda.py`) não roda mais o snapshot.
+- **Action no push da `main`**: roda o snapshot em todo push na `main` e no run que o rabo dispara com o registro, depois de gravá-lo, com o ambiente completo, e commita na `main` (ADR 0062, decisão 10; ADR 0064, decisão 6b). O rabo (`fechar_onda.py`) não roda mais o snapshot.
 - **`/ship`**: usa `/snapshot --diff <base>..HEAD` no Passo 7 pra gerar a seção "Mudanças" do PR body.
 
 ## Sintaxe
@@ -167,7 +167,7 @@ Regenera só 1 arquivo (útil em desenvolvimento da skill ou pra testar geradore
 
 | Skill | Quando interage |
 |---|---|
-| **Action no push da `main`** | Roda o snapshot depois do PR de registro do rabo (`fechar_onda.py`) e commita na `main` (ADR 0062). |
+| **Action no push da `main`** | Roda o snapshot no run que o rabo (`fechar_onda.py`) dispara com o registro, e em todo push na `main`, e commita na `main` (ADR 0062). |
 | **`/ship`** | Invoca `/snapshot --diff <base>..HEAD` no Passo 7 pra preencher "Mudanças" do PR body. |
 
 ---
