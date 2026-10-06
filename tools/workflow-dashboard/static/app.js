@@ -186,7 +186,7 @@ function renderBanner() {
 
 function renderFoot() {
   $('#foot').innerHTML = `
-    <span>tools/workflow-dashboard · somente leitura · fontes: <span class="mono">gh</span> + docs/spec + git</span>
+    <span>Hospital OS · somente leitura · fontes: <span class="mono">gh</span> + docs/spec + git</span>
     <span class="foot-right">coletado às ${esc(fmtDT(S.data.generated_at))}
       <a class="btn-pill outline" href="${esc(S.data.repo_url)}" target="_blank" rel="noopener">${esc(S.data.repo_slug)} <span class="btn-arrow">↗</span></a></span>`;
 }

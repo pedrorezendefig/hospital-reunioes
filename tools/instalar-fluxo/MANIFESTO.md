@@ -72,14 +72,14 @@ Toda skill vai com a pasta inteira (`SKILL.md`, `references/`, `scripts/`, arqui
 | `tools/lint_adr.py` | copiar | |
 | `tools/workflow-dashboard/serve.py`, `collect.py`, `fases.py`, `areas.py`, `diagramas.py`, `static/app.js`, `static/ui.js`, `static/diagramas.js`, `static/vendor/` | copiar | O coração do painel. Não editar. `collect.py` usa o `gh` do diretório corrente, então lê o repositório do DESTINO sozinho. |
 | `tools/workflow-dashboard/static/style.css` | adaptar | **Só o bloco `:root`** (paleta, tints, raios, status, fontes) e o comentário da linha 1. Nenhuma outra linha. |
-| `tools/workflow-dashboard/static/index.html` | adaptar | `<title>`, o `<h1>` ("Aplicativo <span class="accent">Nome</span>"), o `eyebrow` se quiser, e as duas cores do favicon (fundo = `--navy`, círculo = `--brand-light` da paleta escolhida). |
+| `tools/workflow-dashboard/static/index.html` | adaptar | `<title>` ("<Nome> OS"), o `<h1>` ("<Nome> <span class="accent">OS</span>"), o `eyebrow` se quiser, e as duas cores do favicon (fundo = `--navy`, círculo = `--brand-light` da paleta escolhida). |
 | `tools/workflow-dashboard/static/areas.js` | adaptar | `ORDEM_DOM_ROTAS`, as descrições por área, os regex que classificam rota e entidade por área, e o nome do app no diagrama de contexto. Usar as áreas decididas na entrevista. |
 | `tools/workflow-dashboard/static/pessoas.js` | adaptar | Os logins do dicionário `SOCIOS` viram os de quem trabalha no DESTINO (cada um com uma cor fixa); quem não estiver lá ganha cor da paleta sozinho. |
 | `tools/workflow-dashboard/static/content/glossary.js` | adaptar | Trocar "Pedro" pelo nome de quem instala. O resto é vocabulário do fluxo, fica. |
 | `tools/workflow-dashboard/static/content/tabelas.js` | gerar | Resumos das tabelas do DESTINO (a aba Mapa usa como legenda). Sem banco, exportar `{}`. |
 | `tools/workflow-dashboard/install-launchd.sh` | adaptar | Label do plist (`com.<slug>.workflow-dashboard`). macOS só. |
-| `tools/workflow-dashboard/README.md` | adaptar | Nome do projeto e de quem cuida da fila humana. |
-| `tools/workflow-dashboard/tests/` | adaptar | `test_front.py` afirma o título "Aplicativo Hospital": trocar pelo do DESTINO. `test_areas.py` cita o Hospital em fixtures e `test_aba_issues.py` usa os logins dos sócios: trocar o texto, manter as asserções. |
+| `tools/workflow-dashboard/README.md` | adaptar | Título `# <Nome> OS`, nome do projeto e de quem cuida da fila humana. |
+| `tools/workflow-dashboard/tests/` | adaptar | `test_front.py` afirma o título "Hospital OS": trocar por "<Nome> OS". `test_areas.py` cita o Hospital em fixtures e `test_aba_issues.py` usa os logins dos sócios: trocar o texto, manter as asserções. |
 | `tools/instalar-fluxo/` | excluir | O instalador não se instala. |
 
 ## Fora do git da ORIGEM (o roteiro cria no DESTINO)

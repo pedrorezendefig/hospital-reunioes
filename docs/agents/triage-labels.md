@@ -38,7 +38,7 @@ Família **descritiva de tamanho** (não de estado), aplicada pelo `/to-issues` 
 | `fatia:M` | Média — meio período típico (fatia vertical completa, escopo conhecido) |
 | `fatia:G` | Grande — dia cheio ou mais; maior risco/incerteza (muitas camadas, UI nova, integração externa) |
 
-O dashboard usa esses labels para calcular o **tempo típico** de cada fatia: a mediana do **lead time real** (claim → fechamento; sem claim identificável, abertura → fechamento) das fatias fechadas do mesmo tamanho. Bucket com menos de 3 amostras cai na mediana geral. Nunca é estimativa a priori — o número melhora sozinho a cada fatia fechada. Não retro-rotulamos issues antigas; a amostra cresce daqui pra frente. Vocabulário do Plano (onda, caminho crítico) no README de `tools/workflow-dashboard/`.
+O Hospital OS agrupa esses labels no filtro `fatia:` da aba Issues, e a `/onda-enxuta` escolhe por eles o esforço do implementador. Tempo típico, lead time por tamanho e caminho crítico saíram com o Plano (ADR 0062, decisão 3). O vocabulário do painel (fase, funil, raia, tentativa) fica no README de `tools/workflow-dashboard/`.
 
 ## Labels ortogonais (mantidas do fluxo anterior)
 

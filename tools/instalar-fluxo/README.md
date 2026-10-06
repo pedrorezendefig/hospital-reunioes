@@ -1,6 +1,6 @@
 # Instalar o fluxo em outro projeto
 
-Esta pasta exporta o **fluxo de trabalho** deste repositório para qualquer outro projeto: o painel local de 7 abas (Plano, Issues, Produção, Pendências, Mapa, Domínio, Guia), as skills do pipeline (`/grill-with-docs` até `/ship` e `/onda-enxuta`), o catálogo de labels, os CIs de higiene e o contrato de deploy. O design system vai idêntico; só a paleta muda.
+Esta pasta exporta o **fluxo de trabalho** deste repositório para qualquer outro projeto: o Hospital OS (painel local de 5 abas: Issues, PRs, Produção, Mapa, Domínio), as skills do pipeline (`/grill-with-docs` até `/ship` e `/onda-enxuta`), o catálogo de labels, os CIs de higiene e o contrato de deploy. O design system vai idêntico; só a paleta muda.
 
 Não é um prompt solto. É um **roteiro versionado** que um agente Claude Code segue dentro do projeto de destino: explora a base, entrevista quem está instalando (uma pergunta por vez, duas opções, recomendação na frente), copia o que é neutro, adapta o que depende da stack, semeia o domínio e termina com um PR aberto e a primeira pendência humana na fila. Decisão registrada na ADR 0053.
 
