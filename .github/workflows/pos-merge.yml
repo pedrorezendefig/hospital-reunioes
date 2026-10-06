@@ -1,15 +1,18 @@
 name: Pós-merge
 
 # Snapshot e draft do Manual depois de cada push na main (ADR 0062, decisão
-# 10, emendada pela ADR 0065; issue #940). O rabo (fechar_onda.py) grava só a
-# verdade do deploy; o mapa factual (docs/spec/snapshots/, blocos AUTO do
-# docs/ARQUITETURA.md) e o draft das páginas do Manual saem daqui, com o
-# ambiente completo do backend.
+# 10, emendada pela ADR 0065; issue #940), e o registro do deploy que o rabo
+# dispara depois do health (ADR 0064, decisão 6b; issue #1000). O rabo
+# (fechar_onda.py) monta só a verdade do deploy e a entrega aqui; o
+# history.json e o state.json com ela, o mapa factual (docs/spec/snapshots/,
+# blocos AUTO do docs/ARQUITETURA.md) e o draft das páginas do Manual saem
+# daqui, com o ambiente completo do backend.
 #
 # Três jobs (ADR 0065). O `gerar` instala o backend e roda os scripts, sem
 # credencial nenhuma: token só de leitura, que nem fica no .git/config. O
 # `commitar` não instala nada: recebe por artefato só o patch dos três
-# caminhos e empurra direto na main com a deploy key, o único ator em
+# caminhos e dos dois JSONs do registro, confere estes contra o input do
+# rabo e empurra direto na main com a deploy key, o único ator em
 # `bypass_actors` do ruleset (.github/rulesets/main.json). A chave vive num
 # secret do Environment `pos-merge`, restrito à branch main.
 #
@@ -240,7 +243,8 @@ jobs:
           fi
           # Nada nasce nem morre nos três caminhos: o snapshot.py só reescreve
           # os arquivos do TARGET_FILES e os blocos AUTO do ARQUITETURA.md, o
-          # draft só modifica página e o registro só os dois JSONs. Um CLAUDE.md ou uma skill dentro de
+          # draft só modifica página e o registro só os dois JSONs. Um
+          # CLAUDE.md ou uma skill dentro de
           # docs/spec/snapshots/ vira instrução de quem lê o snapshot, agente
           # sem humano incluído. O --include só olha o nome novo: um rename de
           # fora para dentro passaria e apagaria a origem. Sem renames, cada
