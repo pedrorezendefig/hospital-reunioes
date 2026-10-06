@@ -13,6 +13,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+import pytest
+
 RAIZ = Path(__file__).resolve().parent.parent
 SKILLS = RAIZ / ".claude" / "skills"
 AGENTES = RAIZ / ".claude" / "agents"
@@ -198,3 +200,53 @@ def test_o_rabo_grava_app_version_nos_dois_apps_e_cria_a_tag():
     assert "backend e no frontend" in modo and "tag" in modo, modo
     ship = secao(texto("ship"), "Passo 10")
     assert "backend e no frontend" in ship and "tag" in ship, ship
+
+
+# ------------------------------------------- rollback automático (#968)
+
+# O rabo é script e não chama agente (PRD #963): ele volta a imagem anterior e
+# devolve o código; o revert, a issue reaberta, a tentativa e a notificação são
+# de quem o chamou. Skill que não diz isso deixa o defeito na main.
+
+def codigo_do_rabo(nome: str) -> str:
+    fonte = (RAIZ / FECHAR_ONDA).read_text(encoding="utf-8")
+    return re.search(rf"^{nome} = (\d+)$", fonte, re.M).group(1)
+
+
+def fechamento_da_onda() -> str:
+    return re.search(r"^### 6\. Fechamento da onda.*?(?=^### )", texto("onda-enxuta"), re.S | re.M).group(0)
+
+
+def item_da_saida(trecho: str, codigo: str) -> str:
+    itens = [li for li in trecho.splitlines() if f"Saída `{codigo}`" in li]
+    assert len(itens) == 1, f"um item para a saída {codigo}: {itens}"
+    return itens[0]
+
+
+@pytest.mark.parametrize("skill", ["ship", "onda-enxuta"])
+def test_quem_chama_o_rabo_reverte_reabre_conta_e_notifica_no_rollback_feito(skill):
+    trecho = secao(texto("ship"), "Passo 10") if skill == "ship" else fechamento_da_onda()
+    item = item_da_saida(trecho, codigo_do_rabo("EXIT_ROLLBACK"))
+
+    assert "PR de revert" in item and "git revert" in item and "sem rebuild" in item, item
+    assert "gh issue reopen" in item and "ready-for-agent" in item, item
+    assert "linha `health:`" in item, "o comentário leva o que o health respondeu: " + item
+    assert "tentativa" in item, item
+    assert "PushNotification" in item and "rollback disparado no PR" in item, item
+    assert "semáforo" in item and "solto" in item and "/deploy rollback" not in item, item
+
+
+@pytest.mark.parametrize("skill", ["ship", "onda-enxuta"])
+def test_saida_4_continua_sendo_o_rollback_que_falhou_com_semaforo_preso(skill):
+    trecho = texto("ship") if skill == "ship" else fechamento_da_onda()
+    saida_4 = [li for li in trecho.splitlines() if re.search(r"\b4 health|`4`", li)]
+    assert saida_4, "a saída 4 segue descrita"
+    assert any(re.search(r"rollback\b.*\bfalh", li) and "preso" in li for li in saida_4), saida_4
+
+
+def test_tabelas_de_saida_listam_o_rollback_feito():
+    codigo = codigo_do_rabo("EXIT_ROLLBACK")
+    tabela = next(li for li in texto("onda-enxuta").splitlines() if li.startswith("| `scripts/fechar_onda.py"))
+    assert f"{codigo} rollback feito" in tabela, tabela
+    falha = next(li for li in texto("ship").splitlines() if "diz o que fazer pelo código de saída" in li)
+    assert f"{codigo} rollback feito" in falha, falha

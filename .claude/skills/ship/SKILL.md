@@ -370,6 +370,10 @@ python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER"
 
 Um PR só e sem `--sessao` é o modo PR avulso (chave do semáforo `pr-<N>`). O script faz, nesta ordem: pré-condições (PR verde e mergeável, número e `sha256` das migrations), semáforo, versão nova pelo tipo dos commits, sem commit (issue #967), a `origin/main` trazida por merge se a branch ficou atrás (e o CI verde nesse head novo), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida, ADR 0061), tag `vX.Y.Z` no squash, um build, health com conferência de versão, registro (`state.json` e `history.json`) num PR só de docs mergeado do mesmo jeito, e limpeza. Snapshot e draft do Manual não são do rabo: uma Action no push da `main` cuida deles depois do registro (ADR 0062). O registro nomeia o PR e a issue. Códigos de saída e o que fazer em cada um: docstring do script.
 
+**Saída `6` (rollback feito):** o health falhou e o rabo já voltou cada app do lote à imagem anterior no Coolify e ao `APP_VERSION` antigo, conferiu o health de novo e deixou o semáforo solto; produção está boa, mas o merge ruim segue na `main`. Quem rodou o rabo faz, nesta ordem: (1) abre o PR de revert do squash que a linha `rollback:` imprime (`git revert --no-edit <sha>` numa branch `revert/pr-<N>` a partir da `origin/main`, depois `gh pr create`), sem rebuild, porque a imagem no ar já é a anterior; ele vai na frente do próximo rabo, para o próximo deploy não carregar o defeito; (2) `gh issue reopen <issue>`, `gh issue edit <issue> --remove-label in-progress --add-label ready-for-agent` e um `gh issue comment` com `<!-- automacao -->` na primeira linha e a linha `health:` do rabo (o que o health respondeu); (3) conta uma tentativa da fatia e a escreve no comentário (`tentativa k de 3`; na terceira, `ready-for-human` no lugar de `ready-for-agent`); (4) notifica pela ferramenta `PushNotification`: "rollback disparado no PR #N, versão vX.Y.Z voltou", com a versão da linha `rollback:`.
+
+Saída `4` (health) é o rollback automático que falhou: o semáforo fica preso e o caminho é o `/deploy rollback`.
+
 ---
 
 ## Passo 10.5: Pendências humanas (fila `ready-for-human`)
@@ -464,7 +468,7 @@ A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem de
 
 ### Falha no rabo
 
-- Não é do `/ship`: o `fechar_onda.py` diz o que fazer pelo código de saída (1 pré-condição, 2 conflito ou push rejeitado, 3 build, 4 health; o 3 e o 4 deixam o semáforo preso para o `/deploy rollback`).
+- Não é do `/ship`: o `fechar_onda.py` diz o que fazer pelo código de saída (1 pré-condição, 2 conflito ou push rejeitado, 3 build, 4 health com o rollback automático que falhou; o 3 e o 4 deixam o semáforo preso para o `/deploy rollback`; 6 rollback feito, com semáforo solto: revert, issue reaberta e notificação, como diz o Passo 10).
 
 ### Falha em Passo 11 (Resumo final / Discord)
 

@@ -54,7 +54,7 @@ Para ir de `v0.x.y` direto pra `v1.0.0`, marque o commit do PR como breaking (`f
 
 **Coolify (gravado pelo rabo)**:
 - Antes do merge (que dispara o build pelo webhook), o `fechar_onda.py` roda `coolify app env update <uuid> APP_VERSION --value "<versão nova>"` no backend e no frontend. A chave é **posicional**: `--key` é o flag de rename, não serve pra apontar a variável.
-- Pós-health, valida que `GET /api/health` retorna a versão esperada. Mismatch → rollback: a skill para e entrega o comando pronto (`coolify app rollback run`); quem dispara é o humano, porque comando de build é negado na sessão.
+- Pós-health, valida que `GET /api/health` retorna a versão esperada. Mismatch (ou health ruim) → rollback automático (issue #968): o rabo devolve o `APP_VERSION` antigo aos dois apps, volta cada app do lote à imagem anterior (`coolify app rollback run`), confere o health na versão antiga e sai com 6. Se o rollback também falhar, sai com 4 e o semáforo fica preso para o `/deploy rollback`.
 
 ## Release notes
 
