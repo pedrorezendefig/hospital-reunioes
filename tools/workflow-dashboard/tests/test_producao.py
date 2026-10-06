@@ -304,6 +304,29 @@ def test_versao_aberta_mostra_prs_issues_migration_health_duracao_env_e_notas(tm
         assert so_aberta not in card_fechado, so_aberta
 
 
+# ---------- faixa do topo: state.json ----------
+
+
+@com_node
+def test_faixa_do_topo_mostra_a_versao_no_ar_e_cada_servico_com_o_health_do_state(tmp_path):
+    # a versão no ar vem do state.json, não do topo do history
+    estado = {**DADOS["state"], "last_app_version": "0.170.0"}
+    html = _app(tmp_path, "_view.innerHTML", dados={**DADOS, "state": estado})
+    faixa = re.search(r'<section class="prod-band[\s\S]*?</section>', html).group(0)
+    celulas = re.findall(
+        r'class="prod-cell rv ?([^"]*)"[^>]*>\s*<div class="prod-v">([^<]*)</div>\s*'
+        r'<div class="prod-k">([^<]*)</div>\s*<div class="prod-s">([^<]*)</div>',
+        faixa,
+    )
+    assert celulas == [
+        ("", "v0.170.0", "no ar", "atualizado 6 out, 16:38"),
+        ("prod-ok", "healthy", "backend", "HTTP 200 · 143 ms · 6 out, 16:38"),
+        ("prod-ok", "healthy", "frontend", "HTTP 200 · 151 ms · 6 out, 16:38"),
+        ("prod-warn", "warning", "supabase", "sem HTTP · 6 out, 16:38"),
+    ]
+    assert "history.json + state.json" in faixa
+
+
 def _bloco_producao():
     """O bloco de CSS delimitado da aba Produção, do marcador de abertura ao de fim."""
     m = re.search(r"/\* =+ PRODUÇÃO[^*]*\*/(.*?)/\* =+ fim PRODUÇÃO[^*]*\*/", CSS, re.S)
@@ -317,15 +340,12 @@ def _regra(css: str, seletor: str) -> str:
     return m.group(0)
 
 
-# ---------- stats band navy 4-up ----------
+# ---------- faixa navy (padrão Baseline, issue 259) ----------
 
 
-def test_stats_band_navy_com_os_quatro_indicadores():
-    assert "prod-band" in APP_JS, "renderDeploys sem a faixa navy de estatísticas"
-    for rotulo in ("deploys", "saudáveis", "build médio", "última versão"):
-        assert rotulo in APP_JS, f"indicador '{rotulo}' ausente da faixa"
+def test_faixa_do_topo_em_fundo_navy():
     banda = _regra(_bloco_producao(), ".prod-band")
-    assert "var(--navy)" in banda, "faixa de estatísticas sem fundo navy"
+    assert "var(--navy)" in banda, "faixa do topo sem fundo navy"
 
 
 def test_celula_com_borda_superior_translucida_valor_gigante_e_rotulo_65():
@@ -349,17 +369,17 @@ def test_cabecalho_da_faixa_usa_eyebrow():
     assert m, "faixa navy sem cabeçalho eyebrow"
 
 
-# ---------- timeline nova ----------
+# ---------- lista de versões em cartões claros ----------
 
 
-def test_timeline_em_cartoes_claros_com_hairlines():
-    assert "pd-timeline" in APP_JS, "renderDeploys sem a timeline nova"
-    assert "tl-item" not in APP_JS, "timeline antiga (tl-item) ainda no render"
+def test_versoes_em_cartoes_claros_com_hairlines():
     bloco = _bloco_producao()
     cartao = _regra(bloco, ".pd-card")
-    assert "var(--hairline)" in cartao, "cartão do deploy sem hairline dos tokens"
+    assert "var(--hairline)" in cartao, "cartão da versão sem hairline dos tokens"
     corpo = _regra(bloco, ".pd-body")
     assert "var(--hairline)" in corpo, "corpo expandido sem hairline de separação"
+    entre = _regra(bloco, ".pd-dep + .pd-dep")
+    assert "var(--hairline)" in entre, "deploys da mesma versão sem hairline entre eles"
 
 
 # ---------- sparkline ----------

@@ -749,32 +749,37 @@ function versaoCard(v, pos) {
   </div>`;
 }
 
+const STATUS_CLS = { healthy: 'prod-ok', warning: 'prod-warn' };
+
+/* health do serviço pelo último check gravado no state.json */
+function healthTxt(hc) {
+  const h = hc || {};
+  return [h.http_status ? `HTTP ${h.http_status}` : 'sem HTTP', h.latency_ms != null ? `${h.latency_ms} ms` : '',
+    h.at ? fmtDT(h.at) : ''].filter(Boolean).join(' · ');
+}
+
 function renderDeploys() {
   const dep = S.data.history;
-  const healthy = dep.filter(x => x.result === 'healthy');
   const durs = dep.map(x => x.duration_seconds).filter(x => x != null);
-  const avg = durs.length ? durs.reduce((a, b) => a + b, 0) / durs.length : null;
-  const first = dep[dep.length - 1], last = dep[0];
-  const pct = dep.length ? Math.round(healthy.length / dep.length * 100) : 0;
-  const pctCls = pct === 100 ? 'prod-ok' : pct >= 80 ? 'prod-warn' : 'prod-bad';
-  const ultima = last && last.app_version ? depVer(last.app_version) : '·';
+  const st = S.data.state || {};
+  // faixa do topo: a versão no ar e cada serviço com o health, do state.json
   const cells = [
-    { k: 'deploys', v: String(dep.length), s: `${fmtD(first && first.at)} → ${fmtD(last && last.at)}` },
-    { k: 'saudáveis', v: `${pct}<small>%</small>`, s: `${dep.length - healthy.length} com problema`, cls: pctCls },
-    { k: 'build médio', v: avg ? durS(avg) : '·', s: 'duração por deploy' },
-    { k: 'última versão', v: esc(ultima), s: 'no ar em produção' },
+    { k: 'no ar', v: depVer(st.last_app_version) || '·', s: `atualizado ${fmtDT(st.updated_at)}` },
+    ...(st.services || []).map(s => ({
+      k: s.id, v: s.status || '?', s: healthTxt(s.last_health_check), cls: STATUS_CLS[s.status] || 'prod-bad',
+    })),
   ];
 
   return `
   <section class="prod-band rv" style="--i:0">
     <div class="prod-band-head">
-      <span class="eyebrow">produção · linha do tempo de deploys</span>
-      <span class="prod-band-src">history.json + CHANGELOG.md</span>
+      <span class="eyebrow">produção · versão no ar e serviços</span>
+      <span class="prod-band-src">history.json + state.json</span>
     </div>
     <div class="prod-stats">
       ${cells.map((c, i) => `
       <div class="prod-cell rv ${c.cls || ''}" style="--i:${i + 1}">
-        <div class="prod-v">${c.v}</div>
+        <div class="prod-v">${esc(c.v)}</div>
         <div class="prod-k">${esc(c.k)}</div>
         <div class="prod-s">${esc(c.s)}</div>
       </div>`).join('')}
