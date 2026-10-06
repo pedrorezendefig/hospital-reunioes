@@ -1,0 +1,33 @@
+---
+status: accepted
+amends: 0061, 0063
+---
+
+# Revisão só de must-fix em uma rodada, e merge PR a PR sem exigir "em dia com a base"
+
+Decisão do Pedro (06/out/2026, grilling sobre o tempo do rabo). Um dia depois da ADR 0063, com a versão sem commit já em produção (#967, v0.163.2), os três últimos PRs de app levaram 918, 928 e 989 segundos do `fechar_onda.py`. O semáforo em si custa segundos (é um `mkdir` em `/tmp` que serializa builds na mesma máquina) e fica. O que resta de tempo é o CI que roda de novo sobre código que já passou no CI, e o que resta de atenção humana é a lista de should-fix que o revisor escreve e que, sem condição no "vai" (que a 0063 já tirou), não muda o que entra. Esta ADR corta os dois.
+
+## Decisões
+
+1. **O revisor reporta só o que impede o merge.** O veredito do `hr-revisor` (e do `/code-review` e do spec×diff no `/ship`) tem uma lista: must-fix (bug que o teste não pega, teste vácuo, spec não cumprida, segredo, regressão de permissão). Should-fix, nits e "observações para issue futura" deixam de existir no veredito. **Uma rodada de correção**: must-fix dispara o `hr-corretor` uma vez; se a segunda revisão ainda tem must-fix, a fatia sai da onda com `ready-for-human` e o lote segue sem ela. O `hr-revisor-seguranca` continua em caminho sensível, com a mesma régua (só must-fix), e o must-fix dele bloqueia o merge sem parar no humano (ADR 0063, decisão 1). Rejeitado: tirar o revisor de código e ficar só com CI (o CI não pega teste vácuo nem spec não cumprida, e o revisor roda em paralelo com o CI, custando minutos); duas rodadas (a segunda falha é quase sempre o mesmo problema mal entendido, e o `hr-corretor-max` já existe para isso).
+
+2. **O ruleset da `main` deixa de exigir a branch em dia com a base.** `strict_required_status_checks_policy` passa a `false` em `.github/rulesets/main.json`. Continuam: PR obrigatório, os três checks do `ci.yml` verdes no head do PR, sem force push, sem delete, sem bypass. O CI de push na `main` (já existe) é o detector tardio: dois PRs que passam separados e quebram juntos aparecem vermelhos na `main` e viram correção para frente, nunca rollback. Rejeitado: manter a exigência (são 5 a 9 min de CI repetido por rodada, e a regra "a `main` andou no meio, exit 2, roda de novo" nasce dela); exigir só na onda (duas regras para o mesmo merge).
+
+3. **O rabo mergeia PR a PR pela API, em ordem, sem branch `onda/<sessão>` e sem PR de entrega.** Cada PR do lote entra com squash no próprio número ("<título> (#N)"), como o avulso. A onda continua um build: o rabo cancela o deploy que o webhook do Coolify dispara para cada merge intermediário e deixa buildar só o último (o mesmo mecanismo que já cancela o build do registro, issue #851). A tag `vX.Y.Z` vai no squash do último PR do lote; `history.json` e `CHANGELOG` listam todos os PRs e issues do lote, como hoje. Rejeitado: manter a branch de entrega (ela existia para atender "em dia com a base" com um CI só; sem a exigência, é um CI, um PR e dois commits de merge a mais por onda).
+
+## Emenda à ADR 0061
+
+- **Decisão 3 (`main` protegida).** "CI obrigatório e atualizado com a base" passa a "CI obrigatório no head do PR". O resto da decisão continua.
+- **Emenda de 02/10 (o rabo com a `main` protegida).** Saem a branch `onda/<sessão>` com merges `--no-ff`, o PR de entrega com `Closes` e a frase "uma rodada que encontra a `main` andando no meio do CI para com código 2". Fica: merge pela API com squash conferindo o `sha` do head, PR de registro só em PR de app, ruleset sem bypass, `tools/test_ruleset_main.py` amarrando os checks ao `ci.yml`.
+- **Emenda à ADR 0035 (gates de review).** "No máximo 2 rodadas de correção" passa a uma rodada, e o veredito perde should-fix e nits.
+
+## Emenda à ADR 0063
+
+- **Decisão 1.** O humano continua acionado só em migration, fatia que esgotou as tentativas e rollback; "esgotou" agora inclui a segunda revisão com must-fix. O teto de 3 tentativas por fatia (ADR 0022) continua para CI vermelho e conflito.
+- **Decisão 4 (rabo automático).** "Mergeia os PRs verdes e limpos da onda num rabo só" continua, agora PR a PR, sem PR de entrega.
+
+## Consequências
+
+- Três fatias: revisor e `/ship` com veredito só de must-fix e uma rodada (prompts dos agentes `hr-revisor`, `hr-revisor-seguranca`, `hr-corretor`, skill `/onda-enxuta` e `/ship`); ruleset sem "em dia com a base" (`main.json`, `tools/test_ruleset_main.py`, `docs/onboarding/dev.md`; aplicar é do admin, à mão, pela tela do GitHub, porque o token do agente não tem Administration, ADR 0063); rabo PR a PR (`fechar_onda.py` e os testes dele, docstring, `/onda-enxuta`, `/ship`, `CLAUDE.md`).
+- A ordem dos PRs no `--prs` continua sendo a ordem de merge. Conflito de um PR com a `main` depois do merge do anterior é exit 2 só daquele PR: os já mergeados ficam, e o rabo sobe o que entrou.
+- Meta: PR de app com a `main` quieta ou não, do PR verde à produção em 6 a 8 min (build + health + registro), sem CI dentro do rabo; onda de N PRs no mesmo tempo de um PR.
