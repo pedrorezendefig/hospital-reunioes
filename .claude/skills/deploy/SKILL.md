@@ -431,7 +431,7 @@ Apresentar ao humano e **não prosseguir** até ele confirmar que aplicou:
   5. Rodar a query de verificação e conferir a contagem de linhas esperada.
 - Pedir confirmação explícita ("apliquei / deu certo") antes de seguir.
 
-> No fluxo `/ship` este gate é **antecipado para antes do merge** (ver `/ship` Passo 8.6), pois o merge dispara o auto-build no Coolify — o schema precisa existir **antes** do código novo subir. No `/deploy` standalone, se a migration é pré-requisito do código já em produção, há uma janela curta entre o deploy e a confirmação: aplique o quanto antes.
+> No fluxo `/ship` este gate é **antecipado para antes do merge** (o `fechar_onda.py` espera a migration no `/api/health`), pois o merge dispara o auto-build no Coolify — o schema precisa existir **antes** do código novo subir. No `/deploy` standalone, se a migration é pré-requisito do código já em produção, há uma janela curta entre o deploy e a confirmação: aplique o quanto antes.
 
 #### 6.4 Verificação pós-migration
 
