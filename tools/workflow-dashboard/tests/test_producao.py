@@ -304,6 +304,46 @@ def test_versao_aberta_mostra_prs_issues_migration_health_duracao_env_e_notas(tm
         assert so_aberta not in card_fechado, so_aberta
 
 
+# ---------- #producao/vX e o chip de versão ----------
+
+
+def _abertas(html):
+    """(versão, em destaque?) das versões abertas, na ordem da tela."""
+    return [(v, destaque) for v, destaque, card in _versoes(html) if "pd-body" in card]
+
+
+@com_node
+@pytest.mark.parametrize(
+    "versao, shas",
+    [
+        ("v0.161.0", ("ccc3333", "bbb2222")),  # as duas subidas da versão
+        ("v0.160.0", ("eee5555",)),  # depois do grupo: a posição na tela não é o índice no history
+    ],
+)
+def test_hash_da_versao_abre_a_versao_inteira_com_destaque(tmp_path, versao, shas):
+    html = _app(tmp_path, "_view.innerHTML", hash_inicial=f"#producao/{versao}")
+    assert _abertas(html) == [(versao, True)]
+    assert [v for v, destaque, _ in _versoes(html) if destaque] == [versao]
+    card = next(card for v, _, card in _versoes(html) if v == versao)
+    assert all(sha in card.split('class="pd-body"')[1] for sha in shas)
+
+
+@com_node
+def test_chip_de_versao_no_card_da_issue_leva_a_versao_aberta_com_destaque(tmp_path):
+    href, tab, item, html = _app(
+        tmp_path,
+        "[_href, S.tab, S.item, _view.innerHTML]",
+        hash_inicial="#issues",
+        antes="""
+        const _href = issueCard(S.data.github.issues[0], 0).match(/class="chip chip-versao" href="([^"]*)"/)[1];
+        _navegar(_href);
+        """,
+    )
+    assert href == "#producao/v0.161.0"
+    assert (tab, item) == ("producao", "v0.161.0")
+    assert _abertas(html) == [("v0.161.0", True)]
+
+
 # ---------- faixa do topo: state.json ----------
 
 
