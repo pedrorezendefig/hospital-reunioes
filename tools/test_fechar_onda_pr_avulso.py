@@ -846,6 +846,38 @@ def test_segundo_pr_com_merge_recusado_fica_de_fora_e_o_primeiro_sobe_com_saida_
     assert fechou.startswith("onda onda-x fechada sem #8") and "PRs #7 " in fechou, fechou
 
 
+def test_falha_inesperada_do_gh_no_segundo_pr_fica_de_fora_e_o_primeiro_sobe(
+    tmp_path, monkeypatch, capsys
+):
+    """Depois do primeiro squash, uma falha que não é conflito nem entrega
+    recusada (um 502 do `gh` no polling do CI do 2º PR) não pode virar saída 3
+    com o semáforo preso: o PR fica de fora com a causa e o que entrou segue
+    para build, health e registro (revisão do PR #1013)."""
+    fo = carregar_fechar_onda()
+    c = onda_de_dois(tmp_path)
+    preparar(fo, monkeypatch, c)
+    gh_json = fo.gh_json
+
+    def gh_502_no_8(args, cwd=None):
+        if args[:3] == ["pr", "view", "8"] and c.prs[7]["state"] == "MERGED":
+            raise RuntimeError("gh pr view 8 -> HTTP 502: Bad Gateway")
+        return gh_json(args, cwd)
+
+    monkeypatch.setattr(fo, "gh_json", gh_502_no_8)
+
+    assert rodar_onda(fo, monkeypatch, c, [7, 8]) == fo.EXIT_MERGE
+
+    primeiro, registro = c.merges
+    assert primeiro["pr"] == 7 and registro["branch"].startswith("registro/"), c.merges
+    assert c.prs[8]["state"] == "OPEN"
+    assert c.esperados == [primeiro["main"]] and c.healths == [("backend", "0.10.1")]
+    assert c.semaforo == [("pegar", "onda-x"), ("soltar", "onda-x")]
+    saida = capsys.readouterr().out
+    fora = [li for li in saida.splitlines() if li.startswith("de fora:")]
+    assert len(fora) == 1 and "PR #8" in fora[0] and "502" in fora[0], fora
+    assert "rollback" not in saida, saida
+
+
 def test_history_da_onda_lista_os_prs_e_as_issues_do_lote(tmp_path, monkeypatch):
     fo = carregar_fechar_onda()
     c = onda_de_dois(tmp_path)

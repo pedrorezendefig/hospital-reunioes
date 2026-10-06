@@ -54,8 +54,9 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      APP_VERSION no backend e no frontend do Coolify (o backend a le no runtime,
      o frontend no build, pelo ARG do Dockerfile). PR que nao mergeia (conflito
      com a main depois do anterior, push recusado, CI vermelho, head que andou,
-     merge recusado) imprime uma linha `de fora:` e o lote segue sem ele; os ja
-     mergeados ficam
+     merge recusado, ou erro inesperado do gh ou do git depois do primeiro
+     merge) imprime uma linha `de fora:` com a causa e o lote segue sem ele; os
+     ja mergeados ficam
   5. tag vX.Y.Z no squash do ultimo PR que entrou, pela API (tag que falha nao
      para o deploy)
   6. um build: o deploy que o webhook do Coolify dispara para cada squash
@@ -86,7 +87,8 @@ Codigos de saida:
   0  todos os PRs na main, health verde, registro na main (ferramenta: merges na main)
   1  pre-condicao falhou ou trava velha: nada foi tocado
   2  algum PR ficou de fora (conflito com a main, push na branch rejeitado, CI
-     vermelho, head que andou ou merge recusado), cada um com a linha `de fora:`;
+     vermelho, head que andou, merge recusado ou erro inesperado do gh ou do git
+     depois do primeiro merge), cada um com a linha `de fora:`;
      os que entraram seguem o fluxo inteiro e o semaforo e solto. Nenhum entrou:
      nada na main, worktree removido, semaforo solto. Rode de novo so com os de
      fora, depois de corrigir. Com 3 a 6, as linhas `de fora:` saem do mesmo jeito
@@ -1182,6 +1184,15 @@ def main() -> int:
             except EntregaFalhou as e:
                 de_fora.append(n)
                 print(f"de fora: PR #{n}, {e}.")
+                continue
+            except Exception as e:  # noqa: BLE001
+                # antes do primeiro squash nada entrou: segue o tratamento de fora do laco (saida 2).
+                # Depois dele, um 502 do gh ou um git que falhou nao pode largar na main o que
+                # ja entrou sem build, health nem registro: o PR fica de fora com a causa
+                if not mergeados:
+                    raise
+                de_fora.append(n)
+                print(f"de fora: PR #{n}, falha inesperada ao preparar ou mergear ({str(e)[:200]}).")
                 continue
             mergeados.append((info, sha, t))
             print(f"merge: PR #{n} na main pela API, squash {sha[:8]}"
