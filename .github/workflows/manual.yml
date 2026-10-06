@@ -30,6 +30,7 @@ on:
       - '.claude/skills/pegar-issue/**'
       - '.github/workflows/manual.yml'
       - '.github/workflows/ci.yml'
+      - '.github/workflows/pos-merge.yml'
       - '.github/rulesets/**'
   pull_request:
     branches: [main]
@@ -62,6 +63,8 @@ on:
       # O ruleset da main exige os jobs do ci.yml pelo nome (issue #910): o
       # teste em tools/ que amarra os dois roda quando qualquer um muda.
       - '.github/workflows/ci.yml'
+      # A Action pós-merge (issue #940): o contrato dela mora em tools/.
+      - '.github/workflows/pos-merge.yml'
       - '.github/rulesets/**'
 
 jobs:

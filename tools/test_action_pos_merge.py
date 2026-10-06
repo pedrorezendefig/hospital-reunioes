@@ -298,3 +298,12 @@ def test_um_run_por_vez_e_o_draft_nao_se_perde_com_o_snapshot_vermelho():
             < ordem.index(passo("Snapshot")["name"])
             < ordem.index(passo("Commitar")["name"]))
     assert passo("Commitar")["if"] == "${{ !cancelled() }}"
+
+
+def test_estes_testes_rodam_quando_so_o_workflow_muda():
+    """Os testes de `tools/` rodam no `manual.yml`, que só acorda pelos caminhos
+    dele: PR que mexesse só no YAML entraria sem este contrato rodar."""
+    manual = yaml.safe_load((RAIZ / ".github" / "workflows" / "manual.yml").read_text(encoding="utf-8"))
+    on = manual["on"] if "on" in manual else manual[True]
+    for evento in ("push", "pull_request"):
+        assert ".github/workflows/pos-merge.yml" in on[evento]["paths"], evento
