@@ -1,6 +1,6 @@
 # ENTIDADES.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-04T21:49-0300 -->
+<!-- last_update: 2026-10-06T22:52+0000 -->
 
 Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 
@@ -897,6 +897,15 @@ Modelo de dados do Hospital Reuniões. Tabelas no Postgres (via Supabase).
 | `created_at` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
 | `motivo_sem_binario` | `TEXT` | — | — | — |
 
+## migracoes_aplicadas
+
+> Origem: `114_migracoes_aplicadas.sql`
+
+| Campo | Tipo | Constraints | Default | FK |
+|-------|------|-------------|---------|-----|
+| `numero` | `INTEGER` | PK | — | — |
+| `aplicada_em` | `TIMESTAMPTZ` | NOT NULL | `now()` | — |
+
 ---
 
-**Resumo:** 42 tabelas vivas.
+**Resumo:** 43 tabelas vivas.

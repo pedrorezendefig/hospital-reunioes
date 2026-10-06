@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-04T21:49-0300 -->
+<!-- last_update: 2026-10-06T22:52+0000 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -457,6 +457,10 @@ erDiagram
         TIMESTAMPTZ created_at
         _ mais_colunas "+1"
     }
+    migracoes_aplicadas {
+        INTEGER numero PK
+        TIMESTAMPTZ aplicada_em
+    }
 ```
 
 ## Indexes principais
@@ -562,4 +566,4 @@ erDiagram
 | `tecnologia_conversas` | `idx_tecnologia_conversas_demanda` | `demanda_id, criado_em` | `102_tecnologia_fundacao.sql` |
 
 ---
-**Resumo:** 42 tabelas · 47 relacionamentos FK detectados.
+**Resumo:** 43 tabelas · 47 relacionamentos FK detectados.
