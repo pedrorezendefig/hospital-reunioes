@@ -79,7 +79,7 @@ Revoga, na decisão 5, o agrupamento ligado por padrão, a herança do dono do P
 
 ## Emenda de 05/10/2026: responsável cai em quem criou (decisão 5)
 
-> **Revogada** pela emenda de 06/10/2026 da ADR 0062 (issue #942): no painel, responsável é só quem está designado; sem assignee, a issue é "ninguém assumiu", e o autor fica no card só como informação. O texto abaixo é histórico.
+> **Revogada** pela emenda de 06/10/2026 da ADR 0062 (issue #942): no painel, responsável é só quem está designado; sem assignee, a issue é "ninguém assumiu", e o autor fica no card só como informação. O texto abaixo é histórico. **Restaurada no filtro de responsável** pela issue #1039: veja a nota no fim da emenda de 06/10/2026 da ADR 0062.
 
 Com o filtro da emenda de 02/10, 120 issues apareciam "sem responsável", 32 delas abertas, embora toda issue nasça do Claude Code de alguém. O Pedro quer que nenhuma issue fique sem dono no painel.
 

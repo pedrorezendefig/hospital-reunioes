@@ -46,7 +46,7 @@ O método de trabalho (o que era a aba Guia) vive em `docs/onboarding/`.
 
 - **Fase**: em que pé está a issue, derivado só de fatos do GitHub (ADR 0062, decisão 4): Triagem, Fila, Bloqueada, Em andamento, PR aberto, Mergeada, Em produção, Humana, Encerrada sem PR. Quem calcula é o `fases.py`; o front só desenha.
 - **Funil**: a faixa das nove fases com a contagem de cada uma, no total ou de um responsável.
-- **Responsável**: quem assumiu a issue (assignee). Quem só criou aparece no card como informação, mas não conta; "ninguém assumiu" são as issues sem assignee.
+- **Responsável**: quem assumiu a issue (assignee) e, sem assignee, quem criou (issue #1039); quem assumiu manda, então a issue criada por um e atribuída a outro é só do outro. A issue que entra pelo autor mostra a marca `✎ criou` no card. "ninguém assumiu" são as issues sem assignee: a mesma issue pode aparecer no chip do autor e em "ninguém assumiu", de propósito. O funil filtrado segue a mesma regra; a cor dos nós das ondas e as raias da aba PRs seguem só o assignee.
 - **Branch criada**: sub-estado de Em andamento; existe branch remota da issue (convenção `<type>/<slug>-<N>`) e ainda não há PR. É fato do GitHub, vale para qualquer sócio; worktree é local e não entra.
 - **Raia**: a linha de uma pessoa no quadro da aba PRs, na cor dela. O PR cai na raia de quem assumiu a issue que ele fecha; sem assignee, na raia "ninguém assumiu".
 - **Tentativa**: PR fechado sem merge; o próximo PR da mesma issue aparece na linha do tempo como "novo PR".

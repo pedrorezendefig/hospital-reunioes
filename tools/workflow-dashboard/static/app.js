@@ -310,13 +310,19 @@ const FASES = [
 const PREFIXOS_LABEL = ['type', 'area', 'fatia'];
 const LABEL_HUMANA = 'ready-for-human';
 
-/* Responsável = quem assumiu (assignee); quem só criou a issue não conta.
-   SEM_RESP é o "ninguém assumiu": issues sem assignee. Mesmo valor do
-   SEM_RESPONSAVEL do fases.py, chave das contagens do funil. */
+/* Responsável = quem assumiu (assignee); sem assignee, quem criou (#1039),
+   e o card ganha a marca "criou". Quem assumiu manda: criada por um e
+   atribuída a outro é só do outro. SEM_RESP é o "ninguém assumiu": issues sem
+   assignee. Mesmo valor e mesma regra do SEM_RESPONSAVEL do fases.py, chave
+   das contagens do funil. */
 const SEM_RESP = '(sem)';
 
+function responsaveis(i) {
+  return i.assignees.length ? i.assignees : (i.author ? [i.author] : []);
+}
+
 function doResponsavel(i, resp) {
-  return resp === SEM_RESP ? i.assignees.length === 0 : i.assignees.includes(resp);
+  return resp === SEM_RESP ? i.assignees.length === 0 : responsaveis(i).includes(resp);
 }
 
 function faseDe(i) {
@@ -400,7 +406,7 @@ function filtrosHtml(iss) {
   const estados = [['all', 'todas'], ['OPEN', 'abertas'], ['CLOSED', 'fechadas']]
     .map(([v, t]) => chipFiltro('fstate', v, f.state === v, t)).join('');
   const humana = `<button type="button" class="fchip fhumana ${f.humana ? 'on' : ''}" data-act="fhumana" data-v="1" aria-pressed="${f.humana}">${LABEL_HUMANA} <span class="tab-count">${humanas}</span></button>`;
-  const pessoas = [...new Set(iss.flatMap(i => i.assignees))].sort();
+  const pessoas = [...new Set(iss.flatMap(responsaveis))].sort();
   const prds = iss.filter(i => i.is_prd && i.state === 'OPEN').sort((a, b) => b.number - a.number);
   return `
   <div class="filtros rv">
@@ -444,8 +450,8 @@ function pessoaHtml(login) {
 
 function pessoasDoCard(i) {
   if (i.assignees.length) return i.assignees.map(pessoaHtml).join('');
-  // sem assignee: ninguém assumiu; quem criou fica só como informação
-  return pessoaHtml(null) + (i.author ? `<span class="chip autor">✎ criada por ${esc(i.author)}</span>` : '');
+  // sem assignee: ninguém assumiu; a issue entra no filtro de quem criou, com a marca
+  return pessoaHtml(null) + (i.author ? `<span class="chip autor">✎ criou: ${esc(i.author)}</span>` : '');
 }
 
 const idadeTxt = i => i.state === 'OPEN' ? `aberta ${ago(i.created_at)}` : `fechada ${fmtD(i.closed_at)}`;

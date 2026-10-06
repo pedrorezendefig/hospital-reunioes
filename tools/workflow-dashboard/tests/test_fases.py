@@ -576,16 +576,33 @@ def test_funil_conta_as_nove_fases_no_total_e_por_responsavel():
     assert funil["total"]["em_andamento"] == 1
     assert funil["total"]["humana"] == 1
     assert funil["total"]["pr_aberto"] == 0
-    # responsável é só quem assumiu (#942): quem apenas criou não ganha contagem
+    # responsável é quem assumiu; sem assignee, quem criou (#1039)
     assert funil["por_responsavel"]["bia"]["em_andamento"] == 1
     assert funil["por_responsavel"]["bia"]["humana"] == 1
     assert funil["por_responsavel"]["caio"]["em_andamento"] == 1
-    assert "ana" not in funil["por_responsavel"]
+    assert funil["por_responsavel"]["ana"]["triagem"] == 1
+    assert funil["por_responsavel"]["ana"]["fila"] == 1
+    assert sum(funil["por_responsavel"]["ana"].values()) == 2  # a 92 e a 93 ela criou, mas alguém assumiu
     # "(sem)" é a fila sem claim, o mesmo valor do filtro "ninguém assumiu" da aba Issues
     assert funil["por_responsavel"]["(sem)"]["fila"] == 2
     assert funil["por_responsavel"]["(sem)"]["triagem"] == 1
     assert sum(funil["por_responsavel"]["(sem)"].values()) == 3
 
+
+
+def test_funil_por_responsavel_conta_quem_assumiu_e_quem_criou_sem_assignee():
+    issues = [
+        _issue(95, labels=["in-progress"], assignees=["pedro"], author="bia"),  # assumiu
+        _issue(96, labels=["ready-for-agent"], author="pedro"),  # criou, sem assignee
+        _issue(97, labels=["in-progress"], assignees=["lucas"], author="pedro"),  # criou e atribuiu a outro
+    ]
+    por = montar_fases(issues, [], [], [], agora=AGORA)["funil"]["por_responsavel"]
+    assert por["pedro"]["em_andamento"] == 1  # a 95
+    assert por["pedro"]["fila"] == 1  # a 96
+    assert sum(por["pedro"].values()) == 2  # a 97 é só do lucas
+    assert sum(por["lucas"].values()) == 1
+    assert "bia" not in por  # criou a 95, mas o pedro assumiu
+    assert por["(sem)"] == {**dict.fromkeys(por["pedro"], 0), "fila": 1}  # a 96 também é "ninguém assumiu"
 
 # ---------- timeline normalizada ----------
 

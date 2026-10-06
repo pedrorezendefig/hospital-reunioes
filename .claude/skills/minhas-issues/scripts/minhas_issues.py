@@ -8,8 +8,8 @@ Uso:
   python3 minhas_issues.py            login do `gh api user`
   python3 minhas_issues.py @login     fila de outra pessoa
 
-"Minha" segue a regra do painel (ADR 0061, emenda de 05/10/2026): atribuída à
-pessoa; sem ninguém atribuído, quem criou.
+"Minha" segue a regra do filtro de responsável do Hospital OS (issue #1039):
+atribuída à pessoa; sem ninguém atribuído, quem criou.
 """
 
 from __future__ import annotations
