@@ -2138,6 +2138,51 @@ def test_backend_que_o_coolify_ainda_constroi_do_git_segue_pelo_webhook_com_avis
     assert "backend" in aviso and "Coolify" in aviso and "webhook" in aviso, aviso
 
 
+@pytest.mark.parametrize("resposta", [
+    "",  # o CLI nao respondeu nada (timeout, saida vazia)
+    "Coolify CLI v1.2\nnao e json",
+    json.dumps({"uuid": "uuid-backend", "status": "running:healthy"}),  # sem o campo
+], ids=["vazio", "nao-json", "sem-build-pack"])
+def test_leitura_do_build_pack_que_falha_para_antes_do_primeiro_merge(
+    tmp_path, monkeypatch, capsys, resposta
+):
+    """Revisão do PR #1016: sem saber o build pack, o rabo não pode cair no
+    webhook. Depois da troca na tela o app não tem webhook, o deploy forçado
+    repuxaria a tag velha, o health passaria pelo APP_VERSION do runtime e o
+    registro gravaria healthy com um sha que nem existe no GHCR. Só um build
+    pack lido e diferente de dockerimage rebaixa; leitura que falha para antes
+    do primeiro merge, sem tocar no Coolify, e solta o semáforo."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    (c.dir_coolify / "app-uuid-backend.json").write_text(resposta, encoding="utf-8")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
+
+    assert c.merges == [] and c.pushes_na_main() == []
+    assert c.coolify_sem_leituras() == [] and c.publicacoes == [] and c.builds == []
+    assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
+    saida = capsys.readouterr().out
+    assert linhas_com(saida, "aviso:") == []
+    [erro] = linhas_com(saida, "erro:")
+    assert "backend" in erro and "build pack" in erro and "nada entrou" in erro, erro
+
+
+def test_build_pack_dentro_de_data_vale_como_modo_imagem(tmp_path, monkeypatch, capsys):
+    """O CLI pode embrulhar a resposta em `data`, como no `deploy get`: o build
+    pack lido ali é o real."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    (c.dir_coolify / "app-uuid-backend.json").write_text(
+        json.dumps({"data": {"uuid": "uuid-backend", "build_pack": "dockerimage"}}), encoding="utf-8")
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    assert c.builds == [] and c.deploys_novos == ["backend"]
+    assert linhas_com(capsys.readouterr().out, "aviso:") == []
+
+
 def test_dry_run_em_modo_imagem_diz_que_o_backend_vai_por_imagem_sem_disparar_nada(
     tmp_path, monkeypatch, capsys
 ):

@@ -69,7 +69,9 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      mesma pasta do app; sem nenhum, build do squash), espera o run e so entao
      aponta o Coolify para a tag do squash, que so puxa e reinicia. Antes do
      primeiro merge confere no `coolify app get` que a troca na tela foi feita;
-     sem ela, o app segue pelo webhook, com uma linha `aviso:`
+     sem ela, o app segue pelo webhook, com uma linha `aviso:`; leitura que
+     falha (sem resposta, sem JSON, sem build pack) para ali, com saida 2 e
+     nada na main
   7. health com version match. Health ruim: rollback automatico (issue #968),
      cada app do lote volta a imagem anterior no Coolify, a que estava no ar
      antes do primeiro merge (`current` do `coolify app rollback images`, lida
@@ -918,15 +920,23 @@ def conferir_modo_imagem_no_coolify(servicos_cfg: dict) -> None:
     """A troca de build do git para imagem e na tela do Coolify, a mao. Ate ela,
     trocar a tag dispararia um segundo build do git e o rollback por tag
     reconstruiria a main: o app que o Coolify ainda constroi segue pelo webhook,
-    com aviso. Muda `servicos_cfg` no lugar."""
+    com aviso. So um build pack lido e diferente de dockerimage rebaixa: leitura
+    que falha levanta RuntimeError antes do primeiro merge, porque depois da troca
+    o app nao tem webhook e o deploy forcado repuxaria a tag velha (revisao do
+    PR #1016). Muda `servicos_cfg` no lugar."""
     for sid in apps_do_coolify(servicos_cfg):
         if not em_modo_imagem(servicos_cfg[sid]):
             continue
         dado = coolify_json(["app", "get", servicos_cfg[sid]["uuid"]])
+        if isinstance(dado, dict) and isinstance(dado.get("data"), dict):
+            dado = dado["data"]
         real = dado.get("build_pack") if isinstance(dado, dict) else None
+        if not real:
+            raise RuntimeError(f"o `coolify app get` do {sid} nao devolveu o build pack; sem saber se a troca "
+                               "para a imagem do GHCR foi feita na tela, nada entrou na main (issue #1001)")
         if real != "dockerimage":
             print(f"aviso: o project.json diz que o {sid} roda a imagem do GHCR, mas o Coolify responde "
-                  f"build pack {real or '?'}; segue pelo build do webhook ate a troca na tela (issue #1001)")
+                  f"build pack {real}; segue pelo build do webhook ate a troca na tela (issue #1001)")
             servicos_cfg[sid] = {**servicos_cfg[sid], "build": {**servicos_cfg[sid]["build"], "build_pack": real}}
 
 
