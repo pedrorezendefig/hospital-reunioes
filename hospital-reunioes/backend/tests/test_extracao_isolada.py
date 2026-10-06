@@ -1041,6 +1041,11 @@ class TestAsGuardasDoIsolamento:
         assert extrator.FORMATOS_DE_TEXTO_PURO == {".txt", ".md"}
         assert extrator.FORMATOS_DE_TEXTO_PURO < extrator.SUPPORTED_EXTENSIONS
 
+    # Rodar sozinho (issue #971): este teste e o de baixo comparam as pastas
+    # `extracao-*` do tempdir da MÁQUINA antes e depois de uma extração. Em
+    # paralelo, outro worker extraindo ao mesmo tempo cria a pasta dele ali, e a
+    # comparação acusa uma sobra que não é deste teste.
+    @pytest.mark.rodar_sozinho
     def test_o_temporario_do_filho_nao_fica_para_tras(self, client, docx_honesto):
         """O conteúdo do upload passa pelo disco para chegar no filho. Passa, não fica.
 
@@ -1066,6 +1071,7 @@ class TestAsGuardasDoIsolamento:
         assert r.status_code == 200
         assert depois == antes, f"sobrou no disco: {depois - antes}"
 
+    @pytest.mark.rodar_sozinho
     def test_o_temporario_some_tambem_quando_o_filho_e_morto(self, client, monkeypatch, pdf_honesto):
         """O caminho de limpeza que importa é o que roda quando algo dá errado.
 
