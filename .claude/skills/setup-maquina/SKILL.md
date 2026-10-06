@@ -1,6 +1,6 @@
 ---
 name: setup-maquina
-description: Diagnostica a máquina de quem clonou (binários, gh, Coolify, tokens, Node do manual), diz o que falta, de onde vem cada chave e o que é cada pasta. `/setup-maquina [--nivel N] [--env] [--mapa]`.
+description: Diagnostica a máquina clonada (binários, gh, Coolify, tokens, Node do manual, permissões), diz o que falta, de onde vem cada chave, o que é cada pasta. `/setup-maquina [--nivel N] [--env] [--mapa]`.
 ---
 
 # Setup de máquina nova
@@ -12,7 +12,7 @@ Quem clona o repositório precisa de pouca coisa para trabalhar no pipeline (pla
 | Nível | Para quê | O que exige |
 |---|---|---|
 | 1 Pipeline | `/grill-with-docs`, `/to-prd`, `/to-issues`, `/pegar-issue`, `/ship` até o PR | clone com a `main` igual à `origin/main`, git, gh autenticado com WRITE, jq, Claude Code, os plugins de `references/plugins.txt`, `git config user.*` com e-mail da conta `gh` |
-| 2 Deploy e testes | `/tdd` (pytest e ruff do backend), `/ship` até o PR verde, o rabo `fechar_onda.py` (merge e deploy), `/deploy`, `/onda-enxuta` | Claude Code 2.1.280 ou mais (a `/onda-enxuta` lança sessão de fundo), CLI do Coolify com contexto `hsm`, `tokens/.env`, python3 3.9+, uv + `.venv` do backend, Pango, `hospital-reunioes/.env` com três valores fictícios (o snapshot importa o app), e Node >= 22.12, corepack e ffmpeg, porque o rabo publica o Manual quando o deploy tira alguma página do draft |
+| 2 Deploy e testes | `/tdd` (pytest e ruff do backend), `/ship` até o PR verde, o rabo `fechar_onda.py` (merge e deploy), `/deploy`, `/onda-enxuta` | Claude Code 2.1.280 ou mais (a `/onda-enxuta` lança sessão de fundo), as regras do fluxo automático no `~/.claude/settings.json` (ADR 0063), CLI do Coolify com contexto `hsm`, `tokens/.env`, python3 3.9+, uv + `.venv` do backend, Pango, `hospital-reunioes/.env` com três valores fictícios (o snapshot importa o app), e Node >= 22.12, corepack e ffmpeg, porque o rabo publica o Manual quando o deploy tira alguma página do draft |
 | 3 App local | `/atualizar-app`, `vitest` e `tsc` do frontend na máquina | Docker, Supabase CLI, chaves de sandbox (Node e corepack já vêm do nível 2). **Opcional: hoje ninguém usa; teste de frontend confia no CI.** |
 | 4 Produzir vídeo e print | `/divulgar`, `/manual <módulo>` | Chrome, skills globais de HyperFrames, time da Vercel e Playwright em Python para o Roteiro de prints. **Opcional: só quem produz vídeo e print.** |
 
@@ -23,6 +23,8 @@ Como cada sócio mergeia e deploya o próprio PR (ADR 0061), três conferências
 - **Identidade do git** (nível 1): o `git config user.email` precisa ser um e-mail verificado da conta `gh` logada (ou o `ID+login@users.noreply.github.com` dela); senão o commit sai em nome de outra pessoa. Para ler os e-mails privados o `gh` precisa do escopo `user:email`, e o script pede `gh auth refresh -h github.com -s user:email` quando ele falta.
 - **CLI do Coolify** (nível 2): roda, tem o contexto `hsm` como padrão e o servidor responde. Token recusado e servidor sem resposta são falhas diferentes, com consertos diferentes; a conta no Coolify quem cria é o Pedro.
 - **Studio do Supabase de produção** (nível 2): o endereço vem do `docs/spec/deploy/project.json` e a conferência só bate na porta, sem credencial (o login pedindo usuário conta como alcançável). Sem resposta, o acesso se pede ao Pedro.
+
+Como o fluxo vai até produção sem parada humana (ADR 0063), o nível 2 confere também duas coisas. O **token do GitHub**: nem o `gh` da sessão, nem o login guardado no chaveiro, nem outro token do GitHub exportado (como um PAT clássico no `tokens/.env`) podem ter Administration, que é o que muda ou apaga o ruleset da `main` (a conferência pergunta ao GitHub pelas deploy keys, que só respondem com Administration, e olha só a resposta, nunca o token). As **permissões do Claude Code** no `~/.claude/settings.json` de quem roda, uma linha por regra: deny de force push contra a `main`; `autoMode.environment` citando o repositório, o Coolify e o `manual-hsm.vercel.app`; `autoMode.allow` descrevendo o rabo, a `/minhas-issues` e a escrituração em issue e PR; e nenhum allow que pula o classificador (`Bash(gh:*)`, `gh issue create`, `Bash(git:*)`, `coolify` e `curl` com curinga, script por caminho, interpretador ou executor amplo), varrendo o settings do usuário e o `.claude/settings.json` e `settings.local.json` do projeto (o da árvore principal também). Só o arquivo do usuário conta: o modo auto não lê `autoMode` do settings do projeto. O script só pergunta ao `jq` se a regra existe e não imprime nada do arquivo (o bloco `env` guarda token).
 
 ## Como rodar
 
@@ -36,10 +38,10 @@ Saída: uma linha por checagem, com `OK`, `FALTA` (conta e dá exit 1), `AVISO` 
 ## O que fazer com o resultado
 
 1. Rode o script e mostre a tabela ao usuário.
-2. Para cada `FALTA`, execute o conserto indicado **um por vez, com confirmação**, nunca com `sudo`. Clone atrasado é `git pull --ff-only origin main` na `main` (se a árvore tiver mudança não commitada, avise e não puxe). Instalação de binário é `brew install`; plugin é `claude plugin install`; token é humano. O `hospital-reunioes/.env` é só três valores fictícios: o comando do script cria, sem chave real e sem 1Password.
+2. Para cada `FALTA`, execute o conserto indicado **um por vez, com confirmação**, nunca com `sudo`. Clone atrasado é `git pull --ff-only origin main` na `main` (se a árvore tiver mudança não commitada, avise e não puxe). Instalação de binário é `brew install`; plugin é `claude plugin install`; token é humano. Permissão do Claude Code e token do GitHub também são humanos: mostre a regra que o script deu (o trecho pronto e o passo a passo do token estão em `docs/onboarding/claude-setup.md`, seção 5.1) e a pessoa edita o próprio `~/.claude/settings.json` e o `tokens/.env`. Nunca peça, leia nem imprima o token. O `hospital-reunioes/.env` é só três valores fictícios: o comando do script cria, sem chave real e sem 1Password.
 3. Para chave de `.env`, consulte `references/chaves.md`: a tabela diz o nível, se a chave é por pessoa ou compartilhada, e o item do 1Password (cofre `VITTA TECH`) onde ela vive. Chave que só o Pedro tem vira a frase "peça ao Pedro: `NOME_DA_CHAVE`, serve para X".
 4. Com `--env`, gere os arquivos que faltam a partir dos `.env.example`:
-   - `tokens/.env`: `COOLIFY_ACCESS_TOKEN` é por pessoa (gerado no painel do Coolify, conta criada pelo Pedro); `ANA_API_KEY` vem do 1Password; `GITHUB_PERSONAL_ACCESS_TOKEN` só se for usar Actions locais.
+   - `tokens/.env`: `COOLIFY_ACCESS_TOKEN` é por pessoa (gerado no painel do Coolify, conta criada pelo Pedro); `ANA_API_KEY` vem do 1Password; `GH_TOKEN` só para quem é admin, e quem cria e cola é a pessoa (seção 5.1).
    - `hospital-reunioes/.env`: o script já dá o comando que cria o arquivo com os três valores fictícios. Chave real só entra se o usuário for rodar o app local (nível 3).
    - Quem vai ver a Central de Comando local precisa de `GA4_PROPERTY_ID`, `GOOGLE_APPLICATION_CREDENTIALS_JSON`, `INSTAGRAM_ACCESS_TOKEN` e `INSTAGRAM_BUSINESS_ACCOUNT_ID`. As quatro são compartilhadas e só o Pedro tem: diga "peça ao Pedro: `NOME`, serve para X" com o item e o motivo da linha de `references/chaves.md`, e avise da armadilha de formato (a credencial do Google entra como JSON inteiro, não como caminho de arquivo). Sem elas a Central local fica desligada; o resto do app roda.
    - O humano abre o 1Password e copia o valor à mão. A skill diz só o item e o campo. Nunca use a CLI do 1Password nem peça o valor no chat.
@@ -51,6 +53,7 @@ Saída: uma linha por checagem, com `OK`, `FALTA` (conta e dá exit 1), `AVISO` 
 
 - Nunca imprime, ecoa ou cola valor de segredo, nem em log.
 - Nunca commita `.env`, `tokens/.env` ou `~/.claude/settings.json`.
+- Nunca grava o `~/.claude/settings.json`: quem põe a regra que falta é a pessoa.
 - Nunca toca produção: zero `coolify deploy`, zero migration, zero escrita de env no Coolify.
 - Nunca instala sem confirmação e nunca usa `sudo`.
 - Nunca acessa o 1Password (nem `op`, nem pedir o valor no chat). Quem copia a chave é o humano.

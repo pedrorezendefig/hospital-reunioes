@@ -143,6 +143,8 @@ gh api 'repos/{owner}/{repo}/rules/branches/main' --jq '.[] | {type, parameters}
 
 Mudou o JSON depois de aplicado? `gh api -X PUT 'repos/{owner}/{repo}/rulesets/<id>' --input .github/rulesets/main.json`, com o `<id>` de `gh api 'repos/{owner}/{repo}/rulesets'`.
 
+Depois do token sem Administration (ADR 0063, `docs/onboarding/claude-setup.md` seção 5.1), esses dois comandos não passam mais na máquina: a mudança do ruleset é pela tela do GitHub (**Settings** > **Rules** > **Rulesets**), editando ali ou importando o JSON.
+
 ## Notificações
 
 GitHub Mobile (app no celular) é o canal de notificação. Marca o repo como "Watching" pra receber:
