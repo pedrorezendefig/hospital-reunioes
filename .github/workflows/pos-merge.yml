@@ -27,3 +27,40 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # O tirar_draft_manual.py só tira o draft se a publicação for possível em
+      # seguida: confere node >= 22.12, corepack e ffmpeg antes de escrever.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: ffmpeg (conferido pelo tirar-draft)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Tirar do draft as páginas do último deploy
+        # Os PRDs do deploy mais recente do history.json (ADR 0057: só sai do
+        # draft o que está em produção). PR avulso registra prds vazio, e sem
+        # --prd o argparse sairia com 2: lista vazia pula o passo. Saída 2 do
+        # tirar-draft é bloqueio sem escrever nada (o MP4 do Vídeo de tarefa
+        # não vem no clone, issue #951): a página fica em draft, a Action avisa
+        # e segue para o snapshot.
+        run: |
+          prds="$(python3 -c 'import json; print(" ".join(str(n) for n in json.load(open("docs/spec/deploy/history.json"))["deploys"][0]["prds"]))')"
+          if [ -z "$prds" ]; then
+            echo "O último deploy não traz PRD: nenhuma página a tirar do draft."
+            exit 0
+          fi
+          args=""
+          for n in $prds; do args="$args --prd $n"; done
+          set +e
+          python3 tools/tirar_draft_manual.py $args
+          status=$?
+          set -e
+          if [ "$status" -eq 2 ]; then
+            echo "::warning::O draft dos PRDs $prds ficou como está; a saída acima diz o que falta (Vídeo de tarefa sem MP4 no clone: issue #951)."
+            exit 0
+          fi
+          exit "$status"

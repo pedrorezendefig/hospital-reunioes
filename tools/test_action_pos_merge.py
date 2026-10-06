@@ -10,7 +10,10 @@ de shell dele de verdade, num repo git de brinquedo.
 
 from __future__ import annotations
 
+import json
+import os
 import re
+import subprocess
 from pathlib import Path
 
 import yaml
@@ -80,3 +83,77 @@ def test_merge_do_registro_e_de_codigo_acordam_a_action():
     assert acorda(["hospital-reunioes/backend/app/routers/atas.py"])
     assert acorda(["docs/spec/snapshots/ROTAS.md", "hospital-reunioes/supabase/migrations/115_x.sql"])
     assert acorda(["docs/manual/video/ouvidoria/registrar/index.html"])
+
+
+# --------------------------------------------------- os passos de shell, rodados
+
+def passo(trecho: str) -> dict:
+    """O passo do job cujo nome contém o trecho."""
+    passos = workflow()["jobs"]["pos-merge"]["steps"]
+    achados = [p for p in passos if trecho in p.get("name", "")]
+    assert len(achados) == 1, [p.get("name") for p in passos]
+    return achados[0]
+
+
+def rodar(trecho: str, cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
+    """Roda o `run:` do passo como o GitHub Actions roda: `bash -e {0}`."""
+    script = cwd.parent / "passo.sh"
+    script.write_text(passo(trecho)["run"], encoding="utf-8")
+    return subprocess.run(["bash", "-e", str(script)], cwd=cwd, env={**os.environ, **(env or {})},
+                          capture_output=True, text=True)
+
+
+TIRAR_DRAFT_FALSO = """\
+import os, sys
+from pathlib import Path
+Path("chamadas.txt").open("a").write(" ".join(sys.argv[1:]) + "\\n")
+sys.exit(int(os.environ.get("SAIDA_DO_DRAFT", "0")))
+"""
+
+
+def arvore_do_draft(tmp_path: Path, prds: list[int]) -> Path:
+    raiz = tmp_path / "repo"
+    (raiz / "docs" / "spec" / "deploy").mkdir(parents=True)
+    (raiz / "tools").mkdir()
+    deploys = [{"app_version": "0.2.0", "prds": prds}, {"app_version": "0.1.0", "prds": [700]}]
+    (raiz / "docs" / "spec" / "deploy" / "history.json").write_text(
+        json.dumps({"schema_version": 1, "deploys": deploys}), encoding="utf-8")
+    (raiz / "tools" / "tirar_draft_manual.py").write_text(TIRAR_DRAFT_FALSO, encoding="utf-8")
+    return raiz
+
+
+def chamadas(raiz: Path) -> list[str]:
+    arq = raiz / "chamadas.txt"
+    return arq.read_text(encoding="utf-8").splitlines() if arq.exists() else []
+
+
+def test_draft_sai_para_os_prds_do_ultimo_deploy(tmp_path):
+    raiz = arvore_do_draft(tmp_path, [963, 646])
+    proc = rodar("Tirar do draft", raiz)
+    assert proc.returncode == 0, proc.stderr
+    assert chamadas(raiz) == ["--prd 963 --prd 646"]
+
+
+def test_ultimo_deploy_sem_prd_nao_chama_o_tirar_draft(tmp_path):
+    """PR avulso registra `prds: []`. Sem `--prd` o argparse sai com 2, e o
+    passo não pode confundir isso com o bloqueio do MP4."""
+    raiz = arvore_do_draft(tmp_path, [])
+    proc = rodar("Tirar do draft", raiz)
+    assert proc.returncode == 0, proc.stderr
+    assert chamadas(raiz) == []
+
+
+def test_bloqueio_do_mp4_avisa_e_nao_derruba_a_action(tmp_path):
+    """Saída 2: o tirar-draft não escreveu nada (o MP4 do Vídeo de tarefa não
+    vem no clone, issue #951). A página fica em draft e o snapshot segue."""
+    raiz = arvore_do_draft(tmp_path, [963])
+    proc = rodar("Tirar do draft", raiz, {"SAIDA_DO_DRAFT": "2"})
+    assert proc.returncode == 0, proc.stderr
+    assert "::warning::" in proc.stdout
+    assert chamadas(raiz) == ["--prd 963"]
+
+
+def test_pasta_errada_do_manual_derruba_a_action(tmp_path):
+    raiz = arvore_do_draft(tmp_path, [963])
+    proc = rodar("Tirar do draft", raiz, {"SAIDA_DO_DRAFT": "1"})
+    assert proc.returncode == 1
