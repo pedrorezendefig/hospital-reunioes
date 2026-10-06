@@ -80,3 +80,26 @@ def test_a_sessao_so_encerra_depois_de_comentar_o_resultado_do_rabo_na_onda():
     # a passagem já lançada registra o resultado quando o rabo termina
     assert "Rabo da onda <N>:" in resultado and "<nome>-onda<N+1>.md" in resultado, resultado
     assert re.search(r"[Ee]ncerre só depois", resultado), resultado
+
+
+# ------------------------------------------- fatia bloqueada pela onda em deploy
+
+
+def test_fatia_bloqueada_pela_onda_em_deploy_fica_na_onda_em_vez_de_sair_da_fila():
+    fila = passo(1)
+    regra = next(li for li in fila.splitlines() if "dependencies/blocked_by" in li)
+    assert re.search(r"bloqueio por issue da linha `Em deploy`.*fica na onda", regra), regra
+
+
+def test_implementador_de_fatia_bloqueada_pela_onda_em_deploy_so_sai_depois_que_a_bloqueadora_fecha():
+    lote = passo(3)
+    espera = next(li for li in lote.splitlines() if li.startswith("Fatia bloqueada por issue em deploy"))
+    assert "só é disparada depois que a bloqueadora fecha" in espera, espera
+    # a espera é por evento, em segundo plano, lendo o bloqueio nativo, não o relatório
+    assert "run_in_background: true" in espera and "dependencies/blocked_by" in espera, espera
+    assert '.state == "open"' in espera, espera
+    # o worktree dela nasce depois do squash da bloqueadora, e a espera tem teto
+    assert "origin/main" in espera and "teto" in espera, espera
+    # as outras não esperam por ela
+    disparo = next(li for li in lote.splitlines() if li.startswith("Dispare os"))
+    assert "sem bloqueio aberto" in disparo, disparo

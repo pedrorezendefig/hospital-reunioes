@@ -48,7 +48,7 @@ Você, orquestrador, **não lê código, diff, PRD nem spec**. Mantém a tabela 
 
 ### 1. Fila-alvo
 
-Com fila fixa no prompt, use-a: confira só que cada issue está `ready-for-agent`, sem dono e sem bloqueio aberto (`gh issue view <N> --json labels,assignees` e `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`) e que o autor é de dentro do repositório (`gh api repos/{owner}/{repo}/issues/<N> --jq .author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`; o repositório é público). Issue de autor externo sai da fila, com uma linha no relatório. Sem fila fixa, monte (sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`), menores primeiro. Mostre a tabela desta onda em até 6 linhas e siga direto: o lançamento foi a ordem.
+Com fila fixa no prompt, use-a: confira só que cada issue está `ready-for-agent`, sem dono e sem bloqueio aberto (`gh issue view <N> --json labels,assignees` e `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`; bloqueio por issue da linha `Em deploy` da passagem não conta: a fatia fica na onda e espera a bloqueadora fechar, passo 3) e que o autor é de dentro do repositório (`gh api repos/{owner}/{repo}/issues/<N> --jq .author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`; o repositório é público). Issue de autor externo sai da fila, com uma linha no relatório. Sem fila fixa, monte (sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`), menores primeiro. Mostre a tabela desta onda em até 6 linhas e siga direto: o lançamento foi a ordem.
 
 ### 2. Mapa do terreno (1 vez por PRD)
 
@@ -56,7 +56,9 @@ Para cada PRD das issues desta onda: `gh issue view <PRD> --json comments --jq '
 
 ### 3. Lote: implementadores em paralelo
 
-Dispare os `N` implementadores **na mesma mensagem**, um por issue, com o prompt de `references/prompts.md`; o label de tamanho da issue (passo 1) escolhe o agente: `fatia:G` no `hr-implementador-xhigh` (`xhigh`), `fatia:P`, `fatia:M` ou sem label no `hr-implementador` (`high`). O esforço vive no frontmatter do agente; o disparo não o muda por chamada. Cada um faz claim, TDD, PR (`/ship --skip-review`) e morre.
+Dispare os implementadores das fatias sem bloqueio aberto **na mesma mensagem**, um por issue, com o prompt de `references/prompts.md`; o label de tamanho da issue (passo 1) escolhe o agente: `fatia:G` no `hr-implementador-xhigh` (`xhigh`), `fatia:P`, `fatia:M` ou sem label no `hr-implementador` (`high`). O esforço vive no frontmatter do agente; o disparo não o muda por chamada. Cada um faz claim, TDD, PR (`/ship --skip-review`) e morre.
+
+Fatia bloqueada por issue em deploy (passo 1) só é disparada depois que a bloqueadora fecha (o rabo da onda anterior a fecha no merge): na mesma mensagem do lote, um laço via Bash com `run_in_background: true` que termina quando `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by --jq '[.[] | select(.state == "open")] | length'` dá `0`, com teto de 60 min. Na notificação, confira o bloqueio de novo e dispare o implementador dela: o worktree nasce da `origin/main` do momento, já com o squash da bloqueadora. Teto estourado (o rabo da onda anterior parou em migration, conflito ou rollback): a fatia sai desta onda sem contar tentativa e vai para a passagem como bloqueada.
 
 A cada notificação de término, **confira o GitHub**, não o relatório (ADR 0029): `gh pr list --search "<N> in:title,body" --json number,url,headRefName --state open` ou `gh issue view <N> --json labels`. Estados possíveis:
 
