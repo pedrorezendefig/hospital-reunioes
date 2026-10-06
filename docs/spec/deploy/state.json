@@ -1,8 +1,8 @@
 {
   "schema_version": "1.0",
-  "updated_at": "2026-10-05T21:39:26-03:00",
-  "updated_by": "pr-avulso@fechar_onda",
-  "last_app_version": "0.163.0",
+  "updated_at": "2026-10-05T21:51:07-03:00",
+  "updated_by": "onda-enxuta@fechar_onda",
+  "last_app_version": "0.163.1",
   "production": {
     "domain_root": "hospitalsaomatheus.cloud",
     "vps_ip": "31.97.29.32",
@@ -21,15 +21,15 @@
       "port": 8000,
       "health_path": "/api/health",
       "status": "healthy",
-      "last_deploy_sha": "9428a0263e43d81cbbe32891fee5a1af9f5879a2",
-      "last_deploy_at": "2026-10-05T21:39:26-03:00",
+      "last_deploy_sha": "cab8930958d1f89545d688418f37745936cc576f",
+      "last_deploy_at": "2026-10-05T21:51:07-03:00",
       "last_health_check": {
-        "at": "2026-10-05T21:39:26-03:00",
-        "latency_ms": 164,
+        "at": "2026-10-05T21:51:07-03:00",
+        "latency_ms": 601,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 213,
+      "build_duration_seconds": 21,
       "env_count": 24
     },
     {
@@ -39,15 +39,15 @@
       "port": 3000,
       "health_path": null,
       "status": "healthy",
-      "last_deploy_sha": "9428a0263e43d81cbbe32891fee5a1af9f5879a2",
-      "last_deploy_at": "2026-10-05T21:39:26-03:00",
+      "last_deploy_sha": "cab8930958d1f89545d688418f37745936cc576f",
+      "last_deploy_at": "2026-10-05T21:51:07-03:00",
       "last_health_check": {
-        "at": "2026-10-05T21:39:26-03:00",
-        "latency_ms": 171,
+        "at": "2026-10-05T21:51:07-03:00",
+        "latency_ms": 287,
         "http_status": 200,
         "body_ok": true
       },
-      "build_duration_seconds": 273,
+      "build_duration_seconds": 201,
       "env_count": 5
     },
     {
@@ -207,9 +207,9 @@
     }
   ],
   "last_run": {
-    "mode": "pr-avulso",
-    "sha": "9428a0263e43d81cbbe32891fee5a1af9f5879a2",
+    "mode": "onda-enxuta",
+    "sha": "cab8930958d1f89545d688418f37745936cc576f",
     "result": "healthy",
-    "duration_seconds": 819
+    "duration_seconds": 660
   }
 }

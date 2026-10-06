@@ -2,6 +2,38 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-05T21:51:07-03:00",
+      "sha": "cab8930958d1f89545d688418f37745936cc576f",
+      "app_version": "0.163.1",
+      "subject": "Onda onda-a: CI testa só a parte que mudou; PR de ferramenta interna só faz merge, sem versão, build nem registro",
+      "raw_subject": "chore(deploy): registro da onda onda-a (#972 #974)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        963
+      ],
+      "result": "healthy",
+      "duration_seconds": 660,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a: PRs #972 #974, entregues pelo PR #979. Merge pela API do GitHub, um build. Registro num PR so de docs depois do health."
+    },
+    {
       "at": "2026-10-05T21:39:26-03:00",
       "sha": "9428a0263e43d81cbbe32891fee5a1af9f5879a2",
       "app_version": "0.163.0",
