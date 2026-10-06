@@ -108,7 +108,7 @@ def rodar(trecho: str, cwd: Path, env: dict[str, str] | None = None) -> subproce
     script = cwd.parent / "passo.sh"
     script.write_text(passo(trecho)["run"], encoding="utf-8")
     return subprocess.run(["bash", "-e", str(script)], cwd=cwd, env={**ENV_GIT, **(env or {})},
-                          capture_output=True, text=True)
+                          capture_output=True, text=True, check=False)
 
 
 TIRAR_DRAFT_FALSO = """\

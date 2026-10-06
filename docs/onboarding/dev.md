@@ -93,7 +93,7 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo /ship ou pelo fechament
                    → APP_VERSION no backend e no frontend → merge pela API (squash) → tag vX.Y.Z
                    → um build → health com version-match
                    → registro num PR só de docs: state.json + history.json (ADR 0062)
-                   (snapshot e draft do Manual: Action no push da main, depois do registro)
+                   (snapshot e draft do Manual: Action pos-merge.yml no push da main, depois do registro)
                    (migration nova: o script confere o sha256, imprime o arquivo para colar no
                     Studio e espera o número dela no /api/health; 24 h sem ele, sai com 7)
                    Na /onda-enxuta é o mesmo script, com o lote da onda em --prs
@@ -127,15 +127,16 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo /ship ou pelo fechament
 
 ## Como o código e o registro chegam à `main`
 
-A `main` é protegida por ruleset (ADR 0061, emenda de 02/10/2026): ninguém, admin inclusive, dá push direto nela, e todo PR precisa dos três jobs do CI verdes e da branch em dia com a base. Por isso o rabo (`fechar_onda.py`) entra sempre por PR, em três tempos:
+A `main` é protegida por ruleset (ADR 0061, emenda de 02/10/2026): nenhuma pessoa, admin inclusive, dá push direto nela, e todo PR precisa dos três jobs do CI verdes e da branch em dia com a base. A única exceção é o `github-actions[bot]`, e só porque a Action pós-merge commita o snapshot e o draft do Manual direto na `main` (ADR 0062, decisão 10; veja o tempo 4 abaixo). Por isso o rabo (`fechar_onda.py`) entra sempre por PR, em três tempos, e a Action fecha com o quarto:
 
 1. **Código.** A versão nova sai do tipo dos commits e não vira commit (issue #967): o `package.json` fica congelado. O seu PR entra como está (na onda, numa branch `onda/<sessao>` com o lote, que vira um PR de entrega). O script espera o CI verde, põe o `APP_VERSION` no backend e no frontend do Coolify, mergeia pela API do GitHub, com squash, e cria a tag `vX.Y.Z` no squash.
 2. **Build e health** do que entrou.
-3. **Registro.** `history.json` e `state.json` sobem num **PR só de docs** que o próprio script abre e mergeia pela API depois do health. Snapshot e draft do Manual não são do rabo: uma Action no push da `main` cuida deles depois do registro (ADR 0062). O CI desse PR pula os jobs pesados e fica verde em segundos, e o build que o Coolify dispara para ele é cancelado pelo script.
+3. **Registro.** `history.json` e `state.json` sobem num **PR só de docs** que o próprio script abre e mergeia pela API depois do health. Snapshot e draft do Manual não são do rabo (ADR 0062). O CI desse PR pula os jobs pesados e fica verde em segundos, e o build que o Coolify dispara para ele é cancelado pelo script.
+4. **Snapshot e draft do Manual.** O merge do registro dispara a Action `.github/workflows/pos-merge.yml` (ela roda em todo push na `main`, mas é esse que traz a versão nova no `history.json`). Ela monta o backend como o CI, roda o `snapshot.py` e o `tirar_draft_manual.py` com os PRDs do último deploy e, se houver diff, commita direto na `main` como `github-actions[bot]`, com `[skip ci]`. Ninguém roda nada na própria máquina. Página com Vídeo de tarefa fica em draft com um aviso no run, porque o MP4 não vem no clone (issue #951).
 
 Saída 5 do script: produção ok, mas o PR de registro não entrou. Mergeie o PR que ele imprime quando o CI dele ficar verde.
 
-O ruleset está versionado em `.github/rulesets/main.json`. Aplicar (admin, uma vez) e conferir:
+O ruleset está versionado em `.github/rulesets/main.json`, com o GitHub Actions (integration 15368) como único ator em `bypass_actors`; o `tools/test_ruleset_main.py` reprova pessoa, equipe ou papel ali. Aplicar (admin, uma vez) e conferir:
 
 ```bash
 gh api -X POST 'repos/{owner}/{repo}/rulesets' --input .github/rulesets/main.json
@@ -182,7 +183,7 @@ Sem Discord, sem Slack.
 - **`/ship` reprovou num gate?** O gate chama o `hr-corretor` sozinho; só a baixa (`ready-for-human`, com o diagnóstico na issue) volta para você. A saída diz qual gate (hr-revisor, hr-revisor-seguranca ou CI). Corrija e rode `/ship --resume`.
 - **Conflito com a `main`?** O rabo sai com 2 e chama o `hr-corretor`, que rebaseia pela `/resolver-conflitos` e conta tentativa; só a terceira falha (`ready-for-human`) volta para você.
 - **Deploy falhou em produção?** Com health ruim, o `fechar_onda.py` já volta sozinho a imagem anterior e o `APP_VERSION` antigo: sai com código 6, semáforo solto, e quem o rodou abre o PR de revert, reabre a issue e notifica (Passo 10 do `/ship`). Build que falha sai com 3, e health cujo rollback também falhou sai com 4: os dois seguram o semáforo; a saída dele é a fonte de verdade (o `history.json` já foi escrito no push, como `healthy`, e não é corrigido). `/deploy rollback` reverte e `/deploy status` mostra o estado.
-- **Snapshot desatualizado?** `/snapshot --force`.
+- **Snapshot desatualizado ou página do Manual presa em draft?** Olhe o último run da Action Pós-merge na aba Actions: a saída dele diz o que faltou. Corrigida a causa, **Re-run** no run (ele parte da ponta da `main`).
 - Na dúvida, pergunta pro Claude — ele puxa o conhecimento daqui.
 
 ## Pra aprofundar
