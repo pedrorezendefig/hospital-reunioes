@@ -331,7 +331,7 @@ def test_coleta_entrega_as_fases_no_payload(monkeypatch, tmp_path):
     assert fases["prs"][10]["conflito"] is True
     assert list(fases["timelines"]) == [1]
     assert fases["funil"]["total"]["pr_aberto"] == 1
-    assert data["plano"] is not None  # o Plano continua até a fatia da aba Issues
+    assert "plano" not in data  # o Plano saiu com a aba Issues nova (#942)
     json.dumps(data)  # o /api/data serializa o payload inteiro
 
 
