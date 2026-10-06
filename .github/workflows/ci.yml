@@ -111,6 +111,12 @@ jobs:
         # hora do merge, porque ela pode ter andado desde este CI.
         if: github.event_name == 'pull_request'
         run: python ../../tools/checar_migration_repetida.py --base origin/main
+      - name: Migration com recibo
+        # Toda migration nova termina gravando o próprio número em
+        # migracoes_aplicadas (issue #969): o rabo só mergeia depois que o
+        # /api/health devolve esse número, e sem o insert esperaria 24 h.
+        if: github.event_name == 'pull_request'
+        run: python ../../tools/checar_recibo_da_migration.py --base origin/main
       - name: Install uv
         run: pip install uv
       - name: Lock em sincronia (uv.lock x pyproject.toml)

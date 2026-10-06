@@ -250,3 +250,51 @@ def test_tabelas_de_saida_listam_o_rollback_feito():
     assert f"{codigo} rollback feito" in tabela, tabela
     falha = next(li for li in texto("ship").splitlines() if "diz o que fazer pelo código de saída" in li)
     assert f"{codigo} rollback feito" in falha, falha
+
+
+# ----------------------------------------- migration com recibo (#969)
+
+# O rabo espera a migration aparecer no /api/health antes do semáforo e, em
+# 24 h sem ela, sai com código próprio sem tocar na main. Texto que ainda manda
+# aplicar "antes do rabo" e esperar o "apliquei" para o fluxo à toa.
+
+TEXTOS_DO_FLUXO = [
+    SKILLS / "ship" / "SKILL.md",
+    SKILLS / "onda-enxuta" / "SKILL.md",
+    SKILLS / "onda-enxuta" / "references" / "prompts.md",
+    RAIZ / "docs" / "onboarding" / "dev.md",
+]
+
+
+@pytest.mark.parametrize("caminho", TEXTOS_DO_FLUXO, ids=lambda p: str(p.relative_to(RAIZ)))
+def test_nenhum_texto_manda_aplicar_a_migration_antes_de_rodar_o_rabo(caminho):
+    md = caminho.read_text(encoding="utf-8")
+    velhos = [li for li in md.splitlines()
+              if re.search(r"antes (do rabo|de rodar|do \"vai\"|do fechamento)|\"apliquei\" do humano", li, re.I)]
+    assert velhos == [], velhos
+
+
+@pytest.mark.parametrize("skill", ["ship", "onda-enxuta"])
+def test_quem_chama_o_rabo_sabe_o_que_fazer_com_a_migration_vencida(skill):
+    trecho = secao(texto("ship"), "Passo 10") if skill == "ship" else fechamento_da_onda()
+    item = item_da_saida(trecho, codigo_do_rabo("EXIT_MIGRACAO"))
+
+    assert "migration" in item and "/api/health" in item and "24 h" in item, item
+    assert re.search(r"nada entrou na `?main", item) and "semáforo" in item, item
+    assert "PushNotification" in item, item
+    assert "/deploy rollback" not in item and "git revert" not in item, item
+
+
+def test_tabelas_de_saida_listam_a_migration_vencida():
+    codigo = codigo_do_rabo("EXIT_MIGRACAO")
+    tabela = next(li for li in texto("onda-enxuta").splitlines() if li.startswith("| `scripts/fechar_onda.py"))
+    assert f"{codigo} migration vencida" in tabela, tabela
+    falha = next(li for li in texto("ship").splitlines() if "diz o que fazer pelo código de saída" in li)
+    assert f"{codigo} migration vencida" in falha, falha
+
+
+def test_gate_de_migrations_do_ship_diz_que_o_rabo_espera_o_numero_no_health():
+    gate = secao(texto("ship"), "Passo 8.6")
+
+    assert "migracoes_aplicadas" in gate and "/api/health" in gate and "24 h" in gate, gate
+    assert ":1" in gate, "o caminho clicável continua sendo o caminho principal"
