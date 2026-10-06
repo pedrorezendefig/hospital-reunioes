@@ -5,7 +5,7 @@ description: Leva uma mudança até o PR verde (branch, commit, PR, 3 gates) e r
 
 # ship — orquestrar mudança end-to-end
 
-Uma skill, um comando. Do plano ao PR verde, com PR + review automatizada + CI. Merge, bump, `APP_VERSION`, push, build, health e registro são do rabo único, o `fechar_onda.py` (ADR 0061): o `/ship` imprime o comando e para. Usado por time de 3 pessoas (Pedro + 2 contratados), todos com Claude Code e permissão de write no repo.
+Uma skill, um comando. Do plano ao PR verde, com PR + review automatizada + CI. Merge, bump, `APP_VERSION`, push, build, health e registro são do rabo único, o `fechar_onda.py` (ADR 0061): o `/ship` o roda sozinho com os gates verdes (ADR 0063). Usado por time de 3 pessoas (Pedro + 2 contratados), todos com Claude Code e permissão de write no repo.
 
 ## Sintaxe
 
@@ -199,7 +199,9 @@ A seção "Mudanças" usa o output da skill `/snapshot --diff <base>..HEAD` (ver
 
 ## Passo 8 — Gates automatizados (3 gates)
 
-Cada camada faz veto independente. Roda em sequência (ou paralelo onde possível). Os 3 gates verdes são o fim do `/ship`: o PR fica pronto para o rabo.
+Cada camada faz veto independente. Roda em sequência (ou paralelo onde possível). Gate reprovado não para o `/ship`: chama o agente `hr-corretor` (prompt em `.claude/skills/onda-enxuta/references/prompts.md`) e roda o gate de novo, como diz cada gate. Os 3 gates verdes levam ao rabo (Passo 10), sem esperar mensagem (ADR 0063). Na `/onda-enxuta`, o `hr-implementador` roda `/ship --skip-review` e termina no PR aberto: quem espera o CI, revisa e chama o corretor é o orquestrador da onda (passo 4 dela).
+
+**Baixa** (o fim de uma fatia que não fecha): `gh issue edit <issue> --remove-label in-progress --add-label ready-for-human`, um `gh issue comment` com `<!-- automacao -->` na primeira linha e o diagnóstico (gate ou linha do rabo, achado, o que o corretor tentou e a hipótese), e `PushNotification` de uma linha: "#<issue> foi para ready-for-human: <motivo>". O PR fica aberto e o rabo não roda.
 
 ### Passo 8.0 — Detecção de diff cosmético (Corte 2 do plano de enxugamento)
 
@@ -261,7 +263,7 @@ fi
 
 Invoca a skill `code-review:code-review` apontando pra branch atual ou PR.
 
-Captura output. Se levantar issues `must-fix` ou similar → ❌ reportar, comentar no PR via `gh pr comment`, parar (sem aprovar/mergear).
+Captura output. Se levantar `must-fix` → comentar no PR via `gh pr comment` (`<!-- automacao -->` na primeira linha) e disparar o `hr-corretor` motivo `revisao` com o comentário; quando ele terminar, o gate roda de novo. Uma rodada de correção (ADR 0064): se a segunda passada ainda tem must-fix, é baixa (Passo 8).
 
 ### Gate 1.5: Spec × diff (quando há issue vinculada)
 
@@ -280,13 +282,13 @@ Dispara um subagent **independente** (Task/general-purpose) com:
 - O corpo da issue já carregado no Passo 3 (O que construir + Critérios de aceite).
 - O brief: "Reporte: (a) requisitos que a issue pediu e estão **faltando ou parciais** no diff; (b) comportamento no diff que **não foi pedido** (scope creep); (c) requisitos que parecem implementados mas cuja implementação **tem cara de errado**. Cite a linha da spec em cada achado. Menos de 400 palavras."
 
-Achados (a) ou (c) → ❌ reportar, comentar no PR via `gh pr comment`, parar (mesmo tratamento do Gate 1). Scope creep (b) é judgement call: reportar ao usuário sem travar, a menos que toque área sensível (aí o Gate 2 decide).
+Achados (a) ou (c) → comentar no PR via `gh pr comment` e disparar o `hr-corretor` motivo `revisao`, com o mesmo tratamento do Gate 1 (uma rodada, depois baixa). Scope creep (b) é judgement call: reportar ao usuário sem travar, a menos que toque área sensível (aí o Gate 2 decide).
 
 ### Gate 2 — `/security-review` (condicional — área sensível)
 
 Invoca a skill `security-review` na branch.
 
-Captura output. Se levantar vulnerabilidades críticas → ❌ reportar, comentar no PR, parar.
+Captura output. Se levantar vulnerabilidade crítica → comentar no PR e disparar o `hr-corretor` motivo `revisao`, com o mesmo tratamento do Gate 1 (uma rodada, depois baixa).
 
 ### (opcional) review rigorosa: só com `--rigoroso`
 
@@ -304,7 +306,7 @@ Jobs esperados (workflow `.github/workflows/ci.yml`):
 - `Frontend Lint & Type Check` (pnpm lint + tsc)
 - `Build` (docker build dos 2 services como sanity check)
 
-Se algum check falhar, rode antes `python .claude/skills/onda-enxuta/scripts/ci_sem_runner.py "$PR_NUMBER"`. Saída 0 = o GitHub cancelou o job por falta de runner (incidente do Actions, issue #953), não é código: o script já pediu o rerun, volte ao `gh pr checks --watch` (até 3 vezes; depois, reporte "GitHub Actions sem runner, ver githubstatus.com" e pare sem mexer no código). Saída 1 = falha de verdade → ❌ reportar logs (`gh run view <id> --log`), parar.
+Se algum check falhar, rode antes `python .claude/skills/onda-enxuta/scripts/ci_sem_runner.py "$PR_NUMBER"`. Saída 0 = o GitHub cancelou o job por falta de runner (incidente do Actions, issue #953), não é código: o script já pediu o rerun, volte ao `gh pr checks --watch` (até 3 vezes; depois, reporte "GitHub Actions sem runner, ver githubstatus.com" e pare sem mexer no código). Saída 1 = falha de verdade → `hr-corretor` motivo `ci` com as últimas 60 linhas de `gh run view <id> --log-failed`; a segunda falha de CI da fatia vai para o `hr-corretor-max`. Depois da correção, `gh pr checks --watch` de novo. Cada falha conta uma tentativa da fatia (ADR 0022); na terceira, baixa (Passo 8).
 
 ### (substituída pelo `/tdd`) verificação final com evidência: só com `--rigoroso`
 
@@ -313,7 +315,7 @@ Ver `references/rigoroso.md` (segunda parte).
 ### Flags de override
 
 - `--skip-review`: pula code-review e security-review. **NÃO pula** o CI. Só pra emergência.
-- `--hotfix`: mantém security-review + CI (pula o resto). Exige aprovação explícita do dono do repo.
+- `--hotfix`: mantém security-review + CI (pula o resto). Só o dono do repo usa.
 - Default: 3 gates (code-review + security-review condicional + CI). Review rigorosa e verificação final ficam opcionais (`--rigoroso`).
 
 ---
@@ -363,14 +365,15 @@ No `--resume` com os gates verdes, verificar se os critérios da issue já estã
 
 ---
 
-## Passo 10: Imprimir o comando do rabo (o /ship termina aqui)
+## Passo 10: Rodar o rabo
 
-O `/ship` não faz bump, não mexe em `APP_VERSION`, não mergeia e não chama o `/deploy` (ADR 0061). Com o PR verde, imprime o comando do rabo para o autor rodar quando quiser subir para produção:
+O `/ship` não faz bump, não mexe em `APP_VERSION`, não mergeia e não chama o `/deploy` (ADR 0061): tudo isso é do rabo, e o `/ship` o roda assim que o Passo 9 termina, sem esperar mensagem (ADR 0063). Builds levam minutos: rode via Bash em segundo plano e leia só as 10 linhas da saída.
 
 ```bash
-python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER" --dry-run   # o plano, sem tocar em nada
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR_NUMBER"
 ```
+
+Migration nova no PR é a única parada (Passo 8.6): o rabo imprime `migration: cole no Studio <arquivo>:1` e espera; repasse a linha ao humano por `PushNotification` assim que ela aparecer. Na `/onda-enxuta`, o `hr-implementador` termina no PR aberto e não chega aqui: quem roda o rabo, com o lote inteiro, é o fechamento da onda.
 
 Um PR só e sem `--sessao` é o modo PR avulso (chave do semáforo `pr-<N>`). O script faz, nesta ordem: pré-condições (PR verde e mergeável, número e `sha256` das migrations), espera da migration nova no `/api/health` (Passo 8.6), semáforo, versão nova pelo tipo dos commits, sem commit (issue #967), a `origin/main` trazida por merge se a branch ficou atrás (e o CI verde nesse head novo), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida, ADR 0061), tag `vX.Y.Z` no squash, um build, health com conferência de versão, registro (`state.json` e `history.json`) num PR só de docs mergeado do mesmo jeito, e limpeza. Snapshot e draft do Manual não são do rabo: uma Action no push da `main` cuida deles depois do registro (ADR 0062). O registro nomeia o PR e a issue. Códigos de saída e o que fazer em cada um: docstring do script.
 
@@ -401,7 +404,7 @@ Pular se o ciclo não deixou pendência nenhuma.
 
 ## Passo 11: Resumo final
 
-Imprime ao usuário o estado final do ciclo, no formato da seção "Output final" abaixo: o PR verde, os gates, a issue e o comando do rabo. Não cria commit. Não pushea. Não escreve em arquivo. É display puro.
+Imprime ao usuário o estado final do ciclo, no formato da seção "Output final" abaixo: o PR verde, os gates, a issue e a linha final do rabo. Não cria commit. Não pushea. Não escreve em arquivo. É display puro.
 
 O `history.json` e o `state.json` são escritos pelo rabo, no PR de registro depois do health; o `/ship` não toca em nenhum deles.
 
@@ -419,7 +422,7 @@ Bloco único de 3 linhas, com referências essenciais. Sem ruído visual de list
 
 ```
 ✅ ship PR #$PR_NUMBER verde · gates: $GATES_VERDES$([ -n "$ISSUE_NUMBER" ] && echo " · Issue #$ISSUE_NUMBER com critérios marcados")
-   Rabo (merge, bump, deploy): python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs $PR_NUMBER
+   Rabo: python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs $PR_NUMBER → <a última linha da saída>
    $([ -n "$NEW_MIGRATIONS" ] && echo "Migration: o rabo espera $NEW_MIGRATIONS no /api/health antes do merge (Passo 8.6)")
 ```
 
@@ -427,10 +430,10 @@ Bloco único de 3 linhas, com referências essenciais. Sem ruído visual de list
 
 ```
 ✅ ship PR #9 verde · gates: code-review, spec×diff, CI · Issue #8 com critérios marcados
-   Rabo (merge, bump, deploy): python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs 9
+   Rabo: python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs 9 → <a última linha da saída>
 ```
 
-Gate vermelho: emoji muda pra ❌ e a linha 2 dá o gate e o motivo em vez do comando do rabo.
+Baixa (Passo 8): emoji muda pra ❌ e a linha 2 dá o gate e o motivo em vez da linha do rabo.
 
 Notificações (Discord, etc.) reportadas separadamente como linha solta se houver, ou silenciosamente puladas.
 
@@ -453,7 +456,7 @@ Mapeia o ponto de retomada pelo estado real:
 | Commit feito, sem push | Passo 6 (push) |
 | Pushado, sem PR | Passo 7 (PR) |
 | PR aberto, gates pendentes | Passo 8 (gates) |
-| Gates verdes | Passo 9 (critérios na issue) e Passo 10 (comando do rabo) |
+| Gates verdes | Passo 9 (critérios na issue) e Passo 10 (rabo) |
 | PR mergeado | Nada: o rabo já rodou. Conferir no `history.json` |
 
 A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem dependência de `docs/planejamento/`.
@@ -471,8 +474,8 @@ A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem de
 
 - PR fica aberto, com comentários da skill review.
 - Branch fica.
-- O gate que reprovou é reportado no PR; corrigir e re-shippar.
-- Usuário corrige, commita, push, e roda `/ship --resume` (recomeça do Passo 8).
+- O gate que reprovou chama o `hr-corretor` (Passo 8); só a baixa devolve o PR ao humano.
+- Depois da baixa, o humano corrige, commita, dá push e roda `/ship --resume` (recomeça do Passo 8).
 
 ### Falha no rabo
 
@@ -511,4 +514,4 @@ A Issue (`gh issue view $ISSUE`) traz o contexto; o git traz o progresso. Sem de
 - `.github/PULL_REQUEST_TEMPLATE.md`: template do PR.
 - `references/discord.md`: Passo 12 completo (fontes da webhook URL e payload).
 - `https://cli.github.com/manual/` — manual do gh CLI.
-- `.claude/skills/onda-enxuta/scripts/fechar_onda.py`: o rabo que o Passo 10 imprime.
+- `.claude/skills/onda-enxuta/scripts/fechar_onda.py`: o rabo que o Passo 10 roda.

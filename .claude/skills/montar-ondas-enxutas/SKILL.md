@@ -5,7 +5,7 @@ description: Planeja sessões /onda-enxuta sem conflito, presta contas de cada i
 
 # Montar ondas enxutas: plano de sessões paralelas
 
-Planejador da `/onda-enxuta`. A `/onda-enxuta` executa **uma** fila em **várias ondas**, uma sessão de fundo por onda; esta skill decide **quantas** filas abrir, **o que** vai em cada uma e **em que ordem** o humano aprova os merges. Sai daqui um arquivo de prompt por sessão e **um comando de lançamento** por sessão. Nada roda aqui: o Pedro roda os comandos num terminal, cada sessão nasce em segundo plano, faz a onda 1 até PR verde e para no checkpoint; ele entra com `claude attach` e escreve `vai`.
+Planejador da `/onda-enxuta`. A `/onda-enxuta` executa **uma** fila em **várias ondas**, uma sessão de fundo por onda; esta skill decide **quantas** filas abrir, **o que** vai em cada uma e **em que ordem** as ondas sobem. Sai daqui um arquivo de prompt por sessão e **um comando de lançamento** por sessão. Nada roda aqui: o Pedro roda os comandos num terminal, cada sessão nasce em segundo plano e leva a onda 1 até produção sem parar (ADR 0063); só a migration chama o humano, por notificação.
 
 A meta é sair com **toda issue aberta em um de dois lugares**: dentro de um prompt (`ready-for-agent`) ou numa lista curta do que só o humano faz. Issue "esperando triagem" no fim do plano é falha do plano.
 
@@ -20,7 +20,7 @@ A meta é sair com **toda issue aberta em um de dois lugares**: dentro de um pro
 | Argumento | Default | Efeito |
 |---|---|---|
 | `--exceto #PRD` | detectado | PRD cujas fatias outra sessão já está rodando. Sem o argumento, detecte: sub-issue com `in-progress` ou assignee, ou PR aberto da branch dela. |
-| `--max-sessoes N` | 3 | Teto de filas (sessões) novas. Mais que 3 deployando concorre pelo mesmo Coolify e pelo mesmo humano aprovando. Cada fila vira uma cadeia de sessões de fundo, uma por onda. |
+| `--max-sessoes N` | 3 | Teto de filas (sessões) novas. Mais que 3 deployando concorre pelo mesmo Coolify. Cada fila vira uma cadeia de sessões de fundo, uma por onda. |
 
 ## Fluxo
 
@@ -110,8 +110,8 @@ O corpo das issues cita os arquivos (`ouvidoria_setor.py:102`, `page.tsx:278`). 
 
 1. **Mesma sessão, ondas diferentes**: issues que tocam o mesmo arquivo. Dentro da sessão a ordem é: quem a issue diz que vem antes ("fechar as duas em conjunto", "rodar depois da #N"), depois bloqueio nativo, depois `fatia:P` antes de `M`/`G`. Varredura de módulo inteiro (tipografia, lint) vai na última onda da sessão dona daquele módulo.
 2. **Sessões diferentes**: grupos de arquivos disjuntos. Nomeie cada sessão pelo tema (segurança e logs, portal do setor, ouvidoria backend). Issue de docs (`CONTEXT.md`, ADR) conta como arquivo: duas que mexem no `CONTEXT.md` não vão na mesma onda.
-3. **Paralelo por onda**: até 3. Sessão com 2 issues por onda roda `--paralelo 2`. Equilibre o número de ondas entre as sessões: cada onda é um deploy e um checkpoint do humano.
-4. Conflito **entre** sessões (dois grupos tocando `ouvidoria_notificacoes.py` em funções diferentes) é aceitável: resolve no merge sequencial. Conflito **dentro** da onda não é.
+3. **Paralelo por onda**: até 3. Sessão com 2 issues por onda roda `--paralelo 2`. Equilibre o número de ondas entre as sessões: cada onda é um deploy.
+4. Arquivo em comum **entre** sessões também não roda junto (ADR 0063): sem humano no merge, o conflito só apareceria no rabo. Dois grupos que tocam `ouvidoria_notificacoes.py`, mesmo em funções diferentes, vão para a mesma sessão em ondas diferentes (regra 1), e a issue da onda seguinte ganha "Bloqueada por" a da anterior pela dependência nativa (ADR 0028), para nenhuma outra sessão nem o `/pegar-issue` a pegarem antes: `gh api -X POST "repos/$REPO/issues/<seguinte>/dependencies/blocked_by" -F issue_id=$(gh api "repos/$REPO/issues/<anterior>" --jq .id)`. Issue que outra sessão já roda (balde "Outra sessão") e toca arquivo de uma candidata: a candidata ganha "Bloqueada por" ela do mesmo jeito e fica fora deste plano.
 5. Issue que cria migration: **calcule o número** pelo `ls` de `origin/main` e escreva no prompt ("o número é 097; a 096 já existe"). O deploy não aplica migration; o Pedro aplica no Studio.
 
 Mostre a tabela final: sessão · onda · issues · arquivo em comum dentro da sessão (o motivo de a onda ser essa).
@@ -150,7 +150,7 @@ Auditorias de PRD desta sessão: quando #a e #b fecharem, audite o PRD #X contra
 
 Decisões de triagem: comentadas nas issues (#.. em <data>; #.. em <data>).
 - #<N>: <a decisão em uma linha, quando o corpo sozinho deixa dúvida: o item que fica de fora, o valor cravado, "só docs, nenhum código muda">.
-- #<N> cria migration: o número é <0XX> (a <0XX-1> já existe em origin/main). O deploy não aplica: no checkpoint, lembre o humano de aplicar no Studio antes do "vai".
+- #<N> cria migration: o número é <0XX> (a <0XX-1> já existe em origin/main). O deploy não aplica: o rabo imprime o arquivo, a sessão notifica o humano e o merge espera o número no /api/health.
 
 Outras sessões mergeiam e deployam em paralelo (onda-b, onda-c). O semáforo do fechar_onda.py ordena os deploys; prod hoje está em v<X.Y.Z>.
 ```
@@ -165,7 +165,7 @@ PRD que fecha é entrega para o diretor e para quem opera o hospital, e eles só
 
 Regras:
 
-1. **Terminal próprio, nunca dentro da `/onda-enxuta`.** O `/divulgar` tem gate humano no draft do vídeo; a `/onda-enxuta` é AFK até o PR verde. Misturar os dois deixa a onda parada esperando um OK que não é de merge. O plano abre uma **sessão de divulgação** (uma só, sequencial: um PRD de cada vez) com um prompt por PRD.
+1. **Terminal próprio, nunca dentro da `/onda-enxuta`.** O `/divulgar` tem gate humano no draft do vídeo; a `/onda-enxuta` é AFK até produção. Misturar os dois deixa a onda parada esperando um OK que não é de merge. O plano abre uma **sessão de divulgação** (uma só, sequencial: um PRD de cada vez) com um prompt por PRD.
 2. **Quando cada vídeo pode começar** é decisão do plano, não do humano. Leia as fatias que faltam do PRD:
    - Se as fatias restantes **não mudam tela** (chore, teste, docs, manual): o vídeo começa **agora**, em paralelo com as ondas. O carimbo retrata a versão de prod de hoje e o PRD já está inteiro no app.
    - Se alguma fatia restante **muda tela**: o vídeo espera o deploy da última fatia visual (o carimbo "retrata o app em vX.Y.Z" precisa da versão que tem a tela) e roda em paralelo com o que sobrar (manual, docs).
@@ -194,9 +194,9 @@ A resposta final tem esta forma, nesta ordem. É o que o Pedro lê do celular.
 4. **Tabela final** do passo 4.
 5. **Os prompts**, inteiros, cada um com o cabeçalho de leitura (issues, resumo por issue, valor, comando de lançamento) em cima do bloco. Por último, os prompts de divulgação (5b), um por PRD que fecha.
 6. **Passo a passo:**
-   1. Num terminal na raiz do repositório, rodar o comando de lançamento de cada sessão (todos de uma vez, se quiser). Cada uma nasce em segundo plano, monta a fila, escreve o Mapa do terreno do PRD se ainda não existir e roda a onda 1 até PR verde. `claude agents` lista as sessões vivas; `claude logs <id>` mostra o andamento.
-   2. Quando chegar a notificação de checkpoint: `claude attach <id>` e escrever `vai #a #b` (ou com condição, ou `abortar`). **Uma sessão por vez**: o semáforo enfileira os deploys sozinho, mas aprovar uma de cada vez evita corrida de versão na sua cabeça. Liste a sequência onda a onda, alternando sessões, e marque na linha certa "aplique a migration 0XX no Studio antes do vai" e "ela audita o PRD #X em seguida". Ordem: a sessão menor primeiro, a onda com migration quando o Pedro estiver perto do Studio, a fatia que reabre auditoria de PRD por último.
-   3. Depois do "vai", a sessão fecha a onda (um merge pela API, um build), imprime a conta de tokens e lança sozinha a sessão da onda seguinte. Nada a fazer até a próxima notificação.
+   1. Num terminal na raiz do repositório, rodar o comando de lançamento de cada sessão (todos de uma vez, se quiser). Cada uma nasce em segundo plano, monta a fila, escreve o Mapa do terreno do PRD se ainda não existir e roda a onda 1 até produção. `claude agents` lista as sessões vivas; `claude logs <id>` mostra o andamento.
+   2. Nada a aprovar: cada sessão mergeia e sobe a própria onda sozinha (ADR 0063), e o semáforo enfileira os deploys. A notificação chega em três casos: migration no lote (cole no Studio o arquivo que ela cita), fatia que foi para `ready-for-human` e rollback. Liste a sequência onda a onda, alternando sessões, e marque na linha certa "a onda N traz a migration 0XX" e "ela audita o PRD #X em seguida". Lance a sessão com migration quando o Pedro estiver perto do Studio.
+   3. Com os PRs verdes, a sessão fecha a onda (um merge pela API, um build), imprime a conta de tokens e lança sozinha a sessão da onda seguinte. Nada a fazer até a próxima notificação.
    4. **Divulgação:** para cada PRD que fecha, a linha "cole o prompt de `/divulgar #X` num terminal próprio" no momento certo (agora, ou logo após o deploy da onda que sobe a última tela) e, depois do link publicado, "mande o link ao diretor e aos usuários do módulo".
    5. "No tempo morto": as tarefas do item 3.
 

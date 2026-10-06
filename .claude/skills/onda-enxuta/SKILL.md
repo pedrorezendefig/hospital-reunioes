@@ -5,9 +5,9 @@ description: 'Executor AFK da fila de issues em ondas: sessão de fundo por onda
 
 # Onda enxuta
 
-É a onda do pipeline (ADRs 0022, 0029, 0035 e 0061): esvazia uma fila de issues em ondas, para no seu OK de merge por lote, um deploy por onda, auditoria do PRD no fim. Muda **a forma do loop**, não os gates. Nasceu da medição de três ondas de setembro de 2026 (1,05 bilhão de tokens para 11 issues, 94% releitura de contexto) e das decisões em [references/decisoes.md](references/decisoes.md). Tudo o que ela precisa vive em `.claude/skills/onda-enxuta/` e `.claude/agents/hr-*.md`. A `/onda` e a `/montar-ondas` originais foram aposentadas pela ADR 0061.
+É a onda do pipeline (ADRs 0022, 0029, 0035, 0061 e 0063): esvazia uma fila de issues em ondas, mergeia sozinha os PRs verdes e limpos de cada lote (só a migration para no humano), um deploy por onda, auditoria do PRD no fim. Muda **a forma do loop**, não os gates. Nasceu da medição de três ondas de setembro de 2026 (1,05 bilhão de tokens para 11 issues, 94% releitura de contexto) e das decisões em [references/decisoes.md](references/decisoes.md). Tudo o que ela precisa vive em `.claude/skills/onda-enxuta/` e `.claude/agents/hr-*.md`. A `/onda` e a `/montar-ondas` originais foram aposentadas pela ADR 0061.
 
-> **Invariantes herdados, sem exceção:** subir para produção é decisão humana por onda, citando os PR#. PR verde = CI verde + spec×diff + veredito limpo do revisor independente. Baixa em 3 tentativas. Fatia de manual para no draft do vídeo. Nada de doc de estado no repositório: o estado vive no GitHub, e o custo em `~/.claude/onda-enxuta/medicoes/`, fora do repositório.
+> **Invariantes herdados, sem exceção:** nada espera o humano antes de produção, exceto migration (ADR 0063): o gate é CI, revisores agentes, health e rollback automático. PR verde = CI verde + spec×diff + veredito limpo do revisor independente. Baixa em 3 tentativas. Fatia de manual para no draft do vídeo. Nada de doc de estado no repositório: o estado vive no GitHub, e o custo em `~/.claude/onda-enxuta/medicoes/`, fora do repositório.
 
 ## Sintaxe
 
@@ -22,7 +22,7 @@ description: 'Executor AFK da fila de issues em ondas: sessão de fundo por onda
 | `--sessao <nome>` | `onda-<letra>` | Nome da sessão (`--name` do `claude --bg`). É a chave do semáforo e o prefixo das medições. |
 | `--onda N` | 1 | Número desta onda dentro da sessão. Cresce a cada passagem. |
 
-**Uma sessão de fundo = uma onda.** A sessão nasce pelo `scripts/lancar_sessao.sh` (ambiente limpo, zero MCP, Opus 5.5, esforço `high`), roda a onda até o checkpoint, fecha a onda depois do seu "vai", escreve a passagem e lança a sessão da onda seguinte. O caderno nunca atravessa duas ondas.
+**Uma sessão de fundo = uma onda.** A sessão nasce pelo `scripts/lancar_sessao.sh` (ambiente limpo, zero MCP, Opus 5.5, esforço `high`), roda a onda, fecha a onda com o rabo assim que os PRs ficam verdes, escreve a passagem e lança a sessão da onda seguinte. O caderno nunca atravessa duas ondas.
 
 ## Papéis (agentes em `.claude/agents/`)
 
@@ -48,7 +48,7 @@ Você, orquestrador, **não lê código, diff, PRD nem spec**. Mantém a tabela 
 
 ### 1. Fila-alvo
 
-Com fila fixa no prompt, use-a: confira só que cada issue está `ready-for-agent`, sem dono e sem bloqueio aberto (`gh issue view <N> --json labels,assignees` e `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`). Sem fila fixa, monte (sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`), menores primeiro. Mostre a tabela desta onda em até 6 linhas e siga sem pedir confirmação: o lançamento foi o "vai".
+Com fila fixa no prompt, use-a: confira só que cada issue está `ready-for-agent`, sem dono e sem bloqueio aberto (`gh issue view <N> --json labels,assignees` e `gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`). Sem fila fixa, monte (sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`), menores primeiro. Mostre a tabela desta onda em até 6 linhas e siga direto: o lançamento foi a ordem.
 
 ### 2. Mapa do terreno (1 vez por PRD)
 
@@ -80,20 +80,17 @@ Depois, por notificação:
 
 PR verde = `gh pr checks` verde + veredito(s) `LIMPO` + spec×diff declarado pelo implementador. Issue que não fecha em **3 tentativas** (implementação, correções e rodadas somadas): `gh issue edit <N> --remove-label in-progress --add-label ready-for-human` e comentário `<!-- automacao -->` com branch, gate que falhou e hipótese. A onda segue.
 
-### 5. Checkpoint em duas metades
+### 5. Lote pronto
 
-Quando todos os PRs do lote estão verdes ou baixados:
+Quando todos os PRs do lote estão verdes ou baixados, imprima a tabela (issue · PR · status · fatia · migration (número) · MP4 do draft (fatia de manual)) e siga direto para o fechamento, sem esperar mensagem (ADR 0063).
 
-1. Imprima a tabela: issue · PR · status · fatia · should-fix pendentes (n) · migration (número) · MP4 do draft (fatia de manual).
-   Fatia de manual (ADR 0057): o implementador para no draft de cada Vídeo de tarefa e o caminho do MP4 entra na tabela; aprovar o vídeo é o mesmo gate humano do merge, não um segundo toque. Todo comentário do agente no PR leva `<!-- automacao -->` na primeira linha, senão a label `revisor-comentou` acusa a própria onda.
-2. Dispare a notificação push (ferramenta `PushNotification`, uma linha: "Onda <N> de <sessão> pronta: PRs #a #b. `claude attach <id>` e `vai`").
-3. Imprima as instruções e **encerre o turno**: `claude attach <id da sessão>` e depois `vai #a #b` (todos), `vai #a` (subconjunto) ou `abortar`. Condição opcional na mesma linha: `vai #a #b, corrigir o should-fix da #b e mergear se voltar limpo`.
+Fatia de manual (ADR 0057): o implementador para no draft de cada Vídeo de tarefa e o caminho do MP4 entra na tabela e no relatório (passo 7), para o humano ver depois; ele não segura o merge, porque só a migration para no humano. Todo comentário do agente no PR leva `<!-- automacao -->` na primeira linha, senão a label `revisor-comentou` acusa a própria onda.
 
-Não fique em `AskUserQuestion`: numa sessão de fundo ninguém a vê. A pergunta acontece quando você retoma a sessão, e aí a resposta chega como mensagem normal.
+Não use `AskUserQuestion` nem encerre o turno esperando resposta: numa sessão de fundo ninguém a vê.
 
-### 6. Fechamento da onda (depois do "vai")
+### 6. Fechamento da onda
 
-1. Leia o "vai": PRs aprovados e condição. Sem condição, should-fix fica como comentário no PR e a fatia entra como está. Com condição de correção: `hr-corretor` (motivo `revisao`, com os itens pré-autorizados), nova revisão, `gh pr checks --watch`, e só então o fechamento, **sem novo checkpoint**. A condição vale só para este lote.
+1. Entram os PRs verdes do lote (`gh pr checks` verde e veredito `LIMPO`), todos num rabo só, na ordem da tabela; fatia baixada fica de fora. Should-fix fica como comentário no PR e a fatia entra como está.
 2. Migration nova no lote: o script não aplica SQL, mas espera (issue #969). Ele imprime uma linha `migration: cole no Studio <arquivo>:1` por migration e só pega o semáforo quando o `/api/health` devolve o número da maior (toda migration termina gravando o próprio número em `migracoes_aplicadas`). Assim que a linha aparecer na saída do passo 3, repasse-a ao humano por `PushNotification`.
 3. `python .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <a> <b> --sessao <nome>` via Bash **em segundo plano** (builds levam minutos). Ele pega o semáforo, cria um worktree descartável em `~/wt-<nome>` (caminho curto, MAX_PATH), faz merge local `--no-ff` em ordem na branch `onda/<nome>`, calcula a versão nova sem commit (issue #967; lote só de `docs/**`, `.claude/**` e `*.md` não muda a versão nem espera build), abre o PR de entrega e espera o CI dele, põe o `APP_VERSION` no backend e no frontend, mergeia pela API (a `main` é protegida, ADR 0061) e cria a tag `vX.Y.Z` no squash, espera **um build**, confere health com version match, grava o registro num PR só de docs com `history.json` (todos os deploys, sem teto) e `state.json`, limpa worktrees de agente já mergeados e solta o semáforo. O rabo grava só a verdade do deploy: o snapshot e o draft do Manual dos PRDs que fecharam saem numa Action no push da `main`, depois do registro (ADR 0062). Saída de 10 linhas; leia só ela.
    - Saída `2` (conflito ou main andou): com a linha `conflito no merge de #N em: <arquivos>`, dispare o `hr-corretor` motivo `conflito` no #N com os arquivos da linha; ele rebaseia pela skill `resolver-conflitos`. Quando ele terminar, `gh pr checks <N> --watch` em segundo plano, para o CI rodar sobre o código combinado (vermelho segue o passo 4), e rode o script de novo. Cada conflito conta uma tentativa da fatia; na terceira, `ready-for-human` como toda baixa (passo 4), com o diagnóstico (a linha do rabo, os arquivos e o que o corretor tentou), `PushNotification` de uma linha, e o script roda de novo sem o #N.
@@ -117,7 +114,7 @@ Imprima o id que ele devolve e encerre. Fila vazia: **Sinal final** (fechadas e 
 
 ## Limites
 
-- Não revoga o gate de merge, não roda sem checkpoint, não mergeia por conta própria depois de um "vai" que não citou o PR.
+- Só a migration a faz esperar o humano (ADR 0063); não mergeia PR que não está verde e `LIMPO`.
 - Não modifica nada de `.claude/skills/` nem de `docs/` do repositório além do que o `fechar_onda.py` registra (`docs/spec/deploy/history.json` e `state.json`), que já era registro do `/deploy`.
 - As medições de custo vivem em `~/.claude/onda-enxuta/medicoes/`, fora do repositório.
 - Não usa Sonnet nem Haiku em papel nenhum (restrição do dono).
@@ -126,7 +123,7 @@ Imprima o id que ele devolve e encerre. Fila vazia: **Sinal final** (fechadas e 
 
 | Script | Faz | Saída |
 |---|---|---|
-| `scripts/lancar_sessao.sh <nome> <prompt.md> [--dry-run]` | Lança a sessão de fundo com ambiente limpo, zero MCP (`--strict-mcp-config --no-chrome`), plugins desligados (`--settings onda-settings.json`), `--model opus --effort high` | id da sessão (`claude attach <id>`) |
+| `scripts/lancar_sessao.sh <nome> <prompt.md> [--dry-run]` | Lança a sessão de fundo com ambiente limpo, zero MCP (`--strict-mcp-config --no-chrome`), plugins desligados (`--settings onda-settings.json`), `--model opus --effort high` | id da sessão (`claude logs <id>` mostra o andamento) |
 | `scripts/sensivel.py <PR>` | Cruza os arquivos do PR com `revisao-sensivel.txt` | arquivos sensíveis; exit 0 se houver |
 | `scripts/fechar_onda.py --prs ... --sessao ... [--dry-run]` | Integração da onda: um merge pela API, um build, registro só com `history.json` e `state.json` | 10 linhas; exit 0 ok, 1 pré-condição, 2 conflito, 3 build, 4 health com rollback que falhou, 6 rollback feito, 7 migration vencida |
 | `scripts/medir_onda.py --onda N --issues a,b --prs c,d [--inicio ISO] [--modelo claude-opus-5-5]` | Conta da onda a partir dos JSONL da sessão e dos sub-agentes (papel pelo prefixo `[papel: ...]` do prompt) | 10 linhas; JSON em `~/.claude/onda-enxuta/medicoes/`. Sub-agente nunca retomado sai como estimado |
