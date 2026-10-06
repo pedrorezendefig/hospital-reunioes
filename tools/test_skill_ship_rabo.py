@@ -233,9 +233,11 @@ def test_o_rabo_grava_app_version_nos_dois_apps_e_cria_a_tag():
 
 # ------------------------------------------- rollback automático (#968)
 
-# O rabo é script e não chama agente (PRD #963): ele volta a imagem anterior e
-# devolve o código; o revert, a issue reaberta, a tentativa e a notificação são
-# de quem o chamou. Skill que não diz isso deixa o defeito na main.
+# O rabo é script e não chama agente (PRD #963): ele volta a imagem anterior e,
+# ainda com a trava, reabre as issues e mergeia o revert dos squashes (issue
+# #999); a tentativa e a notificação são de quem o chamou. Skill que manda quem
+# chamou abrir outro revert duplica o trabalho, e a que não manda contar a
+# tentativa deixa a fatia sem teto.
 
 def codigo_do_rabo(nome: str) -> str:
     fonte = (RAIZ / FECHAR_ONDA).read_text(encoding="utf-8")
@@ -253,16 +255,20 @@ def item_da_saida(trecho: str, codigo: str) -> str:
 
 
 @pytest.mark.parametrize("skill", ["ship", "onda-enxuta"])
-def test_quem_chama_o_rabo_reverte_reabre_conta_e_notifica_no_rollback_feito(skill):
+def test_no_rollback_feito_o_rabo_ja_reabriu_e_reverteu_e_quem_chama_conta_e_notifica(skill):
     trecho = secao(texto("ship"), "Passo 10") if skill == "ship" else fechamento_da_onda()
     item = item_da_saida(trecho, codigo_do_rabo("EXIT_ROLLBACK"))
 
-    assert "PR de revert" in item and "git revert" in item and "sem rebuild" in item, item
-    assert "gh issue reopen" in item and "ready-for-agent" in item, item
-    assert "linha `health:`" in item, "o comentário leva o que o health respondeu: " + item
+    # o que o rabo já fez, antes de soltar a trava
+    assert "antes de soltar o semáforo" in item, item
+    assert "reabriu" in item and "ready-for-agent" in item and "linha `health:`" in item, item
+    assert "mergeou o PR `revert/" in item and "sem rebuild" in item, item
+    # quem chama não refaz: nenhum comando de revert ou de reabrir no item
+    for refeito in ("git revert", "gh issue reopen", "gh pr create"):
+        assert refeito not in item, (refeito, item)
     assert "tentativa" in item, item
     assert "PushNotification" in item and "rollback disparado no PR" in item, item
-    assert "semáforo" in item and "solto" in item and "/deploy rollback" not in item, item
+    assert "/deploy rollback" not in item, item
 
 
 @pytest.mark.parametrize("skill", ["ship", "onda-enxuta"])

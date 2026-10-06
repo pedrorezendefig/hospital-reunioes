@@ -143,7 +143,7 @@ def test_a_onda_puxa_toda_issue_desbloqueada_e_a_passagem_leva_a_dependencia():
     assert "**a onda é toda issue da fila fixa já desbloqueada** (`blocked_by` todo fechado)" in fila, fila
     assert "mesmo que a passagem a tenha posto numa onda posterior" in fila, fila
 
-    relatorio = secao(ler(ONDA), "7. Relatório da onda", "###")
+    relatorio = secao(ler(ONDA), "5. Lote pronto", "###")  # a passagem sai com os PRs verdes (#999)
     assert '("#945, depois da #944")' in relatorio, relatorio
     assert "número de issues da fila desbloqueadas quando você a escreve, com teto 3" in relatorio, relatorio
 

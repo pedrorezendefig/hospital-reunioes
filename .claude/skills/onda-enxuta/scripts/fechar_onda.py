@@ -40,7 +40,11 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      semaforo: 24 h com a trava pega parariam os outros deploys, e o
      semaforo.sh a da por velha em 60 min. Backend no ar sem o campo
      `migracao` (anterior ao #969): avisa e segue sem esperar, como antes
-  2. semaforo de deploy (chave = nome da sessao, unica por construcao)
+  2. semaforo de deploy (chave = nome da sessao, unica por construcao; na onda,
+     `<sessao>-onda<N>`). Trava parada (o rabo dono saiu com 3 ou 4) ou velha:
+     sai na hora com 8, sem pegar nem soltar. Com a trava pega, confere de novo
+     o `blocked_by` da issue de cada PR (issue #999): a bloqueadora pode ter sido
+     reaberta pelo rollback de outro rabo, e o PR com bloqueio aberto fica de fora
   3. versao nova (semver) pelo tipo dominante dos commits do lote, a partir do
      `last_app_version` do state.json conferido com a maior tag vX.Y.Z
      (ferramenta nao muda a versao). Sem commit (issue #967): o package.json do
@@ -79,7 +83,10 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      antes dele, e `rollback run`, sem forcar build; em modo imagem, a tag
      anterior, pelo mesmo caminho do deploy, se ainda apontar no GHCR para o
      digest do state.json) e o APP_VERSION antigo volta
-     aos apps, antes da imagem subir; o health e conferido de novo na versao antiga
+     aos apps, antes da imagem subir; o health e conferido de novo na versao antiga.
+     Com prod de volta e ainda com a trava (issue #999): reabre cada issue do
+     lote e mergeia pela API o PR `revert/<chave>` com o revert dos squashes,
+     depois do CI dele, cancelando o build que esse merge dispara
   8. registro num PR so de docs, so com history.json (todos os deploys, sem
      teto) e state.json (ADR 0062, decisao 9), mergeado pela API; o build que o
      webhook do Coolify dispara para ele e cancelado (issue #851). Snapshot e
@@ -98,30 +105,39 @@ ultimo PR: o commit que foi para producao. O registro vem depois, so com docs.
 
 Codigos de saida:
   0  todos os PRs na main, health verde, registro na main (ferramenta: merges na main)
-  1  pre-condicao falhou ou trava velha: nada foi tocado
+  1  pre-condicao falhou: nada foi tocado
   2  algum PR ficou de fora (conflito com a main, push na branch rejeitado, CI
-     vermelho, head que andou, merge recusado ou erro inesperado do gh ou do git
-     depois do primeiro merge), cada um com a linha `de fora:`;
-     os que entraram seguem o fluxo inteiro e o semaforo e solto. Nenhum entrou:
-     nada na main, worktree removido, semaforo solto. Rode de novo so com os de
-     fora, depois de corrigir. Com 3 a 6, as linhas `de fora:` saem do mesmo jeito
-  3  build falhou no Coolify: SEMAFORO FICA PRESO, rode `/deploy rollback` com a chave impressa
+     vermelho, head que andou, merge recusado, erro inesperado do gh ou do git
+     depois do primeiro merge, ou a issue dele com `blocked_by` aberto ao pegar a
+     trava, na linha `de fora: #<PR> bloqueada por #<X>`), cada um com a linha
+     `de fora:`; os que entraram seguem o fluxo inteiro e o semaforo e solto.
+     Nenhum entrou: nada na main, worktree removido, semaforo solto. Rode de novo
+     so com os de fora, depois de corrigir. Com 3 a 6, as linhas `de fora:` saem
+     do mesmo jeito
+  3  build falhou no Coolify: SEMAFORO FICA PRESO e marcado parado (o rabo
+     seguinte sai com 8), rode `/deploy rollback` com a chave impressa
   4  health falhou (ou versao nao bate) e o rollback automatico tambem falhou (sem
-     imagem anterior, Coolify recusou, ou health ainda ruim): SEMAFORO FICA PRESO,
-     mesma instrucao do 3
+     imagem anterior, Coolify recusou, ou health ainda ruim), ou o rollback deu
+     certo e o revert da saida 6 nao entrou (conflito, CI vermelho ou merge
+     recusado): SEMAFORO FICA PRESO e marcado parado, mesma instrucao do 3
   5  producao ok, mas o PR de registro nao entrou: semaforo solto; mergeie o PR impresso
      quando o CI dele ficar verde. Ferramenta: merge feito, producao intacta,
      semaforo solto, mas a arrumacao depois do merge falhou (a linha diz o que falta)
   6  rollback feito: o health falhou, a imagem anterior e o APP_VERSION antigo
-     voltaram e o health ficou verde de novo; semaforo solto, sem registro. A tag
-     vX.Y.Z fica no squash ruim, e a proxima versao sai depois dela. Os squashes
-     seguem na main: quem chamou abre o PR de revert deles (sem rebuild), reabre a
-     issue de cada um com `ready-for-agent` e a linha `health:` (o que o health
-     respondeu), conta uma tentativa de cada fatia e notifica
+     voltaram e o health ficou verde de novo; sem registro. A tag vX.Y.Z fica no
+     squash ruim, e a proxima versao sai depois dela. Antes de soltar o semaforo,
+     o rabo reabre a issue de cada PR do lote com `ready-for-agent` e a linha
+     `health:` (o que o health respondeu) e mergeia o PR `revert/<chave>` com o
+     revert dos squashes, sem rebuild; depois, semaforo solto. Quem chamou conta
+     uma tentativa de cada fatia e notifica
   7  migration vencida: o /api/health nao devolveu o numero da migration do lote
      em 24 h: nada entrou na main, o semaforo nao chegou a ser pego e os PRs
      seguem abertos; quem chamou notifica, e o rabo roda de novo depois que a
      migration for colada no Studio
+  8  parada: a trava esta parada (o rabo que a segura saiu com 3 ou 4) ou velha
+     (mais de 60 min), e prod espera rollback humano. Sai na hora, sem pegar o
+     semaforo: nada entrou na main e os PRs seguem abertos. A linha `parada:`
+     diz a chave do dono; soltar a trava e do humano, depois do rollback
 
 `--dry-run`: executa 1 e calcula o 3 sem escrever; imprime o plano (PR,
 issue, classe e tipo de versao: "app: bump ..." ou "ferramenta: só merge") e o
@@ -168,6 +184,7 @@ EXIT_HEALTH = 4
 EXIT_REGISTRO = 5
 EXIT_ROLLBACK = 6
 EXIT_MIGRACAO = 7
+EXIT_PARADA = 8
 
 SEMAFORO = ".claude/skills/deploy/scripts/semaforo.sh"
 SPEC = "docs/spec"
@@ -442,6 +459,17 @@ def semaforo(raiz: Path, acao: str, chave: str, descricao: str = "") -> int:
     return proc.returncode
 
 
+def dono_e_motivo_da_trava(raiz: Path) -> tuple[str, str]:
+    """Quem segura a trava e por que ela esta parada, pelo `semaforo.sh status`:
+    a linha do erro que o rabo dono marcou, ou a idade da trava velha."""
+    status = run([BASH, bash_path(raiz / SEMAFORO), "status"], cwd=raiz, check=False, timeout=60).stdout.strip()
+    achado = re.match(r"ocupado por (\S+) h\S+ (\d+) min: (.*?)(?: \S parada: (.*))?$", status)
+    if not achado:
+        return "?", status or "a trava sumiu"
+    dono, minutos, descricao, parada = achado.groups()
+    return dono, parada if parada is not None else f"trava velha, {minutos} min: {descricao}"
+
+
 def pegar_semaforo(raiz: Path, chave: str, prs: list[int], avulso: bool = False) -> None:
     desc = (f"fechar_onda: PR avulso #{prs[0]}" if avulso
             else f"onda-enxuta {chave}: PRs " + " ".join(f"#{p}" for p in prs))
@@ -452,10 +480,45 @@ def pegar_semaforo(raiz: Path, chave: str, prs: list[int], avulso: bool = False)
         if rc == 3:
             print("semaforo: outra sessao esta deployando, esperando mais um ciclo.")
             continue
-        if rc == 2:
-            falhar("semaforo: trava velha (mais de 60 min). Confira `coolify app deployments list` e, "
-                   "sem build rodando, `semaforo.sh soltar <chave-do-dono> --forcar`.", EXIT_PRECOND)
+        if rc in (2, 4):
+            # trava parada (o rabo dono saiu com 3 ou 4) ou velha: prod espera o rollback
+            # humano, e quem chega sai na hora, sem pegar nem soltar a trava (issue #999)
+            dono, motivo = dono_e_motivo_da_trava(raiz)
+            falhar(f"parada: prod espera rollback humano, chave {dono} ({motivo}). Nada entrou na main e o "
+                   "semaforo nao foi pego; PRs " + " ".join(f"#{p}" for p in prs) + " seguem abertos.",
+                   EXIT_PARADA)
         falhar(f"semaforo: saida inesperada {rc}.", EXIT_PRECOND)
+
+
+def parar_a_trava(raiz: Path, chave: str, linha: str, codigo: int) -> int:
+    """Saidas 3 e 4: a trava fica presa com quem quebrou e marcada parada com a
+    linha do erro, e o rabo seguinte sai na hora com 8 (issue #999)."""
+    print(linha)
+    semaforo(raiz, "parar", chave, linha)
+    return codigo
+
+
+def bloqueadoras_abertas(raiz: Path, issue: int) -> list[int]:
+    """As issues que ainda bloqueiam `issue` (o `blocked_by` nativo do GitHub)."""
+    dados = gh_json(["api", f"repos/{{owner}}/{{repo}}/issues/{issue}/dependencies/blocked_by"], cwd=raiz) or []
+    return sorted(d["number"] for d in dados if str(d.get("state") or "").lower() == "open")
+
+
+def conferir_bloqueios(raiz: Path, infos: list[dict]) -> list[int]:
+    """Os PRs cuja issue tem `blocked_by` aberto agora, com a trava pega: a
+    bloqueadora pode ter sido reaberta pelo rollback de outro rabo depois que a
+    sessao montou a onda (issue #999). Cada um sai com a linha `de fora:`."""
+    bloqueados = []
+    for info in infos:
+        for ref in info.get("closingIssuesReferences") or []:
+            abertas = bloqueadoras_abertas(raiz, ref["number"])
+            if abertas:
+                bloqueados.append(info["number"])
+                print(f"de fora: #{info['number']} bloqueada por " + " ".join(f"#{x}" for x in abertas)
+                      + f" (issue #{ref['number']} com blocked_by aberto). Fica aberto e entra quando a "
+                      "bloqueadora fechar.")
+                break
+    return bloqueados
 
 
 # ----------------------------------------------------------------- worktree
@@ -1199,6 +1262,39 @@ def reverter(servicos_cfg: dict, servicos: list[str], alvos: dict[str, str | Non
     return True, ", ".join(f"{sid} na imagem {alvo[:8]}" for sid, alvo in alvos.items())
 
 
+def reabrir_issues(raiz: Path, lote: list[dict], chave: str, versao_nova: str | None, versao_antiga: str,
+                   linha_health: str) -> None:
+    """Cada issue do lote volta para a fila, com `ready-for-agent` e um comentario
+    com o que o health respondeu (issue #999): o rabo assume a consequencia do
+    proprio fracasso antes de soltar a trava."""
+    corpo = ("<!-- automacao -->\n"
+             f"Rollback do rabo (chave {chave}): o health falhou na v{versao_nova} e cada app do lote voltou a "
+             f"imagem anterior (v{versao_antiga}). O squash sai da main pelo PR `revert/{chave}`, e a issue volta "
+             f"para `ready-for-agent`.\n{linha_health}\n")
+    for n in [ref["number"] for info in lote for ref in info.get("closingIssuesReferences") or []]:
+        run(["gh", "issue", "reopen", str(n)], cwd=raiz)
+        run(["gh", "issue", "edit", str(n), "--remove-label", "in-progress", "--add-label", "ready-for-agent"],
+            cwd=raiz)
+        run(["gh", "issue", "comment", str(n), "--body", corpo], cwd=raiz)
+
+
+def reverter_na_main(raiz: Path, chave: str, squashes: list[str], titulo: str, corpo: str) -> tuple[int, str]:
+    """O PR `revert/<chave>` com o revert dos squashes, do mais novo para o mais
+    velho, a partir da origin/main, mergeado pela API depois do CI dele (issue
+    #999). Conflito, CI vermelho e merge recusado levantam EntregaFalhou. Devolve
+    (PR, squash do revert na main)."""
+    run(["git", "fetch", "-q", "origin", "main"], cwd=raiz)
+    wt = criar_worktree(raiz, f"{chave}-revert")
+    try:
+        if run(["git", "revert", "--no-edit", *reversed(squashes)], cwd=wt, check=False).returncode != 0:
+            run(["git", "revert", "--abort"], cwd=wt, check=False)
+            raise EntregaFalhou(f"o revert de {' '.join(s[:8] for s in squashes)} deu conflito com a main")
+        pr, head = entregar(raiz, wt, f"revert/{chave}", None, titulo, corpo)
+        return pr, mergear_pela_api(raiz, pr, head, f"{titulo} (#{pr})")
+    finally:
+        remover_worktree(raiz, wt)
+
+
 # ------------------------------------------------------------------- health
 
 def linha_de_health(h: dict) -> str:
@@ -1343,10 +1439,19 @@ def main() -> int:
     wt_reg = None
     semaforo_pego = False
     mergeados: list[tuple[dict, str, float]] = []  # (PR, squash na main, hora do merge)
+    de_fora: list[int] = []
     try:
         if not args.dry_run:
             pegar_semaforo(raiz, args.sessao, args.prs, avulso)
             semaforo_pego = True
+            de_fora = conferir_bloqueios(raiz, infos)
+            infos = [i for i in infos if i["number"] not in de_fora]
+            if not infos:
+                semaforo(raiz, "soltar", args.sessao)
+                semaforo_pego = False
+                print(f"nada entrou na main: {prs_txt} de fora, semaforo solto. Rode de novo quando a "
+                      "bloqueadora fechar.")
+                return EXIT_MERGE
         wt = criar_worktree(raiz, args.sessao)
         base = run(["git", "rev-parse", "--short=8", "HEAD"], cwd=wt).stdout.strip()
 
@@ -1410,7 +1515,6 @@ def main() -> int:
         digests_no_ar: dict[str, str | None] = {}  # em modo imagem, o digest de cada tag de `no_ar`
         com_app_version: list[str] = []
         antes_do_primeiro = True
-        de_fora: list[int] = []
         for info in infos:
             n = info["number"]
             try:
@@ -1513,8 +1617,9 @@ def main() -> int:
             if status != "finished":
                 falhas.append(f"{sid}: {status}")
         if falhas:
-            print("build: " + "; ".join(falhas) + f". Semaforo preso na chave {args.sessao}: rode `/deploy rollback` com ela.")
-            return EXIT_BUILD
+            return parar_a_trava(raiz, args.sessao, "build: " + "; ".join(falhas)
+                                 + f". Semaforo preso na chave {args.sessao}: rode `/deploy rollback` com ela.",
+                                 EXIT_BUILD)
         print("build: " + ", ".join(f"{sid} {dur(duracoes.get(sid))}" for sid in servicos)
               + (f", build dos squashes intermediarios cancelado ({', '.join(cancelados)})" if cancelados else ""))
 
@@ -1523,17 +1628,35 @@ def main() -> int:
             healths[sid] = checar_health(servicos_cfg[sid], versao_nova if sid == "backend" else None)
         ruins = [f"{sid}: {linha_de_health(h)}" for sid, h in healths.items() if not h["ok"]]
         if ruins:
-            print("health: " + "; ".join(ruins))
+            linha_health = "health: " + "; ".join(ruins)
+            print(linha_health)
             voltou, como = reverter(servicos_cfg, servicos, no_ar, versao_antiga if versao_nova else None,
                                     com_app_version, digests_no_ar)
             if not voltou:
-                print(f"rollback: falhou, {como}. Semaforo preso na chave {args.sessao}: rode `/deploy rollback` com ela.")
-                return EXIT_HEALTH
+                return parar_a_trava(raiz, args.sessao, f"rollback: falhou, {como}. Semaforo preso na chave "
+                                     f"{args.sessao}: rode `/deploy rollback` com ela.", EXIT_HEALTH)
+            # prod voltou; a consequencia do proprio fracasso sai antes de soltar a trava (issue #999)
+            reabertas = ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in lote)
+            do_lote = f"o PR {entraram}" if avulso else f"a onda {args.sessao}"
+            try:
+                reabrir_issues(raiz, lote, args.sessao, versao_nova, versao_antiga, linha_health)
+                pr_rev, sha_rev = reverter_na_main(
+                    raiz, args.sessao, [s for _, s, _ in mergeados],
+                    f"fix(rollback): reverte {do_lote} (v{versao_nova}, health ruim)",
+                    f"<!-- automacao -->\nRevert de {squashes} ({reabertas}), aberto e mergeado pelo "
+                    f"`fechar_onda.py` depois do rollback da chave {args.sessao}: o health falhou na v{versao_nova} "
+                    "e a imagem anterior voltou (ADR 0064, decisao 6a). O build deste merge e cancelado, porque a "
+                    "imagem no ar ja e a anterior.\n")
+            except Exception as e:  # noqa: BLE001
+                return parar_a_trava(raiz, args.sessao, f"rollback: {como}, APP_VERSION v{versao_antiga} e health "
+                                     f"ok, mas o revert de {squashes} nao entrou na main ({str(e)[:200]}); lote: "
+                                     f"{reabertas}. Semaforo preso na chave {args.sessao}: rode `/deploy rollback` "
+                                     "com ela.", EXIT_HEALTH)
+            cancelar_build_do_registro(servicos_cfg, sha_rev)
             semaforo(raiz, "soltar", args.sessao)
             semaforo_pego = False
-            print(f"rollback: {como}, APP_VERSION v{versao_antiga}, health ok e semaforo solto. "
-                  f"Reverter na main: {squashes}; reabrir: "
-                  + ", ".join(f"PR #{i['number']} ({rotulo_issues(i)})" for i in lote) + "."
+            print(f"rollback: {como}, APP_VERSION v{versao_antiga} e health ok; reabertas: {reabertas}; revert de "
+                  f"{squashes} na main pelo PR #{pr_rev} ({sha_rev[:8]}); semaforo solto."
                   + (f" De fora: {fora}." if de_fora else ""))
             return EXIT_ROLLBACK
         vm = " (version match)" if versao_nova else ""
@@ -1587,9 +1710,9 @@ def main() -> int:
             if w:
                 remover_worktree(raiz, w)
         if mergeados:
-            print(f"o merge ja aconteceu. Semaforo preso na chave {args.sessao}: confira o Coolify e o health, "
-                  f"depois `semaforo.sh soltar {args.sessao}` ou `/deploy rollback`.")
-            return EXIT_BUILD
+            return parar_a_trava(raiz, args.sessao, f"o merge ja aconteceu. Semaforo preso na chave {args.sessao}: "
+                                 f"confira o Coolify e o health, depois `semaforo.sh soltar {args.sessao}` ou "
+                                 "`/deploy rollback`.", EXIT_BUILD)
         if semaforo_pego:
             semaforo(raiz, "soltar", args.sessao)
         return EXIT_MERGE
