@@ -160,6 +160,19 @@ jobs:
             --include='docs/ARQUITETURA.md' \
             --include='docs/manual/src/content/docs/*' \
             "$patch"
+          # O --include só olha o nome novo: um rename de fora para dentro
+          # passaria e apagaria a origem. Sem renames, cada caminho do índice
+          # aparece e tem que cair num dos três; symlink não entra.
+          fora=$(git -c core.quotePath=false diff --cached --name-only --no-renames \
+            | grep -Ev '^(docs/spec/snapshots/|docs/ARQUITETURA\.md$|docs/manual/src/content/docs/)' || true)
+          if [ -n "$fora" ]; then
+            echo "::error::O patch toca caminho fora dos três da Action: $fora"
+            exit 1
+          fi
+          if git diff --cached --raw --no-renames | awk '$2 == "120000"' | grep -q .; then
+            echo "::error::O patch traz symlink: recusado."
+            exit 1
+          fi
           if git diff --cached --quiet; then
             echo "O patch não toca os caminhos da Action: nada a commitar."
             exit 0

@@ -371,6 +371,49 @@ def test_patch_com_caminho_de_fora_so_entra_nos_tres_caminhos(tmp_path):
     assert git(origem, "show", f"main:{CODIGO}") == "antes"
 
 
+def commitar_patch_adulterado(tmp_path: Path, origem: Path, adulterar) -> subprocess.CompletedProcess:
+    """O `commitar` sobre um patch montado à mão, com detecção de rename."""
+    gerador = clonar(tmp_path, origem, "adulterado")
+    adulterar(gerador)
+    git(gerador, "add", "-A")
+    patch = tmp_path / "temp-commitar" / "pos-merge" / "pos-merge.patch"
+    patch.parent.mkdir(parents=True)
+    patch.write_text(git(gerador, "diff", "--cached", "--binary", "-M") + "\n", encoding="utf-8")
+    commitador = clonar(tmp_path, origem, "commitar")
+    return rodar("Commitar", commitador, {"RUNNER_TEMP": str(tmp_path / "temp-commitar")}, job="commitar")
+
+
+def test_rename_de_fora_para_dentro_dos_tres_caminhos_e_recusado(tmp_path):
+    """O --include do `git apply` só olha o nome novo: `rename from` o código
+    `rename to` o snapshot passaria e apagaria o código da `main`."""
+    origem, _ = main_de_brinquedo(tmp_path)
+    antes = git(origem, "rev-parse", "main")
+
+    def adulterar(gerador: Path) -> None:
+        git(gerador, "mv", CODIGO, "docs/spec/snapshots/main.py")
+
+    proc = commitar_patch_adulterado(tmp_path, origem, adulterar)
+
+    assert "rename from " + CODIGO in (tmp_path / "temp-commitar" / "pos-merge" / "pos-merge.patch").read_text()
+    assert proc.returncode != 0
+    assert git(origem, "rev-parse", "main") == antes
+    assert git(origem, "show", f"main:{CODIGO}") == "antes"
+
+
+def test_symlink_nos_tres_caminhos_e_recusado(tmp_path):
+    origem, _ = main_de_brinquedo(tmp_path)
+    antes = git(origem, "rev-parse", "main")
+
+    def adulterar(gerador: Path) -> None:
+        (gerador / "docs/spec/snapshots/link.md").symlink_to("../../../" + CODIGO)
+
+    proc = commitar_patch_adulterado(tmp_path, origem, adulterar)
+
+    assert "new file mode 120000" in (tmp_path / "temp-commitar" / "pos-merge" / "pos-merge.patch").read_text()
+    assert proc.returncode != 0
+    assert git(origem, "rev-parse", "main") == antes
+
+
 def test_sem_diff_nao_commita(tmp_path):
     origem, _ = main_de_brinquedo(tmp_path)
     antes = git(origem, "rev-parse", "main")
