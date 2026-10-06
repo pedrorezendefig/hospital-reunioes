@@ -21,6 +21,12 @@ on:
 permissions:
   contents: write
 
+# Um por vez, sem cancelar o que já começou: dois runs empurrando snapshot ao
+# mesmo tempo brigariam pelos mesmos arquivos.
+concurrency:
+  group: pos-merge
+  cancel-in-progress: false
+
 jobs:
   pos-merge:
     name: Snapshot e draft do Manual
@@ -34,18 +40,14 @@ jobs:
       ENVIRONMENT: ci
     steps:
       - uses: actions/checkout@v6
+        with:
+          # A ponta da main na hora do run, e não o commit do evento: o run que
+          # esperou na fila já parte do commit que o run anterior empurrou.
+          ref: main
 
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-
-      - name: Ambiente do backend (pelo uv.lock, como no CI)
-        # O snapshot lê as rotas do app montado pelo .venv de
-        # hospital-reunioes/backend (introspect_routes.py).
-        working-directory: hospital-reunioes/backend
-        run: |
-          pip install uv
-          uv sync --frozen --extra dev --python "$(command -v python)"
 
       # O tirar_draft_manual.py só tira o draft se a publicação for possível em
       # seguida: confere node >= 22.12, corepack e ffmpeg antes de escrever.
@@ -80,7 +82,36 @@ jobs:
           fi
           exit "$status"
 
+      - name: Ambiente do backend (pelo uv.lock, como no CI)
+        # O snapshot lê as rotas do app montado pelo .venv de
+        # hospital-reunioes/backend (introspect_routes.py).
+        working-directory: hospital-reunioes/backend
+        run: |
+          pip install uv
+          uv sync --frozen --extra dev --python "$(command -v python)"
+
       - name: Snapshot (docs/spec/snapshots e blocos AUTO do ARQUITETURA.md)
         # --no-commit: sem ele o snapshot.py commita sozinho, com outra
         # mensagem e sem [skip ci]. Quem commita é o passo de baixo.
         run: python3 .claude/skills/snapshot/scripts/snapshot.py --root . --no-commit
+
+      - name: Commitar na main como github-actions[bot]
+        # Roda mesmo com o snapshot vermelho: o draft tirado acima não se perde
+        # (o run fica vermelho do mesmo jeito). Só entra o que a Action
+        # escreve, os mesmos caminhos do paths-ignore. [skip ci] e o push pelo
+        # GITHUB_TOKEN não acordam workflow nenhum. O rebase pega o PR que
+        # entrou na main durante o run; sem ele o push seria recusado. O
+        # --autostash é para o que o ambiente mexeu fora desses caminhos não
+        # travar o rebase.
+        if: ${{ !cancelled() }}
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A -- docs/spec/snapshots docs/ARQUITETURA.md docs/manual/src/content/docs
+          if git diff --cached --quiet; then
+            echo "Snapshot e draft em dia: nada a commitar."
+            exit 0
+          fi
+          git commit -q -m "chore(spec): snapshot e draft do Manual pós-merge $(git rev-parse --short HEAD) [skip ci]"
+          git pull --rebase --autostash -q origin main
+          git push -q origin HEAD:main

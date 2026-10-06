@@ -95,11 +95,19 @@ def passo(trecho: str) -> dict:
     return achados[0]
 
 
+# Sem identidade nem config global: quem diz o autor do commit é o passo.
+ENV_GIT = {
+    **{k: v for k, v in os.environ.items() if not k.startswith(("GIT_AUTHOR_", "GIT_COMMITTER_"))},
+    "GIT_CONFIG_GLOBAL": os.devnull,
+    "GIT_CONFIG_NOSYSTEM": "1",
+}
+
+
 def rodar(trecho: str, cwd: Path, env: dict[str, str] | None = None) -> subprocess.CompletedProcess:
     """Roda o `run:` do passo como o GitHub Actions roda: `bash -e {0}`."""
     script = cwd.parent / "passo.sh"
     script.write_text(passo(trecho)["run"], encoding="utf-8")
-    return subprocess.run(["bash", "-e", str(script)], cwd=cwd, env={**os.environ, **(env or {})},
+    return subprocess.run(["bash", "-e", str(script)], cwd=cwd, env={**ENV_GIT, **(env or {})},
                           capture_output=True, text=True)
 
 
@@ -187,3 +195,106 @@ def test_backend_montado_com_o_mesmo_ambiente_do_ci():
     venv = passo("backend")
     assert venv["working-directory"] == "hospital-reunioes/backend"
     assert "uv sync --frozen" in venv["run"]
+
+
+# O que a Action escreve, um caminho de cada filtro.
+ESCRITOS = [
+    "docs/spec/snapshots/ROTAS.md",
+    "docs/ARQUITETURA.md",
+    "docs/manual/src/content/docs/ouvidoria/index.mdx",
+]
+
+
+def git(cwd: Path, *args: str) -> str:
+    return subprocess.run(
+        ["git", "-c", "user.name=alguem", "-c", "user.email=alguem@example.com", *args],
+        cwd=cwd, env=ENV_GIT, capture_output=True, text=True, check=True,
+    ).stdout.strip()
+
+
+def escrever(raiz: Path, caminho: str, texto: str) -> None:
+    arq = raiz / caminho
+    arq.parent.mkdir(parents=True, exist_ok=True)
+    arq.write_text(texto, encoding="utf-8")
+
+
+def main_com_runner(tmp_path: Path) -> tuple[Path, Path, Path]:
+    """A `main` (repo bare), um clone de quem mergeia PR e o clone do runner."""
+    origem = tmp_path / "origem.git"
+    git(tmp_path, "init", "-q", "--bare", "-b", "main", str(origem))
+    outro = tmp_path / "outro"
+    git(tmp_path, "clone", "-q", str(origem), str(outro))
+    for caminho in [*ESCRITOS, "hospital-reunioes/backend/uv.lock"]:
+        escrever(outro, caminho, "antes\n")
+    git(outro, "add", "-A")
+    git(outro, "commit", "-q", "-m", "base")
+    git(outro, "push", "-q", "origin", "HEAD:main")
+    runner = tmp_path / "repo"
+    git(tmp_path, "clone", "-q", "-b", "main", str(origem), str(runner))
+    return origem, outro, runner
+
+
+def test_commit_do_bot_com_skip_ci_so_do_que_a_action_escreve(tmp_path):
+    origem, _, runner = main_com_runner(tmp_path)
+    escrever(runner, "docs/spec/snapshots/ROTAS.md", "rota nova\n")
+    escrever(runner, "docs/manual/src/content/docs/ouvidoria/index.mdx", "draft: false\n")
+    escrever(runner, "hospital-reunioes/backend/uv.lock", "mexido pelo ambiente\n")
+    escrever(runner, "lixo-do-runner.txt", "fora do git\n")
+
+    proc = rodar("Commitar", runner)
+
+    assert proc.returncode == 0, proc.stderr
+    autor, email, assunto = git(origem, "log", "-1", "--format=%an|%ae|%s", "main").split("|")
+    assert autor == "github-actions[bot]"
+    assert email == "41898282+github-actions[bot]@users.noreply.github.com"
+    assert "[skip ci]" in assunto
+    arquivos = git(origem, "show", "--name-only", "--format=", "main").splitlines()
+    assert sorted(arquivos) == ["docs/manual/src/content/docs/ouvidoria/index.mdx",
+                                "docs/spec/snapshots/ROTAS.md"]
+    assert not acorda(arquivos), "o commit do bot acordaria a própria Action"
+
+
+def test_sem_diff_nao_commita(tmp_path):
+    origem, _, runner = main_com_runner(tmp_path)
+    antes = git(origem, "rev-parse", "main")
+    escrever(runner, "hospital-reunioes/backend/uv.lock", "mexido pelo ambiente\n")
+
+    proc = rodar("Commitar", runner)
+
+    assert proc.returncode == 0, proc.stderr
+    assert git(origem, "rev-parse", "main") == antes
+
+
+def test_merge_que_entra_durante_a_action_nao_derruba_o_push(tmp_path):
+    """Entre o checkout e o push outro PR pode entrar na `main`: sem rebase o
+    push seria recusado (non_fast_forward no ruleset)."""
+    origem, outro, runner = main_com_runner(tmp_path)
+    escrever(outro, "hospital-reunioes/backend/app/novo.py", "x = 1\n")
+    git(outro, "add", "-A")
+    git(outro, "commit", "-q", "-m", "PR que entrou no meio")
+    git(outro, "push", "-q", "origin", "HEAD:main")
+    do_pr = git(outro, "rev-parse", "HEAD")
+    escrever(runner, "docs/ARQUITETURA.md", "bloco AUTO novo\n")
+
+    proc = rodar("Commitar", runner)
+
+    assert proc.returncode == 0, proc.stderr
+    assert git(origem, "rev-parse", "main~1") == do_pr
+    assert git(origem, "log", "-1", "--format=%an", "main") == "github-actions[bot]"
+
+
+def test_um_run_por_vez_e_o_draft_nao_se_perde_com_o_snapshot_vermelho():
+    """Runs na fila partem da ponta da `main` (o commit do run anterior), não
+    do commit do evento. O draft vem antes do backend e o commit roda mesmo
+    com o snapshot vermelho: o próximo registro troca os PRDs do último
+    deploy, e o draft que não entrou agora não entraria mais."""
+    w = workflow()
+    assert w["concurrency"]["cancel-in-progress"] is False
+    passos = w["jobs"]["pos-merge"]["steps"]
+    assert passos[0]["uses"].startswith("actions/checkout@") and passos[0]["with"]["ref"] == "main"
+    ordem = [p.get("name") for p in passos]
+    assert (ordem.index(passo("Tirar do draft")["name"])
+            < ordem.index(passo("backend")["name"])
+            < ordem.index(passo("Snapshot")["name"])
+            < ordem.index(passo("Commitar")["name"]))
+    assert passo("Commitar")["if"] == "${{ !cancelled() }}"
