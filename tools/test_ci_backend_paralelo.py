@@ -50,7 +50,7 @@ def filtro(args: list[str]) -> str | None:
 
 
 def paralela(args: list[str]) -> bool:
-    return "-n" in args or any(a.startswith(("-n", "--numprocesses")) for a in args)
+    return any(a.startswith(("-n", "--numprocesses")) for a in args)
 
 
 def pyproject() -> dict:
@@ -94,6 +94,8 @@ def test_lista_vazia_nao_reprova_o_passo_serial():
 
 
 def test_nenhum_retry_automatico_no_job_nem_nas_dependencias():
+    """Nem plugin de retry instalado, nem flag que repete o que falhou, nem
+    passo que segue verde depois de falhar."""
     job = yaml.safe_load(CI.read_text(encoding="utf-8"))["jobs"]["backend"]
     assert "continue-on-error" not in job
     for passo in job["steps"]:
