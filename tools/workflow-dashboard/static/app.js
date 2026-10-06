@@ -4,15 +4,27 @@
    lazy) e /api/issue/<n>/timeline (linha do tempo das fechadas, lazy). */
 
 import { closeTips, reduceMotion, revealOnScroll } from './ui.js';
+import { abaValida, aoMudarRota, gravarRota, lerRota, montarHash } from './router.js';
 import { renderDiagrama, wireDiagramas } from './diagramas.js';
 import { renderArea, wireArea } from './areas.js';
 import { corDaPessoa } from './pessoas.js';
 
 const filtrosVazios = () => ({ state: 'all', fase: '', resp: '', prd: null, label: '', q: '', humana: false });
 
+/* filtros da aba Issues <-> filtros da rota (texto; vazio = sem filtro) */
+const filtrosDaRota = p => ({
+  state: p.state || 'all', fase: p.fase || '', resp: p.resp || '', prd: Number(p.prd) || null,
+  label: p.label || '', q: p.q || '', humana: p.humana === '1',
+});
+const filtrosNaRota = f => ({
+  state: f.state === 'all' ? '' : f.state, fase: f.fase, resp: f.resp, prd: f.prd ? String(f.prd) : '',
+  label: f.label, humana: f.humana ? '1' : '', q: f.q,
+});
+
 const S = {
   data: null,
   tab: 'issues',
+  item: null,   // item aberto que o hash aponta (#issues/930, #producao/v0.161.0)
   fIssues: filtrosVazios(),
   expIss: new Set(),
   expPrd: new Map(),
@@ -108,6 +120,8 @@ function adrPointerBadge(a) {
 const issUrl = n => `${S.data.repo_url}/issues/${n}`;
 const prUrl = n => `${S.data.repo_url}/pull/${n}`;
 const shaUrl = sha => `${S.data.repo_url}/commit/${sha}`;
+/* chip navega dentro do painel pelo hash; o GitHub fica no ↗ de cada card */
+const rotaDe = (aba, item) => esc(montarHash({ aba, item }));
 
 function spark(vals, w = 360, h = 46) {
   if (vals.length < 2) return '';
@@ -180,24 +194,60 @@ function tick() {
   if (el && S.data) el.textContent = `coletado ${ago(S.data.generated_at)}`;
 }
 
-const TABS = ['issues', 'prs', 'producao', 'mapa', 'dominio'];
-/* hashes da navegação antiga (bookmarks) caem na aba que herdou o conteúdo;
-   Plano, Pendências e Guia saíram (ADR 0062, decisão 3) e caem na home */
-const TAB_ALIAS = {
-  plano: 'issues', pendencias: 'issues', guia: 'issues',
-  setup: 'issues', workflow: 'issues', fluxo: 'issues', bastidores: 'issues',
-  agora: 'producao', deploys: 'producao',
-};
+/* ---------- rota (o hash é do router.js; aqui só o estado da tela) ---------- */
 
 function setTab(t) {
-  t = TAB_ALIAS[t] || t;
-  if (!TABS.includes(t)) t = 'issues';
   S.erFull = false;   // trocar de aba sai da tela cheia; voltar ao Mapa não a reabre
-  S.tab = t;
-  if (location.hash !== '#' + t) history.replaceState(null, '', '#' + t);
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === t));
+  S.tab = abaValida(t);
+  S.item = null;      // o item aberto é da aba que ficou para trás
+  sincronizarHash();
+  marcarAba();
   render();
   window.scrollTo({ top: 0 });
+}
+
+function marcarAba() {
+  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+}
+
+/* estado da tela -> hash; os filtros só existem na aba Issues */
+function sincronizarHash() {
+  gravarRota({ aba: S.tab, item: S.item, filtros: S.tab === 'issues' ? filtrosNaRota(S.fIssues) : {} });
+}
+
+/* hash -> estado da tela: no boot, no chip clicado e no voltar do navegador */
+function irPara(rota) {
+  S.erFull = false;
+  S.tab = rota.aba;
+  S.item = rota.item;
+  if (rota.aba === 'issues') S.fIssues = filtrosDaRota(rota.filtros);
+  abrirItem();
+  sincronizarHash();
+  marcarAba();
+  render();
+  const alvo = view.querySelector('[aria-current="true"]');
+  if (alvo) alvo.scrollIntoView({ block: 'center' });
+  else window.scrollTo({ top: 0 });
+}
+
+/* o card que o hash aponta fica em destaque (e é o alvo da rolagem do irPara) */
+const destaque = item => (S.item && S.item === String(item) ? ' aria-current="true"' : '');
+
+/* o item da rota abre expandido; a fatia aparece com o PRD dela aberto */
+function abrirItem() {
+  if (!S.item || !S.data) return;
+  if (S.tab === 'issues') {
+    const n = Number(S.item);
+    const i = (S.data.github.issues || []).find(x => x.number === n);
+    if (!i) return;
+    S.expIss.add(n);
+    ensureComments(n);
+    ensureTimeline(n);
+    if (i.parent) S.expPrd.set(i.parent, true);
+  } else if (S.tab === 'producao') {
+    const idx = S.data.history.findIndex(d => depVer(d.app_version) === S.item);
+    if (idx >= 0) S.expDep.add(idx);
+  }
 }
 
 function render() {
@@ -465,12 +515,12 @@ function issueCard(i, idx, prd = false) {
     pessoasDoCard(i),
     `<span class="chip">${idadeTxt(i)}</span>`,
     i.criteria.total ? `<span class="chip" title="critérios de aceite">✓ ${i.criteria.done}/${i.criteria.total}</span>` : '',
-    fs && fs.pr ? `<a class="chip" href="${prUrl(fs.pr)}" target="_blank" rel="noopener">PR #${fs.pr}</a>` : '',
-    fs && fs.versao ? `<span class="chip chip-versao">${esc(depVer(fs.versao))}</span>` : '',
+    fs && fs.pr ? `<a class="chip" href="${rotaDe('prs', fs.pr)}">PR #${fs.pr}</a>` : '',
+    fs && fs.versao ? `<a class="chip chip-versao" href="${rotaDe('producao', depVer(fs.versao))}">${esc(depVer(fs.versao))}</a>` : '',
   ].filter(Boolean).join('');
 
   return `
-  <article class="nrow ${prd ? 'prd-row' : ''} rv" style="--i:${idx}">
+  <article class="nrow ${prd ? 'prd-row' : ''} rv" style="--i:${idx}"${destaque(i.number)}>
     <span class="nrow-idx">${String(idx + 1).padStart(2, '0')}</span>
     <div class="nrow-main">
       <div class="iss-head" data-act="iss" data-n="${i.number}">
@@ -488,7 +538,7 @@ function issueCard(i, idx, prd = false) {
         ${commentsHtml(i.number)}
       </div>` : ''}
     </div>
-    <a class="nrow-go" href="${issUrl(i.number)}" target="_blank" rel="noopener" aria-label="abrir a issue #${i.number} no GitHub"><span class="nrow-arrow">→</span></a>
+    <a class="nrow-go" href="${issUrl(i.number)}" target="_blank" rel="noopener" aria-label="abrir a issue #${i.number} no GitHub"><span class="nrow-arrow">↗</span></a>
   </article>`;
 }
 
@@ -552,7 +602,7 @@ function renderIssues() {
 
 function wireIssues() {
   const q = $('#fq');
-  if (q) q.addEventListener('input', () => { S.fIssues.q = q.value; refreshIssueList(); });
+  if (q) q.addEventListener('input', () => { S.fIssues.q = q.value; sincronizarHash(); refreshIssueList(); });
 }
 
 /* chip clicado de novo desliga o filtro */
@@ -602,7 +652,8 @@ async function ensureTimeline(n) {
 function renderPrs() {
   return `
   ${cabecalho('acompanhar', 'PRs', 'quadro por fase, uma raia por pessoa')}
-  <div class="empty rv">em construção: o quadro dos PRs por fase chega na próxima fatia do Hospital OS</div>`;
+  <div class="empty rv">em construção: o quadro dos PRs por fase chega na próxima fatia do Hospital OS</div>
+  ${S.item ? `<a class="ghlink rv" href="${prUrl(esc(S.item))}" target="_blank" rel="noopener">abrir o PR #${esc(S.item)} no GitHub ↗</a>` : ''}`;
 }
 
 /* ---------- DEPLOYS ---------- */
@@ -620,22 +671,23 @@ function deployCard(dp, idx) {
   const chipsResumo = [
     `<span class="badge ${ok ? 'b-green' : 'b-red'}">${esc(dp.result || '?')}</span>`,
     ...(dp.migrations_applied || []).map(m => `<span class="badge b-amber">⛁ ${esc(m)}</span>`),
-    ...(dp.pr_numbers || []).map(n => `<a class="chip" href="${prUrl(n)}" target="_blank" rel="noopener">PR #${n}</a>`),
-    ...(dp.issue_numbers || []).map(n => `<a class="chip" href="${issUrl(n)}" target="_blank" rel="noopener">#${n}</a>`),
+    ...(dp.pr_numbers || []).map(n => `<a class="chip" href="${rotaDe('prs', n)}">PR #${n}</a>`),
+    ...(dp.issue_numbers || []).map(n => `<a class="chip" href="${rotaDe('issues', n)}">#${n}</a>`),
     dp.rollback_target_sha ? `<span class="badge b-amber">rollback → ${esc(dp.rollback_target_sha)}</span>` : '',
   ].filter(Boolean).join('');
   const chipsTech = [
-    dp.sha ? `<a class="chip" href="${shaUrl(dp.sha)}" target="_blank" rel="noopener">${esc(dp.sha)}</a>` : '',
+    dp.sha ? `<span class="chip">${esc(dp.sha)}</span>` : '',
     ...(dp.scope || []).map(s => `<span class="chip">${esc(s)}</span>`),
   ].filter(Boolean).join('');
 
   return `
   <div class="pd-item rv ${ok ? '' : 'bad'}" style="--i:${Math.min(idx, 12)}">
-    <article class="card pd-card lift">
+    <article class="card pd-card lift"${destaque(depVer(dp.app_version))}>
       <div class="pd-head" data-act="dep" data-i="${idx}">
         <span class="pd-ver ${dp.app_version ? '' : 'unversioned'}">${dp.app_version ? esc(depVer(dp.app_version)) : esc(dp.sha || '·')}</span>
         <span class="pd-subject">${esc(dp.subject || dp.raw_subject || '')}</span>
         <span class="pd-when">${esc(fmtDT(dp.at))}</span>
+        ${dp.sha ? `<a class="pd-gh" href="${shaUrl(esc(dp.sha))}" target="_blank" rel="noopener" aria-label="abrir o commit ${esc(dp.sha)} no GitHub">↗</a>` : ''}
       </div>
       <div class="pd-chips">${chipsResumo}</div>
       ${dp.duration_seconds ? `
@@ -814,8 +866,8 @@ view.addEventListener('click', e => {
     t.setAttribute('aria-expanded', on ? 'true' : 'false');
   } else if (act === 'iss') {
     const n = Number(t.dataset.n);
-    if (S.expIss.has(n)) S.expIss.delete(n);
-    else { S.expIss.add(n); ensureComments(n); ensureTimeline(n); }
+    if (S.expIss.has(n)) { S.expIss.delete(n); if (S.item === String(n)) S.item = null; }
+    else { S.expIss.add(n); S.item = String(n); ensureComments(n); ensureTimeline(n); }
     refreshIssueList();
   } else if (act === 'prd') {
     const n = Number(t.dataset.n);
@@ -823,7 +875,9 @@ view.addEventListener('click', e => {
     refreshIssueList();
   } else if (act === 'dep') {
     const i = Number(t.dataset.i);
-    S.expDep.has(i) ? S.expDep.delete(i) : S.expDep.add(i);
+    const ver = depVer(S.data.history[i].app_version);
+    if (S.expDep.has(i)) { S.expDep.delete(i); if (S.item === ver) S.item = null; }
+    else { S.expDep.add(i); if (ver) S.item = ver; }
     render();
   } else if (act === 'adr') {
     const i = Number(t.dataset.i);
@@ -862,6 +916,7 @@ view.addEventListener('click', e => {
     S.fIssues = { ...filtrosVazios(), label: t.dataset.label || '' };
     setTab(t.dataset.go);
   }
+  sincronizarHash();   // card aberto e filtro trocado vão para o hash
 });
 
 $('#tabs').addEventListener('click', e => {
@@ -869,10 +924,7 @@ $('#tabs').addEventListener('click', e => {
   if (b) setTab(b.dataset.tab);
 });
 
-window.addEventListener('hashchange', () => {
-  const t = location.hash.slice(1);
-  if (t && t !== S.tab) setTab(t);
-});
+aoMudarRota(irPara);
 
 /* tooltips: fecham com Escape ou clique fora; Escape também sai da tela cheia */
 document.addEventListener('keydown', e => {
@@ -885,10 +937,10 @@ document.addEventListener('click', e => { if (!e.target.closest('.tip')) closeTi
 /* ---------- boot ---------- */
 
 (async function init() {
-  const t = location.hash.slice(1);
-  if (t) S.tab = TAB_ALIAS[t] || (TABS.includes(t) ? t : S.tab);
-  document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+  S.tab = lerRota().aba;   // a aba certa já marcada enquanto coleta
+  marcarAba();
   await load(false);
+  irPara(lerRota());       // relido: uma aba clicada durante a coleta vale
   setInterval(tick, 5000);
   setInterval(() => load(false, true), 60000);
 })();
