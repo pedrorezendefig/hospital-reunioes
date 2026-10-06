@@ -1,0 +1,219 @@
+name: Pós-merge
+
+# Snapshot e draft do Manual depois de cada push na main (ADR 0062, decisão
+# 10, emendada pela ADR 0065; issue #940). O rabo (fechar_onda.py) grava só a
+# verdade do deploy; o mapa factual (docs/spec/snapshots/, blocos AUTO do
+# docs/ARQUITETURA.md) e o draft das páginas do Manual saem daqui, com o
+# ambiente completo do backend.
+#
+# Dois jobs (ADR 0065). O `gerar` instala o backend e roda os scripts, sem
+# credencial nenhuma: token só de leitura, que nem fica no .git/config. O
+# `commitar` não instala nada: recebe por artefato só o patch dos três
+# caminhos e empurra direto na main com a deploy key, o único ator em
+# `bypass_actors` do ruleset (.github/rulesets/main.json). A chave vive num
+# secret do Environment `pos-merge`, restrito à branch main.
+on:
+  push:
+    branches: [main]
+    # O que a própria Action escreve. Push pela deploy key dispara workflow
+    # (ao contrário do GITHUB_TOKEN): o [skip ci] do commit e este filtro
+    # impedem o loop. O merge que importa é o do PR de registro
+    # (docs/spec/deploy/), quando o history.json com a versão nova já está na
+    # main.
+    paths-ignore:
+      - 'docs/spec/snapshots/**'
+      - 'docs/ARQUITETURA.md'
+      - 'docs/manual/src/content/docs/**'
+
+permissions:
+  contents: read
+
+# Um por vez, sem cancelar o que já começou: dois runs empurrando snapshot ao
+# mesmo tempo brigariam pelos mesmos arquivos.
+concurrency:
+  group: pos-merge
+  cancel-in-progress: false
+
+jobs:
+  gerar:
+    name: Snapshot e draft do Manual
+    runs-on: ubuntu-latest
+    env:
+      # As mesmas do job backend do ci.yml: o Settings exige as duas primeiras
+      # e recusa subir sem ENVIRONMENT. Sem elas o import do app falha e o
+      # snapshot cai no parser AST, que rebaixa o ROTAS.md.
+      SUPABASE_URL: http://localhost:54321
+      SUPABASE_SERVICE_ROLE_KEY: dummy-key-for-ci
+      ENVIRONMENT: ci
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          # A ponta da main na hora do run, e não o commit do evento: o run que
+          # esperou na fila já parte do commit que o run anterior empurrou.
+          ref: main
+          # O pip, o uv sync e o import do app rodam aqui: nenhum token fica
+          # no .git/config para um pacote comprometido ler.
+          persist-credentials: false
+
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      # O tirar_draft_manual.py só tira o draft se a publicação for possível em
+      # seguida: confere node >= 22.12, corepack e ffmpeg antes de escrever.
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+      - name: ffmpeg (conferido pelo tirar-draft)
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+
+      - name: Tirar do draft as páginas do último deploy
+        # Os PRDs do deploy mais recente do history.json (ADR 0057: só sai do
+        # draft o que está em produção). PR avulso registra prds vazio, e sem
+        # --prd o argparse sairia com 2: lista vazia pula o passo. Saída 2 do
+        # tirar-draft é bloqueio sem escrever nada (o MP4 do Vídeo de tarefa
+        # não vem no clone, issue #951): a página fica em draft, a Action avisa
+        # e segue para o snapshot.
+        run: |
+          prds="$(python3 -c 'import json; print(" ".join(str(n) for n in json.load(open("docs/spec/deploy/history.json"))["deploys"][0]["prds"]))')"
+          if [ -z "$prds" ]; then
+            echo "O último deploy não traz PRD: nenhuma página a tirar do draft."
+            exit 0
+          fi
+          args=""
+          for n in $prds; do args="$args --prd $n"; done
+          set +e
+          python3 tools/tirar_draft_manual.py $args
+          status=$?
+          set -e
+          if [ "$status" -eq 2 ]; then
+            echo "::warning::O draft dos PRDs $prds ficou como está; a saída acima diz o que falta (Vídeo de tarefa sem MP4 no clone: issue #951)."
+            exit 0
+          fi
+          exit "$status"
+
+      - name: Ambiente do backend (pelo uv.lock, como no CI)
+        # O snapshot lê as rotas do app montado pelo .venv de
+        # hospital-reunioes/backend (introspect_routes.py).
+        working-directory: hospital-reunioes/backend
+        run: |
+          pip install uv
+          uv sync --frozen --extra dev --python "$(command -v python)"
+
+      - name: Snapshot (docs/spec/snapshots e blocos AUTO do ARQUITETURA.md)
+        # --no-commit: sem ele o snapshot.py commita sozinho, com outra
+        # mensagem e sem [skip ci]. Quem commita é o job de baixo.
+        run: python3 .claude/skills/snapshot/scripts/snapshot.py --root . --no-commit
+
+      - name: Empacotar o patch dos três caminhos
+        # Roda mesmo com o snapshot vermelho: o draft tirado acima não se perde
+        # (o run fica vermelho do mesmo jeito). Patch, e não os arquivos: leva
+        # arquivo apagado e aplica sobre a ponta da main que o outro job vê.
+        if: ${{ !cancelled() }}
+        run: |
+          git add -A -- docs/spec/snapshots docs/ARQUITETURA.md docs/manual/src/content/docs
+          git diff --cached --binary > "$RUNNER_TEMP/pos-merge.patch"
+
+      - uses: actions/upload-artifact@v7
+        if: ${{ !cancelled() }}
+        with:
+          name: pos-merge
+          path: ${{ runner.temp }}/pos-merge.patch
+          if-no-files-found: error
+          retention-days: 1
+
+  commitar:
+    name: Commitar na main pela deploy key
+    needs: gerar
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    # O secret da deploy key só existe neste Environment, que só aceita job
+    # da branch main: YAML de outra branch (ou de um workflow_dispatch nela)
+    # não chega à chave.
+    environment: pos-merge
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          ssh-key: ${{ secrets.POS_MERGE_DEPLOY_KEY }}
+
+      - uses: actions/download-artifact@v8
+        with:
+          name: pos-merge
+          path: ${{ runner.temp }}/pos-merge
+
+      - name: Commitar na main como github-actions[bot]
+        # Só entra o que a Action escreve, os mesmos caminhos do paths-ignore:
+        # o --include descarta do patch qualquer outro caminho. [skip ci] no
+        # assunto: o push da deploy key acorda workflow. O rebase pega o PR que
+        # entrou na main durante o run; sem ele o push seria recusado.
+        run: |
+          patch="$RUNNER_TEMP/pos-merge/pos-merge.patch"
+          if [ ! -s "$patch" ]; then
+            echo "Snapshot e draft em dia: nada a commitar."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git apply --index \
+            --include='docs/spec/snapshots/*' \
+            --include='docs/ARQUITETURA.md' \
+            --include='docs/manual/src/content/docs/*' \
+            "$patch"
+          # As checagens com awk saem pelo exit do próprio awk, e não por um
+          # grep -q depois dele: com shell: bash, o encadeamento falha quando
+          # qualquer comando dele falha, e o grep que sai no primeiro achado
+          # mata o awk de SIGPIPE e o if dá falso.
+          # Modo novo só de arquivo comum, ou o 000000 da deleção: symlink
+          # aponta para fora, e gitlink faz o submodule update do clone sair
+          # com 128.
+          if git diff --cached --raw --no-renames | awk '$2 != "100644" && $2 != "000000" {f = 1} END {exit !f}'; then
+            echo "::error::O patch traz modo que não é de arquivo comum (symlink, gitlink, executável): recusado."
+            exit 1
+          fi
+          # No Manual a Action só tira o draft (o sem_draft do
+          # tirar_draft_manual.py): a página já existe na main e volta igual,
+          # com o true da linha draft: do frontmatter trocado por false.
+          # Compara o arquivo inteiro: import, export e {...} no corpo da MDX
+          # executam no build de quem roda o publicar.sh.
+          manual=docs/manual/src/content/docs/
+          if git diff --cached --name-status --no-renames -- "$manual" | awk '$1 != "M" {f = 1} END {exit !f}'; then
+            echo "::error::O patch cria ou apaga página do Manual: só a troca do draft entra."
+            exit 1
+          fi
+          # Nada nasce nem morre nos três caminhos: o snapshot.py só reescreve
+          # os arquivos do TARGET_FILES e os blocos AUTO do ARQUITETURA.md, e
+          # o draft só modifica página. Um CLAUDE.md ou uma skill dentro de
+          # docs/spec/snapshots/ vira instrução de quem lê o snapshot, agente
+          # sem humano incluído. O --include só olha o nome novo: um rename de
+          # fora para dentro passaria e apagaria a origem. Sem renames, cada
+          # caminho do índice aparece e tem que ser um M da lista.
+          fora=$(git -c core.quotePath=false diff --cached --name-status --no-renames \
+            | grep -Ev '^M[[:space:]]+(docs/spec/snapshots/(ROTAS|ENTIDADES|SCHEMA|MIGRATIONS|INTEGRACOES)\.md|docs/ARQUITETURA\.md|docs/manual/src/content/docs/.+)$' || true)
+          if [ -n "$fora" ]; then
+            echo "::error::O patch cria, apaga ou toca arquivo que a Action não escreve: $fora"
+            exit 1
+          fi
+          troca='
+            function apara(s) { gsub(/^[ \t\r]+|[ \t\r]+$/, "", s); return s }
+            NR == 1 { fm = (apara($0) == "---"); print; next }
+            fm && apara($0) == "---" { fm = 0 }
+            fm && tolower(substr($0, 1, 6)) == "draft:" {
+              i = index(tolower($0), "true")
+              if (i) $0 = substr($0, 1, i - 1) "false" substr($0, i + 4)
+              fm = 0
+            }
+            { print }'
+          while IFS= read -r -d '' pagina; do
+            if ! git show "HEAD:$pagina" | awk "$troca" | cmp -s - <(git show ":$pagina"); then
+              echo "::error::$pagina muda além da linha draft: recusado."
+              exit 1
+            fi
+          done < <(git diff --cached --name-only -z --no-renames --diff-filter=M -- "$manual")
+          if git diff --cached --quiet; then
+            echo "O patch não toca os caminhos da Action: nada a commitar."
+            exit 0
+          fi
+          git commit -q -m "chore(spec): snapshot e draft do Manual pós-merge $(git rev-parse --short HEAD) [skip ci]"
+          git pull --rebase -q origin main
+          git push -q origin HEAD:main

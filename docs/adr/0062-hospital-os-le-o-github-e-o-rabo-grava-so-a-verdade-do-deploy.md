@@ -1,7 +1,7 @@
 ---
 status: accepted
 amends: 0022, 0057, 0061
-amended_by: 0064
+amended_by: 0064, 0065
 ---
 
 # Hospital OS lê o GitHub ao vivo; o rabo grava só a verdade do deploy
@@ -28,7 +28,7 @@ Decisão do Pedro (05/out/2026, grilling). O painel local `tools/workflow-dashbo
 
 9. **O rabo grava só `history.json` e `state.json`.** É a verdade que o GitHub não tem (health, duração do build, migration aplicada, env, rollback). O PR de docs por lote continua, com dois JSONs e sem script rodando antes. `history.json` perde o teto de 50 (`HISTORY_MAX`) e guarda tudo. `CHANGELOG.md` é apagado: a timeline é render do `history.json` no Hospital OS, e `CLAUDE.md`, `/ask-pedro` e as skills param de citá-lo.
 
-10. **Snapshot e draft do manual saem do rabo para uma Action no push da `main`.** A Action roda o `snapshot.py` (ambiente completo, sem o modo parcial do macOS) e o `tirar_draft_manual.py`, e commita direto na `main` com bypass do ruleset **só para `github-actions[bot]`**. Ela dispara no merge do PR de docs, quando o `history.json` com a versão nova já está na `main`, então o fato que o draft precisa (versão em produção) existe no momento certo. Push pelo `GITHUB_TOKEN` não redispara workflow: sem loop.
+10. **Snapshot e draft do manual saem do rabo para uma Action no push da `main`.** A Action roda o `snapshot.py` (ambiente completo, sem o modo parcial do macOS) e o `tirar_draft_manual.py`, e commita direto na `main` com bypass do ruleset **só para `github-actions[bot]`**. Ela dispara no merge do PR de docs, quando o `history.json` com a versão nova já está na `main`, então o fato que o draft precisa (versão em produção) existe no momento certo. Push pelo `GITHUB_TOKEN` não redispara workflow: sem loop. *Emendada pela ADR 0065: o bypass do `github-actions[bot]` valia para qualquer workflow de qualquer branch; o ator passa a ser uma deploy key, usada só no job da Action que não instala nada.*
 
 ## Emendas
 
