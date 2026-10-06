@@ -79,8 +79,9 @@ producao. O registro vem depois, so com docs.
 Codigos de saida:
   0  PR ou onda fechados, health verde, registro na main (ferramenta: merge na main)
   1  pre-condicao falhou ou trava velha: nada foi tocado
-  2  conflito, push na branch rejeitado, CI vermelho ou merge recusado: nada
-     entrou na main, worktree removido, semaforo solto; rode de novo depois de corrigir
+  2  conflito, push na branch rejeitado, CI vermelho, merge recusado ou outro erro
+     antes do merge: nada entrou na main, worktree removido, PR de entrega da onda
+     fechado com a branch, semaforo solto; rode de novo depois de corrigir
   3  build falhou no Coolify: SEMAFORO FICA PRESO, rode `/deploy rollback` com a chave impressa
   4  health falhou (ou versao nao bate) e o rollback automatico tambem falhou (sem
      imagem anterior, Coolify recusou, ou health ainda ruim): SEMAFORO FICA PRESO,
@@ -504,6 +505,14 @@ class EntregaFalhou(Exception):
     pr: int | None = None
 
 
+def fechar_pr_de_entrega(raiz: Path, pr: int, motivo) -> None:
+    """Fecha o PR de entrega da onda e apaga a branch `onda/<sessao>`, senao a
+    rodada seguinte trava no push sem force e no 422 do PR ja aberto (#926)."""
+    run(["gh", "pr", "close", str(pr), "--delete-branch", "--comment",
+         f"<!-- automacao -->\nEntrega abandonada: {motivo}. A proxima rodada abre outro PR."],
+        cwd=raiz, check=False)
+
+
 def empurrar_branch(wt: Path, branch: str) -> str:
     """Push do HEAD do worktree numa branch que nao e a main. Devolve o sha."""
     proc = run(["git", "push", "-q", "origin", f"HEAD:refs/heads/{branch}"], cwd=wt, check=False)
@@ -585,7 +594,8 @@ def entregar(raiz: Path, wt: Path, branch: str, pr: int | None, titulo: str, cor
         pr = abrir_pr(raiz, branch, titulo, corpo)
     try:
         esperar_checks(raiz, pr, head)
-    except EntregaFalhou as e:
+    except Exception as e:
+        # qualquer falha, nao so EntregaFalhou: o handler generico tambem fecha (#926)
         e.pr = pr
         raise
     return pr, head
@@ -1326,9 +1336,7 @@ def main() -> int:
             remover_worktree(raiz, wt, args.prs)
         pr_entrega = pr_entrega or e.pr
         if not avulso and pr_entrega:
-            run(["gh", "pr", "close", str(pr_entrega), "--delete-branch", "--comment",
-                 f"<!-- automacao -->\nEntrega abandonada: {e}. A proxima rodada abre outro PR."],
-                cwd=raiz, check=False)
+            fechar_pr_de_entrega(raiz, pr_entrega, e)
         if semaforo_pego:
             semaforo(raiz, "soltar", args.sessao)
         sobra = " A main trazida ficou na branch do PR; a proxima rodada a reaproveita." if avulso else ""
@@ -1343,6 +1351,9 @@ def main() -> int:
             print(f"o merge ja aconteceu. Semaforo preso na chave {args.sessao}: confira o Coolify e o health, "
                   f"depois `semaforo.sh soltar {args.sessao}` ou `/deploy rollback`.")
             return EXIT_BUILD
+        pr_entrega = pr_entrega or getattr(e, "pr", None)
+        if not avulso and pr_entrega:
+            fechar_pr_de_entrega(raiz, pr_entrega, e)
         if semaforo_pego:
             semaforo(raiz, "soltar", args.sessao)
         return EXIT_MERGE

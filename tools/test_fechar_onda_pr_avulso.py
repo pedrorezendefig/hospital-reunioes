@@ -791,6 +791,75 @@ def test_onda_com_ci_vermelho_fecha_o_pr_de_entrega_e_a_rodada_seguinte_entra(
     assert c.na_main("hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
 
 
+def gh_cai_no_ci_da_entrega(fo, monkeypatch, c: Cenario, ligado: dict) -> None:
+    ver = c.ver_pr
+
+    def ver_que_cai(n, campos):
+        if ligado["sim"] and c.prs[n]["headRefName"] == "onda/onda-x":
+            raise RuntimeError("gh pr view -> 502 Bad Gateway")
+        return ver(n, campos)
+
+    c.ver_pr = ver_que_cai
+
+
+def app_version_cai(fo, monkeypatch, c: Cenario, ligado: dict) -> None:
+    setar = fo.setar_app_version_nos_apps
+
+    def setar_que_cai(servicos_cfg, versao):
+        if ligado["sim"]:
+            raise subprocess.TimeoutExpired(["coolify", "app", "env", "update"], 30)
+        return setar(servicos_cfg, versao)
+
+    monkeypatch.setattr(fo, "setar_app_version_nos_apps", setar_que_cai)
+
+
+@pytest.mark.parametrize("falha", [gh_cai_no_ci_da_entrega, app_version_cai],
+                         ids=["gh-no-esperar-checks", "app-version-timeout"])
+def test_onda_com_erro_generico_antes_do_merge_fecha_o_pr_de_entrega_e_a_rodada_seguinte_entra(
+    tmp_path, monkeypatch, falha
+):
+    """Erro que não é EntregaFalhou entre o push e o merge (rede no poll do CI,
+    APP_VERSION): o PR de entrega fecha com a branch, senão a rodada seguinte
+    trava no push sem force e no 422 do PR já aberto (issue #926)."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    ligado = {"sim": True}
+    falha(fo, monkeypatch, c, ligado)
+
+    assert rodar_main(fo, monkeypatch, c, "--sessao", "onda-x") == fo.EXIT_MERGE
+
+    entrega = next(n for n, p in c.prs.items() if p["headRefName"] == "onda/onda-x")
+    fechar = [a for a in c.gh_chamadas if a[:2] == ["pr", "close"]]
+    assert len(fechar) == 1 and fechar[0][2] == str(entrega) and "--delete-branch" in fechar[0], fechar
+    comentario = fechar[0][fechar[0].index("--comment") + 1]
+    assert "<!-- automacao -->" in comentario and ("502" in comentario or "timed out" in comentario), comentario
+    assert c.prs[entrega]["state"] == "CLOSED" and c._tip("onda/onda-x") is None
+    assert c.prs[7]["state"] == "OPEN"
+    assert c.merges == [] and c.main_remota() == c.base
+    assert c.semaforo == [("pegar", "onda-x"), ("soltar", "onda-x")]
+
+    ligado["sim"] = False
+    assert rodar_main(fo, monkeypatch, c, "--sessao", "onda-x") == 0
+
+    assert c.merges[0]["branch"] == "onda/onda-x" and c.merges[0]["pr"] != entrega
+    assert c.na_main("hospital-reunioes/backend/app/prazo.py") == "PRAZO = 15"
+
+
+def test_avulso_com_erro_generico_antes_do_merge_nao_fecha_o_pr_da_fatia(tmp_path, monkeypatch):
+    """No avulso o PR de entrega é o da fatia: o erro genérico não o fecha."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path)
+    preparar(fo, monkeypatch, c)
+    app_version_cai(fo, monkeypatch, c, {"sim": True})
+
+    assert rodar_main(fo, monkeypatch, c) == fo.EXIT_MERGE
+
+    assert [a for a in c.gh_chamadas if a[:2] == ["pr", "close"]] == []
+    assert c.prs[7]["state"] == "OPEN" and c._tip("feature") is not None
+    assert c.merges == [] and c.main_remota() == c.base
+
+
 def test_limpeza_remove_o_worktree_de_agente_da_branch_entregue_por_squash(tmp_path, monkeypatch):
     """Com squash, a branch do PR não vira ancestral da main e o `--merged` não a
     acha; o worktree do agente nessa branch, no head que entrou, sai assim mesmo."""
