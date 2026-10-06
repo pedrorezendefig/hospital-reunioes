@@ -127,7 +127,7 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo /ship ou pelo fechament
 
 ## Como o código e o registro chegam à `main`
 
-A `main` é protegida por ruleset (ADR 0061, emenda de 02/10/2026): nenhuma pessoa, admin inclusive, dá push direto nela, e todo PR precisa dos três jobs do CI verdes e da branch em dia com a base. A única exceção é a deploy key da Action pós-merge, que commita o snapshot e o draft do Manual direto na `main` (ADR 0062, decisão 10, emendada pela ADR 0065; veja o tempo 4 abaixo). Ela só existe no job da Action que roda na `main` e não instala nada; workflow de outra branch, com o token que for, entra por PR como todo mundo. Por isso o rabo (`fechar_onda.py`) entra sempre por PR, em três tempos, e a Action fecha com o quarto:
+A `main` é protegida por ruleset (ADR 0061, emenda de 02/10/2026): nenhuma pessoa, admin inclusive, dá push direto nela, e todo PR precisa dos três jobs do CI verdes no head dele, sem exigir a branch em dia com a base (ADR 0064, decisão 2: o CI do push na `main` pega os dois PRs que passam separados e quebram juntos, e isso vira correção para frente, nunca rollback). A única exceção é a deploy key da Action pós-merge, que commita o snapshot e o draft do Manual direto na `main` (ADR 0062, decisão 10, emendada pela ADR 0065; veja o tempo 4 abaixo). Ela só existe no job da Action que roda na `main` e não instala nada; workflow de outra branch, com o token que for, entra por PR como todo mundo. Por isso o rabo (`fechar_onda.py`) entra sempre por PR, em três tempos, e a Action fecha com o quarto:
 
 1. **Código.** A versão nova sai do tipo dos commits e não vira commit (issue #967): o `package.json` fica congelado. O seu PR entra como está, no próprio número (na onda, cada PR do lote do mesmo jeito, em ordem, ADR 0064). O script espera o CI verde, põe o `APP_VERSION` no backend e no frontend do Coolify, mergeia pela API do GitHub, com squash, e cria a tag `vX.Y.Z` no squash do último PR. PR da onda que não entra (conflito, CI vermelho) fica de fora sozinho.
 2. **Build e health** do que entrou: um build só, o do último squash; o script cancela o dos intermediários.
@@ -146,6 +146,13 @@ gh api 'repos/{owner}/{repo}/rules/branches/main' --jq '.[] | {type, parameters}
 Mudou o JSON depois de aplicado? `gh api -X PUT 'repos/{owner}/{repo}/rulesets/<id>' --input .github/rulesets/main.json`, com o `<id>` de `gh api 'repos/{owner}/{repo}/rulesets'`.
 
 Depois do token sem Administration (ADR 0063, `docs/onboarding/claude-setup.md` seção 5.1), esses dois comandos não passam mais na máquina: a mudança do ruleset é pela tela do GitHub (**Settings** > **Rules** > **Rulesets**), editando ali ou importando o JSON.
+
+Aplicar pela tela, quando o `main.json` muda num PR (o admin, logado no navegador, depois do merge do PR):
+
+1. **Settings** > **Rules** > **Rulesets** > **main protegida (ADR 0061)**.
+2. Faça na regra o que o diff do `main.json` mudou. Exemplo, o da ADR 0064 (decisão 2): em **Require status checks to pass**, desmarque **Require branches to be up to date before merging** (é o `strict_required_status_checks_policy: false`).
+3. **Save changes**.
+4. Confira de qualquer máquina (ler o ruleset não precisa de Administration) e cole a saída num comentário da issue do PR: `gh api 'repos/{owner}/{repo}/rules/branches/main' --jq '.[] | select(.type == "required_status_checks") | {ruleset_id, strict: .parameters.strict_required_status_checks_policy}'`.
 
 ## Notificações
 

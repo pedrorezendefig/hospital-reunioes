@@ -11,7 +11,8 @@ A ordem dos PRs e a ordem de merge. O script nunca toca na arvore principal
 caminho curto (`~/wt-<sessao>`, por causa do MAX_PATH do Windows).
 
 A main e protegida por ruleset (issue #910, ADR 0061 decisao 3): PR
-obrigatorio, CI obrigatorio e em dia com a base, sem push direto. Por isso o
+obrigatorio, CI obrigatorio no head do PR, sem exigir a branch em dia com a
+base (ADR 0064, decisao 2), sem push direto. Por isso o
 script nunca empurra na main: cada PR do lote entra pela API do GitHub com
 squash (o unico metodo que o repositorio permite), no proprio numero, em ordem,
 como o PR avulso (ADR 0064, decisao 3). A onda e o avulso com mais PRs.
@@ -45,16 +46,17 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      `last_app_version` do state.json conferido com a maior tag vX.Y.Z
      (ferramenta nao muda a versao). Sem commit (issue #967): o package.json do
      frontend fica congelado
-  4. PR a PR, na ordem, num worktree descartavel na branch do PR: a origin/main
-     por merge se a branch ficou atras (o ruleset exige em dia com a base, e o
-     merge do PR anterior do lote deixa o seguinte atras), push na branch do PR
-     (nunca na main; em dia, o head nao muda e o CI dele ja vale), CI verde no
-     head e merge pela API (squash, conferindo o sha do head). Antes do primeiro
+  4. PR a PR, na ordem, num worktree descartavel na branch do PR: o head com
+     que o PR chegou, sem a origin/main trazida e sem push, mesmo atras da main
+     (o merge do PR anterior do lote deixa o seguinte atras; o ruleset nao exige
+     em dia com a base, ADR 0064, decisao 2), so com a conferencia local, sem
+     commit, de que a main entra sem conflito; o CI verde que o head ja tinha e
+     merge pela API (squash, conferindo o sha do head). Antes do primeiro
      merge: a imagem no ar de cada app do lote (alvo do rollback; em modo
      imagem, a tag do ultimo deploy dele no state.json) e o
      APP_VERSION no backend e no frontend do Coolify (o backend a le no runtime,
      o frontend no build, pelo ARG do Dockerfile). PR que nao mergeia (conflito
-     com a main depois do anterior, push recusado, CI vermelho, head que andou,
+     com a main depois do anterior, CI vermelho, head que andou,
      merge recusado, ou erro inesperado do gh ou do git depois do primeiro
      merge) imprime uma linha `de fora:` com a causa e o lote segue sem ele; os
      ja mergeados ficam
@@ -486,11 +488,12 @@ class MergeConflito(Exception):
         self.arquivos = arquivos
 
 
-def entrar_na_branch_do_pr(wt: Path, info: dict) -> bool:
-    """O worktree vai para a ponta da branch do PR, que e o que entra na main.
-    O ruleset exige a branch em dia com a base: se a main andou (inclusive pelo
-    merge do PR anterior do lote), ela vem por merge. Devolve True quando
-    precisou trazer a main."""
+def entrar_na_branch_do_pr(wt: Path, info: dict) -> str:
+    """O worktree vai para a ponta da branch do PR, que e o que entra na main
+    como esta: o ruleset nao exige a branch em dia com a base (ADR 0064, decisao
+    2), e o squash da API junta a main que andou. Se ela andou (inclusive pelo
+    merge do PR anterior do lote), so confere, sem commit nem push, que entra
+    sem conflito. Devolve o head."""
     n, branch = info["number"], info["headRefName"]
     run(["git", "fetch", "-q", "origin", f"+refs/heads/{branch}:refs/remotes/origin/{branch}"], cwd=wt)
     run(["git", "checkout", "-q", "--detach", f"origin/{branch}"], cwd=wt)
@@ -500,13 +503,13 @@ def entrar_na_branch_do_pr(wt: Path, info: dict) -> bool:
     if conferido and ponta != conferido:
         raise EntregaFalhou(f"#{n} andou depois das pre-condicoes ({ponta[:8]}): rode de novo")
     if run(["git", "merge-base", "--is-ancestor", "origin/main", "HEAD"], cwd=wt, check=False).returncode == 0:
-        return False
-    proc = run(["git", "merge", "--no-ff", "origin/main", "-m", f"Merge da main em {branch}"], cwd=wt, check=False)
+        return ponta
+    proc = run(["git", "merge", "--no-commit", "--no-ff", "origin/main"], cwd=wt, check=False)
+    conflitos = run(["git", "diff", "--name-only", "--diff-filter=U"], cwd=wt, check=False).stdout.split()
+    run(["git", "merge", "--abort"], cwd=wt, check=False)
     if proc.returncode != 0:
-        conflitos = run(["git", "diff", "--name-only", "--diff-filter=U"], cwd=wt, check=False).stdout.split()
-        run(["git", "merge", "--abort"], cwd=wt, check=False)
         raise MergeConflito(n, conflitos)
-    return True
+    return ponta
 
 
 # ------------------------------------------------- entrega por PR (#910)
@@ -540,9 +543,10 @@ def _resultado(check: dict) -> str:
 def esperar_checks(raiz: Path, pr: int, sha: str) -> None:
     """Espera o CI do head `sha` do PR ficar verde e o GitHub liberar o merge
     (mergeStateStatus CLEAN). Com o ruleset, check obrigatorio pendente deixa o
-    PR em BLOCKED; branch atras da base, em BEHIND. Job que o GitHub cancelou
-    por falta de runner (incidente do Actions, issue #953) e repetido, nao e
-    vermelho de codigo."""
+    PR em BLOCKED; conflito com a main, em DIRTY. Branch atras da base (BEHIND)
+    mergeia: o ruleset nao exige em dia com a base (ADR 0064, decisao 2). Job
+    que o GitHub cancelou por falta de runner (incidente do Actions, issue #953)
+    e repetido, nao e vermelho de codigo."""
     inicio = time.time()
     repeticoes = 0
     while True:
@@ -567,9 +571,9 @@ def esperar_checks(raiz: Path, pr: int, sha: str) -> None:
             elif vermelhos:
                 nomes = [c.get("name") or c.get("context") or "?" for c in vermelhos]
                 raise EntregaFalhou(f"CI vermelho no PR #{pr}: {', '.join(nomes[:4])}")
-            if estado in ("BEHIND", "DIRTY"):
-                raise EntregaFalhou(f"PR #{pr} em {estado}: a main andou durante o CI")
-            if checks and all(_resultado(c) in VERDE for c in checks) and estado in ("CLEAN", "HAS_HOOKS"):
+            if estado == "DIRTY":
+                raise EntregaFalhou(f"PR #{pr} em DIRTY: conflito com a main")
+            if checks and all(_resultado(c) in VERDE for c in checks) and estado in ("CLEAN", "HAS_HOOKS", "BEHIND"):
                 return
         elif time.time() - inicio > HEAD_ATRASADO_S:
             raise EntregaFalhou(f"PR #{pr} esta em {str(info.get('headRefOid'))[:8]}, nao no {sha[:8]} empurrado")
@@ -599,14 +603,14 @@ def entregar(raiz: Path, wt: Path, branch: str, pr: int | None, titulo: str, cor
     return pr, head
 
 
-def preparar_pr(raiz: Path, wt: Path, info: dict) -> tuple[str, bool]:
-    """Leva um PR do lote ao ponto de merge: a branch dele no worktree, com a
-    origin/main por merge se ficou atras, push na branch (em dia, o head nao
-    muda e o CI dele ja vale) e CI verde no head. Devolve (head, trouxe a main)."""
+def preparar_pr(raiz: Path, wt: Path, info: dict) -> str:
+    """Leva um PR do lote ao ponto de merge sem mexer na branch dele: o head das
+    pre-condicoes, sem a main trazida e sem push, e o CI verde que ele ja tinha
+    (ADR 0064, decisao 2). Devolve o head."""
     run(["git", "fetch", "-q", "origin", "main"], cwd=wt)  # o squash do PR anterior do lote
-    trouxe = entrar_na_branch_do_pr(wt, info)
-    _, head = entregar(raiz, wt, info["headRefName"], info["number"], "", "")
-    return head, trouxe
+    head = entrar_na_branch_do_pr(wt, info)
+    esperar_checks(raiz, info["number"], head)
+    return head
 
 
 # --------------------------------------------------------------------- bump
@@ -1381,7 +1385,7 @@ def main() -> int:
                      + ("" if ferramenta else f"APP_VERSION v{versao_nova} no "
                         + " e no ".join(apps_do_coolify(servicos_cfg)) + ", ")
                      + "em ordem: " + ", ".join(f"merge pela API do PR #{i['number']}" for i in infos)
-                     + " (squash, com a main trazida por merge no PR que estiver atras e o CI verde no head), ")
+                     + " (squash, no head com o CI verde, sem trazer a main ao PR que estiver atras), ")
             if ferramenta:
                 print(faria + "cancela o build que o webhook disparar em cada merge, limpeza; "
                       "sem bump, APP_VERSION, build, health nem registro.")
@@ -1414,7 +1418,7 @@ def main() -> int:
         for info in infos:
             n = info["number"]
             try:
-                head, trouxe_main = preparar_pr(raiz, wt, info)
+                head = preparar_pr(raiz, wt, info)
                 if antes_do_primeiro:
                     # a imagem no ar antes do primeiro merge e o alvo de um rollback (issue #968)
                     for sid in servicos:
@@ -1448,8 +1452,7 @@ def main() -> int:
                 continue
             info["head_mergeado"] = head  # a imagem que o CI publicou e a dele (issue #1001)
             mergeados.append((info, sha, t))
-            print(f"merge: PR #{n} na main pela API, squash {sha[:8]}"
-                  + (f", com a main trazida por merge e o CI verde no head {head[:8]}" if trouxe_main else ""))
+            print(f"merge: PR #{n} na main pela API, squash {sha[:8]}")
         remover_worktree(raiz, wt)
         wt = None
 
