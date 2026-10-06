@@ -86,6 +86,19 @@ PROJECT = {
     ]
 }
 
+# O backend em modo imagem (issue #1001): o Coolify roda a imagem que o CI
+# publicou no GHCR, sem build e sem webhook.
+PROJECT_IMAGEM = {
+    "services": [
+        {
+            **PROJECT["services"][0],
+            "build": {"build_pack": "dockerimage", "base_directory": "/hospital-reunioes/backend",
+                      "image": "ghcr.io/dono/repo-backend", "publish_workflow": "imagem-backend.yml"},
+        },
+        PROJECT["services"][1],
+    ]
+}
+
 def script_falso(log: Path, nome: str, alvo: str) -> str:
     """O snapshot e o tirar-draft do Manual moram no repo, mas saíram do rabo para
     a Action do push da main (ADR 0062, decisão 10). O falso anota quem o chamou
@@ -105,7 +118,8 @@ class Cenario:
 
     def __init__(self, tmp_path: Path, numero: int, titulo: str, issue: int | None,
                  arquivos: dict[str, str], corpo: str = "", deploys: list[dict] | None = None,
-                 versao_em_producao: str = "0.10.0"):
+                 versao_em_producao: str = "0.10.0", project: dict | None = None,
+                 sha_no_ar: str | None = None):
         self.numero = numero
         self.issue = issue
         self.log_scripts = tmp_path / "scripts-chamados.log"
@@ -116,11 +130,12 @@ class Cenario:
                  '{\n  "name": "frontend",\n  "version": "0.10.0"\n}\n')
         escrever(repo, "hospital-reunioes/backend/app/prazo.py", "PRAZO = 10\n")
         escrever(repo, f"{MIGRATIONS}/111_base.sql", "select 1;\n")
-        escrever(repo, "docs/spec/deploy/project.json", json_txt(PROJECT))
+        escrever(repo, "docs/spec/deploy/project.json", json_txt(project or PROJECT))
         escrever(repo, "docs/spec/deploy/state.json", json_txt({
             "last_app_version": versao_em_producao,
             "production": {"repo": "dono/repo"},
-            "services": [{"id": "backend"}, {"id": "frontend"}],
+            "services": [{"id": "backend", **({"last_deploy_sha": sha_no_ar} if sha_no_ar else {})},
+                         {"id": "frontend"}],
         }))
         escrever(repo, "docs/spec/deploy/history.json", json_txt({"deploys": deploys or []}))
         escrever(repo, ".claude/skills/snapshot/scripts/snapshot.py",
@@ -176,6 +191,11 @@ class Cenario:
         self.semaforo: list[tuple[str, str]] = []
         self.cancelamentos: list[str] = []
         self.tags: list[tuple[str, str]] = []  # (ref, sha) criados pela API
+        # o workflow que publica a imagem no GHCR (issue #1001): os `-f` de cada
+        # disparo e quantas chamadas ao Coolify (fora as leituras) vieram antes dele
+        self.publicacoes: list[dict] = []
+        self.publicacao_falha = False
+        self.deploys_novos: list[str] = []  # apps cujo deploy novo (sem webhook) o rabo esperou
         self.log_push_main = tmp_path / "push-na-main.log"
         hook = self.remoto / "hooks" / "pre-receive"
         hook.write_text(
@@ -266,6 +286,22 @@ class Cenario:
         if not self.log_coolify.exists():
             return []
         return self.log_coolify.read_text(encoding="utf-8").splitlines()
+
+    def coolify_sem_leituras(self) -> list[str]:
+        return [li for li in self.coolify() if not li.startswith("app deployments list")]
+
+    def disparar_workflow(self, cmd: list[str]) -> None:
+        """`gh workflow run <arquivo> --ref main -f k=v ...`, como o GitHub: o run
+        nasce com o run-name do workflow, que leva o sha."""
+        campos = dict(cmd[i + 1].split("=", 1) for i, a in enumerate(cmd) if a == "-f")
+        ref = cmd[cmd.index("--ref") + 1] if "--ref" in cmd else None
+        self.publicacoes.append({"workflow": cmd[3], "ref": ref, **campos,
+                                 "coolify_antes": len(self.coolify_sem_leituras())})
+
+    def runs_do_workflow(self) -> list[dict]:
+        return [{"databaseId": 900 + i, "displayTitle": f"Imagem do backend {p['sha']}",
+                 "status": "completed", "conclusion": "failure" if self.publicacao_falha else "success"}
+                for i, p in reversed(list(enumerate(self.publicacoes)))]
 
     def pushes_na_main(self) -> list[str]:
         if not self.log_push_main.exists():
@@ -377,6 +413,8 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
             return c.ver_pr(int(args[2]), args[args.index("--json") + 1].split(","))
         if args[:2] == ["issue", "view"]:
             return {"body": "## Pai\n\n`#902`, PRD da esteira.\n"}
+        if args[:2] == ["run", "list"]:
+            return c.runs_do_workflow()
         if args == ["api", "repos/{owner}/{repo}/check-runs/9/annotations"]:
             return [{"annotation_level": "notice", "message": "The ubuntu-latest label will migrate"},
                     {"annotation_level": "failure", "message": c.anotacao_do_cancelamento}]
@@ -404,6 +442,8 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
                     git(c.remoto, "update-ref", "-d", f"refs/heads/{branch}")
             if cmd[1:] == ["run", "rerun", "555", "--failed"]:
                 c.sem_runner -= 1
+            if cmd[1:3] == ["workflow", "run"]:
+                c.disparar_workflow(cmd)
             return subprocess.CompletedProcess(cmd, 0, "", "")
         return run_real(cmd, *args, **kwargs)
 
@@ -427,6 +467,10 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
         c.rollbacks.append(service["id"])
         return "finished"
 
+    def esperar_deploy_novo(service, antes):
+        c.deploys_novos.append(service["id"])
+        return "finished"
+
     def cancelar_build_do_registro(servicos_cfg, sha):
         c.cancelamentos.append(sha)
         return []
@@ -437,7 +481,9 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
     monkeypatch.setattr(fo, "esperar_build", esperar_build)
     monkeypatch.setattr(fo, "checar_health", checar_health)
     monkeypatch.setattr(fo, "esperar_rollback", esperar_rollback)
+    monkeypatch.setattr(fo, "esperar_deploy_novo", esperar_deploy_novo, raising=False)
     monkeypatch.setattr(fo, "cancelar_build_do_registro", cancelar_build_do_registro)
+    monkeypatch.setattr(fo, "IMAGEM_POLL_S", 0, raising=False)
 
 
 def rodar_main(fo, monkeypatch, c: Cenario, *extra: str) -> int:
@@ -1914,3 +1960,36 @@ def test_docstring_documenta_a_migration_vencida():
     for termo in ("migration", "/api/health", "24 h", "nada entrou na main", "semaforo"):
         assert termo in vencida, (termo, vencida)
     assert "SEMAFORO FICA PRESO" not in vencida, vencida
+
+
+# ------------------------------------- imagem do backend no GHCR (#1001)
+
+def test_backend_em_modo_imagem_sobe_a_imagem_do_head_retagueada_para_o_squash_sem_build(
+    tmp_path, monkeypatch, capsys
+):
+    """ADR 0064, decisão 6c: o CI publicou a imagem do head do PR no GHCR. Depois
+    do merge o rabo dispara o workflow que dá a ela a tag do squash (retag, a
+    origem é o head) e só então aponta o Coolify para essa tag e dispara o
+    deploy, que só puxa e reinicia: nenhum build do webhook é esperado."""
+    fo = carregar_fechar_onda()
+    c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
+    preparar(fo, monkeypatch, c)
+
+    assert rodar_main(fo, monkeypatch, c) == 0
+
+    squash = c.merges[0]["main"]
+    [publicacao] = c.publicacoes
+    assert (publicacao["workflow"], publicacao["ref"]) == ("imagem-backend.yml", "main")
+    assert (publicacao["sha"], publicacao["origens"]) == (squash, c.head_do_pr)
+    # antes da imagem publicada, o Coolify só recebeu o APP_VERSION
+    assert publicacao["coolify_antes"] == 2
+    assert c.coolify_sem_leituras() == [
+        f"app env update uuid-backend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app env update uuid-frontend APP_VERSION --value 0.10.1 | main={c.base}",
+        f"app update uuid-backend --docker-tag {squash} | main={squash}",
+        f"deploy uuid uuid-backend | main={squash}",
+    ]
+    assert c.builds == [] and c.deploys_novos == ["backend"]
+    assert c.healths == [("backend", "0.10.1")]
+    entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
+    assert entrada["sha"] == squash and entrada["result"] == "healthy"

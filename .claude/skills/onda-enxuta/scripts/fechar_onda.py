@@ -164,6 +164,8 @@ APP = "hospital-reunioes/"
 BUILD_WAIT_WEBHOOK_S = 120
 BUILD_POLL_S = 10
 BUILD_TIMEOUT_S = 40 * 60
+IMAGEM_POLL_S = 10
+IMAGEM_TIMEOUT_S = 20 * 60  # o retag leva segundos; o build de reserva do workflow, minutos
 CHECKS_POLL_S = 15
 CHECKS_TIMEOUT_S = 40 * 60
 HEAD_ATRASADO_S = 120  # o GitHub registra o push no PR em segundos
@@ -893,6 +895,77 @@ def cancelar_build_do_registro(servicos_cfg: dict, sha: str) -> list[str]:
     return cancelados
 
 
+# ------------------------------------------------- imagem no GHCR (#1001)
+
+def em_modo_imagem(service: dict) -> bool:
+    """O app roda a imagem que o CI publicou no GHCR (ADR 0064, decisao 6c): o
+    Coolify so puxa e reinicia, sem build e sem webhook."""
+    return (service.get("build") or {}).get("build_pack") == "dockerimage"
+
+
+def origens_da_imagem(raiz: Path, service: dict, sha: str, heads: list[str]) -> list[str]:
+    """Os heads mergeados, do mais novo ao mais velho, cuja pasta do app (o
+    contexto do build) e a mesma do squash `sha`: a imagem que o CI publicou
+    para eles e a do squash. Lista vazia: nenhum serve e o workflow constroi."""
+    pasta = (service.get("build") or {}).get("base_directory", "").strip("/")
+
+    def arvore(ref: str) -> str:
+        return run(["git", "rev-parse", f"{ref}:{pasta}"], cwd=raiz, check=False).stdout.strip()
+
+    alvo = arvore(sha)
+    return [h for h in reversed(heads) if alvo and arvore(h) == alvo]
+
+
+def publicar_imagem(raiz: Path, service: dict, sha: str, origens: list[str]) -> str:
+    """Dispara o workflow que publica a imagem do squash `sha` no GHCR (tag do
+    sha e `latest`) e espera o run terminar. O workflow retagueia a primeira das
+    `origens` que existir no GHCR; sem nenhuma, constroi do `sha`. Quem escreve
+    no GHCR e o GITHUB_TOKEN do workflow: o gh da maquina do rabo nao tem
+    `write:packages`. Devolve a conclusao do run."""
+    wf = service["build"]["publish_workflow"]
+    listar = ["run", "list", "--workflow", wf, "--event", "workflow_dispatch", "--limit", "20",
+              "--json", "databaseId,displayTitle,status,conclusion"]
+    antes = {r.get("databaseId") for r in gh_json(listar, cwd=raiz) or []}
+    proc = run(["gh", "workflow", "run", wf, "--ref", "main", "-f", f"sha={sha}",
+                "-f", f"origens={' '.join(origens)}"], cwd=raiz, check=False)
+    if proc.returncode != 0:
+        return f"recusada pelo gh ({(proc.stderr or proc.stdout).strip()[:160]})"
+    limite = time.time() + IMAGEM_TIMEOUT_S
+    while time.time() < limite:
+        try:
+            runs = gh_json(listar, cwd=raiz) or []
+        except RuntimeError:
+            runs = []  # um 502 no polling nao derruba o deploy
+        # o run-name do workflow leva o sha: e assim que o run deste disparo aparece
+        novo = next((r for r in runs if r.get("databaseId") not in antes
+                     and sha in (r.get("displayTitle") or "")), None)
+        if novo and (novo.get("status") or "").lower() == "completed":
+            return (novo.get("conclusion") or "?").lower()
+        time.sleep(IMAGEM_POLL_S)
+    return f"sem fim em {IMAGEM_TIMEOUT_S // 60} min"
+
+
+def trocar_tag(uuid: str, tag: str) -> bool:
+    """Aponta o app em modo imagem para a tag e dispara o deploy, que so puxa a
+    imagem e reinicia o container."""
+    return (run(["coolify", "app", "update", uuid, "--docker-tag", tag], check=False).returncode == 0
+            and run(["coolify", "deploy", "uuid", uuid], check=False).returncode == 0)
+
+
+def subir_imagem(raiz: Path, service: dict, sha: str, heads: list[str]) -> tuple[str, int | None]:
+    """O deploy de um app em modo imagem: publica a imagem do squash e poe a tag
+    dele no ar. Devolve (status, duracao_s), como o esperar_build."""
+    t = time.time()
+    run(["git", "fetch", "-q", "origin", "main"], cwd=raiz)  # o squash, para comparar a pasta do app
+    publicada = publicar_imagem(raiz, service, sha, origens_da_imagem(raiz, service, sha, heads))
+    if publicada != "success":
+        return f"imagem no GHCR {publicada}", None
+    antes = ids_de_deploy(service["uuid"])
+    if not trocar_tag(service["uuid"], sha):
+        return "o Coolify recusou a tag", None
+    return esperar_deploy_novo(service, antes), int(time.time() - t)
+
+
 # ----------------------------------------------------------------- rollback
 
 def imagem_no_ar(uuid: str) -> str | None:
@@ -904,15 +977,29 @@ def imagem_no_ar(uuid: str) -> str | None:
     return str(atual) if atual else None
 
 
+def tag_no_ar(wt: Path, ref: str, sid: str) -> str | None:
+    """A tag que o app em modo imagem roda agora (issue #1001): o sha do ultimo
+    deploy dele no state.json, que e a tag que o rabo pos no ar. O CLI do Coolify
+    nao devolve a tag configurada, e o `rollback images` e de build do git."""
+    state = json.loads(run(["git", "show", f"{ref}:{STATE}"], cwd=wt).stdout)
+    svc = next((s for s in state.get("services") or [] if s.get("id") == sid), {})
+    return svc.get("last_deploy_sha") or None
+
+
 def ids_de_deploy(uuid: str) -> set[str]:
     return {str(_campo(d, "deployment_uuid", "uuid", "id"))
             for d in _lista(coolify_json(["app", "deployments", "list", uuid]))}
 
 
 def esperar_rollback(service: dict, antes: set[str]) -> str:
-    """Espera o deploy que o `rollback run` criou (o que nao estava em `antes`)
-    terminar. Nunca forca build: um `deploy uuid` aqui rebuildaria a main, com o
-    defeito dentro."""
+    """Espera o deploy que o `rollback run` criou terminar. Nunca forca build: um
+    `deploy uuid` aqui rebuildaria a main, com o defeito dentro."""
+    return esperar_deploy_novo(service, antes)
+
+
+def esperar_deploy_novo(service: dict, antes: set[str]) -> str:
+    """Espera o deploy que o rabo acabou de pedir (o que nao estava em `antes`)
+    terminar, sem forcar nenhum."""
     limite = time.time() + BUILD_WAIT_WEBHOOK_S
     while True:
         novos = [d for d in _lista(coolify_json(["app", "deployments", "list", service["uuid"]]))
@@ -1169,7 +1256,8 @@ def main() -> int:
                 head, trouxe_main = preparar_pr(raiz, wt, info)
                 if antes_do_primeiro:
                     # a imagem no ar antes do primeiro merge e o alvo de um rollback (issue #968)
-                    no_ar = {sid: imagem_no_ar(servicos_cfg[sid]["uuid"]) for sid in servicos}
+                    no_ar = {sid: tag_no_ar(wt, base, sid) if em_modo_imagem(servicos_cfg[sid])
+                             else imagem_no_ar(servicos_cfg[sid]["uuid"]) for sid in servicos}
                     com_app_version = setar_app_version_nos_apps(servicos_cfg, versao_nova) if versao_nova else []
                     antes_do_primeiro = False
                 titulo = info["title"].strip()
@@ -1194,6 +1282,7 @@ def main() -> int:
                 de_fora.append(n)
                 print(f"de fora: PR #{n}, falha inesperada ao preparar ou mergear ({str(e)[:200]}).")
                 continue
+            info["head_mergeado"] = head  # a imagem que o CI publicou e a dele (issue #1001)
             mergeados.append((info, sha, t))
             print(f"merge: PR #{n} na main pela API, squash {sha[:8]}"
                   + (f", com a main trazida por merge e o CI verde no head {head[:8]}" if trouxe_main else ""))
@@ -1243,12 +1332,18 @@ def main() -> int:
                   + f" · {n_wt} worktrees limpos · {dur(time.time() - T0)}")
             return EXIT_MERGE if de_fora else 0
 
-        # um build: o webhook dispara um deploy por merge, e so o do ultimo roda (issue #851)
+        # um build: o webhook dispara um deploy por merge, e so o do ultimo roda (issue #851).
+        # App em modo imagem nao tem webhook nem build: a imagem do squash vai para o GHCR e o
+        # Coolify so a puxa (issue #1001)
         cancelados = [sid for s in intermediarios for sid in cancelar_build_do_registro(servicos_cfg, s)]
         duracoes: dict[str, int | None] = {}
         falhas = []
+        heads = [i["head_mergeado"] for i in lote]
         for sid in servicos:
-            status, d = esperar_build(servicos_cfg[sid], t_merge, sha_main, intermediarios)
+            if em_modo_imagem(servicos_cfg[sid]):
+                status, d = subir_imagem(raiz, servicos_cfg[sid], sha_main, heads)
+            else:
+                status, d = esperar_build(servicos_cfg[sid], t_merge, sha_main, intermediarios)
             duracoes[sid] = d
             if status != "finished":
                 falhas.append(f"{sid}: {status}")
