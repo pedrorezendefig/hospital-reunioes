@@ -163,6 +163,7 @@ def rodar(trecho: str, cwd: Path, env: dict[str, str] | None = None,
     """Roda o `run:` do passo como o GitHub Actions roda, num dos dois shells."""
     script = cwd.parent / "passo.sh"
     script.write_text(passo(trecho, job)["run"], encoding="utf-8")
+    # surrogateescape: o `::error::` ecoa nome de arquivo cru, que pode não ser UTF-8
     return subprocess.run([*BASH, str(script)], cwd=cwd, env={**ENV_GIT, **(env or {})},
                           capture_output=True, text=True, errors="surrogateescape", check=False)
 
@@ -714,6 +715,23 @@ def test_nome_com_byte_invalido_nao_passa_pelo_filtro(tmp_path, depois):
     for caminho in (NOME_INVALIDO, *depois):
         assert caminho in proc.stdout
     assert git(origem, "rev-parse", "main") == antes
+
+
+def test_pagina_com_acento_no_nome_sai_do_draft(tmp_path):
+    """Com o `LC_ALL=C` o grep compara byte a byte: o `.+` da página casa os
+    dois bytes do acento, e a troca do draft legítima continua entrando."""
+    origem, outro = main_de_brinquedo(tmp_path)
+    pagina = "docs/manual/src/content/docs/ouvidoria/manifestação.mdx"
+    escrever(outro, pagina, PAGINA_EM_DRAFT)
+    git(outro, "add", "-A")
+    git(outro, "commit", "-q", "-m", "página com acento")
+    git(outro, "push", "-q", "origin", "HEAD:main")
+
+    proc = gerar_e_commitar(tmp_path, origem, lambda g: escrever(g, pagina, sem_draft(PAGINA_EM_DRAFT)))
+
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert git(origem, "log", "-1", "--format=%an", "main") == "github-actions[bot]"
+    assert git(origem, "show", f"main:{pagina}") + "\n" == PAGINA_EM_DRAFT.replace("draft: true", "draft: false")
 
 
 def test_bit_de_executavel_num_snapshot_e_recusado(tmp_path):
