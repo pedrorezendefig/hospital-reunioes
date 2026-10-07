@@ -796,7 +796,7 @@ def _dados_do_pop():
 
 
 @com_node
-def test_hover_e_enxuto_valor_entregue_e_uma_linha_de_rodape(tmp_path):
+def test_hover_tem_titulo_valor_entregue_o_que_resolve_e_rodape(tmp_path):
     dados = _dados_do_pop()
     pr = next(p for p in dados["github"]["prs"] if p["number"] == 70)
     pr["resumo"] = {"antes": "copiava a Ata para o Word.", "depois": "a Ata sai em PDF.", "contexto": None}
@@ -805,8 +805,10 @@ def test_hover_e_enxuto_valor_entregue_e_uma_linha_de_rodape(tmp_path):
     assert re.search(
         r'<span class="fx-k">valor entregue</span><p><em>Antes</em> copiava a Ata para o Word\.</p>'
         r'<p><em>Depois</em> a Ata sai em PDF\.</p>', pop)
+    assert '<p class="pr-pop-tit">feat(atas): exportar PDF</p>' in pop
+    assert '<span class="fx-k">o que resolve</span><p>#901 Issue 901</p>' in pop
     assert '<p class="pr-pop-rodape">#901 · no ar na v0.163.4 · 6 out, 01:30</p>' in pop
-    for fora in ("feat/fatia-901", "type:feature", "aberto por", "levou", "Issue 901", "<a"):
+    for fora in ("feat/fatia-901", "type:feature", "aberto por", "levou", "<a"):
         assert fora not in pop, fora  # enxuto: sem branch, labels, pessoas nem link no hover
 
 
@@ -814,17 +816,18 @@ def test_hover_e_enxuto_valor_entregue_e_uma_linha_de_rodape(tmp_path):
 def test_pr_antigo_mostra_o_contexto_como_valor_entregue(tmp_path):
     dados = _dados_do_pop()
     pr = next(p for p in dados["github"]["prs"] if p["number"] == 70)
-    pr["resumo"] = {"antes": None, "depois": None, "contexto": "O quadro ganha <b>uma</b> coluna."}
+    pr["resumo"] = {"antes": None, "depois": None, "contexto": "O quadro ganha <b>uma</b> coluna.\n\nE ela agrupa por dia."}
     pop = _app(tmp_path, "popDoPr('70', S.data, { fmtDT, depVer })", dados=dados)
-    assert '<span class="fx-k">valor entregue</span><p>O quadro ganha &lt;b&gt;uma&lt;/b&gt; coluna.</p>' in pop
+    assert ('<span class="fx-k">valor entregue</span><p>O quadro ganha &lt;b&gt;uma&lt;/b&gt; coluna.</p>'
+            '<p>E ela agrupa por dia.</p>') in pop
     assert "<em>Antes</em>" not in pop
 
 
 @com_node
-def test_sem_resumo_o_titulo_fica_no_lugar(tmp_path):
+def test_sem_resumo_fica_o_titulo_e_o_que_resolve(tmp_path):
     pop = _app(tmp_path, "popDoPr('70', S.data, { fmtDT, depVer })", dados=_dados_do_pop())
-    assert '<p class="pr-pop-tit">feat(atas): exportar PDF</p>' in pop
-    assert "valor entregue" not in pop
+    assert pop.count('<p class="pr-pop-tit">feat(atas): exportar PDF</p>') == 1
+    assert "valor entregue" not in pop and "o que resolve" in pop
 
 
 @com_node

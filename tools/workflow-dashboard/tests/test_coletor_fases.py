@@ -348,17 +348,22 @@ def test_secao_resumo_funcional_do_1090_vira_texto_corrido():
     }
 
 
-def test_pr_antigo_sem_a_secao_cai_no_primeiro_paragrafo_do_contexto():
+def test_pr_antigo_sem_a_secao_cai_no_contexto():
     assert collect.resumo_funcional(CORPO_ANTIGO) == {
         "antes": None,
         "depois": None,
-        "contexto": "Decisão registrada neste PR: o quadro ganha uma coluna Entregue.",
+        "contexto": "Decisão registrada neste PR: o quadro ganha uma coluna Entregue.\n\nPor quê: o resto do texto longo.",
     }
 
 
+def test_pr_antigo_traz_os_dois_primeiros_paragrafos_do_contexto():
+    corpo = "## Contexto\n\nPrimeiro **parágrafo**.\n\n- segundo\n  em duas linhas\n\nTerceiro fica fora.\n\n## Outra\n"
+    assert collect.resumo_funcional(corpo)["contexto"] == "Primeiro parágrafo.\n\n- segundo em duas linhas"
+
+
 def test_contexto_longo_e_cortado_e_corpo_vazio_nao_tem_resumo():
-    longo = collect.resumo_funcional("## Contexto\n\n" + "palavra " * 80)
-    assert len(longo["contexto"]) <= 161 and longo["contexto"].endswith("…")
+    longo = collect.resumo_funcional("## Contexto\n\n" + "palavra " * 80 + "\n\n" + "outra " * 80)
+    assert len(longo["contexto"]) <= 421 and longo["contexto"].endswith("…")
     assert collect.resumo_funcional("") is None
     assert collect.resumo_funcional("<!-- só comentário -->") is None
 
