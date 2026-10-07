@@ -97,6 +97,14 @@ def _sem_github_de_verdade(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _sem_pr_aberto(monkeypatch):
+    """O lote da reconciliacao le os PRs abertos uma vez (issue #1064). Por
+    padrao nao ha nenhum: quem quer PR aberto, ou a leitura falhando, troca este
+    duble no proprio teste."""
+    monkeypatch.setattr(github_client, "ler_prs_abertos", lambda: [])
+
+
+@pytest.fixture(autouse=True)
 def _sem_email_de_verdade(monkeypatch):
     """Nenhum teste deste arquivo manda e-mail, e todos podem tentar.
 
@@ -2487,3 +2495,196 @@ class TestOPrQueFechaARaiz:
         assert demanda["etapa"] == ETAPA_EM_DESENVOLVIMENTO
         assert demanda["github_foto"]["prs_abertos"] == [1100]
         assert [linha["texto"] for linha in _fio(sb)] == ["Etapa: Em desenvolvimento"]
+
+    def test_pr_fechado_sem_merge_limpa_o_fato_e_a_etapa_volta_as_labels(self, monkeypatch):
+        """Criterio de aceite: o PR some, e quem manda de novo e a label."""
+        gh = _GithubFalso({673: _issue(673, labels=("ready-for-agent",))})
+        cliente, sb, _ = _montar(demandas=[_ja_sincronizada(gh, 673)], github=gh, monkeypatch=monkeypatch)
+
+        _entregar(cliente, _corpo_pr(), evento="pull_request")
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO, "o piso: o PR aberto valeu"
+
+        resposta = _entregar(cliente, _corpo_pr(acao="closed", merged=False), evento="pull_request")
+
+        assert resposta.status_code == 200
+        demanda = _demandas(sb)[0]
+        assert demanda["etapa"] == ETAPA_PLANEJADA
+        assert "prs_abertos" not in demanda["github_foto"]
+        assert "fechada_por_pr" not in demanda["github_foto"]
+        assert [linha["texto"] for linha in _fio(sb)] == ["Etapa: Em desenvolvimento", "Etapa: Planejada"]
+
+    def test_fechar_um_pr_sem_merge_nao_apaga_o_outro_pr_aberto(self, monkeypatch):
+        gh = _GithubFalso({673: _issue(673)})
+        cliente, sb, _ = _montar(demandas=[_ja_sincronizada(gh, 673)], github=gh, monkeypatch=monkeypatch)
+
+        _entregar(cliente, _corpo_pr(1100), evento="pull_request")
+        _entregar(cliente, _corpo_pr(1101), evento="pull_request")
+        _entregar(cliente, _corpo_pr(1100, acao="closed"), evento="pull_request")
+
+        demanda = _demandas(sb)[0]
+        assert demanda["github_foto"]["prs_abertos"] == [1101]
+        assert demanda["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+
+    def test_pr_mergeado_grava_fechada_por_pr_na_foto(self, monkeypatch):
+        """Criterio de aceite: e o fato que a fatia do deploy le para decidir o
+        gatilho da devolucao."""
+        gh = _GithubFalso({673: _issue(673)})
+        cliente, sb, _ = _montar(demandas=[_ja_sincronizada(gh, 673)], github=gh, monkeypatch=monkeypatch)
+        _entregar(cliente, _corpo_pr(), evento="pull_request")
+        gh.issues[673] = _issue(673, estado="closed", motivo="completed")
+
+        resposta = _entregar(cliente, _corpo_pr(acao="closed", merged=True), evento="pull_request")
+
+        assert resposta.status_code == 200
+        foto = _demandas(sb)[0]["github_foto"]
+        assert foto["fechada_por_pr"] == 1100
+        assert "prs_abertos" not in foto
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
+
+    def test_o_evento_issues_seguinte_nao_apaga_os_fatos_do_pr(self, monkeypatch):
+        """A issue relida nao fala de PR: uma label posta depois do PR aberto
+        regravaria a foto sem o fato, e o card voltaria para tras."""
+        gh = _GithubFalso({673: _issue(673)})
+        cliente, sb, _ = _montar(demandas=[_ja_sincronizada(gh, 673)], github=gh, monkeypatch=monkeypatch)
+        _entregar(cliente, _corpo_pr(), evento="pull_request")
+        gh.issues[673] = _issue(673, labels=("ready-for-agent",))
+
+        _entregar(cliente, _corpo(acao="labeled"))
+
+        demanda = _demandas(sb)[0]
+        assert demanda["github_foto"]["prs_abertos"] == [1100]
+        assert demanda["github_foto"]["labels"] == ["ready-for-agent"]
+        assert demanda["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+
+    @pytest.mark.parametrize(
+        "fecha",
+        (None, "Sem referencia nenhuma", "Closes #999", "Refs #673", "Closes outra-pessoa/hospital-reunioes#673"),
+        ids=("sem_corpo", "sem_palavra", "issue_sem_demanda", "so_menciona", "outro_repositorio"),
+    )
+    def test_pr_que_nao_fecha_demanda_vinculada_e_ignorado_com_2xx(self, fecha, monkeypatch):
+        """Criterio de aceite: o PR de ferramenta, o de outra aba e o que so
+        menciona a issue sem fecha-la nao tocam na Demanda nem gastam cota."""
+        gh = _GithubFalso({673: _issue(673), 999: _issue(999)})
+        cliente, sb, _ = _montar(demandas=[_ja_sincronizada(gh, 673)], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _entregar(cliente, _corpo_pr(fecha=fecha), evento="pull_request")
+
+        assert resposta.status_code == 200
+        assert resposta.json() == {"ignorado": "sem_vinculo"}
+        assert gh.leituras == []
+        assert _fio(sb) == []
+        assert _demandas(sb)[0]["github_sincronizado_em"] == CARIMBO_ANTERIOR
+
+    @pytest.mark.parametrize("acao", ("edited", "synchronize", "labeled", "assigned"))
+    def test_acao_de_pr_fora_da_lista_nao_faz_nada(self, acao, monkeypatch):
+        gh = _GithubFalso({673: _issue(673)})
+        cliente, _, _ = _montar(demandas=[_ja_sincronizada(gh, 673)], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _entregar(cliente, _corpo_pr(acao=acao), evento="pull_request")
+
+        assert resposta.json() == {"ignorado": "acao"}
+        assert gh.leituras == []
+
+    def test_pr_de_outro_repositorio_e_ignorado(self, monkeypatch):
+        gh = _GithubFalso({673: _issue(673)})
+        cliente, _, _ = _montar(demandas=[_ja_sincronizada(gh, 673)], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _entregar(cliente, _corpo_pr(repo="outra-pessoa/hospital-reunioes"), evento="pull_request")
+
+        assert resposta.json() == {"ignorado": "outro_repositorio"}
+        assert gh.leituras == []
+
+    @pytest.mark.parametrize(
+        "assinatura",
+        (None, "sha256=" + "0" * 64, "outro-segredo"),
+        ids=("sem_assinatura", "assinatura_errada", "outro_segredo"),
+    )
+    def test_pull_request_sem_assinatura_valida_e_recusado(self, assinatura, monkeypatch):
+        """Criterio de aceite: o HMAC continua obrigatorio, e a recusa vem antes
+        de qualquer leitura ou escrita."""
+        gh = _GithubFalso({673: _issue(673)})
+        cliente, sb, _ = _montar(
+            demandas=[_ja_sincronizada(gh, 673, etapa=ETAPA_PLANEJADA)], github=gh, monkeypatch=monkeypatch
+        )
+        corpo = _corpo_pr()
+        if assinatura == "outro-segredo":
+            assinatura = _assinar(corpo, segredo="outro-segredo")
+
+        resposta = _entregar(cliente, corpo, evento="pull_request", assinatura=assinatura)
+
+        assert resposta.status_code == 401
+        assert gh.leituras == []
+        assert _fio(sb) == []
+        assert _demandas(sb)[0]["etapa"] == ETAPA_PLANEJADA
+
+
+class TestIssuesQueOCorpoFecha:
+    @pytest.mark.parametrize(
+        ("corpo", "esperado"),
+        (
+            ("Closes #673", [673]),
+            ("closes #673\n\nfixes: #674", [673, 674]),
+            ("Resolved pedrorezendefig/hospital-reunioes#673", [673]),
+            ("Closes #1, #2", [1]),
+            ("Close #10 e close #10 de novo", [10]),
+            ("Foreclose #673", []),
+            ("#673 fechado", []),
+        ),
+    )
+    def test_as_palavras_de_fechamento_do_github(self, corpo, esperado):
+        assert github_client.issues_que_o_corpo_fecha(corpo) == esperado
+
+
+class TestAReconciliacaoRecuperaOPrAberto:
+    def _lote(self, monkeypatch, gh: _GithubFalso, demanda: dict, ler_prs_abertos) -> _SupabaseMock:
+        monkeypatch.setattr(github_client, "ler_issue", gh.ler_issue)
+        monkeypatch.setattr(github_client, "ler_sub_issues", gh.ler_sub_issues)
+        monkeypatch.setattr(github_client, "ler_prs_abertos", ler_prs_abertos)
+        return _SupabaseMock({"tecnologia_demandas": [demanda], "tecnologia_conversas": []})
+
+    def test_o_pr_aberto_que_o_webhook_perdeu_entra_na_passagem_de_hora_em_hora(self, monkeypatch):
+        """Criterio de aceite: o webhook do PR nao chegou, a issue segue sem
+        label, e a passagem de hora em hora le os PRs abertos pelo cliente."""
+        gh = _GithubFalso({673: _issue(673)})
+        sb = self._lote(
+            monkeypatch,
+            gh,
+            _ja_sincronizada(gh, 673, etapa=ETAPA_PLANEJADA),
+            lambda: [{"numero": 1100, "fecha": [673]}, {"numero": 1101, "fecha": [999]}],
+        )
+
+        contagem = tecnologia_sincronizacao.reconciliar_vinculos(sb)
+
+        demanda = _demandas(sb)[0]
+        assert contagem["mudadas"] == 1
+        assert demanda["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+        assert demanda["github_foto"]["prs_abertos"] == [1100]
+
+    def test_o_pr_que_fechou_sem_o_webhook_sai_da_foto(self, monkeypatch):
+        gh = _GithubFalso({673: _issue(673, labels=("ready-for-agent",))})
+        foto = {**_foto_guardada(gh, 673), "prs_abertos": [1100]}
+        demanda = _demanda("D1", github_issue_numero=673, etapa=ETAPA_EM_DESENVOLVIMENTO, github_foto=foto)
+        sb = self._lote(monkeypatch, gh, demanda, lambda: [])
+
+        tecnologia_sincronizacao.reconciliar_vinculos(sb)
+
+        assert _demandas(sb)[0]["etapa"] == ETAPA_PLANEJADA
+        assert "prs_abertos" not in _demandas(sb)[0]["github_foto"]
+
+    def test_falha_ao_ler_os_prs_nao_derruba_o_lote_nem_apaga_o_fato(self, monkeypatch):
+        """Sem a lista de PRs, "nao sei" nao pode virar "nao ha PR aberto": o
+        lote segue com o fato que a foto ja tinha."""
+        gh = _GithubFalso({673: _issue(673, labels=("ready-for-agent",))})
+        foto = {**_foto_guardada(gh, 673), "prs_abertos": [1100]}
+        demanda = _demanda("D1", github_issue_numero=673, etapa=ETAPA_PLANEJADA, github_foto=foto)
+
+        def _fora_do_ar():
+            raise github_client.GithubIndisponivelError("timeout")
+
+        sb = self._lote(monkeypatch, gh, demanda, _fora_do_ar)
+
+        contagem = tecnologia_sincronizacao.reconciliar_vinculos(sb)
+
+        assert contagem["falhas"] == 0
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+        assert _demandas(sb)[0]["github_foto"]["prs_abertos"] == [1100]

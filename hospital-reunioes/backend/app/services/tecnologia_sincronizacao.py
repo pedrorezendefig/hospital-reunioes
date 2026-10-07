@@ -543,6 +543,24 @@ def sincronizar_demanda(
     return True
 
 
+def _prs_abertos_do_lote() -> list[dict[str, Any]] | None:
+    """Os PRs abertos do repositorio, lidos uma vez para o lote inteiro.
+
+    `None` quando a leitura falha, e nao lista vazia: "nao consegui ler" virando
+    "nao ha PR aberto" tiraria o fato de toda Demanda numa queda do GitHub, e o
+    card voltaria para tras sem ninguem ter fechado PR nenhum. Com `None`, cada
+    Demanda fica com o fato que a foto ja tinha, e o lote segue.
+    """
+    try:
+        return github_client.ler_prs_abertos()
+    except Exception:
+        logger.warning(
+            "[tecnologia] Falha ao ler os PRs abertos; a reconciliação segue com o fato de PR que cada foto já tinha.",
+            exc_info=True,
+        )
+        return None
+
+
 def reconciliar_vinculos(supabase) -> dict[str, int]:
     """O lote de hora em hora: toda Demanda vinculada que ainda esta aberta.
 
@@ -562,12 +580,17 @@ def reconciliar_vinculos(supabase) -> dict[str, int]:
         .execute()
     )
     demandas = result.data or []
+    prs_abertos = _prs_abertos_do_lote() if demandas else None
 
     mudadas = 0
     falhas = 0
     for demanda in demandas:
         try:
-            if sincronizar_demanda(supabase, demanda):
+            abertos = None
+            if prs_abertos is not None:
+                numero = demanda.get("github_issue_numero")
+                abertos = [pr["numero"] for pr in prs_abertos if numero in pr["fecha"]]
+            if sincronizar_demanda(supabase, demanda, prs_abertos=abertos):
                 mudadas += 1
         except github_client.IssueNaoEncontradaError:
             # Condicao PERMANENTE: a issue foi apagada ou transferida. Uma linha,

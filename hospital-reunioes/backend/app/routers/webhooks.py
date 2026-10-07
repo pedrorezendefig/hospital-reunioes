@@ -532,9 +532,7 @@ async def webhook_github(
     except ValueError:
         raise HTTPException(status_code=400, detail="Payload JSON inválido")
 
-    acoes = (
-        tecnologia_sincronizacao.ACOES_DE_ISSUE if evento == "issues" else tecnologia_sincronizacao.ACOES_DE_PR
-    )
+    acoes = tecnologia_sincronizacao.ACOES_DE_ISSUE if evento == "issues" else tecnologia_sincronizacao.ACOES_DE_PR
     if not isinstance(payload, dict) or payload.get("action") not in acoes:
         return {"ignorado": "acao"}
 
