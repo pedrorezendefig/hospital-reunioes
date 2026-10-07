@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-07T15:18:39-03:00",
+      "sha": "8c709d7b493273bb41f48d8e7cf9533ca2beb97a",
+      "app_version": "0.169.0",
+      "subject": "Onda onda-a-onda3: Produtos em tela própria, pela engrenagem; Anexo na Conversa e no Assistente, issue diz quantas imagens há; Webhook de deploy, Em produção devolve ao diretor, job da Action pós-merg",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda3 (#1098 #1099 #1100)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1056
+      ],
+      "result": "healthy",
+      "duration_seconds": 329,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda3: PR #1098 (issue #1060), PR #1099 (issue #1062), PR #1100 (issue #1065), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 9,
+        "build_s": {
+          "backend": 39,
+          "frontend": 254
+        },
+        "health_s": 1
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-07T14:20:45-03:00",
       "sha": "f99092eed8f395082f86d5271743f46d54fd104d",
       "app_version": "0.168.0",
