@@ -12,7 +12,10 @@ as regras que fazem o Windows funcionar, e que o Linux não perde nada com elas.
 from __future__ import annotations
 
 import ast
+import json
+import os
 import subprocess
+import sys
 from pathlib import Path
 
 import conftest
@@ -139,3 +142,49 @@ def test_snapshot_do_vitest_sai_do_git_com_lf_em_qualquer_maquina():
     ).stdout.splitlines()
 
     assert eol == [f"{snap}: eol: lf" for snap in snaps]
+
+
+SNAPSHOT = RAIZ_DO_REPO / ".claude" / "skills" / "snapshot" / "scripts" / "snapshot.py"
+
+
+def _repo_minimo(raiz: Path) -> Path:
+    """O bastante para o `snapshot.py --check` rodar e imprimir a moldura."""
+    (raiz / "docs" / "spec" / "deploy").mkdir(parents=True)
+    (raiz / "docs" / "spec" / "snapshots").mkdir(parents=True)
+    (raiz / "docs" / "spec" / "deploy" / "project.json").write_text(
+        json.dumps({"project": {"name": "Projeto"}, "services": []}), encoding="utf-8"
+    )
+    return raiz
+
+
+def test_snapshot_imprime_a_moldura_num_console_cp1252(tmp_path):
+    """O console do Windows é cp1252, e o `═` da moldura não existe nele.
+    `PYTHONIOENCODING=cp1252` reproduz esse console em qualquer máquina; sem o
+    `reconfigure` o script morria com `UnicodeEncodeError` no primeiro `print`."""
+    repo = _repo_minimo(tmp_path)
+    ambiente = {k: v for k, v in os.environ.items() if k not in ("PYTHONUTF8", "PYTHONIOENCODING")}
+    ambiente.update(PYTHONIOENCODING="cp1252", PYTHONUTF8="0")
+
+    processo = subprocess.run(
+        [sys.executable, str(SNAPSHOT), "--root", str(repo), "--check"],
+        capture_output=True,
+        env=ambiente,
+        timeout=120,
+    )
+
+    assert processo.returncode == 0, processo.stderr.decode("utf-8", "replace")[-600:]
+    assert "═══ /snapshot --check" in processo.stdout.decode("utf-8")
+
+
+def test_snapshot_decodifica_em_utf8_tudo_que_le_de_subprocesso():
+    """`text=True` sem `encoding` decodifica pela codificação do sistema: no
+    Windows, o `git show` de um router com acento sai trocado ou quebra."""
+    sem_encoding = [
+        no.lineno
+        for no in ast.walk(ast.parse(SNAPSHOT.read_text(encoding="utf-8")))
+        if isinstance(no, ast.Call)
+        and any(k.arg == "text" for k in no.keywords)
+        and not any(k.arg == "encoding" for k in no.keywords)
+    ]
+
+    assert sem_encoding == [], f'passe encoding="utf-8" nas linhas {sem_encoding} do snapshot.py'

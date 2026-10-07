@@ -208,6 +208,9 @@ def _introspect_routes_runtime(routers_dir: Path) -> list[dict] | None:
     # exportar no shell não chega aqui quando o snapshot roda no python do sistema. O filho
     # (.venv ou uv) não é protegido: injetar no ambiente dele resolve nas duas situações.
     env = dict(os.environ)
+    # O filho escreve no pipe pela codificação do sistema (cp1252 no Windows), e
+    # este lado lê em UTF-8: o aviso com acento no stderr quebraria a leitura.
+    env["PYTHONIOENCODING"] = "utf-8"
     if sys.platform == "darwin":
         env.setdefault("DYLD_FALLBACK_LIBRARY_PATH", "/opt/homebrew/lib")
     elif sys.platform == "win32":
@@ -218,7 +221,7 @@ def _introspect_routes_runtime(routers_dir: Path) -> list[dict] | None:
     for cmd in tentativas:
         try:
             proc = subprocess.run(
-                cmd, cwd=str(backend_dir), capture_output=True, text=True,
+                cmd, cwd=str(backend_dir), capture_output=True, text=True, encoding="utf-8",
                 timeout=INTROSPECT_TIMEOUT_S, env=env,
             )
         except (subprocess.TimeoutExpired, OSError) as exc:
@@ -810,7 +813,7 @@ def _grep_first(root: Path, pattern: str, max_results: int = 5) -> list[str]:
     try:
         result = subprocess.run(
             ["grep", "-rln", "--include=*.py", pattern, str(root)],
-            capture_output=True, text=True, timeout=15,
+            capture_output=True, text=True, encoding="utf-8", timeout=15,
         )
         if result.returncode > 1:  # 0=found, 1=not found, 2+=error
             return []
@@ -1066,7 +1069,7 @@ def _git_commit_snapshot(repo_root: Path, changed_files: list[str]) -> None:
     try:
         sha = subprocess.check_output(
             ["git", "-C", str(repo_root), "rev-parse", "--short", "HEAD"],
-            text=True,
+            text=True, encoding="utf-8",
         ).strip()
     except subprocess.CalledProcessError:
         sha = "unknown"
@@ -1180,7 +1183,7 @@ def _parse_routers_from_ref(repo_root: Path, ref: str, routers_dir: Path | None)
     try:
         files = subprocess.check_output(
             ["git", "-C", str(repo_root), "ls-tree", "-r", "--name-only", ref, rel],
-            text=True,
+            text=True, encoding="utf-8",
         ).strip().splitlines()
     except subprocess.CalledProcessError:
         return []
@@ -1191,7 +1194,7 @@ def _parse_routers_from_ref(repo_root: Path, ref: str, routers_dir: Path | None)
             continue
         try:
             content = subprocess.check_output(
-                ["git", "-C", str(repo_root), "show", f"{ref}:{f}"], text=True,
+                ["git", "-C", str(repo_root), "show", f"{ref}:{f}"], text=True, encoding="utf-8",
             )
             tree = ast.parse(content)
         except (subprocess.CalledProcessError, SyntaxError):
@@ -1227,7 +1230,7 @@ def _parse_migrations_from_ref(repo_root: Path, ref: str, migrations_dir: Path |
     try:
         files = subprocess.check_output(
             ["git", "-C", str(repo_root), "ls-tree", "-r", "--name-only", ref, rel],
-            text=True,
+            text=True, encoding="utf-8",
         ).strip().splitlines()
     except subprocess.CalledProcessError:
         return {"tables": {}, "history": []}
@@ -1239,7 +1242,7 @@ def _parse_migrations_from_ref(repo_root: Path, ref: str, migrations_dir: Path |
             continue
         try:
             content = subprocess.check_output(
-                ["git", "-C", str(repo_root), "show", f"{ref}:{f}"], text=True,
+                ["git", "-C", str(repo_root), "show", f"{ref}:{f}"], text=True, encoding="utf-8",
             )
         except subprocess.CalledProcessError:
             continue
@@ -1254,6 +1257,12 @@ def _parse_migrations_from_ref(repo_root: Path, ref: str, migrations_dir: Path |
 
 
 def main() -> int:
+    # O console do Windows é cp1252, sem a moldura `═` nem o `⚠` dos alertas: sem
+    # isto o primeiro `print` morria com UnicodeEncodeError, e só andava com
+    # PYTHONUTF8=1 (issue #844).
+    for fluxo in (sys.stdout, sys.stderr):
+        fluxo.reconfigure(encoding="utf-8")
+
     parser = argparse.ArgumentParser(
         prog="snapshot",
         description="Regenera docs/spec/snapshots/*.md a partir do código fonte.",
