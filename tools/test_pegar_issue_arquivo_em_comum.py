@@ -91,7 +91,7 @@ def test_arquivo_do_pr_de_outra_em_andamento_avisa_sem_bloquear(tmp_path):
 
     assert feito.returncode == 0, feito.stderr
     assert feito.stdout == (
-        "aviso, sem bloqueio (ADR 0066): arquivo em comum com fatia em andamento: "
+        "aviso, sem bloqueio (ADR 0068): arquivo em comum com fatia em andamento: "
         "#988 (.claude/skills/ship/SKILL.md)\n"
     )
     assert bloqueios(tmp_path) == []
@@ -172,7 +172,7 @@ def test_todas_as_fatias_com_arquivo_em_comum_cabem_num_aviso_de_uma_linha(tmp_p
 
     assert feito.returncode == 0, feito.stderr
     assert feito.stdout == (
-        "aviso, sem bloqueio (ADR 0066): arquivo em comum com fatia em andamento: "
+        "aviso, sem bloqueio (ADR 0068): arquivo em comum com fatia em andamento: "
         "#988 (CLAUDE.md); #990 (docs/onboarding/dev.md)\n"
     )
     assert bloqueios(tmp_path) == []

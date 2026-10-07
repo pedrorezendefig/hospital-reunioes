@@ -18,7 +18,7 @@ A skill executa sempre o mesmo algoritmo (detectar mudança → parsear → gera
 
 Relação com outras skills:
 - **Action no push da `main`**: roda o snapshot em todo push na `main` e no run que o rabo dispara com o registro, depois de gravá-lo, com o ambiente completo, e commita na `main` (ADR 0068). O rabo (`fechar_onda.py`) não roda mais o snapshot.
-- **`/ship`**: usa `/snapshot --diff <base>..HEAD` no Passo 7 pra gerar a seção "Mudanças" do PR body.
+- **`/ship`**: usa `/snapshot --diff <base>..HEAD` no Passo 8 pra gerar a seção "Mudanças" do PR body.
 
 ## Sintaxe
 
@@ -34,7 +34,7 @@ Flags suportadas pelo script:
 |------|--------|
 | (sem flag) | Regenera 5 MDs auto-gerados (ROTAS, ENTIDADES, SCHEMA, MIGRATIONS, INTEGRACOES) se algo mudou. Cria commit separado `chore(spec): atualizar snapshot pós deploy <sha>`. |
 | `--check` | Dry-run: mostra que arquivos mudariam, não escreve nem commita. |
-| `--diff <base>..HEAD` | Markdown comparando snapshot esperado com o que teria depois das mudanças entre `<base>` e `HEAD`. Usado pelo `/ship` no Passo 7 pra preencher seção "Mudanças" do PR body. Não escreve em `docs/spec/snapshots/`. |
+| `--diff <base>..HEAD` | Markdown comparando snapshot esperado com o que teria depois das mudanças entre `<base>` e `HEAD`. Usado pelo `/ship` no Passo 8 pra preencher seção "Mudanças" do PR body. Não escreve em `docs/spec/snapshots/`. |
 | `--force` | Regenera tudo ignorando idempotência (útil pra debug). |
 | `--only <ARQUIVO>` | Regenera só 1 dos 5 auto-gerados (ROTAS / ENTIDADES / SCHEMA / MIGRATIONS / INTEGRACOES). **Não aceita** FLUXOGRAMAS ou ESTRUTURA (são curados humano). |
 | `--no-commit` | Não cria commit automático (default: commita). Mudanças ficam no working tree. |
@@ -168,7 +168,7 @@ Regenera só 1 arquivo (útil em desenvolvimento da skill ou pra testar geradore
 | Skill | Quando interage |
 |---|---|
 | **Action no push da `main`** | Roda o snapshot no run que o rabo (`fechar_onda.py`) dispara com o registro, e em todo push na `main`, e commita na `main` (ADR 0068). |
-| **`/ship`** | Invoca `/snapshot --diff <base>..HEAD` no Passo 7 pra preencher "Mudanças" do PR body. |
+| **`/ship`** | Invoca `/snapshot --diff <base>..HEAD` no Passo 8 pra preencher "Mudanças" do PR body. |
 
 ---
 
