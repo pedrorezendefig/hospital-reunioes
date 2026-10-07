@@ -1176,7 +1176,7 @@ async def anexar_a_demanda(
     try:
         linha = tecnologia_anexos.anexar(
             supabase,
-            demanda_id=demanda["id"],
+            demanda=demanda,
             nome=imagem.filename or "",
             conteudo=conteudo,
             quem_id=ator["id"],

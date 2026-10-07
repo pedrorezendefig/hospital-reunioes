@@ -21,7 +21,14 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.limiter import limiter  # noqa: E402
+from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
 from app.services import tecnologia_email  # noqa: E402
+from app.services.assistente_tecnologia import LIMITE_DA_IMAGEM  # noqa: E402
+from app.services.tecnologia_anexos import (  # noqa: E402
+    MOTIVO_ANEXOS_DEMAIS,
+    MOTIVO_ARQUIVO_VAZIO,
+    MOTIVO_DEMANDA_ENCERRADA,
+)
 from test_tecnologia_vinculo import BASE, PEDRO, _demanda, _montar  # noqa: E402
 
 BUCKET = "anexos-tecnologia"
@@ -121,3 +128,107 @@ class TestAnexar:
         # vira caminho no storage.
         assert "Captura" not in linha["storage_path"]
         assert sb.storage.arquivos == {f"{BUCKET}/{linha['storage_path']}": PNG}
+
+    def test_dez_imagens_entram_e_a_decima_primeira_e_recusada(self):
+        """Criar pelo formulario com ate dez imagens: a tela cria a Demanda e
+        manda uma imagem por vez. A decima primeira volta com a frase do teto,
+        e nao deixa binario nem linha."""
+        client, sb, _ = _cenario(demandas=[_demanda("d-1")])
+
+        for i in range(10):
+            assert _anexar(client, nome=f"tela-{i}.png").status_code == 201
+
+        recusa = _anexar(client, nome="tela-11.png")
+
+        assert recusa.status_code == 422
+        assert recusa.json()["detail"] == MOTIVO_ANEXOS_DEMAIS
+        assert "10" in recusa.json()["detail"]
+        assert sorted(linha["ordem"] for linha in _anexos(sb)) == list(range(1, 11))
+        assert len(sb.storage.arquivos) == 10
+
+    @pytest.mark.parametrize("nome", ["relatorio.pdf", "foto.heic", "tela.gif", "sem-extensao"])
+    def test_formato_fora_da_lista_volta_com_a_frase_do_assistente(self, nome):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1")])
+
+        resposta = _anexar(client, nome=nome)
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == tecnologia_router.MOTIVO_IMAGEM_FORA_DA_LISTA
+        assert _anexos(sb) == []
+        assert sb.storage.arquivos == {}
+
+    @pytest.mark.parametrize("nome", ["a.png", "b.jpg", "c.JPEG", "d.webp"])
+    def test_os_quatro_formatos_do_assistente_entram(self, nome):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1")])
+
+        assert _anexar(client, nome=nome).status_code == 201
+        assert len(sb.storage.arquivos) == 1
+
+    def test_acima_do_teto_volta_com_a_frase_do_assistente(self):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1")])
+
+        resposta = _anexar(client, conteudo=b"x" * (LIMITE_DA_IMAGEM + 1))
+
+        assert resposta.status_code == 413
+        assert resposta.json()["detail"] == tecnologia_router.MOTIVO_IMAGEM_GRANDE
+        assert _anexos(sb) == []
+        assert sb.storage.arquivos == {}
+
+    def test_no_teto_cravado_ainda_entra(self):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1")])
+
+        assert _anexar(client, conteudo=b"x" * LIMITE_DA_IMAGEM).status_code == 201
+
+    def test_arquivo_vazio_e_recusado_antes_do_bucket(self):
+        """O CHECK da migration 115 recusaria a linha com tamanho zero, e o
+        binario ja teria subido: a recusa tem que vir antes."""
+        client, sb, _ = _cenario(demandas=[_demanda("d-1")])
+
+        resposta = _anexar(client, conteudo=b"")
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == MOTIVO_ARQUIVO_VAZIO
+        assert sb.storage.arquivos == {}
+
+    @pytest.mark.parametrize("estado", ["concluida", "cancelada"])
+    def test_demanda_encerrada_nao_recebe_anexo(self, estado):
+        """O binario de Demanda encerrada seria dado pessoal parado no bucket
+        sem ninguem para apaga-lo: o apagamento so roda ao encerrar."""
+        client, sb, _ = _cenario(demandas=[_demanda("d-1", estado=estado)])
+
+        resposta = _anexar(client)
+
+        assert resposta.status_code == 422
+        assert resposta.json()["detail"] == MOTIVO_DEMANDA_ENCERRADA
+        assert sb.storage.arquivos == {}
+        assert _anexos(sb) == []
+
+    def test_demanda_inexistente_da_404_sem_subir_nada(self):
+        client, sb, _ = _cenario(demandas=[])
+
+        assert _anexar(client, demanda_id="nao-existe").status_code == 404
+        assert sb.storage.arquivos == {}
+
+    def test_falha_ao_gravar_a_linha_nao_deixa_binario_orfao(self):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1")])
+        original = sb.table
+
+        def _table(nome):
+            consulta = original(nome)
+            if nome == "tecnologia_anexos":
+                executar = consulta.execute
+
+                def execute():
+                    if consulta._insert is not None:
+                        raise RuntimeError("PostgREST fora do ar")
+                    return executar()
+
+                consulta.execute = execute
+            return consulta
+
+        sb.table = _table
+
+        resposta = _anexar(client)
+
+        assert resposta.status_code == 503
+        assert sb.storage.arquivos == {}
