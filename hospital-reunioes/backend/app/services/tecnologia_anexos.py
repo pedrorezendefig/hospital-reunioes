@@ -200,6 +200,24 @@ def listar(supabase, demanda_id: str) -> list[dict]:
     return _para_o_card(supabase, ler(supabase, demanda_id))
 
 
+def para_quem_desenvolve(supabase, demanda_id: str) -> list[dict]:
+    """Os anexos que quem desenvolve baixa pela ponte (issue #1063): nome, tipo
+    e URL assinada de vida curta de cada imagem ainda guardada.
+
+    O apagado fica de fora: o binario saiu, e nao ha o que baixar. Quem anexou e
+    quando ficam no app: o script so precisa do arquivo.
+    """
+    return [
+        {
+            "nome": linha.get("nome_original") or "",
+            "tipo": linha.get("content_type") or "",
+            "url": storage.signed_url(supabase, _bucket(), linha["storage_path"], EXPIRACAO_DA_URL_SEGUNDOS),
+        }
+        for linha in ler(supabase, demanda_id)
+        if not linha.get("apagado_em")
+    ]
+
+
 # ─── A imagem da resposta da Conversa (issue #1062) ─────────────────────────
 #
 # A imagem sobe ANTES, pela mesma porta do formulario (`anexar`): formatos,

@@ -458,6 +458,29 @@ async def require_ana_api_key(x_api_key: str | None = Header(default=None)) -> N
         )
 
 
+async def require_tecnologia_automacao_api_key(x_api_key: str | None = Header(default=None)) -> None:
+    """A chave da ponte com o desenvolvimento (issue #1063, ADR 0069, decisão 2).
+
+    Molde do `require_ana_api_key`, com a mesma comparação constante: chave
+    ausente, vazia ou errada recusa igual. A diferença é a chave não configurada,
+    que responde 503 e não 401: quem chama (o `anexos.py` na máquina do sócio)
+    precisa saber que falta o cadastro no Coolify, e não trocar de chave.
+    O detail nunca ecoa a chave.
+    """
+    chave_configurada = settings.tecnologia_automacao_api_key
+    if not chave_configurada:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Ponte de automação desligada: TECNOLOGIA_AUTOMACAO_API_KEY não está configurada no servidor",
+        )
+    # compare_digest sobre bytes: header com caractere não-ASCII vira 401, não 500.
+    if not x_api_key or not secrets.compare_digest(x_api_key.encode("utf-8"), chave_configurada.encode("utf-8")):
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="API key inválida ou ausente",
+        )
+
+
 def require_role(*allowed_roles: str):
     """Dependency factory que verifica se o usuário tem um dos roles permitidos.
 

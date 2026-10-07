@@ -31,6 +31,7 @@ from app.routers import (
     pendencias,
     perfil,
     reunioes,
+    tecnologia_automacao,
     transcricao,
     webhooks,
 )
@@ -114,6 +115,7 @@ app.include_router(pendencias.router, prefix=settings.api_prefix)
 app.include_router(webhooks.router, prefix=settings.api_prefix)
 app.include_router(aceite.router, prefix=settings.api_prefix)
 app.include_router(ana.router, prefix=settings.api_prefix)
+app.include_router(tecnologia_automacao.router, prefix=settings.api_prefix)
 app.include_router(comentarios.router, prefix=settings.api_prefix)
 app.include_router(notificacoes.router, prefix=settings.api_prefix)
 app.include_router(ouvidoria.router, prefix=settings.api_prefix)

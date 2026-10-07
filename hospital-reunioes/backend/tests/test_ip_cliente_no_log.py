@@ -413,6 +413,10 @@ SEM_ANONIMATO_A_PROTEGER = {
     "GET /api/ana/exames",
     "GET /api/ana/ouvidoria/protocolos/{protocolo}",
     "POST /api/ana/ouvidoria/protocolos",
+    # A ponte com o desenvolvimento (issue #1063) pede `X-API-Key` contra
+    # `TECNOLOGIA_AUTOMACAO_API_KEY`, credencial de máquina no molde da Ana:
+    # quem chega é o script do sócio, não um visitante anônimo.
+    "GET /api/automacao/tecnologia/demandas/{demanda_id}/anexos",
     # O conector MCP da Central (ADR 0058, decisões 3 e 4). O transporte exige o
     # token OAuth do WorkOS (Super admin), não o login do app, então o schema não
     # o marca com `security`; e o metadata é documento público de descoberta
