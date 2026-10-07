@@ -376,6 +376,41 @@ class TestDossieOpcionalDaAna:
         assert banco.inserts[0][campo] is None
         assert banco.inserts[0]["dados_incompletos"] is True
 
+    @pytest.mark.parametrize(("campo", "digitado"), [("manifestante_contato", "-"), ("manifestante_nome", ".")])
+    def test_pontuacao_sozinha_na_identificacao_vira_nulo_e_acende_o_aviso(self, monkeypatch, campo, digitado):
+        """Issue #800: a mesma régua do paciente (`texto_ou_nulo`) nas três
+        portas. Um hífen no contato gravado como conteúdo faria o caso da Ana
+        parecer completo, e o aviso de identificação pela metade não acenderia."""
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(**{campo: digitado}),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        assert banco.inserts[0][campo] is None
+        assert banco.inserts[0]["dados_incompletos"] is True
+
+    def test_identificacao_legitima_com_pontuacao_no_meio_passa_inteira(self, monkeypatch):
+        monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
+        banco = _BancoOuvidoriaFake()
+        client = _make_app(banco)
+
+        r = client.post(
+            "/api/ana/ouvidoria/protocolos",
+            json=_dossie_completo(manifestante_nome="Ana-Lúcia d'Ávila", manifestante_contato="+55 (11) 9999-0000"),
+            headers={"X-API-Key": CHAVE_CORRETA},
+        )
+
+        assert r.status_code == 201
+        assert banco.inserts[0]["manifestante_nome"] == "Ana-Lúcia d'Ávila"
+        assert banco.inserts[0]["manifestante_contato"] == "+55 (11) 9999-0000"
+        assert banco.inserts[0]["dados_incompletos"] is False
+
     def test_tipografia_do_dossie_e_sanitizada(self, monkeypatch):
         monkeypatch.setattr(settings, "ana_api_key", CHAVE_CORRETA)
         banco = _BancoOuvidoriaFake()
