@@ -864,10 +864,13 @@ class RegistroManual(BaseModel):
     @field_validator("manifestante_nome", "manifestante_contato")
     @classmethod
     def identificacao_limpa(cls, valor: str | None) -> str | None:
-        if valor is None:
-            return None
-        valor = sanitizar_travessao(valor).strip()
-        return valor or None
+        """A régua do paciente vale para quem manifesta (issue #800).
+
+        `dados_incompletos` é calculado sobre estes dois valores na gravação:
+        um hífen digitado em Contato para dizer "não deixou" faria o caso
+        parecer completo, e o aviso de identificação pela metade no Dossiê
+        deixaria de acender."""
+        return texto_ou_nulo(valor)
 
     @field_validator("paciente_nome", "paciente_referencia")
     @classmethod
@@ -881,10 +884,8 @@ class RegistroManual(BaseModel):
         dizer "não perguntei" apagaria esse aviso e faria o caso parecer
         resolvido: aqui ele vira ausência, como já vira no canal público.
 
-        Ela é mais estrita que a de `manifestante_nome` e `manifestante_contato`
-        logo acima, que só apara. Essa diferença é herdada, não escolhida nesta
-        fatia: quem escreve o nome do manifestante é o mesmo ouvidor, e mudar a
-        régua dele não é assunto do Paciente do caso.
+        Desde a issue #800 é também a régua de `manifestante_nome` e
+        `manifestante_contato`, logo acima.
         """
         return texto_ou_nulo(valor)
 
