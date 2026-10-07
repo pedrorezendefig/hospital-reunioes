@@ -666,7 +666,7 @@ def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> s
         "",
         f"Título: {numa_linha(str(demanda.get('titulo') or '').strip())}",
         f"Tipo: {TIPO_ROTULO.get(str(demanda.get('tipo')), str(demanda.get('tipo') or ''))}",
-        f"Produto: {demanda.get('produto_nome') or SEM_PRODUTO}",
+        f"Produto: {numa_linha(str(demanda.get('produto_nome') or SEM_PRODUTO))}",
         "",
         "Descrição:",
         indent("\n".join(descricao.splitlines()), RECUO_DA_CONTINUACAO),

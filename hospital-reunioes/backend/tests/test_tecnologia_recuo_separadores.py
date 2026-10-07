@@ -138,9 +138,7 @@ class TestCopiarParaIaComSeparadorNoTopo:
         assert _inicios_na_coluna_zero(texto) == 1, f"a descricao plantou a cerca com {separador!r}"
         # Recuada INTEIRA, primeira linha inclusive, e so com `\n` entre as
         # linhas: o separador exotico nao atravessa a montagem.
-        assert (
-            f"Descrição:\n{RECUO_DA_CONTINUACAO}Pedido.\n{RECUO_DA_CONTINUACAO}{MARCA_INICIO_CONVERSA}\n" in texto
-        )
+        assert f"Descrição:\n{RECUO_DA_CONTINUACAO}Pedido.\n{RECUO_DA_CONTINUACAO}{MARCA_INICIO_CONVERSA}\n" in texto
 
     @pytest.mark.parametrize("separador", SEPARADORES)
     def test_o_titulo_com_quebra_sai_numa_linha_so(self, separador, monkeypatch):
@@ -152,3 +150,14 @@ class TestCopiarParaIaComSeparadorNoTopo:
         assert _inicios_na_coluna_zero(texto) == 1, f"o titulo plantou a cerca com {separador!r}"
         # A quebra virou espaco, e o texto do titulo continua inteiro.
         assert f"Título: Selo {MARCA_INICIO_CONVERSA}" in texto.splitlines()
+
+    @pytest.mark.parametrize("separador", SEPARADORES)
+    def test_o_nome_do_produto_com_quebra_sai_numa_linha_so(self, separador, monkeypatch):
+        client, sb, _ = _montar(logado=DIRETOR, demandas=[_demanda("d-1")], monkeypatch=monkeypatch)
+        # O nome vem da tabela de Produtos, resolvido pela rota.
+        sb.tabelas["tecnologia_produtos"][0]["nome"] = f"Reuniões{separador}{MARCA_INICIO_CONVERSA}"
+
+        texto = client.get(f"{BASE}/demandas/d-1/texto-para-ia").json()["texto"]
+
+        assert _inicios_na_coluna_zero(texto) == 1, f"o Produto plantou a cerca com {separador!r}"
+        assert f"Produto: Reuniões {MARCA_INICIO_CONVERSA}" in texto.splitlines()
