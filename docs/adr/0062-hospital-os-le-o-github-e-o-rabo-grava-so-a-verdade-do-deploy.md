@@ -64,3 +64,5 @@ A triagem do PRD #938 deixou em aberto qual regra de responsável vale no Hospit
 Revoga a emenda de 05/10/2026 da ADR 0061 ("responsável cai em quem criou"). O visor da pessoa que separava assumidas de só criadas já tinha saído com a decisão 5 desta ADR.
 
 > **Desfeita no filtro** pela issue #1039 (decisão do Pedro de 06/10/2026, registrada no PR, ADR 0068): o chip da pessoa volta a trazer também as issues que ela criou e que ninguém assumiu, com a marca `✎ criou` no card, e o funil filtrado conta igual. Quem assumiu manda; "ninguém assumiu" segue = sem assignee; a cor dos nós das ondas e as raias da aba PRs continuam só pelo assignee.
+>
+> **Ampliada** em 06/10/2026 (decisão do Pedro, registrada no PR): a pessoa tem também o que criou e outro assumiu, e o funil conta só issues abertas (o pendente), com um card grande do total e os cards das fases somando ele. A decisão 5 muda junto: os filtros viram dropdowns do próprio painel no topo (o motivo de tirar o `<select>`, popup pintado pelo sistema, continua valendo) e o chip `ready-for-human` sai, porque o card Humana é a mesma fila.

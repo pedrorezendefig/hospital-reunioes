@@ -11,16 +11,18 @@ import { corDaPessoa } from './pessoas.js';
 import { renderOndas } from './ondas.js';
 import { filtrosPrsDaRota, filtrosPrsNaRota, filtrosPrsVazios, renderQuadroPrs } from './prs.js';
 
-const filtrosVazios = () => ({ state: 'all', fase: '', resp: '', prd: null, label: '', q: '', humana: false });
+/* a aba abre no que está pendente: só as abertas */
+const filtrosVazios = () => ({ state: 'OPEN', fase: '', resp: '', prd: null, label: '', q: '' });
 
-/* filtros da aba Issues <-> filtros da rota (texto; vazio = sem filtro) */
+/* filtros da aba Issues <-> filtros da rota (texto; vazio = padrão). O
+   humana=1 dos links antigos (chip ready-for-human) vira a fase Humana. */
 const filtrosDaRota = p => ({
-  state: p.state || 'all', fase: p.fase || '', resp: p.resp || '', prd: Number(p.prd) || null,
-  label: p.label || '', q: p.q || '', humana: p.humana === '1',
+  state: p.state || 'OPEN', fase: p.fase || (p.humana === '1' ? 'humana' : ''), resp: p.resp || '',
+  prd: Number(p.prd) || null, label: p.label || '', q: p.q || '',
 });
 const filtrosNaRota = f => ({
-  state: f.state === 'all' ? '' : f.state, fase: f.fase, resp: f.resp, prd: f.prd ? String(f.prd) : '',
-  label: f.label, humana: f.humana ? '1' : '', q: f.q,
+  state: f.state === 'OPEN' ? '' : f.state, fase: f.fase, resp: f.resp, prd: f.prd ? String(f.prd) : '',
+  label: f.label, q: f.q,
 });
 
 const S = {
@@ -39,6 +41,7 @@ const S = {
   rotasQ: '',
   entTab: null,
   erFull: false,
+  menu: null,   // dropdown de filtro aberto na aba Issues
 };
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -244,6 +247,7 @@ function abrirItem() {
     const n = Number(S.item);
     const i = (S.data.github.issues || []).find(x => x.number === n);
     if (!i) return;
+    mostrarNaLista(i);
     S.expIss.add(n);
     ensureComments(n);
     ensureTimeline(n);
@@ -292,7 +296,7 @@ function renderProducao() {
 }
 
 
-/* ---------- ISSUES (home: funil de fases, filtros em chips, card compacto) ---------- */
+/* ---------- ISSUES (home: pendente por pessoa, filtros em dropdown, card compacto) ---------- */
 
 /* Régua de nove fases do fases.py (ADR 0062, decisão 4), na ordem do funil:
    [chave do payload, nome na tela, badge]. */
@@ -307,18 +311,19 @@ const FASES = [
   ['humana', 'Humana', 'b-coral'],
   ['encerrada_sem_pr', 'Encerrada sem PR', 'b-ghost'],
 ];
+/* o funil conta só as abertas; "encerrada sem PR" é sempre fechada e não entra */
+const FASES_PENDENTES = FASES.filter(([k]) => k !== 'encerrada_sem_pr');
 const PREFIXOS_LABEL = ['type', 'area', 'fatia'];
 const LABEL_HUMANA = 'ready-for-human';
 
-/* Responsável = quem assumiu (assignee); sem assignee, quem criou (#1039),
-   e o card ganha a marca "criou". Quem assumiu manda: criada por um e
-   atribuída a outro é só do outro. SEM_RESP é o "ninguém assumiu": issues sem
-   assignee. Mesmo valor e mesma regra do SEM_RESPONSAVEL do fases.py, chave
-   das contagens do funil. */
+/* Pessoa = quem assumiu (assignee) ou quem criou: tudo que ela tem que olhar.
+   O card marca "criou" quando a pessoa entrou pelo autor. SEM_RESP é o
+   "ninguém assumiu": issues sem assignee. Mesmo valor e mesma regra do
+   SEM_RESPONSAVEL do fases.py, chave das contagens do funil. */
 const SEM_RESP = '(sem)';
 
 function responsaveis(i) {
-  return i.assignees.length ? i.assignees : (i.author ? [i.author] : []);
+  return [...new Set([...i.assignees, ...(i.author ? [i.author] : [])])];
 }
 
 function doResponsavel(i, resp) {
@@ -329,11 +334,6 @@ function faseDe(i) {
   return ((S.data.fases || {}).issues || {})[i.number] || null;
 }
 
-/* pendência humana: issue aberta com ready-for-human (era a aba Pendências) */
-function ehPendenciaHumana(i) {
-  return i.state === 'OPEN' && i.labels.includes(LABEL_HUMANA);
-}
-
 function matchIssue(i) {
   const f = S.fIssues;
   if (f.state !== 'all' && i.state !== f.state) return false;
@@ -341,7 +341,6 @@ function matchIssue(i) {
   if (f.resp && !doResponsavel(i, f.resp)) return false;
   if (f.prd && i.number !== f.prd && i.parent !== f.prd) return false;
   if (f.label && !i.labels.includes(f.label)) return false;
-  if (f.humana && !ehPendenciaHumana(i)) return false;
   if (f.q) {
     const q = f.q.toLowerCase();
     if (!(`#${i.number} ${i.title}`.toLowerCase().includes(q))) return false;
@@ -355,10 +354,19 @@ function contagensDoFunil(funil, resp) {
   return funil.por_responsavel[resp] || {};
 }
 
+const somaDasFases = n => FASES_PENDENTES.reduce((t, [k]) => t + (n[k] || 0), 0);
+
 function nomeDoResponsavel(resp) {
   return resp === SEM_RESP ? 'ninguém assumiu' : esc(resp);
 }
 
+function donoDoPendente(resp) {
+  if (!resp) return ['no time', 'todas as issues abertas'];
+  if (resp === SEM_RESP) return ['sem ninguém', 'abertas que ninguém assumiu'];
+  return [`para ${esc(resp)}`, 'abertas que assumiu ou criou'];
+}
+
+/* card grande = tudo que está pendente; os pequenos destrincham por fase e somam o grande */
 function funilHtml() {
   const fases = S.data.fases;
   if (!fases || !fases.funil) {
@@ -369,26 +377,48 @@ function funilHtml() {
   }
   const f = S.fIssues;
   const n = contagensDoFunil(fases.funil, f.resp);
-  const dono = f.resp ? `<div class="k-label funil-dono rv">contagens de ${nomeDoResponsavel(f.resp)}</div>` : '';
-  return `${dono}
-  <div class="funil rv" role="group" aria-label="fases das issues">
-    ${FASES.map(([k, nome]) => `
-    <button type="button" class="funil-passo ${f.fase === k ? 'on' : ''}" data-act="ffase" data-v="${k}" aria-pressed="${f.fase === k}">
+  const tudo = f.state === 'OPEN' && !f.fase;
+  const [dono, sub] = donoDoPendente(f.resp);
+  return `
+  <div class="funil rv" role="group" aria-label="pendente por fase">
+    <button type="button" class="funil-total ${tudo ? 'on' : ''}" data-act="fpendente" aria-pressed="${tudo}">
+      <span class="funil-total-n">${somaDasFases(n)}</span>
+      <span class="funil-total-nome">pendente ${dono}</span>
+      <span class="funil-total-sub">${sub}</span>
+    </button>
+    ${FASES_PENDENTES.map(([k, nome]) => `
+    <button type="button" class="funil-passo ${f.fase === k ? 'on' : ''} ${n[k] ? '' : 'zero'}" data-act="ffase" data-v="${k}" aria-pressed="${f.fase === k}">
       <span class="funil-n">${n[k] || 0}</span><span class="funil-nome">${nome}</span>
     </button>`).join('')}
   </div>`;
 }
 
-function chipFiltro(act, v, on, txt, attrs = '') {
-  return `<button type="button" class="fchip ${on ? 'on' : ''}" data-act="${act}" data-v="${esc(v)}" aria-pressed="${on}"${attrs}>${txt}</button>`;
+/* dropdown de filtro: o menu fica sempre no DOM e abre pela classe (S.menu) */
+function dropdown(chave, rotulo, valor, opcoes) {
+  const aberto = S.menu === chave;
+  return `
+  <div class="dd ${aberto ? 'open' : ''}" data-menu="${chave}">
+    <button type="button" class="dd-btn ${valor ? 'on' : ''}" data-act="menu" data-v="${chave}" aria-haspopup="listbox" aria-expanded="${aberto}">
+      <span class="dd-rot">${rotulo}</span><span class="dd-val">${valor || 'todos'}</span>
+    </button>
+    <div class="dd-menu" role="listbox" aria-label="${rotulo}">${opcoes.join('')}</div>
+  </div>`;
 }
 
-function chipPessoa(login) {
+function opcao(act, v, on, txt, extra = '') {
+  return `<button type="button" class="dd-opt ${on ? 'on' : ''}" data-act="${act}" data-v="${esc(v)}" role="option" aria-selected="${on}"${extra}>${txt}</button>`;
+}
+
+function opcaoPessoa(login, pendentes) {
   const on = S.fIssues.resp === login;
-  return `<button type="button" class="fchip fpessoa ${on ? 'on' : ''}" data-act="fresp" data-v="${esc(login)}" aria-pressed="${on}" style="--pessoa:${corDaPessoa(login === SEM_RESP ? null : login)}"><span class="pessoa-dot"></span>${nomeDoResponsavel(login)}</button>`;
+  const n = pendentes[login] || 0;
+  return opcao('fresp', login, on,
+    `<span class="pessoa-dot"></span><span class="dd-txt">${nomeDoResponsavel(login)}</span><span class="dd-n">${n}</span>`,
+    ` style="--pessoa:${corDaPessoa(login === SEM_RESP ? null : login)}"`);
 }
 
-/* labels das issues agrupadas por prefixo (type:, area:, fatia:) e o resto */
+/* labels das issues agrupadas por prefixo (type:, area:, fatia:) e o resto;
+   ready-for-human é a fase Humana, card próprio no funil */
 function gruposDeLabels(iss) {
   const todas = [...new Set(iss.flatMap(i => i.labels))].filter(l => l !== LABEL_HUMANA).sort();
   const doPrefixo = p => todas.filter(l => l.startsWith(p + ':'));
@@ -399,24 +429,31 @@ function gruposDeLabels(iss) {
 
 function filtrosHtml(iss) {
   const f = S.fIssues;
-  const linha = (rot, chips) => chips
-    ? `<div class="filtro"><span class="filtro-rot">${rot}</span><div class="filtro-chips">${chips}</div></div>` : '';
-  // gh fora do ar = "não sei", nunca "zero": o contador vira "?"
-  const humanas = S.data.github.error ? '?' : iss.filter(ehPendenciaHumana).length;
-  const estados = [['all', 'todas'], ['OPEN', 'abertas'], ['CLOSED', 'fechadas']]
-    .map(([v, t]) => chipFiltro('fstate', v, f.state === v, t)).join('');
-  const humana = `<button type="button" class="fchip fhumana ${f.humana ? 'on' : ''}" data-act="fhumana" data-v="1" aria-pressed="${f.humana}">${LABEL_HUMANA} <span class="tab-count">${humanas}</span></button>`;
+  const funil = (S.data.fases || {}).funil;
+  const pendentes = Object.fromEntries(Object.entries((funil || {}).por_responsavel || {})
+    .map(([p, n]) => [p, somaDasFases(n)]));
   const pessoas = [...new Set(iss.flatMap(responsaveis))].sort();
+  const estados = [['OPEN', 'abertas'], ['CLOSED', 'fechadas'], ['all', 'todas']];
   const prds = iss.filter(i => i.is_prd && i.state === 'OPEN').sort((a, b) => b.number - a.number);
+  const todos = (act, on) => opcao(act, '', on, '<span class="dd-txt">todos</span>');
+  const menus = [
+    dropdown('resp', 'responsável', f.resp ? nomeDoResponsavel(f.resp) : '',
+      [todos('fresp', !f.resp), ...pessoas.map(p => opcaoPessoa(p, pendentes)), opcaoPessoa(SEM_RESP, pendentes)]),
+    dropdown('state', 'estado', (estados.find(([v]) => v === f.state) || [, ''])[1],
+      estados.map(([v, t]) => opcao('fstate', v, f.state === v, `<span class="dd-txt">${t}</span>`))),
+    prds.length ? dropdown('prd', 'PRD', f.prd ? `#${f.prd}` : '',
+      [todos('fprd', !f.prd), ...prds.map(p => opcao('fprd', p.number, f.prd === p.number,
+        `<span class="dd-num">#${p.number}</span><span class="dd-txt">${esc(p.title)}</span>`))]) : '',
+    ...gruposDeLabels(iss).map(([pref, ls]) => {
+      const curta = l => esc(pref === 'outras' ? l : l.slice(pref.length + 1));
+      return dropdown(pref, pref, ls.includes(f.label) ? curta(f.label) : '',
+        [todos('flabel', !ls.includes(f.label)), ...ls.map(l => opcao('flabel', l, f.label === l, `<span class="dd-txt">${curta(l)}</span>`))]);
+    }),
+  ];
   return `
   <div class="filtros rv">
-    ${linha('estado', estados + humana)}
-    ${linha('responsável', pessoas.map(chipPessoa).join('') + chipPessoa(SEM_RESP))}
-    ${linha('PRD', prds.map(p => chipFiltro('fprd', p.number, f.prd === p.number, `#${p.number}`, ` title="${esc(p.title)}"`)).join(''))}
-    ${gruposDeLabels(iss).map(([pref, ls]) => linha(pref, ls.map(l =>
-      chipFiltro('flabel', l, f.label === l, esc(pref === 'outras' ? l : l.slice(pref.length + 1)))).join(''))).join('')}
-    <div class="filtro"><span class="filtro-rot">busca</span>
-      <input class="search" id="fq" type="search" placeholder="buscar por título ou #número…" value="${esc(f.q)}"></div>
+    ${menus.join('')}
+    <input class="search" id="fq" type="search" placeholder="buscar por título ou #número…" value="${esc(f.q)}">
   </div>`;
 }
 
@@ -449,9 +486,10 @@ function pessoaHtml(login) {
 }
 
 function pessoasDoCard(i) {
-  if (i.assignees.length) return i.assignees.map(pessoaHtml).join('');
-  // sem assignee: ninguém assumiu; a issue entra no filtro de quem criou, com a marca
-  return pessoaHtml(null) + (i.author ? `<span class="chip autor">✎ criou: ${esc(i.author)}</span>` : '');
+  const quem = i.assignees.length ? i.assignees.map(pessoaHtml).join('') : pessoaHtml(null);
+  // quem criou e não assumiu também tem a issue na fila dele: a marca diz por quê
+  const criou = i.author && !i.assignees.includes(i.author);
+  return quem + (criou ? `<span class="chip autor">✎ criou: ${esc(i.author)}</span>` : '');
 }
 
 const idadeTxt = i => i.state === 'OPEN' ? `aberta ${ago(i.created_at)}` : `fechada ${fmtD(i.closed_at)}`;
@@ -561,7 +599,7 @@ function issueListHtml() {
   let idx = 0;
   const groups = [];
   const f = S.fIssues;
-  const filtroAtivo = !!(f.q || f.fase || f.resp || f.prd || f.label || f.humana || f.state !== 'all');
+  const filtroAtivo = !!(f.q || f.fase || f.resp || f.prd || f.label || f.state !== 'OPEN');
 
   for (const prd of prds) {
     used.add(prd.number);
@@ -605,8 +643,8 @@ function renderIssues() {
   return `
   <div class="tab-issues">
   ${cabecalho('acompanhar', 'Issues', 'gh · cada issue na sua fase, do pedido à produção')}
-  ${funilHtml()}
   ${filtrosHtml(iss)}
+  ${funilHtml()}
   <div id="ilist">${issueListHtml()}</div>
   </div>`;
 }
@@ -616,10 +654,32 @@ function wireIssues() {
   if (q) q.addEventListener('input', () => { S.fIssues.q = q.value; sincronizarHash(); refreshIssueList(); });
 }
 
-/* chip clicado de novo desliga o filtro */
+/* filtro que esconderia a issue pedida sai do caminho; fechada pede "todas" */
+function mostrarNaLista(i) {
+  if (matchIssue(i)) return;
+  S.fIssues = { ...filtrosVazios(), state: i.state === 'OPEN' ? 'OPEN' : 'all' };
+}
+
+/* card de fase clicado de novo desliga o filtro */
 function alternarFiltro(chave, v) {
   S.fIssues[chave] = S.fIssues[chave] === v ? filtrosVazios()[chave] : v;
   render();
+}
+
+/* abre/fecha o dropdown sem redesenhar a aba */
+function marcarMenu() {
+  view.querySelectorAll('.dd').forEach(d => {
+    const on = d.dataset.menu === S.menu;
+    d.classList.toggle('open', on);
+    const b = d.querySelector('.dd-btn');
+    if (b) b.setAttribute('aria-expanded', String(on));
+  });
+}
+
+function fecharMenu() {
+  if (S.menu === null) return;
+  S.menu = null;
+  marcarMenu();
 }
 
 function refreshIssueList() {
@@ -662,7 +722,7 @@ async function ensureTimeline(n) {
    fatias do PRD à mostra; filtro que esconderia a fatia sai do caminho */
 function abrirFatia(n, prd) {
   const fatia = (S.data.github.issues || []).find(i => i.number === n);
-  if (fatia && !matchIssue(fatia)) S.fIssues = filtrosVazios();
+  if (fatia) mostrarNaLista(fatia);
   S.expPrd.set(prd, true);
   if (!S.expIss.has(n)) { S.expIss.add(n); ensureComments(n); ensureTimeline(n); }
   render();
@@ -956,20 +1016,24 @@ view.addEventListener('click', e => {
     const i = Number(t.dataset.i);
     S.expAdr.has(i) ? S.expAdr.delete(i) : S.expAdr.add(i);
     render();
-  } else if (act === 'fstate') {
-    S.fIssues.state = t.dataset.v;
+  } else if (act === 'menu') {
+    S.menu = S.menu === t.dataset.v ? null : t.dataset.v;
+    marcarMenu();
+  } else if (['fstate', 'fresp', 'fprd', 'flabel'].includes(act)) {
+    // opção do dropdown: escolhe e fecha; "todos" (v vazio) limpa
+    const chave = { fstate: 'state', fresp: 'resp', fprd: 'prd', flabel: 'label' }[act];
+    S.fIssues[chave] = act === 'fprd' ? (Number(t.dataset.v) || null) : t.dataset.v;
+    S.menu = null;
+    render();
+  } else if (act === 'fpendente') {
+    // o card grande: tudo que está pendente, sem recorte de fase
+    S.fIssues.state = 'OPEN';
+    S.fIssues.fase = '';
     render();
   } else if (act === 'ffase') {
+    // a contagem do card é das abertas: a lista mostra as mesmas
+    S.fIssues.state = 'OPEN';
     alternarFiltro('fase', t.dataset.v);
-  } else if (act === 'fresp') {
-    alternarFiltro('resp', t.dataset.v);
-  } else if (act === 'fprd') {
-    alternarFiltro('prd', Number(t.dataset.v));
-  } else if (act === 'flabel') {
-    alternarFiltro('label', t.dataset.v);
-  } else if (act === 'fhumana') {
-    S.fIssues.humana = !S.fIssues.humana;
-    render();
   } else if (act === 'doc') {
     S.mapaDoc = t.dataset.doc;
     render();
@@ -1003,9 +1067,13 @@ aoMudarRota(irPara);
 document.addEventListener('keydown', e => {
   if (e.key !== 'Escape') return;
   closeTips();
+  fecharMenu();
   if (S.erFull) { S.erFull = false; render(); }
 });
-document.addEventListener('click', e => { if (!e.target.closest('.tip')) closeTips(); });
+document.addEventListener('click', e => {
+  if (!e.target.closest('.tip')) closeTips();
+  if (!e.target.closest('.dd')) fecharMenu();
+});
 
 /* ---------- boot ---------- */
 

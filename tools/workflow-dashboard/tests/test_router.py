@@ -458,7 +458,7 @@ def test_todo_card_de_issue_tem_o_link_do_github_e_nenhum_chip_abre_o_github(tmp
     issues, producao = _app(
         tmp_path,
         "[_issues, _view.innerHTML]",
-        hash_inicial="#issues",
+        hash_inicial="#issues?state=all",  # a 904 é fechada; a aba abre só nas abertas
         antes="""
         _clicar({ act: 'prd', n: '900', open: '0' });
         [900, 901, 902, 904, 910].forEach(n => _clicar({ act: 'iss', n: String(n) }));
