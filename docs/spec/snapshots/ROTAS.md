@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-07T18:15+0000 -->
+<!-- last_update: 2026-10-07T18:54+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -372,6 +372,12 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | POST | `/admin/tecnologia/produtos` | Cria Produto. Nasce ativo, e ativo exige dono. | ✅ |
 | PATCH | `/admin/tecnologia/produtos/{produto_id}` | Renomeia, ativa, desativa, troca o dono e a ordem. | ✅ |
 
+## automacao (`app/routers/tecnologia_automacao.py`)
+
+| Método | Rota | O que faz | Auth |
+|--------|------|-----------|------|
+| GET | `/automacao/tecnologia/demandas/{demanda_id}/anexos` | Nome, tipo e URL assinada de cada anexo não apagado da Demanda. | ✅ |
+
 ## transcricao (`app/routers/transcricao.py`)
 
 | Método | Rota | O que faz | Auth |
@@ -409,4 +415,4 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
 ---
 
-**Totais:** 238 endpoints em 33 routers · 93% exigem auth.
+**Totais:** 239 endpoints em 34 routers · 93% exigem auth.
