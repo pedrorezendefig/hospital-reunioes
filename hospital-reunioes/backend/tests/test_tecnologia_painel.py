@@ -1201,6 +1201,17 @@ class TestEntregasPelaRota:
 
         assert {d["produto_nome"] for d in corpo} == {"Ana"}
 
+    def test_o_quadro_tambem_traz_a_versao_para_o_selo(self):
+        """Issue #1065: o selo diz "Em produção desde v0.165.0" em todo lugar em
+        que a Demanda aparece, e o Quadro e o primeiro deles. A versao vem do
+        mesmo funil (`_com_nomes`), com a mesma regra do bloco Entregas."""
+        resposta = self._cenario().get(f"{BASE}/demandas")
+        assert resposta.status_code == 200, resposta.text
+        por_id = {d["id"]: d for d in resposta.json()}
+
+        assert por_id["e2"]["versao"] == "v0.165.0"
+        assert por_id["e3"]["versao"] is None
+
 
 # ─── 6. Historico, pela rota ─────────────────────────────────────────────────
 

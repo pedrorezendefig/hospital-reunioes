@@ -438,12 +438,14 @@ describe("Entregas", () => {
       }),
     );
 
+    // "Em produção desde v0.165.0" no próprio selo (issue #1065), que é o
+    // mesmo do Quadro: a versão não aparece duas vezes na linha.
     const noAr = (await screen.findByText("Já no ar")).closest("li")!;
-    expect(within(noAr).getByText("Em produção")).toBeTruthy();
-    expect(within(noAr).getByText(/v0\.165\.0/)).toBeTruthy();
+    expect(within(noAr).getByText("Em produção desde v0.165.0")).toBeTruthy();
+    expect(within(noAr).getAllByText(/v0\.165\.0/)).toHaveLength(1);
 
     const emObra = screen.getByText("Ainda em obra").closest("li")!;
-    expect(within(emObra).queryByText(/versão/)).toBeNull();
+    expect(within(emObra).queryByText(/desde v/)).toBeNull();
     expect(within(emObra).getByText("Em desenvolvimento")).toBeTruthy();
   });
 });
