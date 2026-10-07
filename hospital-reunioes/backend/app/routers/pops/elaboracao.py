@@ -33,6 +33,7 @@ from app.models.pops_schemas import (
 )
 from app.routers.pops.versao_view import montar_versao_response, nomes_designados
 from app.services import audit, pops_dominio, pops_email_service, storage
+from app.services.teto_dos_chats import motivo_corpo_grande
 from app.services.transcricao_extractor import CONTENT_TYPE_BY_EXT, extrair_texto_async
 
 logger = logging.getLogger(__name__)
@@ -127,6 +128,10 @@ async def chat_elaboracao(
     persiste na Versão; a primeira interação real move A_ELABORAR →
     EM_ELABORACAO (auditado). Erro de IA não persiste nem transiciona.
     """
+    # Teto do corpo antes de qualquer consulta (issue #893, o porquê em `teto_dos_chats`).
+    motivo = motivo_corpo_grande(req.messages)
+    if motivo:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=motivo)
     pop, setor, versao = _carregar_contexto(pop_id, actor, supabase)
     try:
         pops_dominio.exigir_estado_de_elaboracao(versao)
