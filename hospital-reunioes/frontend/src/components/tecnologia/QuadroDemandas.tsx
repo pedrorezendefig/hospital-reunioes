@@ -91,6 +91,16 @@ const SEM_SESSAO =
 /** A frase de quando o link pede uma Demanda que o Quadro não mostra (issue #640). */
 const AVISO_LINK = "A Demanda deste link não está no Quadro. Confira o endereço com quem enviou.";
 
+/**
+ * A frase de quando o link pede uma Demanda que veio na lista mas já encerrou
+ * (issue #1058): o endereço está certo e o código sabe por que ela não tem
+ * raia, então o aviso diz onde ela está em vez de mandar conferir o endereço.
+ */
+function avisoEncerrada(estado: EstadoDemanda): string {
+  const como = estado === "cancelada" ? "cancelada" : "concluída";
+  return `A Demanda deste link foi ${como} e não está mais no Quadro. Ela está na aba Histórico.`;
+}
+
 export function QuadroDemandas({
   token,
   carregandoAuth,
@@ -154,6 +164,8 @@ export function QuadroDemandas({
    */
   const achadaDoLink =
     idDoLink !== null && demandas.some((d) => d.id === idDoLink && RAIAS.includes(d.estado));
+  const encerradaDoLink =
+    idDoLink !== null ? demandas.find((d) => d.id === idDoLink && !RAIAS.includes(d.estado)) : undefined;
 
   const autorizacao = useCallback(
     () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
@@ -492,7 +504,7 @@ export function QuadroDemandas({
           className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm"
         >
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>{AVISO_LINK}</span>
+          <span>{encerradaDoLink ? avisoEncerrada(encerradaDoLink.estado) : AVISO_LINK}</span>
         </p>
       )}
 

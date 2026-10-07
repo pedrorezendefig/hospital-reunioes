@@ -1488,7 +1488,8 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
 
     const aviso = await screen.findByRole("status");
 
-    expect(aviso.textContent).toContain("não está no Quadro");
+    expect(aviso.textContent).toContain("Confira o endereço");
+    expect(aviso.textContent).not.toContain("Histórico");
     // A frase NÃO afirma o que o código não sabe: nem que a Demanda foi
     // apagada (nada se apaga nesta aba), nem que falta permissão (o gate é da
     // API, e a recusa dela viraria erro de carregamento, não lista sem o card).
@@ -1499,20 +1500,29 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("link para uma Demanda já concluída: a tela diz que ela não está no Quadro, e não abre card", async () => {
-    // A encerrada não está em raia nenhuma (issue #1058). Abrir o card dela
-    // por cima de um Quadro que não a mostra contaria o contrário do que a
-    // tela desenha; o lugar dela é o Histórico.
-    chegarPor("?demanda=d1");
-    servidorCom([demanda("d1", "A do link", { estado: "concluida" }), demanda("d2", "Uma nova")]);
+  it.each([
+    ["concluida", "concluída"],
+    ["cancelada", "cancelada"],
+  ] as const)(
+    "link para uma Demanda %s: a tela diz que ela foi encerrada e está no Histórico, sem culpar o endereço",
+    async (estado, palavra) => {
+      // A encerrada não está em raia nenhuma (issue #1058). Abrir o card dela
+      // por cima de um Quadro que não a mostra contaria o contrário do que a
+      // tela desenha; o lugar dela é o Histórico. O código SABE disso (ela veio
+      // na lista), então o aviso não manda conferir o endereço com ninguém.
+      chegarPor("?demanda=d1");
+      servidorCom([demanda("d1", "A do link", { estado }), demanda("d2", "Uma nova")]);
 
-    render(<QuadroHospedado />);
+      render(<QuadroHospedado />);
 
-    const aviso = await screen.findByRole("status");
-    expect(aviso.textContent).toContain("não está no Quadro");
-    expect(screen.getByText("Uma nova")).toBeTruthy();
-    expect(screen.queryByRole("dialog")).toBeNull();
-  });
+      const aviso = await screen.findByRole("status");
+      expect(aviso.textContent).toContain(`foi ${palavra}`);
+      expect(aviso.textContent).toContain("Histórico");
+      expect(aviso.textContent).not.toContain("Confira o endereço");
+      expect(screen.getByText("Uma nova")).toBeTruthy();
+      expect(screen.queryByRole("dialog")).toBeNull();
+    },
+  );
 
   it("enquanto a sessão carrega, o link não vira acusação nenhuma", async () => {
     // O caminho que mordeu na fatia anterior: o `useAuth` nasce com
