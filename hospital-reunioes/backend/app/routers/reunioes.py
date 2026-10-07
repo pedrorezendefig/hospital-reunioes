@@ -2265,6 +2265,20 @@ async def force_editar_reuniao(
 
     status_before = result.data[0].get("status_ata")
 
+    # A trava do `agendar` e do PATCH comum (issue #761) vale aqui também
+    # (issue #890): o Super admin edita em qualquer status, mas a reunião com
+    # Secretária facilitadora trava na ata do mesmo jeito.
+    if body.facilitador_id:
+        fac = (
+            supabase.table("participantes")
+            .select("id, access_profile")
+            .eq("id", body.facilitador_id)
+            .limit(1)
+            .execute()
+        )
+        if fac.data and is_secretaria(fac.data[0]):
+            raise HTTPException(status_code=422, detail=_DETALHE_SECRETARIA_COMO_FACILITADORA)
+
     # Extrai campos editaveis (exclui reason + participante_ids, tratados separadamente)
     payload = body.model_dump(exclude_none=True)
     payload.pop("reason", None)

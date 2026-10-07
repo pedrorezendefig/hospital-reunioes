@@ -290,3 +290,34 @@ class TestEdicao:
 
         assert resp.status_code == 200, resp.text
         assert sb.reuniao()["facilitador_id"] == SUPER_ADMIN["id"]
+
+
+def _forcar(sb: _Supabase, **campos):
+    corpo = {"reason": "acerto de cadastro", **campos}
+    return _cliente(sb, SUPER_ADMIN).patch(f"/api/reunioes/{REUNIAO}/force", json=corpo)
+
+
+class TestEdicaoForcada:
+    """Issue #890: a trava valia no `agendar` e no PATCH comum, e o `force` do
+    Super admin ainda deixava a Secretária virar facilitadora."""
+
+    def test_force_com_secretaria_como_facilitadora_e_recusado_sem_alterar(self):
+        sb = _Supabase([SUPER_ADMIN, SECRETARIA, FACILITADORA])
+
+        resp = _forcar(sb, titulo="Forcada", facilitador_id=SECRETARIA["id"])
+
+        assert resp.status_code == 422, resp.text
+        assert "secretária" in resp.json()["detail"].lower()
+        linha = sb.reuniao()
+        assert linha["facilitador_id"] == FACILITADORA["id"], "a Secretária virou facilitadora pelo force"
+        assert linha["titulo"] == "Reuniao da Facilitadora", "a recusa veio tarde: o update já tinha rodado"
+
+    def test_force_com_facilitador_de_verdade_continua_valendo(self):
+        """Controle positivo: sem ele, um 422 de outra origem deixaria a recusa verde e vazia."""
+        sb = _Supabase([SUPER_ADMIN, SECRETARIA, FACILITADORA])
+
+        resp = _forcar(sb, titulo="Forcada", facilitador_id=SUPER_ADMIN["id"])
+
+        assert resp.status_code == 200, resp.text
+        assert sb.reuniao()["facilitador_id"] == SUPER_ADMIN["id"]
+        assert sb.reuniao()["titulo"] == "Forcada"
