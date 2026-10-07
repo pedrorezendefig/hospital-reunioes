@@ -10,10 +10,11 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  abaInicial,
   aplicarMencao,
   blocosDoTextoSimples,
   demandaIdDaUrl,
-  fraseDaMinhaVezVazia,
+  fraseDoComVoceVazio,
   fraseDoHistoricoVazio,
   linkDaDemanda,
   mencoesNoTexto,
@@ -323,8 +324,8 @@ describe("A linha de desfecho do Histórico", () => {
 });
 
 describe("As frases de lista vazia", () => {
-  it("Minha vez vazia é boa notícia, e não falha", () => {
-    const frase = fraseDaMinhaVezVazia();
+  it("o Com você vazio é boa notícia, e não falha", () => {
+    const frase = fraseDoComVoceVazio();
 
     expect(frase).toContain("Nada esperando por você");
     // Ela não pode culpar carregamento nem mandar tentar de novo: vazio aqui
@@ -351,6 +352,26 @@ describe("As frases de lista vazia", () => {
 
   it("termo só de espaços não conta como busca", () => {
     expect(fraseDoHistoricoVazio("   ")).toBe(fraseDoHistoricoVazio(""));
+  });
+});
+
+describe("A aba com que a Tecnologia abre (issue #1059)", () => {
+  it("no celular abre no Painel", () => {
+    expect(abaInicial(true, "")).toBe("painel");
+  });
+
+  it("fora do celular abre no Quadro", () => {
+    expect(abaInicial(false, "")).toBe("quadro");
+  });
+
+  it("o link de uma Demanda abre o Quadro até no celular", () => {
+    // É o Quadro quem lê o link e abre o card: abrir no Painel deixaria o link
+    // do e-mail sem card nenhum.
+    expect(abaInicial(true, "?demanda=d7")).toBe("quadro");
+  });
+
+  it("link sem id de Demanda não conta como link", () => {
+    expect(abaInicial(true, "?demanda=")).toBe("painel");
   });
 });
 

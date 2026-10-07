@@ -1504,7 +1504,7 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
     ["concluida", "concluída"],
     ["cancelada", "cancelada"],
   ] as const)(
-    "link para uma Demanda %s: a tela diz que ela foi encerrada e está no Histórico, sem culpar o endereço",
+    "link para uma Demanda %s: a tela diz que ela foi encerrada e está no Histórico do Painel, sem culpar o endereço",
     async (estado, palavra) => {
       // A encerrada não está em raia nenhuma (issue #1058). Abrir o card dela
       // por cima de um Quadro que não a mostra contaria o contrário do que a
@@ -1517,7 +1517,9 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
 
       const aviso = await screen.findByRole("status");
       expect(aviso.textContent).toContain(`foi ${palavra}`);
-      expect(aviso.textContent).toContain("Histórico");
+      // A aba Histórico virou bloco do Painel (issue #1059): o aviso aponta um
+      // lugar que existe na tela.
+      expect(aviso.textContent).toContain("no Painel, no bloco Histórico");
       expect(aviso.textContent).not.toContain("Confira o endereço");
       expect(screen.getByText("Uma nova")).toBeTruthy();
       expect(screen.queryByRole("dialog")).toBeNull();

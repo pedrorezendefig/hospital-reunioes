@@ -95,10 +95,11 @@ const AVISO_LINK = "A Demanda deste link não está no Quadro. Confira o endere�
  * A frase de quando o link pede uma Demanda que veio na lista mas já encerrou
  * (issue #1058): o endereço está certo e o código sabe por que ela não tem
  * raia, então o aviso diz onde ela está em vez de mandar conferir o endereço.
+ * Desde a issue #1059 o Histórico é um bloco do Painel.
  */
 function avisoEncerrada(estado: EstadoDemanda): string {
   const como = estado === "cancelada" ? "cancelada" : "concluída";
-  return `A Demanda deste link foi ${como} e não está mais no Quadro. Ela está na aba Histórico.`;
+  return `A Demanda deste link foi ${como} e não está mais no Quadro. Ela está no Painel, no bloco Histórico.`;
 }
 
 export function QuadroDemandas({

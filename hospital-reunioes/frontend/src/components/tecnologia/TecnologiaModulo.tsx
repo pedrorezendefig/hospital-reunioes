@@ -3,12 +3,12 @@
 /**
  * O módulo da aba Tecnologia (issue #636, PRD #634, ADR 0050).
  *
- * As três abas (Quadro, Minha vez e Histórico) e a gestão de Produtos. O gate
- * de verdade é o `require_super_admin` do backend; a sidebar apenas esconde o
- * item.
+ * As duas abas (Quadro e Painel) e a gestão de Produtos. O gate de verdade é o
+ * `require_super_admin` do backend; a sidebar apenas esconde o item.
  *
- * As abas Minha vez e Histórico entraram na issue #641. Os filtros por tipo,
- * Produto e responsável saíram do módulo na issue #1058 (PRD #1056).
+ * As abas Minha vez e Histórico entraram na issue #641 e viraram blocos do
+ * Painel na issue #1059. Os filtros por tipo, Produto e responsável saíram do
+ * módulo na issue #1058 (PRD #1056).
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -17,11 +17,13 @@ import { AlertCircle, Cpu, Pencil, Plus, Power, PowerOff } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Select } from "@/components/ui/Select";
 
-import { HistoricoDemandas } from "./HistoricoDemandas";
-import { MinhaVez } from "./MinhaVez";
+import { PainelDemandas } from "./PainelDemandas";
 import { QuadroDemandas } from "./QuadroDemandas";
 import {
+  AbaDaTecnologia,
+  abaInicial,
   BASE_TECNOLOGIA,
+  CONSULTA_DO_CELULAR,
   EU_DESCONHECIDO,
   EuNaAba,
   FALHA_DE_CONEXAO,
@@ -39,13 +41,15 @@ type Produto = {
   dono_nome: string | null;
 };
 
-const ABAS = [
+const ABAS: { id: AbaDaTecnologia; label: string }[] = [
   { id: "quadro", label: "Quadro" },
-  { id: "minha-vez", label: "Minha vez" },
-  { id: "historico", label: "Histórico" },
-] as const;
+  { id: "painel", label: "Painel" },
+];
 
-type AbaId = (typeof ABAS)[number]["id"];
+/** Se a tela é de celular. Sem `matchMedia` (ambiente sem tela), não é. */
+function ehCelular(): boolean {
+  return typeof window.matchMedia === "function" && window.matchMedia(CONSULTA_DO_CELULAR).matches;
+}
 
 /**
  * A frase de quando `useAuth` não devolve token.
@@ -63,13 +67,25 @@ const SEM_SESSAO =
 export function TecnologiaModulo() {
   const { token, loading: carregandoAuth } = useAuth();
 
-  const [aba, setAba] = useState<AbaId>("quadro");
+  /**
+   * A aba à vista, ou `null` antes de saber qual abre (issue #1059).
+   *
+   * A escolha depende da largura da tela e do link, que só existem no
+   * navegador: decidida no primeiro render, ela divergiria da página que o
+   * servidor pré-renderizou. E nenhuma aba monta antes da escolha, para o
+   * celular não pedir o Quadro inteiro à rede só para desmontá-lo em seguida.
+   */
+  const [aba, setAba] = useState<AbaDaTecnologia | null>(null);
+
+  useEffect(() => {
+    setAba(abaInicial(ehCelular(), window.location.search));
+  }, []);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   /**
    * Quem está olhando, do ponto de vista do Vínculo (issue #674).
    *
-   * Carregado UMA vez aqui e passado às três abas: elas mostram o mesmo modal,
+   * Carregado UMA vez aqui e passado às duas abas: elas mostram o mesmo modal,
    * e uma chamada por aba multiplicaria a ida à rede e abriria espaço para as
    * abas discordarem entre si.
    *
@@ -224,17 +240,8 @@ export function TecnologiaModulo() {
             eu={eu}
           />
         )}
-        {aba === "minha-vez" && (
-          <MinhaVez
-            token={token}
-            carregandoAuth={carregandoAuth}
-            produtos={produtos}
-            pessoas={pessoas}
-            eu={eu}
-          />
-        )}
-        {aba === "historico" && (
-          <HistoricoDemandas
+        {aba === "painel" && (
+          <PainelDemandas
             token={token}
             carregandoAuth={carregandoAuth}
             produtos={produtos}
