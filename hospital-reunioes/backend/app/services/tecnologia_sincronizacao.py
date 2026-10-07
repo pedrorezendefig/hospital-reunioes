@@ -267,7 +267,20 @@ def _avisar_a_devolucao(supabase, demanda: dict[str, Any], *, destinatario_id: s
     )
 
 
-def _devolver_a_quem_pediu(supabase, demanda: dict[str, Any], *, etapa_nova: str) -> None:
+def _por_pr(foto: dict[str, Any] | None) -> bool:
+    """Se a foto diz que a issue fecha por PR: o PR que a fechou, ou um PR
+    aberto que a fecha (ADR 0069, decisao 5).
+
+    O PR aberto conta porque, no merge, o `issues.closed` pode chegar antes do
+    `pull_request.closed`: a foto ainda diz "PR aberto" e nao tem o
+    `fechada_por_pr`, e a issue esta fechando pelo PR do mesmo jeito. Sem ele, a
+    Demanda seria devolvida em Entregue e de novo em Em producao.
+    """
+    foto = foto if isinstance(foto, dict) else {}
+    return bool(foto.get(FATO_FECHADA_POR_PR) or foto.get(FATO_PRS_ABERTOS))
+
+
+def _devolver_a_quem_pediu(supabase, demanda: dict[str, Any], *, etapa_nova: str, por_pr: bool) -> None:
     """A Entrega devolve a bola a quem pediu (issue #679, ADR 0054, decisao 6).
 
     Quem decide SE ha devolucao e o que ela faz e o servico puro
@@ -288,7 +301,7 @@ def _devolver_a_quem_pediu(supabase, demanda: dict[str, Any], *, etapa_nova: str
     o lote morre no compare-and-swap da Etapa, um degrau acima, e so a thread
     que mudou a Etapa chega ate esta funcao.
     """
-    efeito = efeito_da_etapa(demanda, etapa_nova=etapa_nova)
+    efeito = efeito_da_etapa(demanda, etapa_nova=etapa_nova, por_pr=por_pr)
     if efeito == SEM_EFEITO:
         return
 
@@ -565,7 +578,9 @@ def sincronizar_demanda(
     # sem mexer na Etapa e nao chega ate aqui, entao a Demanda nao e devolvida
     # de novo a cada webhook depois da entrega.
     try:
-        _devolver_a_quem_pediu(supabase, demanda, etapa_nova=mudanca["etapa"])
+        _devolver_a_quem_pediu(
+            supabase, demanda, etapa_nova=mudanca["etapa"], por_pr=_por_pr(mudanca["github_foto"])
+        )
     except Exception:
         # A excecao continua subindo (o webhook responde `falhou: true`, o lote
         # conta a falha), mas ela sai daqui com NOME. O cache e a linha da Etapa
@@ -669,7 +684,22 @@ def marcar_em_producao(supabase, *, versao: str, data: str, issues: list[int]) -
 
 
 def _carimbar_em_producao(supabase, demanda: dict[str, Any], *, versao: str, data: str) -> bool:
-    """Em produção nesta Demanda, se ela estiver Entregue. `True` se marcou."""
+    """Em producao nesta Demanda, se ela estiver Entregue. `True` se marcou.
+
+    **So a Entregue sobe**, e e isso que faz o carimbo idempotente por
+    (Demanda, versao): a segunda chamada com a mesma versao encontra Em producao
+    e sai sem gravar, sem linha e sem e-mail. Pelo mesmo motivo uma subida
+    seguinte que liste a mesma issue nao troca a versao: "Em producao desde"
+    e a PRIMEIRA. A issue reaberta tira a Demanda de Em producao pela
+    sincronizacao, e o proximo fechamento espera a proxima subida.
+
+    O UPDATE e um compare-and-swap na Etapa, como o da sincronizacao: o webhook
+    de deploy roda no threadpool e a reconciliacao numa thread do scheduler, e
+    so quem move a Etapa escreve a linha e devolve o card.
+
+    Demanda fechada nao e tocada, pelo mesmo motivo da sincronizacao: alguem a
+    concluiu ou cancelou a mao, e o fio dela nao ganha linha nova.
+    """
     if str(demanda.get("estado") or "") in ESTADOS_FECHADOS:
         return False
     if demanda.get("etapa") != ETAPA_ENTREGUE:
@@ -680,6 +710,7 @@ def _carimbar_em_producao(supabase, demanda: dict[str, Any], *, versao: str, dat
         .update({"etapa": ETAPA_EM_PRODUCAO, "versao_em_producao": versao, "entregue_em": data})
         .eq("id", demanda_id)
         .eq("etapa", ETAPA_ENTREGUE)
+        .in_("estado", list(ESTADOS_ABERTOS))
         .execute()
     )
     if not marcada.data:
@@ -692,6 +723,21 @@ def _carimbar_em_producao(supabase, demanda: dict[str, Any], *, versao: str, dat
         para=ETAPA_EM_PRODUCAO,
         texto=texto_em_producao(versao),
     )
+    try:
+        _devolver_a_quem_pediu(
+            supabase, demanda, etapa_nova=ETAPA_EM_PRODUCAO, por_pr=_por_pr(demanda.get("github_foto"))
+        )
+    except Exception:
+        # A mesma frase da sincronizacao, pelo mesmo motivo: a Etapa ja e Em
+        # producao, e nenhuma passagem seguinte refaz a devolucao.
+        logger.error(
+            "[tecnologia] A devolução da entrega NÃO foi concluída na Demanda %s e a reconciliação "
+            "não vai refazê-la (a Etapa já é Em produção): termine à mão o movimento para Aguardando, "
+            "o responsável e o aviso.",
+            demanda_id,
+            exc_info=True,
+        )
+        raise
     return True
 
 

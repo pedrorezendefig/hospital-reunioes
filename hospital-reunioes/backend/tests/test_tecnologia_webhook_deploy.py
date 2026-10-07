@@ -27,12 +27,16 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from test_tecnologia_webhook_github import (  # noqa: E402
     _assinar,
+    _corpo,
+    _corpo_pr,
     _demanda,
     _demandas,
+    _entregar,
     _entregue,
     _fio,
     _foto_guardada,
     _GithubFalso,
+    _issue,
     _montar,
     _pessoa,
     _reset_rate_limiter,  # noqa: F401  (autouse)
@@ -44,6 +48,7 @@ from test_tecnologia_webhook_github import (  # noqa: E402
 
 from app.config import settings  # noqa: E402
 from app.services import github_client  # noqa: E402
+from app.services.tecnologia import RECADO_DA_ENTREGA  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_DESENVOLVIMENTO,
     ETAPA_EM_PRODUCAO,
@@ -139,3 +144,115 @@ class TestOWebhookMarcaEmProducao:
             ETAPA_EM_PRODUCAO,
         )
         assert publicados == [], "a linha automática não vira comentário na issue"
+
+
+def _quem_tem_o_card(sb) -> tuple[str, str]:
+    demanda = _demandas(sb)[0]
+    return demanda["estado"], demanda["responsavel_id"]
+
+
+class TestADevolucaoEsperaAProducao:
+    """O gatilho da devolução a quem pediu (ADR 0069, decisão 5): Em produção
+    quando a issue fechou por PR, Entregue quando fechou sem PR. Nunca as duas.
+
+    Pelas DUAS rotas de verdade, na ordem em que os eventos chegam: o merge pelo
+    webhook do GitHub, depois o aviso da subida pelo webhook de deploy.
+    """
+
+    def _em_desenvolvimento_com_pr(self, monkeypatch):
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        foto = {**_foto_guardada(gh, 673), "prs_abertos": [1100]}
+        demanda = _demanda(
+            "D1",
+            github_issue_numero=673,
+            etapa=ETAPA_EM_DESENVOLVIMENTO,
+            github_foto=foto,
+            estado="em_andamento",
+            autor_id="P1",
+            responsavel_id="P2",
+        )
+        cliente, sb, _ = _montar(
+            demandas=[demanda],
+            participantes=[_pessoa("P1")],
+            produtos=[{"id": "prod-1", "nome": "Prontuário"}],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+        gh.issues[673] = _entregue(673)
+        return cliente, sb
+
+    def test_fechada_por_pr_volta_a_quem_pediu_so_em_producao(self, monkeypatch, _sem_email_de_verdade):
+        """Critério de aceite: o merge leva a Entregue e o card fica com a Vitta;
+        a subida leva a Em produção e só então o card volta para quem pediu
+        (Aguardando, Responsável o autor, e-mail de atribuição)."""
+        cliente, sb = self._em_desenvolvimento_com_pr(monkeypatch)
+
+        _entregar(cliente, _corpo_pr(acao="closed", merged=True), evento="pull_request")
+
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
+        assert _quem_tem_o_card(sb) == ("em_andamento", "P2"), "o merge não devolve: o código ainda não está no ar"
+        assert _sem_email_de_verdade == []
+
+        _avisar(cliente, _corpo_do_deploy())
+
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_PRODUCAO
+        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
+        assert [(aviso["destinatario_id"], aviso["trecho"]) for aviso in _sem_email_de_verdade] == [
+            ("P1", RECADO_DA_ENTREGA)
+        ]
+        assert _sem_email_de_verdade[0]["demanda"]["produto_nome"] == "Prontuário"
+
+    def test_o_fechamento_que_chega_antes_do_merge_tambem_espera_a_producao(self, monkeypatch, _sem_email_de_verdade):
+        """No merge, `issues.closed` pode chegar ANTES do `pull_request.closed`:
+        a foto ainda diz "PR aberto" e não tem `fechada_por_pr`. O PR a caminho
+        já diz que o fechamento é por PR, e a devolução espera a subida."""
+        cliente, sb = self._em_desenvolvimento_com_pr(monkeypatch)
+
+        _entregar(cliente, _corpo(acao="closed"))
+        _entregar(cliente, _corpo_pr(acao="closed", merged=True), evento="pull_request")
+
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
+        assert _quem_tem_o_card(sb) == ("em_andamento", "P2")
+        assert _sem_email_de_verdade == []
+
+        _avisar(cliente, _corpo_do_deploy())
+
+        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
+        assert len(_sem_email_de_verdade) == 1
+
+    def test_fechada_sem_pr_volta_em_entregue_e_nao_de_novo_em_producao(self, monkeypatch, _sem_email_de_verdade):
+        """Critério de aceite: a issue fechada à mão (decisão, consultoria)
+        devolve em Entregue, como hoje. Se uma subida a listar depois, a
+        Demanda ganha Em produção sem ser devolvida outra vez."""
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        cliente, sb, _ = _montar(
+            demandas=[
+                _demanda(
+                    "D1",
+                    github_issue_numero=673,
+                    etapa=ETAPA_EM_DESENVOLVIMENTO,
+                    github_foto=_foto_guardada(gh, 673),
+                    estado="em_andamento",
+                    autor_id="P1",
+                    responsavel_id="P2",
+                )
+            ],
+            participantes=[_pessoa("P1")],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+        gh.issues[673] = _entregue(673)
+
+        _entregar(cliente, _corpo(acao="closed"))
+
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
+        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
+        assert len(_sem_email_de_verdade) == 1
+
+        # O diretor conferiu e passou a bola adiante; a subida chega depois.
+        _demandas(sb)[0].update(estado="em_andamento", responsavel_id="P2")
+        _avisar(cliente, _corpo_do_deploy())
+
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_PRODUCAO
+        assert _quem_tem_o_card(sb) == ("em_andamento", "P2"), "devolvida duas vezes"
+        assert len(_sem_email_de_verdade) == 1
