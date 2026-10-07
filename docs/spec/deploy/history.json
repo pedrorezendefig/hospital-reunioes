@@ -2,6 +2,56 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-07T13:17:23-03:00",
+      "sha": "f142a728a0f523dd54927ddca61f4880f4460ba8",
+      "app_version": "0.167.0",
+      "subject": "Onda onda-a-onda1: Fundação do PRD #1056, migration 115 e Etapa Em produção; Quadro de três raias e card enxuto",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda1 (#1093 #1094)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1056
+      ],
+      "result": "healthy",
+      "duration_seconds": 2626,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [
+        "115_tecnologia_anexos_e_em_producao.sql"
+      ],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda1: PR #1093 (issue #1057), PR #1094 (issue #1058), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 6,
+        "build_s": {
+          "backend": 196,
+          "frontend": 224
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-07T01:33:58-03:00",
       "sha": "be94255e6161ec022d245e37e20f73135607ed82",
       "app_version": "0.166.3",
