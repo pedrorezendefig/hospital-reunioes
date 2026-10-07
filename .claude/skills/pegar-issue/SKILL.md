@@ -79,6 +79,12 @@ git fetch origin && git worktree add ../hospital-issue-<N> -b <type>/<slug>-<N> 
 Siga o trabalho dentro de `../hospital-issue-<N>`. Não dependa de `git pull` na árvore principal: pode estar semanas atrasada que a branch nasce do que está em produção agora (issue #1081).
 
 ### 8. Carregar contexto e seguir sem parar
+**Anexos da Demanda.** Se o corpo da issue diz "Anexos" (a frase "Anexos: N imagens na Demanda"), baixe os prints, já dentro de `../hospital-issue-<N>`:
+```bash
+python3 .claude/skills/pegar-issue/scripts/anexos.py <N>
+```
+É a boca única (ADR 0069, decisão 2): o print vive só no app, nunca na issue (o repositório é público), e o script busca pela rota de automação com a `TECNOLOGIA_AUTOMACAO_API_KEY` do `tokens/.env`. Ele grava em `local/anexos/<N>/` (fora do git) e imprime um caminho por linha: leia cada um com a Read tool. Saída `sem anexos` é normal. Saída 1 traz o motivo (chave ausente, ponte desligada no Coolify): repasse a linha e siga sem as imagens. O `/ship` apaga a pasta ao abrir o PR.
+
 Carregue no contexto **O que construir** + **Critérios de aceite** (cada critério vira um teste). Leia `CONTEXT.md` e os ADRs relevantes em `docs/adr/`. Então chame a Skill tool com `tdd` (cada critério de aceite é um teste RED) e, com os testes verdes, a Skill tool com `ship`, que roda a subida sozinho (veja "Fechar o loop"). Não espere mensagem entre um e outro: pegar a issue foi a ordem.
 
 ## Sessões paralelas (worktree)

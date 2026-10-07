@@ -8,7 +8,8 @@ hospital-reunioes/supabase/migrations/**
 
 # Rota sem login: canal público da Ouvidoria, webhooks (ClickSign, GitHub,
 # e-mail recebido pelo Resend), o e-mail recebido em si, link público do Aceite,
-# portal do setor, API da Ana, conector MCP, callback do login.
+# portal do setor, API da Ana, ponte dos anexos da Demanda (issue #1063),
+# conector MCP, callback do login.
 # Todo router com rota cuja cadeia de Depends não chega a get_current_user tem
 # de estar aqui (health.py é a exceção explícita). O sensivel.py também varre o
 # head do PR: router tocado com rota sem login, route.ts e "use server" do
@@ -19,6 +20,7 @@ hospital-reunioes/backend/app/routers/webhooks.py
 hospital-reunioes/backend/app/routers/aceite.py
 hospital-reunioes/backend/app/routers/ouvidoria_setor.py
 hospital-reunioes/backend/app/routers/ana.py
+hospital-reunioes/backend/app/routers/tecnologia_automacao.py
 hospital-reunioes/backend/app/routers/conector_mcp.py
 hospital-reunioes/frontend/src/app/auth/**
 hospital-reunioes/frontend/src/app/actions/auth.ts

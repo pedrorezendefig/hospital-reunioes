@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 import subprocess
 import sys
 import threading
@@ -196,3 +197,91 @@ def test_o_endereco_padrao_e_o_backend_do_project_json():
         sys.path.remove(str(SCRIPT.parent))
 
     assert anexos.base_da_api({}) == fqdn.rstrip("/") + "/api"
+
+
+# ------------------------------------------------- os chamadores
+
+SKILLS = RAIZ / ".claude" / "skills"
+AGENTES = RAIZ / ".claude" / "agents"
+COMANDO = "python3 .claude/skills/pegar-issue/scripts/anexos.py <N>"
+
+
+def test_o_comando_que_os_chamadores_citam_e_o_script_de_verdade():
+    assert (RAIZ / COMANDO.split()[1]).resolve() == SCRIPT
+
+
+@pytest.mark.parametrize(
+    "arquivo",
+    [SKILLS / "pegar-issue" / "SKILL.md", AGENTES / "hr-implementador.md", AGENTES / "hr-corretor.md"],
+    ids=["pegar-issue", "hr-implementador", "hr-corretor"],
+)
+def test_quem_le_a_issue_chama_o_script_quando_o_corpo_diz_anexos(arquivo):
+    texto = arquivo.read_text(encoding="utf-8")
+
+    assert COMANDO in texto
+    # A condição vem logo antes do comando, no mesmo trecho: "Anexos" solto em
+    # outro canto do arquivo não conta.
+    antes = texto[max(0, texto.index(COMANDO) - 300) : texto.index(COMANDO)]
+    assert 'diz "Anexos"' in antes
+
+
+def test_o_ship_apaga_a_pasta_que_o_script_grava():
+    texto = (SKILLS / "ship" / "SKILL.md").read_text(encoding="utf-8")
+
+    assert "rm -rf local/anexos/<N>" in texto
+
+
+def test_o_ask_pedro_cita_o_script_como_boca_unica():
+    texto = (SKILLS / "ask-pedro" / "SKILL.md").read_text(encoding="utf-8")
+
+    assert COMANDO in texto and "boca única" in texto
+
+
+def _diagnostico(tmp_path: Path, tokens: str) -> str:
+    """Roda o `diagnostico.sh` de verdade numa cópia mínima do repo, só com o jq
+    no PATH, e devolve a saída."""
+    origem = SKILLS / "setup-maquina"
+    repo = tmp_path / "repo"
+    scripts = repo / ".claude" / "skills" / "setup-maquina" / "scripts"
+    scripts.mkdir(parents=True)
+    shutil.copy(origem / "scripts" / "diagnostico.sh", scripts / "diagnostico.sh")
+    (scripts.parent / "references").mkdir()
+    shutil.copy(origem / "references" / "plugins.txt", scripts.parent / "references" / "plugins.txt")
+    (repo / "docs" / "spec" / "deploy").mkdir(parents=True)
+    shutil.copy(RAIZ / "docs" / "spec" / "deploy" / "project.json", repo / "docs" / "spec" / "deploy" / "project.json")
+    (repo / "tokens").mkdir()
+    (repo / "tokens" / ".env").write_text(tokens, encoding="utf-8")
+    subprocess.run(["git", "init", "-q", "-b", "main", str(repo)], check=True)
+    pasta = tmp_path / "bin"
+    pasta.mkdir()
+    (pasta / "jq").symlink_to(shutil.which("jq"))
+    casa = tmp_path / "casa"
+    casa.mkdir()
+    r = subprocess.run(
+        ["bash", str(scripts / "diagnostico.sh"), "--nivel", "2"],
+        cwd=casa,
+        env={"PATH": f"{pasta}:/usr/bin:/bin", "HOME": str(casa)},
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+    return r.stdout + r.stderr
+
+
+def _linha_da_chave(saida: str) -> str:
+    achadas = [li for li in saida.splitlines() if "tokens/.env: TECNOLOGIA_AUTOMACAO_API_KEY" in li]
+    assert len(achadas) == 1, saida
+    return achadas[0]
+
+
+def test_o_setup_maquina_lista_a_chave_preenchida_sem_imprimir_o_valor(tmp_path):
+    saida = _diagnostico(tmp_path, f"TECNOLOGIA_AUTOMACAO_API_KEY='{CHAVE}'\n")
+
+    assert "preenchida" in _linha_da_chave(saida)
+    assert CHAVE not in saida
+
+
+def test_o_setup_maquina_avisa_a_chave_vazia_e_diz_a_quem_pedir(tmp_path):
+    linha = _linha_da_chave(_diagnostico(tmp_path, "TECNOLOGIA_AUTOMACAO_API_KEY=\n"))
+
+    assert "preenchida" not in linha and "Pedro" in linha

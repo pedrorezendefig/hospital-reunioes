@@ -339,6 +339,7 @@ if [ -f "$TOK" ]; then
     chave_preenchida "$TOK" "$k" && ok "tokens/.env: $k" "preenchida" || falta "tokens/.env: $k" "ver references/chaves.md"
   done
   chave_preenchida "$TOK" ANA_API_KEY && ok "tokens/.env: ANA_API_KEY" "preenchida" || aviso "tokens/.env: ANA_API_KEY" "só para smoke test contra prod; ver references/chaves.md"
+  chave_preenchida "$TOK" TECNOLOGIA_AUTOMACAO_API_KEY && ok "tokens/.env: TECNOLOGIA_AUTOMACAO_API_KEY" "preenchida" || aviso "tokens/.env: TECNOLOGIA_AUTOMACAO_API_KEY" "sem ela o anexos.py não baixa os prints da Demanda; peça ao Pedro (references/chaves.md)"
   # PAT clássico com escopo repo: na conta de quem é admin ele administra o repositório (ADR 0068).
   if chave_preenchida "$TOK" GITHUB_PERSONAL_ACCESS_TOKEN; then
     if eh_admin; then falta "tokens/.env sem PAT clássico" "apague GITHUB_PERSONAL_ACCESS_TOKEN e revogue o PAT no GitHub: na sua conta ele administra o repositório; o gh usa o GH_TOKEN (seção 5.1)"
