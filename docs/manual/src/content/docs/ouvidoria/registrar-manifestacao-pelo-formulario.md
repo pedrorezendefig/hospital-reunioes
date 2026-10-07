@@ -1,7 +1,7 @@
 ---
 title: Registrar uma manifestação pelo formulário
 description: Como contar uma reclamação, um elogio ou uma sugestão para a Ouvidoria e receber o protocolo na hora.
-prd: [731]
+prd: [659, 731]
 draft: false
 papel: [Qualquer pessoa]
 login: false

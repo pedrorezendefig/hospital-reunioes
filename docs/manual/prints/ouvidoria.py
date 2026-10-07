@@ -888,6 +888,13 @@ def validar_modal(page, base: str, saida: Path) -> None:
     janela = _janela_do_modal(page)
     janela.locator("select").first.select_option(label="Reclamação")
     page.wait_for_timeout(500)
+    # O caso do QR chega sem tipo, logo sigiloso (fail-closed), e a janela
+    # mantém o sigilo até o ouvidor desmarcar: numa reclamação comum, é o que
+    # ele faz. Sem isto o print mostra a ajuda do sigilo ("e só ele") no lugar
+    # da ajuda do caso comum, que é a que a página descreve (issue #1078).
+    janela.get_by_label("Sigilo reforçado", exact=False).uncheck()
+    page.wait_for_timeout(400)
+    janela.get_by_text("do nome de quem manifestou", exact=False).first.wait_for(timeout=5000)
     janela.locator("select").nth(1).select_option(label="Recepção")
     page.wait_for_timeout(500)
     janela.get_by_text("Médio", exact=True).click()
@@ -1135,6 +1142,10 @@ def nova_manifestacao_modal(page, base: str, saida: Path) -> None:
     )
     janela.locator("#nome").fill("Otávio Brandão")
     janela.locator("#contato").fill("otavio.brandao@exemplo.local")
+    janela.locator("#vinculo").select_option(label="Acompanhante")
+    # O Paciente do caso (issue #663): quem ligou fala pela mãe internada.
+    janela.locator("#paciente-nome").fill("Lúcia Brandão")
+    janela.locator("#paciente-referencia").fill("Quarto 312, segunda e terça")
     sem_foco(page)
     balao(page, janela.get_by_text("Canal de origem", exact=False).first, 2)
     balao(page, janela.get_by_text("Data e hora do contato", exact=False).first, 3)
@@ -1255,6 +1266,8 @@ def email_demanda(page, base: str, saida: Path) -> None:
         "tipo_manifestacao": "reclamacao",
         "sigilo_reforcado": False,
         "prazo_area_em": "2026-09-22T18:00:00+00:00",
+        "paciente_nome": "Jorge Siqueira",
+        "paciente_referencia": "entrada principal, manhã de terça",
     }
     html = _montar_no_app(
         "__import__('app.services.ouvidoria_notificacoes', fromlist=['x'])"
@@ -1600,6 +1613,10 @@ CASOS = {
         "manifestante_nome": "Dalva Siqueira",
         "manifestante_contato": "dalva.siqueira@exemplo.local",
         "manifestante_vinculo": "acompanhante",
+        # O Paciente do caso (issue #664): a tela do responsável o mostra logo
+        # abaixo de quem manifestou, e é por ele que a área acha o atendimento.
+        "paciente_nome": "Jorge Siqueira",
+        "paciente_referencia": "entrada principal, manhã de terça",
         "prazo_area_em": "+3 dias",
         "validada_em": "-1 dia",
         "token": True,
@@ -1781,6 +1798,13 @@ def _login_de_exemplo(url: str, chave: str, email: str, senha: str) -> str:
     raise SystemExit(f"login {email} não encontrado depois de criado.")
 
 
+def _relativa(valor) -> bool:
+    """Data escrita relativa a hoje na receita, como "+3 dias" ou "-1 dia"."""
+    return (
+        isinstance(valor, str) and valor[:1] in ("-", "+") and "dia" in valor
+    )
+
+
 def _caso_semeado(url: str, chave: str, apelido: str, receita: dict) -> dict:
     """Cria a manifestação de exemplo, ou devolve a que já existe.
 
@@ -1805,7 +1829,7 @@ def _caso_semeado(url: str, chave: str, apelido: str, receita: dict) -> dict:
     for campo, valor in receita.items():
         if campo in ("prorrogacao", "token"):
             continue
-        if isinstance(valor, str) and (valor.startswith("-") or valor.startswith("+")) and "dia" in valor:
+        if _relativa(valor):
             linha[campo] = _quando(valor)
         else:
             linha[campo] = valor
@@ -2009,6 +2033,18 @@ def restaurar_os_casos() -> None:
             if receita.get("arquivada_em")
             else None,
         }
+        # O paciente entrou nos casos depois que eles já estavam semeados
+        # (issue #1078), e a semeadura não regrava caso existente: a reposição
+        # leva os dois campos para a linha que nasceu sem eles.
+        for campo in ("paciente_nome", "paciente_referencia"):
+            if campo in receita:
+                campos[campo] = receita[campo]
+        # Datas relativas ("+3 dias") também voltam ao ponto de partida: o caso
+        # semeado em setembro chegava vencido em outubro, e o print do portal
+        # mostrava o prazo estourado no caso que existe para estar no prazo.
+        for campo, valor in receita.items():
+            if campo not in ("prorrogacao", "token", "arquivada_em") and _relativa(valor):
+                campos[campo] = _quando(valor)
         _rest(
             url,
             chave,

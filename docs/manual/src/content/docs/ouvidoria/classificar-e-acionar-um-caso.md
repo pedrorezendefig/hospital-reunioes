@@ -1,7 +1,7 @@
 ---
 title: Classificar e acionar um caso
 description: Como decidir do que se trata, escolher a área responsável e mandar o caso para ela com prazo.
-prd: [317, 469, 471]
+prd: [317, 469, 471, 659]
 draft: false
 papel: [Ouvidoria]
 video: cap-2
@@ -19,11 +19,14 @@ trabalhar: nada aciona uma área sozinho.
 
 ## Passo a passo
 
-1. Abra o caso, leia o relato inteiro e clique em **Validar e acionar**.
+1. Abra o caso, leia o relato inteiro e clique em **Validar e acionar**. Com o
+   aviso de paciente sem nome, confirme o nome com quem manifestou antes.
 
    ![Página do caso com o botão Validar e acionar](../../../assets/ouvidoria/caso-validar.png)
 
 2. Escolha o **Tipo da manifestação**. É o tipo que faz o caso nascer sigiloso.
+   O caso sem tipo chega com **Sigilo reforçado** marcado: numa reclamação
+   comum, desmarque.
 
    ![Janela de classificar e acionar preenchida](../../../assets/ouvidoria/validar-modal.png)
 
@@ -40,7 +43,8 @@ trabalhar: nada aciona uma área sozinho.
 
 - **O acionamento não sai:** falta o **Extrato para o setor**. É o pedido da
   Ouvidoria ao setor, com as suas palavras: no caso comum ele vai junto do
-  resumo, do relato inteiro e do nome de quem falou, e no sigiloso vai sozinho.
+  resumo, do relato inteiro, do nome de quem falou e do paciente, e no sigiloso
+  vai sozinho.
 - **Nada veio preenchido pela Ana nem pelo que a pessoa marcou:** o palpite
   dos dois fica à parte e nunca vira classificação.
 - **A caixa de sigilo reforçado não desmarca:** o tipo escolhido é sigiloso por
