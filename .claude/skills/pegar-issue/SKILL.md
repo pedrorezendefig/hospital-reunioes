@@ -78,7 +78,7 @@ git checkout -b <type>/<slug>-<N>
 ```
 
 ### 8. Carregar contexto e seguir sem parar
-Carregue no contexto **O que construir** + **Critérios de aceite** (cada critério vira um teste). Leia `CONTEXT.md` e os ADRs relevantes em `docs/adr/`. Então invoque **`/tdd`** (cada critério de aceite é um teste RED) e, com os testes verdes, **`/ship`**, que roda o rabo sozinho (veja "Fechar o loop"). Não espere mensagem entre um e outro: pegar a issue foi a ordem.
+Carregue no contexto **O que construir** + **Critérios de aceite** (cada critério vira um teste). Leia `CONTEXT.md` e os ADRs relevantes em `docs/adr/`. Então chame a Skill tool com `tdd` (cada critério de aceite é um teste RED) e, com os testes verdes, a Skill tool com `ship`, que roda o rabo sozinho (veja "Fechar o loop"). Não espere mensagem entre um e outro: pegar a issue foi a ordem.
 
 ## Sessões paralelas (worktree)
 
@@ -90,7 +90,7 @@ Abra o Claude Code dentro de `../hospital-issue-<N>`. Veja `docs/agents/issue-tr
 
 ## Fechar o loop
 
-Terminado o `/tdd` (testes verdes), invoque **`/ship`**: abre o PR com `Closes #N`, roda os gates até o PR verde (gate reprovado chama o `hr-corretor`) e roda o rabo (`python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>`), que mergeia e faz o deploy (ADRs 0061 e 0063). Conflito no rabo chama o `hr-corretor` com a `/resolver-conflitos` e conta tentativa; a terceira falha manda a issue para `ready-for-human` (`/ship` Passo 10). O humano só é chamado por notificação em migration, nessa terceira falha e em rollback. Ao mergear, a issue fecha e a Action de higiene (`.github/workflows/higiene-issues.yml`) remove o `in-progress` sozinha.
+Terminado o TDD (testes verdes), chame a Skill tool com `ship`: abre o PR com `Closes #N`, roda os gates até o PR verde (gate reprovado chama o `hr-corretor`) e roda o rabo (`python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>`), que mergeia e faz o deploy (ADRs 0061 e 0063). Conflito no rabo chama o `hr-corretor` com a `/resolver-conflitos` e conta tentativa; a terceira falha manda a issue para `ready-for-human` (`/ship` Passo 10). O humano só é chamado por notificação em migration, nessa terceira falha e em rollback. Ao mergear, a issue fecha e a Action de higiene (`.github/workflows/higiene-issues.yml`) remove o `in-progress` sozinha.
 
 Abandonou? Devolva ao pool:
 ```bash

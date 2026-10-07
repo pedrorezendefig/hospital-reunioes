@@ -17,14 +17,14 @@ O orquestrador informa o número da issue (e do PRD, se houver). Leia a issue (`
 1. **Claim atômico**: `gh issue edit <N> --remove-label ready-for-agent --add-label in-progress --add-assignee @me`. Releia os assignees; se houver mais de um, abra mão e termine informando.
 2. **Branch** determinística `<type>/<slug>-<N>` a partir de `origin/main` atualizado. Confira `git branch --show-current` antes de cada commit.
 3. **Ambiente**: explore só o necessário; o que travar vai em uma linha no relatório.
-4. **`/tdd`** com os critérios de aceite da issue como lista de testes: red, green, refactor. Rode o teste do arquivo, não a suíte inteira; a suíte inteira é papel do CI. Commite WIP a cada passo verde (`wip: ...`), para o trabalho sobreviver se você for interrompido. Prova por mutação com teto: um mutante por critério de aceite, não por teste; cada mutante mexe em uma coisa só e, se o teste tem detector próprio, é o efeito que o detector deve pegar (regra inteira no `/tdd`).
-5. **Fatia de manual** (`docs: manual do PRD #N`): no lugar do `/tdd`, rode `/manual #<PRD>` e pare no draft de cada Vídeo de tarefa; o caminho do MP4 vai no corpo do PR.
+4. **TDD** (chame a Skill tool com `tdd`) com os critérios de aceite da issue como lista de testes: red, green, refactor. Rode o teste do arquivo, não a suíte inteira; a suíte inteira é papel do CI. Commite WIP a cada passo verde (`wip: ...`), para o trabalho sobreviver se você for interrompido. Prova por mutação com teto: um mutante por critério de aceite, não por teste; cada mutante mexe em uma coisa só e, se o teste tem detector próprio, é o efeito que o detector deve pegar (regra inteira no `/tdd`).
+5. **Fatia de manual** (`docs: manual do PRD #N`): no lugar do TDD, chame a Skill tool com `manual` (argumento `#<PRD>`) e pare no draft de cada Vídeo de tarefa; o caminho do MP4 vai no corpo do PR.
 6. **Gate spec × diff**: antes de abrir o PR, releia os critérios de aceite da issue e confira um a um contra `git diff origin/main...HEAD`. Critério sem teste ou sem código: volte ao passo 4.
-7. **PR**: `/ship "<descrição>" --issue <N> --skip-review`. O bump é do fechamento da onda, não seu. Corpo do PR com `Closes #<N>`, o que mudou em 5 linhas, como testar em 3, e a seção **Perigo do merge** (reversível ou não, migration sim ou não).
+7. **PR**: chame a Skill tool com `ship` (argumentos `"<descrição>" --issue <N> --skip-review`). O bump é do fechamento da onda, não seu. Corpo do PR pelo template: `Closes #<N>`, o que mudou em 5 linhas, **Evidência** (antes e depois: o teste que falhava e passa, nunca só "testes verdes") e **Perigo do merge** (porta de uma ou duas vias pela lista do template, com o motivo, e o raio).
 8. Termine. Não espere o CI, não leia o resultado, não comente no PR além do corpo.
 
 ## Regras de segurança
-Proibido `git checkout --`, `git reset --hard`, `git stash drop`, `git push --force` e qualquer comando destrutivo fora dos arquivos da própria issue. Conflito de rebase: siga a skill `resolver-conflitos`. Nada de travessão nem meia-risca em texto visível ao usuário (ADR 0013). Não invoque `/code-review` nem `/security-review`.
+Proibido `git checkout --`, `git reset --hard`, `git stash drop`, `git push --force` e qualquer comando destrutivo fora dos arquivos da própria issue. Conflito de rebase: chame a Skill tool com `resolver-conflitos`. Nada de travessão nem meia-risca em texto visível ao usuário (ADR 0013). Não invoque `/code-review` nem `/security-review`.
 
 ## Relatório final (máximo 12 linhas)
 `issue`, `pr` (número e URL), `branch`, `commits`, `testes` (quantos, arquivo), `migration` (número ou nenhuma), `atritos` (uma linha), `spec x diff: ok`. Nada além disso.

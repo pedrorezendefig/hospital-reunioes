@@ -30,10 +30,10 @@ Do código ao PR verde e, com os gates verdes, o rabo (`fechar_onda.py`), sem es
 1. **Pre-flight:** `git fetch origin`. Arquivo alheio no working tree fica de fora do commit, sem perguntar. Com `--issue N` fora da `main`, a branch tem que terminar em `-<N>`; senão, pare (a árvore pode ser de outra sessão).
 2. **Branch:** `<type>/<slug>[-<N>]` (slug minúsculo, ASCII, até 50 caracteres). Já na branch do `/pegar-issue`, pule.
 3. **Issue:** `gh issue view N --json title,body,labels`. "O que construir" vira o contexto do PR; os critérios de aceite, o checklist e a lista de testes do `/tdd`.
-4. **Código:** pelo `/tdd`. Com `--from-diff`, pule.
+4. **Código:** chame a Skill tool com `tdd`. Com `--from-diff`, pule.
 5. **Commit:** Conventional Commits, `git add` com lista explícita (nunca `-A` nem `.`), nada do `hard_excluded` do `project.json`. Sem versão no PR: o `package.json` do frontend fica congelado, a versão sai no rabo.
 6. **Push:** `git push -u origin "$BRANCH"`. Falhou: reporte o erro bruto e pare.
-7. **PR:** `gh pr create --base main --title "$SUBJECT" --body-file <tmp> --label type:$TYPE --label area:<...>`. Corpo pelo `.github/PULL_REQUEST_TEMPLATE.md`: contexto, critérios de aceite, `Closes #N`. Com migration nova, a seção `## Migration NNN (conferência por hash)` com o `sha256` do arquivo (`shasum -a 256`) e o SQL completo: o rabo confere e para se faltar ou divergir.
+7. **PR:** `gh pr create --base main --title "$SUBJECT" --body-file <tmp> --label type:$TYPE --label area:<...>`. Corpo pelo `.github/PULL_REQUEST_TEMPLATE.md`: contexto, critérios de aceite, **Evidência** (antes e depois: o teste que falhava e passa, a saída de comando que mudou ou o print; nunca só "testes verdes"), **Perigo do merge** (porta de uma ou duas vias pela lista do template, com o motivo, e o raio) e `Closes #N`. Com migration nova, a seção `## Migration NNN (conferência por hash)` com o `sha256` do arquivo (`shasum -a 256`) e o SQL completo: o rabo confere e para se faltar ou divergir.
 
 ## Passo 8: gates
 

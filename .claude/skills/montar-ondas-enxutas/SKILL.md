@@ -41,7 +41,7 @@ gh pr list --state open --json number,headRefName,title
 git worktree list | grep -v detached | tail -40
 git fetch -q origin && git rev-list --left-right --count origin/main...HEAD
 git ls-tree --name-only origin/main hospital-reunioes/supabase/migrations/ | tail -3
-curl -s https://reunioes.hospitalsaomatheus.cloud/api/health
+curl -s https://api.hospitalsaomatheus.cloud/api/health
 ```
 
 Para cada PRD aberto, pegue as sub-issues (`gh api "repos/$REPO/issues/<PRD>/sub_issues"`) e o **último comentário inteiro** (a auditoria de conclusão diz se o PRD só espera trabalho humano, ou se foi REPROVADO com lacuna que pede decisão).
@@ -109,7 +109,7 @@ A `/onda-enxuta` para na largada se houver `revisor-comentou` de revisor humano.
 O único separador de ondas é a **dependência**, não o arquivo (ADR 0066). O rabo mergeia PR a PR (ADR 0064, decisão 3): conflito tira só aquele PR, que o `hr-corretor` rebaseia (motivo `conflito`, skill `resolver-conflitos`), e os outros sobem. Monte o grafo de bloqueio (o nativo do passo 1 mais o "rodar depois da #N" escrito no corpo das issues) e aplique:
 
 1. **Ondas pelo grafo**: onda 1 é toda issue da sessão sem bloqueio aberto; a onda seguinte é a das issues cujas bloqueadoras estão todas nas ondas anteriores. **Arquivo em comum, dentro da sessão ou entre sessões, não separa onda nem sessão.** Com mais issues livres que o `--paralelo`, `fatia:P` antes de `M`/`G`. Varredura de módulo inteiro (tipografia, lint) depende de tudo que muda aquele módulo: ganha o `blocked_by` nativo de cada issue aberta que muda aquele módulo (o comando do item 2) e fica na última onda da sessão dona dele. Sem esse bloqueio, a `/onda-enxuta` a puxa na primeira onda, junto com as issues que ela deveria varrer depois.
-2. **Mesmo ponto é dependência**: o mesmo ponto é a mesma entrada: as duas fatias editam a mesma rota, o mesmo item de menu ou a mesma função, ou uma usa o que a outra cria. Cada fatia acrescentar a própria linha de `include_router` no `main.py` ou o próprio item no `AdminSidebar.tsx` não é mesmo ponto: as duas rodam juntas, e o rabo PR a PR resolve o conflito de texto. Exemplo: as fatias 1 e 2 criam as rotas `/pops` e `/ouvidoria`, cada uma com o próprio `include_router` no `main.py`, e andam na mesma onda; a fatia 3 muda a rota `/pops` que a 1 cria e anda depois da 1, com o `blocked_by` dela. Quando é mesmo ponto, a de depois ganha "Bloqueada por" a de antes pela dependência nativa (ADR 0028), para nenhuma outra sessão nem o `/pegar-issue` a pegarem antes: `gh api -X POST "repos/$REPO/issues/<seguinte>/dependencies/blocked_by" -F issue_id=$(gh api "repos/$REPO/issues/<anterior>" --jq .id)`. Dependência escrita só no corpo ("rodar depois da #N") vira nativa do mesmo jeito: é o `blocked_by` que a `/onda-enxuta` lê. Função diferente no mesmo arquivo não é o mesmo ponto. Issue que outra sessão já roda (balde "Outra sessão") e de quem uma candidata depende: a candidata ganha "Bloqueada por" ela do mesmo jeito e fica fora deste plano.
+2. **Mesmo ponto é dependência**: o mesmo ponto é a mesma entrada: as duas fatias editam a mesma rota, o mesmo item de menu ou a mesma função, ou uma usa o que a outra cria. Cada fatia acrescentar a própria linha de `include_router` no `main.py` ou o próprio item no `AdminSidebar.tsx` não é mesmo ponto: as duas rodam juntas, e o rabo PR a PR resolve o conflito de texto. Exemplo: as fatias 1 e 2 criam as rotas `/pops` e `/ouvidoria`, cada uma com o próprio `include_router` no `main.py`, e andam na mesma onda; a fatia 3 muda a rota `/pops` que a 1 cria e anda depois da 1, com o `blocked_by` dela. Quando é mesmo ponto, a de depois ganha "Bloqueada por" a de antes pela dependência nativa (ADR 0028), para nenhuma outra sessão nem o `/pegar-issue` a pegarem antes: `gh api -X POST "repos/$REPO/issues/<seguinte>/dependencies/blocked_by" -F issue_id=$(gh api "repos/$REPO/issues/<anterior>" --jq .id)`. Dependência escrita só no corpo ("rodar depois da #N") vira nativa do mesmo jeito: é o `blocked_by` que a `/onda-enxuta` lê. Função diferente no mesmo arquivo não é o mesmo ponto. **Arquivo de costura na mesma onda pede nome cravado:** duas issues da mesma onda que acrescentam cada uma a própria entrada no mesmo arquivo de costura recebem, no `## Triagem` de cada uma, o nome exato e o ponto de registro que ela acrescenta (`pops_router`, `include_router` logo depois do de ouvidoria; item "POPs" abaixo de "Ouvidoria" no `AdminSidebar.tsx`). Implementadores paralelos não se veem: sem o nome cravado, cada um inventa o seu para a mesma coisa e o conflito vira semântico, que o rabo PR a PR não resolve. O implementador lê o `## Triagem` como spec, então a casa é a issue, não o prompt da sessão. Issue que outra sessão já roda (balde "Outra sessão") e de quem uma candidata depende: a candidata ganha "Bloqueada por" ela do mesmo jeito e fica fora deste plano.
 3. **Sessões por tema ou PRD**: nomeie cada sessão pelo tema (segurança e logs, portal do setor, ouvidoria backend). Uma cadeia de dependência fica numa sessão só, para a bloqueada andar assim que a bloqueadora fechar.
 4. **Paralelo por onda**: até 3. Sessão com 2 issues por onda roda `--paralelo 2`. Equilibre o número de ondas entre as sessões: cada onda é um deploy.
 5. Issue que cria migration: **calcule o número** pelo `ls` de `origin/main` e escreva no prompt ("o número é 097; a 096 já existe"). O deploy não aplica migration; o Pedro aplica no Studio.
@@ -118,7 +118,7 @@ Mostre a tabela final: sessão · onda · issues · dependência (de quem cada i
 
 ### 5. Escrever os prompts e os comandos de lançamento
 
-Um arquivo de prompt por sessão, gravado em `%TEMP%\onda-enxuta\<nome>-onda1.md` (crie a pasta), e um comando de lançamento por sessão. Nomeie as sessões `onda-a`, `onda-b`, `onda-c`. O prompt inteiro também vai impresso na resposta, com um **cabeçalho de leitura** acima (o Pedro lê o cabeçalho para saber o que a sessão vai fazer; a sessão só recebe o arquivo). Formato do cabeçalho:
+Um arquivo de prompt por sessão, gravado em `$TMPDIR/onda-enxuta/<nome>-onda1.md` (macOS) ou `%TEMP%\onda-enxuta\<nome>-onda1.md` (Windows), criando a pasta, e um comando de lançamento por sessão. O comando de lançamento vem **com o prefixo `!`**: o Pedro cola na própria sessão que montou o plano e o `lancar_sessao.sh` limpa o ambiente herdado (`env -u ANTHROPIC_API_KEY ...`), então a sessão de fundo nasce dali mesmo, sem abrir terminal. Nomeie as sessões `onda-a`, `onda-b`, `onda-c`. O prompt inteiro também vai impresso na resposta, com um **cabeçalho de leitura** acima (o Pedro lê o cabeçalho para saber o que a sessão vai fazer; a sessão só recebe o arquivo). Formato do cabeçalho:
 
 ```markdown
 ### Sessão onda-a: <tema>
@@ -132,7 +132,11 @@ Um arquivo de prompt por sessão, gravado em `%TEMP%\onda-enxuta\<nome>-onda1.md
 
 **Por que vale a pena:** <2 ou 3 frases, na língua do diretor: o que o usuário ganha ou o risco que fecha quando esta sessão terminar. Sem nome de arquivo.>
 
-**Lançar:** `bash .claude/skills/onda-enxuta/scripts/lancar_sessao.sh onda-a-onda1 "$TEMP/onda-enxuta/onda-a-onda1.md"`
+**Lançar (cole nesta sessão):**
+
+```
+! bash .claude/skills/onda-enxuta/scripts/lancar_sessao.sh onda-a-onda1 "$TMPDIR/onda-enxuta/onda-a-onda1.md"
+```
 ```
 
 Depois do cabeçalho, o conteúdo do arquivo de prompt. A primeira linha precisa ser o comando, para a skill disparar. Template:
@@ -188,7 +192,7 @@ Pare no draft e me mostre os frames antes do render final. Depois da página pub
 
 A resposta final tem esta forma, nesta ordem. É o que o Pedro lê do celular.
 
-1. **Uma linha de contas:** "Das N abertas, X estão `ready-for-agent` e entram nos prompts. As outras Y não são trabalho de agente." Cite a pasta `%TEMP%\onda-enxuta\`.
+1. **Uma linha de contas:** "Das N abertas, X estão `ready-for-agent` e entram nos prompts. As outras Y não são trabalho de agente." Cite a pasta dos prompts (`$TMPDIR/onda-enxuta/` ou `%TEMP%\onda-enxuta\`).
 2. **O que eu fiz:** issues triadas, decisões que o humano tomou e onde ficaram registradas, issue criada, PRD destravado, o que mudou no mundo durante o plano (sessão paralela, versão de prod, migration nova).
 3. **As Y que ficam com você:** uma linha por issue, com a ação concreta e o que ela destrava. PRDs entram aqui como "fecham sozinhos quando as filhas fecharem".
 4. **Tabela final** do passo 4.
