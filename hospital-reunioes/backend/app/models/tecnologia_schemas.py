@@ -286,6 +286,22 @@ class ConversaLinhaResponse(BaseModel):
     aviso_por_email: str | None = None
 
 
+class AnexoDaDemandaResponse(BaseModel):
+    """Um Anexo da Demanda como o card o mostra (issue #1061, ADR 0069).
+
+    Sem o caminho no storage: o acesso ao binario e so pela `url`, assinada e
+    de vida curta. Ela vem nula no anexo apagado (Demanda Concluida ou
+    Cancelada), que continua aparecendo com nome, quem e quando.
+    """
+
+    id: str
+    nome: str
+    anexado_por_nome: str | None = None
+    criado_em: str | None = None
+    apagado_em: str | None = None
+    url: str | None = None
+
+
 class TextoParaIaResponse(BaseModel):
     """O texto do "Copiar para IA", ja montado (issue #640).
 

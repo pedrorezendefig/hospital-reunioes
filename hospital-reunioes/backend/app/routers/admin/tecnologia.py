@@ -91,6 +91,7 @@ from supabase import Client
 from app.dependencies import get_supabase_client, require_super_admin, selecionar_participantes
 from app.limiter import limiter
 from app.models.tecnologia_schemas import (
+    AnexoDaDemandaResponse,
     AssistenteChatPayload,
     AssistenteChatResponse,
     AssistenteDocumentoResponse,
@@ -112,7 +113,7 @@ from app.models.tecnologia_schemas import (
     TextoParaIaResponse,
     VincularPayload,
 )
-from app.services import ai_processor, assistente_tecnologia, github_client
+from app.services import ai_processor, assistente_tecnologia, github_client, tecnologia_anexos
 from app.services.conhecimento import carregar_kit
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
@@ -1138,6 +1139,58 @@ async def atribuir_demanda(
     # `_gravar_movimento` sai daqui e o e-mail não chega a ser montado. Avisar
     # antes mandaria "a Demanda é sua" sobre um card cuja trilha ficou quebrada.
     return {**atribuida, "aviso_por_email": await _aviso_da_atribuicao(supabase, demanda=atribuida, ator=ator)}
+
+
+# ─── Anexo da Demanda (issue #1061, ADR 0069) ────────────────────────────────
+
+
+# Um balde so para a porta, por origem, e nao um por Demanda: o `Limiter` da
+# casa nasce com `key_style="url"`, e com `limit` cada Demanda ganharia o
+# proprio balde (o mesmo motivo do `ESCOPO_DO_GATILHO`). Sessenta por minuto
+# cabe seis Demandas de dez imagens.
+LIMITE_DO_ANEXO = "60/minute"
+ESCOPO_DO_ANEXO = "tecnologia-anexo-da-demanda"
+
+
+@router.post(
+    "/demandas/{demanda_id}/anexos",
+    response_model=AnexoDaDemandaResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+@limiter.shared_limit(LIMITE_DO_ANEXO, ESCOPO_DO_ANEXO)
+async def anexar_a_demanda(
+    request: Request,
+    demanda_id: str,
+    imagem: UploadFile = File(...),
+    ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Guarda um print junto da Demanda (ADR 0069, decisao 1).
+
+    O formulario de Nova Demanda chama esta porta uma vez por imagem, logo
+    depois de criar a Demanda. A regra (formatos, teto, ate dez) e o bucket
+    privado moram no `tecnologia_anexos`; aqui so a costura com o HTTP.
+    """
+    demanda = _buscar_demanda(supabase, demanda_id)
+    conteudo = await imagem.read()
+    try:
+        linha = tecnologia_anexos.anexar(
+            supabase,
+            demanda_id=demanda["id"],
+            nome=imagem.filename or "",
+            conteudo=conteudo,
+            quem_id=ator["id"],
+        )
+    except tecnologia_anexos.AnexoRecusadoError as exc:
+        raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    return {
+        "id": linha["id"],
+        "nome": linha["nome_original"],
+        "anexado_por_nome": ator.get("nome_completo"),
+        "criado_em": linha.get("criado_em"),
+        "apagado_em": linha.get("apagado_em"),
+        "url": None,
+    }
 
 
 # ─── Vinculo com o desenvolvimento (issue #674, ADR 0054) ────────────────────
@@ -2366,17 +2419,12 @@ async def assistente_extrair_documento(
     return {"texto": texto, "filename": _nome_para_a_tela(nome)}
 
 
-# A lista de extensoes e o teto vem do SERVICO, que e quem manda a imagem ao
-# modelo: e ele que precisa do tipo de cada extensao, e duas copias da regra
-# divergiriam calado (o 413 recusando o que o payload saberia rotular).
-MOTIVO_IMAGEM_FORA_DA_LISTA = (
-    "Só dá para ler print .png, .jpg, .jpeg ou .webp. Salve a imagem em um desses formatos e anexe de novo."
-)
-
-MOTIVO_IMAGEM_GRANDE = (
-    f"O print passou do limite de {assistente_tecnologia.LIMITE_DA_IMAGEM // (1024 * 1024)} MB. "
-    "Anexe uma imagem menor, ou escreva o que aparece na tela."
-)
+# A lista de extensoes, o teto e as duas frases de recusa vem do SERVICO, que e
+# quem manda a imagem ao modelo: e ele que precisa do tipo de cada extensao, e
+# duas copias da regra divergiriam calado (o 413 recusando o que o payload
+# saberia rotular). O Anexo da Demanda (issue #1061) recusa pelas mesmas.
+MOTIVO_IMAGEM_FORA_DA_LISTA = assistente_tecnologia.MOTIVO_IMAGEM_FORA_DA_LISTA
+MOTIVO_IMAGEM_GRANDE = assistente_tecnologia.MOTIVO_IMAGEM_GRANDE
 
 # A frase de quando a imagem chegou inteira e a LEITURA nao aconteceu: provedor
 # fora do ar, resposta vazia.

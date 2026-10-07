@@ -157,6 +157,19 @@ TIPOS_DE_IMAGEM: dict[str, str] = {
 # passa disto e foto de celular de um monitor, que e outro problema.
 LIMITE_DA_IMAGEM = 5 * 1024 * 1024
 
+# As duas recusas da imagem, junto da tabela e do teto que elas dizem. Moram
+# aqui, e nao na rota, porque sao duas as portas que recusam imagem: o print
+# que o Assistente le e o Anexo da Demanda (issue #1061, ADR 0069), e a regra e
+# a frase tem que ser as mesmas nas duas.
+MOTIVO_IMAGEM_FORA_DA_LISTA = (
+    "Só dá para ler print .png, .jpg, .jpeg ou .webp. Salve a imagem em um desses formatos e anexe de novo."
+)
+
+MOTIVO_IMAGEM_GRANDE = (
+    f"O print passou do limite de {LIMITE_DA_IMAGEM // (1024 * 1024)} MB. "
+    "Anexe uma imagem menor, ou escreva o que aparece na tela."
+)
+
 DESCRICAO_MOCK = "[MOCK] Recebi o print. Ler a imagem exige a IA configurada."
 
 # O rascunho vazio: os campos do formulario de hoje, mais o prazo.

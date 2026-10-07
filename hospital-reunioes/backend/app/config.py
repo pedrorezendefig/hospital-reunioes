@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     supabase_storage_bucket_pdfs_assinados: str = "pdfs-assinados"
     supabase_storage_bucket_materiais_pops: str = "materiais-pops"
     supabase_storage_bucket_anexos_ouvidoria: str = "anexos-ouvidoria"
+    # Bucket privado do Anexo da Demanda (migration 115, ADR 0069).
+    supabase_storage_bucket_anexos_tecnologia: str = "anexos-tecnologia"
 
     # LLM (OpenRouter — provedor único; sem chave configurada, cai no mock)
     openrouter_api_key: str = ""
