@@ -823,7 +823,9 @@ async def _aviso_da_correcao(
     return None if saiu else AVISO_EMAIL_NAO_SAIU
 
 
-def _corpo_espelhado(supabase: Client, *, demanda: dict, texto: str, mencoes: list[str], ator: dict) -> str:
+def _corpo_espelhado(
+    supabase: Client, *, demanda: dict, linha: dict, texto: str, mencoes: list[str], ator: dict
+) -> str:
     """O comentario espelhado, com o autor e os mencionados como o banco os
     conhece (nome e login): e o servico puro que decide o que de cada um pode
     sair para o repositorio publico (nunca o nome civil).
@@ -840,7 +842,13 @@ def _corpo_espelhado(supabase: Client, *, demanda: dict, texto: str, mencoes: li
             .execute()
         )
         mencionados = list(result.data or [])
-    return corpo_do_comentario_espelhado(texto=texto, autor=ator, demanda_id=demanda["id"], mencionados=mencionados)
+    return corpo_do_comentario_espelhado(
+        texto=texto,
+        autor=ator,
+        demanda_id=demanda["id"],
+        mencionados=mencionados,
+        imagens=tecnologia_anexos.quantas_da_resposta(supabase, linha["id"]),
+    )
 
 
 async def _espelhar_resposta(
@@ -874,7 +882,7 @@ async def _espelhar_resposta(
     if not numero:
         return
     try:
-        corpo = _corpo_espelhado(supabase, demanda=demanda, texto=texto, mencoes=mencoes, ator=ator)
+        corpo = _corpo_espelhado(supabase, demanda=demanda, linha=linha, texto=texto, mencoes=mencoes, ator=ator)
         comentario_id = await asyncio.to_thread(github_client.criar_comentario, numero, corpo)
     except Exception:
         logger.exception(
@@ -914,7 +922,7 @@ async def _espelhar_correcao(
     if not comentario_id:
         return
     try:
-        corpo = _corpo_espelhado(supabase, demanda=demanda, texto=texto, mencoes=mencoes, ator=ator)
+        corpo = _corpo_espelhado(supabase, demanda=demanda, linha=linha, texto=texto, mencoes=mencoes, ator=ator)
         await asyncio.to_thread(github_client.editar_comentario, comentario_id, corpo)
     except Exception:
         logger.exception(
@@ -1242,6 +1250,7 @@ async def anexar_a_demanda(
         "anexado_por_nome": ator.get("nome_completo"),
         "criado_em": linha.get("criado_em"),
         "apagado_em": linha.get("apagado_em"),
+        "conversa_id": None,
         "url": None,
     }
 
@@ -1863,8 +1872,14 @@ async def listar_conversa(
 ):
     """O fio da Demanda em ordem cronologica, respostas e movimentos juntos."""
     _buscar_demanda(supabase, demanda_id)
+    # A imagem de cada resposta vem junto da linha (issue #1062): o card a
+    # mostra ao lado do texto, pela URL assinada de vida curta.
+    imagens = tecnologia_anexos.imagens_das_respostas(supabase, demanda_id)
     return [
-        _com_janela(linha, ator_id=ator["id"], autor_nome=linha.get("autor_nome"))
+        {
+            **_com_janela(linha, ator_id=ator["id"], autor_nome=linha.get("autor_nome")),
+            "imagem": imagens.get(str(linha["id"])),
+        }
         for linha in _fio_da_demanda(supabase, demanda_id, ator=ator)
     ]
 
@@ -1918,6 +1933,15 @@ async def responder_na_conversa(
     # o `produto_nome` não está na linha da Demanda.
     demanda = _com_nomes(supabase, [_buscar_demanda(supabase, demanda_id)], ator=ator)[0]
     texto, mencoes = _texto_e_mencoes(supabase, payload)
+    if payload.anexo_id:
+        # A imagem ja subiu pela porta do anexo, com os limites dela. Aqui so se
+        # confere que ela pode ir com ESTA resposta, antes de o texto entrar.
+        try:
+            tecnologia_anexos.imagem_para_a_resposta(
+                supabase, demanda_id=demanda_id, anexo_id=payload.anexo_id, quem_id=ator["id"]
+            )
+        except tecnologia_anexos.AnexoRecusadoError as exc:
+            _recusar(str(exc))
 
     nova = {
         "demanda_id": demanda_id,
@@ -1943,6 +1967,10 @@ async def responder_na_conversa(
         _resposta_nao_entrou()
 
     linha = _com_janela(result.data[0], ator_id=ator["id"], autor_nome=ator.get("nome_completo"))
+    if payload.anexo_id:
+        # Antes do espelho: e a ligacao que faz o comentario dizer "(1 imagem
+        # na Demanda)".
+        tecnologia_anexos.ligar_a_resposta(supabase, anexo_id=payload.anexo_id, conversa_id=linha["id"])
     # Os gatilhos 2 e 3 saem DEPOIS de a linha estar gravada: um e-mail que
     # convidasse a ler uma resposta que não entrou no fio seria pior do que
     # nenhum e-mail.

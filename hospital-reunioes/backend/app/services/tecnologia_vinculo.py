@@ -927,8 +927,13 @@ def corpo_do_comentario_espelhado(
     autor: dict[str, Any] | None,
     demanda_id: str,
     mencionados: list[dict[str, Any]] | None = None,
+    imagens: int = 0,
 ) -> str:
     """O comentario que o app publica na issue quando alguem responde no card.
+
+    A resposta que levou imagem ganha "(1 imagem na Demanda)" depois do texto
+    (issue #1062): so a contagem. A imagem fica no app, e nem a URL nem o nome
+    do arquivo saem para o repositorio publico (ADR 0069, decisao 1).
 
     O marcador vai pelo FATO de ter login (`tem_github_login`): e ele que separa
     a Vitta do hospital para a Action. O cabecalho vai pelo login PUBLICAVEL
@@ -952,6 +957,7 @@ def corpo_do_comentario_espelhado(
             f"**{rotulo_no_github(autor)}** escreveu na Demanda:",
             "",
             texto_espelhado(texto, mencionados=list(mencionados or [])),
+            *(["", f"({imagens} {'imagem' if imagens == 1 else 'imagens'} na Demanda)"] if imagens > 0 else []),
         ]
     )
 

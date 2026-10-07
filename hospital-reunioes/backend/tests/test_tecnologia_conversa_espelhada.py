@@ -516,6 +516,9 @@ class TestResponderEspelha:
             "editado_em",
             "editavel_ate",
             "aviso_por_email",
+            # A imagem da resposta (issue #1062), com URL assinada, nunca o id
+            # do comentario.
+            "imagem",
         }
         assert set(enviada) == esperadas
         assert set(lida) == esperadas

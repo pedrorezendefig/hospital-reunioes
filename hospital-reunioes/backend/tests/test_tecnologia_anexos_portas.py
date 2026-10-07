@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import os
 import sys
+from datetime import UTC, datetime
 
 import pytest
 
@@ -139,3 +140,99 @@ class TestAContagemMudaNaIssueVinculada:
 
         assert _anexar(client).status_code == 201
         assert len(_anexos(sb)) == 1
+
+
+# ─── 2. A resposta da Conversa leva uma imagem ───────────────────────────────
+
+
+def _responder(client, texto: str = "Segue o print do erro.", **extra):
+    return client.post(f"{BASE}/demandas/d-1/conversa", json={"texto": texto, **extra})
+
+
+class TestRespostaComImagem:
+    def test_a_imagem_fica_ligada_a_resposta_e_o_fio_a_mostra_junto(self, monkeypatch):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1")], monkeypatch=monkeypatch)
+        anexo = _anexar(client, nome="tela.png").json()
+
+        resposta = _responder(client, anexo_id=anexo["id"])
+
+        assert resposta.status_code == 201
+        linha_id = resposta.json()["id"]
+        assert _anexos(sb)[0]["conversa_id"] == linha_id
+        fio = client.get(f"{BASE}/demandas/d-1/conversa").json()
+        da_resposta = next(linha for linha in fio if linha["id"] == linha_id)
+        assert da_resposta["imagem"]["nome"] == "tela.png"
+        assert da_resposta["imagem"]["url"].startswith(f"https://storage.local/{BUCKET}/")
+
+    def test_resposta_sem_imagem_vem_sem_imagem_no_fio(self, monkeypatch):
+        client, _, _ = _cenario(demandas=[_demanda("d-1")], monkeypatch=monkeypatch)
+        assert _anexar(client).status_code == 201
+
+        linha_id = _responder(client).json()["id"]
+
+        fio = client.get(f"{BASE}/demandas/d-1/conversa").json()
+        assert next(linha for linha in fio if linha["id"] == linha_id)["imagem"] is None
+
+    def test_a_imagem_passa_pelos_mesmos_limites_do_anexo(self, monkeypatch):
+        """A imagem da resposta sobe pela MESMA porta do anexo: formato, teto e
+        o maximo de dez valem igual, com as mesmas frases."""
+        client, sb, _ = _cenario(demandas=[_demanda("d-1")], monkeypatch=monkeypatch)
+
+        assert _anexar(client, nome="planilha.xlsx").status_code == 422
+        assert _anexar(client, conteudo=b"\x00" * (5 * 1024 * 1024 + 1)).status_code == 413
+        assert _anexos(sb) == []
+
+    @pytest.mark.parametrize("caso", ("de_outra_demanda", "ja_usada", "inexistente"))
+    def test_imagem_que_nao_e_desta_resposta_e_recusada_sem_gravar_a_linha(self, monkeypatch, caso):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1"), _demanda("d-2")], monkeypatch=monkeypatch)
+        if caso == "de_outra_demanda":
+            anexo_id = _anexar(client, demanda_id="d-2").json()["id"]
+        elif caso == "ja_usada":
+            anexo_id = _anexar(client).json()["id"]
+            assert _responder(client, anexo_id=anexo_id).status_code == 201
+        else:
+            anexo_id = "nao-existe"
+        linhas_antes = len(sb.tabelas["tecnologia_conversas"])
+
+        resposta = _responder(client, "Outra resposta.", anexo_id=anexo_id)
+
+        assert resposta.status_code == 422
+        assert len(sb.tabelas["tecnologia_conversas"]) == linhas_antes
+
+
+class TestComentarioEspelhadoDaRespostaComImagem:
+    def _vinculada(self, monkeypatch):
+        gh = _GithubFalso({501: _issue(501)})
+        client, sb, _ = _cenario(
+            demandas=[_demanda("d-1", github_issue_numero=501)], github=gh, monkeypatch=monkeypatch
+        )
+        return client, sb, gh
+
+    def test_o_comentario_sai_com_o_texto_e_a_contagem_sem_url(self, monkeypatch):
+        client, _, gh = self._vinculada(monkeypatch)
+        anexo = _anexar(client, nome="prontuario.png").json()
+
+        assert _responder(client, "Segue o print do erro.", anexo_id=anexo["id"]).status_code == 201
+
+        corpo = gh.comentarios_criados[0]["corpo"]
+        assert corpo.endswith("Segue o print do erro.\n\n(1 imagem na Demanda)")
+
+    def test_resposta_sem_imagem_nao_fala_de_imagem(self, monkeypatch):
+        client, _, gh = self._vinculada(monkeypatch)
+
+        assert _responder(client).status_code == 201
+
+        assert "imagem" not in gh.comentarios_criados[0]["corpo"]
+
+    def test_a_correcao_mantem_a_contagem_no_comentario(self, monkeypatch):
+        client, sb, gh = self._vinculada(monkeypatch)
+        anexo = _anexar(client).json()
+        linha_id = _responder(client, anexo_id=anexo["id"]).json()["id"]
+        # O duble carimba `criado_em` numa data fixa; a janela de correcao e de
+        # 10 minutos a partir de agora.
+        sb.tabelas["tecnologia_conversas"][-1]["criado_em"] = datetime.now(UTC).isoformat()
+
+        corrigida = client.patch(f"{BASE}/demandas/d-1/conversa/{linha_id}", json={"texto": "Segue o print."})
+
+        assert corrigida.status_code == 200
+        assert gh.comentarios_editados[0]["corpo"].endswith("Segue o print.\n\n(1 imagem na Demanda)")

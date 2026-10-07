@@ -284,6 +284,9 @@ class ConversaLinhaResponse(BaseModel):
     # gatilhos de menção e de resposta, e quem escreveu precisa saber se eles
     # saíram. Sempre `None` na LEITURA do fio: ali ninguém acabou de agir.
     aviso_por_email: str | None = None
+    # A imagem que a resposta levou (issue #1062), com a URL assinada de vida
+    # curta, ou `None`. Movimento nunca leva imagem.
+    imagem: AnexoDaDemandaResponse | None = None
 
 
 class AnexoDaDemandaResponse(BaseModel):
@@ -299,6 +302,9 @@ class AnexoDaDemandaResponse(BaseModel):
     anexado_por_nome: str | None = None
     criado_em: str | None = None
     apagado_em: str | None = None
+    # A resposta da Conversa que trouxe a imagem (issue #1062), ou nulo quando
+    # ela veio pelo formulario ou pelo Assistente.
+    conversa_id: str | None = None
     url: str | None = None
 
 
@@ -329,6 +335,10 @@ class RespostaPayload(BaseModel):
 
     texto: str
     mencoes: list[str] | None = None
+    # A imagem que vai junto da resposta (issue #1062): o id do anexo que a
+    # tela acabou de subir pela porta do formulario. So vale no envio; a
+    # correcao reescreve o texto e nao troca a imagem.
+    anexo_id: str | None = None
 
 
 # ─── O Painel (issue #1059, PRD #1056; antes "Minha vez" e Historico, #641) ─

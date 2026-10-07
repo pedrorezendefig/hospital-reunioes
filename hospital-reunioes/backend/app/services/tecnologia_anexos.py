@@ -48,6 +48,9 @@ MOTIVO_ANEXOS_DEMAIS = (
 MOTIVO_ARQUIVO_VAZIO = "A imagem chegou vazia: não há o que anexar. Escolha o arquivo de novo."
 MOTIVO_DEMANDA_ENCERRADA = "Esta Demanda está encerrada: imagem só entra em Demanda aberta. Reabra antes de anexar."
 MOTIVO_NAO_GUARDOU = "Não foi possível guardar a imagem agora. Tente de novo em instantes."
+MOTIVO_IMAGEM_DA_RESPOSTA = (
+    "A imagem desta resposta não foi encontrada nesta Demanda. Escolha a imagem de novo e responda outra vez."
+)
 
 # Dez minutos: o card abre, a miniatura carrega, quem quer ver em tamanho real
 # clica. Link colado fora do app morre antes de virar acesso permanente ao
@@ -191,7 +194,65 @@ def listar(supabase, demanda_id: str) -> list[dict]:
     O anexo apagado vem sem URL e com `apagado_em`: o binario ja saiu do bucket,
     e o card mostra que ele existiu. O caminho no storage nunca sai daqui.
     """
-    linhas = ler(supabase, demanda_id)
+    return _para_o_card(supabase, ler(supabase, demanda_id))
+
+
+# ─── A imagem da resposta da Conversa (issue #1062) ─────────────────────────
+#
+# A imagem sobe ANTES, pela mesma porta do formulario (`anexar`): formatos,
+# teto e o maximo de dez valem igual, com as mesmas frases, e a recusa chega a
+# quem responde antes de o texto entrar no fio. A resposta leva o id do anexo,
+# e so entao ele ganha a `conversa_id`.
+
+
+def imagem_para_a_resposta(supabase, *, demanda_id: str, anexo_id: str, quem_id: str) -> dict:
+    """O anexo que a resposta quer levar, se ele pode ir com ela.
+
+    Pode quando e DESTA Demanda, ainda nao esta ligado a outra resposta, nao
+    foi apagado e foi anexado por quem responde. Qualquer outro caso e a mesma
+    recusa: quem esta respondendo so precisa saber que precisa escolher de novo.
+    """
+    achados = supabase.table(TABELA_ANEXOS).select("*").eq("id", anexo_id).eq("demanda_id", demanda_id).execute()
+    linha = (achados.data or [None])[0]
+    if (
+        not linha
+        or linha.get("conversa_id")
+        or linha.get("apagado_em")
+        or str(linha.get("anexado_por") or "") != str(quem_id)
+    ):
+        raise AnexoRecusadoError(MOTIVO_IMAGEM_DA_RESPOSTA)
+    return linha
+
+
+def ligar_a_resposta(supabase, *, anexo_id: str, conversa_id: str) -> None:
+    """Liga a imagem a resposta que acabou de entrar no fio.
+
+    Nunca levanta: a resposta ja entrou. Sem a ligacao, a imagem continua na
+    Demanda (na lista do card), so nao aparece junto da resposta; o log diz qual.
+    """
+    try:
+        supabase.table(TABELA_ANEXOS).update({"conversa_id": conversa_id}).eq("id", anexo_id).is_(
+            "conversa_id", "null"
+        ).execute()
+    except Exception:
+        logger.exception("A imagem %s nao foi ligada a resposta %s", anexo_id, conversa_id)
+
+
+def imagens_das_respostas(supabase, demanda_id: str) -> dict[str, dict]:
+    """A imagem de cada resposta da Demanda, como o card a mostra, por id da linha
+    do fio. So as ligadas a uma resposta sao assinadas."""
+    linhas = [linha for linha in ler(supabase, demanda_id) if linha.get("conversa_id")]
+    return {str(anexo["conversa_id"]): anexo for anexo in _para_o_card(supabase, linhas)}
+
+
+def quantas_da_resposta(supabase, conversa_id: str) -> int:
+    """Quantas imagens a resposta levou: o "(1 imagem na Demanda)" do comentario
+    espelhado (issue #1062), inclusive na correcao, que remonta o corpo."""
+    result = supabase.table(TABELA_ANEXOS).select("id").eq("conversa_id", conversa_id).execute()
+    return len(result.data or [])
+
+
+def _para_o_card(supabase, linhas: list[dict]) -> list[dict]:
     quem = {linha["anexado_por"] for linha in linhas if linha.get("anexado_por")}
     nomes: dict[str, str] = {}
     if quem:
@@ -204,6 +265,7 @@ def listar(supabase, demanda_id: str) -> list[dict]:
             "anexado_por_nome": nomes.get(linha.get("anexado_por")),
             "criado_em": linha.get("criado_em"),
             "apagado_em": linha.get("apagado_em"),
+            "conversa_id": linha.get("conversa_id"),
             "url": None
             if linha.get("apagado_em")
             else storage.signed_url(supabase, _bucket(), linha["storage_path"], EXPIRACAO_DA_URL_SEGUNDOS),
