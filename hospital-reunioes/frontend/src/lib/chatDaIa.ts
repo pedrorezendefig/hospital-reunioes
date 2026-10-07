@@ -11,10 +11,30 @@ import type { ChatMessagePayload } from "@/types/chat";
  */
 export const LIMITE_DE_MENSAGENS = 40;
 
+/**
+ * O teto de uma fala, igual ao do backend. O backend confere TODA fala do
+ * histórico, e não só a nova: uma fala acima dele que entrasse na conversa
+ * voltaria em todo turno, e o chat recusaria tudo até ela sair da janela.
+ * Por isso a tela barra a fala do usuário antes do envio, e o histórico enviado
+ * deixa de fora qualquer fala acima do teto (uma resposta longa da IA, por exemplo).
+ */
+export const LIMITE_DA_MENSAGEM = 8000;
+
+const MOTIVO_MENSAGEM_GRANDE =
+  "A mensagem passou de 8.000 caracteres, o tamanho que o chat aceita. Encurte o texto e mande de novo.";
+
+/** A frase da recusa quando a fala passa do teto, ou null quando ela pode seguir. */
+export function recusaDaFala(content: string): string | null {
+  return content.length > LIMITE_DA_MENSAGEM ? MOTIVO_MENSAGEM_GRANDE : null;
+}
+
 export const ERRO_DO_TURNO = "Desculpe, houve um erro. Tente novamente.";
 
 export function historicoParaEnvio(messages: ChatMessagePayload[]): ChatMessagePayload[] {
-  return messages.slice(-LIMITE_DE_MENSAGENS).map(({ role, content }) => ({ role, content }));
+  return messages
+    .filter(({ content }) => content.length <= LIMITE_DA_MENSAGEM)
+    .slice(-LIMITE_DE_MENSAGENS)
+    .map(({ role, content }) => ({ role, content }));
 }
 
 /**

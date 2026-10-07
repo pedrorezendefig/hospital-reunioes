@@ -8,7 +8,7 @@ import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
 import ChatMessage from "./ChatMessage";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
 import type { RascunhoAta } from "./AtaEnxutaView";
-import { ERRO_DO_TURNO, falaDaFalha, historicoParaEnvio } from "@/lib/chatDaIa";
+import { ERRO_DO_TURNO, falaDaFalha, historicoParaEnvio, recusaDaFala } from "@/lib/chatDaIa";
 
 interface ChatAtaGuiadaResponse {
   reply: string;
@@ -138,6 +138,13 @@ export default function ChatAtaGuiada({
       content: capturedSectionContext ? `[Seção: ${capturedSectionContext}]\n${text}` : text,
       timestamp: new Date().toISOString(),
     };
+    // Fala acima do teto (issue #893) nem entra na conversa: se entrasse, voltaria
+    // em todo turno e o backend recusaria todos. O texto fica no campo para encurtar.
+    const recusa = recusaDaFala(userMessage.content);
+    if (recusa) {
+      setMessages((prev) => [...prev, { role: "assistant", content: recusa, timestamp: new Date().toISOString() }]);
+      return;
+    }
     const updatedMessages = [...messages, userMessage];
     setMessages(updatedMessages);
     setInput("");
