@@ -202,8 +202,16 @@ function renderMast() {
     <span class="capsule"><span class="dot ${{ ok: 'ok pulse', warn: 'warn', bad: 'bad' }[estado]}"></span>
       <b>v${esc(st.last_app_version || '?')}</b>&nbsp;· prod ${estado === 'ok' ? 'healthy' : `${okCount}/${svcs.length} ok`}</span>
     <span class="ago" id="ago">coletado ${ago(S.data.generated_at)}</span>
+    ${chipMainLocal((S.data.git || {}).main_atras)}
     <button class="iconbtn" id="refresh" title="recoletar agora (gh + arquivos)">⟳</button>`;
   $('#refresh').addEventListener('click', () => load(true));
+}
+
+/* main local atrás da origin/main: só informa, o painel não puxa nada (#1081) */
+function chipMainLocal(atras) {
+  if (atras === null || atras === undefined) return '';
+  if (atras === 0) return `<span class="ago main-atras" title="a main deste clone está igual à origin/main">main local em dia</span>`;
+  return `<span class="ago main-atras warn" title="a main deste clone está ${atras} commit(s) atrás da origin/main. Worktree novo nasce da origin/main; a árvore principal se atualiza com git pull">main local ${atras} atrás</span>`;
 }
 
 function renderBanner() {

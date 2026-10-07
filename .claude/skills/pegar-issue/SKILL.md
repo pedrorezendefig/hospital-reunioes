@@ -71,20 +71,21 @@ Se aparecer **mais de um dono**, abra mão e pegue a próxima:
 gh issue edit <N> --remove-assignee @me
 ```
 
-### 7. Criar a branch
-Derive o tipo do label `type:*` (feature→`feat`, fix→`fix`, etc.) e um slug curto do título. Branch determinística por número (nunca colide):
+### 7. Criar o worktree da issue a partir da `origin/main`
+Derive o tipo do label `type:*` (feature→`feat`, fix→`fix`, etc.) e um slug curto do título. Branch determinística por número (nunca colide), num worktree próprio, nascido da `origin/main` recém-buscada (ADR 0068: a árvore principal fica na `main` e não recebe branch de trabalho):
 ```bash
-git checkout -b <type>/<slug>-<N>
+git fetch origin && git worktree add ../hospital-issue-<N> -b <type>/<slug>-<N> origin/main
 ```
+Siga o trabalho dentro de `../hospital-issue-<N>`. Não dependa de `git pull` na árvore principal: pode estar semanas atrasada que a branch nasce do que está em produção agora (issue #1081).
 
 ### 8. Carregar contexto e seguir sem parar
 Carregue no contexto **O que construir** + **Critérios de aceite** (cada critério vira um teste). Leia `CONTEXT.md` e os ADRs relevantes em `docs/adr/`. Então chame a Skill tool com `tdd` (cada critério de aceite é um teste RED) e, com os testes verdes, a Skill tool com `ship`, que roda a subida sozinho (veja "Fechar o loop"). Não espere mensagem entre um e outro: pegar a issue foi a ordem.
 
 ## Sessões paralelas (worktree)
 
-Para rodar várias issues ao mesmo tempo na mesma máquina, cada sessão usa um **git worktree** próprio (sem Docker):
+Para rodar várias issues ao mesmo tempo na mesma máquina, cada sessão usa um **git worktree** próprio (sem Docker), o mesmo do passo 7:
 ```bash
-git worktree add ../hospital-issue-<N> -b <type>/<slug>-<N>
+git fetch origin && git worktree add ../hospital-issue-<N> -b <type>/<slug>-<N> origin/main
 ```
 Abra o Claude Code dentro de `../hospital-issue-<N>`. Veja `docs/agents/issue-tracker.md`.
 
