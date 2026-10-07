@@ -2905,14 +2905,19 @@ def extrato_do_acionamento(escrito_pelo_ouvidor: str | None) -> str:
     gerado a partir da conversa com ele), e o responsável do setor é gente de
     fora da Ouvidoria, sem login no app. Uma regra só, sem caso especial para
     alguém lembrar: todo email que sai da Ouvidoria leva texto escrito pela
-    Ouvidoria (ADR 0034, decisão 8)."""
+    Ouvidoria (ADR 0034, decisão 8).
+
+    A recusa diz por que o extrato é exigido, e não o que viaja junto dele: a
+    frase é a mesma para o caso comum, o anônimo e o sigiloso, e só no
+    sigiloso o relato fica na Ouvidoria (issue #769). Quem descreve o que vai
+    à área em cada caso é o texto de ajuda do campo, na tela de validação."""
     if escrito_pelo_ouvidor:
         return escrito_pelo_ouvidor
     raise HTTPException(
         status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
         detail=(
-            "O acionamento exige o extrato para o setor. "
-            "Escreva com as suas palavras o que a área precisa resolver: o relato original não sai da Ouvidoria."
+            "O acionamento exige o extrato para o setor. Escreva com as suas palavras o que a área "
+            "precisa resolver: o setor precisa do que a Ouvidoria pede, escrito pela Ouvidoria."
         ),
     )
 
