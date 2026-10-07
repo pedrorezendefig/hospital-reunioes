@@ -316,6 +316,9 @@ export function DemandaModal({ demanda, produtos, pessoas, token, eu, onFechar, 
                 <button
                   key={destino}
                   type="button"
+                  // "Cancelar" sozinho tem homônimo no mesmo card (o de desistir
+                  // da correção na Conversa): o nome diz o que se cancela.
+                  aria-label={ACAO_DE_ENCERRAR[destino] ? `${ACAO_DE_ENCERRAR[destino]} a Demanda` : undefined}
                   onClick={() => mover(destino)}
                   className="px-3 py-1.5 rounded-lg border border-border text-sm text-text hover:border-primary hover:text-primary transition-colors"
                 >

@@ -21,12 +21,9 @@ import {
   pedacosDoTexto,
   pessoasDoAutocomplete,
   podeCorrigirAgora,
-  queryDeFiltros,
   queryDoHistorico,
-  SEM_FILTRO,
   SEM_REGISTRO_DE_QUANDO,
   SEM_REGISTRO_DE_QUEM,
-  temFiltroAtivo,
   termoDaMencao,
   textoDoDesfecho,
 } from "./demandas";
@@ -197,44 +194,6 @@ describe("O destaque da menção no fio", () => {
   });
 });
 
-describe("A busca que os filtros montam", () => {
-  it("sem filtro nenhum a URL fica limpa, sem nem a interrogação", () => {
-    // Um "?" sozinho não quebra o backend, mas denuncia que a tela manda
-    // filtro vazio; e `estado=""` cairia no `if valor` do router como falso,
-    // escondendo aqui um erro que só apareceria com uma API mais rígida.
-    expect(queryDeFiltros(SEM_FILTRO)).toBe("");
-  });
-
-  it("cada filtro escolhido vira o parâmetro que a API já aceita", () => {
-    // Os nomes são escritos à mão de propósito: montá-los a partir do próprio
-    // objeto faria o teste passar com qualquer chave que a tela inventasse.
-    expect(queryDeFiltros({ tipo: "ajuste", produto_id: "", responsavel_id: "" })).toBe("?tipo=ajuste");
-    expect(queryDeFiltros({ tipo: "", produto_id: "prod-1", responsavel_id: "" })).toBe("?produto_id=prod-1");
-    expect(queryDeFiltros({ tipo: "", produto_id: "", responsavel_id: "P2" })).toBe("?responsavel_id=P2");
-  });
-
-  it("os três juntos vão na mesma busca", () => {
-    expect(queryDeFiltros({ tipo: "defeito", produto_id: "prod-2", responsavel_id: "P1" })).toBe(
-      "?tipo=defeito&produto_id=prod-2&responsavel_id=P1",
-    );
-  });
-
-  it("o valor viaja escapado", () => {
-    // Id não tem espaço hoje, mas concatenar na mão passaria a montar uma URL
-    // quebrada no dia em que tiver.
-    expect(queryDeFiltros({ tipo: "", produto_id: "a b&c", responsavel_id: "" })).toBe(
-      "?produto_id=a+b%26c",
-    );
-  });
-
-  it("diz que há filtro ativo quando há, e que não há quando não há", () => {
-    expect(temFiltroAtivo(SEM_FILTRO)).toBe(false);
-    expect(temFiltroAtivo({ tipo: "ajuste", produto_id: "", responsavel_id: "" })).toBe(true);
-    expect(temFiltroAtivo({ tipo: "", produto_id: "prod-1", responsavel_id: "" })).toBe(true);
-    expect(temFiltroAtivo({ tipo: "", produto_id: "", responsavel_id: "P1" })).toBe(true);
-  });
-});
-
 describe("O link da Demanda (issue #640)", () => {
   it("monta o endereço da aba com o id da Demanda", () => {
     // O endereço escrito à mão a partir da rota real (`src/app/admin/tecnologia`),
@@ -279,50 +238,30 @@ describe("O link da Demanda (issue #640)", () => {
 });
 
 describe("A busca do Histórico, do lado da tela (issue #641)", () => {
-  const COM_FILTRO = { tipo: "defeito", produto_id: "prod-2", responsavel_id: "P1" };
-
-  it("sem filtro e sem termo a busca sai vazia", () => {
-    // Nem o "?" sozinho: a API entende ausência de parâmetro como sem filtro.
-    expect(queryDoHistorico(SEM_FILTRO, "")).toBe("");
+  it("sem termo a busca sai vazia", () => {
+    // Nem o "?" sozinho: a API entende ausência de parâmetro como sem busca.
+    expect(queryDoHistorico("")).toBe("");
   });
 
   it("o termo vai como `busca`", () => {
-    expect(queryDoHistorico(SEM_FILTRO, "encerrar")).toBe("?busca=encerrar");
-  });
-
-  it("os filtros das outras abas vão junto", () => {
-    const query = queryDoHistorico(COM_FILTRO, "encerrar");
-
-    expect(new URLSearchParams(query.slice(1)).get("tipo")).toBe("defeito");
-    expect(new URLSearchParams(query.slice(1)).get("produto_id")).toBe("prod-2");
-    expect(new URLSearchParams(query.slice(1)).get("responsavel_id")).toBe("P1");
-    expect(new URLSearchParams(query.slice(1)).get("busca")).toBe("encerrar");
-  });
-
-  it("os filtros sozinhos continuam valendo sem termo", () => {
-    // A irmã de presença do caso acima: sem ela, um montador que ignorasse o
-    // termo passaria naquele teste se o termo entrasse por outro caminho.
-    const query = queryDoHistorico(COM_FILTRO, "");
-
-    expect(new URLSearchParams(query.slice(1)).get("tipo")).toBe("defeito");
-    expect(new URLSearchParams(query.slice(1)).has("busca")).toBe(false);
+    expect(queryDoHistorico("encerrar")).toBe("?busca=encerrar");
   });
 
   it("termo só com espaços não vira busca", () => {
     // Mandar `busca=%20` faria a API procurar um espaço, e a tela diria "nada
     // encontrado" para quem não buscou nada.
-    expect(queryDoHistorico(SEM_FILTRO, "   ")).toBe("");
+    expect(queryDoHistorico("   ")).toBe("");
   });
 
   it("o termo viaja escapado", () => {
-    const query = queryDoHistorico(SEM_FILTRO, "encerrar & pausar");
+    const query = queryDoHistorico("encerrar & pausar");
 
     expect(query).not.toContain(" ");
     expect(new URLSearchParams(query.slice(1)).get("busca")).toBe("encerrar & pausar");
   });
 
   it("o espaço em volta do termo não vai para a URL", () => {
-    expect(new URLSearchParams(queryDoHistorico(SEM_FILTRO, "  régua  ").slice(1)).get("busca")).toBe("régua");
+    expect(new URLSearchParams(queryDoHistorico("  régua  ").slice(1)).get("busca")).toBe("régua");
   });
 });
 
@@ -385,74 +324,33 @@ describe("A linha de desfecho do Histórico", () => {
 
 describe("As frases de lista vazia", () => {
   it("Minha vez vazia é boa notícia, e não falha", () => {
-    const frase = fraseDaMinhaVezVazia(false);
+    const frase = fraseDaMinhaVezVazia();
 
     expect(frase).toContain("Nada esperando por você");
     // Ela não pode culpar carregamento nem mandar tentar de novo: vazio aqui
     // quer dizer que não há nada esperando, e isso é uma boa notícia.
     expect(frase.toLowerCase()).not.toContain("não foi possível");
     expect(frase.toLowerCase()).not.toContain("tente de novo");
-  });
-
-  it("Minha vez vazia COM filtro aponta o filtro e a saída", () => {
-    const frase = fraseDaMinhaVezVazia(true);
-
-    expect(frase).toContain("filtro");
-    expect(frase).toContain("limpe os filtros");
-  });
-
-  it("a frase de Minha vez muda com o filtro", () => {
-    // O par das duas acima: uma frase única passaria nas duas se ela citasse
-    // as duas coisas ao mesmo tempo.
-    expect(fraseDaMinhaVezVazia(true)).not.toBe(fraseDaMinhaVezVazia(false));
-    expect(fraseDaMinhaVezVazia(false)).not.toContain("filtro");
+    // E não fala de filtro: o módulo não tem mais filtro (issue #1058).
+    expect(frase).not.toContain("filtro");
   });
 
   it("Histórico vazio de verdade não fala em busca nem em filtro", () => {
-    const frase = fraseDoHistoricoVazio("", false);
+    const frase = fraseDoHistoricoVazio("");
 
     expect(frase).toContain("Nenhuma Demanda foi concluída ou cancelada ainda");
     expect(frase).not.toContain("filtro");
   });
 
   it("busca sem resultado cita o termo procurado", () => {
-    const frase = fraseDoHistoricoVazio("régua", false);
+    const frase = fraseDoHistoricoVazio("régua");
 
     expect(frase).toContain('"régua"');
-    // Não manda limpar filtro nenhum: não há filtro ligado, e pedir uma ação
-    // impossível deixa quem leu sem saída.
-    expect(frase).not.toContain("filtros");
-  });
-
-  it("busca sem resultado COM filtro diz as duas coisas", () => {
-    const frase = fraseDoHistoricoVazio("régua", true);
-
-    expect(frase).toContain('"régua"');
-    expect(frase).toContain("limpe os filtros");
-  });
-
-  it("filtro sem busca fala do filtro, e não de termo nenhum", () => {
-    const frase = fraseDoHistoricoVazio("", true);
-
-    expect(frase).toContain("Limpe os filtros");
-    expect(frase).not.toContain('""');
+    expect(frase).not.toContain("filtro");
   });
 
   it("termo só de espaços não conta como busca", () => {
-    expect(fraseDoHistoricoVazio("   ", false)).toBe(fraseDoHistoricoVazio("", false));
-  });
-
-  it("as quatro frases são diferentes entre si", () => {
-    // O piso das seis acima: uma frase única para os quatro casos passaria em
-    // metade delas, e mandaria limpar filtro quem não tem filtro.
-    const frases = new Set([
-      fraseDoHistoricoVazio("", false),
-      fraseDoHistoricoVazio("régua", false),
-      fraseDoHistoricoVazio("", true),
-      fraseDoHistoricoVazio("régua", true),
-    ]);
-
-    expect(frases.size).toBe(4);
+    expect(fraseDoHistoricoVazio("   ")).toBe(fraseDoHistoricoVazio(""));
   });
 });
 

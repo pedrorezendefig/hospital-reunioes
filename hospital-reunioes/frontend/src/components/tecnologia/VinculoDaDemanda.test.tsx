@@ -19,7 +19,6 @@
  * servidor é o `test_tecnologia_vinculo.py`).
  */
 
-import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
@@ -33,8 +32,6 @@ import {
   EU_DESCONHECIDO,
   EtapaDemanda,
   EuNaAba,
-  FiltrosDoQuadro,
-  SEM_FILTRO,
   temSelo,
   textoDoSelo,
 } from "./demandas";
@@ -157,22 +154,15 @@ function montarModal(d: Demanda, eu: EuNaAba, opcoes: Parameters<typeof dublarFe
 function montarQuadro(demandas: Demanda[]) {
   dublarFetch({ demandas });
 
-  function Anfitriao() {
-    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
-    return (
-      <QuadroDemandas
-        token="token-de-teste"
-        carregandoAuth={false}
-        produtos={PRODUTOS}
-        pessoas={PESSOAS}
-        filtros={filtros}
-        onFiltrosChange={setFiltros}
-        eu={EU_DESCONHECIDO}
-      />
-    );
-  }
-
-  return render(<Anfitriao />);
+  return render(
+    <QuadroDemandas
+      token="token-de-teste"
+      carregandoAuth={false}
+      produtos={PRODUTOS}
+      pessoas={PESSOAS}
+      eu={EU_DESCONHECIDO}
+    />,
+  );
 }
 
 // ─── 1. Os rótulos ───────────────────────────────────────────────────────────
@@ -469,22 +459,15 @@ function montarQuadroComEu(demandas: Demanda[], eu: EuNaAba, depoisDoPost?: Dema
     }),
   );
 
-  function Anfitriao() {
-    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
-    return (
-      <QuadroDemandas
-        token="token-de-teste"
-        carregandoAuth={false}
-        produtos={PRODUTOS}
-        pessoas={PESSOAS}
-        filtros={filtros}
-        onFiltrosChange={setFiltros}
-        eu={eu}
-      />
-    );
-  }
-
-  return render(<Anfitriao />);
+  return render(
+    <QuadroDemandas
+      token="token-de-teste"
+      carregandoAuth={false}
+      produtos={PRODUTOS}
+      pessoas={PESSOAS}
+      eu={eu}
+    />,
+  );
 }
 
 describe("Quem vê o botão de levar para desenvolvimento", () => {

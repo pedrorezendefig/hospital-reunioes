@@ -21,7 +21,7 @@
  *   isso o mesmo render tem uma de 13 dias que não pode estar.
  */
 
-import { Profiler, useState } from "react";
+import { Profiler } from "react";
 import { act, cleanup, createEvent, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -31,10 +31,8 @@ import {
   Demanda,
   EstadoDemanda,
   EU_DESCONHECIDO,
-  FiltrosDoQuadro,
   linkDaDemanda,
   PrioridadeDemanda,
-  SEM_FILTRO,
   TipoDemanda,
   TIPOS,
 } from "./demandas";
@@ -229,15 +227,6 @@ function montar(
         return { ok: true, status: 200, json: async () => fio } as unknown as Response;
       }
 
-      // Os filtros são do SERVIDOR, como no backend: uma tela que peneirasse
-      // os cards por conta própria receberia tudo aqui e mostraria tudo.
-      const busca = new URLSearchParams(url.split("?")[1] ?? "");
-      const casa = (chave: string, valor: string | null) => !busca.get(chave) || busca.get(chave) === valor;
-      const peneirado = () =>
-        quadro.filter(
-          (d) =>
-            casa("tipo", d.tipo) && casa("produto_id", d.produto_id) && casa("responsavel_id", d.responsavel_id),
-        );
       const quadroRespondido = (corpo: Demanda[]) =>
         ({ ok: true, status: 200, json: async () => corpo }) as unknown as Response;
 
@@ -249,35 +238,22 @@ function montar(
           getsPendentes.push((corpoEscolhido) => resolve(quadroRespondido(corpoEscolhido)));
         });
       }
-      return quadroRespondido(peneirado());
+      return quadroRespondido(quadro.map((d) => ({ ...d })));
     }),
   );
-
-  /**
-   * O dono do estado dos filtros, no lugar do módulo.
-   *
-   * O Quadro não guarda os filtros: quem guarda é a aba Tecnologia, para eles
-   * sobreviverem à troca de aba (issue #639). Aqui o anfitrião faz esse papel.
-   */
-  function Anfitriao() {
-    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
-    return (
-      <QuadroDemandas
-        token={opcoes.token === undefined ? "token-de-teste" : opcoes.token}
-        carregandoAuth={opcoes.carregandoAuth ?? false}
-        produtos={PRODUTOS}
-        pessoas={PESSOAS}
-        filtros={filtros}
-        onFiltrosChange={setFiltros}
-        eu={EU_DESCONHECIDO}
-      />
-    );
-  }
 
   // O `render` volta para quem precisa DESMONTAR a tela: é assim que se cobra
   // que o relógio da atualização automática e o ouvinte de foco somem junto
   // com ela (issue #642).
-  return render(<Anfitriao />);
+  return render(
+    <QuadroDemandas
+      token={opcoes.token === undefined ? "token-de-teste" : opcoes.token}
+      carregandoAuth={opcoes.carregandoAuth ?? false}
+      produtos={PRODUTOS}
+      pessoas={PESSOAS}
+      eu={EU_DESCONHECIDO}
+    />,
+  );
 }
 
 const escritas = () => chamadas.filter((c) => c.metodo !== "GET");
@@ -464,7 +440,7 @@ describe("Mover, Concluir e Cancelar no card aberto", () => {
     montar([demanda("d1", "Uma nova", { estado: "nova" })]);
 
     const menu = await abrir("Uma nova");
-    for (const acao of ["Em andamento", "Aguardando", "Concluir", "Cancelar"]) {
+    for (const acao of ["Em andamento", "Aguardando", "Concluir a Demanda", "Cancelar a Demanda"]) {
       expect(within(menu).getByRole("button", { name: acao })).toBeTruthy();
     }
     // A tela não oferece o caminho que o backend recusaria: ninguém volta a Nova.
@@ -487,7 +463,7 @@ describe("Mover, Concluir e Cancelar no card aberto", () => {
   it("Concluir usa a rota de mover, e a Demanda some do Quadro na hora", async () => {
     montar([demanda("d1", "Uma nova", { estado: "em_andamento" }), demanda("d2", "Outra nova")]);
 
-    fireEvent.click(within(await abrir("Uma nova")).getByRole("button", { name: "Concluir" }));
+    fireEvent.click(within(await abrir("Uma nova")).getByRole("button", { name: "Concluir a Demanda" }));
 
     await waitFor(() => expect(escritas()).toHaveLength(1));
     expect(escritas()[0]).toEqual({
@@ -504,7 +480,7 @@ describe("Mover, Concluir e Cancelar no card aberto", () => {
   it("Cancelar usa a rota de mover, e a Demanda some do Quadro na hora", async () => {
     montar([demanda("d1", "Uma nova", { estado: "aguardando" }), demanda("d2", "Outra nova")]);
 
-    fireEvent.click(within(await abrir("Uma nova")).getByRole("button", { name: "Cancelar" }));
+    fireEvent.click(within(await abrir("Uma nova")).getByRole("button", { name: "Cancelar a Demanda" }));
 
     await waitFor(() => expect(escritas()).toHaveLength(1));
     expect(escritas()[0].corpo).toEqual({ estado: "cancelada" });
@@ -518,7 +494,7 @@ describe("Mover, Concluir e Cancelar no card aberto", () => {
       recusa: { status: 422, detail: "A Demanda não pode ser concluída agora." },
     });
 
-    fireEvent.click(within(await abrir("Uma nova")).getByRole("button", { name: "Concluir" }));
+    fireEvent.click(within(await abrir("Uma nova")).getByRole("button", { name: "Concluir a Demanda" }));
 
     expect((await screen.findByRole("alert")).textContent).toContain("A Demanda não pode ser concluída agora.");
     expect(within(colunaDe("Nova")).getByText("Uma nova")).toBeTruthy();
@@ -712,13 +688,14 @@ describe("A falha de rede não vira quadro vazio e calado", () => {
 
   it("rede fora ao mover: o clique avisa, em vez de não fazer nada", async () => {
     // O `catch` do caminho de ESCRITA. Sem ele, o clique em Mover com a rede
-    // fora quebraria a promise sem alerta nenhum, e o card ficaria na coluna
+    // fora quebraria a promise sem alerta nenhum, e o card ficaria na raia
     // antiga sem explicação.
     vi.spyOn(console, "error").mockImplementation(() => {});
     montar([demanda("d1", "Uma nova")], { redeFora: "salvar" });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Mover Uma nova" }));
-    fireEvent.click(within(cardDe("Uma nova")).getByRole("button", { name: "Aguardando" }));
+    fireEvent.click(await screen.findByText("Uma nova"));
+    const modal = await screen.findByRole("dialog");
+    fireEvent.click(within(within(modal).getByRole("group", { name: "Mover" })).getByRole("button", { name: "Aguardando" }));
 
     const aviso = await screen.findByRole("alert");
     expect(aviso.textContent).toContain("Não foi possível falar com o servidor");
@@ -1065,8 +1042,8 @@ describe("A Conversa dentro do card", () => {
   });
 });
 
-describe("Arrastar entre colunas", () => {
-  /** O gesto inteiro: pega o card, passa por cima da coluna e solta nela. */
+describe("Arrastar entre as três raias", () => {
+  /** O gesto inteiro: pega o card, passa por cima da raia e solta nela. */
   function arrastar(titulo: string, paraColuna: string) {
     fireEvent.dragStart(cardDe(titulo));
     const alvo = colunaDe(paraColuna);
@@ -1092,7 +1069,7 @@ describe("Arrastar entre colunas", () => {
     expect(passandoPorCima.defaultPrevented).toBe(true);
   });
 
-  it("soltar noutra coluna chama a mesma rota do botão Mover, e o card fica lá", async () => {
+  it("soltar noutra raia chama a rota de mover, e o card fica lá", async () => {
     montar([demanda("d1", "Uma nova"), demanda("d2", "Outra nova")]);
 
     await screen.findByText("Uma nova");
@@ -1113,22 +1090,20 @@ describe("Arrastar entre colunas", () => {
   });
 
   it("soltar numa transição proibida devolve o card à origem, com a frase do servidor", async () => {
-    // De Concluída para Cancelada o backend recusa: reabrir é o único caminho.
-    const motivo = "A Demanda não pode ir de Concluída para Cancelada.";
-    montar([demanda("d1", "Fechada", { estado: "concluida" }), demanda("d2", "Uma nova")], {
+    // Ninguém volta a Nova: o backend recusa.
+    const motivo = "A Demanda não pode ir de Aguardando para Nova.";
+    montar([demanda("d1", "Parada", { estado: "aguardando" }), demanda("d2", "Uma nova")], {
       recusa: { status: 422, detail: motivo },
     });
 
-    await screen.findByRole("region", { name: "Concluída" });
-    fireEvent.click(within(colunaDe("Concluída")).getByRole("button"));
-    await screen.findByText("Fechada");
+    await screen.findByText("Parada");
 
-    arrastar("Fechada", "Cancelada");
+    arrastar("Parada", "Nova");
 
     expect((await screen.findByRole("alert")).textContent).toContain(motivo);
     // O card NÃO pode ter ficado no destino que o servidor recusou.
-    expect(within(colunaDe("Concluída")).getByText("Fechada")).toBeTruthy();
-    expect(within(colunaDe("Cancelada")).queryByText("Fechada")).toBeNull();
+    expect(within(colunaDe("Aguardando")).getByText("Parada")).toBeTruthy();
+    expect(within(colunaDe("Nova")).queryByText("Parada")).toBeNull();
   });
 
   it("no 409 do Quadro desatualizado o card também não muda de coluna", async () => {
@@ -1155,17 +1130,6 @@ describe("Arrastar entre colunas", () => {
     await waitFor(() => expect(within(colunaDe("Nova")).getByText("Uma nova")).toBeTruthy());
     expect(escritas()).toHaveLength(0);
     expect(screen.queryByRole("alert")).toBeNull();
-  });
-
-  it("o botão Mover continua fazendo o mesmo que o arrasto", async () => {
-    montar([demanda("d1", "Uma nova")]);
-
-    fireEvent.click(await screen.findByRole("button", { name: "Mover Uma nova" }));
-    fireEvent.click(within(cardDe("Uma nova")).getByRole("button", { name: "Em andamento" }));
-
-    await waitFor(() => expect(escritas()).toHaveLength(1));
-    expect(escritas()[0].url).toBe("/api/admin/tecnologia/demandas/d1/mover");
-    await waitFor(() => expect(within(colunaDe("Em andamento")).getByText("Uma nova")).toBeTruthy());
   });
 
   /** As leituras do Quadro (a Conversa do modal tem GET próprio). */
@@ -1198,16 +1162,14 @@ describe("Arrastar entre colunas", () => {
     // O par de presença do teste acima: uma tela que recarregasse depois de
     // toda recusa passaria naquele. A transição proibida não tem nada de
     // desatualizado, e recarregar ali só gastaria a viagem.
-    montar([demanda("d1", "Fechada", { estado: "concluida" })], {
-      recusa: { status: 422, detail: "A Demanda não pode ir de Concluída para Cancelada." },
+    montar([demanda("d1", "Parada", { estado: "aguardando" })], {
+      recusa: { status: 422, detail: "A Demanda não pode ir de Aguardando para Nova." },
     });
 
-    await screen.findByRole("region", { name: "Concluída" });
-    fireEvent.click(within(colunaDe("Concluída")).getByRole("button"));
-    await screen.findByText("Fechada");
+    await screen.findByText("Parada");
     const antes = leiturasDoQuadro().length;
 
-    arrastar("Fechada", "Cancelada");
+    arrastar("Parada", "Nova");
 
     await screen.findByRole("alert");
     expect(leiturasDoQuadro()).toHaveLength(antes);
@@ -1215,103 +1177,7 @@ describe("Arrastar entre colunas", () => {
 });
 
 
-describe("A barra de filtros", () => {
-  const CARDS = [
-    demanda("d1", "Ajuste na Ana", { tipo: "ajuste", produto_id: "prod-1", responsavel_id: "P1" }),
-    demanda("d2", "Defeito nos POPs", { tipo: "defeito", produto_id: "prod-2", responsavel_id: "P2" }),
-  ];
-
-  /**
-   * Escolhe uma opção num dos filtros e espera o Quadro voltar do servidor.
-   *
-   * A espera é o que dá sentido à asserção de ausência: enquanto recarrega, a
-   * tela troca as colunas por "Carregando Demandas..." e NENHUM card está na
-   * tela, então um `queryByText(...).toBeNull()` disparado cedo passaria mesmo
-   * com um servidor que não filtrasse nada.
-   */
-  async function filtrar(campo: string, opcao: string, buscaEsperada: string) {
-    fireEvent.click(await screen.findByRole("combobox", { name: campo }));
-    fireEvent.click(within(screen.getByRole("listbox")).getByText(opcao));
-    await waitFor(() => expect(chamadas.at(-1)!.url).toBe(buscaEsperada));
-    await waitFor(() => expect(screen.queryByText("Carregando Demandas...")).toBeNull());
-  }
-
-  it("o filtro por tipo vai na busca da API e reduz o Quadro", async () => {
-    montar(CARDS);
-    await screen.findByText("Ajuste na Ana");
-
-    await filtrar("Filtrar por tipo", "Ajuste", "/api/admin/tecnologia/demandas?tipo=ajuste");
-
-    expect(screen.getByText("Ajuste na Ana")).toBeTruthy();
-    expect(screen.queryByText("Defeito nos POPs")).toBeNull();
-  });
-
-  it("o filtro por Produto vai na busca da API e reduz o Quadro", async () => {
-    montar(CARDS);
-    await screen.findByText("Ajuste na Ana");
-
-    await filtrar("Filtrar por Produto", "POPs", "/api/admin/tecnologia/demandas?produto_id=prod-2");
-
-    expect(screen.getByText("Defeito nos POPs")).toBeTruthy();
-    expect(screen.queryByText("Ajuste na Ana")).toBeNull();
-  });
-
-  it("o filtro por responsável vai na busca da API e reduz o Quadro", async () => {
-    montar(CARDS);
-    await screen.findByText("Ajuste na Ana");
-
-    await filtrar("Filtrar por responsável", "Sócia Vitta", "/api/admin/tecnologia/demandas?responsavel_id=P2");
-
-    expect(screen.getByText("Defeito nos POPs")).toBeTruthy();
-    expect(screen.queryByText("Ajuste na Ana")).toBeNull();
-  });
-
-  it("com filtro ativo a tela diz que está filtrando, e limpar traz o Quadro inteiro de volta", async () => {
-    // Um Quadro filtrado e calado é indistinguível de um Quadro vazio: quem
-    // volta à aba precisa ver que sobrou filtro e ter onde desfazê-lo.
-    montar(CARDS);
-    await screen.findByText("Ajuste na Ana");
-
-    await filtrar("Filtrar por tipo", "Ajuste", "/api/admin/tecnologia/demandas?tipo=ajuste");
-    expect(screen.queryByText("Defeito nos POPs")).toBeNull();
-    expect(screen.getByText(/O Quadro está filtrado/)).toBeTruthy();
-
-    fireEvent.click(screen.getByRole("button", { name: "Limpar filtros" }));
-
-    expect(await screen.findByText("Defeito nos POPs")).toBeTruthy();
-    expect(screen.getByText("Ajuste na Ana")).toBeTruthy();
-    expect(chamadas.at(-1)!.url).toBe("/api/admin/tecnologia/demandas");
-  });
-
-  it("sem filtro nenhum a tela não diz que está filtrando", async () => {
-    // O par de presença do teste acima: um aviso cravado passaria naquele.
-    montar(CARDS);
-
-    await screen.findByText("Ajuste na Ana");
-    expect(screen.queryByText(/O Quadro está filtrado/)).toBeNull();
-    expect(screen.queryByRole("button", { name: "Limpar filtros" })).toBeNull();
-  });
-
-  it("o filtro alcança também o Produto inativado, marcado como tal", async () => {
-    // Desativar um Produto o tira da ESCOLHA de quem abre Demanda nova, não do
-    // histórico (ADR 0050, decisão 11). As Demandas dele continuam no Quadro,
-    // então um filtro que não o oferecesse deixaria essas Demandas fora do
-    // alcance de qualquer filtro. A marca evita a pergunta "por que este
-    // Produto está aqui e não no formulário?".
-    montar(CARDS);
-    fireEvent.click(await screen.findByRole("combobox", { name: "Filtrar por Produto" }));
-
-    const opcoes = within(screen.getByRole("listbox")).getAllByRole("option");
-    expect(opcoes.map((o) => o.textContent)).toEqual([
-      "Todos os Produtos",
-      "Ana",
-      "POPs",
-      "Site antigo (inativo)",
-    ]);
-  });
-});
-
-describe("Duas trocas de filtro em sequência", () => {
+describe("Duas leituras do Quadro no ar ao mesmo tempo", () => {
   /** Uma chamada que o componente fez e que ainda não teve resposta. */
   type Pendente = {
     url: string;
@@ -1366,17 +1232,13 @@ describe("Duas trocas de filtro em sequência", () => {
     });
   }
 
-  /** O host dos filtros, como o módulo faz. */
   function Anfitriao() {
-    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
     return (
       <QuadroDemandas
         token="token-de-teste"
         carregandoAuth={false}
         produtos={PRODUTOS}
         pessoas={PESSOAS}
-        filtros={filtros}
-        onFiltrosChange={setFiltros}
         eu={EU_DESCONHECIDO}
       />
     );
@@ -1385,17 +1247,18 @@ describe("Duas trocas de filtro em sequência", () => {
   const AJUSTE = demanda("d1", "Ajuste na Ana", { tipo: "ajuste" });
   const DEFEITO = demanda("d2", "Defeito nos POPs", { tipo: "defeito" });
 
-  /** Escolhe um tipo na barra de filtros. */
-  function escolherTipo(rotulo: string) {
-    fireEvent.click(screen.getByRole("combobox", { name: "Filtrar por tipo" }));
-    fireEvent.click(within(screen.getByRole("listbox")).getByText(rotulo));
+  /** A volta à janela, que pede o Quadro de novo (issue #642). */
+  function voltarAJanela() {
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
   }
 
   /**
-   * Monta a tela com o Quadro já pintado e DOIS pedidos de filtro no ar.
+   * Monta a tela com o Quadro já pintado e DOIS pedidos de leitura no ar.
    *
-   * Devolve a fila: `[0]` é a leitura inicial (já respondida), `[1]` é o
-   * pedido do filtro Ajuste (o VELHO) e `[2]` o do filtro Defeito (o NOVO).
+   * Devolve a fila: `[0]` é a leitura inicial (já respondida), `[1]` é a
+   * primeira volta à janela (a VELHA) e `[2]` a segunda (a NOVA).
    */
   async function comDoisPedidosNoAr(): Promise<Pendente[]> {
     const pendentes = filaDeChamadas();
@@ -1405,22 +1268,18 @@ describe("Duas trocas de filtro em sequência", () => {
     pendentes[0].responder([AJUSTE, DEFEITO]);
     await screen.findByText("Ajuste na Ana");
 
-    escolherTipo("Ajuste");
+    voltarAJanela();
     await waitFor(() => expect(pendentes).toHaveLength(2));
-    escolherTipo("Defeito");
+    voltarAJanela();
     await waitFor(() => expect(pendentes).toHaveLength(3));
-
-    expect(pendentes[1].url).toContain("tipo=ajuste");
-    expect(pendentes[2].url).toContain("tipo=defeito");
     return pendentes;
   }
 
-  it("a resposta atrasada do filtro antigo não repinta o Quadro do filtro novo", async () => {
-    // A rede não devolve na ordem em que foi chamada. Quem troca o filtro duas
-    // vezes rápido deixa dois GET no ar; se o PRIMEIRO chegar por último, uma
-    // tela ingênua pinta o resultado do filtro que ninguém está mais vendo, com
-    // os campos mostrando o filtro novo. É mentira silenciosa: nada de erro,
-    // nada de espera, só o Quadro errado.
+  it("a resposta atrasada da leitura antiga não repinta o Quadro da leitura nova", async () => {
+    // A rede não devolve na ordem em que foi chamada. Duas leituras no ar e a
+    // PRIMEIRA chegando por último: uma tela ingênua pinta o Quadro de antes
+    // por cima do de agora. É mentira silenciosa: nada de erro, nada de
+    // espera, só o Quadro errado.
     const pendentes = await comDoisPedidosNoAr();
 
     // O pedido NOVO chega primeiro, e o velho depois.
@@ -1433,28 +1292,8 @@ describe("Duas trocas de filtro em sequência", () => {
     expect(screen.queryByText("Ajuste na Ana")).toBeNull();
   });
 
-  it("a resposta do filtro antigo que chega PRIMEIRO não desliga a espera", async () => {
-    // A ordem inversa da anterior, e é ela que exercita a guarda da espera: o
-    // pedido velho chegando antes do novo. Sem a guarda, a tela diz "pronto" e
-    // mostra a lista de ANTES do filtro, com o campo escrito com o filtro novo,
-    // enquanto a leitura de verdade ainda está vindo.
-    const pendentes = await comDoisPedidosNoAr();
-
-    pendentes[1].responder([AJUSTE]);
-    await deixarOReactProcessar();
-
-    expect(screen.getByText("Carregando Demandas...")).toBeTruthy();
-    expect(screen.queryByText("Ajuste na Ana")).toBeNull();
-
-    // A irmã de presença: quando o pedido NOVO chega, a espera acaba e o card
-    // certo aparece, então "ainda carregando" acima não é uma tela travada.
-    pendentes[2].responder([DEFEITO]);
-    expect(await screen.findByText("Defeito nos POPs")).toBeTruthy();
-    expect(screen.queryByText("Carregando Demandas...")).toBeNull();
-  });
-
   it("a falha do pedido antigo não escreve aviso por cima do Quadro certo", async () => {
-    // Filtro velho devolve 500, filtro novo devolve 200. Se o 500 chegar por
+    // A leitura velha devolve 500, a nova devolve 200. Se o 500 chegar por
     // último, uma tela sem guarda mostraria "Não foi possível carregar as
     // Demandas." em cima de um Quadro que está perfeitamente certo.
     const pendentes = await comDoisPedidosNoAr();
@@ -1482,9 +1321,9 @@ describe("Duas trocas de filtro em sequência", () => {
   });
 
   it("o Quadro que volta não apaga a recusa de uma escrita", async () => {
-    // Trocar o filtro deixa um GET no ar, a escrita (mover) é recusada e
-    // escreve o alerta, e o GET chega depois. Se ele limpasse o erro, o card
-    // voltaria sozinho para a coluna de origem e ninguém saberia por quê.
+    // A escrita (mover) é recusada e escreve o alerta, e a leitura da volta à
+    // janela chega depois. Se ela limpasse o erro, o card voltaria sozinho
+    // para a raia de origem e ninguém saberia por quê.
     const pendentes = filaDeChamadas();
     render(<Anfitriao />);
 
@@ -1492,13 +1331,14 @@ describe("Duas trocas de filtro em sequência", () => {
     pendentes[0].responder([AJUSTE, DEFEITO]);
     await screen.findByText("Ajuste na Ana");
 
-    fireEvent.click(screen.getByRole("button", { name: "Mover Ajuste na Ana" }));
-    fireEvent.click(within(cardDe("Ajuste na Ana")).getByRole("button", { name: "Aguardando" }));
+    fireEvent.dragStart(cardDe("Ajuste na Ana"));
+    fireEvent.dragOver(colunaDe("Aguardando"));
+    fireEvent.drop(colunaDe("Aguardando"));
     await waitFor(() => expect(pendentes).toHaveLength(2));
     pendentes[1].recusar(422, "Essa Demanda nao pode ir para Aguardando.");
     expect((await screen.findByRole("alert")).textContent).toContain("nao pode ir para Aguardando");
 
-    escolherTipo("Ajuste");
+    voltarAJanela();
     await waitFor(() => expect(pendentes).toHaveLength(3));
     pendentes[2].responder([AJUSTE]);
     await deixarOReactProcessar();
@@ -1519,7 +1359,7 @@ describe("Duas trocas de filtro em sequência", () => {
       "Não foi possível carregar as Demandas.",
     );
 
-    escolherTipo("Ajuste");
+    voltarAJanela();
     await waitFor(() => expect(pendentes).toHaveLength(2));
     pendentes[1].responder([AJUSTE]);
 
@@ -1535,42 +1375,25 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
   }
 
   /**
-   * O anfitrião deste bloco, com o `carregandoAuth` como prop.
+   * O Quadro deste bloco, com o `carregandoAuth` como prop.
    *
-   * O `montar()` lá de cima guarda os filtros dentro dele e não devolve o
-   * `rerender`; os testes daqui precisam re-renderizar o Quadro com props
-   * diferentes (a sessão que resolve) e envolvê-lo num `Profiler`. O papel dos
-   * filtros é o mesmo do `Anfitriao` do `montar`: quem os guarda é a aba
-   * Tecnologia (issue #639).
+   * O `montar()` lá de cima não devolve o `rerender` com props novas; os
+   * testes daqui precisam re-renderizar o Quadro com a sessão que resolve e
+   * envolvê-lo num `Profiler`.
    */
-  function QuadroHospedado({
-    carregandoAuth = false,
-    filtroInicial = SEM_FILTRO,
-  }: {
-    carregandoAuth?: boolean;
-    filtroInicial?: FiltrosDoQuadro;
-  }) {
-    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(filtroInicial);
+  function QuadroHospedado({ carregandoAuth = false }: { carregandoAuth?: boolean }) {
     return (
       <QuadroDemandas
         token="token-de-teste"
         carregandoAuth={carregandoAuth}
         produtos={PRODUTOS}
         pessoas={PESSOAS}
-        filtros={filtros}
-        onFiltrosChange={setFiltros}
         eu={EU_DESCONHECIDO}
       />
     );
   }
 
-  /**
-   * O servidor falso deste bloco: a lista, e a Conversa vazia do modal.
-   *
-   * Ele PENEIRA como a API peneira (issue #639), e não devolve a lista inteira:
-   * com filtro valendo, a Demanda do link some da resposta, que é exatamente o
-   * caso em que a frase do aviso precisa mudar.
-   */
+  /** O servidor falso deste bloco: a lista, e a Conversa vazia do modal. */
   function servidorCom(lista: Demanda[]) {
     vi.stubGlobal(
       "fetch",
@@ -1578,12 +1401,7 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
         if (url.includes("/conversa")) {
           return { ok: true, status: 200, json: async () => [] } as unknown as Response;
         }
-        const busca = new URLSearchParams(url.split("?")[1] ?? "");
-        const casa = (campo: string, valor: string | null) => !busca.get(campo) || busca.get(campo) === valor;
-        const corpo = lista.filter(
-          (d) => casa("tipo", d.tipo) && casa("produto_id", d.produto_id) && casa("responsavel_id", d.responsavel_id),
-        );
-        return { ok: true, status: 200, json: async () => corpo } as unknown as Response;
+        return { ok: true, status: 200, json: async () => lista } as unknown as Response;
       }),
     );
   }
@@ -1671,60 +1489,24 @@ describe("Abrir a Demanda pelo link (issue #640)", () => {
     // API, e a recusa dela viraria erro de carregamento, não lista sem o card).
     expect(aviso.textContent).not.toContain("apagada");
     expect(aviso.textContent).not.toContain("permissão");
-    // Nem em filtro: não há filtro nenhum valendo neste render, e falar dele
-    // aqui mandaria limpar o que já está limpo.
-    expect(aviso.textContent).not.toContain("filtrado");
     // Irmã de presença: o Quadro carregou e mostra o que tem.
     expect(screen.getByText("Uma nova")).toBeTruthy();
     expect(screen.queryByRole("dialog")).toBeNull();
   });
 
-  it("com filtro valendo, o aviso fala do filtro e não manda conferir o endereço", async () => {
-    // O cenário real: o diretor deixou "Filtrar por Produto: POPs" ligado
-    // ontem, e hoje recebe no WhatsApp o link de uma Demanda do Produto Ana. O
-    // link está perfeito; quem esconde a Demanda é o filtro dele mesmo. Mandar
-    // conferir o endereço com quem enviou é cobrar uma ação que não resolve,
-    // sobre uma causa que não é a verdadeira.
+  it("link para uma Demanda já concluída: a tela diz que ela não está no Quadro, e não abre card", async () => {
+    // A encerrada não está em raia nenhuma (issue #1058). Abrir o card dela
+    // por cima de um Quadro que não a mostra contaria o contrário do que a
+    // tela desenha; o lugar dela é o Histórico.
     chegarPor("?demanda=d1");
-    servidorCom([demanda("d1", "A do link", { produto_id: "prod-1", produto_nome: "Ana" })]);
+    servidorCom([demanda("d1", "A do link", { estado: "concluida" }), demanda("d2", "Uma nova")]);
 
-    render(<QuadroHospedado filtroInicial={{ tipo: "", produto_id: "prod-2", responsavel_id: "" }} />);
+    render(<QuadroHospedado />);
 
     const aviso = await screen.findByRole("status");
-    expect(aviso.textContent).toContain("O Quadro está filtrado");
-    expect(aviso.textContent).toContain("limpe os filtros");
-    expect(aviso.textContent).not.toContain("Confira o endereço");
-    // A saída que a frase promete tem que existir na MESMA tela.
-    expect(screen.getByRole("button", { name: "Limpar filtros" })).toBeTruthy();
-  });
-
-  it("limpar os filtros abre o card do link, sem a pessoa clicar nele", async () => {
-    // O par do teste acima: a ação que o aviso aponta resolve de verdade. Sem
-    // isto, a frase seria só uma desculpa mais educada.
-    chegarPor("?demanda=d1");
-    servidorCom([demanda("d1", "A do link", { produto_id: "prod-1", produto_nome: "Ana" })]);
-
-    render(<QuadroHospedado filtroInicial={{ tipo: "", produto_id: "prod-2", responsavel_id: "" }} />);
-    await screen.findByRole("status");
-
-    fireEvent.click(screen.getByRole("button", { name: "Limpar filtros" }));
-
-    const modal = await screen.findByRole("dialog");
-    expect((within(modal).getByLabelText("Título") as HTMLInputElement).value).toBe("A do link");
-    expect(screen.queryByRole("status")).toBeNull();
-  });
-
-  it("com filtro valendo, a Demanda que passa pelo filtro abre normalmente", async () => {
-    // Irmã de presença das duas acima: filtro ligado não é, por si, motivo de
-    // aviso nenhum. O que gera o aviso é a Demanda do link ficar de fora.
-    chegarPor("?demanda=d1");
-    servidorCom([demanda("d1", "A do link", { produto_id: "prod-2", produto_nome: "POPs" })]);
-
-    render(<QuadroHospedado filtroInicial={{ tipo: "", produto_id: "prod-2", responsavel_id: "" }} />);
-
-    const modal = await screen.findByRole("dialog");
-    expect((within(modal).getByLabelText("Título") as HTMLInputElement).value).toBe("A do link");
-    expect(screen.queryByRole("status")).toBeNull();
+    expect(aviso.textContent).toContain("não está no Quadro");
+    expect(screen.getByText("Uma nova")).toBeTruthy();
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("enquanto a sessão carrega, o link não vira acusação nenhuma", async () => {
@@ -1878,21 +1660,17 @@ describe("A atualização sozinha", () => {
   });
 
   it("a atualização automática não deixa o Quadro preso em 'Carregando Demandas...'", async () => {
-    // A leitura da PESSOA (trocar o filtro) acende a espera, e uma automática
-    // entra por cima e vira o pedido mais novo. Se só a leitura visível
-    // pudesse apagar a espera, a tela ficaria em "Carregando Demandas..." para
-    // sempre, com as Demandas já na mão.
+    // A primeira leitura (a visível) acende a espera, e uma automática entra
+    // por cima e vira o pedido mais novo. Se só a leitura visível pudesse
+    // apagar a espera, a tela ficaria em "Carregando Demandas..." para sempre,
+    // com as Demandas já na mão.
     montar([demanda("d1", "Uma nova")], { getSobControle: true });
-    await soltarQuadro(0, [demanda("d1", "Uma nova")]);
-
-    fireEvent.click(screen.getByRole("combobox", { name: "Filtrar por tipo" }));
-    fireEvent.click(within(screen.getByRole("listbox")).getByText("Defeito"));
     expect(screen.getByText("Carregando Demandas...")).toBeTruthy();
-    expect(leiturasDoQuadro()).toHaveLength(2);
+    expect(leiturasDoQuadro()).toHaveLength(1);
 
     await passar(30_000);
-    expect(leiturasDoQuadro()).toHaveLength(3);
-    await soltarQuadro(2, []);
+    expect(leiturasDoQuadro()).toHaveLength(2);
+    await soltarQuadro(1, []);
 
     expect(screen.queryByText("Carregando Demandas...")).toBeNull();
   });
@@ -1964,7 +1742,7 @@ describe("A atualização sozinha", () => {
   it("não recarrega por cima do card aberto", async () => {
     // O modal fechado sozinho leva junto a resposta que estava sendo digitada:
     // basta a Demanda sair da lista que a leitura devolveu (outra pessoa a
-    // moveu para uma coluna escondida pelo filtro) para `aberta` virar nulo.
+    // concluiu) para `aberta` virar nulo.
     montar([demanda("d1", "Uma nova")]);
     fireEvent.click(await screen.findByText("Uma nova"));
     await screen.findByRole("dialog");
@@ -2015,8 +1793,8 @@ describe("A atualização sozinha", () => {
   it("não recarrega com um card na mão", async () => {
     // O outro hazard de `podeRecarregarSozinho`, e o que ficou sem teste na
     // primeira rodada. Uma leitura no meio do arrasto pode tirar do DOM o card
-    // que está sendo arrastado (outra pessoa o moveu para uma coluna que o
-    // filtro esconde), e o gesto morre na mão de quem o começou.
+    // que está sendo arrastado (outra pessoa o concluiu), e o gesto morre na
+    // mão de quem o começou.
     montar([demanda("d1", "Uma nova")]);
     await screen.findByText("Uma nova");
     fireEvent.dragStart(cardDe("Uma nova"));
@@ -2080,7 +1858,7 @@ describe("A atualização sozinha", () => {
     montar([demanda("d1", "Uma nova")]);
     fireEvent.click(await screen.findByText("Uma nova"));
     const modal = await screen.findByRole("dialog");
-    fireEvent.click(within(within(modal).getByRole("group", { name: "Mover" })).getByRole("button", { name: "Concluir" }));
+    fireEvent.click(within(within(modal).getByRole("group", { name: "Mover" })).getByRole("button", { name: "Concluir a Demanda" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     const antes = leiturasDoQuadro().length;
 
@@ -2099,9 +1877,12 @@ describe("A atualização sozinha", () => {
 describe("O aviso de que o e-mail não saiu", () => {
   const AVISO = "O que você fez está gravado, mas o aviso por e-mail não saiu.";
 
+  /** O arrasto é o caminho de escrita que passa pelo `enviar` do Quadro. */
   async function moverCard() {
-    fireEvent.click(await screen.findByRole("button", { name: "Mover Uma nova" }));
-    fireEvent.click(within(cardDe("Uma nova")).getByRole("button", { name: "Aguardando" }));
+    await screen.findByText("Uma nova");
+    fireEvent.dragStart(cardDe("Uma nova"));
+    fireEvent.dragOver(colunaDe("Aguardando"));
+    fireEvent.drop(colunaDe("Aguardando"));
   }
 
   it("chega à tela de quem escreveu pelo Quadro, com a escrita já valendo", async () => {

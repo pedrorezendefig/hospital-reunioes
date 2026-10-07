@@ -36,7 +36,6 @@ import {
   BASE_TECNOLOGIA,
   Demanda,
   demandaIdDaUrl,
-  destinosDe,
   ESTADO_ROTULO,
   EstadoDemanda,
   estaAtrasado,
