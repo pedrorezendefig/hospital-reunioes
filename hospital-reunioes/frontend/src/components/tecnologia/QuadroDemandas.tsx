@@ -127,8 +127,8 @@ export function QuadroDemandas({
    *
    * A leitura que dá certo limpa o aviso, e é o que se quer quando o aviso é
    * dela. Mas a atualização automática dispara uma leitura, e ela chegando
-   * depois de uma recusa de escrita apagaria o motivo: o card voltaria sozinho para a
-   * coluna de origem, sem explicação nenhuma de por que não se moveu.
+   * depois de uma recusa de escrita apagaria o motivo: o card voltaria sozinho
+   * para a raia de origem, sem explicação nenhuma de por que não se moveu.
    */
   const erroDeEscrita = useRef(false);
   /**
@@ -169,7 +169,7 @@ export function QuadroDemandas({
    *
    * `silencioso` é a leitura que a tela faz sozinha (issue #642): ela NÃO
    * acende o "Carregando Demandas...". Sem isso, o Quadro trocaria as três
-   * colunas pela linha de espera a cada 30 segundos, e ler o quadro viraria
+   * raias pela linha de espera a cada 30 segundos, e ler o quadro viraria
    * uma corrida contra o relógio, pior do que não atualizar.
    *
    * O que ela continua fazendo é APAGAR a espera quando é o pedido mais novo
@@ -259,8 +259,8 @@ export function QuadroDemandas({
    *   `carregar` sairia na primeira linha de qualquer jeito;
    * - **modal fechado**: com o card aberto, uma leitura pode devolver uma
    *   lista em que a Demanda não está mais (outra pessoa a concluiu ou a
-   *   cancelou), e `aberta` viraria `null`: o modal FECHA,
-   *   levando junto a resposta que estava sendo digitada. O modal já recarrega
+   *   cancelou), e `aberta` viraria `null`: o modal FECHA, levando junto a
+   *   resposta que estava sendo digitada. O modal já recarrega
    *   sozinho o que muda dentro dele, a cada escrita;
    * - **card parado**: recarregar no meio de um arrasto pode tirar do DOM
    *   justamente o card que está na mão.
@@ -387,6 +387,7 @@ export function QuadroDemandas({
   useEffect(() => {
     if (abertaId !== null && aberta === null) setAbertaId(null);
   }, [abertaId, aberta]);
+
   const agora = new Date();
 
   function coluna(estado: EstadoDemanda) {
