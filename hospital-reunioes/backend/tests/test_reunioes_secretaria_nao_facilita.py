@@ -148,7 +148,7 @@ class _Query:
 
 
 class _Supabase:
-    def __init__(self, participantes: list[dict]):
+    def __init__(self, participantes: list[dict], facilitador_atual: dict = FACILITADORA):
         self.tabelas: dict[str, list] = {
             "participantes": [dict(p) for p in participantes],
             "reunioes": [
@@ -157,7 +157,7 @@ class _Supabase:
                     "titulo": "Reuniao da Facilitadora",
                     "data": "2026-10-01",
                     "status_ata": "PROGRAMADA",
-                    "facilitador_id": FACILITADORA["id"],
+                    "facilitador_id": facilitador_atual["id"],
                     "criada_por": SECRETARIA["id"],
                     "deleted_at": None,
                 }
@@ -290,6 +290,31 @@ class TestEdicao:
 
         assert resp.status_code == 200, resp.text
         assert sb.reuniao()["facilitador_id"] == SUPER_ADMIN["id"]
+
+
+class TestReuniaoLegada:
+    """Issue #890: reunião que já nasceu com a Secretária facilitadora (as da
+    #886). A `/secretaria/nova?edit=` sempre reenvia o facilitador, então recusar
+    o MESMO id travava a correção de um título. A trava vale só quando o
+    facilitador muda para uma Secretária."""
+
+    def test_reenviar_a_mesma_facilitadora_e_mudar_so_o_titulo_e_aceito(self):
+        sb = _Supabase([SECRETARIA, OUTRA_SECRETARIA, FACILITADORA], facilitador_atual=SECRETARIA)
+
+        resp = _editar(sb, SECRETARIA, titulo="Titulo corrigido", facilitador_id=SECRETARIA["id"])
+
+        assert resp.status_code == 200, resp.text
+        assert sb.reuniao()["titulo"] == "Titulo corrigido"
+        assert sb.reuniao()["facilitador_id"] == SECRETARIA["id"]
+
+    def test_trocar_para_outra_secretaria_continua_recusado(self):
+        sb = _Supabase([SECRETARIA, OUTRA_SECRETARIA, FACILITADORA], facilitador_atual=SECRETARIA)
+
+        resp = _editar(sb, SECRETARIA, titulo="Titulo corrigido", facilitador_id=OUTRA_SECRETARIA["id"])
+
+        assert resp.status_code == 422, resp.text
+        assert sb.reuniao()["facilitador_id"] == SECRETARIA["id"]
+        assert sb.reuniao()["titulo"] == "Reuniao da Facilitadora"
 
 
 def _forcar(sb: _Supabase, **campos):
