@@ -69,7 +69,7 @@ No topo ficam quatro números, os mesmos para quem estiver olhando:
 
 Embaixo vêm três blocos, que abrem e fecham com um clique no título:
 
-- **Com você**: as Demandas abertas de que você é o responsável e as em que mencionaram você e você ainda não respondeu. Cada linha diz o motivo ("Você é o responsável", "Mencionaram você"). Vazio é boa notícia: a tela diz "Nada esperando por você agora".
+- **Com você**: as Demandas abertas de que você é o responsável e as em que mencionaram você e você ainda não respondeu. Cada linha diz o motivo: "Você é o responsável", "Mencionaram você" ou, quando a entrega volta para você conferir, "Entregue, confira e conclua". Vazio é boa notícia: a tela diz "Nada esperando por você agora".
 - **Entregas**: as Demandas abertas ligadas ao desenvolvimento, uma linha cada, com a Etapa e as partes, a da última mudança primeiro. É onde se vê o que a Vitta está fazendo.
 - **Histórico**: as Demandas Concluídas e Canceladas, com quem fechou e quando, e uma busca por título, descrição ou texto da Conversa.
 
