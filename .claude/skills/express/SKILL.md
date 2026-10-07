@@ -1,6 +1,6 @@
 ---
-name: express-grill
-description: 'Grill rápido de uma ideia ou possibilidade ("dá pra fazer X?", "discute comigo Y", print de tela com uma vontade). Em vez de entrevista longa, faz uma rodada só: olha o código, diz o que já existe, propõe a ponte mínima, entrega uma decisão com no máximo 2 opções e uma recomendação. Quando o usuário diz "siga suas recomendações", implementa, verifica de verdade (navegador, teste, comando) e fecha com um resumo organizado por tema das questões que apareceram. Use quando o usuário disser "/express-grill", "discute comigo a possibilidade de", "dá pra ter", "queria um link/botão/atalho que", "faz sentido X?", ou mandar um print e uma vontade. Não é o grill-with-docs (esse é longo, uma pergunta por vez, e não implementa).'
+name: express
+description: 'Grill rápido de uma ideia ou possibilidade ("dá pra fazer X?", "discute comigo Y", print de tela com uma vontade). Em vez de entrevista longa, faz uma rodada só: olha o código, diz o que já existe, propõe a ponte mínima, entrega uma decisão com no máximo 2 opções e uma recomendação. Quando o usuário diz "siga suas recomendações", implementa, verifica de verdade (navegador, teste, comando) e fecha com um resumo organizado por tema das questões que apareceram. Use quando o usuário disser "/express", "discute comigo a possibilidade de", "dá pra ter", "queria um link/botão/atalho que", "faz sentido X?", ou mandar um print e uma vontade. Não é o grill-with-docs (esse é longo, uma pergunta por vez, e não implementa).'
 ---
 
 # Express grill
