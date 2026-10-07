@@ -20,6 +20,9 @@ import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
+from test_tecnologia_vinculo import BASE, PEDRO, _demanda, _GithubFalso, _issue, _montar  # noqa: E402
+
+from app.config import settings  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
 from app.services import tecnologia_email, tecnologia_sincronizacao  # noqa: E402
@@ -31,7 +34,6 @@ from app.services.tecnologia_anexos import (  # noqa: E402
     MOTIVO_ARQUIVO_VAZIO,
     MOTIVO_DEMANDA_ENCERRADA,
 )
-from test_tecnologia_vinculo import BASE, PEDRO, _demanda, _GithubFalso, _issue, _montar  # noqa: E402
 
 BUCKET = "anexos-tecnologia"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
@@ -366,7 +368,9 @@ class _BucketQueNaoApaga(_BucketFake):
 
 
 class TestSoEncerrarApaga:
-    @pytest.mark.parametrize("de,para", [("nova", "em_andamento"), ("nova", "aguardando"), ("em_andamento", "aguardando")])
+    @pytest.mark.parametrize(
+        "de,para", [("nova", "em_andamento"), ("nova", "aguardando"), ("em_andamento", "aguardando")]
+    )
     def test_mover_entre_colunas_abertas_nao_apaga(self, de, para):
         client, sb, _ = _cenario(demandas=[_demanda("d-1", estado=de)])
         _anexar(client)
@@ -404,3 +408,35 @@ class TestSoEncerrarApaga:
         assert sb.tabelas["tecnologia_demandas"][0]["etapa"] != demanda["etapa"], "a Etapa nao mudou"
         assert len(sb.storage.arquivos) == 1
         assert _anexos(sb)[0]["apagado_em"] is None
+
+
+# ─── 4. O espelho: nada do anexo sai para a issue nesta fatia ────────────────
+
+
+class TestNadaSaiParaAIssue:
+    """O repositorio e publico (ADR 0069, decisao 1). Nesta fatia a issue nao
+    ganha linha nenhuma sobre anexo: nem o nome, nem o endereco, nem o bucket.
+    A frase "Anexos: N imagens na Demanda" e da fatia seguinte."""
+
+    NOME = "prontuario do paciente.png"
+
+    def _vazamentos(self, texto: str) -> list[str]:
+        return [pedaco for pedaco in (self.NOME, "prontuario", BUCKET, "storage.local", "token=") if pedaco in texto]
+
+    def test_levar_para_desenvolvimento_e_responder_nao_levam_o_anexo(self, monkeypatch):
+        monkeypatch.setattr(settings, "github_integracao_token", "token-de-teste")
+        monkeypatch.setattr(settings, "github_integracao_repo", "pedrorezendefig/hospital-reunioes")
+        client, _, gh = _cenario(demandas=[_demanda("d-1")], monkeypatch=monkeypatch)
+        assert _anexar(client, nome=self.NOME).status_code == 201
+        # A lista do card assina a URL: se algo dela vazasse, vazaria daqui.
+        assert client.get(f"{BASE}/demandas/d-1/anexos").json()[0]["url"]
+
+        assert client.post(f"{BASE}/demandas/d-1/levar-para-desenvolvimento").status_code == 200
+        assert client.post(f"{BASE}/demandas/d-1/conversa", json={"texto": "Segue o print."}).status_code == 201
+
+        assert len(gh.criadas) == 1
+        assert len(gh.comentarios_criados) == 1
+        issue = gh.criadas[0]
+        assert self._vazamentos(issue["titulo"] + issue["corpo"]) == []
+        assert self._vazamentos(gh.comentarios_criados[0]["corpo"]) == []
+        assert "Anexo" not in issue["corpo"]
