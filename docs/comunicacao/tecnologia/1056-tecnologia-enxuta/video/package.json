@@ -1,0 +1,10 @@
+{
+  "name": "tecnologia-1056-tecnologia-enxuta",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npx --yes hyperframes@0.8.140 preview",
+    "check": "npx --yes hyperframes@0.8.140 check",
+    "render": "npx --yes hyperframes@0.8.140 render"
+  }
+}
