@@ -249,6 +249,55 @@ def _enriquecer_prs_abertos(root: Path, prs: list[dict]) -> None:
         )
 
 
+# PRs recentes que ganham o resumo do hover: o body da lista inteira estoura o GraphQL (HTTP 504).
+RESUMO_LIMIT = "200"
+_SECAO = re.compile(r"(?m)^##\s+(.*)$")
+_COMENTARIO_HTML = re.compile(r"<!--.*?-->", re.S)
+
+
+def _secao(body: str, nome: str) -> str | None:
+    """Texto da seção `## ... <nome>` até a próxima `## `, sem comentários HTML."""
+    titulos = list(_SECAO.finditer(body))
+    for i, m in enumerate(titulos):
+        if nome in m.group(1).lower():
+            fim = titulos[i + 1].start() if i + 1 < len(titulos) else len(body)
+            return _COMENTARIO_HTML.sub("", body[m.end():fim]).strip()
+    return None
+
+
+def resumo_funcional(body: str) -> dict | None:
+    """O resumo do hover: a seção "Resumo funcional" do template (o que é e valor);
+    PR antigo, sem ela, cai no primeiro parágrafo do Contexto (até 240 caracteres)."""
+    body = body or ""
+    secao = _secao(body, "resumo funcional")
+    if secao:
+        campo = lambda rot: (re.search(rf"\*\*{rot}:\*\*\s*(.+)", secao) or [None, None])[1]
+        o_que, valor = campo("O que é"), campo("Valor")
+        if o_que or valor:
+            return {"o_que": o_que and o_que.strip(), "valor": valor and valor.strip(), "contexto": None}
+    contexto = _secao(body, "contexto")
+    paragrafo = next((p.strip() for p in (contexto or "").split("\n\n") if p.strip()), "")
+    if not paragrafo:
+        return None
+    paragrafo = " ".join(re.sub(r"\*\*|`", "", paragrafo).split())  # o hover é texto puro
+    if len(paragrafo) > 240:
+        paragrafo = paragrafo[:239].rstrip() + "…"
+    return {"o_que": None, "valor": None, "contexto": paragrafo}
+
+
+def _resumir_prs_recentes(root: Path, prs: list[dict]) -> None:
+    """Resumo funcional dos PRs recentes, numa chamada só; falha deixa os PRs sem resumo."""
+    try:
+        items = json.loads(_run(["gh", "pr", "list", "--state", "all", "--limit", RESUMO_LIMIT,
+                                 "--json", "number,body"], root))
+    except Exception:
+        return
+    corpos = {it["number"]: it.get("body") for it in items}
+    for p in prs:
+        if p["number"] in corpos:
+            p["resumo"] = resumo_funcional(corpos[p["number"]])
+
+
 def _linha_do_no(node: dict) -> dict:
     """Nó GraphQL (fragmento Linha) no shape que fases.timeline_da_issue espera."""
     eventos = []
@@ -839,6 +888,7 @@ def collect(root: Path) -> dict:
         for p in prs:
             p["classe"] = classes.get(p["number"]) if p["state"] == "MERGED" else None
         _enriquecer_prs_abertos(root, prs)
+        _resumir_prs_recentes(root, prs)
         github.update(issues=issues, prs=prs, prds=sorted(prds))
     except Exception as e:
         kind, friendly = _gh_failure(e)
