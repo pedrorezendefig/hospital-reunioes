@@ -5,6 +5,13 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import { fetchParticipantesAtivos } from "@/lib/participantes";
 import KpiCards from "@/components/dashboard/KpiCards";
+import type { ListaDoCard } from "@/components/dashboard/KpiCards";
+import ListaAtasModal from "@/components/dashboard/ListaAtasModal";
+import {
+  atasParadas as filtrarAtasParadas,
+  atasAguardandoAssinatura,
+  type AtaDoDashboard,
+} from "@/lib/reunioes/atasDoDashboard";
 import DashboardFilters from "@/components/dashboard/DashboardFilters";
 import StatusPieChart from "@/components/dashboard/StatusPieChart";
 import SetorBarChart from "@/components/dashboard/SetorBarChart";
@@ -66,6 +73,13 @@ export default function DashboardPage() {
   const [pieStats, setPieStats] = useState<PieEntry[]>([]);
   const [allPendencias, setAllPendencias] = useState<PendenciaRaw[]>([]);
   const [loadingCharts, setLoadingCharts] = useState(false);
+
+  // Atas que os cards contam, e qual lista está aberta no modal (issue #1055)
+  const [listasDeAtas, setListasDeAtas] = useState<Record<ListaDoCard, AtaDoDashboard[]>>({
+    "atas-paradas": [],
+    "aguardam-assinatura": [],
+  });
+  const [listaAberta, setListaAberta] = useState<ListaDoCard | null>(null);
 
   // Debounce ref
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -199,30 +213,15 @@ export default function DashboardPage() {
         const todayLocal = new Date();
         todayLocal.setHours(0, 0, 0, 0);
 
-        // nowUTC / threeDaysAgoUTC: for updated_at comparisons (UTC ISO-8601 timestamps)
-        const nowUTC = new Date();
-        nowUTC.setUTCHours(0, 0, 0, 0);
-        const threeDaysAgoUTC = new Date(nowUTC);
-        threeDaysAgoUTC.setUTCDate(threeDaysAgoUTC.getUTCDate() - 3);
-
-        // Atas paradas: status intermediário e sem atualização há >3 dias
-        const atasParadas = filteredReunioes.filter(
-          (r: { status_ata: string; updated_at?: string }) => {
-            if (
-              r.status_ata !== "AGUARDANDO_VALIDACAO" &&
-              r.status_ata !== "PROCESSANDO"
-            )
-              return false;
-            if (!r.updated_at) return true; // sem updated_at = conservador, conta como parada
-            return new Date(r.updated_at) < threeDaysAgoUTC;
-          }
-        ).length;
-
-        // Atas aguardando assinatura
-        const aguardamAssinatura = filteredReunioes.filter(
-          (r: { status_ata: string }) =>
-            r.status_ata === "AGUARDANDO_ASSINATURA"
-        ).length;
+        // Atas paradas e aguardando assinatura: o card conta a mesma lista que o modal mostra
+        const listaParadas = filtrarAtasParadas(filteredReunioes as AtaDoDashboard[]);
+        const listaAssinatura = atasAguardandoAssinatura(filteredReunioes as AtaDoDashboard[]);
+        setListasDeAtas({
+          "atas-paradas": listaParadas,
+          "aguardam-assinatura": listaAssinatura,
+        });
+        const atasParadas = listaParadas.length;
+        const aguardamAssinatura = listaAssinatura.length;
 
         // Pendências atrasadas
         const atrasadas = pStats.atrasado ?? 0;
@@ -435,7 +434,16 @@ export default function DashboardPage() {
         stats={stats}
         loading={loading}
         onNavigate={(href) => router.push(href)}
+        onAbrirLista={setListaAberta}
       />
+
+      {listaAberta && (
+        <ListaAtasModal
+          titulo={listaAberta === "atas-paradas" ? "Atas Paradas" : "Aguardam Assinatura"}
+          atas={listasDeAtas[listaAberta]}
+          onClose={() => setListaAberta(null)}
+        />
+      )}
 
       {/* Filtros Dinâmicos */}
       <DashboardFilters

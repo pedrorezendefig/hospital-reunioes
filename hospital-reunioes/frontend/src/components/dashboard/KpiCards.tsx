@@ -18,10 +18,14 @@ interface Stats {
   totalPendencias: number;
 }
 
+export type ListaDoCard = "atas-paradas" | "aguardam-assinatura";
+
 export interface KpiCardsProps {
   stats: Stats | null;
   loading: boolean;
   onNavigate: (href: string) => void;
+  /** Os cards de atas abrem a lista no próprio dashboard (issue #1055). */
+  onAbrirLista: (lista: ListaDoCard) => void;
 }
 
 // ─── KPI definitions ─────────────────────────────────────────────────────────
@@ -38,7 +42,8 @@ function buildKpis(stats: Stats | null) {
       neutralColor: "border-border",
       iconColor: "text-warning",
       bgIcon: "bg-warning/10",
-      href: "/pendencias?criticas=true",
+      href: "/pendencias?criticas=true" as string | null,
+      lista: null as ListaDoCard | null,
     },
     {
       id: "atas-paradas",
@@ -50,7 +55,8 @@ function buildKpis(stats: Stats | null) {
       neutralColor: "border-border",
       iconColor: "text-warning",
       bgIcon: "bg-warning/10",
-      href: "/reunioes/calendario",
+      href: null,
+      lista: "atas-paradas" as ListaDoCard,
     },
     {
       id: "aguardam-assinatura",
@@ -62,14 +68,15 @@ function buildKpis(stats: Stats | null) {
       neutralColor: "border-border",
       iconColor: "text-primary",
       bgIcon: "bg-primary/10",
-      href: "/reunioes/calendario",
+      href: null,
+      lista: "aguardam-assinatura" as ListaDoCard,
     },
   ];
 }
 
 // ─── Component ───────────────────────────────────────────────────────────────
 
-export default function KpiCards({ stats, loading, onNavigate }: KpiCardsProps) {
+export default function KpiCards({ stats, loading, onNavigate, onAbrirLista }: KpiCardsProps) {
   const kpis = buildKpis(stats);
 
   return (
@@ -159,7 +166,9 @@ export default function KpiCards({ stats, loading, onNavigate }: KpiCardsProps) 
           <div
             id={kpi.id}
             key={kpi.id}
-            onClick={() => onNavigate(kpi.href)}
+            onClick={() =>
+              kpi.lista ? onAbrirLista(kpi.lista) : kpi.href && onNavigate(kpi.href)
+            }
             className={`bg-surface rounded-2xl p-5 border ${
               isActive ? kpi.alertColor : kpi.neutralColor
             } shadow-premium hover:shadow-premium-strong hover:-translate-y-1 transition-all duration-300 cursor-pointer animate-fade-in-up delay-${i + 1}`}

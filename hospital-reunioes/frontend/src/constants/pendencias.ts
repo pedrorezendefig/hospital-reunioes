@@ -53,7 +53,7 @@ export const PENDENCIA_STATUS_CONFIG: Record<
   }
 > = {
   PENDENTE: {
-    label: "Pendente",
+    label: "PENDENTE",
     color: "text-[#D99B4B]",
     rawColor: "#FFC067",
     textColor: "text-amber-900/80",
@@ -65,7 +65,7 @@ export const PENDENCIA_STATUS_CONFIG: Record<
     icon: Clock,
   },
   EM_PROGRESSO: {
-    label: "Em Progresso",
+    label: "EM PROGRESSO",
     color: "text-[#4A90E2]",
     rawColor: "#7CC2F2",
     textColor: "text-blue-900/80",
@@ -77,7 +77,7 @@ export const PENDENCIA_STATUS_CONFIG: Record<
     icon: RotateCcw,
   },
   CONCLUIDO: {
-    label: "Concluido",
+    label: "CONCLUÍDO",
     color: "text-[#388E3C]",
     rawColor: "#88D7A4",
     textColor: "text-emerald-900/80",
@@ -89,7 +89,7 @@ export const PENDENCIA_STATUS_CONFIG: Record<
     icon: CheckCircle2,
   },
   ATRASADO: {
-    label: "Atrasado",
+    label: "ATRASADO",
     color: "text-[#D32F2F]",
     rawColor: "#FC9D9D",
     textColor: "text-red-900/80",
@@ -101,7 +101,7 @@ export const PENDENCIA_STATUS_CONFIG: Record<
     icon: AlertCircle,
   },
   CANCELADO: {
-    label: "Cancelado",
+    label: "CANCELADO",
     color: "text-slate-500",
     rawColor: "#94a3b8",
     textColor: "text-slate-500",
@@ -113,7 +113,7 @@ export const PENDENCIA_STATUS_CONFIG: Record<
     icon: XCircle,
   },
   REPACTUADA: {
-    label: "Repactuada",
+    label: "REPACTUADA",
     color: "text-[#C084FC]",
     rawColor: "#C084FC",
     textColor: "text-purple-900/80",
