@@ -1,7 +1,7 @@
 ---
 status: accepted
 amends: 0020
-amended_by: 0060
+amended_by: 0060, 0069
 ---
 
 # Demanda vinculada a issue do GitHub: Etapa derivada, comentário do diretor espelhado e a bola volta a quem pediu
