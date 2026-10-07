@@ -253,6 +253,12 @@ CAMPOS_DO_INDICE = {
     # Está nesta lista pela mesma razão do visto logo acima: ela mede o select.
     # Timestamp, sem dado pessoal.
     "arquivada_em",
+    # A marca de anônimo (issue #769): a tela de validação aberta pela fila
+    # diz no texto de ajuda do extrato o que vai à área, e no anônimo o nome
+    # de quem manifestou não vai. Só a Ouvidoria a recebe na resposta
+    # (test_ouvidoria_sigilo.py). Booleano, sem dado pessoal: diz que a pessoa
+    # não se identificou, nunca quem é.
+    "anonimo",
 }
 
 

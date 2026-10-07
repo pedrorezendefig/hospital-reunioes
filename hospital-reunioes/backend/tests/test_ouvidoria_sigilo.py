@@ -558,6 +558,32 @@ class TestResumoFicaDentroDaOuvidoria:
         assert linha["resumo"] == self.RESUMO
 
 
+class TestAnonimoNaFilaDaOuvidoria:
+    """A tela de validação abre também pela fila, e o texto de ajuda do
+    Extrato para o setor muda com o caso (issue #769): no anônimo o nome de
+    quem manifestou não vai à área. Sem o `anonimo` na linha, a tela aberta
+    pela fila diria ao ouvidor que o nome vai, num caso em que ele não vai.
+    Só a Ouvidoria recebe a marca, como o resumo: é ela que valida."""
+
+    @pytest.mark.parametrize("anonimo", [True, False])
+    def test_a_ouvidoria_le_a_marca_de_anonimo_na_fila(self, monkeypatch, anonimo):
+        supabase = _SupabaseFake([_manifestacao(7, tipo_manifestacao="reclamacao", anonimo=anonimo)])
+        client, _ = _client(monkeypatch, OUVIDOR, supabase)
+
+        linha = client.get("/api/ouvidoria/protocolos").json()["protocolos"][0]
+
+        assert linha["anonimo"] is anonimo
+
+    def test_quem_esta_fora_recebe_a_linha_sem_a_marca(self, monkeypatch):
+        supabase = _SupabaseFake([_manifestacao(7, tipo_manifestacao="reclamacao", anonimo=True)])
+        client, _ = _client(monkeypatch, SECRETARIA, supabase)
+
+        linha = client.get("/api/ouvidoria/protocolos").json()["protocolos"][0]
+
+        assert linha["protocolo"] == "2026-0007"
+        assert "anonimo" not in linha
+
+
 class TestTipoInformacaoPelaPortaDaClassificacao:
     """O sexto tipo chegando pela porta da classificação (issue #490, ADR 0040
     decisão 1). É a porta do Dossiê: o caso já está com o ouvidor, e o que

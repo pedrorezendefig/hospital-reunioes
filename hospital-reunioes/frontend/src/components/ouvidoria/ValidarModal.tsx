@@ -7,6 +7,7 @@ import {
   confirmacaoDoRedirecionamento,
   lerAFalhaDoRedirecionamento,
 } from "@/lib/ouvidoria/redirecionamento";
+import { AJUDA_DO_EXTRATO, varianteDoQueViaja } from "@/lib/ouvidoria/o-que-viaja";
 import {
   ehSigilosoPorNatureza,
   LABEL_TIPO,
@@ -36,6 +37,10 @@ interface ValidarModalProps {
     // mandaria `sigilo_reforcado: false`, retirando o sigilo sem ninguém
     // desmarcar nada (issue #372).
     sigilo_reforcado: boolean;
+    // Decide o texto de ajuda do extrato (issue #769): no anônimo o nome de
+    // quem manifestou não vai à área. Opcional porque só a Ouvidoria recebe a
+    // marca na fila, e é só ela que abre esta tela; o Dossiê sempre a traz.
+    anonimo?: boolean;
     // O que sobrou do acionamento anterior no caso (issue #601). Opcionais
     // porque a linha da fila abre esta mesma tela e não carrega o extrato: o
     // campo simplesmente nasce em branco, como sempre nasceu.
@@ -205,6 +210,10 @@ export function ValidarModal({
   // piso, e a tela não pode oferecer um caminho que o backend recusa com 409.
   const sigiloTravado = tipo !== "" && ehSigilosoPorNatureza(tipo);
   const sigiloFinal = sigiloTravado || sigilo;
+  // A frase segue a marca AO VIVO (issue #769): o ouvidor decide o que
+  // escrever no extrato olhando para ela, e ligar o sigilo muda o que vai.
+  const ajudaDoExtrato =
+    AJUDA_DO_EXTRATO[varianteDoQueViaja({ sigilo: sigiloFinal, anonimo: Boolean(manifestacao?.anonimo) })];
   // O motivo entra na régua do botão só no redirecionamento, e é a única
   // diferença de exigência entre os dois atos: ele é obrigatório lá (ADR 0055)
   // e não existe aqui.
@@ -503,11 +512,7 @@ export function ValidarModal({
             onChange={(e) => setExtrato(e.target.value)}
             placeholder="Ex.: Conduta da equipe de enfermagem no plantão noturno. Apurar e responder à Ouvidoria."
           />
-          <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">
-            É este texto que vai no email do responsável, e só ele. Escreva com as suas palavras o
-            que a área precisa resolver: o responsável do setor é de fora da Ouvidoria, e o relato
-            de quem manifestou não sai daqui. Sem este texto o acionamento não sai.
-          </p>
+          <p className="mt-1.5 text-xs text-slate-500 leading-relaxed">{ajudaDoExtrato}</p>
         </div>
 
         <div>

@@ -1,0 +1,14 @@
+{
+  "leia": "O que vai à área além do Extrato para o setor, por caso (issue #769). Espelho da regra do backend (ouvidoria_blocos.py); test_ouvidoria_o_que_viaja_contrato.py prova que ele diz o que a regra faz.",
+  "variantes": {
+    "comum": ["resumo", "relato_integral", "identificacao", "paciente"],
+    "anonimo": ["resumo", "relato_integral", "paciente"],
+    "sigilo": []
+  },
+  "casos": [
+    { "sigilo_reforcado": false, "anonimo": false, "variante": "comum" },
+    { "sigilo_reforcado": false, "anonimo": true, "variante": "anonimo" },
+    { "sigilo_reforcado": true, "anonimo": false, "variante": "sigilo" },
+    { "sigilo_reforcado": true, "anonimo": true, "variante": "sigilo" }
+  ]
+}

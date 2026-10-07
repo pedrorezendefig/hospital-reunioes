@@ -35,6 +35,9 @@ export interface ManifestacaoIndice {
   // Só a Ouvidoria recebe (issue #753): o resumo é recorte literal do relato,
   // e o índice de quem está fora dela vem sem ele.
   resumo?: string;
+  // Só a Ouvidoria recebe (issue #769): a tela de validação aberta pela fila
+  // lê a marca para dizer, no texto de ajuda do extrato, o que vai à área.
+  anonimo?: boolean;
   conversa_id: string;
   // Motor de prazos (issue #322): o vencimento e o rótulo vêm calculados do
   // servidor, em calendário útil.
