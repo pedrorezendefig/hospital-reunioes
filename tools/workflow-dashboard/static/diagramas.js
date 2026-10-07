@@ -709,9 +709,132 @@ function flowSvg(diag) {
   </svg>`;
 }
 
+/* ---------- Fluxo de trabalho: grade desenhada à mão (fluxo.json) ---------- */
+
+/* O fluxo do pedido à produção não é parseado de Mermaid: vem do
+   static/fluxo.json, mantido à mão junto com o /ask-pedro. Cada nó diz onde
+   fica numa grade (x em colunas, y em linhas, fracionários valem), então o
+   renderer não decide layout nenhum: desenha raias, nós (retângulo com título
+   e subtítulo; decisão com borda dupla; parada humana em âmbar com a mão),
+   arestas ortogonais com rótulo e devolve o SVG. Quem clica num nó é o app.js
+   (data-act="fluxono"). */
+const FX_T = 6.4;      // px por caractere do título (sans 12px)
+const FX_S = 6.0;      // px por caractere do subtítulo (mono 10px)
+const FX_PAD = 10;     // respiro interno do nó
+const FX_MAO = 24;     // espaço da mão nos nós humanos
+const FX_MAO_PATH = 'M6 11.5V4.7a1.3 1.3 0 0 1 2.6 0V10M8.6 9.5V3.3a1.3 1.3 0 0 1 2.6 0V10M11.2 10V4.5a1.3 1.3 0 0 1 2.6 0v6.5M13.8 11V7a1.3 1.3 0 0 1 2.6 0v5.8c0 3.6-2.5 5.7-5.7 5.7-2.6 0-4.1-1.1-5.4-3.3L2.4 11.4a1.3 1.3 0 0 1 2.1-1.4l1.5 1.7';
+
+const fxLinhas = v => (v == null ? [] : Array.isArray(v) ? v : [v]);
+
+function fxGeo(diag) {
+  const g = diag.grade || {};
+  const CX = g.coluna || 90, RY = g.linha || 96, W = g.largura || 1080;
+  const pos = new Map();
+  (diag.nos || []).forEach(n => {
+    const subs = fxLinhas(n.sub);
+    const w = n.w || 200, h = 40 + 14 * Math.max(subs.length, 1);
+    pos.set(n.id, { n, subs, cx: n.x * CX, top: n.y * RY, w, h, cy: n.y * RY + h / 2 });
+  });
+  return { CX, RY, W, pos };
+}
+
+function fxNo(p, i) {
+  const { n, subs, cx, top, w, h } = p;
+  const humano = n.classe === 'humano';
+  const x0 = cx - w / 2;
+  const tx = humano ? x0 + FX_PAD + FX_MAO : cx;
+  const largura = w - 2 * FX_PAD - (humano ? FX_MAO : 0);
+  const forma = n.classe === 'decisao'
+    ? `<rect x="${x0}" y="${top}" width="${w}" height="${h}" rx="10"/><rect x="${x0 + 3}" y="${top + 3}" width="${w - 6}" height="${h - 6}" rx="8"/>`
+    : `<rect x="${x0}" y="${top}" width="${w}" height="${h}" rx="10"/>`;
+  const mao = humano
+    ? `<g class="fx-mao" transform="translate(${x0 + FX_PAD - 2} ${top + 9}) scale(.85)"><path d="${FX_MAO_PATH}"/></g>` : '';
+  const titulo = `<text class="fx-t" x="${tx}" y="${top + 21}">${esc(corta(n.titulo || n.id, Math.floor(largura / FX_T)))}</text>`;
+  const sub = subs.map((l, j) =>
+    `<text class="fx-s" x="${tx}" y="${top + 37 + j * 14}">${esc(corta(String(l), Math.floor(largura / FX_S)))}</text>`).join('');
+  const rotulo = [n.titulo, ...subs].join(': ');
+  return `<g class="fx-no fx-${esc(n.classe || 'auto')}${humano ? ' esq' : ''}" data-act="fluxono" data-id="${esc(n.id)}" tabindex="0" role="button"
+    aria-label="${esc(rotulo)}" style="--i:${Math.min(i, 12)}">${forma}${mao}${titulo}${sub}</g>`;
+}
+
+/* uma aresta ortogonal: a geometria sai do modo (baixo, lado, volta, direita
+   ou reto na mesma linha) e o rótulo vai no trecho mais folgado do caminho */
+function fxAresta(a, pos, W) {
+  const A = pos.get(a.de), B = pos.get(a.para);
+  if (!A || !B) return null;
+  const f = v => v.toFixed(1);
+  const modo = a.modo || (Math.abs(A.cy - B.cy) < 1 ? 'reto' : 'baixo');
+  let d, lab;
+  if (modo === 'reto') {
+    const dir = B.cx > A.cx ? 1 : -1;
+    const x1 = A.cx + dir * A.w / 2, x2 = B.cx - dir * B.w / 2;
+    d = `M ${f(x1)} ${f(A.cy)} H ${f(x2)}`;
+    lab = { x: (x1 + x2) / 2, y: A.cy - 6, anchor: 'middle' };
+  } else if (modo === 'lado') {
+    const y1 = A.top + A.h, dir = B.cx > A.cx ? 1 : -1, x2 = B.cx - dir * B.w / 2;
+    d = `M ${f(A.cx)} ${f(y1)} V ${f(B.cy)} H ${f(x2)}`;
+    lab = { x: (A.cx + x2) / 2, y: B.cy - 6, anchor: 'middle' };
+  } else if (modo === 'volta' || modo === 'direita') {
+    const x1 = A.cx + A.w / 2, xc = modo === 'volta' ? x1 + 40 : W - 15, x2 = B.cx + B.w / 2;
+    d = `M ${f(x1)} ${f(A.cy)} H ${f(xc)} V ${f(B.cy)} H ${f(x2)}`;
+    lab = { x: xc - 8, y: (A.cy + B.cy) / 2, anchor: 'end' };
+  } else {
+    const y1 = A.top + A.h, y2 = B.top;
+    if (Math.abs(A.cx - B.cx) < 1) {
+      d = `M ${f(A.cx)} ${f(y1)} V ${f(y2)}`;
+      lab = { x: A.cx + 8, y: (y1 + y2) / 2, anchor: 'start', lado: true };
+    } else {
+      const ym = y1 + (a.meio == null ? 0.5 : a.meio) * (y2 - y1);
+      d = `M ${f(A.cx)} ${f(y1)} V ${f(ym)} H ${f(B.cx)} V ${f(y2)}`;
+      lab = { x: (A.cx + B.cx) / 2, y: ym - 6, anchor: 'middle' };
+    }
+  }
+  const linhas = fxLinhas(a.rotulo);
+  const rotulo = linhas.map((l, i) => {
+    // em cima de um trecho horizontal as linhas sobem; ao lado de um vertical, centram
+    const y = lab.lado ? lab.y + (i - (linhas.length - 1) / 2) * 13 + 4 : lab.y - (linhas.length - 1 - i) * 13;
+    return `<text class="fx-rotulo" x="${f(lab.x)}" y="${f(y)}" text-anchor="${lab.anchor}">${esc(l)}</text>`;
+  }).join('');
+  const seta = `<g class="fx-rel" aria-label="${esc(a.de)} para ${esc(a.para)}${linhas.length ? ': ' + esc(linhas.join(' ')) : ''}">
+    <path class="fx-edge${a.tracejada ? ' fx-tracejada' : ''}" d="${d}" marker-end="url(#fx-ponta)"/></g>`;
+  return { seta, rotulo };
+}
+
+function fxRaia(r, CX, RY) {
+  const x = r.x1 * CX, y = r.y1 * RY, w = (r.x2 - r.x1) * CX, h = (r.y2 - r.y1) * RY;
+  const titulo = String(r.titulo || '');
+  const cw = Math.round(titulo.length * 6.8) + 22;
+  const cx0 = r.alinhar === 'direita' ? x + w - 10 - cw : x + 10;
+  return `<g class="fx-raia"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="14"/>
+    <g class="fx-raia-chip"><rect x="${cx0}" y="${y + 10}" width="${cw}" height="22" rx="11"/>
+    <text x="${cx0 + cw / 2}" y="${y + 25}" text-anchor="middle">${esc(titulo)}</text></g></g>`;
+}
+
+function fluxoSvg(diag) {
+  const nos = diag.nos || [];
+  if (!nos.length) return null;
+  const { CX, RY, W, pos } = fxGeo(diag);
+  const raias = (diag.raias || []).map(r => fxRaia(r, CX, RY)).join('');
+  const setas = [], rotulos = [];
+  (diag.arestas || []).forEach(a => {
+    const e = fxAresta(a, pos, W);
+    if (e) { setas.push(e.seta); rotulos.push(e.rotulo); }
+  });
+  const nosSvg = nos.map((n, i) => fxNo(pos.get(n.id), i)).join('');
+  let H = 0;
+  pos.forEach(p => { H = Math.max(H, p.top + p.h); });
+  (diag.raias || []).forEach(r => { H = Math.max(H, r.y2 * RY); });
+  return `<svg class="fx-svg" viewBox="0 0 ${W} ${Math.ceil(H) + 12}" role="group"
+    aria-label="Fluxo de trabalho: ${esc(diag.titulo || '')}, ${nos.length} passos">
+    <defs><marker id="fx-ponta" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse">
+      <path class="fx-seta" d="M 0 0 L 10 5 L 0 10 Z"/></marker></defs>
+    ${raias}<g class="fx-arestas">${setas.join('')}</g>${nosSvg}<g class="fx-rotulos">${rotulos.join('')}</g>
+  </svg>`;
+}
+
 /* ---------- interface única ---------- */
 
-const RENDERERS = { er: erSvg, seq: seqSvg, estado: estadoSvg, flow: flowSvg };
+const RENDERERS = { er: erSvg, seq: seqSvg, estado: estadoSvg, flow: flowSvg, fluxo: fluxoSvg };
 
 export function renderDiagrama(diag) {
   const fn = diag && Object.hasOwn(RENDERERS, diag.tipo) && RENDERERS[diag.tipo];
@@ -727,6 +850,18 @@ export function wireDiagramas(root) {
   root.querySelectorAll('.er-svg').forEach(wireErMapa);
   root.querySelectorAll('.seq-box').forEach(wireSeq);
   root.querySelectorAll('.st-svg').forEach(wireEstadoHover);
+  root.querySelectorAll('.fx-svg').forEach(wireFluxoTeclado);
+}
+
+/* Enter/Espaço num passo do fluxo clica nele (o data-act borbulha até o app.js) */
+function wireFluxoTeclado(svg) {
+  svg.querySelectorAll('.fx-no').forEach(g => {
+    g.addEventListener('keydown', e => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      e.preventDefault();
+      g.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+  });
 }
 
 /* interações do ER (issue #255): o hover não revela nada, só destaca.

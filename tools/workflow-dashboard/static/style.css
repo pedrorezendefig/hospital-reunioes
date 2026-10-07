@@ -117,11 +117,6 @@ main .btn-pill.outline{border-color:var(--ghost); color:var(--ink)}
 /* ---------- scaffolding ---------- */
 main.wrap{background:var(--surface); border-radius:var(--r-card-lg);
   padding:30px 28px 26px; min-height:55vh}
-.sec{margin:36px 0 16px; display:flex; align-items:baseline; gap:14px}
-.sec:first-child{margin-top:24px}
-.sec .n{font-family:var(--mono); font-size:12.5px; color:var(--brand); font-weight:500}
-.sec h2{font-size:clamp(21px,3vw,28px)}
-.sec .hint{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); margin-left:auto}
 
 .card{background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-card);
   padding:20px 22px; box-shadow:var(--shadow)}
@@ -992,3 +987,65 @@ body.er-lock main{z-index:130}
   .pr-card:hover{border-color:var(--brand)}
 }
 /* ============ fim aba PRs (issue 946) ============ */
+
+/* ============ aba Documentação (fluxo · mapa · decisões · glossário) ============ */
+.doc-subs{margin:18px 0 0}
+
+/* o fluxo de trabalho (static/fluxo.json, renderer próprio): grade desenhada
+   à mão, raias, nós por classe (azul automático, âmbar humano, cinza decisão)
+   e arestas ortogonais com rótulo. Só animação de CSS; prefers-reduced-motion
+   zera tudo pela regra global. */
+.fx-capa{padding:18px 20px 14px}
+.fx-hint{margin-bottom:12px}
+.fx-svg{display:block; width:100%; height:auto}
+.fx-raia > rect{fill:color-mix(in srgb, var(--paper-2) 55%, transparent); stroke:var(--line-2); stroke-width:1.2; stroke-dasharray:5 4}
+.fx-raia-chip rect{fill:var(--card); stroke:var(--line-2); stroke-width:1}
+.fx-raia-chip text{font:500 11px var(--mono); letter-spacing:.06em; fill:var(--ink-soft)}
+.fx-no{cursor:pointer; outline:none; animation:erIn .5s cubic-bezier(.16,.8,.3,1) backwards; animation-delay:calc(var(--i,0)*22ms)}
+.fx-no rect{fill:var(--card); stroke:var(--line-2); stroke-width:1.2; transition:stroke-width .18s ease}
+.fx-auto rect{stroke:var(--brand); fill:color-mix(in srgb, var(--brand) 6%, var(--card))}
+.fx-humano rect{stroke:var(--amber); stroke-width:1.6; fill:var(--amber-wash)}
+.fx-decisao rect{stroke:var(--ink-soft); fill:var(--paper-2)}
+.fx-decisao rect + rect{fill:none}
+.fx-fim rect{fill:var(--brand); stroke:var(--brand)}
+.fx-no.fx-fim .fx-t,.fx-no.fx-fim .fx-s{fill:var(--on-navy)}
+.fx-no .fx-t{font:500 12px var(--sans); fill:var(--ink); text-anchor:middle}
+.fx-no .fx-s{font:400 10px var(--mono); fill:var(--ink-soft); text-anchor:middle}
+.fx-no.esq .fx-t,.fx-no.esq .fx-s{text-anchor:start}
+.fx-mao path{fill:none; stroke:var(--amber); stroke-width:1.6; stroke-linecap:round; stroke-linejoin:round}
+.fx-no:hover rect:first-child,.fx-no:focus-visible rect:first-child,.fx-no.on rect:first-child{stroke-width:2.4}
+.fx-no.on rect:first-child{filter:drop-shadow(0 4px 10px color-mix(in srgb, var(--navy) 18%, transparent))}
+.fx-edge{fill:none; stroke:var(--ink-soft); stroke-width:1.4; opacity:.7}
+.fx-edge.fx-tracejada{stroke-dasharray:5 4}
+.fx-seta{fill:var(--ink-soft)}
+.fx-rotulo{font:500 10.5px var(--mono); fill:var(--brand);
+  paint-order:stroke; stroke:var(--card); stroke-width:3.5px; pointer-events:none}
+.fx-painel{margin-top:14px}
+.fx-painel-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
+.fx-painel h3{font-size:18px; margin:10px 0 8px}
+.fx-painel p{margin:0 0 12px; font-size:14.5px; line-height:1.6}
+.fx-legenda{display:flex; gap:18px; flex-wrap:wrap; margin:16px 2px; font-family:var(--mono); font-size:11.5px; color:var(--ink-soft)}
+.fx-legenda .sw{display:inline-block; width:12px; height:12px; border-radius:3px; border:1.4px solid; vertical-align:-2px; margin-right:6px}
+.fx-legenda .sw-auto{border-color:var(--brand); background:color-mix(in srgb, var(--brand) 6%, var(--card))}
+.fx-legenda .sw-humano{border-color:var(--amber); background:var(--amber-wash)}
+.fx-legenda .sw-decisao{border-color:var(--ink-soft); background:var(--paper-2)}
+.fx-portas td:first-child{white-space:nowrap}
+
+/* Decisões: busca, histórico e grupos por tema */
+.adr-tools{display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin:14px 0 18px}
+.adr-tema{margin:22px 0 10px}
+.adr-tema:first-child{margin-top:4px}
+.adr-frase{margin-top:10px; font-size:13.5px; color:var(--ink-soft)}
+.adr-frase p{margin:0}
+.adr-hist{opacity:.55; transition:opacity .18s ease}
+.adr-hist:hover{opacity:.9}
+
+/* Glossário: índice de termos em chips e o termo alvo da rota em destaque */
+.g-indice{margin-bottom:16px}
+.g-secao{display:flex; flex-direction:column; gap:7px; margin:4px 0 14px}
+.g-secao:last-child{margin-bottom:0}
+.g-chips{display:flex; flex-wrap:wrap; gap:6px}
+.g-chips .chip{text-decoration:none; color:var(--ink)}
+.g-chips .chip:hover{border-color:var(--indigo); color:var(--indigo)}
+.g-termo{scroll-margin-top:90px}
+.md p.g-alvo{background:var(--brand-wash); border-radius:var(--r-inner); padding:6px 10px; margin-left:-10px; margin-right:-10px}

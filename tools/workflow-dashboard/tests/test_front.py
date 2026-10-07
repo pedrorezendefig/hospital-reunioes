@@ -35,10 +35,11 @@ def _fora_do_root():
 # ---------- navegação e branding ----------
 
 
-def test_navegacao_tem_exatamente_5_abas_sem_grupos():
-    # ADR 0062, decisão 3: Plano, Pendências e Guia saem; Issues é a home
+def test_navegacao_tem_exatamente_4_abas_sem_grupos():
+    # ADR 0062, decisão 3: Plano, Pendências e Guia saem; Issues é a home.
+    # Mapa e Domínio viraram sub-pills de Documentação (PR da aba Documentação).
     abas = re.findall(r'data-tab="([^"]+)"', INDEX)
-    assert abas == ["issues", "prs", "producao", "mapa", "dominio"]
+    assert abas == ["issues", "prs", "producao", "documentacao"]
     assert "tabgroup" not in INDEX  # sem rótulos nem separadores de grupo
 
 
