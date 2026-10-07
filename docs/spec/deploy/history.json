@@ -2,6 +2,54 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-07T14:20:45-03:00",
+      "sha": "f99092eed8f395082f86d5271743f46d54fd104d",
+      "app_version": "0.168.0",
+      "subject": "Onda onda-a-onda2: Webhook pull_request, PR aberto que fecha a raiz vira Em desenvolvimento; Anexo da Demanda no formulário e no card, apagado em Concluída ou Cancelada; Painel com Com você, Entregas ",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda2 (#1095 #1096 #1097)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [
+        1056
+      ],
+      "result": "healthy",
+      "duration_seconds": 520,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda2: PR #1095 (issue #1064), PR #1096 (issue #1061), PR #1097 (issue #1059), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 9,
+        "build_s": {
+          "backend": 440,
+          "frontend": 366
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-07T13:17:23-03:00",
       "sha": "f142a728a0f523dd54927ddca61f4880f4460ba8",
       "app_version": "0.167.0",
