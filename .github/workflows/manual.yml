@@ -33,6 +33,7 @@ on:
       - '.github/workflows/pos-merge.yml'
       - '.github/workflows/imagem-backend.yml'
       - '.github/rulesets/**'
+      - 'hospital-reunioes/backend/app/services/registro_do_deploy.py'
   pull_request:
     branches: [main]
     paths:
@@ -70,6 +71,9 @@ on:
       # workflow que a subida dispara ao ci.yml e ao project.json.
       - '.github/workflows/imagem-backend.yml'
       - '.github/rulesets/**'
+      # O aviso da subida ao app (issue #1065): o script de tools/ carrega este
+      # leitor do backend pelo caminho, e o teste dele mora em tools/.
+      - 'hospital-reunioes/backend/app/services/registro_do_deploy.py'
 
 jobs:
   manual:

@@ -31,7 +31,9 @@ Jobs:
   9. reconciliar_vinculos_tecnologia: de hora em hora, relê no GitHub as Demandas
      vinculadas ainda abertas e atualiza a Etapa (issue #678, ADR 0054). É a rede
      de proteção do webhook, que o GitHub não reentrega quando falha. Idempotente:
-     foto igual à guardada não escreve nada.
+     foto igual à guardada não escreve nada. Depois, marca Em produção as Demandas
+     Entregues cujas issues aparecem no history.json da main (issue #1065), a rede
+     de proteção do webhook de deploy. Idempotente: só a Entregue sobe.
 """
 
 import logging
@@ -176,6 +178,14 @@ def reconciliar_vinculos_tecnologia() -> None:
         tecnologia_sincronizacao.reconciliar_vinculos(_supabase())
     except Exception as e:
         logger.error(f"[Cron] Erro em reconciliar_vinculos_tecnologia: {e}", exc_info=True)
+
+    # Depois da releitura das issues, e em separado: a Demanda que acabou de
+    # chegar a Entregue já pode ganhar Em produção pelo history.json da main
+    # (issue #1065), e uma falha de um lado não impede o outro.
+    try:
+        tecnologia_sincronizacao.reconciliar_em_producao(_supabase())
+    except Exception as e:
+        logger.error(f"[Cron] Erro em reconciliar_em_producao: {e}", exc_info=True)
 
 
 def despachar_notificacoes_ouvidoria() -> None:

@@ -111,6 +111,14 @@ def _sem_pr_aberto(monkeypatch):
 
 
 @pytest.fixture(autouse=True)
+def _pr_do_app(monkeypatch):
+    """O PR mergeado toca no app e leva uma subida (revisao do PR #1100). Quem
+    quer o PR de ferramenta, ou a leitura falhando, troca este duble no proprio
+    teste."""
+    monkeypatch.setattr(github_client, "pr_toca_o_app", lambda numero: True)
+
+
+@pytest.fixture(autouse=True)
 def _sem_email_de_verdade(monkeypatch):
     """Nenhum teste deste arquivo manda e-mail, e todos podem tentar.
 

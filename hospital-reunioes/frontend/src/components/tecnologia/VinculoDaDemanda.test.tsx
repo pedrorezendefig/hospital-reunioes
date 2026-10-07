@@ -241,6 +241,18 @@ describe("O que o selo diz", () => {
     // "0 de 0 partes" é uma barra vazia onde não existe barra.
     expect(textoDoSelo(demanda({ etapa: "entregue", partes_entregues: 0, partes_total: 0 }))).toBe("Entregue");
   });
+
+  it("Em produção diz desde qual versão (issue #1065)", () => {
+    expect(textoDoSelo(demanda({ etapa: "em_producao", versao: "v0.169.0" }))).toBe("Em produção desde v0.169.0");
+    expect(
+      textoDoSelo(demanda({ etapa: "em_producao", versao: "v0.169.0", partes_entregues: 7, partes_total: 7 })),
+    ).toBe("Em produção desde v0.169.0 · 7 de 7 partes");
+  });
+
+  it("sem a versão, Em produção fica só com o rótulo", () => {
+    // Backend uma versão atrás não manda o campo: o selo não inventa número.
+    expect(textoDoSelo(demanda({ etapa: "em_producao", versao: null }))).toBe("Em produção");
+  });
 });
 
 // ─── 2. O selo no card ───────────────────────────────────────────────────────
@@ -267,6 +279,12 @@ describe("O selo no card do Quadro", () => {
     montarQuadro([{ ...VINCULADA, vinculo: null }]);
 
     expect(await screen.findByText("Em desenvolvimento · 3 de 7 partes")).toBeTruthy();
+  });
+
+  it("o card Em produção mostra desde qual versão (issue #1065)", async () => {
+    montarQuadro([demanda({ etapa: "em_producao", versao: "v0.169.0", partes_entregues: null, partes_total: null })]);
+
+    expect(await screen.findByText("Em produção desde v0.169.0")).toBeTruthy();
   });
 });
 

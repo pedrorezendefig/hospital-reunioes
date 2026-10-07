@@ -156,6 +156,11 @@ class DemandaResponse(BaseModel):
     # frase; nulo NAO e o corpo tecnico da issue, que nao sai do GitHub.
     o_que_muda: str | None = None
     partes: list[ParteDaEntrega] = []
+    # A versao em que a Demanda subiu, RESOLVIDA pelo backend: vem preenchida so
+    # quando a Etapa e Em producao (`versao_da_entrega`), e o selo a mostra em
+    # todo lugar ("Em producao desde v0.165.0", issue #1065). A tela nao repete
+    # a regra.
+    versao: str | None = None
     # A frase de "isto valeu, mas o aviso por e-mail nao saiu" (issue #642), ou
     # `None` quando nao houve nada a avisar ou o aviso saiu.
     #
@@ -382,11 +387,9 @@ class DemandaDoHistoricoResponse(DemandaResponse):
 class DemandaDaEntregaResponse(DemandaResponse):
     """A Demanda como o bloco Entregas do Painel a le (issue #1059).
 
-    A `versao` e RESOLVIDA pelo backend: vem preenchida so quando a Etapa e Em
-    producao (`versao_da_entrega`). A tela nao repete a regra.
+    A `versao` deixou de ser so deste bloco (issue #1065): ela vem em toda
+    Demanda (`DemandaResponse`), porque o selo a mostra no Quadro tambem.
     """
-
-    versao: str | None = None
 
 
 class NumerosDoPainel(BaseModel):

@@ -194,13 +194,9 @@ export function PainelDemandas({ token, carregandoAuth, produtos, pessoas, eu }:
         {titulo(demanda)}
         <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
           <span>{demanda.produto_nome ?? "Sem Produto"}</span>
-          {/* A Etapa e as partes, no mesmo selo do Quadro. */}
+          {/* A Etapa, as partes e, em Em produção, desde qual versão: o
+              mesmo selo do Quadro (issue #1065). */}
           <SeloDeEtapa demanda={demanda} />
-          {demanda.versao && (
-            <span className="px-2 py-0.5 rounded font-medium bg-slate-100 text-slate-700">
-              No ar desde a versão {demanda.versao}
-            </span>
-          )}
         </div>
       </li>
     );

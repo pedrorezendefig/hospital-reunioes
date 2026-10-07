@@ -124,6 +124,13 @@ export type Demanda = {
    */
   o_que_muda?: string | null;
   partes?: ParteDaEntrega[];
+  /**
+   * A versão em que a Demanda subiu ("v0.169.0", issue #1065).
+   *
+   * O backend a manda só quando a Etapa é Em produção: a tela mostra o que
+   * veio e não repete a regra.
+   */
+  versao?: string | null;
 };
 
 /** O que só quem é da Vitta vê do Vínculo. */
@@ -247,14 +254,18 @@ export function conversaPublicada(demanda: Demanda): boolean {
 }
 
 /**
- * O texto do selo: a Etapa e, quando há partes, "X de Y partes".
+ * O texto do selo: a Etapa e, quando há partes, "X de Y partes". Em produção
+ * diz desde qual versão (issue #1065), que é o que o diretor procura.
  *
  * Sem total não há fração: "0 de 0 partes" é uma barra vazia onde não existe
  * barra, e o card precisa distinguir a issue simples do PRD que ainda não
  * entregou nada.
  */
 export function textoDoSelo(demanda: Demanda): string {
-  const rotulo = ETAPA_ROTULO[demanda.etapa as EtapaDemanda] ?? "";
+  const rotulo =
+    demanda.etapa === "em_producao" && demanda.versao
+      ? `${ETAPA_ROTULO.em_producao} desde ${demanda.versao}`
+      : (ETAPA_ROTULO[demanda.etapa as EtapaDemanda] ?? "");
   const total = demanda.partes_total;
   const entregues = demanda.partes_entregues;
   if (typeof total === "number" && total > 0 && typeof entregues === "number") {
@@ -628,10 +639,10 @@ export const MOTIVO_ROTULO: Record<string, string> = {
 /**
  * A Demanda como o bloco Entregas a lê.
  *
- * A `versao` vem do backend só quando a Etapa é Em produção: a tela mostra o
- * que veio e não repete a regra.
+ * A `versao` deixou de ser só deste bloco (issue #1065): ela vem em toda
+ * Demanda, e o selo a mostra.
  */
-export type DemandaDaEntrega = Demanda & { versao: string | null };
+export type DemandaDaEntrega = Demanda;
 
 /** A Demanda como o bloco Histórico a lê. */
 export type DemandaDoHistorico = Demanda & {

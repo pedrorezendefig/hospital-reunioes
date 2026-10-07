@@ -27,6 +27,9 @@ campo de terceiro espalhado por tres arquivos.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import logging
 import re
 from typing import Any
@@ -189,6 +192,65 @@ def ler_prs_abertos() -> list[dict[str, Any]]:
         for pr in dados
         if isinstance(pr, dict) and isinstance(pr.get("number"), int)
     ]
+
+
+# A pasta do app. O PR que nao toca nela e lote de ferramenta para a subida
+# (`classe_do_lote` no `fechar_onda.py`): so merge, sem build, sem registro no
+# `history.json` e sem webhook de deploy.
+PASTA_DO_APP = "hospital-reunioes/"
+
+# A API lista ate 3000 arquivos de um PR, 100 por pagina.
+_PAGINAS_DE_ARQUIVOS = 30
+
+
+def pr_toca_o_app(numero: int) -> bool:
+    """Se o PR mexe em algum arquivo do app, e por isso leva uma subida
+    (revisao do PR #1100, ADR 0069, decisao 5).
+
+    Para na primeira pagina que acha um arquivo do app, ou na primeira que vem
+    incompleta (a ultima). Falha de leitura sobe como `GithubIndisponivelError`:
+    quem chama decide o que "nao sei" quer dizer.
+    """
+    for pagina in range(1, _PAGINAS_DE_ARQUIVOS + 1):
+        dados = _chamar("GET", f"/pulls/{numero}/files?per_page=100&page={pagina}")
+        if not isinstance(dados, list):
+            raise GithubIndisponivelError("GitHub respondeu os arquivos do PR fora do formato")
+        if any(isinstance(a, dict) and str(a.get("filename") or "").startswith(PASTA_DO_APP) for a in dados):
+            return True
+        if len(dados) < 100:
+            return False
+    return False
+
+
+# O registro de todas as subidas, como a Action pos-merge o grava na `main`
+# (ADR 0064, decisao 6b). E o arquivo, e nao o evento: so a reconciliacao le
+# daqui (ADR 0069, decisao 4).
+CAMINHO_DO_HISTORICO = "docs/spec/deploy/history.json"
+
+
+def ler_historico_de_deploys() -> list[dict[str, Any]]:
+    """As subidas registradas no `history.json` da `main`, a mais nova primeiro.
+
+    Pela API de conteudo, que devolve o arquivo em base64 ate 1 MB (o arquivo
+    tem dezenas de KB). O repositorio e publico, e o token so le. Qualquer
+    coisa fora do formato vira indisponibilidade: quem chama nao marca nada e
+    tenta de novo na hora seguinte, em vez de ler "nenhuma subida" de um
+    arquivo que nao conseguiu ler.
+    """
+    try:
+        dados = _chamar("GET", f"/contents/{CAMINHO_DO_HISTORICO}?ref=main")
+    except IssueNaoEncontradaError as exc:
+        raise GithubIndisponivelError("O history.json nao esta na main") from exc
+    if not isinstance(dados, dict) or dados.get("encoding") != "base64" or not isinstance(dados.get("content"), str):
+        raise GithubIndisponivelError("GitHub respondeu o history.json fora do formato")
+    try:
+        historico = json.loads(base64.b64decode(dados["content"]))
+    except (ValueError, binascii.Error) as exc:
+        raise GithubIndisponivelError("O history.json da main nao e JSON") from exc
+    deploys = historico.get("deploys") if isinstance(historico, dict) else None
+    if not isinstance(deploys, list):
+        raise GithubIndisponivelError("O history.json da main nao tem a lista de deploys")
+    return deploys
 
 
 def e_pull_request(dados: dict[str, Any]) -> bool:

@@ -22,6 +22,13 @@ name: Pós-merge
 # diz o que saiu e o que ficou em draft, e o terceiro job, `avisar`, comenta no
 # PRD fechado. Ele só tem `issues: write`, não faz checkout nem instala nada, e
 # o aviso que ele publica sai do passo do draft, que roda antes do `uv sync`.
+#
+# O quarto job, `em-producao` (issue #1065, ADR 0069, decisão 4), avisa o app de
+# que a versão subiu, para ele marcar Em produção as Demandas do lote. Roda só
+# quando o passo que aplica o registro deu certo, e num job à parte, e não como
+# passo do `gerar`: o segredo do webhook não entra no job que roda pacote de
+# terceiros (ADR 0065). Falhar não derruba o run, porque a reconciliação de hora
+# em hora do app lê o mesmo registro no history.json da main.
 on:
   push:
     branches: [main]
@@ -72,6 +79,9 @@ jobs:
       aviso: ${{ steps.draft.outputs.aviso }}
       prds: ${{ steps.draft.outputs.prds }}
       versao: ${{ steps.draft.outputs.versao }}
+      # Se o registro foi aplicado: é o que libera o aviso ao app (job
+      # `em-producao`). No run do push o passo nem roda, e fica `skipped`.
+      registro: ${{ steps.registro.outcome }}
     steps:
       - uses: actions/checkout@v6
         with:
@@ -87,6 +97,7 @@ jobs:
           python-version: "3.12"
 
       - name: Aplicar o registro do deploy
+        id: registro
         # Só no run que a subida dispara (ADR 0064, decisão 6b): a entrada nova
         # vai para o topo do history.json e o state.json passa a ser o do
         # registro, antes do draft, que lê o deploys[0]. O input entra por
@@ -352,3 +363,28 @@ jobs:
             esac
             printf '<!-- automacao -->\n%s\n\n%s\n' "$marca" "$AVISO" | gh issue comment "$n" --body-file -
           done
+
+  em-producao:
+    name: Avisar o app que a versão subiu
+    needs: gerar
+    # Depois do registro aplicado, e só no run que a subida dispara. O snapshot
+    # vermelho não segura o aviso: a versão subiu do mesmo jeito.
+    if: ${{ !cancelled() && needs.gerar.outputs.registro == 'success' }}
+    runs-on: ubuntu-latest
+    # O app fora do ar ou o segredo ainda não cadastrado não derrubam o run: a
+    # reconciliação de hora em hora do app marca Em produção pelo history.json.
+    continue-on-error: true
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          ref: main
+          persist-credentials: false
+
+      - name: Chamar o webhook de deploy do app
+        # O segredo e o registro entram por env, nunca no `run`. O script só usa
+        # a biblioteca padrão: nada é instalado neste job.
+        env:
+          REGISTRO: ${{ inputs.registro }}
+          TECNOLOGIA_DEPLOY_WEBHOOK_SECRET: ${{ secrets.TECNOLOGIA_DEPLOY_WEBHOOK_SECRET }}
+        run: python3 tools/avisar_deploy_ao_app.py

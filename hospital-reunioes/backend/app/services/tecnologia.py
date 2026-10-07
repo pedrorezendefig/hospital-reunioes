@@ -773,19 +773,38 @@ class EfeitoDaEtapa(NamedTuple):
 SEM_EFEITO = EfeitoDaEtapa()
 
 
-def efeito_da_etapa(demanda: dict[str, Any], *, etapa_nova: str) -> EfeitoDaEtapa:
+def etapa_que_devolve(*, por_pr: bool) -> str:
+    """A Etapa em que a bola volta para quem pediu (ADR 0069, decisao 5).
+
+    Issue fechada por PR volta em Em producao: o diretor nao tem como conferir o
+    que ainda nao subiu, e devolver no merge seria pedir que ele testasse o que
+    nao existe. Issue fechada sem PR (decisao, consultoria, correcao fora do
+    codigo) volta em Entregue, como sempre: nao ha subida nenhuma a esperar. O
+    PR que nao toca no app (lote de ferramenta, so merge) conta como sem PR
+    pelo mesmo motivo: quem decide e a sincronizacao, que nao grava o fato do
+    PR nesse caso (`sincronizar_pelo_pr`).
+    Uma Etapa so por Demanda, e por isso nunca as duas.
+    """
+    return ETAPA_EM_PRODUCAO if por_pr else ETAPA_ENTREGUE
+
+
+def efeito_da_etapa(demanda: dict[str, Any], *, etapa_nova: str, por_pr: bool = False) -> EfeitoDaEtapa:
     """A UNICA regra automatica de movimento do Quadro (ADR 0054, decisao 6).
 
-    Quando a Etapa chega a Entregue, a bola volta para quem pediu: a Demanda vai
-    para Aguardando e o autor vira o responsavel, para o card cair na "Minha
-    vez" dele com algo para conferir. Quem conclui continua sendo gente: a
-    sincronizacao nunca escreve `concluida`, e este tipo nao tem como dizer isso
-    (o unico destino que ele sabe nomear e `ESTADO_AGUARDANDO`).
+    Quando a Etapa chega a que devolve (`etapa_que_devolve`: Em producao se a
+    issue fechou por PR, Entregue se fechou sem PR), a bola volta para quem
+    pediu: a Demanda vai para Aguardando e o autor vira o responsavel, para o
+    card cair no "Com voce" dele com algo para conferir. Quem conclui continua
+    sendo gente: a sincronizacao nunca escreve `concluida`, e este tipo nao tem
+    como dizer isso (o unico destino que ele sabe nomear e `ESTADO_AGUARDANDO`).
+
+    `por_pr` e o fato do PR na foto da issue, que quem chama le: o PR que a
+    fechou (`fechada_por_pr`) ou um PR aberto que a fecha, a caminho do merge.
 
     Tres portas fechadas, e cada uma por um motivo diferente:
 
-    - **qualquer Etapa que nao seja Entregue** nao move nada, "Nao sera feita"
-      inclusive: a Vitta explica na Conversa e cancela a mao (historia 29);
+    - **qualquer outra Etapa** nao move nada, "Nao sera feita" inclusive: a
+      Vitta explica na Conversa e cancela a mao (historia 29);
     - **Demanda fechada** nao e reaberta pela Entrega. A lista testada e a
       POSITIVA (`ESTADOS_ABERTOS`), e nao "tudo menos Concluida e Cancelada":
       um estado novo que entrasse no banco sem passar por aqui seria movido em
@@ -800,7 +819,7 @@ def efeito_da_etapa(demanda: dict[str, Any], *, etapa_nova: str) -> EfeitoDaEtap
     quem de fato mudou a Etapa. Uma segunda guarda aqui prometeria defender algo
     que esta funcao nao tem como ver.
     """
-    if etapa_nova != ETAPA_ENTREGUE:
+    if etapa_nova != etapa_que_devolve(por_pr=por_pr):
         return SEM_EFEITO
     estado = str(demanda.get("estado") or "")
     if estado not in ESTADOS_ABERTOS:
@@ -840,7 +859,9 @@ def devolvida_pela_entrega(demanda: dict[str, Any]) -> bool:
     autor_id = demanda.get("autor_id")
     return (
         bool(autor_id)
-        and str(demanda.get("etapa") or "") == ETAPA_ENTREGUE
+        # As duas Etapas que devolvem (`etapa_que_devolve`): Em producao quando
+        # a issue fechou por PR, Entregue quando fechou sem PR (issue #1065).
+        and str(demanda.get("etapa") or "") in (ETAPA_ENTREGUE, ETAPA_EM_PRODUCAO)
         and str(demanda.get("estado") or "") == ESTADO_AGUARDANDO
         and demanda.get("responsavel_id") == autor_id
     )

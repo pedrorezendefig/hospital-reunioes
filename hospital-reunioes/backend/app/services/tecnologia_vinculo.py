@@ -1007,6 +1007,17 @@ def texto_movimento_etapa(*, para: str, entregues: int | None = None, total: int
     return f"Etapa: {rotulo} ({partes})" if partes else f"Etapa: {rotulo}"
 
 
+def texto_em_producao(versao: str) -> str:
+    """A linha do fio quando a subida leva a entrega ao ar (ADR 0069, decisão 4).
+
+    Com a versão, e não "Etapa: Em produção": a versão é a resposta que o
+    diretor procura ("já posso usar?"), e é a mesma que o selo mostra. Sem nome
+    de quem agiu, como a linha da Etapa: quem subiu foi a Action, e a linha diz
+    o fato.
+    """
+    return f"{ETAPA_ROTULO[ETAPA_EM_PRODUCAO]} na {versao}"
+
+
 # As duas linhas do Vinculo, SEM o numero da issue.
 #
 # O texto da Conversa e lido pelo diretor e sai do app inteiro dentro do

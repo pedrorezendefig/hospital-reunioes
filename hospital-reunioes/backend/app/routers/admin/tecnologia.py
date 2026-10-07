@@ -500,6 +500,7 @@ def _com_nomes(supabase: Client, demandas: list[dict], *, ator: dict) -> list[di
             "responsavel_nome": nomes_pessoa.get(d.get("responsavel_id")),
             "vinculo": _vinculo_visivel(d) if da_vitta else None,
             "partes": _partes_visiveis(d, da_vitta=da_vitta),
+            "versao": versao_da_entrega(d),
         }
         for d in demandas
     ]
@@ -2236,7 +2237,7 @@ async def ler_painel(
         "com_voce": [
             {**nomeadas[str(d["id"])], "motivo": motivo_da_minha_vez(demanda=d, pessoa_id=eu)} for d in com_voce
         ],
-        "entregas": [{**nomeadas[str(d["id"])], "versao": versao_da_entrega(d)} for d in entregas],
+        "entregas": [nomeadas[str(d["id"])] for d in entregas],
         "historico": [
             {
                 **nomeadas[str(d["id"])],

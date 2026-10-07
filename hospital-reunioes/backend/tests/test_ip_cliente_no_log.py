@@ -396,6 +396,10 @@ SEM_ANONIMATO_A_PROTEGER = {
     # infraestrutura deles, provada pelo HMAC, e não uma pessoa. Não há
     # anonimato de manifestante a proteger no IP de origem.
     "POST /api/webhooks/github",
+    # O aviso de deploy da Action pós-merge (issue #1065), provado pelo HMAC do
+    # `TECNOLOGIA_DEPLOY_WEBHOOK_SECRET`. Quem chega aqui é um runner do GitHub
+    # Actions, e não uma pessoa: não há anonimato a proteger no IP de origem.
+    "POST /api/webhooks/deploy",
     # Callback servidor a servidor do Resend Inbound (issue #648, ADR 0051),
     # provado pela assinatura svix. Quem chega aqui é a infraestrutura do
     # Resend, e não a pessoa que escreveu o e-mail: o IP de origem não é o de
