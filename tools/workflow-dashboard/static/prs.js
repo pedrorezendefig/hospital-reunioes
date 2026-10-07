@@ -4,7 +4,8 @@
    seis fases do PR em colunas e uma raia por pessoa, na cor dela. A fase vem
    pronta do fases.py (S.data.fases.prs); aqui só se agrupa, filtra e desenha.
    A pessoa do PR é quem assumiu a issue que ele fecha (assignee, emenda de
-   06/10/2026 da ADR 0062); sem assignee, a raia é "ninguém assumiu". */
+   06/10/2026 da ADR 0062); sem assignee, quem criou a issue; PR sem issue,
+   quem abriu o PR (decisão do PR de 07/10/2026). */
 
 import { esc } from './ui.js';
 import { corDaPessoa } from './pessoas.js';
@@ -43,10 +44,11 @@ export const alternarPessoa = (f, login) => ({
   ...f, resp: f.resp.includes(login) ? f.resp.filter(p => p !== login) : [...f.resp, login],
 });
 
-/* quem assumiu as issues que o PR fecha; ninguém = SEM_RESP */
+/* quem assumiu as issues que o PR fecha; sem assignee, quem criou a issue;
+   PR sem issue (porta C) fica com quem abriu o PR; ninguém = SEM_RESP */
 function pessoasDoPr(pr, issues) {
-  const quem = [...new Set(pr.closes.flatMap(n => (issues[n] || {}).assignees || []))].sort();
-  return quem.length ? quem : [SEM_RESP];
+  const das = campo => [...new Set(pr.closes.flatMap(n => [].concat((issues[n] || {})[campo] || [])))].sort();
+  return [das('assignees'), das('author'), [pr.author].filter(Boolean)].find(l => l.length) || [SEM_RESP];
 }
 
 /* o PR fecha o PRD ou uma fatia dele */
@@ -217,7 +219,7 @@ export function renderQuadroPrs(ctx) {
         raias.get(login).filter(c => c.fase.fase === k).map(c => cardHtml(c, ctx)).join('')}</div>`).join('')}
     </div>`).join('');
 
-  const pessoas = [...new Set(noQuadro.flatMap(c => c.pessoas).filter(p => p !== SEM_RESP))].sort(porNome);
+  const pessoas = [...new Set(noQuadro.flatMap(c => c.pessoas))].sort(porNome);
   const prds = (data.github.issues || [])
     .filter(i => i.is_prd && (i.state === 'OPEN' || i.number === f.prd) && todos.some(c => doPrd(c.pr, i.number, issues)))
     .sort((a, b) => b.number - a.number);
@@ -229,7 +231,7 @@ export function renderQuadroPrs(ctx) {
     ? `<div class="pr-fora rv">O PR #${esc(item)} não aparece no quadro com estes filtros. ${ghLink(ctx, item)}</div>`
     : '';
 
-  return `${filtrosHtml([...pessoas, SEM_RESP], prds, f)}
+  return `${filtrosHtml(pessoas, prds, f)}
   ${fora}
   <div class="pr-quadro-rolagem rv"><div class="pr-quadro">${cabecalho}${linhas}</div></div>
   ${nota}
