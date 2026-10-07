@@ -43,6 +43,7 @@ from test_tecnologia_webhook_github import (  # noqa: E402
 )
 
 from app.config import settings  # noqa: E402
+from app.services import github_client  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_DESENVOLVIMENTO,
     ETAPA_EM_PRODUCAO,
@@ -112,3 +113,29 @@ class TestOWebhookMarcaEmProducao:
         assert d2["etapa"] == ETAPA_ENTREGUE
         assert d2.get("versao_em_producao") is None
         assert gh.leituras == [], "o webhook de deploy não relê o GitHub"
+
+    def test_a_linha_em_producao_entra_na_conversa_e_nao_e_espelhada(self, monkeypatch):
+        """Critério de aceite: "Em produção na v0.169.0" no fio do diretor, como
+        linha automática (sem autor), e nada publicado na issue."""
+        publicados: list = []
+        monkeypatch.setattr(github_client, "criar_comentario", lambda *a, **kw: publicados.append(a) or 1)
+        gh = _GithubFalso({673: _entregue(673)})
+        cliente, sb, _ = _montar(
+            demandas=[_entregue_por_pr(gh, 673, "D1")],
+            participantes=[_pessoa()],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        resposta = _avisar(cliente, _corpo_do_deploy())
+
+        assert resposta.json() == {"recebido": True, "versao": "v0.169.0", "marcadas": 1, "falhas": 0}
+        linha = _fio(sb)[0]
+        assert linha["texto"] == "Em produção na v0.169.0"
+        assert (linha["linha"], linha["autor_id"]) == ("movimento", None)
+        assert (linha["movimento_campo"], linha["movimento_de"], linha["movimento_para"]) == (
+            "etapa",
+            ETAPA_ENTREGUE,
+            ETAPA_EM_PRODUCAO,
+        )
+        assert publicados == [], "a linha automática não vira comentário na issue"

@@ -69,6 +69,7 @@ from app.services.tecnologia_vinculo import (
     o_que_muda_da_foto,
     partes_da_foto,
     partes_para_o_diretor,
+    texto_em_producao,
     texto_movimento_etapa,
 )
 
@@ -681,7 +682,17 @@ def _carimbar_em_producao(supabase, demanda: dict[str, Any], *, versao: str, dat
         .eq("etapa", ETAPA_ENTREGUE)
         .execute()
     )
-    return bool(marcada.data)
+    if not marcada.data:
+        return False
+    _gravar_linha(
+        supabase,
+        demanda_id=demanda_id,
+        campo="etapa",
+        de=ETAPA_ENTREGUE,
+        para=ETAPA_EM_PRODUCAO,
+        texto=texto_em_producao(versao),
+    )
+    return True
 
 
 def reconciliar_vinculos(supabase) -> dict[str, int]:
