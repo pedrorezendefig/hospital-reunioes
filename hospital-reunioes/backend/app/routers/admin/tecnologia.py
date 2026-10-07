@@ -1556,6 +1556,9 @@ async def levar_para_desenvolvimento(
         # que e de dentro.
         levado_por_login=ator.get("github_login"),
         link=link_da_demanda(demanda_id),
+        # So a contagem: nem URL nem nome de arquivo saem para o repositorio
+        # publico (issue #1062, ADR 0069, decisao 1).
+        anexos=tecnologia_anexos.quantos_guardados(supabase, demanda_id),
     )
 
     try:

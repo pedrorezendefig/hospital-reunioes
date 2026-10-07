@@ -166,6 +166,13 @@ def apagar_todos(supabase, demanda_id: str) -> None:
             )
 
 
+def quantos_guardados(supabase, demanda_id: str) -> int:
+    """Quantas imagens a Demanda ainda guarda: o N da frase "Anexos: N imagens
+    na Demanda" da issue (issue #1062). O apagado nao conta: o binario saiu, e
+    quem desenvolve nao teria o que buscar."""
+    return sum(1 for linha in ler(supabase, demanda_id) if not linha.get("apagado_em"))
+
+
 def ler(supabase, demanda_id: str) -> list[dict]:
     """As linhas dos anexos da Demanda, na ordem em que entraram."""
     result = supabase.table(TABELA_ANEXOS).select("*").eq("demanda_id", demanda_id).order("ordem").execute()
