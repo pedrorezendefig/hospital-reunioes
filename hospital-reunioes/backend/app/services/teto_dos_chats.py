@@ -23,6 +23,7 @@ import json
 
 LIMITE_DE_MENSAGENS = 40
 LIMITE_DA_MENSAGEM = 8000
+LIMITE_DO_CAMPO_DE_APOIO = 200_000
 
 
 def _milhar(numero: int) -> str:
@@ -37,11 +38,36 @@ MOTIVO_MENSAGEM_GRANDE = (
     "Encurte o texto e mande de novo."
 )
 
+# Uma frase por campo, e não uma só, porque o código SABE qual estourou: a do
+# Documento de apoio diz o que fazer; nos outros três, quem escreve é a tela ou
+# o agente, e a frase só nomeia o campo.
+_TAMANHO_DO_CHAT = f"passou de {_milhar(LIMITE_DO_CAMPO_DE_APOIO)} caracteres, o tamanho que o chat aceita."
+MOTIVO_CAMPO_GRANDE = {
+    "section_context": f"A seção apontada {_TAMANHO_DO_CHAT}",
+    "documento_apoio": (
+        f"O Documento de apoio {_TAMANHO_DO_CHAT} Remova o documento e anexe um menor, ou só o trecho que importa."
+    ),
+    "rascunho": f"O rascunho {_TAMANHO_DO_CHAT}",
+    "current_plan": f"O plano de correção {_TAMANHO_DO_CHAT}",
+}
 
-def motivo_corpo_grande(messages: list) -> str | None:
-    """A frase de recusa quando o corpo do chat passa de um dos tetos, ou None."""
+
+def _tamanho(valor) -> int:
+    """Texto conta o texto; campo estruturado conta o JSON que vai ao prompt."""
+    return len(valor) if isinstance(valor, str) else len(json.dumps(valor, ensure_ascii=False))
+
+
+def motivo_corpo_grande(messages: list, **campos_de_apoio) -> str | None:
+    """A frase de recusa quando o corpo do chat passa de um dos tetos, ou None.
+
+    `campos_de_apoio` leva os campos da rota pelo nome do corpo (as chaves de
+    `MOTIVO_CAMPO_GRANDE`); campo ausente vem como None e não conta.
+    """
     if len(messages) > LIMITE_DE_MENSAGENS:
         return MOTIVO_MUITAS_MENSAGENS
     if any(len(m.content) > LIMITE_DA_MENSAGEM for m in messages):
         return MOTIVO_MENSAGEM_GRANDE
+    for campo, valor in campos_de_apoio.items():
+        if valor is not None and _tamanho(valor) > LIMITE_DO_CAMPO_DE_APOIO:
+            return MOTIVO_CAMPO_GRANDE[campo]
     return None

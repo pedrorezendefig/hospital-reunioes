@@ -133,3 +133,64 @@ class TestTamanhoDaMensagem:
         conversa = [*_conversa(2), {"role": "user", "content": "a" * 8001}]
         detail = _recusa_legivel(_enviar(rota, monkeypatch, messages=conversa))
         assert "8.000 caracteres" in detail
+
+
+# ─── Campos de apoio ─────────────────────────────────────────────────────────
+#
+# O tamanho de um campo de texto é o do texto; o de um campo estruturado
+# (`rascunho`, `current_plan`) é o do JSON que vai ao prompt, sem escapar acento.
+
+
+def _tamanho(valor) -> int:
+    return len(valor) if isinstance(valor, str) else len(json.dumps(valor, ensure_ascii=False))
+
+
+def _texto(n: int) -> str:
+    return "a" * n
+
+
+def _rascunho(n: int) -> dict:
+    moldura = len(json.dumps({"resumo_executivo": ""}, ensure_ascii=False))
+    return {"resumo_executivo": "a" * (n - moldura)}
+
+
+def _plano(n: int) -> list[dict]:
+    """Um plano de correção válido (cada descrição até 500) com JSON de `n` caracteres."""
+    plano: list[dict] = []
+    while _tamanho(plano) < n:
+        plano.append({"field": "resumo", "action": "update", "description": "a" * 500})
+    excesso = _tamanho(plano) - n
+    for item in reversed(plano):
+        corte = min(excesso, len(item["description"]))
+        item["description"] = item["description"][: len(item["description"]) - corte]
+        excesso -= corte
+    return plano
+
+
+CAMPOS = [
+    (CORRECAO, "section_context", _texto, "seção apontada"),
+    (CORRECAO, "current_plan", _plano, "plano de correção"),
+    (GUIADA, "section_context", _texto, "seção apontada"),
+    (GUIADA, "documento_apoio", _texto, "Documento de apoio"),
+    (GUIADA, "rascunho", _rascunho, "rascunho"),
+    (POP, "section_context", _texto, "seção apontada"),
+    (POP, "rascunho", _rascunho, "rascunho"),
+]
+IDS = [f"{rota}-{campo}" for rota, campo, _, _ in CAMPOS]
+
+
+class TestCamposDeApoio:
+    @pytest.mark.parametrize(("rota", "campo", "valor_de", "_rotulo"), CAMPOS, ids=IDS)
+    def test_campo_com_duzentos_mil_caracteres_passa(self, rota, campo, valor_de, _rotulo, monkeypatch):
+        valor = valor_de(200_000)
+        assert _tamanho(valor) == 200_000
+        resposta = _enviar(rota, monkeypatch, **{campo: valor})
+        assert resposta.status_code == 200, resposta.text[:300]
+
+    @pytest.mark.parametrize(("rota", "campo", "valor_de", "rotulo"), CAMPOS, ids=IDS)
+    def test_campo_um_caractere_acima_e_recusado_com_frase(self, rota, campo, valor_de, rotulo, monkeypatch):
+        valor = valor_de(200_001)
+        assert _tamanho(valor) == 200_001
+        detail = _recusa_legivel(_enviar(rota, monkeypatch, **{campo: valor}))
+        assert "200.000 caracteres" in detail
+        assert rotulo in detail

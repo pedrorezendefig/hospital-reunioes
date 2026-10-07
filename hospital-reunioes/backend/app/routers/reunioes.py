@@ -1689,7 +1689,11 @@ async def chat_correcao_endpoint(
 ):
     """Chat conversacional para correção de ATA. Leve, síncrono, sem pipeline."""
     # Teto do corpo antes de qualquer consulta (issue #893, o porquê em `teto_dos_chats`).
-    motivo = motivo_corpo_grande(req.messages)
+    motivo = motivo_corpo_grande(
+        req.messages,
+        section_context=req.section_context,
+        current_plan=[item.model_dump() for item in req.current_plan],
+    )
     if motivo:
         raise HTTPException(status_code=422, detail=motivo)
     me = await get_participante_for_user(current_user, supabase)
@@ -1747,7 +1751,12 @@ async def chat_ata_guiada_endpoint(
     enxuto + as mensagens e devolve `{ reply, rascunho }`. Disponível só enquanto a
     Reunião está PROGRAMADA (antes de existir Ata). Espelha o `chat-correcao`.
     """
-    motivo = motivo_corpo_grande(req.messages)
+    motivo = motivo_corpo_grande(
+        req.messages,
+        section_context=req.section_context,
+        documento_apoio=req.documento_apoio,
+        rascunho=req.rascunho,
+    )
     if motivo:
         raise HTTPException(status_code=422, detail=motivo)
     me = await get_participante_for_user(current_user, supabase)

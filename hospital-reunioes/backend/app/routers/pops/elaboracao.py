@@ -129,7 +129,7 @@ async def chat_elaboracao(
     EM_ELABORACAO (auditado). Erro de IA não persiste nem transiciona.
     """
     # Teto do corpo antes de qualquer consulta (issue #893, o porquê em `teto_dos_chats`).
-    motivo = motivo_corpo_grande(req.messages)
+    motivo = motivo_corpo_grande(req.messages, section_context=req.section_context, rascunho=req.rascunho)
     if motivo:
         raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail=motivo)
     pop, setor, versao = _carregar_contexto(pop_id, actor, supabase)
