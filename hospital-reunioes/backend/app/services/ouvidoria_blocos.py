@@ -43,9 +43,7 @@ AVISO_SIGILO = (
 )
 # Desde a issue #1051 o caso anônimo leva os três blocos, e o aviso não fala
 # mais de silêncio: só diz que a manifestação é anônima e o que fazer com isso.
-AVISO_ANONIMO = (
-    "Manifestação anônima: o caso segue sem identificação de quem manifestou. " + ORIENTACAO_DE_AUTORIA
-)
+AVISO_ANONIMO = "Manifestação anônima: o caso segue sem identificação de quem manifestou. " + ORIENTACAO_DE_AUTORIA
 
 
 def _texto(manifestacao: dict, campo: str, vazio: str) -> str:

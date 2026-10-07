@@ -1579,10 +1579,12 @@ class TestReenvioLevaOsMesmosBlocos:
 
 
 class TestCasoAnonimoNaRotaDoToken:
-    """O anônimo recebe a mesma proteção do sigiloso (a identificação viaja
-    dentro do próprio texto), e a rota diz por que o caso veio com um bloco só."""
+    """Desde a issue #1051 (emenda de 07/10/2026 da ADR 0041) o anônimo sem
+    sigilo reforçado chega à tela do responsável com os três blocos, como o
+    caso comum, e o aviso só diz que a manifestação é anônima. Só o sigilo
+    reforçado segura o relato."""
 
-    def test_rota_do_caso_anonimo_traz_so_a_nota_e_o_aviso(self, monkeypatch, _nunca_envia_email_de_verdade):
+    def test_rota_do_caso_anonimo_traz_o_relato_integral(self, monkeypatch, _nunca_envia_email_de_verdade):
         sb = _SupabaseFake(manifestacoes=[_manifestacao(7, anonimo=True, manifestante_nome=None)])
         client, _ = _client(monkeypatch, supabase=sb)
         _acionar(client)
@@ -1591,8 +1593,26 @@ class TestCasoAnonimoNaRotaDoToken:
         resposta = client.get(f"/api/ouvidoria-setor/{token}")
         corpo = resposta.json()
 
-        assert [b["chave"] for b in corpo["blocos"]] == ["nota_da_ouvidoria"]
+        assert [b["chave"] for b in corpo["blocos"]] == ["resumo", "relato_integral", "nota_da_ouvidoria"]
+        assert [b["texto"] for b in corpo["blocos"]] == [RESUMO, RELATO, EXTRATO]
         assert "anônima" in corpo["aviso"].lower()
+        assert "não são encaminhados" not in corpo["aviso"]
+        assert corpo["identificacao"] is None
+        assert corpo["aceita_resposta"] is True
+
+    def test_rota_do_caso_anonimo_com_sigilo_reforcado_traz_so_a_nota(self, monkeypatch, _nunca_envia_email_de_verdade):
+        sb = _SupabaseFake(
+            manifestacoes=[_manifestacao(7, anonimo=True, sigilo_reforcado=True, manifestante_nome=None)]
+        )
+        client, _ = _client(monkeypatch, supabase=sb)
+        _acionar(client)
+        token = _token_do_email(_nunca_envia_email_de_verdade)
+
+        resposta = client.get(f"/api/ouvidoria-setor/{token}")
+        corpo = resposta.json()
+
+        assert [b["chave"] for b in corpo["blocos"]] == ["nota_da_ouvidoria"]
+        assert "sigilo reforçado" in corpo["aviso"].lower()
         assert RELATO not in resposta.text
         assert RESUMO not in resposta.text
         # As outras portas seguem abertas: o teste mede a proteção, não uma
