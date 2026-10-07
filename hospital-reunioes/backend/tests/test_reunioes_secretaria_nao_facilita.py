@@ -105,9 +105,15 @@ class _Query:
         self._payload: Any = None
         self._filtros: list[tuple[str, Any]] = []
         self._filtros_in: list[tuple[str, list]] = []
+        self._colunas: list[str] | None = None
 
-    def select(self, *_a, **_kw):
+    def select(self, colunas: str = "*", *_a, **_kw):
+        # Como o PostgREST, devolve só as colunas pedidas: sem isso, a rota que
+        # esquece uma coluna no select (o `facilitador_id` da #890) lia do fake
+        # o que em produção vem ausente.
         self._op = "select"
+        if colunas.strip() != "*":
+            self._colunas = [c.strip() for c in colunas.split(",")]
         return self
 
     def insert(self, payload, **_kw):
@@ -144,11 +150,13 @@ class _Query:
         if self._op == "update":
             for row in casadas:
                 row.update(self._payload or {})
+        if self._colunas is not None:
+            casadas = [{c: r[c] for c in self._colunas if c in r} for r in casadas]
         return type("_R", (), {"data": [dict(r) for r in casadas]})()
 
 
 class _Supabase:
-    def __init__(self, participantes: list[dict]):
+    def __init__(self, participantes: list[dict], facilitador_atual: dict = FACILITADORA):
         self.tabelas: dict[str, list] = {
             "participantes": [dict(p) for p in participantes],
             "reunioes": [
@@ -157,7 +165,7 @@ class _Supabase:
                     "titulo": "Reuniao da Facilitadora",
                     "data": "2026-10-01",
                     "status_ata": "PROGRAMADA",
-                    "facilitador_id": FACILITADORA["id"],
+                    "facilitador_id": facilitador_atual["id"],
                     "criada_por": SECRETARIA["id"],
                     "deleted_at": None,
                 }
@@ -264,6 +272,43 @@ class TestSecretariaAgendaCerto:
         aviso_ao_facilitador.assert_called_once()
 
 
+class TestSerieDaRecorrencia:
+    """Issue #890: a Recorrência manda um `agendar` por cópia, cada uma herdando
+    o facilitador da original. Quando quem cria a série não é o facilitador,
+    cada cópia mandava o aviso "marcaram uma reunião para você": 52 semanas, 52
+    emails. Agora é um aviso por série; o convite por cópia aos participantes
+    continua como estava."""
+
+    def test_serie_criada_por_outra_pessoa_avisa_o_facilitador_uma_vez(self, convites, aviso_ao_facilitador):
+        sb = _Supabase([SECRETARIA, FACILITADORA, CONVIDADO])
+
+        for data in ("2026-11-02", "2026-11-09", "2026-11-16"):
+            resp = _agendar(
+                sb,
+                SECRETARIA,
+                data=data,
+                facilitador_id=FACILITADORA["id"],
+                id_grupo_recorrencia="serie-1",
+                nome_grupo_recorrencia="Semanal",
+            )
+            assert resp.status_code == 200, resp.text
+
+        assert len(sb.reunioes_novas()) == 3
+        aviso_ao_facilitador.assert_called_once()
+        assert aviso_ao_facilitador.call_args.args[2] == FACILITADORA["id"]
+        assert convites.call_count == 3, "o convite por cópia aos participantes não muda"
+
+    def test_outra_serie_avisa_de_novo(self, convites, aviso_ao_facilitador):
+        """O aviso é por série, não por facilitador: uma série nova é notícia nova."""
+        sb = _Supabase([SECRETARIA, FACILITADORA, CONVIDADO])
+
+        for grupo in ("serie-1", "serie-2"):
+            resp = _agendar(sb, SECRETARIA, facilitador_id=FACILITADORA["id"], id_grupo_recorrencia=grupo)
+            assert resp.status_code == 200, resp.text
+
+        assert aviso_ao_facilitador.call_count == 2
+
+
 def _editar(sb: _Supabase, ator: dict, **campos):
     return _cliente(sb, ator).patch(f"/api/reunioes/{REUNIAO}", json=campos)
 
@@ -290,3 +335,59 @@ class TestEdicao:
 
         assert resp.status_code == 200, resp.text
         assert sb.reuniao()["facilitador_id"] == SUPER_ADMIN["id"]
+
+
+class TestReuniaoLegada:
+    """Issue #890: reunião que já nasceu com a Secretária facilitadora (as da
+    #886). A `/secretaria/nova?edit=` sempre reenvia o facilitador, então recusar
+    o MESMO id travava a correção de um título. A trava vale só quando o
+    facilitador muda para uma Secretária."""
+
+    def test_reenviar_a_mesma_facilitadora_e_mudar_so_o_titulo_e_aceito(self):
+        sb = _Supabase([SECRETARIA, OUTRA_SECRETARIA, FACILITADORA], facilitador_atual=SECRETARIA)
+
+        resp = _editar(sb, SECRETARIA, titulo="Titulo corrigido", facilitador_id=SECRETARIA["id"])
+
+        assert resp.status_code == 200, resp.text
+        assert sb.reuniao()["titulo"] == "Titulo corrigido"
+        assert sb.reuniao()["facilitador_id"] == SECRETARIA["id"]
+
+    def test_trocar_para_outra_secretaria_continua_recusado(self):
+        sb = _Supabase([SECRETARIA, OUTRA_SECRETARIA, FACILITADORA], facilitador_atual=SECRETARIA)
+
+        resp = _editar(sb, SECRETARIA, titulo="Titulo corrigido", facilitador_id=OUTRA_SECRETARIA["id"])
+
+        assert resp.status_code == 422, resp.text
+        assert sb.reuniao()["facilitador_id"] == SECRETARIA["id"]
+        assert sb.reuniao()["titulo"] == "Reuniao da Facilitadora"
+
+
+def _forcar(sb: _Supabase, **campos):
+    corpo = {"reason": "acerto de cadastro", **campos}
+    return _cliente(sb, SUPER_ADMIN).patch(f"/api/reunioes/{REUNIAO}/force", json=corpo)
+
+
+class TestEdicaoForcada:
+    """Issue #890: a trava valia no `agendar` e no PATCH comum, e o `force` do
+    Super admin ainda deixava a Secretária virar facilitadora."""
+
+    def test_force_com_secretaria_como_facilitadora_e_recusado_sem_alterar(self):
+        sb = _Supabase([SUPER_ADMIN, SECRETARIA, FACILITADORA])
+
+        resp = _forcar(sb, titulo="Forcada", facilitador_id=SECRETARIA["id"])
+
+        assert resp.status_code == 422, resp.text
+        assert "secretária" in resp.json()["detail"].lower()
+        linha = sb.reuniao()
+        assert linha["facilitador_id"] == FACILITADORA["id"], "a Secretária virou facilitadora pelo force"
+        assert linha["titulo"] == "Reuniao da Facilitadora", "a recusa veio tarde: o update já tinha rodado"
+
+    def test_force_com_facilitador_de_verdade_continua_valendo(self):
+        """Controle positivo: sem ele, um 422 de outra origem deixaria a recusa verde e vazia."""
+        sb = _Supabase([SUPER_ADMIN, SECRETARIA, FACILITADORA])
+
+        resp = _forcar(sb, titulo="Forcada", facilitador_id=SUPER_ADMIN["id"])
+
+        assert resp.status_code == 200, resp.text
+        assert sb.reuniao()["facilitador_id"] == SUPER_ADMIN["id"]
+        assert sb.reuniao()["titulo"] == "Forcada"

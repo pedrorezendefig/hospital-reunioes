@@ -185,6 +185,27 @@ async def agendar_reuniao(
         "id_grupo_recorrencia": req.id_grupo_recorrencia,
         "nome_grupo_recorrencia": req.nome_grupo_recorrencia,
     }
+
+    # A Recorrência manda um `agendar` por cópia, em sequência, todas com o
+    # mesmo facilitador (issue #890). O aviso ao facilitador vai uma vez por
+    # série: se a série já tem uma cópia dele, ele já foi avisado. Olhado antes
+    # do insert para a cópia atual não se contar. Na dúvida (falha da consulta),
+    # avisa: email a mais é melhor que facilitador sem saber da reunião.
+    serie_ja_avisada = False
+    if req.id_grupo_recorrencia and facilitador_id:
+        try:
+            anteriores = (
+                supabase.table("reunioes")
+                .select("id_reuniao")
+                .eq("id_grupo_recorrencia", req.id_grupo_recorrencia)
+                .eq("facilitador_id", facilitador_id)
+                .limit(1)
+                .execute()
+            )
+            serie_ja_avisada = bool(anteriores.data)
+        except Exception as e:
+            logger.warning(f"Não foi possível consultar a série {req.id_grupo_recorrencia}: {e}")
+
     try:
         supabase.table("reunioes").insert(reuniao_data).execute()
     except Exception:
@@ -221,7 +242,7 @@ async def agendar_reuniao(
         background_tasks.add_task(reuniao_email_service.enviar_convites, supabase, id_reuniao, ids_para_notificar)
 
     # Notifica o facilitador quando outra pessoa (ex: secretária) marca a reunião pra ele.
-    if facilitador_id and criador_id and facilitador_id != criador_id:
+    if facilitador_id and criador_id and facilitador_id != criador_id and not serie_ja_avisada:
         try:
             from app.services.email_service import send_meeting_scheduled_notification
 
@@ -999,10 +1020,10 @@ async def editar_reuniao(
     if allowed_ids is not None and id_reuniao not in allowed_ids:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
-    # Só `status_ata`: `criada_por` vinha junto e ninguém lia, e agora que a
-    # decisão de não escopar por criação está escrita acima, a coluna no select
-    # sugeriria o contrário.
-    result = supabase.table("reunioes").select("status_ata").eq("id_reuniao", id_reuniao).execute()
+    # Sem `criada_por`: vinha junto e ninguém lia, e agora que a decisão de não
+    # escopar por criação está escrita acima, a coluna no select sugeriria o
+    # contrário. O `facilitador_id` atual serve à trava da Secretária abaixo.
+    result = supabase.table("reunioes").select("status_ata, facilitador_id").eq("id_reuniao", id_reuniao).execute()
     if not result.data:
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
     if result.data[0]["status_ata"] != "PROGRAMADA":
@@ -1023,8 +1044,12 @@ async def editar_reuniao(
             raise HTTPException(status_code=404, detail="Facilitador informado não encontrado")
         if not fac.data[0].get("ativo"):
             raise HTTPException(status_code=400, detail="Facilitador informado está inativo")
-        # Mesma trava do `agendar` (issue #761): a reunião travaria na ata.
-        if is_secretaria(fac.data[0]):
+        # Mesma trava do `agendar` (issue #761): a reunião travaria na ata. Só
+        # quando o facilitador MUDA (issue #890): a tela de edição sempre
+        # reenvia o atual, e a reunião que já nasceu com a Secretária (#886)
+        # precisa aceitar a correção de um título sem trocar de facilitador.
+        facilitador_atual = result.data[0].get("facilitador_id")
+        if req.facilitador_id != facilitador_atual and is_secretaria(fac.data[0]):
             raise HTTPException(status_code=422, detail=_DETALHE_SECRETARIA_COMO_FACILITADORA)
 
     updates: dict = {k: v for k, v in req.model_dump(exclude_none=True).items()}
@@ -2281,6 +2306,20 @@ async def force_editar_reuniao(
         raise HTTPException(status_code=404, detail="Reunião não encontrada")
 
     status_before = result.data[0].get("status_ata")
+
+    # A trava do `agendar` e do PATCH comum (issue #761) vale aqui também
+    # (issue #890): o Super admin edita em qualquer status, mas a reunião com
+    # Secretária facilitadora trava na ata do mesmo jeito.
+    if body.facilitador_id:
+        fac = (
+            supabase.table("participantes")
+            .select("id, access_profile")
+            .eq("id", body.facilitador_id)
+            .limit(1)
+            .execute()
+        )
+        if fac.data and is_secretaria(fac.data[0]):
+            raise HTTPException(status_code=422, detail=_DETALHE_SECRETARIA_COMO_FACILITADORA)
 
     # Extrai campos editaveis (exclui reason + participante_ids, tratados separadamente)
     payload = body.model_dump(exclude_none=True)
