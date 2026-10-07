@@ -15,10 +15,10 @@ O orquestrador informa: número do PR, número da issue, o motivo (`revisao`, `c
 
 ## Ciclo
 1. `gh pr checkout <PR>` no seu worktree; confira `git branch --show-current`.
-2. Motivo `revisao`: corrija **só os must-fix** do comentário (o veredito não traz outra coisa, ADR 0064). Cada correção com teste que a prove (`/tdd`), quando couber.
+2. Motivo `revisao`: corrija **só os must-fix** do comentário (o veredito não traz outra coisa, ADR 0064). Cada correção com teste que a prove (chame a Skill tool com `tdd`), quando couber.
 3. Motivo `ci`: reproduza o teste que falhou localmente, corrija, rode só aquele arquivo.
-4. Motivo `conflito`: `git fetch origin && git rebase origin/main`, resolvendo pela skill `resolver-conflitos` (lockfile se regenera, nunca hunk a hunk). Rode os testes dos arquivos tocados.
-5. Motivo `retomar`: não há PR ainda; a branch `<type>/<slug>-<N>` tem commits `wip:` de um implementador que morreu. Faça `git checkout <branch>`, leia a issue, confira o que falta contra os critérios de aceite, termine com `/tdd`, faça o gate spec × diff e abra o PR com `/ship "<descrição>" --issue <N> --skip-review`.
+4. Motivo `conflito`: `git fetch origin && git rebase origin/main`, resolvendo com a Skill tool chamada com `resolver-conflitos` (lockfile se regenera, nunca hunk a hunk). Rode os testes dos arquivos tocados.
+5. Motivo `retomar`: não há PR ainda; a branch `<type>/<slug>-<N>` tem commits `wip:` de um implementador que morreu. Faça `git checkout <branch>`, leia a issue, confira o que falta contra os critérios de aceite, termine com a Skill tool chamada com `tdd`, faça o gate spec × diff e abra o PR chamando a Skill tool com `ship` (argumentos `"<descrição>" --issue <N> --skip-review`).
 6. Commit `fix(<escopo>): <o que corrigiu> (revisão do PR #<PR>)` e `git push` (com `--force-with-lease` só no caso de rebase).
 7. Comente no PR, primeira linha `<!-- automacao -->`, listando cada achado e o commit que o fecha, em até 10 linhas.
 8. Termine. Não espere o CI nem a nova revisão.

@@ -23,6 +23,30 @@ entidades, migrations e integrações. Se nada relevante mudou no snapshot, vem 
 
 _gerado por `/snapshot --diff`_
 
+## 🔎 Evidência
+
+<!--
+Antes e depois, nunca só "testes verdes". O teste exato que falhava e agora passa (nome e assert, em
+pseudocódigo), a saída de comando que mudou, ou print quando a mudança é visual. PR de ferramenta: a
+saída do script ou do comando antes e depois.
+-->
+
+- **Antes:**
+- **Depois:**
+
+## ⚠️ Perigo do merge
+
+<!--
+Porta de uma via (o rollback da imagem não desfaz): migration, envio externo (email, ClickSign, WhatsApp),
+escrita ou apagamento em dado de produção, mudança em .github/ ou nas skills do rabo (ship, onda-enxuta,
+agentes hr-*). O resto é porta de duas vias: o rabo faz rollback automático.
+Raio: quem sente se der errado (uma tela, um módulo, todos os logins, o próprio deploy).
+-->
+
+**Porta:** <uma via | duas vias>, porque <motivo em uma linha>
+
+**Raio:** <uma palavra ou expressão curta>
+
 ## 🔗 Links
 
 - Issue: #N
