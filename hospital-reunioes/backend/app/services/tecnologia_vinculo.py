@@ -5,7 +5,7 @@ carrega no corpo, a comparacao entre a foto nova e a guardada, e os textos das
 linhas automaticas da Conversa.
 
 O I/O mora ao lado, no `github_client.py`. A separacao nao e gosto de arquivo:
-a Etapa e a regra que o diretor le na tela, e ela precisa ser testavel nas seis
+a Etapa e a regra que o diretor le na tela, e ela precisa ser testavel nas sete
 saidas e na precedencia entre elas sem depender de rede nenhuma. O cliente e
 dublado nos testes; isto aqui e chamado de verdade.
 """
@@ -33,13 +33,15 @@ from app.utils.text_sanitizer import sanitizar_travessao
 
 # ─── 1. A Etapa ──────────────────────────────────────────────────────────────
 
-# As seis, na ordem em que a entrega anda (ADR 0054, decisao 3). A mesma lista
-# do CHECK da migration 103; o teste amarra as duas pontas.
+# As sete, na ordem em que a entrega anda (ADR 0054, decisao 3; Em producao
+# entrou pela ADR 0069). A mesma lista do CHECK da migration 115; o teste
+# amarra as duas pontas.
 ETAPA_REGISTRADA = "registrada"
 ETAPA_EM_ANALISE = "em_analise"
 ETAPA_PLANEJADA = "planejada"
 ETAPA_EM_DESENVOLVIMENTO = "em_desenvolvimento"
 ETAPA_ENTREGUE = "entregue"
+ETAPA_EM_PRODUCAO = "em_producao"
 ETAPA_NAO_SERA_FEITA = "nao_sera_feita"
 
 ETAPAS = (
@@ -48,17 +50,19 @@ ETAPAS = (
     ETAPA_PLANEJADA,
     ETAPA_EM_DESENVOLVIMENTO,
     ETAPA_ENTREGUE,
+    ETAPA_EM_PRODUCAO,
     ETAPA_NAO_SERA_FEITA,
 )
 
 # O rotulo em palavras do diretor. Ele NAO ve label, numero nem estado de issue:
-# ve estas seis frases (ADR 0054, decisao 9).
+# ve estas sete frases (ADR 0054, decisao 9).
 ETAPA_ROTULO: dict[str, str] = {
     ETAPA_REGISTRADA: "Registrada",
     ETAPA_EM_ANALISE: "Em análise",
     ETAPA_PLANEJADA: "Planejada",
     ETAPA_EM_DESENVOLVIMENTO: "Em desenvolvimento",
     ETAPA_ENTREGUE: "Entregue",
+    ETAPA_EM_PRODUCAO: "Em produção",
     ETAPA_NAO_SERA_FEITA: "Não será feita",
 }
 
@@ -116,8 +120,19 @@ def _partes(foto: dict[str, Any] | None) -> list[dict[str, Any]]:
     return list((foto or {}).get("partes") or [])
 
 
-def etapa_da_foto(foto: dict[str, Any] | None) -> str:
+def etapa_da_foto(
+    foto: dict[str, Any] | None,
+    *,
+    versao_em_producao: str | None = None,
+    pr_aberto: bool = False,
+) -> str:
     """A Etapa que esta foto da issue significa (ADR 0054, decisao 3).
+
+    `versao_em_producao` e fato do APP, e nao da issue (ADR 0069, decisao 4):
+    a versao em que a Demanda subiu, gravada pela Action pos-merge. Por isso
+    entra ao lado da foto, e nao dentro dela. `pr_aberto` diz que ha um PR
+    aberto que fecha a raiz (ADR 0069, decisao 6): o evento e outro, o
+    `pull_request`, e a issue em si nao muda quando o PR abre.
 
     A ordem das regras E a regra: elas se sobrepoem de proposito, e a primeira
     que casa manda. Uma issue fechada como concluida com o `in-progress` preso
@@ -132,6 +147,15 @@ def etapa_da_foto(foto: dict[str, Any] | None) -> str:
 
     labels_raiz = _labels(foto)
     partes = _partes(foto)
+
+    # 0. Entregue E com a versao gravada: Em producao. Entregue e o fechamento
+    #    da issue (o merge); Em producao e a subida que levou esse fechamento ao
+    #    ar (ADR 0069, decisao 4). Sem a versao, a issue fechada continua
+    #    Entregue: o merge aconteceu e a subida ainda nao. A entrega e a mesma
+    #    `_entregue` da regra 1, entao a recusa (`wontfix`, `not_planned`) nunca
+    #    vira Em producao so porque uma versao foi gravada.
+    if versao_em_producao and _entregue(foto):
+        return ETAPA_EM_PRODUCAO
 
     # 1. Fechada como concluida, ou fechada sem motivo declarado: entregue,
     #    aconteca o que acontecer com as partes e com as outras labels.
@@ -161,7 +185,12 @@ def etapa_da_foto(foto: dict[str, Any] | None) -> str:
     ):
         return ETAPA_NAO_SERA_FEITA
 
-    # 3. `in-progress` na raiz ou em QUALQUER parte: alguem esta com a mao nisso.
+    # 3. `in-progress` na raiz ou em QUALQUER parte, ou um PR aberto que fecha
+    #    a raiz: alguem esta com a mao nisso. O PR conta sem label nenhuma
+    #    (ADR 0069, decisao 6): quem abre o PR ja disse que esta trabalhando, e
+    #    a Etapa nao pode esperar alguem lembrar do `in-progress`.
+    if pr_aberto:
+        return ETAPA_EM_DESENVOLVIMENTO
     if LABEL_EM_ANDAMENTO in labels_raiz:
         return ETAPA_EM_DESENVOLVIMENTO
     if any(LABEL_EM_ANDAMENTO in _labels(parte) for parte in partes):
@@ -291,7 +320,7 @@ def bloco_para_o_diretor(corpo: str | None) -> str | None:
 def situacao_da_parte(parte: dict[str, Any] | None) -> str:
     """Em que pe esta ESTA parte, no vocabulario da Etapa (ADR 0054, decisao 7).
 
-    Quatro das seis Etapas, e nao um vocabulario proprio: o diretor le o mesmo
+    Quatro das sete Etapas, e nao um vocabulario proprio: o diretor le o mesmo
     rotulo no selo do card e no selo de cada parte, e duas listas de palavras
     para a mesma ideia fariam "Entregue" significar coisas diferentes na mesma
     tela.

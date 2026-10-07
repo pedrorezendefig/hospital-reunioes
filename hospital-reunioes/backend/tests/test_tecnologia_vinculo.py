@@ -2,7 +2,7 @@
 
 Tres seams, na ordem em que a regra existe:
 
-* **A tabela de Etapas**, funcao pura, testada direto e sem HTTP. As seis
+* **A tabela de Etapas**, funcao pura, testada direto e sem HTTP. As sete
   saidas e a PRECEDENCIA entre elas sao escritas aqui a mao, a partir da issue;
   o caso que separa cada regra da seguinte tem o seu proprio teste, porque e na
   sobreposicao que a tabela erra (issue fechada com o `in-progress` preso e
@@ -23,6 +23,7 @@ trava derruba a sessao se a fixture algum dia sumir.
 from __future__ import annotations
 
 import os
+import re
 import sys
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -53,6 +54,7 @@ from app.services.tecnologia_email import link_da_demanda  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_ANALISE,
     ETAPA_EM_DESENVOLVIMENTO,
+    ETAPA_EM_PRODUCAO,
     ETAPA_ENTREGUE,
     ETAPA_NAO_SERA_FEITA,
     ETAPA_PLANEJADA,
@@ -101,7 +103,10 @@ BASE = "/api/admin/tecnologia"
 # O `criar_issue` real, guardado antes de qualquer `_montar` troca-lo pelo duble.
 _CRIAR_ISSUE_DE_VERDADE = github_client.criar_issue
 
-MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "103_tecnologia_vinculo.sql"
+MIGRATIONS = Path(__file__).resolve().parents[2] / "supabase" / "migrations"
+MIGRATION = MIGRATIONS / "103_tecnologia_vinculo.sql"
+# A fundacao do PRD #1056 (issue #1057): a ultima que redefine o CHECK da Etapa.
+MIGRATION_FUNDACAO_1056 = MIGRATIONS / "115_tecnologia_anexos_e_em_producao.sql"
 
 
 # ─── Fixtures de seguranca ───────────────────────────────────────────────────
@@ -228,26 +233,194 @@ LINHAS_DA_TABELA = [
 class TestTabelaDeEtapas:
     def test_o_piso_da_tabela(self):
         """Controle da lista abaixo: `parametrize` sobre lista vazia satisfaz o
-        teste sem rodar caso nenhum, e ele ficaria verde sobre nada."""
-        assert len(ETAPAS) == 6
+        teste sem rodar caso nenhum, e ele ficaria verde sobre nada.
+
+        A setima Etapa (Em producao, ADR 0069) nao nasce de foto nenhuma: ela
+        precisa da versao, que e fato do app. A cobertura dela mora em
+        `TestEmProducaoEPrAberto`, e a uniao das duas tabelas fecha as sete."""
+        assert len(ETAPAS) == 7
         assert len(LINHAS_DA_TABELA) == 13
-        assert {saida for _, _, saida in LINHAS_DA_TABELA} == set(ETAPAS)
+        assert len(LINHAS_COM_FATOS_DO_APP) == 5
+        saidas = {saida for _, _, saida in LINHAS_DA_TABELA} | {saida for _, _, _, saida in LINHAS_COM_FATOS_DO_APP}
+        assert saidas == set(ETAPAS)
 
     @pytest.mark.parametrize("caso,foto,esperada", LINHAS_DA_TABELA, ids=lambda v: v if isinstance(v, str) else "")
     def test_cada_linha_da_tabela(self, caso, foto, esperada):
         assert etapa_da_foto(foto) == esperada
 
-    def test_a_migration_conhece_as_mesmas_seis(self):
-        """As duas pontas amarradas: o CHECK da migration 103 e a tupla do
-        servico. Uma Etapa nova no Python que nao entrasse no CHECK viraria erro
-        de banco na hora de gravar, em producao, e nao aqui."""
-        sql = MIGRATION.read_text(encoding="utf-8")
-        for etapa in ETAPAS:
-            assert f"'{etapa}'" in sql, f"a migration nao conhece a Etapa {etapa}"
+    def test_a_migration_conhece_as_mesmas_sete(self):
+        """As duas pontas amarradas: o CHECK da ultima migration que o redefine
+        (a 115) e a tupla do servico. Uma Etapa nova no Python que nao entrasse
+        no CHECK viraria erro de banco na hora de gravar, em producao, e nao
+        aqui. A lista e lida DE DENTRO do CHECK, e comparada inteira: achar o
+        valor em qualquer lugar do arquivo (num comentario) nao conta."""
+        sql = MIGRATION_FUNDACAO_1056.read_text(encoding="utf-8")
+        check = re.search(r"CHECK \(etapa IN \(([^)]*)\)\)", sql)
+        assert check, "a migration 115 nao redefine o CHECK da Etapa"
+        valores = {v.strip().strip("'") for v in check.group(1).split(",")}
+        assert valores == set(ETAPAS)
 
     def test_cada_etapa_tem_rotulo_de_gente(self):
         assert set(ETAPA_ROTULO) == set(ETAPAS)
         assert all(ETAPA_ROTULO[e].strip() for e in ETAPAS)
+
+
+# Os dois fatos que a foto da issue nao traz (issue #1057, ADR 0069): a versao
+# em que a Demanda subiu, gravada pela Action pos-merge, e o PR aberto que fecha
+# a raiz, que vem do webhook `pull_request`. Nesta fatia ninguem os alimenta
+# ainda; a funcao pura so os aceita.
+LINHAS_COM_FATOS_DO_APP = [
+    (
+        "versao gravada e issue fechada como concluida",
+        _foto(estado="closed", motivo="completed"),
+        {"versao_em_producao": "v0.165.0"},
+        ETAPA_EM_PRODUCAO,
+    ),
+    (
+        "issue fechada como concluida sem versao gravada",
+        _foto(estado="closed", motivo="completed"),
+        {"versao_em_producao": None},
+        ETAPA_ENTREGUE,
+    ),
+    (
+        "versao gravada e issue fechada sem motivo declarado",
+        _foto(estado="closed", motivo=None),
+        {"versao_em_producao": "v0.165.0"},
+        ETAPA_EM_PRODUCAO,
+    ),
+    (
+        "issue aberta sem label com PR aberto que a fecha",
+        _foto(),
+        {"pr_aberto": True},
+        ETAPA_EM_DESENVOLVIMENTO,
+    ),
+    (
+        "issue aberta sem label e sem PR aberto",
+        _foto(),
+        {"pr_aberto": False},
+        ETAPA_EM_ANALISE,
+    ),
+]
+
+
+class TestEmProducaoEPrAberto:
+    @pytest.mark.parametrize(
+        "caso,foto,fatos,esperada", LINHAS_COM_FATOS_DO_APP, ids=lambda v: v if isinstance(v, str) else ""
+    )
+    def test_cada_linha_com_fato_do_app(self, caso, foto, fatos, esperada):
+        assert etapa_da_foto(foto, **fatos) == esperada
+
+    def test_a_ordem_das_sete_regras_em_escada(self):
+        """Em produção > Entregue > Não será feita > Em desenvolvimento >
+        Planejada > Em análise > Registrada (PRD #1056).
+
+        Cada degrau tira SO o fato que fazia a regra de cima casar e mantem
+        todos os de baixo presentes. Se duas regras vizinhas trocassem de
+        lugar, o degrau delas daria a de baixo, e a escada quebra ali."""
+        labels_de_baixo = ("in-progress", "ready-for-agent")
+        escada = [
+            (
+                _foto(estado="closed", motivo="completed", labels=labels_de_baixo),
+                {"versao_em_producao": "v0.165.0", "pr_aberto": True},
+                ETAPA_EM_PRODUCAO,
+            ),
+            (
+                _foto(estado="closed", motivo="completed", labels=labels_de_baixo),
+                {"versao_em_producao": None, "pr_aberto": True},
+                ETAPA_ENTREGUE,
+            ),
+            (
+                _foto(estado="closed", motivo="not_planned", labels=labels_de_baixo),
+                {"versao_em_producao": "v0.165.0", "pr_aberto": True},
+                ETAPA_NAO_SERA_FEITA,
+            ),
+            (
+                _foto(labels=labels_de_baixo),
+                {"versao_em_producao": "v0.165.0", "pr_aberto": True},
+                ETAPA_EM_DESENVOLVIMENTO,
+            ),
+            (_foto(labels=("ready-for-agent",)), {"versao_em_producao": "v0.165.0"}, ETAPA_PLANEJADA),
+            (_foto(), {"versao_em_producao": "v0.165.0"}, ETAPA_EM_ANALISE),
+            (None, {"versao_em_producao": "v0.165.0", "pr_aberto": True}, ETAPA_REGISTRADA),
+        ]
+        assert [esperada for _, _, esperada in escada] == [
+            ETAPA_EM_PRODUCAO,
+            ETAPA_ENTREGUE,
+            ETAPA_NAO_SERA_FEITA,
+            ETAPA_EM_DESENVOLVIMENTO,
+            ETAPA_PLANEJADA,
+            ETAPA_EM_ANALISE,
+            ETAPA_REGISTRADA,
+        ]
+        assert [etapa_da_foto(foto, **fatos) for foto, fatos, _ in escada] == [esperada for _, _, esperada in escada]
+
+    def test_wontfix_ganha_da_versao_gravada(self):
+        """A recusa nao vira Em produção so porque uma versao foi gravada: a
+        entrega e a mesma `_entregue` da regra Entregue (issue #701)."""
+        foto = _foto(estado="closed", motivo="completed", labels=("wontfix",))
+        assert etapa_da_foto(foto, versao_em_producao="v0.165.0") == ETAPA_NAO_SERA_FEITA
+
+    def test_pr_aberto_nao_tira_a_recusa_de_issue_aberta(self):
+        assert etapa_da_foto(_foto(labels=("wontfix",)), pr_aberto=True) == ETAPA_NAO_SERA_FEITA
+
+    def test_em_producao_tem_rotulo_de_gente(self):
+        assert ETAPA_ROTULO[ETAPA_EM_PRODUCAO] == "Em produção"
+
+
+class TestMigracaoDaFundacao:
+    """A migration unica do PRD #1056 (issue #1057): uma parada humana so.
+
+    O SQL e colado a mao no Studio, entao ele e lido aqui como texto: e o
+    unico jeito de o CI ver o que o humano vai aplicar.
+    """
+
+    @pytest.fixture
+    def sql(self) -> str:
+        return MIGRATION_FUNDACAO_1056.read_text(encoding="utf-8")
+
+    def test_cria_a_tabela_de_anexos_com_as_colunas_do_prd(self, sql):
+        tabela = re.search(r"CREATE TABLE IF NOT EXISTS tecnologia_anexos \((.*?)\n\);", sql, re.DOTALL)
+        assert tabela, "a migration nao cria a tabela tecnologia_anexos"
+        linhas = [linha.strip() for linha in tabela.group(1).splitlines()]
+        colunas = {linha.split()[0] for linha in linhas if linha and not linha.startswith(("--", "UNIQUE"))}
+        assert colunas == {
+            "id",
+            "demanda_id",
+            "ordem",
+            "storage_path",
+            "nome_original",
+            "content_type",
+            "tamanho_bytes",
+            "anexado_por",
+            "criado_em",
+            "conversa_id",
+            "apagado_em",
+        }
+
+    def test_a_tabela_de_anexos_nasce_com_rls_e_sem_policy_solta(self, sql):
+        """Default-deny da casa: RLS ligado e nenhuma policy. Toda policy que
+        aparecer e precedida do seu DROP, para a reaplicacao ser inofensiva."""
+        assert "ALTER TABLE tecnologia_anexos ENABLE ROW LEVEL SECURITY;" in sql
+        for criada in re.findall(r'CREATE POLICY "([^"]+)" ON ([\w.]+)', sql):
+            nome, alvo = criada
+            drop = sql.find(f'DROP POLICY IF EXISTS "{nome}" ON {alvo};')
+            assert 0 <= drop < sql.find(f'CREATE POLICY "{nome}" ON {alvo}'), nome
+
+    def test_cria_o_bucket_privado(self, sql):
+        assert re.search(
+            r"INSERT INTO storage\.buckets \(id, name, public\)\s*"
+            r"VALUES \('anexos-tecnologia', 'anexos-tecnologia', false\)",
+            sql,
+        )
+
+    def test_a_demanda_ganha_a_versao_e_a_data_da_entrega(self, sql):
+        assert "ALTER TABLE tecnologia_demandas ADD COLUMN IF NOT EXISTS versao_em_producao TEXT;" in sql
+        assert "ALTER TABLE tecnologia_demandas ADD COLUMN IF NOT EXISTS entregue_em TIMESTAMPTZ;" in sql
+
+    def test_termina_gravando_o_proprio_numero(self, sql):
+        assert sql.rstrip().endswith(
+            "INSERT INTO migracoes_aplicadas (numero) VALUES (115) ON CONFLICT (numero) DO NOTHING;"
+        )
 
 
 class TestPrecedenciaEntreAsRegras:
