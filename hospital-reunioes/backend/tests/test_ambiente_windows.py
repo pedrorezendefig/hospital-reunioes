@@ -66,7 +66,7 @@ class TestSoUnix:
 # O que só existe no Unix e já mordeu no Windows. Arquivo de teste que usa um
 # destes precisa declarar `so_unix` em algum lugar, senão a falha volta a ser
 # "de ambiente" e todo agente no Windows aprende de novo a ignorá-la.
-SINAIS_SO_UNIX = ("import resource", "pgrep", "signal.SIGKILL", ".sendmsg(")
+SINAIS_SO_UNIX = ("import resource", "pgrep", "signal.SIGKILL", ".sendmsg(", "symlink_to(")
 PASTA_DOS_TESTES = Path(__file__).resolve().parent
 
 
@@ -215,6 +215,7 @@ def _backend_sem_env(raiz: Path) -> Path:
 
 
 class TestSnapshotSemEnv:
+    @pytest.mark.so_unix("o `.venv` da cópia é symlink, e no Windows criar symlink pede Modo de Desenvolvedor ou admin")
     def test_sem_env_as_rotas_vem_do_app_montado(self, tmp_path, monkeypatch):
         """Sem `.env` a introspecção falhava no campo obrigatório do Settings e
         caía no parser AST, que não toca o ROTAS.md (saída 4). Os placeholders
