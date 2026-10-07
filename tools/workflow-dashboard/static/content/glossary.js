@@ -30,7 +30,7 @@ export const TERMS = {
   gh: 'A ferramenta de linha de comando do GitHub. O painel e as skills usam ela para ler issues e PRs e abrir pull requests.',
   CI: 'Integração contínua: o GitHub Actions roda os testes, o lint e o build a cada PR, automaticamente. É o Gate 3 do /ship.',
   Coolify: 'A plataforma onde a app roda em produção (na VPS). O /deploy conversa com ela via MCP para subir versões novas.',
-  'self-approval': 'Aprovar o próprio Pull Request. É permitido aqui porque os 3 gates (code-review, security-review e CI) já validaram a mudança.',
+  'self-approval': 'Aprovar o próprio Pull Request. É permitido aqui porque os gates da ADR 0068 (ferramenta: CI; app: hr-revisor e CI) já validaram a mudança.',
   'Closes #N': 'Uma linha no Pull Request que, ao dar merge, fecha a issue #N automaticamente no GitHub.',
   collaborator: 'Quem tem acesso de escrita ao repositório no GitHub. Você precisa ser adicionado pelo Pedro para clonar e abrir PRs.',
   'package-manager': 'O programa que instala ferramentas na sua máquina: Homebrew (brew) no Mac, winget no Windows, apt no Linux.',
