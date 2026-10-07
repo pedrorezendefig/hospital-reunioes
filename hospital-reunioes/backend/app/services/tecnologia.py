@@ -660,7 +660,8 @@ def texto_para_ia(
 
     **O que entra**, exatamente o que a issue #640 lista: a linha de contexto,
     titulo, tipo, Produto, descricao e a Conversa inteira em ordem, com as
-    linhas de movimento no meio. A Conversa vai CERCADA por marcas, e com as
+    linhas de movimento no meio. Os Anexos da Demanda entram pelo NOME
+    (issue #1061), logo depois da descricao. A Conversa vai CERCADA por marcas, e com as
     continuacoes recuadas, para que nada escrito dentro dela possa passar por
     moldura do texto (ver `MARCA_INICIO_CONVERSA`).
 

@@ -34,6 +34,15 @@ Escrita no fio (issue #638):
                                                         resposta, por 10
                                                         minutos.
 
+Anexo da Demanda (issue #1061, ADR 0069):
+
+- POST  /admin/tecnologia/demandas/{id}/anexos  guarda um print (png, jpg,
+                                                webp, ate dez por Demanda)
+                                                no bucket privado.
+- GET   /admin/tecnologia/demandas/{id}/anexos  os prints do card, com URL
+                                                assinada de vida curta; o
+                                                apagado vem sem URL.
+
 Copiar (issue #640):
 
 - GET   /admin/tecnologia/demandas/{id}/texto-para-ia   a Demanda inteira em
