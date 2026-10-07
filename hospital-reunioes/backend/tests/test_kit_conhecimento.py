@@ -445,3 +445,80 @@ class TestNoveArquivosNoPrompt:
         """Mutante no proprio detector: se `_secoes_do_kit` casasse qualquer
         linha, o teste acima passaria com o prompt errado."""
         assert _secoes_do_kit("# titulo de gente\ntexto\n") == {}
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# 4. O texto da aba conta a aba como ela esta hoje (PRD #1056)
+# ═══════════════════════════════════════════════════════════════════════════
+#
+# O assistente responde do kit e cita a secao. Se o texto da aba descreve a
+# tela de antes (cinco colunas, "Minha vez", sem anexo), ele responde certo
+# sobre uma tela que nao existe mais. As palavras procuradas aqui sao as da
+# TELA (rotulos do frontend), nao as do glossario: e com elas que o diretor
+# pergunta.
+
+
+def _secao(texto: str, titulo: str) -> str:
+    """O corpo da secao `## titulo`, ate a proxima secao de mesmo nivel.
+
+    Devolve vazio quando a secao nao existe: a asserção de conteudo reprova
+    com o termo que faltou, em vez de um KeyError sem contexto.
+    """
+    corpo: list[str] = []
+    dentro = False
+    for linha in texto.splitlines():
+        if linha.startswith("## "):
+            dentro = linha[3:].strip() == titulo
+            continue
+        if dentro:
+            corpo.append(linha)
+    return "\n".join(corpo)
+
+
+class TestOTextoDaAbaContaATelaDeHoje:
+    @pytest.fixture
+    def texto(self) -> str:
+        return _texto(ARQUIVO_DA_ABA)
+
+    def test_o_quadro_desenha_so_as_tres_raias_vivas(self, texto):
+        """Concluir e Cancelar sairam das colunas e viraram botao do card."""
+        quadro = _secao(texto, "O Quadro")
+        for termo in ("Nova", "Em andamento", "Aguardando", "Concluir", "Cancelar", "Painel"):
+            assert termo in quadro, termo
+
+    def test_o_painel_tem_os_tres_blocos_e_os_quatro_numeros(self, texto):
+        painel = _secao(texto, "O Painel")
+        blocos = ("Com você", "Entregas", "Histórico")
+        numeros = ("Abertas", "Com o hospital", "Em desenvolvimento", "Entregues em 30 dias")
+        for termo in (*blocos, *numeros):
+            assert termo in painel, termo
+
+    def test_os_anexos_dizem_portas_limite_e_apagamento(self, texto):
+        anexos = _secao(texto, "Os anexos da Demanda")
+        for termo in ("formulário", "assistente", "Conversa", "até 10", "Concluída", "Cancelada", "apagad"):
+            assert termo in anexos, termo
+
+    def test_a_etapa_tem_em_producao_e_devolve_nela(self, texto):
+        etapa = _secao(texto, "A Etapa")
+        assert "**Em produção**" in etapa
+        assert "quando a entrega fica **Em produção**" in etapa
+
+    def test_os_produtos_moram_atras_da_engrenagem(self, texto):
+        assert "engrenagem" in _secao(texto, "Os Produtos")
+
+    @pytest.mark.parametrize("aposentado", ["Minha vez", "cinco colunas"])
+    def test_sem_o_nome_da_tela_de_antes(self, texto, aposentado):
+        assert aposentado not in texto
+
+
+class TestOFatiadorDeSecao:
+    """O detector acima: um `_secao` que devolvesse o texto inteiro deixaria
+    toda asserção de conteudo verde lendo a secao vizinha."""
+
+    def test_para_na_secao_seguinte(self):
+        texto = "# Aba\n\n## O Quadro\nraias\n\n## O Painel\nnumeros\n"
+        assert "numeros" not in _secao(texto, "O Quadro")
+        assert "raias" in _secao(texto, "O Quadro")
+
+    def test_secao_que_nao_existe_e_vazia(self):
+        assert _secao("# Aba\n\n## O Quadro\nraias\n", "O Painel") == ""
