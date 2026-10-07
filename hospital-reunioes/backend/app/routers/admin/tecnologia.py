@@ -180,6 +180,7 @@ from app.services.tecnologia_vinculo import (
     corpo_precisa_do_marcador,
     foto_mudou,
     labels_da_issue_nova,
+    login_para_publicar,
     motivo_demanda_ja_vinculada,
     motivo_e_pull_request,
     motivo_issue_inexistente,
@@ -439,6 +440,25 @@ def _nomes_de_participantes(supabase: Client, ids: set[str]) -> dict[str, str]:
         return {}
     result = supabase.table("participantes").select("id, nome_completo").in_("id", sorted(ids)).execute()
     return {linha["id"]: linha.get("nome_completo") for linha in (result.data or [])}
+
+
+def _assignees_da_issue_nova(supabase: Client, demanda: dict) -> list[str]:
+    """O login do RESPONSAVEL da Demanda, para a issue nascer designada a ele.
+
+    E o responsavel, e nao quem clicou: assignee em `needs-triage` e
+    responsabilidade, nao claim (a mesma leitura do dono do PRD, ADR 0068), e a
+    `/triage` tira o assignee ao liberar a issue para a fila. Responsavel sem
+    `github_login` (gente do hospital) devolve lista vazia, nunca o login de
+    quem levou. Passa pelo `login_para_publicar`: so login de verdade entra no
+    JSON de um repositorio publico.
+    """
+    responsavel_id = demanda.get("responsavel_id")
+    if not responsavel_id:
+        return []
+    result = supabase.table(TABELA_PARTICIPANTES).select("id, github_login").eq("id", responsavel_id).execute()
+    linhas = result.data or []
+    login = login_para_publicar(linhas[0].get("github_login")) if linhas else None
+    return [login] if login else []
 
 
 def _com_nomes(supabase: Client, demandas: list[dict], *, ator: dict) -> list[dict]:
@@ -1454,7 +1474,12 @@ async def levar_para_desenvolvimento(
     )
 
     try:
-        dados = github_client.criar_issue(titulo=titulo, corpo=corpo, labels=labels_da_issue_nova(demanda.get("tipo")))
+        dados = github_client.criar_issue(
+            titulo=titulo,
+            corpo=corpo,
+            labels=labels_da_issue_nova(demanda.get("tipo")),
+            assignees=_assignees_da_issue_nova(supabase, demanda),
+        )
         numero = dados.get("number")
         if not isinstance(numero, int):
             # A issue pode ter nascido; o Vinculo, nao. Sem o numero nao ha par,

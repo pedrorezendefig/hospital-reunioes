@@ -614,6 +614,7 @@ function issueCard(i, idx, prd = false) {
     faseBadge(fs, i),
     pessoasDoCard(i),
     `<span class="chip">${idadeTxt(i)}</span>`,
+    i.demanda ? '<span class="chip chip-demanda" title="nasceu de uma Demanda da aba Tecnologia">Demanda</span>' : '',
     i.criteria.total ? `<span class="chip" title="critérios de aceite">✓ ${i.criteria.done}/${i.criteria.total}</span>` : '',
     fs && fs.pr ? `<a class="chip" href="${rotaDe('prs', fs.pr)}">PR #${fs.pr}</a>` : '',
     fs && fs.versao ? `<a class="chip chip-versao" href="${rotaDe('producao', depVer(fs.versao))}">${esc(depVer(fs.versao))}</a>` : '',

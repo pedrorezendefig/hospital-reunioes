@@ -1047,7 +1047,7 @@ class _GithubFalso:
         self.corpos_escritos.append((numero, corpo))
         self.issues[numero]["body"] = corpo
 
-    def criar_issue(self, *, titulo: str, corpo: str, labels: list[str]) -> dict:
+    def criar_issue(self, *, titulo: str, corpo: str, labels: list[str], assignees: list[str] | None = None) -> dict:
         """A issue nova, como o GitHub a devolve (issue #677).
 
         Devolve a issue INTEIRA, e nao so o numero: e dela que a foto e a Etapa
@@ -1055,7 +1055,9 @@ class _GithubFalso:
         """
         if self.erro_ao_criar is not None:
             raise self.erro_ao_criar
-        self.criadas.append({"titulo": titulo, "corpo": corpo, "labels": list(labels)})
+        self.criadas.append(
+            {"titulo": titulo, "corpo": corpo, "labels": list(labels), "assignees": list(assignees or [])}
+        )
         numero = self.proximo_numero
         self.proximo_numero += 1
         dados = _issue(numero, corpo=corpo, labels=tuple(labels))
@@ -2482,6 +2484,33 @@ class TestLevarParaDesenvolvimento:
         assert demanda_id_do_marcador(criada["corpo"]) == "d-1"
         # E a Origem sai com o login de quem levou, sem nome de gente.
         assert "levado para o desenvolvimento por @pedrorezendefig." in criada["corpo"]
+
+    def test_a_issue_nasce_designada_ao_responsavel_do_card(self, monkeypatch):
+        """O assignee e o RESPONSAVEL da Demanda, nao quem clicou: e ele quem
+        aparece na coluna certa do Hospital OS desde o dia 1 (ADR 0061,
+        responsabilidade em `needs-triage`, nao claim)."""
+        lucas = _pessoa("P3", "Lucas Sampaio", github_login="lucas-sampaio")
+        client, _, gh = _montar(
+            participantes=[PEDRO, DIRETOR, lucas],
+            demandas=[_demanda("d-1", responsavel_id="P3")],
+            github=_GithubFalso({}),
+            monkeypatch=monkeypatch,
+        )
+
+        assert client.post(self.ROTA).status_code == 200
+        assert gh.criadas[0]["assignees"] == ["lucas-sampaio"]
+
+    def test_responsavel_sem_login_nasce_sem_assignee(self, monkeypatch):
+        """Responsavel do hospital (sem `github_login`): a issue nasce sem
+        ninguem, e nao com o login de quem clicou."""
+        client, _, gh = _montar(
+            demandas=[_demanda("d-1", responsavel_id="P2")],
+            github=_GithubFalso({}),
+            monkeypatch=monkeypatch,
+        )
+
+        assert client.post(self.ROTA).status_code == 200
+        assert gh.criadas[0]["assignees"] == []
 
     def test_a_demanda_fica_vinculada_ao_numero_devolvido(self, monkeypatch):
         gh = _GithubFalso({}, proximo_numero=901)

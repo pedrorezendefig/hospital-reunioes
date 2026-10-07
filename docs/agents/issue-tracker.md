@@ -30,6 +30,7 @@ O `/to-prd` cria a issue grande (o **PRD**); o `/to-issues` quebra em fatias e r
 - **De que PRD veio uma fatia:** a seção `Pai: #N` no corpo, ou o painel de sub-issues na UI da própria fatia.
 - Quando a **última fatia aberta** fecha, a [Action de higiene](#higiene-de-fechamento-github-action) fecha o PRD sozinha, com um comentário. O **claim e o paralelismo (abaixo) acontecem nas fatias**, não no PRD.
 - **Emenda (ADR 0068): o PRD tem dono.** O `/to-prd` põe como assignee do PRD quem fez o grilling. Isso não é claim (ninguém "trabalha o PRD"), é responsabilidade: fatia ainda sem claim conta, para efeito de visão, como do dono do PRD. O Hospital OS (painel local) filtra a aba Issues por quem está designado (assignee), sem herdar o dono do PRD (ADR 0068).
+- **Issue nascida de uma Demanda (botão "Levar para desenvolvimento", ADR 0054) nasce designada ao responsável do card.** Em `needs-triage` esse assignee é responsabilidade, não claim, pela mesma leitura do dono do PRD. A `/triage` tira o assignee ao mover para `ready-for-agent`, porque o pool é `no:assignee`. O Hospital OS marca essas issues com o chip "Demanda".
 
 ## Higiene de fechamento (GitHub Action)
 

@@ -171,8 +171,12 @@ def atualizar_corpo(numero: int, corpo: str) -> None:
     _chamar("PATCH", f"/issues/{numero}", json={"body": corpo})
 
 
-def criar_issue(*, titulo: str, corpo: str, labels: list[str]) -> dict[str, Any]:
+def criar_issue(*, titulo: str, corpo: str, labels: list[str], assignees: list[str] | None = None) -> dict[str, Any]:
     """Abre uma issue nova no repositorio da integracao (issue #677).
+
+    `assignees` e o login do responsavel da Demanda, quando ele tem um: a
+    issue nasce na coluna da pessoa certa do Hospital OS. Lista vazia nao vai
+    no JSON, para o GitHub nao reclamar de campo sem valor.
 
     Devolve o JSON da issue criada, INTEIRO: e dele que a foto e a Etapa saem
     logo em seguida, sem uma segunda leitura que gastaria cota e ainda poderia
@@ -184,7 +188,10 @@ def criar_issue(*, titulo: str, corpo: str, labels: list[str]) -> dict[str, Any]
     que devolve 502 em vez de uma frase sobre um numero que ninguem digitou.
     """
     try:
-        return _chamar("POST", "/issues", json={"title": titulo, "body": corpo, "labels": labels})
+        corpo_json: dict[str, Any] = {"title": titulo, "body": corpo, "labels": labels}
+        if assignees:
+            corpo_json["assignees"] = assignees
+        return _chamar("POST", "/issues", json=corpo_json)
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError("O repositorio da integracao nao aceitou a criacao da issue") from exc
 
