@@ -8,6 +8,18 @@ disable-model-invocation: true
 
 Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não executa nada; só roteia. Se o pedido do usuário vier junto (`/ask-pedro como subo um fix?`), responda direto com a rota recomendada.
 
+## Qual porta? (antes de tudo)
+
+Nem todo trabalho é PRD. Classifique primeiro; o `/grill-with-docs` faz isso no fechamento e o `/express-grill` já nasce na porta C.
+
+| Porta | Quando | Caminho | Por que esse peso |
+|---|---|---|---|
+| **A. PRD + fatias** | Muda comportamento visível em mais de uma fatia, ou tem migration, ou o diretor precisa saber (bloco "Para o diretor"), ou nasce ou muda página do Manual, ou não cabe numa sessão | `/grill-with-docs` → `/to-prd` → `/to-issues` → `/onda-enxuta` ou `/pegar-issue` | O PRD é o que o diretor lê na aba Tecnologia; a issue é a spec do implementador; o draft do Manual é puxado pelo PRD |
+| **B. Issue única, sem PRD** | Uma fatia vertical no app (`hospital-reunioes/`), cabe numa sessão, sem diretor e sem Manual. Várias independentes: `/onda-enxuta --all` ou agentes paralelos na mesma sessão | `/triage` ou `gh issue create` com critérios de aceite → `/pegar-issue N` | PR do app passa pelo `hr-revisor`, e a lente spec × diff precisa dos critérios; os critérios viram os testes do `/tdd`; o funil do OS conta issues |
+| **C. PR direto, sem issue** | Ferramenta (`.claude/`, `tools/`, `.github/`, `docs/`) e chore do app que não muda comportamento (texto, lint, config) | Edita na branch → `/ship "<descrição>" --from-diff` → rabo. Paralelo: um `Agent` com `isolation: worktree` por mudança, cada um termina no `/ship --skip-review`, e um `fechar_onda.py --prs a b c` no fim | ADR 0068, regra 12: decisão de ferramenta vai no corpo do PR. O OS mostra o PR na aba PRs; sem issue fica fora do funil, e é isso mesmo: o funil é trabalho em aberto |
+
+Teste rápido entre B e C: **alguém precisa conferir que fez o que foi pedido?** Sim: B (precisa de critério escrito). A prova é o diff e o CI: C.
+
 ## Fluxo principal (planejar → desenvolver → entregar)
 
 1. **Planejar**: `/grill-with-docs` desafia o plano contra o domínio (uma pergunta por vez, recomendação destacada em cada decisão; atualiza `CONTEXT.md`/ADR via `domain-modeling`). Dúvida factual de serviço externo no meio do grilling → `/research` em background.
@@ -23,6 +35,8 @@ Responde "qual skill eu uso agora?" apontando a skill certa e o porquê. Não ex
 - `/retro-onda [<nome>-onda<N> | <id de sessão>]`: o último passo do modo AFK, quando o relatório da onda terminou em `retro: recomendada`. Lê o que a onda deixou (medição em `~/.claude/onda-enxuta/medicoes/`, baixas, comentários do corretor, saída do rabo, JSONL da sessão) e propõe mudanças no **ambiente** dos agentes, não no código: ponteiro de navegação, check no CI, lente nova no `hr-revisor`, gatilho no `sensivel.py`, instrução sem efeito para apagar. Mecânico vira check; juízo vira lente. Só propõe; cada candidata aceita vira PR de ferramenta pelo `/ship`.
 
 ## On-ramps (como o trabalho entra)
+
+- Ideia pequena, "dá pra fazer X?", print com uma vontade → `/express-grill`: uma rodada só, olha o código, propõe a ponte mínima, e com o "siga" implementa e verifica. É a entrada da porta C; se a conversa pedir 5 decisões encadeadas, ele mesmo manda para o `/grill-with-docs`.
 
 - `/triage`: criar/triar issues pelos papéis canônicos de label (`docs/agents/triage-labels.md`).
 - Bug difícil ou regressão de performance → `/diagnose`.
