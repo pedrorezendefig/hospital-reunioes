@@ -996,6 +996,15 @@ body.er-lock main{z-index:130}
 .pr-celula.pr-col-cheia{background:color-mix(in srgb, var(--amber) 10%, transparent)}
 .pr-card.pr-velho{border-color:var(--red); box-shadow:inset 3px 0 0 var(--red)}
 .pr-velho .pr-dias{color:var(--red); font-weight:500}
+/* o resumo do PR (hover) e o fixo do clicado, que aceita clique nos links */
+.tab-prs{position:relative}
+.pr-pop{width:300px}
+.pr-pop .fx-k{color:var(--brand-wash); opacity:.75; margin-top:6px}
+.pr-pop p{margin:0}
+.pr-pop .pr-pop-tit{font-weight:500}
+.pr-pop-fixo{pointer-events:auto}
+.pr-pop a{color:var(--brand-wash)}
+.pr-pop .pr-pop-gh{display:inline-block; margin-top:8px; font:500 11px var(--mono)}
 /* faixa cinza das tentativas (PRs fechados sem merge): histórico, fora das colunas */
 .pr-tentativas{margin:0 0 18px; padding:12px 14px; border:1px dashed var(--ghost); border-radius:var(--r-inner);
   background:color-mix(in srgb, var(--ink-soft) 8%, var(--surface))}

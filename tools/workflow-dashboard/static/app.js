@@ -10,7 +10,7 @@ import { posicionarPop, renderArea, wireArea } from './areas.js';
 import { desenharSetas, mapaDecisoes, vinculosDe } from './decisoes.js';
 import { corDaPessoa } from './pessoas.js';
 import { renderOndas } from './ondas.js';
-import { alternarPessoa, filtrosPrsDaRota, filtrosPrsNaRota, filtrosPrsVazios, renderQuadroPrs } from './prs.js';
+import { alternarPessoa, filtrosPrsDaRota, filtrosPrsNaRota, filtrosPrsVazios, popDoPr, renderQuadroPrs } from './prs.js';
 
 /* a aba abre no que está pendente: só as abertas */
 const filtrosVazios = () => ({ state: 'OPEN', fase: '', resp: '', prd: null, label: '', q: '' });
@@ -297,6 +297,9 @@ function render() {
   }[S.tab];
   view.innerHTML = fn ? fn() : '';
   if (S.tab === 'issues') wireIssues();
+  if (S.tab === 'prs') {
+    try { wirePrs(); } catch { /* quadro sem resumo > aba quebrada */ }
+  }
   const sub = S.tab === 'documentacao' ? subDoc() : null;
   if (sub === 'mapa') {
     try { desenharDiagramas(view); } catch { /* bloco fica no fallback de código cru */ }
@@ -795,6 +798,46 @@ function renderPrs() {
   ${cabecalho('acompanhar', 'PRs', 'gh · cada PR na sua fase, uma raia por pessoa')}
   ${renderQuadroPrs({ data: S.data, filtros: S.fPrs, item: S.item, depVer, fmtD, fmtDT })}
   </div>`;
+}
+
+/* o resumo ao lado do card: à direita, ou à esquerda quando não cabe;
+   embaixo do topo do card, subindo só o que passar da janela */
+function posicionarPrPop(pop, card, box) {
+  pop.hidden = false;
+  const r = card.getBoundingClientRect(), b = box.getBoundingClientRect();
+  const direita = r.right + 8 + pop.offsetWidth < window.innerWidth;
+  const x = direita ? r.right - b.left + 8 : r.left - b.left - pop.offsetWidth - 8;
+  const sobra = r.top + pop.offsetHeight + 8 - window.innerHeight;
+  pop.style.left = `${Math.round(Math.max(8, x))}px`;
+  pop.style.top = `${Math.round(r.top - b.top - Math.max(0, sobra))}px`;
+}
+
+/* hover em qualquer card de PR abre o resumo; o clicado (o do hash) fica
+   com o resumo fixo e os links, e volta a aparecer quando o mouse sai */
+function wirePrs() {
+  const box = view.querySelector('.tab-prs');
+  if (!box) return;
+  const fixo = box.querySelector('.pr-pop-fixo');
+  const cardDe = n => box.querySelector(`[data-act="pr"][data-n="${n}"]`);
+  if (fixo && cardDe(fixo.dataset.n)) posicionarPrPop(fixo, cardDe(fixo.dataset.n), box);
+  const pop = document.createElement('div');
+  pop.className = 'st-pop pr-pop';
+  pop.hidden = true;
+  box.appendChild(pop);
+  box.addEventListener('mouseover', e => {
+    const card = e.target.closest('[data-act="pr"]');
+    if (!card || (fixo && fixo.dataset.n === card.dataset.n)) return;
+    pop.innerHTML = popDoPr(card.dataset.n, S.data, { fmtDT, depVer });
+    if (!pop.innerHTML) return;
+    if (fixo) fixo.hidden = true;
+    posicionarPrPop(pop, card, box);
+  });
+  box.addEventListener('mouseout', e => {
+    const card = e.target.closest('[data-act="pr"]');
+    if (!card || card.contains(e.relatedTarget)) return;
+    pop.hidden = true;
+    if (fixo) fixo.hidden = false;
+  });
 }
 
 /* ---------- PRODUÇÃO: linha do tempo do repositório (merges + deploys) ---------- */

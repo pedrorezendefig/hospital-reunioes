@@ -293,6 +293,78 @@ def test_git_log_falhando_deixa_a_classe_desconhecida(monkeypatch):
     assert collect._classes_dos_prs(DASH) == {}
 
 
+# ---------- resumo funcional do PR (o hover do quadro) ----------
+
+CORPO_NOVO = """## 💬 Resumo funcional
+
+<!-- duas frases para quem não é dev -->
+**O que é:** a Ata sai em PDF com um clique.
+**Valor:** o secretário não precisa mais copiar para o Word.
+
+## 🎯 Contexto
+
+Pedido da diretoria.
+"""
+
+CORPO_ANTIGO = """<!-- template -->
+## 🎯 Contexto
+
+Decisão registrada neste PR: o `quadro` ganha uma coluna **Entregue**.
+
+Por quê: o resto do texto longo.
+
+## ✅ Critérios de aceite
+"""
+
+
+def test_resumo_funcional_le_o_que_e_e_valor_da_secao():
+    assert collect.resumo_funcional(CORPO_NOVO) == {
+        "o_que": "a Ata sai em PDF com um clique.",
+        "valor": "o secretário não precisa mais copiar para o Word.",
+        "contexto": None,
+    }
+
+
+def test_pr_antigo_sem_a_secao_cai_no_primeiro_paragrafo_do_contexto():
+    assert collect.resumo_funcional(CORPO_ANTIGO) == {
+        "o_que": None,
+        "valor": None,
+        "contexto": "Decisão registrada neste PR: o quadro ganha uma coluna Entregue.",
+    }
+
+
+def test_contexto_longo_e_cortado_e_corpo_vazio_nao_tem_resumo():
+    longo = collect.resumo_funcional("## Contexto\n\n" + "palavra " * 80)
+    assert len(longo["contexto"]) <= 241 and longo["contexto"].endswith("…")
+    assert collect.resumo_funcional("") is None
+    assert collect.resumo_funcional("<!-- só comentário -->") is None
+
+
+def test_resumo_vem_dos_prs_recentes_numa_chamada_so(monkeypatch):
+    chamadas = []
+
+    def run(cmd, cwd, timeout=None):
+        chamadas.append(cmd)
+        return json.dumps([{"number": 11, "body": CORPO_NOVO}, {"number": 10, "body": ""}])
+
+    monkeypatch.setattr(collect, "_run", run)
+    prs = [{"number": 10}, {"number": 11}, {"number": 3}]
+    collect._resumir_prs_recentes(DASH, prs)
+    assert prs[1]["resumo"]["o_que"] == "a Ata sai em PDF com um clique."
+    assert prs[0]["resumo"] is None and "resumo" not in prs[2]
+    assert chamadas == [["gh", "pr", "list", "--state", "all", "--limit", "200", "--json", "number,body"]]
+
+
+def test_falha_no_resumo_nao_derruba_os_prs(monkeypatch):
+    def run(cmd, cwd, timeout=None):
+        raise RuntimeError("HTTP 504")
+
+    monkeypatch.setattr(collect, "_run", run)
+    prs = [{"number": 10}]
+    collect._resumir_prs_recentes(DASH, prs)
+    assert prs == [{"number": 10}]
+
+
 # ---------- coleta inteira ----------
 
 ISSUES = [

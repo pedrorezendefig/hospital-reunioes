@@ -775,3 +775,90 @@ def test_entregue_nao_e_gargalo_nem_envelhece(tmp_path):
     html = _app(tmp_path, hash_inicial="#prs?prd=900", dados=dados)
     assert 'data-col="entregue"' in html and "pr-col-cheia" not in re.search(r'class="pr-col-cab([^"]*)" data-col="entregue"', html).group(1)
     assert "pr-velho" not in _card(html, 110)
+
+
+# ---------- hover e clique: o resumo do PR ----------
+
+
+def _dados_do_pop():
+    dados = json.loads(json.dumps(DADOS))
+    pr = next(p for p in dados["github"]["prs"] if p["number"] == 70)
+    pr.update(
+        title="feat(atas): exportar PDF",
+        created_at="2026-10-05T22:10:00Z",
+        merged_at="2026-10-06T01:30:00Z",
+        author="lucassampaioc1",
+        mergeado_por="pedrorezendefig",
+        labels=["type:feature", "area:atas"],
+    )
+    return dados
+
+
+@com_node
+def test_hover_resume_o_pr_titulo_issue_pessoas_branch_tempos_e_versao(tmp_path):
+    pop = _app(tmp_path, "popDoPr('70', S.data, { fmtDT, depVer })", dados=_dados_do_pop())
+    assert "<b>PR #70 · Em produção</b>" in pop
+    assert "feat(atas): exportar PDF" in pop
+    assert "#901 Issue 901" in pop  # a issue que fecha, com o título dela
+    assert "aberto por lucassampaioc1" in pop and "mergeado por pedrorezendefig" in pop
+    assert "feat/fatia-901" in pop
+    assert "aberto 5 out, 22:10" in pop and "mergeado 6 out, 01:30" in pop and "levou 3h20" in pop
+    assert "v0.163.4" in pop
+    assert "type:feature" in pop and "area:atas" in pop
+    assert "<a" not in pop  # o hover só resume; link é do clique
+
+
+@com_node
+def test_hover_abre_com_o_resumo_funcional_o_que_e_e_valor(tmp_path):
+    dados = _dados_do_pop()
+    pr = next(p for p in dados["github"]["prs"] if p["number"] == 70)
+    pr["resumo"] = {"o_que": "a Ata sai em PDF.", "valor": "sem copiar para o Word.", "contexto": None}
+    pop = _app(tmp_path, "popDoPr('70', S.data, { fmtDT, depVer })", dados=dados)
+    assert re.search(r'<p class="pr-pop-tit">[^<]*</p>\s*<span class="fx-k">o que é</span><p>a Ata sai em PDF\.</p>', pop)
+    assert '<span class="fx-k">valor</span><p>sem copiar para o Word.</p>' in pop
+
+
+@com_node
+def test_pr_antigo_mostra_o_contexto_no_lugar_do_resumo(tmp_path):
+    dados = _dados_do_pop()
+    pr = next(p for p in dados["github"]["prs"] if p["number"] == 70)
+    pr["resumo"] = {"o_que": None, "valor": None, "contexto": "O quadro ganha <b>uma</b> coluna."}
+    pop = _app(tmp_path, "popDoPr('70', S.data, { fmtDT, depVer })", dados=dados)
+    assert '<span class="fx-k">contexto</span><p>O quadro ganha &lt;b&gt;uma&lt;/b&gt; coluna.</p>' in pop
+    assert "o que é" not in pop
+
+
+@com_node
+def test_hover_do_entregue_diz_que_o_merge_e_a_entrega(tmp_path):
+    dados = json.loads(json.dumps(DADOS))
+    dados["github"]["prs"].append({**_pr(95, "MERGED", []), "merged_at": "2026-10-06T04:20:00Z"})
+    dados["fases"]["prs"]["95"] = _fase_pr("entregue", 0, {"desde": "2026-10-06T04:20:00Z"})
+    pop = _app(tmp_path, "popDoPr('95', S.data, { fmtDT, depVer })", dados=dados)
+    assert "<b>PR #95 · Entregue</b>" in pop
+    assert "ferramenta: o merge é a entrega, sem build nem versão" in pop
+    assert "sem issue" in pop
+
+
+@com_node
+def test_hover_do_aberto_mostra_dias_na_coluna_e_conflito(tmp_path):
+    pop = _app(tmp_path, "popDoPr('81', S.data, { fmtDT, depVer })")
+    assert "<b>PR #81 · CI vermelho</b>" in pop
+    assert "5 dias na coluna" in pop and "conflito com a main" in pop
+
+
+@com_node
+def test_clique_fixa_o_resumo_com_link_do_github_e_da_issue(tmp_path):
+    html = _app(tmp_path, hash_inicial="#prs/70", dados=_dados_do_pop())
+    fixo = re.search(r'<div class="st-pop pr-pop pr-pop-fixo" data-n="70"[^>]*>(.*?)</div>', html, re.S)  # o resumo não tem div dentro
+    assert fixo, "o PR do hash abre o resumo fixo"
+    corpo = fixo.group(1)
+    assert "feat(atas): exportar PDF" in corpo
+    assert 'href="https://github.com/x/y/pull/70" target="_blank"' in corpo
+    assert 'href="#issues/901"' in corpo
+
+
+@com_node
+def test_sem_pr_no_hash_o_pop_vem_vazio_e_escondido(tmp_path):
+    html = _app(tmp_path)
+    assert '<div class="st-pop pr-pop" hidden></div>' in html
+    assert "pr-pop-fixo" not in html
