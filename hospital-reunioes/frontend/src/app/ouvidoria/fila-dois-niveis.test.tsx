@@ -213,13 +213,16 @@ describe("a linha de dois níveis substitui a tabela (RN-72, RN-73)", () => {
     }
   });
 
-  it("o resumo é cortado em uma linha, com o texto inteiro no tooltip", async () => {
+  it("o resumo é cortado em uma linha, e nenhum tooltip o repete", async () => {
     montar([caso(7, "aguardando_area")]);
     const linha = await linhaDe("2026-0007");
 
     const resumo = within(linha).getByText(RESUMO_LONGO);
     expect(resumo.className).toContain("truncate");
-    expect(resumo.getAttribute("title")).toBe(RESUMO_LONGO);
+    // O resumo é recorte literal do relato (issue #753): o texto inteiro mora
+    // no Dossiê, e não no `title` de elemento nenhum da linha.
+    const titulos = Array.from(linha.querySelectorAll("[title]")).map((el) => el.getAttribute("title") ?? "");
+    expect(titulos.filter((t) => t.includes(RESUMO_LONGO.slice(0, 20)))).toEqual([]);
   });
 
   it("o nível 2 diz o setor, quem responde por ele e o prazo", async () => {

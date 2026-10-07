@@ -45,11 +45,9 @@ A Ouvidoria aparece na barra de baixo para quem tem acesso a ela.
 
 Quem tem papel nas Reuniões e não tem acesso à Ouvidoria também abre esta lista,
 e nela lê, de cada caso não sigiloso: o protocolo, o setor, a situação, o prazo, a
-gravidade, o tipo, o desfecho quando o caso já encerrou e **o resumo**, que é a
-frase que descreve o caso. No computador, passar o mouse em cima mostra o resumo
-inteiro.
+gravidade, o tipo e o desfecho quando o caso já encerrou.
 
-O que essa pessoa não alcança: o relato de quem falou, o nome e o contato dele,
+O que essa pessoa não alcança: o resumo, o relato de quem falou, o nome e o contato dele,
 os anexos, a resposta da área e o histórico. A página do caso também não abre
 para ela.
 

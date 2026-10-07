@@ -14,8 +14,8 @@ ele.
 Por isso o caso que entra pelo formulário, pelo QR ou pela Ana nasce sigiloso:
 essas portas não escolhem tipo, e o caso sem tipo é tratado como protegido até
 você classificar. Já o caso que a Ouvidoria registra à mão nasce com o tipo que
-você escolheu na hora: uma reclamação digitada no balcão não é sigilosa, e o
-resumo dela aparece na lista do hospital assim que você salva.
+você escolheu na hora: uma reclamação digitada no balcão não é sigilosa e
+aparece na lista do hospital assim que você salva, sem o resumo.
 
 A regra automática é piso, não teto: o ouvidor pode elevar o sigilo de um caso
 que a lista não previu. O que ele não pode é tirar o sigilo de um tipo que é
@@ -25,7 +25,7 @@ sigiloso por natureza.
 
 - **Caso comum:** ouvidor e Diretoria veem tudo. Quem tem papel nas Reuniões e
   não é da Ouvidoria lê na lista o protocolo, o setor, a situação, o prazo, a
-  gravidade, o tipo, o desfecho e **o resumo do caso**, e não abre a página dele. O setor responsável
+  gravidade, o tipo e o desfecho, sem o resumo, e não abre a página dele. O setor responsável
   recebe o resumo, o relato inteiro, a nota da Ouvidoria e quem falou.
 - **Caso sigiloso:** só ouvidor e Diretoria. O caso nem aparece na lista de quem
   está fora da Ouvidoria, e o setor recebe só a nota da Ouvidoria.
@@ -37,7 +37,7 @@ sigiloso por natureza.
 
 ![Denúncia anônima ainda não classificada](../../../../assets/ouvidoria/caso-denuncia-sigilosa.png)
 
-## O resumo é o que atravessa a parede
+## O resumo fica na Ouvidoria
 
 No caso que entra pelo formulário ou pelo QR, o resumo não é escrito por
 ninguém: são as primeiras linhas do relato, do jeito que a pessoa escreveu, até
@@ -45,13 +45,10 @@ ninguém: são as primeiras linhas do relato, do jeito que a pessoa escreveu, at
 registrar. No caso que a Ouvidoria registra à mão, é o texto que o ouvidor
 escreve no campo **Resumo**.
 
-É esse texto que fica visível na lista para quem tem papel nas Reuniões e não é
-da Ouvidoria, assim que o caso deixa de ser sigiloso. Nas três portas que não
-escolhem tipo, esse momento é a sua classificação: tirar o sigilo de um caso que
-veio do formulário é decidir que o começo daquele relato pode ser lido pelo
-hospital. No registro à mão não há esse intervalo, porque o tipo já vai
-escolhido: o que você escrever no **Resumo** de uma reclamação é público desde o
-clique em **Registrar manifestação**.
+Como no formulário o resumo é o começo do relato, ele não sai da Ouvidoria
+pela lista: quem tem papel nas Reuniões e não é da Ouvidoria vê o caso que
+deixou de ser sigiloso com protocolo, setor, situação e prazo, mas sem o resumo.
+Vale para o caso classificado e para o registrado à mão.
 
 ## Tirar o sigilo é sempre um ato consciente
 

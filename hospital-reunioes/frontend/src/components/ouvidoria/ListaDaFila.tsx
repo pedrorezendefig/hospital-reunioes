@@ -437,12 +437,11 @@ function LinhaDaFila({
               </span>
             )}
           </div>
-          {/* Uma linha só, com reticências, e o resumo inteiro no tooltip do
-              desktop (RN-72). Peso médio quando há novidade (issue #484,
-              RN-68): é o segundo sinal, para o ponto não ficar sozinho
-              carregando a cor. */}
+          {/* Uma linha só, com reticências (RN-72). Sem tooltip: o resumo é
+              recorte literal do relato (issue #753), e o texto inteiro mora no
+              Dossiê. Peso médio quando há novidade (issue #484, RN-68): é o
+              segundo sinal, para o ponto não ficar sozinho carregando a cor. */}
           <span
-            title={m.resumo}
             className={`truncate text-sm ${
               m.tem_novidade ? "font-medium text-slate-800" : "text-slate-600"
             }`}

@@ -522,6 +522,42 @@ class TestOIndiceDizSeOCasoESigiloso:
         assert linhas[0]["sigilo_reforcado"] is False
 
 
+class TestResumoFicaDentroDaOuvidoria:
+    """O resumo é um recorte literal do relato (issue #753): no formulário
+    público são as primeiras letras do que a pessoa escreveu. Classificar tira
+    o sigilo e o registro do balcão já nasce sem ele, então o caso aberto chega
+    ao índice de quem está fora da Ouvidoria, e o resumo não pode ir junto. O
+    resto da linha (protocolo, setor, situação e prazo) segue."""
+
+    RESUMO = "Sou a Maria Silva, do leito 302, e o enfermeiro me destratou."
+
+    @pytest.mark.parametrize("participante", [SECRETARIA, SUPER_ADMIN], ids=["secretaria", "super_admin"])
+    def test_quem_esta_fora_recebe_a_linha_sem_o_resumo(self, monkeypatch, participante):
+        supabase = _SupabaseFake([_manifestacao(7, tipo_manifestacao="reclamacao", resumo=self.RESUMO)])
+        client, _ = _client(monkeypatch, participante, supabase)
+
+        resposta = client.get("/api/ouvidoria/protocolos")
+
+        assert resposta.status_code == 200
+        linha = resposta.json()["protocolos"][0]
+        assert "resumo" not in linha
+        # Nem com outro nome: o corpo inteiro não carrega o texto da pessoa.
+        assert "Maria Silva" not in resposta.text
+        assert linha["protocolo"] == "2026-0007"
+        assert linha["setor"] == "A definir"
+        assert linha["status"] == "em_classificacao"
+        assert "rotulo_prazo" in linha
+
+    @pytest.mark.parametrize("participante", [OUVIDOR, DIRETORIA], ids=["ouvidor", "diretoria"])
+    def test_a_ouvidoria_segue_lendo_o_resumo_na_fila(self, monkeypatch, participante):
+        supabase = _SupabaseFake([_manifestacao(7, tipo_manifestacao="reclamacao", resumo=self.RESUMO)])
+        client, _ = _client(monkeypatch, participante, supabase)
+
+        linha = client.get("/api/ouvidoria/protocolos").json()["protocolos"][0]
+
+        assert linha["resumo"] == self.RESUMO
+
+
 class TestTipoInformacaoPelaPortaDaClassificacao:
     """O sexto tipo chegando pela porta da classificação (issue #490, ADR 0040
     decisão 1). É a porta do Dossiê: o caso já está com o ouvidor, e o que

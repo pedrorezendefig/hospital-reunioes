@@ -45,7 +45,7 @@ trabalhar: nada aciona uma área sozinho.
   dos dois fica à parte e nunca vira classificação.
 - **A caixa de sigilo reforçado não desmarca:** o tipo escolhido é sigiloso por
   natureza. Você eleva o sigilo de um caso, nunca tira o de uma denúncia.
-- **Desmarcar o sigilo mostra o resumo ao hospital:** sem ele, quem tem papel nas
-  Reuniões lê o resumo na lista, e no caso vindo do formulário o resumo é o
-  começo do relato. Veja
+- **Desmarcar o sigilo mostra o caso ao hospital:** sem ele, quem tem papel nas
+  Reuniões vê o caso na lista, com protocolo, setor, situação e prazo, mas sem o
+  resumo. Veja
   [O que é sigiloso](/ouvidoria/como-funciona/o-que-e-sigiloso/).

@@ -32,8 +32,8 @@ mensagem ou avaliou o hospital na internet.
 3. Preencha **Data e hora do contato** com a hora real em que a pessoa falou. O
    prazo conta a partir dali.
 4. Escolha o **Tipo da manifestação** e o **Setor**, e escreva o **Resumo**.
-   Denúncia e relato de conduta nascem sigilosos; nos outros tipos, o resumo é
-   público desde já.
+   Denúncia e relato de conduta nascem sigilosos; nos outros tipos, o caso já
+   aparece na lista de quem tem papel nas Reuniões, sem o resumo.
 5. Cole em **Relato integral** o que a pessoa contou, inteiro e sem correção, e
    preencha **Quem manifestou**, **Contato** e **Vínculo**. Do Google, do
    Reclame Aqui ou do Instagram, o endereço da avaliação ou o @ vai no
@@ -45,10 +45,6 @@ mensagem ou avaliou o hospital na internet.
 
 - **A tela pede para conferir os campos:** relato, tipo, setor e resumo são
   obrigatórios, e a data não pode ser futura.
-- **Você escreveu no Resumo algo que o hospital não deveria ler:** salvo, ele vai
-  para a lista de quem tem papel nas Reuniões, sem classificação no meio. O
-  detalhe fica no **Relato integral**, que não sai da Ouvidoria. Veja
-  [O que é sigiloso](/ouvidoria/como-funciona/o-que-e-sigiloso/).
 - **Você marcou WhatsApp e o caso era da Ana:** o que a Ana atendeu entra
   sozinho, pelo canal dela, e conta separado. O WhatsApp do hospital é atendido
   por gente, e é você quem digita.
