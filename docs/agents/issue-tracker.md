@@ -29,11 +29,11 @@ O `/to-prd` cria a issue grande (o **PRD**); o `/to-issues` quebra em fatias e r
 - **Listar as fatias de um PRD:** `gh api "repos/$REPO/issues/<PRD>/sub_issues" --jq '.[].number'`.
 - **De que PRD veio uma fatia:** a seção `Pai: #N` no corpo, ou o painel de sub-issues na UI da própria fatia.
 - Quando a **última fatia aberta** fecha, a [Action de higiene](#higiene-de-fechamento-github-action) fecha o PRD sozinha, com um comentário. O **claim e o paralelismo (abaixo) acontecem nas fatias**, não no PRD.
-- **Emenda (ADR 0061, 01/10/2026): o PRD tem dono.** O `/to-prd` põe como assignee do PRD quem fez o grilling. Isso não é claim (ninguém "trabalha o PRD"), é responsabilidade: fatia ainda sem claim conta, para efeito de visão, como do dono do PRD. O Hospital OS (painel local) filtra a aba Issues por quem está designado (assignee), sem herdar o dono do PRD (emenda de 02/10/2026 da ADR 0061).
+- **Emenda (ADR 0068): o PRD tem dono.** O `/to-prd` põe como assignee do PRD quem fez o grilling. Isso não é claim (ninguém "trabalha o PRD"), é responsabilidade: fatia ainda sem claim conta, para efeito de visão, como do dono do PRD. O Hospital OS (painel local) filtra a aba Issues por quem está designado (assignee), sem herdar o dono do PRD (ADR 0068).
 
 ## Higiene de fechamento (GitHub Action)
 
-A Action `.github/workflows/higiene-issues.yml` dispara no evento `issues.closed` — para **qualquer** fechamento (merge com `Closes #N`, web, ou manual) — e garante que o status nunca minta (ADR 0020, decisão 2):
+A Action `.github/workflows/higiene-issues.yml` dispara no evento `issues.closed`, para **qualquer** fechamento (merge com `Closes #N`, web, ou manual), e garante que o status nunca minta (ADR 0068):
 
 1. Remove as labels de estado (`in-progress`, `ready-for-agent`, `blocked`) da issue fechada.
 2. Se ela era a **última sub-issue aberta** de um PRD, fecha o PRD com um comentário — limpando as labels do PRD na mesma run (o fechamento via `GITHUB_TOKEN` não re-dispara a Action).
@@ -42,15 +42,15 @@ Nenhuma skill ou passo manual cuida disso — a higiene é event-driven de prop�
 
 ## Snapshot e draft do Manual (GitHub Action)
 
-A Action `.github/workflows/pos-merge.yml` dispara em todo push na `main` e faz o que saiu do rabo (ADR 0062, decisão 10): o `fechar_onda.py` grava só `history.json` e `state.json`, e o resto é dela.
+A Action `.github/workflows/pos-merge.yml` dispara em todo push na `main` e faz o que saiu do rabo (ADR 0068): o `fechar_onda.py` grava só `history.json` e `state.json`, e o resto é dela.
 
 1. Tira do `draft` as páginas do Manual dos PRDs do último deploy do `history.json` (`tools/tirar_draft_manual.py`). Deploy sem PRD (PR avulso) pula o passo; página com Vídeo de tarefa fica em draft com um aviso no run, porque o MP4 não vem no clone (issue #951).
 2. Regenera o mapa factual (`docs/spec/snapshots/` e os blocos AUTO do `docs/ARQUITETURA.md`) com o backend montado como no CI, sem o modo parcial da máquina local.
-3. Com diff, commita direto na `main` como `github-actions[bot]`, com `[skip ci]`. Quem empurra é a deploy key da Action, num job separado que não instala nada; o ruleset da `main` dá bypass a ela e a mais ninguém (`.github/rulesets/main.json`, ADR 0065).
+3. Com diff, commita direto na `main` como `github-actions[bot]`, com `[skip ci]`. Quem empurra é a deploy key da Action, num job separado que não instala nada; o ruleset da `main` dá bypass a ela e a mais ninguém (`.github/rulesets/main.json`, ADR 0068).
 
 O `[skip ci]` impede o push do bot de redisparar workflow, e o filtro de caminhos da Action ignora o que ela mesma escreve. Nenhuma skill nem o rabo roda snapshot ou draft.
 
-## Loop do revisor (ADR 0020, decisão 5)
+## Loop do revisor (ADR 0068)
 
 O **revisor** (papel; o **diretor** é o caso canônico) acompanha as issues pelo GitHub web/mobile e comenta. O mecanismo **independe da pessoa** — o que dispara o loop é o comentário e o contexto que ele adiciona:
 
@@ -108,12 +108,12 @@ Abra a sessão Claude Code dentro de `../hospital-issue-<N>`. O `EnterWorktree` 
 - O `/tdd` usa os **critérios de aceite** da issue como a lista de testes.
 - `/ship` abre o PR com `Closes #N` no corpo → ao mergear, o GitHub **fecha a issue**, e a [Action de higiene](#higiene-de-fechamento-github-action) remove o `in-progress` automaticamente.
 - Abandonou? Devolva ao pool: `gh issue edit <N> --remove-assignee @me --remove-label in-progress --add-label ready-for-agent`.
-- **Fatia de PRD alheio (ADR 0061):** pode pegar, mas combine antes com o dono do PRD (assignee da issue-raiz). O claim muda o responsável da fatia; o PRD continua do dono.
-- **Quem mergeia e deploya é o autor do PR (ADR 0061):** migration em produção e `APP_VERSION` são de quem mergeia. O bump de versão não entra no PR; acontece no merge, na `main`, pelo `fechar_onda.py`.
+- **Fatia de PRD alheio (ADR 0068):** pode pegar, mas combine antes com o dono do PRD (assignee da issue-raiz). O claim muda o responsável da fatia; o PRD continua do dono.
+- **Quem mergeia e deploya é o autor do PR (ADR 0068):** migration em produção e `APP_VERSION` são de quem mergeia. A versão não entra no PR nem vira commit: o rabo (`fechar_onda.py`) a define pelo tipo dos commits, em `APP_VERSION` no Coolify e na tag.
 
 ## Bloqueios entre issues (dependências nativas)
 
-Dependência entre issues usa o recurso nativo de **issue dependencies** do GitHub ("blocked by"), não texto no corpo (ADR 0028). O formato antigo (`Bloqueada por: #X` no corpo + label `blocked` + varredura manual de destravamento) foi aposentado; o texto remanescente em issues antigas é histórico, a fonte da verdade é a relação nativa.
+Dependência entre issues usa o recurso nativo de **issue dependencies** do GitHub ("blocked by"), não texto no corpo (ADR 0068). O formato antigo (`Bloqueada por: #X` no corpo + label `blocked` + varredura manual de destravamento) foi aposentado; o texto remanescente em issues antigas é histórico, a fonte da verdade é a relação nativa.
 
 - **Criar a dependência** (a issue `<N>` é bloqueada pela `<X>`): o endpoint exige o *id global* da bloqueadora, não o número. Com `gh` >= 2.94.0 existe `gh issue edit <N> --add-blocked-by <X>`; com o `gh` atual:
   ```bash

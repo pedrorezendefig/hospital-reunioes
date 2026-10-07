@@ -145,7 +145,7 @@ O desenvolvimento é **GitHub-issue-centric** (modelo Matt Pocock). Issues, PRs 
 |---|---|
 | Planejar → issues | `grill-with-docs` · `to-prd` · `to-issues` · `triage` |
 | Desenvolver | `pegar-issue` · `tdd` · `diagnose` · `prototype` · `improve-codebase-architecture` · `zoom-out` |
-| Entregar | `ship` (PR + 3 gates + merge) · `deploy` (Coolify + health + rollback) |
+| Entregar | `ship` (PR + gates + rabo) · `deploy` (Coolify + health + rollback) |
 | Apoio | `snapshot` (atualiza este doc) · `atualizar-app` (dev local) |
 
 **Skills globais** (no seu Claude Code, valem em todos os projetos — não precisam de instalação por repo): `passagem` (handoff pt-BR), e os plugins `code-review`, `security-review`, `frontend-design`, `context7`, `github`.

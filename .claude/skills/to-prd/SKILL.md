@@ -25,9 +25,9 @@ Issue tracker = **GitHub Issues** via `gh` (veja `docs/agents/issue-tracker.md`)
    URL=$(gh issue create --title "<título pt-BR>" --body "<corpo>" --label ready-for-agent --assignee @me)
    ```
 
-   O `--assignee @me` faz o PRD nascer com dono: quem rodou o `/to-prd` (ADR 0061, decisão 4). Não é claim; as fatias que o `/to-issues` cria continuam sem assignee até alguém pegar, e o `/pegar-issue` avisa quem pega fatia de PRD alheio.
+   O `--assignee @me` faz o PRD nascer com dono: quem rodou o `/to-prd` (ADR 0068). Não é claim; as fatias que o `/to-issues` cria continuam sem assignee até alguém pegar, e o `/pegar-issue` avisa quem pega fatia de PRD alheio.
 
-   **Todo PRD abre com o bloco "Para o diretor"** (ADR 0020, decisão 7): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada do revisor não-técnico, que lê as issues direto no GitHub. Formato fixo, mínimo de palavras, zero jargão:
+   **Todo PRD abre com o bloco "Para o diretor"** (ADR 0068): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada do revisor não-técnico, que lê as issues direto no GitHub. Formato fixo, mínimo de palavras, zero jargão:
 
    - **O que muda:** uma frase de valor, não-técnica — o que o sistema passa a fazer pelo hospital.
    - **O que você precisa saber:** 2–3 regras simples que deixem o revisor reconhecer a feature funcionando.

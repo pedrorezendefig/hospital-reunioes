@@ -1,11 +1,11 @@
 ---
 name: ship
-description: Leva uma mudança até o PR verde (branch, commit, PR, 3 gates) e roda o rabo, o fechar_onda.py, sem parar. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--skip-review]`.
+description: Leva uma mudança até o PR verde (branch, commit, PR, gates da ADR 0068) e roda o rabo, o fechar_onda.py, sem parar. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--skip-review]`.
 ---
 
 # ship
 
-Do código ao PR verde e, com os gates verdes, o rabo (`fechar_onda.py`), sem esperar mensagem (ADR 0063). Merge, versão, `APP_VERSION`, build, health e registro são só do rabo (ADR 0061); o `/ship` nunca faz nenhum deles. Config em `docs/spec/deploy/project.json`.
+Do código ao PR verde e, com os gates verdes, o rabo (`fechar_onda.py`), sem esperar mensagem (ADR 0068). Merge, versão, `APP_VERSION`, build, health e registro são só do rabo (ADR 0068); o `/ship` nunca faz nenhum deles. Config em `docs/spec/deploy/project.json`.
 
 ## Sintaxe
 
@@ -23,21 +23,22 @@ Do código ao PR verde e, com os gates verdes, o rabo (`fechar_onda.py`), sem es
 | `--from-diff` | O código já está no working tree: vai direto ao commit. |
 | `--resume` | Retoma pelo estado do git e do PR (tabela no fim). |
 
-**Nunca pare para perguntar** (ADR 0067): dúvida, impasse ou revisor sem veredito é baixa, com uma linha de motivo.
+**Nunca pare para perguntar** (ADR 0068): dúvida, impasse ou revisor sem veredito é baixa, com uma linha de motivo.
 
-## Passos 1 a 7: branch, código, commit, PR
+## Passos 1 a 8: branch, código, testes, commit, PR
 
 1. **Pre-flight:** `git fetch origin`. Arquivo alheio no working tree fica de fora do commit, sem perguntar. Com `--issue N` fora da `main`, a branch tem que terminar em `-<N>`; senão, pare (a árvore pode ser de outra sessão).
 2. **Branch:** `<type>/<slug>[-<N>]` (slug minúsculo, ASCII, até 50 caracteres). Já na branch do `/pegar-issue`, pule.
 3. **Issue:** `gh issue view N --json title,body,labels`. "O que construir" vira o contexto do PR; os critérios de aceite, o checklist e a lista de testes do `/tdd`.
 4. **Código:** chame a Skill tool com `tdd`. Com `--from-diff`, pule.
-5. **Commit:** Conventional Commits, `git add` com lista explícita (nunca `-A` nem `.`), nada do `hard_excluded` do `project.json`. Sem versão no PR: o `package.json` do frontend fica congelado, a versão sai no rabo.
-6. **Push:** `git push -u origin "$BRANCH"`. Falhou: reporte o erro bruto e pare.
-7. **PR:** `gh pr create --base main --title "$SUBJECT" --body-file <scratchpad>/pr-$BRANCH.md --label type:$TYPE --label area:<...>`. O arquivo do corpo leva o nome da branch: agentes paralelos na mesma sessão já se atropelaram num `pr.md` compartilhado (o #796 saiu com o `Closes` da issue errada). Corpo pelo `.github/PULL_REQUEST_TEMPLATE.md`: contexto (sem `--issue`, o Contexto abre com "Decisão registrada neste PR" e o porquê da mudança: é a casa da decisão de ferramenta, ADR 0068, regra 12), critérios de aceite, **Evidência** (antes e depois: o teste que falhava e passa, a saída de comando que mudou ou o print; nunca só "testes verdes"), **Perigo do merge** (porta de uma ou duas vias pela lista do template, com o motivo, e o raio) e `Closes #N`. Com migration nova, a seção `## Migration NNN (conferência por hash)` com o `sha256` do arquivo (`shasum -a 256`) e o SQL completo: o rabo confere e para se faltar ou divergir.
+5. **Testes locais, o mesmo comando do CI:** PR de ferramenta roda `uv run --no-project --python ">=3.12" --with pytest --with pyyaml python -m pytest tools/ -q --ignore=tools/workflow-dashboard` (o job do `manual.yml`; o `python3` do macOS é velho e não tem `tomllib`) e, se tocou o painel, o mesmo `uv run` com `tools/workflow-dashboard/tests -q`; PR do app roda a suíte do backend ou do frontend que o diff toca. Vermelho local nunca vira PR: o CI inteiro é a prova, não a lista de arquivos que você lembrou de rodar (o #1046 caiu por trocar uma string que um teste de outro arquivo asserta).
+6. **Commit:** Conventional Commits, `git add` com lista explícita (nunca `-A` nem `.`), nada do `hard_excluded` do `project.json`. Sem versão no PR: o `package.json` do frontend fica congelado, a versão sai no rabo.
+7. **Push:** `git push -u origin "$BRANCH"`. Falhou: reporte o erro bruto e pare.
+8. **PR:** `gh pr create --base main --title "$SUBJECT" --body-file <scratchpad>/pr-$BRANCH.md --label type:$TYPE --label area:<...>`. O arquivo do corpo leva o nome da branch: agentes paralelos na mesma sessão já se atropelaram num `pr.md` compartilhado (o #796 saiu com o `Closes` da issue errada). Corpo pelo `.github/PULL_REQUEST_TEMPLATE.md`: contexto (sem `--issue`, o Contexto abre com "Decisão registrada neste PR" e o porquê da mudança: é a casa da decisão de ferramenta, ADR 0068, regra 12), critérios de aceite, **Evidência** (antes e depois: o teste que falhava e passa, a saída de comando que mudou ou o print; nunca só "testes verdes"), **Perigo do merge** (porta de uma ou duas vias pela lista do template, com o motivo, e o raio) e `Closes #N`. Com migration nova, a seção `## Migration NNN (conferência por hash)` com o `sha256` do arquivo (`shasum -a 256`) e o SQL completo: o rabo confere e para se faltar ou divergir.
 
 ## Passo 8: gates
 
-**PR de ferramenta** (nenhum arquivo em `hospital-reunioes/`, ADR 0067): só o CI. Verde, vá ao Passo 9.
+**PR de ferramenta** (nenhum arquivo em `hospital-reunioes/`, ADR 0068): só o CI. Verde, vá ao Passo 9.
 
 **PR do app**, na ordem:
 
@@ -88,8 +89,8 @@ Baixa: `❌` e, na segunda linha, o gate e o motivo.
 | Estado | Retoma em |
 |---|---|
 | Sem commit | Passo 5 |
-| Commit sem push | Passo 6 |
-| Push sem PR | Passo 7 |
+| Commit sem push | Passo 7 |
+| Push sem PR | Passo 8 |
 | PR aberto, gates pendentes | Passo 8 |
 | Gates verdes | Passos 9 e 10 |
 | PR mergeado | Nada; o rabo já rodou |

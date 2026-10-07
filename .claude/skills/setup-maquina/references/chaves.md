@@ -11,7 +11,7 @@ Cofre compartilhado do 1Password: **VITTA TECH**. Quem clona precisa de acesso a
 | `COOLIFY_ACCESS_TOKEN` | 2 | por pessoa | Painel do Coolify, Keys & Tokens, API tokens, com permissão de deploy. A conta no Coolify quem cria é o Pedro. |
 | `COOLIFY_BASE_URL` | 2 | config | Já vem no `.env.example`. |
 | `ANA_API_KEY` | opcional | compartilhada | 1Password, VITTA TECH, item "Ana API key" (criar). É a mesma chave de produção. Só para smoke test. |
-| `GH_TOKEN` | 2, só admin | por pessoa | Token fine-grained do GitHub sem Administration, criado por quem é admin do repositório (seção 5.1 do `docs/onboarding/claude-setup.md`). Quem não é admin deixa vazio e usa o `gh auth login`. Não troque por PAT clássico (ADR 0063). |
+| `GH_TOKEN` | 2, só admin | por pessoa | Token fine-grained do GitHub sem Administration, criado por quem é admin do repositório (seção 5.1 do `docs/onboarding/claude-setup.md`). Quem não é admin deixa vazio e usa o `gh auth login`. Não troque por PAT clássico (ADR 0068). |
 
 ## hospital-reunioes/.env (nível 2: três valores fictícios)
 

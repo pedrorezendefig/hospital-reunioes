@@ -53,7 +53,7 @@ volta para `docs/manual/` e fica fora do git.
 - O humano, via `/manual publicar`, depois do deploy que fecha PRD com Fatia
   de manual (o aviso da Action no PRD lembra), ou quando quer o site no ar
   agora.
-- O rabo (`fechar_onda.py`) não publica nem tira draft (ADR 0062): quem tira o
+- O rabo (`fechar_onda.py`) não publica nem tira draft (ADR 0068): quem tira o
   `draft` das páginas dos PRDs que subiram é uma Action no push da `main`,
   depois do registro, e ela não publica. Antes de tirar o draft, o
   `tools/tirar_draft_manual.py` confere que o MP4 de cada Vídeo de tarefa
@@ -62,4 +62,5 @@ volta para `docs/manual/` e fica fora do git.
   basta uma página com vídeo para o lote inteiro ficar em `draft` e fora do ar
   até o humano rodar o `/manual publicar` numa máquina que tenha tudo.
 
-A Fatia de manual **não publica**: ela para no checkpoint de merge.
+A Fatia de manual **não publica**: ela para no PR verde, fora do rabo, e quem
+viu o draft do vídeo roda o `fechar_onda.py`.

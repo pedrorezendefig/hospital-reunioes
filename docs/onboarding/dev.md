@@ -9,7 +9,7 @@ O trabalho é **GitHub-issue-centric**: toda mudança nasce de uma Issue e morre
 - **Tem uma ideia ou melhoria nova?** → `/grill-with-docs` (lapida a ideia, vira PRD, vira issues).
 - **Vai pegar trabalho que já está na fila?** → `/pegar-issue` (sem nada lista a fila; com um número pega a issue).
 
-O resto do caminho, `/tdd` → `/ship` → rabo (`fechar_onda.py`), as skills encadeiam sozinhas, sem parada até produção, exceto migration (ADR 0063).
+O resto do caminho, `/tdd` → `/ship` → rabo (`fechar_onda.py`), as skills encadeiam sozinhas, sem parada até produção, exceto migration (ADR 0068).
 
 ## Setup inicial (1 vez só)
 
@@ -45,7 +45,7 @@ Agora há issues na fila pra qualquer um pegar.
 /pegar-issue          # lista as issues ready-for-agent sem dono
 /pegar-issue 42       # dá o "claim" (vira sua), cria a branch e carrega a spec
 /tdd                  # red → green → refactor: critérios de aceite viram testes
-/ship                 # 3 gates e, com o PR verde, roda o rabo sozinho:
+/ship                 # gates da ADR 0068 e, com o PR verde, roda o rabo sozinho:
                       # fechar_onda.py --prs <PR> = merge + versão + deploy + registro (a issue fecha pelo Closes #42)
 # migration nova? o rabo imprime <arquivo>:1, você cola no Studio de produção e ele segue quando o número aparece no /api/health (até 24 h)
 ```
@@ -83,16 +83,16 @@ Loop disciplinado: reproduz → minimiza → hipótese → instrumenta → corri
    ▼
 /tdd               red → green → refactor; critérios de aceite = testes de integração
    ▼
-/ship              Gate 1: hr-revisor (sempre)
-                   Gate 2: sensivel.py (rota sem login ou migration vira linha Sensível: no revisor)
-                   Gate 3 — CI verde (GitHub Actions)
-                   → gate reprovado chama o hr-corretor; com o PR verde, roda o rabo sozinho (sem versão no PR)
+/ship              Ferramenta (nada em hospital-reunioes/): só o CI verde (GitHub Actions)
+                   App: hr-revisor uma vez (sensivel.py acusa rota sem login ou migration e
+                   acrescenta a lente de segurança; spec × diff se houver issue) + CI verde
+                   → must-fix ou CI vermelho chamam o hr-corretor; com o PR verde, roda o rabo sozinho (sem versão no PR)
                    ▼
-fechar_onda.py     o rabo único (ADR 0061), rodado pelo /ship ou pelo fechamento da onda:
+fechar_onda.py     o rabo único (ADR 0068), rodado pelo /ship ou pelo fechamento da onda:
   --prs <N>        migration nova no /api/health → semáforo → versão nova sem commit → CI verde
                    → APP_VERSION no backend e no frontend → merge pela API (squash) → tag vX.Y.Z
                    → um build → health com version-match
-                   → registro pela Action pos-merge.yml, sem PR: state.json + history.json (ADR 0064)
+                   → registro pela Action pos-merge.yml, sem PR: state.json + history.json (ADR 0068)
                    (no mesmo run da Action: snapshot e draft do Manual, depois do registro)
                    (Manual no ar: /manual publicar, da máquina com os MP4; a Action só avisa no PRD)
                    (migration nova: o script confere o sha256, imprime o arquivo para colar no
@@ -117,22 +117,22 @@ fechar_onda.py     o rabo único (ADR 0061), rodado pelo /ship ou pelo fechament
 ## Regras importantes
 
 1. **Nunca commitar em `main` direto.** Sempre PR via `/ship`; quem leva o PR à `main` é o rabo (`fechar_onda.py`).
-2. **Self-approval é OK**: os 3 gates (hr-revisor + sensivel.py + CI) validam. Cada um aprova o próprio PR.
-   - **Emenda (ADR 0061, 01/10/2026):** cada sócio **mergeia e sobe para produção o próprio PR**, sem esperar ninguém. Quem mergeia aplica a migration em produção (Studio) e cuida do `APP_VERSION` no Coolify, então todo sócio precisa de acesso aos dois. PR verde parado esperando o Pedro é erro de processo, não cautela.
+2. **Self-approval é OK**: os gates da ADR 0068 (hr-revisor com a lente do sensivel.py, e CI) validam. Cada um aprova o próprio PR.
+   - **Emenda (ADR 0068):** cada sócio **mergeia e sobe para produção o próprio PR**, sem esperar ninguém. Quem mergeia aplica a migration em produção (Studio) e cuida do `APP_VERSION` no Coolify, então todo sócio precisa de acesso aos dois. PR verde parado esperando o Pedro é erro de processo, não cautela.
 3. **Nunca pular o `sensivel.py`**: rota sem login ou migration (canal público da Ouvidoria, webhook, e-mail recebido, RLS) leva a linha `Sensível:` ao `hr-revisor`.
 4. **O contexto do trabalho vive na Issue**, não em arquivo de plano. Os critérios de aceite da Issue viram os seus testes no `/tdd`.
 5. **Uma Issue por vez, uma branch por Issue.** Em paralelo (vários terminais), use **1 git worktree por issue** — o claim atômico evita que duas sessões peguem a mesma. Protocolo em `docs/agents/issue-tracker.md`.
-   - **Emenda (ADR 0061):** a **árvore principal do seu clone fica sempre na `main`** e só recebe `git pull`. Todo trabalho, inclusive doc e ADR, acontece em worktree. Voltou de uma pausa? `git pull` na árvore principal antes de qualquer coisa.
-6. **Dono do PRD (ADR 0061).** Todo PRD tem um assignee: quem fez o grilling (o `/to-prd` põe). Fatia sem claim conta como do dono do PRD; pegar fatia de PRD de outro sócio se combina antes com ele. Quem está puxando o quê aparece no Hospital OS, o painel local (`python3 tools/workflow-dashboard/serve.py`, aba Issues, filtro por responsável).
+   - **Emenda (ADR 0068):** a **árvore principal do seu clone fica sempre na `main`** e só recebe `git pull`. Todo trabalho, inclusive doc e ADR, acontece em worktree. Voltou de uma pausa? `git pull` na árvore principal antes de qualquer coisa.
+6. **Dono do PRD (ADR 0068).** Todo PRD tem um assignee: quem fez o grilling (o `/to-prd` põe). Fatia sem claim conta como do dono do PRD; pegar fatia de PRD de outro sócio se combina antes com ele. Quem está puxando o quê aparece no Hospital OS, o painel local (`python3 tools/workflow-dashboard/serve.py`, aba Issues, filtro por responsável).
 7. **Skills locais ficam em `.claude/skills/`** — não mexa sem confirmar comigo (Pedro). Mudanças aqui são "skills do time".
 
 ## Como o código e o registro chegam à `main`
 
-A `main` é protegida por ruleset (ADR 0061, emenda de 02/10/2026): nenhuma pessoa, admin inclusive, dá push direto nela, e todo PR precisa dos três jobs do CI verdes no head dele, sem exigir a branch em dia com a base (ADR 0064, decisão 2: o CI do push na `main` pega os dois PRs que passam separados e quebram juntos, e isso vira correção para frente, nunca rollback). A única exceção é a deploy key da Action pós-merge, que commita o snapshot e o draft do Manual direto na `main` (ADR 0062, decisão 10, emendada pela ADR 0065; veja o tempo 4 abaixo). Ela só existe no job da Action que roda na `main` e não instala nada; workflow de outra branch, com o token que for, entra por PR como todo mundo. Por isso o rabo (`fechar_onda.py`) entra sempre por PR, em três tempos, e a Action fecha com o quarto:
+A `main` é protegida por ruleset (ADR 0068): nenhuma pessoa, admin inclusive, dá push direto nela, e todo PR precisa dos três jobs do CI verdes no head dele, sem exigir a branch em dia com a base (ADR 0068: o CI do push na `main` pega os dois PRs que passam separados e quebram juntos, e isso vira correção para frente, nunca rollback). A única exceção é a deploy key da Action pós-merge, que commita o snapshot e o draft do Manual direto na `main` (ADR 0068; veja o tempo 4 abaixo). Ela só existe no job da Action que roda na `main` e não instala nada; workflow de outra branch, com o token que for, entra por PR como todo mundo. Por isso o rabo (`fechar_onda.py`) entra sempre por PR, em três tempos, e a Action fecha com o quarto:
 
-1. **Código.** A versão nova sai do tipo dos commits e não vira commit (issue #967): o `package.json` fica congelado. O seu PR entra como está, no próprio número (na onda, cada PR do lote do mesmo jeito, em ordem, ADR 0064). O script espera o CI verde, põe o `APP_VERSION` no backend e no frontend do Coolify, mergeia pela API do GitHub, com squash, e cria a tag `vX.Y.Z` no squash do último PR. PR da onda que não entra (conflito, CI vermelho) fica de fora sozinho.
+1. **Código.** A versão nova sai do tipo dos commits e não vira commit (issue #967): o `package.json` fica congelado. O seu PR entra como está, no próprio número (na onda, cada PR do lote do mesmo jeito, em ordem, ADR 0068). O script espera o CI verde, põe o `APP_VERSION` no backend e no frontend do Coolify, mergeia pela API do GitHub, com squash, e cria a tag `vX.Y.Z` no squash do último PR. PR da onda que não entra (conflito, CI vermelho) fica de fora sozinho.
 2. **Build e health** do que entrou: um build só, o do último squash; o script cancela o dos intermediários.
-3. **Registro.** Depois do health, o script monta a entrada nova do `history.json` e o `state.json` e dispara a Action `.github/workflows/pos-merge.yml` na `main` (`workflow_dispatch`), com os dois no input `registro`, sem PR (ADR 0064, decisão 6b). Ele só sai quando vê a entrada no `history.json` da `main`, e cancela o build que o Coolify dispara para o commit do bot. Snapshot e draft do Manual não são do rabo (ADR 0062).
+3. **Registro.** Depois do health, o script monta a entrada nova do `history.json` e o `state.json` e dispara a Action `.github/workflows/pos-merge.yml` na `main` (`workflow_dispatch`), com os dois no input `registro`, sem PR (ADR 0068). Ele só sai quando vê a entrada no `history.json` da `main`, e cancela o build que o Coolify dispara para o commit do bot. Snapshot e draft do Manual não são do rabo (ADR 0068).
 4. **Snapshot e draft do Manual.** A Action roda em todo push na `main`, mas é o run do registro que traz a versão nova no `history.json`. Um job sem credencial valida o registro e o aplica aos dois JSONs, monta o backend como o CI, roda o `snapshot.py` e o `tirar_draft_manual.py` com os PRDs do último deploy e passa o patch por artefato; outro, com a deploy key, aplica só os três caminhos e os dois JSONs (conferidos contra o registro do input) e, se houver diff, commita direto na `main` como `github-actions[bot]`, com `[skip ci]`. Ninguém roda nada na própria máquina. A Action não publica o Manual (issue #951): o resumo do run lista as páginas que saíram do draft e as que ficaram (página com Vídeo de tarefa, porque o MP4 não vem no clone), e um terceiro job, só com `issues: write`, deixa esse aviso no PRD fechado, uma vez por deploy.
 
 **Depois do deploy que fecha PRD com Fatia de manual, o Manual no ar é com você.** Rode `/manual publicar` de uma máquina com os MP4 dos Vídeos de tarefa: ele tira o draft das páginas com vídeo (`tirar_draft_manual.py` com os PRDs do aviso), republica o site na Vercel (`https://manual-hsm.vercel.app`) e leva a troca do draft à `main` por PR. O aviso da Action no PRD é o lembrete; o registro do link fica em comentário no mesmo PRD.
@@ -148,12 +148,12 @@ gh api 'repos/{owner}/{repo}/rules/branches/main' --jq '.[] | {type, parameters}
 
 Mudou o JSON depois de aplicado? `gh api -X PUT 'repos/{owner}/{repo}/rulesets/<id>' --input .github/rulesets/main.json`, com o `<id>` de `gh api 'repos/{owner}/{repo}/rulesets'`.
 
-Depois do token sem Administration (ADR 0063, `docs/onboarding/claude-setup.md` seção 5.1), esses dois comandos não passam mais na máquina: a mudança do ruleset é pela tela do GitHub (**Settings** > **Rules** > **Rulesets**), editando ali ou importando o JSON.
+Depois do token sem Administration (ADR 0068, `docs/onboarding/claude-setup.md` seção 5.1), esses dois comandos não passam mais na máquina: a mudança do ruleset é pela tela do GitHub (**Settings** > **Rules** > **Rulesets**), editando ali ou importando o JSON.
 
 Aplicar pela tela, quando o `main.json` muda num PR (o admin, logado no navegador, depois do merge do PR):
 
-1. **Settings** > **Rules** > **Rulesets** > **main protegida (ADR 0061)**.
-2. Faça na regra o que o diff do `main.json` mudou. Exemplo, o da ADR 0064 (decisão 2): em **Require status checks to pass**, desmarque **Require branches to be up to date before merging** (é o `strict_required_status_checks_policy: false`).
+1. **Settings** > **Rules** > **Rulesets** > **main protegida (ADR 0061)** (o nome literal do ruleset na tela do GitHub; a decisão vive na ADR 0068).
+2. Faça na regra o que o diff do `main.json` mudou. Exemplo, o da ADR 0068: em **Require status checks to pass**, desmarque **Require branches to be up to date before merging** (é o `strict_required_status_checks_policy: false`).
 3. **Save changes**.
 4. Confira de qualquer máquina (ler o ruleset não precisa de Administration) e cole a saída num comentário da issue do PR: `gh api 'repos/{owner}/{repo}/rules/branches/main' --jq '.[] | select(.type == "required_status_checks") | {ruleset_id, strict: .parameters.strict_required_status_checks_policy}'`.
 
@@ -178,8 +178,8 @@ Sem Discord, sem Slack.
 | `/to-issues` | Quebra o PRD em fatias verticais (1 issue cada) |
 | `/pegar-issue` | Sem arg: lista a fila. Com `<N>`: claim + branch + spec |
 | `/tdd` | Red → green → refactor (testes a partir dos critérios de aceite) |
-| `/ship` | Commit → PR → 3 gates → com o PR verde, roda o rabo sozinho |
-| `fechar_onda.py --prs <N>` | O rabo único: versão sem commit, APP_VERSION nos dois apps, merge pela API, tag, um build, health, registro gravado pela Action pós-merge, sem PR (ADR 0061, ADR 0064) |
+| `/ship` | Commit → PR → gates da ADR 0068 → com o PR verde, roda o rabo sozinho |
+| `fechar_onda.py --prs <N>` | O rabo único: versão sem commit, APP_VERSION nos dois apps, merge pela API, tag, um build, health, registro gravado pela Action pós-merge, sem PR (ADR 0068) |
 | `/deploy status` | Ver estado de produção (sem alterar) |
 | `/deploy rollback` | Reverte produção pro deploy anterior |
 | `/diagnose` | Investigação raiz de bug |

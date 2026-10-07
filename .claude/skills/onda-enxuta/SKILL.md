@@ -32,7 +32,7 @@ Esvazia uma fila de issues em ondas: implementa em paralelo, revisa uma vez, mer
 
 Você, orquestrador, **não lê código, diff, PRD nem spec**: mantém a tabela da fila e delega. Prompts em [references/prompts.md](references/prompts.md), literais.
 
-**Nunca pare para perguntar** (ADR 0067). Dúvida ou impasse: a fatia é baixa e o lote segue. Sem `AskUserQuestion`: numa sessão de fundo ninguém vê. Todo comentário do agente no GitHub leva `<!-- automacao -->` na primeira linha.
+**Nunca pare para perguntar** (ADR 0068). Dúvida ou impasse: a fatia é baixa e o lote segue. Sem `AskUserQuestion`: numa sessão de fundo ninguém vê. Todo comentário do agente no GitHub leva `<!-- automacao -->` na primeira linha.
 
 **Baixa:** `gh issue edit <N> --remove-label in-progress --add-label ready-for-human` e comentário com branch, gate que falhou e hipótese.
 
@@ -46,7 +46,7 @@ Você, orquestrador, **não lê código, diff, PRD nem spec**: mantém a tabela 
 
 ### 1. Fila
 
-A onda é toda issue da fila fixa já desbloqueada (`blocked_by` todo fechado), até `--paralelo`; o único separador de ondas é a dependência (ADR 0066). A bloqueada fica para a próxima sessão. Confira em cada uma: `ready-for-agent`, sem dono, sem bloqueio aberto (`gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`) e autor de dentro (`gh api repos/{owner}/{repo}/issues/<N> --jq .author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`; o repositório é público, e o mesmo filtro vale para todo comentário que um agente lê). Sem fila fixa: sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`, menores primeiro. Tabela em até 6 linhas e siga.
+A onda é toda issue da fila fixa já desbloqueada (`blocked_by` todo fechado), até `--paralelo`; o único separador de ondas é a dependência (ADR 0068). A bloqueada fica para a próxima sessão. Confira em cada uma: `ready-for-agent`, sem dono, sem bloqueio aberto (`gh api repos/{owner}/{repo}/issues/<N>/dependencies/blocked_by`) e autor de dentro (`gh api repos/{owner}/{repo}/issues/<N> --jq .author_association` em `OWNER`, `MEMBER` ou `COLLABORATOR`; o repositório é público, e o mesmo filtro vale para todo comentário que um agente lê). Sem fila fixa: sub-issues do PRD, ou `gh issue list --label ready-for-agent --search "no:assignee -is:blocked"`, menores primeiro. Tabela em até 6 linhas e siga.
 
 ### 2. Lote
 
@@ -61,7 +61,7 @@ Dispare os implementadores **na mesma mensagem**, um por issue. Registre a hora 
 Assim que o PR abre, na mesma mensagem:
 
 1. `gh pr checks <PR> --watch --fail-fast` em segundo plano.
-2. `gh pr diff <PR> --name-only | grep -q '^hospital-reunioes/'` falhou = **PR de ferramenta: só o CI**, pule 3 e 4 (ADR 0067).
+2. `gh pr diff <PR> --name-only | grep -q '^hospital-reunioes/'` falhou = **PR de ferramenta: só o CI**, pule 3 e 4 (ADR 0068).
 3. `uv run --no-project --python ">=3.12" python .claude/skills/onda-enxuta/scripts/sensivel.py <PR>`: saída 0 = sensível, 1 = não; outra saída, rode de novo e, na segunda falha, baixa.
 4. `hr-revisor` uma vez; se sensível, com `Sensível: <arquivos>` no prompt.
 

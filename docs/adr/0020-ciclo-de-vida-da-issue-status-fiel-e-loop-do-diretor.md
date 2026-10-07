@@ -1,6 +1,7 @@
 ---
-status: accepted
+status: superseded
 amended_by: 0054
+superseded_by: 0068
 ---
 
 # Ciclo de vida da issue: status fiel, critérios auto-verificados e loop do diretor

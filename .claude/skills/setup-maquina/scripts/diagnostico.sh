@@ -73,7 +73,7 @@ checa_claude_versao() { # OK se claude --version >= CLAUDE_MIN; FALTA abaixo ou 
   if versao_min "$v" "$CLAUDE_MIN"; then ok "claude >= $CLAUDE_MIN" "$v"
   else falta "claude >= $CLAUDE_MIN" "tem $v; atualize: curl -fsSL https://claude.ai/install.sh | bash"; fi
 }
-# Fluxo automático (ADR 0063): o settings DO USUÁRIO precisa do deny de force push contra a main e
+# Fluxo automático (ADR 0068): o settings DO USUÁRIO precisa do deny de force push contra a main e
 # do autoMode (o modo auto não lê autoMode do settings do projeto). O rabo, a /minhas-issues e a
 # escrituração em issue e PR vão em autoMode.allow, em prosa, para o classificador seguir olhando
 # destino e conteúdo; em permissions.allow eles pulariam o classificador, e esse allow vale também
@@ -151,7 +151,7 @@ AUTO
     done <<<"$abertas"
   fi
 }
-# A trava do ruleset é do servidor (ADR 0063): nenhuma credencial do GitHub que o agente alcança pode
+# A trava do ruleset é do servidor (ADR 0068): nenhuma credencial do GitHub que o agente alcança pode
 # ter Administration. Pergunta ao GitHub pelas deploy keys, que só respondem com Administration,
 # e só olha o código de saída e o HTTP do erro: nunca lê nem imprime o token.
 eh_admin() { # quem roda é admin: o papel no repo ou, com o token fine-grained, o login do dono
@@ -228,7 +228,7 @@ checa_gh() {
 }
 checa_gh
 
-# Cada sócio mergeia o próprio PR (ADR 0061): o user.email do git tem que ser um e-mail
+# Cada sócio mergeia o próprio PR (ADR 0068): o user.email do git tem que ser um e-mail
 # verificado da conta gh logada, senão o commit sai em nome de outra pessoa (setembro/2026).
 # Só lê o perfil pela API; o token do gh nunca entra.
 checa_email_git() { # email
@@ -315,7 +315,7 @@ checa_coolify() {
 }
 tem_bin coolify && checa_coolify
 
-# Quem mergeia aplica a migration no Studio de produção (ADR 0061). Só bate na porta, sem
+# Quem mergeia aplica a migration no Studio de produção (ADR 0068). Só bate na porta, sem
 # credencial: 401 é o login do Studio pedindo usuário, ou seja, alcançável.
 checa_studio() { # url
   local codigo
@@ -339,7 +339,7 @@ if [ -f "$TOK" ]; then
     chave_preenchida "$TOK" "$k" && ok "tokens/.env: $k" "preenchida" || falta "tokens/.env: $k" "ver references/chaves.md"
   done
   chave_preenchida "$TOK" ANA_API_KEY && ok "tokens/.env: ANA_API_KEY" "preenchida" || aviso "tokens/.env: ANA_API_KEY" "só para smoke test contra prod; ver references/chaves.md"
-  # PAT clássico com escopo repo: na conta de quem é admin ele administra o repositório (ADR 0063).
+  # PAT clássico com escopo repo: na conta de quem é admin ele administra o repositório (ADR 0068).
   if chave_preenchida "$TOK" GITHUB_PERSONAL_ACCESS_TOKEN; then
     if eh_admin; then falta "tokens/.env sem PAT clássico" "apague GITHUB_PERSONAL_ACCESS_TOKEN e revogue o PAT no GitHub: na sua conta ele administra o repositório; o gh usa o GH_TOKEN (seção 5.1)"
     else aviso "tokens/.env sem PAT clássico" "GITHUB_PERSONAL_ACCESS_TOKEN não é usado pelo fluxo; pode apagar (seção 5.1)"; fi
