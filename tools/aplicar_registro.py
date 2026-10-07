@@ -33,6 +33,7 @@ VERSAO = re.compile(r"\d+\.\d+\.\d+")
 ID = re.compile(r"[a-z][a-z0-9_-]*")
 CHAVE_DE_ENV = re.compile(r"[A-Z][A-Z0-9_]*")
 MIGRATION = re.compile(r"\d+_[A-Za-z0-9_.-]+\.sql")
+LOGIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*")  # login do GitHub de quem rodou o rabo
 CONTROLE = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -74,7 +75,17 @@ def _mudanca_de_env(v) -> bool:
             and _casa(ID)(v["action"]) and _lista(_casa(CHAVE_DE_ENV))(v["keys"]))
 
 
-# Os campos que o `escrever_registro` do rabo grava, nem um a mais.
+def _etapas(v) -> bool:
+    """O que o rabo mediu: merge e health em segundos, build por app (None para o
+    app sem build, como o backend em modo imagem)."""
+    return (isinstance(v, dict) and set(v) == {"merge_s", "build_s", "health_s"}
+            and _inteiro(v["merge_s"]) and _inteiro(v["health_s"]) and isinstance(v["build_s"], dict)
+            and all(_casa(ID)(k) and (x is None or _inteiro(x)) for k, x in v["build_s"].items()))
+
+
+# Os campos que o `montar_registro` do rabo grava, nem um a mais. As entradas
+# antigas do history.json não têm `etapas` nem `responsavel`: o esquema vale
+# para a entrada nova, nunca para o arquivo inteiro.
 ENTRADA = {
     "at": _data,
     "sha": _casa(SHA),
@@ -90,6 +101,8 @@ ENTRADA = {
     "migrations_applied": _lista(_casa(MIGRATION)),
     "rollback_target_sha": lambda v: v is None or _casa(SHA)(v),
     "notes": _texto,
+    "etapas": _etapas,
+    "responsavel": _casa(LOGIN),
 }
 # O que o rabo muda no state.json, além dos serviços: o resto vem da main.
 DO_RABO = {"updated_at", "updated_by", "last_app_version", "last_run"}

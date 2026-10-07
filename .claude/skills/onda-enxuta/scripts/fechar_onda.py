@@ -774,16 +774,42 @@ def rotulo_issues(info: dict) -> str:
     return ("issue " if len(nums) == 1 else "issues ") + " ".join(f"#{n}" for n in nums)
 
 
+LOGIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*")
+SEM_LOGIN = "desconhecido"
+
+
+def quem_roda(raiz: Path) -> str:
+    """O login de quem roda o rabo (`gh api user`): o `responsavel` do registro.
+    Sem resposta valida, um nome fixo que o esquema aceita, para o registro
+    nao parar por isso."""
+    try:
+        login = (gh_json(["api", "user"], cwd=raiz) or {}).get("login")
+    except Exception:  # noqa: BLE001
+        login = None
+    return login if isinstance(login, str) and LOGIN.fullmatch(login) else SEM_LOGIN
+
+
+def banco_ok_pelo_backend(healths: dict[str, dict]) -> bool:
+    """O supabase nao tem HTTP proprio: o /api/health do backend so responde ok
+    com o banco respondendo, e diz como ele esta no campo `db` quando o tem."""
+    h = healths.get("backend") or {}
+    return bool(h.get("ok")) and h.get("db") in (None, "healthy")
+
+
 def montar_registro(state: dict, sessao: str, infos: list[dict], versao: str | None,
                     sha_codigo: str, prds: list[int], migs: list[str], servicos: list[str],
                     duracoes: dict[str, int | None], healths: dict[str, dict], resultado: str,
                     com_app_version: list[str], avulso: bool = False,
-                    digests: dict[str, str | None] | None = None) -> dict:
+                    digests: dict[str, str | None] | None = None, etapas: dict | None = None,
+                    responsavel: str = SEM_LOGIN) -> dict:
     """A verdade do deploy que o GitHub nao tem (ADR 0068), como a
     Action pos-merge a recebe (ADR 0068): a entrada nova do
     history.json, que guarda todos os deploys, e o `state` (o state.json da main,
     atualizado). App em modo imagem leva o digest do que foi para o ar
-    (`last_deploy_digest`): e o que o rollback confere no GHCR."""
+    (`last_deploy_digest`): e o que o rollback confere no GHCR. `etapas` e o que
+    o rabo mediu (merge, build por app e health, em segundos) e `responsavel` e
+    quem o rodou: os dois vao na entrada, e o painel desenha a linha do tempo
+    com eles."""
     when = agora_iso()
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
     como = "Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health."
@@ -815,6 +841,8 @@ def montar_registro(state: dict, sessao: str, infos: list[dict], versao: str | N
         "migrations_applied": migs,
         "rollback_target_sha": None,
         "notes": notes,
+        "etapas": etapas or {"merge_s": 0, "build_s": {sid: duracoes.get(sid) for sid in servicos}, "health_s": 0},
+        "responsavel": responsavel,
     }
 
     modo = "pr-avulso" if avulso else "onda-enxuta"
@@ -835,6 +863,12 @@ def montar_registro(state: dict, sessao: str, infos: list[dict], versao: str | N
             svc["last_health_check"] = {"at": when, "latency_ms": h.get("latency_ms"),
                                         "http_status": h.get("status"), "body_ok": bool(h.get("ok"))}
             svc["build_duration_seconds"] = duracoes.get(svc["id"])
+        elif svc.get("id") == "supabase":
+            # o supabase nao faz deploy (last_deploy_* ficam) e nao tem HTTP proprio: o
+            # status vem do health do backend, a cada deploy, para o semaforo nao mentir
+            ok_banco = banco_ok_pelo_backend(healths)
+            svc["status"] = "healthy" if ok_banco else "warning"
+            svc["last_health_check"] = {"at": when, "latency_ms": None, "http_status": None, "body_ok": ok_banco}
     state["last_run"] = {"mode": modo, "sha": sha_codigo, "result": resultado,
                          "duration_seconds": int(time.time() - T0)}
     state.pop("next_actions", None)
@@ -1382,6 +1416,13 @@ def checar_health(service: dict, versao_esperada: str | None) -> dict:
         regex = hc.get("expected_body_regex")
         if ok and regex and not re.search(regex, body.strip()):
             ok = False
+        if regex:
+            # o /api/health do backend diz explicitamente como esta o banco (`db`):
+            # e o que o registro usa para o bloco do supabase, que nao tem HTTP proprio
+            try:
+                resultado["db"] = json.loads(body).get("db")
+            except Exception:
+                resultado["db"] = None
         if ok and versao_esperada and regex:
             try:
                 versao = json.loads(body).get("version")
@@ -1565,6 +1606,7 @@ def main() -> int:
         digests_no_ar: dict[str, str | None] = {}  # em modo imagem, o digest de cada tag de `no_ar`
         com_app_version: list[str] = []
         antes_do_primeiro = True
+        merge_s = 0.0  # o que os merges pela API levaram, somados (etapa `merge` do registro)
         for info in infos:
             n = info["number"]
             try:
@@ -1582,6 +1624,7 @@ def main() -> int:
                 titulo = titulo if f"(#{n})" in titulo else f"{titulo} (#{n})"
                 t = time.time()
                 sha = mergear_pela_api(raiz, n, head, titulo)
+                merge_s += time.time() - t
             except MergeConflito as e:
                 de_fora.append(n)
                 print(f"de fora: conflito no merge de #{e.pr} em: {', '.join(e.arquivos) or '?'}. "
@@ -1673,8 +1716,11 @@ def main() -> int:
               + (f", build dos squashes intermediarios cancelado ({', '.join(cancelados)})" if cancelados else ""))
 
         healths = {}
+        t_health = time.time()
         for sid in (servicos or [s for s in servicos_cfg if s != "supabase"]):
             healths[sid] = checar_health(servicos_cfg[sid], versao_nova if sid == "backend" else None)
+        etapas = {"merge_s": int(merge_s), "build_s": {sid: duracoes.get(sid) for sid in servicos},
+                  "health_s": int(time.time() - t_health)}
         ruins = [f"{sid}: {linha_de_health(h)}" for sid, h in healths.items() if not h["ok"]]
         if ruins:
             linha_health = "health: " + "; ".join(ruins)
@@ -1720,7 +1766,8 @@ def main() -> int:
             migs = [Path(c).name for h, c in novas if h in heads]
             registro = montar_registro(json.loads(run(["git", "show", f"origin/main:{STATE}"], cwd=raiz).stdout),
                                        args.sessao, lote, versao_nova, sha_main, prds_do_lote(raiz, lote), migs,
-                                       servicos, duracoes, healths, "healthy", com_app_version, avulso, digests)
+                                       servicos, duracoes, healths, "healthy", com_app_version, avulso, digests,
+                                       etapas, quem_roda(raiz))
             arquivo_reg.write_text(json.dumps(registro, ensure_ascii=False), encoding="utf-8")
             sha_reg = registrar_pela_action(raiz, arquivo_reg, registro["entrada"])
         except Exception as e:  # noqa: BLE001

@@ -31,6 +31,7 @@ const S = {
   item: null,   // item aberto que o hash aponta (#issues/930, #producao/v0.161.0)
   fIssues: filtrosVazios(),
   fPrs: filtrosPrsVazios(),
+  fProd: { resp: '' },   // filtro da linha do tempo da aba Produção (filtrosProdVazios)
   expIss: new Set(),
   expPrd: new Map(),
   expDep: new Set(),
@@ -96,10 +97,14 @@ function ago(iso) {
   if (ms < 48 * 3.6e6) return `há ${Math.round(ms / 3.6e6)} h`;
   return `há ${Math.round(ms / 86.4e6)} dias`;
 }
+/* duração humana: 45s, 1m06s, 2h05m, 3d 4h (as etapas da linha do tempo vão de segundos a dias) */
 function durS(sec) {
   if (sec == null) return '·';
-  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
-  return m ? `${m}m${String(s).padStart(2, '0')}s` : `${s}s`;
+  const s = Math.round(sec);
+  const d = Math.floor(s / 86400), h = Math.floor((s % 86400) / 3600), m = Math.floor((s % 3600) / 60), r = s % 60;
+  if (d) return `${d}d ${h}h`;
+  if (h) return `${h}h${String(m).padStart(2, '0')}m`;
+  return m ? `${m}m${String(r).padStart(2, '0')}s` : `${r}s`;
 }
 
 const LABEL_CLS = {
@@ -172,14 +177,30 @@ async function load(fresh = false, silent = false) {
 
 /* ---------- shell ---------- */
 
+/* Semáforo com três estados: verde só com todo serviço healthy e checado;
+   vermelho com algum down/unhealthy ou HTTP fora de 2xx; âmbar no resto
+   (warning, sem verificação). O supabase não tem HTTP próprio: o rabo deriva
+   o status dele do health do backend, e "sem HTTP" deixou de ser vermelho. */
+const SERVICO_FORA = ['down', 'unhealthy'];
+const checado = s => s.status === 'healthy' && !!s.last_health_check;
+
+function estadoDaProducao(svcs) {
+  const fora = s => {
+    const http = (s.last_health_check || {}).http_status;
+    return SERVICO_FORA.includes(s.status) || (http != null && (http < 200 || http >= 300));
+  };
+  if (svcs.some(fora)) return 'bad';
+  return svcs.length && svcs.every(checado) ? 'ok' : 'warn';
+}
+
 function renderMast() {
   const st = S.data.state || {};
   const svcs = st.services || [];
-  const okCount = svcs.filter(s => s.status === 'healthy').length;
-  const allOk = svcs.length && okCount === svcs.length;
+  const okCount = svcs.filter(checado).length;
+  const estado = estadoDaProducao(svcs);
   $('#mast-status').innerHTML = `
-    <span class="capsule"><span class="dot ${allOk ? 'ok pulse' : 'bad'}"></span>
-      <b>v${esc(st.last_app_version || '?')}</b>&nbsp;· prod ${allOk ? 'healthy' : `${okCount}/${svcs.length} ok`}</span>
+    <span class="capsule"><span class="dot ${{ ok: 'ok pulse', warn: 'warn', bad: 'bad' }[estado]}"></span>
+      <b>v${esc(st.last_app_version || '?')}</b>&nbsp;· prod ${estado === 'ok' ? 'healthy' : `${okCount}/${svcs.length} ok`}</span>
     <span class="ago" id="ago">coletado ${ago(S.data.generated_at)}</span>
     <button class="iconbtn" id="refresh" title="recoletar agora (gh + arquivos)">⟳</button>`;
   $('#refresh').addEventListener('click', () => load(true));
@@ -220,9 +241,10 @@ function marcarAba() {
   document.querySelectorAll('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
 }
 
-/* estado da tela -> hash; os filtros existem nas abas Issues e PRs */
+/* estado da tela -> hash; os filtros existem nas abas Issues, PRs e Produção */
 function sincronizarHash() {
-  const filtros = S.tab === 'issues' ? filtrosNaRota(S.fIssues) : S.tab === 'prs' ? filtrosPrsNaRota(S.fPrs) : {};
+  const filtros = S.tab === 'issues' ? filtrosNaRota(S.fIssues) : S.tab === 'prs' ? filtrosPrsNaRota(S.fPrs)
+    : S.tab === 'producao' ? filtrosProdNaRota(S.fProd) : {};
   gravarRota({ aba: S.tab, item: S.item, filtros });
 }
 
@@ -233,6 +255,7 @@ function irPara(rota) {
   S.item = rota.item;
   if (rota.aba === 'issues') S.fIssues = filtrosDaRota(rota.filtros);
   if (rota.aba === 'prs') S.fPrs = filtrosPrsDaRota(rota.filtros);
+  if (rota.aba === 'producao') S.fProd = filtrosProdDaRota(rota.filtros);
   abrirItem();
   sincronizarHash();
   marcarAba();
@@ -768,92 +791,182 @@ function renderPrs() {
   </div>`;
 }
 
-/* ---------- DEPLOYS ---------- */
+/* ---------- PRODUÇÃO: linha do tempo do repositório (merges + deploys) ---------- */
 
 /* history.json mistura "v0.45.4" e "0.43.1"; a aba exibe sempre com um v só */
 const depVer = v => v ? 'v' + String(v).replace(/^v/, '') : '';
 
-/* Deploys da mesma versão juntos, na ordem do history.json (o rabo grava o
-   mais recente em [0]); deploy sem versão é linha própria. A chave da versão
-   é o índice do deploy mais recente dela no history: o mesmo que o abrirItem
-   acha pelo hash e o clique (data-act="dep") expande. */
-function versoesDoHistorico(history) {
-  const porVer = new Map(), lista = [];
-  history.forEach((dp, i) => {
-    const ver = depVer(dp.app_version);
-    if (ver && porVer.has(ver)) { porVer.get(ver).deploys.push(dp); return; }
-    const v = { i, ver, deploys: [dp] };
-    if (ver) porVer.set(ver, v);
-    lista.push(v);
-  });
-  return lista;
+/* filtro da aba <-> rota: só a pessoa (quem mergeou, ou o responsável do deploy) */
+const filtrosProdVazios = () => ({ resp: '' });
+const filtrosProdDaRota = p => ({ resp: p.resp || '' });
+const filtrosProdNaRota = f => ({ resp: f.resp });
+
+const shaCurto = sha => String(sha || '·').slice(0, 7);
+/* o responsável do deploy vem do coletor como um login, uma lista deles ou nada */
+const pessoasDe = r => (r == null ? [] : [].concat(r));
+/* as pessoas de um evento: quem mergeou o PR, ou o responsável do deploy */
+const quemFez = ev => (ev.tipo === 'deploy' ? pessoasDe(ev.responsavel) : [ev.mergeado_por].filter(Boolean));
+
+/* o deploy do evento no history.json: o índice que o clique (data-act="dep") e
+   o hash (#producao/vX, pelo abrirItem) usam para abrir o card */
+const indiceNoHistory = ev => S.data.history.findIndex(d => d.sha === ev.sha && d.at === ev.at);
+
+const passaFiltroProd = ev => !S.fProd.resp || quemFez(ev).includes(S.fProd.resp);
+
+/* o dropdown de pessoa da aba Issues, reaproveitado; a faceta conta eventos */
+function filtrosProdHtml(eventos) {
+  const f = S.fProd;
+  const pessoas = [...new Set(eventos.flatMap(quemFez))].sort();
+  const conta = login => eventos.filter(ev => !login || quemFez(ev).includes(login)).length;
+  const op = (login, txt) => opcao('lfresp', login, f.resp === login,
+    `${login ? '<span class="pessoa-dot"></span>' : ''}<span class="dd-txt">${txt}</span><span class="dd-n">${conta(login)}</span>`,
+    `${login ? ` style="--pessoa:${corDaPessoa(login)}"` : ''}${conta(login) ? '' : ' data-zero="1"'}`);
+  return `
+  <div class="filtros lt-filtros rv">
+    ${dropdown('lresp', 'responsável', f.resp ? esc(f.resp) : '', [op('', 'todos'), ...pessoas.map(p => op(p, esc(p)))])}
+    ${f.resp ? botaoLimpar('lflimpar') : ''}
+  </div>`;
 }
 
-const unicos = xs => [...new Set(xs)];
-const shaCurto = sha => String(sha || '·').slice(0, 7);
+/* etapas da barra empilhada: chave -> nome na tela. A largura é log do tempo:
+   um build de 1 min ao lado de 3 dias de PR aberto continua visível */
+const ETAPAS = { aberto: 'aberto', fila: 'fila até produção', merge: 'merge', build: 'build', health: 'health', total: 'total' };
+const LARGURA_MIN_ROTULO = 14;  // % da barra a partir da qual o segmento mostra o rótulo
 
-/* um deploy da versão, aberto: quando, health, build, env e notas */
-function deployDaVersao(dp) {
+function segmentosDe(ev) {
+  const e = ev.etapas || {};
+  const segs = [];
+  const add = (k, s, title = '') => { if (s != null && s > 0) segs.push({ k, s, title }); };
+  add('aberto', e.aberto_s);
+  add('fila', e.fila_s);
+  const medido = e.merge_s != null || e.build_s || e.health_s != null;
+  if (medido) {
+    add('merge', e.merge_s);
+    const builds = Object.entries(e.build_s || {}).filter(([, v]) => v != null);
+    add('build', Math.max(0, ...builds.map(([, v]) => v)), builds.map(([sid, v]) => `${sid} ${durS(v)}`).join(' · '));
+    add('health', e.health_s);
+  } else {
+    add('total', ev.duration_seconds);   // entrada antiga, sem etapas: só o total do rabo
+  }
+  return segs;
+}
+
+function etapasHtml(ev) {
+  const segs = segmentosDe(ev);
+  if (!segs.length) return '';
+  const pesos = segs.map(x => Math.log10(1 + x.s));
+  const soma = pesos.reduce((a, b) => a + b, 0);
+  return `<div class="etapas" role="img" aria-label="etapas do deploy">${segs.map((x, j) => {
+    const pct = (pesos[j] / soma) * 100;
+    const rot = `${ETAPAS[x.k]} ${durS(x.s)}`;
+    const title = x.title ? `${rot} (${x.title})` : rot;
+    return `<span class="etapa etapa-${x.k}" style="flex-basis:${pct.toFixed(1)}%" title="${esc(title)}">${
+      pct >= LARGURA_MIN_ROTULO ? `<span class="etapa-rot">${esc(rot)}</span>` : ''}</span>`;
+  }).join('')}</div>`;
+}
+
+/* chip de PR com a bolinha de quem mergeou (como a aba PRs faz com a issue) */
+function chipPr(n, mergePorPr) {
+  const m = mergePorPr.get(n);
+  const cor = m && m.mergeado_por ? corDaPessoa(m.mergeado_por) : null;
+  return `<a class="chip chip-pr" href="${rotaDe('prs', n)}"${m ? ` title="${esc(m.titulo)}"` : ''}${
+    cor ? ` style="--pessoa:${cor}"` : ''}>${cor ? '<span class="pessoa-dot"></span>' : ''}PR #${n}</a>`;
+}
+
+const chipIssue = n => `<a class="chip" href="${rotaDe('issues', n)}">#${n}</a>`;
+
+/* o deploy aberto: commit, escopo, duração do rabo, env e notas */
+function detalheDoDeploy(dp) {
   const env = (dp.env_changes || []).map(e => `${esc(e.service)} ${esc(e.action)} ${(e.keys || []).map(esc).join(', ')}`);
   return `
   <div class="pd-dep">
     <div class="pd-chips">
-      <span class="pd-when">${esc(fmtDT(dp.at))}</span>
-      <span class="badge ${dp.result === 'healthy' ? 'b-green' : 'b-red'}">${esc(dp.result || '?')}</span>
-      <span class="chip" title="duração do build">${durS(dp.duration_seconds)}</span>
       ${dp.sha ? `<span class="chip">${esc(shaCurto(dp.sha))}</span>` : ''}
       ${(dp.scope || []).map(s => `<span class="chip">${esc(s)}</span>`).join('')}
-      ${dp.rollback_target_sha ? `<span class="badge b-amber">rollback → ${esc(dp.rollback_target_sha)}</span>` : ''}
+      <span class="chip" title="duração do rabo">${durS(dp.duration_seconds)}</span>
     </div>
     ${env.length ? `<p class="pd-notes mono">env: ${env.join(' · ')}</p>` : ''}
     ${dp.notes ? `<p class="pd-notes">${esc(dp.notes)}</p>` : ''}
   </div>`;
 }
 
-/* card da versão: fechado, o que entrou (PRs, issues, migration) e o health
-   do deploy mais recente; aberto, cada deploy da versão */
-function versaoCard(v, pos) {
-  const dp = v.deploys[0];
-  const open = S.expDep.has(v.i);
-  const ok = dp.result === 'healthy';
-  const maxDur = Math.max(...S.data.history.map(x => x.duration_seconds || 0), 1);
-  const de = campo => unicos(v.deploys.flatMap(d => d[campo] || []));
-
-  const chipsResumo = [
-    `<span class="badge ${ok ? 'b-green' : 'b-red'}">${esc(dp.result || '?')}</span>`,
-    v.deploys.length > 1 ? `<span class="chip">${v.deploys.length} deploys</span>` : '',
-    ...de('migrations_applied').map(m => `<span class="badge b-amber">⛁ ${esc(m)}</span>`),
-    ...de('pr_numbers').map(n => `<a class="chip" href="${rotaDe('prs', n)}">PR #${n}</a>`),
-    ...de('issue_numbers').map(n => `<a class="chip" href="${rotaDe('issues', n)}">#${n}</a>`),
+/* card cheio do deploy: versão, subject, resultado, responsável, data, PRs e
+   issues que entraram, migrations e a barra das etapas; aberto, o detalhe */
+function deployCardHtml(ev, pos, mergePorPr, alvo) {
+  const i = indiceNoHistory(ev);
+  const dp = S.data.history[i] || {};
+  const ver = depVer(ev.app_version);
+  const ok = ev.result === 'healthy';
+  const open = S.expDep.has(i);
+  const chips = [
+    `<span class="badge ${ok ? 'b-green' : 'b-red'}">${esc(ev.result || '?')}</span>`,
+    ...pessoasDe(ev.responsavel).map(pessoaHtml),
+    ...(ev.prs || []).map(n => chipPr(n, mergePorPr)),
+    ...(ev.issues || []).map(chipIssue),
+    ...(ev.migrations_applied || []).map(m => `<span class="badge b-amber">⛁ ${esc(m)}</span>`),
+    ev.rollback_target_sha ? `<span class="badge b-amber">rollback para ${esc(shaCurto(ev.rollback_target_sha))}</span>` : '',
   ].filter(Boolean).join('');
-
   return `
-  <div class="pd-item rv ${ok ? '' : 'bad'}" style="--i:${Math.min(pos, 12)}">
-    <article class="card pd-card lift"${destaque(v.ver)}>
-      <div class="pd-head" data-act="dep" data-i="${v.i}">
-        <span class="pd-ver ${v.ver ? '' : 'unversioned'}">${esc(v.ver || shaCurto(dp.sha))}</span>
-        <span class="pd-subject">${esc(dp.subject || dp.raw_subject || '')}</span>
-        <span class="pd-when">${esc(fmtDT(dp.at))}</span>
-        ${dp.sha ? `<a class="pd-gh" href="${shaUrl(esc(dp.sha))}" target="_blank" rel="noopener" aria-label="abrir o commit ${esc(dp.sha)} no GitHub">↗</a>` : ''}
+  <li class="lt-no lt-deploy rv ${ok ? '' : 'bad'}" style="--i:${Math.min(pos, 12)}">
+    <article class="card pd-card lift"${alvo ? ' aria-current="true"' : ''}>
+      <div class="pd-head" data-act="dep" data-i="${i}">
+        <span class="pd-ver ${ver ? '' : 'unversioned'}">${esc(ver || shaCurto(ev.sha))}</span>
+        <span class="pd-subject">${esc(ev.subject || '')}</span>
+        <span class="pd-when">${esc(fmtDT(ev.at))}</span>
+        ${ev.sha ? `<a class="pd-gh" href="${shaUrl(esc(ev.sha))}" target="_blank" rel="noopener" aria-label="abrir o commit ${esc(ev.sha)} no GitHub">↗</a>` : ''}
       </div>
-      <div class="pd-chips">${chipsResumo}</div>
-      ${dp.duration_seconds ? `
-      <div class="pd-durbar">
-        <span class="rail"><span class="fill" style="width:${Math.round((dp.duration_seconds / maxDur) * 100)}%"></span></span>
-        <span class="t">${durS(dp.duration_seconds)}</span>
-      </div>` : ''}
-      ${open ? `<div class="pd-body">${v.deploys.map(deployDaVersao).join('')}</div>` : ''}
+      <div class="pd-chips">${chips}</div>
+      ${etapasHtml(ev)}
+      ${open ? `<div class="pd-body">${detalheDoDeploy(dp)}</div>` : ''}
     </article>
-  </div>`;
+  </li>`;
+}
+
+/* merge que não entrou em deploy nenhum: nó pequeno, contorno tracejado na cor
+   de quem mergeou. Ferramenta (nada em hospital-reunioes/) nunca entra; PR do
+   app espera o próximo deploy */
+function mergeNoHtml(ev, pos, versaoDoDeploy) {
+  const etiqueta = ev.ferramenta ? 'só merge · ferramenta'
+    : ev.deploy_sha ? `no ar na ${versaoDoDeploy(ev.deploy_sha) || shaCurto(ev.deploy_sha)}` : 'mergeado · sem deploy';
+  return `
+  <li class="lt-no lt-merge rv" style="--i:${Math.min(pos, 12)};--pessoa:${corDaPessoa(ev.mergeado_por)}">
+    <div class="lt-merge-corpo">
+      <a class="chip chip-pr" href="${rotaDe('prs', ev.pr)}">PR #${ev.pr}</a>
+      <span class="lt-merge-tit">${esc(ev.titulo)}</span>
+      <span class="chip lt-etiqueta">${esc(etiqueta)}</span>
+      ${(ev.issues || []).map(chipIssue).join('')}
+      ${ev.mergeado_por ? pessoaHtml(ev.mergeado_por) : ''}
+      <span class="pd-when">${esc(fmtDT(ev.at))}</span>
+    </div>
+  </li>`;
+}
+
+/* a trilha: deploys como cards, merges sem deploy como nós; o merge que entrou
+   num deploy visível aparece dentro do card dele, como chip de PR */
+function trilhaHtml(eventos) {
+  const mergePorPr = new Map(eventos.filter(e => e.tipo === 'merge').map(e => [e.pr, e]));
+  const visiveis = eventos.filter(passaFiltroProd);
+  if (!visiveis.length) return '<div class="empty rv">nenhum merge nem deploy na janela com este filtro</div>';
+  const deploys = visiveis.filter(e => e.tipo === 'deploy');
+  const shas = new Set(deploys.map(d => d.sha));
+  const versaoDoDeploy = sha => depVer((eventos.find(d => d.tipo === 'deploy' && d.sha === sha) || {}).app_version);
+  const alvo = deploys.find(e => depVer(e.app_version) === S.item) || null;
+  const nos = visiveis.filter(e => e.tipo === 'deploy' || !shas.has(e.deploy_sha));
+  return `<ol class="lt">${nos.map((ev, pos) => (ev.tipo === 'deploy'
+    ? deployCardHtml(ev, pos, mergePorPr, ev === alvo)
+    : mergeNoHtml(ev, pos, versaoDoDeploy))).join('')}</ol>`;
 }
 
 const STATUS_CLS = { healthy: 'prod-ok', warning: 'prod-warn' };
 
-/* health do serviço pelo último check gravado no state.json */
-function healthTxt(hc) {
-  const h = hc || {};
-  return [h.http_status ? `HTTP ${h.http_status}` : 'sem HTTP', h.latency_ms != null ? `${h.latency_ms} ms` : '',
-    h.at ? fmtDT(h.at) : ''].filter(Boolean).join(' · ');
+/* health do serviço pelo último check gravado no state.json. Serviço sem HTTP
+   próprio (health_path nulo) é verificado pelo backend: "via backend" quando o
+   corpo do health do backend disse ok, "sem verificação" quando não */
+function healthTxt(s) {
+  const h = s.last_health_check || {};
+  const http = h.http_status ? `HTTP ${h.http_status}`
+    : s.health_path == null ? (h.body_ok ? 'via backend' : 'sem verificação') : 'sem HTTP';
+  return [http, h.latency_ms != null ? `${h.latency_ms} ms` : '', h.at ? fmtDT(h.at) : ''].filter(Boolean).join(' · ');
 }
 
 function renderDeploys() {
@@ -864,11 +977,13 @@ function renderDeploys() {
   const cells = [
     { k: 'no ar', v: depVer(st.last_app_version) || '·', s: `atualizado ${fmtDT(st.updated_at)}` },
     ...(st.services || []).map(s => ({
-      k: s.id, v: s.status || '?', s: healthTxt(s.last_health_check), cls: STATUS_CLS[s.status] || 'prod-bad',
+      k: s.id, v: s.status || '?', s: healthTxt(s), cls: STATUS_CLS[s.status] || 'prod-bad',
     })),
   ];
+  const eventos = S.data.linha_do_tempo || [];
 
   return `
+  <div class="tab-producao">
   <section class="prod-band rv" style="--i:0">
     <div class="prod-band-head">
       <span class="eyebrow">produção · versão no ar e serviços</span>
@@ -884,10 +999,16 @@ function renderDeploys() {
     </div>
   </section>
   <div class="card prod-spark rv" style="--i:5">
-    <div class="k-label">duração dos builds (antigo → recente)</div>
+    <div class="k-label">duração dos builds (antigo ao recente)</div>
     ${spark([...durs].reverse())}
   </div>
-  <div class="pd-timeline">${versoesDoHistorico(dep).map(versaoCard).join('')}</div>`;
+  <div class="lt-cab rv">
+    <span class="k-label">linha do tempo do repositório</span>
+    <span class="lt-fonte">merges do GitHub (gh) e deploys do history.json, costurados pelo número do PR · últimos 60 dias ou 40 deploys</span>
+  </div>
+  ${filtrosProdHtml(eventos)}
+  ${trilhaHtml(eventos)}
+  </div>`;
 }
 
 /* ---------- MAPA ---------- */
@@ -1251,6 +1372,14 @@ view.addEventListener('click', e => {
     render();
   } else if (act === 'pflimpar') {
     S.fPrs = filtrosPrsVazios();
+    render();
+  } else if (act === 'lfresp') {
+    // o dropdown de pessoa da linha do tempo: escolhe e fecha; "todos" (v vazio) limpa
+    S.fProd.resp = t.dataset.v;
+    S.menu = null;
+    render();
+  } else if (act === 'lflimpar') {
+    S.fProd = filtrosProdVazios();
     render();
   } else if (act === 'fpendente') {
     // o card grande: tudo que está pendente, sem recorte de fase

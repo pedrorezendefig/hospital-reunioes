@@ -186,8 +186,8 @@ def test_css_sem_regras_orfas_das_telas_aposentadas():
         ".gate-resumo", ".git-stale", ".hero-version .v",
         # hover-descrição de card e âncora morta
         ".has-desc", ".desc-pop", ".wf-golink",
-        # pontos de status sem uso
-        ".dot.info", ".dot.muted", ".dot.warn",
+        # pontos de status sem uso (.dot.warn voltou: o âmbar do semáforo do mast)
+        ".dot.info", ".dot.muted",
         # Plano, Pendências, Guia e visor do responsável (aposentados na #942)
         ".tab-plano", ".leva", ".fcopia", ".fslash", ".ftempo",
         ".feita-chip", ".plano-", ".pend-", ".flx", ".guia-flow", ".cmdpill",

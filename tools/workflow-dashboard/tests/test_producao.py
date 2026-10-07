@@ -1,11 +1,15 @@
 """Aba Produção do Hospital OS (issue #945, ADR 0062, decisões 2 e 8).
 
-A aba lê só `history.json` e `state.json` da `origin/main`: no topo, a versão
-no ar e os serviços com o health; abaixo, uma linha por versão (deploys da
-mesma versão juntos), a mais recente primeiro e sem teto. Aberta, a versão
-mostra PRs, issues, migration, health, duração, env e notas, com chips que
-navegam dentro do painel. O coletor não lê mais as notas de versão em Markdown
-(o arquivo saiu no #939) e o /api/data não tem mais o campo `changelog`.
+No topo, a versão no ar e os serviços com o health (`state.json` da
+`origin/main`); o semáforo do mast tem três estados (verde, âmbar, vermelho).
+Abaixo, a linha do tempo do repositório: merges do GitHub (`gh`, com
+`mergedBy`) e deploys do `history.json` numa trilha só, costurados pelo número
+do PR. Cada deploy é um card (versão, subject, resultado, responsável, PRs com a
+bolinha de quem mergeou, issues, migrations e a barra das etapas); merge que
+não entrou em deploy é um nó tracejado na cor da pessoa. Aberto, o deploy mostra
+commit, env e notas. Filtro por pessoa no dropdown da aba Issues. O coletor não
+lê mais as notas de versão em Markdown (o arquivo saiu no #939) e o /api/data
+não tem mais o campo `changelog`.
 
 O app.js roda de verdade no Node (molde do test_router.py): DOM mínimo de
 mentira, `location`/`history` que guardam o hash e o `fetch` do /api/data
@@ -19,6 +23,7 @@ import re
 import shutil
 import subprocess
 import sys
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
@@ -106,7 +111,12 @@ ENV_APP_VERSION = {"service": "backend", "action": "update", "keys": ["APP_VERSI
 # history.json mais recente primeiro (o rabo grava em [0]); a 0.161.0 subiu
 # duas vezes, uma com "v" e outra sem, e o deploy sem versão vira linha própria
 HISTORY = [
-    _deploy("0.163.4", "aaa1111", at="2026-10-06T16:38:54Z", prs=[70], issues=[904], dur=57),
+    # entrada nova: o rabo mediu as etapas e gravou quem o rodou
+    {
+        **_deploy("0.163.4", "aaa1111", at="2026-10-06T16:38:54Z", prs=[70], issues=[904], dur=57),
+        "etapas": {"merge_s": 4, "build_s": {"backend": 34, "frontend": None}, "health_s": 2},
+        "responsavel": "pedro",
+    },
     _deploy(
         "v0.161.0",
         "ccc3333",
@@ -130,6 +140,53 @@ HISTORY = [
     ),
     _deploy(None, "ddd4444", at="2026-10-05T14:46:19Z"),
     _deploy("0.160.0", "eee5555", at="2026-10-04T10:00:00Z", prs=[60]),
+]
+
+
+def _pr(n, *, merged, created, por, closes=(), labels=(), title=None):
+    """PR mergeado no shape do coletor (`_gh_prs`), com `mergeado_por` e `labels`."""
+    return {
+        "number": n,
+        "title": title or f"feat(x): fatia {n}",
+        "state": "MERGED",
+        "merged_at": merged,
+        "head_ref": f"feature/fatia-{n}",
+        "url": f"https://github.com/x/y/pull/{n}",
+        "closes": list(closes),
+        "created_at": created,
+        "closed_at": merged,
+        "author": por,
+        "is_draft": False,
+        "mergeado_por": por,
+        "labels": list(labels),
+        "checks": [],
+        "merge_state": None,
+        "reviews": [],
+        "comentarios": None,
+        "vereditos": [],
+    }
+
+
+AGORA = datetime(2026, 10, 6, 17, 30, tzinfo=UTC)
+FIX, FEAT, CHORE = ["type:fix"], ["type:feature"], ["type:chore"]
+
+# 70, 69, 68 e 60 entraram em deploys; 71 é ferramenta (type:chore, nenhum deploy);
+# 72 é do app e espera o próximo deploy; 50 é anterior ao deploy mais antigo
+PRS = [
+    _pr(72, merged="2026-10-06T17:20:00Z", created="2026-10-06T12:00:00Z", por="bia", closes=[905], labels=FIX),
+    _pr(
+        71,
+        merged="2026-10-06T17:10:00Z",
+        created="2026-10-06T16:00:00Z",
+        por="ana",
+        labels=CHORE,
+        title="chore(skills): afina o router",
+    ),
+    _pr(70, merged="2026-10-06T16:30:00Z", created="2026-10-06T10:00:00Z", por="ana", closes=[904], labels=FIX),
+    _pr(69, merged="2026-10-05T17:50:00Z", created="2026-10-04T09:00:00Z", por="bia", closes=[903], labels=FEAT),
+    _pr(68, merged="2026-10-05T16:40:00Z", created="2026-10-05T08:00:00Z", por="bia", closes=[902], labels=FEAT),
+    _pr(60, merged="2026-10-04T09:50:00Z", created="2026-10-03T09:00:00Z", por="ana", closes=[901], labels=FIX),
+    _pr(50, merged="2026-09-01T09:50:00Z", created="2026-08-30T09:00:00Z", por="ana", labels=CHORE),
 ]
 
 
@@ -159,7 +216,7 @@ DADOS = {
     "generated_at": "2026-10-06T17:00:00Z",
     "repo_url": "https://github.com/x/y",
     "repo_slug": "x/y",
-    "github": {"error": None, "error_kind": None, "issues": [_iss(903, state="CLOSED")], "prs": [], "prds": []},
+    "github": {"error": None, "error_kind": None, "issues": [_iss(903, state="CLOSED")], "prs": PRS, "prds": []},
     "fases": {
         "issues": {
             "903": {
@@ -179,6 +236,8 @@ DADOS = {
         "funil": {"total": {}, "por_responsavel": {}},
     },
     "history": HISTORY,
+    # o que o coletor monta dos dois lados (merges do gh, deploys do history)
+    "linha_do_tempo": collect._linha_do_tempo(HISTORY, PRS, agora=AGORA),
     "state": {
         "updated_at": "2026-10-06T13:38:54-03:00",
         "last_app_version": "0.163.4",
@@ -191,6 +250,11 @@ DADOS = {
     "snapshots": [],
     "adrs": [],
 }
+
+
+def _estado(*servicos):
+    return {**DADOS, "state": {**DADOS["state"], "services": list(servicos)}}
+
 
 # DOM mínimo: cada seletor devolve sempre o mesmo elemento (com os ouvintes
 # dele); location/history guardam o hash; window guarda os ouvintes por tipo.
@@ -267,31 +331,88 @@ def _versoes(html):
 
 
 def _chips(html):
-    """{texto: href} de cada chip que é link."""
-    return {m.group(2): m.group(1) for m in re.finditer(r'<a class="chip[^"]*" href="([^"]*)"[^>]*>([^<]*)</a>', html)}
+    """{texto: href} de cada chip que é link (a bolinha da pessoa, se houver, sai do texto)."""
+    return {
+        re.sub(r"<[^>]+>", "", m.group(2)).strip(): m.group(1)
+        for m in re.finditer(r'<a class="chip[^"]*" href="([^"]*)"[^>]*>(.*?)</a>', html)
+    }
 
 
-# ---------- lista de versões ----------
+# ---------- a trilha: um card por deploy, nós para os merges sem deploy ----------
+
+
+def _nos(html):
+    """(tipo, html) de cada nó da trilha, na ordem da tela."""
+    return [(m.group(1), m.group(0)) for m in re.finditer(r'<li class="lt-no lt-(deploy|merge)[\s\S]*?</li>', html)]
 
 
 @com_node
-def test_producao_lista_uma_linha_por_versao_a_mais_recente_primeiro(tmp_path):
+def test_trilha_mistura_merges_e_deploys_do_mais_recente_ao_mais_antigo(tmp_path):
     html = _app(tmp_path, "_view.innerHTML")
-    assert [v for v, _, _ in _versoes(html)] == ["v0.163.4", "v0.161.0", "ddd4444", "v0.160.0"]
+    # um card por deploy (a 0.161.0 subiu duas vezes: dois cards), os dois merges
+    # de depois do último deploy como nós em cima; 70, 69, 68 e 60 entraram em
+    # deploys e não viram nó (ficam dentro do card); 50 é anterior à janela
+    assert [t for t, _ in _nos(html)] == ["merge", "merge", "deploy", "deploy", "deploy", "deploy", "deploy"]
+    assert [v for v, _, _ in _versoes(html)] == ["v0.163.4", "v0.161.0", "v0.161.0", "ddd4444", "v0.160.0"]
+    assert "PR #50" not in html
+    nos = [h for _, h in _nos(html)]
+    assert "PR #72" in nos[0] and "PR #71" in nos[1]
 
 
 @com_node
-def test_producao_mostra_o_history_inteiro_sem_teto(tmp_path):
-    # o history.json perdeu o teto de 50 no #939; a aba não pode cortar de novo
-    longo = [_deploy(f"0.{200 - n}.0", f"{n:07d}", at="2026-10-01T10:00:00Z") for n in range(75)]
-    html = _app(tmp_path, "_view.innerHTML", dados={**DADOS, "history": longo})
-    versoes = [v for v, _, _ in _versoes(html)]
-    assert len(versoes) == 75
-    assert (versoes[0], versoes[-1]) == ("v0.200.0", "v0.126.0")
+def test_merge_sem_deploy_e_no_tracejado_na_cor_de_quem_mergeou_com_a_etiqueta(tmp_path):
+    html = _app(tmp_path, "_view.innerHTML")
+    ferramenta = next(h for t, h in _nos(html) if t == "merge" and "PR #71" in h)
+    app = next(h for t, h in _nos(html) if t == "merge" and "PR #72" in h)
+    # a cor da pessoa entra pelo --pessoa do nó (pessoas.js); o contorno tracejado é do CSS
+    assert re.search(r'<li class="lt-no lt-merge rv" style="--i:\d+;--pessoa:var\(--[a-z-]+\)"', ferramenta)
+    assert "só merge · ferramenta" in ferramenta and "chore(skills): afina o router" in ferramenta
+    assert "mergeado · sem deploy" in app and "#issues/905" in app
+    assert ">ana<" in ferramenta and ">bia<" in app
+    assert "mergeado · sem deploy" not in ferramenta and "ferramenta" not in app
 
 
 @com_node
-def test_versao_aberta_mostra_prs_issues_migration_health_duracao_env_e_notas(tmp_path):
+def test_card_do_deploy_mostra_responsavel_prs_com_a_bolinha_issues_migration_e_etapas(tmp_path):
+    html = _app(tmp_path, "_view.innerHTML")
+    versoes = _versoes(html)
+    _, _, novo = versoes[0]
+    # responsável do history (quem rodou o rabo) e não quem mergeou o PR
+    assert ">pedro<" in novo and ">ana<" not in novo
+    # o PR do lote vira chip com a bolinha de quem mergeou, dentro do card
+    chip = re.search(r'<a class="chip chip-pr" href="#prs/70"[^>]*>[\s\S]*?</a>', novo).group(0)
+    assert "pessoa-dot" in chip and re.search(r'style="--pessoa:var\(--[a-z-]+\)"', chip)
+    assert _chips(novo)["#904"] == "#issues/904"
+    # etapas medidas pelo rabo mais as derivadas do GitHub: aberto, fila, merge, build, health
+    assert re.findall(r'class="etapa etapa-(\w+)"', novo) == ["aberto", "fila", "merge", "build", "health"]
+    assert "aberto 6h30m" in novo and "fila até produção 8m54s" in novo and "build 34s" in novo
+    assert "merge 4s" in novo and "health 2s" in novo
+    _, _, velho = versoes[2]
+    assert "⛁ 114_migracoes_aplicadas.sql" in velho and ">failed<" in velho and ">bia<" in velho
+    # entrada antiga, sem etapas: só aberto, fila e o total do rabo
+    assert re.findall(r'class="etapa etapa-(\w+)"', velho) == ["aberto", "fila", "total"]
+    assert "total 5m00s" in velho
+    _, _, sem_versao = versoes[3]
+    assert re.findall(r'class="etapa etapa-(\w+)"', sem_versao) == ["total"]
+
+
+@com_node
+def test_rotulo_so_no_segmento_largo_o_bastante_e_tooltip_em_todos(tmp_path):
+    html = _app(tmp_path, "_view.innerHTML")
+    _, _, novo = _versoes(html)[0]
+    segmentos = re.findall(
+        r'<span class="etapa etapa-(\w+)" style="flex-basis:([\d.]+)%" title="([^"]*)">(.*?)</span>', novo
+    )
+    assert [s[0] for s in segmentos] == ["aberto", "fila", "merge", "build", "health"]
+    for _, pct, title, miolo in segmentos:
+        assert title, "todo segmento tem tooltip"
+        assert (float(pct) >= 14) == ("etapa-rot" in miolo), (pct, miolo)
+    assert any("etapa-rot" in s[3] for s in segmentos) and not all("etapa-rot" in s[3] for s in segmentos)
+    assert "backend 34s" in next(t for k, _, t, _ in segmentos if k == "build")
+
+
+@com_node
+def test_deploy_aberto_mostra_commit_env_e_notas_e_fechado_nao(tmp_path):
     fechada, aberta = _app(
         tmp_path,
         "[_fechada, _view.innerHTML]",
@@ -300,20 +421,40 @@ def test_versao_aberta_mostra_prs_issues_migration_health_duracao_env_e_notas(tm
     _, _, card_fechado = _versoes(fechada)[1]
     rotulo, _, card = _versoes(aberta)[1]
     assert rotulo == "v0.161.0"
-    # o que entrou nas duas subidas da versão, com chips que ficam no painel
-    assert _chips(card) == {"PR #69": "#prs/69", "PR #68": "#prs/68", "#903": "#issues/903", "#902": "#issues/902"}
-    assert "⛁ 114_migracoes_aplicadas.sql" in card
-    # cada deploy da versão: health, build, commit, env e notas
-    deploys = re.findall(r'<div class="pd-dep">[\s\S]*?</p>\s*</div>', card)
-    assert len(deploys) == 2
-    novo, velho = deploys
-    assert ">healthy<" in novo and "45s" in novo and "ccc3333" in novo
-    assert "env: backend update APP_VERSION" in novo and "redeploy depois do health vermelho" in novo
-    assert ">failed<" in velho and "5m00s" in velho and "bbb2222" in velho
-    assert "primeira subida da onda" in velho and "env:" not in velho
-    # fechada, a versão não mostra o miolo dos deploys
-    for so_aberta in ("pd-dep", "redeploy depois", "primeira subida", "env:", "bbb2222"):
+    assert _chips(card) == {"PR #69": "#prs/69", "#903": "#issues/903"}
+    [detalhe] = re.findall(r'<div class="pd-dep">[\s\S]*?</p>\s*</div>', card)
+    assert "ccc3333" in detalhe and "45s" in detalhe
+    assert "env: backend update APP_VERSION" in detalhe and "redeploy depois do health vermelho" in detalhe
+    # o outro deploy da versão é card próprio e segue fechado
+    _, _, outro = _versoes(aberta)[2]
+    assert 'class="pd-body"' not in outro and "primeira subida" not in outro
+    for so_aberta in ("pd-dep", "redeploy depois", "env:"):
         assert so_aberta not in card_fechado, so_aberta
+
+
+@com_node
+def test_filtro_por_pessoa_recorta_merges_e_deploys_e_vai_para_o_hash(tmp_path):
+    html, hash_ = _app(tmp_path, "[_view.innerHTML, location.hash]", antes="_clicar({ act: 'lfresp', v: 'bia' });")
+    # bia mergeou o 72 (sem deploy), o 69 e o 68 (deploys da 0.161.0); ana e pedro saem
+    assert [t for t, _ in _nos(html)] == ["merge", "deploy", "deploy"]
+    assert [v for v, _, _ in _versoes(html)] == ["v0.161.0", "v0.161.0"]
+    trilha = html.split('<ol class="lt">')[1]
+    assert "PR #71" not in trilha and "v0.163.4" not in trilha
+    assert hash_ == "#producao?resp=bia"
+    assert 'class="dd-opt on"' in html and 'data-act="lflimpar"' in html
+    # a faceta conta eventos de cada pessoa: ana mergeou 71, 70 e 60 e responde pela 0.160.0
+    assert re.search(r'data-v="ana"[^>]*>[\s\S]*?<span class="dd-n">4</span>', html)
+
+
+@com_node
+def test_hash_com_pessoa_abre_a_aba_ja_filtrada(tmp_path):
+    html, resp = _app(tmp_path, "[_view.innerHTML, S.fProd.resp]", hash_inicial="#producao?resp=ana")
+    assert resp == "ana"
+    # o 71 (ferramenta), o 70 (entrou na 0.163.4, que é do pedro e sai do recorte: o
+    # merge volta a aparecer como nó, dizendo onde está no ar) e a 0.160.0 (60, da ana)
+    assert [t for t, _ in _nos(html)] == ["merge", "merge", "deploy"]
+    no_70 = next(h for t, h in _nos(html) if t == "merge" and "PR #70" in h)
+    assert "no ar na v0.163.4" in no_70
 
 
 # ---------- #producao/vX e o chip de versão ----------
@@ -326,18 +467,18 @@ def _abertas(html):
 
 @com_node
 @pytest.mark.parametrize(
-    "versao, shas",
+    "versao, sha",
     [
-        ("v0.161.0", ("ccc3333", "bbb2222")),  # as duas subidas da versão
-        ("v0.160.0", ("eee5555",)),  # depois do grupo: a posição na tela não é o índice no history
+        ("v0.161.0", "ccc3333"),  # a versão subiu duas vezes: abre a subida mais recente
+        ("v0.160.0", "eee5555"),  # depois do grupo: a posição na tela não é o índice no history
     ],
 )
-def test_hash_da_versao_abre_a_versao_inteira_com_destaque(tmp_path, versao, shas):
+def test_hash_da_versao_abre_o_deploy_mais_recente_dela_com_destaque(tmp_path, versao, sha):
     html = _app(tmp_path, "_view.innerHTML", hash_inicial=f"#producao/{versao}")
     assert _abertas(html) == [(versao, True)]
     assert [v for v, destaque, _ in _versoes(html) if destaque] == [versao]
     card = next(card for v, _, card in _versoes(html) if v == versao)
-    assert all(sha in card.split('class="pd-body"')[1] for sha in shas)
+    assert sha in card.split('class="pd-body"')[1]
 
 
 @com_node
@@ -374,9 +515,166 @@ def test_faixa_do_topo_mostra_a_versao_no_ar_e_cada_servico_com_o_health_do_stat
         ("", "v0.170.0", "no ar", "atualizado 6 out, 16:38"),
         ("prod-ok", "healthy", "backend", "HTTP 200 · 143 ms · 6 out, 16:38"),
         ("prod-ok", "healthy", "frontend", "HTTP 200 · 151 ms · 6 out, 16:38"),
-        ("prod-warn", "warning", "supabase", "sem HTTP · 6 out, 16:38"),
+        ("prod-warn", "warning", "supabase", "sem verificação · 6 out, 16:38"),
     ]
     assert "history.json + state.json" in faixa
+
+
+def _supabase(status, body_ok):
+    """O supabase como o rabo o grava agora: sem HTTP próprio, status pelo health do backend."""
+    s = _servico("supabase", status, http=None, ms=None)
+    s["health_path"] = None
+    s["last_health_check"]["body_ok"] = body_ok
+    return s
+
+
+@com_node
+def test_servico_sem_http_proprio_diz_via_backend_quando_o_health_do_backend_deu_ok(tmp_path):
+    dados = _estado(_servico("backend", "healthy"), _supabase("healthy", True))
+    html = _app(tmp_path, "_view.innerHTML", dados=dados)
+    celulas = re.findall(r'<div class="prod-k">supabase</div>\s*<div class="prod-s">([^<]*)</div>', html)
+    assert celulas == ["via backend · 6 out, 16:38"]
+    # serviço com health_path e sem resposta segue "sem HTTP"
+    dados = _estado({**_servico("backend", "warning", http=None, ms=None), "health_path": "/api/health"})
+    html = _app(tmp_path, "_view.innerHTML", dados=dados)
+    assert re.findall(r'<div class="prod-k">backend</div>\s*<div class="prod-s">([^<]*)</div>', html) == [
+        "sem HTTP · 6 out, 16:38"
+    ]
+
+
+# ---------- semáforo do mast: verde, âmbar, vermelho ----------
+
+
+def _mast(tmp_path, *servicos):
+    html = _app(tmp_path, "_els['#mast-status'].innerHTML", dados=_estado(*servicos))
+    m = re.search(r'<span class="dot ([^"]*)"></span>\s*<b>[^<]*</b>&nbsp;· prod ([^<]*)</span>', html)
+    return m.group(1), m.group(2)
+
+
+@com_node
+def test_mast_verde_so_com_todos_healthy_e_checados(tmp_path):
+    assert _mast(
+        tmp_path, _servico("backend", "healthy"), _servico("frontend", "healthy"), _supabase("healthy", True)
+    ) == ("ok pulse", "healthy")
+
+
+@com_node
+@pytest.mark.parametrize(
+    "terceiro",
+    [_supabase("warning", False), {**_servico("supabase", "healthy"), "last_health_check": None}],
+    ids=["warning", "sem-check"],
+)
+def test_mast_ambar_com_warning_ou_sem_verificacao_e_ninguem_fora(tmp_path, terceiro):
+    assert _mast(tmp_path, _servico("backend", "healthy"), _servico("frontend", "healthy"), terceiro) == (
+        "warn",
+        "2/3 ok",
+    )
+
+
+@com_node
+@pytest.mark.parametrize(
+    "ruim",
+    [_servico("backend", "down"), _servico("backend", "unhealthy"), _servico("backend", "warning", http=503)],
+    ids=["down", "unhealthy", "http-503"],
+)
+def test_mast_vermelho_so_com_servico_fora_ou_http_fora_de_2xx(tmp_path, ruim):
+    assert _mast(tmp_path, ruim, _servico("frontend", "healthy"), _supabase("healthy", True)) == ("bad", "2/3 ok")
+
+
+def test_dot_warn_na_cor_ambar_do_badge_warning():
+    assert "var(--amber)" in _regra(CSS, ".dot.warn")
+    assert "var(--amber)" in _regra(CSS, ".b-amber")
+    assert "var(--amber)" in _regra(_bloco_producao(), ".prod-warn .prod-v")
+
+
+# ---------- coletor: a linha do tempo ----------
+
+
+def _evento(eventos, tipo, chave, valor):
+    return next(e for e in eventos if e["tipo"] == tipo and e[chave] == valor)
+
+
+def test_coletor_costura_merges_e_deploys_pelo_numero_do_pr_do_mais_recente_ao_mais_antigo():
+    eventos = collect._linha_do_tempo(HISTORY, PRS, agora=AGORA)
+    assert [e["at"] for e in eventos] == sorted((e["at"] for e in eventos), reverse=True)
+    assert [e["tipo"] for e in eventos].count("deploy") == 5
+    # merge que entrou num deploy aponta o sha dele; o de ferramenta e o que espera, não
+    assert _evento(eventos, "merge", "pr", 70)["deploy_sha"] == "aaa1111"
+    assert _evento(eventos, "merge", "pr", 71) == {
+        "tipo": "merge",
+        "at": "2026-10-06T17:10:00Z",
+        "pr": 71,
+        "titulo": "chore(skills): afina o router",
+        "autor": "ana",
+        "mergeado_por": "ana",
+        "issues": [],
+        "ferramenta": True,
+        "deploy_sha": None,
+    }
+    espera = _evento(eventos, "merge", "pr", 72)
+    assert (espera["ferramenta"], espera["deploy_sha"], espera["issues"]) == (False, None, [905])
+    # merge anterior ao deploy mais antigo da janela fica de fora
+    assert all(e.get("pr") != 50 for e in eventos)
+
+
+def test_coletor_deriva_as_etapas_do_github_e_soma_as_do_history():
+    eventos = collect._linha_do_tempo(HISTORY, PRS, agora=AGORA)
+    novo = _evento(eventos, "deploy", "sha", "aaa1111")
+    assert novo["etapas"] == {
+        "aberto_s": 23400,
+        "fila_s": 534,
+        "merge_s": 4,
+        "build_s": {"backend": 34, "frontend": None},
+        "health_s": 2,
+    }
+    assert novo["responsavel"] == "pedro"  # quem rodou o rabo manda sobre quem mergeou
+    assert (novo["prs"], novo["issues"], novo["app_version"], novo["result"]) == ([70], [904], "0.163.4", "healthy")
+    velho = _evento(eventos, "deploy", "sha", "bbb2222")
+    assert velho["etapas"] == {"aberto_s": 31200, "fila_s": 1200}
+    assert velho["responsavel"] == "bia" and velho["migrations_applied"] == ["114_migracoes_aplicadas.sql"]
+    sem_pr = _evento(eventos, "deploy", "sha", "ddd4444")
+    assert (sem_pr["etapas"], sem_pr["responsavel"], sem_pr["prs"]) == ({}, None, [])
+
+
+def test_coletor_lista_os_responsaveis_quando_o_lote_tem_mais_de_um():
+    lote = [{**HISTORY[0], "etapas": None, "responsavel": None, "pr_numbers": [70, 69]}]
+    [deploy] = [e for e in collect._linha_do_tempo(lote, PRS, agora=AGORA) if e["tipo"] == "deploy"]
+    assert deploy["responsavel"] == ["ana", "bia"]
+
+
+def test_janela_e_60_dias_ou_40_deploys_o_que_for_maior():
+    def deploys(n, dia):
+        return [_deploy(f"0.{n - i}.0", f"{i:07d}", at=f"2026-{dia}T10:00:00Z", prs=[]) for i in range(n)]
+
+    # 75 deploys antigos (fora dos 60 dias): ficam os 40 mais recentes
+    antigos = deploys(75, "06-01")
+    assert sum(e["tipo"] == "deploy" for e in collect._linha_do_tempo(antigos, [], agora=AGORA)) == 40
+    # 75 deploys nos últimos 60 dias: ficam todos
+    recentes = deploys(75, "10-01")
+    assert sum(e["tipo"] == "deploy" for e in collect._linha_do_tempo(recentes, [], agora=AGORA)) == 75
+    # sem deploy nenhum, os merges dos últimos 60 dias entram (o 50, de 1 de setembro, inclusive)
+    assert [e["pr"] for e in collect._linha_do_tempo([], PRS, agora=AGORA)] == [72, 71, 70, 69, 68, 60, 50]
+
+
+def test_coletor_pede_merged_by_e_labels_ao_gh_e_os_entrega_no_pr(monkeypatch):
+    item = {
+        "number": 1,
+        "title": "t",
+        "state": "MERGED",
+        "mergedAt": "2026-10-06T17:10:00Z",
+        "mergedBy": {"login": "ana", "id": "U_1", "is_bot": False},
+        "labels": [{"name": "type:chore"}],
+    }
+    monkeypatch.setattr(collect, "_run", lambda cmd, cwd, timeout=None: json.dumps([item]))
+    assert {"mergedBy", "labels"} <= set(collect.PR_FIELDS.split(","))
+    [pr] = collect._gh_prs(DASH)
+    assert (pr["mergeado_por"], pr["labels"]) == ("ana", ["type:chore"])
+
+
+@com_node
+def test_payload_leva_a_linha_do_tempo_e_a_aba_sem_ela_nao_quebra(tmp_path):
+    html = _app(tmp_path, "_view.innerHTML", dados={k: v for k, v in DADOS.items() if k != "linha_do_tempo"})
+    assert "nenhum merge nem deploy" in html and "prod-band" in html
 
 
 def _bloco_producao():

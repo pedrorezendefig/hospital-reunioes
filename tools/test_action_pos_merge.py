@@ -316,6 +316,10 @@ ENTRADA = {
     "raw_subject": "chore(deploy): registro do PR avulso (#1040)",
     "prds": [963, 646], "duration_seconds": 312, "migrations_applied": ["115_registro.sql"],
     "notes": "PR avulso: PR #1040, issue #1000. Merge pela API do GitHub, um build.",
+    # o que o rabo mediu e quem o rodou (a linha do tempo do painel): só nas entradas
+    # novas, as antigas do history.json ficam como estão
+    "etapas": {"merge_s": 4, "build_s": {"backend": 34, "frontend": None}, "health_s": 2},
+    "responsavel": "pedrorezendefig",
 }
 STATE_ANTES = {
     "schema_version": "1.0", "updated_at": DEPLOY_ANTERIOR["at"], "updated_by": "pr-avulso@fechar_onda",
@@ -399,6 +403,13 @@ FORA_DO_ESQUEMA = {
                               state={**STATE_DO_REGISTRO, "updated_at": "2026-10-07T09:12:30"}),
     "notes-com-quebra": registro(entrada={**ENTRADA, "notes": "ok\n::add-mask::x"}),
     "migration-fora": registro(entrada={**ENTRADA, "migrations_applied": ["../../CLAUDE.md"]}),
+    # a entrada nova sem o que o rabo mede, ou com medida que não é número, é recusada
+    "sem-etapas": registro(entrada=sem(ENTRADA, "etapas")),
+    "etapas-sem-build": registro(entrada={**ENTRADA, "etapas": {"merge_s": 4, "health_s": 2}}),
+    "etapas-texto": registro(entrada={**ENTRADA, "etapas": {**ENTRADA["etapas"], "merge_s": "4s"}}),
+    "build-de-app-sem-id": registro(entrada={**ENTRADA, "etapas": {**ENTRADA["etapas"], "build_s": {"x y": 1}}}),
+    "sem-responsavel": registro(entrada=sem(ENTRADA, "responsavel")),
+    "responsavel-com-quebra": registro(entrada={**ENTRADA, "responsavel": "ana\n::add-mask::x"}),
     "state-sem-servicos": registro(state=sem(STATE_DO_REGISTRO, "services")),
     "state-com-chave-nova": registro(state={**STATE_DO_REGISTRO, "instrucoes": "x"}),
     "state-de-outro-deploy": registro(state={**STATE_DO_REGISTRO, "last_app_version": "0.163.4"}),
