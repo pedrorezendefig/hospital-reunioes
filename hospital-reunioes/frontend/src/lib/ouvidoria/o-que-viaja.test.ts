@@ -33,7 +33,7 @@ describe("o que vai à área além do extrato (issue #769)", () => {
   it.each(Object.entries(contrato.variantes))("a frase de %s nomeia o que vai, e só o que vai", (variante, vai) => {
     const frase = AJUDA_DO_EXTRATO[variante as VarianteDoQueViaja];
     for (const [item, nome] of Object.entries(NOME_NA_FRASE)) {
-      if (vai.includes(item)) {
+      if ((vai as string[]).includes(item)) {
         expect(frase, `${variante} deveria dizer que ${item} vai`).toContain(nome);
       } else {
         expect(frase, `${variante} não pode dizer que ${item} vai`).not.toContain(nome);
