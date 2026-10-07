@@ -11,7 +11,7 @@ import json
 import re
 import subprocess
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 
 from areas import fundir_colunas_no_er, parse_area
@@ -21,7 +21,8 @@ from fases import montar_fases, timeline_da_issue, vereditos_dos_comentarios
 GH_TIMEOUT = 20
 
 ISSUE_FIELDS = "number,title,state,labels,createdAt,closedAt,assignees,author,body,url"
-PR_FIELDS = "number,title,state,mergedAt,headRefName,closingIssuesReferences,url,createdAt,closedAt,author,isDraft"
+PR_FIELDS = ("number,title,state,mergedAt,headRefName,closingIssuesReferences,url,createdAt,closedAt,author,isDraft,"
+             "mergedBy,labels")
 # Campos pesados só dos PRs abertos: pedidos para a lista inteira, o GraphQL do GitHub estoura (HTTP 504).
 PR_ABERTO_FIELDS = "number,statusCheckRollup,mergeStateStatus,reviews,comments"
 # Sem teto prático: o total de issues e o filtro por responsável contam o histórico inteiro.
@@ -120,7 +121,7 @@ def _read_text(path: Path):
 def _spec_json_fresh(root: Path, rel: str):
     """Lê um JSON de spec da origin/main, com fallback na working tree.
 
-    Os ships rodam em worktrees paralelos e empurram direto pra origin/main —
+    Os ships rodam em worktrees paralelos e empurram direto pra origin/main:
     a working tree local fica velha e pode até ter staging sujo de outra
     sessão. O estado fresco pós-ship vive no remoto.
     """
@@ -193,6 +194,9 @@ def _gh_prs(root: Path) -> list[dict]:
         "closed_at": it.get("closedAt"),
         "author": (it.get("author") or {}).get("login"),
         "is_draft": bool(it.get("isDraft")),
+        # quem clicou (ou mandou o rabo clicar) no merge: o responsável da linha do tempo
+        "mergeado_por": (it.get("mergedBy") or {}).get("login"),
+        "labels": [lb["name"] for lb in it.get("labels") or []],
         # Só os abertos ganham estes campos (_enriquecer_prs_abertos).
         "checks": [],
         "merge_state": None,
@@ -420,6 +424,108 @@ def _correlate(history: list[dict], issues: list[dict], prs: list[dict]) -> None
                         for d in history if i["number"] in d.get("issue_numbers", [])]
 
 
+# ---------- Linha do tempo do repositório (aba Produção) ----------
+
+# Janela da linha do tempo: os últimos 60 dias ou os últimos 40 deploys, o que
+# for maior. Limite para o payload não pesar; o history.json inteiro continua
+# no campo `history`.
+JANELA_DIAS = 60
+JANELA_DEPLOYS = 40
+# PR mergeado que nenhum deploy incluiu e cuja label não é de código do app:
+# é PR de ferramenta (só merge, sem build). A label desempata o PR de app que
+# ainda espera deploy (heurística: o coletor não tem a lista de arquivos).
+LABELS_DO_APP = ("type:feature", "type:fix")
+
+
+def _dt(v) -> datetime | None:
+    try:
+        d = datetime.fromisoformat(str(v).replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return None
+    return d if d.tzinfo else None
+
+
+def _segundos(de, ate) -> int | None:
+    a, b = _dt(de), _dt(ate)
+    return max(0, int((b - a).total_seconds())) if a and b else None
+
+
+def _unico_ou_lista(valores: list[str]):
+    """Um responsável vira texto; vários, lista; nenhum, None."""
+    vistos = sorted(set(v for v in valores if v))
+    return vistos[0] if len(vistos) == 1 else (vistos or None)
+
+
+def _linha_do_tempo(history: list[dict], prs: list[dict], agora: datetime | None = None) -> list[dict]:
+    """Merges (GitHub ao vivo) e deploys (history.json) numa lista só, do mais
+    recente ao mais antigo, costurados pelo número do PR (`_correlate`)."""
+    agora = agora or datetime.now().astimezone()
+    corte = agora - timedelta(days=JANELA_DIAS)
+    deploys = [d for d in history if _dt(d.get("at"))]
+    recentes = sum(1 for d in deploys if _dt(d["at"]) >= corte)
+    deploys = deploys[:max(JANELA_DEPLOYS, recentes)]
+    # merges a partir do deploy mais antigo da janela: antes dele não há deploy no
+    # history.json para costurar, e todo PR do app pareceria "sem deploy"
+    inicio = min((_dt(d["at"]) for d in deploys), default=corte)
+    prs_by = {p["number"]: p for p in prs}
+
+    deploy_do_pr: dict[int, dict] = {}  # o primeiro deploy (no tempo) que levou o PR ao ar
+    for d in history:
+        for n in d.get("pr_numbers") or []:
+            atual = deploy_do_pr.get(n)
+            if atual is None or (_dt(d.get("at")) or agora) < (_dt(atual.get("at")) or agora):
+                deploy_do_pr[n] = d
+
+    eventos = []
+    for d in deploys:
+        lote = [prs_by[n] for n in d.get("pr_numbers") or [] if n in prs_by]
+        etapas = {}
+        mais_antigo = min(lote, key=lambda p: _dt(p.get("created_at")) or agora, default=None)
+        if mais_antigo:
+            etapas["aberto_s"] = _segundos(mais_antigo.get("created_at"), mais_antigo.get("merged_at"))
+        ultimo_merge = max((p.get("merged_at") for p in lote if _dt(p.get("merged_at"))), key=_dt, default=None)
+        if ultimo_merge:
+            etapas["fila_s"] = _segundos(ultimo_merge, d["at"])
+        if isinstance(d.get("etapas"), dict):
+            etapas.update(d["etapas"])
+        eventos.append({
+            "tipo": "deploy",
+            "at": d["at"],
+            "sha": d.get("sha"),
+            "app_version": d.get("app_version"),
+            "result": d.get("result"),
+            "subject": d.get("subject") or d.get("raw_subject") or "",
+            "prs": sorted(d.get("pr_numbers") or []),
+            "issues": sorted(d.get("issue_numbers") or []),
+            "responsavel": d.get("responsavel") or _unico_ou_lista([p.get("mergeado_por") for p in lote]),
+            "etapas": etapas,
+            "duration_seconds": d.get("duration_seconds"),
+            "migrations_applied": list(d.get("migrations_applied") or []),
+            "rollback_target_sha": d.get("rollback_target_sha"),
+        })
+    shas_da_janela = {d.get("sha") for d in deploys}
+    for p in prs:
+        em = _dt(p.get("merged_at"))
+        deploy = deploy_do_pr.get(p["number"])
+        # o PR de um deploy da janela entra sempre (o do deploy mais antigo foi mergeado antes dele)
+        no_deploy_da_janela = deploy is not None and deploy.get("sha") in shas_da_janela
+        if p.get("state") != "MERGED" or not em or (em < inicio and not no_deploy_da_janela):
+            continue
+        eventos.append({
+            "tipo": "merge",
+            "at": p["merged_at"],
+            "pr": p["number"],
+            "titulo": p["title"],
+            "autor": p.get("author"),
+            "mergeado_por": p.get("mergeado_por"),
+            "issues": sorted(p.get("closes") or []),
+            "ferramenta": deploy is None and not any(l in LABELS_DO_APP for l in p.get("labels") or []),
+            "deploy_sha": deploy.get("sha") if deploy else None,
+        })
+    eventos.sort(key=lambda e: _dt(e["at"]), reverse=True)
+    return eventos
+
+
 # ---------- Arquivos do repo ----------
 
 def frase_da_decisao(body_md: str, maximo: int = 240) -> str:
@@ -558,10 +664,10 @@ def _git_info(root: Path) -> dict:
 def _gh_failure(e: Exception) -> tuple[str, str]:
     """Classifica a falha do gh numa mensagem amigável para o painel."""
     if isinstance(e, FileNotFoundError):
-        return "missing", "gh não encontrado — instale o GitHub CLI (cli.github.com) e rode `gh auth login`."
+        return "missing", "gh não encontrado: instale o GitHub CLI (cli.github.com) e rode `gh auth login`."
     msg = str(e).lower()
     if any(t in msg for t in ("auth", "logged in", "not logged", "gh auth login")):
-        return "unauth", "gh não autenticado — rode `gh auth login` e clique em ⟳ para recarregar."
+        return "unauth", "gh não autenticado: rode `gh auth login` e clique em ⟳ para recarregar."
     return "other", str(e)
 
 
@@ -614,7 +720,7 @@ def _linhas_do_funil(fases: dict | None) -> list[str]:
 
 def collect(root: Path) -> dict:
     spec = root / "docs" / "spec"
-    try:  # tolera offline — segue com o que a working tree tiver
+    try:  # tolera offline: segue com o que a working tree tiver
         _run(["git", "fetch", "origin", "main", "--quiet"], root, timeout=15)
     except Exception:
         pass
@@ -671,6 +777,7 @@ def collect(root: Path) -> dict:
         "github": github,
         "state": _state_public(state),
         "history": history,
+        "linha_do_tempo": _linha_do_tempo(history, github["prs"]),
         "project": project,
         "versioning_md": _read_text(spec / "VERSIONING.md"),
         "adrs": _parse_adrs(root),

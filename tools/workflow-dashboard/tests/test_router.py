@@ -15,6 +15,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -23,6 +24,9 @@ DASH = Path(__file__).resolve().parents[1]
 STATIC = DASH / "static"
 APP_JS = (STATIC / "app.js").read_text(encoding="utf-8")
 ROUTER = STATIC / "router.js"
+sys.path.insert(0, str(DASH))
+
+import collect  # noqa: E402
 
 com_node = pytest.mark.skipif(not shutil.which("node"), reason="node ausente")
 
@@ -139,6 +143,8 @@ DADOS = {
     "snapshots": [],
     "adrs": [],
 }
+# a aba Produção desenha a linha do tempo que o coletor monta do history (sem PR do gh aqui)
+DADOS["linha_do_tempo"] = collect._linha_do_tempo(DADOS["history"], [])
 
 # DOM mínimo: cada seletor devolve sempre o mesmo elemento (com os ouvintes
 # dele); location/history guardam o hash; window guarda os ouvintes por tipo.

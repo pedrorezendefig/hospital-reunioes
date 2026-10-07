@@ -535,6 +535,8 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
             return c.ver_pr(int(args[2]), args[args.index("--json") + 1].split(","))
         if args[:2] == ["issue", "view"]:
             return {"body": "## Pai\n\n`#902`, PRD da esteira.\n"}
+        if args == ["api", "user"]:
+            return {"login": "ana", "id": 1}  # quem roda o rabo: o `responsavel` do registro
         if args[:2] == ["run", "list"]:
             wf = args[args.index("--workflow") + 1]
             if wf == "ci.yml":
@@ -729,6 +731,11 @@ def test_registro_vai_pela_action_na_main_depois_do_health_sem_pr_de_registro(
     entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
     assert entrada == disparo["registro"]["entrada"]
     assert json.loads(c.na_main("docs/spec/deploy/state.json"))["last_run"]["sha"] == codigo
+    # o que o rabo mediu e quem o rodou (`gh api user`), para a linha do tempo do painel
+    assert entrada["responsavel"] == "ana"
+    assert set(entrada["etapas"]) == {"merge_s", "build_s", "health_s"}
+    assert entrada["etapas"]["build_s"] == {"backend": 42}
+    assert all(isinstance(entrada["etapas"][k], int) for k in ("merge_s", "health_s"))
     # o commit do bot é push na main: o build que o webhook dispara é cancelado
     assert c.cancelamentos == [bot]
     [registro] = linhas_com(capsys.readouterr().out, "registro:")
