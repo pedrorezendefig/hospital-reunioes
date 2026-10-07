@@ -105,9 +105,15 @@ class _Query:
         self._payload: Any = None
         self._filtros: list[tuple[str, Any]] = []
         self._filtros_in: list[tuple[str, list]] = []
+        self._colunas: list[str] | None = None
 
-    def select(self, *_a, **_kw):
+    def select(self, colunas: str = "*", *_a, **_kw):
+        # Como o PostgREST, devolve só as colunas pedidas: sem isso, a rota que
+        # esquece uma coluna no select (o `facilitador_id` da #890) lia do fake
+        # o que em produção vem ausente.
         self._op = "select"
+        if colunas.strip() != "*":
+            self._colunas = [c.strip() for c in colunas.split(",")]
         return self
 
     def insert(self, payload, **_kw):
@@ -144,6 +150,8 @@ class _Query:
         if self._op == "update":
             for row in casadas:
                 row.update(self._payload or {})
+        if self._colunas is not None:
+            casadas = [{c: r[c] for c in self._colunas if c in r} for r in casadas]
         return type("_R", (), {"data": [dict(r) for r in casadas]})()
 
 
