@@ -2,6 +2,52 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-07T01:33:58-03:00",
+      "sha": "be94255e6161ec022d245e37e20f73135607ed82",
+      "app_version": "0.166.3",
+      "subject": "Onda onda-b-onda2: Acabamentos da trava de Secretária facilitadora",
+      "raw_subject": "chore(deploy): registro da onda onda-b-onda2 (#1076)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 1414,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-b-onda2: PR #1076 (issue #890), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 160,
+          "frontend": 142
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-07T01:27:43-03:00",
       "sha": "0331fcf97f5e9ae41d25507c747f5df3bb3cedaf",
       "app_version": "0.166.2",
