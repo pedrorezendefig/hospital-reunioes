@@ -163,6 +163,9 @@ class DemandaResponse(BaseModel):
     # escrever essa frase sem repetir a regra de quem devia receber, e uma
     # segunda versao do texto divergiria da primeira.
     aviso_por_email: str | None = None
+    # A frase dos prints do Assistente que nao viraram Anexo na criacao (issue
+    # #1062), ou `None` quando todos entraram ou nao havia print.
+    aviso_dos_anexos: str | None = None
 
 
 class DemandaCreatePayload(BaseModel):
@@ -186,6 +189,10 @@ class DemandaCreatePayload(BaseModel):
     # Texto ISO (`2026-10-01`) ou vazio. O router normaliza e valida: `""` nao e
     # NULL, e gravado numa coluna DATE seria erro de banco, nao 422.
     prazo: str | None = None
+    # Os identificadores efemeros dos prints que o Assistente descreveu (issue
+    # #1062): viram Anexo na mesma chamada que cria a Demanda. O formulario nao
+    # manda nada aqui; ele anexa depois, uma imagem por vez.
+    prints: list[str] = []
 
 
 class DemandaUpdatePayload(BaseModel):
@@ -284,6 +291,9 @@ class ConversaLinhaResponse(BaseModel):
     # gatilhos de menção e de resposta, e quem escreveu precisa saber se eles
     # saíram. Sempre `None` na LEITURA do fio: ali ninguém acabou de agir.
     aviso_por_email: str | None = None
+    # A imagem que a resposta levou (issue #1062), com a URL assinada de vida
+    # curta, ou `None`. Movimento nunca leva imagem.
+    imagem: AnexoDaDemandaResponse | None = None
 
 
 class AnexoDaDemandaResponse(BaseModel):
@@ -299,6 +309,9 @@ class AnexoDaDemandaResponse(BaseModel):
     anexado_por_nome: str | None = None
     criado_em: str | None = None
     apagado_em: str | None = None
+    # A resposta da Conversa que trouxe a imagem (issue #1062), ou nulo quando
+    # ela veio pelo formulario ou pelo Assistente.
+    conversa_id: str | None = None
     url: str | None = None
 
 
@@ -329,6 +342,10 @@ class RespostaPayload(BaseModel):
 
     texto: str
     mencoes: list[str] | None = None
+    # A imagem que vai junto da resposta (issue #1062): o id do anexo que a
+    # tela acabou de subir pela porta do formulario. So vale no envio; a
+    # correcao reescreve o texto e nao troca a imagem.
+    anexo_id: str | None = None
 
 
 # ─── O Painel (issue #1059, PRD #1056; antes "Minha vez" e Historico, #641) ─
@@ -475,6 +492,10 @@ class AssistenteImagemResponse(BaseModel):
     2026-09-17 as 14.02.11.png", que nao diz nada a quem le a conversa, e a
     imagem nao e guardada em lugar nenhum para alguem querer achar depois
     (ADR 0056, decisao 4).
+
+    `print_id` e o identificador efemero do print (issue #1062): a imagem fica
+    so na memoria do backend e vira Anexo se a pessoa clicar "Criar Demanda".
     """
 
     texto: str
+    print_id: str | None = None

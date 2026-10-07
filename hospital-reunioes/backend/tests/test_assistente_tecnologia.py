@@ -1588,7 +1588,7 @@ class TestDescreverImagem:
         cliente = _montar(logado=_pessoa("p1"))
         resposta = cliente.post(DESCREVER, files=_imagem("tela.png"))
         assert resposta.status_code == 200, resposta.text
-        assert resposta.json() == {"texto": "A tela de login da Ana, com o aviso vermelho 'senha inválida'."}
+        assert resposta.json()["texto"] == "A tela de login da Ana, com o aviso vermelho 'senha inválida'."
 
     def test_quem_nao_e_super_admin_leva_403(self, monkeypatch):
         llm = _stub_llm(monkeypatch, content="qualquer coisa")
@@ -1721,7 +1721,7 @@ class TestDescreverImagem:
         cliente = _montar(logado=_pessoa("p1"))
         resposta = cliente.post(DESCREVER, files=_imagem("tela.png"))
         assert resposta.status_code == 200
-        assert resposta.json() == {"texto": assistente_tecnologia.DESCRICAO_MOCK}
+        assert resposta.json()["texto"] == assistente_tecnologia.DESCRICAO_MOCK
 
     def test_provedor_fora_do_ar_vira_frase_de_gente_e_nao_500(self, monkeypatch):
         _stub_llm(monkeypatch, exc=RuntimeError("502 Bad Gateway"))

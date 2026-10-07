@@ -133,6 +133,12 @@ type DesfechoDaEntrada = { aviso: string } | { fala: string };
 export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
   const [messages, setMessages] = useState<MensagemDoChat[]>([BOAS_VINDAS]);
   const [rascunho, setRascunho] = useState<RascunhoDaDemanda>(RASCUNHO_VAZIO);
+  /**
+   * Os identificadores dos prints que o servidor descreveu (issue #1062). Vão
+   * no "Criar Demanda", que é quando a imagem vira Anexo; sem o clique, ninguém
+   * os manda a lugar nenhum, e o servidor esquece a imagem sozinho.
+   */
+  const [prints, setPrints] = useState<string[]>([]);
   const [texto, setTexto] = useState("");
   const [conversando, setConversando] = useState(false);
   const [criando, setCriando] = useState(false);
@@ -192,6 +198,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     if (guardado && guardado.messages.length > 0) {
       setMessages(guardado.messages);
       setRascunho(guardado.rascunho);
+      setPrints(guardado.prints);
     }
     leuDaSessao.current = true;
   }, []);
@@ -212,8 +219,8 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
       limparASessao();
       return;
     }
-    gravarNaSessao({ messages, rascunho });
-  }, [messages, rascunho]);
+    gravarNaSessao({ messages, rascunho, prints });
+  }, [messages, rascunho, prints]);
 
   useEffect(() => {
     fimDaLista.current?.scrollIntoView({ behavior: "smooth" });
@@ -451,10 +458,16 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
    */
   function anexarAImagem(arquivo: File) {
     return anexar(avisoDaImagem(arquivo), async () => {
+      const daConversa = conversaAtual.current;
       const leitura = await descreverAImagem(arquivo, token);
       if ("aviso" in leitura) return leitura;
       const descricao = leitura.corpo.texto.trim();
-      return descricao ? { fala: mensagemComOrigem(PREFIXO_DE_PRINT, descricao) } : { aviso: PRINT_SEM_LEITURA };
+      if (!descricao) return { aviso: PRINT_SEM_LEITURA };
+      // O print descrito ganha o identificador com que vira Anexo (issue #1062),
+      // se a conversa ainda for a mesma: o "Descartar" no meio da leitura o esquece.
+      const printId = leitura.corpo.print_id;
+      if (printId && conversaAtual.current === daConversa) setPrints((atuais) => [...atuais, printId]);
+      return { fala: mensagemComOrigem(PREFIXO_DE_PRINT, descricao) };
     });
   }
 
@@ -481,6 +494,8 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
           prioridade: rascunho.prioridade,
           descricao: descricaoAoCriar(tipo, rascunho.descricao),
           prazo: rascunho.prazo,
+          // Os prints viram Anexo nesta mesma chamada (issue #1062).
+          ...(prints.length > 0 ? { prints } : {}),
         }),
       });
     } catch (e) {
@@ -516,7 +531,10 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     }
     limparASessao();
     setCriando(false);
-    onCriada(criada, typeof criada.aviso_por_email === "string" ? criada.aviso_por_email : null);
+    const avisos = [criada.aviso_por_email, criada.aviso_dos_anexos].filter(
+      (aviso): aviso is string => typeof aviso === "string" && aviso.length > 0,
+    );
+    onCriada(criada, avisos.length > 0 ? avisos.join(" ") : null);
   }
 
   function descartar() {
@@ -528,6 +546,7 @@ export function AssistenteDeTecnologia({ token, produtos, onCriada }: Props) {
     limparASessao();
     setMessages([BOAS_VINDAS]);
     setRascunho(RASCUNHO_VAZIO);
+    setPrints([]);
     setTexto("");
     setErro(null);
     setAviso(null);

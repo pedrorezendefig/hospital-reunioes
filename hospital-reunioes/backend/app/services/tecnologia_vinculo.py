@@ -463,6 +463,47 @@ def corpo_com_marcador(corpo: str | None, demanda_id: str) -> str:
     return f"{limpo}\n\n{marcador}" if limpo else marcador
 
 
+# A frase dos Anexos da Demanda na issue (issue #1062, ADR 0069, decisao 1).
+# So a CONTAGEM sai para o repositorio publico: nem URL (a assinada expira e,
+# enquanto vale, abre o print para qualquer um), nem nome de arquivo (o nome
+# pode ser "prontuario do Joao.png"). Quem desenvolve busca as imagens pelo app.
+#
+# A frase entra no FIM do corpo, e o corpo que termina no bloco "Para o
+# diretor" (o formato que o `_COMENTARIO_HTML` documenta) seria lido ate o fim
+# pelo `bloco_para_o_diretor`: a frase voltaria para o card do diretor e para o
+# "Copiar para IA". Nesse caso ela vem atras de um `---`, que fecha o bloco, e
+# o separador sai junto com ela quando a contagem muda ou vai a zero.
+_FRASE_DOS_ANEXOS_RE = re.compile(
+    r"(?:^-{3,}[ \t\r]*\n\s*)?^Anexos: \d+ image(?:m|ns) na Demanda[ \t\r]*$", re.MULTILINE
+)
+
+
+def frase_dos_anexos(quantos: int) -> str | None:
+    """A frase "Anexos: N imagens na Demanda", ou `None` sem imagem guardada."""
+    if quantos <= 0:
+        return None
+    return f"Anexos: {quantos} {'imagem' if quantos == 1 else 'imagens'} na Demanda"
+
+
+def corpo_vinculado(corpo: str | None, demanda_id: str, *, anexos: int) -> str:
+    """O corpo da issue com a frase dos Anexos (se houver) e o marcador no fim.
+
+    Mesma disciplina do `corpo_com_marcador`: a frase antiga e retirada antes
+    de a nova entrar, entao rodar duas vezes com a mesma contagem deixa o corpo
+    igual, e a contagem que muda substitui em vez de acumular. Sem imagem, a
+    frase sai e nada entra no lugar.
+    """
+    limpo = _MARCADOR_RE.sub("", corpo or "")
+    limpo = _FRASE_DOS_ANEXOS_RE.sub("", limpo).rstrip()
+    frase = frase_dos_anexos(anexos)
+    if frase:
+        com_frase = f"{limpo}\n\n{frase}" if limpo else frase
+        if frase in (bloco_para_o_diretor(com_frase) or ""):
+            com_frase = f"{limpo}\n\n---\n\n{frase}"
+        limpo = com_frase
+    return corpo_com_marcador(limpo, demanda_id)
+
+
 def corpo_precisa_do_marcador(corpo: str | None, demanda_id: str) -> bool:
     """Se vale a pena escrever no GitHub.
 
@@ -672,6 +713,7 @@ def corpo_da_issue_nova(
     produto_nome: str,
     levado_por_login: str | None,
     link: str,
+    anexos: int = 0,
 ) -> str:
     """O corpo da issue que o botao "Levar para desenvolvimento" cria.
 
@@ -702,6 +744,9 @@ def corpo_da_issue_nova(
 
     Descricao vazia usa o TITULO: uma issue cujo "O que muda" viesse em branco
     mostraria "Descrição em preparação" no card de quem acabou de pedir.
+
+    Os Anexos da Demanda entram so como contagem, na Origem (`frase_dos_anexos`,
+    issue #1062): fora do bloco do diretor, que volta para o card.
     """
     o_que_muda = texto_do_diretor(descricao) or texto_do_diretor(titulo)
     login = login_para_publicar(levado_por_login)
@@ -723,6 +768,7 @@ def corpo_da_issue_nova(
             "",
             origem,
             f"Abrir a Demanda: {link}",
+            *(["", frase] if (frase := frase_dos_anexos(anexos)) else []),
             "",
             marcador_da_demanda(demanda_id),
         ]
@@ -892,8 +938,13 @@ def corpo_do_comentario_espelhado(
     autor: dict[str, Any] | None,
     demanda_id: str,
     mencionados: list[dict[str, Any]] | None = None,
+    imagens: int = 0,
 ) -> str:
     """O comentario que o app publica na issue quando alguem responde no card.
+
+    A resposta que levou imagem ganha "(1 imagem na Demanda)" depois do texto
+    (issue #1062): so a contagem. A imagem fica no app, e nem a URL nem o nome
+    do arquivo saem para o repositorio publico (ADR 0069, decisao 1).
 
     O marcador vai pelo FATO de ter login (`tem_github_login`): e ele que separa
     a Vitta do hospital para a Action. O cabecalho vai pelo login PUBLICAVEL
@@ -917,6 +968,7 @@ def corpo_do_comentario_espelhado(
             f"**{rotulo_no_github(autor)}** escreveu na Demanda:",
             "",
             texto_espelhado(texto, mencionados=list(mencionados or [])),
+            *(["", f"({imagens} {'imagem' if imagens == 1 else 'imagens'} na Demanda)"] if imagens > 0 else []),
         ]
     )
 

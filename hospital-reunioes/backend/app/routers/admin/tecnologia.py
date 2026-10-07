@@ -188,10 +188,9 @@ from app.services.tecnologia_vinculo import (
     MOTIVO_SEM_VINCULO_PARA_DESFAZER,
     TEXTO_VINCULO_CRIADO,
     TEXTO_VINCULO_DESFEITO,
-    corpo_com_marcador,
     corpo_da_issue_nova,
     corpo_do_comentario_espelhado,
-    corpo_precisa_do_marcador,
+    corpo_vinculado,
     foto_mudou,
     labels_da_issue_nova,
     login_para_publicar,
@@ -824,7 +823,9 @@ async def _aviso_da_correcao(
     return None if saiu else AVISO_EMAIL_NAO_SAIU
 
 
-def _corpo_espelhado(supabase: Client, *, demanda: dict, texto: str, mencoes: list[str], ator: dict) -> str:
+def _corpo_espelhado(
+    supabase: Client, *, demanda: dict, linha: dict, texto: str, mencoes: list[str], ator: dict
+) -> str:
     """O comentario espelhado, com o autor e os mencionados como o banco os
     conhece (nome e login): e o servico puro que decide o que de cada um pode
     sair para o repositorio publico (nunca o nome civil).
@@ -841,7 +842,13 @@ def _corpo_espelhado(supabase: Client, *, demanda: dict, texto: str, mencoes: li
             .execute()
         )
         mencionados = list(result.data or [])
-    return corpo_do_comentario_espelhado(texto=texto, autor=ator, demanda_id=demanda["id"], mencionados=mencionados)
+    return corpo_do_comentario_espelhado(
+        texto=texto,
+        autor=ator,
+        demanda_id=demanda["id"],
+        mencionados=mencionados,
+        imagens=tecnologia_anexos.quantas_da_resposta(supabase, linha["id"]),
+    )
 
 
 async def _espelhar_resposta(
@@ -875,7 +882,7 @@ async def _espelhar_resposta(
     if not numero:
         return
     try:
-        corpo = _corpo_espelhado(supabase, demanda=demanda, texto=texto, mencoes=mencoes, ator=ator)
+        corpo = _corpo_espelhado(supabase, demanda=demanda, linha=linha, texto=texto, mencoes=mencoes, ator=ator)
         comentario_id = await asyncio.to_thread(github_client.criar_comentario, numero, corpo)
     except Exception:
         logger.exception(
@@ -915,7 +922,7 @@ async def _espelhar_correcao(
     if not comentario_id:
         return
     try:
-        corpo = _corpo_espelhado(supabase, demanda=demanda, texto=texto, mencoes=mencoes, ator=ator)
+        corpo = _corpo_espelhado(supabase, demanda=demanda, linha=linha, texto=texto, mencoes=mencoes, ator=ator)
         await asyncio.to_thread(github_client.editar_comentario, comentario_id, corpo)
     except Exception:
         logger.exception(
@@ -924,6 +931,37 @@ async def _espelhar_correcao(
             linha.get("id"),
             demanda["id"],
         )
+
+
+def _reescrever_a_contagem(numero: int, demanda_id: str, anexos: int) -> None:
+    dados = github_client.ler_issue(numero)
+    corpo = dados.get("body")
+    novo_corpo = corpo_vinculado(corpo, demanda_id, anexos=anexos)
+    if novo_corpo != (corpo or ""):
+        github_client.atualizar_corpo(numero, novo_corpo)
+
+
+async def _contagem_na_issue(supabase: Client, *, demanda: dict) -> None:
+    """A issue ja vinculada acompanha a contagem dos Anexos (issue #1062).
+
+    Imagem nova e encerramento (que apaga os binarios) mudam o N da frase
+    "Anexos: N imagens na Demanda"; o corpo e reescrito por substituicao, e so
+    quando muda. Demanda sem Vinculo nao tem onde escrever.
+
+    **Falha aqui nao desfaz nada**, pelo mesmo motivo do espelho da resposta: a
+    imagem ja entrou (ou a Demanda ja foi encerrada), e o GitHub fora do ar nao
+    pode devolver erro a quem anexou. A proxima mudanca de contagem, ou um novo
+    `vincular`, reescreve a frase. Fora do loop porque o cliente e sincrono.
+    """
+    numero = demanda.get("github_issue_numero")
+    if not numero:
+        return
+    demanda_id = str(demanda["id"])
+    try:
+        anexos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)
+        await asyncio.to_thread(_reescrever_a_contagem, int(numero), demanda_id, anexos)
+    except Exception:
+        logger.exception("Falha ao atualizar a contagem de anexos da Demanda %s na issue vinculada", demanda_id)
 
 
 # ─── Demanda: endpoints ──────────────────────────────────────────────────────
@@ -1010,9 +1048,20 @@ async def criar_demanda(
             detail="Falha ao criar a Demanda",
         )
     criada = _com_nomes(supabase, [result.data[0]], ator=ator)[0]
+    # Os prints do Assistente viram Anexo AQUI, na mesma chamada (issue #1062):
+    # sem o clique que chega a esta rota, eles nunca saem da memoria.
+    aviso_dos_anexos = (
+        tecnologia_anexos.anexar_prints(supabase, demanda=result.data[0], print_ids=payload.prints, quem_id=ator["id"])
+        if payload.prints
+        else None
+    )
     # "Inclusive na criação" (PRD #634, história 41): a Demanda nasce na mão do
     # dono do Produto, e para ele isso é uma atribuição como qualquer outra.
-    return {**criada, "aviso_por_email": await _aviso_da_atribuicao(supabase, demanda=criada, ator=ator)}
+    return {
+        **criada,
+        "aviso_por_email": await _aviso_da_atribuicao(supabase, demanda=criada, ator=ator),
+        "aviso_dos_anexos": aviso_dos_anexos,
+    }
 
 
 @router.patch("/demandas/{demanda_id}", response_model=DemandaResponse)
@@ -1100,7 +1149,8 @@ async def mover_demanda(
         # apagam. Antes da linha do fio, e nao depois: se ela falhar, o 500 do
         # `_gravar_movimento` sai com a Demanda ja encerrada, e o binario de
         # assunto encerrado nao pode ficar para tras por causa disso.
-        tecnologia_anexos.apagar_todos(supabase, demanda_id)
+        if tecnologia_anexos.apagar_todos(supabase, demanda_id):
+            await _contagem_na_issue(supabase, demanda=atual)
 
     _gravar_movimento(
         supabase,
@@ -1204,12 +1254,14 @@ async def anexar_a_demanda(
         )
     except tecnologia_anexos.AnexoRecusadoError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    await _contagem_na_issue(supabase, demanda=demanda)
     return {
         "id": linha["id"],
         "nome": linha["nome_original"],
         "anexado_por_nome": ator.get("nome_completo"),
         "criado_em": linha.get("criado_em"),
         "apagado_em": linha.get("apagado_em"),
+        "conversa_id": None,
         "url": None,
     }
 
@@ -1402,7 +1454,7 @@ async def vincular_demanda(
 
     O par e guardado dos DOIS lados: a Demanda ganha o numero, a issue ganha o
     id da Demanda num marcador oculto no fim do corpo. O marcador entra por
-    substituicao (`corpo_com_marcador`), entao vincular duas vezes o mesmo
+    substituicao (`corpo_vinculado`), entao vincular duas vezes o mesmo
     numero deixa o corpo identico e nem chega a chamar o PATCH.
 
     Sincroniza na hora: sem isso o card mostraria o selo vazio ate a
@@ -1426,14 +1478,18 @@ async def vincular_demanda(
     if outra:
         _recusar(motivo_numero_ja_usado(numero, str(outra.get("titulo") or "sem título")))
 
+    anexos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)
     try:
         dados = github_client.ler_issue(numero)
         if github_client.e_pull_request(dados):
             _recusar(motivo_e_pull_request(numero))
 
+        # O marcador e, quando a Demanda guarda imagens, a frase "Anexos: N
+        # imagens na Demanda" (issue #1062): so a contagem, nunca URL nem nome.
         corpo = dados.get("body")
-        if corpo_precisa_do_marcador(corpo, demanda_id):
-            github_client.atualizar_corpo(numero, corpo_com_marcador(corpo, demanda_id))
+        novo_corpo = corpo_vinculado(corpo, demanda_id, anexos=anexos)
+        if novo_corpo != (corpo or ""):
+            github_client.atualizar_corpo(numero, novo_corpo)
 
         foto = github_client.montar_foto(dados, github_client.ler_sub_issues(numero))
     except github_client.IssueNaoEncontradaError:
@@ -1556,6 +1612,9 @@ async def levar_para_desenvolvimento(
         # que e de dentro.
         levado_por_login=ator.get("github_login"),
         link=link_da_demanda(demanda_id),
+        # So a contagem: nem URL nem nome de arquivo saem para o repositorio
+        # publico (issue #1062, ADR 0069, decisao 1).
+        anexos=tecnologia_anexos.quantos_guardados(supabase, demanda_id),
     )
 
     try:
@@ -1824,8 +1883,14 @@ async def listar_conversa(
 ):
     """O fio da Demanda em ordem cronologica, respostas e movimentos juntos."""
     _buscar_demanda(supabase, demanda_id)
+    # A imagem de cada resposta vem junto da linha (issue #1062): o card a
+    # mostra ao lado do texto, pela URL assinada de vida curta.
+    imagens = tecnologia_anexos.imagens_das_respostas(supabase, demanda_id)
     return [
-        _com_janela(linha, ator_id=ator["id"], autor_nome=linha.get("autor_nome"))
+        {
+            **_com_janela(linha, ator_id=ator["id"], autor_nome=linha.get("autor_nome")),
+            "imagem": imagens.get(str(linha["id"])),
+        }
         for linha in _fio_da_demanda(supabase, demanda_id, ator=ator)
     ]
 
@@ -1879,6 +1944,15 @@ async def responder_na_conversa(
     # o `produto_nome` não está na linha da Demanda.
     demanda = _com_nomes(supabase, [_buscar_demanda(supabase, demanda_id)], ator=ator)[0]
     texto, mencoes = _texto_e_mencoes(supabase, payload)
+    if payload.anexo_id:
+        # A imagem ja subiu pela porta do anexo, com os limites dela. Aqui so se
+        # confere que ela pode ir com ESTA resposta, antes de o texto entrar.
+        try:
+            tecnologia_anexos.imagem_para_a_resposta(
+                supabase, demanda_id=demanda_id, anexo_id=payload.anexo_id, quem_id=ator["id"]
+            )
+        except tecnologia_anexos.AnexoRecusadoError as exc:
+            _recusar(str(exc))
 
     nova = {
         "demanda_id": demanda_id,
@@ -1904,6 +1978,10 @@ async def responder_na_conversa(
         _resposta_nao_entrou()
 
     linha = _com_janela(result.data[0], ator_id=ator["id"], autor_nome=ator.get("nome_completo"))
+    if payload.anexo_id:
+        # Antes do espelho: e a ligacao que faz o comentario dizer "(1 imagem
+        # na Demanda)".
+        tecnologia_anexos.ligar_a_resposta(supabase, anexo_id=payload.anexo_id, conversa_id=linha["id"])
     # Os gatilhos 2 e 3 saem DEPOIS de a linha estar gravada: um e-mail que
     # convidasse a ler uma resposta que não entrou no fio seria pior do que
     # nenhum e-mail.
@@ -2466,7 +2544,10 @@ async def assistente_descrever_imagem(
     """O print anexado vira descricao, e a imagem some (ADR 0056, decisao 4).
 
     A primeira chamada MULTIMODAL do app. Nao grava NADA: nem storage, nem
-    tabela, nem log com o conteudo. O que a tela faz com o que sai daqui e
+    tabela, nem log com o conteudo. Os bytes ficam so na memoria do processo,
+    com um identificador efemero que volta junto da descricao (issue #1062): o
+    print vira Anexo se "Criar Demanda" trouxer o identificador, e some sozinho
+    se nao trouxer. O que a tela faz com o que sai daqui e
     escrever uma mensagem da PESSOA com o prefixo `[print] `, que e o que a
     deixa ver o que o assistente enxergou e o que faz o material entrar cercado
     no prompt do turno seguinte.
@@ -2499,4 +2580,7 @@ async def assistente_descrever_imagem(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_PRINT_ILEGIVEL)
 
     logger.info(f"Print lido para o Assistente por {_ator['id']}: {extensao}, {len(texto)} chars")
-    return {"texto": texto}
+    # O print fica so na memoria, com um identificador efemero (issue #1062): vira
+    # Anexo se "Criar Demanda" o trouxer, e some sozinho se nao trouxer.
+    print_id = tecnologia_anexos.guardar_print(quem_id=_ator["id"], nome=imagem.filename or "", conteudo=conteudo)
+    return {"texto": texto, "print_id": print_id}

@@ -23,6 +23,8 @@ export type AnexoDaDemanda = {
   anexado_por_nome: string | null;
   criado_em: string | null;
   apagado_em: string | null;
+  /** A resposta da Conversa que trouxe a imagem (issue #1062), quando veio por ela. */
+  conversa_id?: string | null;
   url: string | null;
 };
 
@@ -97,6 +99,42 @@ export async function anexarImagem(demandaId: string, arquivo: File, token: stri
     return FALHA_DE_CONEXAO;
   }
 }
+
+/**
+ * Sobe a imagem da resposta da Conversa (issue #1062) pela MESMA porta do
+ * formulário, com os mesmos limites, e devolve o id do anexo que a resposta vai
+ * levar, ou o motivo da recusa. Nunca levanta.
+ *
+ * Diferente do `anexarImagem`, aqui o corpo importa: sem o id, a resposta não
+ * tem o que ligar a ela.
+ */
+export async function subirImagem(
+  demandaId: string,
+  arquivo: File,
+  token: string | null,
+): Promise<{ id: string } | { motivo: string }> {
+  const form = new FormData();
+  form.append("imagem", arquivo, arquivo.name);
+  try {
+    const resposta = await fetch(urlDosAnexos(demandaId), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${token}` },
+      body: form,
+    });
+    if (!resposta.ok) return { motivo: await motivoDaRecusa(resposta) };
+    const corpo = (await resposta.json()) as { id?: unknown };
+    if (typeof corpo?.id === "string") return { id: corpo.id };
+    console.error("[admin/tecnologia] a resposta do anexo veio sem id");
+    return { motivo: IMAGEM_SEM_CONFIRMACAO };
+  } catch (e) {
+    console.error("[admin/tecnologia] falha ao subir a imagem da resposta", e);
+    return { motivo: e instanceof TypeError ? FALHA_DE_CONEXAO : IMAGEM_SEM_CONFIRMACAO };
+  }
+}
+
+/** A imagem pode ter entrado, mas a tela não soube qual: a resposta não sai sem ela. */
+export const IMAGEM_SEM_CONFIRMACAO =
+  "A imagem não foi confirmada pelo servidor, e a resposta não foi enviada. Feche e abra o card, confira as imagens e responda de novo.";
 
 /**
  * O aviso das imagens que o servidor recusou depois de a Demanda nascer, ou

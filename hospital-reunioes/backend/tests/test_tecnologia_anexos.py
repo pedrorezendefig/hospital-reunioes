@@ -414,9 +414,9 @@ class TestSoEncerrarApaga:
 
 
 class TestNadaSaiParaAIssue:
-    """O repositorio e publico (ADR 0069, decisao 1). Nesta fatia a issue nao
-    ganha linha nenhuma sobre anexo: nem o nome, nem o endereco, nem o bucket.
-    A frase "Anexos: N imagens na Demanda" e da fatia seguinte."""
+    """O repositorio e publico (ADR 0069, decisao 1). A issue nao ganha nada do
+    anexo: nem o nome, nem o endereco, nem o bucket. So a contagem, na frase
+    "Anexos: N imagens na Demanda" (issue #1062)."""
 
     NOME = "prontuario do paciente.png"
 
@@ -439,4 +439,4 @@ class TestNadaSaiParaAIssue:
         issue = gh.criadas[0]
         assert self._vazamentos(issue["titulo"] + issue["corpo"]) == []
         assert self._vazamentos(gh.comentarios_criados[0]["corpo"]) == []
-        assert "Anexo" not in issue["corpo"]
+        assert "Anexos: 1 imagem na Demanda" in issue["corpo"]

@@ -21,7 +21,10 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+import time
 import uuid
+from collections import OrderedDict
 from datetime import UTC, datetime
 
 from app.config import settings
@@ -48,6 +51,9 @@ MOTIVO_ANEXOS_DEMAIS = (
 MOTIVO_ARQUIVO_VAZIO = "A imagem chegou vazia: não há o que anexar. Escolha o arquivo de novo."
 MOTIVO_DEMANDA_ENCERRADA = "Esta Demanda está encerrada: imagem só entra em Demanda aberta. Reabra antes de anexar."
 MOTIVO_NAO_GUARDOU = "Não foi possível guardar a imagem agora. Tente de novo em instantes."
+MOTIVO_IMAGEM_DA_RESPOSTA = (
+    "A imagem desta resposta não foi encontrada nesta Demanda. Escolha a imagem de novo e responda outra vez."
+)
 
 # Dez minutos: o card abre, a miniatura carrega, quem quer ver em tamanho real
 # clica. Link colado fora do app morre antes de virar acesso permanente ao
@@ -128,7 +134,7 @@ def anexar(supabase, *, demanda: dict, nome: str, conteudo: bytes, quem_id: str)
         raise AnexoRecusadoError(MOTIVO_NAO_GUARDOU, status_code=503) from exc
 
 
-def apagar_todos(supabase, demanda_id: str) -> None:
+def apagar_todos(supabase, demanda_id: str) -> int:
     """Tira do bucket os binarios da Demanda e marca cada registro apagado.
 
     Chamado SO por Concluir e Cancelar, o ato humano que encerra (ADR 0069,
@@ -142,17 +148,22 @@ def apagar_todos(supabase, demanda_id: str) -> None:
 
     Nunca levanta: quem chama ja encerrou a Demanda, e o encerramento vale com
     ou sem o bucket respondendo. Falha aqui vira log com o caminho do arquivo.
+
+    Devolve quantos binarios sairam: com zero, a contagem da issue vinculada
+    (issue #1062) nao mudou e nao ha o que reescrever la.
     """
     try:
         guardados = [linha for linha in ler(supabase, demanda_id) if not linha.get("apagado_em")]
     except Exception:
         logger.exception("Falha ao ler os anexos da Demanda %s para apagar ao encerrar", demanda_id)
-        return
+        return 0
+    sairam = 0
     for linha in guardados:
         path = linha["storage_path"]
         if not storage.delete_file(supabase, _bucket(), path):
             logger.error("Anexo da Demanda %s não saiu do bucket ao encerrar: %s", demanda_id, path)
             continue
+        sairam += 1
         try:
             supabase.table(TABELA_ANEXOS).update({"apagado_em": datetime.now(UTC).isoformat()}).eq(
                 "id", linha["id"]
@@ -164,6 +175,14 @@ def apagar_todos(supabase, demanda_id: str) -> None:
                 demanda_id,
                 path,
             )
+    return sairam
+
+
+def quantos_guardados(supabase, demanda_id: str) -> int:
+    """Quantas imagens a Demanda ainda guarda: o N da frase "Anexos: N imagens
+    na Demanda" da issue (issue #1062). O apagado nao conta: o binario saiu, e
+    quem desenvolve nao teria o que buscar."""
+    return sum(1 for linha in ler(supabase, demanda_id) if not linha.get("apagado_em"))
 
 
 def ler(supabase, demanda_id: str) -> list[dict]:
@@ -178,7 +197,65 @@ def listar(supabase, demanda_id: str) -> list[dict]:
     O anexo apagado vem sem URL e com `apagado_em`: o binario ja saiu do bucket,
     e o card mostra que ele existiu. O caminho no storage nunca sai daqui.
     """
-    linhas = ler(supabase, demanda_id)
+    return _para_o_card(supabase, ler(supabase, demanda_id))
+
+
+# ─── A imagem da resposta da Conversa (issue #1062) ─────────────────────────
+#
+# A imagem sobe ANTES, pela mesma porta do formulario (`anexar`): formatos,
+# teto e o maximo de dez valem igual, com as mesmas frases, e a recusa chega a
+# quem responde antes de o texto entrar no fio. A resposta leva o id do anexo,
+# e so entao ele ganha a `conversa_id`.
+
+
+def imagem_para_a_resposta(supabase, *, demanda_id: str, anexo_id: str, quem_id: str) -> dict:
+    """O anexo que a resposta quer levar, se ele pode ir com ela.
+
+    Pode quando e DESTA Demanda, ainda nao esta ligado a outra resposta, nao
+    foi apagado e foi anexado por quem responde. Qualquer outro caso e a mesma
+    recusa: quem esta respondendo so precisa saber que precisa escolher de novo.
+    """
+    achados = supabase.table(TABELA_ANEXOS).select("*").eq("id", anexo_id).eq("demanda_id", demanda_id).execute()
+    linha = (achados.data or [None])[0]
+    if (
+        not linha
+        or linha.get("conversa_id")
+        or linha.get("apagado_em")
+        or str(linha.get("anexado_por") or "") != str(quem_id)
+    ):
+        raise AnexoRecusadoError(MOTIVO_IMAGEM_DA_RESPOSTA)
+    return linha
+
+
+def ligar_a_resposta(supabase, *, anexo_id: str, conversa_id: str) -> None:
+    """Liga a imagem a resposta que acabou de entrar no fio.
+
+    Nunca levanta: a resposta ja entrou. Sem a ligacao, a imagem continua na
+    Demanda (na lista do card), so nao aparece junto da resposta; o log diz qual.
+    """
+    try:
+        supabase.table(TABELA_ANEXOS).update({"conversa_id": conversa_id}).eq("id", anexo_id).is_(
+            "conversa_id", "null"
+        ).execute()
+    except Exception:
+        logger.exception("A imagem %s nao foi ligada a resposta %s", anexo_id, conversa_id)
+
+
+def imagens_das_respostas(supabase, demanda_id: str) -> dict[str, dict]:
+    """A imagem de cada resposta da Demanda, como o card a mostra, por id da linha
+    do fio. So as ligadas a uma resposta sao assinadas."""
+    linhas = [linha for linha in ler(supabase, demanda_id) if linha.get("conversa_id")]
+    return {str(anexo["conversa_id"]): anexo for anexo in _para_o_card(supabase, linhas)}
+
+
+def quantas_da_resposta(supabase, conversa_id: str) -> int:
+    """Quantas imagens a resposta levou: o "(1 imagem na Demanda)" do comentario
+    espelhado (issue #1062), inclusive na correcao, que remonta o corpo."""
+    result = supabase.table(TABELA_ANEXOS).select("id").eq("conversa_id", conversa_id).execute()
+    return len(result.data or [])
+
+
+def _para_o_card(supabase, linhas: list[dict]) -> list[dict]:
     quem = {linha["anexado_por"] for linha in linhas if linha.get("anexado_por")}
     nomes: dict[str, str] = {}
     if quem:
@@ -191,9 +268,105 @@ def listar(supabase, demanda_id: str) -> list[dict]:
             "anexado_por_nome": nomes.get(linha.get("anexado_por")),
             "criado_em": linha.get("criado_em"),
             "apagado_em": linha.get("apagado_em"),
+            "conversa_id": linha.get("conversa_id"),
             "url": None
             if linha.get("apagado_em")
             else storage.signed_url(supabase, _bucket(), linha["storage_path"], EXPIRACAO_DA_URL_SEGUNDOS),
         }
         for linha in linhas
     ]
+
+
+# ─── O print do Assistente (issue #1062) ─────────────────────────────────────
+#
+# O Assistente le o print e devolve a descricao; a imagem nao vira Anexo ali,
+# porque a Demanda ainda nao existe e pode nunca existir. Ela fica guardada SO
+# na memoria do processo, com um identificador efemero que a tela leva junto da
+# conversa, e vira Anexo no clique de "Criar Demanda", na mesma chamada que cria.
+# Sem o clique, nada persiste: nem linha, nem binario no bucket. O que sobra na
+# memoria sai pelo prazo ou pelo teto, e um reinicio do backend tambem limpa.
+#
+# Memoria, e nao bucket com faxina: o diretor que descarta a conversa nao deixa
+# print do hospital em lugar nenhum, nem por uma hora. O uvicorn deste app sobe
+# com um worker so, entao a memoria e uma so.
+
+PRAZO_DO_PRINT_SEGUNDOS = 2 * 60 * 60
+# Teto de memoria: vinte prints no limite de 5 MB. O mais antigo sai primeiro.
+TETO_DE_BYTES_DOS_PRINTS = 20 * LIMITE_DA_IMAGEM
+
+_prints: OrderedDict[str, dict] = OrderedDict()
+_trava_dos_prints = threading.Lock()
+
+
+def _jogar_fora_vencidos(agora: float) -> None:
+    for print_id in [p for p, guardado in _prints.items() if guardado["vence_em"] <= agora]:
+        del _prints[print_id]
+    while sum(len(g["conteudo"]) for g in _prints.values()) > TETO_DE_BYTES_DOS_PRINTS:
+        _prints.popitem(last=False)
+
+
+def guardar_print(*, quem_id: str, nome: str, conteudo: bytes) -> str:
+    """Guarda na memoria o print que o Assistente acabou de descrever e devolve
+    o identificador efemero que a tela leva ate "Criar Demanda"."""
+    print_id = uuid.uuid4().hex
+    agora = time.monotonic()
+    with _trava_dos_prints:
+        _prints[print_id] = {
+            "quem_id": str(quem_id),
+            "nome": nome,
+            "conteudo": conteudo,
+            "vence_em": agora + PRAZO_DO_PRINT_SEGUNDOS,
+        }
+        _jogar_fora_vencidos(agora)
+    return print_id
+
+
+def tirar_print(*, quem_id: str, print_id: str) -> dict | None:
+    """O print guardado, que sai da memoria ao ser tirado: entra uma vez so.
+
+    `None` quando ele venceu, saiu pelo teto, o backend reiniciou, ou e de outra
+    pessoa (e ai ele fica onde esta: nao e de quem pediu)."""
+    with _trava_dos_prints:
+        _jogar_fora_vencidos(time.monotonic())
+        guardado = _prints.get(print_id)
+        if not guardado or guardado["quem_id"] != str(quem_id):
+            return None
+        del _prints[print_id]
+    return guardado
+
+
+def esquecer_prints() -> None:
+    """Esvazia a memoria dos prints (testes)."""
+    with _trava_dos_prints:
+        _prints.clear()
+
+
+def aviso_dos_prints(quantos: int) -> str | None:
+    """A frase da Demanda que nasceu sem algum dos prints do Assistente."""
+    if quantos <= 0:
+        return None
+    sujeito = "um print da conversa não entrou" if quantos == 1 else f"{quantos} prints da conversa não entraram"
+    return f"A Demanda foi aberta, mas {sujeito} como imagem. Abra a Demanda e anexe de novo."
+
+
+def anexar_prints(supabase, *, demanda: dict, print_ids: list[str], quem_id: str) -> str | None:
+    """Grava como Anexo os prints que "Criar Demanda" trouxe e devolve o aviso
+    dos que nao entraram, ou `None`. Nunca levanta: a Demanda ja nasceu."""
+    faltaram = 0
+    for print_id in dict.fromkeys(print_ids):
+        guardado = tirar_print(quem_id=quem_id, print_id=print_id)
+        if guardado is None:
+            faltaram += 1
+            continue
+        try:
+            anexar(supabase, demanda=demanda, nome=guardado["nome"], conteudo=guardado["conteudo"], quem_id=quem_id)
+        except AnexoRecusadoError:
+            logger.warning("Print do Assistente recusado ao criar a Demanda %s", demanda.get("id"))
+            faltaram += 1
+        except Exception:
+            # Largo de proposito, como o resto do modulo: o `APIError` e o
+            # `httpx.HTTPError` cru do PostgREST virariam 500 com a Demanda ja
+            # gravada, e a tela convidaria a cria-la de novo.
+            logger.exception("Falha ao gravar o print do Assistente na Demanda %s", demanda.get("id"))
+            faltaram += 1
+    return aviso_dos_prints(faltaram)
