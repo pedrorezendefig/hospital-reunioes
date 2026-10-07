@@ -644,6 +644,12 @@ def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> s
     (`LIMITE_RESPOSTA`), e a rota e de Super admin, com a Demanda pedida uma por
     vez.
     """
+    # A descricao entra RECUADA INTEIRA, primeira linha inclusive (issue #895),
+    # como o "O que muda" da raiz: ela pode nascer do print lido pelo Assistente
+    # (ADR 0056), e ai e texto de terceiro, que na coluna zero escreveria uma
+    # marca de inicio e plantaria uma Conversa inventada antes da de verdade.
+    # Linha e o que o `splitlines()` diz que e linha, e a saida so tem `\n`.
+    descricao = str(demanda.get("descricao") or "").strip() or SEM_DESCRICAO
     partes: list[str] = [
         CABECALHO_PARA_IA,
         "",
@@ -652,7 +658,7 @@ def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> s
         f"Produto: {demanda.get('produto_nome') or SEM_PRODUTO}",
         "",
         "Descrição:",
-        str(demanda.get("descricao") or "").strip() or SEM_DESCRICAO,
+        indent("\n".join(descricao.splitlines()), RECUO_DA_CONTINUACAO),
         # A Etapa e o "O que muda" entram AQUI, entre a descricao e a Conversa
         # (issue #676): eles contam o que a Vitta esta entregando, que e a
         # continuacao do pedido, e nao mais uma fala do fio.
