@@ -183,6 +183,29 @@ def _rebaixaria_o_rotas_md(rotas_md: Path, fonte: str) -> bool:
     return MARCA_DE_LISTAGEM_PARCIAL not in rotas_md.read_text(encoding="utf-8")
 
 
+def _placeholders_sem_env(backend_dir: Path) -> dict[str, str]:
+    """Os valores do `backend/.env.example`, com ENVIRONMENT=development, quando
+    não há `hospital-reunioes/.env`. Vazio quando há.
+
+    Sem `.env` (o worktree novo) o Settings recusa montar por campo obrigatório
+    e a introspecção caía no parser AST, que não toca o ROTAS.md (issue #844).
+    Para listar rotas o app só precisa montar, e o exemplo só tem placeholder:
+    nenhum segredo é lido. Com `.env` presente nada entra, porque variável de
+    ambiente ganha do `.env` no pydantic e trocaria o valor real pelo exemplo.
+    """
+    exemplo = backend_dir / ".env.example"
+    if (backend_dir.parent / ".env").exists() or not exemplo.exists():
+        return {}
+    valores: dict[str, str] = {}
+    for linha in exemplo.read_text(encoding="utf-8").splitlines():
+        linha = linha.strip()
+        if linha and not linha.startswith("#") and "=" in linha:
+            chave, _, valor = linha.partition("=")
+            valores[chave.strip()] = valor.strip()
+    valores["ENVIRONMENT"] = "development"
+    return valores
+
+
 def _introspect_routes_runtime(routers_dir: Path) -> list[dict] | None:
     """Lê as rotas do app FastAPI montado. None se não der (sem venv, sem uv,
     import quebrado, .env faltando), e aí quem chama cai no parser AST.
@@ -211,6 +234,9 @@ def _introspect_routes_runtime(routers_dir: Path) -> list[dict] | None:
     # O filho escreve no pipe pela codificação do sistema (cp1252 no Windows), e
     # este lado lê em UTF-8: o aviso com acento no stderr quebraria a leitura.
     env["PYTHONIOENCODING"] = "utf-8"
+    # `setdefault`: o que o ambiente já traz (o ENVIRONMENT=ci do CI) fica.
+    for chave, valor in _placeholders_sem_env(backend_dir).items():
+        env.setdefault(chave, valor)
     if sys.platform == "darwin":
         env.setdefault("DYLD_FALLBACK_LIBRARY_PATH", "/opt/homebrew/lib")
     elif sys.platform == "win32":

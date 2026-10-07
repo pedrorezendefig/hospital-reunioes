@@ -12,8 +12,10 @@ as regras que fazem o Windows funcionar, e que o Linux não perde nada com elas.
 from __future__ import annotations
 
 import ast
+import importlib.util
 import json
 import os
+import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -188,3 +190,62 @@ def test_snapshot_decodifica_em_utf8_tudo_que_le_de_subprocesso():
     ]
 
     assert sem_encoding == [], f'passe encoding="utf-8" nas linhas {sem_encoding} do snapshot.py'
+
+
+BACKEND = PASTA_DOS_TESTES.parent
+
+
+def _carregar_snapshot():
+    """O script vive fora do pacote do backend (é script de skill)."""
+    spec = importlib.util.spec_from_file_location("snapshot_do_ambiente_windows", SNAPSHOT)
+    modulo = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(modulo)
+    return modulo
+
+
+def _backend_sem_env(raiz: Path) -> Path:
+    """Uma cópia do backend sem `hospital-reunioes/.env`, que é o worktree
+    novo. Cópia do `app/`, e não link: o `config.py` acha o `.env` pelo
+    próprio caminho resolvido, e um link o levaria ao `.env` desta máquina."""
+    backend = raiz / "hospital-reunioes" / "backend"
+    shutil.copytree(BACKEND / "app", backend / "app", ignore=shutil.ignore_patterns("__pycache__"))
+    shutil.copy(BACKEND / ".env.example", backend / ".env.example")
+    (backend / ".venv").symlink_to(BACKEND / ".venv")
+    return backend
+
+
+class TestSnapshotSemEnv:
+    def test_sem_env_as_rotas_vem_do_app_montado(self, tmp_path, monkeypatch):
+        """Sem `.env` a introspecção falhava no campo obrigatório do Settings e
+        caía no parser AST, que não toca o ROTAS.md (saída 4). Os placeholders
+        do `.env.example` bastam para o app montar e listar as rotas."""
+        backend = _backend_sem_env(tmp_path)
+        for chave in ("SUPABASE_URL", "SUPABASE_SERVICE_ROLE_KEY", "ENVIRONMENT"):
+            monkeypatch.delenv(chave, raising=False)
+
+        rotas = _carregar_snapshot()._introspect_routes_runtime(backend / "app" / "routers")
+
+        assert rotas is not None, "a introspecção não rodou: o snapshot cairia no parser AST"
+        assert ("GET", "/.well-known/oauth-protected-resource") in {(r["method"], r["path"]) for r in rotas}
+
+    def test_com_env_o_placeholder_nao_passa_por_cima(self, tmp_path):
+        """Variável de ambiente ganha do `.env` no pydantic: injetar o
+        placeholder com o `.env` presente trocaria o valor real por `<PREENCHER>`."""
+        backend = tmp_path / "hospital-reunioes" / "backend"
+        backend.mkdir(parents=True)
+        shutil.copy(BACKEND / ".env.example", backend / ".env.example")
+        (backend.parent / ".env").write_text("SUPABASE_URL=http://127.0.0.1:54321\n", encoding="utf-8")
+
+        assert _carregar_snapshot()._placeholders_sem_env(backend) == {}
+
+    def test_sem_env_o_ambiente_e_development_e_nada_vem_de_fora_do_exemplo(self, tmp_path):
+        backend = tmp_path / "hospital-reunioes" / "backend"
+        backend.mkdir(parents=True)
+        (backend / ".env.example").write_text(
+            "# comentário\n\nSUPABASE_URL=<PREENCHER>\nENVIRONMENT=production\n", encoding="utf-8"
+        )
+
+        assert _carregar_snapshot()._placeholders_sem_env(backend) == {
+            "SUPABASE_URL": "<PREENCHER>",
+            "ENVIRONMENT": "development",
+        }
