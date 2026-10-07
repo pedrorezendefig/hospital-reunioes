@@ -22,7 +22,6 @@ import { useState } from "react";
 import { AlertCircle, CalendarClock } from "lucide-react";
 
 import { DemandaModal } from "./DemandaModal";
-import { FiltrosDeDemandas } from "./FiltrosDeDemandas";
 import { SeloDeEtapa } from "./SeloDeEtapa";
 import { TipoIcone } from "./TipoIcone";
 import { useListaDeDemandas } from "./useListaDeDemandas";
@@ -30,7 +29,6 @@ import {
   DemandaDaMinhaVez,
   estaAtrasado,
   EuNaAba,
-  FiltrosDoQuadro,
   fraseDaMinhaVezVazia,
   idadeEmDias,
   IDADE_VERMELHA_A_PARTIR_DE,
@@ -40,8 +38,6 @@ import {
   PrioridadeDemanda,
   prazoLegivel,
   ProdutoDaEscolha,
-  queryDeFiltros,
-  temFiltroAtivo,
   textoDaIdade,
 } from "./demandas";
 
@@ -56,8 +52,6 @@ type Props = {
   carregandoAuth: boolean;
   produtos: ProdutoDaEscolha[];
   pessoas: PessoaDaAba[];
-  filtros: FiltrosDoQuadro;
-  onFiltrosChange: (filtros: FiltrosDoQuadro) => void;
   /**
    * Quem está olhando, do ponto de vista do Vínculo (issue #674).
    *
@@ -87,7 +81,7 @@ const SEM_SESSAO =
 
 const NAO_DEU_PARA_CARREGAR = "Não foi possível carregar o que espera por você.";
 
-export function MinhaVez({ token, carregandoAuth, produtos, pessoas, filtros, onFiltrosChange, eu }: Props) {
+export function MinhaVez({ token, carregandoAuth, produtos, pessoas, eu }: Props) {
   const {
     itens: demandas,
     carregando,
@@ -96,7 +90,7 @@ export function MinhaVez({ token, carregandoAuth, produtos, pessoas, filtros, on
   } = useListaDeDemandas<DemandaDaMinhaVez>({
     token,
     carregandoAuth,
-    caminho: `/minha-vez${queryDeFiltros(filtros)}`,
+    caminho: "/minha-vez",
     semSessao: SEM_SESSAO,
     falhaAoCarregar: NAO_DEU_PARA_CARREGAR,
   });
@@ -165,21 +159,13 @@ export function MinhaVez({ token, carregandoAuth, produtos, pessoas, filtros, on
         </p>
       )}
 
-      <FiltrosDeDemandas
-        filtros={filtros}
-        onFiltrosChange={onFiltrosChange}
-        produtos={produtos}
-        pessoas={pessoas}
-        oQueEstaFiltrado="Minha vez"
-      />
-
       {carregando ? (
         <p className="text-sm text-text-secondary">Carregando o que espera por você...</p>
       ) : demandas.length === 0 ? (
         // A frase não sai quando há erro: com a leitura falhada o código NÃO
         // SABE se há algo esperando, e dizer "nada esperando por você" seria
         // afirmar um fato não verificado, ainda por cima como boa notícia.
-        !erro && <p className="text-sm text-text-secondary">{fraseDaMinhaVezVazia(temFiltroAtivo(filtros))}</p>
+        !erro && <p className="text-sm text-text-secondary">{fraseDaMinhaVezVazia()}</p>
       ) : (
         <ul aria-label="Demandas esperando por você" className="divide-y divide-border rounded-xl border border-border bg-surface">
           {demandas.map(linha)}

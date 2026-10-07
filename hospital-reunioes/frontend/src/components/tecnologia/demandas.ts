@@ -326,7 +326,7 @@ export type LinhaDaConversa = {
   editavel_ate: string | null;
 };
 
-/** A ordem das colunas no Quadro. */
+/** Os cinco estados da Demanda, na ordem do fluxo. */
 export const ESTADOS: EstadoDemanda[] = ["nova", "em_andamento", "aguardando", "concluida", "cancelada"];
 
 export const ESTADO_ROTULO: Record<EstadoDemanda, string> = {
@@ -338,12 +338,13 @@ export const ESTADO_ROTULO: Record<EstadoDemanda, string> = {
 };
 
 /**
- * As duas colunas que nascem recolhidas.
+ * As três raias do Quadro, na ordem (issue #1058, PRD #1056).
  *
- * O contador continua à vista: recolher é dar espaço às colunas vivas, não
- * esconder o que foi fechado (PRD #634, história 24).
+ * Concluída e Cancelada continuam sendo estados no banco, mas deixaram de ser
+ * coluna: encerrar é uma ação no card aberto, e a Demanda encerrada sai do
+ * Quadro na hora. O que já fechou mora no Histórico.
  */
-export const COLUNAS_RECOLHIDAS: EstadoDemanda[] = ["concluida", "cancelada"];
+export const RAIAS: EstadoDemanda[] = ["nova", "em_andamento", "aguardando"];
 
 /** Espelho da tabela do backend (`app/services/tecnologia.py`). */
 export const TRANSICOES: Record<EstadoDemanda, EstadoDemanda[]> = {
@@ -548,47 +549,6 @@ export function pedacosDoTexto(texto: string, nomesMencionados: string[]): Pedac
 }
 
 /**
- * O que a barra de filtros do Quadro guarda (issue #639).
- *
- * Campo vazio quer dizer "todos", e nao "sem responsavel": o filtro so estreita
- * o Quadro, e a API entende ausencia do parametro como sem filtro.
- *
- * O `estado` fica de fora de proposito: ele e o eixo das colunas, e filtrar por
- * ele deixaria o Quadro com uma coluna cheia e quatro vazias, sem dizer por que.
- */
-export type FiltrosDoQuadro = { tipo: string; produto_id: string; responsavel_id: string };
-
-/** O Quadro inteiro: nenhum filtro escolhido. */
-export const SEM_FILTRO: FiltrosDoQuadro = { tipo: "", produto_id: "", responsavel_id: "" };
-
-/**
- * A busca da listagem, com os filtros que a API ja aceita.
- *
- * Sem filtro nenhum a busca sai vazia, nem o "?" sozinho, e os valores viajam
- * escapados pelo `URLSearchParams`: e a mesma URL que a tela pediria a mao, sem
- * o risco de um id com espaco quebrar a chamada.
- */
-export function queryDeFiltros(filtros: FiltrosDoQuadro): string {
-  const busca = new URLSearchParams();
-  if (filtros.tipo) busca.set("tipo", filtros.tipo);
-  if (filtros.produto_id) busca.set("produto_id", filtros.produto_id);
-  if (filtros.responsavel_id) busca.set("responsavel_id", filtros.responsavel_id);
-  const texto = busca.toString();
-  return texto ? `?${texto}` : "";
-}
-
-/**
- * Se algum filtro esta valendo.
- *
- * A tela precisa saber para AVISAR: um Quadro filtrado e calado e
- * indistinguivel de um Quadro vazio, e quem volta a aba com o filtro de ontem
- * concluiria que as Demandas sumiram.
- */
-export function temFiltroAtivo(filtros: FiltrosDoQuadro): boolean {
-  return Boolean(filtros.tipo || filtros.produto_id || filtros.responsavel_id);
-}
-
-/**
  * O endereço da Demanda, montado e lido no mesmo lugar (issue #640).
  *
  * As duas funções abaixo são os dois lados do MESMO formato: `linkDaDemanda`
@@ -686,37 +646,23 @@ export function textoDoDesfecho(demanda: DemandaDoHistorico): string {
 }
 
 /**
- * A busca do Histórico, com os MESMOS filtros das outras abas.
- *
- * Ela sai do `queryDeFiltros` de propósito, e não de um segundo montador: os
- * três filtros são compartilhados entre as três abas (issue #639), e duas
- * montagens divergiriam na primeira mudança de parâmetro.
+ * A busca do Histórico.
  *
  * Termo só com espaços não vai: mandar `busca=%20` faria a API procurar um
  * espaço, e a tela diria "nada encontrado" para quem não buscou nada.
  */
-export function queryDoHistorico(filtros: FiltrosDoQuadro, termo: string): string {
-  const busca = new URLSearchParams(queryDeFiltros(filtros).replace(/^\?/, ""));
+export function queryDoHistorico(termo: string): string {
   const limpo = termo.trim();
-  if (limpo) busca.set("busca", limpo);
-  const texto = busca.toString();
-  return texto ? `?${texto}` : "";
+  return limpo ? `?${new URLSearchParams({ busca: limpo })}` : "";
 }
 
 /**
  * A frase de "Minha vez" vazia.
  *
  * Vazio aqui é BOA NOTÍCIA, e a frase precisa dizer isso: "nada esperando por
- * você" não é falha de carregamento. Com filtro ligado ela muda, porque aí o
- * código não sabe se não há nada ou se o filtro escondeu, e aponta a saída.
+ * você" não é falha de carregamento.
  */
-export function fraseDaMinhaVezVazia(filtrando: boolean): string {
-  if (filtrando) {
-    return (
-      "Nada esperando por você entre as Demandas que o filtro mostra. " +
-      "Pode haver Demandas suas fora dele: limpe os filtros acima para ver todas."
-    );
-  }
+export function fraseDaMinhaVezVazia(): string {
   return (
     "Nada esperando por você agora. Uma Demanda aparece aqui quando você vira o responsável dela, " +
     "ou quando alguém te menciona na Conversa e você ainda não respondeu."
@@ -726,27 +672,13 @@ export function fraseDaMinhaVezVazia(filtrando: boolean): string {
 /**
  * A frase do Histórico vazio.
  *
- * Quatro casos, porque são quatro causas diferentes e o código as distingue:
- * o Histórico ainda não tem nada, o filtro estreitou, a busca não achou, ou os
- * dois juntos. Uma frase só mandaria limpar o filtro a quem não tem filtro, ou
+ * Dois casos, porque são duas causas diferentes e o código as distingue: o
+ * Histórico ainda não tem nada, ou a busca não achou. Uma frase só mandaria
  * mudar o termo a quem não buscou nada.
  */
-export function fraseDoHistoricoVazio(termo: string, filtrando: boolean): string {
-  const buscando = Boolean(termo.trim());
-  if (buscando && filtrando) {
-    return (
-      `Nenhuma Demanda concluída ou cancelada com "${termo.trim()}" entre as que o filtro mostra. ` +
-      "Tente outras palavras, ou limpe os filtros acima para buscar no Histórico inteiro."
-    );
-  }
-  if (buscando) {
+export function fraseDoHistoricoVazio(termo: string): string {
+  if (termo.trim()) {
     return `Nenhuma Demanda concluída ou cancelada com "${termo.trim()}" no título, na descrição ou na Conversa.`;
-  }
-  if (filtrando) {
-    return (
-      "Nenhuma Demanda concluída ou cancelada entre as que o filtro mostra. " +
-      "Limpe os filtros acima para ver o Histórico inteiro."
-    );
   }
   return "Nenhuma Demanda foi concluída ou cancelada ainda. Quando a primeira fechar, ela aparece aqui.";
 }

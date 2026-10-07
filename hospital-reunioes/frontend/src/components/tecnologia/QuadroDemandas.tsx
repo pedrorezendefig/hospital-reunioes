@@ -3,26 +3,28 @@
 /**
  * O Quadro de Demandas (issue #637, PRD #634, ADR 0050).
  *
- * Cinco colunas. Concluída e Cancelada nascem recolhidas, com o contador à
- * vista: recolher é dar espaço às colunas vivas, não esconder o que fechou.
+ * Três raias vivas (Nova, Em andamento, Aguardando), em largura cheia e sem
+ * filtros (issue #1058, PRD #1056). Concluída e Cancelada continuam estados no
+ * banco, mas não são coluna: encerrar é ação no card aberto, junto do Mover, e
+ * a Demanda encerrada sai do Quadro na hora.
  *
- * O card mostra o que evita abrir o modal: símbolo do tipo, título, Produto,
- * responsável, prioridade, idade em dias (vermelha a partir de 14) e a marca de
- * atrasado. Idade e atraso são coisas diferentes, e o card diz as duas: sem
- * prazo a Demanda não atrasa, só envelhece (ADR 0050, decisão 5).
+ * O card fechado tem duas linhas (símbolo do tipo e título; Produto e
+ * responsável) e chip só na exceção: Etapa quando há Vínculo, prioridade só
+ * quando Alta, idade só vermelha ou com prazo vencido. Idade e atraso são
+ * coisas diferentes: sem prazo a Demanda não atrasa, só envelhece (ADR 0050,
+ * decisão 5).
  *
- * Arrastar entre colunas e a barra de filtros são da issue #639. Arrastar não
- * é um caminho novo: solta o card e chama o MESMO endpoint do botão "Mover",
- * que continua ali como o caminho de quem não usa o mouse. O card só muda de
- * coluna depois que o servidor aceitou, porque a recusa (422 da transição
- * proibida, 409 do Quadro desatualizado) é dele, e não da tela.
+ * Arrastar entre raias (issue #639) não é um caminho novo: solta o card e
+ * chama o MESMO endpoint do Mover do card aberto, que é o caminho de quem não
+ * usa o mouse. O card só muda de raia depois que o servidor aceitou, porque a
+ * recusa (422 da transição proibida, 409 do Quadro desatualizado) é dele, e
+ * não da tela.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { AlertCircle, CalendarClock, Plus } from "lucide-react";
 
-import { Select } from "@/components/ui/Select";
 import { usePolling } from "@/hooks/usePolling";
 
 import { ROTA_ASSISTENTE } from "./assistente";
@@ -32,32 +34,24 @@ import { TipoIcone } from "./TipoIcone";
 import {
   avisoPorEmail,
   BASE_TECNOLOGIA,
-  COLUNAS_RECOLHIDAS,
   Demanda,
   demandaIdDaUrl,
-  destinosDe,
   ESTADO_ROTULO,
-  ESTADOS,
   EstadoDemanda,
   estaAtrasado,
   FALHA_DE_CONEXAO,
   EuNaAba,
-  FiltrosDoQuadro,
   idadeEmDias,
   IDADE_VERMELHA_A_PARTIR_DE,
   INTERVALO_DE_ATUALIZACAO_MS,
   motivoDaRecusa,
   PessoaDaAba,
   PRIORIDADE_ROTULO,
-  PrioridadeDemanda,
   prazoLegivel,
   ProdutoDaEscolha,
-  queryDeFiltros,
-  SEM_FILTRO,
-  temFiltroAtivo,
+  RAIAS,
   textoDaIdade,
-  TIPO_ROTULO,
-  TIPOS,
+  temSelo,
 } from "./demandas";
 
 type Props = {
@@ -74,15 +68,6 @@ type Props = {
   produtos: ProdutoDaEscolha[];
   pessoas: PessoaDaAba[];
   /**
-   * Os filtros valendo agora.
-   *
-   * Eles moram na aba Tecnologia, e não aqui, porque precisam sobreviver à
-   * troca de aba: o painel do Quadro é desmontado quando alguém vai a "Minha
-   * vez", e um estado local voltaria ao zero na volta (issue #639).
-   */
-  filtros: FiltrosDoQuadro;
-  onFiltrosChange: (filtros: FiltrosDoQuadro) => void;
-  /**
    * Quem está olhando, do ponto de vista do Vínculo (issue #674).
    *
    * Vem de cima, e não de uma chamada por painel: as três abas mostram o mesmo
@@ -90,12 +75,6 @@ type Props = {
    * e o risco de as abas discordarem entre si.
    */
   eu: EuNaAba;
-};
-
-const CLASSE_PRIORIDADE: Record<PrioridadeDemanda, string> = {
-  baixa: "bg-slate-100 text-slate-500",
-  normal: "bg-sky-50 text-sky-700",
-  alta: "bg-amber-50 text-amber-700",
 };
 
 /**
@@ -109,45 +88,29 @@ const CLASSE_PRIORIDADE: Record<PrioridadeDemanda, string> = {
 const SEM_SESSAO =
   "Não foi possível carregar as Demandas: a sessão não está ativa ou o servidor não respondeu. Tente recarregar a página.";
 
-/**
- * As duas frases de quando o link pede uma Demanda que o Quadro não mostra
- * (issue #640, com os filtros da issue #639 no ar).
- *
- * São duas porque as causas são duas e o código as DISTINGUE. Uma frase só
- * mandaria conferir o endereço com quem enviou justamente quando o endereço
- * está certo e quem esconde a Demanda é o filtro que a própria pessoa deixou
- * ligado ontem: cobrança de uma ação que não resolve, sobre uma causa que não
- * é a verdadeira.
- *
- * A frase do filtro não AFIRMA que o filtro é a causa (a Demanda pode nem
- * existir, e o código não sabe): ela diz os dois fatos que o código tem, o
- * filtro valendo e a Demanda fora do que o Quadro mostra, e aponta a ação, que
- * está na mesma tela, no botão "Limpar filtros".
- */
-const AVISO_LINK_SEM_FILTRO = "A Demanda deste link não está no Quadro. Confira o endereço com quem enviou.";
-const AVISO_LINK_COM_FILTRO =
-  "O Quadro está filtrado, e a Demanda deste link não está entre as que ele mostra. " +
-  "Ela pode estar escondida pelo filtro: limpe os filtros abaixo e veja de novo.";
+/** A frase de quando o link pede uma Demanda que o Quadro não mostra (issue #640). */
+const AVISO_LINK = "A Demanda deste link não está no Quadro. Confira o endereço com quem enviou.";
 
-/** As opções que LIMPAM cada filtro: o rótulo é o mesmo do campo em branco. */
-const TODOS_OS_TIPOS = "Todos os tipos";
-const TODOS_OS_PRODUTOS = "Todos os Produtos";
-const TODOS_OS_RESPONSAVEIS = "Todos os responsáveis";
+/**
+ * A frase de quando o link pede uma Demanda que veio na lista mas já encerrou
+ * (issue #1058): o endereço está certo e o código sabe por que ela não tem
+ * raia, então o aviso diz onde ela está em vez de mandar conferir o endereço.
+ */
+function avisoEncerrada(estado: EstadoDemanda): string {
+  const como = estado === "cancelada" ? "cancelada" : "concluída";
+  return `A Demanda deste link foi ${como} e não está mais no Quadro. Ela está na aba Histórico.`;
+}
 
 export function QuadroDemandas({
   token,
   carregandoAuth,
   produtos,
   pessoas,
-  filtros,
-  onFiltrosChange,
   eu,
 }: Props) {
   const [demandas, setDemandas] = useState<Demanda[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
-  const [expandidas, setExpandidas] = useState<EstadoDemanda[]>([]);
-  const [moverAberto, setMoverAberto] = useState<string | null>(null);
   const [abertaId, setAbertaId] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState<string | null>(null);
   /**
@@ -163,20 +126,19 @@ export function QuadroDemandas({
   /**
    * O número do pedido de leitura mais recente.
    *
-   * A rede não devolve na ordem em que foi chamada: trocar o filtro duas vezes
-   * rápido deixa dois GET no ar, e se o primeiro chegar por último ele pinta o
-   * Quadro do filtro que ninguém está mais vendo, com os campos mostrando o
-   * filtro novo. Cada leitura leva o seu número e só escreve na tela se ainda
-   * for a última.
+   * A rede não devolve na ordem em que foi chamada: uma escrita e a
+   * atualização automática deixam dois GET no ar, e se o primeiro chegar por
+   * último ele pinta o Quadro de antes por cima do de agora. Cada leitura leva
+   * o seu número e só escreve na tela se ainda for a última.
    */
   const ultimoPedido = useRef(0);
   /**
    * Se o aviso na tela veio de uma ESCRITA recusada.
    *
    * A leitura que dá certo limpa o aviso, e é o que se quer quando o aviso é
-   * dela. Mas trocar o filtro dispara uma leitura, e ela chegando depois de
-   * uma recusa de escrita apagaria o motivo: o card voltaria sozinho para a
-   * coluna de origem, sem explicação nenhuma de por que não se moveu.
+   * dela. Mas a atualização automática dispara uma leitura, e ela chegando
+   * depois de uma recusa de escrita apagaria o motivo: o card voltaria sozinho
+   * para a raia de origem, sem explicação nenhuma de por que não se moveu.
    */
   const erroDeEscrita = useRef(false);
   /**
@@ -200,28 +162,26 @@ export function QuadroDemandas({
    * leitor de tela ANUNCIA a acusação falsa em toda abertura por link bom. É a
    * mesma família do alarme de sessão que mordeu na fatia #637.
    */
-  const achadaDoLink = idDoLink !== null && demandas.some((d) => d.id === idDoLink);
+  const achadaDoLink =
+    idDoLink !== null && demandas.some((d) => d.id === idDoLink && RAIAS.includes(d.estado));
+  const encerradaDoLink =
+    idDoLink !== null ? demandas.find((d) => d.id === idDoLink && !RAIAS.includes(d.estado)) : undefined;
 
   const autorizacao = useCallback(
     () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
     [token],
   );
 
-  // Quem peneira é a API, com os filtros que ela já aceita: peneirar aqui
-  // esconderia os cards sem tirá-los da resposta, e a mesma tela mostraria
-  // contas diferentes conforme o que já tivesse sido baixado.
-  const busca = queryDeFiltros(filtros);
-
   /**
    * Carrega o Quadro.
    *
    * A falha de rede vira AVISO, e não quadro vazio: sem o `catch`, o backend
-   * fora do ar desenharia cinco colunas zeradas, que é indistinguível de "não
+   * fora do ar desenharia três raias zeradas, que é indistinguível de "não
    * há Demanda nenhuma" e derruba o critério de aceite do Quadro.
    *
    * `silencioso` é a leitura que a tela faz sozinha (issue #642): ela NÃO
-   * acende o "Carregando Demandas...". Sem isso, o Quadro trocaria as cinco
-   * colunas pela linha de espera a cada 30 segundos, e ler o quadro viraria
+   * acende o "Carregando Demandas...". Sem isso, o Quadro trocaria as três
+   * raias pela linha de espera a cada 30 segundos, e ler o quadro viraria
    * uma corrida contra o relógio, pior do que não atualizar.
    *
    * O que ela continua fazendo é APAGAR a espera quando é o pedido mais novo
@@ -236,7 +196,7 @@ export function QuadroDemandas({
     ultimoPedido.current = meuPedido;
     if (!silencioso) setCarregando(true);
     try {
-      const resposta = await fetch(`${BASE_TECNOLOGIA}/demandas${busca}`, { headers: autorizacao() });
+      const resposta = await fetch(`${BASE_TECNOLOGIA}/demandas`, { headers: autorizacao() });
       // Chegou tarde: já há um pedido mais novo no ar, e o que esta resposta
       // conta não é mais o que a tela está pedindo.
       if (meuPedido !== ultimoPedido.current) return;
@@ -258,7 +218,7 @@ export function QuadroDemandas({
       // resposta velha diria "pronto" com a leitura de verdade ainda vindo.
       if (meuPedido === ultimoPedido.current) setCarregando(false);
     }
-  }, [token, autorizacao, busca]);
+  }, [token, autorizacao]);
 
   useEffect(() => {
     // Enquanto a autenticação resolve, o token nulo não quer dizer nada ainda:
@@ -267,7 +227,7 @@ export function QuadroDemandas({
     if (carregandoAuth) return;
     if (!token) {
       // Resolvida a autenticação, token nulo é sessão de verdade ausente. Sem
-      // este aviso o Quadro desenharia cinco colunas zeradas, calado, que é
+      // este aviso o Quadro desenharia três raias zeradas, calado, que é
       // indistinguível de "não há Demanda nenhuma". O aviso do módulo não
       // cobre este caso: ele fala de Produtos e mora abaixo do Quadro.
       setCarregando(false);
@@ -310,9 +270,9 @@ export function QuadroDemandas({
    * - **autenticação e token**: sem sessão resolvida não há o que pedir, e o
    *   `carregar` sairia na primeira linha de qualquer jeito;
    * - **modal fechado**: com o card aberto, uma leitura pode devolver uma
-   *   lista em que a Demanda não está mais (outra pessoa a moveu para uma
-   *   coluna que o filtro esconde), e `aberta` viraria `null`: o modal FECHA,
-   *   levando junto a resposta que estava sendo digitada. O modal já recarrega
+   *   lista em que a Demanda não está mais (outra pessoa a concluiu ou a
+   *   cancelou), e `aberta` viraria `null`: o modal FECHA, levando junto a
+   *   resposta que estava sendo digitada. O modal já recarrega
    *   sozinho o que muda dentro dele, a cada escrita;
    * - **card parado**: recarregar no meio de um arrasto pode tirar do DOM
    *   justamente o card que está na mão.
@@ -411,7 +371,6 @@ export function QuadroDemandas({
   }
 
   async function mover(demanda: Demanda, estado: EstadoDemanda) {
-    setMoverAberto(null);
     await enviar(`${BASE_TECNOLOGIA}/demandas/${demanda.id}/mover`, "POST", { estado });
   }
 
@@ -431,8 +390,16 @@ export function QuadroDemandas({
     mover(demanda, estado);
   }
 
-  const filtrando = temFiltroAtivo(filtros);
-  const aberta = demandas.find((d) => d.id === abertaId) ?? null;
+  // O card aberto só vale enquanto a Demanda está numa raia: concluída ou
+  // cancelada, ela sai do Quadro na hora, e o card aberto fecha junto.
+  const aberta = demandas.find((d) => d.id === abertaId && RAIAS.includes(d.estado)) ?? null;
+
+  // E o id do card que fechou assim sai também: preso, ele manteria a
+  // atualização automática parada como se ainda houvesse card aberto.
+  useEffect(() => {
+    if (abertaId !== null && aberta === null) setAbertaId(null);
+  }, [abertaId, aberta]);
+
   const agora = new Date();
 
   function coluna(estado: EstadoDemanda) {
@@ -443,6 +410,12 @@ export function QuadroDemandas({
     const dias = idadeEmDias(demanda.criado_em, agora);
     const velha = dias >= IDADE_VERMELHA_A_PARTIR_DE;
     const atrasada = estaAtrasado(demanda.prazo, agora);
+    // Chip só na exceção (issue #1058): a prioridade de sempre e a idade de
+    // poucos dias são o normal do Quadro, e repetidas em todo card escondem
+    // o card que de fato pede atenção.
+    const alta = demanda.prioridade === "alta";
+    const mostraIdade = velha || atrasada;
+    const temExcecao = temSelo(demanda) || alta || mostraIdade;
 
     return (
       <li
@@ -469,46 +442,36 @@ export function QuadroDemandas({
           <span className="text-sm font-medium text-text">{demanda.titulo}</span>
         </button>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
+        <p className="flex flex-wrap items-center gap-1 text-xs text-text-secondary">
           <span>{demanda.produto_nome ?? "Sem Produto"}</span>
+          <span aria-hidden="true">·</span>
           <span>{demanda.responsavel_nome ?? "Sem responsável"}</span>
-          <span className={`px-2 py-0.5 rounded font-medium ${CLASSE_PRIORIDADE[demanda.prioridade]}`}>
-            {PRIORIDADE_ROTULO[demanda.prioridade]}
-          </span>
-          <span className={velha ? "font-semibold text-red-600" : ""}>{textoDaIdade(dias)}</span>
-          {/* O selo do desenvolvimento (issue #674): só aparece quando há
-              Vínculo, e some junto com ele. Quem decide é o `temSelo` dentro do
-              componente, para que os três cards não repitam a condição. */}
-          <SeloDeEtapa demanda={demanda} />
-          {atrasada && demanda.prazo && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium bg-red-50 text-red-700">
-              <CalendarClock className="w-3 h-3" />
-              Atrasada desde {prazoLegivel(demanda.prazo)}
-            </span>
-          )}
-        </div>
+        </p>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            aria-label={`Mover ${demanda.titulo}`}
-            onClick={() => setMoverAberto(moverAberto === demanda.id ? null : demanda.id)}
-            className="px-2 py-1 rounded-lg border border-border text-xs text-text-secondary hover:border-primary hover:text-primary transition-colors"
-          >
-            Mover
-          </button>
-          {moverAberto === demanda.id &&
-            destinosDe(demanda.estado).map((destino) => (
-              <button
-                key={destino}
-                type="button"
-                onClick={() => mover(demanda, destino)}
-                className="px-2 py-1 rounded-lg bg-primary/5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-              >
-                {ESTADO_ROTULO[destino]}
-              </button>
-            ))}
-        </div>
+        {temExcecao && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {/* O selo do desenvolvimento (issue #674): só aparece quando há
+                Vínculo, e some junto com ele. Quem decide é o `temSelo` dentro
+                do componente, para que os três cards não repitam a condição. */}
+            <SeloDeEtapa demanda={demanda} />
+            {alta && (
+              <span className="px-2 py-0.5 rounded font-medium bg-amber-50 text-amber-700">
+                {PRIORIDADE_ROTULO.alta}
+              </span>
+            )}
+            {mostraIdade && (
+              <span className={velha ? "font-semibold text-red-600" : "text-text-secondary"}>
+                {textoDaIdade(dias)}
+              </span>
+            )}
+            {atrasada && demanda.prazo && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium bg-red-50 text-red-700">
+                <CalendarClock className="w-3 h-3" />
+                Atrasada desde {prazoLegivel(demanda.prazo)}
+              </span>
+            )}
+          </div>
+        )}
       </li>
     );
   }
@@ -534,14 +497,14 @@ export function QuadroDemandas({
           erro de carregamento, não lista sem o card). E ela olha `achadaDoLink`,
           que é derivado da lista de agora: preso ao efeito que abre o card, o
           aviso apareceria no commit em que a Demanda chega, antes de o card
-          abrir. A frase muda com o filtro: ver `AVISO_LINK_COM_FILTRO`. */}
+          abrir. */}
       {!carregando && !erro && idDoLink && !achadaDoLink && (
         <p
           role="status"
           className="flex items-start gap-2 px-4 py-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 text-sm"
         >
           <AlertCircle className="w-4 h-4 shrink-0 mt-0.5" />
-          <span>{filtrando ? AVISO_LINK_COM_FILTRO : AVISO_LINK_SEM_FILTRO}</span>
+          <span>{encerradaDoLink ? avisoEncerrada(encerradaDoLink.estado) : AVISO_LINK}</span>
         </p>
       )}
 
@@ -561,71 +524,14 @@ export function QuadroDemandas({
         </Link>
       </div>
 
-      <div className="rounded-xl border border-border bg-surface p-3 space-y-3">
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
-          <Select
-            label="Filtrar por tipo"
-            value={filtros.tipo}
-            onChange={(tipo) => onFiltrosChange({ ...filtros, tipo })}
-            options={[
-              { value: "", label: TODOS_OS_TIPOS },
-              ...TIPOS.map((t) => ({ value: t, label: TIPO_ROTULO[t] })),
-            ]}
-            placeholder={TODOS_OS_TIPOS}
-          />
-          <Select
-            label="Filtrar por Produto"
-            value={filtros.produto_id}
-            onChange={(produto_id) => onFiltrosChange({ ...filtros, produto_id })}
-            // Todos os Produtos, e não só os ativos: desativar tira o Produto
-            // da escolha de quem abre Demanda nova, não do histórico (ADR 0050,
-            // decisão 11). As Demandas dele continuam no Quadro, e sem esta
-            // opção elas ficariam fora do alcance de qualquer filtro.
-            options={[
-              { value: "", label: TODOS_OS_PRODUTOS },
-              ...produtos.map((p) => ({ value: p.id, label: p.ativo ? p.nome : `${p.nome} (inativo)` })),
-            ]}
-            placeholder={TODOS_OS_PRODUTOS}
-          />
-          <Select
-            label="Filtrar por responsável"
-            value={filtros.responsavel_id}
-            onChange={(responsavel_id) => onFiltrosChange({ ...filtros, responsavel_id })}
-            options={[
-              { value: "", label: TODOS_OS_RESPONSAVEIS },
-              ...pessoas.map((p) => ({ value: p.id, label: p.nome_completo })),
-            ]}
-            placeholder={TODOS_OS_RESPONSAVEIS}
-          />
-        </div>
-
-        {/* O Quadro filtrado e calado é indistinguível do Quadro vazio: quem
-            volta à aba com o filtro de antes concluiria que as Demandas
-            sumiram. O aviso diz o que está acontecendo e onde desfazer. */}
-        {filtrando && (
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <p className="text-sm text-amber-700">
-              O Quadro está filtrado: as Demandas fora do filtro não aparecem em nenhuma coluna.
-            </p>
-            <button
-              type="button"
-              onClick={() => onFiltrosChange(SEM_FILTRO)}
-              className="px-3 py-1.5 rounded-lg border border-border text-xs font-medium text-text-secondary hover:border-primary hover:text-primary transition-colors"
-            >
-              Limpar filtros
-            </button>
-          </div>
-        )}
-      </div>
-
       {carregando ? (
         <p className="text-sm text-text-secondary">Carregando Demandas...</p>
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-2">
-          {ESTADOS.map((estado) => {
+        // Uma coluna no celular, três da tela média em diante, sempre em largura
+        // cheia: com três raias não há mais o que rolar para o lado.
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {RAIAS.map((estado) => {
             const cards = coluna(estado);
-            const recolhivel = COLUNAS_RECOLHIDAS.includes(estado);
-            const expandida = !recolhivel || expandidas.includes(estado);
 
             return (
               <section
@@ -639,44 +545,24 @@ export function QuadroDemandas({
                   e.preventDefault();
                   soltarEm(estado);
                 }}
-                className={`shrink-0 rounded-xl border bg-surface p-3 ${
-                  expandida ? "w-[260px]" : "w-[180px]"
-                } ${arrastando ? "border-dashed border-primary/50" : "border-border"}`}
+                className={`min-w-0 rounded-xl border bg-surface p-3 ${
+                  arrastando ? "border-dashed border-primary/50" : "border-border"
+                }`}
               >
-                {recolhivel ? (
-                  <button
-                    type="button"
-                    aria-expanded={expandida}
-                    onClick={() =>
-                      setExpandidas(
-                        expandida ? expandidas.filter((e) => e !== estado) : [...expandidas, estado],
-                      )
-                    }
-                    className="w-full flex items-center justify-between gap-2 text-sm font-semibold text-text hover:text-primary transition-colors"
-                  >
-                    <span>{ESTADO_ROTULO[estado]}</span>
-                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-xs text-slate-600">
-                      {cards.length}
-                    </span>
-                  </button>
-                ) : (
-                  <h3 className="flex items-center justify-between gap-2 text-sm font-semibold text-text">
-                    <span>{ESTADO_ROTULO[estado]}</span>
-                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-xs text-slate-600">
-                      {cards.length}
-                    </span>
-                  </h3>
-                )}
+                <h3 className="flex items-center justify-between gap-2 text-sm font-semibold text-text">
+                  <span>{ESTADO_ROTULO[estado]}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-xs text-slate-600">
+                    {cards.length}
+                  </span>
+                </h3>
 
-                {expandida && (
-                  <ul className="mt-3 space-y-2">
-                    {cards.length === 0 ? (
-                      <li className="text-xs text-text-secondary">Nenhuma Demanda aqui.</li>
-                    ) : (
-                      cards.map(cartao)
-                    )}
-                  </ul>
-                )}
+                <ul className="mt-3 space-y-2">
+                  {cards.length === 0 ? (
+                    <li className="text-xs text-text-secondary">Nenhuma Demanda aqui.</li>
+                  ) : (
+                    cards.map(cartao)
+                  )}
+                </ul>
               </section>
             );
           })}

@@ -12,20 +12,21 @@
  * - o termo digitado vira `busca` na URL, depois que a digitação para;
  * - termo só de espaços não vira busca nenhuma;
  * - a linha diz quando e por quem a Demanda fechou;
- * - as quatro listas vazias dizem coisas diferentes (nada ainda, filtro, busca,
- *   e busca com filtro);
- * - duas leituras no ar não pintam a lista errada.
+ * - as duas listas vazias dizem coisas diferentes (nada ainda, e busca sem
+ *   resultado);
+ * - duas leituras no ar não pintam a lista errada. As corridas são do
+ *   `useListaDeDemandas`, e moram aqui porque a busca é o que troca a leitura
+ *   desde que os filtros saíram do módulo (issue #1058).
  *
  * Toda asserção de ausência espera a tela terminar de carregar e tem irmã de
  * presença no mesmo render.
  */
 
-import { useState } from "react";
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { HistoricoDemandas } from "./HistoricoDemandas";
-import { DemandaDoHistorico, EU_DESCONHECIDO, FiltrosDoQuadro, SEM_FILTRO } from "./demandas";
+import { DemandaDoHistorico, EU_DESCONHECIDO } from "./demandas";
 
 const PRODUTOS = [
   { id: "prod-1", nome: "Ana", ativo: true },
@@ -77,7 +78,6 @@ function montar(
     redeForaNaBusca?: boolean;
     token?: string | null;
     carregandoAuth?: boolean;
-    filtrosIniciais?: FiltrosDoQuadro;
   } = {},
 ) {
   urls = [];
@@ -101,39 +101,23 @@ function montar(
       if (opcoes.recusa) {
         return { ok: false, status: opcoes.recusa, json: async () => ({ detail: "não deu" }) } as unknown as Response;
       }
-      // Quem busca e quem filtra é o SERVIDOR: uma tela que peneirasse por
-      // conta própria receberia tudo aqui e mostraria tudo.
-      const parametros = new URLSearchParams(url.split("?")[1] ?? "");
-      const termo = (parametros.get("busca") ?? "").toLowerCase();
-      const casa = (chave: string, valor: string | null) =>
-        !parametros.get(chave) || parametros.get(chave) === valor;
-      const corpo = demandas.filter(
-        (d) =>
-          casa("tipo", d.tipo) &&
-          casa("produto_id", d.produto_id) &&
-          casa("responsavel_id", d.responsavel_id) &&
-          (!termo || d.titulo.toLowerCase().includes(termo)),
-      );
+      // Quem busca é o SERVIDOR: uma tela que peneirasse por conta própria
+      // receberia tudo aqui e mostraria tudo.
+      const termo = (new URLSearchParams(url.split("?")[1] ?? "").get("busca") ?? "").toLowerCase();
+      const corpo = demandas.filter((d) => !termo || d.titulo.toLowerCase().includes(termo));
       return { ok: true, status: 200, json: async () => corpo } as unknown as Response;
     }),
   );
 
-  function Anfitriao() {
-    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(opcoes.filtrosIniciais ?? SEM_FILTRO);
-    return (
-      <HistoricoDemandas
-        token={opcoes.token === undefined ? "token-de-teste" : opcoes.token}
-        carregandoAuth={opcoes.carregandoAuth ?? false}
-        produtos={PRODUTOS}
-        pessoas={PESSOAS}
-        filtros={filtros}
-        onFiltrosChange={setFiltros}
-        eu={EU_DESCONHECIDO}
-      />
-    );
-  }
-
-  render(<Anfitriao />);
+  render(
+    <HistoricoDemandas
+      token={opcoes.token === undefined ? "token-de-teste" : opcoes.token}
+      carregandoAuth={opcoes.carregandoAuth ?? false}
+      produtos={PRODUTOS}
+      pessoas={PESSOAS}
+      eu={EU_DESCONHECIDO}
+    />,
+  );
 }
 
 async function esperarCarregar() {
@@ -278,7 +262,7 @@ describe("A busca", () => {
 });
 
 describe("A lista vazia", () => {
-  it("sem busca e sem filtro, diz que ainda não fechou nada", async () => {
+  it("sem busca, diz que ainda não fechou nada", async () => {
     montar([]);
     await esperarCarregar();
 
@@ -293,9 +277,6 @@ describe("A lista vazia", () => {
     digitarNaBusca("ouvidoria");
 
     expect(await screen.findByText(/"ouvidoria"/)).toBeTruthy();
-    // Sem filtro ligado, a frase não manda limpar filtro nenhum: pedir uma ação
-    // impossível deixa quem leu sem saída.
-    expect(screen.queryByText(/limpe os filtros/)).toBeNull();
   });
 
   it("a frase cita o termo da lista que está na tela, e não o que está sendo digitado", async () => {
@@ -314,40 +295,6 @@ describe("A lista vazia", () => {
     expect(screen.queryByText(/"xyz"/)).toBeNull();
     // A irmã de presença: passada a espera, a frase acompanha o termo novo.
     expect(await screen.findByText(/"xyz"/)).toBeTruthy();
-  });
-
-  it("com filtro e sem busca, aponta o filtro e onde limpar", async () => {
-    montar([], { filtrosIniciais: { tipo: "defeito", produto_id: "", responsavel_id: "" } });
-    await esperarCarregar();
-
-    expect(screen.getByText(/Limpe os filtros acima/)).toBeTruthy();
-    expect(screen.getByRole("button", { name: "Limpar filtros" })).toBeTruthy();
-  });
-});
-
-describe("Os filtros herdados das outras abas", () => {
-  it("o filtro que veio por prop entra na chamada", async () => {
-    montar([demanda("d1", "Encerrar conversas")], {
-      filtrosIniciais: { tipo: "decisao", produto_id: "prod-1", responsavel_id: "P1" },
-    });
-
-    await screen.findByText("Encerrar conversas");
-
-    expect(urls[0]).toContain("tipo=decisao");
-    expect(urls[0]).toContain("produto_id=prod-1");
-    expect(urls[0]).toContain("responsavel_id=P1");
-  });
-
-  it("o filtro e a busca viajam juntos", async () => {
-    montar([demanda("d1", "Encerrar conversas")], {
-      filtrosIniciais: { tipo: "decisao", produto_id: "", responsavel_id: "" },
-    });
-    await screen.findByText("Encerrar conversas");
-
-    digitarNaBusca("encerrar");
-
-    await waitFor(() => expect(urls[urls.length - 1]).toContain("busca=encerrar"));
-    expect(urls[urls.length - 1]).toContain("tipo=decisao");
   });
 });
 
@@ -440,7 +387,11 @@ describe("Quando não dá para ler", () => {
 });
 
 describe("Duas leituras no ar ao mesmo tempo", () => {
-  type Pendente = { url: string; responder: (dados: DemandaDoHistorico[]) => void };
+  type Pendente = {
+    url: string;
+    responder: (dados: DemandaDoHistorico[]) => void;
+    recusar: (status: number) => void;
+  };
 
   function filaDeChamadas(): Pendente[] {
     const pendentes: Pendente[] = [];
@@ -453,6 +404,47 @@ describe("Duas leituras no ar ao mesmo tempo", () => {
               url,
               responder: (dados) =>
                 resolve({ ok: true, status: 200, json: async () => dados } as unknown as Response),
+              recusar: (status) =>
+                resolve({ ok: false, status, json: async () => ({ detail: "não deu" }) } as unknown as Response),
+            });
+          }),
+      ),
+    );
+    return pendentes;
+  }
+
+  /** Uma chamada cujos CABEÇALHOS e cujo CORPO chegam em dois tempos. */
+  type PendenteComCorpo = {
+    url: string;
+    /** Resolve o `Response`: daqui em diante o `json()` fica pendurado. */
+    responder: () => void;
+    /** Resolve o `json()`. */
+    entregarCorpo: (dados: DemandaDoHistorico[]) => void;
+  };
+
+  /**
+   * O `fetch` cujo corpo só resolve quando o teste manda.
+   *
+   * A fila de cima entrega resposta e corpo de uma vez, e por isso não sabe
+   * dizer nada sobre o que acontece ENTRE os dois. É nessa fresta que mora a
+   * corrida que a segunda conferência do selo fecha.
+   */
+  function filaDeCorposLentos(): PendenteComCorpo[] {
+    const pendentes: PendenteComCorpo[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(
+        (url: string) =>
+          new Promise((resolverResposta) => {
+            let entregar: (dados: DemandaDoHistorico[]) => void = () => {};
+            const corpo = new Promise<DemandaDoHistorico[]>((r) => {
+              entregar = r;
+            });
+            pendentes.push({
+              url,
+              responder: () =>
+                resolverResposta({ ok: true, status: 200, json: () => corpo } as unknown as Response),
+              entregarCorpo: (dados) => entregar(dados),
             });
           }),
       ),
@@ -461,15 +453,12 @@ describe("Duas leituras no ar ao mesmo tempo", () => {
   }
 
   function Anfitriao() {
-    const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
     return (
       <HistoricoDemandas
         token="token-de-teste"
         carregandoAuth={false}
         produtos={PRODUTOS}
         pessoas={PESSOAS}
-        filtros={filtros}
-        onFiltrosChange={setFiltros}
         eu={EU_DESCONHECIDO}
       />
     );
@@ -531,5 +520,74 @@ describe("Duas leituras no ar ao mesmo tempo", () => {
     pendentes[2].responder([LOGOTIPO]);
     expect(await screen.findByText("Trocar o logotipo")).toBeTruthy();
     expect(screen.queryByText("Carregando o Histórico...")).toBeNull();
+  });
+
+  it("a falha da busca antiga não apaga a lista certa da busca nova", async () => {
+    // Desde que a leitura que falha passou a LIMPAR a lista, uma recusa velha
+    // que escapasse do selo faria pior do que escrever um aviso: apagaria o
+    // resultado da busca que a pessoa está vendo. É a guarda conferida logo na
+    // chegada da resposta, antes do corpo, que segura este caso.
+    const pendentes = await comDuasBuscasNoAr();
+
+    pendentes[2].responder([LOGOTIPO]);
+    await screen.findByText("Trocar o logotipo");
+    pendentes[1].recusar(500);
+    await deixarOReactProcessar();
+
+    expect(screen.queryByRole("alert")).toBeNull();
+    expect(screen.getByText("Trocar o logotipo")).toBeTruthy();
+  });
+
+  it("a falha da busca mais NOVA, essa sim, vira aviso e leva a lista", async () => {
+    // O par de presença do teste acima: sem ele, uma tela que engolisse TODA
+    // falha de leitura passaria naquele.
+    const pendentes = await comDuasBuscasNoAr();
+
+    pendentes[1].responder([ENCERRAR]);
+    pendentes[2].recusar(500);
+
+    expect((await screen.findByRole("alert")).textContent).toContain("Não foi possível carregar o Histórico.");
+    expect(screen.queryByText("Encerrar conversas")).toBeNull();
+  });
+
+  it("o CORPO atrasado da leitura antiga não repinta a lista", async () => {
+    // A resposta e o corpo dela chegam em dois tempos, e é entre os dois que
+    // mora esta corrida. A ORDEM dos eventos aqui é o teste inteiro:
+    //
+    // 1. os cabeçalhos do primeiro pedido chegam enquanto ele AINDA É O
+    //    ÚLTIMO. Ele passa pela primeira conferência do selo, a da chegada, e
+    //    fica pendurado no `json()`;
+    // 2. só ENTÃO nasce o segundo pedido, que chega inteiro e pinta a tela;
+    // 3. e só depois o corpo do primeiro resolve.
+    //
+    // Se o segundo pedido nascesse antes do passo 1, o primeiro pararia logo
+    // na conferência da chegada, o `json()` dele nunca seria chamado e a
+    // segunda conferência não rodaria: o teste provaria a PRIMEIRA guarda duas
+    // vezes e a segunda nenhuma.
+    //
+    // Não é hipótese remota nesta aba: o Histórico não pagina e a busca varre a
+    // Conversa, então os corpos têm tamanhos bem diferentes e o corpo grande de
+    // um pedido velho chega depois da resposta inteira de um pedido novo.
+    const pendentes = filaDeCorposLentos();
+    render(<Anfitriao />);
+
+    await waitFor(() => expect(pendentes).toHaveLength(1));
+    pendentes[0].responder();
+    await deixarOReactProcessar();
+
+    digitarNaBusca("logotipo");
+    await waitFor(() => expect(pendentes).toHaveLength(2));
+    pendentes[1].responder();
+    pendentes[1].entregarCorpo([LOGOTIPO]);
+    expect(await screen.findByText("Trocar o logotipo")).toBeTruthy();
+
+    pendentes[0].entregarCorpo([ENCERRAR, LOGOTIPO]);
+    await deixarOReactProcessar();
+
+    // A irmã de presença no mesmo render: a lista certa continua desenhada, e
+    // é por isso que a ausência abaixo quer dizer "o corpo velho não entrou", e
+    // não "a tela está vazia".
+    expect(screen.getByText("Trocar o logotipo")).toBeTruthy();
+    expect(screen.queryByText("Encerrar conversas")).toBeNull();
   });
 });
