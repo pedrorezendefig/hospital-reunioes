@@ -830,6 +830,10 @@ body.er-lock main{z-index:130}
 .dd-txt{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
 .dd-num{color:var(--ink-soft)}
 .dd-n{color:var(--ink-soft); font-size:11px}
+.dd-opt[data-zero]{opacity:.45}
+.dd-opt[data-zero]:hover,.dd-opt[data-zero].on{opacity:1}
+.fchip.limpar{color:var(--ink-soft); border-style:dashed}
+.fchip.limpar:hover{color:var(--red); border-color:var(--red)}
 
 /* linhas de chips da aba PRs (prs.js) */
 .filtros{display:flex; flex-direction:column; gap:8px; margin:0 0 20px}
@@ -873,20 +877,24 @@ body.er-lock main{z-index:130}
 
 /* ============ desenho das ondas no card do PRD (issue 943) ============ */
 /* Só tokens do :root. A cor da pessoa chega como --pessoa no style do nó
-   (corDaPessoa) e pinta o corpo; a da fase chega como --fase pela classe
-   onda-f-<fase> e pinta o anel. Animação e transição só existem sob
-   .onda-anima, que o ondas.js não põe quando reduceMotion() é verdadeiro. */
+   (corDaPessoa) e pinta a bolinha; a da fase chega como --fase pela classe
+   onda-f-<fase> e pinta a borda (o anel). O PR leva a cor da fase dele pela
+   classe onda-p-<fase>. Animação e transição só existem sob .onda-anima,
+   que o ondas.js não põe quando reduceMotion() é verdadeiro. */
 .ondas{margin:12px 0 2px}
 .ondas-canvas{overflow-x:auto; margin-top:8px}
 .onda-svg{display:block; max-width:100%; height:auto}
-.onda-col{font:500 10.5px var(--mono); letter-spacing:.08em; fill:var(--ink-soft); text-anchor:middle}
-.onda-seta path{fill:none; stroke:var(--ink-soft); stroke-width:1.4; opacity:.7}
-.onda-seta .onda-ponta{fill:var(--ink-soft); stroke:none}
+.onda-col{font:500 10.5px var(--mono); letter-spacing:.08em; fill:var(--ink-soft); text-transform:uppercase}
+.onda-faixa{stroke:var(--hairline); stroke-width:1}
+.onda-seta path{fill:none; stroke:var(--red); stroke-width:1.5; opacity:.8}
+.onda-seta .onda-ponta{fill:var(--red); stroke:none}
+.onda-fluxo path{fill:none; stroke:var(--ghost); stroke-width:1.6}
+.onda-fluxo .onda-ponta{fill:var(--ghost); stroke:none}
 .onda-no{cursor:pointer}
 .onda-anel{fill:var(--card); stroke:var(--fase); stroke-width:2.5}
-.onda-corpo{fill:var(--pessoa)}
-.onda-num{font:500 12px var(--mono); fill:var(--card)}
-.onda-tit{font:400 10.5px var(--mono); fill:var(--card)}
+.onda-dot{fill:var(--pessoa)}
+.onda-num{font:500 12px var(--mono); fill:var(--ink)}
+.onda-tit{font:400 10.5px var(--mono); fill:var(--ink-soft)}
 .onda-f-triagem{--fase:var(--ink-soft)}
 .onda-f-fila{--fase:var(--brand)}
 .onda-f-bloqueada{--fase:var(--red)}
@@ -896,15 +904,28 @@ body.er-lock main{z-index:130}
 .onda-f-em_producao{--fase:var(--green)}
 .onda-f-humana{--fase:var(--coral)}
 .onda-f-encerrada_sem_pr{--fase:var(--ghost)}
+/* PR e versão: links de hash; a borda do PR é a fase dele no quadro da aba PRs */
+.onda-pr,.onda-ver{cursor:pointer; text-decoration:none}
+.onda-pr-corpo{fill:var(--card); stroke:var(--fase-pr, var(--ghost)); stroke-width:2; stroke-dasharray:none}
+.onda-p-aberto_sem_ci{--fase-pr:var(--ghost)}
+.onda-p-ci_vermelho{--fase-pr:var(--red)}
+.onda-p-esperando_revisor{--fase-pr:var(--blue)}
+.onda-p-verde_esperando_merge{--fase-pr:var(--brand)}
+.onda-p-mergeado_sem_deploy{--fase-pr:var(--purple)}
+.onda-p-em_producao{--fase-pr:var(--green)}
+.onda-p-fechado_sem_merge{--fase-pr:var(--ink-soft)}
+.onda-p-fechado_sem_merge .onda-pr-corpo{stroke-dasharray:4 3}
+.onda-ver-corpo{fill:var(--green-wash); stroke:var(--green); stroke-width:1.5}
+.onda-ver .onda-num{fill:var(--green)}
 .ondas-legenda{display:flex; gap:6px; flex-wrap:wrap; margin-top:8px}
 .onda-leg{display:inline-flex; align-items:center; font-family:var(--mono); font-size:11.5px; color:var(--ink);
   border:2px solid var(--fase); border-radius:var(--r-pill); padding:1px 10px}
-.onda-anima .onda-no{animation:erIn .45s var(--ease-expo) backwards; animation-delay:calc(var(--i,0)*40ms)}
-.onda-anima .onda-seta{animation:ondaSeta .5s ease .25s backwards}
+.onda-anima .onda-no,.onda-anima .onda-pr,.onda-anima .onda-ver{animation:erIn .45s var(--ease-expo) backwards; animation-delay:calc(var(--i,0)*40ms)}
+.onda-anima .onda-seta,.onda-anima .onda-fluxo{animation:ondaSeta .5s ease .25s backwards}
 @keyframes ondaSeta{from{opacity:0}}
 @media (min-width:769px){
-  .onda-no:hover .onda-anel{stroke-width:4}
-  .onda-anima .onda-anel{transition:stroke-width .15s ease}
+  .onda-no:hover .onda-anel,.onda-pr:hover .onda-pr-corpo,.onda-ver:hover .onda-ver-corpo{stroke-width:4}
+  .onda-anima .onda-anel,.onda-anima .onda-pr-corpo,.onda-anima .onda-ver-corpo{transition:stroke-width .15s ease}
 }
 /* ============ fim desenho das ondas (issue 943) ============ */
 
@@ -914,7 +935,7 @@ body.er-lock main{z-index:130}
    quadro rola na horizontal em vez de espremer os cards. */
 .pr-quadro-rolagem{overflow-x:auto; margin:0 0 22px; padding-bottom:4px}
 .pr-quadro{display:flex; flex-direction:column; gap:8px; min-width:1120px}
-.pr-linha{display:grid; grid-template-columns:148px repeat(6,minmax(0,1fr)); gap:8px}
+.pr-linha{display:grid; grid-template-columns:148px repeat(5,minmax(0,1fr)) 230px; gap:8px}
 .pr-col-cab{display:flex; align-items:baseline; justify-content:space-between; gap:6px; padding:8px 10px;
   font-family:var(--mono); font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft);
   background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-inner)}
@@ -938,6 +959,13 @@ body.er-lock main{z-index:130}
 .pr-chips a.chip:hover{border-color:var(--brand); color:var(--brand)}
 .pr-meta{display:flex; flex-direction:column; gap:1px; font-family:var(--mono); font-size:10.5px; color:var(--ink-soft)}
 .pr-branch{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+/* Em produção compacta: uma linha por PR, só número, issue e versão */
+.pr-mini{flex-direction:row; align-items:center; flex-wrap:wrap; gap:4px 6px; padding:5px 8px}
+.pr-mini .pr-num{font-size:11px}
+.pr-mini .chip{font-size:10.5px; padding:1px 7px; text-decoration:none}
+.pr-mini a.chip:hover{border-color:var(--brand); color:var(--brand)}
+.pr-mini .pr-gh{margin-left:auto}
+.pr-celula[data-col="em_producao"]{gap:3px}
 /* gargalo: a coluna mais cheia (cabeçalho e células) e o card parado além do limite */
 .pr-col-cab.pr-col-cheia{background:var(--amber-wash); border-color:var(--amber); color:var(--amber)}
 .pr-col-cab.pr-col-cheia .pr-col-n{color:var(--amber)}

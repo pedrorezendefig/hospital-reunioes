@@ -9,7 +9,7 @@ import { renderDiagrama, wireDiagramas } from './diagramas.js';
 import { renderArea, wireArea } from './areas.js';
 import { corDaPessoa } from './pessoas.js';
 import { renderOndas } from './ondas.js';
-import { filtrosPrsDaRota, filtrosPrsNaRota, filtrosPrsVazios, renderQuadroPrs } from './prs.js';
+import { alternarPessoa, filtrosPrsDaRota, filtrosPrsNaRota, filtrosPrsVazios, renderQuadroPrs } from './prs.js';
 
 /* a aba abre no que está pendente: só as abertas */
 const filtrosVazios = () => ({ state: 'OPEN', fase: '', resp: '', prd: null, label: '', q: '' });
@@ -316,14 +316,15 @@ const FASES_PENDENTES = FASES.filter(([k]) => k !== 'encerrada_sem_pr');
 const PREFIXOS_LABEL = ['type', 'area', 'fatia'];
 const LABEL_HUMANA = 'ready-for-human';
 
-/* Pessoa = quem assumiu (assignee) ou quem criou: tudo que ela tem que olhar.
-   O card marca "criou" quando a pessoa entrou pelo autor. SEM_RESP é o
-   "ninguém assumiu": issues sem assignee. Mesmo valor e mesma regra do
-   SEM_RESPONSAVEL do fases.py, chave das contagens do funil. */
+/* Pessoa = quem assumiu (assignee); sem ninguém, quem criou (ADR 0062,
+   emenda de 06/10/2026). O card marca "criou" quando a pessoa entrou pelo
+   autor. SEM_RESP é o "ninguém assumiu": issues sem assignee. Mesmo valor e
+   mesma regra do SEM_RESPONSAVEL e do responsaveis() do fases.py. */
 const SEM_RESP = '(sem)';
 
 function responsaveis(i) {
-  return [...new Set([...i.assignees, ...(i.author ? [i.author] : [])])];
+  if (i.assignees.length) return i.assignees;
+  return i.author ? [i.author] : [];
 }
 
 function doResponsavel(i, resp) {
@@ -334,8 +335,11 @@ function faseDe(i) {
   return ((S.data.fases || {}).issues || {})[i.number] || null;
 }
 
-function matchIssue(i) {
-  const f = S.fIssues;
+/* matchIssue é passado a .filter, então o segundo parâmetro não pode ser
+   o filtro (seria o índice): a variante com filtro explícito é à parte */
+const matchIssue = i => matchIssueCom(i, S.fIssues);
+
+function matchIssueCom(i, f) {
   if (f.state !== 'all' && i.state !== f.state) return false;
   if (f.fase && (faseDe(i) || {}).fase !== f.fase) return false;
   if (f.resp && !doResponsavel(i, f.resp)) return false;
@@ -363,7 +367,7 @@ function nomeDoResponsavel(resp) {
 function donoDoPendente(resp) {
   if (!resp) return ['no time', 'todas as issues abertas'];
   if (resp === SEM_RESP) return ['sem ninguém', 'abertas que ninguém assumiu'];
-  return [`para ${esc(resp)}`, 'abertas que assumiu ou criou'];
+  return [`para ${esc(resp)}`, 'abertas que assumiu, ou criou e ninguém assumiu'];
 }
 
 /* card grande = tudo que está pendente; os pequenos destrincham por fase e somam o grande */
@@ -409,13 +413,30 @@ function opcao(act, v, on, txt, extra = '') {
   return `<button type="button" class="dd-opt ${on ? 'on' : ''}" data-act="${act}" data-v="${esc(v)}" role="option" aria-selected="${on}"${extra}>${txt}</button>`;
 }
 
-function opcaoPessoa(login, pendentes) {
-  const on = S.fIssues.resp === login;
-  const n = pendentes[login] || 0;
-  return opcao('fresp', login, on,
-    `<span class="pessoa-dot"></span><span class="dd-txt">${nomeDoResponsavel(login)}</span><span class="dd-n">${n}</span>`,
+/* faceta: quantas issues a opção mostraria com os OUTROS filtros como estão;
+   zero fica esmaecido, mas continua clicável (a escolhida nunca some) */
+function faceta(iss, chave, v) {
+  return iss.filter(i => matchIssueCom(i, { ...S.fIssues, [chave]: v })).length;
+}
+
+function opcaoContada(act, chave, v, on, txt, extra = '') {
+  const n = faceta(S.data.github.issues || [], chave, v);
+  return opcao(act, v, on, `${txt}<span class="dd-n">${n}</span>`, `${extra}${n ? '' : ' data-zero="1"'}`);
+}
+
+function opcaoPessoa(login) {
+  return opcaoContada('fresp', 'resp', login, S.fIssues.resp === login,
+    `<span class="pessoa-dot"></span><span class="dd-txt">${nomeDoResponsavel(login)}</span>`,
     ` style="--pessoa:${corDaPessoa(login === SEM_RESP ? null : login)}"`);
 }
+
+/* algum filtro fora do padrão da aba (o botão limpar só existe nesse caso) */
+function filtroAtivo(f = S.fIssues) {
+  const z = filtrosVazios();
+  return Object.keys(z).some(k => (f[k] || '') !== (z[k] || ''));
+}
+
+const botaoLimpar = act => `<button type="button" class="fchip limpar" data-act="${act}">limpar</button>`;
 
 /* labels das issues agrupadas por prefixo (type:, area:, fatia:) e o resto;
    ready-for-human é a fase Humana, card próprio no funil */
@@ -429,31 +450,31 @@ function gruposDeLabels(iss) {
 
 function filtrosHtml(iss) {
   const f = S.fIssues;
-  const funil = (S.data.fases || {}).funil;
-  const pendentes = Object.fromEntries(Object.entries((funil || {}).por_responsavel || {})
-    .map(([p, n]) => [p, somaDasFases(n)]));
   const pessoas = [...new Set(iss.flatMap(responsaveis))].sort();
   const estados = [['OPEN', 'abertas'], ['CLOSED', 'fechadas'], ['all', 'todas']];
   const prds = iss.filter(i => i.is_prd && i.state === 'OPEN').sort((a, b) => b.number - a.number);
-  const todos = (act, on) => opcao(act, '', on, '<span class="dd-txt">todos</span>');
+  const txt = t => `<span class="dd-txt">${t}</span>`;
+  const todos = (act, chave, on) => opcaoContada(act, chave, '', on, txt('todos'));
   const menus = [
     dropdown('resp', 'responsável', f.resp ? nomeDoResponsavel(f.resp) : '',
-      [todos('fresp', !f.resp), ...pessoas.map(p => opcaoPessoa(p, pendentes)), opcaoPessoa(SEM_RESP, pendentes)]),
+      [todos('fresp', 'resp', !f.resp), ...pessoas.map(opcaoPessoa), opcaoPessoa(SEM_RESP)]),
     dropdown('state', 'estado', (estados.find(([v]) => v === f.state) || [, ''])[1],
-      estados.map(([v, t]) => opcao('fstate', v, f.state === v, `<span class="dd-txt">${t}</span>`))),
+      estados.map(([v, t]) => opcaoContada('fstate', 'state', v, f.state === v, txt(t)))),
     prds.length ? dropdown('prd', 'PRD', f.prd ? `#${f.prd}` : '',
-      [todos('fprd', !f.prd), ...prds.map(p => opcao('fprd', p.number, f.prd === p.number,
-        `<span class="dd-num">#${p.number}</span><span class="dd-txt">${esc(p.title)}</span>`))]) : '',
+      [todos('fprd', 'prd', !f.prd), ...prds.map(p => opcaoContada('fprd', 'prd', p.number, f.prd === p.number,
+        `<span class="dd-num">#${p.number}</span>${txt(esc(p.title))}`))]) : '',
     ...gruposDeLabels(iss).map(([pref, ls]) => {
       const curta = l => esc(pref === 'outras' ? l : l.slice(pref.length + 1));
       return dropdown(pref, pref, ls.includes(f.label) ? curta(f.label) : '',
-        [todos('flabel', !ls.includes(f.label)), ...ls.map(l => opcao('flabel', l, f.label === l, `<span class="dd-txt">${curta(l)}</span>`))]);
+        [todos('flabel', 'label', !ls.includes(f.label)),
+          ...ls.map(l => opcaoContada('flabel', 'label', l, f.label === l, txt(curta(l))))]);
     }),
   ];
   return `
   <div class="filtros rv">
     ${menus.join('')}
     <input class="search" id="fq" type="search" placeholder="buscar por título ou #número…" value="${esc(f.q)}">
+    ${filtroAtivo(f) ? botaoLimpar('flimpar') : ''}
   </div>`;
 }
 
@@ -487,7 +508,7 @@ function pessoaHtml(login) {
 
 function pessoasDoCard(i) {
   const quem = i.assignees.length ? i.assignees.map(pessoaHtml).join('') : pessoaHtml(null);
-  // quem criou e não assumiu também tem a issue na fila dele: a marca diz por quê
+  // quem criou aparece como informação; só conta como responsável quando ninguém assumiu
   const criou = i.author && !i.assignees.includes(i.author);
   return quem + (criou ? `<span class="chip autor">✎ criou: ${esc(i.author)}</span>` : '');
 }
@@ -598,8 +619,7 @@ function issueListHtml() {
   const used = new Set();
   let idx = 0;
   const groups = [];
-  const f = S.fIssues;
-  const filtroAtivo = !!(f.q || f.fase || f.resp || f.prd || f.label || f.state !== 'OPEN');
+  const comFiltro = filtroAtivo();
 
   for (const prd of prds) {
     used.add(prd.number);
@@ -611,7 +631,7 @@ function issueListHtml() {
     // escolha explícita do usuário (expPrd: numero -> bool) sempre vence (#268)
     const aberto = S.expPrd.has(prd.number)
       ? S.expPrd.get(prd.number)
-      : (filtroAtivo && kidsShown.length > 0);
+      : (comFiltro && kidsShown.length > 0);
     const fechadas = kids.filter(k => k.state === 'CLOSED').length;
     const toggle = kids.length ? `
       <button class="fatias-toggle" data-act="prd" data-n="${prd.number}" data-open="${aberto ? 1 : 0}" aria-expanded="${aberto}">
@@ -997,7 +1017,7 @@ view.addEventListener('click', e => {
     S.item = S.item === t.dataset.n ? null : t.dataset.n;
     render();
   } else if (act === 'pfresp') {
-    S.fPrs.resp = S.fPrs.resp === t.dataset.v ? '' : t.dataset.v;
+    S.fPrs = alternarPessoa(S.fPrs, t.dataset.v);
     render();
   } else if (act === 'pfprd') {
     const n = Number(t.dataset.v);
@@ -1024,6 +1044,12 @@ view.addEventListener('click', e => {
     const chave = { fstate: 'state', fresp: 'resp', fprd: 'prd', flabel: 'label' }[act];
     S.fIssues[chave] = act === 'fprd' ? (Number(t.dataset.v) || null) : t.dataset.v;
     S.menu = null;
+    render();
+  } else if (act === 'flimpar') {
+    S.fIssues = filtrosVazios();
+    render();
+  } else if (act === 'pflimpar') {
+    S.fPrs = filtrosPrsVazios();
     render();
   } else if (act === 'fpendente') {
     // o card grande: tudo que está pendente, sem recorte de fase
