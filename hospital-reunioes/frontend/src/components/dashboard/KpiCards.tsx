@@ -68,8 +68,8 @@ function buildKpis(stats: Stats | null) {
       neutralColor: "border-border",
       iconColor: "text-primary",
       bgIcon: "bg-primary/10",
-      href: "/reunioes/calendario",
-      lista: null,
+      href: null,
+      lista: "aguardam-assinatura" as ListaDoCard,
     },
   ];
 }

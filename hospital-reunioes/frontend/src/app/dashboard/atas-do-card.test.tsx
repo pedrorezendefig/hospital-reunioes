@@ -125,3 +125,12 @@ describe("card Atas Paradas", () => {
     expect(roteador.push).not.toHaveBeenCalled();
   });
 });
+
+describe("card Aguardam Assinatura", () => {
+  it("abre o modal com só a ata que aguarda assinatura", async () => {
+    await abrirCard("aguardam-assinatura");
+
+    expect(linksDoModal("Aguardam Assinatura")).toEqual(["/reunioes/assinatura-1"]);
+    expect(roteador.push).not.toHaveBeenCalled();
+  });
+});
