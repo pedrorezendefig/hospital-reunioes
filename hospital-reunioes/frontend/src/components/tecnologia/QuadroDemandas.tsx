@@ -23,7 +23,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
-import { AlertCircle, CalendarClock, Plus } from "lucide-react";
+import { AlertCircle, CalendarClock, Plus, Settings } from "lucide-react";
 
 import { usePolling } from "@/hooks/usePolling";
 
@@ -50,6 +50,7 @@ import {
   prazoLegivel,
   ProdutoDaEscolha,
   RAIAS,
+  ROTA_PRODUTOS,
   textoDaIdade,
   temSelo,
 } from "./demandas";
@@ -230,7 +231,7 @@ export function QuadroDemandas({
       // Resolvida a autenticação, token nulo é sessão de verdade ausente. Sem
       // este aviso o Quadro desenharia três raias zeradas, calado, que é
       // indistinguível de "não há Demanda nenhuma". O aviso do módulo não
-      // cobre este caso: ele fala de Produtos e mora abaixo do Quadro.
+      // cobre este caso: ele fala de Produtos, e não de Demandas.
       setCarregando(false);
       setErro(SEM_SESSAO);
       return;
@@ -515,14 +516,26 @@ export function QuadroDemandas({
         </p>
         {/* Vira link na issue #727: "Nova Demanda" abre o Assistente de
             Tecnologia numa página própria (ADR 0056, decisão 5), e o
-            formulário de sempre fica a um clique de lá. */}
-        <Link
-          href={ROTA_ASSISTENTE}
-          className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all"
-        >
-          <Plus className="w-4 h-4" />
-          Nova Demanda
-        </Link>
+            formulário de sempre fica a um clique de lá. A engrenagem ao
+            lado abre o cadastro de Produtos, que saiu do rodapé do Quadro na
+            issue #1060. */}
+        <div className="flex items-center gap-2">
+          <Link
+            href={ROTA_PRODUTOS}
+            aria-label="Produtos"
+            title="Produtos"
+            className="p-2 rounded-xl border border-border text-text-secondary hover:border-primary hover:text-primary transition-colors"
+          >
+            <Settings className="w-4 h-4" />
+          </Link>
+          <Link
+            href={ROTA_ASSISTENTE}
+            className="flex items-center gap-2 px-4 py-2 rounded-xl bg-gradient-to-r from-primary to-primary-light text-white text-sm font-semibold shadow-md hover:shadow-lg transition-all"
+          >
+            <Plus className="w-4 h-4" />
+            Nova Demanda
+          </Link>
+        </div>
       </div>
 
       {carregando ? (
