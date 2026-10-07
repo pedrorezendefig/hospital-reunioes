@@ -158,6 +158,11 @@ O resto do nível 2 no Windows sai do `winget`, e não do `brew`:
 - **uv:** `winget install astral-sh.uv`.
 - **python3:** o instalador do python.org cria só `python.exe`, e o `python3` que sobra no PATH é o atalho da Microsoft Store, que não roda nada. As skills chamam `python3`, então copie `python.exe` como `python3.exe` na mesma pasta do Python.
 - **Pango (WeasyPrint):** `winget install MSYS2.MSYS2`, depois `C:/msys64/usr/bin/bash -lc 'pacman -S --noconfirm mingw-w64-x86_64-pango'` e `setx WEASYPRINT_DLL_DIRECTORIES C:\msys64\mingw64\bin`. Reabra o terminal e o Claude Code para a variável valer.
+- **pnpm:** não entra no PATH. Chame sempre `COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm@9 <comando>`; sem a variável, o corepack para perguntando se pode baixar. O `/setup-maquina` acusa quando o corepack não entrega o pnpm.
+- **Worktree:** o repo tem caminhos longos em `docs/adr/` e `docs/comunicacao/`, e um `git worktree add` dentro do scratchpad estoura o limite de 260 caracteres do Windows ("Filename too long"). Rode uma vez `git config --global core.longpaths true`, ou crie o worktree num caminho curto (`git worktree add C:\Users\<voce>\wt844 origin/main`). O worktree de bookkeeping da subida segue a mesma regra.
+- **Suíte do backend:** `uv run pytest` roda sem plugin nem contorno. O que depende de recurso só do Unix (o isolamento da extração, o `sendmsg` da trava de rede, a URI `file://` do asset do PDF) tem a marca `so_unix` e sai como skip com o motivo; no Linux do CI tudo roda.
+- **Scripts das skills:** o `snapshot.py` força UTF-8 sozinho e, sem `hospital-reunioes/.env`, monta o app com os placeholders do `backend/.env.example`. Não precisa de `PYTHONUTF8=1`.
+- **`next build`:** a etapa `standalone` falha com EPERM ao criar symlink, e isso é limitação conhecida, sem conserto aqui. O build de verdade é o do Coolify (Linux); na máquina, `vitest` e `tsc` bastam.
 
 **Passo 3: criar o contexto `hsm`**
 

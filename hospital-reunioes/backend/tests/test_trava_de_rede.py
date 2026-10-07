@@ -267,6 +267,7 @@ class TestAsPortasDeSaida:
 
         assert "8.8.8.8" in str(erro.value)
 
+    @pytest.mark.so_unix("`socket.sendmsg` não existe no Windows")
     def test_udp_por_sendmsg_tambem_falha(self):
         """`sendmsg` é o irmão de `sendto` que ninguém lembra: mesmo pacote,
         outra função."""

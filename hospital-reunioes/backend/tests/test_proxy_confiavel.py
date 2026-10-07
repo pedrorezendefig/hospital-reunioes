@@ -78,7 +78,7 @@ class TestContratoDoDockerfile:
         """O `command:` do compose sobrescreve o CMD do Dockerfile (por causa do
         --reload): sem repetir as flags ali, o dev local volta a ter um balde
         único para todo visitante e o defeito reaparece só fora de produção."""
-        compose = (_DOCKERFILE.parents[1] / "docker-compose.yml").read_text()
+        compose = (_DOCKERFILE.parents[1] / "docker-compose.yml").read_text(encoding="utf-8")
         linha = next(ln for ln in compose.splitlines() if "uvicorn app.main:app" in ln)
 
         assert "--proxy-headers" in linha

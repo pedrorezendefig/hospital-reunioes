@@ -413,6 +413,13 @@ else
   falta "node >= $NODE_MIN (manual)" "brew install node@22 (a subida publica o Manual e o site exige $NODE_MIN)"
 fi
 bin_ok corepack "npm i -g corepack (o site do Manual builda com corepack pnpm@9)"
+# No Windows o `pnpm` não entra no PATH: o caminho é `corepack pnpm@9`, e sem o
+# prompt desligado o corepack para perguntando se pode baixar (issue #844).
+if PATH="$PATH_SHELL" COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm@9 --version >/dev/null 2>&1; then
+  ok "pnpm (corepack)" "corepack pnpm@9"
+else
+  falta "pnpm (corepack)" "o corepack não entregou o pnpm: rode COREPACK_ENABLE_DOWNLOAD_PROMPT=0 corepack pnpm@9 --version e chame o pnpm sempre assim"
+fi
 bin_ok ffmpeg "brew install ffmpeg (a publicação do Manual reencoda os vídeos)"
 
 fi

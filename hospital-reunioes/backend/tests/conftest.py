@@ -59,6 +59,7 @@ from __future__ import annotations
 import ipaddress
 import os
 import socket
+import sys
 
 import pytest
 
@@ -291,6 +292,27 @@ def pytest_runtest_protocol(item, nextitem):
             _instalar()
     else:
         yield
+
+
+def _pular_o_que_so_roda_no_unix(items, plataforma: str = sys.platform) -> None:
+    """No Windows, o teste marcado com `so_unix("motivo")` vira skip com o motivo.
+
+    Existe para a suíte local voltar a dizer algo numa máquina Windows (issue
+    #844): sem isto, de 11 a 29 falhas fixas de ambiente (`resource`, `pgrep`,
+    `SIGKILL`, `sendmsg`) escondiam a falha que importa. A regra olha só o
+    Windows: no Linux do CI e no macOS a marca não tira teste nenhum, e por
+    isso ela não é `skipif` solto em cada arquivo, onde cada um escolheria a
+    própria condição."""
+    if plataforma != "win32":
+        return
+    for item in items:
+        marca = item.get_closest_marker("so_unix")
+        if marca is not None:
+            item.add_marker(pytest.mark.skip(reason=f"só roda no Unix: {marca.args[0]}"))
+
+
+def pytest_collection_modifyitems(config, items):
+    _pular_o_que_so_roda_no_unix(items)
 
 
 @pytest.fixture
