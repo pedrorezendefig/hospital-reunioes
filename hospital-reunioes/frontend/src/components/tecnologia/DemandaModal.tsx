@@ -60,6 +60,18 @@ type Props = {
   onMudou: () => void | Promise<void>;
 };
 
+/**
+ * Encerrar é ação, e não destino (issue #1058, PRD #1056).
+ *
+ * Concluída e Cancelada deixaram de ser coluna do Quadro, então o botão diz o
+ * que se faz ("Concluir"), e não para onde o card iria. A rota é a mesma de
+ * mover: os cinco estados continuam no banco.
+ */
+const ACAO_DE_ENCERRAR: Partial<Record<EstadoDemanda, string>> = {
+  concluida: "Concluir",
+  cancelada: "Cancelar",
+};
+
 function camposDa(demanda: Demanda) {
   return {
     titulo: demanda.titulo,
@@ -297,8 +309,8 @@ export function DemandaModal({ demanda, produtos, pessoas, token, eu, onFechar, 
             </p>
           </div>
 
-          <div>
-            <span className="text-xs font-medium text-text-secondary">Mover para</span>
+          <div role="group" aria-label="Mover">
+            <span className="text-xs font-medium text-text-secondary">Mover</span>
             <div className="mt-1 flex flex-wrap gap-2">
               {destinosDe(demanda.estado).map((destino) => (
                 <button
@@ -307,7 +319,7 @@ export function DemandaModal({ demanda, produtos, pessoas, token, eu, onFechar, 
                   onClick={() => mover(destino)}
                   className="px-3 py-1.5 rounded-lg border border-border text-sm text-text hover:border-primary hover:text-primary transition-colors"
                 >
-                  {ESTADO_ROTULO[destino]}
+                  {ACAO_DE_ENCERRAR[destino] ?? ESTADO_ROTULO[destino]}
                 </button>
               ))}
             </div>

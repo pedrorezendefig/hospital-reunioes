@@ -453,39 +453,28 @@ describe("Nova Demanda", () => {
   });
 });
 
-describe("Mover pelo card", () => {
-  it("de Nova oferece os quatro destinos, e nenhum deles é Nova", async () => {
+describe("Mover, Concluir e Cancelar no card aberto", () => {
+  async function abrir(titulo: string) {
+    fireEvent.click(await screen.findByText(titulo));
+    const modal = await screen.findByRole("dialog");
+    return within(modal).getByRole("group", { name: "Mover" });
+  }
+
+  it("de Nova o menu oferece as outras raias, Concluir e Cancelar, e nenhum deles é Nova", async () => {
     montar([demanda("d1", "Uma nova", { estado: "nova" })]);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Mover Uma nova" }));
-
-    const card = cardDe("Uma nova");
-    for (const destino of ["Em andamento", "Aguardando", "Concluída", "Cancelada"]) {
-      expect(within(card).getByRole("button", { name: destino })).toBeTruthy();
+    const menu = await abrir("Uma nova");
+    for (const acao of ["Em andamento", "Aguardando", "Concluir", "Cancelar"]) {
+      expect(within(menu).getByRole("button", { name: acao })).toBeTruthy();
     }
     // A tela não oferece o caminho que o backend recusaria: ninguém volta a Nova.
-    expect(within(card).queryByRole("button", { name: "Nova" })).toBeNull();
+    expect(within(menu).queryByRole("button", { name: "Nova" })).toBeNull();
   });
 
-  it("de Concluída o único destino é reabrir em Em andamento", async () => {
-    montar([demanda("d1", "Fechada", { estado: "concluida" })]);
-
-    await screen.findByRole("region", { name: "Concluída" });
-    fireEvent.click(within(colunaDe("Concluída")).getByRole("button"));
-    fireEvent.click(screen.getByRole("button", { name: "Mover Fechada" }));
-
-    const card = cardDe("Fechada");
-    expect(within(card).getByRole("button", { name: "Em andamento" })).toBeTruthy();
-    for (const proibido of ["Nova", "Aguardando", "Cancelada"]) {
-      expect(within(card).queryByRole("button", { name: proibido })).toBeNull();
-    }
-  });
-
-  it("clicar no destino chama a rota de mover com o estado escolhido", async () => {
+  it("clicar numa raia chama a rota de mover com o estado escolhido", async () => {
     montar([demanda("d1", "Uma nova", { estado: "nova" })]);
 
-    fireEvent.click(await screen.findByRole("button", { name: "Mover Uma nova" }));
-    fireEvent.click(within(cardDe("Uma nova")).getByRole("button", { name: "Aguardando" }));
+    fireEvent.click(within(await abrir("Uma nova")).getByRole("button", { name: "Aguardando" }));
 
     await waitFor(() => expect(escritas()).toHaveLength(1));
     expect(escritas()[0]).toEqual({
@@ -495,15 +484,44 @@ describe("Mover pelo card", () => {
     });
   });
 
-  it("a recusa da transição aparece com a frase do servidor", async () => {
+  it("Concluir usa a rota de mover, e a Demanda some do Quadro na hora", async () => {
+    montar([demanda("d1", "Uma nova", { estado: "em_andamento" }), demanda("d2", "Outra nova")]);
+
+    fireEvent.click(within(await abrir("Uma nova")).getByRole("button", { name: "Concluir" }));
+
+    await waitFor(() => expect(escritas()).toHaveLength(1));
+    expect(escritas()[0]).toEqual({
+      url: "/api/admin/tecnologia/demandas/d1/mover",
+      metodo: "POST",
+      corpo: { estado: "concluida" },
+    });
+    // O card aberto fecha junto: a Demanda encerrada não está mais no Quadro.
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.queryByText("Uma nova")).toBeNull();
+    expect(within(colunaDe("Nova")).getByText("Outra nova")).toBeTruthy();
+  });
+
+  it("Cancelar usa a rota de mover, e a Demanda some do Quadro na hora", async () => {
+    montar([demanda("d1", "Uma nova", { estado: "aguardando" }), demanda("d2", "Outra nova")]);
+
+    fireEvent.click(within(await abrir("Uma nova")).getByRole("button", { name: "Cancelar" }));
+
+    await waitFor(() => expect(escritas()).toHaveLength(1));
+    expect(escritas()[0].corpo).toEqual({ estado: "cancelada" });
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    expect(screen.queryByText("Uma nova")).toBeNull();
+    expect(within(colunaDe("Nova")).getByText("Outra nova")).toBeTruthy();
+  });
+
+  it("a recusa do servidor aparece com a frase dele, e a Demanda continua no Quadro", async () => {
     montar([demanda("d1", "Uma nova")], {
-      recusa: { status: 422, detail: "A Demanda já está em Nova." },
+      recusa: { status: 422, detail: "A Demanda não pode ser concluída agora." },
     });
 
-    fireEvent.click(await screen.findByRole("button", { name: "Mover Uma nova" }));
-    fireEvent.click(within(cardDe("Uma nova")).getByRole("button", { name: "Aguardando" }));
+    fireEvent.click(within(await abrir("Uma nova")).getByRole("button", { name: "Concluir" }));
 
-    expect((await screen.findByRole("alert")).textContent).toContain("A Demanda já está em Nova.");
+    expect((await screen.findByRole("alert")).textContent).toContain("A Demanda não pode ser concluída agora.");
+    expect(within(colunaDe("Nova")).getByText("Uma nova")).toBeTruthy();
   });
 });
 
@@ -2047,6 +2065,22 @@ describe("A atualização sozinha", () => {
     fireEvent.click(await screen.findByText("Uma nova"));
     const modal = await screen.findByRole("dialog");
     fireEvent.click(within(modal).getByLabelText("Fechar"));
+    await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
+    const antes = leiturasDoQuadro().length;
+
+    await passar(30_000);
+
+    expect(leiturasDoQuadro().length).toBeGreaterThan(antes);
+  });
+
+  it("volta a atualizar sozinho depois que o card aberto é concluído", async () => {
+    // Concluir fecha o card sem o botão Fechar: a Demanda saiu do Quadro. Se a
+    // tela continuasse achando que há card aberto, o relógio ficaria parado
+    // para sempre, e o Quadro deixaria de ver o que muda do outro lado.
+    montar([demanda("d1", "Uma nova")]);
+    fireEvent.click(await screen.findByText("Uma nova"));
+    const modal = await screen.findByRole("dialog");
+    fireEvent.click(within(within(modal).getByRole("group", { name: "Mover" })).getByRole("button", { name: "Concluir" }));
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     const antes = leiturasDoQuadro().length;
 

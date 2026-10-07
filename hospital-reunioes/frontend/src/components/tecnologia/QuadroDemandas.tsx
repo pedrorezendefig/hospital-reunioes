@@ -191,7 +191,8 @@ export function QuadroDemandas({
    * leitor de tela ANUNCIA a acusação falsa em toda abertura por link bom. É a
    * mesma família do alarme de sessão que mordeu na fatia #637.
    */
-  const achadaDoLink = idDoLink !== null && demandas.some((d) => d.id === idDoLink);
+  const achadaDoLink =
+    idDoLink !== null && demandas.some((d) => d.id === idDoLink && RAIAS.includes(d.estado));
 
   const autorizacao = useCallback(
     () => ({ Authorization: `Bearer ${token}`, "Content-Type": "application/json" }),
@@ -422,7 +423,15 @@ export function QuadroDemandas({
   }
 
   const filtrando = temFiltroAtivo(filtros);
-  const aberta = demandas.find((d) => d.id === abertaId) ?? null;
+  // O card aberto só vale enquanto a Demanda está numa raia: concluída ou
+  // cancelada, ela sai do Quadro na hora, e o card aberto fecha junto.
+  const aberta = demandas.find((d) => d.id === abertaId && RAIAS.includes(d.estado)) ?? null;
+
+  // E o id do card que fechou assim sai também: preso, ele manteria a
+  // atualização automática parada como se ainda houvesse card aberto.
+  useEffect(() => {
+    if (abertaId !== null && aberta === null) setAbertaId(null);
+  }, [abertaId, aberta]);
   const agora = new Date();
 
   function coluna(estado: EstadoDemanda) {
