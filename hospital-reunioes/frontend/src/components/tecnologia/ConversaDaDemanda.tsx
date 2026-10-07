@@ -15,9 +15,11 @@
  * `useAuth` carrega o id do Supabase Auth, e não o `participantes.id`).
  */
 
-import { useState } from "react";
-import { Pencil, Send } from "lucide-react";
+import { useRef, useState } from "react";
+import { ImagePlus, Pencil, Send, X } from "lucide-react";
 
+import { avisoDaImagem, IMAGENS_ACEITAS } from "./assistente";
+import { subirImagem } from "./anexos";
 import {
   aplicarMencao,
   avisoPorEmail,
@@ -119,6 +121,35 @@ function CaixaComMencao({
   );
 }
 
+/**
+ * A imagem que a resposta levou (issue #1062), pela URL assinada de vida curta.
+ * Apagada (Demanda Concluída ou Cancelada), fica o nome e a marca, sem imagem
+ * nem link para o vazio.
+ */
+function ImagemDaLinha({ imagem }: { imagem: NonNullable<LinhaDaConversa["imagem"]> }) {
+  if (!imagem.url || imagem.apagado_em) {
+    return <span className="mt-1 block text-xs text-text-secondary">{`${imagem.nome} (apagada)`}</span>;
+  }
+  return (
+    <a
+      href={imagem.url}
+      target="_blank"
+      rel="noopener noreferrer"
+      aria-label={`Abrir ${imagem.nome} em tamanho real`}
+      className="mt-2 block w-fit"
+    >
+      {/* `<img>` puro pelo mesmo motivo do card: a URL é assinada e morre em
+          minutos, e o otimizador do Next a guardaria em cache. */}
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img
+        src={imagem.url}
+        alt={imagem.nome}
+        className="max-h-40 max-w-full rounded-lg border border-border hover:border-primary transition-colors"
+      />
+    </a>
+  );
+}
+
 /** O texto da linha com as menções em destaque: o par na tela da coluna `mencoes`. */
 function TextoDaLinha({ linha, pessoas }: { linha: LinhaDaConversa; pessoas: PessoaDaAba[] }) {
   const nomes = linha.mencoes
@@ -147,6 +178,33 @@ export function ConversaDaDemanda({ demandaId, linhas, pessoas, token, publicada
   const [textoEditado, setTextoEditado] = useState("");
   const [escolhidasEditadas, setEscolhidasEditadas] = useState<PessoaDaAba[]>([]);
   const [enviando, setEnviando] = useState(false);
+  /** A imagem que vai junto da próxima resposta (issue #1062), uma só. */
+  const [imagem, setImagem] = useState<File | null>(null);
+  /**
+   * O id do anexo da imagem que JÁ subiu. Se a resposta for recusada depois, o
+   * segundo clique reaproveita a mesma imagem em vez de subir outra cópia.
+   */
+  const anexoSubido = useRef<string | null>(null);
+  const escolherImagem = useRef<HTMLInputElement | null>(null);
+
+  function trocarImagem(arquivo: File | null) {
+    anexoSubido.current = null;
+    setImagem(arquivo);
+  }
+
+  /** A recusa local usa as frases do Assistente, antes de subir a imagem. */
+  function aoEscolherImagem(evento: React.ChangeEvent<HTMLInputElement>) {
+    const arquivo = evento.target.files?.[0];
+    evento.target.value = "";
+    if (!arquivo) return;
+    const recusa = avisoDaImagem(arquivo);
+    if (recusa) {
+      onErro(recusa);
+      return;
+    }
+    onErro(null);
+    trocarImagem(arquivo);
+  }
 
   function guardarEscolhida(atuais: PessoaDaAba[], pessoa: PessoaDaAba): PessoaDaAba[] {
     return atuais.some((p) => p.id === pessoa.id) ? atuais : [...atuais, pessoa];
@@ -193,13 +251,28 @@ export function ConversaDaDemanda({ demandaId, linhas, pessoas, token, publicada
   }
 
   async function responder() {
+    // A imagem sobe ANTES, pela porta do anexo (issue #1062): a recusa dela
+    // chega a quem responde antes de o texto entrar no fio.
+    if (imagem && !anexoSubido.current) {
+      setEnviando(true);
+      const subida = await subirImagem(demandaId, imagem, token);
+      setEnviando(false);
+      if ("motivo" in subida) {
+        onErro(subida.motivo);
+        return;
+      }
+      anexoSubido.current = subida.id;
+    }
+    const anexoId = imagem ? anexoSubido.current : null;
     const enviado = await escrever(`${BASE_TECNOLOGIA}/demandas/${demandaId}/conversa`, "POST", {
       texto,
       mencoes: mencoesNoTexto(texto, escolhidas),
+      ...(anexoId ? { anexo_id: anexoId } : {}),
     });
     if (enviado) {
       setTexto("");
       setEscolhidas([]);
+      trocarImagem(null);
     }
   }
 
@@ -272,6 +345,7 @@ export function ConversaDaDemanda({ demandaId, linhas, pessoas, token, publicada
                     ) : null}
                     <TextoDaLinha linha={linha} pessoas={pessoas} />
                   </span>
+                  {linha.imagem && <ImagemDaLinha imagem={linha.imagem} />}
                   <span className="mt-0.5 flex items-center gap-2 text-xs text-slate-400">
                     <span>{momentoLegivel(linha.criado_em)}</span>
                     {/* O par na tela do carimbo `editado_em` do backend: sem
@@ -304,7 +378,39 @@ export function ConversaDaDemanda({ demandaId, linhas, pessoas, token, publicada
           aoMencionar={(pessoa) => setEscolhidas((atuais) => guardarEscolhida(atuais, pessoa))}
           publicada={publicada}
         />
+        <input
+          ref={escolherImagem}
+          type="file"
+          accept={IMAGENS_ACEITAS.join(",")}
+          aria-label="Imagem da resposta"
+          className="hidden"
+          onChange={aoEscolherImagem}
+        />
+        {imagem && (
+          <div className="flex items-center gap-2 text-xs text-text">
+            <ImagePlus className="w-4 h-4 text-text-secondary" />
+            <span className="truncate">{imagem.name}</span>
+            <button
+              type="button"
+              onClick={() => trocarImagem(null)}
+              aria-label="Tirar a imagem"
+              className="text-text-secondary hover:text-primary transition-colors"
+            >
+              <X className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => escolherImagem.current?.click()}
+            disabled={enviando || imagem !== null}
+            aria-label="Anexar imagem à resposta"
+            title="Anexar uma imagem à resposta"
+            className="p-2 rounded-lg border border-border text-text-secondary hover:border-primary hover:text-primary transition-colors disabled:opacity-50"
+          >
+            <ImagePlus className="w-4 h-4" />
+          </button>
           <button
             type="button"
             onClick={responder}

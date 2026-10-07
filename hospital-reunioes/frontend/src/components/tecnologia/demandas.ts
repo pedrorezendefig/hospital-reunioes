@@ -7,6 +7,8 @@
  * a tela não OFERECER um caminho que ela sabe que não existe.
  */
 
+import type { AnexoDaDemanda } from "./anexos";
+
 /** O prefixo da API da aba. */
 export const BASE_TECNOLOGIA = "/api/admin/tecnologia";
 
@@ -333,6 +335,8 @@ export type LinhaDaConversa = {
    * 10 minutos correm.
    */
   editavel_ate: string | null;
+  /** A imagem que a resposta levou (issue #1062), com a URL assinada de vida curta. */
+  imagem?: AnexoDaDemanda | null;
 };
 
 /** Os cinco estados da Demanda, na ordem do fluxo. */
