@@ -19,7 +19,11 @@ import { ToastProvider } from "@/components/ui/Toast";
 
 import CalendarioPage from "./page";
 
-const perfil = vi.hoisted(() => ({ participante: null as Record<string, unknown> | null }));
+const perfil = vi.hoisted(() => ({
+  participante: null as Record<string, unknown> | null,
+  loading: false,
+  error: null as string | null,
+}));
 const navegacao = vi.hoisted(() => ({ empurrou: [] as string[] }));
 
 vi.mock("next/navigation", () => ({
@@ -28,7 +32,7 @@ vi.mock("next/navigation", () => ({
 }));
 
 vi.mock("@/hooks/useCurrentParticipante", () => ({
-  useCurrentParticipante: () => ({ participante: perfil.participante, loading: false, error: null }),
+  useCurrentParticipante: () => ({ participante: perfil.participante, loading: perfil.loading, error: perfil.error }),
 }));
 
 vi.mock("@/hooks/useFacilitadores", () => ({
@@ -67,6 +71,8 @@ beforeEach(() => {
   vi.useFakeTimers({ toFake: ["Date"] });
   vi.setSystemTime(HOJE);
   navegacao.empurrou = [];
+  perfil.loading = false;
+  perfil.error = null;
 });
 
 afterEach(() => {
@@ -139,6 +145,57 @@ describe("Outros perfis no Calendário", () => {
     fireEvent.click(await screen.findByTestId("slot-2026-11-12-14:00"));
 
     await waitFor(() => expect(modalAberto()).toBe(true));
+    expect(navegacao.empurrou).toEqual([]);
+  });
+});
+
+// Issue #890: enquanto o perfil carrega (ou se a busca falha), a tela não sabe
+// se quem clica é a Secretária. Antes ela abria o modal, e a Secretária levava
+// 422 numa janela sem o campo Facilitador. Agora nenhum gesto de criar responde.
+describe("Perfil ainda carregando", () => {
+  beforeEach(() => {
+    perfil.participante = null;
+    perfil.loading = true;
+  });
+
+  it("o botão fica desabilitado e não abre nem navega", async () => {
+    montar();
+    const botao = screen.getByRole("button", { name: /Agendar Reunião/ });
+
+    fireEvent.click(botao);
+
+    expect(botao).toHaveProperty("disabled", true);
+    expect(modalAberto()).toBe(false);
+    expect(navegacao.empurrou).toEqual([]);
+  });
+
+  it("o clique no dia não abre nem navega", async () => {
+    montar();
+
+    fireEvent.click(screen.getByTestId("dia-2026-11-20"));
+
+    expect(modalAberto()).toBe(false);
+    expect(navegacao.empurrou).toEqual([]);
+  });
+
+  it("o clique no slot da semana não abre nem navega", async () => {
+    montar();
+    fireEvent.click(screen.getByRole("button", { name: /Semanal/ }));
+
+    fireEvent.click(await screen.findByTestId("slot-2026-11-12-14:00"));
+
+    expect(modalAberto()).toBe(false);
+    expect(navegacao.empurrou).toEqual([]);
+  });
+
+  it("se a busca do perfil falha, continua sem abrir", async () => {
+    perfil.loading = false;
+    perfil.error = "falhou";
+    montar();
+
+    fireEvent.click(screen.getByTestId("dia-2026-11-20"));
+
+    expect(modalAberto()).toBe(false);
     expect(navegacao.empurrou).toEqual([]);
   });
 });
