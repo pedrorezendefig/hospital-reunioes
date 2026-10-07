@@ -60,8 +60,10 @@ def test_credencial_de_escrita_so_no_job_que_nao_instala_nada():
     só usa checkout, download do artefato e git."""
     w = workflow()
     assert w["permissions"] == {"contents": "read"}
-    # O terceiro job, `avisar`, só escreve em issue (issue #951).
-    assert set(w["jobs"]) == {"gerar", "commitar", "avisar"}
+    # O terceiro job, `avisar`, só escreve em issue (issue #951); o quarto,
+    # `em-producao`, só chama o app com o segredo do webhook de deploy (issue
+    # #1065, contrato em `test_avisar_deploy_ao_app.py`).
+    assert set(w["jobs"]) == {"gerar", "commitar", "avisar", "em-producao"}
     gerar, commitar = w["jobs"]["gerar"], w["jobs"]["commitar"]
     for nome, job in (("gerar", gerar), ("commitar", commitar)):
         assert "permissions" not in job, nome
@@ -81,7 +83,11 @@ def test_credencial_de_escrita_so_no_job_que_nao_instala_nada():
     scripts = " ".join(p["run"] for p in commitar["steps"] if "run" in p)
     for instalador in ("pip", "uv ", "npm", "pnpm", "corepack", "apt", "python", "curl", "wget"):
         assert instalador not in scripts, instalador
-    assert WORKFLOW.read_text(encoding="utf-8").count("secrets.") == 1
+    texto = WORKFLOW.read_text(encoding="utf-8")
+    assert texto.count("secrets.") == 2
+    assert texto.count("secrets.POS_MERGE_DEPLOY_KEY") == 1
+    assert "secrets." not in yaml.safe_dump(w["jobs"]["avisar"])
+    assert "POS_MERGE_DEPLOY_KEY" not in yaml.safe_dump(w["jobs"]["em-producao"])
 
 
 def casa(padrao: str, caminho: str) -> bool:
@@ -456,7 +462,7 @@ def test_registro_so_no_run_do_rabo_lido_por_env_e_antes_do_draft():
     for job in workflow()["jobs"].values():
         for p in job["steps"]:
             assert "${{" not in p.get("run", ""), p.get("name")
-    assert texto.count("inputs.registro") == 2  # o env do `gerar` e o do `commitar`
+    assert texto.count("inputs.registro") == 3  # o env do `gerar`, o do `commitar` e o do `em-producao`
     ordem = [p.get("name") for p in workflow()["jobs"]["gerar"]["steps"]]
     assert ordem.index(aplicar["name"]) < ordem.index(passo("Tirar do draft")["name"])
 
