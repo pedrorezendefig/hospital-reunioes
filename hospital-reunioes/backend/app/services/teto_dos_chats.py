@@ -22,6 +22,7 @@ from __future__ import annotations
 import json
 
 LIMITE_DE_MENSAGENS = 40
+LIMITE_DA_MENSAGEM = 8000
 
 
 def _milhar(numero: int) -> str:
@@ -31,10 +32,16 @@ def _milhar(numero: int) -> str:
 MOTIVO_MUITAS_MENSAGENS = (
     f"A conversa passou de {LIMITE_DE_MENSAGENS} mensagens, o máximo que o chat aceita de uma vez."
 )
+MOTIVO_MENSAGEM_GRANDE = (
+    f"A mensagem passou de {_milhar(LIMITE_DA_MENSAGEM)} caracteres, o tamanho que o chat aceita. "
+    "Encurte o texto e mande de novo."
+)
 
 
 def motivo_corpo_grande(messages: list) -> str | None:
     """A frase de recusa quando o corpo do chat passa de um dos tetos, ou None."""
     if len(messages) > LIMITE_DE_MENSAGENS:
         return MOTIVO_MUITAS_MENSAGENS
+    if any(len(m.content) > LIMITE_DA_MENSAGEM for m in messages):
+        return MOTIVO_MENSAGEM_GRANDE
     return None

@@ -284,8 +284,10 @@ class HealthResponse(BaseModel):
 
 
 class ChatMessageSchema(BaseModel):
+    # Sem `max_length`: o teto do tamanho mora em `teto_dos_chats` (issue #893),
+    # para a recusa chegar à tela como frase, e não como `detail` em lista.
     role: Literal["user", "assistant"]
-    content: str = Field(..., max_length=5000)
+    content: str
 
 
 class CorrectionItem(BaseModel):

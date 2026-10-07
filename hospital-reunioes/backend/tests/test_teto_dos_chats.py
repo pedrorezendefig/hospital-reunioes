@@ -117,3 +117,19 @@ class TestQuantidadeDeMensagens:
     def test_quarenta_e_uma_mensagens_sao_recusadas_com_frase(self, rota, monkeypatch):
         detail = _recusa_legivel(_enviar(rota, monkeypatch, messages=_conversa(41)))
         assert "40 mensagens" in detail
+
+
+class TestTamanhoDaMensagem:
+    """O teto vale para cada fala do histórico, e não só para a última."""
+
+    @pytest.mark.parametrize("rota", ROTAS)
+    def test_mensagem_de_oito_mil_caracteres_passa(self, rota, monkeypatch):
+        conversa = [{"role": "user", "content": "a" * 8000}]
+        resposta = _enviar(rota, monkeypatch, messages=conversa)
+        assert resposta.status_code == 200, resposta.text
+
+    @pytest.mark.parametrize("rota", ROTAS)
+    def test_mensagem_um_caractere_acima_e_recusada_com_frase(self, rota, monkeypatch):
+        conversa = [*_conversa(2), {"role": "user", "content": "a" * 8001}]
+        detail = _recusa_legivel(_enviar(rota, monkeypatch, messages=conversa))
+        assert "8.000 caracteres" in detail
