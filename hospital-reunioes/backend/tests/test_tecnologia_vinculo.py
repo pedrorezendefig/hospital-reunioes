@@ -2,7 +2,7 @@
 
 Tres seams, na ordem em que a regra existe:
 
-* **A tabela de Etapas**, funcao pura, testada direto e sem HTTP. As seis
+* **A tabela de Etapas**, funcao pura, testada direto e sem HTTP. As sete
   saidas e a PRECEDENCIA entre elas sao escritas aqui a mao, a partir da issue;
   o caso que separa cada regra da seguinte tem o seu proprio teste, porque e na
   sobreposicao que a tabela erra (issue fechada com o `in-progress` preso e

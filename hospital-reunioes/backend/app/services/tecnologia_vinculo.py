@@ -5,7 +5,7 @@ carrega no corpo, a comparacao entre a foto nova e a guardada, e os textos das
 linhas automaticas da Conversa.
 
 O I/O mora ao lado, no `github_client.py`. A separacao nao e gosto de arquivo:
-a Etapa e a regra que o diretor le na tela, e ela precisa ser testavel nas seis
+a Etapa e a regra que o diretor le na tela, e ela precisa ser testavel nas sete
 saidas e na precedencia entre elas sem depender de rede nenhuma. O cliente e
 dublado nos testes; isto aqui e chamado de verdade.
 """
@@ -320,7 +320,7 @@ def bloco_para_o_diretor(corpo: str | None) -> str | None:
 def situacao_da_parte(parte: dict[str, Any] | None) -> str:
     """Em que pe esta ESTA parte, no vocabulario da Etapa (ADR 0054, decisao 7).
 
-    Quatro das seis Etapas, e nao um vocabulario proprio: o diretor le o mesmo
+    Quatro das sete Etapas, e nao um vocabulario proprio: o diretor le o mesmo
     rotulo no selo do card e no selo de cada parte, e duas listas de palavras
     para a mesma ideia fariam "Entregue" significar coisas diferentes na mesma
     tela.
