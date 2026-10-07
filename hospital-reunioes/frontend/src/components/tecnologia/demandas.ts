@@ -568,6 +568,9 @@ export function pedacosDoTexto(texto: string, nomesMencionados: string[]): Pedac
  */
 export const ROTA_TECNOLOGIA = "/admin/tecnologia";
 
+/** A tela de Produtos, atrás da engrenagem ao lado de "Nova Demanda" (issue #1060). */
+export const ROTA_PRODUTOS = `${ROTA_TECNOLOGIA}/produtos`;
+
 /** O nome do parâmetro que carrega o id da Demanda no link. */
 export const PARAM_DEMANDA = "demanda";
 

@@ -432,6 +432,17 @@ describe("Nova Demanda", () => {
     expect(screen.queryByLabelText("Título")).toBeNull();
     expect(screen.queryByRole("button", { name: "Abrir Demanda" })).toBeNull();
   });
+
+  it("a engrenagem ao lado leva à tela de Produtos (issue #1060)", async () => {
+    montar([]);
+
+    const novaDemanda = await screen.findByRole("link", { name: /Nova Demanda/ });
+    const engrenagem = screen.getByRole("link", { name: "Produtos" });
+    // Literal, e não a constante da rota: a constante errada passaria aqui.
+    expect(engrenagem.getAttribute("href")).toBe("/admin/tecnologia/produtos");
+    // Ao lado: as duas moram no mesmo grupo de ações do topo do Quadro.
+    expect(engrenagem.parentElement).toBe(novaDemanda.parentElement);
+  });
 });
 
 describe("Mover, Concluir e Cancelar no card aberto", () => {

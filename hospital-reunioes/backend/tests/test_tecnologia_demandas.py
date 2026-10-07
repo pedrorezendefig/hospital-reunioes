@@ -619,12 +619,15 @@ class TestCriarDemanda:
     def test_a_recusa_do_dono_sem_acesso_diz_onde_consertar(self):
         """Guarda-corpo que so diz "nao pode" vira indisponibilidade.
 
-        Quem TEM onde carimbar e o proprio Super admin, na mesma tela: a lista
-        de Produtos fica logo abaixo do Quadro, e dentro da aba todos podem
-        tudo (ADR 0050, decisao 11). A frase tem que apontar para la.
+        Quem TEM onde carimbar e o proprio Super admin, dentro da aba: a lista
+        de Produtos mora na tela da engrenagem ao lado de "Nova Demanda" desde
+        a issue #1060, e dentro da aba todos podem tudo (ADR 0050, decisao 11).
+        A frase tem que apontar para la, e nao para o rodape do Quadro, que nao
+        tem mais cadastro nenhum.
         """
         assert "dono" in MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO
-        assert "lista de Produtos" in MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO
+        assert "engrenagem ao lado de Nova Demanda" in MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO
+        assert "abaixo do Quadro" not in MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO
 
     def test_dono_desativado_tambem_e_recusado(self):
         """Perder o acesso nao e so perder o Super admin: participante
