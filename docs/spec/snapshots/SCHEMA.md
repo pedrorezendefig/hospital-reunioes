@@ -1,6 +1,6 @@
 # SCHEMA.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-06T22:52+0000 -->
+<!-- last_update: 2026-10-07T12:17-0300 -->
 
 Diagrama relacional do Hospital Reuniões. Renderiza nativo no GitHub.
 
@@ -34,6 +34,7 @@ erDiagram
     participantes ||--o{ reunioes : "criada_por"
     participantes ||--o{ reunioes : "facilitador_id"
     participantes ||--o{ reunioes : "nome_arquivo_original"
+    participantes ||--o{ tecnologia_anexos : "anexado_por"
     participantes ||--o{ tecnologia_conversas : "autor_id"
     participantes ||--o{ tecnologia_demandas : "autor_id"
     participantes ||--o{ tecnologia_demandas : "cancelada_por"
@@ -52,6 +53,8 @@ erDiagram
     reunioes ||--o{ pendencias : "id_reuniao"
     reunioes ||--o{ reuniao_participantes : "id_reuniao"
     reunioes ||--o{ tokens_validacao : "id_reuniao"
+    tecnologia_conversas ||--o{ tecnologia_anexos : "conversa_id"
+    tecnologia_demandas ||--o{ tecnologia_anexos : "demanda_id"
     tecnologia_demandas ||--o{ tecnologia_conversas : "demanda_id"
     tecnologia_produtos ||--o{ tecnologia_demandas : "produto_id"
     tipos_reuniao ||--o{ reunioes : "tipo_id"
@@ -433,7 +436,7 @@ erDiagram
         TEXT estado
         VARCHAR responsavel_id FK
         VARCHAR autor_id FK
-        _ mais_colunas "+17"
+        _ mais_colunas "+19"
     }
     tecnologia_conversas {
         UUID id PK
@@ -460,6 +463,17 @@ erDiagram
     migracoes_aplicadas {
         INTEGER numero PK
         TIMESTAMPTZ aplicada_em
+    }
+    tecnologia_anexos {
+        UUID id PK
+        UUID demanda_id FK
+        INTEGER ordem
+        TEXT storage_path
+        TEXT nome_original
+        TEXT content_type
+        BIGINT tamanho_bytes
+        VARCHAR anexado_por FK
+        _ mais_colunas "+3"
     }
 ```
 
@@ -564,6 +578,7 @@ erDiagram
 | `tecnologia_demandas` | `idx_tecnologia_demandas_produto` | `produto_id` | `102_tecnologia_fundacao.sql` |
 | `tecnologia_demandas` | `tecnologia_demandas_github_issue_numero_idx` | `github_issue_numero` | `103_tecnologia_vinculo.sql` |
 | `tecnologia_conversas` | `idx_tecnologia_conversas_demanda` | `demanda_id, criado_em` | `102_tecnologia_fundacao.sql` |
+| `tecnologia_anexos` | `idx_tecnologia_anexos_conversa` | `conversa_id` | `115_tecnologia_anexos_e_em_producao.sql` |
 
 ---
-**Resumo:** 43 tabelas · 47 relacionamentos FK detectados.
+**Resumo:** 44 tabelas · 50 relacionamentos FK detectados.

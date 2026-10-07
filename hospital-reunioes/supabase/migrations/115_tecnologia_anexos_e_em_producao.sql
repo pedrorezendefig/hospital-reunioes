@@ -28,16 +28,17 @@
 -- O binario e apagado quando a Demanda chega a Concluida ou Cancelada
 -- (decisao 3), e a linha FICA, com `apagado_em` preenchido: a Conversa mostra
 -- que o anexo existiu (nome, quem, quando) e nao pode quebrar.
+--
+-- `ordem` e a posicao da imagem na Demanda, de 1 a 10: o teto de dez da ADR
+-- 0069 vive tambem aqui, como na Ouvidoria, para contornar a API nao contornar
+-- o teto. Os formatos e o teto de 5 MB sao os do Assistente de Tecnologia
+-- (`assistente_tecnologia.py`): a regra da imagem e uma so no modulo.
 CREATE TABLE IF NOT EXISTS tecnologia_anexos (
   id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   demanda_id     UUID NOT NULL REFERENCES tecnologia_demandas(id) ON DELETE RESTRICT,
-  -- A posicao da imagem na Demanda, de 1 a 10: o teto de dez da ADR 0069 vive
-  -- tambem aqui, como na Ouvidoria, para contornar a API nao contornar o teto.
   ordem          INTEGER NOT NULL CHECK (ordem BETWEEN 1 AND 10),
   storage_path   TEXT NOT NULL CHECK (btrim(storage_path) <> ''),
   nome_original  TEXT NOT NULL CHECK (btrim(nome_original) <> ''),
-  -- Os formatos e o teto de 5 MB sao os do Assistente de Tecnologia
-  -- (`assistente_tecnologia.py`): a regra da imagem e uma so no modulo.
   content_type   TEXT NOT NULL CHECK (content_type IN ('image/png', 'image/jpeg', 'image/webp')),
   tamanho_bytes  BIGINT NOT NULL CHECK (tamanho_bytes > 0 AND tamanho_bytes <= 5242880),
   anexado_por    VARCHAR(10) REFERENCES participantes(id) ON DELETE SET NULL,

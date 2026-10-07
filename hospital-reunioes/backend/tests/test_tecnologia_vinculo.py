@@ -310,6 +310,59 @@ class TestEmProducaoEPrAberto:
     def test_cada_linha_com_fato_do_app(self, caso, foto, fatos, esperada):
         assert etapa_da_foto(foto, **fatos) == esperada
 
+    def test_a_ordem_das_sete_regras_em_escada(self):
+        """Em produção > Entregue > Não será feita > Em desenvolvimento >
+        Planejada > Em análise > Registrada (PRD #1056).
+
+        Cada degrau tira SO o fato que fazia a regra de cima casar e mantem
+        todos os de baixo presentes. Se duas regras vizinhas trocassem de
+        lugar, o degrau delas daria a de baixo, e a escada quebra ali."""
+        labels_de_baixo = ("in-progress", "ready-for-agent")
+        escada = [
+            (
+                _foto(estado="closed", motivo="completed", labels=labels_de_baixo),
+                {"versao_em_producao": "v0.165.0", "pr_aberto": True},
+                ETAPA_EM_PRODUCAO,
+            ),
+            (
+                _foto(estado="closed", motivo="completed", labels=labels_de_baixo),
+                {"versao_em_producao": None, "pr_aberto": True},
+                ETAPA_ENTREGUE,
+            ),
+            (
+                _foto(estado="closed", motivo="not_planned", labels=labels_de_baixo),
+                {"versao_em_producao": "v0.165.0", "pr_aberto": True},
+                ETAPA_NAO_SERA_FEITA,
+            ),
+            (
+                _foto(labels=labels_de_baixo),
+                {"versao_em_producao": "v0.165.0", "pr_aberto": True},
+                ETAPA_EM_DESENVOLVIMENTO,
+            ),
+            (_foto(labels=("ready-for-agent",)), {"versao_em_producao": "v0.165.0"}, ETAPA_PLANEJADA),
+            (_foto(), {"versao_em_producao": "v0.165.0"}, ETAPA_EM_ANALISE),
+            (None, {"versao_em_producao": "v0.165.0", "pr_aberto": True}, ETAPA_REGISTRADA),
+        ]
+        assert [esperada for _, _, esperada in escada] == [
+            ETAPA_EM_PRODUCAO,
+            ETAPA_ENTREGUE,
+            ETAPA_NAO_SERA_FEITA,
+            ETAPA_EM_DESENVOLVIMENTO,
+            ETAPA_PLANEJADA,
+            ETAPA_EM_ANALISE,
+            ETAPA_REGISTRADA,
+        ]
+        assert [etapa_da_foto(foto, **fatos) for foto, fatos, _ in escada] == [esperada for _, _, esperada in escada]
+
+    def test_wontfix_ganha_da_versao_gravada(self):
+        """A recusa nao vira Em produção so porque uma versao foi gravada: a
+        entrega e a mesma `_entregue` da regra Entregue (issue #701)."""
+        foto = _foto(estado="closed", motivo="completed", labels=("wontfix",))
+        assert etapa_da_foto(foto, versao_em_producao="v0.165.0") == ETAPA_NAO_SERA_FEITA
+
+    def test_pr_aberto_nao_tira_a_recusa_de_issue_aberta(self):
+        assert etapa_da_foto(_foto(labels=("wontfix",)), pr_aberto=True) == ETAPA_NAO_SERA_FEITA
+
     def test_em_producao_tem_rotulo_de_gente(self):
         assert ETAPA_ROTULO[ETAPA_EM_PRODUCAO] == "Em produção"
 
@@ -328,7 +381,8 @@ class TestMigracaoDaFundacao:
     def test_cria_a_tabela_de_anexos_com_as_colunas_do_prd(self, sql):
         tabela = re.search(r"CREATE TABLE IF NOT EXISTS tecnologia_anexos \((.*?)\n\);", sql, re.DOTALL)
         assert tabela, "a migration nao cria a tabela tecnologia_anexos"
-        colunas = {linha.split()[0] for linha in tabela.group(1).splitlines() if linha.strip() and not linha.strip().startswith(("--", "CONSTRAINT", "UNIQUE"))}
+        linhas = [linha.strip() for linha in tabela.group(1).splitlines()]
+        colunas = {linha.split()[0] for linha in linhas if linha and not linha.startswith(("--", "UNIQUE"))}
         assert colunas == {
             "id",
             "demanda_id",
@@ -354,7 +408,8 @@ class TestMigracaoDaFundacao:
 
     def test_cria_o_bucket_privado(self, sql):
         assert re.search(
-            r"INSERT INTO storage\.buckets \(id, name, public\)\s*VALUES \('anexos-tecnologia', 'anexos-tecnologia', false\)",
+            r"INSERT INTO storage\.buckets \(id, name, public\)\s*"
+            r"VALUES \('anexos-tecnologia', 'anexos-tecnologia', false\)",
             sql,
         )
 
