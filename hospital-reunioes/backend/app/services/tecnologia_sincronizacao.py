@@ -117,7 +117,7 @@ TENTATIVAS_DA_ESCRITA = 3
 ESTADOS_DA_RECONCILIACAO = ESTADOS_ABERTOS
 
 
-def mudanca_da_foto(foto: dict[str, Any]) -> dict[str, Any]:
+def mudanca_da_foto(foto: dict[str, Any], *, versao_em_producao: str | None = None) -> dict[str, Any]:
     """O cache da Demanda para esta foto: Etapa, partes, "O que muda" e carimbo.
 
     Um lugar so para o SHAPE do cache. Ele e escrito por tres caminhos (vincular,
@@ -126,10 +126,16 @@ def mudanca_da_foto(foto: dict[str, Any]) -> dict[str, Any]:
     o que quase aconteceu com o `o_que_muda` da issue #676, que entrou pelo
     `vincular`: sem esta funcao, o bloco que o diretor le congelaria no texto do
     dia do Vinculo e a edicao dele no GitHub nunca chegaria ao card.
+
+    `versao_em_producao` e o fato do app que segura Em producao (issue #1065):
+    quem chama passa a versao so quando a Demanda JA esta Em producao
+    (`_versao_que_segura`), e nunca a que sobrou de uma subida anterior.
     """
     entregues, total = partes_da_foto(foto)
     return {
-        "etapa": etapa_da_foto(foto, pr_aberto=bool(foto.get(FATO_PRS_ABERTOS))),
+        "etapa": etapa_da_foto(
+            foto, versao_em_producao=versao_em_producao, pr_aberto=bool(foto.get(FATO_PRS_ABERTOS))
+        ),
         "partes_entregues": entregues,
         "partes_total": total,
         # O texto que o diretor le, lido do GitHub e nunca digitado no app
@@ -478,6 +484,21 @@ def _com_os_fatos(
     return foto
 
 
+def _versao_que_segura(demanda: dict[str, Any]) -> str | None:
+    """A versao que mantem a Demanda Em producao enquanto a issue segue entregue.
+
+    So vale com a Etapa JA em Em producao: quem a pos la foi a subida
+    (`_carimbar_em_producao`), e a releitura da issue fechada nao tem como
+    saber disso sozinha. A coluna pode guardar a versao de uma subida anterior
+    com a Etapa que voltou atras (a issue reaberta para um ajuste), e passa-la
+    adiante faria o proximo fechamento pular direto para Em producao com a
+    versao velha, antes de a correcao subir.
+    """
+    if demanda.get("etapa") != ETAPA_EM_PRODUCAO:
+        return None
+    return demanda.get("versao_em_producao") or None
+
+
 def _reler(supabase, demanda_id: str) -> dict[str, Any] | None:
     result = supabase.table(TABELA_DEMANDAS).select("*").eq("id", demanda_id).execute()
     linhas = result.data or []
@@ -529,7 +550,9 @@ def sincronizar_demanda(
     demanda_id = str(demanda["id"])
 
     for _ in range(TENTATIVAS_DA_ESCRITA):
-        mudanca = mudanca_da_foto(_com_os_fatos(foto_do_github, demanda, ajustar_fatos))
+        mudanca = mudanca_da_foto(
+            _com_os_fatos(foto_do_github, demanda, ajustar_fatos), versao_em_producao=_versao_que_segura(demanda)
+        )
         if not cache_desatualizado(demanda, mudanca):
             return False
         etapa_antes = demanda.get("etapa") or ETAPA_REGISTRADA
@@ -698,12 +721,11 @@ def _carimbar_em_producao(supabase, demanda: dict[str, Any], *, versao: str, dat
     so quem move a Etapa escreve a linha e devolve o card.
 
     Demanda fechada nao e tocada, pelo mesmo motivo da sincronizacao: alguem a
-    concluiu ou cancelou a mao, e o fio dela nao ganha linha nova.
+    concluiu ou cancelou a mao, e o fio dela nao ganha linha nova. As duas
+    regras moram no proprio UPDATE, e nao num `if` antes dele: conferidas na
+    linha lida, deixariam passar quem mudou a Demanda entre a leitura e a
+    escrita.
     """
-    if str(demanda.get("estado") or "") in ESTADOS_FECHADOS:
-        return False
-    if demanda.get("etapa") != ETAPA_ENTREGUE:
-        return False
     demanda_id = str(demanda["id"])
     marcada = (
         supabase.table(TABELA_DEMANDAS)

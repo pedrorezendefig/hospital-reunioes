@@ -47,7 +47,7 @@ from test_tecnologia_webhook_github import (  # noqa: E402
 )
 
 from app.config import settings  # noqa: E402
-from app.services import github_client  # noqa: E402
+from app.services import github_client, tecnologia_sincronizacao  # noqa: E402
 from app.services.tecnologia import RECADO_DA_ENTREGA  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
     ETAPA_EM_DESENVOLVIMENTO,
@@ -256,3 +256,129 @@ class TestADevolucaoEsperaAProducao:
         assert _demandas(sb)[0]["etapa"] == ETAPA_EM_PRODUCAO
         assert _quem_tem_o_card(sb) == ("em_andamento", "P2"), "devolvida duas vezes"
         assert len(_sem_email_de_verdade) == 1
+
+
+class TestAMesmaVersaoNaoRegrava:
+    def test_a_mesma_versao_duas_vezes_nao_grava_nem_avisa_de_novo(self, monkeypatch, _sem_email_de_verdade):
+        """Critério de aceite: a Action reexecutada (ou o aviso repetido) não
+        escreve nada na segunda vez: nem a Demanda, nem o fio, nem o e-mail."""
+        gh = _GithubFalso({673: _entregue(673)})
+        cliente, sb, _ = _montar(
+            demandas=[_entregue_por_pr(gh, 673, "D1", responsavel_id="P2")],
+            participantes=[_pessoa("P1")],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+        _avisar(cliente, _corpo_do_deploy())
+        depois_da_primeira = dict(_demandas(sb)[0])
+        linhas = len(_fio(sb))
+        assert len(_sem_email_de_verdade) == 1, "o piso: a primeira chamada devolveu"
+
+        resposta = _avisar(cliente, _corpo_do_deploy())
+
+        assert resposta.json()["marcadas"] == 0
+        assert _demandas(sb)[0] == depois_da_primeira
+        assert len(_fio(sb)) == linhas
+        assert len(_sem_email_de_verdade) == 1
+
+    def test_a_releitura_da_issue_depois_da_subida_mantem_em_producao(self, monkeypatch):
+        """A reconciliação de hora em hora relê a issue, que segue fechada: a
+        Etapa fica Em produção, sem linha nova. Sem isto, a passagem seguinte
+        derivaria Entregue da foto e o selo voltaria para trás."""
+        gh = _GithubFalso({673: _entregue(673)})
+        cliente, sb, _ = _montar(
+            demandas=[_entregue_por_pr(gh, 673, "D1")],
+            participantes=[_pessoa("P1")],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+        _avisar(cliente, _corpo_do_deploy())
+        linhas = len(_fio(sb))
+
+        tecnologia_sincronizacao.reconciliar_vinculos(sb)
+
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_PRODUCAO
+        assert len(_fio(sb)) == linhas
+
+    def test_a_issue_reaberta_sai_de_em_producao_e_o_novo_fechamento_espera_a_subida(self, monkeypatch):
+        """O diretor pediu ajuste: a issue reabre e a Etapa volta a andar. O
+        fechamento seguinte é Entregue, e não Em produção com a versão velha."""
+        gh = _GithubFalso({673: _entregue(673)})
+        cliente, sb, _ = _montar(
+            demandas=[_entregue_por_pr(gh, 673, "D1")],
+            participantes=[_pessoa("P1")],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+        _avisar(cliente, _corpo_do_deploy())
+
+        gh.issues[673] = _issue(673, labels=("in-progress",))
+        _entregar(cliente, _corpo(acao="reopened"))
+        assert _demandas(sb)[0]["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+
+        gh.issues[673] = _entregue(673)
+        _entregar(cliente, _corpo(acao="closed"))
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
+
+        _avisar(cliente, _corpo_do_deploy("0.170.0"))
+        demanda = _demandas(sb)[0]
+        assert (demanda["etapa"], demanda["versao_em_producao"]) == (ETAPA_EM_PRODUCAO, "v0.170.0")
+
+
+class TestAPortaDoDeploy:
+    @pytest.mark.parametrize(
+        "assinatura",
+        (None, "sha256=" + "0" * 64, "outro-segredo", "github"),
+        ids=("sem_assinatura", "assinatura_errada", "outro_segredo", "segredo_do_webhook_do_github"),
+    )
+    def test_assinatura_invalida_e_recusada_sem_gravar(self, assinatura, monkeypatch):
+        """Critério de aceite: 401 antes de qualquer leitura ou escrita. O
+        segredo do webhook do GitHub não abre esta porta: são dois segredos."""
+        gh = _GithubFalso({673: _entregue(673)})
+        cliente, sb, _ = _montar(demandas=[_entregue_por_pr(gh, 673, "D1")], github=gh, monkeypatch=monkeypatch)
+        corpo = _corpo_do_deploy()
+        if assinatura == "outro-segredo":
+            assinatura = _assinar(corpo, segredo="outro-segredo")
+        elif assinatura == "github":
+            assinatura = _assinar(corpo)
+
+        resposta = _avisar(cliente, corpo, assinatura=assinatura)
+
+        assert resposta.status_code == 401
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
+        assert _fio(sb) == []
+
+    def test_sem_o_segredo_configurado_responde_503(self, monkeypatch):
+        """Critério de aceite: até o passo humano, a porta fica fechada e diz
+        que está indisponível, e não que a assinatura falhou. A assinatura com
+        segredo vazio é a tentativa que uma porta aberta aceitaria."""
+        monkeypatch.setattr(settings, "tecnologia_deploy_webhook_secret", "")
+        gh = _GithubFalso({673: _entregue(673)})
+        cliente, sb, _ = _montar(demandas=[_entregue_por_pr(gh, 673, "D1")], github=gh, monkeypatch=monkeypatch)
+        corpo = _corpo_do_deploy()
+
+        resposta = _avisar(cliente, corpo, assinatura=_assinar(corpo, segredo=""))
+
+        assert resposta.status_code == 503
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
+
+    @pytest.mark.parametrize(
+        "corpo",
+        (
+            {"versao": "latest", "data": DATA_DA_SUBIDA, "prs": []},
+            {"versao": "0.169.0", "data": "ontem", "prs": []},
+            {"versao": "0.169.0", "data": "2026-10-07T18:00:00", "prs": []},
+            {"versao": "0.169.0", "data": DATA_DA_SUBIDA, "prs": [{"numero": 1100, "fecha": ["673"]}]},
+            {"versao": "0.169.0", "data": DATA_DA_SUBIDA, "prs": [{"numero": True, "fecha": [673]}]},
+            {"versao": "0.169.0", "data": DATA_DA_SUBIDA},
+        ),
+        ids=("versao", "data", "data_sem_fuso", "issue_em_texto", "pr_booleano", "sem_prs"),
+    )
+    def test_aviso_fora_do_formato_e_recusado_com_422(self, corpo, monkeypatch):
+        gh = _GithubFalso({673: _entregue(673)})
+        cliente, sb, _ = _montar(demandas=[_entregue_por_pr(gh, 673, "D1")], github=gh, monkeypatch=monkeypatch)
+
+        resposta = _avisar(cliente, json.dumps(corpo).encode("utf-8"))
+
+        assert resposta.status_code == 422
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
