@@ -26,6 +26,29 @@ export type AnexoDaDemanda = {
   url: string | null;
 };
 
+function textoOuNulo(valor: unknown): boolean {
+  return valor === null || typeof valor === "string";
+}
+
+/** A lista do card serve para a tela usar? Mesma fronteira dos outros corpos. */
+export function listaDeAnexosValida(corpo: unknown): corpo is AnexoDaDemanda[] {
+  return (
+    Array.isArray(corpo) &&
+    corpo.every((item) => {
+      if (typeof item !== "object" || item === null) return false;
+      const a = item as Record<string, unknown>;
+      return (
+        typeof a.id === "string" &&
+        typeof a.nome === "string" &&
+        textoOuNulo(a.anexado_por_nome) &&
+        textoOuNulo(a.criado_em) &&
+        textoOuNulo(a.apagado_em) &&
+        textoOuNulo(a.url)
+      );
+    })
+  );
+}
+
 export function urlDosAnexos(demandaId: string): string {
   return `${BASE_TECNOLOGIA}/demandas/${demandaId}/anexos`;
 }
