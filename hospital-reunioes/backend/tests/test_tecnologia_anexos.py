@@ -25,6 +25,7 @@ from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
 from app.services import tecnologia_email  # noqa: E402
 from app.services.assistente_tecnologia import LIMITE_DA_IMAGEM  # noqa: E402
 from app.services.tecnologia_anexos import (  # noqa: E402
+    EXPIRACAO_DA_URL_SEGUNDOS,
     MOTIVO_ANEXOS_DEMAIS,
     MOTIVO_ARQUIVO_VAZIO,
     MOTIVO_DEMANDA_ENCERRADA,
@@ -232,3 +233,42 @@ class TestAnexar:
 
         assert resposta.status_code == 503
         assert sb.storage.arquivos == {}
+
+
+# ─── 2. O card ───────────────────────────────────────────────────────────────
+
+
+class TestListar:
+    def test_o_card_lista_os_anexos_em_ordem_com_url_assinada_de_vida_curta(self):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1")])
+        _anexar(client, nome="primeira.png")
+        _anexar(client, nome="segunda.webp")
+
+        resposta = client.get(f"{BASE}/demandas/d-1/anexos")
+
+        assert resposta.status_code == 200
+        anexos = resposta.json()
+        assert [a["nome"] for a in anexos] == ["primeira.png", "segunda.webp"]
+        assert all(a["anexado_por_nome"] == PEDRO["nome_completo"] for a in anexos)
+        assert all(a["criado_em"] for a in anexos)
+        assert all(a["apagado_em"] is None for a in anexos)
+        # A URL e a do bucket privado, assinada, e vale minutos e nao horas.
+        caminhos = [linha["storage_path"] for linha in sorted(_anexos(sb), key=lambda linha: linha["ordem"])]
+        assert [a["url"] for a in anexos] == [
+            f"https://storage.local/{BUCKET}/{caminho}?token=assinado&exp={EXPIRACAO_DA_URL_SEGUNDOS}"
+            for caminho in caminhos
+        ]
+        assert EXPIRACAO_DA_URL_SEGUNDOS <= 15 * 60
+        # O caminho no storage nao sai: o acesso e so pela URL assinada.
+        assert all("storage_path" not in a for a in anexos)
+
+    def test_o_anexo_de_outra_demanda_nao_aparece(self):
+        client, _, _ = _cenario(demandas=[_demanda("d-1"), _demanda("d-2")])
+        _anexar(client, demanda_id="d-2", nome="da-outra.png")
+
+        assert client.get(f"{BASE}/demandas/d-1/anexos").json() == []
+
+    def test_demanda_inexistente_da_404(self):
+        client, _, _ = _cenario(demandas=[])
+
+        assert client.get(f"{BASE}/demandas/nao-existe/anexos").status_code == 404

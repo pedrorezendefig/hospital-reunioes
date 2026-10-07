@@ -48,6 +48,11 @@ MOTIVO_ARQUIVO_VAZIO = "A imagem chegou vazia: não há o que anexar. Escolha o 
 MOTIVO_DEMANDA_ENCERRADA = "Esta Demanda está encerrada: imagem só entra em Demanda aberta. Reabra antes de anexar."
 MOTIVO_NAO_GUARDOU = "Não foi possível guardar a imagem agora. Tente de novo em instantes."
 
+# Dez minutos: o card abre, a miniatura carrega, quem quer ver em tamanho real
+# clica. Link colado fora do app morre antes de virar acesso permanente ao
+# print. A tela pede a lista de novo a cada vez que o card abre.
+EXPIRACAO_DA_URL_SEGUNDOS = 600
+
 
 class AnexoRecusadoError(Exception):
     """A recusa, com a frase que a pessoa le e o status HTTP que a rota devolve."""
@@ -120,3 +125,36 @@ def anexar(supabase, *, demanda: dict, nome: str, conteudo: bytes, quem_id: str)
             logger.error("Anexo da Demanda %s órfão no bucket após falha de registro: %s", demanda_id, path)
         logger.exception("Falha ao registrar o anexo da Demanda %s", demanda_id)
         raise AnexoRecusadoError(MOTIVO_NAO_GUARDOU, status_code=503) from exc
+
+
+def ler(supabase, demanda_id: str) -> list[dict]:
+    """As linhas dos anexos da Demanda, na ordem em que entraram."""
+    result = supabase.table(TABELA_ANEXOS).select("*").eq("demanda_id", demanda_id).order("ordem").execute()
+    return list(result.data or [])
+
+
+def listar(supabase, demanda_id: str) -> list[dict]:
+    """Os anexos como o card os mostra: nome, quem, quando, e a URL assinada.
+
+    O anexo apagado vem sem URL e com `apagado_em`: o binario ja saiu do bucket,
+    e o card mostra que ele existiu. O caminho no storage nunca sai daqui.
+    """
+    linhas = ler(supabase, demanda_id)
+    quem = {linha["anexado_por"] for linha in linhas if linha.get("anexado_por")}
+    nomes: dict[str, str] = {}
+    if quem:
+        result = supabase.table("participantes").select("id, nome_completo").in_("id", sorted(quem)).execute()
+        nomes = {p["id"]: p.get("nome_completo") for p in (result.data or [])}
+    return [
+        {
+            "id": linha["id"],
+            "nome": linha.get("nome_original") or "",
+            "anexado_por_nome": nomes.get(linha.get("anexado_por")),
+            "criado_em": linha.get("criado_em"),
+            "apagado_em": linha.get("apagado_em"),
+            "url": None
+            if linha.get("apagado_em")
+            else storage.signed_url(supabase, _bucket(), linha["storage_path"], EXPIRACAO_DA_URL_SEGUNDOS),
+        }
+        for linha in linhas
+    ]

@@ -1193,6 +1193,17 @@ async def anexar_a_demanda(
     }
 
 
+@router.get("/demandas/{demanda_id}/anexos", response_model=list[AnexoDaDemandaResponse])
+async def listar_anexos_da_demanda(
+    demanda_id: str,
+    _ator: dict = Depends(require_super_admin),
+    supabase: Client = Depends(get_supabase_client),
+):
+    """Os anexos do card, com URL assinada de vida curta (ADR 0069)."""
+    _buscar_demanda(supabase, demanda_id)
+    return tecnologia_anexos.listar(supabase, demanda_id)
+
+
 # ─── Vinculo com o desenvolvimento (issue #674, ADR 0054) ────────────────────
 
 
