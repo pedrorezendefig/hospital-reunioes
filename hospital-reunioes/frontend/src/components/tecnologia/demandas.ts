@@ -326,7 +326,7 @@ export type LinhaDaConversa = {
   editavel_ate: string | null;
 };
 
-/** A ordem das colunas no Quadro. */
+/** Os cinco estados da Demanda, na ordem do fluxo. */
 export const ESTADOS: EstadoDemanda[] = ["nova", "em_andamento", "aguardando", "concluida", "cancelada"];
 
 export const ESTADO_ROTULO: Record<EstadoDemanda, string> = {
@@ -338,12 +338,13 @@ export const ESTADO_ROTULO: Record<EstadoDemanda, string> = {
 };
 
 /**
- * As duas colunas que nascem recolhidas.
+ * As três raias do Quadro, na ordem (issue #1058, PRD #1056).
  *
- * O contador continua à vista: recolher é dar espaço às colunas vivas, não
- * esconder o que foi fechado (PRD #634, história 24).
+ * Concluída e Cancelada continuam sendo estados no banco, mas deixaram de ser
+ * coluna: encerrar é uma ação no card aberto, e a Demanda encerrada sai do
+ * Quadro na hora. O que já fechou mora no Histórico.
  */
-export const COLUNAS_RECOLHIDAS: EstadoDemanda[] = ["concluida", "cancelada"];
+export const RAIAS: EstadoDemanda[] = ["nova", "em_andamento", "aguardando"];
 
 /** Espelho da tabela do backend (`app/services/tecnologia.py`). */
 export const TRANSICOES: Record<EstadoDemanda, EstadoDemanda[]> = {

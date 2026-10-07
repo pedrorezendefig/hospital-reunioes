@@ -296,54 +296,59 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("As cinco colunas", () => {
-  it("desenha as cinco, cada uma com o seu contador", async () => {
+describe("As três raias", () => {
+  it("desenha só Nova, Em andamento e Aguardando, cada uma com o seu contador", async () => {
     montar([
       demanda("d1", "Uma nova"),
       demanda("d2", "Outra nova"),
       demanda("d3", "Em curso", { estado: "em_andamento" }),
       demanda("d4", "Fechada", { estado: "concluida" }),
+      demanda("d5", "Desistimos", { estado: "cancelada" }),
     ]);
 
     await screen.findByText("Uma nova");
-    for (const nome of ["Nova", "Em andamento", "Aguardando", "Concluída", "Cancelada"]) {
-      expect(colunaDe(nome)).toBeTruthy();
-    }
+    expect(screen.getAllByRole("region").map((r) => r.getAttribute("aria-label"))).toEqual([
+      "Nova",
+      "Em andamento",
+      "Aguardando",
+    ]);
     expect(within(colunaDe("Nova")).getByText("2")).toBeTruthy();
     expect(within(colunaDe("Em andamento")).getByText("1")).toBeTruthy();
     expect(within(colunaDe("Aguardando")).getByText("0")).toBeTruthy();
-    expect(within(colunaDe("Concluída")).getByText("1")).toBeTruthy();
   });
 
-  it("Concluída e Cancelada nascem recolhidas, com o contador à vista", async () => {
+  it("a Demanda concluída ou cancelada não aparece em lugar nenhum do Quadro", async () => {
     montar([
       demanda("d1", "Uma nova"),
       demanda("d2", "Fechada", { estado: "concluida" }),
       demanda("d3", "Desistimos", { estado: "cancelada" }),
     ]);
 
-    // A irmã de presença: a coluna viva mostra o card no mesmo render, então
-    // "não aparece" abaixo significa recolhida, e não tela vazia.
+    // A irmã de presença: a raia viva mostra o card no mesmo render, então
+    // "não aparece" abaixo é ausência de verdade, e não tela vazia.
     expect(await screen.findByText("Uma nova")).toBeTruthy();
     expect(screen.queryByText("Fechada")).toBeNull();
     expect(screen.queryByText("Desistimos")).toBeNull();
-
-    // Recolhida não é escondida: o contador continua dizendo quantas são.
-    expect(within(colunaDe("Concluída")).getByText("1")).toBeTruthy();
-    expect(within(colunaDe("Cancelada")).getByText("1")).toBeTruthy();
+    expect(screen.queryByRole("region", { name: "Concluída" })).toBeNull();
+    expect(screen.queryByRole("region", { name: "Cancelada" })).toBeNull();
   });
 
-  it("a coluna recolhida abre ao clicar", async () => {
-    montar([demanda("d2", "Fechada", { estado: "concluida" })]);
+  it("raia vazia diz que não há Demanda ali", async () => {
+    montar([demanda("d1", "Uma nova")]);
 
-    await screen.findByRole("region", { name: "Concluída" });
-    const cabecalho = within(colunaDe("Concluída")).getByRole("button");
-    expect(cabecalho.getAttribute("aria-expanded")).toBe("false");
+    await screen.findByText("Uma nova");
+    expect(within(colunaDe("Aguardando")).getByText(/Nenhuma Demanda aqui/)).toBeTruthy();
+    expect(within(colunaDe("Nova")).queryByText(/Nenhuma Demanda aqui/)).toBeNull();
+  });
 
-    fireEvent.click(cabecalho);
+  it("no celular as raias empilham, e da tela média em diante ficam lado a lado em largura cheia", async () => {
+    montar([demanda("d1", "Uma nova")]);
 
-    expect(await screen.findByText("Fechada")).toBeTruthy();
-    expect(cabecalho.getAttribute("aria-expanded")).toBe("true");
+    await screen.findByText("Uma nova");
+    const grade = colunaDe("Nova").parentElement!;
+    expect(grade.className.split(" ")).toEqual(expect.arrayContaining(["grid", "grid-cols-1", "md:grid-cols-3"]));
+    // Largura fixa na raia brigaria com a grade e devolveria a rolagem lateral.
+    expect(colunaDe("Nova").className).not.toMatch(/w-\[/);
   });
 });
 

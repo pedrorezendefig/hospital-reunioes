@@ -32,12 +32,10 @@ import { TipoIcone } from "./TipoIcone";
 import {
   avisoPorEmail,
   BASE_TECNOLOGIA,
-  COLUNAS_RECOLHIDAS,
   Demanda,
   demandaIdDaUrl,
   destinosDe,
   ESTADO_ROTULO,
-  ESTADOS,
   EstadoDemanda,
   estaAtrasado,
   FALHA_DE_CONEXAO,
@@ -53,6 +51,7 @@ import {
   prazoLegivel,
   ProdutoDaEscolha,
   queryDeFiltros,
+  RAIAS,
   SEM_FILTRO,
   temFiltroAtivo,
   textoDaIdade,
@@ -146,7 +145,6 @@ export function QuadroDemandas({
   const [demandas, setDemandas] = useState<Demanda[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
-  const [expandidas, setExpandidas] = useState<EstadoDemanda[]>([]);
   const [moverAberto, setMoverAberto] = useState<string | null>(null);
   const [abertaId, setAbertaId] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState<string | null>(null);
@@ -621,11 +619,11 @@ export function QuadroDemandas({
       {carregando ? (
         <p className="text-sm text-text-secondary">Carregando Demandas...</p>
       ) : (
-        <div className="flex gap-4 overflow-x-auto pb-2">
-          {ESTADOS.map((estado) => {
+        // Uma coluna no celular, três da tela média em diante, sempre em largura
+        // cheia: com três raias não há mais o que rolar para o lado.
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+          {RAIAS.map((estado) => {
             const cards = coluna(estado);
-            const recolhivel = COLUNAS_RECOLHIDAS.includes(estado);
-            const expandida = !recolhivel || expandidas.includes(estado);
 
             return (
               <section
@@ -639,44 +637,24 @@ export function QuadroDemandas({
                   e.preventDefault();
                   soltarEm(estado);
                 }}
-                className={`shrink-0 rounded-xl border bg-surface p-3 ${
-                  expandida ? "w-[260px]" : "w-[180px]"
-                } ${arrastando ? "border-dashed border-primary/50" : "border-border"}`}
+                className={`min-w-0 rounded-xl border bg-surface p-3 ${
+                  arrastando ? "border-dashed border-primary/50" : "border-border"
+                }`}
               >
-                {recolhivel ? (
-                  <button
-                    type="button"
-                    aria-expanded={expandida}
-                    onClick={() =>
-                      setExpandidas(
-                        expandida ? expandidas.filter((e) => e !== estado) : [...expandidas, estado],
-                      )
-                    }
-                    className="w-full flex items-center justify-between gap-2 text-sm font-semibold text-text hover:text-primary transition-colors"
-                  >
-                    <span>{ESTADO_ROTULO[estado]}</span>
-                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-xs text-slate-600">
-                      {cards.length}
-                    </span>
-                  </button>
-                ) : (
-                  <h3 className="flex items-center justify-between gap-2 text-sm font-semibold text-text">
-                    <span>{ESTADO_ROTULO[estado]}</span>
-                    <span className="px-2 py-0.5 rounded-full bg-slate-100 text-xs text-slate-600">
-                      {cards.length}
-                    </span>
-                  </h3>
-                )}
+                <h3 className="flex items-center justify-between gap-2 text-sm font-semibold text-text">
+                  <span>{ESTADO_ROTULO[estado]}</span>
+                  <span className="px-2 py-0.5 rounded-full bg-slate-100 text-xs text-slate-600">
+                    {cards.length}
+                  </span>
+                </h3>
 
-                {expandida && (
-                  <ul className="mt-3 space-y-2">
-                    {cards.length === 0 ? (
-                      <li className="text-xs text-text-secondary">Nenhuma Demanda aqui.</li>
-                    ) : (
-                      cards.map(cartao)
-                    )}
-                  </ul>
-                )}
+                <ul className="mt-3 space-y-2">
+                  {cards.length === 0 ? (
+                    <li className="text-xs text-text-secondary">Nenhuma Demanda aqui.</li>
+                  ) : (
+                    cards.map(cartao)
+                  )}
+                </ul>
               </section>
             );
           })}
