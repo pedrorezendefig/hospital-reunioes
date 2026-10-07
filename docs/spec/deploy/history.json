@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-07T01:21:44-03:00",
+      "sha": "f55a7e5fad4aa6f0cfe0e0e0ce184f2678c88b68",
+      "app_version": "0.166.1",
+      "subject": "Onda onda-c-onda1: Suíte do backend, snapshot.py e pnpm rodam no Windows; O kit instalar-fluxo leva a onda-enxuta e o fechar_onda.py como a subida do DESTINO; Medir_onda acha o projeto quando o caminh",
+      "raw_subject": "chore(deploy): registro da onda onda-c-onda1 (#1074 #1071 #1069)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        902
+      ],
+      "result": "healthy",
+      "duration_seconds": 1387,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-c-onda1: PR #1074 (issue #844), PR #1071 (issue #924), PR #1069 (issue #900), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 8,
+        "build_s": {
+          "backend": 17
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-07T01:11:25-03:00",
       "sha": "d7e54948b40e87b02dbb27b62eaf097bd71a39a1",
       "app_version": "0.166.0",
