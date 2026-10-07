@@ -265,8 +265,9 @@ def _secao(body: str, nome: str) -> str | None:
     return None
 
 
-def _texto_puro(texto: str, maximo: int = 160) -> str:
-    texto = " ".join(re.sub(r"\*\*|`", "", texto).split())  # o hover é texto puro
+def _texto_puro(texto: str, maximo: int = 420) -> str:
+    """Sem markdown e com espaço normalizado; a linha em branco entre parágrafos fica."""
+    texto = "\n\n".join(" ".join(p.split()) for p in re.sub(r"\*\*|`", "", texto).split("\n\n"))
     return texto if len(texto) <= maximo else texto[: maximo - 1].rstrip() + "…"
 
 
@@ -284,7 +285,9 @@ def resumo_funcional(body: str) -> dict | None:
     texto = " ".join(t for t in (campo(funcional, "O que é"), campo(funcional, "Valor")) if t)
     if not texto:
         contexto = _secao(body, "contexto")
-        texto = next((p.strip() for p in (contexto or "").split("\n\n") if p.strip()), "")
+        # os dois primeiros parágrafos, um por linha em branco (o hover desenha um <p> por parágrafo)
+        paragrafos = [" ".join(p.split()) for p in (contexto or "").split("\n\n") if p.strip()][:2]
+        texto = "\n\n".join(paragrafos)
     return {"antes": None, "depois": None, "contexto": _texto_puro(texto)} if texto else None
 
 

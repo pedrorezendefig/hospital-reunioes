@@ -163,9 +163,10 @@ function cardHtml(c, ctx) {
 const NOME_DA_FASE = Object.fromEntries([...COLUNAS, ['fechado_sem_merge', 'Fechado sem merge']]);
 
 /* conteúdo do resumo (só span, p, b, em e a: o seletor dos testes conta
-   com nenhum div dentro). Enxuto: o valor entregue (antes e depois, da
-   seção do template do PR; PR antigo mostra o começo do Contexto) e uma
-   linha de rodapé com issue, situação e data. fixo = o clicado, com links */
+   com nenhum div dentro): o título, o valor entregue (antes e depois, da
+   seção do template do PR; PR antigo mostra os dois primeiros parágrafos do
+   Contexto), o que resolve (o título das issues) e uma linha de rodapé com
+   issue, situação e data. fixo = o clicado, com links */
 function resumoDoPr(pr, fase, ctx, fixo) {
   const issues = pr.closes.length
     ? pr.closes.map(n => (fixo ? `<a href="${esc(montarHash({ aba: 'issues', item: String(n) }))}">#${n}</a>` : `#${n}`)).join(' ')
@@ -179,11 +180,14 @@ function resumoDoPr(pr, fase, ctx, fixo) {
   const r = pr.resumo || {};
   const valor = r.antes || r.depois
     ? `${r.antes ? `<p><em>Antes</em> ${esc(r.antes)}</p>` : ''}${r.depois ? `<p><em>Depois</em> ${esc(r.depois)}</p>` : ''}`
-    : r.contexto ? `<p>${esc(r.contexto)}</p>` : '';
+    : r.contexto ? r.contexto.split('\n\n').map(p => `<p>${esc(p)}</p>`).join('') : '';
+  const resolve = pr.closes.filter(n => (ctx.issues[n] || {}).title)
+    .map(n => `<p>#${n} ${esc(ctx.issues[n].title)}</p>`).join('');
   return `<b>PR #${pr.number} · ${esc(NOME_DA_FASE[fase.fase] || fase.fase)}</b>
-    ${valor ? `<span class="fx-k">valor entregue</span>${valor}` : `<p class="pr-pop-tit">${esc(pr.title)}</p>`}
+    <p class="pr-pop-tit">${esc(pr.title)}</p>
+    ${valor ? `<span class="fx-k">valor entregue</span>${valor}` : ''}${resolve ? `<span class="fx-k">o que resolve</span>${resolve}` : ''}
     <p class="pr-pop-rodape">${rodape}</p>
-    ${fixo ? `<p class="pr-pop-tit">${esc(pr.title)}</p><a class="pr-pop-gh" href="${esc(ctx.data.repo_url)}/pull/${esc(pr.number)}" target="_blank" rel="noopener">abrir no GitHub ↗</a>` : ''}`;
+    ${fixo ? `<a class="pr-pop-gh" href="${esc(ctx.data.repo_url)}/pull/${esc(pr.number)}" target="_blank" rel="noopener">abrir no GitHub ↗</a>` : ''}`;
 }
 
 /* o resumo de um PR do payload, sem links (o app.js chama no hover) */
