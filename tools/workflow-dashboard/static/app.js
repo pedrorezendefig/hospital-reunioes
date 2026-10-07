@@ -788,7 +788,7 @@ function renderPrs() {
   return `
   <div class="tab-prs">
   ${cabecalho('acompanhar', 'PRs', 'gh · cada PR na sua fase, uma raia por pessoa')}
-  ${renderQuadroPrs({ data: S.data, filtros: S.fPrs, item: S.item, depVer, fmtD })}
+  ${renderQuadroPrs({ data: S.data, filtros: S.fPrs, item: S.item, depVer, fmtD, fmtDT })}
   </div>`;
 }
 
