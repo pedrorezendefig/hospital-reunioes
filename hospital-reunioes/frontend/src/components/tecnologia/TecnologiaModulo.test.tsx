@@ -14,7 +14,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { TecnologiaModulo } from "./TecnologiaModulo";
-import { EU_DESCONHECIDO, EuNaAba } from "./demandas";
+import { EU_DESCONHECIDO, EuNaAba, FALHA_DE_CONEXAO } from "./demandas";
 
 // `loading` é parametrizável de propósito, e não cravado em `false`: cravar
 // esconde o estado de BOOT do `useAuth` (`{ token: null, loading: true }`, duas
@@ -67,6 +67,8 @@ function montar(
     eu?: EuNaAba;
     /** O `GET /eu` responde erro: a aba tem que seguir de pé sem ele. */
     euFalha?: boolean;
+    /** A rede CAI na leitura: todo `GET` rejeita, em vez de responder erro. */
+    redeFora?: boolean;
   } = {},
 ) {
   chamadas = [];
@@ -80,6 +82,10 @@ function montar(
         metodo,
         corpo: init?.body ? JSON.parse(String(init.body)) : null,
       });
+
+      if (opcoes.redeFora && metodo === "GET") {
+        throw new TypeError("Failed to fetch");
+      }
 
       // As duas abas (o Quadro da issue #637 e o Painel da #1059) carregam o
       // que mostram e têm teste só delas: aqui elas ficam vazias.
@@ -193,6 +199,41 @@ describe("Produtos em tela própria (issue #1060)", () => {
     expect(screen.queryByRole("region", { name: "Produtos" })).toBeNull();
     expect(screen.queryByRole("button", { name: /Novo Produto/ })).toBeNull();
     expect(screen.queryByLabelText("Nome do Produto")).toBeNull();
+  });
+});
+
+describe("O aviso do módulo, acima das abas (issue #1060)", () => {
+  it("backend fora do ar: a aba avisa, fora do Quadro, em vez de calar", async () => {
+    // Produtos e pessoas são carregados AQUI e vão para o card aberto do
+    // Quadro e do Painel. Sem o aviso, a escolha de Produto ficaria vazia e
+    // muda. Com a rede fora o Quadro avisa do lado dele também, por isso a
+    // busca é pelo alerta que fica FORA do painel da aba: é o do módulo.
+    vi.spyOn(console, "error").mockImplementation(() => {});
+    montar([produto("p1", "Ana", 1, { dono_id: "P1" })], { redeFora: true });
+
+    const painel = await screen.findByRole("tabpanel");
+    await waitFor(() => {
+      const doModulo = screen.getAllByRole("alert").filter((a) => !painel.contains(a));
+      expect(doModulo).toHaveLength(1);
+      expect(doModulo[0].textContent).toContain(FALHA_DE_CONEXAO);
+    });
+  });
+
+  it("durante o boot da autenticação, a aba não acusa sessão nenhuma", async () => {
+    // O `useAuth` nasce com `{ token: null, loading: true }` e só entrega o
+    // token depois de `getUser()` e `getSession()`. Nesse intervalo, o aviso
+    // de sessão pintaria o alerta vermelho em TODA abertura da aba, com a
+    // sessão perfeitamente válida. A asserção é sobre a tela inteira: o
+    // módulo e as abas, que recebem `carregandoAuth` por prop.
+    sessao.carregando = true;
+    sessao.token = null;
+    montar([produto("p1", "Ana", 1, { dono_id: "P1" })]);
+
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    expect(await screen.findByRole("tabpanel")).toBeTruthy();
+    expect(screen.queryAllByRole("alert")).toHaveLength(0);
+    // E ninguém foi à rede antes de saber se existe sessão.
+    expect(chamadas).toHaveLength(0);
   });
 });
 
