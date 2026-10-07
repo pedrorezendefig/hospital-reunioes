@@ -467,7 +467,15 @@ def corpo_com_marcador(corpo: str | None, demanda_id: str) -> str:
 # So a CONTAGEM sai para o repositorio publico: nem URL (a assinada expira e,
 # enquanto vale, abre o print para qualquer um), nem nome de arquivo (o nome
 # pode ser "prontuario do Joao.png"). Quem desenvolve busca as imagens pelo app.
-_FRASE_DOS_ANEXOS_RE = re.compile(r"^Anexos: \d+ image(?:m|ns) na Demanda$", re.MULTILINE)
+#
+# A frase entra no FIM do corpo, e o corpo que termina no bloco "Para o
+# diretor" (o formato que o `_COMENTARIO_HTML` documenta) seria lido ate o fim
+# pelo `bloco_para_o_diretor`: a frase voltaria para o card do diretor e para o
+# "Copiar para IA". Nesse caso ela vem atras de um `---`, que fecha o bloco, e
+# o separador sai junto com ela quando a contagem muda ou vai a zero.
+_FRASE_DOS_ANEXOS_RE = re.compile(
+    r"(?:^-{3,}[ \t\r]*\n\s*)?^Anexos: \d+ image(?:m|ns) na Demanda[ \t\r]*$", re.MULTILINE
+)
 
 
 def frase_dos_anexos(quantos: int) -> str | None:
@@ -489,7 +497,10 @@ def corpo_vinculado(corpo: str | None, demanda_id: str, *, anexos: int) -> str:
     limpo = _FRASE_DOS_ANEXOS_RE.sub("", limpo).rstrip()
     frase = frase_dos_anexos(anexos)
     if frase:
-        limpo = f"{limpo}\n\n{frase}" if limpo else frase
+        com_frase = f"{limpo}\n\n{frase}" if limpo else frase
+        if frase in (bloco_para_o_diretor(com_frase) or ""):
+            com_frase = f"{limpo}\n\n---\n\n{frase}"
+        limpo = com_frase
     return corpo_com_marcador(limpo, demanda_id)
 
 

@@ -20,7 +20,9 @@ import os
 import sys
 from datetime import UTC, datetime
 
+import httpx
 import pytest
+from postgrest.exceptions import APIError
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -30,6 +32,7 @@ from test_tecnologia_vinculo import BASE, DIRETOR, _demanda, _GithubFalso, _issu
 from app.config import settings  # noqa: E402
 from app.limiter import limiter  # noqa: E402
 from app.services import assistente_tecnologia, tecnologia_anexos, tecnologia_email  # noqa: E402
+from app.services.tecnologia_vinculo import bloco_para_o_diretor  # noqa: E402
 
 LEVAR = f"{BASE}/demandas/d-1/levar-para-desenvolvimento"
 
@@ -86,8 +89,21 @@ class TestVincularEscreveAFrase:
         assert client.post(f"{BASE}/demandas/d-1/vincular", json={"numero": 501}).status_code == 200
 
         assert gh.issues[501]["body"] == (
-            f'{self.CORPO}\n\nAnexos: 3 imagens na Demanda\n\n<!-- demanda-vitta id="d-1" -->'
+            f'{self.CORPO}\n\n---\n\nAnexos: 3 imagens na Demanda\n\n<!-- demanda-vitta id="d-1" -->'
         )
+
+    def test_a_frase_nao_entra_no_texto_do_diretor(self, monkeypatch):
+        """O corpo que termina no bloco "Para o diretor" e o formato que o
+        `bloco_para_o_diretor` le ate o fim: a frase colada ali voltaria para o
+        card do diretor e para o "Copiar para IA"."""
+        gh = _GithubFalso({501: _issue(501, corpo=self.CORPO)})
+        client, _, _ = _cenario(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+        assert _anexar(client).status_code == 201
+
+        assert client.post(f"{BASE}/demandas/d-1/vincular", json={"numero": 501}).status_code == 200
+
+        assert "Anexos: 1 imagem na Demanda" in gh.issues[501]["body"]
+        assert bloco_para_o_diretor(gh.issues[501]["body"]) == "O selo passa a aparecer no card."
 
     def test_vincular_de_novo_com_a_mesma_contagem_nao_escreve(self, monkeypatch):
         gh = _GithubFalso({501: _issue(501, corpo=self.CORPO)})
@@ -122,9 +138,10 @@ class TestAContagemMudaNaIssueVinculada:
         assert _anexar(client, nome="dois.png").status_code == 201
 
         assert gh.issues[501]["body"] == (
-            "## Para o diretor\n\nO selo passa a aparecer no card.\n\n"
+            "## Para o diretor\n\nO selo passa a aparecer no card.\n\n---\n\n"
             'Anexos: 2 imagens na Demanda\n\n<!-- demanda-vitta id="d-1" -->'
         )
+        assert bloco_para_o_diretor(gh.issues[501]["body"]) == "O selo passa a aparecer no card."
 
     def test_concluir_tira_a_frase_porque_as_imagens_sairam(self, monkeypatch):
         client, _, gh = self._vinculada(monkeypatch)
@@ -228,6 +245,32 @@ class TestPrintDoAssistente:
         assert criada.status_code == 201
         assert _anexos(sb) == []
         assert criada.json()["aviso_dos_anexos"] == tecnologia_anexos.aviso_dos_prints(1)
+
+    @pytest.mark.parametrize("falha", (APIError({"message": "fora do ar"}), httpx.ReadTimeout("timeout")))
+    def test_falha_do_banco_ao_ler_os_anexos_vira_aviso_e_a_demanda_responde_201(self, monkeypatch, falha):
+        """A Demanda ja nasceu quando os prints entram: um 500 aqui mandaria a
+        pessoa criar de novo, e a Demanda sairia duplicada."""
+        client, sb, _ = _cenario(monkeypatch=monkeypatch)
+        print_id = _descrever(client).json()["print_id"]
+        original = sb.table
+
+        def _table(nome):
+            consulta = original(nome)
+            if nome == "tecnologia_anexos":
+
+                def execute():
+                    raise falha
+
+                consulta.execute = execute
+            return consulta
+
+        sb.table = _table
+
+        criada = _criar(client, prints=[print_id])
+
+        assert criada.status_code == 201
+        assert criada.json()["aviso_dos_anexos"] == tecnologia_anexos.aviso_dos_prints(1)
+        assert len(sb.tabelas["tecnologia_demandas"]) == 1
 
 
 # ─── 3. A resposta da Conversa leva uma imagem ───────────────────────────────

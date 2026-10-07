@@ -363,4 +363,10 @@ def anexar_prints(supabase, *, demanda: dict, print_ids: list[str], quem_id: str
         except AnexoRecusadoError:
             logger.warning("Print do Assistente recusado ao criar a Demanda %s", demanda.get("id"))
             faltaram += 1
+        except Exception:
+            # Largo de proposito, como o resto do modulo: o `APIError` e o
+            # `httpx.HTTPError` cru do PostgREST virariam 500 com a Demanda ja
+            # gravada, e a tela convidaria a cria-la de novo.
+            logger.exception("Falha ao gravar o print do Assistente na Demanda %s", demanda.get("id"))
+            faltaram += 1
     return aviso_dos_prints(faltaram)
