@@ -1,17 +1,20 @@
-"""Minha vez e Historico (issue #641, PRD #634, ADR 0050).
+"""O Painel da aba Tecnologia (issue #1059, PRD #1056), no lugar de "Minha vez"
+e do Historico (issue #641, PRD #634, ADR 0050).
 
 Dois seams, na mesma ordem das fatias anteriores:
 
-* **As regras puras**, testadas direto e sem HTTP: a ordem de "Minha vez", a
+* **As regras puras**, testadas direto e sem HTTP: a ordem do "Com voce", a
   conta de "fui mencionado e ainda nao respondi", o desfecho da Demanda
-  (quando e por quem ela fechou) e o que a busca do Historico procura.
-* **Os dois endpoints**, pela ROTA de verdade com o Supabase dublado, no molde
-  do `test_tecnologia_demandas.py`. E o unico jeito de provar que "Minha vez"
-  usa o participante LOGADO, e nao um id que a tela mandaria.
+  (quando e por quem ela fechou), o que a busca do Historico procura e os
+  quatro numeros do topo.
+* **A rota do Painel**, pela ROTA de verdade com o Supabase dublado, no molde
+  do `test_tecnologia_demandas.py`. E o unico jeito de provar que o "Com voce"
+  usa o participante LOGADO, e nao um id que a tela mandaria. Os testes que
+  eram das duas rotas antigas leem o bloco correspondente do Painel: os casos
+  de hoje continuam valendo, so mudou a porta.
 
 O gate de papel nao se repete aqui: a matriz de `test_admin_tecnologia.py`
-varre o schema OpenAPI e engole as duas rotas novas (o piso dela subiu de 13
-para 15 no mesmo commit).
+varre o schema OpenAPI e engole a rota nova.
 """
 
 from __future__ import annotations
@@ -19,6 +22,7 @@ from __future__ import annotations
 import os
 import sys
 from dataclasses import dataclass
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
@@ -850,10 +854,129 @@ def _montar_com_duble(
     return TestClient(app), sb
 
 
-# ─── 3. Minha vez, pela rota ─────────────────────────────────────────────────
+def _painel(client: TestClient, **params) -> dict:
+    resposta = client.get(f"{BASE}/painel", params=params)
+    assert resposta.status_code == 200, resposta.text
+    return resposta.json()
 
 
-class TestMinhaVezPelaRota:
+def _com_voce(client: TestClient, **params) -> list[dict]:
+    return _painel(client, **params)["com_voce"]
+
+
+def _entregas(client: TestClient) -> list[dict]:
+    return _painel(client)["entregas"]
+
+
+def _historico(client: TestClient, **params) -> list[dict]:
+    return _painel(client, **params)["historico"]
+
+
+def _ha_dias(dias: float) -> str:
+    """Um instante relativo a AGORA: a janela de 30 dias e contada pelo relogio
+    da rota, e uma data cravada no teste sairia da janela com o calendario."""
+    return (datetime.now(UTC) - timedelta(days=dias)).isoformat()
+
+
+# ─── 3. Os quatro numeros, pela rota ─────────────────────────────────────────
+
+
+class TestOsQuatroNumerosPelaRota:
+    """O topo do Painel (issue #1059): abertas, com o hospital, em
+    desenvolvimento e entregues nos ultimos 30 dias.
+
+    Um conjunto so, semeado para que cada numero tenha um caso que entra e um
+    vizinho que nao entra. Os valores esperados sao contados a mao, Demanda por
+    Demanda, a partir das definicoes da issue:
+
+    - abertas = Nova + Em andamento + Aguardando: a1, a2, a3, a4, a5;
+    - com o hospital = Aguardando: a3, a4;
+    - em desenvolvimento = abertas com Vinculo em Planejada ou Em
+      desenvolvimento: a2 (Planejada) e a3 (Em desenvolvimento). A f3,
+      cancelada em Em desenvolvimento, nao conta: ela nao esta mais em
+      desenvolvimento para o hospital, e o bloco Entregas nao a mostra;
+    - entregues nos ultimos 30 dias = `entregue_em` dentro da janela: a5 (5
+      dias, ainda aberta) e f1 (10 dias, ja concluida). A f2, de 40 dias, fica
+      de fora.
+    """
+
+    def _cenario(self, logado: dict = PEDRO) -> TestClient:
+        return _montar(
+            logado=logado,
+            demandas=[
+                _demanda("a1", estado="nova"),
+                _demanda("a2", estado="em_andamento", github_issue_numero=10, etapa="planejada"),
+                _demanda("a3", estado="aguardando", github_issue_numero=11, etapa="em_desenvolvimento"),
+                _demanda("a4", estado="aguardando", responsavel_id="P2"),
+                _demanda(
+                    "a5",
+                    estado="em_andamento",
+                    github_issue_numero=12,
+                    etapa="entregue",
+                    entregue_em=_ha_dias(5),
+                ),
+                _demanda(
+                    "f1",
+                    estado="concluida",
+                    concluida_em=_ha_dias(2),
+                    github_issue_numero=13,
+                    etapa="em_producao",
+                    versao_em_producao="v0.165.0",
+                    entregue_em=_ha_dias(10),
+                ),
+                _demanda("f2", estado="concluida", concluida_em=_ha_dias(35), entregue_em=_ha_dias(40)),
+                _demanda(
+                    "f3",
+                    estado="cancelada",
+                    cancelada_em=_ha_dias(1),
+                    github_issue_numero=14,
+                    etapa="em_desenvolvimento",
+                ),
+            ],
+        )
+
+    def test_os_quatro_numeros_do_conjunto_semeado(self):
+        numeros = _painel(self._cenario())["numeros"]
+
+        assert numeros == {
+            "abertas": 5,
+            "com_o_hospital": 2,
+            "em_desenvolvimento": 2,
+            "entregues_30_dias": 2,
+        }
+
+    def test_nenhum_numero_e_por_pessoa(self):
+        """ADR 0061 recusou comparar gente. O Painel e o mesmo para quem quer que
+        abra: Pedro e Sócia leem os MESMOS quatro numeros, embora o "Com voce"
+        de cada um seja diferente no mesmo cenario (a4 e da Sócia). A igualdade
+        de chaves acima ja prende que nao entrou um quinto numero por pessoa;
+        esta prende que nenhum dos quatro muda com quem esta logado."""
+        do_pedro = _painel(self._cenario(PEDRO))
+        da_socia = _painel(self._cenario(SOCIA))
+
+        assert do_pedro["numeros"] == da_socia["numeros"]
+        # A irma de presenca: o cenario distingue as duas pessoas de verdade, e
+        # a igualdade acima nao vem de um Painel que ignora quem esta logado.
+        assert {d["id"] for d in do_pedro["com_voce"]} != {d["id"] for d in da_socia["com_voce"]}
+
+
+class TestAsRotasAntigasSairam:
+    """ "Minha vez" e Historico viraram blocos do Painel (issue #1059): as duas
+    rotas saem junto com as abas, para nao sobrar porta sem tela."""
+
+    @pytest.mark.parametrize("caminho", ("/minha-vez", "/historico"))
+    def test_a_rota_antiga_nao_existe_mais(self, caminho):
+        client = _montar(demandas=[_demanda("d1")])
+
+        assert client.get(f"{BASE}{caminho}").status_code == 404
+        # A irma de presenca: o mesmo cliente responde o Painel.
+        assert client.get(f"{BASE}/painel").status_code == 200
+
+
+# ─── 4. Com voce, pela rota (os casos de "Minha vez") ────────────────────────
+
+
+class TestComVocePelaRota:
     def test_traz_so_as_abertas_em_que_eu_sou_o_responsavel(self):
         client = _montar(
             logado=SOCIA,
@@ -864,7 +987,7 @@ class TestMinhaVezPelaRota:
             ],
         )
 
-        corpo = client.get(f"{BASE}/minha-vez").json()
+        corpo = _com_voce(client)
 
         assert {d["id"] for d in corpo} == {"minha"}
 
@@ -878,7 +1001,7 @@ class TestMinhaVezPelaRota:
             ],
         )
 
-        corpo = client.get(f"{BASE}/minha-vez").json()
+        corpo = _com_voce(client)
 
         # A irma de presenca: a aberta aparece no MESMO pedido, entao a
         # ausencia da fechada nao e uma lista vazia disfarcada.
@@ -891,7 +1014,7 @@ class TestMinhaVezPelaRota:
             conversas=[_linha("d1", autor_id="P1", texto="@Sócia Vitta o que acha?", mencoes=["P2"])],
         )
 
-        corpo = client.get(f"{BASE}/minha-vez").json()
+        corpo = _com_voce(client)
 
         assert [d["id"] for d in corpo] == ["d1"]
         assert corpo[0]["motivo"] == "mencao"
@@ -913,7 +1036,7 @@ class TestMinhaVezPelaRota:
             ],
         )
 
-        assert client.get(f"{BASE}/minha-vez").json() == []
+        assert _com_voce(client) == []
 
     def test_o_motivo_diz_por_que_o_card_esta_na_aba(self):
         client = _montar(
@@ -922,7 +1045,7 @@ class TestMinhaVezPelaRota:
             conversas=[_linha("chamada", autor_id="P1", texto="@Sócia Vitta olha", mencoes=["P2"])],
         )
 
-        por_id = {d["id"]: d for d in client.get(f"{BASE}/minha-vez").json()}
+        por_id = {d["id"]: d for d in _com_voce(client)}
 
         assert por_id["minha"]["motivo"] == "responsavel"
         assert por_id["chamada"]["motivo"] == "mencao"
@@ -949,7 +1072,7 @@ class TestMinhaVezPelaRota:
             ],
         )
 
-        por_id = {d["id"]: d for d in client.get(f"{BASE}/minha-vez").json()}
+        por_id = {d["id"]: d for d in _com_voce(client)}
 
         assert por_id["devolvida"]["motivo"] == "entregue"
         assert por_id["esperando"]["motivo"] == "responsavel"
@@ -966,7 +1089,7 @@ class TestMinhaVezPelaRota:
             ],
         )
 
-        corpo = client.get(f"{BASE}/minha-vez").json()
+        corpo = _com_voce(client)
 
         assert [d["id"] for d in corpo] == [
             "alta_velha",
@@ -981,8 +1104,8 @@ class TestMinhaVezPelaRota:
         listas: sem isso, "Minha vez" seria "a vez de alguem"."""
         demandas = [_demanda("do_pedro", responsavel_id="P1"), _demanda("da_socia", responsavel_id="P2")]
 
-        do_pedro = _montar(logado=PEDRO, demandas=demandas).get(f"{BASE}/minha-vez").json()
-        da_socia = _montar(logado=SOCIA, demandas=demandas).get(f"{BASE}/minha-vez").json()
+        do_pedro = _com_voce(_montar(logado=PEDRO, demandas=demandas))
+        da_socia = _com_voce(_montar(logado=SOCIA, demandas=demandas))
 
         assert [d["id"] for d in do_pedro] == ["do_pedro"]
         assert [d["id"] for d in da_socia] == ["da_socia"]
@@ -990,39 +1113,96 @@ class TestMinhaVezPelaRota:
     def test_traz_o_nome_do_produto_e_do_responsavel(self):
         client = _montar(logado=SOCIA, demandas=[_demanda("d1", responsavel_id="P2")])
 
-        corpo = client.get(f"{BASE}/minha-vez").json()
+        corpo = _com_voce(client)
 
         assert corpo[0]["produto_nome"] == "Ana"
         assert corpo[0]["responsavel_nome"] == "Sócia Vitta"
 
-    @pytest.mark.parametrize(
-        "filtro,esperado",
-        (
-            ({}, {"d1", "d2"}),
-            ({"tipo": "defeito"}, {"d2"}),
-            ({"produto_id": "prod-2"}, {"d2"}),
-            ({"responsavel_id": "P1"}, set()),
-        ),
-    )
-    def test_os_filtros_da_aba_valem_aqui_tambem(self, filtro, esperado):
-        """Os filtros sao COMPARTILHADOS entre as tres abas (issue #639), e a
-        aba que os ignorasse mostraria uma lista que contradiz os campos
-        preenchidos logo acima dela."""
-        client = _montar(
+
+# ─── 5. Entregas, pela rota ──────────────────────────────────────────────────
+
+
+class TestEntregasPelaRota:
+    """O bloco Entregas (issue #1059): as Demandas abertas com Vinculo, cada uma
+    com a Etapa, as partes e a versao quando a Etapa e Em producao, pela ultima
+    mudanca. E onde o diretor ve o que a Vitta esta fazendo sem abrir card.
+
+    O `atualizado_em` de cada uma DISCORDA da ordem em que o banco as devolve
+    (`criado_em` empatado, desempate pelo `id`: e1, e2, e3), e tambem da ordem
+    inversa: so uma lista ordenada pela ultima mudanca da a ordem esperada.
+    """
+
+    def _cenario(self) -> TestClient:
+        return _montar(
             logado=SOCIA,
-            produtos=[{"id": "prod-1", "nome": "Ana"}, {"id": "prod-2", "nome": "POPs"}],
             demandas=[
-                _demanda("d1", responsavel_id="P2", tipo="decisao", produto_id="prod-1"),
-                _demanda("d2", responsavel_id="P2", tipo="defeito", produto_id="prod-2"),
+                _demanda(
+                    "e1",
+                    estado="em_andamento",
+                    github_issue_numero=20,
+                    etapa="em_desenvolvimento",
+                    partes_entregues=1,
+                    partes_total=3,
+                    atualizado_em="2026-09-05T10:00:00Z",
+                ),
+                _demanda(
+                    "e2",
+                    estado="aguardando",
+                    github_issue_numero=21,
+                    etapa="em_producao",
+                    versao_em_producao="v0.165.0",
+                    atualizado_em="2026-09-07T10:00:00Z",
+                ),
+                _demanda(
+                    "e3",
+                    estado="nova",
+                    github_issue_numero=22,
+                    etapa="entregue",
+                    # A versao de uma subida anterior, com a Etapa que voltou a
+                    # Entregue: a versao nao vale mais e nao pode aparecer.
+                    versao_em_producao="v0.160.0",
+                    atualizado_em="2026-09-06T10:00:00Z",
+                ),
+                _demanda("sem_vinculo", estado="nova", atualizado_em="2026-09-08T10:00:00Z"),
+                _demanda(
+                    "fechada",
+                    estado="concluida",
+                    concluida_em="2026-09-09T10:00:00Z",
+                    github_issue_numero=23,
+                    etapa="em_producao",
+                    versao_em_producao="v0.166.0",
+                    atualizado_em="2026-09-09T10:00:00Z",
+                ),
             ],
         )
 
-        corpo = client.get(f"{BASE}/minha-vez", params=filtro).json()
+    def test_so_as_abertas_com_vinculo_pela_ultima_mudanca(self):
+        corpo = _entregas(self._cenario())
 
-        assert {d["id"] for d in corpo} == esperado
+        assert [d["id"] for d in corpo] == ["e2", "e3", "e1"]
+
+    def test_cada_linha_traz_a_etapa_e_as_partes(self):
+        por_id = {d["id"]: d for d in _entregas(self._cenario())}
+
+        assert por_id["e1"]["etapa"] == "em_desenvolvimento"
+        assert (por_id["e1"]["partes_entregues"], por_id["e1"]["partes_total"]) == (1, 3)
+        assert por_id["e2"]["etapa"] == "em_producao"
+
+    def test_a_versao_so_vem_quando_a_etapa_e_em_producao(self):
+        por_id = {d["id"]: d for d in _entregas(self._cenario())}
+
+        assert por_id["e2"]["versao"] == "v0.165.0"
+        assert por_id["e3"]["versao"] is None
+        assert por_id["e1"]["versao"] is None
+
+    def test_a_linha_traz_o_nome_do_produto(self):
+        """A linha passa pelo mesmo funil das outras listas (`_com_nomes`)."""
+        corpo = _entregas(self._cenario())
+
+        assert {d["produto_nome"] for d in corpo} == {"Ana"}
 
 
-# ─── 4. Historico, pela rota ─────────────────────────────────────────────────
+# ─── 6. Historico, pela rota ─────────────────────────────────────────────────
 
 
 class TestHistoricoPelaRota:
@@ -1051,12 +1231,12 @@ class TestHistoricoPelaRota:
         )
 
     def test_traz_so_concluida_e_cancelada(self):
-        corpo = self._cenario().get(f"{BASE}/historico").json()
+        corpo = _historico(self._cenario())
 
         assert {d["id"] for d in corpo} == {"fechada", "desistida"}
 
     def test_cada_linha_diz_quando_e_por_quem_fechou(self):
-        por_id = {d["id"]: d for d in self._cenario().get(f"{BASE}/historico").json()}
+        por_id = {d["id"]: d for d in _historico(self._cenario())}
 
         assert por_id["fechada"]["fechada_em"] == "2026-09-08T10:00:00Z"
         assert por_id["fechada"]["fechada_por_nome"] == "Sócia Vitta"
@@ -1078,33 +1258,20 @@ class TestHistoricoPelaRota:
     def test_a_busca_varre_titulo_descricao_e_conversa(self, termo, esperado):
         """ "integração" esta no titulo da Demanda ABERTA: a busca nao pode
         trazer de volta o que o Historico nao mostra."""
-        corpo = self._cenario().get(f"{BASE}/historico", params={"busca": termo}).json()
+        corpo = _historico(self._cenario(), busca=termo)
 
         assert {d["id"] for d in corpo} == esperado
 
     @pytest.mark.parametrize("vazio", ("", "   "))
     def test_busca_vazia_traz_o_historico_inteiro(self, vazio):
-        corpo = self._cenario().get(f"{BASE}/historico", params={"busca": vazio}).json()
+        corpo = _historico(self._cenario(), busca=vazio)
 
         assert {d["id"] for d in corpo} == {"fechada", "desistida"}
 
     def test_a_ordem_e_a_que_fechou_por_ultimo_primeiro(self):
-        corpo = self._cenario().get(f"{BASE}/historico").json()
+        corpo = _historico(self._cenario())
 
         assert [d["id"] for d in corpo] == ["fechada", "desistida"]
-
-    def test_os_filtros_da_aba_valem_aqui_tambem(self):
-        client = _montar(
-            produtos=[{"id": "prod-1", "nome": "Ana"}, {"id": "prod-2", "nome": "POPs"}],
-            demandas=[
-                _demanda("d1", estado="concluida", produto_id="prod-1", concluida_em="2026-09-08T10:00:00Z"),
-                _demanda("d2", estado="concluida", produto_id="prod-2", concluida_em="2026-09-07T10:00:00Z"),
-            ],
-        )
-
-        corpo = client.get(f"{BASE}/historico", params={"produto_id": "prod-2"}).json()
-
-        assert {d["id"] for d in corpo} == {"d2"}
 
     def test_a_busca_nao_le_a_linha_de_movimento(self):
         """O texto do movimento carrega o nome de quem moveu. Se ele entrasse
@@ -1119,10 +1286,10 @@ class TestHistoricoPelaRota:
             ],
         )
 
-        assert client.get(f"{BASE}/historico", params={"busca": "Pedro"}).json() == []
+        assert _historico(client, busca="Pedro") == []
         # A irma de presenca, no mesmo cenario: a busca funciona, ela so nao
         # olha a linha de movimento.
-        assert [d["id"] for d in client.get(f"{BASE}/historico", params={"busca": "logotipo"}).json()] == ["d1"]
+        assert [d["id"] for d in _historico(client, busca="logotipo")] == ["d1"]
 
     def test_fechada_sem_carimbo_de_pessoa_ainda_aparece(self):
         """Linha antiga ou escrita por fora do app: o Historico nao esconde a
@@ -1131,13 +1298,13 @@ class TestHistoricoPelaRota:
             demandas=[_demanda("d1", estado="concluida", concluida_em="2026-09-08T10:00:00Z", concluida_por=None)]
         )
 
-        corpo = client.get(f"{BASE}/historico").json()
+        corpo = _historico(client)
 
         assert [d["id"] for d in corpo] == ["d1"]
         assert corpo[0]["fechada_por_nome"] is None
 
 
-# ─── 5. A ordem do fio e o teto do PostgREST (rodada 1 de fix) ───────────────
+# ─── 7. A ordem do fio e o teto do PostgREST (rodada 1 de fix) ───────────────
 
 
 class TestAOrdemDoFio:
@@ -1175,7 +1342,7 @@ class TestAOrdemDoFio:
             ],
         )
 
-        assert client.get(f"{BASE}/minha-vez").json() == []
+        assert _com_voce(client) == []
 
     def test_a_resposta_antes_da_mencao_mantem_a_vez_mesmo_chegando_por_ultimo(self):
         """A irma de presenca da de cima, com o MESMO desalinho entre a ordem da
@@ -1193,7 +1360,7 @@ class TestAOrdemDoFio:
             ],
         )
 
-        assert [d["id"] for d in client.get(f"{BASE}/minha-vez").json()] == ["d1"]
+        assert [d["id"] for d in _com_voce(client)] == ["d1"]
 
     def test_duas_linhas_no_mesmo_instante_sao_desempatadas_pelo_id(self):
         """`criado_em` sozinho nao e chave unica. Duas linhas gravadas no mesmo
@@ -1219,7 +1386,7 @@ class TestAOrdemDoFio:
             ],
         )
 
-        assert client.get(f"{BASE}/minha-vez").json() == []
+        assert _com_voce(client) == []
 
 
 class TestAMencaoDaCorrecaoPelaRota:
@@ -1257,12 +1424,12 @@ class TestAMencaoDaCorrecaoPelaRota:
     def test_a_demanda_aparece_para_quem_a_correcao_chamou(self):
         client = self._client(self.ANTES_DA_CORRECAO)
 
-        assert [d["id"] for d in client.get(f"{BASE}/minha-vez").json()] == ["d1"]
+        assert [d["id"] for d in _com_voce(client)] == ["d1"]
 
     def test_e_sai_quando_a_resposta_veio_depois_da_correcao(self):
         client = self._client(self.DEPOIS_DA_CORRECAO)
 
-        assert client.get(f"{BASE}/minha-vez").json() == []
+        assert _com_voce(client) == []
 
 
 class TestQuemACorrecaoChamaPelaRota:
@@ -1302,7 +1469,7 @@ class TestQuemACorrecaoChamaPelaRota:
     def test_a_correcao_que_chamou_outra_pessoa_nao_traz_a_socia_de_volta(self):
         client = self._client(mencoes_da_correcao=["P3"])
 
-        assert client.get(f"{BASE}/minha-vez").json() == []
+        assert _com_voce(client) == []
 
     def test_a_socia_continua_aparecendo_quando_a_correcao_chamou_ela(self):
         """A irma de presenca: no MESMO cenario, com a Socia na lista da
@@ -1310,7 +1477,7 @@ class TestQuemACorrecaoChamaPelaRota:
         passaria no teste de cima."""
         client = self._client(mencoes_da_correcao=["P2"])
 
-        assert [d["id"] for d in client.get(f"{BASE}/minha-vez").json()] == ["d1"]
+        assert [d["id"] for d in _com_voce(client)] == ["d1"]
 
 
 class TestOTetoDoPostgrest:
@@ -1363,7 +1530,7 @@ class TestOTetoDoPostgrest:
             ],
         )
 
-        assert [d["id"] for d in client.get(f"{BASE}/minha-vez").json()] == ["d2"]
+        assert [d["id"] for d in _com_voce(client)] == ["d2"]
 
     def test_o_historico_nao_perde_as_demandas_alem_do_teto(self):
         client = _montar(
@@ -1373,7 +1540,7 @@ class TestOTetoDoPostgrest:
             ],
         )
 
-        corpo = client.get(f"{BASE}/historico").json()
+        corpo = _historico(client)
 
         assert {d["id"] for d in corpo} == {"d0", "d1", "d2"}
 
@@ -1393,7 +1560,7 @@ class TestOTetoDoPostgrest:
             ],
         )
 
-        corpo = client.get(f"{BASE}/historico", params={"busca": "régua"}).json()
+        corpo = _historico(client, busca="régua")
 
         assert [d["id"] for d in corpo] == ["d2"]
 
@@ -1423,7 +1590,7 @@ class TestAsColunasDoFio:
     def test_minha_vez_nao_pede_o_texto_da_conversa(self):
         client, sb = self._cenario_da_mencao()
 
-        client.get(f"{BASE}/minha-vez")
+        client.get(f"{BASE}/painel")
         pedidos = sb.selects_de("tecnologia_conversas")
 
         assert pedidos, "a rota nem leu a Conversa: a asserção abaixo passaria sobre nada"
@@ -1438,7 +1605,7 @@ class TestAsColunasDoFio:
         da lista, a linha chegaria sem eles e a mencao sumiria."""
         client, _ = self._cenario_da_mencao()
 
-        assert [d["id"] for d in client.get(f"{BASE}/minha-vez").json()] == ["d1"]
+        assert [d["id"] for d in _com_voce(client)] == ["d1"]
 
     def test_a_busca_do_historico_pede_o_texto(self):
         """O par do primeiro: a busca varre o texto das respostas, entao aqui a
@@ -1449,7 +1616,7 @@ class TestAsColunasDoFio:
             conversas=[_linha("d1", texto="combinamos a régua de 24 horas")],
         )
 
-        corpo = client.get(f"{BASE}/historico", params={"busca": "régua"}).json()
+        corpo = _historico(client, busca="régua")
 
         assert [d["id"] for d in corpo] == ["d1"]
         assert all("texto" in pedido for pedido in sb.selects_de("tecnologia_conversas"))
@@ -1462,29 +1629,26 @@ class TestAsColunasDoFio:
             conversas=[_linha("d1", texto="combinamos a régua de 24 horas")],
         )
 
-        client.get(f"{BASE}/historico")
+        client.get(f"{BASE}/painel")
 
         assert sb.selects_de("tecnologia_conversas") == []
         # A irma de presenca: com termo, ela le.
-        client.get(f"{BASE}/historico", params={"busca": "régua"})
+        client.get(f"{BASE}/painel", params={"busca": "régua"})
         assert sb.selects_de("tecnologia_conversas") != []
 
 
-class TestMinhaVezEAutorizacaoNaoFiltro:
-    """ "Minha vez" e a caixa de entrada de QUEM ESTA LOGADO, e nao uma consulta
+class TestComVoceEAutorizacao:
+    """O "Com voce" e a caixa de entrada de QUEM ESTA LOGADO, e nao uma consulta
     parametrizavel por pessoa.
 
-    Os tres filtros da aba (`tipo`, `produto_id`, `responsavel_id`) so
-    ESTREITAM a lista, e o `responsavel_id` e o unico deles que fala de gente:
-    ele e a porta por onde um "me mostre a vez de outra pessoa" entraria. Nao
-    entra, e e isto que fica preso aqui.
+    Desde a issue #1059 a rota do Painel nao recebe filtro nenhum, e o que fica
+    preso aqui e que nenhum parametro troca o dono da lista: um
+    `?responsavel_id=` mandado por um cliente qualquer e ignorado, e o bloco
+    continua respondendo "o que espera por MIM".
 
     Nao e sigilo: dentro da aba todo mundo ve tudo (ADR 0050, decisao 11), e
-    quem quiser as Demandas de outra pessoa pede `/demandas?responsavel_id=`,
-    que e o Quadro e existe para isso. E que "Minha vez" tem que continuar
-    querendo dizer MINHA vez: uma aba cujo dono muda conforme o parametro nao
-    responde mais a pergunta que ela promete responder, e o e-mail e as
-    contagens que vierem depois passariam a falar da caixa de outra pessoa.
+    quem quiser as Demandas de outra pessoa olha o Quadro. E que "Com voce" tem
+    que continuar querendo dizer COM VOCE.
     """
 
     def _cenario(self, logado: dict) -> TestClient:
@@ -1502,34 +1666,25 @@ class TestMinhaVezEAutorizacaoNaoFiltro:
 
     def test_pedir_com_o_id_de_outra_pessoa_nao_devolve_a_vez_dela(self):
         """O caso que prende a propriedade. Pedro pede `?responsavel_id=P2`: o
-        que volta e a INTERSECAO com a vez dele (a Demanda em que a Sócia o
-        chamou), e nunca `da_socia`, que e a vez da Sócia e de mais ninguem."""
-        corpo = self._cenario(PEDRO).get(f"{BASE}/minha-vez", params={"responsavel_id": "P2"}).json()
+        que volta e a vez DELE, inteira, e nunca `da_socia`."""
+        corpo = _com_voce(self._cenario(PEDRO), responsavel_id="P2")
 
-        assert [d["id"] for d in corpo] == ["chamou_o_pedro"]
-        assert "da_socia" not in {d["id"] for d in corpo}
+        assert {d["id"] for d in corpo} == {"do_pedro", "chamou_o_pedro"}
 
-    def test_o_par_de_presenca_o_filtro_com_o_proprio_id_funciona(self):
-        """Sem esta, uma rota que devolvesse lista vazia para qualquer
-        `responsavel_id` passaria na de cima, e o teste estaria provando que o
-        filtro nao funciona, e nao que a autorizacao vale."""
-        corpo = self._cenario(PEDRO).get(f"{BASE}/minha-vez", params={"responsavel_id": "P1"}).json()
-
-        assert [d["id"] for d in corpo] == ["do_pedro"]
-
-    def test_sem_parametro_nenhum_cada_um_ve_a_propria_vez(self):
-        """O terceiro lado: as duas listas inteiras, para o filtro acima nao ser
-        a unica coisa medida."""
-        do_pedro = self._cenario(PEDRO).get(f"{BASE}/minha-vez").json()
-        da_socia = self._cenario(SOCIA).get(f"{BASE}/minha-vez").json()
+    def test_cada_um_ve_a_propria_vez(self):
+        """A irma de presenca: as duas listas inteiras, uma por pessoa logada, no
+        mesmo Quadro. Sem ela, uma rota que devolvesse sempre a vez do Pedro
+        passaria na de cima."""
+        do_pedro = _com_voce(self._cenario(PEDRO))
+        da_socia = _com_voce(self._cenario(SOCIA))
 
         assert {d["id"] for d in do_pedro} == {"do_pedro", "chamou_o_pedro"}
         assert {d["id"] for d in da_socia} == {"da_socia", "chamou_o_pedro"}
 
-    def test_o_id_de_outra_pessoa_nao_troca_o_dono_do_motivo(self):
-        """O `motivo` continua respondendo "por que isto esta na MINHA aba", e
-        nao "quem e o responsavel": pedindo com o id da Sócia, a Demanda em que
-        ela chamou o Pedro continua marcada como mencao PARA ELE."""
-        corpo = self._cenario(PEDRO).get(f"{BASE}/minha-vez", params={"responsavel_id": "P2"}).json()
+    def test_o_motivo_e_de_quem_esta_logado(self):
+        """O `motivo` responde "por que isto esta na MINHA lista": a Demanda em
+        que a Sócia chamou o Pedro e mencao PARA ELE, mesmo pedindo com o id
+        dela."""
+        corpo = _com_voce(self._cenario(PEDRO), responsavel_id="P2")
 
-        assert corpo[0]["motivo"] == "mencao"
+        assert {d["id"]: d["motivo"] for d in corpo}["chamou_o_pedro"] == "mencao"

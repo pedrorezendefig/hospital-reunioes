@@ -1,36 +1,37 @@
 "use client";
 
 /**
- * A leitura de uma lista de Demandas da aba Tecnologia (issue #641).
+ * A leitura do Painel da aba Tecnologia (issue #1059; nasceu na issue #641
+ * para as abas "Minha vez" e Histórico, que o Painel substituiu).
  *
- * As abas "Minha vez" e Histórico pedem listas diferentes à mesma API, e
- * precisam das MESMAS quatro defesas. Escrever as quatro duas vezes seria
- * escrevê-las de dois jeitos, e a segunda cópia é onde o defeito mora:
+ * O Painel inteiro vem de uma rota só, e a busca do Histórico troca a leitura
+ * a cada termo. Ela precisa de quatro defesas:
  *
  * 1. **A autenticação carregando não é "sem sessão".** O `useAuth` nasce com
  *    `{ token: null, loading: true }` e só entrega o token depois de duas idas
  *    à rede. Tratar o token nulo do primeiro render como sessão ausente pisca
  *    o alerta vermelho em toda abertura da aba, com a sessão válida.
- * 2. **A falha vira aviso, e a lista de antes sai da tela.** Sem o `catch`, o
- *    backend fora do ar desenharia uma lista zerada, indistinguível de "nada
- *    esperando por você", que é justamente a frase de boa notícia da aba. E a
- *    lista ANTERIOR também não pode ficar: embaixo do alerta vermelho, com a
- *    caixa de busca já mostrando o termo novo, ela e o contador afirmariam um
- *    resultado que esta leitura não obteve.
- * 3. **O selo de sequência, conferido DUAS vezes.** Trocar o filtro ou digitar
- *    na busca deixa mais de um GET no ar, e a rede não devolve na ordem em que
+ * 2. **A falha vira aviso, e o Painel de antes sai da tela.** Sem o `catch`, o
+ *    backend fora do ar desenharia blocos zerados, indistinguíveis de "nada
+ *    esperando por você", que é justamente a frase de boa notícia do Painel. E
+ *    o Painel ANTERIOR também não pode ficar: embaixo do alerta vermelho, com a
+ *    caixa de busca já mostrando o termo novo, ele e o contador afirmariam um
+ *    resultado que esta leitura não obteve. Por isso a falha devolve `null`, e
+ *    não um Painel vazio.
+ * 3. **O selo de sequência, conferido DUAS vezes.** Digitar na busca deixa
+ *    mais de um GET no ar, e a rede não devolve na ordem em que
  *    foi chamada. Cada leitura leva o seu número e só escreve na tela se ainda
  *    for a última: isso vale para a lista, para o aviso e para desligar a
  *    espera. A segunda conferência, depois de ler o CORPO, é o que fecha a
  *    corrida de verdade: o corpo é outra espera, e um pedido novo pode começar
  *    e terminar enquanto o corpo do velho ainda está chegando.
- * 4. **A espera começa ligada**, para a primeira pintura não ser uma lista
- *    vazia que ninguém pediu.
+ * 4. **A espera começa ligada**, para a primeira pintura não ser um Painel
+ *    vazio que ninguém pediu.
  *
  * Molde do `QuadroDemandas`, que resolve o mesmo problema desde a issue #639.
  * Ele continua com a cópia dele: o Quadro tem um caminho de ESCRITA (criar e
  * mover), com a regra a mais de não deixar a leitura apagar o motivo de uma
- * recusa, e estas duas abas só leem.
+ * recusa, e o Painel só lê.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -48,21 +49,22 @@ type Opcoes = {
   falhaAoCarregar: string;
 };
 
-type Lista<T> = {
-  itens: T[];
+type Leitura<T> = {
+  /** O que a última leitura boa trouxe, ou `null` quando ainda não há ou falhou. */
+  dados: T | null;
   carregando: boolean;
   erro: string | null;
   recarregar: () => Promise<void>;
 };
 
-export function useListaDeDemandas<T>({
+export function useLeituraDoPainel<T>({
   token,
   carregandoAuth,
   caminho,
   semSessao,
   falhaAoCarregar,
-}: Opcoes): Lista<T> {
-  const [itens, setItens] = useState<T[]>([]);
+}: Opcoes): Leitura<T> {
+  const [dados, setDados] = useState<T | null>(null);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
   const ultimoPedido = useRef(0);
@@ -80,15 +82,15 @@ export function useListaDeDemandas<T>({
       // conta não é mais o que a tela está pedindo.
       if (meuPedido !== ultimoPedido.current) return;
       if (!resposta.ok) {
-        // A lista de ANTES sai da tela junto. Deixá-la desenhada embaixo do
+        // O Painel de ANTES sai da tela junto. Deixá-lo desenhado embaixo do
         // alerta vermelho faria a tela afirmar um fato que esta leitura não
         // verificou, e com mais força do que uma frase: o Histórico ainda
         // contaria "3 Demandas fechadas" para uma busca que o servidor recusou.
-        setItens([]);
+        setDados(null);
         setErro(falhaAoCarregar);
         return;
       }
-      const dados = await resposta.json();
+      const lidos = await resposta.json();
       // A segunda conferência do selo, e é ela que fecha a corrida. Ler o corpo
       // é outra espera: entre a guarda de cima e esta linha o JS cedeu o
       // controle, e um pedido mais novo pode ter começado E terminado nesse
@@ -96,12 +98,12 @@ export function useListaDeDemandas<T>({
       // Histórico não pagina, e a busca varre a Conversa) chega depois e
       // repinta a lista por cima da resposta certa.
       if (meuPedido !== ultimoPedido.current) return;
-      setItens(dados);
+      setDados(lidos);
       setErro(null);
     } catch (e) {
-      console.error("[admin/tecnologia] falha ao carregar a lista", e);
+      console.error("[admin/tecnologia] falha ao carregar o Painel", e);
       if (meuPedido !== ultimoPedido.current) return;
-      setItens([]);
+      setDados(null);
       setErro(FALHA_DE_CONEXAO);
     } finally {
       if (meuPedido === ultimoPedido.current) setCarregando(false);
@@ -112,7 +114,7 @@ export function useListaDeDemandas<T>({
     if (carregandoAuth) return;
     if (!token) {
       // Resolvida a autenticação, token nulo é sessão de verdade ausente. Sem
-      // este aviso a aba desenharia a lista vazia, calada, que é
+      // este aviso o Painel desenharia blocos vazios, calado, que é
       // indistinguível de "não há nada aqui".
       setCarregando(false);
       setErro(semSessao);
@@ -121,5 +123,5 @@ export function useListaDeDemandas<T>({
     carregar();
   }, [carregandoAuth, token, carregar, semSessao]);
 
-  return { itens, carregando, erro, recarregar: carregar };
+  return { dados, carregando, erro, recarregar: carregar };
 }

@@ -130,11 +130,20 @@ function montar(
         return { ok: true, status: 200, json: async () => ({}) } as unknown as Response;
       }
 
-      // As três abas (o Quadro da issue #637, e "Minha vez" e o Histórico da
-      // #641) carregam as próprias listas e têm teste só delas: aqui elas ficam
-      // vazias, para não disputar os `getBy*` com a lista de Produtos.
-      if (url.includes("/demandas") || url.includes("/minha-vez") || url.includes("/historico")) {
+      // As duas abas (o Quadro da issue #637 e o Painel da #1059) carregam o
+      // que mostram e têm teste só delas: aqui elas ficam vazias, para não
+      // disputar os `getBy*` com a lista de Produtos.
+      if (url.includes("/demandas")) {
         return { ok: true, status: 200, json: async () => [] } as unknown as Response;
+      }
+      if (url.includes("/painel")) {
+        const vazio = {
+          numeros: { abertas: 0, com_o_hospital: 0, em_desenvolvimento: 0, entregues_30_dias: 0 },
+          com_voce: [],
+          entregas: [],
+          historico: [],
+        };
+        return { ok: true, status: 200, json: async () => vazio } as unknown as Response;
       }
 
       if (url.endsWith("/eu")) {
@@ -171,15 +180,59 @@ afterEach(() => {
 });
 
 describe("A casca da aba", () => {
-  it("nasce com as três abas do quadro", async () => {
+  it("tem só duas abas: Quadro e Painel", async () => {
+    // Issue #1059: o Painel entra no lugar de "Minha vez" e do Histórico.
     montar([]);
 
-    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(3));
-    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual([
-      "Quadro",
-      "Minha vez",
-      "Histórico",
-    ]);
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
+    expect(screen.getAllByRole("tab").map((t) => t.textContent)).toEqual(["Quadro", "Painel"]);
+  });
+});
+
+describe("A aba com que a Tecnologia abre (issue #1059)", () => {
+  /** A tela finge ser de celular (ou não) pela mesma pergunta que o navegador responde. */
+  function telaDeCelular(celular: boolean) {
+    vi.stubGlobal(
+      "matchMedia",
+      vi.fn((consulta: string) => ({ matches: celular && consulta.includes("max-width"), media: consulta })),
+    );
+  }
+
+  const selecionada = () =>
+    screen
+      .getAllByRole("tab")
+      .filter((t) => t.getAttribute("aria-selected") === "true")
+      .map((t) => t.textContent);
+
+  afterEach(() => {
+    window.history.replaceState({}, "", "/");
+  });
+
+  it("no celular, abre no Painel, e o Quadro nem é pedido", async () => {
+    telaDeCelular(true);
+    montar([]);
+
+    await waitFor(() => expect(selecionada()).toEqual(["Painel"]));
+    await waitFor(() => expect(chamadas.some((c) => c.url.includes("/painel"))).toBe(true));
+    expect(chamadas.some((c) => c.url.includes("/demandas"))).toBe(false);
+  });
+
+  it("fora do celular, abre no Quadro", async () => {
+    // A irmã do de cima, com a MESMA pergunta respondida ao contrário: sem ela,
+    // uma tela que abrisse sempre no Painel passaria naquele.
+    telaDeCelular(false);
+    montar([]);
+
+    await waitFor(() => expect(selecionada()).toEqual(["Quadro"]));
+    expect(await screen.findByRole("link", { name: /Nova Demanda/ })).toBeTruthy();
+  });
+
+  it("no celular, o link de uma Demanda abre o Quadro, que é quem abre o card", async () => {
+    telaDeCelular(true);
+    window.history.replaceState({}, "", "/admin/tecnologia?demanda=d7");
+    montar([]);
+
+    await waitFor(() => expect(selecionada()).toEqual(["Quadro"]));
   });
 });
 
@@ -392,7 +445,7 @@ describe("A falha de rede não vira lista vazia e calada", () => {
     sessao.carregando = true;
     montar([produto("p1", "Ana", 1, { dono_id: "P1" })]);
 
-    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(3));
+    await waitFor(() => expect(screen.getAllByRole("tab")).toHaveLength(2));
     expect(screen.queryAllByRole("alert")).toHaveLength(0);
     // E ninguém foi à rede antes de saber se existe sessão.
     expect(chamadas).toHaveLength(0);
@@ -458,12 +511,9 @@ describe("Sem filtros no módulo (issue #1058)", () => {
     expect(await screen.findByRole("link", { name: /Nova Demanda/ })).toBeTruthy();
     semFiltro();
 
-    fireEvent.click(aba("Minha vez"));
+    fireEvent.click(aba("Painel"));
     expect(await screen.findByText(/Nada esperando por você/)).toBeTruthy();
-    semFiltro();
-
-    fireEvent.click(aba("Histórico"));
-    expect(await screen.findByLabelText("Buscar no Histórico")).toBeTruthy();
+    expect(screen.getByLabelText("Buscar no Histórico")).toBeTruthy();
     semFiltro();
   });
 });
@@ -485,7 +535,7 @@ describe("Quem está olhando, do ponto de vista do Vínculo (issue #674)", () =>
   });
 
   it("a pergunta sai UMA vez, e não uma por aba", async () => {
-    // As três abas mostram o mesmo modal: uma chamada por aba multiplicaria a
+    // As duas abas mostram o mesmo modal: uma chamada por aba multiplicaria a
     // ida à rede e abriria espaço para elas discordarem entre si.
     montar([produto("prod-1", "Ana", 1)], { eu: DA_VITTA });
 
@@ -493,8 +543,8 @@ describe("Quem está olhando, do ponto de vista do Vínculo (issue #674)", () =>
       expect(chamadas.filter((c) => c.url.endsWith("/admin/tecnologia/eu")).length).toBe(1);
     });
 
-    fireEvent.click(screen.getByRole("tab", { name: "Minha vez" }));
-    fireEvent.click(screen.getByRole("tab", { name: "Histórico" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Painel" }));
+    fireEvent.click(screen.getByRole("tab", { name: "Quadro" }));
 
     expect(chamadas.filter((c) => c.url.endsWith("/admin/tecnologia/eu")).length).toBe(1);
   });

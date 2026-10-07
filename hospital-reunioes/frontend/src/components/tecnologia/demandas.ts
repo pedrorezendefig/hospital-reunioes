@@ -163,13 +163,19 @@ export const EU_DESCONHECIDO: EuNaAba = {
   integracao_configurada: false,
 };
 
-/** As seis Etapas, espelho da tupla do backend (`app/services/tecnologia_vinculo.py`). */
+/**
+ * As sete Etapas, espelho da tupla do backend (`app/services/tecnologia_vinculo.py`).
+ *
+ * "Em produção" entrou pela ADR 0069 (issue #1057): a subida que levou a
+ * entrega ao ar. O Painel a mostra no bloco Entregas, com a versão (#1059).
+ */
 export type EtapaDemanda =
   | "registrada"
   | "em_analise"
   | "planejada"
   | "em_desenvolvimento"
   | "entregue"
+  | "em_producao"
   | "nao_sera_feita";
 
 export const ETAPAS: EtapaDemanda[] = [
@@ -178,13 +184,14 @@ export const ETAPAS: EtapaDemanda[] = [
   "planejada",
   "em_desenvolvimento",
   "entregue",
+  "em_producao",
   "nao_sera_feita",
 ];
 
 /**
  * O rótulo em palavras do diretor.
  *
- * Ele não vê label, número nem estado de issue: vê estas seis frases
+ * Ele não vê label, número nem estado de issue: vê estas sete frases
  * (ADR 0054, decisão 9).
  */
 export const ETAPA_ROTULO: Record<EtapaDemanda, string> = {
@@ -193,6 +200,7 @@ export const ETAPA_ROTULO: Record<EtapaDemanda, string> = {
   planejada: "Planejada",
   em_desenvolvimento: "Em desenvolvimento",
   entregue: "Entregue",
+  em_producao: "Em produção",
   nao_sera_feita: "Não será feita",
 };
 
@@ -203,6 +211,7 @@ export const ETAPA_CLASSE: Record<EtapaDemanda, string> = {
   planejada: "bg-sky-50 text-sky-700",
   em_desenvolvimento: "bg-amber-50 text-amber-700",
   entregue: "bg-emerald-50 text-emerald-700",
+  em_producao: "bg-emerald-100 text-emerald-800",
   nao_sera_feita: "bg-slate-100 text-slate-500",
 };
 
@@ -580,23 +589,24 @@ export function demandaIdDaUrl(busca: string): string | null {
 }
 
 /**
- * As duas abas que leem recortes da lista (issue #641).
+ * O Painel (issue #1059, PRD #1056), no lugar de "Minha vez" e do Histórico da
+ * issue #641.
  *
- * "Minha vez" e Histórico pedem à API listas com um campo a mais cada uma,
- * resolvido pelo backend: por que o card está na minha aba, e quem fechou a
- * Demanda e quando. Os dois são campos calculados lá porque a tela não tem
- * como calculá-los: ela não sabe qual participante é o usuário logado (o
- * `useAuth` carrega o id do Supabase Auth, e não o `participantes.id`), e o
- * desfecho mora em duas colunas diferentes conforme o estado.
+ * Cada bloco lê a Demanda com um campo a mais, resolvido pelo backend: por que
+ * o card está no "Com você", a versão em que a entrega subiu, e quem fechou a
+ * Demanda e quando. São campos calculados lá porque a tela não tem como
+ * calculá-los: ela não sabe qual participante é o usuário logado (o `useAuth`
+ * carrega o id do Supabase Auth, e não o `participantes.id`), e o desfecho
+ * mora em duas colunas diferentes conforme o estado.
  */
 
-/** A Demanda como a aba "Minha vez" a lê. */
-export type DemandaDaMinhaVez = Demanda & { motivo: string };
+/** A Demanda como o bloco "Com você" a lê. */
+export type DemandaComVoce = Demanda & { motivo: string };
 
 /**
  * O par na tela do `motivo` que o backend carimba.
  *
- * Sem ele, quem abre "Minha vez" vê um card cujo responsável é OUTRA pessoa e
+ * Sem ele, quem abre o "Com você" vê um card cujo responsável é OUTRA pessoa e
  * não descobre por que ele está ali.
  */
 export const MOTIVO_ROTULO: Record<string, string> = {
@@ -608,7 +618,15 @@ export const MOTIVO_ROTULO: Record<string, string> = {
   entregue: "Entregue, confira e conclua",
 };
 
-/** A Demanda como a aba Histórico a lê. */
+/**
+ * A Demanda como o bloco Entregas a lê.
+ *
+ * A `versao` vem do backend só quando a Etapa é Em produção: a tela mostra o
+ * que veio e não repete a regra.
+ */
+export type DemandaDaEntrega = Demanda & { versao: string | null };
+
+/** A Demanda como o bloco Histórico a lê. */
 export type DemandaDoHistorico = Demanda & {
   fechada_em: string | null;
   fechada_por_id: string | null;
@@ -657,12 +675,12 @@ export function queryDoHistorico(termo: string): string {
 }
 
 /**
- * A frase de "Minha vez" vazia.
+ * A frase do "Com você" vazio.
  *
  * Vazio aqui é BOA NOTÍCIA, e a frase precisa dizer isso: "nada esperando por
  * você" não é falha de carregamento.
  */
-export function fraseDaMinhaVezVazia(): string {
+export function fraseDoComVoceVazio(): string {
   return (
     "Nada esperando por você agora. Uma Demanda aparece aqui quando você vira o responsável dela, " +
     "ou quando alguém te menciona na Conversa e você ainda não respondeu."
@@ -681,4 +699,57 @@ export function fraseDoHistoricoVazio(termo: string): string {
     return `Nenhuma Demanda concluída ou cancelada com "${termo.trim()}" no título, na descrição ou na Conversa.`;
   }
   return "Nenhuma Demanda foi concluída ou cancelada ainda. Quando a primeira fechar, ela aparece aqui.";
+}
+
+/** O Painel inteiro, como a rota `/painel` o devolve (issue #1059). */
+export type PainelDaAba = {
+  numeros: NumerosDoPainel;
+  com_voce: DemandaComVoce[];
+  entregas: DemandaDaEntrega[];
+  historico: DemandaDoHistorico[];
+};
+
+/** Os quatro números do topo. Nenhum é por pessoa (ADR 0061). */
+export type NumerosDoPainel = {
+  abertas: number;
+  com_o_hospital: number;
+  em_desenvolvimento: number;
+  entregues_30_dias: number;
+};
+
+/** O rótulo de cada número, na ordem em que a faixa os mostra. */
+export const ROTULO_DOS_NUMEROS: [keyof NumerosDoPainel, string][] = [
+  ["abertas", "Abertas"],
+  ["com_o_hospital", "Com o hospital"],
+  ["em_desenvolvimento", "Em desenvolvimento"],
+  ["entregues_30_dias", "Entregues em 30 dias"],
+];
+
+/** A frase do bloco Entregas vazio: nada em desenvolvimento não é falha. */
+export function fraseDasEntregasVazias(): string {
+  return "Nenhuma Demanda aberta está com a Vitta em desenvolvimento agora.";
+}
+
+/** As duas abas da Tecnologia (issue #1059). */
+export type AbaDaTecnologia = "quadro" | "painel";
+
+/**
+ * Até onde a tela conta como celular: abaixo do `md` do Tailwind, o mesmo
+ * ponto em que o Quadro deixa de ter três colunas lado a lado.
+ */
+export const CONSULTA_DO_CELULAR = "(max-width: 767px)";
+
+/**
+ * A aba com que a Tecnologia abre (issue #1059).
+ *
+ * No celular é o Painel: três raias empilhadas numa tela estreita são uma
+ * rolagem longa, e quem abre pelo telefone quer saber o que espera por ele.
+ *
+ * O link de uma Demanda (`?demanda=`) abre sempre o Quadro, inclusive no
+ * celular: é o Quadro quem lê o link e abre o card, e abrir no Painel
+ * deixaria o link do e-mail sem card nenhum.
+ */
+export function abaInicial(celular: boolean, busca: string): AbaDaTecnologia {
+  if (demandaIdDaUrl(busca)) return "quadro";
+  return celular ? "painel" : "quadro";
 }

@@ -167,15 +167,17 @@ function montarQuadro(demandas: Demanda[]) {
 
 // ─── 1. Os rótulos ───────────────────────────────────────────────────────────
 
-describe("Os seis textos da Etapa", () => {
+describe("Os sete textos da Etapa", () => {
   it("cada Etapa tem o seu rótulo em pt-BR", () => {
-    expect(ETAPAS).toHaveLength(6);
+    // Em produção entrou pela ADR 0069; o Painel a mostra nas Entregas (#1059).
+    expect(ETAPAS).toHaveLength(7);
     expect(ETAPAS.map((e) => ETAPA_ROTULO[e])).toEqual([
       "Registrada",
       "Em análise",
       "Planejada",
       "Em desenvolvimento",
       "Entregue",
+      "Em produção",
       "Não será feita",
     ]);
   });

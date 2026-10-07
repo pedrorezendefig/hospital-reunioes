@@ -331,13 +331,13 @@ class RespostaPayload(BaseModel):
     mencoes: list[str] | None = None
 
 
-# ─── Minha vez e Historico (issue #641) ──────────────────────────────────────
+# ─── O Painel (issue #1059, PRD #1056; antes "Minha vez" e Historico, #641) ─
 
 
-class DemandaDaMinhaVezResponse(DemandaResponse):
-    """A Demanda como a aba "Minha vez" a le.
+class DemandaComVoceResponse(DemandaResponse):
+    """A Demanda como o bloco "Com voce" do Painel a le.
 
-    O `motivo` e o par na tela da regra do backend: a aba traz tanto o que e
+    O `motivo` e o par na tela da regra do backend: o bloco traz tanto o que e
     meu quanto o que me chamaram, e sem ele quem abre ve um card cujo
     responsavel e OUTRA pessoa e nao descobre por que ele esta ali.
     """
@@ -349,7 +349,7 @@ class DemandaDaMinhaVezResponse(DemandaResponse):
 
 
 class DemandaDoHistoricoResponse(DemandaResponse):
-    """A Demanda como a aba Historico a le.
+    """A Demanda como o bloco Historico do Painel a le.
 
     Os tres campos de desfecho sao RESOLVIDOS pelo backend, a partir do estado:
     a tela mostra "quando e por quem" numa linha so, e escolher entre
@@ -360,6 +360,39 @@ class DemandaDoHistoricoResponse(DemandaResponse):
     fechada_em: str | None = None
     fechada_por_id: str | None = None
     fechada_por_nome: str | None = None
+
+
+class DemandaDaEntregaResponse(DemandaResponse):
+    """A Demanda como o bloco Entregas do Painel a le (issue #1059).
+
+    A `versao` e RESOLVIDA pelo backend: vem preenchida so quando a Etapa e Em
+    producao (`versao_da_entrega`). A tela nao repete a regra.
+    """
+
+    versao: str | None = None
+
+
+class NumerosDoPainel(BaseModel):
+    """Os quatro numeros do topo do Painel. Nenhum e por pessoa (ADR 0061)."""
+
+    abertas: int
+    com_o_hospital: int
+    em_desenvolvimento: int
+    entregues_30_dias: int
+
+
+class PainelResponse(BaseModel):
+    """O Painel inteiro numa resposta so (issue #1059).
+
+    Uma rota, e nao uma por bloco: os quatro numeros e os tres blocos saem da
+    MESMA leitura das Demandas, e tres leituras em tempos diferentes deixariam
+    o numero do topo discordar da lista logo abaixo dele.
+    """
+
+    numeros: NumerosDoPainel
+    com_voce: list[DemandaComVoceResponse]
+    entregas: list[DemandaDaEntregaResponse]
+    historico: list[DemandaDoHistoricoResponse]
 
 
 # ─── Assistente de Tecnologia (PRD #726, ADR 0056) ───────────────────────────

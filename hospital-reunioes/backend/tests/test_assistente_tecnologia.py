@@ -785,7 +785,7 @@ class TestDemandasAbertasNoPrompt:
         assert "responsável" not in self._bloco(monkeypatch, demandas=[DEMANDA_ABERTA])
 
     def test_a_descricao_nao_e_nem_pedida_ao_banco(self, monkeypatch):
-        """Mutante: voltar `_demandas_filtradas` ao `select("*")`.
+        """Mutante: voltar `_demandas_dos_estados` ao `select("*")`.
 
         A docstring diz que a descricao nao e lida; o `select` e o unico lugar
         onde isso pode ser verdade. O piso e a segunda assercao: sem ela, uma
