@@ -22,6 +22,7 @@ import { AlertCircle, Save } from "lucide-react";
 import { AdminModal } from "@/components/admin/AdminModal";
 import { Select } from "@/components/ui/Select";
 
+import { AnexosDaDemanda } from "./AnexosDaDemanda";
 import { ConversaDaDemanda } from "./ConversaDaDemanda";
 import { CopiarDaDemanda } from "./CopiarDaDemanda";
 import { OQueMudaDaDemanda } from "./OQueMudaDaDemanda";
@@ -294,6 +295,12 @@ export function DemandaModal({ demanda, produtos, pessoas, token, eu, onFechar, 
             />
           </label>
         </div>
+
+        {/* Os prints do pedido, logo depois dos campos que eles ilustram
+            (issue #1061). A chave pelo estado pede a lista de novo quando a
+            Demanda é Concluída ou Cancelada aqui mesmo: o card passa a dizer
+            "apagado" sem precisar fechar e abrir. */}
+        <AnexosDaDemanda key={demanda.estado} demandaId={demanda.id} token={token} />
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4 border-t border-border">
           <div>

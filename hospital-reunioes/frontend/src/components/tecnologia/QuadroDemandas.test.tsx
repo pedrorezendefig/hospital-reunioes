@@ -1877,9 +1877,18 @@ describe("A atualização sozinha", () => {
     await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull());
     const antes = leiturasDoQuadro().length;
 
-    await passar(30_000);
-
-    expect(leiturasDoQuadro().length).toBeGreaterThan(antes);
+    // Aqui o id do card sai num efeito do render SEGUINTE ao que tirou o
+    // modal, e o relógio só é armado no efeito do render depois desse. Os dois
+    // correm no Scheduler de verdade, e numa máquina lenta (o CI) o
+    // `passar(30_000)` chegava antes do relógio existir: o primeiro tique caía
+    // 30 segundos depois do que o teste olhava (mordeu no #1094 e no #1096).
+    // O `vi.waitFor` repete em tempo REAL até o relógio armar; a cadência de
+    // 30 segundos já é cobrada em "pede o Quadro de novo a cada 30 segundos",
+    // e um relógio parado para sempre continua reprovando aqui.
+    await vi.waitFor(async () => {
+      await passar(30_000);
+      expect(leiturasDoQuadro().length).toBeGreaterThan(antes);
+    });
   });
 });
 

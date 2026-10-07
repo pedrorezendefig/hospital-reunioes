@@ -474,6 +474,11 @@ MARCA_FIM_CONVERSA = "--- fim da conversa ---"
 RECUO_DA_CONTINUACAO = "    "
 
 SEM_DESCRICAO = "(sem descrição)"
+# O que acompanha o nome do Anexo da Demanda no texto (issue #1061). O apagado
+# (Demanda encerrada) diz que a imagem ja nao existe, para a IA nao contar com
+# ela.
+ROTULO_DO_ANEXO = "(imagem anexada à Demanda)"
+ROTULO_DO_ANEXO_APAGADO = "(imagem anexada à Demanda, já apagada)"
 SEM_CONVERSA = "(sem conversa até agora)"
 SEM_PRODUTO = "(sem Produto)"
 # Resposta cujo autor nao foi resolvido. Mesma palavra que a linha de movimento
@@ -624,7 +629,29 @@ def linhas_do_desenvolvimento(demanda: dict[str, Any]) -> list[str]:
     return linhas
 
 
-def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> str:
+def linhas_dos_anexos(anexos: list[dict[str, Any]]) -> list[str]:
+    """A secao "Anexos:" do texto, ou nenhuma linha quando nao ha anexo
+    (issue #1061, ADR 0069).
+
+    So o NOME de cada imagem, e nunca o endereco: o texto sai do app para uma
+    IA de fora, e a URL assinada, enquanto vale, abre o print para qualquer um.
+    O nome e texto de terceiro (quem batizou o arquivo nao e quem anexou), por
+    isso vai numa linha so e recuado, como a descricao: nada nele chega a
+    coluna zero, onde poderia escrever a marca da Conversa.
+    """
+    if not anexos:
+        return []
+    itens = []
+    for anexo in anexos:
+        nome = numa_linha(str(anexo.get("nome_original") or "").strip())
+        rotulo = ROTULO_DO_ANEXO_APAGADO if anexo.get("apagado_em") else ROTULO_DO_ANEXO
+        itens.append(f"{RECUO_DA_CONTINUACAO}{nome} {rotulo}")
+    return ["", "Anexos:", *itens]
+
+
+def texto_para_ia(
+    *, demanda: dict[str, Any], linhas: list[dict[str, Any]], anexos: list[dict[str, Any]] | None = None
+) -> str:
     """A Demanda inteira em texto simples, para colar numa IA (issue #640).
 
     Mora aqui, e nao na tela, para ser FONTE UNICA: o mesmo texto tem que sair
@@ -633,7 +660,8 @@ def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> s
 
     **O que entra**, exatamente o que a issue #640 lista: a linha de contexto,
     titulo, tipo, Produto, descricao e a Conversa inteira em ordem, com as
-    linhas de movimento no meio. A Conversa vai CERCADA por marcas, e com as
+    linhas de movimento no meio. Os Anexos da Demanda entram pelo NOME
+    (issue #1061), logo depois da descricao. A Conversa vai CERCADA por marcas, e com as
     continuacoes recuadas, para que nada escrito dentro dela possa passar por
     moldura do texto (ver `MARCA_INICIO_CONVERSA`).
 
@@ -670,6 +698,9 @@ def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> s
         "",
         "Descrição:",
         indent("\n".join(descricao.splitlines()), RECUO_DA_CONTINUACAO),
+        # Os prints vem logo depois da descricao, que e o pedido que eles
+        # ilustram (issue #1061).
+        *linhas_dos_anexos(anexos or []),
         # A Etapa e o "O que muda" entram AQUI, entre a descricao e a Conversa
         # (issue #676): eles contam o que a Vitta esta entregando, que e a
         # continuacao do pedido, e nao mais uma fala do fio.
