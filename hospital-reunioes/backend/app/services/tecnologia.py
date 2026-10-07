@@ -23,7 +23,10 @@ from zoneinfo import ZoneInfo
 
 from app.dependencies import is_super_admin
 from app.services.tecnologia_vinculo import (
+    ETAPA_EM_DESENVOLVIMENTO,
+    ETAPA_EM_PRODUCAO,
     ETAPA_ENTREGUE,
+    ETAPA_PLANEJADA,
     ETAPA_REGISTRADA,
     ETAPA_ROTULO,
     texto_movimento_etapa,
@@ -1012,6 +1015,92 @@ def demanda_casa_a_busca(
         return True
     campos = [demanda.get("titulo"), demanda.get("descricao"), *textos_da_conversa]
     return any(alvo in normalizar_para_busca(campo) for campo in campos)
+
+
+# ─── O Painel (issue #1059, PRD #1056) ───────────────────────────────────────
+
+# As Etapas que o numero "em desenvolvimento" conta: o trabalho que a Vitta ja
+# assumiu e ainda nao entregou (issue #1059).
+ETAPAS_EM_DESENVOLVIMENTO_NO_PAINEL: tuple[str, ...] = (ETAPA_PLANEJADA, ETAPA_EM_DESENVOLVIMENTO)
+
+# A janela do "entregues nos ultimos 30 dias".
+JANELA_DAS_ENTREGUES = timedelta(days=30)
+
+
+def tem_vinculo(demanda: dict[str, Any]) -> bool:
+    """A Demanda esta ligada a uma issue-raiz (ADR 0054).
+
+    Quem diz e o numero da issue, e nao a Etapa: "Registrada" e a ausencia de
+    Vinculo na tela, mas no banco a Etapa e um cache da issue, e o numero e o
+    proprio Vinculo.
+    """
+    return bool(demanda.get("github_issue_numero"))
+
+
+def esta_aberta(demanda: dict[str, Any]) -> bool:
+    return str(demanda.get("estado") or "") in ESTADOS_ABERTOS
+
+
+def entregas_do_painel(demandas: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """O bloco Entregas: as Demandas abertas com Vinculo, a da ultima mudanca
+    primeiro (issue #1059).
+
+    "Ultima mudanca" e o `atualizado_em`, que o gatilho da migration 102 carimba
+    em todo UPDATE da Demanda. A sincronizacao com o GitHub so escreve quando o
+    cache mudou de fato (`cache_desatualizado`), entao a Etapa que andou sobe
+    para o topo, e a leitura de hora em hora sem novidade nao mexe na ordem.
+
+    Data ilegivel vai para o FIM, e nao some: e o mesmo criterio do Historico.
+    """
+    vinculadas = [d for d in demandas if esta_aberta(d) and tem_vinculo(d)]
+    minimo = datetime.min.replace(tzinfo=UTC)
+    return sorted(vinculadas, key=lambda d: instante_do_banco(d.get("atualizado_em")) or minimo, reverse=True)
+
+
+def versao_da_entrega(demanda: dict[str, Any]) -> str | None:
+    """A versao do app em que a Demanda subiu, so quando a Etapa e Em producao.
+
+    A coluna pode guardar a versao de uma subida anterior com a Etapa que voltou
+    atras (a issue reaberta para um ajuste): mostrar "v0.160.0" ao lado de
+    "Entregue" diria que ja esta no ar o que ainda nao esta.
+    """
+    if demanda.get("etapa") != ETAPA_EM_PRODUCAO:
+        return None
+    return demanda.get("versao_em_producao") or None
+
+
+def numeros_do_painel(demandas: list[dict[str, Any]], *, agora: datetime) -> dict[str, int]:
+    """Os quatro numeros do topo do Painel, derivados do que ja existe.
+
+    Nenhum deles e por pessoa (ADR 0061 recusou comparar gente): a conta e a
+    mesma para quem quer que esteja olhando, e por isso esta funcao nem recebe
+    quem esta logado.
+
+    - **abertas**: Nova, Em andamento e Aguardando;
+    - **com o hospital**: Aguardando, a unica raia em que a bola nao esta com a
+      Vitta;
+    - **em desenvolvimento**: as ABERTAS com Vinculo em Planejada ou Em
+      desenvolvimento. A cancelada no meio do caminho nao conta, porque nao esta
+      mais em desenvolvimento para quem pediu, e o numero tem que bater com as
+      linhas do bloco Entregas;
+    - **entregues nos ultimos 30 dias**: pela data em que a Etapa chegou a
+      Entregue ou Em producao (`entregue_em`, migration 115), aberta ou
+      fechada: a Demanda entregue e concluida depois continua tendo sido
+      entregue. Data ilegivel nao conta, porque nao ha como dizer que esta na
+      janela.
+    """
+    abertas = [d for d in demandas if esta_aberta(d)]
+    desde = agora - JANELA_DAS_ENTREGUES
+    return {
+        "abertas": len(abertas),
+        "com_o_hospital": sum(1 for d in abertas if d.get("estado") == ESTADO_AGUARDANDO),
+        "em_desenvolvimento": sum(
+            1 for d in abertas if tem_vinculo(d) and d.get("etapa") in ETAPAS_EM_DESENVOLVIMENTO_NO_PAINEL
+        ),
+        "entregues_30_dias": sum(
+            1 for d in demandas if (quando := instante_do_banco(d.get("entregue_em"))) and quando >= desde
+        ),
+    }
 
 
 # ─── Quem recebe o aviso por e-mail (issue #642) ─────────────────────────────

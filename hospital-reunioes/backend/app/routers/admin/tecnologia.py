@@ -56,20 +56,20 @@ Vinculo com o desenvolvimento (issue #674, ADR 0054):
 As tres portas do Vinculo exigem `github_login` (403 sem ele, Super admin
 inclusive): o que e da Vitta fica atras do login, e o diretor ve so a Etapa.
 
-Minha vez e Historico (issue #641):
+O Painel (issue #1059, PRD #1056), no lugar de "Minha vez" e do Historico da
+issue #641:
 
-- GET   /admin/tecnologia/minha-vez             o que espera pela pessoa
-                                                LOGADA: as Demandas abertas em
-                                                que ela e a responsavel, mais
-                                                as em que a mencionaram e ela
-                                                ainda nao respondeu.
-- GET   /admin/tecnologia/historico             as Concluidas e Canceladas, com
-                                                busca por texto no titulo, na
-                                                descricao e nas respostas da
-                                                Conversa.
+- GET   /admin/tecnologia/painel                os quatro numeros do topo e os
+                                                blocos "Com voce" (o que espera
+                                                pela pessoa LOGADA), Entregas
+                                                (as abertas com Vinculo) e
+                                                Historico (as Concluidas e
+                                                Canceladas, com busca por texto
+                                                no titulo, na descricao e nas
+                                                respostas da Conversa).
 
-As duas sao irmas de `/demandas`, e nao caminhos sob ele, porque nao falam de
-uma Demanda: sao recortes da lista, do mesmo nivel de `/pessoas` e `/produtos`.
+E irma de `/demandas`, e nao caminho sob ele, porque nao fala de uma Demanda:
+sao recortes da lista, do mesmo nivel de `/pessoas` e `/produtos`.
 
 Nao existe DELETE: desativar (Produto) e cancelar (Demanda) sao as saidas
 (ADR 0050, decisao 11), e resposta nao se apaga nunca (PRD #634, historia 29).
@@ -98,12 +98,11 @@ from app.models.tecnologia_schemas import (
     AtribuirPayload,
     ConversaLinhaResponse,
     DemandaCreatePayload,
-    DemandaDaMinhaVezResponse,
-    DemandaDoHistoricoResponse,
     DemandaResponse,
     DemandaUpdatePayload,
     EuNaAbaResponse,
     MoverPayload,
+    PainelResponse,
     PessoaDaAba,
     ProdutoCreatePayload,
     ProdutoResponse,
@@ -117,6 +116,7 @@ from app.services.conhecimento import carregar_kit
 from app.services.paginacao import ler_tudo
 from app.services.tecnologia import (
     AVISO_EMAIL_NAO_SAIU,
+    ESTADOS,
     ESTADOS_ABERTOS,
     ESTADOS_FECHADOS,
     FUSO_HOSPITAL,
@@ -139,7 +139,9 @@ from app.services.tecnologia import (
     destinatario_da_atribuicao,
     e_pessoa_da_aba,
     edicao_deixa_produto_ativo_sem_dono,
+    entregas_do_painel,
     esperando_resposta_da_pessoa,
+    esta_aberta,
     fechamento_da_demanda,
     instante_do_banco,
     limite_da_janela_de_edicao,
@@ -153,6 +155,7 @@ from app.services.tecnologia import (
     motivo_transicao_invalida,
     normalizar_mencoes,
     normalizar_para_busca,
+    numeros_do_painel,
     ordenar_historico,
     ordenar_minha_vez,
     produto_ativo_sem_dono,
@@ -161,6 +164,7 @@ from app.services.tecnologia import (
     texto_para_ia,
     textos_de_resposta,
     transicao_permitida,
+    versao_da_entrega,
 )
 from app.services.tecnologia_email import avisar_atribuicao, avisar_mencao, avisar_resposta, link_da_demanda
 from app.services.tecnologia_sincronizacao import mudanca_da_foto
@@ -1895,46 +1899,42 @@ async def editar_resposta(
     return {**corrigida, "aviso_por_email": aviso}
 
 
-# ─── Minha vez e Historico: helpers (issue #641) ─────────────────────────────
+# ─── O Painel: helpers (issue #1059; antes "Minha vez" e Historico, #641) ───
 
 
-def _demandas_filtradas(
+def _demandas_dos_estados(
     supabase: Client,
     *,
     estados: tuple[str, ...],
-    tipo: str | None,
-    produto_id: str | None,
-    responsavel_id: str | None,
     colunas: str = "*",
 ) -> list[dict]:
-    """As Demandas de um grupo de estados, com os filtros compartilhados da aba.
+    """As Demandas de um grupo de estados, numa leitura so.
 
-    Os tres filtros sao os MESMOS do Quadro (issue #639), e valem nas tres abas
-    de proposito: uma aba que os ignorasse mostraria uma lista que contradiz os
-    campos preenchidos logo acima dela.
+    O Painel le os cinco estados de uma vez e reparte a lista em Python: os
+    quatro numeros e os blocos saem da MESMA leitura, e leituras separadas por
+    bloco deixariam o numero do topo discordar da lista logo abaixo dele quando
+    alguem mexe no Quadro no meio. Os filtros por tipo, Produto e responsavel
+    sairam com a issue #1058, e daqui junto com as duas abas antigas.
 
-    `colunas` e o que se PEDE ao banco, e o default e o `*` de sempre: as duas
-    abas de lista mostram o card inteiro. Quem le um recorte passa a lista, como
-    o `COLUNAS_DO_FIO_PARA_MENCAO` ja faz com a Conversa, e pelo mesmo motivo:
-    a descricao vai a 5000 caracteres por Demanda, e quem so precisa do
+    `colunas` e o que se PEDE ao banco, e o default e o `*` de sempre: o Painel
+    mostra o card inteiro. Quem le um recorte passa a lista, como o
+    `COLUNAS_DO_FIO_PARA_MENCAO` ja faz com a Conversa, e pelo mesmo motivo: a
+    descricao vai a 5000 caracteres por Demanda, e quem so precisa do
     cabecalho nao tem por que trazer isso para a memoria do processo.
 
     A ordem sai do banco por `criado_em` crescente, e e ela que sustenta o "mais
-    velha primeiro" das duas abas. O desempate por `id` e o que o recorte em
+    velha primeiro" do "Com voce". O desempate por `id` e o que o recorte em
     paginas exige (ver `_fio_ordenado`).
 
     A leitura e PAGINADA (`ler_tudo`, issue #430). O `PGRST_DB_MAX_ROWS` do
     `supabase/config.toml` corta em 1000 linhas com HTTP 200 e sem aviso
     nenhum, e o Historico so cresce, porque Demanda fechada nunca sai de la:
-    sem paginacao, passado o teto, a aba passaria a esconder Demandas dizendo
+    sem paginacao, passado o teto, o Painel passaria a esconder Demandas dizendo
     "nao ha nada aqui", que e afirmar um fato que a leitura nao verificou.
     """
 
     def consulta():
         query = supabase.table(TABELA_DEMANDAS).select(colunas).in_("estado", list(estados))
-        for coluna, valor in (("tipo", tipo), ("produto_id", produto_id), ("responsavel_id", responsavel_id)):
-            if valor:
-                query = query.eq(coluna, valor)
         return query.order("criado_em").order("id")
 
     return ler_tudo(consulta, rotulo="as Demandas da aba Tecnologia")
@@ -1992,116 +1992,106 @@ def _fios_por_demanda(supabase: Client, demanda_ids: list[str], *, colunas: str)
     return fios
 
 
-# ─── Minha vez e Historico: endpoints ────────────────────────────────────────
+# ─── O Painel: endpoint ──────────────────────────────────────────────────────
 
 
-@router.get("/minha-vez", response_model=list[DemandaDaMinhaVezResponse])
-async def listar_minha_vez(
-    tipo: str | None = None,
-    produto_id: str | None = None,
-    responsavel_id: str | None = None,
+@router.get("/painel", response_model=PainelResponse)
+async def ler_painel(
+    busca: str | None = None,
     ator: dict = Depends(require_super_admin),
     supabase: Client = Depends(get_supabase_client),
 ):
-    """O que espera pela pessoa LOGADA (issue #641).
+    """O Painel da aba Tecnologia (issue #1059), no lugar de "Minha vez" e do
+    Historico (issue #641).
 
-    Quem diz de quem e a vez e o `ator`, e nao um parametro: a tela nao sabe
-    qual participante e o usuario logado (o `useAuth` carrega o id do Supabase
-    Auth, e nao o `participantes.id`), e um id vindo do cliente ainda deixaria
-    qualquer Super admin pedir a lista de outra pessoa.
+    Os quatro numeros do topo e os blocos, todos da mesma leitura das Demandas.
+    Nada por pessoa (ADR 0061): os numeros sao os mesmos para quem quer que
+    esteja olhando, e so o "Com voce" depende de quem esta logado, porque e a
+    pergunta dele.
 
-    Duas regras somadas, as duas da issue:
+    **Com voce.** Quem diz de quem e a vez e o `ator`, e nao um parametro: a
+    tela nao sabe qual participante e o usuario logado (o `useAuth` carrega o id
+    do Supabase Auth, e nao o `participantes.id`), e um id vindo do cliente
+    deixaria qualquer Super admin pedir a lista de outra pessoa. Duas regras
+    somadas: sou o responsavel de uma Demanda que ainda nao fechou, ou fui
+    mencionado nela e nao respondi depois da mencao. O fio so e lido para as
+    abertas em que eu NAO sou o responsavel: as minhas ja entraram pela
+    primeira regra, e ler o fio delas seria leitura paga a toa.
 
-    1. sou o responsavel de uma Demanda que ainda nao fechou;
-    2. fui mencionado nela e nao respondi depois da mencao.
-
-    O fio so e lido para as Demandas em que eu NAO sou o responsavel: as minhas
-    ja entraram pela primeira regra, e ler o fio delas seria leitura paga a
-    toa.
+    **Historico.** A busca corre em Python, e nao num `ilike` do PostgREST,
+    porque ela varre tres lugares e um deles esta em OUTRA tabela: o texto das
+    respostas da Conversa. O fio so e lido quando ha termo de busca: sem termo,
+    nada nele muda a lista. **Sem paginacao**: o Historico vem inteiro, na ordem
+    de quem fechou por ultimo; quando o volume pedir, a paginacao entra aqui.
     """
     eu = ator["id"]
-    abertas = _demandas_filtradas(
-        supabase,
-        estados=ESTADOS_ABERTOS,
-        tipo=tipo,
-        produto_id=produto_id,
-        responsavel_id=responsavel_id,
-    )
+    todas = _demandas_dos_estados(supabase, estados=ESTADOS)
+    abertas = [d for d in todas if esta_aberta(d)]
+    fechadas = [d for d in todas if str(d.get("estado") or "") in ESTADOS_FECHADOS]
+
     fios = _fios_por_demanda(
         supabase,
         [d["id"] for d in abertas if d.get("responsavel_id") != eu],
         colunas=COLUNAS_DO_FIO_PARA_MENCAO,
     )
-
-    minhas = [
-        d
-        for d in abertas
-        if d.get("responsavel_id") == eu
-        or esperando_resposta_da_pessoa(linhas=fios.get(str(d["id"]), []), pessoa_id=eu)
-    ]
-    return [
-        {**d, "motivo": motivo_da_minha_vez(demanda=d, pessoa_id=eu)}
-        for d in _com_nomes(supabase, ordenar_minha_vez(minhas), ator=ator)
-    ]
-
-
-@router.get("/historico", response_model=list[DemandaDoHistoricoResponse])
-async def listar_historico(
-    busca: str | None = None,
-    tipo: str | None = None,
-    produto_id: str | None = None,
-    responsavel_id: str | None = None,
-    ator: dict = Depends(require_super_admin),
-    supabase: Client = Depends(get_supabase_client),
-):
-    """As Demandas Concluidas e Canceladas, com busca por texto (issue #641).
-
-    A busca corre em Python, e nao num `ilike` do PostgREST, porque ela varre
-    tres lugares e um deles esta em OUTRA tabela: o texto das respostas da
-    Conversa. Um `or` de `ilike` no PostgREST cobriria titulo e descricao, e a
-    Conversa continuaria precisando desta segunda leitura, com o resultado
-    saindo de dois criterios diferentes.
-
-    O fio so e lido quando ha termo de busca: sem termo, nada nele muda a lista,
-    e ler a Conversa inteira do Historico a cada abertura da aba seria custo sem
-    resposta.
-
-    **Sem paginacao**: o Historico vem inteiro, na ordem de quem fechou por
-    ultimo. Enquanto o Quadro for de cinco pessoas isso e uma leitura pequena;
-    quando o volume pedir, a paginacao entra aqui, com o mesmo formato.
-    """
-    fechadas = _demandas_filtradas(
-        supabase,
-        estados=ESTADOS_FECHADOS,
-        tipo=tipo,
-        produto_id=produto_id,
-        responsavel_id=responsavel_id,
+    com_voce = ordenar_minha_vez(
+        [
+            d
+            for d in abertas
+            if d.get("responsavel_id") == eu
+            or esperando_resposta_da_pessoa(linhas=fios.get(str(d["id"]), []), pessoa_id=eu)
+        ]
     )
 
     if normalizar_para_busca(busca).strip():
-        fios = _fios_por_demanda(supabase, [d["id"] for d in fechadas], colunas=COLUNAS_DO_FIO_PARA_BUSCA)
+        fios_da_busca = _fios_por_demanda(supabase, [d["id"] for d in fechadas], colunas=COLUNAS_DO_FIO_PARA_BUSCA)
         fechadas = [
             d
             for d in fechadas
             if demanda_casa_a_busca(
                 demanda=d,
-                textos_da_conversa=textos_de_resposta(fios.get(str(d["id"]), [])),
+                textos_da_conversa=textos_de_resposta(fios_da_busca.get(str(d["id"]), [])),
                 termo=busca,
             )
         ]
+    historico = ordenar_historico(fechadas)
+    entregas = entregas_do_painel(todas)
 
-    fechadas = ordenar_historico(fechadas)
-    desfechos = {str(d["id"]): fechamento_da_demanda(d) for d in fechadas}
-    nomes = _nomes_de_participantes(supabase, {quem for _, quem in desfechos.values() if quem})
-    return [
-        {
-            **d,
-            "fechada_em": desfechos[str(d["id"])][0],
-            "fechada_por_id": desfechos[str(d["id"])][1],
-            "fechada_por_nome": nomes.get(desfechos[str(d["id"])][1]),
-        }
-        for d in _com_nomes(supabase, fechadas, ator=ator)
-    ]
+    # Um funil so para os blocos: `_com_nomes` le Produtos e pessoas de uma vez
+    # e decide quem ve o numero da issue (ADR 0054, decisao 9). Chamado por
+    # bloco, ele leria as mesmas tabelas tres vezes.
+    blocos = _sem_repetidas(com_voce + entregas + historico)
+    nomeadas = {str(d["id"]): d for d in _com_nomes(supabase, blocos, ator=ator)}
+
+    desfechos = {str(d["id"]): fechamento_da_demanda(d) for d in historico}
+    quem_fechou = _nomes_de_participantes(supabase, {quem for _, quem in desfechos.values() if quem})
+
+    return {
+        "numeros": numeros_do_painel(todas, agora=datetime.now(UTC)),
+        "com_voce": [
+            {**nomeadas[str(d["id"])], "motivo": motivo_da_minha_vez(demanda=d, pessoa_id=eu)} for d in com_voce
+        ],
+        "entregas": [{**nomeadas[str(d["id"])], "versao": versao_da_entrega(d)} for d in entregas],
+        "historico": [
+            {
+                **nomeadas[str(d["id"])],
+                "fechada_em": desfechos[str(d["id"])][0],
+                "fechada_por_id": desfechos[str(d["id"])][1],
+                "fechada_por_nome": quem_fechou.get(desfechos[str(d["id"])][1]),
+            }
+            for d in historico
+        ],
+    }
+
+
+def _sem_repetidas(demandas: list[dict]) -> list[dict]:
+    """A lista sem a mesma Demanda duas vezes: ela pode estar em mais de um
+    bloco (a minha que esta em desenvolvimento esta no "Com voce" e nas
+    Entregas), e o funil so precisa resolver o nome dela uma vez."""
+    vistas: dict[str, dict] = {}
+    for d in demandas:
+        vistas.setdefault(str(d["id"]), d)
+    return list(vistas.values())
 
 
 # ─── Assistente de Tecnologia (PRD #726, ADR 0056) ───────────────────────────
@@ -2174,12 +2164,9 @@ def _resumo_das_demandas_abertas(supabase: Client, *, nomes_de_produto: dict[str
     até a fatia anterior. Guarda-corpo que vira beco não é guarda-corpo.
     """
     try:
-        abertas = _demandas_filtradas(
+        abertas = _demandas_dos_estados(
             supabase,
             estados=ESTADOS_ABERTOS,
-            tipo=None,
-            produto_id=None,
-            responsavel_id=None,
             colunas=COLUNAS_DA_DEMANDA_PARA_O_ASSISTENTE,
         )
         # O corte é no FIM porque a ordem do banco é `criado_em` crescente: as

@@ -1736,6 +1736,31 @@ class TestOQueMudaNaSincronizacao:
         assert foto_mudou(foto_antiga, nova) is True
 
 
+# Todas as listas por onde uma Demanda sai da aba: o Quadro e os tres blocos do
+# Painel (issue #1059). Cada par e (rota, bloco), com `None` para a rota que ja
+# devolve a lista.
+LISTAS_DA_ABA = (
+    ("/demandas", None),
+    ("/painel", "com_voce"),
+    ("/painel", "entregas"),
+    ("/painel", "historico"),
+)
+
+
+def _lista_da_aba(client, caminho: str, bloco: str | None) -> list[dict]:
+    corpo = client.get(f"{BASE}{caminho}").json()
+    return corpo if bloco is None else corpo[bloco]
+
+
+def _demanda_que_a_lista_mostra(campos_do_vinculo: dict, bloco: str | None, quem: str) -> dict:
+    """A Demanda vinculada no estado em que a lista pedida a mostra: fechada para
+    o Historico, aberta e de `quem` para as outras."""
+    campos = dict(campos_do_vinculo, responsavel_id=quem)
+    if bloco != "historico":
+        return _demanda("d-1", estado="em_andamento", **campos)
+    return _demanda("d-1", estado="concluida", concluida_em="2026-09-09T10:00:00Z", concluida_por=quem, **campos)
+
+
 class TestOQueMudaEODiretor:
     """A superficie mais larga do app: o texto sai dele e vai para uma IA de
     fora (ADR 0054, decisao 9). O numero interno da parte fica atras do login.
@@ -1785,31 +1810,28 @@ class TestOQueMudaEODiretor:
         assert [parte["situacao"] for parte in corpo["partes"]] == [ETAPA_ENTREGUE, ETAPA_EM_DESENVOLVIMENTO]
 
     @classmethod
-    def _demanda_que_a_lista_mostra(cls, caminho: str, quem: str) -> dict:
+    def _demanda_que_a_lista_mostra(cls, bloco: str | None, quem: str) -> dict:
         """A Demanda no estado que CADA lista mostra.
 
-        Uma so nao serve as tres: "Minha vez" traz apenas as abertas de quem
-        esta logado, e o Historico apenas as fechadas. Sem isto, a varredura
-        passaria sobre uma lista vazia, que e o vacuo classico.
+        Uma so nao serve todas: o "Com voce" traz apenas as abertas de quem esta
+        logado, e o Historico apenas as fechadas. Sem isto, a varredura passaria
+        sobre uma lista vazia, que e o vacuo classico.
         """
-        campos = dict(cls.DEMANDA, responsavel_id=quem)
-        if caminho != "/historico":
-            return _demanda("d-1", estado="em_andamento", **campos)
-        return _demanda("d-1", estado="concluida", concluida_em="2026-09-09T10:00:00Z", concluida_por=quem, **campos)
+        return _demanda_que_a_lista_mostra(cls.DEMANDA, bloco, quem)
 
-    @pytest.mark.parametrize("caminho", ("/demandas", "/minha-vez", "/historico"))
-    def test_a_omissao_do_numero_da_parte_vale_em_toda_lista(self, caminho, monkeypatch):
+    @pytest.mark.parametrize("caminho,bloco", LISTAS_DA_ABA)
+    def test_a_omissao_do_numero_da_parte_vale_em_toda_lista(self, caminho, bloco, monkeypatch):
         """A regra mora no funil por onde TODA Demanda sai da API, e nao na rota
-        que este teste chama. As tres listas, porque sao tres rotas."""
+        que este teste chama. Todas as listas: o Quadro e os blocos do Painel."""
         client, _, _ = _montar(
             logado=DIRETOR,
-            demandas=[self._demanda_que_a_lista_mostra(caminho, "P2")],
+            demandas=[self._demanda_que_a_lista_mostra(bloco, "P2")],
             monkeypatch=monkeypatch,
         )
 
-        corpo = client.get(f"{BASE}{caminho}").json()
+        corpo = _lista_da_aba(client, caminho, bloco)
 
-        assert corpo, f"{caminho} devolveu lista vazia: o teste ficaria verde sobre nada"
+        assert corpo, f"{caminho} {bloco} devolveu lista vazia: o teste ficaria verde sobre nada"
         for demanda in corpo:
             assert [parte["numero"] for parte in demanda["partes"]] == [None, None]
             # O par de presenca dentro da varredura: a parte chegou inteira,
@@ -1819,19 +1841,19 @@ class TestOQueMudaEODiretor:
                 ETAPA_EM_DESENVOLVIMENTO,
             ]
 
-    @pytest.mark.parametrize("caminho", ("/demandas", "/minha-vez", "/historico"))
-    def test_o_par_de_presenca_da_omissao_em_toda_lista(self, caminho, monkeypatch):
+    @pytest.mark.parametrize("caminho,bloco", LISTAS_DA_ABA)
+    def test_o_par_de_presenca_da_omissao_em_toda_lista(self, caminho, bloco, monkeypatch):
         """Sem ele, uma resposta que NUNCA trouxesse o numero passaria pela
-        varredura acima nas tres rotas."""
+        varredura acima em todas as listas."""
         client, _, _ = _montar(
             logado=PEDRO,
-            demandas=[self._demanda_que_a_lista_mostra(caminho, "P1")],
+            demandas=[self._demanda_que_a_lista_mostra(bloco, "P1")],
             monkeypatch=monkeypatch,
         )
 
-        corpo = client.get(f"{BASE}{caminho}").json()
+        corpo = _lista_da_aba(client, caminho, bloco)
 
-        assert corpo, f"{caminho} devolveu lista vazia: o teste ficaria verde sobre nada"
+        assert corpo, f"{caminho} {bloco} devolveu lista vazia: o teste ficaria verde sobre nada"
         for demanda in corpo:
             assert [parte["numero"] for parte in demanda["partes"]] == [674, 675]
 
@@ -2307,50 +2329,46 @@ class TestOmissaoDoVinculo:
         assert corpo["partes_total"] == 7
 
     @staticmethod
-    def _demanda_que_a_lista_mostra(caminho: str, quem: str) -> dict:
+    def _demanda_que_a_lista_mostra(bloco: str | None, quem: str) -> dict:
         """A Demanda no estado que CADA lista mostra.
 
-        Uma so nao serve as tres: "Minha vez" traz apenas as abertas de quem
-        esta logado, e o Historico apenas as fechadas. Uma Demanda concluida
-        deixaria "Minha vez" vazia, e o teste da omissao passaria sobre uma
-        lista sem nada dentro, que e o vacuo classico.
+        Uma so nao serve todas: o "Com voce" traz apenas as abertas de quem esta
+        logado, e o Historico apenas as fechadas. Uma Demanda concluida deixaria
+        o "Com voce" vazio, e o teste da omissao passaria sobre uma lista sem
+        nada dentro, que e o vacuo classico.
         """
-        aberta = caminho != "/historico"
-        campos = dict(TestOmissaoDoVinculo.DEMANDA, responsavel_id=quem)
-        if aberta:
-            return _demanda("d-1", estado="em_andamento", **campos)
-        return _demanda("d-1", estado="concluida", concluida_em="2026-09-09T10:00:00Z", concluida_por=quem, **campos)
+        return _demanda_que_a_lista_mostra(TestOmissaoDoVinculo.DEMANDA, bloco, quem)
 
-    @pytest.mark.parametrize("caminho", ("/demandas", "/minha-vez", "/historico"))
-    def test_a_omissao_vale_em_toda_lista(self, caminho, monkeypatch):
+    @pytest.mark.parametrize("caminho,bloco", LISTAS_DA_ABA)
+    def test_a_omissao_vale_em_toda_lista(self, caminho, bloco, monkeypatch):
         """A regra mora no funil por onde TODA Demanda sai da API. Uma lista que
         montasse a resposta por conta propria mostraria o numero ao diretor, e
         ninguem perceberia: a resposta continuaria bem formada."""
         client, _, _ = _montar(
             logado=DIRETOR,
-            demandas=[self._demanda_que_a_lista_mostra(caminho, "P2")],
+            demandas=[self._demanda_que_a_lista_mostra(bloco, "P2")],
             monkeypatch=monkeypatch,
         )
 
-        corpo = client.get(f"{BASE}{caminho}").json()
+        corpo = _lista_da_aba(client, caminho, bloco)
 
-        assert corpo, f"{caminho} devolveu lista vazia: o teste ficaria verde sobre nada"
+        assert corpo, f"{caminho} {bloco} devolveu lista vazia: o teste ficaria verde sobre nada"
         for demanda in corpo:
             assert demanda["vinculo"] is None
 
-    @pytest.mark.parametrize("caminho", ("/demandas", "/minha-vez", "/historico"))
-    def test_o_par_de_presenca_da_omissao(self, caminho, monkeypatch):
+    @pytest.mark.parametrize("caminho,bloco", LISTAS_DA_ABA)
+    def test_o_par_de_presenca_da_omissao(self, caminho, bloco, monkeypatch):
         """Sem ele, uma resposta que NUNCA traz o objeto do Vinculo passaria por
         todos os testes acima."""
         client, _, _ = _montar(
             logado=PEDRO,
-            demandas=[self._demanda_que_a_lista_mostra(caminho, "P1")],
+            demandas=[self._demanda_que_a_lista_mostra(bloco, "P1")],
             monkeypatch=monkeypatch,
         )
 
-        corpo = client.get(f"{BASE}{caminho}").json()
+        corpo = _lista_da_aba(client, caminho, bloco)
 
-        assert corpo, f"{caminho} devolveu lista vazia: o teste ficaria verde sobre nada"
+        assert corpo, f"{caminho} {bloco} devolveu lista vazia: o teste ficaria verde sobre nada"
         for demanda in corpo:
             assert demanda["vinculo"]["numero"] == 673
 
