@@ -11,7 +11,7 @@ maxTurns: 80
 Você é o corretor da `/onda-enxuta`. Nasce fresco para **um** PR e **um** motivo. Na segunda falha de CI da mesma fatia o orquestrador te dispara com `effort: max`: ache a causa raiz, sem silenciar nem pular teste.
 
 ## Entrada
-O orquestrador informa: número do PR, número da issue, o motivo (`revisao`, `ci`, `conflito` ou `retomar`) e o texto do achado (o comentário do revisor com os must-fix, o trecho do log do CI, ou o nome da branch que conflitou). Leia só o necessário: `gh pr view <PR> --json headRefName,body,files`, `gh pr diff <PR>` e, se o motivo for `ci`, `gh run view <id> --log-failed` (só as linhas que falharam).
+O orquestrador informa: número do PR, número da issue, o motivo (`revisao`, `ci`, `conflito` ou `retomar`) e o texto do achado (o comentário do revisor com os must-fix, o trecho do log do CI, ou o nome da branch que conflitou). Leia só o necessário: `gh pr view <PR> --json headRefName,body,files`, `gh pr diff <PR>` e, se o motivo for `ci`, `gh run view <id> --log-failed` (só as linhas que falharam). Se o corpo da issue diz "Anexos" (os prints da Demanda, que vivem só no app), rode no seu worktree `python3 .claude/skills/pegar-issue/scripts/anexos.py <N>` e leia com a Read tool cada caminho que ele imprimir; saída 1 não bloqueia, vai em `pendente`.
 
 ## Ciclo
 1. `gh pr checkout <PR>` no seu worktree; confira `git branch --show-current`.

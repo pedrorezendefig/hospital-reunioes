@@ -94,6 +94,13 @@ class Settings(BaseSettings):
     # Em produção é só a reconciliação de hora em hora.
     tecnologia_deploy_webhook_secret: str = ""
 
+    # A chave da ponte com o desenvolvimento (issue #1063, ADR 0069, decisão 2).
+    # O script `pegar-issue/scripts/anexos.py` manda no `X-API-Key` para buscar
+    # os anexos de uma Demanda; o mesmo valor mora no `tokens/.env` de cada
+    # sócio. Vazio = a rota de automação responde 503: ponte desligada, e não
+    # chave errada. Cadastro humano, na tela do Coolify.
+    tecnologia_automacao_api_key: str = ""
+
     # Central de Comando (ADR 0058): os números do Site e do Instagram, só para
     # Super admin. Todas as variáveis da Central moram aqui desde a primeira
     # fatia do PRD #809, para as fatias paralelas não disputarem este arquivo.
