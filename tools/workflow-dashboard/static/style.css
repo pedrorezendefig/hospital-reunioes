@@ -987,9 +987,10 @@ body.er-lock main{z-index:130}
 /* Entregue (ferramenta, sem versão): o mais compacto, PRs por dia do merge, só o número, lado a lado */
 .pr-entregue-dia{display:flex; flex-wrap:wrap; align-items:baseline; gap:3px}
 .pr-entregue-data{flex-basis:100%; font-family:var(--mono); font-size:10px; letter-spacing:.04em; color:var(--ink-soft)}
-.pr-card.pr-entregue{display:inline-block; padding:1px 6px; font-family:var(--mono); font-size:10.5px; color:var(--ink-soft);
+.pr-card.pr-entregue{display:inline-flex; flex-direction:row; align-items:center; white-space:nowrap; gap:2px; padding:1px 2px 1px 6px; font-family:var(--mono); font-size:10.5px; color:var(--ink-soft);
   border-radius:var(--r-pill)}
 .pr-card.pr-entregue:hover{border-color:var(--brand); color:var(--brand)}
+.pr-entregue .pr-gh{font-size:10px; padding:0 3px}
 /* gargalo: a coluna mais cheia (cabeçalho e células) e o card parado além do limite */
 .pr-col-cab.pr-col-cheia{background:var(--amber-wash); border-color:var(--amber); color:var(--amber)}
 .pr-col-cab.pr-col-cheia .pr-col-n{color:var(--amber)}
@@ -998,13 +999,17 @@ body.er-lock main{z-index:130}
 .pr-velho .pr-dias{color:var(--red); font-weight:500}
 /* o resumo do PR (hover) e o fixo do clicado, que aceita clique nos links */
 .tab-prs{position:relative}
-.pr-pop{width:300px}
-.pr-pop .fx-k{color:var(--brand-wash); opacity:.75; margin-top:6px}
-.pr-pop p{margin:0}
-.pr-pop .pr-pop-tit{font-weight:500}
+/* claro e suave, na cor do card (o .st-pop escuro fica para os fluxogramas) */
+.pr-pop{width:280px; background:var(--card); color:var(--ink); border:1px solid var(--line-2); box-shadow:var(--shadow-up)}
+.pr-pop b{color:var(--indigo)}
+.pr-pop .fx-k{color:var(--ink-soft); margin-top:6px}
+.pr-pop p{margin:0 0 4px}
+.pr-pop em{font-style:normal; font-weight:500; color:var(--ink-soft)}
+.pr-pop .pr-pop-tit{color:var(--ink-soft); font-size:12px}
+.pr-pop .pr-pop-rodape{margin:8px 0 0; padding-top:6px; border-top:1px solid var(--line-2); font:400 10.5px var(--mono); color:var(--ink-soft)}
 .pr-pop-fixo{pointer-events:auto}
-.pr-pop a{color:var(--brand-wash)}
-.pr-pop .pr-pop-gh{display:inline-block; margin-top:8px; font:500 11px var(--mono)}
+.pr-pop a{color:var(--brand)}
+.pr-pop .pr-pop-gh{display:inline-block; margin-top:6px; font:500 11px var(--mono)}
 /* faixa cinza das tentativas (PRs fechados sem merge): histórico, fora das colunas */
 .pr-tentativas{margin:0 0 18px; padding:12px 14px; border:1px dashed var(--ghost); border-radius:var(--r-inner);
   background:color-mix(in srgb, var(--ink-soft) 8%, var(--surface))}

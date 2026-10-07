@@ -3,16 +3,18 @@ PR template preenchido automaticamente pelo /ship a partir da Issue vinculada (g
 Pode editar manualmente. No modelo Pocock o contexto vive na Issue, não em chronicle/plano.
 -->
 
-## 💬 Resumo funcional
+## 💬 Valor entregue
 
 <!--
-Para quem não é dev, em duas frases curtas, sem jargão técnico (sem endpoint, branch, componente).
-Aparece em destaque no hover do card do PR no Hospital OS, então é o que o funcional lê primeiro.
-O que é: o que muda, do ponto de vista de quem usa ou opera. Valor: o ganho (mais rápido, mais seguro, agora possível).
+O que muda de verdade para quem usa ou opera, em linguagem muito simples, como se explicasse para
+um colega do hospital que não é dev. Uma frase cada, sem jargão (sem endpoint, branch, componente, PR).
+É a seção principal do hover do card do PR no Hospital OS.
+Exemplo. Antes: o secretário copiava a Ata para o Word para mandar por email.
+         Depois: a Ata sai pronta em PDF com um clique.
 -->
 
-**O que é:** <uma frase>
-**Valor:** <uma frase>
+**Antes:** <como era>
+**Depois:** <como fica>
 
 ## 🎯 Contexto
 

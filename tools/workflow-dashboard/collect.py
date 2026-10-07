@@ -265,24 +265,27 @@ def _secao(body: str, nome: str) -> str | None:
     return None
 
 
+def _texto_puro(texto: str, maximo: int = 160) -> str:
+    texto = " ".join(re.sub(r"\*\*|`", "", texto).split())  # o hover é texto puro
+    return texto if len(texto) <= maximo else texto[: maximo - 1].rstrip() + "…"
+
+
 def resumo_funcional(body: str) -> dict | None:
-    """O resumo do hover: a seção "Resumo funcional" do template (o que é e valor);
-    PR antigo, sem ela, cai no primeiro parágrafo do Contexto (até 240 caracteres)."""
+    """O resumo do hover: a seção "Valor entregue" do template (antes e depois, em
+    linguagem simples). O #1090 usou "Resumo funcional" (o que é, valor) e vira texto
+    corrido; PR antigo, sem nenhuma, cai no primeiro parágrafo do Contexto."""
     body = body or ""
-    secao = _secao(body, "resumo funcional")
-    if secao:
-        campo = lambda rot: (re.search(rf"\*\*{rot}:\*\*\s*(.+)", secao) or [None, None])[1]
-        o_que, valor = campo("O que é"), campo("Valor")
-        if o_que or valor:
-            return {"o_que": o_que and o_que.strip(), "valor": valor and valor.strip(), "contexto": None}
-    contexto = _secao(body, "contexto")
-    paragrafo = next((p.strip() for p in (contexto or "").split("\n\n") if p.strip()), "")
-    if not paragrafo:
-        return None
-    paragrafo = " ".join(re.sub(r"\*\*|`", "", paragrafo).split())  # o hover é texto puro
-    if len(paragrafo) > 240:
-        paragrafo = paragrafo[:239].rstrip() + "…"
-    return {"o_que": None, "valor": None, "contexto": paragrafo}
+    campo = lambda secao, rot: (re.search(rf"\*\*{rot}:\*\*\s*(.+)", secao or "") or [None, ""])[1].strip()
+    valor = _secao(body, "valor entregue")
+    antes, depois = campo(valor, "Antes"), campo(valor, "Depois")
+    if antes or depois:
+        return {"antes": antes or None, "depois": depois or None, "contexto": None}
+    funcional = _secao(body, "resumo funcional")
+    texto = " ".join(t for t in (campo(funcional, "O que é"), campo(funcional, "Valor")) if t)
+    if not texto:
+        contexto = _secao(body, "contexto")
+        texto = next((p.strip() for p in (contexto or "").split("\n\n") if p.strip()), "")
+    return {"antes": None, "depois": None, "contexto": _texto_puro(texto)} if texto else None
 
 
 def _resumir_prs_recentes(root: Path, prs: list[dict]) -> None:
