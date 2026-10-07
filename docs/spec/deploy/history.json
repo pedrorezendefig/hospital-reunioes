@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-07T15:54:08-03:00",
+      "sha": "896423a2e6e51aaee204db274c8510a0d0b35398",
+      "app_version": "0.170.0",
+      "subject": "Onda onda-a-onda4: Ponte com o desenvolvimento, rota de automação e script dos anexos",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda4 (#1101)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1056
+      ],
+      "result": "healthy",
+      "duration_seconds": 68,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda4: PR #1101 (issue #1063), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 28
+        },
+        "health_s": 20
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-07T15:18:39-03:00",
       "sha": "8c709d7b493273bb41f48d8e7cf9533ca2beb97a",
       "app_version": "0.169.0",
