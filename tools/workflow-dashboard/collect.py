@@ -422,6 +422,65 @@ def _correlate(history: list[dict], issues: list[dict], prs: list[dict]) -> None
 
 # ---------- Arquivos do repo ----------
 
+def frase_da_decisao(body_md: str, maximo: int = 240) -> str:
+    """A frase que resume a ADR: o primeiro parágrafo depois de "## Decisão" ou,
+    sem essa seção, o primeiro parágrafo do corpo (sem títulos, listas e
+    blocos de código). Cortada em `maximo` caracteres, na palavra."""
+    texto = body_md or ""
+    m = re.search(r"(?mi)^## Decis[aã]o\s*$", texto)
+    if m:
+        texto = texto[m.end():]
+    paragrafo = []
+    em_codigo = False
+    for linha in texto.splitlines():
+        if linha.strip().startswith("```"):
+            em_codigo = not em_codigo
+            continue
+        if em_codigo:
+            continue
+        if not linha.strip():
+            if paragrafo:
+                break
+            continue
+        if re.match(r"^(#|[-*] |\d+\. |\||>|---)", linha.strip()):
+            if paragrafo:
+                break
+            continue
+        paragrafo.append(linha.strip())
+    frase = " ".join(paragrafo)
+    if len(frase) > maximo:
+        frase = frase[:maximo].rsplit(" ", 1)[0].rstrip(",;:") + "..."
+    return frase
+
+
+def parse_temas_adr(indice_md: str) -> list[dict]:
+    """Os temas do índice `docs/adr/README.md`: cada `## Tema` seguido da tabela
+    com uma linha `| [NNNN](arquivo) | status | título |` por ADR. Devolve
+    `[{"tema", "numeros"}]` na ordem do índice; ADR repetida fica no primeiro
+    tema em que aparece. Índice sem tema parseável devolve lista vazia (o front
+    agrupa por prefixo do título)."""
+    temas: list[dict] = []
+    vistos: set[int] = set()
+    atual = None
+    for linha in (indice_md or "").splitlines():
+        hm = re.match(r"^## (.+?)\s*$", linha)
+        if hm:
+            atual = {"tema": hm.group(1).strip(), "numeros": []}
+            temas.append(atual)
+            continue
+        nm = re.match(r"^\|\s*\[(\d+)\]\(", linha)
+        if nm and atual is not None:
+            n = int(nm.group(1))
+            if n not in vistos:
+                vistos.add(n)
+                atual["numeros"].append(n)
+    return [t for t in temas if t["numeros"]]
+
+
+def _temas_adr(root: Path) -> list[dict]:
+    return parse_temas_adr(_read_text(root / "docs" / "adr" / "README.md") or "")
+
+
 def _parse_adrs(root: Path) -> list[dict]:
     out = []
     for f in sorted((root / "docs" / "adr").glob("[0-9]*.md")):  # README.md é o índice, não uma ADR
@@ -440,16 +499,18 @@ def _parse_adrs(root: Path) -> list[dict]:
         tm = re.search(r"(?m)^# (.+)$", body)
         title = tm.group(1).strip() if tm else f.stem
         nm = re.match(r"(\d+)", f.name)
+        body_md = re.sub(r"(?m)^# .+\n", "", body, count=1).strip()
         out.append({
             "number": int(nm.group(1)) if nm else None,
             "slug": f.stem,
             "title": title,
             "status": state or "?",
+            "decisao": frase_da_decisao(body_md),
             "supersedes": meta.get("supersedes"),
             "superseded_by": meta.get("superseded_by"),
             "amends": meta.get("amends"),
             "amended_by": meta.get("amended_by"),
-            "body_md": re.sub(r"(?m)^# .+\n", "", body, count=1).strip(),
+            "body_md": body_md,
             "file": str(f.relative_to(root)),
         })
     return out
@@ -613,6 +674,7 @@ def collect(root: Path) -> dict:
         "project": project,
         "versioning_md": _read_text(spec / "VERSIONING.md"),
         "adrs": _parse_adrs(root),
+        "adr_temas": _temas_adr(root),
         "context_md": _read_text(root / "CONTEXT.md"),
         "snapshots": _snapshots(root),
         "git": _git_info(root),

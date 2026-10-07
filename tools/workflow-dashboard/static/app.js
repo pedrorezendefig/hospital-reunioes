@@ -4,7 +4,7 @@
    lazy) e /api/issue/<n>/timeline (linha do tempo das fechadas, lazy). */
 
 import { closeTips, reduceMotion, revealOnScroll } from './ui.js';
-import { abaValida, aoMudarRota, gravarRota, lerRota, montarHash } from './router.js';
+import { SUBS_DOC, abaValida, aoMudarRota, gravarRota, lerRota, montarHash } from './router.js';
 import { renderDiagrama, wireDiagramas } from './diagramas.js';
 import { renderArea, wireArea } from './areas.js';
 import { corDaPessoa } from './pessoas.js';
@@ -35,6 +35,11 @@ const S = {
   expPrd: new Map(),
   expDep: new Set(),
   expAdr: new Set(),
+  adrHist: false,   // Decisões: mostrar também as superseded (esmaecidas)
+  adrQ: '',
+  fluxo: null,      // static/fluxo.json, carregado na primeira visita à sub-pill Fluxo
+  fluxoErro: null,
+  fluxoNo: null,    // passo do fluxo aberto no painel
   comments: {},
   timelines: {},
   mapaDoc: null,
@@ -118,8 +123,8 @@ function adrStatusBadge(status) {
   return `<span class="badge ${ADR_STATUS_CLS[status] || 'b-red'}">${esc(status)}</span>`;
 }
 function adrPointerBadge(a) {
-  const ptr = a.superseded_by ? `→ ${a.superseded_by}`
-    : a.amended_by ? `± ${a.amended_by}` : '';
+  const ptr = a.superseded_by ? `substituída pela ${a.superseded_by}`
+    : a.amended_by ? `emendada pela ${a.amended_by}` : '';
   return ptr ? `<span class="badge b-ghost">${esc(ptr)}</span>` : '';
 }
 
@@ -261,25 +266,28 @@ function abrirItem() {
 function render() {
   if (!S.data) return;
   const fn = {
-    issues: renderIssues, prs: renderPrs, producao: renderProducao, mapa: renderMapa, dominio: renderDominio,
+    issues: renderIssues, prs: renderPrs, producao: renderProducao, documentacao: renderDocumentacao,
   }[S.tab];
   view.innerHTML = fn ? fn() : '';
   if (S.tab === 'issues') wireIssues();
-  if (S.tab === 'mapa') {
+  const sub = S.tab === 'documentacao' ? subDoc() : null;
+  if (sub === 'mapa') {
     try { desenharDiagramas(view); } catch { /* bloco fica no fallback de código cru */ }
     try { wireDiagramas(view); } catch { /* diagrama sem interação > aba quebrada */ }
     const cur = (S.data.snapshots || []).find(s => s.name === S.mapaDoc);
     try { wireArea(view, cur, areaCtx()); } catch { /* capa sem interação > aba quebrada */ }
   }
-  // tela cheia do ER só existe na aba mapa; o lock de scroll segue o estado
-  document.body.classList.toggle('er-lock', S.tab === 'mapa' && S.erFull);
+  if (sub === 'fluxo') {
+    try { wireDiagramas(view); } catch { /* fluxo sem teclado > aba quebrada */ }
+    marcarNoFluxo();
+  }
+  if (sub === 'decisoes') wireDecisoes();
+  // tela cheia do ER só existe no Mapa; o lock de scroll segue o estado
+  document.body.classList.toggle('er-lock', sub === 'mapa' && S.erFull);
   if (_ioView) _ioView.disconnect();
   if (_ioList) { _ioList.disconnect(); _ioList = null; }
   _ioView = revealOnScroll(view, '.rv');
 }
-
-const sec = (n, title, hint = '') =>
-  `<div class="sec rv"><span class="n">${n}</span><h2 class="clip"><span class="clip-inner">${title}</span></h2>${hint ? `<span class="hint">${hint}</span>` : ''}</div>`;
 
 /* cabeçalho de seção com eyebrow (padrão Baseline, #260) */
 function cabecalho(eyebrow, titulo, hint = '') {
@@ -932,7 +940,7 @@ function renderMapa() {
     : capa != null ? capa + fonte
       : `<div class="card md rv" style="--i:4" id="snapdoc">${md(cur.body_md)}</div>`;
   return `
-  ${sec('04', 'Mapa da app', 'docs/spec/snapshots · regenerado a cada deploy')}
+  ${cabecalho('mapear', 'Mapa da app', 'docs/spec/snapshots · regenerado a cada deploy')}
   ${erCapaHtml()}
   <div class="docpills rv" style="--i:2">
     ${snaps.map(s => `<button class="fchip ${s.name === S.mapaDoc ? 'on' : ''}" data-act="doc" data-doc="${esc(s.name)}">${esc(s.name)}</button>`).join('')}
@@ -962,28 +970,208 @@ function desenharDiagramas(root) {
   });
 }
 
-/* ---------- DOMÍNIO ---------- */
+/* ---------- DOCUMENTAÇÃO (fluxo · mapa · decisões · glossário) ---------- */
 
-function renderDominio() {
-  const adrs = S.data.adrs;
+const ROTULO_SUB = { fluxo: 'Fluxo', mapa: 'Mapa', decisoes: 'Decisões', glossario: 'Glossário' };
+
+/* a sub-pill é o item da rota (#documentacao/decisoes); o Glossário leva o
+   termo depois dela (#documentacao/glossario/ata); sem item, abre no Fluxo */
+function subDoc() {
+  const sub = String(S.item || '').split('/')[0];
+  return SUBS_DOC.includes(sub) ? sub : 'fluxo';
+}
+
+function renderDocumentacao() {
+  const sub = subDoc();
+  const corpo = { fluxo: renderFluxo, mapa: renderMapa, decisoes: renderDecisoes, glossario: renderGlossario }[sub]();
   return `
-  ${cabecalho('decidir', 'Decisões de arquitetura', 'docs/adr · curado por humano')}
-  <div class="grid g12">
-    ${adrs.map((a, i) => `
-      <article class="card tst adr lift sp6 rv" style="--i:${i}" data-act="adr" data-i="${i}">
+  <div class="docpills doc-subs rv" style="--i:0">
+    ${SUBS_DOC.map(k => `<button class="fchip ${k === sub ? 'on' : ''}" data-act="docsub" data-sub="${k}">${ROTULO_SUB[k]}</button>`).join('')}
+  </div>
+  ${corpo}`;
+}
+
+/* ----- Fluxo: static/fluxo.json desenhado pelo renderer próprio ----- */
+
+function ensureFluxo() {
+  if (S.fluxo || S.fluxoPedido) return;
+  S.fluxoPedido = true;
+  fetch('/fluxo.json').then(r => r.json()).then(j => {
+    S.fluxo = j;
+    if (S.tab === 'documentacao' && subDoc() === 'fluxo') render();
+  }).catch(e => {
+    S.fluxoErro = String(e.message || e);
+    S.fluxoPedido = false;
+    if (S.tab === 'documentacao' && subDoc() === 'fluxo') render();
+  });
+}
+
+const CLASSE_FLUXO = {
+  auto: ['b-indigo', 'automático'], humano: ['b-amber', 'parada humana'],
+  decisao: ['b-ghost', 'decisão'], fim: ['b-green', 'produção'],
+};
+
+/* o painel do passo aberto: a regra (campo detalhe do fluxo.json) e, em nó de
+   skill, o link secundário para o SKILL.md no GitHub */
+function painelFluxoHtml() {
+  const n = S.fluxo && S.fluxoNo && (S.fluxo.nos || []).find(x => x.id === S.fluxoNo);
+  if (!n) return '<div class="empty">clique num passo do fluxo para ler a regra dele; os passos de skill levam ao SKILL.md</div>';
+  const [cls, rotulo] = CLASSE_FLUXO[n.classe] || CLASSE_FLUXO.auto;
+  const subs = Array.isArray(n.sub) ? n.sub : n.sub ? [n.sub] : [];
+  return `<div class="card fx-painel">
+    <div class="fx-painel-head"><span class="badge ${cls}">${esc(rotulo)}</span><span class="k-label">${esc(subs.join(' · '))}</span></div>
+    <h3>${esc(n.titulo)}</h3>
+    <p>${esc(n.detalhe || '')}</p>
+    ${n.skill ? `<a class="btn-pill outline" href="${esc(S.data.repo_url)}/blob/main/.claude/skills/${esc(n.skill)}/SKILL.md" target="_blank" rel="noopener">.claude/skills/${esc(n.skill)}/SKILL.md <span class="btn-arrow">↗</span></a>` : ''}
+  </div>`;
+}
+
+function marcarNoFluxo() {
+  view.querySelectorAll('.fx-no').forEach(g => g.classList.toggle('on', g.dataset.id === S.fluxoNo));
+  const painel = $('#fluxo-painel');
+  if (painel) painel.innerHTML = painelFluxoHtml();
+}
+
+function renderFluxo() {
+  const cab = cabecalho('trabalhar', 'Do pedido à produção', 'ADR 0068 · static/fluxo.json, mantido junto com o /ask-pedro');
+  if (!S.fluxo) {
+    ensureFluxo();
+    return `${cab}<div class="empty">${S.fluxoErro ? `fluxo.json indisponível: ${esc(S.fluxoErro)}` : 'carregando o fluxo…'}</div>`;
+  }
+  const svg = renderDiagrama(S.fluxo) || '<div class="empty">fluxo.json fora do formato que o renderer entende</div>';
+  const legenda = (S.fluxo.legenda || []).map(l =>
+    `<span><span class="sw sw-${esc(l.classe)}"></span>${esc(l.texto)}</span>`).join('');
+  const portas = (S.fluxo.portas || []).map(pt =>
+    `<tr><td><b>${esc(pt.porta)}</b></td><td>${esc(pt.quando)}</td><td class="mono">${esc(pt.caminho)}</td></tr>`).join('');
+  return `${cab}
+  <div class="card fx-capa rv" style="--i:1">
+    <div class="fx-hint glass-cap">clique num passo para ler a regra · âmbar é onde alguém precisa agir</div>
+    ${svg}
+  </div>
+  <div id="fluxo-painel" class="rv" style="--i:2">${painelFluxoHtml()}</div>
+  <div class="fx-legenda rv" style="--i:3">${legenda}</div>
+  ${portas ? `<div class="card md rv" style="--i:4">
+    <span class="k-label">as três portas</span>
+    <table class="fx-portas"><thead><tr><th>Porta</th><th>Quando</th><th>Caminho</th></tr></thead><tbody>${portas}</tbody></table>
+  </div>` : ''}`;
+}
+
+/* ----- Decisões: ADRs agrupadas pelo tema do docs/adr/README.md ----- */
+
+/* sem índice parseável, o tema é o prefixo do título (o que vem antes dos
+   dois-pontos); sem prefixo, "Outras" */
+function temasPorPrefixo(adrs) {
+  const grupos = new Map();
+  adrs.forEach(a => {
+    const m = /^(.{3,40}?):/.exec(a.title || '');
+    const tema = m ? m[1] : 'Outras';
+    if (!grupos.has(tema)) grupos.set(tema, []);
+    grupos.get(tema).push(a.number);
+  });
+  return [...grupos].map(([tema, numeros]) => ({ tema, numeros }));
+}
+
+function adrGrupos() {
+  const adrs = S.data.adrs || [];
+  const temas = (S.data.adr_temas && S.data.adr_temas.length) ? S.data.adr_temas : temasPorPrefixo(adrs);
+  const q = S.adrQ.trim().toLowerCase();
+  const visivel = a => (S.adrHist || a.status === 'accepted')
+    && (!q || `${a.title} ${a.body_md}`.toLowerCase().includes(q));
+  const porNumero = new Map(adrs.map((a, i) => [a.number, i]));
+  const grupos = temas.map(t => ({ tema: t.tema, idx: t.numeros.map(n => porNumero.get(n)).filter(i => i != null) }));
+  const noIndice = new Set(grupos.flatMap(g => g.idx));
+  const fora = adrs.map((_, i) => i).filter(i => !noIndice.has(i));
+  if (fora.length) grupos.push({ tema: 'Fora do índice', idx: fora });
+  return grupos.map(g => ({ tema: g.tema, idx: g.idx.filter(i => visivel(adrs[i])) })).filter(g => g.idx.length);
+}
+
+function adrCard(a, i, k) {
+  return `
+      <article class="card tst adr lift sp6 rv ${a.status === 'accepted' ? '' : 'adr-hist'}" style="--i:${Math.min(k, 12)}" data-act="adr" data-i="${i}">
         <span class="tst-quote" aria-hidden="true">&ldquo;</span>
         <h3 class="tst-corpo">${esc(a.title)}</h3>
+        ${a.decisao ? `<div class="adr-frase md">${md(a.decisao)}</div>` : ''}
         ${S.expAdr.has(i) ? `<div class="adr-body md">${md(a.body_md)}</div>` : ''}
         <div class="tst-foot">
           <span class="tst-ref">ADR ${String(a.number ?? '').padStart(2, '0')} · ${esc(a.file)}</span>
           ${adrStatusBadge(a.status)}${adrPointerBadge(a)}
         </div>
-      </article>`).join('')}
+      </article>`;
+}
+
+function listaAdrsHtml() {
+  const adrs = S.data.adrs || [];
+  const grupos = adrGrupos();
+  if (!grupos.length) return '<div class="empty">nenhuma decisão bate com a busca</div>';
+  return grupos.map(g => `
+    <div class="adr-tema rv"><span class="k-label">${esc(g.tema)} · ${g.idx.length}</span></div>
+    <div class="grid g12">${g.idx.map((i, k) => adrCard(adrs[i], i, k)).join('')}</div>`).join('');
+}
+
+function renderDecisoes() {
+  const hist = (S.data.adrs || []).filter(a => a.status !== 'accepted').length;
+  return `
+  ${cabecalho('decidir', 'Decisões de arquitetura', 'docs/adr · curado por humano · só as aceitas, por tema')}
+  <div class="adr-tools rv">
+    <input class="search" id="adrq" type="search" placeholder="buscar no título e no corpo" value="${esc(S.adrQ)}" autocomplete="off">
+    <button class="fchip ${S.adrHist ? 'on' : ''}" data-act="adrhist" aria-pressed="${S.adrHist}">ver histórico (${hist})</button>
   </div>
-  ${cabecalho('entender', 'Glossário do domínio', 'o que as palavras significam aqui')}
-  <div class="card tst rv">
+  <div id="adrlist">${listaAdrsHtml()}</div>`;
+}
+
+/* a busca redesenha só a lista: o campo mantém o foco e o texto */
+function wireDecisoes() {
+  const q = $('#adrq');
+  if (!q) return;
+  q.addEventListener('input', () => {
+    S.adrQ = q.value;
+    const el = $('#adrlist');
+    if (!el) return;
+    el.innerHTML = listaAdrsHtml();
+    if (_ioList) _ioList.disconnect();
+    _ioList = revealOnScroll(el, '.rv');
+  });
+}
+
+/* ----- Glossário: CONTEXT.md com um índice de termos e âncora por termo ----- */
+
+const slugDe = s => String(s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase()
+  .replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '');
+
+/* os termos do CONTEXT.md: cada `**Termo**:` no começo de linha, agrupado
+   pela seção `## X` em que está */
+function termosDoGlossario(mdTexto) {
+  const secoes = [];
+  let atual = null;
+  String(mdTexto || '').split('\n').forEach(linha => {
+    const h = /^## (.+?)\s*$/.exec(linha);
+    if (h) { atual = { titulo: h[1], termos: [] }; secoes.push(atual); return; }
+    const t = /^\*\*(.+?)\*\*/.exec(linha);
+    if (t && atual) atual.termos.push({ nome: t[1], slug: slugDe(t[1]) });
+  });
+  return secoes.filter(s => s.termos.length);
+}
+
+function renderGlossario() {
+  const src = S.data.context_md || '';
+  const secoes = termosDoGlossario(src);
+  const alvo = String(S.item || '').startsWith('glossario/') ? S.item.slice('glossario/'.length) : '';
+  let html = md(src || '_CONTEXT.md não encontrado_');
+  secoes.forEach(sec => sec.termos.forEach(t => {
+    const abre = `<p><strong>${esc(t.nome)}</strong>`;
+    const atual = t.slug === alvo;
+    html = html.replace(abre, `<p id="g-${t.slug}" class="g-termo${atual ? ' g-alvo' : ''}"${atual ? ' aria-current="true"' : ''}><strong>${esc(t.nome)}</strong>`);
+  }));
+  const indice = secoes.map(sec => `
+    <div class="g-secao"><span class="k-label">${esc(sec.titulo)}</span>
+      <div class="g-chips">${sec.termos.map(t => `<a class="chip" href="${rotaDe('documentacao', `glossario/${t.slug}`)}">${esc(t.nome)}</a>`).join('')}</div>
+    </div>`).join('');
+  return `
+  ${cabecalho('entender', 'Glossário do domínio', 'CONTEXT.md · o que as palavras significam aqui')}
+  ${indice ? `<div class="card g-indice rv" style="--i:1">${indice}</div>` : ''}
+  <div class="card tst rv" style="--i:2">
     <span class="tst-quote" aria-hidden="true">&ldquo;</span>
-    <div class="md">${md(S.data.context_md || '_CONTEXT.md não encontrado_')}</div>
+    <div class="md">${html}</div>
     <div class="tst-foot"><span class="tst-ref">CONTEXT.md · curado por humano</span></div>
   </div>`;
 }
@@ -1036,6 +1224,19 @@ view.addEventListener('click', e => {
     const i = Number(t.dataset.i);
     S.expAdr.has(i) ? S.expAdr.delete(i) : S.expAdr.add(i);
     render();
+  } else if (act === 'adrhist') {
+    S.adrHist = !S.adrHist;
+    render();
+  } else if (act === 'docsub') {
+    // sub-pill de Documentação: vira o item da rota; o termo do glossário cai
+    S.item = t.dataset.sub;
+    S.erFull = false;
+    render();
+    window.scrollTo({ top: 0 });
+  } else if (act === 'fluxono') {
+    // passo do fluxo: só o painel e o destaque mudam, sem redesenhar o SVG
+    S.fluxoNo = S.fluxoNo === t.dataset.id ? null : t.dataset.id;
+    marcarNoFluxo();
   } else if (act === 'menu') {
     S.menu = S.menu === t.dataset.v ? null : t.dataset.v;
     marcarMenu();

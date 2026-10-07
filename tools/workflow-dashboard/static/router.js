@@ -6,15 +6,23 @@
    escreve o location.hash: o app.js recebe e entrega a rota como objeto
    { aba, item, filtros }, com os filtros como texto. */
 
-export const ABAS = ['issues', 'prs', 'producao', 'mapa', 'dominio'];
+export const ABAS = ['issues', 'prs', 'producao', 'documentacao'];
+
+/* sub-pills da aba Documentação: o item da rota (#documentacao/decisoes);
+   o Glossário leva o termo depois da barra (#documentacao/glossario/ata) */
+export const SUBS_DOC = ['fluxo', 'mapa', 'decisoes', 'glossario'];
 
 /* hashes da navegação antiga (bookmarks) caem na aba que herdou o conteúdo;
-   Plano, Pendências e Guia saíram (ADR 0062, decisão 3) e caem na home */
+   Plano, Pendências e Guia saíram (ADR 0062, decisão 3) e caem na home;
+   Mapa e Domínio viraram sub-pills de Documentação */
 const ALIAS = {
   plano: 'issues', pendencias: 'issues', guia: 'issues',
   setup: 'issues', workflow: 'issues', fluxo: 'issues', bastidores: 'issues',
   agora: 'producao', deploys: 'producao',
+  mapa: 'documentacao', dominio: 'documentacao',
 };
+/* a sub-pill que o apelido antigo abre (o #mapa cai no Mapa, o #dominio nas Decisões) */
+const SUB_DO_ALIAS = { mapa: 'mapa', dominio: 'decisoes' };
 
 /* aba conhecida, apelido antigo ou a home */
 export function abaValida(t) {
@@ -30,13 +38,14 @@ export function lerHash(hash) {
   const aba = barra < 0 ? caminho : caminho.slice(0, barra);
   const item = barra < 0 ? '' : decodeURIComponent(caminho.slice(barra + 1));
   const filtros = Object.fromEntries(new URLSearchParams(q < 0 ? '' : h.slice(q + 1)));
-  return { aba: abaValida(aba), item: item || null, filtros };
+  return { aba: abaValida(aba), item: item || SUB_DO_ALIAS[aba] || null, filtros };
 }
 
-/* o inverso do lerHash; filtro vazio não entra no hash */
+/* o inverso do lerHash; filtro vazio não entra no hash. A barra do item
+   fica legível (#documentacao/glossario/ata): o lerHash só corta na primeira */
 export function montarHash({ aba, item, filtros }) {
   const q = new URLSearchParams(Object.entries(filtros || {}).filter(([, v]) => v)).toString();
-  return `#${aba}${item ? '/' + encodeURIComponent(item) : ''}${q ? '?' + q : ''}`;
+  return `#${aba}${item ? '/' + encodeURIComponent(item).replace(/%2F/g, '/') : ''}${q ? '?' + q : ''}`;
 }
 
 /* a rota do endereço atual */

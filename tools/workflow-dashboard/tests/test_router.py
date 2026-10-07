@@ -195,12 +195,14 @@ function _navegar(hash) {
 """
 
 
-def _app(tmp_path, expr, antes="", hash_inicial="", dados=None):
-    """Roda o app.js inteiro (boot incluso) e avalia `expr` depois de `antes`."""
+def _app(tmp_path, expr, antes="", hash_inicial="", dados=None, preludio_extra=""):
+    """Roda o app.js inteiro (boot incluso) e avalia `expr` depois de `antes`.
+    `preludio_extra` entra entre o DOM de mentira e o app.js (ex.: carregar o marked)."""
     modulo = APP_JS.replace("from './", f"from '{STATIC.as_uri()}/")
     prog = (
         f"const _HASH_INICIAL = {json.dumps(hash_inicial)};\nconst _DADOS = {json.dumps(dados or DADOS)};\n"
         + PRELUDIO
+        + preludio_extra
         + modulo
         + f"\nawait _esperar();\n{antes}\n"
         + f"console.log('@@' + JSON.stringify({expr}));\n"
@@ -231,7 +233,8 @@ def _card(html, n):
 def test_hash_vira_aba_item_e_filtros(tmp_path):
     rotas = _router(
         tmp_path,
-        "['#issues/930?resp=lucassampaioc1&fase=pr_aberto', '#prs/930', '#producao/v0.161.0', '#mapa', '']"
+        "['#issues/930?resp=lucassampaioc1&fase=pr_aberto', '#prs/930', '#producao/v0.161.0', "
+        "'#documentacao/decisoes', '#documentacao/glossario/ata-guiada', '#mapa', '#dominio', '#documentacao', '']"
         ".map(R.lerHash)",
     )
     assert rotas == [
@@ -242,7 +245,12 @@ def test_hash_vira_aba_item_e_filtros(tmp_path):
         },
         {"aba": "prs", "item": "930", "filtros": {}},
         {"aba": "producao", "item": "v0.161.0", "filtros": {}},
-        {"aba": "mapa", "item": None, "filtros": {}},
+        {"aba": "documentacao", "item": "decisoes", "filtros": {}},
+        {"aba": "documentacao", "item": "glossario/ata-guiada", "filtros": {}},
+        # os endereços antigos caem na sub-pill que herdou o conteúdo
+        {"aba": "documentacao", "item": "mapa", "filtros": {}},
+        {"aba": "documentacao", "item": "decisoes", "filtros": {}},
+        {"aba": "documentacao", "item": None, "filtros": {}},
         {"aba": "issues", "item": None, "filtros": {}},
     ]
 

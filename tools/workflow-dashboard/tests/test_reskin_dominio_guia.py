@@ -39,13 +39,19 @@ def _fora_do_root():
 # ---------- Domínio: cartões testimonial ----------
 
 
-def test_dominio_com_cabecalho_de_eyebrow():
-    fn = re.search(r"function renderDominio\(\)[\s\S]*?\n\}", APP_JS)
-    assert fn, "app.js sem renderDominio"
-    corpo = fn.group(0)
-    assert "cabecalho(" in corpo, "Domínio fora do padrão de cabeçalho com eyebrow"
-    assert "Decisões de arquitetura" in corpo
-    assert "Glossário do domínio" in corpo
+def _fn(nome):
+    fn = re.search(r"function " + nome + r"\(\)[\s\S]*?\n\}", APP_JS)
+    assert fn, f"app.js sem {nome}"
+    return fn.group(0)
+
+
+def test_decisoes_e_glossario_com_cabecalho_de_eyebrow():
+    # Domínio virou as sub-pills Decisões e Glossário da aba Documentação
+    assert "renderDominio" not in APP_JS
+    decisoes, glossario = _fn("renderDecisoes"), _fn("renderGlossario")
+    assert "cabecalho(" in decisoes and "cabecalho(" in glossario, "fora do padrão de cabeçalho com eyebrow"
+    assert "Decisões de arquitetura" in decisoes
+    assert "Glossário do domínio" in glossario
 
 
 def test_adr_em_cartao_testimonial_com_aspas_em_brand():
@@ -86,9 +92,9 @@ def test_ghostnum_da_identidade_anterior_aposentado():
 
 
 def test_glossario_no_mesmo_cartao_testimonial():
-    fn = re.search(r"function renderDominio\(\)[\s\S]*?\n\}", APP_JS)
-    corpo = fn.group(0)
-    assert re.search(r'class="card tst[^"]*"[\s\S]{0,400}context_md', corpo), \
+    corpo = _fn("renderGlossario")
+    assert "context_md" in corpo
+    assert re.search(r'class="card tst rv"[\s\S]{0,200}\$\{html\}', corpo), \
         "glossário fora do cartão testimonial"
     assert re.search(r'tst-foot[\s\S]{0,200}CONTEXT\.md', corpo), \
         "rodapé do glossário sem a fonte CONTEXT.md"

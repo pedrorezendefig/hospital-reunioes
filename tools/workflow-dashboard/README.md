@@ -1,5 +1,7 @@
 # Hospital OS
 
+> Quando mudar skill do pipeline, atualize `static/fluxo.json` junto com o `/ask-pedro`: é dali que a aba Documentação desenha o fluxo de trabalho.
+
 O painel local e **somente leitura** do time (ADR 0062, decisão 1): a ferramenta interna do fluxo de trabalho, não o aplicativo do hospital. Abre direto em **Issues**, nas abertas: filtros em dropdown no topo, o card grande com tudo que está pendente e a quebra por fase, cada issue com a fase, quem assumiu e há quanto tempo.
 
 ```bash
@@ -24,17 +26,27 @@ Porta fixa `8799` (a 8765 fica livre pra rodadas manuais), logs em `~/Library/Lo
 
 ## Abas
 
-Cinco abas, uma fonte por aba (ADR 0062, decisões 2 e 3). Nada no Hospital OS deriva de arquivo o que o GitHub já diz.
+Quatro abas, uma fonte por aba (ADR 0062, decisões 2 e 3). Nada no Hospital OS deriva de arquivo o que o GitHub já diz.
 
 | Aba | O que mostra | Fonte |
 |---|---|---|
 | **Issues** (home) | pendente por fase, filtros em dropdown, árvore PRD → fatias com o desenho das ondas, card com a linha do tempo | GitHub ao vivo pelo `gh` (issues, sub-issues, bloqueios, PRs, eventos, branches remotas); a fase Em produção cruza com o `history.json` |
 | **PRs** | quadro por fase com uma raia por pessoa e a faixa das tentativas | GitHub ao vivo pelo `gh` (PRs com checks, `mergeStateStatus`, reviews); a coluna Em produção cruza com o `history.json` |
 | **Produção** | versão no ar, health de cada serviço e uma linha por versão | `history.json` e `state.json` da `origin/main` (`git fetch` + `git show`) |
-| **Mapa** | snapshots factuais da app (rotas, entidades, schema, diagramas) | `docs/spec/snapshots/` do seu clone |
-| **Domínio** | ADRs e glossário do hospital | `docs/adr/` e `CONTEXT.md` do seu clone |
+| **Documentação** | quatro sub-pills: Fluxo, Mapa, Decisões e Glossário (abaixo) | arquivos do seu clone, uma fonte por sub-pill |
 
-**Issues** (home): no topo, os filtros numa linha de dropdowns do próprio painel (sem `<select>`): responsável (na cor da pessoa, mais "ninguém assumiu"), estado (abre em abertas), PRD aberto, labels agrupadas por prefixo (`type:`, `area:`, `fatia:` e as outras) e busca. Cada opção mostra quantas issues traria com os outros filtros como estão (faceta); opção que traria zero fica esmaecida, mas continua clicável. O botão `limpar` aparece só quando algum filtro saiu do padrão e volta tudo ao padrão (abertas, sem recorte). Abaixo, o **funil**: o card grande, de contorno forte, com tudo que está pendente (issues abertas), e oito cards que destrincham esse número por fase e somam ele; clicar num card filtra a lista. A fila humana (era a aba Pendências) é o card Humana: aberta com `ready-for-human`. Com um responsável filtrado, o funil mostra as contagens dele; não há lead time nem métrica por pessoa (ADR 0061, decisão 5). A lista segue a árvore PRD → fatias; o card do PRD desenha o **fluxo do PRD** (abaixo); o card fechado mostra fase, pessoa, idade, critérios feitos/total, PR e versão; aberto, a linha do tempo com data e hora, o corpo e os comentários · **PRs**: quadro com as seis fases do PR em colunas (aberto sem CI, CI vermelho, esperando revisor, verde esperando merge, mergeado sem deploy, em produção) e uma raia por pessoa, na cor dela (quem assumiu a issue que o PR fecha; sem assignee, "ninguém assumiu"). O card mostra PR, issue (o título dela no title do chip), branch, dias na coluna e o sinal de conflito; a coluna mais cheia e o card parado há mais de 3 dias ganham destaque. Em produção, o fim do caminho, não conta, é compacta (uma linha por PR: número, issue e versão) e mostra só a última semana, ou tudo com um PRD filtrado. Tentativas (fechados sem merge) ficam na faixa cinza embaixo. Filtros: pessoas (várias ao mesmo tempo, uma raia para cada), PRD, só abertos e o `limpar` · **Produção**: estado de produção + timeline de deploys · **Mapa**: snapshots factuais da app · **Domínio**: ADRs + glossário.
+**Issues** (home): no topo, os filtros numa linha de dropdowns do próprio painel (sem `<select>`): responsável (na cor da pessoa, mais "ninguém assumiu"), estado (abre em abertas), PRD aberto, labels agrupadas por prefixo (`type:`, `area:`, `fatia:` e as outras) e busca. Cada opção mostra quantas issues traria com os outros filtros como estão (faceta); opção que traria zero fica esmaecida, mas continua clicável. O botão `limpar` aparece só quando algum filtro saiu do padrão e volta tudo ao padrão (abertas, sem recorte). Abaixo, o **funil**: o card grande, de contorno forte, com tudo que está pendente (issues abertas), e oito cards que destrincham esse número por fase e somam ele; clicar num card filtra a lista. A fila humana (era a aba Pendências) é o card Humana: aberta com `ready-for-human`. Com um responsável filtrado, o funil mostra as contagens dele; não há lead time nem métrica por pessoa (ADR 0061, decisão 5). A lista segue a árvore PRD → fatias; o card do PRD desenha o **fluxo do PRD** (abaixo); o card fechado mostra fase, pessoa, idade, critérios feitos/total, PR e versão; aberto, a linha do tempo com data e hora, o corpo e os comentários · **PRs**: quadro com as seis fases do PR em colunas (aberto sem CI, CI vermelho, esperando revisor, verde esperando merge, mergeado sem deploy, em produção) e uma raia por pessoa, na cor dela (quem assumiu a issue que o PR fecha; sem assignee, "ninguém assumiu"). O card mostra PR, issue (o título dela no title do chip), branch, dias na coluna e o sinal de conflito; a coluna mais cheia e o card parado há mais de 3 dias ganham destaque. Em produção, o fim do caminho, não conta, é compacta (uma linha por PR: número, issue e versão) e mostra só a última semana, ou tudo com um PRD filtrado. Tentativas (fechados sem merge) ficam na faixa cinza embaixo. Filtros: pessoas (várias ao mesmo tempo, uma raia para cada), PRD, só abertos e o `limpar` · **Produção**: estado de produção + timeline de deploys · **Documentação**: o fluxo de trabalho desenhado, o mapa da app, as decisões por tema e o glossário.
+
+### Documentação
+
+Uma aba, quatro sub-pills (`#documentacao/fluxo`, `/mapa`, `/decisoes`, `/glossario`; os endereços antigos `#mapa` e `#dominio` caem na sub-pill que herdou o conteúdo). Cada uma tem uma fonte só:
+
+| Sub-pill | O que mostra | Fonte |
+|---|---|---|
+| **Fluxo** (padrão) | o fluxo de trabalho do pedido à produção: as três portas (PRD + fatias, issue única, PR direto), os gates, o rabo `fechar_onda.py` e as paradas humanas em âmbar; clicar num passo abre a regra dele e, em passo de skill, o link para o `SKILL.md`; abaixo, a legenda e a tabela das três portas | `static/fluxo.json`, desenhado à mão e mantido junto com o `/ask-pedro`; o front não tem texto do fluxo hardcoded, e o `diagramas.js` desenha (tipo `fluxo`, ADR 0025: sem mermaid.js) |
+| **Mapa** | snapshots factuais da app: capa ER interativa e uma pill por documento (rotas, entidades, schema, diagramas) | `docs/spec/snapshots/` do seu clone |
+| **Decisões** | ADRs agrupadas pelo tema do índice, só as `accepted` por padrão, com a frase da decisão em cada card; `ver histórico (N)` mostra as `superseded` esmaecidas com "substituída pela NNNN"; busca no título e no corpo | `docs/adr/*.md` e o índice `docs/adr/README.md` (parseado no `collect.py`; sem índice, agrupa pelo prefixo do título) |
+| **Glossário** | o `CONTEXT.md` renderizado, com um índice de termos em chips no topo; cada `**Termo**` vira a âncora `#documentacao/glossario/<slug>` | `CONTEXT.md` do seu clone |
 
 O método de trabalho (o que era a aba Guia) vive em `docs/onboarding/`.
 
@@ -57,7 +69,7 @@ O método de trabalho (o que era a aba Guia) vive em `docs/onboarding/`.
 ## De onde vêm os dados (ao vivo vs. do último `git pull`)
 
 - **Ao vivo (rede):** issues, PRs, comentários e a linha do tempo via `gh`; produção e deploys (`history.json` e `state.json`) da `origin/main` (`git fetch` + `git show`; o rabo `fechar_onda.py` pusha de um worktree próprio, então a verdade pós-merge vive no remoto); e o seu `git` local (branch, commits).
-- **Do seu clone (último `git pull`):** mapa da app (`docs/spec/snapshots/`), decisões e glossário (`docs/adr/` + `CONTEXT.md`).
+- **Do seu clone (último `git pull`):** mapa da app (`docs/spec/snapshots/`), decisões e glossário (`docs/adr/` + `CONTEXT.md`); o fluxo de trabalho é um arquivo do próprio painel (`static/fluxo.json`).
 
 Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta sozinho a cada 60s. Requer `gh` autenticado para Issues; sem ele, o resto continua funcionando (o painel mostra como resolver).
 
@@ -68,13 +80,14 @@ Recoleta a cada request (cache de 60s; o botão ⟳ força). O painel recoleta s
 - `fases.py`: módulo puro das fases: fase por issue e por PR, linha do tempo, ondas por PRD e contagens do funil (o front não calcula nada).
 - `areas.py`: parse dos snapshots de área para as capas interativas (degrada para `None`, nunca quebra).
 - `diagramas.py`: parse do subset Mermaid dos snapshots (ADR 0025).
-- `tests/`: pytest dos módulos e do front (`cd tools/workflow-dashboard && python3 -m pytest tests -q`; o front roda no Node).
+- `tests/`: pytest dos módulos e do front (`uv run --no-project --python ">=3.12" --with pytest python -m pytest tools/workflow-dashboard/tests -q`; o front roda no Node). O CI não roda esta pasta (o `manual.yml` ignora o painel): o `/ship` roda local.
 - `static/`: front vanilla em ES modules (sem build):
   - `app.js`: SPA, render de cada aba.
   - `ui.js`: componentes (tooltip, copiar, recolhível).
   - `pessoas.js`: a cor fixa de cada pessoa (`corDaPessoa`), reusada por chips, raias e nós.
   - `prs.js`: o quadro da aba PRs (colunas por fase, raias por pessoa, faixa das tentativas e filtros).
   - `router.js`: o router de hash (`#aba/item?filtros`), único módulo que lê e grava o `location.hash`.
+  - `fluxo.json`: o fluxo de trabalho desenhado à mão (nós numa grade, raias, arestas, regra de cada passo, legenda e as três portas); fonte da sub-pill Fluxo.
   - `ondas.js`: o desenho das ondas no card do PRD (SVG próprio, um gancho só no `issueCard`).
   - `content/`: textos estáveis (glossário, verbetes das tabelas).
   - `style.css`: identidade visual (papel/indigo/coral; Fraunces + IBM Plex).
