@@ -194,6 +194,34 @@ def ler_prs_abertos() -> list[dict[str, Any]]:
     ]
 
 
+# A pasta do app. O PR que nao toca nela e lote de ferramenta para a subida
+# (`classe_do_lote` no `fechar_onda.py`): so merge, sem build, sem registro no
+# `history.json` e sem webhook de deploy.
+PASTA_DO_APP = "hospital-reunioes/"
+
+# A API lista ate 3000 arquivos de um PR, 100 por pagina.
+_PAGINAS_DE_ARQUIVOS = 30
+
+
+def pr_toca_o_app(numero: int) -> bool:
+    """Se o PR mexe em algum arquivo do app, e por isso leva uma subida
+    (revisao do PR #1100, ADR 0069, decisao 5).
+
+    Para na primeira pagina que acha um arquivo do app, ou na primeira que vem
+    incompleta (a ultima). Falha de leitura sobe como `GithubIndisponivelError`:
+    quem chama decide o que "nao sei" quer dizer.
+    """
+    for pagina in range(1, _PAGINAS_DE_ARQUIVOS + 1):
+        dados = _chamar("GET", f"/pulls/{numero}/files?per_page=100&page={pagina}")
+        if not isinstance(dados, list):
+            raise GithubIndisponivelError("GitHub respondeu os arquivos do PR fora do formato")
+        if any(isinstance(a, dict) and str(a.get("filename") or "").startswith(PASTA_DO_APP) for a in dados):
+            return True
+        if len(dados) < 100:
+            return False
+    return False
+
+
 # O registro de todas as subidas, como a Action pos-merge o grava na `main`
 # (ADR 0064, decisao 6b). E o arquivo, e nao o evento: so a reconciliacao le
 # daqui (ADR 0069, decisao 4).

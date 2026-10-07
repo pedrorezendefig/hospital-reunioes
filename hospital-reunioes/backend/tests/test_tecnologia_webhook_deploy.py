@@ -41,6 +41,7 @@ from test_tecnologia_webhook_github import (  # noqa: E402
     _issue,
     _montar,
     _pessoa,
+    _pr_do_app,  # noqa: F401  (autouse)
     _reset_rate_limiter,  # noqa: F401  (autouse)
     _segredo_configurado,  # noqa: F401  (autouse)
     _sem_github_de_verdade,  # noqa: F401  (autouse)
@@ -273,6 +274,101 @@ class TestADevolucaoEsperaAProducao:
         assert len(avisos) == 1
 
 
+class TestOPrDeFerramentaNaoEsperaSubida:
+    """O PR que não toca em `hospital-reunioes/` (uma Demanda resolvida só no
+    `docs/manual/`, por exemplo) é lote de ferramenta: o `fechar_onda.py` só
+    mergeia, sem build, sem entrada no `history.json` e sem webhook de deploy.
+    Não há subida a esperar, e a devolução volta a Entregue (ADR 0069, decisão
+    5). Revisão do PR #1100."""
+
+    def _sem_app(self, monkeypatch) -> list[int]:
+        lidos: list[int] = []
+
+        def _ler(numero):
+            lidos.append(numero)
+            return False
+
+        monkeypatch.setattr(github_client, "pr_toca_o_app", _ler)
+        return lidos
+
+    def test_o_merge_de_um_pr_de_ferramenta_devolve_em_entregue(self, monkeypatch, avisos):
+        cliente, sb = TestADevolucaoEsperaAProducao()._em_desenvolvimento_com_pr(monkeypatch)
+        lidos = self._sem_app(monkeypatch)
+
+        _entregar(cliente, _corpo_pr(acao="closed", merged=True), evento="pull_request")
+
+        assert lidos == [1100]
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
+        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
+        assert [aviso["destinatario_id"] for aviso in avisos] == ["P1"]
+
+    def test_o_fechamento_que_chega_antes_do_merge_de_ferramenta_tambem_devolve(self, monkeypatch, avisos):
+        """O `issues.closed` chega primeiro, com o PR ainda aberto na foto: a
+        devolução espera. O `pull_request.closed` diz que o PR não leva subida,
+        e a Demanda, que segue Entregue, volta a quem pediu uma vez só."""
+        cliente, sb = TestADevolucaoEsperaAProducao()._em_desenvolvimento_com_pr(monkeypatch)
+        self._sem_app(monkeypatch)
+
+        _entregar(cliente, _corpo(acao="closed"))
+        assert _quem_tem_o_card(sb) == ("em_andamento", "P2"), "o piso: o PR aberto ainda segura a devolução"
+
+        _entregar(cliente, _corpo_pr(acao="closed", merged=True), evento="pull_request")
+
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
+        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
+        assert len(avisos) == 1
+
+        _entregar(cliente, _corpo(acao="edited"))
+        assert len(avisos) == 1, "devolvida de novo numa releitura da issue"
+
+
+_PR_TOCA_O_APP_DE_VERDADE = github_client.pr_toca_o_app
+
+
+class TestOClienteDizSeOPrLevaSubida:
+    """O cliente de verdade, com o transporte dublado, pelas páginas de 100
+    arquivos que a API do GitHub devolve."""
+
+    def _paginas(self, monkeypatch, paginas: list[list[str]]) -> list[str]:
+        monkeypatch.setattr(settings, "github_integracao_token", "token-falso")
+        pedidos: list[str] = []
+
+        def _transporte(metodo, url, **_kw):
+            pedidos.append(url)
+            pagina = int(url.rsplit("page=", 1)[1])
+            return httpx.Response(200, json=[{"filename": f} for f in paginas[pagina - 1]])
+
+        monkeypatch.setattr(github_client.httpx, "request", _transporte)
+        return pedidos
+
+    def test_pr_so_de_docs_nao_leva_subida(self, monkeypatch):
+        pedidos = self._paginas(monkeypatch, [["docs/manual/src/content/docs/tecnologia.md", "tools/x.py"]])
+
+        assert _PR_TOCA_O_APP_DE_VERDADE(1105) is False
+        assert pedidos == [f"https://api.github.com/repos/{REPO}/pulls/1105/files?per_page=100&page=1"]
+
+    def test_um_arquivo_do_app_na_segunda_pagina_leva_subida(self, monkeypatch):
+        cheia = [f"docs/manual/p{i}.md" for i in range(100)]
+        self._paginas(monkeypatch, [cheia, ["hospital-reunioes/backend/app/main.py"]])
+
+        assert _PR_TOCA_O_APP_DE_VERDADE(1105) is True
+
+    def test_falha_ao_ler_os_arquivos_devolve_no_merge(self, monkeypatch, avisos):
+        """ "Não sei" vale "sem subida": esperar uma subida que talvez não venha
+        deixaria o card com a Vitta para sempre."""
+        cliente, sb = TestADevolucaoEsperaAProducao()._em_desenvolvimento_com_pr(monkeypatch)
+
+        def _fora_do_ar(numero):
+            raise github_client.GithubIndisponivelError("timeout")
+
+        monkeypatch.setattr(github_client, "pr_toca_o_app", _fora_do_ar)
+
+        _entregar(cliente, _corpo_pr(acao="closed", merged=True), evento="pull_request")
+
+        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
+        assert len(avisos) == 1
+
+
 class TestAMesmaVersaoNaoRegrava:
     def test_a_mesma_versao_duas_vezes_nao_grava_nem_avisa_de_novo(self, monkeypatch, avisos):
         """Critério de aceite: a Action reexecutada (ou o aviso repetido) não
@@ -421,6 +517,13 @@ HISTORICO = [
 ]
 
 
+def _fechada_em(numero: int, quando: str) -> dict:
+    """A issue entregue com a data do fechamento, como o GitHub a devolve
+    (`closed_at`, em UTC). É ela que separa a subida do fechamento atual da
+    subida de um fechamento anterior."""
+    return {**_entregue(numero), "closed_at": quando}
+
+
 class TestORegistroDoDeploy:
     def test_os_prs_do_lote_saem_das_notas_da_subida(self):
         from app.services.registro_do_deploy import aviso_da_entrada
@@ -491,7 +594,7 @@ class TestAReconciliacaoCarimbaEmProducao:
         hora em hora lê o `history.json` da `main` e marca Em produção, com a
         versão mais nova que lista a issue e a data dela, a linha no fio e a
         devolução a quem pediu."""
-        gh = _GithubFalso({673: _entregue(673), 999: _entregue(999)})
+        gh = _GithubFalso({673: _fechada_em(673, "2026-10-08T12:30:00Z"), 999: _entregue(999)})
         _, sb, _ = _montar(
             demandas=[
                 _entregue_por_pr(gh, 673, "D1", responsavel_id="P2"),
@@ -513,6 +616,40 @@ class TestAReconciliacaoCarimbaEmProducao:
         assert [linha["texto"] for linha in _fio(sb) if linha["demanda_id"] == "D1"][0] == "Em produção na v0.169.0"
         assert (d1["estado"], d1["responsavel_id"]) == ("aguardando", "P1")
         assert d2["etapa"] == ETAPA_ENTREGUE, "a issue que nenhuma subida lista continua Entregue"
+
+    def test_a_issue_reaberta_nao_herda_a_subida_do_fechamento_anterior(self, monkeypatch, avisos):
+        """O caso da revisão do PR #1100: a 673 subiu na v0.169.0, reabriu para
+        um ajuste e o PR do ajuste foi mergeado. Até a subida do ajuste entrar
+        no `history.json`, a v0.169.0 é a única entrada que lista a 673, e ela é
+        de ANTES do fechamento atual: a passagem de hora em hora não carimba
+        nada, e o card fica com a Vitta. A subida seguinte carimba a dela."""
+        gh = _GithubFalso({673: _fechada_em(673, "2026-10-08T15:00:00Z")})
+        _, sb, _ = _montar(
+            demandas=[_entregue_por_pr(gh, 673, "D1", estado="em_andamento", responsavel_id="P2")],
+            participantes=[_pessoa("P1")],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        self._job(monkeypatch, sb)
+
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE, "carimbou a subida de antes do fechamento"
+        assert _demandas(sb)[0].get("versao_em_producao") is None
+        assert _quem_tem_o_card(sb) == ("em_andamento", "P2")
+        assert _fio(sb) == []
+        assert avisos == []
+
+        subida_do_ajuste = {
+            "app_version": "0.170.0",
+            "at": "2026-10-08T16:00:00-03:00",
+            "notes": "PR avulso: PR #1105, issue #673. Merge pela API do GitHub, um build.",
+        }
+        self._job(monkeypatch, sb, historico=[subida_do_ajuste, *HISTORICO])
+
+        demanda = _demandas(sb)[0]
+        assert (demanda["etapa"], demanda["versao_em_producao"]) == (ETAPA_EM_PRODUCAO, "v0.170.0")
+        assert _quem_tem_o_card(sb) == ("aguardando", "P1")
+        assert len(avisos) == 1
 
     def test_sem_demanda_entregue_o_history_json_nem_e_lido(self, monkeypatch):
         """A cota do GitHub é uma só: sem Demanda à espera da subida, não há o

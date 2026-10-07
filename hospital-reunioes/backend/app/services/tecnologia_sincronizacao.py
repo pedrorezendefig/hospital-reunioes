@@ -444,6 +444,20 @@ def _fatos_anteriores(demanda: dict[str, Any]) -> tuple[list[int], int | None]:
     return abertos, fechada if isinstance(fechada, int) else None
 
 
+def _pr_leva_subida(pr: int) -> bool:
+    """Se o PR mergeado toca no app; "nao sei" vale "nao" (`sincronizar_pelo_pr`)."""
+    try:
+        return github_client.pr_toca_o_app(pr)
+    except Exception:
+        logger.warning(
+            "[tecnologia] Falha ao ler os arquivos do PR #%s; o fechamento conta como sem subida "
+            "e devolve em Entregue.",
+            pr,
+            exc_info=True,
+        )
+        return False
+
+
 def sincronizar_pelo_pr(supabase, demanda: dict[str, Any], *, pr: int, acao: str, mergeado: bool) -> bool:
     """O evento `pull_request` aplicado a uma Demanda cuja raiz o PR fecha.
 
@@ -454,13 +468,23 @@ def sincronizar_pelo_pr(supabase, demanda: dict[str, Any], *, pr: int, acao: str
 
     Vai como TROCA, e nao como a lista pronta: se outra escrita passar na
     frente, a troca e reaplicada sobre os fatos que ela gravou.
+
+    O merge so grava "fechada por PR" quando o PR leva uma subida, isto e,
+    toca no app (revisao do PR #1100). O PR de ferramenta e so merge: sem
+    entrada no `history.json` e sem webhook de deploy, Em producao nunca
+    chegaria, e a devolucao que a esperasse nunca aconteceria. Sem o fato, a
+    issue conta como fechada sem PR e devolve em Entregue (ADR 0069, decisao
+    5). Se a leitura dos arquivos falhar, vale o mesmo: devolver no merge e o
+    comportamento de antes da fatia, e esperar uma subida que talvez nao venha
+    deixaria o card com a Vitta para sempre.
     """
+    leva_subida = mergeado and _pr_leva_subida(pr)
 
     def _ajustar(abertos: list[int], fechada: int | None) -> tuple[list[int], int | None]:
         abertos = [n for n in abertos if n != pr]
         if acao in ("opened", "reopened"):
             abertos.append(pr)
-        elif mergeado:
+        elif leva_subida:
             fechada = pr
         return abertos, fechada
 
@@ -502,6 +526,25 @@ def _versao_que_segura(demanda: dict[str, Any]) -> str | None:
     if demanda.get("etapa") != ETAPA_EM_PRODUCAO:
         return None
     return demanda.get("versao_em_producao") or None
+
+
+def _deixou_de_esperar_a_subida(demanda: dict[str, Any], mudanca: dict[str, Any], *, etapa_antes: str) -> bool:
+    """A Demanda segue Entregue e o fato do PR acabou de sumir (revisao do PR #1100).
+
+    O caso: o `issues.closed` do merge chegou antes do `pull_request.closed`, a
+    foto ainda dizia "PR aberto" e a devolucao ficou esperando Em producao. O
+    `pull_request.closed` de um PR de ferramenta (ou fechado sem merge) tira o
+    PR sem gravar "fechada por PR": a Etapa nao muda, mas agora nao ha subida a
+    esperar, e a Demanda volta a quem pediu em Entregue, como se tivesse
+    fechado sem PR. Uma vez so: quem chega aqui e a escrita que trocou a foto
+    (a trava do `atualizado_em`), e a foto seguinte ja nao tem o fato.
+    """
+    return (
+        etapa_antes == ETAPA_ENTREGUE
+        and mudanca["etapa"] == ETAPA_ENTREGUE
+        and _por_pr(demanda.get("github_foto"))
+        and not _por_pr(mudanca["github_foto"])
+    )
 
 
 def _reler(supabase, demanda_id: str) -> dict[str, Any] | None:
@@ -586,6 +629,8 @@ def sincronizar_demanda(
         return False
 
     if not muda_a_etapa:
+        if _deixou_de_esperar_a_subida(demanda, mudanca, etapa_antes=etapa_antes):
+            _devolver_a_quem_pediu(supabase, demanda, etapa_nova=ETAPA_ENTREGUE, por_pr=False)
         return True
 
     _gravar_linha(
@@ -766,6 +811,29 @@ def _carimbar_em_producao(supabase, demanda: dict[str, Any], *, versao: str, dat
     return True
 
 
+def _subiu_depois_do_fechamento(data_da_subida: str, fechada_em: object) -> bool:
+    """Se a subida e de DEPOIS do fechamento atual da issue (revisao do PR #1100).
+
+    A entrada mais nova do `history.json` que lista a issue pode ser a de um
+    fechamento ANTERIOR: a issue subiu, reabriu para um ajuste, o PR do ajuste
+    foi mergeado, e a subida dele ainda nao foi registrada (build, health e a
+    Action pos-merge; na onda, todos os merges antes de um build so). Carimbar
+    essa entrada gravaria "Em producao desde" a versao velha e devolveria o card
+    com o ajuste fora do ar, e o webhook da subida certa ja nao corrigiria nada.
+
+    O registro e gravado depois do health, e o merge fecha a issue antes do
+    build: a subida que levou o fechamento atual tem sempre data posterior ao
+    `closed_at`. Sem `closed_at` legivel nao ha como provar, e a Demanda espera
+    o webhook ou a passagem seguinte.
+    """
+    if not isinstance(fechada_em, str):
+        return False
+    try:
+        return datetime.fromisoformat(data_da_subida) > datetime.fromisoformat(fechada_em)
+    except (TypeError, ValueError):
+        return False
+
+
 def reconciliar_em_producao(supabase) -> dict[str, int]:
     """O par do webhook de deploy no lote de hora em hora (ADR 0069, decisao 4).
 
@@ -773,7 +841,9 @@ def reconciliar_em_producao(supabase) -> dict[str, int]:
     reiniciando na hora, a rede. O registro da subida esta no `history.json` da
     `main` do mesmo jeito, e esta passagem marca Em producao cada Demanda
     Entregue cuja issue aparece numa subida registrada, com a versao e a data
-    da mais nova que a lista (`subida_de_cada_issue`).
+    da mais nova que a lista (`subida_de_cada_issue`), desde que essa subida
+    seja de depois do fechamento atual da issue (`_subiu_depois_do_fechamento`,
+    que rele a issue para o `closed_at`).
 
     Roda DEPOIS do `reconciliar_vinculos`, que pode ter acabado de levar a
     Demanda a Entregue (o `issues.closed` que o webhook perdeu). Sem Demanda
@@ -806,11 +876,14 @@ def reconciliar_em_producao(supabase) -> dict[str, int]:
     marcadas = 0
     falhas = 0
     for demanda in entregues:
-        subida = subidas.get(int(demanda["github_issue_numero"]))
+        numero = int(demanda["github_issue_numero"])
+        subida = subidas.get(numero)
         if subida is None:
             continue
         versao, data = subida
         try:
+            if not _subiu_depois_do_fechamento(data, github_client.ler_issue(numero).get("closed_at")):
+                continue
             if _carimbar_em_producao(supabase, demanda, versao=versao, data=data):
                 marcadas += 1
         except Exception:

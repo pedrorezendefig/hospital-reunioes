@@ -779,7 +779,10 @@ def etapa_que_devolve(*, por_pr: bool) -> str:
     Issue fechada por PR volta em Em producao: o diretor nao tem como conferir o
     que ainda nao subiu, e devolver no merge seria pedir que ele testasse o que
     nao existe. Issue fechada sem PR (decisao, consultoria, correcao fora do
-    codigo) volta em Entregue, como sempre: nao ha subida nenhuma a esperar.
+    codigo) volta em Entregue, como sempre: nao ha subida nenhuma a esperar. O
+    PR que nao toca no app (lote de ferramenta, so merge) conta como sem PR
+    pelo mesmo motivo: quem decide e a sincronizacao, que nao grava o fato do
+    PR nesse caso (`sincronizar_pelo_pr`).
     Uma Etapa so por Demanda, e por isso nunca as duas.
     """
     return ETAPA_EM_PRODUCAO if por_pr else ETAPA_ENTREGUE
