@@ -8,6 +8,7 @@ import { useGravacaoVoz } from "@/hooks/useGravacaoVoz";
 import ChatMessage from "./ChatMessage";
 import CorrectionPlanSummary from "./CorrectionPlanSummary";
 import type { ChatMessage as ChatMessageType, CorrectionItem, ChatCorrecaoResponse } from "@/types/chat";
+import { ERRO_DO_TURNO, falaDaFalha, historicoParaEnvio } from "@/lib/chatDaIa";
 
 interface ChatCorrecaoProps {
   idReuniao: string;
@@ -104,13 +105,18 @@ export default function ChatCorrecao({
           Authorization: `Bearer ${session?.access_token}`,
         },
         body: JSON.stringify({
-          messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
+          messages: historicoParaEnvio(updatedMessages),
           section_context: capturedSectionContext,
           current_plan: correctionPlan,
         }),
       });
 
-      if (!res.ok) throw new Error("Erro ao enviar mensagem");
+      if (!res.ok) {
+        // A recusa de um teto (issue #893) chega com a frase do backend.
+        const fala = await falaDaFalha(res);
+        setMessages((prev) => [...prev, { role: "assistant", content: fala, timestamp: new Date().toISOString() }]);
+        return;
+      }
 
       const data: ChatCorrecaoResponse = await res.json();
 
@@ -129,7 +135,7 @@ export default function ChatCorrecao({
         ...prev,
         {
           role: "assistant",
-          content: "Desculpe, houve um erro. Tente novamente.",
+          content: ERRO_DO_TURNO,
           timestamp: new Date().toISOString(),
         },
       ]);

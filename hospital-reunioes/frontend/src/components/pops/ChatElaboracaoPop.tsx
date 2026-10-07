@@ -9,6 +9,7 @@ import ChatMessage from "@/components/reunioes/ChatMessage";
 import type { ChatMessage as ChatMessageType } from "@/types/chat";
 import type { PeriodicidadeRevisaoPop, PopMaterialReferencia, RascunhoPop } from "@/types";
 import { PROMPT_ARRANQUE_LEGADO, exibirArranqueLegado } from "@/lib/pops/arranqueLegado";
+import { ERRO_DO_TURNO, falaDaFalha, historicoParaEnvio } from "@/lib/chatDaIa";
 
 interface ChatElaboracaoResponse {
   reply: string;
@@ -210,12 +211,17 @@ export default function ChatElaboracaoPop({
         },
         body: JSON.stringify({
           rascunho,
-          messages: updatedMessages.map((m) => ({ role: m.role, content: m.content })),
+          messages: historicoParaEnvio(updatedMessages),
           section_context: capturedSectionContext,
         }),
       });
 
-      if (!res.ok) throw new Error("Erro ao enviar mensagem");
+      if (!res.ok) {
+        // A recusa de um teto (issue #893) chega com a frase do backend.
+        const fala = await falaDaFalha(res);
+        setMessages((prev) => [...prev, { role: "assistant", content: fala, timestamp: new Date().toISOString() }]);
+        return;
+      }
 
       const data: ChatElaboracaoResponse = await res.json();
       setMessages((prev) => [
@@ -231,7 +237,7 @@ export default function ChatElaboracaoPop({
         ...prev,
         {
           role: "assistant",
-          content: "Desculpe, houve um erro. Tente novamente.",
+          content: ERRO_DO_TURNO,
           timestamp: new Date().toISOString(),
         },
       ]);
