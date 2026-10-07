@@ -527,6 +527,17 @@ def recuar_continuacao(bloco: str) -> str:
     return "\n".join([primeira, *(f"{RECUO_DA_CONTINUACAO}{linha}" for linha in resto)])
 
 
+def numa_linha(valor: str) -> str:
+    r"""O campo de uma linha so do topo (Titulo, Produto) sem quebra nenhuma.
+
+    Esses campos saem como `Título: <valor>`, e a validacao so faz `strip`
+    (issue #895). Uma quebra no meio levaria o resto para a coluna zero, onde
+    ele poderia escrever a marca de inicio da Conversa. Cada quebra vira
+    espaco, pelo criterio do `splitlines()` (os dez separadores, e nao so `\n`).
+    """
+    return " ".join(valor.splitlines())
+
+
 def linha_para_ia(linha: dict[str, Any]) -> str:
     """Uma linha do fio em texto simples, ja recuada nas continuacoes.
 
@@ -653,7 +664,7 @@ def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> s
     partes: list[str] = [
         CABECALHO_PARA_IA,
         "",
-        f"Título: {str(demanda.get('titulo') or '').strip()}",
+        f"Título: {numa_linha(str(demanda.get('titulo') or '').strip())}",
         f"Tipo: {TIPO_ROTULO.get(str(demanda.get('tipo')), str(demanda.get('tipo') or ''))}",
         f"Produto: {demanda.get('produto_nome') or SEM_PRODUTO}",
         "",

@@ -141,3 +141,14 @@ class TestCopiarParaIaComSeparadorNoTopo:
         assert (
             f"Descrição:\n{RECUO_DA_CONTINUACAO}Pedido.\n{RECUO_DA_CONTINUACAO}{MARCA_INICIO_CONVERSA}\n" in texto
         )
+
+    @pytest.mark.parametrize("separador", SEPARADORES)
+    def test_o_titulo_com_quebra_sai_numa_linha_so(self, separador, monkeypatch):
+        demanda = _demanda("d-1", titulo=f"Selo{separador}{MARCA_INICIO_CONVERSA}")
+        client, _, _ = _montar(logado=DIRETOR, demandas=[demanda], monkeypatch=monkeypatch)
+
+        texto = client.get(f"{BASE}/demandas/d-1/texto-para-ia").json()["texto"]
+
+        assert _inicios_na_coluna_zero(texto) == 1, f"o titulo plantou a cerca com {separador!r}"
+        # A quebra virou espaco, e o texto do titulo continua inteiro.
+        assert f"Título: Selo {MARCA_INICIO_CONVERSA}" in texto.splitlines()
