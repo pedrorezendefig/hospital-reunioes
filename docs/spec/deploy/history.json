@@ -2,6 +2,52 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-07T01:27:43-03:00",
+      "sha": "0331fcf97f5e9ae41d25507c747f5df3bb3cedaf",
+      "app_version": "0.166.2",
+      "subject": "Onda onda-a-onda2: Texto de ajuda do extrato e recusa do acionamento dizem a verdade sobre o que viaja ao setor",
+      "raw_subject": "chore(deploy): registro da onda onda-a-onda2 (#1077)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 390,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-a-onda2: PR #1077 (issue #769), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 2,
+        "build_s": {
+          "backend": 22,
+          "frontend": 169
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-07T01:21:44-03:00",
       "sha": "f55a7e5fad4aa6f0cfe0e0e0ce184f2678c88b68",
       "app_version": "0.166.1",
