@@ -612,6 +612,44 @@ def _temas_adr(root: Path) -> list[dict]:
     return parse_temas_adr(_read_text(root / "docs" / "adr" / "README.md") or "")
 
 
+def numeros_adr(valor) -> list[int]:
+    """`"0029, 0061"` do frontmatter vira `[29, 61]`; vazio vira `[]`."""
+    return [int(n) for n in re.findall(r"\d+", valor or "")]
+
+
+def citacoes_adr(body_md: str, propria: int, existentes: set) -> list[int]:
+    """As ADRs que o corpo cita: `ADR 0034`, `ADRs 0057 e 0068` (lista com
+    vírgula ou "e") e o link `[0031](0031-x.md)`. Número solto não conta;
+    só entram as que existem, sem a própria."""
+    texto = body_md or ""
+    achados = set()
+    for m in re.finditer(r"\bADRs?\s+(\d{4}(?:\s*(?:,|\be\b)\s*\d{4})*)", texto):
+        achados.update(int(n) for n in re.findall(r"\d{4}", m.group(1)))
+    achados.update(int(n) for n in re.findall(r"\((\d{4})-[^)\s]*\.md\)", texto))
+    return sorted(n for n in achados if n in existentes and n != propria)
+
+
+def arestas_adr(adrs: list[dict]) -> list[dict]:
+    """As setas do mapa das Decisões, só do frontmatter (citação no corpo não
+    vira seta). A seta vai de `de` para `para`: a emenda aponta para a
+    emendada, a substituição aponta para a sucessora. O vínculo declarado dos
+    dois lados (`amends` e `amended_by`) vira uma seta só; ponta em ADR que não
+    existe cai."""
+    existentes = {a["number"] for a in adrs}
+    vistas = set()
+    for a in adrs:
+        n = a["number"]
+        vistas.update((n, x, "emenda") for x in a.get("emenda", []))
+        vistas.update((x, n, "emenda") for x in a.get("emendada_por", []))
+        vistas.update((x, n, "substitui") for x in a.get("substitui", []))
+        vistas.update((n, x, "substitui") for x in a.get("substituida_por", []))
+    return [
+        {"de": de, "para": para, "tipo": tipo}
+        for de, para, tipo in sorted(vistas)
+        if de in existentes and para in existentes
+    ]
+
+
 def _parse_adrs(root: Path) -> list[dict]:
     out = []
     for f in sorted((root / "docs" / "adr").glob("[0-9]*.md")):  # README.md é o índice, não uma ADR
@@ -641,9 +679,17 @@ def _parse_adrs(root: Path) -> list[dict]:
             "superseded_by": meta.get("superseded_by"),
             "amends": meta.get("amends"),
             "amended_by": meta.get("amended_by"),
+            "emenda": numeros_adr(meta.get("amends")),
+            "substitui": numeros_adr(meta.get("supersedes")),
+            "emendada_por": numeros_adr(meta.get("amended_by")),
+            "substituida_por": numeros_adr(meta.get("superseded_by")),
             "body_md": body_md,
             "file": str(f.relative_to(root)),
         })
+    existentes = {a["number"] for a in out}
+    for a in out:
+        ligadas = set(a["emenda"] + a["substitui"] + a["emendada_por"] + a["substituida_por"])
+        a["cita"] = [n for n in citacoes_adr(a["body_md"], a["number"], existentes) if n not in ligadas]
     return out
 
 
@@ -802,6 +848,7 @@ def collect(root: Path) -> dict:
             d.setdefault("pr_numbers", [])
             d.setdefault("issue_numbers", [])
 
+    adrs = _parse_adrs(root)
     return {
         "generated_at": datetime.now().astimezone().isoformat(timespec="seconds"),
         "repo_slug": slug,
@@ -812,8 +859,9 @@ def collect(root: Path) -> dict:
         "linha_do_tempo": _linha_do_tempo(history, github["prs"]),
         "project": project,
         "versioning_md": _read_text(spec / "VERSIONING.md"),
-        "adrs": _parse_adrs(root),
+        "adrs": adrs,
         "adr_temas": _temas_adr(root),
+        "adr_arestas": arestas_adr(adrs),
         "context_md": _read_text(root / "CONTEXT.md"),
         "snapshots": _snapshots(root),
         "git": _git_info(root),

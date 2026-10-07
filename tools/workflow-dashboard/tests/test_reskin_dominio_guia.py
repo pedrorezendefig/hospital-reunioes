@@ -54,9 +54,10 @@ def test_decisoes_e_glossario_com_cabecalho_de_eyebrow():
     assert "Glossário do domínio" in glossario
 
 
-def test_adr_em_cartao_testimonial_com_aspas_em_brand():
-    assert 'class="card tst adr' in APP_JS, "ADR fora do cartão testimonial"
-    assert "tst-quote" in APP_JS, "cartão de ADR sem glifo de aspas"
+def test_adr_em_miniatura_e_aspas_do_testimonial_em_brand():
+    # as Decisões viraram mapa de miniaturas (issue #1082); o testimonial segue no glossário
+    assert 'class="adr-mini' in APP_JS, "ADR fora da miniatura"
+    assert "tst-quote" in APP_JS, "testimonial sem glifo de aspas"
     quote = _bloco(".tst-quote")
     assert "var(--brand)" in quote, "glifo de aspas fora do azul royal"
 
@@ -81,9 +82,9 @@ def test_chips_de_estado_de_adr_nas_semanticas_dos_tokens():
     assert "superseded: 'b-ghost'" in mapa
     assert "proposed: 'b-blue'" in mapa
     assert "rejected: 'b-red'" in mapa
-    # o chip de estado vive no rodapé hairline do cartão
-    assert re.search(r'class="tst-foot"[\s\S]{0,400}adrStatusBadge', APP_JS), \
-        "chip de estado fora do rodapé do testimonial"
+    # o chip de estado vive no cabeçalho do painel da ADR aberta
+    assert re.search(r'class="adr-painel-head"[\s\S]{0,400}adrStatusBadge', APP_JS), \
+        "chip de estado fora do painel da ADR"
 
 
 def test_ghostnum_da_identidade_anterior_aposentado():
