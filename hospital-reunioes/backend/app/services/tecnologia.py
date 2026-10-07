@@ -527,6 +527,17 @@ def recuar_continuacao(bloco: str) -> str:
     return "\n".join([primeira, *(f"{RECUO_DA_CONTINUACAO}{linha}" for linha in resto)])
 
 
+def numa_linha(valor: str) -> str:
+    r"""O campo de uma linha so do topo (Titulo, Produto) sem quebra nenhuma.
+
+    Esses campos saem como `Título: <valor>`, e a validacao so faz `strip`
+    (issue #895). Uma quebra no meio levaria o resto para a coluna zero, onde
+    ele poderia escrever a marca de inicio da Conversa. Cada quebra vira
+    espaco, pelo criterio do `splitlines()` (os dez separadores, e nao so `\n`).
+    """
+    return " ".join(valor.splitlines())
+
+
 def linha_para_ia(linha: dict[str, Any]) -> str:
     """Uma linha do fio em texto simples, ja recuada nas continuacoes.
 
@@ -644,15 +655,21 @@ def texto_para_ia(*, demanda: dict[str, Any], linhas: list[dict[str, Any]]) -> s
     (`LIMITE_RESPOSTA`), e a rota e de Super admin, com a Demanda pedida uma por
     vez.
     """
+    # A descricao entra RECUADA INTEIRA, primeira linha inclusive (issue #895),
+    # como o "O que muda" da raiz: ela pode nascer do print lido pelo Assistente
+    # (ADR 0056), e ai e texto de terceiro, que na coluna zero escreveria uma
+    # marca de inicio e plantaria uma Conversa inventada antes da de verdade.
+    # Linha e o que o `splitlines()` diz que e linha, e a saida so tem `\n`.
+    descricao = str(demanda.get("descricao") or "").strip() or SEM_DESCRICAO
     partes: list[str] = [
         CABECALHO_PARA_IA,
         "",
-        f"Título: {str(demanda.get('titulo') or '').strip()}",
+        f"Título: {numa_linha(str(demanda.get('titulo') or '').strip())}",
         f"Tipo: {TIPO_ROTULO.get(str(demanda.get('tipo')), str(demanda.get('tipo') or ''))}",
-        f"Produto: {demanda.get('produto_nome') or SEM_PRODUTO}",
+        f"Produto: {numa_linha(str(demanda.get('produto_nome') or SEM_PRODUTO))}",
         "",
         "Descrição:",
-        str(demanda.get("descricao") or "").strip() or SEM_DESCRICAO,
+        indent("\n".join(descricao.splitlines()), RECUO_DA_CONTINUACAO),
         # A Etapa e o "O que muda" entram AQUI, entre a descricao e a Conversa
         # (issue #676): eles contam o que a Vitta esta entregando, que e a
         # continuacao do pedido, e nao mais uma fala do fio.

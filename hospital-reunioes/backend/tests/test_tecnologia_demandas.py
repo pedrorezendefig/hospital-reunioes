@@ -2041,7 +2041,7 @@ Tipo: Decisão
 Produto: Ana
 
 Descrição:
-A Ana precisa encerrar a conversa parada há 24 horas.
+    A Ana precisa encerrar a conversa parada há 24 horas.
 
 Conversa:
 --- início da conversa ---
@@ -2118,14 +2118,14 @@ class TestTextoParaIa:
     def test_sem_descricao_o_texto_diz_que_ela_nao_foi_preenchida(self):
         texto = texto_para_ia(demanda=_demanda_com_nomes(descricao=None), linhas=FIO_DO_EXEMPLO)
 
-        assert "Descrição:\n(sem descrição)" in texto
+        assert "Descrição:\n    (sem descrição)" in texto
         # Par de presenca: o resto do pedido esta la.
         assert "Título: Encerrar conversas da Ana" in texto
 
     def test_descricao_so_de_espacos_conta_como_sem_descricao(self):
         texto = texto_para_ia(demanda=_demanda_com_nomes(descricao="   \n  "), linhas=[])
 
-        assert "Descrição:\n(sem descrição)" in texto
+        assert "Descrição:\n    (sem descrição)" in texto
 
     @pytest.mark.parametrize(
         "tipo,rotulo",
