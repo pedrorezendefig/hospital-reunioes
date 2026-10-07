@@ -12,6 +12,7 @@ as regras que fazem o Windows funcionar, e que o Linux não perde nada com elas.
 from __future__ import annotations
 
 import ast
+import subprocess
 from pathlib import Path
 
 import conftest
@@ -119,3 +120,22 @@ def test_os_testes_leem_e_escrevem_arquivo_em_utf8():
             sem_encoding.append(f"{arquivo.name}:{linha}")
 
     assert sem_encoding == [], f'passe encoding="utf-8": {sem_encoding}'
+
+
+RAIZ_DO_REPO = PASTA_DOS_TESTES.parents[2]
+
+
+def test_snapshot_do_vitest_sai_do_git_com_lf_em_qualquer_maquina():
+    """O vitest grava o `.snap` com LF. Com `core.autocrlf=true` (o padrão do
+    Git no Windows) o checkout vinha com CRLF, o vitest regravava, e o arquivo
+    aparecia modificado em todo worktree, com diff de conteúdo vazio."""
+    snaps = subprocess.run(
+        ["git", "ls-files", "*.snap"], cwd=RAIZ_DO_REPO, capture_output=True, text=True, check=True
+    ).stdout.split()
+    assert snaps, "o repo não tem mais .snap: o teste perdeu o objeto"
+
+    eol = subprocess.run(
+        ["git", "check-attr", "eol", "--", *snaps], cwd=RAIZ_DO_REPO, capture_output=True, text=True, check=True
+    ).stdout.splitlines()
+
+    assert eol == [f"{snap}: eol: lf" for snap in snaps]

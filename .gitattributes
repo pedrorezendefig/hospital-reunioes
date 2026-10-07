@@ -1,0 +1,4 @@
+# O vitest grava snapshot com LF. Sem isto, o core.autocrlf=true do Git no
+# Windows faz o checkout com CRLF e o arquivo aparece modificado depois de
+# todo `vitest run` (issue #844).
+*.snap text eol=lf
