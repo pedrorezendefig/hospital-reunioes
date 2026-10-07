@@ -264,6 +264,43 @@ class TestSecretariaAgendaCerto:
         aviso_ao_facilitador.assert_called_once()
 
 
+class TestSerieDaRecorrencia:
+    """Issue #890: a Recorrência manda um `agendar` por cópia, cada uma herdando
+    o facilitador da original. Quando quem cria a série não é o facilitador,
+    cada cópia mandava o aviso "marcaram uma reunião para você": 52 semanas, 52
+    emails. Agora é um aviso por série; o convite por cópia aos participantes
+    continua como estava."""
+
+    def test_serie_criada_por_outra_pessoa_avisa_o_facilitador_uma_vez(self, convites, aviso_ao_facilitador):
+        sb = _Supabase([SECRETARIA, FACILITADORA, CONVIDADO])
+
+        for data in ("2026-11-02", "2026-11-09", "2026-11-16"):
+            resp = _agendar(
+                sb,
+                SECRETARIA,
+                data=data,
+                facilitador_id=FACILITADORA["id"],
+                id_grupo_recorrencia="serie-1",
+                nome_grupo_recorrencia="Semanal",
+            )
+            assert resp.status_code == 200, resp.text
+
+        assert len(sb.reunioes_novas()) == 3
+        aviso_ao_facilitador.assert_called_once()
+        assert aviso_ao_facilitador.call_args.args[2] == FACILITADORA["id"]
+        assert convites.call_count == 3, "o convite por cópia aos participantes não muda"
+
+    def test_outra_serie_avisa_de_novo(self, convites, aviso_ao_facilitador):
+        """O aviso é por série, não por facilitador: uma série nova é notícia nova."""
+        sb = _Supabase([SECRETARIA, FACILITADORA, CONVIDADO])
+
+        for grupo in ("serie-1", "serie-2"):
+            resp = _agendar(sb, SECRETARIA, facilitador_id=FACILITADORA["id"], id_grupo_recorrencia=grupo)
+            assert resp.status_code == 200, resp.text
+
+        assert aviso_ao_facilitador.call_count == 2
+
+
 def _editar(sb: _Supabase, ator: dict, **campos):
     return _cliente(sb, ator).patch(f"/api/reunioes/{REUNIAO}", json=campos)
 
