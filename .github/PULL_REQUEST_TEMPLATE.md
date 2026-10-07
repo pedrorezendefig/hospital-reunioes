@@ -1,6 +1,6 @@
 <!--
 PR template preenchido automaticamente pelo /ship a partir da Issue vinculada (gh issue view).
-Pode editar manualmente. No modelo Pocock o contexto vive na Issue — não em chronicle/plano.
+Pode editar manualmente. No modelo Pocock o contexto vive na Issue, não em chronicle/plano.
 -->
 
 ## 🎯 Contexto
@@ -52,11 +52,10 @@ Raio: quem sente se der errado (uma tela, um módulo, todos os logins, o própri
 - Issue: #N
 - Snapshot atual: [`docs/spec/snapshots/`](./docs/spec/snapshots/)
 
-## 🤖 Gates (3)
+## 🤖 Gates (ADR 0068)
 
-- [ ] Gate 1: `hr-revisor` (só PR do app)
-- [ ] Gate 2: `sensivel.py` (rota sem login ou migration vira `Sensível:` no revisor)
-- [ ] Gate 3: CI verde
+- [ ] Ferramenta (nada em `hospital-reunioes/`): CI verde
+- [ ] App: `hr-revisor` uma vez (com `Sensível:` se o `sensivel.py` acusar rota sem login ou migration) e CI verde
 
 ## Closes
 
