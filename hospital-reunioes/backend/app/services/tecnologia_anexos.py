@@ -21,7 +21,10 @@ from __future__ import annotations
 
 import logging
 import os
+import threading
+import time
 import uuid
+from collections import OrderedDict
 from datetime import UTC, datetime
 
 from app.config import settings
@@ -272,3 +275,92 @@ def _para_o_card(supabase, linhas: list[dict]) -> list[dict]:
         }
         for linha in linhas
     ]
+
+
+# ─── O print do Assistente (issue #1062) ─────────────────────────────────────
+#
+# O Assistente le o print e devolve a descricao; a imagem nao vira Anexo ali,
+# porque a Demanda ainda nao existe e pode nunca existir. Ela fica guardada SO
+# na memoria do processo, com um identificador efemero que a tela leva junto da
+# conversa, e vira Anexo no clique de "Criar Demanda", na mesma chamada que cria.
+# Sem o clique, nada persiste: nem linha, nem binario no bucket. O que sobra na
+# memoria sai pelo prazo ou pelo teto, e um reinicio do backend tambem limpa.
+#
+# Memoria, e nao bucket com faxina: o diretor que descarta a conversa nao deixa
+# print do hospital em lugar nenhum, nem por uma hora. O uvicorn deste app sobe
+# com um worker so, entao a memoria e uma so.
+
+PRAZO_DO_PRINT_SEGUNDOS = 2 * 60 * 60
+# Teto de memoria: vinte prints no limite de 5 MB. O mais antigo sai primeiro.
+TETO_DE_BYTES_DOS_PRINTS = 20 * LIMITE_DA_IMAGEM
+
+_prints: OrderedDict[str, dict] = OrderedDict()
+_trava_dos_prints = threading.Lock()
+
+
+def _jogar_fora_vencidos(agora: float) -> None:
+    for print_id in [p for p, guardado in _prints.items() if guardado["vence_em"] <= agora]:
+        del _prints[print_id]
+    while sum(len(g["conteudo"]) for g in _prints.values()) > TETO_DE_BYTES_DOS_PRINTS:
+        _prints.popitem(last=False)
+
+
+def guardar_print(*, quem_id: str, nome: str, conteudo: bytes) -> str:
+    """Guarda na memoria o print que o Assistente acabou de descrever e devolve
+    o identificador efemero que a tela leva ate "Criar Demanda"."""
+    print_id = uuid.uuid4().hex
+    agora = time.monotonic()
+    with _trava_dos_prints:
+        _prints[print_id] = {
+            "quem_id": str(quem_id),
+            "nome": nome,
+            "conteudo": conteudo,
+            "vence_em": agora + PRAZO_DO_PRINT_SEGUNDOS,
+        }
+        _jogar_fora_vencidos(agora)
+    return print_id
+
+
+def tirar_print(*, quem_id: str, print_id: str) -> dict | None:
+    """O print guardado, que sai da memoria ao ser tirado: entra uma vez so.
+
+    `None` quando ele venceu, saiu pelo teto, o backend reiniciou, ou e de outra
+    pessoa (e ai ele fica onde esta: nao e de quem pediu)."""
+    with _trava_dos_prints:
+        _jogar_fora_vencidos(time.monotonic())
+        guardado = _prints.get(print_id)
+        if not guardado or guardado["quem_id"] != str(quem_id):
+            return None
+        del _prints[print_id]
+    return guardado
+
+
+def esquecer_prints() -> None:
+    """Esvazia a memoria dos prints (testes)."""
+    with _trava_dos_prints:
+        _prints.clear()
+
+
+def aviso_dos_prints(quantos: int) -> str | None:
+    """A frase da Demanda que nasceu sem algum dos prints do Assistente."""
+    if quantos <= 0:
+        return None
+    sujeito = "um print da conversa não entrou" if quantos == 1 else f"{quantos} prints da conversa não entraram"
+    return f"A Demanda foi aberta, mas {sujeito} como imagem. Abra a Demanda e anexe de novo."
+
+
+def anexar_prints(supabase, *, demanda: dict, print_ids: list[str], quem_id: str) -> str | None:
+    """Grava como Anexo os prints que "Criar Demanda" trouxe e devolve o aviso
+    dos que nao entraram, ou `None`. Nunca levanta: a Demanda ja nasceu."""
+    faltaram = 0
+    for print_id in dict.fromkeys(print_ids):
+        guardado = tirar_print(quem_id=quem_id, print_id=print_id)
+        if guardado is None:
+            faltaram += 1
+            continue
+        try:
+            anexar(supabase, demanda=demanda, nome=guardado["nome"], conteudo=guardado["conteudo"], quem_id=quem_id)
+        except AnexoRecusadoError:
+            logger.warning("Print do Assistente recusado ao criar a Demanda %s", demanda.get("id"))
+            faltaram += 1
+    return aviso_dos_prints(faltaram)

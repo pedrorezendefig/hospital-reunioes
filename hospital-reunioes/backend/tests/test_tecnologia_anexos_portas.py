@@ -25,11 +25,11 @@ import pytest
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from test_tecnologia_anexos import BUCKET, PNG, _anexar, _anexos, _cenario  # noqa: E402
-from test_tecnologia_vinculo import BASE, _demanda, _GithubFalso, _issue  # noqa: E402
+from test_tecnologia_vinculo import BASE, DIRETOR, _demanda, _GithubFalso, _issue  # noqa: E402
 
 from app.config import settings  # noqa: E402
 from app.limiter import limiter  # noqa: E402
-from app.services import tecnologia_email  # noqa: E402
+from app.services import assistente_tecnologia, tecnologia_anexos, tecnologia_email  # noqa: E402
 
 LEVAR = f"{BASE}/demandas/d-1/levar-para-desenvolvimento"
 
@@ -142,7 +142,95 @@ class TestAContagemMudaNaIssueVinculada:
         assert len(_anexos(sb)) == 1
 
 
-# ─── 2. A resposta da Conversa leva uma imagem ───────────────────────────────
+# ─── 2. O print do Assistente vira Anexo no clique ───────────────────────────
+
+
+DESCREVER = f"{BASE}/assistente/descrever-imagem"
+
+
+@pytest.fixture
+def _visao_dublada(monkeypatch):
+    """O provedor de visao fica de fora: o que se prova aqui e o que o app
+    guarda, e nao o que o modelo enxerga."""
+    monkeypatch.setattr(
+        assistente_tecnologia, "descrever_imagem", lambda **kw: "Tela de login com erro vermelho no topo."
+    )
+    tecnologia_anexos.esquecer_prints()
+    yield
+    tecnologia_anexos.esquecer_prints()
+
+
+def _descrever(client, nome: str = "Captura de tela.png", conteudo: bytes = PNG):
+    return client.post(DESCREVER, files={"imagem": (nome, conteudo, "image/png")})
+
+
+def _criar(client, **extra):
+    return client.post(
+        f"{BASE}/demandas",
+        json={"titulo": "Erro no login", "tipo": "defeito", "produto_id": "prod-1", **extra},
+    )
+
+
+@pytest.mark.usefixtures("_visao_dublada")
+class TestPrintDoAssistente:
+    def test_criar_demanda_grava_o_print_descrito_como_anexo(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch=monkeypatch)
+        descrito = _descrever(client).json()
+        assert descrito["texto"] == "Tela de login com erro vermelho no topo."
+
+        criada = _criar(client, prints=[descrito["print_id"]])
+
+        assert criada.status_code == 201
+        assert criada.json()["aviso_dos_anexos"] is None
+        anexos = _anexos(sb)
+        assert len(anexos) == 1
+        assert anexos[0]["demanda_id"] == criada.json()["id"]
+        assert anexos[0]["nome_original"] == "Captura de tela.png"
+        assert sb.storage.arquivos == {f"{BUCKET}/{anexos[0]['storage_path']}": PNG}
+
+    def test_sem_o_clique_nenhum_registro_nem_binario_fica(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch=monkeypatch)
+
+        assert _descrever(client).status_code == 200
+        assert _descrever(client, nome="outro.png").status_code == 200
+
+        assert _anexos(sb) == []
+        assert sb.storage.arquivos == {}
+        assert sb.tabelas["tecnologia_demandas"] == []
+
+    def test_o_print_entra_uma_vez_so(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch=monkeypatch)
+        print_id = _descrever(client).json()["print_id"]
+        assert _criar(client, prints=[print_id]).status_code == 201
+
+        segunda = _criar(client, prints=[print_id])
+
+        assert segunda.status_code == 201
+        assert len(_anexos(sb)) == 1
+        assert segunda.json()["aviso_dos_anexos"]
+
+    def test_print_que_se_perdeu_nao_impede_a_demanda_e_vira_aviso(self, monkeypatch):
+        client, sb, _ = _cenario(monkeypatch=monkeypatch)
+
+        criada = _criar(client, prints=["sumiu-com-o-reinicio"])
+
+        assert criada.status_code == 201
+        assert criada.json()["aviso_dos_anexos"] == tecnologia_anexos.aviso_dos_prints(1)
+        assert _anexos(sb) == []
+
+    def test_o_print_de_outra_pessoa_nao_entra(self, monkeypatch):
+        client_pedro, sb, _ = _cenario(monkeypatch=monkeypatch)
+        print_id = _descrever(client_pedro).json()["print_id"]
+        client_diretor, _, _ = _cenario(logado=DIRETOR, supabase=sb, monkeypatch=monkeypatch)
+
+        criada = _criar(client_diretor, prints=[print_id])
+
+        assert criada.status_code == 201
+        assert _anexos(sb) == []
+        assert criada.json()["aviso_dos_anexos"] == tecnologia_anexos.aviso_dos_prints(1)
+
+
+# ─── 3. A resposta da Conversa leva uma imagem ───────────────────────────────
 
 
 def _responder(client, texto: str = "Segue o print do erro.", **extra):

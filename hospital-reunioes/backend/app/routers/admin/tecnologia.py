@@ -1048,9 +1048,20 @@ async def criar_demanda(
             detail="Falha ao criar a Demanda",
         )
     criada = _com_nomes(supabase, [result.data[0]], ator=ator)[0]
+    # Os prints do Assistente viram Anexo AQUI, na mesma chamada (issue #1062):
+    # sem o clique que chega a esta rota, eles nunca saem da memoria.
+    aviso_dos_anexos = (
+        tecnologia_anexos.anexar_prints(supabase, demanda=result.data[0], print_ids=payload.prints, quem_id=ator["id"])
+        if payload.prints
+        else None
+    )
     # "Inclusive na criação" (PRD #634, história 41): a Demanda nasce na mão do
     # dono do Produto, e para ele isso é uma atribuição como qualquer outra.
-    return {**criada, "aviso_por_email": await _aviso_da_atribuicao(supabase, demanda=criada, ator=ator)}
+    return {
+        **criada,
+        "aviso_por_email": await _aviso_da_atribuicao(supabase, demanda=criada, ator=ator),
+        "aviso_dos_anexos": aviso_dos_anexos,
+    }
 
 
 @router.patch("/demandas/{demanda_id}", response_model=DemandaResponse)
@@ -2533,7 +2544,10 @@ async def assistente_descrever_imagem(
     """O print anexado vira descricao, e a imagem some (ADR 0056, decisao 4).
 
     A primeira chamada MULTIMODAL do app. Nao grava NADA: nem storage, nem
-    tabela, nem log com o conteudo. O que a tela faz com o que sai daqui e
+    tabela, nem log com o conteudo. Os bytes ficam so na memoria do processo,
+    com um identificador efemero que volta junto da descricao (issue #1062): o
+    print vira Anexo se "Criar Demanda" trouxer o identificador, e some sozinho
+    se nao trouxer. O que a tela faz com o que sai daqui e
     escrever uma mensagem da PESSOA com o prefixo `[print] `, que e o que a
     deixa ver o que o assistente enxergou e o que faz o material entrar cercado
     no prompt do turno seguinte.
@@ -2566,4 +2580,7 @@ async def assistente_descrever_imagem(
         raise HTTPException(status_code=status.HTTP_502_BAD_GATEWAY, detail=MOTIVO_PRINT_ILEGIVEL)
 
     logger.info(f"Print lido para o Assistente por {_ator['id']}: {extensao}, {len(texto)} chars")
-    return {"texto": texto}
+    # O print fica so na memoria, com um identificador efemero (issue #1062): vira
+    # Anexo se "Criar Demanda" o trouxer, e some sozinho se nao trouxer.
+    print_id = tecnologia_anexos.guardar_print(quem_id=_ator["id"], nome=imagem.filename or "", conteudo=conteudo)
+    return {"texto": texto, "print_id": print_id}
