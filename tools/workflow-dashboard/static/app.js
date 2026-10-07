@@ -7,6 +7,7 @@ import { closeTips, marcarTermos, reduceMotion, revealOnScroll, termosGlossario 
 import { SUBS_DOC, abaValida, aoMudarRota, gravarRota, lerRota, montarHash } from './router.js';
 import { renderDiagrama, wireDiagramas } from './diagramas.js';
 import { posicionarPop, renderArea, wireArea } from './areas.js';
+import { desenharSetas, mapaDecisoes, vinculosDe } from './decisoes.js';
 import { corDaPessoa } from './pessoas.js';
 import { renderOndas } from './ondas.js';
 import { alternarPessoa, filtrosPrsDaRota, filtrosPrsNaRota, filtrosPrsVazios, renderQuadroPrs } from './prs.js';
@@ -35,9 +36,9 @@ const S = {
   expIss: new Set(),
   expPrd: new Map(),
   expDep: new Set(),
-  expAdr: new Set(),
   adrHist: false,   // Decisões: mostrar também as superseded (esmaecidas)
   adrQ: '',
+  adrFechados: new Set(),   // temas recolhidos nas Decisões
   fluxo: null,      // static/fluxo.json, carregado na primeira visita à sub-pill Fluxo
   fluxoErro: null,
   fluxoNo: null,    // passo do fluxo aberto no painel
@@ -126,11 +127,6 @@ const ADR_STATUS_CLS = {
 function adrStatusBadge(status) {
   // Estado fora do conjunto canônico (inclui "?" de ADR sem frontmatter) grita em vermelho.
   return `<span class="badge ${ADR_STATUS_CLS[status] || 'b-red'}">${esc(status)}</span>`;
-}
-function adrPointerBadge(a) {
-  const ptr = a.superseded_by ? `substituída pela ${a.superseded_by}`
-    : a.amended_by ? `emendada pela ${a.amended_by}` : '';
-  return ptr ? `<span class="badge b-ghost">${esc(ptr)}</span>` : '';
 }
 
 const issUrl = n => `${S.data.repo_url}/issues/${n}`;
@@ -1224,82 +1220,173 @@ function renderFluxo() {
   </div>` : ''}`;
 }
 
-/* ----- Decisões: ADRs agrupadas pelo tema do docs/adr/README.md ----- */
+/* ----- Decisões: mapa de miniaturas por tema do docs/adr/README.md (issue #1082) ----- */
 
-/* sem índice parseável, o tema é o prefixo do título (o que vem antes dos
-   dois-pontos); sem prefixo, "Outras" */
-function temasPorPrefixo(adrs) {
-  const grupos = new Map();
-  adrs.forEach(a => {
-    const m = /^(.{3,40}?):/.exec(a.title || '');
-    const tema = m ? m[1] : 'Outras';
-    if (!grupos.has(tema)) grupos.set(tema, []);
-    grupos.get(tema).push(a.number);
-  });
-  return [...grupos].map(([tema, numeros]) => ({ tema, numeros }));
+const PONTO_STATUS = { accepted: 'ok', superseded: 'hist', deprecated: 'hist', proposed: 'novo' };
+const num4 = n => String(n ?? '').padStart(4, '0');
+const adrDe = n => (S.data.adrs || []).find(a => a.number === n);
+
+/* a ADR aberta no painel vem da rota (#documentacao/decisoes/68) */
+function adrAberta() {
+  const m = /^decisoes\/(\d+)$/.exec(S.item || '');
+  return m ? Number(m[1]) : null;
 }
 
-function adrGrupos() {
-  const adrs = S.data.adrs || [];
-  const temas = (S.data.adr_temas && S.data.adr_temas.length) ? S.data.adr_temas : temasPorPrefixo(adrs);
-  const q = S.adrQ.trim().toLowerCase();
-  const visivel = a => (S.adrHist || a.status === 'accepted')
-    && (!q || `${a.title} ${a.body_md}`.toLowerCase().includes(q));
-  const porNumero = new Map(adrs.map((a, i) => [a.number, i]));
-  const grupos = temas.map(t => ({ tema: t.tema, idx: t.numeros.map(n => porNumero.get(n)).filter(i => i != null) }));
-  const noIndice = new Set(grupos.flatMap(g => g.idx));
-  const fora = adrs.map((_, i) => i).filter(i => !noIndice.has(i));
-  if (fora.length) grupos.push({ tema: 'Fora do índice', idx: fora });
-  return grupos.map(g => ({ tema: g.tema, idx: g.idx.filter(i => visivel(adrs[i])) })).filter(g => g.idx.length);
-}
+/* vínculo com outro tema: "→ 0054 (Tecnologia)" na ponta de saída, "←" na de chegada */
+const chipOutroTema = c =>
+  `<span class="adr-fora" data-act="adr" data-n="${c.n}">${c.sai ? '→' : '←'} ${num4(c.n)} (${esc(c.tema)})</span>`;
 
-function adrCard(a, i, k) {
-  return `
-      <article class="card tst adr lift sp6 rv ${a.status === 'accepted' ? '' : 'adr-hist'}" style="--i:${Math.min(k, 12)}" data-act="adr" data-i="${i}">
-        <span class="tst-quote" aria-hidden="true">&ldquo;</span>
-        <h3 class="tst-corpo">${esc(a.title)}</h3>
-        ${a.decisao ? `<div class="adr-frase md">${md(a.decisao)}</div>` : ''}
-        ${S.expAdr.has(i) ? `<div class="adr-body md">${md(a.body_md)}</div>` : ''}
-        <div class="tst-foot">
-          <span class="tst-ref">ADR ${String(a.number ?? '').padStart(2, '0')} · ${esc(a.file)}</span>
-          ${adrStatusBadge(a.status)}${adrPointerBadge(a)}
-        </div>
-      </article>`;
+function adrMini(a, chips = []) {
+  const aberta = adrAberta() === a.number;
+  return `<div class="adr-mini${a.status === 'accepted' ? '' : ' adr-hist'}${aberta ? ' on' : ''}" role="button" tabindex="0" data-act="adr" data-n="${a.number}"${aberta ? ' aria-current="true"' : ''}>
+      <span class="adr-mini-head"><span class="adr-mini-n">${num4(a.number)}</span><span class="adr-ponto p-${PONTO_STATUS[a.status] || 'erro'}" title="${esc(a.status)}"></span></span>
+      <span class="adr-mini-t">${esc(a.title)}</span>
+      ${chips.length ? `<span class="adr-mini-chips">${chips.slice(0, 2).map(chipOutroTema).join('')}${chips.length > 2 ? `<span class="adr-fora">+${chips.length - 2}</span>` : ''}</span>` : ''}
+    </div>`;
 }
 
 function listaAdrsHtml() {
-  const adrs = S.data.adrs || [];
-  const grupos = adrGrupos();
+  const grupos = mapaDecisoes(S.data.adrs || [], S.data.adr_temas, S.data.adr_arestas, { hist: S.adrHist, q: S.adrQ });
   if (!grupos.length) return '<div class="empty">nenhuma decisão bate com a busca</div>';
-  return grupos.map(g => `
-    <div class="adr-tema rv"><span class="k-label">${esc(g.tema)} · ${g.idx.length}</span></div>
-    <div class="grid g12">${g.idx.map((i, k) => adrCard(adrs[i], i, k)).join('')}</div>`).join('');
+  return grupos.map((g, k) => `
+    <details class="adr-tema" data-tema="${esc(g.tema)}"${S.adrFechados.has(g.tema) ? '' : ' open'}>
+      <summary><span class="k-label">${esc(g.tema)}</span><span class="adr-conta">${g.nos.length}</span></summary>
+      <div class="adr-mapa" data-i="${k}" data-setas="${esc(g.setas.map(x => `${x.de}>${x.para}:${x.tipo}`).join(','))}">
+        <svg class="adr-setas" aria-hidden="true"></svg>
+        <div class="adr-grade">${g.nos.map(a => adrMini(a, g.chips[a.number])).join('')}</div>
+      </div>
+    </details>`).join('');
+}
+
+/* o popover do hover: a frase da decisão, os vínculos e o arquivo */
+function adrPopHtml(a) {
+  const vinc = vinculosDe(a).map(([rot, ns]) => `<span class="fx-k">${rot}</span><p>${ns.map(num4).join(', ')}</p>`).join('');
+  return `<b>${num4(a.number)} · ${esc(a.title)}</b>
+    ${a.decisao ? `<p>${esc(a.decisao.replace(/\*\*|`/g, ''))}</p>` : ''}${vinc}
+    <span class="adr-pop-arq">${esc(a.file)}</span>`;
+}
+
+/* o painel lateral da ADR aberta: corpo inteiro e as relacionadas clicáveis */
+function painelAdrHtml(a) {
+  const rel = vinculosDe(a).map(([rot, ns]) => `<div class="adr-rel"><span class="fx-k">${rot}</span>
+      ${ns.map(n => `<button class="chip" data-act="adr" data-n="${n}">${num4(n)}${adrDe(n) ? ` ${esc(adrDe(n).title)}` : ''}</button>`).join('')}
+    </div>`).join('');
+  return `<div class="adr-painel-head">
+      <span class="tst-ref">ADR ${num4(a.number)} · ${esc(a.file)}</span>${adrStatusBadge(a.status)}
+      <button class="adr-fechar" data-act="adrfechar" aria-label="Fechar a ADR">×</button>
+    </div>
+    <h3>${esc(a.title)}</h3>
+    ${rel}
+    <div class="md adr-body">${md(a.body_md)}</div>`;
 }
 
 function renderDecisoes() {
   const hist = (S.data.adrs || []).filter(a => a.status !== 'accepted').length;
   return `
-  ${cabecalho('decidir', 'Decisões de arquitetura', 'docs/adr · curado por humano · só as aceitas, por tema')}
+  ${cabecalho('decidir', 'Decisões de arquitetura', 'docs/adr · curado por humano · passe o mouse para o resumo, clique para ler')}
   <div class="adr-tools rv">
     <input class="search" id="adrq" type="search" placeholder="buscar no título e no corpo" value="${esc(S.adrQ)}" autocomplete="off">
     <button class="fchip ${S.adrHist ? 'on' : ''}" data-act="adrhist" aria-pressed="${S.adrHist}">ver histórico (${hist})</button>
+    <span class="adr-legenda"><span class="adr-seta-ex"></span>emenda <span class="adr-seta-ex adr-seta-ex-sub"></span>substituída, aponta a sucessora</span>
   </div>
-  <div id="adrlist">${listaAdrsHtml()}</div>`;
+  <div id="adrlist">${listaAdrsHtml()}</div>
+  <aside id="adr-painel" class="card adr-painel" aria-label="ADR aberta" hidden></aside>`;
+}
+
+/* a miniatura da rota acesa e o painel com a ADR dela (sem redesenhar o mapa) */
+function marcarAdr() {
+  const n = adrAberta();
+  view.querySelectorAll('.adr-mini').forEach(el => {
+    const on = Number(el.dataset.n) === n;
+    el.classList.toggle('on', on);
+    if (on) el.setAttribute('aria-current', 'true'); else el.removeAttribute('aria-current');
+  });
+  const painel = $('#adr-painel');
+  if (!painel) return;
+  const a = n != null && adrDe(n);
+  painel.innerHTML = a ? painelAdrHtml(a) : '';
+  painel.hidden = !a;
+}
+
+/* o popover abre embaixo da miniatura e só sobe quando não cabe na janela
+   (o posicionarPop mede a caixa, e o tema é baixo demais para ele) */
+function posicionarAdrPop(pop, mini, box) {
+  pop.hidden = false;
+  const r = mini.getBoundingClientRect(), b = box.getBoundingClientRect();
+  const x = Math.max(8, Math.min(r.left - b.left + r.width / 2 - pop.offsetWidth / 2, b.width - pop.offsetWidth - 8));
+  const cabe = r.bottom + 8 + pop.offsetHeight < window.innerHeight;
+  pop.style.left = `${Math.round(x)}px`;
+  pop.style.top = `${Math.round(cabe ? r.bottom - b.top + 8 : r.top - b.top - pop.offsetHeight - 8)}px`;
+}
+
+/* hover ou foco na miniatura: popover com o resumo; ela, as setas dela e as
+   ligadas acendem, o resto apaga (o padrão do mapa ER) */
+function wireMapaAdr(el) {
+  desenharSetas(el);
+  el.querySelectorAll('details.adr-tema').forEach(d => d.addEventListener('toggle', () => {
+    if (d.open) { S.adrFechados.delete(d.dataset.tema); desenharSetas(d); } else S.adrFechados.add(d.dataset.tema);
+  }));
+  el.querySelectorAll('.adr-mapa').forEach(box => {
+    const pop = document.createElement('div');
+    pop.className = 'st-pop adr-pop';
+    pop.hidden = true;
+    box.appendChild(pop);
+    const apagar = () => {
+      box.classList.remove('adr-foco');
+      box.querySelectorAll('.adr-seta.on, .adr-mini.acesa').forEach(x => x.classList.remove('on', 'acesa'));
+      pop.hidden = true;
+    };
+    box.querySelectorAll('.adr-mini').forEach(mini => {
+      const a = adrDe(Number(mini.dataset.n));
+      if (!a) return;
+      const acender = () => {
+        const n = mini.dataset.n;
+        const ligadas = new Set([n]);
+        box.querySelectorAll('.adr-seta').forEach(p => {
+          const on = p.dataset.de === n || p.dataset.para === n;
+          p.classList.toggle('on', on);
+          if (on) { ligadas.add(p.dataset.de); ligadas.add(p.dataset.para); }
+        });
+        box.querySelectorAll('.adr-mini').forEach(m => m.classList.toggle('acesa', ligadas.has(m.dataset.n)));
+        box.classList.add('adr-foco');
+        pop.innerHTML = adrPopHtml(a);
+        posicionarAdrPop(pop, mini, box);
+      };
+      mini.addEventListener('mouseenter', acender);
+      mini.addEventListener('mouseleave', apagar);
+      mini.addEventListener('focus', acender);
+      mini.addEventListener('blur', apagar);
+      mini.addEventListener('keydown', e => {
+        if (e.key !== 'Enter' && e.key !== ' ') return;
+        e.preventDefault();
+        mini.click();
+      });
+    });
+  });
 }
 
 /* a busca redesenha só a lista: o campo mantém o foco e o texto */
 function wireDecisoes() {
   const q = $('#adrq');
-  if (!q) return;
-  q.addEventListener('input', () => {
+  const el = $('#adrlist');
+  if (q && el) q.addEventListener('input', () => {
     S.adrQ = q.value;
-    const el = $('#adrlist');
-    if (!el) return;
     el.innerHTML = listaAdrsHtml();
-    if (_ioList) _ioList.disconnect();
-    _ioList = revealOnScroll(el, '.rv');
+    wireMapaAdr(el);
+    marcarAdr();
   });
+  if (el) wireMapaAdr(el);
+  marcarAdr();
 }
+
+/* a grade reflui com a largura: as setas se medem de novo */
+let _setasRaf = 0;
+window.addEventListener('resize', () => {
+  cancelAnimationFrame(_setasRaf);
+  _setasRaf = requestAnimationFrame(() => {
+    if (S.tab === 'documentacao' && subDoc() === 'decisoes') desenharSetas(view);
+  });
+});
 
 /* ----- Glossário: CONTEXT.md com um índice de termos e âncora por termo ----- */
 
@@ -1389,9 +1476,15 @@ view.addEventListener('click', e => {
     else { S.expDep.add(i); if (ver) S.item = ver; }
     render();
   } else if (act === 'adr') {
-    const i = Number(t.dataset.i);
-    S.expAdr.has(i) ? S.expAdr.delete(i) : S.expAdr.add(i);
-    render();
+    // miniatura, chip de outro tema ou relacionada do painel: abre (ou fecha) e destaca
+    const n = Number(t.dataset.n);
+    S.item = adrAberta() === n ? 'decisoes' : `decisoes/${n}`;
+    marcarAdr();
+    const mini = view.querySelector(`.adr-mini[data-n="${n}"]`);
+    if (mini) mini.scrollIntoView({ block: 'nearest', behavior: reduceMotion() ? 'auto' : 'smooth' });
+  } else if (act === 'adrfechar') {
+    S.item = 'decisoes';
+    marcarAdr();
   } else if (act === 'adrhist') {
     S.adrHist = !S.adrHist;
     render();
@@ -1472,6 +1565,7 @@ document.addEventListener('keydown', e => {
   closeTips();
   fecharMenu();
   if (S.erFull) { S.erFull = false; render(); }
+  if (S.tab === 'documentacao' && adrAberta() != null) { S.item = 'decisoes'; marcarAdr(); sincronizarHash(); }
 });
 document.addEventListener('click', e => {
   if (!e.target.closest('.tip')) closeTips();

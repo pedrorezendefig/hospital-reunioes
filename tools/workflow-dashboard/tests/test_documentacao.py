@@ -211,16 +211,10 @@ def test_frase_da_decisao_corta_na_palavra():
     assert frase.endswith("...") and len(frase) <= 54 and " pal..." not in frase
 
 
-def test_decisoes_mostram_so_accepted_por_padrao_com_historico_e_busca():
-    fn = re.search(r"function adrGrupos\(\)[\s\S]*?\n\}", APP_JS)
-    assert fn, "app.js sem adrGrupos"
-    corpo = fn.group(0)
-    assert "S.adrHist || a.status === 'accepted'" in corpo
-    assert "adr_temas" in corpo and "temasPorPrefixo" in corpo
+def test_decisoes_usam_o_mapa_do_decisoes_js_com_historico_e_busca():
+    assert "mapaDecisoes(" in APP_JS and "from './decisoes.js'" in APP_JS
+    assert "adr_arestas" in APP_JS and "adr_temas" in APP_JS
     assert "ver histórico (" in APP_JS
-    assert "substituída pela" in APP_JS and "→" not in re.search(
-        r"function adrPointerBadge[\s\S]*?\n\}", APP_JS
-    ).group(0)
 
 
 # ---------- a aba viva no Node: sub-pills, histórico e âncora do glossário ----------
@@ -236,6 +230,7 @@ DADOS_DOC = {
             "title": "Onda antiga",
             "status": "superseded",
             "superseded_by": "0068",
+            "substituida_por": [68],
             "decisao": "Ondas com checkpoint.",
             "body_md": "corpo da 22",
             "file": "docs/adr/0022.md",
@@ -244,6 +239,7 @@ DADOS_DOC = {
             "number": 68,
             "title": "O fluxo em uma página",
             "status": "accepted",
+            "substitui": [22],
             "decisao": "O que o pipeline faz hoje.",
             "body_md": "corpo da 68 fala de subida",
             "file": "docs/adr/0068.md",
@@ -258,6 +254,7 @@ DADOS_DOC = {
         },
     ],
     "adr_temas": [{"tema": "Workflow de agentes e ondas", "numeros": [22, 68]}],
+    "adr_arestas": [{"de": 22, "para": 68, "tipo": "substitui"}],
     "context_md": "# Glossário\n\n## Reunião e Ata\n\n**Ata Guiada**:\nSegundo modo.\n\n**Ata**:\nO documento.\n",
 }
 
@@ -287,7 +284,7 @@ def test_sub_pills_vao_para_o_hash_e_os_enderecos_antigos_caem_nelas(tmp_path):
 
 
 @com_node
-def test_decisoes_por_tema_so_accepted_e_o_historico_esmaecido_com_ponteiro(tmp_path):
+def test_decisoes_por_tema_so_accepted_e_o_historico_esmaecido(tmp_path):
     antes, depois = _app(
         tmp_path,
         "[_antes, _view.innerHTML]",
@@ -295,16 +292,55 @@ def test_decisoes_por_tema_so_accepted_e_o_historico_esmaecido_com_ponteiro(tmp_
         dados=DADOS_DOC,
         antes="const _antes = _view.innerHTML; _clicar({ act: 'adrhist' });",
     )
-    assert "Workflow de agentes e ondas · 1" in antes and "Fora do índice · 1" in antes
+    assert "Workflow de agentes e ondas" in antes and "Fora do índice" in antes
+    assert re.search(r'class="adr-conta">1<', antes)
     assert "O fluxo em uma página" in antes and "Supabase self-hosted" in antes
     assert "Onda antiga" not in antes
     assert "ver histórico (1)" in antes
-    assert "O que o pipeline faz hoje." in antes  # a frase da decisão no card
-    assert "Workflow de agentes e ondas · 2" in depois and "Onda antiga" in depois
-    assert re.search(
-        r'class="card tst adr[^"]*adr-hist"[\s\S]{0,900}substituída pela 0068', depois
+    # miniatura densa: número e título, a frase da decisão fica para o popover
+    assert re.search(r'class="adr-mini[^"]*"[^>]*data-n="68"', antes)
+    assert ">0068<" in antes
+    assert "Onda antiga" in depois
+    assert re.search(r'class="adr-mini adr-hist[^"]*"[^>]*data-n="22"', depois)
+    # a seta da superada para a sucessora vai no data-setas do tema
+    assert 'data-setas="22&gt;68:substitui"' in depois
+
+
+@com_node
+def test_clique_na_miniatura_abre_o_painel_e_grava_a_rota(tmp_path):
+    hashes, painel = _app(
+        tmp_path,
+        "[_h, _els['#adr-painel'].innerHTML]",
+        hash_inicial="#documentacao/decisoes",
+        dados=DADOS_DOC,
+        antes="""
+        const _h = [];
+        _clicar({ act: 'adr', n: '68' }); _h.push(location.hash);
+        _clicar({ act: 'adr', n: '22' }); _h.push(location.hash);
+        _clicar({ act: 'adrfechar' }); _h.push(location.hash);
+        _clicar({ act: 'adr', n: '68' }); _h.push(location.hash);
+        """,
     )
-    assert "→" not in depois
+    assert hashes == [
+        "#documentacao/decisoes/68",
+        "#documentacao/decisoes/22",
+        "#documentacao/decisoes",
+        "#documentacao/decisoes/68",
+    ]
+    assert "corpo da 68 fala de subida" in painel
+    # a relacionada é clicável e troca o painel
+    assert 'data-act="adr" data-n="22"' in painel and "docs/adr/0068.md" in painel
+
+
+@com_node
+def test_rota_com_a_adr_abre_o_painel_no_boot(tmp_path):
+    painel = _app(
+        tmp_path,
+        "_els['#adr-painel'].innerHTML",
+        hash_inicial="#documentacao/decisoes/1",
+        dados=DADOS_DOC,
+    )
+    assert "corpo da 1" in painel and "Supabase self-hosted" in painel
 
 
 @com_node
