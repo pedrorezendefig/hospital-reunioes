@@ -62,6 +62,8 @@ from app.services.tecnologia import (
 )
 from app.services.tecnologia_email import avisar_atribuicao
 from app.services.tecnologia_vinculo import (
+    ETAPA_EM_PRODUCAO,
+    ETAPA_ENTREGUE,
     ETAPA_REGISTRADA,
     etapa_da_foto,
     o_que_muda_da_foto,
@@ -633,6 +635,53 @@ def _prs_abertos_do_lote() -> list[dict[str, Any]] | None:
             exc_info=True,
         )
         return None
+
+
+def marcar_em_producao(supabase, *, versao: str, data: str, issues: list[int]) -> dict[str, int]:
+    """A subida chegou: Em produção nas Demandas destas issues (issue #1065).
+
+    `versao` ja vem rotulada ("v0.169.0") e `issues` sao as que os PRs do lote
+    fecham. Cada Demanda vinculada a uma delas passa por `_carimbar_em_producao`;
+    as outras issues (a esmagadora maioria) nao tem Demanda nenhuma atras.
+
+    Falha e de UMA Demanda, como no lote de hora em hora: a seguinte ainda e
+    marcada, e a contagem diz quantas ficaram para tras.
+    """
+    marcadas = 0
+    falhas = 0
+    for numero in sorted(set(issues)):
+        demanda = None
+        try:
+            demanda = demanda_vinculada(supabase, numero)
+            if demanda is not None and _carimbar_em_producao(supabase, demanda, versao=versao, data=data):
+                marcadas += 1
+        except Exception:
+            falhas += 1
+            logger.warning(
+                "[tecnologia] Falha ao marcar Em produção na %s a Demanda %s (issue #%s).",
+                versao,
+                (demanda or {}).get("id"),
+                numero,
+                exc_info=True,
+            )
+    return {"marcadas": marcadas, "falhas": falhas}
+
+
+def _carimbar_em_producao(supabase, demanda: dict[str, Any], *, versao: str, data: str) -> bool:
+    """Em produção nesta Demanda, se ela estiver Entregue. `True` se marcou."""
+    if str(demanda.get("estado") or "") in ESTADOS_FECHADOS:
+        return False
+    if demanda.get("etapa") != ETAPA_ENTREGUE:
+        return False
+    demanda_id = str(demanda["id"])
+    marcada = (
+        supabase.table(TABELA_DEMANDAS)
+        .update({"etapa": ETAPA_EM_PRODUCAO, "versao_em_producao": versao, "entregue_em": data})
+        .eq("id", demanda_id)
+        .eq("etapa", ETAPA_ENTREGUE)
+        .execute()
+    )
+    return bool(marcada.data)
 
 
 def reconciliar_vinculos(supabase) -> dict[str, int]:

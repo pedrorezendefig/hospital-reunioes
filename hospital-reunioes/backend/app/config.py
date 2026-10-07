@@ -86,6 +86,14 @@ class Settings(BaseSettings):
     # aceita tudo", que é a porta aberta com aparência de guarda.
     github_webhook_secret: str = ""
 
+    # O segredo do webhook de deploy (issue #1065, ADR 0069, decisão 4). A
+    # Action pós-merge assina com ele o aviso de que uma versão subiu, e o app
+    # marca Em produção as Demandas do lote. O mesmo valor mora nos secrets do
+    # repositório (`TECNOLOGIA_DEPLOY_WEBHOOK_SECRET`), e os dois cadastros são
+    # passo humano. Vazio = a rota `/webhooks/deploy` responde 503, e quem marca
+    # Em produção é só a reconciliação de hora em hora.
+    tecnologia_deploy_webhook_secret: str = ""
+
     # Central de Comando (ADR 0058): os números do Site e do Instagram, só para
     # Super admin. Todas as variáveis da Central moram aqui desde a primeira
     # fatia do PRD #809, para as fatias paralelas não disputarem este arquivo.
