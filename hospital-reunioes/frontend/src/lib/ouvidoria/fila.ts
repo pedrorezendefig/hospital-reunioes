@@ -32,7 +32,9 @@ export interface ManifestacaoIndice {
   sigilo_reforcado: boolean;
   categoria: string;
   setor: string;
-  resumo: string;
+  // Só a Ouvidoria recebe (issue #753): o resumo é recorte literal do relato,
+  // e o índice de quem está fora dela vem sem ele.
+  resumo?: string;
   conversa_id: string;
   // Motor de prazos (issue #322): o vencimento e o rótulo vêm calculados do
   // servidor, em calendário útil.
