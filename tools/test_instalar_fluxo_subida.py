@@ -21,7 +21,11 @@ def ler(nome: str) -> str:
 
 
 def textos_do_kit() -> dict[str, str]:
-    return {p.name: p.read_text(encoding="utf-8") for p in sorted(KIT.iterdir()) if p.is_file()}
+    return {
+        p.name: p.read_text(encoding="utf-8")
+        for p in sorted(KIT.iterdir())
+        if p.is_file()
+    }
 
 
 def secao(texto: str, titulo: str) -> str:
@@ -39,7 +43,10 @@ def linha_da_tabela(texto: str, chave: str) -> str:
 def test_empacotar_dry_run_lista_onda_enxuta_e_agentes_sem_gerar_zip(tmp_path):
     proc = subprocess.run(
         ["bash", str(KIT / "empacotar.sh"), "--dry-run", str(tmp_path)],
-        capture_output=True, text=True, check=True, cwd=RAIZ,
+        capture_output=True,
+        text=True,
+        check=True,
+        cwd=RAIZ,
     )
     listados = set(proc.stdout.splitlines())
     assert ".claude/skills/onda-enxuta/" in listados
@@ -53,7 +60,13 @@ def test_empacotar_dry_run_lista_onda_enxuta_e_agentes_sem_gerar_zip(tmp_path):
 def test_manifesto_lista_onda_enxuta_com_seus_arquivos():
     linha = linha_da_tabela(ler("MANIFESTO.md"), "`onda-enxuta`")
     assert "| adaptar |" in linha
-    for arquivo in ("SKILL.md", "references/", "scripts/fechar_onda.py", "revisao-sensivel.txt", "onda-settings.json"):
+    for arquivo in (
+        "SKILL.md",
+        "references/",
+        "scripts/fechar_onda.py",
+        "revisao-sensivel.txt",
+        "onda-settings.json",
+    ):
         assert arquivo in linha, arquivo
         assert (RAIZ / ".claude" / "skills" / "onda-enxuta" / arquivo).exists(), arquivo
 
@@ -97,5 +110,9 @@ def test_nenhuma_frase_do_kit_diz_que_o_ship_mergeia_ou_que_o_deploy_ship_faz_de
 
 
 def test_kit_sem_travessao_nem_meia_risca():
-    achados = [nome for nome, texto in textos_do_kit().items() if re.search("[—–]", texto)]
+    achados = [
+        nome
+        for nome, texto in textos_do_kit().items()
+        if re.search("[\u2014\u2013]", texto)
+    ]
     assert achados == []
