@@ -109,13 +109,13 @@ MOTIVO_RESPONSAVEL_SEM_ACESSO = "O responsavel precisa ser um participante ativo
 # A criacao recusa o mesmo estado que a porta de atribuir recusa: dono que
 # perdeu o acesso a aba (saiu do Super admin ou foi desativado) nao pode virar
 # responsavel, senao o card nasce com o nome de alguem que nao consegue abrir a
-# aba. A frase diz ONDE consertar, porque a acao e possivel na mesma tela: a
-# lista de Produtos fica logo abaixo do Quadro, e dentro da aba todos podem
-# tudo (ADR 0050, decisao 11). Guarda-corpo que so diz "nao pode" vira
-# indisponibilidade.
+# aba. A frase diz ONDE consertar, porque a acao e possivel dentro da aba: a
+# lista de Produtos mora na tela da engrenagem ao lado de "Nova Demanda" desde
+# a issue #1060, e dentro da aba todos podem tudo (ADR 0050, decisao 11).
+# Guarda-corpo que so diz "nao pode" vira indisponibilidade.
 MOTIVO_DONO_DO_PRODUTO_SEM_ACESSO = (
     "O dono deste Produto não tem mais acesso à aba Tecnologia, então a Demanda nasceria sem responsável. "
-    "Troque o dono na lista de Produtos, logo abaixo do Quadro, e abra a Demanda de novo."
+    "Troque o dono na lista de Produtos, na engrenagem ao lado de Nova Demanda, e abra a Demanda de novo."
 )
 
 ESTADOS: tuple[str, ...] = ("nova", "em_andamento", "aguardando", "concluida", "cancelada")
