@@ -204,6 +204,10 @@ _CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     "encerramento_sem_contato_em",
 )
 _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
+# O índice de quem está fora da Ouvidoria: o mesmo, menos o resumo (issue
+# #753). O resumo é recorte literal do relato, e protocolo, setor, situação e
+# prazo bastam para quem só acompanha a fila.
+_CAMPOS_INDICE_FORA_DA_OUVIDORIA = tuple(campo for campo in _CAMPOS_INDICE_TUPLA if campo != "resumo")
 
 # O que a fila LÊ, que é maior do que o que ela devolve. O carimbo do visto
 # (issue #484) entra no select porque a flag de novidade sai da comparação
@@ -474,9 +478,13 @@ async def listar_protocolos(
     ultimos, degradado_da_trilha = (
         ouvidoria_novidade.ultimo_movimento_ou_degradado(supabase) if da_ouvidoria else ({}, [])
     )
+    # O resumo é um recorte literal do relato (issue #753): no formulário
+    # público são as primeiras letras do que a pessoa escreveu. O caso aberto
+    # chega a quem está fora da Ouvidoria, e o resumo não vai junto.
+    campos = _CAMPOS_INDICE_TUPLA if da_ouvidoria else _CAMPOS_INDICE_FORA_DA_OUVIDORIA
     return {
         "protocolos": [
-            {campo: row.get(campo) for campo in _CAMPOS_INDICE_TUPLA}
+            {campo: row.get(campo) for campo in campos}
             | _projetar_prazo(row, agora, feriados)
             | {
                 # Caso arquivado nunca acende o ponto (issue #592, ADR 0047):
