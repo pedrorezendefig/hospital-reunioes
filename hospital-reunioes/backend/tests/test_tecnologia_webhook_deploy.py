@@ -21,11 +21,13 @@ import json
 import os
 import sys
 
+import httpx
 import pytest
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from test_tecnologia_webhook_github import (  # noqa: E402
+    REPO,
     _assinar,
     _corpo,
     _corpo_pr,
@@ -41,12 +43,12 @@ from test_tecnologia_webhook_github import (  # noqa: E402
     _pessoa,
     _reset_rate_limiter,  # noqa: F401  (autouse)
     _segredo_configurado,  # noqa: F401  (autouse)
-    _sem_email_de_verdade,  # noqa: F401  (autouse)
     _sem_github_de_verdade,  # noqa: F401  (autouse)
     _sem_pr_aberto,  # noqa: F401  (autouse)
 )
 
 from app.config import settings  # noqa: E402
+from app.cron import scheduler as scheduler_mod  # noqa: E402
 from app.services import github_client, tecnologia_sincronizacao  # noqa: E402
 from app.services.tecnologia import RECADO_DA_ENTREGA  # noqa: E402
 from app.services.tecnologia_vinculo import (  # noqa: E402
@@ -61,6 +63,21 @@ ROTA = "/api/webhooks/deploy"
 SEGREDO_DO_DEPLOY = "segredo-falso-do-deploy-1065"
 
 DATA_DA_SUBIDA = "2026-10-07T18:00:00-03:00"
+
+
+@pytest.fixture(autouse=True)
+def avisos(monkeypatch) -> list[dict]:
+    """Nenhum teste daqui manda e-mail, e todos podem tentar: o carimbo de Em
+    produção devolve o card e chama o aviso de atribuição, e o `.env` dos
+    testes tem credencial de verdade. Devolve os avisos pedidos."""
+    pedidos: list[dict] = []
+
+    def _registrar(supabase, **argumentos):
+        pedidos.append(argumentos)
+        return True
+
+    monkeypatch.setattr(tecnologia_sincronizacao, "avisar_atribuicao", _registrar)
+    return pedidos
 
 
 @pytest.fixture(autouse=True)
@@ -181,7 +198,7 @@ class TestADevolucaoEsperaAProducao:
         gh.issues[673] = _entregue(673)
         return cliente, sb
 
-    def test_fechada_por_pr_volta_a_quem_pediu_so_em_producao(self, monkeypatch, _sem_email_de_verdade):
+    def test_fechada_por_pr_volta_a_quem_pediu_so_em_producao(self, monkeypatch, avisos):
         """Critério de aceite: o merge leva a Entregue e o card fica com a Vitta;
         a subida leva a Em produção e só então o card volta para quem pediu
         (Aguardando, Responsável o autor, e-mail de atribuição)."""
@@ -191,18 +208,16 @@ class TestADevolucaoEsperaAProducao:
 
         assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
         assert _quem_tem_o_card(sb) == ("em_andamento", "P2"), "o merge não devolve: o código ainda não está no ar"
-        assert _sem_email_de_verdade == []
+        assert avisos == []
 
         _avisar(cliente, _corpo_do_deploy())
 
         assert _demandas(sb)[0]["etapa"] == ETAPA_EM_PRODUCAO
         assert _quem_tem_o_card(sb) == ("aguardando", "P1")
-        assert [(aviso["destinatario_id"], aviso["trecho"]) for aviso in _sem_email_de_verdade] == [
-            ("P1", RECADO_DA_ENTREGA)
-        ]
-        assert _sem_email_de_verdade[0]["demanda"]["produto_nome"] == "Prontuário"
+        assert [(aviso["destinatario_id"], aviso["trecho"]) for aviso in avisos] == [("P1", RECADO_DA_ENTREGA)]
+        assert avisos[0]["demanda"]["produto_nome"] == "Prontuário"
 
-    def test_o_fechamento_que_chega_antes_do_merge_tambem_espera_a_producao(self, monkeypatch, _sem_email_de_verdade):
+    def test_o_fechamento_que_chega_antes_do_merge_tambem_espera_a_producao(self, monkeypatch, avisos):
         """No merge, `issues.closed` pode chegar ANTES do `pull_request.closed`:
         a foto ainda diz "PR aberto" e não tem `fechada_por_pr`. O PR a caminho
         já diz que o fechamento é por PR, e a devolução espera a subida."""
@@ -213,14 +228,14 @@ class TestADevolucaoEsperaAProducao:
 
         assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
         assert _quem_tem_o_card(sb) == ("em_andamento", "P2")
-        assert _sem_email_de_verdade == []
+        assert avisos == []
 
         _avisar(cliente, _corpo_do_deploy())
 
         assert _quem_tem_o_card(sb) == ("aguardando", "P1")
-        assert len(_sem_email_de_verdade) == 1
+        assert len(avisos) == 1
 
-    def test_fechada_sem_pr_volta_em_entregue_e_nao_de_novo_em_producao(self, monkeypatch, _sem_email_de_verdade):
+    def test_fechada_sem_pr_volta_em_entregue_e_nao_de_novo_em_producao(self, monkeypatch, avisos):
         """Critério de aceite: a issue fechada à mão (decisão, consultoria)
         devolve em Entregue, como hoje. Se uma subida a listar depois, a
         Demanda ganha Em produção sem ser devolvida outra vez."""
@@ -247,7 +262,7 @@ class TestADevolucaoEsperaAProducao:
 
         assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
         assert _quem_tem_o_card(sb) == ("aguardando", "P1")
-        assert len(_sem_email_de_verdade) == 1
+        assert len(avisos) == 1
 
         # O diretor conferiu e passou a bola adiante; a subida chega depois.
         _demandas(sb)[0].update(estado="em_andamento", responsavel_id="P2")
@@ -255,11 +270,11 @@ class TestADevolucaoEsperaAProducao:
 
         assert _demandas(sb)[0]["etapa"] == ETAPA_EM_PRODUCAO
         assert _quem_tem_o_card(sb) == ("em_andamento", "P2"), "devolvida duas vezes"
-        assert len(_sem_email_de_verdade) == 1
+        assert len(avisos) == 1
 
 
 class TestAMesmaVersaoNaoRegrava:
-    def test_a_mesma_versao_duas_vezes_nao_grava_nem_avisa_de_novo(self, monkeypatch, _sem_email_de_verdade):
+    def test_a_mesma_versao_duas_vezes_nao_grava_nem_avisa_de_novo(self, monkeypatch, avisos):
         """Critério de aceite: a Action reexecutada (ou o aviso repetido) não
         escreve nada na segunda vez: nem a Demanda, nem o fio, nem o e-mail."""
         gh = _GithubFalso({673: _entregue(673)})
@@ -272,14 +287,14 @@ class TestAMesmaVersaoNaoRegrava:
         _avisar(cliente, _corpo_do_deploy())
         depois_da_primeira = dict(_demandas(sb)[0])
         linhas = len(_fio(sb))
-        assert len(_sem_email_de_verdade) == 1, "o piso: a primeira chamada devolveu"
+        assert len(avisos) == 1, "o piso: a primeira chamada devolveu"
 
         resposta = _avisar(cliente, _corpo_do_deploy())
 
         assert resposta.json()["marcadas"] == 0
         assert _demandas(sb)[0] == depois_da_primeira
         assert len(_fio(sb)) == linhas
-        assert len(_sem_email_de_verdade) == 1
+        assert len(avisos) == 1
 
     def test_a_releitura_da_issue_depois_da_subida_mantem_em_producao(self, monkeypatch):
         """A reconciliação de hora em hora relê a issue, que segue fechada: a
@@ -382,3 +397,146 @@ class TestAPortaDoDeploy:
 
         assert resposta.status_code == 422
         assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
+
+
+# ─── A reconciliação pelo history.json da main ──────────────────────────────
+
+# Entradas no formato que o `montar_registro` da subida grava nas `notes`
+# (onda, PR avulso, PR sem issue) e uma antiga sem versão. A mais nova primeiro,
+# como o `history.json` guarda.
+HISTORICO = [
+    {
+        "app_version": "0.169.0",
+        "at": "2026-10-08T10:00:00-03:00",
+        "notes": "onda-enxuta onda-a: PR #1100 (issue #673), PR #1101 (issues #700 #701), mergeados PR a PR. "
+        "Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+    },
+    {
+        "app_version": "0.168.0",
+        "at": "2026-10-07T14:20:45-03:00",
+        "notes": "PR avulso: PR #1090, issue #673. Merge pela API do GitHub, um build.",
+    },
+    {"app_version": "0.167.1", "at": "2026-10-07T12:00:00-03:00", "notes": "PR avulso: PR #1089, sem issue."},
+    {"app_version": None, "at": "2026-09-01T12:00:00-03:00", "notes": "PR avulso: PR #881, issue #702."},
+]
+
+
+class TestORegistroDoDeploy:
+    def test_os_prs_do_lote_saem_das_notas_da_subida(self):
+        from app.services.registro_do_deploy import aviso_da_entrada
+
+        assert aviso_da_entrada(HISTORICO[0]) == {
+            "versao": "0.169.0",
+            "data": "2026-10-08T10:00:00-03:00",
+            "prs": [{"numero": 1100, "fecha": [673]}, {"numero": 1101, "fecha": [700, 701]}],
+        }
+        assert aviso_da_entrada(HISTORICO[1])["prs"] == [{"numero": 1090, "fecha": [673]}]
+        assert aviso_da_entrada(HISTORICO[2])["prs"] == [{"numero": 1089, "fecha": []}]
+
+    def test_entrada_sem_versao_nao_vira_aviso(self):
+        from app.services.registro_do_deploy import aviso_da_entrada
+
+        assert aviso_da_entrada(HISTORICO[3]) is None
+
+    def test_a_subida_de_cada_issue_e_a_mais_nova_que_a_lista(self):
+        from app.services.registro_do_deploy import subida_de_cada_issue
+
+        assert subida_de_cada_issue(HISTORICO) == {
+            673: ("v0.169.0", "2026-10-08T10:00:00-03:00"),
+            700: ("v0.169.0", "2026-10-08T10:00:00-03:00"),
+            701: ("v0.169.0", "2026-10-08T10:00:00-03:00"),
+        }
+
+    def test_o_cliente_le_o_history_json_da_main(self, monkeypatch):
+        """O cliente de verdade, com o transporte dublado: o arquivo da `main`
+        pela API de conteúdo, em base64 como o GitHub manda."""
+        import base64
+
+        monkeypatch.setattr(settings, "github_integracao_token", "token-falso")
+        pedidos: list[str] = []
+        conteudo = base64.b64encode(json.dumps({"schema_version": 1, "deploys": HISTORICO}).encode()).decode()
+
+        def _transporte(metodo, url, **_kw):
+            pedidos.append(f"{metodo} {url}")
+            # O GitHub quebra o base64 em linhas de 60 caracteres.
+            quebrado = "\n".join(conteudo[i : i + 60] for i in range(0, len(conteudo), 60))
+            return httpx.Response(200, json={"encoding": "base64", "content": quebrado})
+
+        monkeypatch.setattr(github_client.httpx, "request", _transporte)
+
+        deploys = _LER_HISTORICO_DE_VERDADE()
+
+        assert pedidos == [f"GET https://api.github.com/repos/{REPO}/contents/docs/spec/deploy/history.json?ref=main"]
+        assert deploys == HISTORICO
+
+
+_LER_HISTORICO_DE_VERDADE = github_client.ler_historico_de_deploys
+
+
+class TestAReconciliacaoCarimbaEmProducao:
+    def _job(self, monkeypatch, sb, *, historico=HISTORICO):
+        leituras: list = []
+
+        def _ler():
+            leituras.append(1)
+            return historico
+
+        monkeypatch.setattr(github_client, "ler_historico_de_deploys", _ler)
+        monkeypatch.setattr(scheduler_mod, "_supabase", lambda: sb)
+        scheduler_mod.reconciliar_vinculos_tecnologia()
+        return leituras
+
+    def test_o_job_de_hora_em_hora_carimba_o_que_o_webhook_nao_entregou(self, monkeypatch, avisos):
+        """Critério de aceite: o aviso da Action não chegou, e a passagem de
+        hora em hora lê o `history.json` da `main` e marca Em produção, com a
+        versão mais nova que lista a issue e a data dela, a linha no fio e a
+        devolução a quem pediu."""
+        gh = _GithubFalso({673: _entregue(673), 999: _entregue(999)})
+        _, sb, _ = _montar(
+            demandas=[
+                _entregue_por_pr(gh, 673, "D1", responsavel_id="P2"),
+                _entregue_por_pr(gh, 999, "D2", pr=1102),
+            ],
+            participantes=[_pessoa("P1")],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        self._job(monkeypatch, sb)
+
+        d1, d2 = _demandas(sb)
+        assert (d1["etapa"], d1["versao_em_producao"], d1["entregue_em"]) == (
+            ETAPA_EM_PRODUCAO,
+            "v0.169.0",
+            "2026-10-08T10:00:00-03:00",
+        )
+        assert [linha["texto"] for linha in _fio(sb) if linha["demanda_id"] == "D1"][0] == "Em produção na v0.169.0"
+        assert (d1["estado"], d1["responsavel_id"]) == ("aguardando", "P1")
+        assert d2["etapa"] == ETAPA_ENTREGUE, "a issue que nenhuma subida lista continua Entregue"
+
+    def test_sem_demanda_entregue_o_history_json_nem_e_lido(self, monkeypatch):
+        """A cota do GitHub é uma só: sem Demanda à espera da subida, não há o
+        que procurar no arquivo."""
+        gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
+        _, sb, _ = _montar(
+            demandas=[_demanda("D1", github_issue_numero=673, etapa=ETAPA_EM_DESENVOLVIMENTO)],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        assert self._job(monkeypatch, sb) == []
+
+    def test_history_json_ilegivel_nao_derruba_o_job(self, monkeypatch, caplog):
+        gh = _GithubFalso({673: _entregue(673)})
+        _, sb, _ = _montar(demandas=[_entregue_por_pr(gh, 673, "D1")], github=gh, monkeypatch=monkeypatch)
+
+        def _fora_do_ar():
+            raise github_client.GithubIndisponivelError("timeout")
+
+        monkeypatch.setattr(github_client, "ler_historico_de_deploys", _fora_do_ar)
+        monkeypatch.setattr(scheduler_mod, "_supabase", lambda: sb)
+
+        scheduler_mod.reconciliar_vinculos_tecnologia()
+
+        assert _demandas(sb)[0]["etapa"] == ETAPA_ENTREGUE
+        assert "history.json" in caplog.text

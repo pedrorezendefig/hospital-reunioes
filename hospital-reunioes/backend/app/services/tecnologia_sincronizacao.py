@@ -43,6 +43,7 @@ from datetime import UTC, datetime
 from typing import Any
 
 from app.services import github_client
+from app.services.registro_do_deploy import subida_de_cada_issue
 from app.services.tecnologia import (
     AUTOR_DA_ENTREGA,
     ESTADO_AGUARDANDO,
@@ -133,9 +134,7 @@ def mudanca_da_foto(foto: dict[str, Any], *, versao_em_producao: str | None = No
     """
     entregues, total = partes_da_foto(foto)
     return {
-        "etapa": etapa_da_foto(
-            foto, versao_em_producao=versao_em_producao, pr_aberto=bool(foto.get(FATO_PRS_ABERTOS))
-        ),
+        "etapa": etapa_da_foto(foto, versao_em_producao=versao_em_producao, pr_aberto=bool(foto.get(FATO_PRS_ABERTOS))),
         "partes_entregues": entregues,
         "partes_total": total,
         # O texto que o diretor le, lido do GitHub e nunca digitado no app
@@ -601,9 +600,7 @@ def sincronizar_demanda(
     # sem mexer na Etapa e nao chega ate aqui, entao a Demanda nao e devolvida
     # de novo a cada webhook depois da entrega.
     try:
-        _devolver_a_quem_pediu(
-            supabase, demanda, etapa_nova=mudanca["etapa"], por_pr=_por_pr(mudanca["github_foto"])
-        )
+        _devolver_a_quem_pediu(supabase, demanda, etapa_nova=mudanca["etapa"], por_pr=_por_pr(mudanca["github_foto"]))
     except Exception:
         # A excecao continua subindo (o webhook responde `falhou: true`, o lote
         # conta a falha), mas ela sai daqui com NOME. O cache e a linha da Etapa
@@ -761,6 +758,66 @@ def _carimbar_em_producao(supabase, demanda: dict[str, Any], *, versao: str, dat
         )
         raise
     return True
+
+
+def reconciliar_em_producao(supabase) -> dict[str, int]:
+    """O par do webhook de deploy no lote de hora em hora (ADR 0069, decisao 4).
+
+    A Action pode nao ter avisado: o segredo ainda nao cadastrado, o app
+    reiniciando na hora, a rede. O registro da subida esta no `history.json` da
+    `main` do mesmo jeito, e esta passagem marca Em producao cada Demanda
+    Entregue cuja issue aparece numa subida registrada, com a versao e a data
+    da mais nova que a lista (`subida_de_cada_issue`).
+
+    Roda DEPOIS do `reconciliar_vinculos`, que pode ter acabado de levar a
+    Demanda a Entregue (o `issues.closed` que o webhook perdeu). Sem Demanda
+    Entregue aberta, o arquivo nem e lido: a cota do GitHub e uma so.
+
+    O carimbo e o mesmo do webhook (`_carimbar_em_producao`), e por isso a
+    mesma idempotencia, a mesma linha e a mesma devolucao.
+    """
+    result = (
+        supabase.table(TABELA_DEMANDAS)
+        .select("*")
+        .eq("etapa", ETAPA_ENTREGUE)
+        .in_("estado", list(ESTADOS_ABERTOS))
+        .not_.is_("github_issue_numero", "null")
+        .execute()
+    )
+    entregues = result.data or []
+    if not entregues:
+        return {"lidas": 0, "marcadas": 0, "falhas": 0}
+
+    try:
+        subidas = subida_de_cada_issue(github_client.ler_historico_de_deploys())
+    except Exception:
+        logger.warning(
+            "[tecnologia] Falha ao ler o history.json da main; Em produção fica para a próxima passagem.",
+            exc_info=True,
+        )
+        return {"lidas": len(entregues), "marcadas": 0, "falhas": len(entregues)}
+
+    marcadas = 0
+    falhas = 0
+    for demanda in entregues:
+        subida = subidas.get(int(demanda["github_issue_numero"]))
+        if subida is None:
+            continue
+        versao, data = subida
+        try:
+            if _carimbar_em_producao(supabase, demanda, versao=versao, data=data):
+                marcadas += 1
+        except Exception:
+            falhas += 1
+            logger.warning(
+                "[tecnologia] Falha ao marcar Em produção na %s a Demanda %s pela reconciliação.",
+                versao,
+                demanda.get("id"),
+                exc_info=True,
+            )
+    if marcadas or falhas:
+        logger.info("[tecnologia] Em produção pelo history.json: %s marcada(s), %s falha(s).", marcadas, falhas)
+    return {"lidas": len(entregues), "marcadas": marcadas, "falhas": falhas}
 
 
 def reconciliar_vinculos(supabase) -> dict[str, int]:

@@ -26,3 +26,60 @@ def versao_rotulada(bruta: object) -> str | None:
         return None
     achado = _VERSAO.fullmatch(bruta.strip())
     return f"v{achado.group(1)}" if achado else None
+
+
+# Um PR do lote nas `notes` do registro, como o `montar_registro` da subida o
+# escreve (`fechar_onda.py`, rótulo do `rotulo_issues`):
+#
+# - na onda, "PR #1095 (issue #1064)" ou "PR #1101 (issues #700 #701)";
+# - no PR avulso, "PR avulso: PR #1007, issue #1006.";
+# - nos dois, "sem issue" quando o PR não fecha nenhuma.
+#
+# As issues vêm do `closingIssuesReferences` do GitHub, lido pela subida na hora
+# do merge: é a mesma verdade que o `Closes #N` do corpo do PR. Entrada antiga,
+# de antes deste formato, não casa e não lista PR nenhum.
+_PR_DO_LOTE = re.compile(r"PR #(\d+)(?: \(|, )(?:issues? (#\d+(?: #\d+)*)|sem issue)")
+
+
+def prs_do_registro(notas: object) -> list[dict]:
+    """Os PRs do lote, cada um com as issues que fecha, na ordem do registro."""
+    if not isinstance(notas, str):
+        return []
+    return [
+        {"numero": int(pr), "fecha": [int(n) for n in re.findall(r"#(\d+)", issues)]}
+        for pr, issues in _PR_DO_LOTE.findall(notas)
+    ]
+
+
+def aviso_da_entrada(entrada: object) -> dict | None:
+    """O corpo do webhook de deploy para uma entrada do `history.json`:
+    `{"versao", "data", "prs"}`. `None` quando a entrada não tem versão (as
+    antigas podem não ter), porque não há o que dizer de uma subida sem ela."""
+    if not isinstance(entrada, dict) or versao_rotulada(entrada.get("app_version")) is None:
+        return None
+    return {
+        "versao": entrada["app_version"],
+        "data": entrada.get("at"),
+        "prs": prs_do_registro(entrada.get("notes")),
+    }
+
+
+def subida_de_cada_issue(deploys: object) -> dict[int, tuple[str, str]]:
+    """Para cada issue que algum PR registrado fecha, a versão (rotulada) e a
+    data da subida MAIS NOVA que a lista.
+
+    A mais nova, e não a primeira: a issue reaberta para um ajuste volta a ser
+    fechada por outro PR, e a Demanda que hoje está Entregue espera a subida
+    desse fechamento, e não a do anterior. O `history.json` guarda a mais nova
+    primeiro, então a primeira que aparece ganha.
+    """
+    subidas: dict[int, tuple[str, str]] = {}
+    for entrada in deploys if isinstance(deploys, list) else []:
+        aviso = aviso_da_entrada(entrada)
+        if aviso is None or not isinstance(aviso["data"], str):
+            continue
+        versao = versao_rotulada(aviso["versao"])
+        for pr in aviso["prs"]:
+            for numero in pr["fecha"]:
+                subidas.setdefault(numero, (versao, aviso["data"]))
+    return subidas

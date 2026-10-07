@@ -177,6 +177,14 @@ def reconciliar_vinculos_tecnologia() -> None:
     except Exception as e:
         logger.error(f"[Cron] Erro em reconciliar_vinculos_tecnologia: {e}", exc_info=True)
 
+    # Depois da releitura das issues, e em separado: a Demanda que acabou de
+    # chegar a Entregue já pode ganhar Em produção pelo history.json da main
+    # (issue #1065), e uma falha de um lado não impede o outro.
+    try:
+        tecnologia_sincronizacao.reconciliar_em_producao(_supabase())
+    except Exception as e:
+        logger.error(f"[Cron] Erro em reconciliar_em_producao: {e}", exc_info=True)
+
 
 def despachar_notificacoes_ouvidoria() -> None:
     """Entrega as notificações da Ouvidoria cuja hora chegou (issue #325).

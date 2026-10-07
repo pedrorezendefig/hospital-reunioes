@@ -27,6 +27,9 @@ campo de terceiro espalhado por tres arquivos.
 
 from __future__ import annotations
 
+import base64
+import binascii
+import json
 import logging
 import re
 from typing import Any
@@ -189,6 +192,37 @@ def ler_prs_abertos() -> list[dict[str, Any]]:
         for pr in dados
         if isinstance(pr, dict) and isinstance(pr.get("number"), int)
     ]
+
+
+# O registro de todas as subidas, como a Action pos-merge o grava na `main`
+# (ADR 0064, decisao 6b). E o arquivo, e nao o evento: so a reconciliacao le
+# daqui (ADR 0069, decisao 4).
+CAMINHO_DO_HISTORICO = "docs/spec/deploy/history.json"
+
+
+def ler_historico_de_deploys() -> list[dict[str, Any]]:
+    """As subidas registradas no `history.json` da `main`, a mais nova primeiro.
+
+    Pela API de conteudo, que devolve o arquivo em base64 ate 1 MB (o arquivo
+    tem dezenas de KB). O repositorio e publico, e o token so le. Qualquer
+    coisa fora do formato vira indisponibilidade: quem chama nao marca nada e
+    tenta de novo na hora seguinte, em vez de ler "nenhuma subida" de um
+    arquivo que nao conseguiu ler.
+    """
+    try:
+        dados = _chamar("GET", f"/contents/{CAMINHO_DO_HISTORICO}?ref=main")
+    except IssueNaoEncontradaError as exc:
+        raise GithubIndisponivelError("O history.json nao esta na main") from exc
+    if not isinstance(dados, dict) or dados.get("encoding") != "base64" or not isinstance(dados.get("content"), str):
+        raise GithubIndisponivelError("GitHub respondeu o history.json fora do formato")
+    try:
+        historico = json.loads(base64.b64decode(dados["content"]))
+    except (ValueError, binascii.Error) as exc:
+        raise GithubIndisponivelError("O history.json da main nao e JSON") from exc
+    deploys = historico.get("deploys") if isinstance(historico, dict) else None
+    if not isinstance(deploys, list):
+        raise GithubIndisponivelError("O history.json da main nao tem a lista de deploys")
+    return deploys
 
 
 def e_pull_request(dados: dict[str, Any]) -> bool:
