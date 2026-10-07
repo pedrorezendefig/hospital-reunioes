@@ -133,12 +133,19 @@ def _ondas(prd: dict, por_numero: dict[int, dict], abertas: set[int]) -> list[li
     return colunas
 
 
+def responsaveis(issue: dict) -> list[str]:
+    """Quem tem a issue na fila: os assignees; sem nenhum, quem criou."""
+    if issue["assignees"]:
+        return list(issue["assignees"])
+    return [issue["author"]] if issue.get("author") else []
+
+
 def _funil(issues: list[dict], fases_issue: dict[int, dict]) -> dict:
     """Contagem por fase das issues ABERTAS (o que está pendente), no total e por pessoa.
 
-    A pessoa conta o que assumiu (assignee) e o que criou, mesmo atribuído a
-    outro: é tudo que ela tem que olhar. SEM_RESPONSAVEL junta as sem
-    assignee, então a issue sem assignee conta para o autor e para SEM_RESPONSAVEL.
+    Quem assumiu (assignee) manda; o autor só conta quando ninguém assumiu
+    (ADR 0062, emenda de 06/10/2026). SEM_RESPONSAVEL junta as sem assignee,
+    então a issue sem assignee conta para o autor e para SEM_RESPONSAVEL.
     Issue fechada não é pendência e fica fora.
     """
     total = dict.fromkeys(FASES_ISSUE, 0)
@@ -148,7 +155,7 @@ def _funil(issues: list[dict], fases_issue: dict[int, dict]) -> dict:
             continue
         fase = fases_issue[i["number"]]["fase"]
         total[fase] += 1
-        pessoas = set(i["assignees"]) | {i.get("author")} | (set() if i["assignees"] else {SEM_RESPONSAVEL})
+        pessoas = set(responsaveis(i)) | (set() if i["assignees"] else {SEM_RESPONSAVEL})
         for p in pessoas - {None}:
             por_responsavel.setdefault(p, dict.fromkeys(FASES_ISSUE, 0))[fase] += 1
     return {"total": total, "por_responsavel": por_responsavel}

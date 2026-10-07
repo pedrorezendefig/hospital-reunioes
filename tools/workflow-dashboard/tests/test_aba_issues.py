@@ -318,7 +318,8 @@ def test_filtros_sao_dropdowns_de_responsavel_estado_prd_labels_e_busca(tmp_path
     assert list(dds) == ["responsável", "estado", "PRD", "type", "area", "fatia", "outras"]
     assert dds["estado"][0] == "abertas"
     assert [v for _, v, _ in dds["estado"][1]] == ["OPEN", "CLOSED", "all"]
-    assert dds["type"][1][0][1] == "" and ["fix"] in [t for _, _, t in dds["type"][1]]  # sem o prefixo
+    assert dds["type"][1][0][1] == ""
+    assert ["fix", "1"] in [t for _, _, t in dds["type"][1]]  # sem o prefixo, com a faceta
     assert "ready-for-human" not in {v for _, v, _ in dds["outras"][1]}  # é o card Humana
     assert html.index('class="filtros') < html.index('data-act="fpendente"')  # filtros acima dos cards
     assert re.search(r'<input[^>]*type="search"', html)
@@ -343,11 +344,41 @@ def test_dropdown_abre_fecha_e_escolher_fecha_o_menu(tmp_path):
 
 
 @com_node
-def test_opcao_da_pessoa_mostra_quanto_esta_pendente_para_ela(tmp_path):
+def test_opcao_mostra_quantas_issues_ela_traria_com_os_outros_filtros_como_estao(tmp_path):
+    # faceta: a contagem segue os outros filtros, não o payload; zero fica marcado e continua clicável
     html = _rodar(tmp_path, "renderIssues()")
     opcoes = {v: t for _, v, t in _dropdowns(html)["responsável"][1]}
-    assert opcoes["lucassampaioc1"][-1] == str(sum(DO_LUCAS.values()))
-    assert opcoes["(sem)"][-1] == "0"  # sem contagem no payload
+    assert opcoes["lucassampaioc1"][-1] == "1"  # a 902, aberta
+    assert opcoes["(sem)"][-1] == "3"  # 901, 905 e 910
+    assert opcoes[""][-1] == "6"  # todos = as abertas
+    html = _rodar(tmp_path, "renderIssues()", antes="S.fIssues.resp = 'lucassampaioc1';")
+    dds = _dropdowns(html)
+    assert {v: t[-1] for _, v, t in dds["estado"][1]} == {"OPEN": "1", "CLOSED": "0", "all": "1"}
+    assert {v: t[-1] for _, v, t in dds["area"][1]} == {"": "1", "area:infra": "1"}
+    assert {v: t[-1] for _, v, t in dds["type"][1]} == {"": "1", "type:feature": "0", "type:fix": "0"}
+    zeros = re.findall(r'<button[^>]*data-v="([^"]*)"[^>]*data-zero="1"', html)
+    assert "type:fix" in zeros and "area:infra" not in zeros
+    assert _lista(tmp_path, "S.fIssues.resp = 'lucassampaioc1'; _clicar({ act: 'flabel', v: 'type:fix' });") == []
+
+
+@com_node
+def test_botao_limpar_so_aparece_com_filtro_fora_do_padrao_e_volta_ao_padrao(tmp_path):
+    assert 'data-act="flimpar"' not in _rodar(tmp_path, "renderIssues()")
+    for antes in (
+        "S.fIssues.resp = 'ana';",
+        "S.fIssues.state = 'all';",
+        "S.fIssues.fase = 'fila';",
+        "S.fIssues.q = '90';",
+    ):
+        assert 'data-act="flimpar"' in _rodar(tmp_path, "renderIssues()", antes=antes), antes
+    antes = (
+        "S.fIssues = { state: 'all', fase: 'fila', resp: 'ana', prd: 900, label: 'type:fix', q: '9' };"
+        " _clicar({ act: 'flimpar' });"
+    )
+    filtros, html = _rodar(tmp_path, "[S.fIssues, renderIssues()]", antes=antes)
+    assert filtros == {"state": "OPEN", "fase": "", "resp": "", "prd": None, "label": "", "q": ""}
+    assert 'data-act="flimpar"' not in html
+    assert _cards(html) == [900, 910]  # sem filtro o PRD volta recolhido
 
 
 @com_node
@@ -412,14 +443,14 @@ def test_ninguem_assumiu_lista_as_issues_sem_assignee_mesmo_com_autor(tmp_path):
 
 
 @com_node
-def test_filtro_por_pessoa_traz_o_que_assumiu_e_o_que_criou(tmp_path):
+def test_filtro_por_pessoa_traz_o_que_assumiu_e_o_que_criou_sem_dono(tmp_path):
     expr = (
         "['ana', 'pedrorezendefig'].map(p => (S.fIssues.resp = p, S.fIssues.state = 'all', "
         "S.data.github.issues.filter(matchIssue).map(i => i.number)))"
     )
     ana, pedro = _rodar(tmp_path, expr)
-    assert ana == [901, 904, 911, 912]  # a 904 ela criou e o pedro assumiu: segue na fila dela
-    assert pedro == [900, 902, 904, 905]  # a 902 ele criou e o lucas assumiu
+    assert ana == [901, 911, 912]  # a 904 ela criou e o pedro assumiu: é dele
+    assert pedro == [900, 904, 905]  # a 902 ele criou e o lucas assumiu: é do lucas
 
 
 @com_node

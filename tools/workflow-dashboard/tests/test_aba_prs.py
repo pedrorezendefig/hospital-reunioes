@@ -450,13 +450,14 @@ def test_filtros_sao_chips_de_pessoa_na_cor_dela_prd_e_so_abertos(tmp_path):
 
 
 @com_node
-def test_filtro_de_pessoa_deixa_so_a_raia_dela(tmp_path):
-    lucas, sem, desligado = _app(
+def test_filtro_de_pessoa_soma_raias_e_o_chip_de_novo_tira_a_pessoa(tmp_path):
+    lucas, duas, sem, desligado = _app(
         tmp_path,
-        "[_lucas, _sem, _view.innerHTML]",
+        "[_lucas, _duas, _sem, _view.innerHTML]",
         antes="""
         _clicar({ act: 'pfresp', v: 'lucassampaioc1' }); const _lucas = _view.innerHTML;
-        _clicar({ act: 'pfresp', v: '(sem)' }); const _sem = _view.innerHTML;
+        _clicar({ act: 'pfresp', v: '(sem)' }); const _duas = _view.innerHTML;
+        _clicar({ act: 'pfresp', v: 'lucassampaioc1' }); const _sem = _view.innerHTML;
         _clicar({ act: 'pfresp', v: '(sem)' });
         """,
     )
@@ -464,12 +465,64 @@ def test_filtro_de_pessoa_deixa_so_a_raia_dela(tmp_path):
     assert _no_quadro(lucas) == [70, 72, 80, 83, 84, 86]
     assert _faixa_ou_vazia(lucas) == []
     assert 'aria-pressed="true"' in _botoes(lucas, "pfresp")["lucassampaioc1"]
+    # segunda pessoa entra ao lado, cada uma na sua raia
+    assert list(_raias(duas)) == ["lucassampaioc1", "(sem)"]
+    assert _no_quadro(duas) == [70, 72, 73, 80, 82, 83, 84, 86]
+    assert all('aria-pressed="true"' in _botoes(duas, "pfresp")[p] for p in ("lucassampaioc1", "(sem)"))
     assert (
         list(_raias(sem)) == ["(sem)"]
         and _no_quadro(sem) == [73, 82]
         and _faixa_ou_vazia(sem) == [76]
     )
-    assert len(_raias(desligado)) == 4  # chip clicado de novo desliga o filtro
+    assert len(_raias(desligado)) == 4  # sem ninguém marcado, todas as raias
+
+
+@com_node
+def test_varias_pessoas_vao_para_o_hash_separadas_por_virgula_e_voltam(tmp_path):
+    h = _app(
+        tmp_path,
+        "location.hash",
+        antes="_clicar({ act: 'pfresp', v: 'lucassampaioc1' }); _clicar({ act: 'pfresp', v: 'pedroribbe' });",
+    )
+    assert h == "#prs?resp=lucassampaioc1%2Cpedroribbe"  # a vírgula vai codificada pelo router
+    for inicial in ("#prs?resp=lucassampaioc1%2Cpedroribbe", "#prs?resp=lucassampaioc1,pedroribbe"):
+        html = _app(tmp_path, hash_inicial=inicial)
+        assert list(_raias(html)) == ["lucassampaioc1", "pedroribbe"], inicial
+    assert list(_raias(html)) == ["lucassampaioc1", "pedroribbe"]
+
+
+@com_node
+def test_em_producao_e_compacta_uma_linha_por_pr_com_issue_e_versao(tmp_path):
+    html = _app(tmp_path)
+    mini = _card(html, 70)
+    assert 'class="pr-card pr-mini"' in mini
+    assert 'title="PR 70"' in mini  # o título vai para o title, não para o card
+    assert _chips(mini) == {"#901": "#issues/901", "v0.163.4": "#producao/v0.163.4"}
+    assert "na coluna" not in mini and "feat/fatia" not in mini
+    assert 'class="pr-card"' in _card(html, 83) or 'class="pr-card ' in _card(html, 83)
+    assert "pr-mini" not in _card(html, 83)
+
+
+@com_node
+def test_chip_da_issue_leva_o_titulo_dela(tmp_path):
+    html = _app(tmp_path)
+    assert re.search(r'<a class="chip" href="#issues/904" title="Issue 904">#904</a>', _card(html, 83))
+
+
+@com_node
+def test_botao_limpar_da_aba_prs_so_com_filtro_e_volta_ao_padrao(tmp_path):
+    assert 'data-act="pflimpar"' not in _app(tmp_path)
+    html, filtros = _app(
+        tmp_path,
+        "[_com, S.fPrs]",
+        antes="""
+        _clicar({ act: 'pfresp', v: 'lucassampaioc1' }); _clicar({ act: 'pfprd', v: '900' });
+        const _com = _view.innerHTML;
+        _clicar({ act: 'pflimpar' });
+        """,
+    )
+    assert 'data-act="pflimpar"' in html
+    assert filtros == {"resp": [], "prd": None, "abertos": False}
 
 
 @com_node

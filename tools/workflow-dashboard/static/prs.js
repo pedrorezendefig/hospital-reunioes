@@ -30,10 +30,18 @@ export const LIMITE_DIAS = 3;
 const FIM = 'em_producao';
 export const JANELA_PRODUCAO_DIAS = 7;
 
-/* filtros da aba <-> filtros da rota (texto; vazio = sem filtro) */
-export const filtrosPrsVazios = () => ({ resp: '', prd: null, abertos: false });
-export const filtrosPrsDaRota = p => ({ resp: p.resp || '', prd: Number(p.prd) || null, abertos: p.abertos === '1' });
-export const filtrosPrsNaRota = f => ({ resp: f.resp, prd: f.prd ? String(f.prd) : '', abertos: f.abertos ? '1' : '' });
+/* filtros da aba <-> filtros da rota (texto; vazio = sem filtro). resp é
+   uma lista: várias pessoas ao mesmo tempo, uma raia para cada */
+export const filtrosPrsVazios = () => ({ resp: [], prd: null, abertos: false });
+export const filtrosPrsDaRota = p => ({
+  resp: p.resp ? p.resp.split(',').filter(Boolean) : [], prd: Number(p.prd) || null, abertos: p.abertos === '1',
+});
+export const filtrosPrsNaRota = f => ({ resp: f.resp.join(','), prd: f.prd ? String(f.prd) : '', abertos: f.abertos ? '1' : '' });
+
+/* liga/desliga uma pessoa no filtro (o chip clicado de novo sai) */
+export const alternarPessoa = (f, login) => ({
+  ...f, resp: f.resp.includes(login) ? f.resp.filter(p => p !== login) : [...f.resp, login],
+});
 
 /* quem assumiu as issues que o PR fecha; ninguém = SEM_RESP */
 function pessoasDoPr(pr, issues) {
@@ -61,9 +69,12 @@ const diasTxt = d => d == null ? '' : d === 0 ? 'hoje na coluna' : `${d} ${d ===
 const nomeDe = login => (login === SEM_RESP ? 'ninguém assumiu' : esc(login));
 const corDe = login => corDaPessoa(login === SEM_RESP ? null : login);
 
-/* chip navega dentro do painel pelo hash; o GitHub fica no ↗ do card */
-const chip = (aba, item, txt, cls = '') =>
-  `<a class="chip${cls}" href="${esc(montarHash({ aba, item }))}">${esc(txt)}</a>`;
+/* chip navega dentro do painel pelo hash; o GitHub fica no ↗ do card. O
+   chip da issue leva o título dela no title: o que o PR entrega, sem sair */
+const chip = (aba, item, txt, cls = '', title = '') =>
+  `<a class="chip${cls}" href="${esc(montarHash({ aba, item }))}"${title ? ` title="${esc(title)}"` : ''}>${esc(txt)}</a>`;
+
+const chipDaIssue = (n, ctx) => chip('issues', String(n), `#${n}`, '', (ctx.issues[n] || {}).title || '');
 
 const ghLink = (ctx, n) =>
   `<a class="pr-gh" href="${esc(ctx.data.repo_url)}/pull/${esc(n)}" target="_blank" rel="noopener" aria-label="abrir o PR #${esc(n)} no GitHub">↗</a>`;
@@ -71,10 +82,25 @@ const ghLink = (ctx, n) =>
 /* o card que o hash aponta fica em destaque (e é o alvo da rolagem do app.js) */
 const destaque = (ctx, n) => (ctx.item === String(n) ? ' aria-current="true"' : '');
 
-function cardHtml({ pr, fase }, ctx) {
+/* Em produção é histórico: uma linha por PR (número, issue e versão), o
+   título fica no title; a raia de produção cresce sem engolir o quadro */
+function miniHtml({ pr, fase }, ctx) {
   const versao = fase.versao ? ctx.depVer(fase.versao) : '';
   const chips = [
-    ...pr.closes.map(n => chip('issues', String(n), `#${n}`)),
+    ...pr.closes.map(n => chipDaIssue(n, ctx)),
+    versao ? chip('producao', versao, versao, ' chip-versao') : '',
+  ].join('');
+  return `<article class="pr-card pr-mini" data-act="pr" data-n="${pr.number}" title="${esc(pr.title)}"${destaque(ctx, pr.number)}>
+    <span class="pr-num">PR #${pr.number}</span>${chips}${ghLink(ctx, pr.number)}
+  </article>`;
+}
+
+function cardHtml(c, ctx) {
+  if (c.fase.fase === FIM) return miniHtml(c, ctx);
+  const { pr, fase } = c;
+  const versao = fase.versao ? ctx.depVer(fase.versao) : '';
+  const chips = [
+    ...pr.closes.map(n => chipDaIssue(n, ctx)),
     versao ? chip('producao', versao, versao, ' chip-versao') : '',
     fase.conflito ? '<span class="badge b-red pr-conflito">conflito</span>' : '',
   ].filter(Boolean).join('');
@@ -90,7 +116,7 @@ function cardHtml({ pr, fase }, ctx) {
 /* tentativa: PR fechado sem merge, fora das colunas, na faixa cinza */
 function tentativaHtml({ pr, fase }, ctx) {
   const issues = pr.closes.length
-    ? pr.closes.map(n => chip('issues', String(n), `#${n}`)).join('')
+    ? pr.closes.map(n => chipDaIssue(n, ctx)).join('')
     : '<span class="chip">sem issue</span>';
   return `<article class="pr-tentativa" data-act="pr" data-n="${pr.number}"${destaque(ctx, pr.number)}>
     <span class="pr-num">PR #${pr.number}</span><span class="pr-tit">${esc(pr.title)}</span>
@@ -111,15 +137,18 @@ function filtroChip(act, v, on, txt, attrs = '') {
   return `<button type="button" class="fchip${on ? ' on' : ''}" data-act="${act}" data-v="${esc(v)}" aria-pressed="${on}"${attrs}>${txt}</button>`;
 }
 
+const filtroAtivo = f => JSON.stringify(f) !== JSON.stringify(filtrosPrsVazios());
+
 function filtrosHtml(pessoas, prds, f) {
   const linha = (rot, chips) => chips
     ? `<div class="filtro"><span class="filtro-rot">${rot}</span><div class="filtro-chips">${chips}</div></div>` : '';
-  const pessoa = login => `<button type="button" class="fchip fpessoa${f.resp === login ? ' on' : ''}" data-act="pfresp" data-v="${esc(login)}" aria-pressed="${f.resp === login}" style="--pessoa:${corDe(login)}"><span class="pessoa-dot"></span>${nomeDe(login)}</button>`;
+  const pessoa = login => `<button type="button" class="fchip fpessoa${f.resp.includes(login) ? ' on' : ''}" data-act="pfresp" data-v="${esc(login)}" aria-pressed="${f.resp.includes(login)}" style="--pessoa:${corDe(login)}"><span class="pessoa-dot"></span>${nomeDe(login)}</button>`;
   return `
   <div class="filtros rv">
     ${linha('pessoa', pessoas.map(pessoa).join(''))}
     ${linha('PRD', prds.map(p => filtroChip('pfprd', p.number, f.prd === p.number, `#${p.number}`, ` title="${esc(p.title)}"`)).join(''))}
-    ${linha('estado', filtroChip('pfabertos', '1', f.abertos, 'só abertos'))}
+    ${linha('estado', filtroChip('pfabertos', '1', f.abertos, 'só abertos')
+      + (filtroAtivo(f) ? '<button type="button" class="fchip limpar" data-act="pflimpar">limpar</button>' : ''))}
   </div>`;
 }
 
@@ -137,10 +166,11 @@ export function renderQuadroPrs(ctx) {
   if (!data.fases || !data.fases.prs || data.fases.erro) return indisponivel(data);
   const fases = data.fases.prs;
   const issues = Object.fromEntries((data.github.issues || []).map(i => [i.number, i]));
+  ctx = { ...ctx, issues };
   const todos = (data.github.prs || [])
     .filter(pr => fases[pr.number])
     .map(pr => ({ pr, fase: fases[pr.number], pessoas: pessoasDoPr(pr, issues) }));
-  const passa = c => (!f.resp || c.pessoas.includes(f.resp)) && (!f.prd || doPrd(c.pr, f.prd, issues))
+  const passa = c => (!f.resp.length || c.pessoas.some(p => f.resp.includes(p))) && (!f.prd || doPrd(c.pr, f.prd, issues))
     && (!f.abertos || c.pr.state === 'OPEN');
   const naJanela = c => c.fase.fase !== FIM || f.prd || item === String(c.pr.number)
     || (c.fase.dias_na_coluna ?? Infinity) <= JANELA_PRODUCAO_DIAS;
@@ -153,7 +183,7 @@ export function renderQuadroPrs(ctx) {
 
   const raias = new Map();
   for (const c of cards) {
-    for (const p of c.pessoas.filter(p => !f.resp || p === f.resp)) {
+    for (const p of c.pessoas.filter(p => !f.resp.length || f.resp.includes(p))) {
       if (!raias.has(p)) raias.set(p, []);
       raias.get(p).push(c);
     }

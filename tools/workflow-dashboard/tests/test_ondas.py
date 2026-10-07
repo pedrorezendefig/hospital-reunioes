@@ -168,7 +168,7 @@ def test_no_na_cor_de_quem_assumiu_e_ninguem_assumiu_na_cor_sem_dono(tmp_path):
     nos = _nos(_svg(html))
     pessoa = {n: re.search(r"--pessoa:([^;]+)", s).group(1) for n, (_, _, s) in nos.items()}
     assert pessoa == {951: pedro, 952: ninguem, 953: lucas, 954: rib, 955: pedro, 956: ninguem, 957: ninguem}
-    assert re.search(r"\.onda-corpo\{[^}]*fill:var\(--pessoa\)", CSS)
+    assert re.search(r"\.onda-dot\{[^}]*fill:var\(--pessoa\)", CSS)
 
 
 @com_node
@@ -197,6 +197,111 @@ def test_borda_do_no_segue_a_fase_do_payload(tmp_path):
 def test_setas_seguem_so_o_blocked_by_aberto_dentro_do_prd(tmp_path):
     # 955 -> 956: bloqueadora fechada; 999 -> 957: bloqueadora de fora do PRD
     assert _setas(_svg(_rodar(tmp_path, _card(PRD)))) == {(951, 953), (952, 954), (953, 954)}
+
+
+# ---------- fluxo da fatia: PR e versão (emenda de 06/10/2026 da ADR 0062) ----------
+
+
+def _pr(n, state, closes, merged_at=None):
+    return {
+        "number": n,
+        "title": f"PR {n}",
+        "state": state,
+        "merged_at": merged_at,
+        "head_ref": f"feat/fatia-{closes[0]}",
+        "url": f"https://github.com/x/y/pull/{n}",
+        "closes": closes,
+        "created_at": "2026-10-02T10:00:00Z",
+        "closed_at": merged_at,
+        "author": "pedrorezendefig",
+        "is_draft": False,
+        "checks": [
+            {"nome": "ci", "conclusao": "SUCCESS", "inicio": "2026-10-02T10:00:00Z", "fim": "2026-10-02T10:05:00Z"}
+        ],
+        "merge_state": "CLEAN",
+        "reviews": [],
+        "vereditos": [],
+    }
+
+
+# as seis colunas do quadro da aba PRs: a borda do nó do PR tem cor para cada uma
+COLUNAS_PR = [
+    ("aberto_sem_ci", "Aberto sem CI"),
+    ("ci_vermelho", "CI vermelho"),
+    ("esperando_revisor", "Esperando revisor"),
+    ("verde_esperando_merge", "Verde esperando merge"),
+    ("mergeado_sem_deploy", "Mergeado sem deploy"),
+    ("em_producao", "Em produção"),
+]
+
+
+def _dados_com_prs():
+    prs = [_pr(81, "OPEN", [951]), _pr(85, "MERGED", [955], merged_at="2026-10-03T12:00:00Z")]
+    deploy = {
+        "app_version": "0.163.4",
+        "at": "2026-10-03T15:00:00-03:00",
+        "result": "healthy",
+        "subject": "PR #85: fatia 955",
+        "raw_subject": "",
+        "notes": "",
+        "duration_seconds": 100,
+    }
+    fases = montar_fases(ISSUES, prs, [deploy], [])
+    dados = {**DADOS, "github": {**DADOS["github"], "prs": prs}, "fases": fases, "history": [deploy]}
+    return json.loads(json.dumps(dados))
+
+
+def _rodar_com(tmp_path, dados, expr):
+    prog = PRELUDIO + _modulo_app() + f"\nS.data = {json.dumps(dados)};\n"
+    prog += f"console.log('@@' + JSON.stringify({expr}));\n"
+    arq = tmp_path / "harness.mjs"
+    arq.write_text(prog, encoding="utf-8")
+    out = subprocess.run(
+        ["node", str(arq)], capture_output=True, text=True, check=False, env={**os.environ, "TZ": "UTC"}
+    )
+    assert out.returncode == 0, out.stderr
+    return json.loads([x for x in out.stdout.splitlines() if x.startswith("@@")][-1][2:])
+
+
+@com_node
+def test_fatia_com_pr_ganha_o_no_do_pr_na_fase_dele_e_em_producao_a_versao(tmp_path):
+    dados = _dados_com_prs()
+    svg = _svg(_rodar_com(tmp_path, dados, _card(PRD)))
+    prs = re.findall(r'<a class="onda-pr (onda-p-\w+)" href="([^"]+)" data-pr="(\d+)"', svg)
+    fase_81 = dados["fases"]["prs"]["81"]["fase"]  # a borda do PR é a fase que o fases.py deu a ele
+    assert prs == [(f"onda-p-{fase_81}", "#prs/81", "81"), ("onda-p-em_producao", "#prs/85", "85")]
+    versoes = re.findall(r'<a class="onda-ver" href="([^"]+)" data-versao="([^"]+)"', svg)
+    assert versoes == [("#producao/v0.163.4", "v0.163.4")]
+    # a seta do fluxo liga a fatia ao PR e o PR à versão; as de bloqueio continuam só entre fatias
+    assert svg.count('class="onda-fluxo"') == 3
+    assert _setas(svg) == {(951, 953), (952, 954), (953, 954)}
+    # fatia sem PR termina na fatia
+    linha_952 = svg.split('data-n="952"', 1)[1].split('<g class="onda-no', 1)[0]
+    assert "onda-pr" not in linha_952
+    for fase, _ in COLUNAS_PR:
+        assert re.search(rf"\.onda-p-{fase}\{{--fase-pr:var\(--[\w-]+\)\}}", CSS), fase
+
+
+@com_node
+def test_sem_pr_nenhum_o_desenho_para_na_fatia_e_fica_estreito(tmp_path):
+    largo = _svg(_rodar_com(tmp_path, _dados_com_prs(), _card(PRD)))
+    estreito = _svg(_rodar(tmp_path, _card(PRD)))
+
+    def w(svg):
+        return int(re.search(r'width="(\d+)"', svg).group(1))
+
+    assert w(estreito) < w(largo)
+    assert "onda-fluxo" not in estreito
+
+
+@com_node
+def test_fatias_vem_em_faixas_por_onda_uma_linha_por_fatia(tmp_path):
+    svg = _svg(_rodar(tmp_path, _card(PRD)))
+    ys = [int(y) for y in re.findall(r'<rect class="onda-anel" x="\d+" y="(\d+)"', svg)]
+    assert ys == sorted(ys) and len(set(ys)) == 7  # nunca duas fatias na mesma linha
+    xs = set(re.findall(r'<rect class="onda-anel" x="(\d+)"', svg))
+    assert len(xs) == 1  # todas as fatias na mesma coluna; a onda é a faixa, não a coluna
+    assert svg.count('class="onda-faixa"') == 2  # separadores entre as três ondas
 
 
 # ---------- clique no nó ----------
