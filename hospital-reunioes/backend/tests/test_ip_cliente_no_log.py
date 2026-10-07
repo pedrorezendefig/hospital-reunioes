@@ -347,7 +347,7 @@ def _dockerfile_em_prosa() -> str:
     substring no arquivo cru é detector cego: passa verde com a frase inteira
     ainda lá. Aqui o `# ` de cada linha sai e o espaço em branco colapsa antes
     de comparar."""
-    cru = _DOCKERFILE.read_text()
+    cru = _DOCKERFILE.read_text(encoding="utf-8")
     sem_marca = " ".join(linha.strip().lstrip("#").strip() for linha in cru.splitlines())
     return " ".join(sem_marca.split()).lower()
 

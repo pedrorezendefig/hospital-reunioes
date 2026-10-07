@@ -11,9 +11,11 @@ as regras que fazem o Windows funcionar, e que o Linux não perde nada com elas.
 
 from __future__ import annotations
 
-import pytest
+import ast
+from pathlib import Path
 
 import conftest
+import pytest
 
 
 class _ItemDeMentira:
@@ -53,3 +55,67 @@ class TestSoUnix:
         conftest._pular_o_que_so_roda_no_unix([item], plataforma="win32")
 
         assert item.acrescentadas == []
+
+
+# O que só existe no Unix e já mordeu no Windows. Arquivo de teste que usa um
+# destes precisa declarar `so_unix` em algum lugar, senão a falha volta a ser
+# "de ambiente" e todo agente no Windows aprende de novo a ignorá-la.
+SINAIS_SO_UNIX = ("import resource", "pgrep", "signal.SIGKILL", ".sendmsg(")
+PASTA_DOS_TESTES = Path(__file__).resolve().parent
+
+
+def test_todo_arquivo_que_usa_recurso_so_do_unix_declara_so_unix():
+    proprios = {"conftest.py", Path(__file__).name}
+
+    sem_marca = []
+    for arquivo in sorted(PASTA_DOS_TESTES.glob("test_*.py")):
+        if arquivo.name in proprios:
+            continue
+        texto = arquivo.read_text(encoding="utf-8")
+        usados = [s for s in SINAIS_SO_UNIX if s in texto]
+        if usados and "pytest.mark.so_unix(" not in texto:
+            sem_marca.append(f"{arquivo.name}: {', '.join(usados)}")
+
+    assert sem_marca == [], f"usa recurso só do Unix e não marca com so_unix: {sem_marca}"
+
+
+def _leituras_e_escritas_sem_encoding(codigo: str) -> list[int]:
+    """As linhas de `read_text`, `write_text` e `open` em modo texto sem
+    `encoding`. Sem ele o Python usa a codificação do sistema, que no Windows
+    é cp1252, e o arquivo com acento quebra ou sai trocado."""
+    linhas = []
+    for no in ast.walk(ast.parse(codigo)):
+        if not isinstance(no, ast.Call) or any(k.arg == "encoding" for k in no.keywords):
+            continue
+        funcao = no.func
+        if isinstance(funcao, ast.Attribute) and funcao.attr in ("read_text", "write_text"):
+            linhas.append(no.lineno)
+        elif isinstance(funcao, ast.Name) and funcao.id == "open":
+            modo = no.args[1] if len(no.args) > 1 else next((k.value for k in no.keywords if k.arg == "mode"), None)
+            binario = isinstance(modo, ast.Constant) and "b" in str(modo.value)
+            if not binario:
+                linhas.append(no.lineno)
+    return linhas
+
+
+def test_o_detector_de_encoding_pega_os_tres_jeitos_e_poupa_o_binario():
+    """Sem esta prova, um detector que nunca acha nada passaria no teste de baixo."""
+    codigo = (
+        "p.read_text()\n"
+        "p.write_text('á')\n"
+        "open(caminho)\n"
+        "open(caminho, 'rb')\n"
+        "p.read_text(encoding='utf-8')\n"
+        "open(caminho, 'w', encoding='utf-8')\n"
+    )
+
+    assert _leituras_e_escritas_sem_encoding(codigo) == [1, 2, 3]
+
+
+def test_os_testes_leem_e_escrevem_arquivo_em_utf8():
+    sem_encoding = []
+    for arquivo in sorted(PASTA_DOS_TESTES.glob("*.py")):
+        for linha in _leituras_e_escritas_sem_encoding(arquivo.read_text(encoding="utf-8")):
+            sem_encoding.append(f"{arquivo.name}:{linha}")
+
+    assert sem_encoding == [], f'passe encoding="utf-8": {sem_encoding}'

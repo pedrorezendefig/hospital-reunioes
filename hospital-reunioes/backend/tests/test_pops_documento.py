@@ -799,6 +799,10 @@ def _asset_uri(*partes: str) -> str:
 LOGO_URI = _asset_uri("images", "logo_hospital.png")
 FONTE_URI = _asset_uri("fonts", "HPSimplified_Rg.ttf")
 
+# No Windows o `abspath` vira `C:\...` e a URI `file://C:\...` não abre (o
+# `C:` vira host): o asset do PDF só tem caminho POSIX (issue #844).
+SO_UNIX_URI_DO_ASSET = pytest.mark.so_unix("a URI file:// do asset é montada com caminho POSIX")
+
 
 class TestUrlFetcherDoPdf:
     """As recusas são asseridas pelo MARCADOR da mensagem, não só pelo tipo da
@@ -877,6 +881,7 @@ class TestUrlFetcherDoPdf:
         with pytest.raises(ValueError, match="host privado/loopback recusado"):
             self._fetcher().open(request.Request("http://127.0.0.1/interno"))
 
+    @SO_UNIX_URI_DO_ASSET
     def test_recusa_no_redirect_nao_envenena_a_busca_seguinte(self):
         """A recusa que chega pelo `open` não pode deixar a requisição recusada
         pendurada no fetcher.
@@ -913,6 +918,7 @@ class TestUrlFetcherDoPdf:
         with pytest.raises(ValueError, match="esquema de URL não permitido"):
             self._fetcher().fetch("ftp://exemplo.test/x")
 
+    @SO_UNIX_URI_DO_ASSET
     def test_asset_permitido_carrega_de_verdade(self):
         """Contraste positivo: o logo e a fonte do template entram pelo fetcher e
         voltam com os bytes do arquivo (assinatura PNG e TTF)."""
@@ -921,6 +927,7 @@ class TestUrlFetcherDoPdf:
         assert fetcher.fetch(LOGO_URI).read().startswith(b"\x89PNG")
         assert fetcher.fetch(FONTE_URI).read().startswith(b"\x00\x01\x00\x00")
 
+    @SO_UNIX_URI_DO_ASSET
     def test_guarda_esta_ligada_no_render_do_pop(self, monkeypatch):
         """O fetcher precisa ir no construtor do `HTML`, que é quem busca os
         recursos. O `write_pdf` do WeasyPrint 70 descarta opção que não conhece:
