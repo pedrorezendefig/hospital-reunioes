@@ -769,3 +769,65 @@ def test_bloco_producao_sem_cor_fixa():
     bloco = _bloco_producao()
     assert not re.search(r"#[0-9a-fA-F]{3,8}\b", bloco), "cor hex no bloco da aba"
     assert not re.search(r"\b(?:rgba?|hsla?)\(", bloco), "rgb()/hsl() no bloco da aba"
+
+
+# ---------- main local atrás da origin/main (#1081) ----------
+
+
+def _git_run(respostas):
+    """_run falso: responde por prefixo do comando; prefixo ausente é falha do git."""
+
+    def run(cmd, cwd, timeout=None):
+        chave = " ".join(cmd)
+        for prefixo, saida in respostas.items():
+            if chave.startswith(prefixo):
+                if isinstance(saida, Exception):
+                    raise saida
+                return saida
+        raise RuntimeError("git fora")
+
+    return run
+
+
+def test_coletor_conta_quantos_commits_a_main_local_esta_atras_da_origin(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        collect,
+        "_run",
+        _git_run({"git branch": "main\n", "git status": "", "git log": "", "git rev-list --count main..origin/main": "7\n"}),
+    )
+    assert collect._git_info(tmp_path)["main_atras"] == 7
+
+
+def test_coletor_deixa_main_atras_nulo_quando_o_rev_list_falha_sem_derrubar_o_resto(monkeypatch, tmp_path):
+    monkeypatch.setattr(
+        collect,
+        "_run",
+        _git_run({"git branch": "main\n", "git status": "", "git log": "", "git rev-list": RuntimeError("sem origin")}),
+    )
+    info = collect._git_info(tmp_path)
+    assert info["main_atras"] is None
+    assert info["branch"] == "main"
+
+
+def _chip_main(tmp_path, main_atras):
+    html = _app(tmp_path, "_els['#mast-status'].innerHTML", dados={**DADOS, "git": {"main_atras": main_atras}})
+    m = re.search(r'<span class="ago main-atras[^"]*"[^>]*>([^<]*)</span>', html)
+    return m.group(1) if m else None
+
+
+@com_node
+@pytest.mark.parametrize(
+    "atras, texto",
+    [(0, "main local em dia"), (1, "main local 1 atrás"), (3, "main local 3 atrás"), (None, None)],
+    ids=["em-dia", "um", "varios", "sem-git"],
+)
+def test_mast_diz_se_a_main_local_esta_em_dia_ou_quantos_commits_atras(tmp_path, atras, texto):
+    assert _chip_main(tmp_path, atras) == texto
+
+
+@com_node
+def test_chip_da_main_atrasada_leva_a_classe_de_alerta_e_o_em_dia_nao(tmp_path):
+    atrasado = _app(tmp_path, "_els['#mast-status'].innerHTML", dados={**DADOS, "git": {"main_atras": 2}})
+    em_dia = _app(tmp_path, "_els['#mast-status'].innerHTML", dados={**DADOS, "git": {"main_atras": 0}})
+    assert 'class="ago main-atras warn" title=' in atrasado
+    assert 'class="ago main-atras" title=' in em_dia

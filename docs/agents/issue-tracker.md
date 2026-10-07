@@ -98,11 +98,11 @@ gh issue edit <N> --remove-assignee @me   # devolve para quem chegou primeiro
 ```
 
 ### 4. Isolar o filesystem: 1 worktree por issue
-Para rodar em paralelo de verdade na mesma máquina, cada sessão trabalha num **git worktree** próprio (branches isoladas, mesmo `.git`, sem Docker):
+Para rodar em paralelo de verdade na mesma máquina, cada sessão trabalha num **git worktree** próprio (branches isoladas, mesmo `.git`, sem Docker), nascido da `origin/main` recém-buscada, e não do HEAD da árvore principal, que pode estar atrasado (issue #1081):
 ```bash
-git worktree add ../hospital-issue-<N> -b <type>/<slug>-<N>
+git fetch origin && git worktree add ../hospital-issue-<N> -b <type>/<slug>-<N> origin/main
 ```
-Abra a sessão Claude Code dentro de `../hospital-issue-<N>`. O `EnterWorktree` nativo do Claude Code também resolve isso.
+Abra a sessão Claude Code dentro de `../hospital-issue-<N>`. O `EnterWorktree` nativo do Claude Code também resolve isso; nesse caso confira com `git log --oneline -1 origin/main` que a branch nasceu da ponta.
 
 ### 5. Trabalhar e fechar
 - Branch determinística por número da issue: `<type>/<slug>-<N>` → nunca colide com outra.

@@ -652,7 +652,7 @@ def _snapshots(root: Path) -> list[dict]:
 
 
 def _git_info(root: Path) -> dict:
-    info = {"branch": None, "dirty": None, "commits": []}
+    info = {"branch": None, "dirty": None, "commits": [], "main_atras": None}
     try:
         info["branch"] = _run(["git", "branch", "--show-current"], root).strip()
         info["dirty"] = len([l for l in _run(["git", "status", "--porcelain"], root).splitlines() if l.strip()])
@@ -661,6 +661,10 @@ def _git_info(root: Path) -> dict:
             info["commits"].append({"sha": sha, "subject": subject})
     except Exception as e:
         info["error"] = str(e)
+    try:  # quantos commits a main local deve à origin/main (o fetch é o do collect)
+        info["main_atras"] = int(_run(["git", "rev-list", "--count", "main..origin/main"], root).strip())
+    except Exception:
+        info["main_atras"] = None
     info["on_main"] = info["branch"] == "main"
     info["stale_hint"] = bool(info["branch"] and info["branch"] != "main") or bool(info["dirty"])
     return info
