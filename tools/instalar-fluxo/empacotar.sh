@@ -2,6 +2,7 @@
 # Gera o zip "fluxo-origem" para mandar a quem vai instalar o fluxo sem clonar o repo.
 #
 #   tools/instalar-fluxo/empacotar.sh [pasta-de-saida]   # default: ~/Downloads
+#   tools/instalar-fluxo/empacotar.sh --dry-run          # só lista o que iria, sem gerar o zip
 #
 # O zip descompacta numa pasta fluxo-origem/ com os mesmos caminhos do repo,
 # então o ROTEIRO.md funciona igual apontando ORIGEM para ela. O conteúdo segue
@@ -9,24 +10,33 @@
 # é "gerar". Não vai o app nem o conteúdo do Hospital.
 set -euo pipefail
 
+DRY=0
+if [ "${1:-}" = "--dry-run" ]; then DRY=1; shift; fi
+
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
 OUT_DIR="${1:-$HOME/Downloads}"
 SHA="$(git -C "$ROOT" rev-parse --short HEAD)"
 DATA="$(date +%Y-%m-%d)"
-STAGE="$(mktemp -d)"
-PKG="$STAGE/fluxo-origem"
 ZIP="$OUT_DIR/fluxo-origem-$DATA-$SHA.zip"
 
-mkdir -p "$PKG" "$OUT_DIR"
+if [ "$DRY" = 0 ]; then
+  STAGE="$(mktemp -d)"
+  PKG="$STAGE/fluxo-origem"
+  mkdir -p "$PKG" "$OUT_DIR"
+fi
 
 copiar() {  # copiar <caminho relativo ao repo> (arquivo ou pasta)
   local rel="$1"
   if [ ! -e "$ROOT/$rel" ]; then echo "  aviso: $rel não existe, pulando" >&2; return; fi
+  if [ "$DRY" = 1 ]; then  # uma linha por caminho; pasta termina em /
+    if [ -d "$ROOT/$rel" ]; then echo "$rel/"; else echo "$rel"; fi
+    return
+  fi
   mkdir -p "$PKG/$(dirname "$rel")"
   cp -R "$ROOT/$rel" "$PKG/$rel"
 }
 
-echo "Empacotando a partir de $ROOT @ $SHA"
+echo "Empacotando a partir de $ROOT @ $SHA" >&2
 
 # raiz
 for f in CLAUDE.md README.md skills-lock.json .gitignore; do copiar "$f"; done
@@ -38,7 +48,8 @@ for d in "$ROOT"/.claude/skills/*/; do
   copiar ".claude/skills/$nome"
 done
 
-# agentes da /onda-enxuta (hr-*), que a skill dispara pelo nome
+# agentes da /onda-enxuta (hr-*), que a skill dispara pelo nome; a skill em si,
+# com o fechar_onda.py (a subida), já foi no laço de cima
 for f in "$ROOT"/.claude/agents/hr-*.md; do copiar ".claude/agents/$(basename "$f")"; done
 
 # docs
@@ -56,8 +67,11 @@ copiar hospital-reunioes/frontend/eslint.config.mjs
 
 # tools
 copiar tools/lint_adr.py
+copiar tools/aplicar_registro.py   # o registro da subida, que a Action pos-merge.yml grava na main
 copiar tools/workflow-dashboard
 copiar tools/instalar-fluxo
+
+[ "$DRY" = 1 ] && exit 0
 
 # limpeza de caches e artefatos
 find "$PKG" \( -name __pycache__ -o -name .DS_Store -o -name '*.pyc' -o -name .pytest_cache \) -prune -exec rm -rf {} + 2>/dev/null || true
