@@ -22,6 +22,7 @@ from __future__ import annotations
 import logging
 import os
 import uuid
+from datetime import UTC, datetime
 
 from app.config import settings
 from app.services import storage
@@ -125,6 +126,44 @@ def anexar(supabase, *, demanda: dict, nome: str, conteudo: bytes, quem_id: str)
             logger.error("Anexo da Demanda %s órfão no bucket após falha de registro: %s", demanda_id, path)
         logger.exception("Falha ao registrar o anexo da Demanda %s", demanda_id)
         raise AnexoRecusadoError(MOTIVO_NAO_GUARDOU, status_code=503) from exc
+
+
+def apagar_todos(supabase, demanda_id: str) -> None:
+    """Tira do bucket os binarios da Demanda e marca cada registro apagado.
+
+    Chamado SO por Concluir e Cancelar, o ato humano que encerra (ADR 0069,
+    decisao 3). Mudanca de Etapa nunca chega aqui: em Entregue o diretor ainda
+    confere com o print na mao.
+
+    A marca de cada anexo entra logo depois da confirmacao DELE, e nao todas no
+    fim (a regra do `storage.delete_file`): uma falha no meio deixa marcados so
+    os que sairam de verdade. O que o Storage nao confirmou fica sem a marca,
+    com o caminho no log, e o card continua honesto sobre ele.
+
+    Nunca levanta: quem chama ja encerrou a Demanda, e o encerramento vale com
+    ou sem o bucket respondendo. Falha aqui vira log com o caminho do arquivo.
+    """
+    try:
+        guardados = [linha for linha in ler(supabase, demanda_id) if not linha.get("apagado_em")]
+    except Exception:
+        logger.exception("Falha ao ler os anexos da Demanda %s para apagar ao encerrar", demanda_id)
+        return
+    for linha in guardados:
+        path = linha["storage_path"]
+        if not storage.delete_file(supabase, _bucket(), path):
+            logger.error("Anexo da Demanda %s não saiu do bucket ao encerrar: %s", demanda_id, path)
+            continue
+        try:
+            supabase.table(TABELA_ANEXOS).update({"apagado_em": datetime.now(UTC).isoformat()}).eq(
+                "id", linha["id"]
+            ).execute()
+        except Exception:
+            logger.exception(
+                "Anexo %s da Demanda %s saiu do bucket, mas a marca de apagado não entrou: %s",
+                linha["id"],
+                demanda_id,
+                path,
+            )
 
 
 def ler(supabase, demanda_id: str) -> list[dict]:

@@ -1081,6 +1081,14 @@ async def mover_demanda(
             detail=("O Quadro está desatualizado e este movimento não foi feito. Recarregue o Quadro e tente de novo."),
         )
 
+    if para in ESTADOS_FECHADOS:
+        # Concluir e Cancelar apagam os prints do bucket (ADR 0069, decisao
+        # 3), e so eles: mover entre colunas abertas e mudar de Etapa nunca
+        # apagam. Antes da linha do fio, e nao depois: se ela falhar, o 500 do
+        # `_gravar_movimento` sai com a Demanda ja encerrada, e o binario de
+        # assunto encerrado nao pode ficar para tras por causa disso.
+        tecnologia_anexos.apagar_todos(supabase, demanda_id)
+
     _gravar_movimento(
         supabase,
         demanda_id=demanda_id,

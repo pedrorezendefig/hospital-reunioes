@@ -22,7 +22,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
 from app.limiter import limiter  # noqa: E402
 from app.routers.admin import tecnologia as tecnologia_router  # noqa: E402
-from app.services import tecnologia_email  # noqa: E402
+from app.services import tecnologia_email, tecnologia_sincronizacao  # noqa: E402
 from app.services.assistente_tecnologia import LIMITE_DA_IMAGEM  # noqa: E402
 from app.services.tecnologia_anexos import (  # noqa: E402
     EXPIRACAO_DA_URL_SEGUNDOS,
@@ -30,7 +30,7 @@ from app.services.tecnologia_anexos import (  # noqa: E402
     MOTIVO_ARQUIVO_VAZIO,
     MOTIVO_DEMANDA_ENCERRADA,
 )
-from test_tecnologia_vinculo import BASE, PEDRO, _demanda, _montar  # noqa: E402
+from test_tecnologia_vinculo import BASE, PEDRO, _demanda, _GithubFalso, _issue, _montar  # noqa: E402
 
 BUCKET = "anexos-tecnologia"
 PNG = b"\x89PNG\r\n\x1a\n" + b"\x00" * 64
@@ -272,3 +272,102 @@ class TestListar:
         client, _, _ = _cenario(demandas=[])
 
         assert client.get(f"{BASE}/demandas/nao-existe/anexos").status_code == 404
+
+
+# ─── 3. Encerrar apaga o binario, e so encerrar ──────────────────────────────
+
+
+def _mover(client, estado: str, demanda_id: str = "d-1"):
+    return client.post(f"{BASE}/demandas/{demanda_id}/mover", json={"estado": estado})
+
+
+class TestEncerrarApaga:
+    @pytest.mark.parametrize("acao", ["concluida", "cancelada"])
+    def test_encerrar_tira_os_binarios_do_bucket_e_deixa_o_registro_apagado(self, acao):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1", estado="em_andamento")])
+        _anexar(client, nome="antes.png")
+        _anexar(client, nome="depois.png")
+        assert len(sb.storage.arquivos) == 2
+
+        assert _mover(client, acao).status_code == 200
+
+        assert sb.storage.arquivos == {}, "o binario ficou no bucket depois de encerrar"
+        # O registro fica: nome, quem e quando, com a marca de apagado.
+        anexos = client.get(f"{BASE}/demandas/d-1/anexos").json()
+        assert [a["nome"] for a in anexos] == ["antes.png", "depois.png"]
+        assert all(a["anexado_por_nome"] == PEDRO["nome_completo"] for a in anexos)
+        assert all(a["criado_em"] for a in anexos)
+        assert all(a["apagado_em"] for a in anexos)
+        assert all(a["url"] is None for a in anexos)
+
+    def test_o_anexo_de_outra_demanda_continua_no_bucket(self):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1", estado="em_andamento"), _demanda("d-2")])
+        _anexar(client, demanda_id="d-1", nome="desta.png")
+        _anexar(client, demanda_id="d-2", nome="da-outra.png")
+
+        _mover(client, "concluida")
+
+        restantes = [linha for linha in _anexos(sb) if linha["apagado_em"] is None]
+        assert [linha["nome_original"] for linha in restantes] == ["da-outra.png"]
+        assert list(sb.storage.arquivos) == [f"{BUCKET}/{restantes[0]['storage_path']}"]
+
+    def test_binario_que_o_storage_nao_confirmou_fica_sem_a_marca(self, caplog):
+        """O Storage pode recusar sem levantar. O anexo que nao saiu NAO ganha
+        a marca de apagado (o card mentiria) e o caminho fica no log, para
+        alguem achar; o encerramento vale assim mesmo."""
+        client, sb, _ = _cenario(demandas=[_demanda("d-1", estado="em_andamento")])
+        _anexar(client, nome="teimoso.png")
+        sb.storage.from_ = lambda bucket: _BucketQueNaoApaga(sb.storage, bucket)
+
+        with caplog.at_level("ERROR"):
+            assert _mover(client, "concluida").status_code == 200
+
+        linha = _anexos(sb)[0]
+        assert linha["apagado_em"] is None
+        assert linha["storage_path"] in caplog.text
+
+
+class _BucketQueNaoApaga(_BucketFake):
+    def remove(self, paths):
+        return []
+
+
+class TestSoEncerrarApaga:
+    @pytest.mark.parametrize("de,para", [("nova", "em_andamento"), ("nova", "aguardando"), ("em_andamento", "aguardando")])
+    def test_mover_entre_colunas_abertas_nao_apaga(self, de, para):
+        client, sb, _ = _cenario(demandas=[_demanda("d-1", estado=de)])
+        _anexar(client)
+
+        assert _mover(client, para).status_code == 200
+
+        assert len(sb.storage.arquivos) == 1
+        assert _anexos(sb)[0]["apagado_em"] is None
+
+    @pytest.mark.parametrize(
+        "issue",
+        [
+            {"state": "closed", "state_reason": "completed", "labels": []},
+            {"state": "open", "state_reason": None, "labels": [{"name": "in-progress"}]},
+        ],
+        ids=["entregue", "em-desenvolvimento"],
+    )
+    def test_mudanca_de_etapa_nao_apaga_nada(self, monkeypatch, issue):
+        """A Etapa muda pela sincronizacao (webhook e reconciliacao), inclusive
+        para Entregue, que devolve o card a quem pediu: o diretor ainda confere
+        com o print na mao (ADR 0069, decisao 3)."""
+        monkeypatch.setattr(tecnologia_sincronizacao, "avisar_atribuicao", lambda *a, **kw: True)
+        gh = _GithubFalso({900: _issue(900, estado=issue["state"], motivo=issue["state_reason"])})
+        gh.issues[900]["labels"] = issue["labels"]
+        client, sb, _ = _cenario(
+            demandas=[_demanda("d-1", estado="em_andamento", github_issue_numero=900, autor_id="P2")],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+        _anexar(client)
+        demanda = dict(sb.tabelas["tecnologia_demandas"][0])
+
+        assert tecnologia_sincronizacao.sincronizar_demanda(sb, demanda) is True
+
+        assert sb.tabelas["tecnologia_demandas"][0]["etapa"] != demanda["etapa"], "a Etapa nao mudou"
+        assert len(sb.storage.arquivos) == 1
+        assert _anexos(sb)[0]["apagado_em"] is None
