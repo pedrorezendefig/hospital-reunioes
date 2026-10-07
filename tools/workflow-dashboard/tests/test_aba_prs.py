@@ -689,3 +689,21 @@ def test_em_producao_mostra_a_ultima_semana_e_conta_as_mais_antigas(tmp_path):
 def test_texto_em_construcao_da_aba_saiu(tmp_path):
     assert "em construção" not in _app(tmp_path)
     assert "em construção" not in APP_JS
+
+
+@com_node
+def test_em_producao_ordena_pela_versao_e_mostra_a_hora_do_merge(tmp_path):
+    # mesma raia, dias na coluna e número fora de ordem de propósito: quem manda é a versão
+    prs = [
+        (40, "0.161.3", 9, "2026-10-01T09:05:00Z"),
+        (41, "0.161.10", 1, "2026-10-03T18:40:00Z"),
+        (42, "v0.162.0", 5, "2026-10-04T11:20:00Z"),
+        (43, "0.161.2", 0, "2026-10-01T08:00:00Z"),
+    ]
+    dados = json.loads(json.dumps(DADOS))
+    dados["github"]["prs"] = [{**_pr(n, "MERGED", [901]), "merged_at": m} for n, _, _, m in prs]
+    dados["fases"]["prs"] = {str(n): _fase_pr("em_producao", 0, {"versao": v, "dias_na_coluna": d}) for n, v, d, _ in prs}
+    html = _app(tmp_path, hash_inicial="#prs?prd=900", dados=dados)
+    assert _celulas(_raias(html)["lucassampaioc1"])["em_producao"] == [42, 41, 40, 43]
+    assert re.search(r'class="pr-quando"[^>]*>4 out, 11:20<', _card(html, 42))
+    assert re.search(r'class="pr-quando"[^>]*>1 out, 08:00<', _card(html, 43))

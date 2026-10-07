@@ -977,11 +977,12 @@ body.er-lock main{z-index:130}
 .pr-chips a.chip:hover{border-color:var(--brand); color:var(--brand)}
 .pr-meta{display:flex; flex-direction:column; gap:1px; font-family:var(--mono); font-size:10.5px; color:var(--ink-soft)}
 .pr-branch{overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
-/* Em produção compacta: uma linha por PR, só número, issue e versão */
+/* Em produção compacta: uma linha por PR, só número, issue, versão e hora do merge */
 .pr-mini{flex-direction:row; align-items:center; flex-wrap:wrap; gap:4px 6px; padding:5px 8px}
 .pr-mini .pr-num{font-size:11px}
 .pr-mini .chip{font-size:10.5px; padding:1px 7px; text-decoration:none}
 .pr-mini a.chip:hover{border-color:var(--brand); color:var(--brand)}
+.pr-mini .pr-quando{font-size:10.5px; font-family:var(--mono); color:var(--ink-soft); white-space:nowrap}
 .pr-mini .pr-gh{margin-left:auto}
 .pr-celula[data-col="em_producao"]{gap:3px}
 /* gargalo: a coluna mais cheia (cabeçalho e células) e o card parado além do limite */

@@ -55,6 +55,19 @@ const doPrd = (pr, prd, issues) => pr.closes.some(n => n === prd || (issues[n] |
 /* mais tempo na coluna primeiro: o card parado aparece em cima */
 const porIdade = (a, b) => (b.fase.dias_na_coluna ?? -1) - (a.fase.dias_na_coluna ?? -1) || b.pr.number - a.pr.number;
 
+/* Em produção não envelhece: a versão mais nova em cima, número a número
+   (0.161.10 vem antes de 0.161.3); na mesma versão, o merge mais recente */
+const partesDaVersao = v => String(v || '').replace(/^v/, '').split('.').map(Number);
+function porVersao(a, b) {
+  const va = partesDaVersao(a.fase.versao), vb = partesDaVersao(b.fase.versao);
+  for (let i = 0; i < Math.max(va.length, vb.length); i++) {
+    const d = (vb[i] || 0) - (va[i] || 0);
+    if (d) return d;
+  }
+  return String(b.pr.merged_at || '').localeCompare(String(a.pr.merged_at || '')) || b.pr.number - a.pr.number;
+}
+const naOrdem = (a, b) => (a.fase.fase === FIM && b.fase.fase === FIM ? porVersao(a, b) : porIdade(a, b));
+
 /* a coluna com mais cards que cada uma das outras; empate não tem gargalo */
 function colunaMaisCheia(contagem) {
   const [[k, max], [, segundo]] = COLUNAS.filter(([c]) => c !== FIM)
@@ -82,13 +95,15 @@ const ghLink = (ctx, n) =>
 /* o card que o hash aponta fica em destaque (e é o alvo da rolagem do app.js) */
 const destaque = (ctx, n) => (ctx.item === String(n) ? ' aria-current="true"' : '');
 
-/* Em produção é histórico: uma linha por PR (número, issue e versão), o
-   título fica no title; a raia de produção cresce sem engolir o quadro */
+/* Em produção é histórico: uma linha por PR (número, issue, versão e hora
+   do merge), o título fica no title; a raia de produção cresce sem engolir
+   o quadro */
 function miniHtml({ pr, fase }, ctx) {
   const versao = fase.versao ? ctx.depVer(fase.versao) : '';
   const chips = [
     ...pr.closes.map(n => chipDaIssue(n, ctx)),
     versao ? chip('producao', versao, versao, ' chip-versao') : '',
+    pr.merged_at ? `<span class="pr-quando" title="mergeado em ${esc(ctx.fmtDT(pr.merged_at))}">${esc(ctx.fmtDT(pr.merged_at))}</span>` : '',
   ].join('');
   return `<article class="pr-card pr-mini" data-act="pr" data-n="${pr.number}" title="${esc(pr.title)}"${destaque(ctx, pr.number)}>
     <span class="pr-num">PR #${pr.number}</span>${chips}${ghLink(ctx, pr.number)}
@@ -160,7 +175,7 @@ function indisponivel(data) {
   return `<div class="empty rv">${motivo}</div>`;
 }
 
-/* ctx: { data, filtros, item, depVer, fmtD } (valores puros, sem o estado do app.js) */
+/* ctx: { data, filtros, item, depVer, fmtD, fmtDT } (valores puros, sem o estado do app.js) */
 export function renderQuadroPrs(ctx) {
   const { data, filtros: f, item } = ctx;
   if (!data.fases || !data.fases.prs || data.fases.erro) return indisponivel(data);
@@ -177,7 +192,7 @@ export function renderQuadroPrs(ctx) {
 
   const noQuadro = todos.filter(c => COLUNAS.some(([k]) => k === c.fase.fase));
   const filtrados = noQuadro.filter(passa);
-  const cards = filtrados.filter(naJanela).sort(porIdade);
+  const cards = filtrados.filter(naJanela).sort(naOrdem);
   const foraDaJanela = filtrados.length - cards.length;
   const tentativas = todos.filter(c => c.fase.fase === 'fechado_sem_merge' && passa(c));
 
