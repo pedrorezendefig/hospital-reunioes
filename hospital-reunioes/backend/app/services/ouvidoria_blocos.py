@@ -41,12 +41,10 @@ AVISO_SIGILO = (
     "caso segue sem identificação de quem manifestou. A nota da Ouvidoria abaixo é o extrato pertinente ao setor. "
     + ORIENTACAO_DE_AUTORIA
 )
-# O mesmo silêncio, por outro motivo. Sem um aviso próprio, o acionamento
-# anônimo chegaria à área com um bloco só e nenhuma explicação.
+# Desde a issue #1051 o caso anônimo leva os três blocos, e o aviso não fala
+# mais de silêncio: só diz que a manifestação é anônima e o que fazer com isso.
 AVISO_ANONIMO = (
-    "Manifestação anônima: o relato original e o resumo não são encaminhados, porque costumam trazer a "
-    "identificação de quem preferiu não se identificar. A nota da Ouvidoria abaixo é o extrato pertinente ao setor. "
-    + ORIENTACAO_DE_AUTORIA
+    "Manifestação anônima: o caso segue sem identificação de quem manifestou. " + ORIENTACAO_DE_AUTORIA
 )
 
 
@@ -61,12 +59,12 @@ def sob_sigilo(manifestacao: dict) -> bool:
 def caso_protegido(manifestacao: dict) -> bool:
     """Quando a palavra crua de quem manifestou não sai da Ouvidoria.
 
-    Sigilo reforçado é a exceção que a RN-79 nomeia. O caso anônimo entra pelo
-    mesmo motivo e pela mesma porta de `identificacao_do_caso`: quem não quis se
-    identificar costuma se identificar dentro do próprio texto ("sou a Maria
-    Silva, do leito 302"), e mandar esse texto ao setor desfaz o anonimato que o
-    canal prometeu."""
-    return sob_sigilo(manifestacao) or bool(manifestacao.get("anonimo"))
+    Só o sigilo reforçado, a exceção que a RN-79 nomeia. O caso anônimo saiu
+    daqui na issue #1051 (emenda de 07/10/2026 da ADR 0041): o setor que lê só
+    a nota responde à interpretação da Ouvidoria, não ao paciente, e o anônimo
+    passou a levar resumo e relato integral como o caso comum. O anonimato
+    continua tirando quem manifestou, em `identificacao_do_caso`."""
+    return sob_sigilo(manifestacao)
 
 
 def identificacao_do_caso(manifestacao: dict) -> str | None:
@@ -77,11 +75,10 @@ def identificacao_do_caso(manifestacao: dict) -> str | None:
     leitura, mas sem nome na regra ficava fora de qualquer teste de ordem.
 
     Mora aqui, ao lado de `montar_blocos`, e pergunta ao MESMO `caso_protegido`
-    que corta os blocos. Gate próprio seria uma segunda regra respondendo a
-    mesma pergunta, e as duas divergiriam na primeira mudança: caso sigiloso e
-    caso anônimo saem sem identificação porque a área recebe o extrato
-    necessário para resolver, e nada além (ADR 0034, decisão 8)."""
-    if caso_protegido(manifestacao):
+    que corta os blocos, mais o anonimato: caso sigiloso e caso anônimo saem
+    sem identificação (ADR 0034, decisão 8). Desde a issue #1051 o anônimo
+    leva o relato, mas continua sem o nome de quem preferiu não se identificar."""
+    if caso_protegido(manifestacao) or manifestacao.get("anonimo"):
         return None
     return manifestacao.get("manifestante_nome") or None
 
@@ -107,15 +104,15 @@ def paciente_do_caso(manifestacao: dict) -> dict | None:
 
 
 def aviso_do_caso(manifestacao: dict) -> str | None:
-    """O que explica à área por que o caso chegou com um bloco só.
+    """O que a área precisa saber antes de ler os blocos.
 
-    Nasce do mesmo gate de `montar_blocos`, e não de `sob_sigilo`: aviso que
-    olha uma condição diferente da que corta os blocos deixa o acionamento
-    anônimo mudo, que é exatamente o mal-entendido que o aviso existe para
-    evitar."""
-    if sob_sigilo(manifestacao):
-        return AVISO_SIGILO
+    Sigilo reforçado: por que o caso chegou com um bloco só. Anônimo: que a
+    manifestação é anônima e que a autoria não se procura, mesmo com o relato
+    integral na mão (issue #1051). O sigilo vence quando os dois valem, porque
+    é ele que corta os blocos."""
     if caso_protegido(manifestacao):
+        return AVISO_SIGILO
+    if manifestacao.get("anonimo"):
         return AVISO_ANONIMO
     return None
 

@@ -105,12 +105,22 @@ class TestVarianteSigilosa:
         assert CHAVE_RESUMO not in [b["chave"] for b in blocos]
         assert "Maria Silva" not in " ".join(b["texto"] for b in blocos)
 
-    def test_caso_anonimo_recebe_a_mesma_protecao(self):
-        """Quem não quis se identificar costuma se identificar dentro do próprio
-        texto: mandar relato e resumo ao setor desfaria o anonimato."""
+    def test_caso_anonimo_nao_recebe_a_protecao_do_sigilo(self):
+        """Invertido na issue #1051 (decisão de 07/10/2026, emenda da ADR 0041):
+        o setor que lê só a nota responde à interpretação da Ouvidoria, não ao
+        paciente. Anônimo sem sigilo reforçado leva os três blocos, como o caso
+        comum; quem segura o relato é só o sigilo reforçado."""
         blocos = montar_blocos(_manifestacao(anonimo=True))
 
+        assert [b["chave"] for b in blocos] == [CHAVE_RESUMO, CHAVE_RELATO, CHAVE_NOTA]
+        assert [b["texto"] for b in blocos] == [RESUMO, RELATO, EXTRATO]
+
+    def test_caso_anonimo_com_sigilo_reforcado_continua_so_com_a_nota(self):
+        """RN-79: o sigilo reforçado protege com ou sem anonimato."""
+        blocos = montar_blocos(_manifestacao(anonimo=True, sigilo_reforcado=True))
+
         assert [b["chave"] for b in blocos] == [CHAVE_NOTA]
+        assert [b["texto"] for b in blocos] == [EXTRATO]
 
 
 class TestEmailDeAcionamento:
@@ -175,8 +185,8 @@ class TestAvisoDoCasoProtegido:
         assert aviso_do_caso(_manifestacao(sigilo_reforcado=True)) == AVISO_SIGILO
 
     def test_caso_anonimo_leva_o_aviso_do_anonimato(self):
-        """Sem aviso próprio, o acionamento anônimo chegaria mudo: com um bloco
-        só e nenhuma razão para o resto ter ficado para trás."""
+        """O anônimo leva o relato desde a issue #1051, e o aviso continua: diz
+        que a manifestação é anônima e que a autoria não se procura."""
         assert aviso_do_caso(_manifestacao(anonimo=True)) == AVISO_ANONIMO
 
     @pytest.mark.parametrize("protegido", [{"sigilo_reforcado": True}, {"anonimo": True}])
@@ -194,13 +204,30 @@ class TestAvisoDoCasoProtegido:
         for pedaco in (html, texto):
             assert aviso in pedaco
 
-    def test_email_do_caso_anonimo_explica_por_que_veio_so_a_nota(self):
+    def test_email_do_caso_anonimo_leva_o_relato_integral_e_o_resumo(self):
+        """Issue #1051 (caso 2026-0079): a responsável do setor recebia só a
+        nota e o aviso de que o relato não era encaminhado. Agora o anônimo sem
+        sigilo reforçado leva os três blocos, na ordem, e o aviso só diz que a
+        manifestação é anônima."""
         _, html, texto = montar_nova_demanda(_manifestacao(anonimo=True), "Carlos", AGORA, SEM_FERIADOS)
 
         for pedaco in (html, texto):
+            assert pedaco.index(RESUMO) < pedaco.index(RELATO) < pedaco.index(EXTRATO)
+            assert "RELATO INTEGRAL" in pedaco
             assert AVISO_ANONIMO in pedaco
+            assert "não são encaminhados" not in pedaco
+            assert "Joana da Silva" not in pedaco
+
+    def test_email_do_caso_anonimo_com_sigilo_reforcado_sai_so_com_a_nota(self):
+        caso = _manifestacao(anonimo=True, sigilo_reforcado=True)
+        _, html, texto = montar_nova_demanda(caso, "Carlos", AGORA, SEM_FERIADOS)
+
+        for pedaco in (html, texto):
+            assert EXTRATO in pedaco
+            assert AVISO_SIGILO in pedaco
             assert RELATO not in pedaco
             assert RESUMO not in pedaco
+            assert "RELATO INTEGRAL" not in pedaco
 
 
 class TestGuardaDoPacienteDoCaso:
