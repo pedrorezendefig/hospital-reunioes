@@ -950,11 +950,11 @@ body.er-lock main{z-index:130}
 
 /* ============ aba PRs: quadro por fase, raias por pessoa (issue 946) ============ */
 /* Só tokens do :root. A cor da pessoa chega como --pessoa no style da raia
-   (corDaPessoa). As seis colunas têm largura mínima: em tela estreita o
+   (corDaPessoa). As colunas têm largura mínima: em tela estreita o
    quadro rola na horizontal em vez de espremer os cards. */
 .pr-quadro-rolagem{overflow-x:auto; margin:0 0 22px; padding-bottom:4px}
 .pr-quadro{display:flex; flex-direction:column; gap:8px; min-width:1120px}
-.pr-linha{display:grid; grid-template-columns:148px repeat(5,minmax(0,1fr)) 230px; gap:8px}
+.pr-linha{display:grid; grid-template-columns:140px repeat(5,minmax(0,1fr)) 210px 136px; gap:8px}
 .pr-col-cab{display:flex; align-items:baseline; justify-content:space-between; gap:6px; padding:8px 10px;
   font-family:var(--mono); font-size:10.5px; letter-spacing:.05em; text-transform:uppercase; color:var(--ink-soft);
   background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-inner)}
@@ -986,6 +986,12 @@ body.er-lock main{z-index:130}
 .pr-mini .pr-quando{font-size:10.5px; font-family:var(--mono); color:var(--ink-soft); white-space:nowrap}
 .pr-mini .pr-gh{margin-left:auto}
 .pr-celula[data-col="em_producao"]{gap:3px}
+/* Entregue (ferramenta, sem versão): o mais compacto, PRs por dia do merge, só o número, lado a lado */
+.pr-entregue-dia{display:flex; flex-wrap:wrap; align-items:baseline; gap:3px}
+.pr-entregue-data{flex-basis:100%; font-family:var(--mono); font-size:10px; letter-spacing:.04em; color:var(--ink-soft)}
+.pr-card.pr-entregue{display:inline-block; padding:1px 6px; font-family:var(--mono); font-size:10.5px; color:var(--ink-soft);
+  border-radius:var(--r-pill)}
+.pr-card.pr-entregue:hover{border-color:var(--brand); color:var(--brand)}
 /* gargalo: a coluna mais cheia (cabeçalho e células) e o card parado além do limite */
 .pr-col-cab.pr-col-cheia{background:var(--amber-wash); border-color:var(--amber); color:var(--amber)}
 .pr-col-cab.pr-col-cheia .pr-col-n{color:var(--amber)}
