@@ -40,7 +40,7 @@ Tecnologia fica fora de propósito (a divulgação do #634 cobre).
 
 O manual só mostra **o que está no ar**. Funcionalidade que ainda não subiu
 nasce em `draft: true` e uma Action no push da `main` tira o draft quando ela
-sobe (ADR 0062). A Action não publica: o site só muda com o
+sobe (ADR 0068). A Action não publica: o site só muda com o
 `/manual publicar`, que o humano roda da máquina com os MP4 e que também tira
 o draft das páginas com Vídeo de tarefa (o MP4 não vem no clone; issue #951).
 

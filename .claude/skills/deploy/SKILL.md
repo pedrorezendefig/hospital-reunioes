@@ -9,7 +9,7 @@ Uma skill, cinco modos. Invocação por subcomando:
 
 | Comando | Modo | Quando usar |
 |---|---|---|
-| `/deploy` | **ship** (default) | Não sobe nada: imprime o comando do `fechar_onda.py`, o rabo único (ADR 0061), e sai |
+| `/deploy` | **ship** (default) | Não sobe nada: imprime o comando do `fechar_onda.py`, o rabo único (ADR 0068), e sai |
 | `/deploy setup` | **setup** | 1ª vez no projeto: cria projeto, apps, env vars, DNS guia, primeiro deploy, `project.json` |
 | `/deploy status` | **status** | Só reporta estado atual, sem alterar nada |
 | `/deploy rollback` | **rollback** | Reverte para último deploy `healthy` |
@@ -25,7 +25,7 @@ Uma skill, cinco modos. Invocação por subcomando:
 **Fonte única de verdade por projeto:**
 - `<repo>/docs/spec/deploy/project.json` — **spec do projeto** (o "v0"): stack, portas, fqdn, build, env vars, secrets, gates. Lido em todos os modos. Editável manualmente; `setup`/`migrate` o gera.
 - `<repo>/docs/spec/deploy/state.json` — **snapshot do estado atual**. Reescrito pelo ship/rollback/setup. Não editar à mão.
-- `<repo>/docs/spec/deploy/history.json`: **timeline**, com todos os deploys (sem teto, ADR 0062). Reescrito pelo ship/rollback. Não editar à mão.
+- `<repo>/docs/spec/deploy/history.json`: **timeline**, com todos os deploys (sem teto, ADR 0068). Reescrito pelo ship/rollback. Não editar à mão.
 
 Schema completo do `project.json` em `.claude/skills/deploy/references/project-schema.md`.
 
@@ -153,7 +153,7 @@ $S status                                # quem segura e há quanto tempo
 
 ## Modo `ship` (default, sem argumento)
 
-O caminho para produção é um só, o `fechar_onda.py` (ADR 0061): versão nova pelo tipo dos commits, sem commit (issue #967), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida), tag `vX.Y.Z` no squash, um build, health com conferência de versão e registro gravado pela Action pós-merge, sem PR, para um PR avulso ou para o lote de uma onda. Este modo não executa passo nenhum: imprime o comando e sai.
+O caminho para produção é um só, o `fechar_onda.py` (ADR 0068): versão nova pelo tipo dos commits, sem commit (issue #967), `APP_VERSION` no backend e no frontend do Coolify antes do merge, merge pela API do GitHub (a `main` é protegida), tag `vX.Y.Z` no squash, um build, health com conferência de versão e registro gravado pela Action pós-merge, sem PR, para um PR avulso ou para o lote de uma onda. Este modo não executa passo nenhum: imprime o comando e sai.
 
 ```bash
 python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <N>
@@ -632,7 +632,7 @@ Detalhes da skill: `.claude/skills/snapshot/SKILL.md`.
 #### 9.5 (removido) Sem cronologia em Markdown
 
 > A timeline dos deploys é o `history.json` (9.2), com todos os deploys, e o painel a
-> desenha (ADR 0062, decisão 9). Não criar arquivo de cronologia em `docs/spec/`.
+> desenha (ADR 0068). Não criar arquivo de cronologia em `docs/spec/`.
 
 #### 9.6 Manual do usuário: tirar o draft do que subiu
 

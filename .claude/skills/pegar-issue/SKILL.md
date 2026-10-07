@@ -5,11 +5,11 @@ description: 'Claim atômico de uma issue ready-for-agent, branch e spec, e daí
 
 # Pegar issue
 
-Entry point de **desenvolvimento**. Pega uma issue da fila `ready-for-agent`, dá "claim" para evitar colisão entre sessões paralelas, cria a branch, carrega a spec no contexto e encadeia `/tdd`, `/ship` e o rabo até produção, sem parar para perguntar (ADR 0063). Protocolo completo em `docs/agents/issue-tracker.md`.
+Entry point de **desenvolvimento**. Pega uma issue da fila `ready-for-agent`, dá "claim" para evitar colisão entre sessões paralelas, cria a branch, carrega a spec no contexto e encadeia `/tdd`, `/ship` e o rabo até produção, sem parar para perguntar (ADR 0068). Protocolo completo em `docs/agents/issue-tracker.md`.
 
 ## Sem argumento — listar a fila
 
-**Antes da fila, o loop do revisor (ADR 0020).** Issues com `revisor-comentou` vêm **no topo** — inclusive fechadas (um pedido de mudança do revisor reabre trabalho entregue):
+**Antes da fila, o loop do revisor (ADR 0068).** Issues com `revisor-comentou` vêm **no topo**, inclusive fechadas (um pedido de mudança do revisor reabre trabalho entregue):
 
 ```bash
 gh issue list --label revisor-comentou --state all \
@@ -18,13 +18,13 @@ gh issue list --label revisor-comentou --state all \
 
 Se houver alguma, mostre num bloco separado ("🔔 Revisor comentou — curadoria pendente") e recomende tratá-las antes de pegar issue nova. A curadoria (ler o comentário, classificar, reabrir/editar critérios sob aprovação humana) segue o protocolo do `/triage`.
 
-Depois, mostre as issues disponíveis (prontas e sem dono), cada uma com o dono do PRD ao lado (ADR 0061, decisão 4):
+Depois, mostre as issues disponíveis (prontas e sem dono), cada uma com o dono do PRD ao lado (ADR 0068):
 
 ```bash
 python3 .claude/skills/pegar-issue/scripts/dono_do_prd.py --fila
 ```
 
-O script busca `ready-for-agent`, sem assignee e `-is:blocked` (a busca avançada exclui as bloqueadas server-side, dependências nativas, ADR 0028) e imprime a tabela com as colunas **PRD** e **dono do PRD**: `avulsa` quando a issue não tem PRD, `sem dono` quando o PRD não tem assignee. Mostre essa tabela, acrescentando o tipo AFK/HITL, se marcado. Pergunte qual número pegar; se o usuário disser "pega a próxima", pegue a primeira AFK e siga.
+O script busca `ready-for-agent`, sem assignee e `-is:blocked` (a busca avançada exclui as bloqueadas server-side, dependências nativas, ADR 0068) e imprime a tabela com as colunas **PRD** e **dono do PRD**: `avulsa` quando a issue não tem PRD, `sem dono` quando o PRD não tem assignee. Mostre essa tabela, acrescentando o tipo AFK/HITL, se marcado. Pergunte qual número pegar; se o usuário disser "pega a próxima", pegue a primeira AFK e siga.
 
 ## Com argumento `<N>` — pegar a issue
 
@@ -48,13 +48,13 @@ Se retornar alguma bloqueadora **aberta**, avise e **não pegue**; sugira pegar 
 ```bash
 python3 .claude/skills/pegar-issue/scripts/arquivo_em_comum.py <N>
 ```
-Arquivo em comum não separa fatias (ADR 0066): o único separador é a dependência, que quem fatia escreve como `blocked_by` nativo (passo 2), e o conflito de texto se resolve no rabo, PR a PR. O script cruza os caminhos que o corpo da issue cita entre crases com os das issues `in-progress` (corpo e arquivos do PR aberto que as fecha) e, se algum coincide, imprime uma linha de aviso com as issues e os arquivos. Repasse a linha ao usuário e **siga para o claim**; o script não grava dependência e sempre sai `0`.
+Arquivo em comum não separa fatias (ADR 0068): o único separador é a dependência, que quem fatia escreve como `blocked_by` nativo (passo 2), e o conflito de texto se resolve no rabo, PR a PR. O script cruza os caminhos que o corpo da issue cita entre crases com os das issues `in-progress` (corpo e arquivos do PR aberto que as fecha) e, se algum coincide, imprime uma linha de aviso com as issues e os arquivos. Repasse a linha ao usuário e **siga para o claim**; o script não grava dependência e sempre sai `0`.
 
 ### 4. Avisar fatia de PRD alheio (não bloqueia)
 ```bash
 python3 .claude/skills/pegar-issue/scripts/dono_do_prd.py <N>
 ```
-Se a fatia é de um PRD cujo dono (assignee do PRD pai) é outro login, o script imprime uma linha, `fatia do PRD de @fulano; combine antes`: repasse o aviso ao usuário e **siga para o claim** (ADR 0061, decisão 4: pegar fatia de PRD alheio não é proibido, se combina). Fatia do próprio PRD, PRD sem dono ou issue avulsa: o script não imprime nada.
+Se a fatia é de um PRD cujo dono (assignee do PRD pai) é outro login, o script imprime uma linha, `fatia do PRD de @fulano; combine antes`: repasse o aviso ao usuário e **siga para o claim** (ADR 0068: pegar fatia de PRD alheio não é proibido, se combina). Fatia do próprio PRD, PRD sem dono ou issue avulsa: o script não imprime nada.
 
 ### 5. Claim atômico (o "lock")
 ```bash
@@ -90,7 +90,7 @@ Abra o Claude Code dentro de `../hospital-issue-<N>`. Veja `docs/agents/issue-tr
 
 ## Fechar o loop
 
-Terminado o TDD (testes verdes), chame a Skill tool com `ship`: abre o PR com `Closes #N`, roda os gates até o PR verde (gate reprovado chama o `hr-corretor`) e roda o rabo (`python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>`), que mergeia e faz o deploy (ADRs 0061 e 0063). Conflito no rabo chama o `hr-corretor` com a `/resolver-conflitos` e conta tentativa; a terceira falha manda a issue para `ready-for-human` (`/ship` Passo 10). O humano só é chamado por notificação em migration, nessa terceira falha e em rollback. Ao mergear, a issue fecha e a Action de higiene (`.github/workflows/higiene-issues.yml`) remove o `in-progress` sozinha.
+Terminado o TDD (testes verdes), chame a Skill tool com `ship`: abre o PR com `Closes #N`, roda os gates até o PR verde (gate reprovado chama o `hr-corretor`) e roda o rabo (`python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR>`), que mergeia e faz o deploy (ADR 0068). Conflito no rabo chama o `hr-corretor` com a `/resolver-conflitos` e conta tentativa; a terceira falha manda a issue para `ready-for-human` (`/ship` Passo 10). O humano só é chamado por notificação em migration, nessa terceira falha e em rollback. Ao mergear, a issue fecha e a Action de higiene (`.github/workflows/higiene-issues.yml`) remove o `in-progress` sozinha.
 
 Abandonou? Devolva ao pool:
 ```bash

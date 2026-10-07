@@ -1,11 +1,11 @@
 ---
 name: ship
-description: Leva uma mudança até o PR verde (branch, commit, PR, 3 gates) e roda o rabo, o fechar_onda.py, sem parar. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--skip-review]`.
+description: Leva uma mudança até o PR verde (branch, commit, PR, gates da ADR 0068) e roda o rabo, o fechar_onda.py, sem parar. Sintaxe `/ship "<descrição>" [--issue N] [--type ...] [--skip-review]`.
 ---
 
 # ship
 
-Do código ao PR verde e, com os gates verdes, o rabo (`fechar_onda.py`), sem esperar mensagem (ADR 0063). Merge, versão, `APP_VERSION`, build, health e registro são só do rabo (ADR 0061); o `/ship` nunca faz nenhum deles. Config em `docs/spec/deploy/project.json`.
+Do código ao PR verde e, com os gates verdes, o rabo (`fechar_onda.py`), sem esperar mensagem (ADR 0068). Merge, versão, `APP_VERSION`, build, health e registro são só do rabo (ADR 0068); o `/ship` nunca faz nenhum deles. Config em `docs/spec/deploy/project.json`.
 
 ## Sintaxe
 
@@ -23,7 +23,7 @@ Do código ao PR verde e, com os gates verdes, o rabo (`fechar_onda.py`), sem es
 | `--from-diff` | O código já está no working tree: vai direto ao commit. |
 | `--resume` | Retoma pelo estado do git e do PR (tabela no fim). |
 
-**Nunca pare para perguntar** (ADR 0067): dúvida, impasse ou revisor sem veredito é baixa, com uma linha de motivo.
+**Nunca pare para perguntar** (ADR 0068): dúvida, impasse ou revisor sem veredito é baixa, com uma linha de motivo.
 
 ## Passos 1 a 7: branch, código, commit, PR
 
@@ -37,7 +37,7 @@ Do código ao PR verde e, com os gates verdes, o rabo (`fechar_onda.py`), sem es
 
 ## Passo 8: gates
 
-**PR de ferramenta** (nenhum arquivo em `hospital-reunioes/`, ADR 0067): só o CI. Verde, vá ao Passo 9.
+**PR de ferramenta** (nenhum arquivo em `hospital-reunioes/`, ADR 0068): só o CI. Verde, vá ao Passo 9.
 
 **PR do app**, na ordem:
 

@@ -413,7 +413,7 @@ def _mergeados(repo: str, agora: datetime) -> list[dict]:
         for n in pag["data"]["search"]["nodes"]:
             fatias = [l["name"] for ref in n["closingIssuesReferences"]["nodes"] for l in ref["labels"]["nodes"] if l["name"].startswith("fatia:")]
             if not n["closingIssuesReferences"]["nodes"]:
-                continue  # PR de registro de deploy, sem issue
+                continue  # PR de registro de deploy (histórico, não existe mais desde a Action pós-merge), sem issue
             horas = (_quando(n["mergedAt"]) - _quando(n["createdAt"])).total_seconds() / 3600
             saida.append({"horas": horas, "fatias": fatias})
     return saida

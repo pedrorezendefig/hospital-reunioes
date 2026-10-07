@@ -7,7 +7,7 @@ se houver algum, 1 se não houver, 2 em qualquer erro (falha fechada: Python
 abaixo do 3.12, `gh`, `git` ou a varredura que quebra). Globs com prefixo "+" só casam
 quando o PR criou o arquivo (status "added" na API do GitHub).
 
-Além da lista, a varredura (ADR 0064, decisão 4): router de backend tocado pelo
+Além da lista, a varredura (ADR 0068): router de backend tocado pelo
 PR com rota cuja cadeia de Depends não chega a get_current_user, lido no head
 do PR, e arquivo do frontend tocado que é route handler (route.ts) ou server
 action ("use server"). Rota nova com login segue fora.

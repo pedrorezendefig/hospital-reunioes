@@ -44,9 +44,9 @@ Slices may be **HITL** or **AFK**. HITL slices require human interaction (archit
 
 Se nem os lotes conseguem fechar verde sozinhos, mantenha a sequência mas use uma integration branch compartilhada, com todas as issues bloqueando uma issue final de integrate-and-verify: o verde só é prometido lá.
 
-#### Paralelismo real (ADR 0064, decisão 5)
+#### Paralelismo real (ADR 0068)
 
-A `/onda-enxuta` roda juntas todas as fatias desbloqueadas. O único separador de ondas é a dependência, não o arquivo (ADR 0066): o rabo mergeia PR a PR, e conflito tira só aquele PR, que o `hr-corretor` rebaseia. Fatie para que elas andem juntas de verdade:
+A `/onda-enxuta` roda juntas todas as fatias desbloqueadas. O único separador de ondas é a dependência, não o arquivo (ADR 0068): o rabo mergeia PR a PR, e conflito tira só aquele PR, que o `hr-corretor` rebaseia. Fatie para que elas andem juntas de verdade:
 
 - **Arquivo de costura:** o arquivo onde várias funcionalidades se registram (`main.py`, `config.py`, `AdminSidebar.tsx`, `fechar_onda.py` e afins). Fatias que só compartilham o arquivo andam na mesma onda. Só a dependência real separa, e o mesmo ponto é a mesma entrada: as duas fatias editam a mesma rota, o mesmo item de menu ou a mesma função, ou uma usa o que a outra cria. Cada fatia acrescentar a própria linha de `include_router` no `main.py` ou o próprio item no `AdminSidebar.tsx` não é mesmo ponto: as duas rodam juntas, e o rabo PR a PR resolve o conflito de texto. Exemplo: as fatias 1 e 2 criam as rotas `/pops` e `/ouvidoria`, cada uma com o próprio `include_router` no `main.py`, e andam na mesma onda; a fatia 3 muda a rota `/pops` que a 1 cria e anda depois da 1, com o `blocked_by` dela. Quando é mesmo ponto, a de depois ganha o `blocked_by` nativo da de antes (passo 5). Confira o ponto de registro antes de propor a divisão: no Mapa do terreno do PRD (comentário `## Mapa do terreno` de autor `OWNER`, `MEMBER` ou `COLLABORATOR`) ou, sem Mapa, no código (`git grep` do ponto de registro: rota, item de menu, setting).
 - **G sem bloqueio:** fatia G que não bloqueia ninguém vira duas M.
@@ -59,7 +59,7 @@ O PRD traz a seção **"Manual: páginas que nascem ou mudam"**. Quando ela list
 - **Título:** `docs: manual do PRD #<PRD>`.
 - **Labels:** `type:docs` e `area:docs`, além de `ready-for-agent` e do tamanho.
 - **Bloqueada nativamente por todas as fatias de código** do PRD: a página precisa da tela pronta para o print e o vídeo, então ela roda depois, não no mesmo PR (é isto que emenda a regra "mesmo PR" do ADR 0056).
-- **Corpo:** manda rodar `/manual #<PRD>`, cita a seção "Manual" do PRD como a lista do que escrever e lembra que tudo nasce em `draft: true`, porque quem tira o draft é a Action do push da `main` quando a funcionalidade sobe (ADR 0062).
+- **Corpo:** manda rodar `/manual #<PRD>`, cita a seção "Manual" do PRD como a lista do que escrever e lembra que tudo nasce em `draft: true`, porque quem tira o draft é a Action do push da `main` quando a funcionalidade sobe (ADR 0068).
 
 PRD cuja seção "Manual" diz "Nenhuma: este PRD não muda tela" não ganha esta fatia.
 
@@ -96,7 +96,7 @@ Para cada fatia aprovada, publique uma issue com `gh issue create`, usando o tem
 
 **Classifique o tamanho de cada fatia** e aplique o label `fatia:P`, `fatia:M` ou `fatia:G` junto com `ready-for-agent` (uma por fatia; nunca no PRD pai). Critério: **P** = poucas horas, escopo contido, 1 camada dominante; **M** = fatia vertical completa de escopo conhecido (meio período); **G** = dia cheio ou mais (muitas camadas, UI nova ou integração externa). Labels e critério vivem em `docs/agents/triage-labels.md`; o Hospital OS filtra por eles (chips `fatia:` da aba Issues), e a `/onda-enxuta` escolhe por eles o esforço do implementador (`xhigh` na G, `high` na P e na M): classifique pelo escopo, não pela pressa.
 
-**Toda issue abre com o bloco "Para o diretor"** (ADR 0020, decisão 7): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada do revisor não-técnico, que lê as issues direto no GitHub — sem ele, a parte técnica é só ruído pra essa pessoa. Formato fixo, mínimo de palavras, zero jargão:
+**Toda issue abre com o bloco "Para o diretor"** (ADR 0068): um resumo em linguagem simples, no topo do corpo, antes da parte técnica. É a porta de entrada do revisor não-técnico, que lê as issues direto no GitHub; sem ele, a parte técnica é só ruído pra essa pessoa. Formato fixo, mínimo de palavras, zero jargão:
 
 - **O que muda:** uma frase de valor, não-técnica — o que o sistema passa a fazer pelo hospital.
 - **O que você precisa saber:** 2–3 regras simples que deixem o revisor reconhecer a feature funcionando.
@@ -117,7 +117,7 @@ BLOCKER_ID=$(gh api "repos/$REPO/issues/<X>" --jq '.id')
 gh api --method POST "repos/$REPO/issues/$CHILD/dependencies/blocked_by" -F issue_id="$BLOCKER_ID"
 ```
 
-A dependência nativa é a **única** fonte de bloqueio (ADR 0028): a fatia bloqueada nasce com `ready-for-agent` mesmo assim, porque a fila filtra com `-is:blocked` e ela reaparece sozinha quando a bloqueadora fecha. Não escreva "Bloqueada por: #X" no corpo nem use label `blocked`.
+A dependência nativa é a **única** fonte de bloqueio (ADR 0068): a fatia bloqueada nasce com `ready-for-agent` mesmo assim, porque a fila filtra com `-is:blocked` e ela reaparece sozinha quando a bloqueadora fecha. Não escreva "Bloqueada por: #X" no corpo nem use label `blocked`.
 
 Se o endpoint de sub-issues falhar (feature indisponível ou permissão), **não trave**: a seção `Pai: #$PRD` no corpo (abaixo) garante a referência cruzada. Reporte o erro e siga.
 

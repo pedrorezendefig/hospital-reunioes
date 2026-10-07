@@ -61,7 +61,6 @@ CHAVES = ("input_tokens", "cache_creation_input_tokens", "cache_read_input_token
 # fallback por palavra-chave para sessoes antigas (ordem importa).
 PAPEIS = [
     ("revisor-seguranca", r"revisor de seguran[cç]a|security review"),
-    ("auditor-prd", r"auditor|audit(a|e|oria)"),
     ("corretor", r"corretor|corrig[ai]|rebase"),
     ("implementador", r"implement|desenvolvimento|tdd|pr verde"),
     ("mapeador", r"mapa do terreno|mapeador"),

@@ -68,10 +68,10 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 
 | ADR | Status | Título |
 |---|---|---|
-| [0020](0020-ciclo-de-vida-da-issue-status-fiel-e-loop-do-diretor.md) | accepted | Ciclo de vida da issue: status fiel, critérios auto-verificados e loop do diretor |
+| [0020](0020-ciclo-de-vida-da-issue-status-fiel-e-loop-do-diretor.md) | superseded | Ciclo de vida da issue: status fiel, critérios auto-verificados e loop do diretor |
 | [0022](0022-onda-execucao-autonoma-da-fila.md) | superseded | Onda: execução autônoma da fila em ondas com checkpoint por lote e deploy único |
 | [0027](0027-wayfinder-on-ramp-situacional.md) | accepted | Wayfinder: on-ramp situacional para planejamento multi-sessão, sob demanda |
-| [0028](0028-bloqueio-por-dependencia-nativa.md) | accepted | Bloqueio entre issues por dependência nativa do GitHub |
+| [0028](0028-bloqueio-por-dependencia-nativa.md) | superseded | Bloqueio entre issues por dependência nativa do GitHub |
 | [0029](0029-onda-goal-prd-fonte-verdade-github.md) | superseded | Onda escopada em PRD: goal de conclusão, fonte de verdade no GitHub e orquestrador magro |
 | [0035](0035-gates-de-review-da-onda-pertencem-ao-orquestrador.md) | superseded | Gates de review da onda pertencem ao orquestrador |
 | [0061](0061-um-pipeline-dono-por-prd-e-main-protegida.md) | superseded | Um pipeline só, dono por PRD e `main` protegida: a esteira para três sócios em paralelo (emenda 0022, 0035) |
@@ -81,10 +81,10 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0065](0065-bypass-da-main-e-uma-deploy-key-no-job-que-nao-instala-nada.md) | superseded | O bypass da `main` é uma deploy key, usada só no job da Action que não instala nada (emenda 0062) |
 | [0066](0066-ondas-por-dependencia-nao-por-arquivo.md) | superseded | Ondas se separam por dependência, não por arquivo (emenda 0063, 0064) |
 | [0067](0067-ferramenta-sem-revisor-e-revisao-unica-no-app.md) | superseded | PR de ferramenta sem revisor, revisão única no app, agente nunca para para perguntar (emenda 0064) |
-| [0068](0068-o-fluxo-em-uma-pagina.md) | accepted | O fluxo em uma página: de issue a produção, como roda hoje (substitui 0022, 0029, 0035, 0061 a 0067) |
-| [0043](0043-skills-locais-sao-o-kit-do-workflow.md) | accepted | Skills locais são o kit completo do workflow, duplicata com as globais é intencional |
+| [0068](0068-o-fluxo-em-uma-pagina.md) | accepted | O fluxo em uma página: de issue a produção, como roda hoje (substitui 0020, 0022, 0028, 0029, 0035, 0043, 0053, 0061 a 0067) |
+| [0043](0043-skills-locais-sao-o-kit-do-workflow.md) | superseded | Skills locais são o kit completo do workflow, duplicata com as globais é intencional |
 | [0049](0049-wayfinder-instalada-e-lock-com-ref.md) | accepted | A wayfinder entra instalada no clone, e o `skills-lock.json` fixa o commit de origem |
-| [0053](0053-fluxo-exportavel-por-roteiro-versionado.md) | accepted | O fluxo de trabalho é exportável por um roteiro versionado no repositório, não por prompt solto |
+| [0053](0053-fluxo-exportavel-por-roteiro-versionado.md) | superseded | O fluxo de trabalho é exportável por um roteiro versionado no repositório, não por prompt solto |
 
 ## UI e design system
 

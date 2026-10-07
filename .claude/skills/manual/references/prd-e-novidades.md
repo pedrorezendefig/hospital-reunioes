@@ -19,9 +19,10 @@ fatia.
 3. **Prints e vídeo** das páginas novas, pelas receitas de `prints.md` e
    `video-de-tarefa.md`.
 4. **Uma entrada em `novidades.md`** do módulo (formato abaixo).
-5. **Não publique.** A Fatia de manual para no checkpoint de merge, com o
-   caminho do draft do vídeo no comentário do PR. Quem publica é o
-   rabo (`fechar_onda.py`), depois que a funcionalidade sobe.
+5. **Não publique.** A Fatia de manual para no PR verde, fora do rabo, com
+   o caminho do draft do vídeo no corpo do PR; quem viu o vídeo roda o
+   `fechar_onda.py`. Quem publica é o humano, com `/manual publicar`,
+   depois que a funcionalidade sobe.
 
 Página que o PRD apaga (tela que deixou de existir) sai do repositório no mesmo
 PR, junto com a composição do vídeo dela: o conferidor acusa composição órfã.

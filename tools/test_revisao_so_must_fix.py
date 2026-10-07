@@ -1,6 +1,6 @@
-"""O gatilho de segurança por PR: `sensivel.py` e a lista `revisao-sensivel.txt` (ADR 0064).
+"""O gatilho de segurança por PR: `sensivel.py` e a lista `revisao-sensivel.txt` (ADR 0068).
 
-O `hr-revisor-seguranca` só roda em rota sem login ou migration. Estes testes
+A lente de segurança do `hr-revisor` só entra em rota sem login ou migration. Estes testes
 provam que a lista cobre o que a varredura do `sensivel.py` acha hoje e que o
 script falha fechado.
 """

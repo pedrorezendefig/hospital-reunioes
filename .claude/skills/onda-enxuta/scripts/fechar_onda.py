@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""fechar_onda.py: o rabo unico (ADR 0061). Leva um PR avulso ou uma onda da
+"""fechar_onda.py: o rabo unico (ADR 0068). Leva um PR avulso ou uma onda da
 `/onda-enxuta` a producao com um merge por PR na main e UM build.
 
 Uso:
@@ -10,12 +10,12 @@ A ordem dos PRs e a ordem de merge. O script nunca toca na arvore principal
 (ela pode estar suja): todo o trabalho acontece num worktree descartavel de
 caminho curto (`~/wt-<sessao>`, por causa do MAX_PATH do Windows).
 
-A main e protegida por ruleset (issue #910, ADR 0061 decisao 3): PR
+A main e protegida por ruleset (issue #910, ADR 0068): PR
 obrigatorio, CI obrigatorio no head do PR, sem exigir a branch em dia com a
-base (ADR 0064, decisao 2), sem push direto. Por isso o
+base (ADR 0068), sem push direto. Por isso o
 script nunca empurra na main: cada PR do lote entra pela API do GitHub com
 squash (o unico metodo que o repositorio permite), no proprio numero, em ordem,
-como o PR avulso (ADR 0064, decisao 3). A onda e o avulso com mais PRs.
+como o PR avulso (ADR 0068). A onda e o avulso com mais PRs.
 
 Classe do lote, pelos arquivos (issue #965): "app" se algum esta em
 `hospital-reunioes/`, "ferramenta" se nenhum esta. Lote misto e app. Os
@@ -53,7 +53,7 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
   4. PR a PR, na ordem, num worktree descartavel na branch do PR: o head com
      que o PR chegou, sem a origin/main trazida e sem push, mesmo atras da main
      (o merge do PR anterior do lote deixa o seguinte atras; o ruleset nao exige
-     em dia com a base, ADR 0064, decisao 2), so com a conferencia local, sem
+     em dia com a base, ADR 0068), so com a conferencia local, sem
      commit, de que a main entra sem conflito; o CI verde que o head ja tinha e
      merge pela API (squash, conferindo o sha do head). Antes do primeiro
      merge: a imagem no ar de cada app do lote (alvo do rollback; em modo
@@ -89,13 +89,13 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      Com prod de volta e ainda com a trava (issue #999): reabre cada issue do
      lote e mergeia pela API o PR `revert/<chave>` com o revert dos squashes,
      depois do CI dele, cancelando o build que esse merge dispara
-  8. registro sem PR (ADR 0064, decisao 6b): o rabo monta a entrada nova do
-     history.json (todos os deploys, sem teto) e o state.json (ADR 0062,
-     decisao 9), grava os dois num arquivo `~/registro-<chave>-<sha>.json` e
+  8. registro sem PR (ADR 0068): o rabo monta a entrada nova do
+     history.json (todos os deploys, sem teto) e o state.json, grava os
+     dois num arquivo `~/registro-<chave>-<sha>.json` e
      dispara a Action pos-merge na main por workflow_dispatch, com o arquivo
      no input `registro`. Ela commita os dois JSONs na main pela deploy key,
      como github-actions[bot], e no mesmo run tira o draft do Manual dos PRDs
-     do lote e roda o snapshot (ADR 0062, decisao 10). O rabo espera a entrada
+     do lote e roda o snapshot (ADR 0068). O rabo espera a entrada
      aparecer no history.json da main, e nao so o fim do run: um push que
      chega com o disparo na fila do grupo pos-merge o cancela, e o rabo
      dispara de novo. O build que o webhook do Coolify dispara para o commit do
@@ -218,7 +218,7 @@ CHECKS_POLL_S = 15
 CHECKS_TIMEOUT_S = 40 * 60
 HEAD_ATRASADO_S = 120  # o GitHub registra o push no PR em segundos
 REGISTRO_JANELA_S = 90  # o webhook do Coolify dispara em segundos
-POS_MERGE_WORKFLOW = "pos-merge.yml"  # grava o registro na main pela deploy key (ADR 0064, decisao 6b)
+POS_MERGE_WORKFLOW = "pos-merge.yml"  # grava o registro na main pela deploy key (ADR 0068)
 REGISTRO_TIMEOUT_S = 15 * 60  # o run do push do squash na fila do grupo pos-merge, mais o do registro
 REGISTRO_POLL_S = 15
 MIGRACAO_TIMEOUT_S = 24 * 60 * 60  # teto da espera pela migration colada no Studio (issue #969)
@@ -561,8 +561,8 @@ class MergeConflito(Exception):
 
 def entrar_na_branch_do_pr(wt: Path, info: dict) -> str:
     """O worktree vai para a ponta da branch do PR, que e o que entra na main
-    como esta: o ruleset nao exige a branch em dia com a base (ADR 0064, decisao
-    2), e o squash da API junta a main que andou. Se ela andou (inclusive pelo
+    como esta: o ruleset nao exige a branch em dia com a base (ADR 0068), e o
+    squash da API junta a main que andou. Se ela andou (inclusive pelo
     merge do PR anterior do lote), so confere, sem commit nem push, que entra
     sem conflito. Devolve o head."""
     n, branch = info["number"], info["headRefName"]
@@ -615,7 +615,7 @@ def esperar_checks(raiz: Path, pr: int, sha: str) -> None:
     """Espera o CI do head `sha` do PR ficar verde e o GitHub liberar o merge
     (mergeStateStatus CLEAN). Com o ruleset, check obrigatorio pendente deixa o
     PR em BLOCKED; conflito com a main, em DIRTY. Branch atras da base (BEHIND)
-    mergeia: o ruleset nao exige em dia com a base (ADR 0064, decisao 2). Job
+    mergeia: o ruleset nao exige em dia com a base (ADR 0068). Job
     que o GitHub cancelou por falta de runner (incidente do Actions, issue #953)
     e repetido, nao e vermelho de codigo."""
     inicio = time.time()
@@ -677,7 +677,7 @@ def entregar(raiz: Path, wt: Path, branch: str, pr: int | None, titulo: str, cor
 def preparar_pr(raiz: Path, wt: Path, info: dict) -> str:
     """Leva um PR do lote ao ponto de merge sem mexer na branch dele: o head das
     pre-condicoes, sem a main trazida e sem push, e o CI verde que ele ja tinha
-    (ADR 0064, decisao 2). Devolve o head."""
+    (ADR 0068). Devolve o head."""
     run(["git", "fetch", "-q", "origin", "main"], cwd=wt)  # o squash do PR anterior do lote
     head = entrar_na_branch_do_pr(wt, info)
     esperar_checks(raiz, info["number"], head)
@@ -779,8 +779,8 @@ def montar_registro(state: dict, sessao: str, infos: list[dict], versao: str | N
                     duracoes: dict[str, int | None], healths: dict[str, dict], resultado: str,
                     com_app_version: list[str], avulso: bool = False,
                     digests: dict[str, str | None] | None = None) -> dict:
-    """A verdade do deploy que o GitHub nao tem (ADR 0062, decisao 9), como a
-    Action pos-merge a recebe (ADR 0064, decisao 6b): a entrada nova do
+    """A verdade do deploy que o GitHub nao tem (ADR 0068), como a
+    Action pos-merge a recebe (ADR 0068): a entrada nova do
     history.json, que guarda todos os deploys, e o `state` (o state.json da main,
     atualizado). App em modo imagem leva o digest do que foi para o ar
     (`last_deploy_digest`): e o que o rollback confere no GHCR."""
@@ -788,7 +788,7 @@ def montar_registro(state: dict, sessao: str, infos: list[dict], versao: str | N
     prs_txt = " ".join(f"#{i['number']}" for i in infos)
     como = "Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health."
     if avulso:
-        # PR avulso (ADR 0061): o registro nomeia PR e issue, e a palavra onda nao aparece.
+        # PR avulso (ADR 0068): o registro nomeia PR e issue, e a palavra onda nao aparece.
         pr = infos[0]
         subject = f"PR #{pr['number']}, {rotulo_issues(pr)}: {humanizar(pr['title'])}"
         raw_subject = f"chore(deploy): registro do PR avulso (#{pr['number']})"
@@ -862,8 +862,8 @@ def runs_do_registro(raiz: Path) -> list[dict]:
 
 
 def registrar_pela_action(raiz: Path, arquivo: Path, entrada: dict) -> str:
-    """Dispara a Action pos-merge na main com o registro do `arquivo` (ADR 0064,
-    decisao 6b) e espera a `entrada` no history.json da main. Devolve o sha do
+    """Dispara a Action pos-merge na main com o registro do `arquivo` (ADR
+    0068) e espera a `entrada` no history.json da main. Devolve o sha do
     commit do bot. A conclusao do run nao basta: no grupo de concorrencia
     `pos-merge` um push que chega com o disparo na fila o cancela, e o rabo
     dispara de novo. Run que termina de outro jeito sem o registro na main, e o
@@ -1039,7 +1039,7 @@ def cancelar_build_do_registro(servicos_cfg: dict, sha: str) -> list[str]:
 # ------------------------------------------------- imagem no GHCR (#1001)
 
 def em_modo_imagem(service: dict) -> bool:
-    """O app roda a imagem que o CI publicou no GHCR (ADR 0064, decisao 6c): o
+    """O app roda a imagem que o CI publicou no GHCR (ADR 0068): o
     Coolify so puxa e reinicia, sem build e sem webhook."""
     return (service.get("build") or {}).get("build_pack") == "dockerimage"
 
@@ -1446,7 +1446,7 @@ def limpar_worktrees_de_agente(raiz: Path, entregues: dict[str, str] | None = No
 # --------------------------------------------------------------------- main
 
 def resolver_sessao(prs: list[int], sessao: str | None) -> tuple[str, bool]:
-    """Devolve (sessao, avulso). Sem `--sessao`, um PR so e um PR avulso (ADR 0061)
+    """Devolve (sessao, avulso). Sem `--sessao`, um PR so e um PR avulso (ADR 0068)
     e a chave do semaforo e do worktree sai do numero dele."""
     if sessao:
         return sessao, False
@@ -1559,7 +1559,7 @@ def main() -> int:
             print(f"versao: segue v{versao_antiga} (ferramenta)")
         conferir_modo_imagem_no_coolify(servicos_cfg)
 
-        # PR a PR, na ordem (ADR 0064, decisao 3). PR que nao mergeia fica de fora
+        # PR a PR, na ordem (ADR 0068). PR que nao mergeia fica de fora
         # e o lote segue sem ele; os ja mergeados ficam.
         no_ar: dict[str, str | None] = {}
         digests_no_ar: dict[str, str | None] = {}  # em modo imagem, o digest de cada tag de `no_ar`
@@ -1694,7 +1694,7 @@ def main() -> int:
                     f"fix(rollback): reverte {do_lote} (v{versao_nova}, health ruim)",
                     f"<!-- automacao -->\nRevert de {squashes} ({reabertas}), aberto e mergeado pelo "
                     f"`fechar_onda.py` depois do rollback da chave {args.sessao}: o health falhou na v{versao_nova} "
-                    "e a imagem anterior voltou (ADR 0064, decisao 6a). O build deste merge e cancelado, porque a "
+                    "e a imagem anterior voltou (ADR 0068). O build deste merge e cancelado, porque a "
                     "imagem no ar ja e a anterior.\n")
             except Exception as e:  # noqa: BLE001
                 return parar_a_trava(raiz, args.sessao, f"rollback: {como}, APP_VERSION v{versao_antiga} e health "
@@ -1711,8 +1711,8 @@ def main() -> int:
         vm = " (version match)" if versao_nova else ""
         print(f"health: ok{vm}")
 
-        # registro: so depois do health, pela Action pos-merge na main, sem PR (ADR 0064,
-        # decisao 6b). Daqui em diante producao esta certa: falha aqui e codigo 5, nunca o 3.
+        # registro: so depois do health, pela Action pos-merge na main, sem PR (ADR 0068).
+        # Daqui em diante producao esta certa: falha aqui e codigo 5, nunca o 3.
         arquivo_reg = Path.home() / f"registro-{args.sessao}-{sha_main[:8]}.json"
         try:
             run(["git", "fetch", "-q", "origin", "main"], cwd=raiz)

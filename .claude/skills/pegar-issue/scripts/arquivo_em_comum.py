@@ -1,8 +1,8 @@
 """Avisa, sem bloquear, a issue que toca arquivo de outra em andamento, para o `/pegar-issue`.
 
-Nasceu no #970 recusando o claim (ADR 0063). Pela ADR 0066, arquivo em comum
+Nasceu no #970 recusando o claim (ADR 0068). Pela ADR 0068, arquivo em comum
 não separa fatias: o único separador é a dependência, que quem fatia escreve
-como `blocked_by` nativo (ADR 0028), e o conflito de texto se resolve no rabo
+como `blocked_by` nativo (ADR 0068), e o conflito de texto se resolve no rabo
 PR a PR. Por isso o script só imprime um aviso de uma linha com os arquivos que
 coincidem, não grava dependência e não impede o claim.
 
@@ -83,7 +83,7 @@ def main(argv: list[str]) -> int:
         if comuns:
             coincidencias.append(f"#{outra['number']} ({', '.join(comuns)})")
     if coincidencias:
-        print("aviso, sem bloqueio (ADR 0066): arquivo em comum com fatia em andamento: "
+        print("aviso, sem bloqueio (ADR 0068): arquivo em comum com fatia em andamento: "
               + "; ".join(coincidencias))
     return 0
 

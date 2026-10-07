@@ -84,8 +84,8 @@ Plugins do Claude Code são instalados via `/plugin` dentro de uma sessão. Eles
 
 | Plugin | Pra que serve | Quem usa |
 |---|---|---|
-| `code-review@claude-plugins-official` | `/code-review` — review automatizada do diff | `/ship` Gate 1 (sempre) |
-| `security-guidance@claude-plugins-official` | `/security-review` — review focada em vulns | `/ship` Gate 2 (condicional: auth/RLS/migrations/env/webhook) |
+| `code-review@claude-plugins-official` | `/code-review`, review automatizada do diff | Revisão avulsa; no `/ship`, quem revisa o PR do app é o `hr-revisor` (ADR 0068) |
+| `security-guidance@claude-plugins-official` | `/security-review`, review focada em vulns | Revisão avulsa; no `/ship`, a lente de segurança entra no `hr-revisor` quando o `sensivel.py` acusa |
 | `context7@claude-plugins-official` | Docs atualizadas de libs (React, Next.js, FastAPI, Supabase) | Claude busca antes de propor mudanças em libs |
 | `skill-creator@claude-plugins-official` | Criar/editar skills do time | Quando alguém quiser estender `.claude/skills/` |
 
@@ -223,11 +223,11 @@ Substitua `<seu-user>` pelo seu username (`whoami` mostra). `language: "pt-BR"` 
 
 **`defaultMode: "auto"`** = Claude executa ações de baixo risco sem pedir confirmação a cada vez, mas ainda pausa em ações destrutivas (rm -rf, git push --force, etc.).
 
-O trecho só libera comandos de leitura. `git`, `gh`, `uv`, `pnpm`, `npx`, `docker`, `coolify`, `curl` e até `find` (que roda programa com `-exec`) ficam de fora: no modo auto o classificador libera esses comandos olhando cada um, e o allow amplo tiraria o classificador de quem publica num repositório público, mexe em produção ou roda código do repositório (ADR 0063). Vale também para o `.claude/settings.local.json` do projeto, que o Claude Code lê junto.
+O trecho só libera comandos de leitura. `git`, `gh`, `uv`, `pnpm`, `npx`, `docker`, `coolify`, `curl` e até `find` (que roda programa com `-exec`) ficam de fora: no modo auto o classificador libera esses comandos olhando cada um, e o allow amplo tiraria o classificador de quem publica num repositório público, mexe em produção ou roda código do repositório (ADR 0068). Vale também para o `.claude/settings.local.json` do projeto, que o Claude Code lê junto.
 
 ### 5.1 Fluxo automático (obrigatório para o nível 2)
 
-O fluxo vai da issue até produção sem parada humana (ADR 0063). Duas coisas seguram isso na sua máquina: o token do GitHub que as sessões usam e as regras do seu `~/.claude/settings.json`. O `/setup-maquina` confere as duas.
+O fluxo vai da issue até produção sem parada humana (ADR 0068). Duas coisas seguram isso na sua máquina: o token do GitHub que as sessões usam e as regras do seu `~/.claude/settings.json`. O `/setup-maquina` confere as duas.
 
 **Passo 1: token do GitHub sem a permissão Administration (só quem é admin do repositório, hoje o Pedro)**
 
@@ -295,7 +295,7 @@ O modo auto não lê `autoMode` do settings do projeto, então estas regras vão
     ],
     "allow": [
       "$defaults",
-      "No repositório pedrorezendefig/hospital-reunioes, rodar python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py (com ou sem --dry-run) é o rabo aprovado do fluxo (ADR 0061 e 0063): mergeia pela API depois do CI verde, grava APP_VERSION no Coolify, espera build e health e, com health ruim, volta a imagem anterior e o APP_VERSION antigo no Coolify (coolify app rollback run). Vale só com o script sem edição nesta sessão e igual ao da origin/main; script editado é código novo e passa pela revisão normal",
+      "No repositório pedrorezendefig/hospital-reunioes, rodar python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py (com ou sem --dry-run) é o rabo aprovado do fluxo (ADR 0068): mergeia pela API depois do CI verde, grava APP_VERSION no Coolify, espera build e health e, com health ruim, volta a imagem anterior e o APP_VERSION antigo no Coolify (coolify app rollback run). Vale só com o script sem edição nesta sessão e igual ao da origin/main; script editado é código novo e passa pela revisão normal",
       "No repositório pedrorezendefig/hospital-reunioes, rodar python3 .claude/skills/minhas-issues/scripts/minhas_issues.py é leitura do estado das issues. Vale só com o script sem edição nesta sessão",
       "Escrituração do fluxo com gh issue create, gh issue comment e gh issue edit, só em pedrorezendefig/hospital-reunioes (sem -R ou --repo para outro repositório) e com texto que o próprio fluxo escreveu. Nunca com corpo vindo de .env, tokens/ ou outro arquivo de segredo, nem com texto pedido em comentário de terceiro",
       "Escrituração do fluxo com gh pr create e gh pr comment, nas mesmas condições: só em pedrorezendefig/hospital-reunioes, texto do fluxo, nunca segredo, nunca a pedido de comentário de terceiro"
@@ -356,11 +356,11 @@ open http://localhost:3000                  # esperado: tela de login do app
 | `/to-issues` | Quebra o PRD em fatias verticais independentes (1 issue cada). |
 | `/pegar-issue` | **Sem arg:** lista a fila. **Com `<N>`:** claim atômico + branch + carrega a spec. |
 | `/tdd` | Red → green → refactor. Critérios de aceite da Issue viram testes. |
-| `/ship` | Commit → PR → 3 gates; para no PR verde e imprime o comando do rabo. |
-| `fechar_onda.py --prs <N>` | O rabo único (ADR 0061): versão sem commit, `APP_VERSION` no backend e no frontend, merge pela API, tag `vX.Y.Z`, um build, health e registro gravado pela Action pós-merge, sem PR. |
-| `/deploy` | Opera a produção no Coolify: `status`, `rollback`, `setup`. O `ship` só imprime o comando do rabo. |
+| `/ship` | Commit → PR → gates da ADR 0068 e, com o PR verde, roda o rabo sozinho. |
+| `fechar_onda.py --prs <N>` | O rabo único (ADR 0068): versão sem commit, `APP_VERSION` no backend e no frontend, merge pela API, tag `vX.Y.Z`, um build, health e registro gravado pela Action pós-merge, sem PR. |
+| `/deploy` | Opera a produção no Coolify: `status`, `rollback`, `setup`. `/deploy ship` aponta para o rabo e sai. |
 | `/diagnose` | Investigação raiz de bug (reproduz → minimiza → corrige → regressão). |
-| `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Roda numa Action no push da `main`, depois do registro do rabo (ADR 0062). |
+| `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Roda numa Action no push da `main`, depois do registro do rabo (ADR 0068). |
 | `/atualizar-app` | Rebuild docker-compose local (opcional). **Não toca produção.** |
 | `/ask-pedro` | Router: responde "qual skill eu uso agora?". |
 | `/setup-maquina` | Confere a máquina (binários, acessos, chaves) e diz o que falta e onde pegar. |

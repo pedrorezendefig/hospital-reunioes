@@ -56,4 +56,4 @@ Baixas até aqui (ready-for-human): <issue e motivo, ou "nenhuma">.
 Prod hoje: v<antiga>; a onda <N> leva a v<nova>. Última migration: <0XX>, contando a da onda em deploy.
 ```
 
-A fila leva a dependência de cada issue ("#945, depois da #944"), nunca arquivo em comum (ADR 0066). `<P>` é o número de issues da fila desbloqueadas, com teto 3. A passagem é escrita uma vez e não muda: o resultado do rabo vai no comentário da onda.
+A fila leva a dependência de cada issue ("#945, depois da #944"), nunca arquivo em comum (ADR 0068). `<P>` é o número de issues da fila desbloqueadas, com teto 3. A passagem é escrita uma vez e não muda: o resultado do rabo vai no comentário da onda.
