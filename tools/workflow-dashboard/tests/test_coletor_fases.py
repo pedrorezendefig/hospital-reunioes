@@ -295,15 +295,30 @@ def test_git_log_falhando_deixa_a_classe_desconhecida(monkeypatch):
 
 # ---------- resumo funcional do PR (o hover do quadro) ----------
 
-CORPO_NOVO = """## 💬 Resumo funcional
+CORPO_NOVO = """## 💬 Valor entregue
 
-<!-- duas frases para quem não é dev -->
-**O que é:** a Ata sai em PDF com um clique.
-**Valor:** o secretário não precisa mais copiar para o Word.
+<!-- linguagem simples -->
+**Antes:** o secretário copiava a Ata para o Word para mandar por email.
+**Depois:** a Ata sai em PDF com um clique.
 
 ## 🎯 Contexto
 
 Pedido da diretoria.
+
+## 🔎 Evidência
+
+- **Antes:** teste vermelho
+- **Depois:** teste verde
+"""
+
+CORPO_RESUMO_FUNCIONAL = """## 💬 Resumo funcional
+
+**O que é:** a Ata sai em PDF.
+**Valor:** sem copiar para o Word.
+
+## 🎯 Contexto
+
+Outro texto.
 """
 
 CORPO_ANTIGO = """<!-- template -->
@@ -317,25 +332,33 @@ Por quê: o resto do texto longo.
 """
 
 
-def test_resumo_funcional_le_o_que_e_e_valor_da_secao():
+def test_valor_entregue_le_antes_e_depois_da_secao_e_nao_da_evidencia():
     assert collect.resumo_funcional(CORPO_NOVO) == {
-        "o_que": "a Ata sai em PDF com um clique.",
-        "valor": "o secretário não precisa mais copiar para o Word.",
+        "antes": "o secretário copiava a Ata para o Word para mandar por email.",
+        "depois": "a Ata sai em PDF com um clique.",
         "contexto": None,
+    }
+
+
+def test_secao_resumo_funcional_do_1090_vira_texto_corrido():
+    assert collect.resumo_funcional(CORPO_RESUMO_FUNCIONAL) == {
+        "antes": None,
+        "depois": None,
+        "contexto": "a Ata sai em PDF. sem copiar para o Word.",
     }
 
 
 def test_pr_antigo_sem_a_secao_cai_no_primeiro_paragrafo_do_contexto():
     assert collect.resumo_funcional(CORPO_ANTIGO) == {
-        "o_que": None,
-        "valor": None,
+        "antes": None,
+        "depois": None,
         "contexto": "Decisão registrada neste PR: o quadro ganha uma coluna Entregue.",
     }
 
 
 def test_contexto_longo_e_cortado_e_corpo_vazio_nao_tem_resumo():
     longo = collect.resumo_funcional("## Contexto\n\n" + "palavra " * 80)
-    assert len(longo["contexto"]) <= 241 and longo["contexto"].endswith("…")
+    assert len(longo["contexto"]) <= 161 and longo["contexto"].endswith("…")
     assert collect.resumo_funcional("") is None
     assert collect.resumo_funcional("<!-- só comentário -->") is None
 
@@ -350,7 +373,7 @@ def test_resumo_vem_dos_prs_recentes_numa_chamada_so(monkeypatch):
     monkeypatch.setattr(collect, "_run", run)
     prs = [{"number": 10}, {"number": 11}, {"number": 3}]
     collect._resumir_prs_recentes(DASH, prs)
-    assert prs[1]["resumo"]["o_que"] == "a Ata sai em PDF com um clique."
+    assert prs[1]["resumo"]["depois"] == "a Ata sai em PDF com um clique."
     assert prs[0]["resumo"] is None and "resumo" not in prs[2]
     assert chamadas == [["gh", "pr", "list", "--state", "all", "--limit", "200", "--json", "number,body"]]
 

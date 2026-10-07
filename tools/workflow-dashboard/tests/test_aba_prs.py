@@ -497,7 +497,7 @@ def test_em_producao_e_compacta_uma_linha_por_pr_com_issue_e_versao(tmp_path):
     html = _app(tmp_path)
     mini = _card(html, 70)
     assert 'class="pr-card pr-mini"' in mini
-    assert 'title="PR 70"' in mini  # o título vai para o title, não para o card
+    assert "title=" not in mini.split(">", 1)[0]  # o título vai para o resumo do hover
     assert _chips(mini) == {"#901": "#issues/901", "v0.163.4": "#producao/v0.163.4"}
     assert "na coluna" not in mini and "feat/fatia" not in mini
     assert 'class="pr-card"' in _card(html, 83) or 'class="pr-card ' in _card(html, 83)
@@ -749,11 +749,12 @@ def test_entregue_agrupa_por_dia_e_mostra_so_o_numero(tmp_path):
     )
     html = _app(tmp_path, dados=dados)
     pilula = _card(html, 95)
-    assert re.fullmatch(r'<article class="pr-card pr-entregue" data-act="pr" data-n="95" title="[^"]*">#95</article>', pilula)
-    assert 'title="chore(os): 95 · fecha #904 · mergeado em 6 out, 04:20"' in pilula
+    assert re.fullmatch(
+        r'<article class="pr-card pr-entregue" data-act="pr" data-n="95">#95'
+        r'<a class="pr-gh" href="https://github.com/x/y/pull/95" target="_blank"[^>]*>↗</a></article>', pilula)
     celula = dict(_blocos(_raias(html)["lucassampaioc1"], "pr-celula"))
     entregue = next(b for tag, b in celula.items() if 'data-col="entregue"' in tag)
-    dias = re.findall(r'<span class="pr-entregue-data">([^<]+)</span>((?:<article[^>]*>#\d+</article>)+)', entregue)
+    dias = re.findall(r'<span class="pr-entregue-data">([^<]+)</span>((?:<article[^>]*>#\d+<a[^>]*>↗</a></article>)+)', entregue)
     assert [(d, re.findall(r">#(\d+)<", ps)) for d, ps in dias] == [("6 out", ["96", "95"]), ("5 out", ["98"])]
 
 
@@ -795,37 +796,35 @@ def _dados_do_pop():
 
 
 @com_node
-def test_hover_resume_o_pr_titulo_issue_pessoas_branch_tempos_e_versao(tmp_path):
-    pop = _app(tmp_path, "popDoPr('70', S.data, { fmtDT, depVer })", dados=_dados_do_pop())
+def test_hover_e_enxuto_valor_entregue_e_uma_linha_de_rodape(tmp_path):
+    dados = _dados_do_pop()
+    pr = next(p for p in dados["github"]["prs"] if p["number"] == 70)
+    pr["resumo"] = {"antes": "copiava a Ata para o Word.", "depois": "a Ata sai em PDF.", "contexto": None}
+    pop = _app(tmp_path, "popDoPr('70', S.data, { fmtDT, depVer })", dados=dados)
     assert "<b>PR #70 · Em produção</b>" in pop
-    assert "feat(atas): exportar PDF" in pop
-    assert "#901 Issue 901" in pop  # a issue que fecha, com o título dela
-    assert "aberto por lucassampaioc1" in pop and "mergeado por pedrorezendefig" in pop
-    assert "feat/fatia-901" in pop
-    assert "aberto 5 out, 22:10" in pop and "mergeado 6 out, 01:30" in pop and "levou 3h20" in pop
-    assert "v0.163.4" in pop
-    assert "type:feature" in pop and "area:atas" in pop
-    assert "<a" not in pop  # o hover só resume; link é do clique
+    assert re.search(
+        r'<span class="fx-k">valor entregue</span><p><em>Antes</em> copiava a Ata para o Word\.</p>'
+        r'<p><em>Depois</em> a Ata sai em PDF\.</p>', pop)
+    assert '<p class="pr-pop-rodape">#901 · no ar na v0.163.4 · 6 out, 01:30</p>' in pop
+    for fora in ("feat/fatia-901", "type:feature", "aberto por", "levou", "Issue 901", "<a"):
+        assert fora not in pop, fora  # enxuto: sem branch, labels, pessoas nem link no hover
 
 
 @com_node
-def test_hover_abre_com_o_resumo_funcional_o_que_e_e_valor(tmp_path):
+def test_pr_antigo_mostra_o_contexto_como_valor_entregue(tmp_path):
     dados = _dados_do_pop()
     pr = next(p for p in dados["github"]["prs"] if p["number"] == 70)
-    pr["resumo"] = {"o_que": "a Ata sai em PDF.", "valor": "sem copiar para o Word.", "contexto": None}
+    pr["resumo"] = {"antes": None, "depois": None, "contexto": "O quadro ganha <b>uma</b> coluna."}
     pop = _app(tmp_path, "popDoPr('70', S.data, { fmtDT, depVer })", dados=dados)
-    assert re.search(r'<p class="pr-pop-tit">[^<]*</p>\s*<span class="fx-k">o que é</span><p>a Ata sai em PDF\.</p>', pop)
-    assert '<span class="fx-k">valor</span><p>sem copiar para o Word.</p>' in pop
+    assert '<span class="fx-k">valor entregue</span><p>O quadro ganha &lt;b&gt;uma&lt;/b&gt; coluna.</p>' in pop
+    assert "<em>Antes</em>" not in pop
 
 
 @com_node
-def test_pr_antigo_mostra_o_contexto_no_lugar_do_resumo(tmp_path):
-    dados = _dados_do_pop()
-    pr = next(p for p in dados["github"]["prs"] if p["number"] == 70)
-    pr["resumo"] = {"o_que": None, "valor": None, "contexto": "O quadro ganha <b>uma</b> coluna."}
-    pop = _app(tmp_path, "popDoPr('70', S.data, { fmtDT, depVer })", dados=dados)
-    assert '<span class="fx-k">contexto</span><p>O quadro ganha &lt;b&gt;uma&lt;/b&gt; coluna.</p>' in pop
-    assert "o que é" not in pop
+def test_sem_resumo_o_titulo_fica_no_lugar(tmp_path):
+    pop = _app(tmp_path, "popDoPr('70', S.data, { fmtDT, depVer })", dados=_dados_do_pop())
+    assert '<p class="pr-pop-tit">feat(atas): exportar PDF</p>' in pop
+    assert "valor entregue" not in pop
 
 
 @com_node
@@ -835,15 +834,14 @@ def test_hover_do_entregue_diz_que_o_merge_e_a_entrega(tmp_path):
     dados["fases"]["prs"]["95"] = _fase_pr("entregue", 0, {"desde": "2026-10-06T04:20:00Z"})
     pop = _app(tmp_path, "popDoPr('95', S.data, { fmtDT, depVer })", dados=dados)
     assert "<b>PR #95 · Entregue</b>" in pop
-    assert "ferramenta: o merge é a entrega, sem build nem versão" in pop
-    assert "sem issue" in pop
+    assert '<p class="pr-pop-rodape">sem issue · ferramenta, sem versão · 6 out, 04:20</p>' in pop
 
 
 @com_node
 def test_hover_do_aberto_mostra_dias_na_coluna_e_conflito(tmp_path):
     pop = _app(tmp_path, "popDoPr('81', S.data, { fmtDT, depVer })")
     assert "<b>PR #81 · CI vermelho</b>" in pop
-    assert "5 dias na coluna" in pop and "conflito com a main" in pop
+    assert "5 dias na coluna · conflito com a main" in pop
 
 
 @com_node

@@ -117,18 +117,16 @@ function miniHtml({ pr, fase }, ctx) {
     versao ? chip('producao', versao, versao, ' chip-versao') : '',
     pr.merged_at ? `<span class="pr-quando" title="mergeado em ${esc(ctx.fmtDT(pr.merged_at))}">${esc(ctx.fmtDT(pr.merged_at))}</span>` : '',
   ].join('');
-  return `<article class="pr-card pr-mini" data-act="pr" data-n="${pr.number}" title="${esc(pr.title)}"${destaque(ctx, pr.number)}>
+  return `<article class="pr-card pr-mini" data-act="pr" data-n="${pr.number}"${destaque(ctx, pr.number)}>
     <span class="pr-num">PR #${pr.number}</span>${chips}${ghLink(ctx, pr.number)}
   </article>`;
 }
 
 /* Entregue acumula tudo que é ferramenta, então é o mais compacto do
-   quadro: os PRs agrupados pelo dia do merge, só o número, lado a lado;
-   título, issues e hora ficam no title */
+   quadro: os PRs agrupados pelo dia do merge, o número e o ↗ do GitHub,
+   lado a lado; o resto fica no resumo do hover */
 function entregueHtml({ pr }, ctx) {
-  const issues = pr.closes.map(n => ` #${n}`).join('');
-  const title = `${pr.title}${issues ? ` · fecha${issues}` : ''}${pr.merged_at ? ` · mergeado em ${ctx.fmtDT(pr.merged_at)}` : ''}`;
-  return `<article class="pr-card pr-entregue" data-act="pr" data-n="${pr.number}" title="${esc(title)}"${destaque(ctx, pr.number)}>#${pr.number}</article>`;
+  return `<article class="pr-card pr-entregue" data-act="pr" data-n="${pr.number}"${destaque(ctx, pr.number)}>#${pr.number}${ghLink(ctx, pr.number)}</article>`;
 }
 
 function entreguesHtml(cards, ctx) {
@@ -164,47 +162,28 @@ function cardHtml(c, ctx) {
 
 const NOME_DA_FASE = Object.fromEntries([...COLUNAS, ['fechado_sem_merge', 'Fechado sem merge']]);
 
-/* quanto o PR levou da abertura ao merge: "3h20", "2d 4h", "45min" */
-function duracao(de, ate) {
-  const min = Math.round((new Date(ate) - new Date(de)) / 60000);
-  if (!(min >= 0)) return '';
-  if (min < 60) return `${min}min`;
-  const h = Math.floor(min / 60);
-  if (h < 24) return `${h}h${String(min % 60).padStart(2, '0')}`;
-  return `${Math.floor(h / 24)}d ${h % 24}h`;
-}
-
-/* conteúdo do resumo (só span, p, b e a: o seletor dos testes conta com
-   nenhum div dentro). fixo = o clicado, com o GitHub e as issues como link */
+/* conteúdo do resumo (só span, p, b, em e a: o seletor dos testes conta
+   com nenhum div dentro). Enxuto: o valor entregue (antes e depois, da
+   seção do template do PR; PR antigo mostra o começo do Contexto) e uma
+   linha de rodapé com issue, situação e data. fixo = o clicado, com links */
 function resumoDoPr(pr, fase, ctx, fixo) {
   const issues = pr.closes.length
-    ? pr.closes.map(n => {
-      const t = `#${n}${(ctx.issues[n] || {}).title ? ` ${ctx.issues[n].title}` : ''}`;
-      return fixo ? `<a href="${esc(montarHash({ aba: 'issues', item: String(n) }))}">${esc(t)}</a>` : esc(t);
-    }).join('<br>')
+    ? pr.closes.map(n => (fixo ? `<a href="${esc(montarHash({ aba: 'issues', item: String(n) }))}">#${n}</a>` : `#${n}`)).join(' ')
     : 'sem issue';
-  const pessoas = [pr.author && `aberto por ${pr.author}`, pr.mergeado_por && `mergeado por ${pr.mergeado_por}`].filter(Boolean);
-  const tempos = [
-    pr.created_at && `aberto ${ctx.fmtDT(pr.created_at)}`,
-    pr.merged_at && `mergeado ${ctx.fmtDT(pr.merged_at)}`,
-    pr.created_at && pr.merged_at && `levou ${duracao(pr.created_at, pr.merged_at)}`,
-  ].filter(Boolean);
-  const situacao = fase.fase === ENTREGUE ? 'ferramenta: o merge é a entrega, sem build nem versão'
-    : fase.fase === FIM ? (fase.versao ? `no ar na ${ctx.depVer(fase.versao)}` : 'no ar, versão desconhecida')
-      : fase.fase === 'fechado_sem_merge' ? `fechado ${ctx.fmtDT(fase.desde)}`
+  const situacao = fase.fase === ENTREGUE ? 'ferramenta, sem versão'
+    : fase.fase === FIM ? (fase.versao ? `no ar na ${ctx.depVer(fase.versao)}` : 'no ar')
+      : fase.fase === 'fechado_sem_merge' ? 'fechado sem merge'
         : [diasTxt(fase.dias_na_coluna), fase.conflito ? 'conflito com a main' : ''].filter(Boolean).join(' · ');
-  const linha = (rot, txt) => (txt ? `<span class="fx-k">${rot}</span><p>${txt}</p>` : '');
-  /* o resumo funcional (seção do template do PR) vem primeiro: é o que o
-     funcional lê; PR antigo, sem ele, mostra o começo do Contexto */
+  const quando = pr.merged_at || (fase.fase === 'fechado_sem_merge' ? fase.desde : null);
+  const rodape = [issues, esc(situacao), quando ? esc(ctx.fmtDT(quando)) : ''].filter(Boolean).join(' · ');
   const r = pr.resumo || {};
-  const resumo = linha('o que é', esc(r.o_que || '')) + linha('valor', esc(r.valor || ''))
-    + (r.o_que || r.valor ? '' : linha('contexto', esc(r.contexto || '')));
+  const valor = r.antes || r.depois
+    ? `${r.antes ? `<p><em>Antes</em> ${esc(r.antes)}</p>` : ''}${r.depois ? `<p><em>Depois</em> ${esc(r.depois)}</p>` : ''}`
+    : r.contexto ? `<p>${esc(r.contexto)}</p>` : '';
   return `<b>PR #${pr.number} · ${esc(NOME_DA_FASE[fase.fase] || fase.fase)}</b>
-    <p class="pr-pop-tit">${esc(pr.title)}</p>
-    ${resumo}${linha('fecha', issues)}${linha('situação', esc(situacao))}${linha('quem', esc(pessoas.join(' · ')))}
-    ${linha('quando', esc(tempos.join(' · ')))}${linha('branch', esc(pr.head_ref || ''))}
-    ${linha('labels', esc((pr.labels || []).join(' · ')))}
-    ${fixo ? `<a class="pr-pop-gh" href="${esc(ctx.data.repo_url)}/pull/${esc(pr.number)}" target="_blank" rel="noopener">abrir no GitHub ↗</a>` : ''}`;
+    ${valor ? `<span class="fx-k">valor entregue</span>${valor}` : `<p class="pr-pop-tit">${esc(pr.title)}</p>`}
+    <p class="pr-pop-rodape">${rodape}</p>
+    ${fixo ? `<p class="pr-pop-tit">${esc(pr.title)}</p><a class="pr-pop-gh" href="${esc(ctx.data.repo_url)}/pull/${esc(pr.number)}" target="_blank" rel="noopener">abrir no GitHub ↗</a>` : ''}`;
 }
 
 /* o resumo de um PR do payload, sem links (o app.js chama no hover) */
