@@ -18,7 +18,7 @@ from app.limiter import limiter
 from app.services import ouvidoria_acuse
 from app.services.ouvidoria_taxonomia import SETOR_PENDENTE, nasce_sigilosa
 from app.utils.ana_resposta import filtrar_por_termo, montar_resposta
-from app.utils.text_sanitizer import sanitizar_travessao
+from app.utils.text_sanitizer import sanitizar_travessao, texto_ou_nulo
 
 router = APIRouter(prefix="/ana", tags=["ana"], dependencies=[Depends(require_ana_api_key)])
 
@@ -220,11 +220,12 @@ class RegistroProtocolo(BaseModel):
     def opcional_vazio_e_ausencia(cls, valor: str | None) -> str | None:
         """A mesma falha silenciosa alcança os campos novos: vazio, espaço em
         branco ou travessão sozinho é ausência, não conteúdo. Gravar o vazio
-        faria o Dossiê parecer preenchido para o ouvidor."""
-        if valor is None:
-            return None
-        valor = sanitizar_travessao(valor).strip()
-        return valor if re.search(r"\w", valor) else None
+        faria o Dossiê parecer preenchido para o ouvidor.
+
+        A régua é a da casa, a mesma do canal público e do registro manual
+        (issue #800): as três portas gravam as colunas de onde sai o
+        `dados_incompletos`, e não podem discordar sobre o que é contato."""
+        return texto_ou_nulo(valor)
 
     @field_validator("manifestante_vinculo", "gravidade_sugerida", "confianca_sugestao", mode="before")
     @classmethod
