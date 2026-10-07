@@ -122,7 +122,7 @@ class TestAContagemMudaNaIssueVinculada:
         assert _anexar(client, nome="dois.png").status_code == 201
 
         assert gh.issues[501]["body"] == (
-            '## Para o diretor\n\nO selo passa a aparecer no card.\n\n'
+            "## Para o diretor\n\nO selo passa a aparecer no card.\n\n"
             'Anexos: 2 imagens na Demanda\n\n<!-- demanda-vitta id="d-1" -->'
         )
 
@@ -324,3 +324,60 @@ class TestComentarioEspelhadoDaRespostaComImagem:
 
         assert corrigida.status_code == 200
         assert gh.comentarios_editados[0]["corpo"].endswith("Segue o print.\n\n(1 imagem na Demanda)")
+
+
+# ─── 4. Nada do anexo sai para o repositorio publico ─────────────────────────
+
+
+class TestNenhumaUrlNemBinarioSaiParaAIssue:
+    """O detector: tudo o que o app escreve no GitHub (corpo da issue nova, corpo
+    reescrito pelo vincular e pela contagem, comentario espelhado e a correcao
+    dele) e varrido atras de qualquer pedaco da URL assinada, do caminho no
+    bucket, do nome do arquivo e dos bytes da imagem."""
+
+    NOME = "prontuario do paciente.png"
+
+    def _vazamentos(self, texto: str, sb) -> list[str]:
+        caminhos = [linha["storage_path"] for linha in _anexos(sb)]
+        assinadas = [a["path"] for a in sb.storage.assinaturas]
+        suspeitos = [
+            self.NOME,
+            "prontuario",
+            BUCKET,
+            "storage.local",
+            "token=",
+            "\x89PNG",
+            "iVBORw0KGgo",  # o PNG em base64
+            *caminhos,
+            *assinadas,
+        ]
+        return [pedaco for pedaco in suspeitos if pedaco and pedaco in texto]
+
+    def test_corpo_e_comentario_levam_so_a_contagem(self, monkeypatch):
+        gh = _GithubFalso({501: _issue(501)})
+        client, sb, _ = _cenario(demandas=[_demanda("d-1"), _demanda("d-2")], github=gh, monkeypatch=monkeypatch)
+        _anexar(client, nome=self.NOME)
+        _anexar(client, demanda_id="d-2", nome=self.NOME)
+        # A lista do card e o fio assinam URL: se algo delas vazasse, vazaria daqui.
+        assert client.get(f"{BASE}/demandas/d-1/anexos").json()[0]["url"]
+        assert client.post(LEVAR).status_code == 200
+        assert client.post(f"{BASE}/demandas/d-2/vincular", json={"numero": 501}).status_code == 200
+        anexo = _anexar(client, nome=self.NOME).json()
+        linha_id = _responder(client, "Segue o print.", anexo_id=anexo["id"]).json()["id"]
+        assert client.get(f"{BASE}/demandas/d-1/conversa").json()
+        sb.tabelas["tecnologia_conversas"][-1]["criado_em"] = datetime.now(UTC).isoformat()
+        assert client.patch(f"{BASE}/demandas/d-1/conversa/{linha_id}", json={"texto": "Segue."}).status_code == 200
+
+        publicados = (
+            [c["corpo"] for c in gh.criadas]
+            + [corpo for _, corpo in gh.corpos_escritos]
+            + [c["corpo"] for c in gh.comentarios_criados]
+            + [c["corpo"] for c in gh.comentarios_editados]
+        )
+
+        assert len(publicados) >= 5
+        assert sb.storage.assinaturas, "nada foi assinado: a varredura procuraria URL que nunca existiu"
+        assert [self._vazamentos(texto, sb) for texto in publicados] == [[] for _ in publicados]
+        assert "Anexos: 2 imagens na Demanda" in gh.issues[900]["body"]
+        assert "Anexos: 1 imagem na Demanda" in gh.issues[501]["body"]
+        assert gh.comentarios_criados[0]["corpo"].endswith("(1 imagem na Demanda)")

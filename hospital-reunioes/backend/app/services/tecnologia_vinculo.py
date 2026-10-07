@@ -471,7 +471,7 @@ _FRASE_DOS_ANEXOS_RE = re.compile(r"^Anexos: \d+ image(?:m|ns) na Demanda$", re.
 
 
 def frase_dos_anexos(quantos: int) -> str | None:
-    """"Anexos: N imagens na Demanda", ou `None` quando nao ha imagem guardada."""
+    """A frase "Anexos: N imagens na Demanda", ou `None` sem imagem guardada."""
     if quantos <= 0:
         return None
     return f"Anexos: {quantos} {'imagem' if quantos == 1 else 'imagens'} na Demanda"
