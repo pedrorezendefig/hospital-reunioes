@@ -14,6 +14,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
+import { IMAGEM_FORA_DA_LISTA } from "./assistente";
 import { FormularioNovaDemanda } from "./FormularioNovaDemanda";
 import { Demanda, ProdutoDaEscolha } from "./demandas";
 
@@ -37,6 +38,8 @@ function montar(
     avisoPorEmail?: string;
     /** 201 com um corpo que o `json()` não lê, ou que lê e não serve. */
     corpoDoCriar?: "ilegivel" | unknown;
+    /** A recusa do servidor para uma imagem, pelo nome do arquivo. */
+    recusaDaImagem?: Record<string, { status: number; detail: string }>;
   } = {},
 ) {
   chamadas = [];
@@ -45,11 +48,25 @@ function montar(
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
-      chamadas.push({
-        url,
-        metodo: init?.method ?? "GET",
-        corpo: init?.body ? JSON.parse(String(init.body)) : undefined,
-      });
+      const corpo =
+        init?.body instanceof FormData ? init.body : init?.body ? JSON.parse(String(init.body)) : undefined;
+      chamadas.push({ url, metodo: init?.method ?? "GET", corpo });
+      if (url.endsWith("/anexos")) {
+        const arquivo = (corpo as FormData).get("imagem") as File;
+        const recusa = opcoes.recusaDaImagem?.[arquivo.name];
+        if (recusa) {
+          return {
+            ok: false,
+            status: recusa.status,
+            json: async () => ({ detail: recusa.detail }),
+          } as unknown as Response;
+        }
+        return {
+          ok: true,
+          status: 201,
+          json: async () => ({ id: `a-${arquivo.name}`, nome: arquivo.name }),
+        } as unknown as Response;
+      }
       if (opcoes.recusa) {
         return {
           ok: false,
@@ -234,5 +251,128 @@ describe("Abrir uma Demanda", () => {
 
     await waitFor(() => expect(criadas).toHaveLength(1));
     expect(criadas[0].aviso).toContain("nao saiu");
+  });
+});
+
+describe("Imagens na criação da Demanda (issue #1061)", () => {
+  function imagem(nome: string, tamanho = 16): File {
+    return new File([new Uint8Array(tamanho)], nome, { type: "image/png" });
+  }
+
+  function escolher(...arquivos: File[]) {
+    fireEvent.change(screen.getByLabelText("Anexar imagens"), { target: { files: arquivos } });
+  }
+
+  function envios(): Chamada[] {
+    return escritas().filter((c) => c.url.endsWith("/anexos"));
+  }
+
+  function nomesEnviados(): string[] {
+    return envios().map((c) => ((c.corpo as FormData).get("imagem") as File).name);
+  }
+
+  it("cada imagem escolhida sobe para a Demanda criada, depois da criação", async () => {
+    montar();
+    preencher();
+    escolher(imagem("tela.png"), imagem("erro.jpg"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
+
+    await waitFor(() => expect(criadas).toHaveLength(1));
+    // A Demanda primeiro: a imagem precisa de um card para morar.
+    expect(escritas()[0].url).toBe("/api/admin/tecnologia/demandas");
+    expect(envios().map((c) => c.url)).toEqual([
+      "/api/admin/tecnologia/demandas/d-nova/anexos",
+      "/api/admin/tecnologia/demandas/d-nova/anexos",
+    ]);
+    expect(nomesEnviados()).toEqual(["tela.png", "erro.jpg"]);
+    expect(criadas[0].aviso).toBeNull();
+  });
+
+  it("sem imagem escolhida, só a Demanda é enviada", async () => {
+    montar();
+    preencher();
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
+
+    await waitFor(() => expect(criadas).toHaveLength(1));
+    expect(envios()).toHaveLength(0);
+  });
+
+  it("mostra as escolhidas e deixa tirar uma antes de criar", async () => {
+    montar();
+    preencher();
+    escolher(imagem("fica.png"), imagem("sai.png"));
+
+    expect(screen.getByText("fica.png")).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Tirar sai.png" }));
+    expect(screen.queryByText("sai.png")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
+
+    await waitFor(() => expect(criadas).toHaveLength(1));
+    expect(nomesEnviados()).toEqual(["fica.png"]);
+  });
+
+  it("até dez: a décima primeira fica de fora, com aviso", async () => {
+    montar();
+    preencher();
+    escolher(...Array.from({ length: 11 }, (_, i) => imagem(`tela-${i + 1}.png`)));
+
+    expect(screen.getByRole("status").textContent).toContain("10");
+    expect(screen.queryByText("tela-11.png")).toBeNull();
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
+
+    await waitFor(() => expect(criadas).toHaveLength(1));
+    expect(nomesEnviados()).toHaveLength(10);
+    expect(nomesEnviados()).not.toContain("tela-11.png");
+  });
+
+  it("formato fora da lista é recusado na escolha, com a frase do Assistente", () => {
+    montar();
+    escolher(imagem("relatorio.pdf"));
+
+    expect(screen.getByRole("status").textContent).toContain(IMAGEM_FORA_DA_LISTA);
+    expect(screen.queryByText("relatorio.pdf")).toBeNull();
+  });
+
+  it("imagem acima de 5 MB é recusada na escolha", () => {
+    montar();
+    escolher(imagem("enorme.png", 5 * 1024 * 1024 + 1));
+
+    expect(screen.getByRole("status").textContent).toContain("5 MB");
+    expect(screen.queryByText("enorme.png")).toBeNull();
+  });
+
+  it("a imagem que o servidor recusou vira aviso junto da Demanda criada", async () => {
+    const motivo = "O print passou do limite de 5 MB. Anexe uma imagem menor, ou escreva o que aparece na tela.";
+    montar({ recusaDaImagem: { "grande.png": { status: 413, detail: motivo } } });
+    preencher();
+    escolher(imagem("boa.png"), imagem("grande.png"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
+
+    await waitFor(() => expect(criadas).toHaveLength(1));
+    // A boa entrou; a recusada não some calada: quem criou precisa saber.
+    expect(nomesEnviados()).toEqual(["boa.png", "grande.png"]);
+    expect(criadas[0].aviso).toContain("grande.png");
+    expect(criadas[0].aviso).toContain(motivo);
+    expect(criadas[0].aviso).not.toContain("boa.png");
+  });
+
+  it("o aviso de e-mail e o da imagem chegam juntos", async () => {
+    montar({
+      avisoPorEmail: "A Demanda foi criada, mas o e-mail de atribuicao nao saiu.",
+      recusaDaImagem: { "grande.png": { status: 413, detail: "grande demais" } },
+    });
+    preencher();
+    escolher(imagem("grande.png"));
+
+    fireEvent.click(screen.getByRole("button", { name: "Abrir Demanda" }));
+
+    await waitFor(() => expect(criadas).toHaveLength(1));
+    expect(criadas[0].aviso).toContain("nao saiu");
+    expect(criadas[0].aviso).toContain("grande.png");
   });
 });
