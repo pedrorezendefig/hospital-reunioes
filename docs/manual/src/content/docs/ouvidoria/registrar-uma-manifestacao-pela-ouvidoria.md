@@ -1,7 +1,7 @@
 ---
 title: Registrar uma manifestação pela Ouvidoria
 description: Como lançar no sistema o caso que chegou por telefone, balcão, WhatsApp, e-mail ou avaliação na internet.
-prd: [317, 720]
+prd: [317, 659, 720]
 draft: false
 papel: [Ouvidoria]
 video: cap-1
@@ -37,7 +37,8 @@ mensagem ou avaliou o hospital na internet.
 5. Cole em **Relato integral** o que a pessoa contou, inteiro e sem correção, e
    preencha **Quem manifestou**, **Contato** e **Vínculo**. Do Google, do
    Reclame Aqui ou do Instagram, o endereço da avaliação ou o @ vai no
-   **Contato**: não há campo próprio para ele.
+   **Contato**: não há campo próprio para ele. Quem fala por outra pessoa?
+   Preencha **Nome do paciente** e **Referência do atendimento**.
 6. Junte os **Anexos** e clique em **Registrar manifestação**. O protocolo
    aparece na tela para você informar a quem falou.
 
