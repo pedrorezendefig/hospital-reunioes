@@ -19,6 +19,8 @@ import sys
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+from slowapi import _rate_limit_exceeded_handler
+from slowapi.errors import RateLimitExceeded
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
@@ -27,6 +29,7 @@ from test_tecnologia_vinculo import _SupabaseMock  # noqa: E402
 
 from app.config import settings  # noqa: E402
 from app.dependencies import get_supabase_client  # noqa: E402
+from app.limiter import limiter  # noqa: E402
 from app.routers import tecnologia_automacao  # noqa: E402
 
 CHAVE = "chave-de-automacao-do-teste-1063"
@@ -54,6 +57,8 @@ def _anexo(ordem: int, nome: str, *, demanda: str = DEMANDA, apagado: bool = Fal
 
 def _cliente(anexos: list[dict]) -> TestClient:
     app = FastAPI()
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
     app.include_router(tecnologia_automacao.router, prefix="/api")
     sb = _SupabaseMock({"tecnologia_anexos": [dict(a) for a in anexos]})
     sb.storage = _StorageFake()
@@ -62,6 +67,14 @@ def _cliente(anexos: list[dict]) -> TestClient:
             sb.storage.arquivos[f"{BUCKET}/{anexo['storage_path']}"] = b"png"
     app.dependency_overrides[get_supabase_client] = lambda: sb
     return TestClient(app)
+
+
+@pytest.fixture(autouse=True)
+def _zera_o_limitador():
+    """O limitador guarda a contagem em memoria entre testes e arquivos."""
+    limiter._storage.reset()
+    yield
+    limiter._storage.reset()
 
 
 @pytest.fixture
@@ -148,6 +161,31 @@ class TestOQueALista:
 
         assert resposta.status_code == 200
         assert resposta.json() == {"anexos": []}
+
+
+class TestOTeto:
+    """A rota fica aberta na internet sem login (o gate e a chave), entao tem
+    teto por endereco, no molde da API da Ana: 60 por minuto."""
+
+    def test_o_61o_pedido_no_mesmo_minuto_e_429_mesmo_com_a_chave_certa(self, chave_configurada):
+        """O teto conta antes da chave: 60 tentativas de chave errada esgotam o
+        minuto, e nem a chave certa fura no 61o pedido. Sem isso, adivinhar a
+        chave nao tem freio."""
+        cliente = _cliente([_anexo(1, "tela do erro.png")])
+
+        tentativas = [cliente.get(ROTA, headers={"X-API-Key": "chave-errada"}) for _ in range(60)]
+        assert [r.status_code for r in tentativas] == [401] * 60
+
+        passou_do_teto = cliente.get(ROTA, headers={"X-API-Key": CHAVE})
+
+        assert passou_do_teto.status_code == 429
+
+    def test_quem_desenvolve_busca_os_prints_60_vezes_no_minuto_sem_bater_no_teto(self, chave_configurada):
+        cliente = _cliente([_anexo(1, "tela do erro.png")])
+
+        respostas = [cliente.get(ROTA, headers={"X-API-Key": CHAVE}) for _ in range(60)]
+
+        assert [r.status_code for r in respostas] == [200] * 60
 
 
 def test_a_rota_esta_montada_no_app():

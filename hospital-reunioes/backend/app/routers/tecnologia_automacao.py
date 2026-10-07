@@ -11,15 +11,27 @@ Autenticação por chave de serviço própria (`X-API-Key` contra
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Request
 
 from app.dependencies import get_supabase_client, require_tecnologia_automacao_api_key
+from app.limiter import limiter
 from app.services import tecnologia_anexos
+
+
+@limiter.limit("60/minute")
+def _teto_por_endereco(request: Request) -> None:
+    """60 pedidos por minuto por endereço, no molde da API da Ana.
+
+    Vem como dependência antes da chave, e não no endpoint: o decorador no
+    endpoint só conta depois que as dependências passam, e aí a tentativa de
+    chave errada (401) não gastaria o teto.
+    """
+
 
 router = APIRouter(
     prefix="/automacao/tecnologia",
     tags=["automacao"],
-    dependencies=[Depends(require_tecnologia_automacao_api_key)],
+    dependencies=[Depends(_teto_por_endereco), Depends(require_tecnologia_automacao_api_key)],
 )
 
 
