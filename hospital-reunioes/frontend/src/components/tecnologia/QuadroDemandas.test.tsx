@@ -375,8 +375,13 @@ describe("O card fechado", () => {
 
     await screen.findByText("Urgente");
     expect(within(cardDe("Urgente")).getByText("Alta")).toBeTruthy();
-    expect(screen.queryByText("Normal")).toBeNull();
-    expect(screen.queryByText("Baixa")).toBeNull();
+    // Card a card, e com os três rótulos: procurar só "Normal" deixaria passar
+    // o card Normal com um chip escrito "Alta".
+    for (const titulo of ["De sempre", "Quando der"]) {
+      for (const rotulo of ["Alta", "Normal", "Baixa"]) {
+        expect(within(cardDe(titulo)).queryByText(rotulo)).toBeNull();
+      }
+    }
   });
 
   it("a idade só aparece a partir de 14 dias, e então em vermelho", async () => {
