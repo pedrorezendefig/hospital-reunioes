@@ -2,6 +2,51 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-07T16:33:35-03:00",
+      "sha": "45b55d020fd071b02b2b5203e9aac6e4a436a9f5",
+      "app_version": "0.170.1",
+      "subject": "PR #1102, issue #1066: Kit e manual da aba contam Quadro, Painel, anexos e Em produção",
+      "raw_subject": "chore(deploy): registro do PR avulso (#1102)",
+      "scope": [
+        "backend"
+      ],
+      "prds": [
+        1056
+      ],
+      "result": "healthy",
+      "duration_seconds": 70,
+      "services_touched": [
+        "backend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "PR avulso: PR #1102, issue #1066. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 3,
+        "build_s": {
+          "backend": 39
+        },
+        "health_s": 10
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-07T15:54:08-03:00",
       "sha": "896423a2e6e51aaee204db274c8510a0d0b35398",
       "app_version": "0.170.0",
