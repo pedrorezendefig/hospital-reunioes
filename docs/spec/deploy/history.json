@@ -2,6 +2,52 @@
   "schema_version": "1.0",
   "deploys": [
     {
+      "at": "2026-10-07T01:11:25-03:00",
+      "sha": "d7e54948b40e87b02dbb27b62eaf097bd71a39a1",
+      "app_version": "0.166.0",
+      "subject": "Onda onda-b-onda1: Atas Paradas e Aguardam Assinatura abrem lista no dashboard, status da pendência em caixa alta; Tetos de tamanho nos chats de correção, Ata Guiada e POP; Copiar para IA recua a desc",
+      "raw_subject": "chore(deploy): registro da onda onda-b-onda1 (#1068 #1073 #1067)",
+      "scope": [
+        "backend",
+        "frontend"
+      ],
+      "prds": [],
+      "result": "healthy",
+      "duration_seconds": 813,
+      "services_touched": [
+        "backend",
+        "frontend"
+      ],
+      "env_changes": [
+        {
+          "service": "backend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        },
+        {
+          "service": "frontend",
+          "action": "update",
+          "keys": [
+            "APP_VERSION"
+          ]
+        }
+      ],
+      "migrations_applied": [],
+      "rollback_target_sha": null,
+      "notes": "onda-enxuta onda-b-onda1: PR #1068 (issue #1055), PR #1073 (issue #893), PR #1067 (issue #895), mergeados PR a PR. Merge pela API do GitHub, um build. Registro pela Action pos-merge depois do health.",
+      "etapas": {
+        "merge_s": 8,
+        "build_s": {
+          "backend": 121,
+          "frontend": 130
+        },
+        "health_s": 0
+      },
+      "responsavel": "pedrorezendefig"
+    },
+    {
       "at": "2026-10-07T01:00:51-03:00",
       "sha": "d1b23d238dacda17abec6024716b74c7f3ef25a2",
       "app_version": "0.165.0",
