@@ -17,10 +17,10 @@ Esvazia uma fila de issues em ondas: implementa em paralelo, revisa uma vez, mer
 |---|---|---|
 | `#PRD` / `--all` | `--all` | Escopo. Normalmente o prompt já traz a **fila-alvo fixa** do `/montar-ondas-enxutas`. |
 | `--paralelo N` | 3 | Issues por onda. |
-| `--sessao <nome>` | `onda-<letra>` | Nome da sessão; com `-onda<N>`, a chave do semáforo do rabo. |
+| `--sessao <nome>` | `onda-<letra>` | Nome da sessão; com `-onda<N>`, a chave do semáforo da subida. |
 | `--onda N` | 1 | Número desta onda na sessão. |
 
-**Uma sessão de fundo = uma onda.** Nasce pelo `scripts/lancar_sessao.sh`, roda o lote e, com os PRs verdes, lança a sessão da onda seguinte antes de rodar o próprio rabo. Depois do lançamento as duas só se falam pelo semáforo e pelo GitHub.
+**Uma sessão de fundo = uma onda.** Nasce pelo `scripts/lancar_sessao.sh`, roda o lote e, com os PRs verdes, lança a sessão da onda seguinte antes de rodar a própria subida. Depois do lançamento as duas só se falam pelo semáforo e pelo GitHub.
 
 ## Papéis (`.claude/agents/`)
 
@@ -75,19 +75,19 @@ PR verde = CI verde e, no app, `VEREDITO: LIMPO` ou corretor sem `pendente`. Iss
 
 ### 4. Lote pronto: lance a onda seguinte
 
-Com todos os PRs verdes ou baixados, registre a hora dos PRs verdes e imprima a tabela (issue · PR · status · migration · MP4 do draft). Sobrou fila (se toda ela depende desta onda, lance só depois do rabo):
+Com todos os PRs verdes ou baixados, registre a hora dos PRs verdes e imprima a tabela (issue · PR · status · migration · MP4 do draft). Sobrou fila (se toda ela depende desta onda, lance só depois da subida):
 
 1. `python .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <a> <b> --sessao <nome>-onda<N> --dry-run`: a linha `plano:` dá a versão esperada.
 2. Escreva a **passagem** (modelo em `references/prompts.md`) em `%TEMP%\onda-enxuta\<nome>-onda<N+1>.md` e lance: `bash .claude/skills/onda-enxuta/scripts/lancar_sessao.sh <nome>-onda<N+1> "<caminho>"`.
 
-**Fatia de manual:** o PR fica fora do rabo até o OK humano no draft. `PushNotification` "Draft do vídeo da #<N> no PR #<PR>: <MP4>"; quem viu roda `fechar_onda.py --prs <PR>`. Não conta tentativa.
+**Fatia de manual:** o PR fica fora da subida até o OK humano no draft. `PushNotification` "Draft do vídeo da #<N> no PR #<PR>: <MP4>"; quem viu roda `fechar_onda.py --prs <PR>`. Não conta tentativa.
 
-### 5. Rabo
+### 5. Subida
 
 `python .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <a> <b> --sessao <nome>-onda<N>` em segundo plano, com os PRs verdes na ordem da tabela. A chave é a da onda, não a da sessão (a onda seguinte já roda). Leia só a saída; o que cada código significa está na docstring do script. Cabe a você:
 
 - **`migration: cole no Studio <arquivo>:1`:** repasse por `PushNotification` assim que aparecer.
-- **2 com `conflito no merge de #N em: <arquivos>`:** `hr-corretor` motivo `conflito` com os arquivos, `--watch` de novo e o rabo só com os de fora. Outra `de fora:` (CI vermelho, merge recusado): passo 3 ou rabo de novo. Ambas contam tentativa. `de fora: #<PR> bloqueada por #<X>`: issue em `blocked`, sem tentativa.
+- **2 com `conflito no merge de #N em: <arquivos>`:** `hr-corretor` motivo `conflito` com os arquivos, `--watch` de novo e a subida só com os de fora. Outra `de fora:` (CI vermelho, merge recusado): passo 3 ou subida de novo. Ambas contam tentativa. `de fora: #<PR> bloqueada por #<X>`: issue em `blocked`, sem tentativa.
 - **3 ou 4:** pare; imprima a chave e a linha. Rollback pelo `/deploy rollback`.
 - **6:** uma tentativa por fatia e `PushNotification` "rollback disparado no PR #N, versão vX.Y.Z voltou".
 - **7 e 8:** `PushNotification` com a linha do script; o mesmo comando de novo depois do humano. Sem tentativa.
@@ -96,7 +96,7 @@ Depois: `python .claude/skills/onda-enxuta/scripts/medir_onda.py --onda <N> --is
 
 ### 6. Fim
 
-Relatório de até 15 linhas (linha final do rabo, issue · PR · versão, baixas, medição, intervalo entre os PRs verdes da onda anterior e o primeiro implementador desta; meta: menos de 2 min; última linha `retro: recomendada (<motivo>)` se houve baixa, rollback, conflito no rabo ou corretor em `effort: max`, senão `retro: dispensável`; quem roda é o humano, com `/retro-onda <nome>-onda<N>`), comentado em cada PRD da onda (issue sem PRD: no PR) com `<!-- automacao -->` e `## Onda <nome> <N>`. Passagem que ficou para depois do rabo (passo 4): lance agora. Fila vazia: **Sinal final** (fechadas, ready-for-human, bloqueadas, deploys). Encerre depois do comentário.
+Relatório de até 15 linhas (linha final da subida, issue · PR · versão, baixas, medição, intervalo entre os PRs verdes da onda anterior e o primeiro implementador desta; meta: menos de 2 min; última linha `retro: recomendada (<motivo>)` se houve baixa, rollback, conflito na subida ou corretor em `effort: max`, senão `retro: dispensável`; quem roda é o humano, com `/retro-onda <nome>-onda<N>`), comentado em cada PRD da onda (issue sem PRD: no PR) com `<!-- automacao -->` e `## Onda <nome> <N>`. Passagem que ficou para depois da subida (passo 4): lance agora. Fila vazia: **Sinal final** (fechadas, ready-for-human, bloqueadas, deploys). Encerre depois do comentário.
 
 ## Scripts
 
@@ -104,6 +104,6 @@ Relatório de até 15 linhas (linha final do rabo, issue · PR · versão, baixa
 |---|---|
 | `scripts/lancar_sessao.sh <nome> <prompt.md>` | Sessão de fundo limpa: zero MCP, plugins desligados, Opus, `high`. |
 | `scripts/sensivel.py <PR>` | Rota sem login ou migration no PR (lista em `revisao-sensivel.txt`); exit 0 se houver. |
-| `scripts/fechar_onda.py --prs ... [--sessao ...] [--dry-run]` | O rabo: merge PR a PR pela API, um build, health, rollback, registro. Códigos na docstring. |
+| `scripts/fechar_onda.py --prs ... [--sessao ...] [--dry-run]` | A subida: merge PR a PR pela API, um build, health, rollback, registro. Códigos na docstring. |
 | `scripts/medir_onda.py --onda N --issues ... --prs ...` | Conta da onda pelos JSONL (papel pelo `[papel: ...]` do prompt). |
 | `scripts/ci_sem_runner.py <PR>` | Distingue falta de runner de CI vermelho; pede o rerun. |

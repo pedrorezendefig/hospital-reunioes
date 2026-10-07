@@ -76,7 +76,7 @@ def test_classes_das_cores_e_as_paradas_humanas_da_0068(fluxo):
     assert classes <= {"auto", "humano", "decisao", "fim"}, classes
     humanos = {n["id"] for n in fluxo["nos"] if n["classe"] == "humano"}
     # as paradas humanas que o painel promete: migration, draft do vídeo,
-    # rollback que o rabo não conseguiu e a baixa ready-for-human
+    # rollback que a subida não conseguiu e a baixa ready-for-human
     assert {"migration", "draft", "rollback", "baixa"} <= humanos
     assert [n["id"] for n in fluxo["nos"] if n["classe"] == "decisao"] == ["porta"]
     for n in fluxo["nos"]:
@@ -237,7 +237,7 @@ DADOS_DOC = {
             "title": "O fluxo em uma página",
             "status": "accepted",
             "decisao": "O que o pipeline faz hoje.",
-            "body_md": "corpo da 68 fala de rabo",
+            "body_md": "corpo da 68 fala de subida",
             "file": "docs/adr/0068.md",
         },
         {

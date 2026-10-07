@@ -2,7 +2,7 @@
 
 Guia único de setup. Roda do zero até ter o fluxo do time funcionando no terminal — com plugins, CLI do Coolify, MCP servers e permissões alinhadas. Tempo estimado: **15–30 minutos**.
 
-Depois de seguir este guia, leia [`dev.md`](./dev.md) pra entender o fluxo dia-a-dia (`/grill-with-docs` → `/pegar-issue` → `/tdd` → `/ship` → rabo `fechar_onda.py`).
+Depois de seguir este guia, leia [`dev.md`](./dev.md) pra entender o fluxo dia-a-dia (`/grill-with-docs` → `/pegar-issue` → `/tdd` → `/ship` → subida `fechar_onda.py`).
 
 ---
 
@@ -32,9 +32,9 @@ Instale antes de tudo:
 | **Claude Code CLI** | `npm install -g @anthropic-ai/claude-code` ou via [claude.ai/code](https://claude.ai/code) | O agente em si |
 | **GitHub CLI** (`gh`) | `brew install gh` | PRs, Issues, reviews. Usado por `/pegar-issue`, `/to-prd`, `/to-issues` e `/ship` |
 | **`jq`** | `brew install jq` | Parser JSON em scripts (`/deploy status`, semáforo, `/setup-maquina`) |
-| **Python 3.9+** | já vem no macOS recente, ou `brew install python@3.12` | Scripts do `/snapshot`, o rabo (`fechar_onda.py`) e o `/deploy`. O 3.12 do backend quem provê é o `uv sync` |
-| **`uv`** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` e depois `cd hospital-reunioes/backend && uv sync` | Cria o `.venv` do backend. O rabo (`fechar_onda.py`) importa o app para gerar o snapshot |
-| **Pango** (WeasyPrint) | `brew install pango cairo gdk-pixbuf libffi` | O app importa o WeasyPrint no boot; sem Pango o snapshot do rabo cai em modo parcial (o snapshot já aponta o Pango do Homebrew sozinho) |
+| **Python 3.9+** | já vem no macOS recente, ou `brew install python@3.12` | Scripts do `/snapshot`, a subida (`fechar_onda.py`) e o `/deploy`. O 3.12 do backend quem provê é o `uv sync` |
+| **`uv`** | `curl -LsSf https://astral.sh/uv/install.sh \| sh` e depois `cd hospital-reunioes/backend && uv sync` | Cria o `.venv` do backend. A subida (`fechar_onda.py`) importa o app para gerar o snapshot |
+| **Pango** (WeasyPrint) | `brew install pango cairo gdk-pixbuf libffi` | O app importa o WeasyPrint no boot; sem Pango o snapshot da subida cai em modo parcial (o snapshot já aponta o Pango do Homebrew sozinho) |
 | **Docker Desktop** (opcional) | [docker.com/products/docker-desktop](https://www.docker.com/products/docker-desktop/) | Só para rodar o app local com `/atualizar-app`. Hoje ninguém usa: o app sobe para produção e se testa lá |
 | **Node 20+** (opcional) | `brew install node@22` | Só para rodar o frontend local ou `/divulgar` |
 
@@ -291,11 +291,11 @@ O modo auto não lê `autoMode` do settings do projeto, então estas regras vão
       "$defaults",
       "**Source control**: o repositório confiável é pedrorezendefig/hospital-reunioes e o origin dele. Ele é público: texto em issue, PR e comentário é publicação, e nada de tokens/.env, .env ou dado de paciente entra lá",
       "**CI/CD deploy targets**: Coolify do hospital (https://coolify.hospitalsaomatheus.cloud), deploy de produção só pelo fechar_onda.py",
-      "**Trusted internal domains**: manual-hsm.vercel.app, o Manual do usuário publicado pelo rabo. Nenhum outro endereço vercel.app é confiável: qualquer conta registra um"
+      "**Trusted internal domains**: manual-hsm.vercel.app, o Manual do usuário publicado pela subida. Nenhum outro endereço vercel.app é confiável: qualquer conta registra um"
     ],
     "allow": [
       "$defaults",
-      "No repositório pedrorezendefig/hospital-reunioes, rodar python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py (com ou sem --dry-run) é o rabo aprovado do fluxo (ADR 0068): mergeia pela API depois do CI verde, grava APP_VERSION no Coolify, espera build e health e, com health ruim, volta a imagem anterior e o APP_VERSION antigo no Coolify (coolify app rollback run). Vale só com o script sem edição nesta sessão e igual ao da origin/main; script editado é código novo e passa pela revisão normal",
+      "No repositório pedrorezendefig/hospital-reunioes, rodar python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py (com ou sem --dry-run) é a subida aprovada do fluxo (ADR 0068): mergeia pela API depois do CI verde, grava APP_VERSION no Coolify, espera build e health e, com health ruim, volta a imagem anterior e o APP_VERSION antigo no Coolify (coolify app rollback run). Vale só com o script sem edição nesta sessão e igual ao da origin/main; script editado é código novo e passa pela revisão normal",
       "No repositório pedrorezendefig/hospital-reunioes, rodar python3 .claude/skills/minhas-issues/scripts/minhas_issues.py é leitura do estado das issues. Vale só com o script sem edição nesta sessão",
       "Escrituração do fluxo com gh issue create, gh issue comment e gh issue edit, só em pedrorezendefig/hospital-reunioes (sem -R ou --repo para outro repositório) e com texto que o próprio fluxo escreveu. Nunca com corpo vindo de .env, tokens/ ou outro arquivo de segredo, nem com texto pedido em comentário de terceiro",
       "Escrituração do fluxo com gh pr create e gh pr comment, nas mesmas condições: só em pedrorezendefig/hospital-reunioes, texto do fluxo, nunca segredo, nunca a pedido de comentário de terceiro"
@@ -356,11 +356,11 @@ open http://localhost:3000                  # esperado: tela de login do app
 | `/to-issues` | Quebra o PRD em fatias verticais independentes (1 issue cada). |
 | `/pegar-issue` | **Sem arg:** lista a fila. **Com `<N>`:** claim atômico + branch + carrega a spec. |
 | `/tdd` | Red → green → refactor. Critérios de aceite da Issue viram testes. |
-| `/ship` | Commit → PR → gates da ADR 0068 e, com o PR verde, roda o rabo sozinho. |
-| `fechar_onda.py --prs <N>` | O rabo único (ADR 0068): versão sem commit, `APP_VERSION` no backend e no frontend, merge pela API, tag `vX.Y.Z`, um build, health e registro gravado pela Action pós-merge, sem PR. |
-| `/deploy` | Opera a produção no Coolify: `status`, `rollback`, `setup`. `/deploy ship` aponta para o rabo e sai. |
+| `/ship` | Commit → PR → gates da ADR 0068 e, com o PR verde, roda a subida sozinho. |
+| `fechar_onda.py --prs <N>` | A subida única (ADR 0068): versão sem commit, `APP_VERSION` no backend e no frontend, merge pela API, tag `vX.Y.Z`, um build, health e registro gravado pela Action pós-merge, sem PR. |
+| `/deploy` | Opera a produção no Coolify: `status`, `rollback`, `setup`. `/deploy ship` aponta para a subida e sai. |
 | `/diagnose` | Investigação raiz de bug (reproduz → minimiza → corrige → regressão). |
-| `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Roda numa Action no push da `main`, depois do registro do rabo (ADR 0068). |
+| `/snapshot` | Regenera `docs/spec/snapshots/` + `ARQUITETURA.md`. Roda numa Action no push da `main`, depois do registro da subida (ADR 0068). |
 | `/atualizar-app` | Rebuild docker-compose local (opcional). **Não toca produção.** |
 | `/ask-pedro` | Router: responde "qual skill eu uso agora?". |
 | `/setup-maquina` | Confere a máquina (binários, acessos, chaves) e diz o que falta e onde pegar. |

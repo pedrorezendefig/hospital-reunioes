@@ -25,12 +25,12 @@ from datetime import datetime, timedelta, timezone
 STATUS_PAGE = "https://www.githubstatus.com/api/v2/components.json"
 SEM_RUNNER = "not acquired by Runner"
 JANELA_DIAS = 45
-RABO = "python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py"
+SUBIDA = "python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py"
 TRIAGEM = ("ready-for-agent", "ready-for-human", "needs-triage", "needs-info")
 
 VEREDITO = {
     "verde": "dá pra desenvolver: sim",
-    "amarelo": "dá pra desenvolver: só até o PR (o rabo espera)",
+    "amarelo": "dá pra desenvolver: só até o PR (a subida espera)",
     "vermelho": "dá pra desenvolver: só código local (não abra onda)",
 }
 
@@ -95,7 +95,7 @@ def estado_pr(pr: dict) -> dict:
     elif pr["vereditos"] and _must_fix_aberto(pr["vereditos"][-1]):
         motivo = "must-fix aberto"
     elif pr["mergeStateStatus"] == "CLEAN":
-        return {"nivel": 1, "motivo": "verde, esperando o rabo"}
+        return {"nivel": 1, "motivo": "verde, esperando a subida"}
     else:
         motivo = "sem revisão" if not pr["vereditos"] else f"merge {pr['mergeStateStatus']}"
     return {"nivel": 3, "motivo": motivo}
@@ -170,7 +170,7 @@ def montar(d: dict) -> str:
             e = estado_pr(pr)
             onde.append(e["motivo"])
             if e["nivel"] == 1:
-                prox = [f"`{RABO} --prs {pr['number']} --dry-run`"]
+                prox = [f"`{SUBIDA} --prs {pr['number']} --dry-run`"]
             else:
                 prox = _comando_pr(pr, e["motivo"])
             passos.setdefault(e["nivel"], []).append((f"#{pr['number']}", prox))

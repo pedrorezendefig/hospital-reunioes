@@ -2,7 +2,7 @@
 
 Nasceu no #970 recusando o claim (ADR 0068). Pela ADR 0068, arquivo em comum
 não separa fatias: o único separador é a dependência, que quem fatia escreve
-como `blocked_by` nativo (ADR 0068), e o conflito de texto se resolve no rabo
+como `blocked_by` nativo (ADR 0068), e o conflito de texto se resolve na subida
 PR a PR. Por isso o script só imprime um aviso de uma linha com os arquivos que
 coincidem, não grava dependência e não impede o claim.
 

@@ -34,7 +34,7 @@ jobs:
         # Cada job pesado roda só com a parte dele (PRD #963, decisão 4):
         # backend com backend/ ou supabase/, frontend com frontend/, build com
         # qualquer um dos dois. Ferramenta é o que fica fora de
-        # hospital-reunioes/, a mesma fronteira do rabo (fechar_onda.py);
+        # hospital-reunioes/, a mesma fronteira da subida (fechar_onda.py);
         # nenhum job daqui a consome, porque os testes de tools/ rodam no
         # manual.yml. Se o git diff falhar, o passo falha e os jobs rodam (ver
         # o if deles).
@@ -113,7 +113,7 @@ jobs:
         run: python ../../tools/checar_migration_repetida.py --base origin/main
       - name: Migration com recibo
         # Toda migration nova termina gravando o próprio número em
-        # migracoes_aplicadas (issue #969): o rabo só mergeia depois que o
+        # migracoes_aplicadas (issue #969): a subida só mergeia depois que o
         # /api/health devolve esse número, e sem o insert esperaria 24 h.
         if: github.event_name == 'pull_request'
         run: python ../../tools/checar_recibo_da_migration.py --base origin/main
@@ -192,7 +192,7 @@ jobs:
     runs-on: ubuntu-latest
     # Os 2 Dockerfiles ainda buildam. A imagem do backend vai para o GHCR com a
     # tag do sha do head do PR (issue #1001, ADR 0064 decisão 6c): depois do
-    # merge o rabo (fechar_onda.py) dá a ela a tag do squash pelo
+    # merge a subida (fechar_onda.py) dá a ela a tag do squash pelo
     # imagem-backend.yml, e o Coolify só puxa. A do frontend não sai daqui: é
     # construída com valores falsos, e o Coolify ainda a constrói pelo webhook.
     permissions:
@@ -202,7 +202,7 @@ jobs:
       IMAGEM_BACKEND: ghcr.io/pedrorezendefig/hospital-reunioes-backend
       # Só PR deste repositório publica: o de fork não tem token que escreva no
       # GHCR, e o push na main não precisa (a imagem do squash é do workflow
-      # que o rabo dispara).
+      # que a subida dispara).
       PUBLICA: ${{ github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository }}
     steps:
       - name: Checkout do head
@@ -233,7 +233,7 @@ jobs:
           cache-to: type=gha,scope=backend,mode=max
           build-args: |
             ENVIRONMENT=ci
-      # A tag `:<head>` é mutável; o digest do que este build publicou não. O rabo
+      # A tag `:<head>` é mutável; o digest do que este build publicou não. A subida
       # o lê deste artefato e retagueia pelo digest (revisão do PR #1016).
       - name: Digest da imagem do backend
         if: env.PUBLICA == 'true'
@@ -242,7 +242,7 @@ jobs:
         run: |
           mkdir -p digest
           printf '%s\n' "$DIGEST" > digest/digest
-      - name: Guarda o digest para o rabo
+      - name: Guarda o digest para a subida
         if: env.PUBLICA == 'true'
         uses: actions/upload-artifact@v4
         with:

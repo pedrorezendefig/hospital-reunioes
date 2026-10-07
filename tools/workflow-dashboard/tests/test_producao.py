@@ -108,10 +108,10 @@ def _servico(sid, status, http=200, ms=140):
 
 ENV_APP_VERSION = {"service": "backend", "action": "update", "keys": ["APP_VERSION"]}
 
-# history.json mais recente primeiro (o rabo grava em [0]); a 0.161.0 subiu
+# history.json mais recente primeiro (a subida grava em [0]); a 0.161.0 subiu
 # duas vezes, uma com "v" e outra sem, e o deploy sem versão vira linha própria
 HISTORY = [
-    # entrada nova: o rabo mediu as etapas e gravou quem o rodou
+    # entrada nova: a subida mediu as etapas e gravou quem a rodou
     {
         **_deploy("0.163.4", "aaa1111", at="2026-10-06T16:38:54Z", prs=[70], issues=[904], dur=57),
         "etapas": {"merge_s": 4, "build_s": {"backend": 34, "frontend": None}, "health_s": 2},
@@ -377,19 +377,19 @@ def test_card_do_deploy_mostra_responsavel_prs_com_a_bolinha_issues_migration_e_
     html = _app(tmp_path, "_view.innerHTML")
     versoes = _versoes(html)
     _, _, novo = versoes[0]
-    # responsável do history (quem rodou o rabo) e não quem mergeou o PR
+    # responsável do history (quem rodou a subida) e não quem mergeou o PR
     assert ">pedro<" in novo and ">ana<" not in novo
     # o PR do lote vira chip com a bolinha de quem mergeou, dentro do card
     chip = re.search(r'<a class="chip chip-pr" href="#prs/70"[^>]*>[\s\S]*?</a>', novo).group(0)
     assert "pessoa-dot" in chip and re.search(r'style="--pessoa:var\(--[a-z-]+\)"', chip)
     assert _chips(novo)["#904"] == "#issues/904"
-    # etapas medidas pelo rabo mais as derivadas do GitHub: aberto, fila, merge, build, health
+    # etapas medidas pela subida mais as derivadas do GitHub: aberto, fila, merge, build, health
     assert re.findall(r'class="etapa etapa-(\w+)"', novo) == ["aberto", "fila", "merge", "build", "health"]
     assert "aberto 6h30m" in novo and "fila até produção 8m54s" in novo and "build 34s" in novo
     assert "merge 4s" in novo and "health 2s" in novo
     _, _, velho = versoes[2]
     assert "⛁ 114_migracoes_aplicadas.sql" in velho and ">failed<" in velho and ">bia<" in velho
-    # entrada antiga, sem etapas: só aberto, fila e o total do rabo
+    # entrada antiga, sem etapas: só aberto, fila e o total da subida
     assert re.findall(r'class="etapa etapa-(\w+)"', velho) == ["aberto", "fila", "total"]
     assert "total 5m00s" in velho
     _, _, sem_versao = versoes[3]
@@ -521,7 +521,7 @@ def test_faixa_do_topo_mostra_a_versao_no_ar_e_cada_servico_com_o_health_do_stat
 
 
 def _supabase(status, body_ok):
-    """O supabase como o rabo o grava agora: sem HTTP próprio, status pelo health do backend."""
+    """O supabase como a subida o grava agora: sem HTTP próprio, status pelo health do backend."""
     s = _servico("supabase", status, http=None, ms=None)
     s["health_path"] = None
     s["last_health_check"]["body_ok"] = body_ok
@@ -627,7 +627,7 @@ def test_coletor_deriva_as_etapas_do_github_e_soma_as_do_history():
         "build_s": {"backend": 34, "frontend": None},
         "health_s": 2,
     }
-    assert novo["responsavel"] == "pedro"  # quem rodou o rabo manda sobre quem mergeou
+    assert novo["responsavel"] == "pedro"  # quem rodou a subida manda sobre quem mergeou
     assert (novo["prs"], novo["issues"], novo["app_version"], novo["result"]) == ([70], [904], "0.163.4", "healthy")
     velho = _evento(eventos, "deploy", "sha", "bbb2222")
     assert velho["etapas"] == {"aberto_s": 31200, "fila_s": 1200}

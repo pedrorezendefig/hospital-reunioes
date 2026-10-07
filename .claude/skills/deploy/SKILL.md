@@ -9,7 +9,7 @@ Uma skill, cinco modos. Invocação por subcomando:
 
 | Comando | Modo | Quando usar |
 |---|---|---|
-| `/deploy` | **ship** (default) | Não sobe nada: imprime o comando do `fechar_onda.py`, o rabo único (ADR 0068), e sai |
+| `/deploy` | **ship** (default) | Não sobe nada: imprime o comando do `fechar_onda.py`, a subida única (ADR 0068), e sai |
 | `/deploy setup` | **setup** | 1ª vez no projeto: cria projeto, apps, env vars, DNS guia, primeiro deploy, `project.json` |
 | `/deploy status` | **status** | Só reporta estado atual, sem alterar nada |
 | `/deploy rollback` | **rollback** | Reverte para último deploy `healthy` |
@@ -351,7 +351,7 @@ done
 
 > Forma **posicional**: a chave vem depois do UUID, sem `--key` (ver pegadinha 1).
 
-Depois do merge, a tag `vX.Y.Z` vai no squash pela API do GitHub (`POST repos/{owner}/{repo}/git/refs`). Ela é a conferência da próxima versão de partida; se falhar, o deploy segue e o rabo imprime o comando para criá-la depois.
+Depois do merge, a tag `vX.Y.Z` vai no squash pela API do GitHub (`POST repos/{owner}/{repo}/git/refs`). Ela é a conferência da próxima versão de partida; se falhar, o deploy segue e a subida imprime o comando para criá-la depois.
 
 Salvar `expected_app_version = $NOVA` em memória: usado no Passo 7.2 pra validar match pós-deploy.
 
@@ -489,7 +489,7 @@ Se mismatch → Passo 8 (rollback). Mensagem: "APP_VERSION do Coolify não bate 
 
 ### Passo 8 — Rollback (se health falhou)
 
-> **O rabo já tenta sozinho; este passo é o que sobra.** Com health ruim, o `fechar_onda.py` volta cada app do lote à imagem anterior e ao `APP_VERSION` antigo e confere o health de novo (saída 6, semáforo solto; issue #968). Este passo é para quando isso não deu: saída 4 (o rollback automático falhou) ou 3 (build). Aqui a sessão detecta e prepara, e o disparo é humano: fora do rabo, o comando de rollback é negado pelo classifier, então a skill para, entrega o comando pronto e espera. Em modo AFK (`/onda-enxuta`), isso significa produção parada no build ruim até alguém rodar o comando: reportar isso em alto e bom som, não seguir em silêncio.
+> **A subida já tenta sozinha; este passo é o que sobra.** Com health ruim, o `fechar_onda.py` volta cada app do lote à imagem anterior e ao `APP_VERSION` antigo e confere o health de novo (saída 6, semáforo solto; issue #968). Este passo é para quando isso não deu: saída 4 (o rollback automático falhou) ou 3 (build). Aqui a sessão detecta e prepara, e o disparo é humano: fora da subida, o comando de rollback é negado pelo classifier, então a skill para, entrega o comando pronto e espera. Em modo AFK (`/onda-enxuta`), isso significa produção parada no build ruim até alguém rodar o comando: reportar isso em alto e bom som, não seguir em silêncio.
 
 Executar 1×:
 1. Ler `<repo>/docs/spec/deploy/history.json` → último deploy com `result == "healthy"` por service afetado.
@@ -527,7 +527,7 @@ Snapshot completo:
     "branch": "<project.git.branch>",
     "project_name": "<project.project.name>"
   },
-  "last_app_version": "<X.Y.Z que o rabo calculou e gravou no APP_VERSION, versão semântica humana>",
+  "last_app_version": "<X.Y.Z que a subida calculou e gravou no APP_VERSION, versão semântica humana>",
   "services": [
     {
       "id": "<service.id>", "uuid": "<service.uuid>",
@@ -719,7 +719,7 @@ Algo down → ❌ destacado.
 
 ## Modo `rollback`
 
-Invocação: `/deploy rollback [--dry-run]`. Reverte para o último deploy `healthy` anterior, quando o rabo não voltou sozinho (saída 3 do `fechar_onda.py`, build, ou 4, rollback automático que falhou). Aqui o `rollback run` é sempre do humano (`! coolify app rollback run ...`); app em modo imagem (`dockerimage`) volta por tag, com o `deploy uuid` também do humano. Passo a passo em `references/modo-rollback.md`.
+Invocação: `/deploy rollback [--dry-run]`. Reverte para o último deploy `healthy` anterior, quando a subida não voltou sozinha (saída 3 do `fechar_onda.py`, build, ou 4, rollback automático que falhou). Aqui o `rollback run` é sempre do humano (`! coolify app rollback run ...`); app em modo imagem (`dockerimage`) volta por tag, com o `deploy uuid` também do humano. Passo a passo em `references/modo-rollback.md`.
 
 ---
 

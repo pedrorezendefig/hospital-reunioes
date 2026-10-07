@@ -2,10 +2,10 @@
 -- Migration 114: recibo de migration aplicada (issue #969, PRD #963, ADR 0063)
 -- =====================================================
 -- A migration e a unica parada humana do fluxo ate producao: o Postgres nao e
--- exposto e o SQL e colado no Studio. Ate aqui o rabo (`fechar_onda.py`) nao
+-- exposto e o SQL e colado no Studio. Ate aqui a subida (`fechar_onda.py`) nao
 -- tinha como saber se a colagem aconteceu. Com esta tabela, toda migration
 -- termina gravando o proprio numero, o `/api/health` devolve o maior numero
--- gravado, e o rabo espera esse numero aparecer antes do merge (teto de 24 h).
+-- gravado, e a subida espera esse numero aparecer antes do merge (teto de 24 h).
 --
 -- O CI (`tools/checar_recibo_da_migration.py`) reprova migration nova que nao
 -- termina com o insert do proprio numero. As migrations 001 a 113 sao

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""fechar_onda.py: o rabo unico (ADR 0068). Leva um PR avulso ou uma onda da
+"""fechar_onda.py: a subida unica (ADR 0068). Leva um PR avulso ou uma onda da
 `/onda-enxuta` a producao com um merge por PR na main e UM build.
 
 Uso:
@@ -26,7 +26,7 @@ e servicos saem do lote inteiro, antes do primeiro merge.
   - ferramenta: so merge pela API depois do CI verde (passos 1 a 4 e 9). Sem
     versao nova, sem APP_VERSION, sem tag, sem esperar build, sem health e sem
     registro (nenhuma entrada no history.json). Se o webhook do Coolify disparar
-    build em algum merge, o rabo o cancela, como faz com o do commit do registro.
+    build em algum merge, a subida o cancela, como faz com o do commit do registro.
 
 Sequencia (cada passo imprime no maximo uma linha, o 4 uma por PR; sucesso
 cabe em 10 linhas mais uma por PR, fora as da migration):
@@ -42,10 +42,10 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      semaforo.sh a da por velha em 60 min. Backend no ar sem o campo
      `migracao` (anterior ao #969): avisa e segue sem esperar, como antes
   2. semaforo de deploy (chave = nome da sessao, unica por construcao; na onda,
-     `<sessao>-onda<N>`). Trava parada (o rabo dono saiu com 3 ou 4) ou velha:
+     `<sessao>-onda<N>`). Trava parada (a subida dona saiu com 3 ou 4) ou velha:
      sai na hora com 8, sem pegar nem soltar. Com a trava pega, confere de novo
      o `blocked_by` da issue de cada PR (issue #999): a bloqueadora pode ter sido
-     reaberta pelo rollback de outro rabo, e o PR com bloqueio aberto fica de fora
+     reaberta pelo rollback de outra subida, e o PR com bloqueio aberto fica de fora
   3. versao nova (semver) pelo tipo dominante dos commits do lote, a partir do
      `last_app_version` do state.json conferido com a maior tag vX.Y.Z
      (ferramenta nao muda a versao). Sem commit (issue #967): o package.json do
@@ -67,10 +67,10 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
   5. tag vX.Y.Z no squash do ultimo PR que entrou, pela API (tag que falha nao
      para o deploy)
   6. um build: o deploy que o webhook do Coolify dispara para cada squash
-     intermediario e cancelado (o mesmo mecanismo do registro, issue #851) e o
-     rabo monitora so o do ultimo, em cada service; forca se nao disparar.
+     intermediario e cancelado (o mesmo mecanismo do registro, issue #851) e a
+     subida monitora so o do ultimo, em cada service; forca se nao disparar.
      App em modo imagem (`build_pack` dockerimage no project.json, issue #1001)
-     nao tem build nem webhook: o rabo dispara o workflow que publica a imagem
+     nao tem build nem webhook: a subida dispara o workflow que publica a imagem
      do squash no GHCR (retag, pelo digest que o CI guardou, da imagem de um
      head do lote com a mesma pasta do app; sem nenhum, build do squash),
      espera o run, confere no GHCR que a tag do squash aponta para o digest que
@@ -89,15 +89,15 @@ cabe em 10 linhas mais uma por PR, fora as da migration):
      Com prod de volta e ainda com a trava (issue #999): reabre cada issue do
      lote e mergeia pela API o PR `revert/<chave>` com o revert dos squashes,
      depois do CI dele, cancelando o build que esse merge dispara
-  8. registro sem PR (ADR 0068): o rabo monta a entrada nova do
+  8. registro sem PR (ADR 0068): a subida monta a entrada nova do
      history.json (todos os deploys, sem teto) e o state.json, grava os
      dois num arquivo `~/registro-<chave>-<sha>.json` e
      dispara a Action pos-merge na main por workflow_dispatch, com o arquivo
      no input `registro`. Ela commita os dois JSONs na main pela deploy key,
      como github-actions[bot], e no mesmo run tira o draft do Manual dos PRDs
-     do lote e roda o snapshot (ADR 0068). O rabo espera a entrada
+     do lote e roda o snapshot (ADR 0068). A subida espera a entrada
      aparecer no history.json da main, e nao so o fim do run: um push que
-     chega com o disparo na fila do grupo pos-merge o cancela, e o rabo
+     chega com o disparo na fila do grupo pos-merge o cancela, e a subida
      dispara de novo. O build que o webhook do Coolify dispara para o commit do
      bot e cancelado (issue #851)
   9. limpeza (worktrees, worktrees de agente ja entregues) e soltar o semaforo
@@ -123,7 +123,7 @@ Codigos de saida:
      Nenhum entrou: nada na main, worktree removido, semaforo solto. Rode de novo
      so com os de fora, depois de corrigir. Com 3 a 6, as linhas `de fora:` saem
      do mesmo jeito
-  3  build falhou no Coolify: SEMAFORO FICA PRESO e marcado parado (o rabo
+  3  build falhou no Coolify: SEMAFORO FICA PRESO e marcado parado (a subida
      seguinte sai com 8), rode `/deploy rollback` com a chave impressa
   4  health falhou (ou versao nao bate) e o rollback automatico tambem falhou (sem
      imagem anterior, Coolify recusou, ou health ainda ruim), ou o rollback deu
@@ -138,15 +138,15 @@ Codigos de saida:
   6  rollback feito: o health falhou, a imagem anterior e o APP_VERSION antigo
      voltaram e o health ficou verde de novo; sem registro. A tag vX.Y.Z fica no
      squash ruim, e a proxima versao sai depois dela. Antes de soltar o semaforo,
-     o rabo reabre a issue de cada PR do lote com `ready-for-agent` e a linha
+     a subida reabre a issue de cada PR do lote com `ready-for-agent` e a linha
      `health:` (o que o health respondeu) e mergeia o PR `revert/<chave>` com o
      revert dos squashes, sem rebuild; depois, semaforo solto. Quem chamou conta
      uma tentativa de cada fatia e notifica
   7  migration vencida: o /api/health nao devolveu o numero da migration do lote
      em 24 h: nada entrou na main, o semaforo nao chegou a ser pego e os PRs
-     seguem abertos; quem chamou notifica, e o rabo roda de novo depois que a
+     seguem abertos; quem chamou notifica, e a subida roda de novo depois que a
      migration for colada no Studio
-  8  parada: a trava esta parada (o rabo que a segura saiu com 3 ou 4) ou velha
+  8  parada: a trava esta parada (a subida que a segura saiu com 3 ou 4) ou velha
      (mais de 60 min), e prod espera rollback humano. Sai na hora, sem pegar o
      semaforo: nada entrou na main e os PRs seguem abertos. A linha `parada:`
      diz a chave do dono; soltar a trava e do humano, depois do rollback
@@ -442,19 +442,19 @@ def esperar_migrations_do_lote(raiz: Path, backend: dict, novas: list[tuple[str,
         arquivo.write_bytes(conteudo)
         linhas = conteudo.count(b"\n")
         print(f"migration: cole no Studio {arquivo}:1 ({linhas} linhas, sha256 "
-              f"{hashlib.sha256(conteudo).hexdigest()[:12]}); o rabo espera o {numero} no /api/health",
+              f"{hashlib.sha256(conteudo).hexdigest()[:12]}); a subida espera o {numero} no /api/health",
               flush=True)
     t = time.time()
     status, ultimo = esperar_migracao(url_do_health(backend), numero)
     if status == SEM_CAMPO:
         print(f"migration: o /api/health no ar nao informa a migration aplicada (backend anterior ao #969); "
-              f"o rabo segue sem esperar, confira que a {numero} foi colada no Studio.", flush=True)
+              f"a subida segue sem esperar, confira que a {numero} foi colada no Studio.", flush=True)
     elif status == "aplicada":
         print(f"migration: {numero} aplicada, o /api/health devolveu {ultimo} em {dur(time.time() - t)}", flush=True)
     else:
         print(f"migration: vencida, o /api/health nao chegou a {numero} em {MIGRACAO_TIMEOUT_S // 3600} h "
               f"(ultimo: {ultimo}). Nada entrou na main e o semaforo nao foi pego; PRs {prs_txt} seguem abertos. "
-              "Cole a migration no Studio e rode o rabo de novo.")
+              "Cole a migration no Studio e rode a subida de novo.")
         return False
     return True
 
@@ -471,7 +471,7 @@ def semaforo(raiz: Path, acao: str, chave: str, descricao: str = "") -> int:
 
 def dono_e_motivo_da_trava(raiz: Path) -> tuple[str, str]:
     """Quem segura a trava e por que ela esta parada, pelo `semaforo.sh status`:
-    a linha do erro que o rabo dono marcou, ou a idade da trava velha."""
+    a linha do erro que a subida dona marcou, ou a idade da trava velha."""
     status = run([BASH, bash_path(raiz / SEMAFORO), "status"], cwd=raiz, check=False, timeout=60).stdout.strip()
     achado = re.match(r"ocupado por (\S+) h\S+ (\d+) min: (.*?)(?: \S parada: (.*))?$", status)
     if not achado:
@@ -491,7 +491,7 @@ def pegar_semaforo(raiz: Path, chave: str, prs: list[int], avulso: bool = False)
             print("semaforo: outra sessao esta deployando, esperando mais um ciclo.")
             continue
         if rc in (2, 4):
-            # trava parada (o rabo dono saiu com 3 ou 4) ou velha: prod espera o rollback
+            # trava parada (a subida dona saiu com 3 ou 4) ou velha: prod espera o rollback
             # humano, e quem chega sai na hora, sem pegar nem soltar a trava (issue #999)
             dono, motivo = dono_e_motivo_da_trava(raiz)
             falhar(f"parada: prod espera rollback humano, chave {dono} ({motivo}). Nada entrou na main e o "
@@ -502,7 +502,7 @@ def pegar_semaforo(raiz: Path, chave: str, prs: list[int], avulso: bool = False)
 
 def parar_a_trava(raiz: Path, chave: str, linha: str, codigo: int) -> int:
     """Saidas 3 e 4: a trava fica presa com quem quebrou e marcada parada com a
-    linha do erro, e o rabo seguinte sai na hora com 8 (issue #999)."""
+    linha do erro, e a subida seguinte sai na hora com 8 (issue #999)."""
     print(linha)
     semaforo(raiz, "parar", chave, linha)
     return codigo
@@ -516,7 +516,7 @@ def bloqueadoras_abertas(raiz: Path, issue: int) -> list[int]:
 
 def conferir_bloqueios(raiz: Path, infos: list[dict]) -> list[int]:
     """Os PRs cuja issue tem `blocked_by` aberto agora, com a trava pega: a
-    bloqueadora pode ter sido reaberta pelo rollback de outro rabo depois que a
+    bloqueadora pode ter sido reaberta pelo rollback de outra subida depois que a
     sessao montou a onda (issue #999). Cada um sai com a linha `de fora:`."""
     bloqueados = []
     for info in infos:
@@ -724,7 +724,7 @@ def versao_em_producao(wt: Path, ref: str) -> str:
     """Versao de onde a proxima sai (issue #967): o `last_app_version` do
     state.json no `ref`, conferido com a maior tag vX.Y.Z do remoto. A versao
     nao e mais commitada: o package.json do frontend fica congelado. Vale a
-    maior das duas: tag a frente do state.json e um rabo que mergeou e
+    maior das duas: tag a frente do state.json e uma subida que mergeou e
     etiquetou mas nao registrou, e repetir a versao dele confundiria o health."""
     do_state = json.loads(run(["git", "show", f"{ref}:{STATE}"], cwd=wt).stdout).get("last_app_version")
     tags = re.findall(r"refs/tags/v(\d+\.\d+\.\d+)$", run(["git", "ls-remote", "--tags", "origin"], cwd=wt).stdout,
@@ -779,7 +779,7 @@ SEM_LOGIN = "desconhecido"
 
 
 def quem_roda(raiz: Path) -> str:
-    """O login de quem roda o rabo (`gh api user`): o `responsavel` do registro.
+    """O login de quem roda a subida (`gh api user`): o `responsavel` do registro.
     Sem resposta valida, um nome fixo que o esquema aceita, para o registro
     nao parar por isso."""
     try:
@@ -807,7 +807,7 @@ def montar_registro(state: dict, sessao: str, infos: list[dict], versao: str | N
     history.json, que guarda todos os deploys, e o `state` (o state.json da main,
     atualizado). App em modo imagem leva o digest do que foi para o ar
     (`last_deploy_digest`): e o que o rollback confere no GHCR. `etapas` e o que
-    o rabo mediu (merge, build por app e health, em segundos) e `responsavel` e
+    a subida mediu (merge, build por app e health, em segundos) e `responsavel` e
     quem o rodou: os dois vao na entrada, e o painel desenha a linha do tempo
     com eles."""
     when = agora_iso()
@@ -899,7 +899,7 @@ def registrar_pela_action(raiz: Path, arquivo: Path, entrada: dict) -> str:
     """Dispara a Action pos-merge na main com o registro do `arquivo` (ADR
     0068) e espera a `entrada` no history.json da main. Devolve o sha do
     commit do bot. A conclusao do run nao basta: no grupo de concorrencia
-    `pos-merge` um push que chega com o disparo na fila o cancela, e o rabo
+    `pos-merge` um push que chega com o disparo na fila o cancela, e a subida
     dispara de novo. Run que termina de outro jeito sem o registro na main, e o
     teto, levantam RuntimeError."""
     limite = time.time() + REGISTRO_TIMEOUT_S
@@ -996,7 +996,7 @@ def _parse_ts(v) -> float | None:
 
 def esperar_build(service: dict, desde: float, sha_push: str, ignorar: tuple[str, ...] = ()) -> tuple[str, int | None]:
     """Espera o deploy disparado pelo webhook. Devolve (status, duracao_s).
-    `ignorar`: os squashes intermediarios da onda, cujo deploy o rabo cancelou e
+    `ignorar`: os squashes intermediarios da onda, cujo deploy a subida cancelou e
     que a janela de horario pegaria."""
     uuid = service["uuid"]
     dep = None
@@ -1176,7 +1176,7 @@ def publicar_imagem(raiz: Path, service: dict, sha: str, origens: list[str]) -> 
     sha e `latest`) e espera o run terminar. O workflow retagueia pelo digest a
     primeira das `origens` (`<head>@<digest>`) que existir no GHCR; sem nenhuma,
     constroi do `sha`. Quem escreve no GHCR e o GITHUB_TOKEN do workflow: o gh
-    da maquina do rabo nao tem `write:packages`. Devolve (conclusao, id do run)."""
+    da maquina da subida nao tem `write:packages`. Devolve (conclusao, id do run)."""
     wf = service["build"]["publish_workflow"]
     antes = {r.get("databaseId") for r in runs_da_imagem(raiz, service)}
     proc = run(["gh", "workflow", "run", wf, "--ref", "main", "-f", f"sha={sha}",
@@ -1265,7 +1265,7 @@ def imagem_no_ar(uuid: str) -> str | None:
 
 def tag_no_ar(raiz: Path, wt: Path, ref: str, service: dict) -> tuple[str | None, str | None]:
     """A tag que o app em modo imagem roda agora (issue #1001) e o digest dela:
-    o sha e o digest do ultimo deploy dele no state.json, que o rabo pos no ar.
+    o sha e o digest do ultimo deploy dele no state.json, que a subida pos no ar.
     O CLI do Coolify nao devolve a tag configurada, e o `rollback images` e de
     build do git. Sem digest no state.json (o primeiro deploy por imagem), o do
     run do workflow que publicou a tag."""
@@ -1289,7 +1289,7 @@ def esperar_rollback(service: dict, antes: set[str]) -> str:
 
 
 def esperar_deploy_novo(service: dict, antes: set[str]) -> str:
-    """Espera o deploy que o rabo acabou de pedir (o que nao estava em `antes`)
+    """Espera o deploy que a subida acabou de pedir (o que nao estava em `antes`)
     terminar, sem forcar nenhum."""
     limite = time.time() + BUILD_WAIT_WEBHOOK_S
     while True:
@@ -1306,7 +1306,7 @@ def reverter(servicos_cfg: dict, servicos: list[str], alvos: dict[str, str | Non
              com_app_version: list[str], digests: dict[str, str | None] | None = None) -> tuple[bool, str]:
     """Rollback automatico (issue #968): cada app do lote volta a imagem que
     estava no ar antes do merge (`alvos`, de `imagem_no_ar`), o APP_VERSION
-    antigo volta aos apps em que o rabo o trocou e o health e conferido de novo.
+    antigo volta aos apps em que a subida o trocou e o health e conferido de novo.
     Devolve (deu certo, o que aconteceu)."""
     try:
         alvos = {sid: alvos.get(sid) for sid in servicos}
@@ -1350,10 +1350,10 @@ def reverter(servicos_cfg: dict, servicos: list[str], alvos: dict[str, str | Non
 def reabrir_issues(raiz: Path, lote: list[dict], chave: str, versao_nova: str | None, versao_antiga: str,
                    linha_health: str) -> None:
     """Cada issue do lote volta para a fila, com `ready-for-agent` e um comentario
-    com o que o health respondeu (issue #999): o rabo assume a consequencia do
+    com o que o health respondeu (issue #999): a subida assume a consequencia do
     proprio fracasso antes de soltar a trava."""
     corpo = ("<!-- automacao -->\n"
-             f"Rollback do rabo (chave {chave}): o health falhou na v{versao_nova} e cada app do lote voltou a "
+             f"Rollback da subida (chave {chave}): o health falhou na v{versao_nova} e cada app do lote voltou a "
              f"imagem anterior (v{versao_antiga}). O squash sai da main pelo PR `revert/{chave}`, e a issue volta "
              f"para `ready-for-agent`.\n{linha_health}\n")
     for n in [ref["number"] for info in lote for ref in info.get("closingIssuesReferences") or []]:
@@ -1435,7 +1435,7 @@ def checar_health(service: dict, versao_esperada: str | None) -> dict:
         resultado["ok"] = ok
         if ok:
             return resultado
-        # o que o health respondeu vai na linha do rabo e no comentario da issue reaberta (issue #968)
+        # o que o health respondeu vai na linha da subida e no comentario da issue reaberta (issue #968)
         resultado["corpo"] = " ".join(body.split())[:200]
         time.sleep(10)
     return resultado
@@ -1628,7 +1628,7 @@ def main() -> int:
             except MergeConflito as e:
                 de_fora.append(n)
                 print(f"de fora: conflito no merge de #{e.pr} em: {', '.join(e.arquivos) or '?'}. "
-                      "Mande um corretor rebasear o PR sobre origin/main e rode o rabo de novo com ele.")
+                      "Mande um corretor rebasear o PR sobre origin/main e rode a subida de novo com ele.")
                 continue
             except EntregaFalhou as e:
                 de_fora.append(n)

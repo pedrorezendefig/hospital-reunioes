@@ -7,7 +7,7 @@ registro no input `registro`: `{"entrada": <a entrada nova do history.json>,
 do Manual e do snapshot, que leem a versão nova no `history.json`. O input chega
 pela variável `REGISTRO`, nunca interpolado no `run` do YAML.
 
-A entrada vai para o topo de `deploys` (o mais novo primeiro, como o rabo sempre
+A entrada vai para o topo de `deploys` (o mais novo primeiro, como a subida sempre
 gravou) e as antigas ficam como estão; o `state.json` passa a ser o do registro.
 Registro fora do esquema sai com 1 sem escrever nada: o passo do draft põe os
 `prds` e a `app_version` da entrada no `GITHUB_OUTPUT`. O `commitar` confere de
@@ -33,7 +33,7 @@ VERSAO = re.compile(r"\d+\.\d+\.\d+")
 ID = re.compile(r"[a-z][a-z0-9_-]*")
 CHAVE_DE_ENV = re.compile(r"[A-Z][A-Z0-9_]*")
 MIGRATION = re.compile(r"\d+_[A-Za-z0-9_.-]+\.sql")
-LOGIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*")  # login do GitHub de quem rodou o rabo
+LOGIN = re.compile(r"[A-Za-z0-9][A-Za-z0-9-]*")  # login do GitHub de quem rodou a subida
 CONTROLE = re.compile(r"[\x00-\x1f\x7f]")
 
 
@@ -76,14 +76,14 @@ def _mudanca_de_env(v) -> bool:
 
 
 def _etapas(v) -> bool:
-    """O que o rabo mediu: merge e health em segundos, build por app (None para o
+    """O que a subida mediu: merge e health em segundos, build por app (None para o
     app sem build, como o backend em modo imagem)."""
     return (isinstance(v, dict) and set(v) == {"merge_s", "build_s", "health_s"}
             and _inteiro(v["merge_s"]) and _inteiro(v["health_s"]) and isinstance(v["build_s"], dict)
             and all(_casa(ID)(k) and (x is None or _inteiro(x)) for k, x in v["build_s"].items()))
 
 
-# Os campos que o `montar_registro` do rabo grava, nem um a mais. As entradas
+# Os campos que o `montar_registro` da subida grava, nem um a mais. As entradas
 # antigas do history.json não têm `etapas` nem `responsavel`: o esquema vale
 # para a entrada nova, nunca para o arquivo inteiro.
 ENTRADA = {
@@ -104,8 +104,8 @@ ENTRADA = {
     "etapas": _etapas,
     "responsavel": _casa(LOGIN),
 }
-# O que o rabo muda no state.json, além dos serviços: o resto vem da main.
-DO_RABO = {"updated_at", "updated_by", "last_app_version", "last_run"}
+# O que a subida muda no state.json, além dos serviços: o resto vem da main.
+DA_SUBIDA = {"updated_at", "updated_by", "last_app_version", "last_run"}
 
 
 def validar_entrada(entrada) -> dict:
@@ -126,11 +126,11 @@ def _ids(state: dict) -> list:
 
 def validar_state(state, atual: dict, entrada: dict) -> dict:
     """O state.json do registro tem as chaves do da main (menos `next_actions`,
-    que o rabo apaga) mais as que o rabo grava, os mesmos serviços na mesma
+    que a subida apaga) mais as que a subida grava, os mesmos serviços na mesma
     ordem, e bate com a entrada."""
     if not isinstance(state, dict):
         raise RegistroRecusado("o state não é um objeto")
-    if set(state) != (set(atual) - {"next_actions"}) | DO_RABO:
+    if set(state) != (set(atual) - {"next_actions"}) | DA_SUBIDA:
         raise RegistroRecusado("as chaves do state não são as do state.json da main")
     if not isinstance(state.get("services"), list) or _ids(state) != _ids(atual):
         raise RegistroRecusado("os serviços do state não são os do state.json da main")
@@ -146,13 +146,13 @@ def _ler(caminho: Path):
 
 
 def _escrever(caminho: Path, dado) -> None:
-    # o mesmo formato do `escrever_json` do rabo: o diff do history.json é só a entrada nova
+    # o mesmo formato do `escrever_json` da subida: o diff do history.json é só a entrada nova
     caminho.write_text(json.dumps(dado, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
 
 def aplicar(valor: str, raiz: Path) -> bool:
     """Valida o registro e grava os dois arquivos. Devolve False se a entrada já
-    estava no history.json (o rabo disparou de novo um run que já tinha entrado)."""
+    estava no history.json (a subida disparou de novo um run que já tinha entrado)."""
     try:
         registro = json.loads(valor)
     except json.JSONDecodeError as e:

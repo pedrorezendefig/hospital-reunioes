@@ -1,8 +1,8 @@
 """A imagem do backend construída no CI e publicada no GHCR (issue #1001, ADR 0064 decisão 6c).
 
 Três pontas que só se encontram em produção: o `ci.yml` publica a imagem com a
-tag do sha do head do PR, o `imagem-backend.yml` dá a ela a tag do squash (o
-rabo o dispara e acha o run pelo sha no título) e o `project.json` diz ao rabo
+tag do sha do head do PR, o `imagem-backend.yml` dá a ela a tag do squash (a
+subida o dispara e acha o run pelo sha no título) e o `project.json` diz à subida
 que o backend está em modo imagem, qual imagem e qual workflow. Um nome de
 imagem diferente numa delas, ou um run-name sem o sha, só apareceria no
 primeiro deploy. Estes testes leem os YAML e o JSON como dado e rodam o script
@@ -68,7 +68,7 @@ def test_backend_esta_em_modo_imagem_no_project_json_e_o_frontend_segue_no_git()
     assert build["build_pack"] == "dockerimage"
     assert build["image"] == "ghcr.io/pedrorezendefig/hospital-reunioes-backend"
     assert (WORKFLOWS / build["publish_workflow"]).exists()
-    # a pasta que o rabo compara entre head e squash é o contexto do build no CI
+    # a pasta que a subida compara entre head e squash é o contexto do build no CI
     contexto = passo(job_build()["steps"], "Build backend image")["with"]["context"]
     assert build["base_directory"].strip("/") == contexto
     assert servico("frontend")["build"]["build_pack"] == "dockerfile"  # a #1002
@@ -111,16 +111,16 @@ def test_cache_de_camadas_e_do_github_actions_isolado_por_ref_e_nao_do_registry(
         assert "type=registry" not in caminho.read_text(encoding="utf-8"), caminho.name
 
 
-def test_ci_guarda_o_digest_da_imagem_do_head_para_o_rabo():
+def test_ci_guarda_o_digest_da_imagem_do_head_para_a_subida():
     """A tag `:<head>` é mutável; o digest do que o build publicou vai para o
-    artefato que o rabo lê (`digest-<serviço>`), só quando o CI publica."""
+    artefato que a subida lê (`digest-<serviço>`), só quando o CI publica."""
     passos = job_build()["steps"]
     assert passo(passos, "Build backend image")["id"] == "backend"
     digest = passo(passos, "Digest da imagem do backend")
     assert digest["if"] == "env.PUBLICA == 'true'"
     assert digest["env"]["DIGEST"] == "${{ steps.backend.outputs.digest }}"
     assert "digest/digest" in digest["run"]
-    guarda = passo(passos, "Guarda o digest para o rabo")
+    guarda = passo(passos, "Guarda o digest para a subida")
     assert guarda["if"] == "env.PUBLICA == 'true'"
     assert guarda["uses"].startswith("actions/upload-artifact@")
     assert guarda["with"] == {"name": f"digest-{backend()['id']}", "path": "digest/digest"}
@@ -134,12 +134,12 @@ def test_ci_nao_publica_a_imagem_do_frontend_construida_com_valores_falsos():
 
 # ------------------------------------------------------ imagem-backend.yml
 
-def test_workflow_de_imagem_e_o_contrato_que_o_rabo_dispara():
+def test_workflow_de_imagem_e_o_contrato_que_a_subida_dispara():
     wf = publicador()
     entradas = wf["on"]["workflow_dispatch"]["inputs"]
     assert entradas["sha"]["required"] is True
     assert entradas["origens"]["required"] is False
-    # o rabo acha o run do disparo pelo sha no título
+    # a subida acha o run do disparo pelo sha no título
     assert "${{ inputs.sha }}" in wf["run-name"]
     assert wf["permissions"] == {"contents": "read", "packages": "write"}
     [job] = wf["jobs"].values()
@@ -163,13 +163,13 @@ def test_build_de_reserva_constroi_o_squash_e_publica_sha_e_latest():
                                              "${{ env.IMAGEM_BACKEND }}:latest"]
 
 
-def test_workflow_guarda_o_digest_publicado_para_o_rabo():
-    """O digest do retag (o da origem) ou o do build vai para o artefato que o
-    rabo lê, confere no GHCR e grava no state.json."""
+def test_workflow_guarda_o_digest_publicado_para_a_subida():
+    """O digest do retag (o da origem) ou o do build vai para o artefato que a
+    subida lê, confere no GHCR e grava no state.json."""
     [job] = publicador()["jobs"].values()
     digest = passo(job["steps"], "Digest publicado")
     assert digest["env"]["DIGEST"] == "${{ steps.retag.outputs.digest || steps.build.outputs.digest }}"
-    guarda = passo(job["steps"], "Guarda o digest para o rabo")
+    guarda = passo(job["steps"], "Guarda o digest para a subida")
     assert guarda["uses"].startswith("actions/upload-artifact@")
     assert guarda["with"] == {"name": f"digest-{backend()['id']}", "path": "digest/digest"}
 

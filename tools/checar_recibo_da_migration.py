@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
 """Recusa migration nova que não termina gravando o próprio número (issue #969).
 
-O rabo (`fechar_onda.py`) só mergeia um lote com migration depois que o
+A subida (`fechar_onda.py`) só mergeia um lote com migration depois que o
 `/api/health` devolve o número dela, e quem põe o número lá é a própria
 migration: a última instrução de toda migration nova é
 
     INSERT INTO migracoes_aplicadas (numero) VALUES (<N>) ON CONFLICT (numero) DO NOTHING;
 
-com N igual ao prefixo do arquivo. Sem ela, ou com o número de outra, o rabo
+com N igual ao prefixo do arquivo. Sem ela, ou com o número de outra, a subida
 esperaria 24 h por um número que nunca chega. Comentário e linha em branco
 depois do insert não contam; o `ON CONFLICT` é opcional (deixa reaplicar).
 
@@ -71,7 +71,7 @@ def mensagem(ruins: list[str]) -> str:
         for nome in ruins
     ]
     linhas.append(
-        "O rabo só mergeia depois que o /api/health devolve esse número (issue #969)."
+        "A subida só mergeia depois que o /api/health devolve esse número (issue #969)."
     )
     return "\n".join(linhas)
 

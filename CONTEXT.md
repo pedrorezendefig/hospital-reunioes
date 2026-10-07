@@ -247,6 +247,9 @@ _Evitar_: vincular fatia em vez do PRD; Demanda com mais de uma issue; mostrar n
 Onde a Demanda vinculada está na entrega, em palavras do diretor, sempre derivada do GitHub e nunca editada à mão: **Registrada** (sem Vínculo), **Em análise**, **Planejada**, **Em desenvolvimento**, **Entregue** e **Não será feita**. É um eixo à parte do Estado da Demanda: o Estado diz de quem é a vez na conversa, a Etapa diz o que o desenvolvimento já fez. Num PRD, vem com "X de Y partes entregues". Só uma Etapa mexe no Estado: **Entregue** devolve a Demanda a quem pediu (Aguardando, responsável o autor) para ele conferir e concluir.
 _Evitar_: Etapa digitada; confundir Etapa com Estado; concluir a Demanda sozinho na entrega; Entregue como "deploy confirmado" (é o fechamento da issue).
 
+**Subida**:
+O passo que leva PRs verdes até produção (`fechar_onda.py`): merge pela API, versão, build, health, registro. Antes chamado de rabo.
+
 **O que muda**:
 O que a entrega acrescenta para quem pediu, em linguagem de leigo. O card da Demanda vinculada mostra o texto da entrega inteira e, embaixo, o de cada parte dela com a situação (Planejada, Em desenvolvimento, Entregue). Vem do bloco "Para o diretor" da issue e **nunca é digitado no app**: quem escreve é o planejamento da Vitta, e o app só lê (ADR 0054, decisão 7). Sem o bloco escrito, o card diz "Descrição em preparação". O botão **Copiar para IA** leva esse texto junto.
 _Evitar_: reescrever o valor na descrição da Demanda (duplica e apodrece); mostrar o corpo técnico da issue no lugar do bloco; título de parte, número de issue, link ou label na tela de quem não trabalha no GitHub.

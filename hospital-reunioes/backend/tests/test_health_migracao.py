@@ -1,7 +1,7 @@
 """O número da última migration aplicada no `/api/health` (issue #969).
 
-Toda migration termina gravando o próprio número em `migracoes_aplicadas`, e o
-rabo (`fechar_onda.py`) só mergeia um lote com migration depois que o health
+Toda migration termina gravando o próprio número em `migracoes_aplicadas`, e a
+subida (`fechar_onda.py`) só mergeia um lote com migration depois que o health
 devolve esse número. A costura é a rota de verdade, montada num app mínimo com
 o mesmo prefixo, e o banco é um dublê que se comporta como o PostgREST: ordena,
 limita e responde `42P01` quando a tabela ainda não existe (a migration 114
@@ -115,8 +115,8 @@ def test_health_com_a_tabela_vazia_devolve_migracao_nula(monkeypatch):
     assert resp.json()["migracao"] is None
 
 
-def test_corpo_do_health_continua_casando_o_regex_do_rabo(monkeypatch):
-    """O rabo confere o health pelo `expected_body_regex` do project.json:
+def test_corpo_do_health_continua_casando_o_regex_da_subida(monkeypatch):
+    """A subida confere o health pelo `expected_body_regex` do project.json:
     `status` e `db` primeiro, campo novo só no fim."""
     projeto = json.loads((RAIZ / "docs/spec/deploy/project.json").read_text(encoding="utf-8"))
     backend = next(s for s in projeto["services"] if s["id"] == "backend")

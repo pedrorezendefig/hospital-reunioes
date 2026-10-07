@@ -33,12 +33,12 @@ Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila
 
 1. **Semáforo** (1 linha), só Actions: componente Actions da status page do GitHub mais os últimos 10 runs do repositório.
    - verde: `operational` e nenhum job cancelado com `not acquired by Runner`: desenvolve, mergeia e deploya.
-   - amarelo: `degraded_performance`, status page sem resposta ou algum cancelamento por runner: desenvolve e abre PR; o rabo espera.
+   - amarelo: `degraded_performance`, status page sem resposta ou algum cancelamento por runner: desenvolve e abre PR; a subida espera.
    - vermelho: `partial_outage` ou `major_outage`: só código local, não abre onda.
-2. **Em andamento**: issue com claim, PR, ou worktree nesta máquina. "Onde parou" diz PR verde esperando o rabo, CI cancelado ou vermelho, conflito, must-fix aberto, sem revisão, commit só local e worktree travado.
+2. **Em andamento**: issue com claim, PR, ou worktree nesta máquina. "Onde parou" diz PR verde esperando a subida, CI cancelado ou vermelho, conflito, must-fix aberto, sem revisão, commit só local e worktree travado.
 3. **Na fila**: uma linha por PRD ou grupo de avulsas, com a idade ("parada há N dias"). `needs-triage` entra só na contagem, com `/triage`.
 4. **Plano**: até 3 passos, um por nível, nesta ordem fixa:
-   1. PR verde esperando o rabo (`fechar_onda.py --prs <N> --dry-run`);
+   1. PR verde esperando a subida (`fechar_onda.py --prs <N> --dry-run`);
    2. trabalho que pode se perder (commit sem push);
    3. PR travado (rerun, log do CI, conflito, must-fix, revisão);
    4. `priority:high` na fila (`/pegar-issue <N>`);

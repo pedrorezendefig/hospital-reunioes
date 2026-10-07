@@ -179,7 +179,7 @@ async function load(fresh = false, silent = false) {
 
 /* Semáforo com três estados: verde só com todo serviço healthy e checado;
    vermelho com algum down/unhealthy ou HTTP fora de 2xx; âmbar no resto
-   (warning, sem verificação). O supabase não tem HTTP próprio: o rabo deriva
+   (warning, sem verificação). O supabase não tem HTTP próprio: a subida deriva
    o status dele do health do backend, e "sem HTTP" deixou de ser vermelho. */
 const SERVICO_FORA = ['down', 'unhealthy'];
 const checado = s => s.status === 'healthy' && !!s.last_health_check;
@@ -847,7 +847,7 @@ function segmentosDe(ev) {
     add('build', Math.max(0, ...builds.map(([, v]) => v)), builds.map(([sid, v]) => `${sid} ${durS(v)}`).join(' · '));
     add('health', e.health_s);
   } else {
-    add('total', ev.duration_seconds);   // entrada antiga, sem etapas: só o total do rabo
+    add('total', ev.duration_seconds);   // entrada antiga, sem etapas: só o total da subida
   }
   return segs;
 }
@@ -876,7 +876,7 @@ function chipPr(n, mergePorPr) {
 
 const chipIssue = n => `<a class="chip" href="${rotaDe('issues', n)}">#${n}</a>`;
 
-/* o deploy aberto: commit, escopo, duração do rabo, env e notas */
+/* o deploy aberto: commit, escopo, duração da subida, env e notas */
 function detalheDoDeploy(dp) {
   const env = (dp.env_changes || []).map(e => `${esc(e.service)} ${esc(e.action)} ${(e.keys || []).map(esc).join(', ')}`);
   return `
@@ -884,7 +884,7 @@ function detalheDoDeploy(dp) {
     <div class="pd-chips">
       ${dp.sha ? `<span class="chip">${esc(shaCurto(dp.sha))}</span>` : ''}
       ${(dp.scope || []).map(s => `<span class="chip">${esc(s)}</span>`).join('')}
-      <span class="chip" title="duração do rabo">${durS(dp.duration_seconds)}</span>
+      <span class="chip" title="duração da subida">${durS(dp.duration_seconds)}</span>
     </div>
     ${env.length ? `<p class="pd-notes mono">env: ${env.join(' · ')}</p>` : ''}
     ${dp.notes ? `<p class="pd-notes">${esc(dp.notes)}</p>` : ''}

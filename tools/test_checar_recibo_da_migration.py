@@ -1,8 +1,8 @@
 """Guarda do recibo da migration (issue #969).
 
 Toda migration nova termina gravando o próprio número em `migracoes_aplicadas`,
-e o rabo só mergeia depois que o `/api/health` devolve esse número. Migration
-sem o recibo, ou com o número de outra, faria o rabo esperar 24 h por um número
+e a subida só mergeia depois que o `/api/health` devolve esse número. Migration
+sem o recibo, ou com o número de outra, faria a subida esperar 24 h por um número
 que nunca chega. Estes testes montam um repositório `git` de verdade em
 `tmp_path` e rodam a guarda por subprocess, como o CI roda. Cada mutante mexe
 em uma coisa só da migration certa.
@@ -38,7 +38,7 @@ ENV_GIT = {
 
 CORPO = "CREATE TABLE triagem (id int);\nALTER TABLE triagem ENABLE ROW LEVEL SECURITY;\n"
 RECIBO_115 = "INSERT INTO migracoes_aplicadas (numero) VALUES (115) ON CONFLICT (numero) DO NOTHING;\n"
-CERTA = CORPO + "\n-- recibo: o rabo espera este numero no /api/health\n" + RECIBO_115
+CERTA = CORPO + "\n-- recibo: a subida espera este numero no /api/health\n" + RECIBO_115
 NOVA = "115_triagem.sql"
 
 

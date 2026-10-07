@@ -6,7 +6,7 @@ mudança por qualquer caminho. Regra de deny por prefixo não trava isso (escapa
 com `-X DELETE`, `--method=PUT`, `graphql`, `curl`), então ela não existe mais.
 No `~/.claude/settings.json` de cada pessoa ficam o deny de force push contra a
 `main` e o `autoMode` (o modo auto não lê `autoMode` do settings do projeto):
-o rabo, a `/minhas-issues` e a escrituração em issue e PR vão em
+a subida, a `/minhas-issues` e a escrituração em issue e PR vão em
 `autoMode.allow`, em prosa, para o classificador seguir olhando destino e
 conteúdo, e nunca em `permissions.allow`, que pula o classificador. O
 `/setup-maquina` confere e diz o que falta e por quê; nunca grava o arquivo e

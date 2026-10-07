@@ -51,7 +51,7 @@ describe("rewrite do /api", () => {
 /**
  * Versão do app no rodapé (issue #967).
  *
- * A versão não é mais commitada: o rabo grava APP_VERSION no Coolify antes do
+ * A versão não é mais commitada: a subida grava APP_VERSION no Coolify antes do
  * merge, o Dockerfile a passa ao build e o next.config a grava no bundle. Sem
  * ela (build local, CI), vale o package.json, que fica congelado.
  */

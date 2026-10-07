@@ -22,7 +22,7 @@ class Settings(BaseSettings):
 
     # App
     app_name: str = "Hospital Reuniões API"
-    # Em produção, sobrescrita por APP_VERSION, que o rabo (fechar_onda.py) grava no Coolify antes do merge.
+    # Em produção, sobrescrita por APP_VERSION, que a subida (fechar_onda.py) grava no Coolify antes do merge.
     app_version: str = "0.1.0"
     debug: bool = False
     api_prefix: str = "/api"

@@ -1,10 +1,10 @@
 """O bloco `supabase` do state.json regravado a cada deploy pelo health do backend.
 
-O supabase não faz deploy nem tem HTTP próprio: o rabo nunca o tocava e o
+O supabase não faz deploy nem tem HTTP próprio: a subida nunca o tocava e o
 semáforo do painel ficava âmbar para sempre. O `/api/health` do backend só
 responde ok com o banco respondendo e diz como ele está no campo `db`: é dele
 que o `montar_registro` deriva o status do supabase, mantendo `last_deploy_*`
-como estão. A entrada nova leva `etapas` (o que o rabo mediu) e `responsavel`
+como estão. A entrada nova leva `etapas` (o que a subida mediu) e `responsavel`
 (quem o rodou), e o esquema do `tools/aplicar_registro.py` tem que aceitá-la.
 
 Mutante que fica vermelho aqui: quem esquece de regravar o bloco (o state de

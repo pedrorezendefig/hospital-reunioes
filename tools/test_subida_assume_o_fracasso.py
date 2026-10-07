@@ -1,15 +1,15 @@
-"""O rabo assume o próprio fracasso antes de soltar o semáforo (issue #999).
+"""A subida assume o próprio fracasso antes de soltar o semáforo (issue #999).
 
 ADR 0064, decisão 6a, emenda de 06/10/2026: a onda seguinte não lê nada da
 anterior. Quem ordena os deploys é o semáforo, e quem diz o que está bloqueado
 é o GitHub. Por isso o `fechar_onda.py`, ainda com a trava:
-- nas saídas 3 e 4 marca a trava como parada, e o rabo seguinte sai na hora com
+- nas saídas 3 e 4 marca a trava como parada, e a subida seguinte sai na hora com
   8, sem pegar a trava e sem mandar ninguém forçar;
 - na saída 6 reabre as issues do lote e mergeia o revert dos squashes;
 - confere de novo o `blocked_by` da issue de cada PR (a bloqueadora pode ter
   sido reaberta por um rollback).
 
-Os testes do rabo usam o repositório de verdade e os dublês de
+Os testes da subida usam o repositório de verdade e os dublês de
 `test_fechar_onda_pr_avulso.py`; os da trava rodam o `semaforo.sh` de verdade,
 numa trava própria em /tmp.
 """
@@ -82,11 +82,11 @@ def test_trava_velha_recusa_sem_mandar_forcar(trava):
     assert (trava / "chave").read_text(encoding="utf-8").strip() == "onda-a-onda1"
 
 
-# ------------------------------------------------- o rabo e a trava parada
+# ------------------------------------------------- a subida e a trava parada
 
 def com_semaforo_de_verdade(monkeypatch, c):
-    """Carrega o rabo, prepara os dublês e põe o `semaforo.sh` de verdade no
-    lugar do dublê, copiado para o clone em que o rabo roda. Quem espera a
+    """Carrega a subida, prepara os dublês e põe o `semaforo.sh` de verdade no
+    lugar do dublê, copiado para o clone em que a subida roda. Quem espera a
     trava em vez de sair na hora cai num `3` e para o teste ali, em vez de
     esperar para sempre."""
     fo = carregar_fechar_onda()
@@ -98,7 +98,7 @@ def com_semaforo_de_verdade(monkeypatch, c):
 
     def semaforo(raiz, acao, chave, descricao=""):
         rc = semaforo_real(raiz, acao, chave, descricao)
-        assert not (acao == "pegar" and rc == 3), "o rabo esperou a trava em vez de sair na hora"
+        assert not (acao == "pegar" and rc == 3), "a subida esperou a trava em vez de sair na hora"
         return rc
 
     monkeypatch.setattr(fo, "semaforo", semaforo)
@@ -113,7 +113,7 @@ def rodar(fo, monkeypatch, c, *argv: str) -> int:
         return e.code
 
 
-def test_saida_3_deixa_a_trava_parada_e_o_rabo_seguinte_sai_com_8_na_hora(tmp_path, monkeypatch, capsys, trava):
+def test_saida_3_deixa_a_trava_parada_e_a_subida_seguinte_sai_com_8_na_hora(tmp_path, monkeypatch, capsys, trava):
     c = onda_de_dois(tmp_path)
     fo = com_semaforo_de_verdade(monkeypatch, c)
     monkeypatch.setattr(fo, "esperar_build", lambda service, desde, sha, ignorar=(): ("failed", 30))
@@ -138,7 +138,7 @@ def test_saida_3_deixa_a_trava_parada_e_o_rabo_seguinte_sai_com_8_na_hora(tmp_pa
     assert c.merges == merges and c.prs[8]["state"] == "OPEN"
 
 
-def test_trava_velha_o_rabo_sai_com_8_na_hora_sem_pegar_e_sem_mandar_forcar(tmp_path, monkeypatch, capsys, trava):
+def test_trava_velha_a_subida_sai_com_8_na_hora_sem_pegar_e_sem_mandar_forcar(tmp_path, monkeypatch, capsys, trava):
     c = pr_de_codigo(tmp_path)
     fo = com_semaforo_de_verdade(monkeypatch, c)
     assert semaforo_sh("pegar", "onda-b-onda3", "PRs #5").returncode == 0
@@ -159,7 +159,7 @@ def test_trava_velha_o_rabo_sai_com_8_na_hora_sem_pegar_e_sem_mandar_forcar(tmp_
 
 def test_pr_cuja_issue_ganhou_bloqueio_aberto_fica_de_fora_e_nao_entra(tmp_path, monkeypatch, capsys):
     """A #6 (do PR #8) depende da #4, que um rollback reabriu depois que a
-    sessão montou a onda: com a trava pega, o rabo pergunta ao GitHub de novo e
+    sessão montou a onda: com a trava pega, a subida pergunta ao GitHub de novo e
     deixa o #8 de fora. O #7, cuja bloqueadora já fechou, sobe sozinho."""
     fo = carregar_fechar_onda()
     c = onda_de_dois(tmp_path)

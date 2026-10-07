@@ -92,7 +92,7 @@ def _check(conclusao="SUCCESS", *, status="COMPLETED", inicio="2026-10-03T10:05:
 
 
 def _deploy(versao, at, texto, duracao=None):
-    """Deploy no shape do history.json; o texto cita PRs e issues como o rabo escreve."""
+    """Deploy no shape do history.json; o texto cita PRs e issues como a subida escreve."""
     return {
         "app_version": versao,
         "at": at,
@@ -467,7 +467,7 @@ def test_notes_que_citam_pr_futuro_nao_poem_o_pr_em_producao_antes_do_merge():
 
 
 def test_pr_que_nenhum_deploy_cita_sobe_no_primeiro_build_depois_do_merge():
-    # PR de registro do rabo e PR só de docs não ganham deploy próprio: o seguinte sobe a main com eles
+    # PR de registro da subida e PR só de docs não ganham deploy próprio: o seguinte sobe a main com eles
     deploys = [
         _deploy("0.162.0", "2026-10-06T12:00:00Z", "PR #300", duracao=900),
         _deploy("0.161.3", "2026-10-05T18:41:18Z", "PR #896"),
