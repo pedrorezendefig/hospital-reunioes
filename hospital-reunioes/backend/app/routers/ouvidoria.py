@@ -202,12 +202,21 @@ _CAMPOS_INDICE_TUPLA = _CAMPOS_PROTOCOLO_TUPLA + (
     # indicador de resposta conclusiva, e o indicador vive na linha da fila, ao
     # lado do de resolução. É um carimbo de tempo, não dado do manifestante.
     "encerramento_sem_contato_em",
+    # A tela de validação abre também pela fila, e o texto de ajuda do Extrato
+    # para o setor diz o que vai à área conforme o caso (issue #769): no
+    # anônimo, o nome de quem manifestou não vai. Sem a marca aqui, a tela
+    # aberta pela fila descreveria o anônimo como caso comum.
+    "anonimo",
 )
 _CAMPOS_INDICE = ", ".join(_CAMPOS_INDICE_TUPLA)
 # O índice de quem está fora da Ouvidoria: o mesmo, menos o resumo (issue
-# #753). O resumo é recorte literal do relato, e protocolo, setor, situação e
-# prazo bastam para quem só acompanha a fila.
-_CAMPOS_INDICE_FORA_DA_OUVIDORIA = tuple(campo for campo in _CAMPOS_INDICE_TUPLA if campo != "resumo")
+# #753) e a marca de anônimo (issue #769). O resumo é recorte literal do
+# relato, a marca só serve a quem valida, e protocolo, setor, situação e prazo
+# bastam para quem só acompanha a fila.
+_SO_DA_OUVIDORIA_NO_INDICE = frozenset({"resumo", "anonimo"})
+_CAMPOS_INDICE_FORA_DA_OUVIDORIA = tuple(
+    campo for campo in _CAMPOS_INDICE_TUPLA if campo not in _SO_DA_OUVIDORIA_NO_INDICE
+)
 
 # O que a fila LÊ, que é maior do que o que ela devolve. O carimbo do visto
 # (issue #484) entra no select porque a flag de novidade sai da comparação
