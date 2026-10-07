@@ -27,20 +27,17 @@ import { useEffect, useState } from "react";
 import { AlertCircle, Search } from "lucide-react";
 
 import { DemandaModal } from "./DemandaModal";
-import { FiltrosDeDemandas } from "./FiltrosDeDemandas";
 import { SeloDeEtapa } from "./SeloDeEtapa";
 import { TipoIcone } from "./TipoIcone";
 import { useListaDeDemandas } from "./useListaDeDemandas";
 import {
   DemandaDoHistorico,
   EuNaAba,
-  FiltrosDoQuadro,
   fraseDoHistoricoVazio,
   O_QUE_A_BUSCA_PROCURA,
   PessoaDaAba,
   ProdutoDaEscolha,
   queryDoHistorico,
-  temFiltroAtivo,
   textoDoDesfecho,
 } from "./demandas";
 
@@ -50,8 +47,6 @@ type Props = {
   carregandoAuth: boolean;
   produtos: ProdutoDaEscolha[];
   pessoas: PessoaDaAba[];
-  filtros: FiltrosDoQuadro;
-  onFiltrosChange: (filtros: FiltrosDoQuadro) => void;
   /**
    * Quem está olhando, do ponto de vista do Vínculo (issue #674).
    *
@@ -71,7 +66,7 @@ const SEM_SESSAO =
 
 const NAO_DEU_PARA_CARREGAR = "Não foi possível carregar o Histórico.";
 
-export function HistoricoDemandas({ token, carregandoAuth, produtos, pessoas, filtros, onFiltrosChange, eu }: Props) {
+export function HistoricoDemandas({ token, carregandoAuth, produtos, pessoas, eu }: Props) {
   /** O que está escrito na caixa agora. */
   const [termo, setTermo] = useState("");
   /** O que já foi perguntado ao servidor: o termo depois que a digitação parou. */
@@ -90,7 +85,7 @@ export function HistoricoDemandas({ token, carregandoAuth, produtos, pessoas, fi
   } = useListaDeDemandas<DemandaDoHistorico>({
     token,
     carregandoAuth,
-    caminho: `/historico${queryDoHistorico(filtros, termoBuscado)}`,
+    caminho: `/historico${queryDoHistorico(termoBuscado)}`,
     semSessao: SEM_SESSAO,
     falhaAoCarregar: NAO_DEU_PARA_CARREGAR,
   });
@@ -149,14 +144,6 @@ export function HistoricoDemandas({ token, carregandoAuth, produtos, pessoas, fi
         />
       </div>
 
-      <FiltrosDeDemandas
-        filtros={filtros}
-        onFiltrosChange={onFiltrosChange}
-        produtos={produtos}
-        pessoas={pessoas}
-        oQueEstaFiltrado="O Histórico"
-      />
-
       {carregando ? (
         <p className="text-sm text-text-secondary">Carregando o Histórico...</p>
       ) : demandas.length === 0 ? (
@@ -166,9 +153,7 @@ export function HistoricoDemandas({ token, carregandoAuth, produtos, pessoas, fi
         // a tecla e o fim da espera, a lista na tela ainda é a da busca
         // anterior, e citar o termo novo daria a ele um resultado que não é
         // dele.
-        !erro && (
-          <p className="text-sm text-text-secondary">{fraseDoHistoricoVazio(termoBuscado, temFiltroAtivo(filtros))}</p>
-        )
+        !erro && <p className="text-sm text-text-secondary">{fraseDoHistoricoVazio(termoBuscado)}</p>
       ) : (
         <>
           <p className="text-sm text-text-secondary">

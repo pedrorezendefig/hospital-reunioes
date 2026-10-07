@@ -7,8 +7,8 @@
  * de verdade é o `require_super_admin` do backend; a sidebar apenas esconde o
  * item.
  *
- * As abas Minha vez e Histórico entraram na issue #641, e leem os filtros que
- * moram aqui, os mesmos do Quadro.
+ * As abas Minha vez e Histórico entraram na issue #641. Os filtros por tipo,
+ * Produto e responsável saíram do módulo na issue #1058 (PRD #1056).
  */
 
 import { useCallback, useEffect, useState } from "react";
@@ -25,9 +25,7 @@ import {
   EU_DESCONHECIDO,
   EuNaAba,
   FALHA_DE_CONEXAO,
-  FiltrosDoQuadro,
   motivoDaRecusa,
-  SEM_FILTRO,
 } from "./demandas";
 
 type Pessoa = { id: string; nome_completo: string; email: string };
@@ -66,21 +64,6 @@ export function TecnologiaModulo() {
   const { token, loading: carregandoAuth } = useAuth();
 
   const [aba, setAba] = useState<AbaId>("quadro");
-  /**
-   * Os filtros do Quadro moram aqui, e não dentro dele (issue #639).
-   *
-   * Trocar de aba desmonta o painel, então um estado guardado lá dentro
-   * voltaria ao zero na volta, que é justo o que o critério de aceite proíbe.
-   * Aqui em cima eles atravessam a troca de aba e ficam à mão das abas que
-   * ainda vêm (Minha vez e Histórico).
-   *
-   * Não vão para o `localStorage` de propósito: um filtro escolhido ontem
-   * voltaria calado no dia seguinte, escondendo Demandas de quem nem lembra
-   * de tê-lo posto, e a leitura do storage ainda pode lançar em navegador com
-   * dados de site bloqueados. O critério pede a travessia de aba, não a
-   * travessia de sessão.
-   */
-  const [filtros, setFiltros] = useState<FiltrosDoQuadro>(SEM_FILTRO);
   const [produtos, setProdutos] = useState<Produto[]>([]);
   const [pessoas, setPessoas] = useState<Pessoa[]>([]);
   /**
@@ -231,10 +214,6 @@ export function TecnologiaModulo() {
         ))}
       </div>
 
-      {/* As três abas recebem os MESMOS filtros e o mesmo jeito de trocá-los
-          (issue #639): o estado mora aqui em cima justamente para atravessar a
-          troca de aba, e uma aba que não o recebesse mostraria uma lista que
-          contradiz o que a pessoa acabou de escolher na aba ao lado. */}
       <div role="tabpanel">
         {aba === "quadro" && (
           <QuadroDemandas
@@ -242,8 +221,6 @@ export function TecnologiaModulo() {
             carregandoAuth={carregandoAuth}
             produtos={produtos}
             pessoas={pessoas}
-            filtros={filtros}
-            onFiltrosChange={setFiltros}
             eu={eu}
           />
         )}
@@ -253,8 +230,6 @@ export function TecnologiaModulo() {
             carregandoAuth={carregandoAuth}
             produtos={produtos}
             pessoas={pessoas}
-            filtros={filtros}
-            onFiltrosChange={setFiltros}
             eu={eu}
           />
         )}
@@ -264,8 +239,6 @@ export function TecnologiaModulo() {
             carregandoAuth={carregandoAuth}
             produtos={produtos}
             pessoas={pessoas}
-            filtros={filtros}
-            onFiltrosChange={setFiltros}
             eu={eu}
           />
         )}
