@@ -1,6 +1,6 @@
 # ROTAS.md
 <!-- gerado automaticamente por /snapshot — não editar -->
-<!-- last_update: 2026-10-07T17:14+0000 -->
+<!-- last_update: 2026-10-07T18:15+0000 -->
 
 Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 
@@ -403,9 +403,10 @@ Endpoints HTTP expostos pelo backend FastAPI do Hospital Reuniões.
 | Método | Rota | O que faz | Auth |
 |--------|------|-----------|------|
 | POST | `/webhooks/clicksign` | Recebe notificações da ClickSign sobre assinaturas e fechamento de documentos. | ❌ |
+| POST | `/webhooks/deploy` | Uma versão subiu: Em produção nas Demandas do lote (ADR 0069, decisão 4). | ❌ |
 | POST | `/webhooks/github` | A Demanda vinculada aprendendo do GitHub em segundos (ADR 0054, decisão 2). | ❌ |
 | POST | `/webhooks/resend` | O e-mail que chegou em ouvidoria@ entra na Triagem de e-mail (ADR 0051). | ❌ |
 
 ---
 
-**Totais:** 237 endpoints em 33 routers · 93% exigem auth.
+**Totais:** 238 endpoints em 33 routers · 93% exigem auth.
