@@ -188,10 +188,9 @@ from app.services.tecnologia_vinculo import (
     MOTIVO_SEM_VINCULO_PARA_DESFAZER,
     TEXTO_VINCULO_CRIADO,
     TEXTO_VINCULO_DESFEITO,
-    corpo_com_marcador,
     corpo_da_issue_nova,
     corpo_do_comentario_espelhado,
-    corpo_precisa_do_marcador,
+    corpo_vinculado,
     foto_mudou,
     labels_da_issue_nova,
     login_para_publicar,
@@ -926,6 +925,37 @@ async def _espelhar_correcao(
         )
 
 
+def _reescrever_a_contagem(numero: int, demanda_id: str, anexos: int) -> None:
+    dados = github_client.ler_issue(numero)
+    corpo = dados.get("body")
+    novo_corpo = corpo_vinculado(corpo, demanda_id, anexos=anexos)
+    if novo_corpo != (corpo or ""):
+        github_client.atualizar_corpo(numero, novo_corpo)
+
+
+async def _contagem_na_issue(supabase: Client, *, demanda: dict) -> None:
+    """A issue ja vinculada acompanha a contagem dos Anexos (issue #1062).
+
+    Imagem nova e encerramento (que apaga os binarios) mudam o N da frase
+    "Anexos: N imagens na Demanda"; o corpo e reescrito por substituicao, e so
+    quando muda. Demanda sem Vinculo nao tem onde escrever.
+
+    **Falha aqui nao desfaz nada**, pelo mesmo motivo do espelho da resposta: a
+    imagem ja entrou (ou a Demanda ja foi encerrada), e o GitHub fora do ar nao
+    pode devolver erro a quem anexou. A proxima mudanca de contagem, ou um novo
+    `vincular`, reescreve a frase. Fora do loop porque o cliente e sincrono.
+    """
+    numero = demanda.get("github_issue_numero")
+    if not numero:
+        return
+    demanda_id = str(demanda["id"])
+    try:
+        anexos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)
+        await asyncio.to_thread(_reescrever_a_contagem, int(numero), demanda_id, anexos)
+    except Exception:
+        logger.exception("Falha ao atualizar a contagem de anexos da Demanda %s na issue vinculada", demanda_id)
+
+
 # ─── Demanda: endpoints ──────────────────────────────────────────────────────
 
 
@@ -1100,7 +1130,8 @@ async def mover_demanda(
         # apagam. Antes da linha do fio, e nao depois: se ela falhar, o 500 do
         # `_gravar_movimento` sai com a Demanda ja encerrada, e o binario de
         # assunto encerrado nao pode ficar para tras por causa disso.
-        tecnologia_anexos.apagar_todos(supabase, demanda_id)
+        if tecnologia_anexos.apagar_todos(supabase, demanda_id):
+            await _contagem_na_issue(supabase, demanda=atual)
 
     _gravar_movimento(
         supabase,
@@ -1204,6 +1235,7 @@ async def anexar_a_demanda(
         )
     except tecnologia_anexos.AnexoRecusadoError as exc:
         raise HTTPException(status_code=exc.status_code, detail=str(exc)) from exc
+    await _contagem_na_issue(supabase, demanda=demanda)
     return {
         "id": linha["id"],
         "nome": linha["nome_original"],
@@ -1402,7 +1434,7 @@ async def vincular_demanda(
 
     O par e guardado dos DOIS lados: a Demanda ganha o numero, a issue ganha o
     id da Demanda num marcador oculto no fim do corpo. O marcador entra por
-    substituicao (`corpo_com_marcador`), entao vincular duas vezes o mesmo
+    substituicao (`corpo_vinculado`), entao vincular duas vezes o mesmo
     numero deixa o corpo identico e nem chega a chamar o PATCH.
 
     Sincroniza na hora: sem isso o card mostraria o selo vazio ate a
@@ -1426,14 +1458,18 @@ async def vincular_demanda(
     if outra:
         _recusar(motivo_numero_ja_usado(numero, str(outra.get("titulo") or "sem título")))
 
+    anexos = tecnologia_anexos.quantos_guardados(supabase, demanda_id)
     try:
         dados = github_client.ler_issue(numero)
         if github_client.e_pull_request(dados):
             _recusar(motivo_e_pull_request(numero))
 
+        # O marcador e, quando a Demanda guarda imagens, a frase "Anexos: N
+        # imagens na Demanda" (issue #1062): so a contagem, nunca URL nem nome.
         corpo = dados.get("body")
-        if corpo_precisa_do_marcador(corpo, demanda_id):
-            github_client.atualizar_corpo(numero, corpo_com_marcador(corpo, demanda_id))
+        novo_corpo = corpo_vinculado(corpo, demanda_id, anexos=anexos)
+        if novo_corpo != (corpo or ""):
+            github_client.atualizar_corpo(numero, novo_corpo)
 
         foto = github_client.montar_foto(dados, github_client.ler_sub_issues(numero))
     except github_client.IssueNaoEncontradaError:

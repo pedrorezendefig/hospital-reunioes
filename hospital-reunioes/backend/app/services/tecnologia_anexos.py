@@ -128,7 +128,7 @@ def anexar(supabase, *, demanda: dict, nome: str, conteudo: bytes, quem_id: str)
         raise AnexoRecusadoError(MOTIVO_NAO_GUARDOU, status_code=503) from exc
 
 
-def apagar_todos(supabase, demanda_id: str) -> None:
+def apagar_todos(supabase, demanda_id: str) -> int:
     """Tira do bucket os binarios da Demanda e marca cada registro apagado.
 
     Chamado SO por Concluir e Cancelar, o ato humano que encerra (ADR 0069,
@@ -142,17 +142,22 @@ def apagar_todos(supabase, demanda_id: str) -> None:
 
     Nunca levanta: quem chama ja encerrou a Demanda, e o encerramento vale com
     ou sem o bucket respondendo. Falha aqui vira log com o caminho do arquivo.
+
+    Devolve quantos binarios sairam: com zero, a contagem da issue vinculada
+    (issue #1062) nao mudou e nao ha o que reescrever la.
     """
     try:
         guardados = [linha for linha in ler(supabase, demanda_id) if not linha.get("apagado_em")]
     except Exception:
         logger.exception("Falha ao ler os anexos da Demanda %s para apagar ao encerrar", demanda_id)
-        return
+        return 0
+    sairam = 0
     for linha in guardados:
         path = linha["storage_path"]
         if not storage.delete_file(supabase, _bucket(), path):
             logger.error("Anexo da Demanda %s não saiu do bucket ao encerrar: %s", demanda_id, path)
             continue
+        sairam += 1
         try:
             supabase.table(TABELA_ANEXOS).update({"apagado_em": datetime.now(UTC).isoformat()}).eq(
                 "id", linha["id"]
@@ -164,6 +169,7 @@ def apagar_todos(supabase, demanda_id: str) -> None:
                 demanda_id,
                 path,
             )
+    return sairam
 
 
 def quantos_guardados(supabase, demanda_id: str) -> int:

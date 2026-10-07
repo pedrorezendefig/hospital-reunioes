@@ -71,3 +71,71 @@ class TestIssueNovaDizQuantasImagens:
         assert client.post(LEVAR).status_code == 200
 
         assert "Anexos:" not in gh.criadas[0]["corpo"]
+
+
+class TestVincularEscreveAFrase:
+    CORPO = "## Para o diretor\n\nO selo passa a aparecer no card."
+
+    def test_vincular_demanda_com_anexos_escreve_a_frase_na_issue_existente(self, monkeypatch):
+        gh = _GithubFalso({501: _issue(501, corpo=self.CORPO)})
+        client, _, _ = _cenario(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+        for nome in ("um.png", "dois.png", "tres.png"):
+            assert _anexar(client, nome=nome).status_code == 201
+
+        assert client.post(f"{BASE}/demandas/d-1/vincular", json={"numero": 501}).status_code == 200
+
+        assert gh.issues[501]["body"] == (
+            f'{self.CORPO}\n\nAnexos: 3 imagens na Demanda\n\n<!-- demanda-vitta id="d-1" -->'
+        )
+
+    def test_vincular_de_novo_com_a_mesma_contagem_nao_escreve(self, monkeypatch):
+        gh = _GithubFalso({501: _issue(501, corpo=self.CORPO)})
+        client, _, _ = _cenario(demandas=[_demanda("d-1")], github=gh, monkeypatch=monkeypatch)
+        assert _anexar(client).status_code == 201
+        assert client.post(f"{BASE}/demandas/d-1/vincular", json={"numero": 501}).status_code == 200
+
+        assert client.post(f"{BASE}/demandas/d-1/vincular", json={"numero": 501}).status_code == 200
+
+        assert len(gh.corpos_escritos) == 1
+        assert gh.issues[501]["body"].count("Anexos:") == 1
+        assert "Anexos: 1 imagem na Demanda" in gh.issues[501]["body"]
+
+
+class TestAContagemMudaNaIssueVinculada:
+    CORPO = '## Para o diretor\n\nO selo passa a aparecer no card.\n\n<!-- demanda-vitta id="d-1" -->'
+
+    def _vinculada(self, monkeypatch):
+        gh = _GithubFalso({501: _issue(501, corpo=self.CORPO)})
+        client, sb, _ = _cenario(
+            demandas=[_demanda("d-1", estado="em_andamento", github_issue_numero=501)],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+        return client, sb, gh
+
+    def test_imagem_nova_atualiza_a_contagem_na_issue(self, monkeypatch):
+        client, _, gh = self._vinculada(monkeypatch)
+
+        assert _anexar(client, nome="um.png").status_code == 201
+        assert "Anexos: 1 imagem na Demanda" in gh.issues[501]["body"]
+        assert _anexar(client, nome="dois.png").status_code == 201
+
+        assert gh.issues[501]["body"] == (
+            '## Para o diretor\n\nO selo passa a aparecer no card.\n\n'
+            'Anexos: 2 imagens na Demanda\n\n<!-- demanda-vitta id="d-1" -->'
+        )
+
+    def test_concluir_tira_a_frase_porque_as_imagens_sairam(self, monkeypatch):
+        client, _, gh = self._vinculada(monkeypatch)
+        assert _anexar(client).status_code == 201
+
+        assert client.post(f"{BASE}/demandas/d-1/mover", json={"estado": "concluida"}).status_code == 200
+
+        assert gh.issues[501]["body"] == self.CORPO
+
+    def test_github_fora_do_ar_nao_derruba_o_anexo(self, monkeypatch):
+        client, sb, gh = self._vinculada(monkeypatch)
+        gh.erro = RuntimeError("GitHub fora do ar")
+
+        assert _anexar(client).status_code == 201
+        assert len(_anexos(sb)) == 1
