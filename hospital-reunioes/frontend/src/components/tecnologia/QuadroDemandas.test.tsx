@@ -352,15 +352,13 @@ describe("As três raias", () => {
   });
 });
 
-describe("O card", () => {
-  it("mostra símbolo do tipo, título, Produto, responsável, prioridade e idade", async () => {
+describe("O card fechado", () => {
+  it("mostra símbolo do tipo, título, Produto e Responsável, e nenhum botão além do que o abre", async () => {
     montar([
       demanda("d1", "Encerrar conversas", {
         tipo: "decisao",
         produto_nome: "Ana",
         responsavel_nome: "Sócia Vitta",
-        prioridade: "alta",
-        criado_em: diasAtras(3),
       }),
     ]);
 
@@ -369,8 +367,13 @@ describe("O card", () => {
     expect(within(card).getByRole("img", { name: "Decisão" })).toBeTruthy();
     expect(within(card).getByText("Ana")).toBeTruthy();
     expect(within(card).getByText("Sócia Vitta")).toBeTruthy();
-    expect(within(card).getByText("Alta")).toBeTruthy();
-    expect(within(card).getByText("há 3 dias")).toBeTruthy();
+
+    // O único botão do card é o que o abre: mover, concluir e cancelar moram
+    // no card aberto.
+    const botoes = within(card).getAllByRole("button");
+    expect(botoes).toHaveLength(1);
+    fireEvent.click(botoes[0]);
+    expect(await screen.findByRole("dialog")).toBeTruthy();
   });
 
   it("os sete tipos desenham sete símbolos diferentes", async () => {
@@ -387,7 +390,20 @@ describe("O card", () => {
     expect(new Set(desenhos).size).toBe(7);
   });
 
-  it("a idade fica vermelha a partir de 14 dias, e não antes", async () => {
+  it("prioridade Normal e Baixa não viram chip; Alta vira", async () => {
+    montar([
+      demanda("d1", "Urgente", { prioridade: "alta" }),
+      demanda("d2", "De sempre", { prioridade: "normal" }),
+      demanda("d3", "Quando der", { prioridade: "baixa" }),
+    ]);
+
+    await screen.findByText("Urgente");
+    expect(within(cardDe("Urgente")).getByText("Alta")).toBeTruthy();
+    expect(screen.queryByText("Normal")).toBeNull();
+    expect(screen.queryByText("Baixa")).toBeNull();
+  });
+
+  it("a idade só aparece a partir de 14 dias, e então em vermelho", async () => {
     montar([
       demanda("d1", "Envelheceu", { criado_em: diasAtras(14) }),
       demanda("d2", "Ainda nova", { criado_em: diasAtras(13) }),
@@ -395,19 +411,25 @@ describe("O card", () => {
 
     await screen.findByText("Envelheceu");
     expect(within(cardDe("Envelheceu")).getByText("há 14 dias").className).toContain("text-red-600");
-    expect(within(cardDe("Ainda nova")).getByText("há 13 dias").className).not.toContain("text-red-600");
+    // A irmã de presença está no mesmo render: o card de 13 dias está lá, sem idade.
+    expect(within(cardDe("Ainda nova")).queryByText(/há \d+ dias?|hoje/)).toBeNull();
   });
 
-  it("o prazo vencido marca atrasada; sem prazo o card só envelhece", async () => {
+  it("com o prazo vencido a idade aparece mesmo nova, junto da marca de atrasada", async () => {
     montar([
-      demanda("d1", "Passou do prazo", { prazo: dataEm(-1) }),
-      demanda("d2", "Vence amanhã", { prazo: dataEm(1) }),
+      demanda("d1", "Passou do prazo", { prazo: dataEm(-1), criado_em: diasAtras(3) }),
+      demanda("d2", "Vence amanhã", { prazo: dataEm(1), criado_em: diasAtras(3) }),
       demanda("d3", "Sem prazo nenhum", { prazo: null, criado_em: diasAtras(30) }),
     ]);
 
     await screen.findByText("Passou do prazo");
-    expect(within(cardDe("Passou do prazo")).getByText(/Atrasada desde/)).toBeTruthy();
-    expect(within(cardDe("Vence amanhã")).queryByText(/Atrasada/)).toBeNull();
+    const vencida = cardDe("Passou do prazo");
+    expect(within(vencida).getByText(/Atrasada desde/)).toBeTruthy();
+    expect(within(vencida).getByText("há 3 dias")).toBeTruthy();
+
+    const noPrazo = cardDe("Vence amanhã");
+    expect(within(noPrazo).queryByText(/Atrasada/)).toBeNull();
+    expect(within(noPrazo).queryByText("há 3 dias")).toBeNull();
 
     // Velha não é atrasada: sem prazo, o card envelhece e não atrasa.
     const semPrazo = cardDe("Sem prazo nenhum");

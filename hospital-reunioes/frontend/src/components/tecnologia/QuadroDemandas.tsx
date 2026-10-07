@@ -47,7 +47,6 @@ import {
   motivoDaRecusa,
   PessoaDaAba,
   PRIORIDADE_ROTULO,
-  PrioridadeDemanda,
   prazoLegivel,
   ProdutoDaEscolha,
   queryDeFiltros,
@@ -57,6 +56,7 @@ import {
   textoDaIdade,
   TIPO_ROTULO,
   TIPOS,
+  temSelo,
 } from "./demandas";
 
 type Props = {
@@ -89,12 +89,6 @@ type Props = {
    * e o risco de as abas discordarem entre si.
    */
   eu: EuNaAba;
-};
-
-const CLASSE_PRIORIDADE: Record<PrioridadeDemanda, string> = {
-  baixa: "bg-slate-100 text-slate-500",
-  normal: "bg-sky-50 text-sky-700",
-  alta: "bg-amber-50 text-amber-700",
 };
 
 /**
@@ -145,7 +139,6 @@ export function QuadroDemandas({
   const [demandas, setDemandas] = useState<Demanda[]>([]);
   const [carregando, setCarregando] = useState(true);
   const [erro, setErro] = useState<string | null>(null);
-  const [moverAberto, setMoverAberto] = useState<string | null>(null);
   const [abertaId, setAbertaId] = useState<string | null>(null);
   const [arrastando, setArrastando] = useState<string | null>(null);
   /**
@@ -409,7 +402,6 @@ export function QuadroDemandas({
   }
 
   async function mover(demanda: Demanda, estado: EstadoDemanda) {
-    setMoverAberto(null);
     await enviar(`${BASE_TECNOLOGIA}/demandas/${demanda.id}/mover`, "POST", { estado });
   }
 
@@ -441,6 +433,12 @@ export function QuadroDemandas({
     const dias = idadeEmDias(demanda.criado_em, agora);
     const velha = dias >= IDADE_VERMELHA_A_PARTIR_DE;
     const atrasada = estaAtrasado(demanda.prazo, agora);
+    // Chip só na exceção (issue #1058): a prioridade de sempre e a idade de
+    // poucos dias são o normal do Quadro, e repetidas em todo card escondem
+    // o card que de fato pede atenção.
+    const alta = demanda.prioridade === "alta";
+    const mostraIdade = velha || atrasada;
+    const temExcecao = temSelo(demanda) || alta || mostraIdade;
 
     return (
       <li
@@ -467,46 +465,36 @@ export function QuadroDemandas({
           <span className="text-sm font-medium text-text">{demanda.titulo}</span>
         </button>
 
-        <div className="flex flex-wrap items-center gap-2 text-xs text-text-secondary">
+        <p className="flex flex-wrap items-center gap-1 text-xs text-text-secondary">
           <span>{demanda.produto_nome ?? "Sem Produto"}</span>
+          <span aria-hidden="true">·</span>
           <span>{demanda.responsavel_nome ?? "Sem responsável"}</span>
-          <span className={`px-2 py-0.5 rounded font-medium ${CLASSE_PRIORIDADE[demanda.prioridade]}`}>
-            {PRIORIDADE_ROTULO[demanda.prioridade]}
-          </span>
-          <span className={velha ? "font-semibold text-red-600" : ""}>{textoDaIdade(dias)}</span>
-          {/* O selo do desenvolvimento (issue #674): só aparece quando há
-              Vínculo, e some junto com ele. Quem decide é o `temSelo` dentro do
-              componente, para que os três cards não repitam a condição. */}
-          <SeloDeEtapa demanda={demanda} />
-          {atrasada && demanda.prazo && (
-            <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium bg-red-50 text-red-700">
-              <CalendarClock className="w-3 h-3" />
-              Atrasada desde {prazoLegivel(demanda.prazo)}
-            </span>
-          )}
-        </div>
+        </p>
 
-        <div className="flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            aria-label={`Mover ${demanda.titulo}`}
-            onClick={() => setMoverAberto(moverAberto === demanda.id ? null : demanda.id)}
-            className="px-2 py-1 rounded-lg border border-border text-xs text-text-secondary hover:border-primary hover:text-primary transition-colors"
-          >
-            Mover
-          </button>
-          {moverAberto === demanda.id &&
-            destinosDe(demanda.estado).map((destino) => (
-              <button
-                key={destino}
-                type="button"
-                onClick={() => mover(demanda, destino)}
-                className="px-2 py-1 rounded-lg bg-primary/5 text-xs font-medium text-primary hover:bg-primary/10 transition-colors"
-              >
-                {ESTADO_ROTULO[destino]}
-              </button>
-            ))}
-        </div>
+        {temExcecao && (
+          <div className="flex flex-wrap items-center gap-2 text-xs">
+            {/* O selo do desenvolvimento (issue #674): só aparece quando há
+                Vínculo, e some junto com ele. Quem decide é o `temSelo` dentro
+                do componente, para que os três cards não repitam a condição. */}
+            <SeloDeEtapa demanda={demanda} />
+            {alta && (
+              <span className="px-2 py-0.5 rounded font-medium bg-amber-50 text-amber-700">
+                {PRIORIDADE_ROTULO.alta}
+              </span>
+            )}
+            {mostraIdade && (
+              <span className={velha ? "font-semibold text-red-600" : "text-text-secondary"}>
+                {textoDaIdade(dias)}
+              </span>
+            )}
+            {atrasada && demanda.prazo && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded font-medium bg-red-50 text-red-700">
+                <CalendarClock className="w-3 h-3" />
+                Atrasada desde {prazoLegivel(demanda.prazo)}
+              </span>
+            )}
+          </div>
+        )}
       </li>
     );
   }
