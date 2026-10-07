@@ -224,7 +224,7 @@ def test_clicar_num_no_abre_o_card_da_fatia_na_lista(tmp_path):
 def test_clicar_no_no_de_fatia_escondida_pelo_filtro_limpa_o_filtro(tmp_path):
     antes = "S.fIssues.state = 'CLOSED'; _clicar({ act: 'onda', n: '953', prd: '950' });"
     html, estado = _rodar(tmp_path, "[issueListHtml(), S.fIssues.state]", antes=antes)
-    assert estado == "all"
+    assert estado == "OPEN"  # o padrão da aba; a 953 está aberta
     assert _fatias_abertas(html) == [953]
 
 

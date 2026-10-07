@@ -780,31 +780,63 @@ body.er-lock main{z-index:130}
 .pd-gh{font-size:14px; line-height:1; color:var(--ink-soft); text-decoration:none; padding:2px 6px}
 .pd-gh:hover{color:var(--brand)}
 
-/* ---------- contador (chip ready-for-human da aba Issues) ---------- */
-.tab-count{display:inline-flex; align-items:center; justify-content:center; min-width:18px; height:18px;
-  padding:0 5px; margin-left:6px; border-radius:9px; font-family:var(--mono); font-size:11px; font-weight:500;
-  background:var(--coral); color:var(--card); line-height:1}
-
 /* ============ aba Issues: funil, chips por pessoa e linha do tempo (issue 942) ============ */
 /* Só tokens do :root. A cor da pessoa chega como --pessoa no style do chip,
    vinda de pessoas.js (corDaPessoa), que devolve sempre um var(--token). */
-.funil{display:grid; grid-template-columns:repeat(9,minmax(0,1fr)); gap:6px; margin:4px 0 18px}
+/* card grande = tudo que está pendente (contorno forte); os oito ao lado destrincham por fase */
+.funil{display:grid; grid-template-columns:minmax(200px,1.4fr) repeat(4,minmax(0,1fr)); gap:8px; margin:0 0 22px}
+.funil-total{grid-row:span 2; appearance:none; cursor:pointer; display:flex; flex-direction:column; align-items:flex-start;
+  justify-content:flex-end; gap:6px; min-width:0; text-align:left; background:var(--card); border:2px solid var(--ink);
+  border-radius:var(--r-inner); padding:18px 18px 16px; color:var(--ink); transition:background .15s ease, color .15s ease}
+.funil-total:hover{border-color:var(--brand)}
+.funil-total.on{background:var(--ink); color:var(--paper)}
+.funil-total.on:hover{border-color:var(--ink)}
+.funil-total-n{font-family:var(--sans); font-weight:500; font-size:52px; line-height:1; letter-spacing:-.03em}
+.funil-total-nome{font-family:var(--sans); font-weight:500; font-size:15px; line-height:1.25; overflow-wrap:anywhere}
+.funil-total-sub{font-family:var(--mono); font-size:10.5px; letter-spacing:.03em; opacity:.7}
 .funil-passo{appearance:none; cursor:pointer; display:flex; flex-direction:column; align-items:flex-start; gap:6px;
   min-width:0; text-align:left; background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-inner);
   padding:11px 12px; color:var(--ink); transition:border-color .15s ease}
 .funil-passo:hover{border-color:var(--brand)}
+.funil-passo.zero{color:var(--ink-soft)}
 .funil-passo.on{background:var(--ink); border-color:var(--ink); color:var(--paper)}
 .funil-n{font-family:var(--sans); font-weight:500; font-size:22px; line-height:1}
 .funil-nome{font-family:var(--mono); font-size:10.5px; letter-spacing:.03em; line-height:1.3; opacity:.8}
-.funil-dono{margin:6px 0 8px; color:var(--brand)}
 .funil-vazio{margin:4px 0 18px}
 
+/* filtros: uma linha de dropdowns do próprio painel (nada de popup do sistema) */
+.tab-issues .filtros{display:flex; flex-direction:row; align-items:center; gap:8px; flex-wrap:wrap; margin:0 0 16px}
+.tab-issues .filtros .search{max-width:none; min-width:160px; padding:7px 15px}
+.dd{position:relative}
+.dd-btn{appearance:none; cursor:pointer; display:inline-flex; align-items:baseline; gap:8px; font-family:var(--mono);
+  font-size:11.5px; background:var(--card); border:1px solid var(--line-2); border-radius:var(--r-pill);
+  padding:7px 14px; color:var(--ink); transition:border-color .15s ease}
+.dd-btn:hover,.dd.open .dd-btn{border-color:var(--ink)}
+.dd-rot{font-size:10px; letter-spacing:.14em; text-transform:uppercase; color:var(--ink-soft)}
+.dd-val{color:var(--ink-soft); max-width:22ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.dd-btn.on{background:var(--ink); border-color:var(--ink)}
+.dd-btn.on .dd-rot{color:var(--w65)}
+.dd-btn.on .dd-val{color:var(--paper)}
+.dd-menu{display:none; position:absolute; top:calc(100% + 6px); left:0; z-index:30; min-width:240px; max-width:380px;
+  max-height:340px; overflow-y:auto; padding:6px; background:var(--card); border:1px solid var(--hairline);
+  border-radius:var(--r-inner); box-shadow:var(--shadow-up)}
+.dd.open .dd-menu{display:block; animation:dd-in .14s var(--ease-quart)}
+@keyframes dd-in{from{opacity:0; transform:translateY(-4px)}to{opacity:1; transform:none}}
+.dd-opt{appearance:none; cursor:pointer; display:flex; align-items:center; gap:8px; width:100%; text-align:left;
+  font-family:var(--mono); font-size:12px; background:transparent; border:0; border-radius:8px; padding:8px 10px; color:var(--ink)}
+.dd-opt:hover{background:var(--surface)}
+.dd-opt.on{background:var(--brand-wash); color:var(--brand)}
+.dd-opt .pessoa-dot{margin-right:0}
+.dd-txt{flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap}
+.dd-num{color:var(--ink-soft)}
+.dd-n{color:var(--ink-soft); font-size:11px}
+
+/* linhas de chips da aba PRs (prs.js) */
 .filtros{display:flex; flex-direction:column; gap:8px; margin:0 0 20px}
 .filtro{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
 .filtro-rot{font-family:var(--mono); font-size:10.5px; letter-spacing:.14em; text-transform:uppercase;
   color:var(--ink-soft); min-width:104px}
 .filtro-chips{display:flex; gap:6px; flex-wrap:wrap; flex:1; min-width:0}
-.filtro .search{max-width:420px}
 
 .pessoa-dot{display:inline-block; width:8px; height:8px; border-radius:var(--r-pill); background:var(--pessoa);
   margin-right:7px; flex:none}
@@ -812,7 +844,6 @@ body.er-lock main{z-index:130}
 .fpessoa:hover{border-color:var(--pessoa); color:var(--ink)}
 .fpessoa.on{background:var(--pessoa); border-color:var(--pessoa); color:var(--card)}
 .fpessoa.on .pessoa-dot{background:var(--card)}
-.fhumana{display:inline-flex; align-items:center}
 
 .iss-chips{display:flex; align-items:center; gap:6px; flex-wrap:wrap; margin-top:8px}
 .iss-chips a.chip{text-decoration:none}
@@ -829,9 +860,13 @@ body.er-lock main{z-index:130}
 .evento-quando{font-family:var(--mono); font-size:11.5px; color:var(--ink-soft); min-width:104px; flex:none}
 
 @media (max-width:1024px){
-  .funil{grid-template-columns:repeat(3,minmax(0,1fr))}
+  .funil{grid-template-columns:repeat(4,minmax(0,1fr))}
+  .funil-total{grid-row:auto; grid-column:1 / -1}
 }
 @media (max-width:640px){
+  .funil{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .tab-issues .filtros .search{min-width:0; flex-basis:100%}
+  .dd-menu{max-width:calc(100vw - 48px)}
   .filtro-rot{min-width:0; width:100%}
 }
 /* ============ fim aba Issues (issue 942) ============ */

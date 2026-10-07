@@ -1,11 +1,12 @@
 """Aba Issues do Hospital OS (issue #942, ADR 0062, decisões 3, 5 e 6).
 
-Home do painel: funil das nove fases no topo (contagens do payload, clicável),
-filtros em chips (estado, fase, responsável na cor da pessoa, PRD, labels por
-prefixo, busca), chip `ready-for-human` com contador, card compacto e, aberto,
-a linha do tempo datada. Responsável é quem assumiu (assignee) e, sem
-assignee, quem criou, com a marca "criou" no card (#1039); "ninguém assumiu"
-lista as issues sem assignee, mesmo que alguém tenha criado.
+Home do painel: filtros em dropdown do próprio painel no topo (responsável na
+cor da pessoa, estado, PRD, labels por prefixo, busca), o card grande com tudo
+que está pendente (abertas) e os cards das fases que o destrincham, card
+compacto e, aberto, a linha do tempo datada. A aba abre nas abertas. A pessoa
+tem o que assumiu e o que criou, com a marca "criou" no card quando entrou pelo
+autor; "ninguém assumiu" lista as issues sem assignee, mesmo que alguém tenha
+criado. A fila humana é o card Humana (ready-for-human aberta).
 
 O app.js roda de verdade no Node, inteiro: o módulo é carregado com um DOM
 mínimo de mentira, os cliques passam pelo mesmo ouvinte que o navegador usa e
@@ -45,9 +46,11 @@ FASES = [
     "humana",
     "encerrada_sem_pr",
 ]
+# o funil conta só abertas: "encerrada sem PR" é sempre fechada e não tem card
+PENDENTES = FASES[:-1]
 # Contagens que a lista de issues do teste não reproduz: o funil tem que ler o payload.
-TOTAL = dict(zip(FASES, [31, 12, 4, 7, 5, 2, 260, 3, 40]))
-DO_LUCAS = dict(zip(FASES, [0, 0, 1, 6, 2, 0, 9, 0, 0]))
+TOTAL = dict(zip(FASES, [31, 12, 4, 7, 5, 2, 6, 3, 0]))
+DO_LUCAS = dict(zip(FASES, [0, 0, 1, 6, 2, 0, 1, 0, 0]))
 
 
 def _fase(fase, **extra):
@@ -204,6 +207,14 @@ def _passos_do_funil(html):
     return passos
 
 
+def _total_do_funil(html):
+    """(número, nome, marcado) do card grande do pendente."""
+    [(_, tag, corpo)] = _botoes(html, "fpendente")
+    n = int(re.search(r'class="funil-total-n">(\d+)<', corpo).group(1))
+    nome = re.search(r'class="funil-total-nome">([^<]+)<', corpo).group(1)
+    return n, nome, "on" in re.search(r'class="([^"]*)"', tag).group(1).split()
+
+
 def _cards(html):
     """Números das issues na lista, na ordem em que aparecem."""
     return [int(n) for n in re.findall(r'class="iss-head" data-act="iss" data-n="(\d+)"', html)]
@@ -228,17 +239,31 @@ def test_hash_das_abas_aposentadas_cai_em_issues(tmp_path):
 
 
 @com_node
-def test_funil_mostra_as_nove_fases_com_as_contagens_do_payload(tmp_path):
-    passos = _passos_do_funil(_rodar(tmp_path, "renderIssues()"))
-    assert [p[0] for p in passos] == FASES
-    assert {p[0]: p[1] for p in passos} == TOTAL
+def test_funil_mostra_o_pendente_e_as_oito_fases_abertas_com_as_contagens_do_payload(tmp_path):
+    html = _rodar(tmp_path, "renderIssues()")
+    passos = _passos_do_funil(html)
+    assert [p[0] for p in passos] == PENDENTES
+    assert {p[0]: p[1] for p in passos} == {f: TOTAL[f] for f in PENDENTES}
     assert not any(p[2] for p in passos)
+    assert _total_do_funil(html) == (sum(TOTAL.values()), "pendente no time", True)  # a aba abre nas abertas
 
 
 @com_node
-def test_clicar_numa_fase_filtra_a_lista_e_marca_o_chip(tmp_path):
-    html = _rodar(tmp_path, "_view.innerHTML", antes="setTab('issues'); _clicar({ act: 'ffase', v: 'fila' });")
+def test_card_grande_soma_as_fases_e_volta_para_tudo_que_esta_pendente(tmp_path):
+    antes = "setTab('issues'); _clicar({ act: 'ffase', v: 'fila' }); _clicar({ act: 'fpendente' });"
+    html, f = _rodar(tmp_path, "[_view.innerHTML, S.fIssues]", antes=antes)
+    assert (f["state"], f["fase"]) == ("OPEN", "")
+    assert _total_do_funil(html)[2]
+    assert not any(p[2] for p in _passos_do_funil(html))
+
+
+@com_node
+def test_clicar_numa_fase_filtra_a_lista_e_marca_o_card(tmp_path):
+    antes = "setTab('issues'); _clicar({ act: 'fstate', v: 'all' }); _clicar({ act: 'ffase', v: 'fila' });"
+    html, estado = _rodar(tmp_path, "[_view.innerHTML, S.fIssues.state]", antes=antes)
     assert [p[0] for p in _passos_do_funil(html) if p[2]] == ["fila"]
+    assert estado == "OPEN"  # a contagem do card é das abertas: a lista mostra as mesmas
+    assert not _total_do_funil(html)[2]
     cards = _cards(html)
     assert 901 in cards
     assert not {902, 903, 904, 905, 910, 911, 912} & set(cards)
@@ -249,18 +274,19 @@ def test_clicar_de_novo_na_fase_marcada_desliga_o_filtro(tmp_path):
     antes = "setTab('issues'); _clicar({ act: 'ffase', v: 'fila' }); _clicar({ act: 'ffase', v: 'fila' });"
     html = _rodar(tmp_path, "_view.innerHTML", antes=antes)
     assert not any(p[2] for p in _passos_do_funil(html))
-    assert {910, 911, 912} <= set(_cards(html))
+    assert 910 in _cards(html)
+    assert not {904, 911, 912} & set(_cards(html))  # fechadas não estão pendentes
 
 
 @com_node
 def test_sem_gh_o_funil_avisa_em_vez_de_zerar(tmp_path):
     dados = {**DADOS, "github": {**DADOS["github"], "error": "gh fora", "issues": []}, "fases": None}
     html = _rodar(tmp_path, "renderIssues()", dados=dados)
-    assert _passos_do_funil(html) == []
+    assert _passos_do_funil(html) == [] and _botoes(html, "fpendente") == []
     assert "funil" in html and "gh" in html
 
 
-# ---------- filtros em chips, sem <select> ----------
+# ---------- filtros em dropdown do painel, sem <select> ----------
 
 
 def test_nenhum_select_nos_controles():
@@ -269,27 +295,69 @@ def test_nenhum_select_nos_controles():
     assert "fsel" not in CSS and "fsel" not in APP_JS
 
 
+def _dropdowns(html):
+    """rótulo -> (valor no botão, [(data-act, data-v, texto)] das opções)."""
+    out = {}
+    for m in re.finditer(r'<div class="dd[^"]*" data-menu="[^"]+">([\s\S]*?)</div>\s*</div>', html):
+        bloco = m.group(1)
+        rot = re.search(r'class="dd-rot">([^<]+)<', bloco).group(1)
+        val = re.search(r'class="dd-val">([^<]*)<', bloco).group(1)
+        opcoes = [
+            (act, v, re.sub(r"<[^>]+>", " ", corpo).split())
+            for act, v, corpo in re.findall(r'<button[^>]*data-act="(\w+)" data-v="([^"]*)"[^>]*>([\s\S]*?)</button>', bloco)
+            if act != "menu"
+        ]
+        out[rot] = (val, opcoes)
+    return out
+
+
 @com_node
-def test_filtros_sao_chips_de_estado_fase_responsavel_prd_labels_e_busca(tmp_path):
+def test_filtros_sao_dropdowns_de_responsavel_estado_prd_labels_e_busca(tmp_path):
     html = _rodar(tmp_path, "renderIssues()")
-    for act in ("fstate", "ffase", "fresp", "fprd", "flabel", "fhumana"):
-        assert _botoes(html, act), f"sem chip {act}"
+    dds = _dropdowns(html)
+    assert list(dds) == ["responsável", "estado", "PRD", "type", "area", "fatia", "outras"]
+    assert dds["estado"][0] == "abertas"
+    assert [v for _, v, _ in dds["estado"][1]] == ["OPEN", "CLOSED", "all"]
+    assert dds["type"][1][0][1] == "" and ["fix"] in [t for _, _, t in dds["type"][1]]  # sem o prefixo
+    assert "ready-for-human" not in {v for _, v, _ in dds["outras"][1]}  # é o card Humana
+    assert html.index('class="filtros') < html.index('data-act="fpendente"')  # filtros acima dos cards
     assert re.search(r'<input[^>]*type="search"', html)
-    assert "<select" not in html
-    grupos = re.findall(r'class="filtro-rot">([^<]+)<', html)
-    assert {"type", "area", "fatia"} <= set(grupos)
-    labels = {v: corpo for v, _, corpo in _botoes(html, "flabel")}
-    assert labels["type:fix"].strip() == "fix"  # dentro do grupo, o chip mostra a label sem o prefixo
-    assert "ready-for-human" not in labels  # tem chip próprio, com contador
+    assert "<select" not in html and "fhumana" not in html
 
 
 @com_node
-def test_chip_de_prd_filtra_o_prd_e_as_fatias_dele(tmp_path):
-    assert _lista(tmp_path, "_clicar({ act: 'fprd', v: '900' });") == [900, 901, 902, 903, 904, 905]
+def test_dropdown_abre_fecha_e_escolher_fecha_o_menu(tmp_path):
+    expr = "[S.menu, renderIssues()]"
+    aberto, html = _rodar(tmp_path, expr, antes="_clicar({ act: 'menu', v: 'resp' });")
+    assert aberto == "resp"
+    assert re.search(r'<div class="dd open" data-menu="resp">', html)
+    menu, resp, html = _rodar(
+        tmp_path,
+        "[S.menu, S.fIssues.resp, renderIssues()]",
+        antes="_clicar({ act: 'menu', v: 'resp' }); _clicar({ act: 'fresp', v: 'lucassampaioc1' });",
+    )
+    assert (menu, resp) == (None, "lucassampaioc1")
+    assert _dropdowns(html)["responsável"][0] == "lucassampaioc1"
+    limpo = _rodar(tmp_path, "S.fIssues.resp", antes="_clicar({ act: 'fresp', v: 'ana' }); _clicar({ act: 'fresp', v: '' });")
+    assert limpo == ""
 
 
 @com_node
-def test_chip_de_label_e_de_estado_filtram(tmp_path):
+def test_opcao_da_pessoa_mostra_quanto_esta_pendente_para_ela(tmp_path):
+    html = _rodar(tmp_path, "renderIssues()")
+    opcoes = {v: t for _, v, t in _dropdowns(html)["responsável"][1]}
+    assert opcoes["lucassampaioc1"][-1] == str(sum(DO_LUCAS.values()))
+    assert opcoes["(sem)"][-1] == "0"  # sem contagem no payload
+
+
+@com_node
+def test_prd_filtra_o_prd_e_as_fatias_dele(tmp_path):
+    assert _lista(tmp_path, "_clicar({ act: 'fprd', v: '900' });") == [900, 901, 902, 903, 905]
+    assert _lista(tmp_path, "_clicar({ act: 'fprd', v: '900' }); _clicar({ act: 'fprd', v: '' });") == [900, 910]  # sem filtro, o PRD fecha
+
+
+@com_node
+def test_label_e_estado_filtram(tmp_path):
     assert _lista(tmp_path, "_clicar({ act: 'flabel', v: 'type:fix' });") == [900, 903]
     assert _lista(tmp_path, "_clicar({ act: 'fstate', v: 'CLOSED' });") == [900, 904, 912, 911]
 
@@ -297,6 +365,11 @@ def test_chip_de_label_e_de_estado_filtram(tmp_path):
 @com_node
 def test_busca_por_numero(tmp_path):
     assert _lista(tmp_path, "S.fIssues.q = '#910';") == [910]
+
+
+@com_node
+def test_link_antigo_humana_vira_a_fase_humana(tmp_path):
+    assert _rodar(tmp_path, "filtrosDaRota({ humana: '1' }).fase") == "humana"
 
 
 # ---------- responsável: cor da pessoa e "ninguém assumiu" ----------
@@ -323,28 +396,30 @@ def test_cor_por_pessoa_mora_numa_funcao_so():
 
 
 @com_node
-def test_chip_de_responsavel_usa_a_cor_da_pessoa(tmp_path):
+def test_opcao_de_responsavel_usa_a_cor_da_pessoa(tmp_path):
     html, cor = _rodar(tmp_path, "[renderIssues(), corDaPessoa('lucassampaioc1')]")
-    chips = {v: tag for v, tag, _ in _botoes(html, "fresp")}
-    assert f"--pessoa:{cor}" in chips["lucassampaioc1"]
-    assert "(sem)" in chips  # o chip "ninguém assumiu"
-    assert "ana" in chips  # não assumiu nada, mas criou issues que ninguém assumiu
+    opcoes = {v: tag for v, tag, _ in _botoes(html, "fresp")}
+    assert f"--pessoa:{cor}" in opcoes["lucassampaioc1"]
+    assert "(sem)" in opcoes  # "ninguém assumiu"
+    assert "ana" in opcoes  # não assumiu nada, mas criou issues
 
 
 @com_node
 def test_ninguem_assumiu_lista_as_issues_sem_assignee_mesmo_com_autor(tmp_path):
-    numeros = _rodar(
-        tmp_path, "S.data.github.issues.filter(matchIssue).map(i => i.number)", antes="S.fIssues.resp = SEM_RESP;"
-    )
-    assert numeros == [901, 905, 910, 911, 912]
+    expr = "S.data.github.issues.filter(matchIssue).map(i => i.number)"
+    assert _rodar(tmp_path, expr, antes="S.fIssues.resp = SEM_RESP;") == [901, 905, 910]
+    assert _rodar(tmp_path, expr, antes="S.fIssues.resp = SEM_RESP; S.fIssues.state = 'all';") == [901, 905, 910, 911, 912]
 
 
 @com_node
-def test_filtro_por_pessoa_traz_o_que_assumiu_e_o_que_criou_sem_assignee(tmp_path):
-    expr = "['ana', 'pedrorezendefig'].map(p => (S.fIssues.resp = p, S.data.github.issues.filter(matchIssue).map(i => i.number)))"
+def test_filtro_por_pessoa_traz_o_que_assumiu_e_o_que_criou(tmp_path):
+    expr = (
+        "['ana', 'pedrorezendefig'].map(p => (S.fIssues.resp = p, S.fIssues.state = 'all', "
+        "S.data.github.issues.filter(matchIssue).map(i => i.number)))"
+    )
     ana, pedro = _rodar(tmp_path, expr)
-    assert ana == [901, 911, 912]  # criou sem assignee; a 904 ela criou e o pedro assumiu
-    assert pedro == [900, 904, 905]  # assumiu a 900 e a 904, criou a 905; a 902 ele criou e o lucas assumiu
+    assert ana == [901, 904, 911, 912]  # a 904 ela criou e o pedro assumiu: segue na fila dela
+    assert pedro == [900, 902, 904, 905]  # a 902 ele criou e o lucas assumiu
 
 
 @com_node
@@ -353,30 +428,26 @@ def test_contagens_do_funil_batem_com_a_lista_filtrada_pela_pessoa(tmp_path):
 
     por_numero = {int(n): f for n, f in DADOS["fases"]["issues"].items()}
     dados = {**DADOS, "fases": {**DADOS["fases"], "funil": fases._funil(ISSUES, por_numero)}}
-    pessoas = ["pedrorezendefig", "ana", "lucassampaioc1", "(sem)"]
+    pessoas = ["pedrorezendefig", "ana", "bia", "lucassampaioc1", "(sem)"]
     expr = (
         f"{json.dumps(pessoas)}.map(p => (S.fIssues.resp = p, "
         "[renderIssues(), S.data.github.issues.filter(matchIssue).map(i => faseDe(i).fase)]))"
     )
     for pessoa, (html, fases_da_lista) in zip(pessoas, _rodar(tmp_path, expr, dados=dados)):
         funil = {v: n for v, n, _ in _passos_do_funil(html)}
-        assert funil == {f: fases_da_lista.count(f) for f in FASES}, pessoa
+        assert funil == {f: fases_da_lista.count(f) for f in PENDENTES}, pessoa
+        assert _total_do_funil(html)[0] == len(fases_da_lista), pessoa
 
 
 @com_node
-def test_chip_ready_for_human_mostra_o_contador_e_filtra_a_fila_humana(tmp_path):
-    html = _rodar(tmp_path, "renderIssues()")
-    [(_, _, corpo)] = _botoes(html, "fhumana")
-    assert "ready-for-human" in corpo
-    assert re.search(r'class="tab-count">1<', corpo)  # só a aberta conta
-    assert _lista(tmp_path, "_clicar({ act: 'fhumana', v: '1' });") == [900, 905]
+def test_card_humana_conta_so_a_ready_for_human_aberta(tmp_path):
+    import fases
 
-
-@com_node
-def test_contador_ready_for_human_sem_gh_e_interrogacao(tmp_path):
-    dados = {**DADOS, "github": {**DADOS["github"], "error": "gh fora", "issues": []}}
-    [(_, _, corpo)] = _botoes(_rodar(tmp_path, "renderIssues()", dados=dados), "fhumana")
-    assert re.search(r'class="tab-count">\?<', corpo)
+    por_numero = {int(n): f for n, f in DADOS["fases"]["issues"].items()}
+    dados = {**DADOS, "fases": {**DADOS["fases"], "funil": fases._funil(ISSUES, por_numero)}}
+    html = _rodar(tmp_path, "renderIssues()", dados=dados)
+    assert {v: n for v, n, _ in _passos_do_funil(html)}["humana"] == 1  # a 912 é fechada
+    assert _lista(tmp_path, "_clicar({ act: 'ffase', v: 'humana' });") == [900, 905]
 
 
 # ---------- responsável filtrado: contagens dele, nada de lead time ----------
@@ -385,15 +456,16 @@ def test_contador_ready_for_human_sem_gh_e_interrogacao(tmp_path):
 @com_node
 def test_funil_com_responsavel_filtrado_mostra_as_contagens_dele(tmp_path):
     html = _rodar(tmp_path, "renderIssues()", antes="S.fIssues.resp = 'lucassampaioc1';")
-    assert {p[0]: p[1] for p in _passos_do_funil(html)} == DO_LUCAS
-    assert "contagens de lucassampaioc1" in html
+    assert {p[0]: p[1] for p in _passos_do_funil(html)} == {f: DO_LUCAS[f] for f in PENDENTES}
+    assert _total_do_funil(html)[:2] == (sum(DO_LUCAS.values()), "pendente para lucassampaioc1")
     assert "lead time" not in html.lower()
 
 
 @com_node
 def test_funil_de_quem_nao_tem_contagem_no_payload_zera(tmp_path):
     html = _rodar(tmp_path, "renderIssues()", antes="S.fIssues.resp = 'zeca';")
-    assert {p[0]: p[1] for p in _passos_do_funil(html)} == dict.fromkeys(FASES, 0)
+    assert {p[0]: p[1] for p in _passos_do_funil(html)} == dict.fromkeys(PENDENTES, 0)
+    assert _total_do_funil(html)[0] == 0
 
 
 def test_lead_time_sai_do_app_js():
@@ -427,7 +499,7 @@ def test_card_sem_assignee_diz_ninguem_assumiu_e_marca_quem_criou(tmp_path):
     assert "ninguém assumiu" in criou
     assert re.search(r'class="chip autor"[^>]*>✎ criou: pedrorezendefig<', criou)
     assert "criou" not in assumiu  # o pedro assumiu e criou: a marca é só de quem entrou pelo autor
-    assert "criou" not in atribuiu  # o pedro criou, o lucas assumiu
+    assert re.search(r'class="chip autor"[^>]*>✎ criou: pedrorezendefig<', atribuiu)  # o pedro criou, o lucas assumiu
 
 
 @com_node

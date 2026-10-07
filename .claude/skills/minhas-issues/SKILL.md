@@ -15,7 +15,7 @@ Mostra numa tela só o que está aberto com quem pede, onde cada coisa parou, se
 
 Sem argumento, a pessoa é o login do `gh api user`. Com `@login`, mostra a fila de outra pessoa (cobrar alguém, cobrir férias).
 
-"Minha" segue a regra do filtro de responsável do Hospital OS (issue #1039): atribuída à pessoa; sem ninguém atribuído, quem criou. O total bate com a lista de abertas do painel filtrado pela pessoa.
+"Minha" é o que a pessoa tem que fazer: atribuída a ela; sem ninguém atribuído, quem criou. O painel filtrado pela pessoa mostra também o que ela criou e outro assumiu, então lá o total pode ser maior.
 
 ## Fluxo
 

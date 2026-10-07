@@ -273,10 +273,10 @@ def test_index_so_carrega_script_local():
         assert not src.startswith(("http:", "https:", "//")), f"script de CDN: {src}"
 
 
-def test_fila_humana_virou_filtro_da_aba_issues():
+def test_fila_humana_virou_card_da_aba_issues():
     """Pendências saiu (ADR 0062, decisão 3): as issues abertas ready-for-human
-    são um chip com contador na aba Issues, lidas do GitHub como o resto."""
+    são o card Humana do funil da aba Issues, lidas do GitHub como o resto."""
     assert "renderPendencias" not in APP_JS
-    assert 'data-act="fhumana"' in APP_JS
-    assert "ready-for-human" in APP_JS
+    assert "['humana', 'Humana'" in APP_JS
+    assert "fhumana" not in APP_JS
     assert ".pend-card" not in CSS
