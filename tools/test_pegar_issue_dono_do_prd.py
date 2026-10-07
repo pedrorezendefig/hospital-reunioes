@@ -107,7 +107,7 @@ def fatia(numero: int, titulo: str, labels: list[str], parent: dict | None) -> d
 
 def test_a_fila_mostra_o_dono_do_prd_ao_lado_de_cada_fatia(tmp_path):
     resposta = fila(
-        fatia(907, "Esteira: rabo único", ["type:chore"], prd(902, "pedrorezendefig")),
+        fatia(907, "Esteira: subida única", ["type:chore"], prd(902, "pedrorezendefig")),
         fatia(888, "Tecnologia: menção viva", ["type:fix"], None),
         fatia(664, "Fatia de PRD sem dono", [], prd(659)),
     )
@@ -118,7 +118,7 @@ def test_a_fila_mostra_o_dono_do_prd_ao_lado_de_cada_fatia(tmp_path):
     linhas = feito.stdout.splitlines()
     assert linhas[0] == "| # | título | labels | PRD | dono do PRD |"
     assert linhas[2:] == [
-        "| 907 | Esteira: rabo único | type:chore | #902 | @pedrorezendefig |",
+        "| 907 | Esteira: subida única | type:chore | #902 | @pedrorezendefig |",
         "| 888 | Tecnologia: menção viva | type:fix | avulsa |  |",
         "| 664 | Fatia de PRD sem dono |  | #659 | sem dono |",
     ]

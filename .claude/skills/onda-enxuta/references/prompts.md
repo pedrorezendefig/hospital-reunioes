@@ -29,7 +29,7 @@ PR #<PR>, issue #<N>. Ache problemas, não aprove, não edite. Revisão única: 
 PR #<PR>, issue #<N>. Motivo: <revisao|ci|conflito|retomar>.
 <revisao: cole o comentário do veredito inteiro.>
 <ci: cole as últimas 60 linhas de `gh run view <id> --log-failed`.>
-<conflito: "A main andou; rebase chamando a Skill tool com resolver-conflitos. Arquivos em conflito: <lista da linha do rabo>. Tentativa <k> de 3.">
+<conflito: "A main andou; rebase chamando a Skill tool com resolver-conflitos. Arquivos em conflito: <lista da linha da subida>. Tentativa <k> de 3.">
 <retomar: "Branch <branch> tem commits wip. Termine a fatia e abra o PR.">
 ```
 
@@ -42,7 +42,7 @@ Salve em `%TEMP%\onda-enxuta\<nome>-onda<N+1>.md`. A primeira linha precisa ser 
 
 ## Passagem
 Sessão <nome>, onda <N> com os PRs verdes em <data hora ISO>.
-Em deploy: PRs #a #b (issues #x #y), versão esperada v<antiga> -> v<nova>, rabo na chave <nome>-onda<N>.
+Em deploy: PRs #a #b (issues #x #y), versão esperada v<antiga> -> v<nova>, subida na chave <nome>-onda<N>.
 Ondas anteriores: <cada uma com os PRs e o estado deles no GitHub (mergeados ou abertos), ou "nenhuma">.
 
 Fila-alvo FIXA desta sessão (o que sobrou):
@@ -56,4 +56,4 @@ Baixas até aqui (ready-for-human): <issue e motivo, ou "nenhuma">.
 Prod hoje: v<antiga>; a onda <N> leva a v<nova>. Última migration: <0XX>, contando a da onda em deploy.
 ```
 
-A fila leva a dependência de cada issue ("#945, depois da #944"), nunca arquivo em comum (ADR 0068). `<P>` é o número de issues da fila desbloqueadas, com teto 3. A passagem é escrita uma vez e não muda: o resultado do rabo vai no comentário da onda.
+A fila leva a dependência de cada issue ("#945, depois da #944"), nunca arquivo em comum (ADR 0068). `<P>` é o número de issues da fila desbloqueadas, com teto 3. A passagem é escrita uma vez e não muda: o resultado da subida vai no comentário da onda.

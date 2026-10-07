@@ -24,10 +24,10 @@ O que o pipeline faz hoje, de issue a produção. O histórico de como se chegou
 ## Até produção
 
 7. **A `main` é protegida:** PR e CI verde obrigatórios, sem exigir a branch em dia com a base. O único bypass é a deploy key da Action pós-merge, num job que não instala nada.
-8. **O rabo é um só, o `fechar_onda.py`**, para PR avulso e para onda: merge PR a PR pela API (squash, no head do CI verde), versão pelo tipo dos commits sem commit (`APP_VERSION` e tag), um build, health com conferência de versão, registro em `history.json` e `state.json`. Health ruim: rollback automático para a imagem anterior, revert dos squashes e issue reaberta. PR de ferramenta: só o merge.
-9. **Quatro coisas esperam o humano:** (1) a migration (ele cola no Studio; o rabo espera o `/api/health` devolver o número dela, até 24 h); (2) o draft do vídeo da fatia de manual; (3) o rollback que o rabo não conseguiu sozinho (saídas 3, 4 e 8 do `fechar_onda.py`: `/deploy rollback` à mão); (4) a baixa `ready-for-human` (3 tentativas esgotadas, dúvida, corretor pendente).
-10. **A onda seguinte sai no PR verde**, antes do rabo da atual; o semáforo ordena os deploys.
-11. **Snapshot e draft do Manual** saem na Action do push da `main`, não no rabo.
+8. **A subida é uma só, o `fechar_onda.py`**, para PR avulso e para onda: merge PR a PR pela API (squash, no head do CI verde), versão pelo tipo dos commits sem commit (`APP_VERSION` e tag), um build, health com conferência de versão, registro em `history.json` e `state.json`. Health ruim: rollback automático para a imagem anterior, revert dos squashes e issue reaberta. PR de ferramenta: só o merge.
+9. **Quatro coisas esperam o humano:** (1) a migration (ele cola no Studio; a subida espera o `/api/health` devolver o número dela, até 24 h); (2) o draft do vídeo da fatia de manual; (3) o rollback que a subida não conseguiu sozinha (saídas 3, 4 e 8 do `fechar_onda.py`: `/deploy rollback` à mão); (4) a baixa `ready-for-human` (3 tentativas esgotadas, dúvida, corretor pendente).
+10. **A onda seguinte sai no PR verde**, antes da subida da atual; o semáforo ordena os deploys.
+11. **Snapshot e draft do Manual** saem na Action do push da `main`, não na subida.
 
 ## Regra de casa
 

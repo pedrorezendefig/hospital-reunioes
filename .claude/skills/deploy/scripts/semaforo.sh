@@ -17,7 +17,7 @@
 # Saídas de `pegar`: 0 pegou (ou já era sua) · 3 ainda ocupado após --espera
 # (chame de novo) · 2 trava velha (mais que --velha minutos) · 4 trava parada.
 #
-# Parada (issue #999): o rabo que saiu com 3 ou 4 deixa a trava presa e marcada
+# Parada (issue #999): a subida que saiu com 3 ou 4 deixa a trava presa e marcada
 # (`parar`, arquivo `parada` dentro da pasta, com a chave e a linha do erro).
 # Quem chega, o dono inclusive, sai na hora com 4, sem esperar e sem pegar:
 # prod espera o rollback humano. Na trava velha e na parada, quem confere o

@@ -265,7 +265,7 @@ def test_cada_pasta_liga_so_os_jobs_dela(tmp_path, mudados, rodam, ferramenta):
     """A tabela do PRD #963 (decisão 4): backend roda com `backend/` ou
     `supabase/`, frontend com `frontend/`, docker build com qualquer um dos
     dois, `.github/workflows/` roda tudo. Ferramenta (fora de
-    `hospital-reunioes/`, a mesma fronteira do rabo) não liga job nenhum daqui:
+    `hospital-reunioes/`, a mesma fronteira da subida) não liga job nenhum daqui:
     os testes de `tools/` rodam no `manual.yml`."""
     proc = rodar_detector(tmp_path, mudados)
     assert proc.returncode == 0, proc.stderr

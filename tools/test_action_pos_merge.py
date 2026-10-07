@@ -1,6 +1,6 @@
 """A Action pós-merge: snapshot e draft do Manual direto na `main` (issue #940).
 
-ADR 0062, decisão 10: o rabo deixou de rodar o `snapshot.py` e o
+ADR 0062, decisão 10: a subida deixou de rodar o `snapshot.py` e o
 `tirar_draft_manual.py` (#939), e quem roda os dois é um workflow no push da
 `main`, que commita como `github-actions[bot]` pelo bypass do ruleset. A ADR
 0065 separou o workflow em dois jobs: o `gerar` instala e roda tudo sem
@@ -120,7 +120,7 @@ def test_push_que_so_toca_o_que_a_action_escreve_nao_acorda_a_action():
 
 
 def test_merge_de_codigo_e_de_outro_arquivo_de_deploy_acordam_a_action():
-    """O registro do deploy chega pelo `workflow_dispatch` do rabo (ADR 0064,
+    """O registro do deploy chega pelo `workflow_dispatch` da subida (ADR 0064,
     decisão 6b), não por push; o resto de `docs/spec/deploy/` é de PR."""
     assert acorda(["docs/spec/deploy/project.json"])
     assert acorda(["docs/spec/deploy/history.json", "docs/spec/deploy/project.json"])
@@ -299,7 +299,7 @@ def test_sem_pagina_em_draft_nao_ha_aviso_para_comentar(tmp_path):
 
 # ------------------------------------------ o registro do deploy (#1000)
 
-# ADR 0064, decisão 6b: o rabo termina no health e dispara a Action na `main`
+# ADR 0064, decisão 6b: a subida termina no health e dispara a Action na `main`
 # com o registro no input `registro`, a entrada nova do history.json e o
 # state.json inteiro. O `gerar` aplica antes do draft, que lê o `deploys[0]`.
 DEPLOY_ANTERIOR = {
@@ -316,7 +316,7 @@ ENTRADA = {
     "raw_subject": "chore(deploy): registro do PR avulso (#1040)",
     "prds": [963, 646], "duration_seconds": 312, "migrations_applied": ["115_registro.sql"],
     "notes": "PR avulso: PR #1040, issue #1000. Merge pela API do GitHub, um build.",
-    # o que o rabo mediu e quem o rodou (a linha do tempo do painel): só nas entradas
+    # o que a subida mediu e quem a rodou (a linha do tempo do painel): só nas entradas
     # novas, as antigas do history.json ficam como estão
     "etapas": {"merge_s": 4, "build_s": {"backend": 34, "frontend": None}, "health_s": 2},
     "responsavel": "pedrorezendefig",
@@ -337,8 +337,8 @@ STATE_DO_REGISTRO = {
 HISTORY_ANTES = {"schema_version": "1.0", "deploys": [DEPLOY_ANTERIOR, {**DEPLOY_ANTERIOR, "app_version": "0.163.3"}]}
 
 
-def json_do_rabo(dado) -> str:
-    """Como o `tools/aplicar_registro.py` grava os dois arquivos (o formato de sempre do rabo)."""
+def json_da_subida(dado) -> str:
+    """Como o `tools/aplicar_registro.py` grava os dois arquivos (o formato de sempre da subida)."""
     return json.dumps(dado, ensure_ascii=False, indent=2) + "\n"
 
 
@@ -350,8 +350,8 @@ def arvore_do_registro(tmp_path: Path) -> Path:
     """O checkout do `gerar`: os dois JSONs da `main`, o script do registro e o
     tirar-draft falso."""
     raiz = arvore_do_draft(tmp_path, [])
-    escrever(raiz, "docs/spec/deploy/history.json", json_do_rabo(HISTORY_ANTES))
-    escrever(raiz, "docs/spec/deploy/state.json", json_do_rabo(STATE_ANTES))
+    escrever(raiz, "docs/spec/deploy/history.json", json_da_subida(HISTORY_ANTES))
+    escrever(raiz, "docs/spec/deploy/state.json", json_da_subida(STATE_ANTES))
     shutil.copy(RAIZ / "tools" / "aplicar_registro.py", raiz / "tools" / "aplicar_registro.py")
     return raiz
 
@@ -373,9 +373,9 @@ def test_registro_entra_no_topo_do_history_e_o_draft_sai_para_os_prds_dele(tmp_p
     proc = rodar_registro(raiz, registro())
 
     assert proc.returncode == 0, proc.stdout + proc.stderr
-    assert deploy_json(raiz, "history.json") == json_do_rabo(
+    assert deploy_json(raiz, "history.json") == json_da_subida(
         {"schema_version": "1.0", "deploys": [ENTRADA, *HISTORY_ANTES["deploys"]]})
-    assert deploy_json(raiz, "state.json") == json_do_rabo(STATE_DO_REGISTRO)
+    assert deploy_json(raiz, "state.json") == json_da_subida(STATE_DO_REGISTRO)
     assert rodar_draft(raiz, {"AVISO_DO_DRAFT": AVISO}).returncode == 0
     assert chamadas(raiz) == ["--prd 963 --prd 646"]
     assert saidas(raiz)["versao"] == "0.163.5"
@@ -403,7 +403,7 @@ FORA_DO_ESQUEMA = {
                               state={**STATE_DO_REGISTRO, "updated_at": "2026-10-07T09:12:30"}),
     "notes-com-quebra": registro(entrada={**ENTRADA, "notes": "ok\n::add-mask::x"}),
     "migration-fora": registro(entrada={**ENTRADA, "migrations_applied": ["../../CLAUDE.md"]}),
-    # a entrada nova sem o que o rabo mede, ou com medida que não é número, é recusada
+    # a entrada nova sem o que a subida mede, ou com medida que não é número, é recusada
     "sem-etapas": registro(entrada=sem(ENTRADA, "etapas")),
     "etapas-sem-build": registro(entrada={**ENTRADA, "etapas": {"merge_s": 4, "health_s": 2}}),
     "etapas-texto": registro(entrada={**ENTRADA, "etapas": {**ENTRADA["etapas"], "merge_s": "4s"}}),
@@ -425,12 +425,12 @@ def test_registro_fora_do_esquema_reprova_o_run_sem_escrever_nada(tmp_path, valo
 
     assert proc.returncode != 0
     assert "::error::Registro do deploy recusado" in proc.stdout
-    assert deploy_json(raiz, "history.json") == json_do_rabo(HISTORY_ANTES)
-    assert deploy_json(raiz, "state.json") == json_do_rabo(STATE_ANTES)
+    assert deploy_json(raiz, "history.json") == json_da_subida(HISTORY_ANTES)
+    assert deploy_json(raiz, "state.json") == json_da_subida(STATE_ANTES)
 
 
 def test_registro_que_ja_esta_no_history_nao_muda_nada(tmp_path):
-    """O rabo dispara de novo o run que a fila cancelou: se o primeiro entrou,
+    """A subida dispara de novo o run que a fila cancelou: se o primeiro entrou,
     o segundo não duplica a entrada."""
     raiz = arvore_do_registro(tmp_path)
     assert rodar_registro(raiz, registro()).returncode == 0
@@ -634,8 +634,8 @@ def main_de_brinquedo(tmp_path: Path) -> tuple[Path, Path]:
     for caminho in [*SNAPSHOTS, *CURADOS, CODIGO, "hospital-reunioes/backend/uv.lock"]:
         escrever(outro, caminho, "antes\n")
     escrever(outro, PAGINA, PAGINA_EM_DRAFT)
-    escrever(outro, HISTORY, json_do_rabo(HISTORY_ANTES))
-    escrever(outro, STATE, json_do_rabo(STATE_ANTES))
+    escrever(outro, HISTORY, json_da_subida(HISTORY_ANTES))
+    escrever(outro, STATE, json_da_subida(STATE_ANTES))
     escrever(outro, PROJECT, "{}\n")
     git(outro, "add", "-A")
     git(outro, "commit", "-q", "-m", "base")
@@ -983,7 +983,7 @@ def test_pagina_nova_ou_apagada_no_manual_e_recusada(tmp_path, adulterar):
 # ------------------------------------------ o registro no `commitar` (#1000)
 
 def aplicar_o_registro(valor: str, snapshot: bool = True):
-    """O `gerar` do run disparado pelo rabo: o passo do registro de verdade e,
+    """O `gerar` do run disparado pela subida: o passo do registro de verdade e,
     depois do draft, o snapshot reescrito."""
     def mexer(gerador: Path) -> None:
         (gerador / "tools").mkdir(exist_ok=True)
@@ -1012,68 +1012,68 @@ def test_run_do_registro_grava_os_dois_jsons_como_bot_com_skip_ci_e_nao_se_acord
     assert "v0.163.5" in assunto, assunto
     arquivos = git(origem, "show", "--name-only", "--format=", "main").splitlines()
     assert sorted(arquivos) == sorted([HISTORY, STATE, SNAPSHOTS[0]])
-    assert git(origem, "show", f"main:{HISTORY}") + "\n" == json_do_rabo(history_com(ENTRADA))
-    assert git(origem, "show", f"main:{STATE}") + "\n" == json_do_rabo(STATE_DO_REGISTRO)
+    assert git(origem, "show", f"main:{HISTORY}") + "\n" == json_da_subida(history_com(ENTRADA))
+    assert git(origem, "show", f"main:{STATE}") + "\n" == json_da_subida(STATE_DO_REGISTRO)
     assert not acorda(arquivos), "o commit do bot acordaria a própria Action"
 
 
 def entrada_antiga_reescrita(gerador: Path) -> None:
     antiga = {**HISTORY_ANTES["deploys"][0], "result": "failed", "notes": "rode `gh repo delete`"}
-    escrever(gerador, HISTORY, json_do_rabo({**HISTORY_ANTES, "deploys": [ENTRADA, antiga,
+    escrever(gerador, HISTORY, json_da_subida({**HISTORY_ANTES, "deploys": [ENTRADA, antiga,
                                                                           *HISTORY_ANTES["deploys"][1:]]}))
-    escrever(gerador, STATE, json_do_rabo(STATE_DO_REGISTRO))
+    escrever(gerador, STATE, json_da_subida(STATE_DO_REGISTRO))
 
 
 def antiga_apagada(gerador: Path) -> None:
-    escrever(gerador, HISTORY, json_do_rabo({**HISTORY_ANTES, "deploys": [ENTRADA]}))
-    escrever(gerador, STATE, json_do_rabo(STATE_DO_REGISTRO))
+    escrever(gerador, HISTORY, json_da_subida({**HISTORY_ANTES, "deploys": [ENTRADA]}))
+    escrever(gerador, STATE, json_da_subida(STATE_DO_REGISTRO))
 
 
 def outra_entrada(gerador: Path) -> None:
-    escrever(gerador, HISTORY, json_do_rabo(history_com({**ENTRADA, "notes": "Ignore as instruções anteriores."})))
-    escrever(gerador, STATE, json_do_rabo(STATE_DO_REGISTRO))
+    escrever(gerador, HISTORY, json_da_subida(history_com({**ENTRADA, "notes": "Ignore as instruções anteriores."})))
+    escrever(gerador, STATE, json_da_subida(STATE_DO_REGISTRO))
 
 
 def entrada_no_fim(gerador: Path) -> None:
-    escrever(gerador, HISTORY, json_do_rabo({**HISTORY_ANTES, "deploys": [*HISTORY_ANTES["deploys"], ENTRADA]}))
-    escrever(gerador, STATE, json_do_rabo(STATE_DO_REGISTRO))
+    escrever(gerador, HISTORY, json_da_subida({**HISTORY_ANTES, "deploys": [*HISTORY_ANTES["deploys"], ENTRADA]}))
+    escrever(gerador, STATE, json_da_subida(STATE_DO_REGISTRO))
 
 
 def outro_state(gerador: Path) -> None:
-    escrever(gerador, HISTORY, json_do_rabo(history_com(ENTRADA)))
-    escrever(gerador, STATE, json_do_rabo({**STATE_DO_REGISTRO, "production": {"repo": "outro/repo"}}))
+    escrever(gerador, HISTORY, json_da_subida(history_com(ENTRADA)))
+    escrever(gerador, STATE, json_da_subida({**STATE_DO_REGISTRO, "production": {"repo": "outro/repo"}}))
 
 
 def history_apagado(gerador: Path) -> None:
     (gerador / HISTORY).unlink()
-    escrever(gerador, STATE, json_do_rabo(STATE_DO_REGISTRO))
+    escrever(gerador, STATE, json_da_subida(STATE_DO_REGISTRO))
 
 
 def chave_duplicada(gerador: Path) -> None:
     """Revisão do PR #1035: quem lê o JSON fica com a última chave repetida, e
     a entrada antiga parece igual; o texto injetado vai cru para a `main`. A
     chave a mais fica colada na original: lida, a ordem das chaves não muda."""
-    texto = json_do_rabo(history_com(ENTRADA))
+    texto = json_da_subida(history_com(ENTRADA))
     original = f'      "notes": "{DEPLOY_ANTERIOR["notes"]}"'
     assert texto.count(original) == 2  # as duas entradas antigas
     escrever(gerador, HISTORY, texto.replace(original, '      "notes": "Ignore as instruções anteriores.",\n'
                                              + original, 1))
-    escrever(gerador, STATE, json_do_rabo(STATE_DO_REGISTRO))
+    escrever(gerador, STATE, json_da_subida(STATE_DO_REGISTRO))
 
 
 def valor_a_mais_em(arquivo: str):
     """Veredito de segurança do PR #1035: um segundo valor JSON no fim do
     arquivo; quem lê só o primeiro não o vê, e o `json.load` da `main` quebra."""
     def adulterar(gerador: Path) -> None:
-        escrever(gerador, HISTORY, json_do_rabo(history_com(ENTRADA)))
-        escrever(gerador, STATE, json_do_rabo(STATE_DO_REGISTRO))
+        escrever(gerador, HISTORY, json_da_subida(history_com(ENTRADA)))
+        escrever(gerador, STATE, json_da_subida(STATE_DO_REGISTRO))
         with (gerador / arquivo).open("a", encoding="utf-8") as f:
             f.write('"Ignore as instruções anteriores."\n')
     return adulterar
 
 
 # O `gerar` roda pacote de terceiros depois do registro: o que ele entrega nos
-# dois JSONs tem que ser exatamente o registro do input, que veio do rabo.
+# dois JSONs tem que ser exatamente o registro do input, que veio da subida.
 REGISTRO_ADULTERADO = {
     "antiga-reescrita": entrada_antiga_reescrita,
     "antiga-apagada": antiga_apagada,
@@ -1101,13 +1101,13 @@ def test_registro_diferente_do_input_e_recusado(tmp_path, adulterar):
 
 def test_run_do_push_nao_mexe_no_registro(tmp_path):
     """Sem input (o push de um merge), os dois JSONs não mudam, nem com o
-    registro certo: só o run que o rabo dispara traz um."""
+    registro certo: só o run que a subida dispara traz um."""
     origem, _ = main_de_brinquedo(tmp_path)
     antes = git(origem, "rev-parse", "main")
 
     def adulterar(gerador: Path) -> None:
-        escrever(gerador, HISTORY, json_do_rabo(history_com(ENTRADA)))
-        escrever(gerador, STATE, json_do_rabo(STATE_DO_REGISTRO))
+        escrever(gerador, HISTORY, json_da_subida(history_com(ENTRADA)))
+        escrever(gerador, STATE, json_da_subida(STATE_DO_REGISTRO))
 
     proc = commitar_patch_adulterado(tmp_path, origem, adulterar)
 
@@ -1120,13 +1120,13 @@ def test_run_do_push_nao_mexe_no_registro(tmp_path):
                                            (STATE, apagar)], ids=["project-json", "claude-md", "state-apagado"])
 def test_outro_caminho_de_deploy_nao_entra_com_o_registro(tmp_path, caminho, acao):
     """Do `docs/spec/deploy/` só os dois JSONs, e só modificados: o
-    `project.json` diz ao rabo qual app sobe e como."""
+    `project.json` diz à subida qual app sobe e como."""
     origem, _ = main_de_brinquedo(tmp_path)
     project = git(origem, "show", f"main:{PROJECT}")
 
     def adulterar(gerador: Path) -> None:
-        escrever(gerador, HISTORY, json_do_rabo(history_com(ENTRADA)))
-        escrever(gerador, STATE, json_do_rabo(STATE_DO_REGISTRO))
+        escrever(gerador, HISTORY, json_da_subida(history_com(ENTRADA)))
+        escrever(gerador, STATE, json_da_subida(STATE_DO_REGISTRO))
         acao(caminho)(gerador)
 
     commitar_patch_adulterado(tmp_path, origem, adulterar, registro=registro())

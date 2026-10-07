@@ -512,7 +512,7 @@ EOF
 )"
 ```
 
-**Importante:** o `scope_map` em `project.json` mapeia `docs/spec/snapshots/**` pra escopo `spec`. Commits com prefix `chore(spec):` entram no mesmo push do rabo (`fechar_onda.py`) e **não disparam novo ciclo de deploy** (heurística: commits `docs`/`spec` que tocam só MD não geram trigger de service).
+**Importante:** o `scope_map` em `project.json` mapeia `docs/spec/snapshots/**` pra escopo `spec`. Commits com prefix `chore(spec):` entram no mesmo push da subida (`fechar_onda.py`) e **não disparam novo ciclo de deploy** (heurística: commits `docs`/`spec` que tocam só MD não geram trigger de service).
 
 Se `--check` (dry-run): mostrar diff mas não commitar nem escrever.
 

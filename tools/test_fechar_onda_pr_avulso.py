@@ -1,4 +1,4 @@
-"""O `fechar_onda.py` como rabo único de um PR avulso (issues #907 e #910, ADR 0061).
+"""O `fechar_onda.py` como subida única de um PR avulso (issues #907 e #910, ADR 0061).
 
 O `/ship` passou a parar no PR verde, e quem faz merge, bump, `APP_VERSION`,
 build, health e registro de um PR só é o mesmo script da onda. Estes testes
@@ -109,7 +109,7 @@ DIGEST_FORJADO = digest_de("imagem de um run de outra branch")
 
 
 def script_falso(log: Path, nome: str, alvo: str) -> str:
-    """O snapshot e o tirar-draft do Manual moram no repo, mas saíram do rabo para
+    """O snapshot e o tirar-draft do Manual moram no repo, mas saíram da subida para
     a Action do push da main (ADR 0062, decisão 10). O falso anota quem o chamou
     e suja a árvore como o de verdade sujaria."""
     return (
@@ -190,18 +190,18 @@ class Cenario:
         self.ruleset_antigo = False
         self.sem_checks = False  # o CI nunca rodou: nenhum check no PR
         self.bloqueadoras: dict[int, list[dict]] = {}  # issue -> o `blocked_by` dela (issue #999)
-        # quantas rodadas do CI do head que o rabo empurra o GitHub cancela por
+        # quantas rodadas do CI do head que a subida empurra o GitHub cancela por
         # falta de runner (#953)
         self.sem_runner = 0
         self.anotacao_do_cancelamento = SEM_RUNNER
         self.merges: list[dict] = []
         self.gh_chamadas: list[list[str]] = []
         self.builds: list[str] = []
-        self.esperados: list[str] = []  # sha do squash cujo deploy o rabo esperou
+        self.esperados: list[str] = []  # sha do squash cujo deploy a subida esperou
         self.healths: list[tuple[str, str | None]] = []
         # versões em que o /api/health do backend responde 500 (issue #968)
         self.health_ruim_em: set[str | None] = set()
-        self.rollbacks: list[str] = []  # apps cujo deploy de rollback o rabo esperou
+        self.rollbacks: list[str] = []  # apps cujo deploy de rollback a subida esperou
         self.semaforo: list[tuple[str, str]] = []
         self.cancelamentos: list[str] = []
         self.tags: list[tuple[str, str]] = []  # (ref, sha) criados pela API
@@ -211,7 +211,7 @@ class Cenario:
         self.publicacao_falha = False
         # o GHCR (revisão do PR #1016): tag -> digest para o qual ela aponta agora;
         # os artefatos `digest-backend` de cada run (id -> digest); os runs do
-        # workflow da imagem de antes deste rabo; os heads cujo CI não guardou digest
+        # workflow da imagem de antes desta subida; os heads cujo CI não guardou digest
         self.ghcr: dict[str, str] = {}
         self.artefatos: dict[str, str] = {}
         self.runs_anteriores: list[dict] = []
@@ -219,7 +219,7 @@ class Cenario:
         self.tag_sobrescrita = False  # um run de outra branch troca a tag do squash depois do workflow
         if sha_no_ar and digest_no_ar:
             self.ghcr[sha_no_ar] = digest_no_ar
-        self.deploys_novos: list[str] = []  # apps cujo deploy novo (sem webhook) o rabo esperou
+        self.deploys_novos: list[str] = []  # apps cujo deploy novo (sem webhook) a subida esperou
         # a Action pós-merge que grava o registro (ADR 0064, decisão 6b): cada
         # disparo, a conclusão de cada run (success sem nada dito; "pendente"
         # fica na fila; "verde-sem-commit" termina success sem empurrar nada) e
@@ -299,7 +299,7 @@ class Cenario:
 
     def imagens_no_coolify(self, uuid: str, no_ar: str | None, revertidas: tuple[str, ...] = ()) -> None:
         """Lista do `coolify app rollback images`, no formato real (conferido em
-        06/10/2026), como o rabo a le ANTES do merge: a imagem no ar e, mais novas
+        06/10/2026), como a subida a le ANTES do merge: a imagem no ar e, mais novas
         que ela, as que um rollback anterior tirou do ar."""
         imagens = [{"created_at": f"2026-10-06 0{5 - i}:00:00 +0000 UTC", "is_current": False, "tag": tag}
                    for i, tag in enumerate(revertidas)]
@@ -354,7 +354,7 @@ class Cenario:
         self.ghcr[campos["sha"]] = DIGEST_FORJADO if self.tag_sobrescrita else digest
 
     def imagem_publicada_antes(self, sha: str, digest: str) -> None:
-        """Um run do workflow da imagem de antes deste rabo (o passo 2 do PR #1016)."""
+        """Um run do workflow da imagem de antes desta subida (o passo 2 do PR #1016)."""
         run_id = 800 + len(self.runs_anteriores)
         self.runs_anteriores.append({"databaseId": run_id, "displayTitle": f"Imagem do backend {sha}",
                                      "status": "completed", "conclusion": "success"})
@@ -536,7 +536,7 @@ def preparar(fo, monkeypatch, c: Cenario) -> None:
         if args[:2] == ["issue", "view"]:
             return {"body": "## Pai\n\n`#902`, PRD da esteira.\n"}
         if args == ["api", "user"]:
-            return {"login": "ana", "id": 1}  # quem roda o rabo: o `responsavel` do registro
+            return {"login": "ana", "id": 1}  # quem roda a subida: o `responsavel` do registro
         if args[:2] == ["run", "list"]:
             wf = args[args.index("--workflow") + 1]
             if wf == "ci.yml":
@@ -708,9 +708,9 @@ def test_main_protegida_o_pr_entra_pela_api_sem_commit_na_branch_dele(tmp_path, 
 def test_registro_vai_pela_action_na_main_depois_do_health_sem_pr_de_registro(
     tmp_path, monkeypatch, capsys
 ):
-    """ADR 0064, decisão 6b: o rabo termina no health e dispara a Action
+    """ADR 0064, decisão 6b: a subida termina no health e dispara a Action
     pós-merge na `main` com o registro; quem grava os dois JSONs é o bot, pela
-    deploy key. O rabo só sai depois de ver a entrada no `history.json` da
+    deploy key. A subida só sai depois de ver a entrada no `history.json` da
     `main`, e cancela o build que o webhook do Coolify dispara para o commit do
     bot (issue #851)."""
     fo = carregar_fechar_onda()
@@ -731,7 +731,7 @@ def test_registro_vai_pela_action_na_main_depois_do_health_sem_pr_de_registro(
     entrada = json.loads(c.na_main("docs/spec/deploy/history.json"))["deploys"][0]
     assert entrada == disparo["registro"]["entrada"]
     assert json.loads(c.na_main("docs/spec/deploy/state.json"))["last_run"]["sha"] == codigo
-    # o que o rabo mediu e quem o rodou (`gh api user`), para a linha do tempo do painel
+    # o que a subida mediu e quem o rodou (`gh api user`), para a linha do tempo do painel
     assert entrada["responsavel"] == "ana"
     assert set(entrada["etapas"]) == {"merge_s", "build_s", "health_s"}
     assert entrada["etapas"]["build_s"] == {"backend": 42}
@@ -753,7 +753,7 @@ def comando_do_registro(saida: str) -> list[str]:
 @pytest.mark.parametrize("conclusao", ["failure", "pendente", "verde-sem-commit"],
                          ids=["run-vermelho", "sem-fim", "run-verde-sem-registro"])
 def test_action_que_nao_confirma_sai_com_5_e_imprime_o_disparo_a_mao(tmp_path, monkeypatch, capsys, conclusao):
-    """Produção está certa: o rabo solta o semáforo e diz como disparar a
+    """Produção está certa: a subida solta o semáforo e diz como disparar a
     Action à mão com o mesmo registro, que fica num arquivo."""
     fo = carregar_fechar_onda()
     c = pr_de_codigo(tmp_path)
@@ -777,7 +777,7 @@ def test_action_que_nao_confirma_sai_com_5_e_imprime_o_disparo_a_mao(tmp_path, m
 
 def test_run_do_registro_cancelado_na_fila_e_disparado_de_novo(tmp_path, monkeypatch):
     """Um push que chega com o disparo na fila do grupo `pos-merge` cancela o
-    disparo: o rabo dispara de novo, e a entrada entra uma vez."""
+    disparo: a subida dispara de novo, e a entrada entra uma vez."""
     fo = carregar_fechar_onda()
     c = pr_de_codigo(tmp_path)
     preparar(fo, monkeypatch, c)
@@ -795,8 +795,8 @@ def test_run_do_registro_cancelado_na_fila_e_disparado_de_novo(tmp_path, monkeyp
 def test_registro_leva_so_history_e_state_sem_snapshot_nem_draft_do_manual(
     tmp_path, monkeypatch, extra
 ):
-    """ADR 0062, decisões 9 e 10: o rabo grava só a verdade do deploy. Snapshot e
-    draft do Manual são da Action do push da main, em nenhum caminho do rabo."""
+    """ADR 0062, decisões 9 e 10: a subida grava só a verdade do deploy. Snapshot e
+    draft do Manual são da Action do push da main, em nenhum caminho da subida."""
     fo = carregar_fechar_onda()
     c = pr_de_codigo(tmp_path)
     preparar(fo, monkeypatch, c)
@@ -826,7 +826,7 @@ def test_history_guarda_todos_os_deploys_sem_teto(tmp_path, monkeypatch):
 
 
 def test_sem_snapshot_saiu_da_cli_e_da_docstring(tmp_path, monkeypatch, capsys):
-    """Sem snapshot no rabo, a opção que o pulava não tem o que pular."""
+    """Sem snapshot na subida, a opção que o pulava não tem o que pular."""
     fo = carregar_fechar_onda()
     c = pr_de_codigo(tmp_path)
     preparar(fo, monkeypatch, c)
@@ -875,7 +875,7 @@ def test_pr_atras_da_main_entra_no_head_verde_sem_trazer_a_main_nem_ci_novo(
 
 
 # O PR do lote entra no head que já estava verde (ADR 0064, decisão 2), e o
-# registro vai pela Action (decisão 6b): o único head que o rabo empurra e cujo
+# registro vai pela Action (decisão 6b): o único head que a subida empurra e cujo
 # CI ele espera é o do PR `revert/<chave>`, depois de um rollback.
 
 def revert_depois_do_rollback(tmp_path: Path) -> Cenario:
@@ -1154,7 +1154,7 @@ def test_limpeza_remove_o_worktree_de_agente_da_branch_entregue_por_squash(tmp_p
 
 def test_esperar_build_ignora_o_deploy_cancelado_do_squash_intermediario(monkeypatch):
     """Os merges da onda saem segundos um depois do outro: o deploy do squash
-    intermediário, já cancelado, cai na janela de horário do último. O rabo
+    intermediário, já cancelado, cai na janela de horário do último. A subida
     espera o do último, nunca o cancelado."""
     fo = carregar_fechar_onda()
     intermediario, ultimo = "a" * 40, "b" * 40
@@ -1334,7 +1334,7 @@ def test_versao_de_partida_vem_do_state_json_conferida_pela_tag(
     tmp_path, monkeypatch, capsys, tags, de, para
 ):
     """O package.json fica congelado (0.10.0 no cenário) e não conta. Tag à
-    frente do state.json é um rabo que etiquetou e não registrou: vale a tag,
+    frente do state.json é uma subida que etiquetou e não registrou: vale a tag,
     para a versão não se repetir."""
     fo = carregar_fechar_onda()
     c = pr_de_codigo(tmp_path, versao_em_producao="0.20.4")
@@ -1397,7 +1397,7 @@ def test_fechamento_de_ferramenta_so_faz_merge_sem_coolify_nem_registro(
     # e sem versão nova, sem tag
     assert c.coolify() == [] and c.tags == []
     assert c.builds == [] and c.healths == []
-    # nenhum PR aberto pelo rabo: nem de registro, nem um que embrulhe a onda
+    # nenhum PR aberto pela subida: nem de registro, nem um que embrulhe a onda
     abertos = [a for a in c.gh_chamadas if a[:4] == ["api", "-X", "POST", "repos/{owner}/{repo}/pulls"]]
     assert abertos == [], abertos
     assert c.merges[0]["pr"] == 7
@@ -1596,12 +1596,12 @@ def test_pr_sem_migration_nova_nao_pede_hash(tmp_path, monkeypatch):
     assert rodar_main(fo, monkeypatch, c, "--dry-run") == 0
 
 
-# ------------------------------------- rabo rodado de dentro do próprio worktree
+# ------------------------------------- subida rodada de dentro do próprio worktree
 
-def test_rabo_rodado_do_worktree_do_autor_nao_remove_o_proprio_checkout(
+def test_subida_rodada_do_worktree_do_autor_nao_remove_o_proprio_checkout(
     tmp_path, monkeypatch
 ):
-    """O autor roda o rabo do próprio checkout, um worktree em `.claude/worktrees/`
+    """O autor roda a subida do próprio checkout, um worktree em `.claude/worktrees/`
     na branch do PR. Depois do push essa branch está na main, mas a limpeza não
     pode remover o worktree de onde o script roda: o arquivo sujo sumiria e o
     `git` seguinte, com `cwd` apagado, viraria um exit 3 falso depois do deploy
@@ -1640,7 +1640,7 @@ def coolify_sem_leitura_de_deploys(c: Cenario) -> list[str]:
 def test_health_ruim_volta_a_imagem_anterior_e_o_app_version_antigo_e_sai_com_rollback_feito(
     tmp_path, monkeypatch, capsys
 ):
-    """O backend da v0.10.1 responde 500: o rabo volta o app do lote à imagem
+    """O backend da v0.10.1 responde 500: a subida volta o app do lote à imagem
     que estava no ar ANTES do merge (lida antes dele, não a mais nova da lista:
     a de um rollback anterior é mais nova e tem defeito), devolve o APP_VERSION
     v0.10.0 aos dois apps ANTES de subir a imagem (o backend o lê no start do
@@ -1667,7 +1667,7 @@ def test_health_ruim_volta_a_imagem_anterior_e_o_app_version_antigo_e_sai_com_ro
     assert c.rollbacks == ["backend"]
     assert c.healths == [("backend", "0.10.1"), ("backend", "0.10.0")]
     assert c.semaforo == [("pegar", "pr-7"), ("soltar", "pr-7")]
-    # sem registro: o próprio rabo mergeia o revert antes de soltar a trava (issue #999)
+    # sem registro: a própria subida mergeia o revert antes de soltar a trava (issue #999)
     assert [m["branch"] for m in c.merges] == ["feature", "revert/pr-7"], c.merges
     saida = capsys.readouterr().out
     health = next(li for li in saida.splitlines() if li.startswith("health:"))
@@ -1704,7 +1704,7 @@ def test_rollback_que_falha_sai_com_4_e_o_semaforo_fica_preso(tmp_path, monkeypa
 
     assert rodar_main(fo, monkeypatch, c) == fo.EXIT_HEALTH == 4
 
-    # presa e marcada parada: o rabo seguinte sai com 8 na hora (issue #999)
+    # presa e marcada parada: a subida seguinte sai com 8 na hora (issue #999)
     assert c.semaforo == [("pegar", "pr-7"), ("parar", "pr-7")]
     assert [m["pr"] for m in c.merges] == [7]
     saida = capsys.readouterr().out
@@ -1713,7 +1713,7 @@ def test_rollback_que_falha_sai_com_4_e_o_semaforo_fica_preso(tmp_path, monkeypa
     assert "/deploy rollback" in rollback, rollback
 
 
-def test_sem_imagem_anterior_o_rabo_nao_mexe_no_app_version_nem_sobe_imagem(tmp_path, monkeypatch):
+def test_sem_imagem_anterior_a_subida_nao_mexe_no_app_version_nem_sobe_imagem(tmp_path, monkeypatch):
     """Sem para onde voltar, o APP_VERSION novo continua batendo com a imagem no ar."""
     fo = carregar_fechar_onda()
     c = pr_de_codigo(tmp_path)
@@ -1791,7 +1791,7 @@ def test_esperar_rollback_sem_deploy_novo_desiste_sem_forcar_build(monkeypatch):
 
 
 def test_health_ruim_guarda_o_que_o_health_respondeu(monkeypatch):
-    """O corpo da resposta vai na linha do rabo e, dali, no comentário da issue reaberta."""
+    """O corpo da resposta vai na linha da subida e, dali, no comentário da issue reaberta."""
     fo = carregar_fechar_onda()
 
     def urlopen(req, timeout):
@@ -1808,7 +1808,7 @@ def test_health_ruim_guarda_o_que_o_health_respondeu(monkeypatch):
     assert fo.linha_de_health(h) == 'http 500 {"detail": "db fora do ar"}'
 
 
-# --------------------------- migration com recibo: o rabo espera o número (#969)
+# --------------------------- migration com recibo: a subida espera o número (#969)
 
 SQL_COM_RECIBO = (
     "create table triagem (id int);\n"
@@ -1820,7 +1820,7 @@ HORA = 60 * 60
 
 
 class Relogio:
-    """O relógio do rabo: `sleep` só anda o ponteiro, e 24 h passam num instante."""
+    """O relógio da subida: `sleep` só anda o ponteiro, e 24 h passam num instante."""
 
     def __init__(self):
         import time as _time
@@ -1851,7 +1851,7 @@ class _Resposta:
 
 
 class HealthDoBackend:
-    """O `/api/health` de produção visto pelo rabo. `coladas` diz, em segundos
+    """O `/api/health` de produção visto pela subida. `coladas` diz, em segundos
     desde o início, quando o Pedro colou cada migration no Studio; antes de
     todas, o banco tem só a 111. `sem_campo`: o backend no ar é anterior ao
     #969 e não informa o número."""
@@ -1883,7 +1883,7 @@ def pr_com_migration_com_recibo(tmp_path: Path, *outras: str) -> Cenario:
 
 def preparar_com_relogio(fo, monkeypatch, c: Cenario, health: HealthDoBackend) -> list[float]:
     """`preparar` com o relógio controlado e o health falso do backend; devolve
-    os instantes em que o rabo pegou o semáforo."""
+    os instantes em que a subida pegou o semáforo."""
     preparar(fo, monkeypatch, c)
     monkeypatch.setattr(fo, "time", health.relogio)
     monkeypatch.setattr(fo.urllib.request, "urlopen", health)
@@ -1903,7 +1903,7 @@ def linhas_com(saida: str, prefixo: str) -> list[str]:
     return [li for li in saida.splitlines() if li.startswith(prefixo)]
 
 
-def test_rabo_espera_a_migration_aparecer_no_health_e_so_entao_pega_o_semaforo_e_mergeia(
+def test_subida_espera_a_migration_aparecer_no_health_e_so_entao_pega_o_semaforo_e_mergeia(
     tmp_path, monkeypatch, capsys
 ):
     fo = carregar_fechar_onda()
@@ -1976,7 +1976,7 @@ def test_migration_que_nao_aparece_em_24_h_vence_com_codigo_proprio_sem_merge(
 def test_push_no_pr_da_onda_durante_a_espera_nao_entra_na_main(tmp_path, monkeypatch, capsys):
     """Revisão de segurança do PR #996: na espera, alguém empurra outro SQL no PR
     do lote. O SQL colado (do head conferido) deixa de ser o que entraria na
-    main, e o rabo para sem merge, como o avulso já parava."""
+    main, e a subida para sem merge, como o avulso já parava."""
     fo = carregar_fechar_onda()
     c = pr_com_migration_com_recibo(tmp_path)
     relogio = Relogio()
@@ -2004,9 +2004,9 @@ def test_push_no_pr_da_onda_durante_a_espera_nao_entra_na_main(tmp_path, monkeyp
     assert "#8 andou depois das pre-condicoes" in saida, saida
 
 
-def test_health_de_backend_anterior_ao_recibo_nao_prende_o_rabo(tmp_path, monkeypatch, capsys):
+def test_health_de_backend_anterior_ao_recibo_nao_prende_a_subida(tmp_path, monkeypatch, capsys):
     """O deploy do próprio #969: o backend no ar ainda não informa o número, e a
-    114 foi colada no Studio pelo fluxo antigo. O rabo avisa e segue sem esperar."""
+    114 foi colada no Studio pelo fluxo antigo. A subida avisa e segue sem esperar."""
     fo = carregar_fechar_onda()
     c = pr_com_migration_com_recibo(tmp_path)
     health = HealthDoBackend(Relogio(), sem_campo=True)
@@ -2081,7 +2081,7 @@ def test_backend_em_modo_imagem_sobe_a_imagem_do_head_retagueada_para_o_squash_s
     tmp_path, monkeypatch, capsys
 ):
     """ADR 0064, decisão 6c: o CI publicou a imagem do head do PR no GHCR. Depois
-    do merge o rabo dispara o workflow que dá a ela a tag do squash (retag, a
+    do merge a subida dispara o workflow que dá a ela a tag do squash (retag, a
     origem é o head) e só então aponta o Coolify para essa tag e dispara o
     deploy, que só puxa e reinicia: nenhum build do webhook é esperado."""
     fo = carregar_fechar_onda()
@@ -2160,7 +2160,7 @@ def test_imagem_que_nao_sai_do_workflow_para_com_3_sem_trocar_a_tag_no_coolify(
     tmp_path, monkeypatch, capsys
 ):
     """O run do workflow terminou vermelho: o Coolify nunca recebe a tag de uma
-    imagem que não existe, e o rabo sai como um build que falhou."""
+    imagem que não existe, e a subida sai como um build que falhou."""
     fo = carregar_fechar_onda()
     c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM)
     c.publicacao_falha = True
@@ -2228,7 +2228,7 @@ def test_backend_que_o_coolify_ainda_constroi_do_git_segue_pelo_webhook_com_avis
 ):
     """O project.json já diz modo imagem, mas a troca no Coolify é pela tela e
     ainda não foi feita: trocar a tag de um app do git dispararia um segundo
-    build, e o rollback por tag reconstruiria a main com o defeito. O rabo
+    build, e o rollback por tag reconstruiria a main com o defeito. A subida
     confere o build pack no Coolify antes do primeiro merge e segue pelo
     webhook, avisando."""
     fo = carregar_fechar_onda()
@@ -2254,7 +2254,7 @@ def test_backend_que_o_coolify_ainda_constroi_do_git_segue_pelo_webhook_com_avis
 def test_leitura_do_build_pack_que_falha_para_antes_do_primeiro_merge(
     tmp_path, monkeypatch, capsys, resposta
 ):
-    """Revisão do PR #1016: sem saber o build pack, o rabo não pode cair no
+    """Revisão do PR #1016: sem saber o build pack, a subida não pode cair no
     webhook. Depois da troca na tela o app não tem webhook, o deploy forçado
     repuxaria a tag velha, o health passaria pelo APP_VERSION do runtime e o
     registro gravaria healthy com um sha que nem existe no GHCR. Só um build
@@ -2383,7 +2383,7 @@ def test_rollback_em_modo_imagem_com_a_tag_anterior_sobrescrita_nao_mexe_em_nada
 
 def test_rollback_do_primeiro_deploy_por_imagem_le_o_digest_do_run_que_publicou_a_tag(tmp_path, monkeypatch):
     """O state.json ainda não tem digest (a imagem no ar veio do passo 2, o run
-    manual do workflow): o rabo o lê do artefato daquele run, na main, e volta."""
+    manual do workflow): a subida o lê do artefato daquele run, na main, e volta."""
     fo = carregar_fechar_onda()
     c = pr_de_codigo(tmp_path, project=PROJECT_IMAGEM, sha_no_ar=IMAGEM_ANTERIOR)
     c.imagem_publicada_antes(IMAGEM_ANTERIOR, DIGEST_ANTERIOR)

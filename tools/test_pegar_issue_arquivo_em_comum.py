@@ -2,7 +2,7 @@
 
 Nasceu no #970 recusando o claim e gravando "Bloqueada por" (ADR 0063). A ADR
 0066 tirou o arquivo como separador: o único separador é a dependência, escrita
-como `blocked_by` por quem fatia, e o conflito de texto se resolve no rabo PR a
+como `blocked_by` por quem fatia, e o conflito de texto se resolve na subida PR a
 PR. Agora `arquivo_em_comum.py` só imprime um aviso de uma linha com os arquivos
 que coincidem, sai 0 e não grava dependência nenhuma. Estes testes o rodam como
 o agente roda, com um `gh` de mentira no PATH.
@@ -117,7 +117,7 @@ def test_sem_arquivo_em_comum_pega_sem_marcar_nada(tmp_path):
     feito = rodar(
         tmp_path,
         resposta(
-            "Mexe em `.claude/skills/ship/SKILL.md` e em `tools/test_skill_ship_rabo.py`.",
+            "Mexe em `.claude/skills/ship/SKILL.md` e em `tools/test_skill_ship_subida.py`.",
             em_andamento(990, 5003, "Muda `.github/rulesets/main.json`.", ["tools/test_ruleset_main.py"]),
         ),
         "970",

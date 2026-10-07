@@ -199,7 +199,7 @@ def _gh_prs(root: Path) -> list[dict]:
         "closed_at": it.get("closedAt"),
         "author": (it.get("author") or {}).get("login"),
         "is_draft": bool(it.get("isDraft")),
-        # quem clicou (ou mandou o rabo clicar) no merge: o responsável da linha do tempo
+        # quem clicou (ou mandou a subida clicar) no merge: o responsável da linha do tempo
         "mergeado_por": (it.get("mergedBy") or {}).get("login"),
         "labels": [lb["name"] for lb in it.get("labels") or []],
         # Só os abertos ganham estes campos (_enriquecer_prs_abertos).

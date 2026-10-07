@@ -67,7 +67,7 @@ on:
       # A Action pós-merge (issue #940): o contrato dela mora em tools/.
       - '.github/workflows/pos-merge.yml'
       # A imagem do backend no GHCR (issue #1001): o teste em tools/ amarra o
-      # workflow que o rabo dispara ao ci.yml e ao project.json.
+      # workflow que a subida dispara ao ci.yml e ao project.json.
       - '.github/workflows/imagem-backend.yml'
       - '.github/rulesets/**'
 

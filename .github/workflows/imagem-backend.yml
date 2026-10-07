@@ -1,13 +1,13 @@
 name: Imagem do backend
 
 # A imagem do squash que vai para produção (issue #1001, ADR 0064 decisão 6c).
-# O rabo (fechar_onda.py) dispara este workflow depois do merge e acha o run
+# A subida (fechar_onda.py) dispara este workflow depois do merge e acha o run
 # pelo sha no título; quando ele termina verde, aponta o Coolify para a tag do
 # squash, e o Coolify só puxa e reinicia. Quem escreve no GHCR é o GITHUB_TOKEN
-# daqui: o gh da máquina do rabo não tem `write:packages`.
+# daqui: o gh da máquina da subida não tem `write:packages`.
 #
 # `origens`: `<head>@<digest>` de heads de PR, do mais novo ao mais velho, com
-# a pasta do backend igual à do squash (o rabo compara). O digest é o que o CI
+# a pasta do backend igual à do squash (a subida compara). O digest é o que o CI
 # do head guardou no artefato `digest-backend`: a tag `:<head>` é mutável (um
 # run com `packages: write` de qualquer branch a sobrescreve), o digest não. A
 # primeira origem cujo digest existe no GHCR é a imagem do squash: ganha as
@@ -15,7 +15,7 @@ name: Imagem do backend
 # ou o lote juntou PRs que nunca rodaram juntos no CI): constrói do squash,
 # com o cache de camadas do GitHub Actions da main (isolado por ref: PR não
 # escreve nele). O digest publicado vai para o artefato `digest-backend` deste
-# run, que o rabo lê, confere no GHCR antes de pôr no ar e grava no state.json.
+# run, que a subida lê, confere no GHCR antes de pôr no ar e grava no state.json.
 run-name: Imagem do backend ${{ inputs.sha }}
 
 on:
@@ -109,7 +109,7 @@ jobs:
           fi
           mkdir -p digest
           printf '%s\n' "$DIGEST" > digest/digest
-      - name: Guarda o digest para o rabo
+      - name: Guarda o digest para a subida
         uses: actions/upload-artifact@v4
         with:
           name: digest-backend

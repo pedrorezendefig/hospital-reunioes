@@ -1,8 +1,8 @@
 name: Pós-merge
 
 # Snapshot e draft do Manual depois de cada push na main (ADR 0062, decisão
-# 10, emendada pela ADR 0065; issue #940), e o registro do deploy que o rabo
-# dispara depois do health (ADR 0064, decisão 6b; issue #1000). O rabo
+# 10, emendada pela ADR 0065; issue #940), e o registro do deploy que a subida
+# dispara depois do health (ADR 0064, decisão 6b; issue #1000). A subida
 # (fechar_onda.py) monta só a verdade do deploy e a entrega aqui; o
 # history.json e o state.json com ela, o mapa factual (docs/spec/snapshots/,
 # blocos AUTO do docs/ARQUITETURA.md) e o draft das páginas do Manual saem
@@ -11,8 +11,8 @@ name: Pós-merge
 # Três jobs (ADR 0065). O `gerar` instala o backend e roda os scripts, sem
 # credencial nenhuma: token só de leitura, que nem fica no .git/config. O
 # `commitar` não instala nada: recebe por artefato só o patch dos três
-# caminhos e dos dois JSONs do registro, confere estes contra o input do
-# rabo e empurra direto na main com a deploy key, o único ator em
+# caminhos e dos dois JSONs do registro, confere estes contra o input da
+# subida e empurra direto na main com a deploy key, o único ator em
 # `bypass_actors` do ruleset (.github/rulesets/main.json). A chave vive num
 # secret do Environment `pos-merge`, restrito à branch main.
 #
@@ -87,7 +87,7 @@ jobs:
           python-version: "3.12"
 
       - name: Aplicar o registro do deploy
-        # Só no run que o rabo dispara (ADR 0064, decisão 6b): a entrada nova
+        # Só no run que a subida dispara (ADR 0064, decisão 6b): a entrada nova
         # vai para o topo do history.json e o state.json passa a ser o do
         # registro, antes do draft, que lê o deploys[0]. O input entra por
         # env e o script recusa tudo fora do esquema sem escrever nada.
@@ -201,7 +201,7 @@ jobs:
         # o --include descarta do patch qualquer outro caminho. [skip ci] no
         # assunto: o push da deploy key acorda workflow. O rebase pega o PR que
         # entrou na main durante o run; sem ele o push seria recusado. O
-        # registro do run disparado pelo rabo entra por env, como no `gerar`:
+        # registro do run disparado pela subida entra por env, como no `gerar`:
         # é com ele que os dois JSONs do patch são conferidos.
         env:
           REGISTRO: ${{ inputs.registro }}
@@ -257,8 +257,8 @@ jobs:
             echo "::error::O patch cria, apaga ou toca arquivo que a Action não escreve: $fora"
             exit 1
           fi
-          # O registro do deploy (ADR 0064, decisão 6b) só muda no run que o
-          # rabo dispara, e só para o que ele mandou: o history.json da main
+          # O registro do deploy (ADR 0064, decisão 6b) só muda no run que a
+          # subida dispara, e só para o que ela mandou: o history.json da main
           # com a entrada do input no topo, as antigas iguais e na mesma
           # ordem, e o state.json do input. O `gerar` roda pacote de terceiros
           # depois de aplicar o registro: a conferência é contra o input, e
@@ -270,7 +270,7 @@ jobs:
           registro=""
           if ! git diff --cached --quiet -- "$deploy"; then
             if [ -z "$REGISTRO" ]; then
-              echo "::error::O patch muda $deploy num run sem registro (só o run que o rabo dispara traz um): recusado."
+              echo "::error::O patch muda $deploy num run sem registro (só o run que a subida dispara traz um): recusado."
               exit 1
             fi
             tokens="$RUNNER_TEMP/registro-tokens"
@@ -283,7 +283,7 @@ jobs:
                 || ! git show ":$deploy/state.json" | jq -c --stream . > "$tokens/state" \
                 || ! cmp -s "$tokens/history-esperado" "$tokens/history" \
                 || ! cmp -s "$tokens/state-esperado" "$tokens/state"; then
-              echo "::error::O history.json ou o state.json do patch não é o registro que o rabo mandou: recusado."
+              echo "::error::O history.json ou o state.json do patch não é o registro que a subida mandou: recusado."
               exit 1
             fi
             registro="registro v$(jq -nr '$ENV.REGISTRO | fromjson | .entrada.app_version'), "

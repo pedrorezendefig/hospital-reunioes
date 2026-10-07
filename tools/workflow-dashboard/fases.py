@@ -192,7 +192,7 @@ def _dt(s: str | None) -> datetime | None:
 class _Producao:
     """Em que deploy do history.json cada PR subiu.
 
-    O rabo escreve os PRs no texto do deploy ("PR #896", "PRs #874 #875 #876");
+    A subida escreve os PRs no texto do deploy ("PR #896", "PRs #874 #875 #876");
     número de issue e de PR não colidem no GitHub. Citar não basta: as notes
     falam de PRs futuros como contexto ("#729 (PR #751, que rebaseia por cima"),
     então o deploy só conta se não for anterior ao merge (com a tolerância do registro).
@@ -217,7 +217,7 @@ class _Producao:
         2. merge anterior ao build mais antigo do history.json: está no ar, versão
            desconhecida (o history.json guardou só os 50 últimos deploys até a ADR 0062);
         3. o primeiro deploy cujo build começou depois do merge: PR só de docs e PR de
-           registro do rabo não ganham deploy próprio, e todo deploy sobe a main inteira.
+           registro da subida não ganham deploy próprio, e todo deploy sobe a main inteira.
         """
         if pr["state"] != "MERGED":
             return False, None

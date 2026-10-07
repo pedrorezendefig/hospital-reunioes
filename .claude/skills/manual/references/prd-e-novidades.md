@@ -13,13 +13,13 @@ fatia.
    escrever.
 2. **Escreva só essas páginas**, no molde da Página de tarefa, com
    `prd: [<N>]` e **`draft: true` em todas**, inclusive nas que só mudaram. A
-   funcionalidade ainda não está em produção: é o rabo (`fechar_onda.py`) que tira o
+   funcionalidade ainda não está em produção: é a subida (`fechar_onda.py`) que tira o
    draft quando ela sobe, e é por isso que o `draft` é o único mecanismo de
    invisibilidade do manual.
 3. **Prints e vídeo** das páginas novas, pelas receitas de `prints.md` e
    `video-de-tarefa.md`.
 4. **Uma entrada em `novidades.md`** do módulo (formato abaixo).
-5. **Não publique.** A Fatia de manual para no PR verde, fora do rabo, com
+5. **Não publique.** A Fatia de manual para no PR verde, fora da subida, com
    o caminho do draft do vídeo no corpo do PR; quem viu o vídeo roda o
    `fechar_onda.py`. Quem publica é o humano, com `/manual publicar`,
    depois que a funcionalidade sobe.

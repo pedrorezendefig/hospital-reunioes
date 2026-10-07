@@ -72,7 +72,7 @@ Na sua máquina só existem tokens da máquina (`tokens/.env`: Coolify) e três 
 
 ## O fluxo, em uma linha por etapa
 
-1. Ideia: `/grill-with-docs` afia contra `CONTEXT.md` e ADRs. 2. `/to-prd` e `/to-issues` viram issues. 3. `/pegar-issue N` faz o claim e abre a branch. 4. `/tdd` escreve o teste primeiro. 5. `/ship` abre o PR, roda os gates da ADR 0068 e, com o PR verde, roda o rabo (`fechar_onda.py`) sozinho. 6. O rabo mergeia pela API, define a versão (`APP_VERSION` e tag, sem commit), faz um build, confere o health e registra em `docs/spec/deploy/` pela Action pós-merge. 7. Testa em produção. 8. `/divulgar` conta a entrega ao diretor. 9. A Fatia de manual roda `/manual #PRD` e escreve a parte do Manual do usuário que a entrega criou; ela entra no ar no deploy seguinte, sem passo manual.
+1. Ideia: `/grill-with-docs` afia contra `CONTEXT.md` e ADRs. 2. `/to-prd` e `/to-issues` viram issues. 3. `/pegar-issue N` faz o claim e abre a branch. 4. `/tdd` escreve o teste primeiro. 5. `/ship` abre o PR, roda os gates da ADR 0068 e, com o PR verde, roda a subida (`fechar_onda.py`) sozinho. 6. A subida mergeia pela API, define a versão (`APP_VERSION` e tag, sem commit), faz um build, confere o health e registra em `docs/spec/deploy/` pela Action pós-merge. 7. Testa em produção. 8. `/divulgar` conta a entrega ao diretor. 9. A Fatia de manual roda `/manual #PRD` e escreve a parte do Manual do usuário que a entrega criou; ela entra no ar no deploy seguinte, sem passo manual.
 
 ## Cobertura (o `/setup-maquina` confere esta lista)
 

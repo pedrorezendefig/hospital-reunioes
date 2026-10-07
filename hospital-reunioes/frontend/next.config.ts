@@ -2,7 +2,7 @@ import type { NextConfig } from "next";
 import withSerwistInit from "@serwist/next";
 import pkg from "./package.json";
 
-// Versão do rodapé (issue #967): o rabo grava APP_VERSION no Coolify antes do
+// Versão do rodapé (issue #967): a subida grava APP_VERSION no Coolify antes do
 // merge e o Dockerfile a entrega ao build. Sem ela (build local, CI) ou vazia
 // (ARG sem valor), vale o package.json, que fica congelado: a versão não é
 // mais commitada.

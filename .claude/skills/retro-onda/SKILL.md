@@ -1,6 +1,6 @@
 ---
 name: retro-onda
-description: Retrospectiva de uma onda da /onda-enxuta. Lê o que a onda deixou (medição, baixas, correções, rabo, JSONL) e propõe mudanças no ambiente dos agentes, não no código. Só propõe. Sintaxe `/retro-onda [<nome>-onda<N> | <id de sessão>]`.
+description: Retrospectiva de uma onda da /onda-enxuta. Lê o que a onda deixou (medição, baixas, correções, subida, JSONL) e propõe mudanças no ambiente dos agentes, não no código. Só propõe. Sintaxe `/retro-onda [<nome>-onda<N> | <id de sessão>]`.
 disable-model-invocation: true
 ---
 
@@ -21,12 +21,12 @@ Sem argumento: a medição mais recente em `~/.claude/onda-enxuta/medicoes/`.
 ## Fontes, nesta ordem
 
 1. **Medição:** `~/.claude/onda-enxuta/medicoes/<data>-<sessao>-onda<N>.json`. Os sinais: `github.<PR>.ci_falhas`, `revisoes` acima de 1, `por_papel.corretor` (agentes e custo), `contexto_max` acima de 150 mil, `minutos` fora do normal da sessão.
-2. **GitHub:** o comentário `## Onda <nome> <N>` no PRD (linha do rabo, baixas, linha `retro:`); as issues `ready-for-human` da onda (o comentário de baixa diz gate, achado e hipótese); os comentários do `hr-corretor` nos PRs (achado e commit); o veredito do `hr-revisor`; `docs/spec/deploy/history.json` (a entrada da versão, com `notes`).
+2. **GitHub:** o comentário `## Onda <nome> <N>` no PRD (linha da subida, baixas, linha `retro:`); as issues `ready-for-human` da onda (o comentário de baixa diz gate, achado e hipótese); os comentários do `hr-corretor` nos PRs (achado e commit); o veredito do `hr-revisor`; `docs/spec/deploy/history.json` (a entrada da versão, com `notes`).
 3. **JSONL da sessão**, só onde a medição aponta: `~/.claude/projects/<slug>/<sessao>.jsonl` e `<sessao>/subagents/agent-*.jsonl`. Procure o trecho do atrito (a sequência de tool calls antes do erro, a busca longa, a releitura repetida), não a sessão inteira.
 
 ## Passos
 
-1. Identifique a onda e leia a medição. Liste os **atritos**: baixa, rollback, conflito no rabo, CI vermelho, corretor em `effort: max`, revisão com must-fix, busca longa, contexto alto. Sem atrito, diga que a onda não ensina e pare.
+1. Identifique a onda e leia a medição. Liste os **atritos**: baixa, rollback, conflito na subida, CI vermelho, corretor em `effort: max`, revisão com must-fix, busca longa, contexto alto. Sem atrito, diga que a onda não ensina e pare.
 2. Para cada atrito, ache o **momento**: PR, issue, arquivo, trecho do JSONL. Candidata que não aponta para um momento é descartada: conselho genérico para preencher categoria não entra.
 3. Classifique e dê a casa:
 

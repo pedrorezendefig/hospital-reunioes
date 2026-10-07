@@ -74,7 +74,7 @@ checa_claude_versao() { # OK se claude --version >= CLAUDE_MIN; FALTA abaixo ou 
   else falta "claude >= $CLAUDE_MIN" "tem $v; atualize: curl -fsSL https://claude.ai/install.sh | bash"; fi
 }
 # Fluxo automático (ADR 0068): o settings DO USUÁRIO precisa do deny de force push contra a main e
-# do autoMode (o modo auto não lê autoMode do settings do projeto). O rabo, a /minhas-issues e a
+# do autoMode (o modo auto não lê autoMode do settings do projeto). A subida, a /minhas-issues e a
 # escrituração em issue e PR vão em autoMode.allow, em prosa, para o classificador seguir olhando
 # destino e conteúdo; em permissions.allow eles pulariam o classificador, e esse allow vale também
 # no settings do projeto, então os do projeto entram na varredura. Só pergunta ao jq se a regra
@@ -281,7 +281,7 @@ done < "$LISTA"
 
 # ---------------------------------------------------------------- Nível 2
 if [ "$NIVEL" -ge 2 ]; then
-titulo "Nível 2: deploy (ship, rabo fechar_onda.py, /deploy, /onda-enxuta)"
+titulo "Nível 2: deploy (ship, subida fechar_onda.py, /deploy, /onda-enxuta)"
 checa_claude_versao
 # O allow do projeto também vale: o da árvore onde o script roda e o da árvore principal (worktree).
 PRINCIPAL="$(cd "$(git rev-parse --path-format=absolute --git-common-dir 2>/dev/null)/.." 2>/dev/null && pwd)"
@@ -383,7 +383,7 @@ if [ -f "$ENVF" ]; then
       || falta ".env: $k" "valor fictício basta: echo '$par' >> hospital-reunioes/.env"
   done
   if [ -x "$VENV_PY" ]; then
-    # Mesmo comando e mesmo ambiente do snapshot do rabo (fechar_onda.py) (ele injeta no filho o DYLD
+    # Mesmo comando e mesmo ambiente do snapshot da subida (fechar_onda.py) (ele injeta no filho o DYLD
     # no macOS e o WEASYPRINT_DLL_DIRECTORIES no Windows).
     if erro="$(cd "$APP/backend" && DYLD_FALLBACK_LIBRARY_PATH="${DYLD_FALLBACK_LIBRARY_PATH:-/opt/homebrew/lib}" WEASYPRINT_DLL_DIRECTORIES="$MSYS_BIN" "$VENV_PY" -c "import app.main" 2>&1 >/dev/null)"; then
       ok "app importa (snapshot vai funcionar)"
@@ -397,7 +397,7 @@ else
   falta "hospital-reunioes/.env existe" "printf '%s\\n' $ENV_MIN > hospital-reunioes/.env (três valores fictícios; nada real)"
 fi
 
-# O rabo (fechar_onda.py) publica o Manual quando o deploy tira alguma página do draft
+# A subida (fechar_onda.py) publica o Manual quando o deploy tira alguma página do draft
 # (tools/tirar_draft_manual.py): o site é Starlight, buildado por `corepack pnpm@9` com Node >=
 # 22.12, e a publicação reencoda cada vídeo com ffmpeg. Por isso os três são
 # nível 2, o mesmo do deploy, e não opcionais.
@@ -410,7 +410,7 @@ if no_path_do_shell node; then
     falta "node >= $NODE_MIN (manual)" "tem v$nodev; o site do Manual não builda: brew install node@22 e ponha no PATH do ~/.zshrc"
   fi
 else
-  falta "node >= $NODE_MIN (manual)" "brew install node@22 (o rabo publica o Manual e o site exige $NODE_MIN)"
+  falta "node >= $NODE_MIN (manual)" "brew install node@22 (a subida publica o Manual e o site exige $NODE_MIN)"
 fi
 bin_ok corepack "npm i -g corepack (o site do Manual builda com corepack pnpm@9)"
 bin_ok ffmpeg "brew install ffmpeg (a publicação do Manual reencoda os vídeos)"

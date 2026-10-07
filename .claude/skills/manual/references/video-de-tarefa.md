@@ -81,6 +81,6 @@ npx --yes hyperframes@0.8.41 render --quality draft \
    legenda cita, texto legível, a tela batendo com o app real. O `check` do
    HyperFrames não vê nada disso.
 3. **OK humano no draft:** entregue o caminho do MP4 de draft ao Pedro (na
-   `/onda-enxuta`, no corpo do PR: ele fica verde fora do rabo até quem viu o
+   `/onda-enxuta`, no corpo do PR: ele fica verde fora da subida até quem viu o
    vídeo rodar o `fechar_onda.py`) e espere. Ajuste pedido = novo draft, novo OK. Só depois do OK vem o render
    final (`--quality high`), e ele é o que a publicação sobe.
