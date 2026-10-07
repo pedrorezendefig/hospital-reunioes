@@ -96,6 +96,11 @@ def _sem_github_de_verdade(monkeypatch):
     monkeypatch.setattr(github_client.httpx, "request", _proibido)
 
 
+# A funcao de verdade, guardada antes de o duble abaixo trocar o nome no modulo:
+# e por ela que o teste do cliente passa pelo transporte dublado.
+_LER_PRS_ABERTOS_DE_VERDADE = github_client.ler_prs_abertos
+
+
 @pytest.fixture(autouse=True)
 def _sem_pr_aberto(monkeypatch):
     """O lote da reconciliacao le os PRs abertos uma vez (issue #1064). Por
@@ -2633,6 +2638,24 @@ class TestIssuesQueOCorpoFecha:
     )
     def test_as_palavras_de_fechamento_do_github(self, corpo, esperado):
         assert github_client.issues_que_o_corpo_fecha(corpo) == esperado
+
+    def test_a_leitura_dos_prs_abertos_traz_as_issues_que_cada_um_fecha(self, monkeypatch):
+        """O cliente de verdade, com o transporte dublado: o caminho pedido e
+        o dos PRs ABERTOS, e cada PR sai com as issues que o corpo dele fecha."""
+        monkeypatch.setattr(settings, "github_integracao_token", "token-falso")
+        pedidos: list[str] = []
+
+        def _transporte(metodo, url, **_kw):
+            pedidos.append(f"{metodo} {url}")
+            corpo = [{"number": 1100, "body": "Closes #673"}, {"number": 1101, "body": None}]
+            return httpx.Response(200, json=corpo)
+
+        monkeypatch.setattr(github_client.httpx, "request", _transporte)
+
+        prs = _LER_PRS_ABERTOS_DE_VERDADE()
+
+        assert pedidos == [f"GET https://api.github.com/repos/{REPO}/pulls?state=open&per_page=100"]
+        assert prs == [{"numero": 1100, "fecha": [673]}, {"numero": 1101, "fecha": []}]
 
 
 class TestAReconciliacaoRecuperaOPrAberto:
