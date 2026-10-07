@@ -82,6 +82,7 @@ Só `status: accepted` vale como decisão; `superseded` é histórico (CLAUDE.md
 | [0066](0066-ondas-por-dependencia-nao-por-arquivo.md) | superseded | Ondas se separam por dependência, não por arquivo (emenda 0063, 0064) |
 | [0067](0067-ferramenta-sem-revisor-e-revisao-unica-no-app.md) | superseded | PR de ferramenta sem revisor, revisão única no app, agente nunca para para perguntar (emenda 0064) |
 | [0068](0068-o-fluxo-em-uma-pagina.md) | accepted | O fluxo em uma página: de issue a produção, como roda hoje (substitui 0020, 0022, 0028, 0029, 0035, 0043, 0053, 0061 a 0067) |
+| [0069](0069-anexo-da-demanda-fica-no-app-e-em-producao-devolve-ao-diretor.md) | accepted | Anexo da Demanda fica no app e quem desenvolve busca; Em produção é a Etapa que devolve ao diretor (emenda 0054) |
 | [0043](0043-skills-locais-sao-o-kit-do-workflow.md) | superseded | Skills locais são o kit completo do workflow, duplicata com as globais é intencional |
 | [0049](0049-wayfinder-instalada-e-lock-com-ref.md) | accepted | A wayfinder entra instalada no clone, e o `skills-lock.json` fixa o commit de origem |
 | [0053](0053-fluxo-exportavel-por-roteiro-versionado.md) | superseded | O fluxo de trabalho é exportável por um roteiro versionado no repositório, não por prompt solto |
