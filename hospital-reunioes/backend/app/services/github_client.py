@@ -28,6 +28,7 @@ campo de terceiro espalhado por tres arquivos.
 from __future__ import annotations
 
 import logging
+import re
 from typing import Any
 
 import httpx
@@ -138,6 +139,56 @@ def _no(dados: dict[str, Any]) -> dict[str, Any]:
             str(label["name"]) for label in (dados.get("labels") or []) if isinstance(label, dict) and label.get("name")
         ),
     }
+
+
+# As palavras com que um PR diz que fecha uma issue, as mesmas que o GitHub
+# reconhece (issue #1064): `Closes #673`, `fixes: #673`, `Resolved
+# dono/repo#673`. A palavra vale para UMA referencia: em "Closes #1, #2" o
+# GitHub fecha so a #1, e a regra daqui diz o mesmo.
+_FECHAMENTO = re.compile(
+    r"\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b:?\s+([\w.-]+/[\w.-]+)?#(\d+)\b",
+    re.IGNORECASE,
+)
+
+
+def issues_que_o_corpo_fecha(corpo: str | None) -> list[int]:
+    """As issues DESTE repositorio que o corpo de um PR fecha, em ordem.
+
+    E a mesma leitura para os dois gatilhos (o webhook `pull_request` e a
+    reconciliacao), e por isso mora aqui: lida de dois jeitos, a issue que o
+    webhook chama de "fechada pelo PR" poderia ser outra na passagem de hora em
+    hora, e o fato iria e voltaria a cada hora.
+
+    Referencia a outro repositorio (`outra-pessoa/repo#673`) nao conta: o
+    numero e de la, e a issue #673 daqui nao tem nada com isso.
+    """
+    repo = (settings.github_integracao_repo or "").lower()
+    numeros: list[int] = []
+    for outro_repo, numero in _FECHAMENTO.findall(corpo or ""):
+        if outro_repo and outro_repo.lower() != repo:
+            continue
+        if int(numero) not in numeros:
+            numeros.append(int(numero))
+    return numeros
+
+
+def ler_prs_abertos() -> list[dict[str, Any]]:
+    """Os PRs abertos do repositorio, cada um com as issues que ele fecha.
+
+    Uma leitura so para o lote inteiro da reconciliacao (issue #1064), e nao
+    uma por Demanda: a lista de PRs abertos e curta e a cota do GitHub e
+    compartilhada. A primeira pagina (100) basta para o volume deste
+    repositorio; um PR alem dela so perde o fato "PR aberto" no lote, e o
+    webhook continua cobrindo.
+    """
+    dados = _chamar("GET", "/pulls?state=open&per_page=100")
+    if not isinstance(dados, list):
+        raise GithubIndisponivelError("GitHub respondeu a lista de PRs fora do formato")
+    return [
+        {"numero": pr.get("number"), "fecha": issues_que_o_corpo_fecha(pr.get("body"))}
+        for pr in dados
+        if isinstance(pr, dict) and isinstance(pr.get("number"), int)
+    ]
 
 
 def e_pull_request(dados: dict[str, Any]) -> bool:

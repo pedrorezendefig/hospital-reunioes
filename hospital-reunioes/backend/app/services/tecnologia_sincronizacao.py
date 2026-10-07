@@ -79,6 +79,26 @@ logger = logging.getLogger(__name__)
 # nem corpo, que sao os tres campos de que a Etapa e o "O que muda" vivem.
 ACOES_DE_ISSUE = ("labeled", "unlabeled", "closed", "reopened", "edited")
 
+# As acoes do evento `pull_request` que mexem no fato do PR (issue #1064, ADR
+# 0069, decisao 6). Abrir e reabrir poem o PR na foto; fechar o tira, e o merge
+# ainda grava "fechada por PR". `edited` e `synchronize` (push novo no PR) nao
+# mudam se ha PR aberto, e quem corrige a referencia editada e a reconciliacao.
+ACOES_DE_PR = ("opened", "reopened", "closed")
+
+# Os dois fatos do PR, gravados DENTRO da foto da issue (issue #1064).
+#
+# Moram na foto, e nao em coluna propria, porque sao fatos do GitHub sobre a
+# issue, e a foto e onde o app guarda o que leu de la. So entram quando dizem
+# algo: uma foto sem PR nenhum continua identica a de antes desta fatia, e a
+# guarda do cache igual nao regrava todas as Demandas na primeira passagem.
+#
+# `prs_abertos` e a LISTA dos numeros, e nao um booleano: com dois PRs abertos
+# para a mesma raiz, fechar um sem merge nao pode apagar o fato do outro.
+# `fechada_por_pr` e o numero do PR mergeado, que a fatia do deploy le para
+# decidir se a devolucao espera Em producao (ADR 0069, decisao 5).
+FATO_PRS_ABERTOS = "prs_abertos"
+FATO_FECHADA_POR_PR = "fechada_por_pr"
+
 # Quais Demandas o lote de hora em hora rele.
 #
 # A lista e a POSITIVA, e nao "tudo menos concluida e cancelada", porque no
@@ -100,7 +120,7 @@ def mudanca_da_foto(foto: dict[str, Any]) -> dict[str, Any]:
     """
     entregues, total = partes_da_foto(foto)
     return {
-        "etapa": etapa_da_foto(foto),
+        "etapa": etapa_da_foto(foto, pr_aberto=bool(foto.get(FATO_PRS_ABERTOS))),
         "partes_entregues": entregues,
         "partes_total": total,
         # O texto que o diretor le, lido do GitHub e nunca digitado no app
@@ -375,8 +395,51 @@ def _devolver_a_quem_pediu(supabase, demanda: dict[str, Any], *, etapa_nova: str
     _avisar_a_devolucao(supabase, atribuida.data[0], destinatario_id=efeito.atribuir_a)
 
 
-def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
+def _fatos_anteriores(demanda: dict[str, Any]) -> tuple[list[int], int | None]:
+    """Os fatos do PR que a foto guardada ja carrega.
+
+    A issue relida do GitHub nao diz nada sobre PR, entao uma sincronizacao
+    pelo evento `issues` (uma label, uma edicao do corpo) apagaria o fato que o
+    webhook `pull_request` gravou. Por isso todo caminho parte daqui e so troca
+    o que ele mesmo sabe.
+    """
+    foto = demanda.get("github_foto")
+    if not isinstance(foto, dict):
+        return [], None
+    abertos = [n for n in (foto.get(FATO_PRS_ABERTOS) or []) if isinstance(n, int)]
+    fechada = foto.get(FATO_FECHADA_POR_PR)
+    return abertos, fechada if isinstance(fechada, int) else None
+
+
+def sincronizar_pelo_pr(supabase, demanda: dict[str, Any], *, pr: int, acao: str, mergeado: bool) -> bool:
+    """O evento `pull_request` aplicado a uma Demanda cuja raiz o PR fecha.
+
+    Abrir (ou reabrir) poe o PR entre os abertos; fechar o tira, com ou sem
+    merge. So o merge grava "fechada por PR": o PR fechado sem merge apenas
+    deixa de contar, e a Etapa volta a ser o que as labels e as partes dizem
+    (ADR 0069, decisao 6).
+    """
+    abertos, fechada = _fatos_anteriores(demanda)
+    abertos = [n for n in abertos if n != pr]
+    if acao in ("opened", "reopened"):
+        abertos.append(pr)
+    elif mergeado:
+        fechada = pr
+    return sincronizar_demanda(supabase, demanda, prs_abertos=abertos, fechada_por_pr=fechada)
+
+
+def sincronizar_demanda(
+    supabase,
+    demanda: dict[str, Any],
+    *,
+    prs_abertos: list[int] | None = None,
+    fechada_por_pr: int | None = None,
+) -> bool:
     """Rele a issue vinculada e atualiza o cache da Demanda. `True` se mudou.
+
+    `prs_abertos` e `fechada_por_pr` sao os fatos do PR (issue #1064) que quem
+    chama sabe. `None` quer dizer "nao sei", e o que vale e o que a foto
+    guardada ja dizia: e o caso do evento `issues`, que nao fala de PR.
 
     NAO trata excecao: `GithubIndisponivelError` e `IssueNaoEncontradaError` sobem
     para quem chamou, porque o desfeito e diferente nos dois gatilhos. O webhook
@@ -399,6 +462,13 @@ def sincronizar_demanda(supabase, demanda: dict[str, Any]) -> bool:
 
     dados = github_client.ler_issue(numero)
     foto = github_client.montar_foto(dados, github_client.ler_sub_issues(numero))
+    abertos_antes, fechada_antes = _fatos_anteriores(demanda)
+    abertos = sorted(set(abertos_antes if prs_abertos is None else prs_abertos))
+    fechada = fechada_por_pr if fechada_por_pr is not None else fechada_antes
+    if abertos:
+        foto[FATO_PRS_ABERTOS] = abertos
+    if fechada is not None:
+        foto[FATO_FECHADA_POR_PR] = fechada
     mudanca = mudanca_da_foto(foto)
     if not cache_desatualizado(demanda, mudanca):
         return False

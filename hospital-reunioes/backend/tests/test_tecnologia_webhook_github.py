@@ -1021,7 +1021,7 @@ class TestSemSegredoConfigurado:
 
 
 class TestSoOEventoIssues:
-    @pytest.mark.parametrize("evento", ("issue_comment", "push", "pull_request", "ping"))
+    @pytest.mark.parametrize("evento", ("issue_comment", "push", "pull_request_review", "ping"))
     def test_outro_evento_responde_2xx_e_nao_faz_nada(self, evento, monkeypatch):
         gh = _GithubFalso({673: _issue(673, labels=("in-progress",))})
         cliente, sb, _ = _montar(demandas=[_demanda("D1", github_issue_numero=673)], github=gh, monkeypatch=monkeypatch)
@@ -2442,3 +2442,48 @@ class TestADevolucaoPelaRota:
         demanda = _demandas(sb)[0]
         assert (demanda["etapa"], demanda["estado"], demanda["responsavel_id"]) == (ETAPA_ENTREGUE, "aguardando", "P1")
         assert [aviso["trecho"] for aviso in _sem_email_de_verdade] == [RECADO_DA_ENTREGA]
+
+
+# ─── 7. O PR que fecha a raiz (issue #1064, ADR 0069, decisao 6) ─────────────
+
+
+def _corpo_pr(
+    numero_pr: int = 1100,
+    acao: str = "opened",
+    *,
+    fecha: str | None = "Closes #673",
+    merged: bool = False,
+    repo: str = REPO,
+) -> bytes:
+    """O corpo CRU de um evento `pull_request`, com o corpo do PR dentro.
+
+    As issues que o PR fecha saem do corpo dele, pelas palavras de fechamento
+    do GitHub (`Closes #N`), que e como o `/ship` escreve todo PR.
+    """
+    payload = {
+        "action": acao,
+        "number": numero_pr,
+        "pull_request": {"number": numero_pr, "body": fecha, "merged": merged},
+        "repository": {"full_name": repo},
+    }
+    return json.dumps(payload, indent=2).encode("utf-8")
+
+
+class TestOPrQueFechaARaiz:
+    def test_pr_aberto_que_fecha_a_raiz_vira_em_desenvolvimento_sem_label(self, monkeypatch):
+        """Criterio de aceite: ninguem pos `in-progress`, e o PR aberto basta."""
+        gh = _GithubFalso({673: _issue(673)})
+        cliente, sb, _ = _montar(
+            demandas=[_ja_sincronizada(gh, 673, etapa=ETAPA_PLANEJADA)],
+            github=gh,
+            monkeypatch=monkeypatch,
+        )
+
+        resposta = _entregar(cliente, _corpo_pr(), evento="pull_request")
+
+        assert resposta.status_code == 200
+        assert resposta.json() == {"recebido": True, "sincronizada": True}
+        demanda = _demandas(sb)[0]
+        assert demanda["etapa"] == ETAPA_EM_DESENVOLVIMENTO
+        assert demanda["github_foto"]["prs_abertos"] == [1100]
+        assert [linha["texto"] for linha in _fio(sb)] == ["Etapa: Em desenvolvimento"]
