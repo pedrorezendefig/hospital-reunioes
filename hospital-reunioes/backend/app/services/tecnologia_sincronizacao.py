@@ -31,6 +31,12 @@ linhas automaticas e o e-mail de atribuicao com o recado "Entregue, confira e
 conclua". Fica aqui, e nao no router, porque este e o caminho comum dos dois
 gatilhos: escrito la, a devolucao valeria para o webhook e nao para o lote.
 
+Desde a issue #1065 (ADR 0069, decisoes 4 e 5) a issue fechada por PR espera
+a subida: quem a leva a Em producao e o webhook de deploy que a Action
+pos-merge chama (`marcar_em_producao`), ou a passagem de hora em hora pelo
+`history.json` da `main` (`reconciliar_em_producao`), e e la que a devolucao
+acontece. A issue fechada sem PR continua devolvendo em Entregue.
+
 O I/O do GitHub e todo do `github_client`; a regra da Etapa e toda do
 `tecnologia_vinculo`. Aqui mora so a costura entre os dois e o banco.
 """

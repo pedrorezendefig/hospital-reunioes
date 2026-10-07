@@ -856,7 +856,9 @@ def devolvida_pela_entrega(demanda: dict[str, Any]) -> bool:
     autor_id = demanda.get("autor_id")
     return (
         bool(autor_id)
-        and str(demanda.get("etapa") or "") == ETAPA_ENTREGUE
+        # As duas Etapas que devolvem (`etapa_que_devolve`): Em producao quando
+        # a issue fechou por PR, Entregue quando fechou sem PR (issue #1065).
+        and str(demanda.get("etapa") or "") in (ETAPA_ENTREGUE, ETAPA_EM_PRODUCAO)
         and str(demanda.get("estado") or "") == ESTADO_AGUARDANDO
         and demanda.get("responsavel_id") == autor_id
     )

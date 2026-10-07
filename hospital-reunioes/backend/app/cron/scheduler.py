@@ -31,7 +31,9 @@ Jobs:
   9. reconciliar_vinculos_tecnologia: de hora em hora, relê no GitHub as Demandas
      vinculadas ainda abertas e atualiza a Etapa (issue #678, ADR 0054). É a rede
      de proteção do webhook, que o GitHub não reentrega quando falha. Idempotente:
-     foto igual à guardada não escreve nada.
+     foto igual à guardada não escreve nada. Depois, marca Em produção as Demandas
+     Entregues cujas issues aparecem no history.json da main (issue #1065), a rede
+     de proteção do webhook de deploy. Idempotente: só a Entregue sobe.
 """
 
 import logging

@@ -1077,6 +1077,19 @@ class TestComVocePelaRota:
         assert por_id["devolvida"]["motivo"] == "entregue"
         assert por_id["esperando"]["motivo"] == "responsavel"
 
+    def test_a_demanda_devolvida_em_producao_tambem_chega_com_o_recado(self):
+        """Issue #1065: quando a issue fecha por PR, a devolucao acontece em Em
+        producao (ADR 0069, decisao 5), e o card de quem pediu continua dizendo
+        por que esta ali."""
+        client = _montar(
+            logado=SOCIA,
+            demandas=[
+                _demanda("no_ar", estado="aguardando", responsavel_id="P2", autor_id="P2", etapa="em_producao"),
+            ],
+        )
+
+        assert _com_voce(client)[0]["motivo"] == "entregue"
+
     def test_a_ordem_e_prioridade_e_depois_idade(self):
         client = _montar(
             logado=SOCIA,
