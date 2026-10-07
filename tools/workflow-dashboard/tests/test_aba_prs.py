@@ -2,7 +2,8 @@
 
 Quadro com as seis fases do PR em colunas e uma raia por pessoa, na cor dela.
 A pessoa do PR é quem assumiu a issue que ele fecha (assignee; emenda de
-06/10/2026 da ADR 0062): PR de issue sem assignee cai em "ninguém assumiu".
+06/10/2026 da ADR 0062); sem assignee, quem criou a issue; PR sem issue, quem
+abriu o PR.
 Card com PR, issue, branch e dias na coluna; conflito vira sinal no card.
 Coluna mais cheia e card velho ganham destaque; PRs fechados sem merge ficam
 numa faixa cinza embaixo. Filtros pessoa, PRD e só abertos vivem no hash.
@@ -63,7 +64,7 @@ ISSUES = [
     _iss(900, assignees=["pedrorezendefig"], children=(901, 902, 903, 904, 905)),
     _iss(901, assignees=["lucassampaioc1"], parent=900),
     _iss(902, assignees=["pedroribbe"], parent=900),
-    _iss(903, parent=900),  # ninguém assumiu, mesmo com autor
+    _iss(903, author="ana", parent=900),  # ninguém assumiu: a raia é de quem criou
     _iss(904, assignees=["lucassampaioc1"], parent=900),
     _iss(905, assignees=["zeca"], parent=900),  # assumiu, mas não tem PR: sem raia
     _iss(920, assignees=["pedrorezendefig"], children=(921,)),
@@ -269,16 +270,16 @@ def _no_quadro(html):
 def test_quadro_tem_as_seis_colunas_e_uma_raia_por_pessoa_que_tem_pr(tmp_path):
     html, cores = _app(
         tmp_path,
-        "[_view.innerHTML, ['lucassampaioc1', 'pedrorezendefig', 'pedroribbe', null].map(corDaPessoa)]",
+        "[_view.innerHTML, ['ana', 'lucassampaioc1', 'pedrorezendefig', 'pedroribbe'].map(corDaPessoa)]",
     )
     cab = re.findall(r'class="pr-col-cab[^"]*" data-col="([^"]+)"', html)
     assert cab == COLUNAS
     raias = _raias(html)
-    assert list(raias) == ["lucassampaioc1", "pedrorezendefig", "pedroribbe", "(sem)"]
+    assert list(raias) == ["ana", "lucassampaioc1", "pedrorezendefig", "pedroribbe"]
     for (login, raia), cor in zip(raias.items(), cores):
         assert f"--pessoa:{cor}" in re.match(r"<div[^>]*>", raia).group(0)
         assert list(_celulas(raia)) == COLUNAS
-    assert "ninguém assumiu" in raias["(sem)"]
+    assert "ninguém assumiu" not in html
     assert "zeca" not in html  # assumiu issue, não tem PR
     assert _celulas(raias["lucassampaioc1"]) == {
         "aberto_sem_ci": [80],
@@ -288,9 +289,7 @@ def test_quadro_tem_as_seis_colunas_e_uma_raia_por_pessoa_que_tem_pr(tmp_path):
         "mergeado_sem_deploy": [86],
         "em_producao": [72, 70],
     }
-    assert _celulas(raias["(sem)"])["esperando_revisor"] == [
-        82
-    ]  # autor da 903 não conta
+    assert _celulas(raias["ana"])["esperando_revisor"] == [82]  # 903 sem assignee: quem criou
 
 
 # ---------- card: PR, issue, branch, dias; conflito como sinal ----------
@@ -437,7 +436,7 @@ def _faixa_ou_vazia(html):
 def test_filtros_sao_chips_de_pessoa_na_cor_dela_prd_e_so_abertos(tmp_path):
     html, cor = _app(tmp_path, "[_view.innerHTML, corDaPessoa('pedroribbe')]")
     pessoas = _botoes(html, "pfresp")
-    assert list(pessoas) == ["lucassampaioc1", "pedrorezendefig", "pedroribbe", "(sem)"]
+    assert list(pessoas) == ["ana", "lucassampaioc1", "pedrorezendefig", "pedroribbe"]
     assert f"--pessoa:{cor}" in pessoas["pedroribbe"]
     assert list(_botoes(html, "pfprd")) == ["920", "900"]
     assert list(_botoes(html, "pfabertos")) == ["1"]
@@ -456,9 +455,9 @@ def test_filtro_de_pessoa_soma_raias_e_o_chip_de_novo_tira_a_pessoa(tmp_path):
         "[_lucas, _duas, _sem, _view.innerHTML]",
         antes="""
         _clicar({ act: 'pfresp', v: 'lucassampaioc1' }); const _lucas = _view.innerHTML;
-        _clicar({ act: 'pfresp', v: '(sem)' }); const _duas = _view.innerHTML;
+        _clicar({ act: 'pfresp', v: 'ana' }); const _duas = _view.innerHTML;
         _clicar({ act: 'pfresp', v: 'lucassampaioc1' }); const _sem = _view.innerHTML;
-        _clicar({ act: 'pfresp', v: '(sem)' });
+        _clicar({ act: 'pfresp', v: 'ana' });
         """,
     )
     assert list(_raias(lucas)) == ["lucassampaioc1"]
@@ -466,13 +465,13 @@ def test_filtro_de_pessoa_soma_raias_e_o_chip_de_novo_tira_a_pessoa(tmp_path):
     assert _faixa_ou_vazia(lucas) == []
     assert 'aria-pressed="true"' in _botoes(lucas, "pfresp")["lucassampaioc1"]
     # segunda pessoa entra ao lado, cada uma na sua raia
-    assert list(_raias(duas)) == ["lucassampaioc1", "(sem)"]
+    assert list(_raias(duas)) == ["ana", "lucassampaioc1"]
     assert _no_quadro(duas) == [70, 72, 73, 80, 82, 83, 84, 86]
-    assert all('aria-pressed="true"' in _botoes(duas, "pfresp")[p] for p in ("lucassampaioc1", "(sem)"))
+    assert all('aria-pressed="true"' in _botoes(duas, "pfresp")[p] for p in ("lucassampaioc1", "ana"))
     assert (
-        list(_raias(sem)) == ["(sem)"]
+        list(_raias(sem)) == ["ana"]
         and _no_quadro(sem) == [73, 82]
-        and _faixa_ou_vazia(sem) == [76]
+        and _faixa_ou_vazia(sem) == []
     )
     assert len(_raias(desligado)) == 4  # sem ninguém marcado, todas as raias
 
@@ -707,3 +706,15 @@ def test_em_producao_ordena_pela_versao_e_mostra_a_hora_do_merge(tmp_path):
     assert _celulas(_raias(html)["lucassampaioc1"])["em_producao"] == [42, 41, 40, 43]
     assert re.search(r'class="pr-quando"[^>]*>4 out, 11:20<', _card(html, 42))
     assert re.search(r'class="pr-quando"[^>]*>1 out, 08:00<', _card(html, 43))
+
+
+@com_node
+def test_pr_sem_issue_fica_na_raia_de_quem_abriu_o_pr(tmp_path):
+    dados = json.loads(json.dumps(DADOS))
+    dados["github"]["prs"].append({**_pr(90, "MERGED", []), "author": "lucassampaioc1"})
+    dados["fases"]["prs"]["90"] = _fase_pr("em_producao", 0, {"versao": "0.163.6"})
+    html = _app(tmp_path, dados=dados)
+    assert 90 in _celulas(_raias(html)["lucassampaioc1"])["em_producao"]
+    assert "(sem)" not in _raias(html)
+    # a faixa cinza segue a mesma regra: o #76 (sem issue) é de quem o abriu
+    assert _faixa_ou_vazia(_app(tmp_path, antes="_clicar({ act: 'pfresp', v: 'pedrorezendefig' });")) == [76]
