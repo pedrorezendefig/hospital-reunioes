@@ -77,9 +77,9 @@ Faça as perguntas abaixo, **nesta ordem**, uma por mensagem. Cada uma traz a re
 
 **P2. Nome do router.** Na ORIGEM a skill que responde "qual skill eu uso agora?" chama `/ask-pedro`. Aqui vira `/ask-<primeiro-nome-de-quem-instala>`. Recomende o login do `gh api user --jq .login` ou o primeiro nome do `git config user.name`.
 
-**P3. Plataforma de deploy.** Recomende a que a ficha achou. Se não achou nenhuma: opção A "ainda não tem deploy, instale o `/deploy` stub que só registra a versão" (recomendo) e opção B "tem, mas não está no repo: me diga qual". Anote também o endpoint de health e o domínio de produção, se existirem.
+**P3. Plataforma de deploy.** Recomende a que a ficha achou. Se não achou nenhuma: opção A "ainda não tem deploy, instale o `/deploy` stub e a subida só com o merge" (recomendo) e opção B "tem, mas não está no repo: me diga qual". Anote também o endpoint de health e o domínio de produção, se existirem.
 
-**P4. Fonte da versão.** Recomende a que a ficha achou. Sem nenhuma: opção A "criar `version` no `package.json` (ou `pyproject.toml`) começando em `0.1.0`" (recomendo) e opção B "arquivo `VERSION` na raiz". O `/ship` faz bump automático a partir daí.
+**P4. Fonte da versão.** Recomende a que a ficha achou. Sem nenhuma: opção A "criar `version` no `package.json` (ou `pyproject.toml`) começando em `0.1.0`" (recomendo) e opção B "arquivo `VERSION` na raiz". A versão de cada deploy sai da subida (`fechar_onda.py`, Fase 4.4), pelo tipo dos commits, e vira tag.
 
 **P5. Os 3 gates.** O `/ship` roda lint, testes e build antes de abrir o PR, e o `ci.yml` roda os mesmos no GitHub. Recomende os comandos que a ficha achou (`pnpm lint`, `pnpm test`, `pnpm build`, ou `ruff check .`, `pytest`, etc.). Se falta algum, opção A "instalar o padrão da stack" (recomendo, e diga qual) e opção B "pular esse gate por enquanto" (o `/ship` marca como pulado, não como verde).
 
@@ -144,27 +144,38 @@ Siga a nota do manifesto. O `CLAUDE.md` fica mínimo: as regras. O roteamento fi
 
 ### 4.3 `/ship`
 
-Abra `.claude/skills/ship/SKILL.md` e faça, nesta ordem:
+O `/ship` leva o PR até verde e roda a subida. Versão, `APP_VERSION`, merge, build, health e registro não estão nele: são da subida (Fase 4.4). Abra `.claude/skills/ship/SKILL.md` e faça, nesta ordem:
 
-1. Caminho do arquivo de versão (P4) em todo lugar que cita `hospital-reunioes/frontend/package.json`.
-2. Os 3 gates (P5): os comandos de lint, testes e build. Gate pulado na P5 fica marcado como "pulado" na saída do `/ship`, nunca como verde.
-3. `APP_VERSION`: no Hospital o sync no Coolify antes do push vive na subida (`fechar_onda.py`, passo 7), não no `/ship`. Se a plataforma da P3 tem env de runtime e o app lê versão de env, escreva o equivalente na subida do DESTINO; senão, "não se aplica a esta plataforma".
-4. Passo de migrations pré-merge: caminho de migrations do DESTINO e como elas são aplicadas em produção. Sem banco, "não se aplica".
-5. O fim do `/ship` imprime o comando da subida (`fechar_onda.py`, da skill `onda-enxuta`, ADR 0061). Este roteiro ainda não leva a `onda-enxuta`: até isso entrar, troque o Passo 10 do `/ship` do DESTINO por uma chamada ao `/deploy ship` gerado na Fase 4.4, para o comando impresso apontar para algo que existe.
+1. Passo 5 (testes locais, o mesmo comando do CI): os comandos da P5. Gate pulado na P5 fica marcado como "pulado" na saída do `/ship`, nunca como verde.
+2. Passo 8 (gates): o prefixo `hospital-reunioes/`, que separa PR do app de PR de ferramenta, vira a pasta do app do DESTINO. Use a mesma pasta na `onda-enxuta` e no `fechar_onda.py`.
+3. Passo 8 (corpo do PR): a seção `## Migration NNN (conferência por hash)` aponta para o caminho de migrations do DESTINO. Sem banco, apague a seção e a frase da migration no Passo 10.
+4. O Passo 10 roda a subida (`python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs "$PR"`), que a Fase 3 trouxe com a `onda-enxuta`. Não troque por outra chamada: o comando aponta para um arquivo que já existe no DESTINO.
 
-Não mexa nos invariantes: 3 gates, PR, OK humano citando o PR# antes da subida, Passo 10 do `/ship` (issue `ready-for-human` para pendência humana pós-ciclo).
+Não mexa nos invariantes: gates da ADR 0068 (revisor uma vez no PR do app, CI sempre), corpo do PR pelo template, issue `ready-for-human` para pendência só humana, Passo 10 rodando a subida.
 
-### 4.4 `/deploy`
+### 4.4 A subida e o `/deploy`
 
-Gere `.claude/skills/deploy/SKILL.md` para a plataforma da P3. Use o da ORIGEM como modelo de **estrutura** (modos, passos numerados, o que grava onde), não de conteúdo. O contrato que não pode quebrar, porque a aba Produção e o `/ship` dependem dele:
+**A subida** é o `.claude/skills/onda-enxuta/scripts/fechar_onda.py`. É o único caminho até produção: merge de cada PR pela API, versão, tag, build, health, rollback automático e registro. O `/ship` e a `/onda-enxuta` só a chamam. Leia a docstring do script (a sequência numerada e os códigos de saída) antes de mexer; a sequência e os códigos ficam, o que muda é o que fala com a plataforma. O que adaptar, com as respostas da entrevista:
 
-- Lê `docs/spec/deploy/project.json` (serviços, health check, plataforma).
-- Modo `ship`: dispara ou acompanha o deploy, roda o health check, grava `state.json` (status por serviço, `last_deploy_sha`, `last_deploy_at`, `last_health_check`) e prepend em `history.json` (`at`, `sha`, `app_version`, `subject`, `raw_subject`, `scope`, `result`, `duration_seconds`, `services_touched`, `env_changes`, `migrations_applied`, `rollback_target_sha`, `notes`; sem teto, é a timeline inteira), commita o bookkeeping, roda `/snapshot`.
-- Modo `status`: health check e leitura do estado, sem escrever nada além de `state.json`.
-- Modo `rollback`: volta para `rollback_target_sha` e registra em `history.json`.
-- Modo `setup`: o que a plataforma precisa uma vez (tokens, serviço, domínio).
+- **Classe do lote:** `classe_do_lote` separa "app" de "ferramenta" pelo prefixo `hospital-reunioes/`. Vira a pasta do app do DESTINO, a mesma da 4.3.
+- **Plataforma (P3):** toda chamada ao `coolify` (pré-condição de CLI no PATH, `setar_app_version_nos_apps`, `esperar_build`, `cancelar_build_do_registro`, o rollback por `coolify app rollback`, o modo imagem do GHCR) vira o equivalente da plataforma do DESTINO: disparar ou acompanhar o build do squash, cancelar os builds intermediários se a plataforma faz deploy a cada push, voltar à imagem anterior quando o health falha. Os dados de cada serviço vêm de `docs/spec/deploy/project.json`.
+- **Versão (P4):** a subida calcula a versão nova pelo tipo dos commits, a partir do `last_app_version` do `state.json` conferido com a maior tag `vX.Y.Z`, e não commita versão. Se o app do DESTINO mostra a versão, ela chega por env da plataforma (no Hospital, `APP_VERSION` no runtime do backend e no build do frontend); sem env, escreva "não se aplica a esta plataforma" e a versão fica na tag e no registro.
+- **Migrations:** `conferir_migrations` e `esperar_migrations_do_lote` leem `hospital-reunioes/supabase/migrations/` e esperam o número da migration no campo `migracao` do `/api/health`. Viram o caminho de migrations do DESTINO e o jeito de saber que ela foi aplicada; sem banco, as duas devolvem lista vazia e a espera sai.
+- **Health:** URL, status e regex esperados saem do `health_check` de cada serviço no `project.json`; o campo que devolve a versão (o version match) vira o do health do DESTINO. Sem endpoint de health, o serviço fica com `health_check: null` e a subida não espera por ele.
+- **Registro:** a subida não escreve na `main`. Ela monta a entrada do `history.json` (`at`, `sha`, `app_version`, `subject`, `raw_subject`, `scope`, `result`, `duration_seconds`, `services_touched`, `env_changes`, `migrations_applied`, `rollback_target_sha`, `notes`; sem teto, é a timeline inteira) e o `state.json`, e dispara `.github/workflows/pos-merge.yml` com o arquivo no input `registro`. A Action grava os dois JSONs na `main` (com `tools/aplicar_registro.py`) e roda o `/snapshot`. Adapte a Action pela nota do manifesto; o esquema dos campos não muda, porque a aba Produção lê.
+- **Trava:** o semáforo é `.claude/skills/deploy/scripts/semaforo.sh`, que vai igual.
 
-**Stub (sem plataforma):** os modos existem, `ship` grava `history.json` com `result: "not-deployed"` e `state.json` com `status: "not-deployed"`; `status` diz que não há deploy configurado e aponta o `setup`; `setup` explica que é preciso escolher plataforma e reabrir esta parte do roteiro. A aba Produção mostra a timeline mesmo assim.
+**Sem plataforma (P3, opção A):** a subida trata todo lote como ferramenta: só merge pela API depois do CI verde, sem versão, build, health nem registro. Faça `classe_do_lote` devolver sempre "ferramenta" e tire o `coolify` das pré-condições. A aba Produção mostra a timeline vazia. Quando a plataforma chegar, reabra esta seção.
+
+**Prova:** na Fase 7, com o CI do PR da instalação verde, rode `python3 .claude/skills/onda-enxuta/scripts/fechar_onda.py --prs <PR> --dry-run`. Ele imprime o plano (classe, versão, um merge pela API) sem tocar em nada. Só `--dry-run`: a subida de verdade mergearia o PR, e o merge é da pessoa.
+
+**O `/deploy`** fica para operar a produção fora da subida. Gere `.claude/skills/deploy/SKILL.md` para a plataforma da P3 com três modos, usando o da ORIGEM como modelo de **estrutura** (passos numerados, o que grava onde), não de conteúdo. Levar PR a produção não é dele: não existe comando de deploy no `/deploy`.
+
+- `status`: health check de cada serviço do `project.json` e leitura do estado, sem escrever nada além de `state.json`.
+- `rollback`: volta para o `rollback_target_sha` (ou a imagem anterior) e registra em `history.json` com `result: "rollback-manual"`. É o que a subida manda rodar quando sai com 3 ou 4 e deixa a trava parada.
+- `setup`: o que a plataforma precisa uma vez (tokens, serviço, domínio).
+
+**Stub (sem plataforma):** `status` diz que não há deploy configurado e aponta o `setup`; `rollback` diz que não há o que voltar; `setup` explica que é preciso escolher plataforma e reabrir a Fase 4.4.
 
 ### 4.5 `/snapshot`
 
@@ -193,7 +204,7 @@ Um commit por bloco, para o diff contar a história:
 
 - `chore(fluxo): adaptar painel ao <Nome> (paleta, áreas, título)`
 - `chore(fluxo): adaptar CLAUDE.md, router e skills à stack do <Nome>`
-- `chore(fluxo): gerar /deploy, /snapshot e /atualizar-app para <plataforma/stack>`
+- `chore(fluxo): adaptar a subida e gerar /deploy, /snapshot e /atualizar-app para <plataforma/stack>`
 - `chore(fluxo): CI de gates e travessão, labels do GitHub`
 
 ---
@@ -218,7 +229,7 @@ Tudo abaixo tem que passar antes de abrir o PR. Se algo falha, conserte e rode d
 python3 -m pytest tools/workflow-dashboard/tests -q          # testes do painel
 python3 tools/lint_adr.py                                     # ADRs válidas
 python3 .claude/skills/snapshot/scripts/snapshot.py --check   # snapshot em dia
-grep -rPln '[\x{2014}\x{2013}]' CLAUDE.md CONTEXT.md README.md docs/ tools/workflow-dashboard/static/index.html tools/workflow-dashboard/static/content .claude/skills/ask-*/ .claude/skills/deploy .claude/skills/snapshot .claude/skills/ship/SKILL.md; echo "travessão: nenhum acima = ok"
+grep -rPln '[\x{2014}\x{2013}]' CLAUDE.md CONTEXT.md README.md docs/ tools/workflow-dashboard/static/index.html tools/workflow-dashboard/static/content .claude/skills/ask-*/ .claude/skills/deploy .claude/skills/snapshot .claude/skills/ship/SKILL.md .claude/skills/onda-enxuta/SKILL.md; echo "travessão: nenhum acima = ok"
 python3 tools/workflow-dashboard/serve.py --no-open --port 8765 &
 sleep 3; curl -s 'http://localhost:8765/api/data?fresh' | python3 -c 'import json,sys; d=json.load(sys.stdin); print({k: (type(v).__name__, len(v) if hasattr(v, "__len__") else v) for k, v in d.items()})'
 ```
