@@ -210,6 +210,16 @@ class _Producao:
             self.deploys.append((at, build, d, citados))
         self.deploys.sort(key=lambda t: t[0])
 
+    def cita(self, pr: dict) -> dict | None:
+        """O primeiro deploy, não anterior ao merge, que cita o PR ou a issue dele."""
+        merge = _dt(pr.get("merged_at"))
+        issues = set(pr.get("closes") or [])
+        for at, _, d, citados in self.deploys:
+            # O /ship antigo citava só a issue ("Objetivos (#820)"); issue reaberta já foi citada antes.
+            if (not merge or at >= merge - _TOLERANCIA_REGISTRO) and (pr["number"] in citados or issues & citados):
+                return d
+        return None
+
     def do_pr(self, pr: dict) -> tuple[bool, dict | None]:
         """(em produção?, deploy) do PR mergeado, nesta ordem:
 
@@ -222,11 +232,9 @@ class _Producao:
         if pr["state"] != "MERGED":
             return False, None
         merge = _dt(pr.get("merged_at"))
-        issues = set(pr.get("closes") or [])
-        for at, _, d, citados in self.deploys:
-            # O /ship antigo citava só a issue ("Objetivos (#820)"); issue reaberta já foi citada antes.
-            if (not merge or at >= merge - _TOLERANCIA_REGISTRO) and (pr["number"] in citados or issues & citados):
-                return True, d
+        citou = self.cita(pr)
+        if citou:
+            return True, citou
         if not merge or not self.deploys:
             return False, None
         if merge < self.deploys[0][1]:
@@ -288,7 +296,10 @@ def _fase_pr(pr: dict, producao: _Producao, agora: datetime) -> dict:
     versao = None
     if pr["state"] == "MERGED":
         no_ar, deploy = producao.do_pr(pr)
-        if no_ar:
+        if pr.get("classe") == "ferramenta" and not producao.cita(pr):
+            # a subida não builda ferramenta (#965): o merge é a entrega, sem versão
+            fase, desde = "entregue", pr.get("merged_at")
+        elif no_ar:
             fase, desde = "em_producao", deploy["at"] if deploy else None
             versao = deploy.get("app_version") if deploy else None
         else:

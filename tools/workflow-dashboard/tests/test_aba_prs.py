@@ -1,6 +1,6 @@
 """Aba PRs do Hospital OS (issue #946, ADR 0062, decisão 7).
 
-Quadro com as seis fases do PR em colunas e uma raia por pessoa, na cor dela.
+Quadro com as sete fases do PR em colunas e uma raia por pessoa, na cor dela.
 A pessoa do PR é quem assumiu a issue que ele fecha (assignee; emenda de
 06/10/2026 da ADR 0062); sem assignee, quem criou a issue; PR sem issue, quem
 abriu o PR.
@@ -35,6 +35,7 @@ COLUNAS = [
     "verde_esperando_merge",
     "mergeado_sem_deploy",
     "em_producao",
+    "entregue",
 ]
 
 
@@ -267,7 +268,7 @@ def _no_quadro(html):
 
 
 @com_node
-def test_quadro_tem_as_seis_colunas_e_uma_raia_por_pessoa_que_tem_pr(tmp_path):
+def test_quadro_tem_as_sete_colunas_e_uma_raia_por_pessoa_que_tem_pr(tmp_path):
     html, cores = _app(
         tmp_path,
         "[_view.innerHTML, ['ana', 'lucassampaioc1', 'pedrorezendefig', 'pedroribbe'].map(corDaPessoa)]",
@@ -288,6 +289,7 @@ def test_quadro_tem_as_seis_colunas_e_uma_raia_por_pessoa_que_tem_pr(tmp_path):
         "verde_esperando_merge": [],
         "mergeado_sem_deploy": [86],
         "em_producao": [72, 70],
+        "entregue": [],
     }
     assert _celulas(raias["ana"])["esperando_revisor"] == [82]  # 903 sem assignee: quem criou
 
@@ -547,7 +549,7 @@ def test_so_abertos_tira_mergeados_e_tentativas(tmp_path):
     assert _faixa_ou_vazia(html) == []
     assert (
         re.findall(r'class="pr-col-cab[^"]*" data-col="([^"]+)"', html) == COLUNAS
-    )  # as seis colunas ficam
+    )  # as sete colunas ficam
 
 
 @com_node
@@ -718,3 +720,58 @@ def test_pr_sem_issue_fica_na_raia_de_quem_abriu_o_pr(tmp_path):
     assert "(sem)" not in _raias(html)
     # a faixa cinza segue a mesma regra: o #76 (sem issue) é de quem o abriu
     assert _faixa_ou_vazia(_app(tmp_path, antes="_clicar({ act: 'pfresp', v: 'pedrorezendefig' });")) == [76]
+
+
+# ---------- Entregue: PR de ferramenta, o merge é a entrega ----------
+
+
+def _com_entregues(*entregues):
+    dados = json.loads(json.dumps(DADOS))
+    for n, merged_at, dias in entregues:
+        dados["github"]["prs"].append({**_pr(n, "MERGED", [904]), "merged_at": merged_at, "title": f"chore(os): {n}"})
+        dados["fases"]["prs"][str(n)] = _fase_pr("entregue", dias, {"desde": merged_at})
+    return dados
+
+
+@com_node
+def test_entregue_e_coluna_propria_depois_de_em_producao(tmp_path):
+    html = _app(tmp_path, dados=_com_entregues((95, "2026-10-06T04:20:00Z", 0)))
+    cab = re.findall(r'class="pr-col-cab[^"]*" data-col="([^"]+)"><span>([^<]+)<', html)
+    assert cab[-2:] == [("em_producao", "Em produção"), ("entregue", "Entregue")]
+    celulas = _celulas(_raias(html)["lucassampaioc1"])
+    assert celulas["entregue"] == [95] and 95 not in celulas["em_producao"] + celulas["mergeado_sem_deploy"]
+
+
+@com_node
+def test_entregue_agrupa_por_dia_e_mostra_so_o_numero(tmp_path):
+    dados = _com_entregues(
+        (95, "2026-10-06T04:20:00Z", 0), (96, "2026-10-06T09:00:00Z", 0), (98, "2026-10-05T10:00:00Z", 1)
+    )
+    html = _app(tmp_path, dados=dados)
+    pilula = _card(html, 95)
+    assert re.fullmatch(r'<article class="pr-card pr-entregue" data-act="pr" data-n="95" title="[^"]*">#95</article>', pilula)
+    assert 'title="chore(os): 95 · fecha #904 · mergeado em 6 out, 04:20"' in pilula
+    celula = dict(_blocos(_raias(html)["lucassampaioc1"], "pr-celula"))
+    entregue = next(b for tag, b in celula.items() if 'data-col="entregue"' in tag)
+    dias = re.findall(r'<span class="pr-entregue-data">([^<]+)</span>((?:<article[^>]*>#\d+</article>)+)', entregue)
+    assert [(d, re.findall(r">#(\d+)<", ps)) for d, ps in dias] == [("6 out", ["96", "95"]), ("5 out", ["98"])]
+
+
+@com_node
+def test_entregue_ordena_pelo_merge_e_mostra_so_a_ultima_semana(tmp_path):
+    dados = _com_entregues(
+        (95, "2026-10-04T10:00:00Z", 2), (96, "2026-10-06T09:00:00Z", 0), (97, "2026-09-20T10:00:00Z", 16)
+    )
+    html = _app(tmp_path, dados=dados)
+    assert _celulas(_raias(html)["lucassampaioc1"])["entregue"] == [96, 95]
+    assert re.search(r'class="pr-nota[^"]*"[^>]*>[^<]*2 PRs mais antigos', html)  # o #61 e o #97
+    com_prd = _app(tmp_path, hash_inicial="#prs?prd=900", dados=dados)
+    assert _celulas(_raias(com_prd)["lucassampaioc1"])["entregue"] == [96, 95, 97]
+
+
+@com_node
+def test_entregue_nao_e_gargalo_nem_envelhece(tmp_path):
+    dados = _com_entregues(*[(n, "2026-10-01T10:00:00Z", 5) for n in range(110, 116)])
+    html = _app(tmp_path, hash_inicial="#prs?prd=900", dados=dados)
+    assert 'data-col="entregue"' in html and "pr-col-cheia" not in re.search(r'class="pr-col-cab([^"]*)" data-col="entregue"', html).group(1)
+    assert "pr-velho" not in _card(html, 110)

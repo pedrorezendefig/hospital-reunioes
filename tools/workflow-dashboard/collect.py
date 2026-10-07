@@ -309,6 +309,26 @@ def _branches_remotas(root: Path) -> list[str]:
             for linha in saida.splitlines() if "\t" in linha]
 
 
+def _classes_dos_prs(root: Path) -> dict[int, str]:
+    """Classe de cada PR mergeado, pelos arquivos do squash na origin/main ("(#N)" no assunto).
+
+    Mesmo critério do fechar_onda.py: "app" se algum arquivo está em hospital-reunioes/,
+    senão "ferramenta". Sem renames: mover código para fora do app também conta como app.
+    """
+    try:
+        saida = _run(["git", "log", "origin/main", "--no-renames", "--name-only", "--format=%x00%s"], root)
+    except Exception:
+        return {}
+    classes = {}
+    for bloco in saida.split("\x00")[1:]:
+        assunto, _, arquivos = bloco.partition("\n")
+        m = re.search(r"\(#(\d+)\)\s*$", assunto)
+        if m:
+            app = any(a.startswith("hospital-reunioes/") for a in arquivos.split())
+            classes.setdefault(int(m.group(1)), "app" if app else "ferramenta")
+    return classes
+
+
 def _gh_subissues(root: Path, slug: str) -> dict[int, list[int]]:
     """Mapa PRD -> fatias via API nativa de sub-issues (GraphQL).
 
@@ -769,6 +789,9 @@ def collect(root: Path) -> dict:
             i["children"] = sorted(children.get(i["number"], []))
             i["is_prd"] = i["number"] in prds
         _correlate(history, issues, prs)
+        classes = _classes_dos_prs(root)
+        for p in prs:
+            p["classe"] = classes.get(p["number"]) if p["state"] == "MERGED" else None
         _enriquecer_prs_abertos(root, prs)
         github.update(issues=issues, prs=prs, prds=sorted(prds))
     except Exception as e:

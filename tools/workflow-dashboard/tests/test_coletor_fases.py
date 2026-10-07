@@ -267,6 +267,32 @@ def test_ls_remote_falhando_devolve_lista_vazia(monkeypatch):
     assert collect._branches_remotas(DASH) == []
 
 
+def test_classe_do_pr_vem_dos_arquivos_do_squash_na_origin_main(monkeypatch):
+    chamadas = []
+    saida = (
+        "\x00feat(ouvidoria): tela nova (#90)\n\nhospital-reunioes/frontend/a.tsx\ntools/x.py\n"
+        "\x00chore(os): painel (#91)\n\ntools/workflow-dashboard/fases.py\nCONTEXT.md\n"
+        "\x00refactor: tira do app (#92)\n\nhospital-reunioes/velho.py\nscripts/novo.py\n"
+        "\x00chore: commit sem PR\n\nhospital-reunioes/b.py\n"
+    )
+
+    def run(cmd, cwd, timeout=None):
+        chamadas.append(cmd)
+        return saida
+
+    monkeypatch.setattr(collect, "_run", run)
+    assert collect._classes_dos_prs(DASH) == {90: "app", 91: "ferramenta", 92: "app"}
+    assert chamadas[0][:2] == ["git", "log"] and "origin/main" in chamadas[0] and "--no-renames" in chamadas[0]
+
+
+def test_git_log_falhando_deixa_a_classe_desconhecida(monkeypatch):
+    def run(cmd, cwd, timeout=None):
+        raise RuntimeError("sem git")
+
+    monkeypatch.setattr(collect, "_run", run)
+    assert collect._classes_dos_prs(DASH) == {}
+
+
 # ---------- coleta inteira ----------
 
 ISSUES = [
@@ -297,11 +323,13 @@ ISSUES = [
 ]
 
 
-def _fake_coleta(*, falha_gh=False, falha_timeline=False):
+def _fake_coleta(*, falha_gh=False, falha_timeline=False, git_log=None):
     def run(cmd, cwd, timeout=None):
         if cmd[0] == "git":
             if cmd[1] == "ls-remote":
                 return "abc\trefs/heads/feat/x-1\n"
+            if cmd[1] == "log" and git_log is not None:
+                return git_log
             raise RuntimeError("sem origin")
         if falha_gh:
             raise RuntimeError("gh: To get started with GitHub CLI, please run:  gh auth login")
@@ -333,6 +361,15 @@ def test_coleta_entrega_as_fases_no_payload(monkeypatch, tmp_path):
     assert fases["funil"]["total"]["pr_aberto"] == 1
     assert "plano" not in data  # o Plano saiu com a aba Issues nova (#942)
     json.dumps(data)  # o /api/data serializa o payload inteiro
+
+
+def test_coleta_marca_a_classe_do_pr_mergeado_e_ferramenta_fica_entregue(monkeypatch, tmp_path):
+    git_log = "\x00chore(os): painel (#11)\n\ntools/workflow-dashboard/app.js\n"
+    monkeypatch.setattr(collect, "_run", _fake_coleta(git_log=git_log))
+    data = collect.collect(tmp_path)
+    classes = {p["number"]: p.get("classe") for p in data["github"]["prs"]}
+    assert classes == {10: None, 11: "ferramenta"}
+    assert data["fases"]["prs"][11]["fase"] == "entregue"
 
 
 def test_erro_do_gh_degrada_sem_derrubar_o_payload(monkeypatch, tmp_path):

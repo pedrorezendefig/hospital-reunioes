@@ -1,7 +1,7 @@
 'use strict';
 
 /* Aba PRs do Hospital OS (ADR 0062, decisão 7; issue #946): quadro com as
-   seis fases do PR em colunas e uma raia por pessoa, na cor dela. A fase vem
+   fases do PR em colunas e uma raia por pessoa, na cor dela. A fase vem
    pronta do fases.py (S.data.fases.prs); aqui só se agrupa, filtra e desenha.
    A pessoa do PR é quem assumiu a issue que ele fecha (assignee, emenda de
    06/10/2026 da ADR 0062); sem assignee, quem criou a issue; PR sem issue,
@@ -19,16 +19,21 @@ export const COLUNAS = [
   ['verde_esperando_merge', 'Verde esperando merge'],
   ['mergeado_sem_deploy', 'Mergeado sem deploy'],
   ['em_producao', 'Em produção'],
+  ['entregue', 'Entregue'],
 ];
 
 /* mesmo valor do SEM_RESP do app.js e do SEM_RESPONSAVEL do fases.py */
 const SEM_RESP = '(sem)';
 /* card parado há mais dias que isto na mesma coluna ganha destaque */
 export const LIMITE_DIAS = 3;
-/* Em produção é o fim do caminho: não é gargalo nem envelhece, e guarda o
-   histórico inteiro; o quadro mostra só a última semana dela, a não ser com
-   um PRD filtrado (aí todos os PRs do PRD) ou com o PR apontado pelo hash */
+/* Em produção (app, com versão) e Entregue (ferramenta: o merge é a entrega,
+   sem build, #965) são o fim do caminho: não são gargalo nem envelhecem, e
+   guardam o histórico inteiro; o quadro mostra só a última semana delas, a
+   não ser com um PRD filtrado (aí todos os PRs do PRD) ou com o PR apontado
+   pelo hash */
 const FIM = 'em_producao';
+const ENTREGUE = 'entregue';
+const ehFim = fase => fase.fase === FIM || fase.fase === ENTREGUE;
 export const JANELA_PRODUCAO_DIAS = 7;
 
 /* filtros da aba <-> filtros da rota (texto; vazio = sem filtro). resp é
@@ -68,16 +73,21 @@ function porVersao(a, b) {
   }
   return String(b.pr.merged_at || '').localeCompare(String(a.pr.merged_at || '')) || b.pr.number - a.pr.number;
 }
-const naOrdem = (a, b) => (a.fase.fase === FIM && b.fase.fase === FIM ? porVersao(a, b) : porIdade(a, b));
+const porMerge = (a, b) => String(b.pr.merged_at || '').localeCompare(String(a.pr.merged_at || '')) || b.pr.number - a.pr.number;
+/* cada célula é uma fase: agrupar pela coluna primeiro deixa a comparação
+   transitiva, e dentro dela vale a ordem da fase */
+const naColuna = c => COLUNAS.findIndex(([k]) => k === c.fase.fase);
+const naOrdem = (a, b) => naColuna(a) - naColuna(b)
+  || (a.fase.fase === FIM ? porVersao(a, b) : a.fase.fase === ENTREGUE ? porMerge(a, b) : porIdade(a, b));
 
 /* a coluna com mais cards que cada uma das outras; empate não tem gargalo */
 function colunaMaisCheia(contagem) {
-  const [[k, max], [, segundo]] = COLUNAS.filter(([c]) => c !== FIM)
+  const [[k, max], [, segundo]] = COLUNAS.filter(([c]) => c !== FIM && c !== ENTREGUE)
     .map(([c]) => [c, contagem[c]]).sort((a, b) => b[1] - a[1]);
   return max > segundo ? k : null;
 }
 
-const ehVelho = fase => fase.fase !== FIM && fase.dias_na_coluna > LIMITE_DIAS;
+const ehVelho = fase => !ehFim(fase) && fase.dias_na_coluna > LIMITE_DIAS;
 
 const diasTxt = d => d == null ? '' : d === 0 ? 'hoje na coluna' : `${d} ${d === 1 ? 'dia' : 'dias'} na coluna`;
 
@@ -110,6 +120,26 @@ function miniHtml({ pr, fase }, ctx) {
   return `<article class="pr-card pr-mini" data-act="pr" data-n="${pr.number}" title="${esc(pr.title)}"${destaque(ctx, pr.number)}>
     <span class="pr-num">PR #${pr.number}</span>${chips}${ghLink(ctx, pr.number)}
   </article>`;
+}
+
+/* Entregue acumula tudo que é ferramenta, então é o mais compacto do
+   quadro: os PRs agrupados pelo dia do merge, só o número, lado a lado;
+   título, issues e hora ficam no title */
+function entregueHtml({ pr }, ctx) {
+  const issues = pr.closes.map(n => ` #${n}`).join('');
+  const title = `${pr.title}${issues ? ` · fecha${issues}` : ''}${pr.merged_at ? ` · mergeado em ${ctx.fmtDT(pr.merged_at)}` : ''}`;
+  return `<article class="pr-card pr-entregue" data-act="pr" data-n="${pr.number}" title="${esc(title)}"${destaque(ctx, pr.number)}>#${pr.number}</article>`;
+}
+
+function entreguesHtml(cards, ctx) {
+  const dias = new Map();
+  for (const c of cards) {
+    const dia = ctx.fmtD(c.pr.merged_at);
+    if (!dias.has(dia)) dias.set(dia, []);
+    dias.get(dia).push(c);
+  }
+  return [...dias].map(([dia, cs]) => `<div class="pr-entregue-dia"><span class="pr-entregue-data">${esc(dia)}</span>${
+    cs.map(c => entregueHtml(c, ctx)).join('')}</div>`).join('');
 }
 
 function cardHtml(c, ctx) {
@@ -189,7 +219,7 @@ export function renderQuadroPrs(ctx) {
     .map(pr => ({ pr, fase: fases[pr.number], pessoas: pessoasDoPr(pr, issues) }));
   const passa = c => (!f.resp.length || c.pessoas.some(p => f.resp.includes(p))) && (!f.prd || doPrd(c.pr, f.prd, issues))
     && (!f.abertos || c.pr.state === 'OPEN');
-  const naJanela = c => c.fase.fase !== FIM || f.prd || item === String(c.pr.number)
+  const naJanela = c => !ehFim(c.fase) || f.prd || item === String(c.pr.number)
     || (c.fase.dias_na_coluna ?? Infinity) <= JANELA_PRODUCAO_DIAS;
 
   const noQuadro = todos.filter(c => COLUNAS.some(([k]) => k === c.fase.fase));
@@ -215,8 +245,11 @@ export function renderQuadroPrs(ctx) {
   const linhas = [...raias.keys()].sort(porNome).map(login => `
     <div class="pr-raia pr-linha" data-raia="${esc(login)}" style="--pessoa:${corDe(login)}">
       <div class="pr-raia-nome"><span class="pessoa-dot"></span>${nomeDe(login)}</div>
-      ${COLUNAS.map(([k]) => `<div class="pr-celula${naCheia(k)}" data-col="${k}">${
-        raias.get(login).filter(c => c.fase.fase === k).map(c => cardHtml(c, ctx)).join('')}</div>`).join('')}
+      ${COLUNAS.map(([k]) => {
+        const daCelula = raias.get(login).filter(c => c.fase.fase === k);
+        return `<div class="pr-celula${naCheia(k)}" data-col="${k}">${
+          k === ENTREGUE ? entreguesHtml(daCelula, ctx) : daCelula.map(c => cardHtml(c, ctx)).join('')}</div>`;
+      }).join('')}
     </div>`).join('');
 
   const pessoas = [...new Set(noQuadro.flatMap(c => c.pessoas))].sort(porNome);
@@ -224,7 +257,7 @@ export function renderQuadroPrs(ctx) {
     .filter(i => i.is_prd && (i.state === 'OPEN' || i.number === f.prd) && todos.some(c => doPrd(c.pr, i.number, issues)))
     .sort((a, b) => b.number - a.number);
   const nota = foraDaJanela
-    ? `<div class="pr-nota rv">Em produção mostra só a última semana: ${foraDaJanela} ${foraDaJanela === 1 ? 'PR mais antigo fica fora' : 'PRs mais antigos ficam fora'}; com um PRD filtrado, aparecem todos os dele.</div>`
+    ? `<div class="pr-nota rv">Em produção e Entregue mostram só a última semana: ${foraDaJanela} ${foraDaJanela === 1 ? 'PR mais antigo fica fora' : 'PRs mais antigos ficam fora'}; com um PRD filtrado, aparecem todos os dele.</div>`
     : '';
   const visiveis = new Set([...cards, ...tentativas].map(c => String(c.pr.number)));
   const fora = item && !visiveis.has(item)

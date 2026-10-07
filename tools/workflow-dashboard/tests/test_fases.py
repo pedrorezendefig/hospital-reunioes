@@ -719,3 +719,51 @@ def test_timeline_so_sai_para_as_issues_que_vieram_com_linha():
         [_issue(320), _issue(321)], [], [], [], timelines={320: {"eventos": [], "prs": []}}, agora=AGORA
     )
     assert list(fases["timelines"]) == [320]
+
+
+# ---------- PR de ferramenta: o merge é a entrega ----------
+
+
+def _ferramenta(number, merged_at="2026-10-07T04:00:00Z"):
+    return {**_merged(number, [], merged_at=merged_at), "classe": "ferramenta"}
+
+
+def test_pr_de_ferramenta_mergeado_fica_entregue_desde_o_merge():
+    fase = _fase_pr(_ferramenta(300))
+    assert fase["fase"] == "entregue"
+    assert fase["desde"] == "2026-10-07T04:00:00Z"
+    assert fase["versao"] is None
+
+
+def test_pr_de_ferramenta_nao_pega_a_versao_do_proximo_deploy():
+    # a subida não builda ferramenta; o deploy seguinte do app não tem nada a ver com ele
+    depois = [
+        _deploy("0.166.3", "2026-10-06T22:30:00-03:00", "PR #399", duracao=300),
+        _deploy("0.167.0", "2026-10-07T09:00:00-03:00", "PR #400, issue #40", duracao=300),
+    ]
+    fase = _fase_pr(_ferramenta(301), deploys=depois)
+    assert fase["fase"] == "entregue"
+    assert fase["versao"] is None
+
+
+def test_pr_de_app_continua_pegando_o_deploy_seguinte():
+    depois = [
+        _deploy("0.166.3", "2026-10-06T22:30:00-03:00", "PR #399", duracao=300),
+        _deploy("0.167.0", "2026-10-07T09:00:00-03:00", "PR #400, issue #40", duracao=300),
+    ]
+    fase = _fase_pr({**_ferramenta(302), "classe": "app"}, deploys=depois)
+    assert fase["fase"] == "em_producao"
+    assert fase["versao"] == "0.167.0"
+
+
+def test_pr_de_ferramenta_citado_num_deploy_guarda_a_versao_dele():
+    # antes do #965 a subida buildava ferramenta e citava o PR: a versão é real
+    citou = [_deploy("0.150.0", "2026-10-07T01:05:00-03:00", "PR #303")]
+    fase = _fase_pr(_ferramenta(303), deploys=citou)
+    assert fase["fase"] == "em_producao"
+    assert fase["versao"] == "0.150.0"
+
+
+def test_pr_sem_classe_conhecida_segue_a_regra_antiga():
+    fase = _fase_pr(_merged(304, []))
+    assert fase["fase"] == "mergeado_sem_deploy"
