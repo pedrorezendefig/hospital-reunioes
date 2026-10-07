@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import hashlib
 import hmac
+import itertools
 import json
 import logging
 import os
@@ -156,6 +157,9 @@ def _reset_rate_limiter():
 
 # ─── Supabase duble ──────────────────────────────────────────────────────────
 
+# O `now()` do gatilho de `atualizado_em`: um valor novo a cada escrita.
+_RELOGIO_DO_GATILHO = itertools.count(1)
+
 
 @dataclass
 class _Result:
@@ -256,6 +260,11 @@ class _TableQuery:
                 if erro is not None:
                     raise erro
                 linha.update(self._update)
+                if self._nome == "tecnologia_demandas":
+                    # O gatilho `trg_tecnologia_demandas_atualizado_em` da
+                    # migration 102: toda escrita na Demanda troca o carimbo, e
+                    # e nele que a sincronizacao trava a escrita (issue #1064).
+                    linha["atualizado_em"] = f"2026-09-10T12:00:00.{next(_RELOGIO_DO_GATILHO):06d}+00:00"
             return _Result(data=[dict(linha) for linha in casadas])
 
         return _Result(data=[dict(linha) for linha in casadas])
@@ -2621,6 +2630,92 @@ class TestOPrQueFechaARaiz:
         assert gh.leituras == []
         assert _fio(sb) == []
         assert _demandas(sb)[0]["etapa"] == ETAPA_PLANEJADA
+
+
+def _linhas_da_etapa(sb: _SupabaseMock) -> list[str]:
+    """So as linhas da Etapa: a devolucao a quem pediu, que a Entrega dispara,
+    escreve as dela, e nao e o que estes casos contam."""
+    return [linha["texto"] for linha in _fio(sb) if linha["texto"].startswith("Etapa:")]
+
+
+class TestOMergeChegaJuntoComOFechamentoDaIssue:
+    """O merge de um PR com `Closes #N` manda `pull_request.closed` e
+    `issues.closed` quase no mesmo segundo, e cada handler le a Demanda ANTES
+    das duas chamadas ao GitHub. O evento `issues` parte da foto que leu, sem
+    `fechada_por_pr`, e o GitHub nao reentrega o `pull_request`: se a escrita
+    do `issues` apagar o fato, ninguem o devolve (a reconciliacao so le PR
+    aberto).
+
+    A corrida e encenada como a da Etapa acima: as duas leituras antes de
+    qualquer escrita, e as escritas uma depois da outra, nas duas ordens.
+    """
+
+    def _dois_leitores(self, monkeypatch, issue: dict, etapa: str):
+        gh = _GithubFalso({673: _issue(673)})
+        foto = {**_foto_guardada(gh, 673), "prs_abertos": [1100]}
+        gh.issues[673] = issue
+        monkeypatch.setattr(github_client, "ler_issue", gh.ler_issue)
+        monkeypatch.setattr(github_client, "ler_sub_issues", gh.ler_sub_issues)
+        sb = _SupabaseMock(
+            {
+                "tecnologia_demandas": [_demanda("D1", github_issue_numero=673, etapa=etapa, github_foto=foto)],
+                "tecnologia_conversas": [],
+            }
+        )
+        guardada = sb.tabelas["tecnologia_demandas"][0]
+        return sb, dict(guardada), dict(guardada)
+
+    def _merge(self, sb, demanda):
+        return tecnologia_sincronizacao.sincronizar_pelo_pr(sb, demanda, pr=1100, acao="closed", mergeado=True)
+
+    def test_issues_escrevendo_depois_do_merge_nao_apaga_o_fato_sem_mudar_a_etapa(self, monkeypatch):
+        """A Etapa nao muda nos dois (a label `in-progress` segura Em
+        desenvolvimento), entao nenhum UPDATE leva a trava da Etapa: o ultimo a
+        escrever ganhava, e era o `issues`, com a foto velha."""
+        sb, pelo_pr, pelo_issues = self._dois_leitores(
+            monkeypatch, _issue(673, labels=("in-progress",)), ETAPA_EM_DESENVOLVIMENTO
+        )
+
+        self._merge(sb, pelo_pr)
+        tecnologia_sincronizacao.sincronizar_demanda(sb, pelo_issues)
+
+        foto = _demandas(sb)[0]["github_foto"]
+        assert foto.get("fechada_por_pr") == 1100, "o evento issues apagou o fato que o merge gravou"
+        assert "prs_abertos" not in foto
+
+    def test_merge_escrevendo_depois_do_issues_que_moveu_a_etapa_grava_o_fato(self, monkeypatch):
+        """A Etapa vai de Em desenvolvimento a Entregue nos dois. O `issues`
+        ganha a trava da Etapa, e o PR, que perdia e saia sem escrever, levava
+        o `fechada_por_pr` junto."""
+        sb, pelo_pr, pelo_issues = self._dois_leitores(monkeypatch, _entregue(), ETAPA_EM_DESENVOLVIMENTO)
+
+        tecnologia_sincronizacao.sincronizar_demanda(sb, pelo_issues)
+        self._merge(sb, pelo_pr)
+
+        demanda = _demandas(sb)[0]
+        assert demanda["github_foto"].get("fechada_por_pr") == 1100, "o merge perdeu a corrida e o fato junto"
+        assert "prs_abertos" not in demanda["github_foto"]
+        assert demanda["etapa"] == ETAPA_ENTREGUE
+        assert _linhas_da_etapa(sb) == ["Etapa: Entregue"], "a linha da Etapa saiu duas vezes"
+
+    def test_merge_escrevendo_antes_do_issues_que_moveria_a_etapa_mantem_o_fato(self, monkeypatch):
+        sb, pelo_pr, pelo_issues = self._dois_leitores(monkeypatch, _entregue(), ETAPA_EM_DESENVOLVIMENTO)
+
+        self._merge(sb, pelo_pr)
+        tecnologia_sincronizacao.sincronizar_demanda(sb, pelo_issues)
+
+        demanda = _demandas(sb)[0]
+        assert demanda["github_foto"].get("fechada_por_pr") == 1100
+        assert "prs_abertos" not in demanda["github_foto"]
+        assert _linhas_da_etapa(sb) == ["Etapa: Entregue"]
+
+    def test_o_detector_da_corrida_nao_e_vacuo(self, monkeypatch):
+        """O piso: o leitor do `issues` chega MESMO com a foto sem o fato e com
+        o PR ainda aberto, que e o que a escrita dele regravaria."""
+        _, _, pelo_issues = self._dois_leitores(monkeypatch, _entregue(), ETAPA_EM_DESENVOLVIMENTO)
+
+        assert pelo_issues["github_foto"]["prs_abertos"] == [1100]
+        assert "fechada_por_pr" not in pelo_issues["github_foto"]
 
 
 class TestIssuesQueOCorpoFecha:
