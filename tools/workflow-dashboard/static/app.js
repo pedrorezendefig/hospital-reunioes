@@ -3,10 +3,10 @@
 /* Fluxo vivo, SPA vanilla. Lê /api/data (agregado), /api/issue/<n> (comentários
    lazy) e /api/issue/<n>/timeline (linha do tempo das fechadas, lazy). */
 
-import { closeTips, reduceMotion, revealOnScroll } from './ui.js';
+import { closeTips, marcarTermos, reduceMotion, revealOnScroll, termosGlossario } from './ui.js';
 import { SUBS_DOC, abaValida, aoMudarRota, gravarRota, lerRota, montarHash } from './router.js';
 import { renderDiagrama, wireDiagramas } from './diagramas.js';
-import { renderArea, wireArea } from './areas.js';
+import { posicionarPop, renderArea, wireArea } from './areas.js';
 import { corDaPessoa } from './pessoas.js';
 import { renderOndas } from './ondas.js';
 import { alternarPessoa, filtrosPrsDaRota, filtrosPrsNaRota, filtrosPrsVazios, renderQuadroPrs } from './prs.js';
@@ -310,6 +310,7 @@ function render() {
   }
   if (sub === 'fluxo') {
     try { wireDiagramas(view); } catch { /* fluxo sem teclado > aba quebrada */ }
+    try { wireFluxoPop(); } catch { /* fluxo sem popover > aba quebrada */ }
     marcarNoFluxo();
   }
   if (sub === 'decisoes') wireDecisoes();
@@ -1141,8 +1142,16 @@ const CLASSE_FLUXO = {
   decisao: ['b-ghost', 'decisão'], fim: ['b-green', 'produção'],
 };
 
-/* o painel do passo aberto: a regra (campo detalhe do fluxo.json) e, em nó de
-   skill, o link secundário para o SKILL.md no GitHub */
+/* como funciona (campo detalhe) e por que existe (campo porque) de um passo,
+   com os termos do glossário sublinhados; serve ao popover e ao painel */
+function explicacaoFluxoHtml(n) {
+  const termos = termosGlossario(S.data && S.data.context_md);
+  return `<span class="fx-k">como funciona</span><p>${marcarTermos(n.detalhe, termos)}</p>
+    ${n.porque ? `<span class="fx-k">por que existe</span><p>${marcarTermos(n.porque, termos)}</p>` : ''}`;
+}
+
+/* o painel do passo aberto: a regra (campo detalhe do fluxo.json), o porquê e,
+   em nó de skill, o link secundário para o SKILL.md no GitHub */
 function painelFluxoHtml() {
   const n = S.fluxo && S.fluxoNo && (S.fluxo.nos || []).find(x => x.id === S.fluxoNo);
   if (!n) return '<div class="empty">clique num passo do fluxo para ler a regra dele; os passos de skill levam ao SKILL.md</div>';
@@ -1151,9 +1160,38 @@ function painelFluxoHtml() {
   return `<div class="card fx-painel">
     <div class="fx-painel-head"><span class="badge ${cls}">${esc(rotulo)}</span><span class="k-label">${esc(subs.join(' · '))}</span></div>
     <h3>${esc(n.titulo)}</h3>
-    <p>${esc(n.detalhe || '')}</p>
+    ${explicacaoFluxoHtml(n)}
     ${n.skill ? `<a class="btn-pill outline" href="${esc(S.data.repo_url)}/blob/main/.claude/skills/${esc(n.skill)}/SKILL.md" target="_blank" rel="noopener">.claude/skills/${esc(n.skill)}/SKILL.md <span class="btn-arrow">↗</span></a>` : ''}
   </div>`;
+}
+
+/* hover ou foco num passo abre o popover (o mesmo .st-pop dos fluxogramas
+   das Áreas); ele aceita o mouse, para o termo sublinhado mostrar a definição */
+function wireFluxoPop() {
+  const box = view.querySelector('.fx-capa');
+  if (!box || !S.fluxo) return;
+  const pop = document.createElement('div');
+  pop.className = 'st-pop fx-pop';
+  pop.hidden = true;
+  box.appendChild(pop);
+  let timer = null;
+  const esconder = () => { timer = setTimeout(() => { pop.hidden = true; }, 150); };
+  const ficar = () => clearTimeout(timer);
+  pop.addEventListener('mouseenter', ficar);
+  pop.addEventListener('mouseleave', esconder);
+  box.querySelectorAll('.fx-no').forEach(g => {
+    const n = (S.fluxo.nos || []).find(x => x.id === g.dataset.id);
+    if (!n) return;
+    const mostrar = () => {
+      ficar();
+      pop.innerHTML = `<b>${esc(n.titulo)}</b>${explicacaoFluxoHtml(n)}`;
+      posicionarPop(pop, g, box);
+    };
+    g.addEventListener('mouseenter', mostrar);
+    g.addEventListener('mouseleave', esconder);
+    g.addEventListener('focus', mostrar);
+    g.addEventListener('blur', esconder);
+  });
 }
 
 function marcarNoFluxo() {
@@ -1175,7 +1213,7 @@ function renderFluxo() {
     `<tr><td><b>${esc(pt.porta)}</b></td><td>${esc(pt.quando)}</td><td class="mono">${esc(pt.caminho)}</td></tr>`).join('');
   return `${cab}
   <div class="card fx-capa rv" style="--i:1">
-    <div class="fx-hint glass-cap">clique num passo para ler a regra · âmbar é onde alguém precisa agir</div>
+    <div class="fx-hint glass-cap">passe o mouse num passo para ver como funciona e por que existe · clique para fixar embaixo · âmbar é onde alguém precisa agir</div>
     ${svg}
   </div>
   <div id="fluxo-painel" class="rv" style="--i:2">${painelFluxoHtml()}</div>
