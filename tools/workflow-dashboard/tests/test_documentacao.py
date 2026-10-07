@@ -83,6 +83,14 @@ def test_classes_das_cores_e_as_paradas_humanas_da_0068(fluxo):
         assert n.get("detalhe"), f"nó {n['id']} sem a regra (campo detalhe)"
 
 
+def test_todo_no_tem_o_porque_sem_travessao(fluxo):
+    # o popover mostra "por que existe": uma frase por passo, no mesmo arquivo
+    for n in fluxo["nos"]:
+        porque = (n.get("porque") or "").strip()
+        assert porque, f"nó {n['id']} sem o porquê (campo porque)"
+        assert chr(0x2014) not in porque and chr(0x2013) not in porque, n["id"]
+
+
 def test_as_tres_portas_e_a_legenda_vem_do_json(fluxo):
     portas = [p["porta"] for p in fluxo["portas"]]
     assert [p[0] for p in portas] == ["A", "B", "C"]
@@ -319,3 +327,77 @@ def test_glossario_tem_indice_em_chips_e_o_termo_do_hash_em_destaque(tmp_path):
     assert 'id="g-ata-guiada" class="g-termo g-alvo" aria-current="true"' in html
     assert 'id="g-ata" class="g-termo"' in html
     assert "Segundo modo." in html  # o corpo segue intacto
+
+
+# ---------- termos do glossário sublinhados no texto do fluxo ----------
+
+UI_URI = (STATIC / "ui.js").as_uri()
+CONTEXTO = (
+    "## Manual do usuário\n\n**Manual**:\nO site único do manual. Segunda frase.\n\n"
+    "**Fatia**:\nUm pedaço.\n\n**Fatia de manual**:\nA issue que todo PRD com tela ganha no fim. Outra.\n"
+)
+
+
+@com_node
+def test_marcar_termos_o_mais_longo_ganha_uma_vez_so_com_caixa_e_escape(tmp_path):
+    prog = (
+        f"import {{ marcarTermos, termosGlossario }} from '{UI_URI}';\n"
+        f"const t = termosGlossario({json.dumps(CONTEXTO)});\n"
+        "const r = [\n"
+        "  marcarTermos('A Fatia de manual mexe no Manual e no Manual <b>.', t),\n"
+        "  marcarTermos('o /manual publicar e o site manual', t),\n"
+        "  marcarTermos('/onda-enxuta, /rollback e fechar_onda.py, depois a onda e o Rollback', t),\n"
+        "];\n"
+        "console.log('@@' + JSON.stringify(r));\n"
+    )
+    arq = tmp_path / "t.mjs"
+    arq.write_text(prog, encoding="utf-8")
+    out = subprocess.run(
+        ["node", str(arq)], capture_output=True, text=True, check=False
+    )
+    assert out.returncode == 0, out.stderr
+    longo, caixa, pedaco = json.loads(
+        [x for x in out.stdout.splitlines() if x.startswith("@@")][-1][2:]
+    )
+    # "Fatia de manual" vence "Fatia" e "Manual"; cada termo uma vez; a definição é a 1ª frase
+    assert longo.count('class="gl-termo"') == 2
+    assert (
+        '<span class="gl-termo" tabindex="0">Fatia de manual<span class="gl-def" role="tooltip">'
+        "<b>Fatia de manual</b>A issue que todo PRD com tela ganha no fim.</span></span>"
+    ) in longo
+    assert "<b>Manual</b>O site único do manual.</span>" in longo
+    assert "Segunda frase" not in longo
+    assert longo.endswith("e no Manual &lt;b&gt;.")
+    # termo do CONTEXT.md respeita a caixa: "manual" não é o Manual
+    assert "gl-termo" not in caixa
+    # pedaço de nome não conta; jargão do TERMS casa sem caixa
+    assert pedaco.count('class="gl-termo"') == 2
+    assert "/onda-enxuta, /rollback e fechar_onda.py" in pedaco
+    assert '<span class="gl-termo" tabindex="0">onda<' in pedaco
+    assert '<span class="gl-termo" tabindex="0">Rollback<' in pedaco
+
+
+@com_node
+def test_painel_do_passo_mostra_como_funciona_e_por_que_existe_com_termos(
+    tmp_path, fluxo
+):
+    painel = _app(
+        tmp_path,
+        "_els['#fluxo-painel'].innerHTML",
+        hash_inicial="#documentacao/fluxo",
+        dados={**DADOS_DOC, "context_md": CONTEXTO},
+        preludio_extra=f"_respostas['/fluxo.json'] = {json.dumps(fluxo)};\n",
+        antes="await _esperar(); _clicar({ act: 'fluxono', id: 'draft' });",
+    )
+    assert "como funciona" in painel and "por que existe" in painel
+    # o porquê do draft (os termos dele viram span, por isso o trecho sem termo)
+    assert (
+        "só mostra o que está em produção" in painel
+        and "0057, decisões 4 e 5" in painel
+    )
+    assert "<b>Fatia de manual</b>A issue que todo PRD com tela ganha no fim." in painel
+
+
+def test_dica_do_fluxo_fala_do_hover_e_do_clique():
+    assert "passe o mouse num passo para ver como funciona e por que existe" in APP_JS
+    assert "clique para fixar" in APP_JS

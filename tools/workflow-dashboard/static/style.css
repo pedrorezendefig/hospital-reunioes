@@ -1045,6 +1045,23 @@ body.er-lock main{z-index:130}
 .fx-seta{fill:var(--ink-soft)}
 .fx-rotulo{font:500 10.5px var(--mono); fill:var(--brand);
   paint-order:stroke; stroke:var(--card); stroke-width:3.5px; pointer-events:none}
+.fx-capa{position:relative}
+.fx-pop{max-width:380px; pointer-events:auto}
+.fx-pop p{margin:0 0 8px}
+.fx-pop p:last-child{margin-bottom:0}
+.fx-k{display:block; font:500 10px var(--mono); letter-spacing:.08em; text-transform:uppercase; color:var(--ink-soft); margin-bottom:2px}
+.fx-pop .fx-k{color:var(--brand-wash); opacity:.75}
+/* termo do glossário no texto do fluxo: sublinhado discreto, definição no hover */
+.gl-termo{position:relative; text-decoration:underline dotted; text-decoration-color:color-mix(in srgb, currentColor 45%, transparent);
+  text-underline-offset:3px; cursor:help; outline:none}
+.gl-def{position:absolute; bottom:calc(100% + 6px); left:0; z-index:80; width:max-content; max-width:262px;
+  background:var(--ink); color:var(--paper); font:400 12px/1.5 var(--sans); padding:8px 11px;
+  border-radius:var(--r-inner); box-shadow:var(--shadow-up); opacity:0; visibility:hidden; pointer-events:none;
+  transition:opacity .14s ease}
+.gl-def b{display:block; font:500 10.5px var(--mono); letter-spacing:.06em; color:var(--brand-wash); margin-bottom:2px}
+.fx-pop .gl-def{background:var(--paper); color:var(--ink)}
+.fx-pop .gl-def b{color:var(--brand)}
+.gl-termo:hover .gl-def,.gl-termo:focus-visible .gl-def{opacity:1; visibility:visible}
 .fx-painel{margin-top:14px}
 .fx-painel-head{display:flex; align-items:center; gap:10px; flex-wrap:wrap}
 .fx-painel h3{font-size:18px; margin:10px 0 8px}
