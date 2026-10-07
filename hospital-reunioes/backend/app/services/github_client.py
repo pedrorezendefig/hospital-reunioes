@@ -9,8 +9,8 @@ Tres invariantes que o resto do app herda:
 
 - **So este repositorio.** O repositorio vem de `GITHUB_INTEGRACAO_REPO` e
   entra no caminho da URL uma vez so, aqui.
-- **Escrita minima.** Quatro verbos de escrita, e so quatro: o PATCH do corpo
-  da issue, que serve ao marcador do Vinculo; o POST que abre a issue do "Levar
+- **Escrita minima.** Quatro verbos de escrita, e so quatro: o PATCH da
+  issue, que serve ao marcador do Vinculo e a designacao do responsavel; o POST que abre a issue do "Levar
   para desenvolvimento" (issue #677); e o par POST/PATCH do comentario
   espelhado da Conversa (issue #680). Nenhum verbo de LEITURA de comentario:
   nada do GitHub volta para a Conversa (ADR 0054, decisao 5). O token
@@ -175,8 +175,11 @@ def criar_issue(*, titulo: str, corpo: str, labels: list[str], assignees: list[s
     """Abre uma issue nova no repositorio da integracao (issue #677).
 
     `assignees` e o login do responsavel da Demanda, quando ele tem um: a
-    issue nasce na coluna da pessoa certa do Hospital OS. Lista vazia nao vai
-    no JSON, para o GitHub nao reclamar de campo sem valor.
+    issue vai para a coluna da pessoa certa do Hospital OS. Ele NAO vai no
+    POST: login que nao e assignable neste repositorio (sem acesso, digitado
+    errado) faz o GitHub recusar a criacao inteira com 422, e um campo de
+    conveniencia derrubaria o botao. A issue nasce sem ninguem e a designacao
+    vem depois, num PATCH cuja falha so loga (PR #1050).
 
     Devolve o JSON da issue criada, INTEIRO: e dele que a foto e a Etapa saem
     logo em seguida, sem uma segunda leitura que gastaria cota e ainda poderia
@@ -188,12 +191,17 @@ def criar_issue(*, titulo: str, corpo: str, labels: list[str], assignees: list[s
     que devolve 502 em vez de uma frase sobre um numero que ninguem digitou.
     """
     try:
-        corpo_json: dict[str, Any] = {"title": titulo, "body": corpo, "labels": labels}
-        if assignees:
-            corpo_json["assignees"] = assignees
-        return _chamar("POST", "/issues", json=corpo_json)
+        dados = _chamar("POST", "/issues", json={"title": titulo, "body": corpo, "labels": labels})
     except IssueNaoEncontradaError as exc:
         raise GithubIndisponivelError("O repositorio da integracao nao aceitou a criacao da issue") from exc
+
+    numero = dados.get("number") if isinstance(dados, dict) else None
+    if assignees and isinstance(numero, int):
+        try:
+            _chamar("PATCH", f"/issues/{numero}", json={"assignees": assignees})
+        except (GithubIndisponivelError, IssueNaoEncontradaError) as exc:
+            logger.warning("[github] a issue #%s nasceu sem assignee (%s): %s", numero, assignees, exc)
+    return dados
 
 
 def criar_comentario(numero: int, corpo: str) -> int:

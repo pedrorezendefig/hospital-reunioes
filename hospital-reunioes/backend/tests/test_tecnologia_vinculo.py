@@ -29,6 +29,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
 
+import httpx
 import pytest
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
@@ -96,6 +97,9 @@ from app.services.tecnologia_vinculo import (  # noqa: E402
 )
 
 BASE = "/api/admin/tecnologia"
+
+# O `criar_issue` real, guardado antes de qualquer `_montar` troca-lo pelo duble.
+_CRIAR_ISSUE_DE_VERDADE = github_client.criar_issue
 
 MIGRATION = Path(__file__).resolve().parents[2] / "supabase" / "migrations" / "103_tecnologia_vinculo.sql"
 
@@ -2604,6 +2608,91 @@ class TestLevarParaDesenvolvimento:
 
         assert resposta.status_code == 502
         assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] is None
+
+
+class _TransporteGithub:
+    """O `httpx.request` do cliente trocado por um gravador (PR #1050).
+
+    O `_GithubFalso` troca o `criar_issue` inteiro e por isso nao ve o JSON que
+    sai para o GitHub. Este fica um degrau abaixo: o cliente roda de verdade e
+    so a rede e falsa. O POST da issue responde 201; o PATCH que designa
+    responde `status_da_designacao` (422 e o que o GitHub da para login que nao
+    e assignable no repositorio).
+    """
+
+    def __init__(self, *, status_da_designacao: int = 200, numero: int = 900):
+        self.status_da_designacao = status_da_designacao
+        self.numero = numero
+        self.chamadas: list[tuple[str, str, dict | None]] = []
+
+    def __call__(self, metodo, url, *, headers, json, timeout):
+        self.chamadas.append((metodo, url, json))
+        pedido = httpx.Request(metodo, url)
+        # O GitHub recusa o POST INTEIRO quando o assignee que veio nele nao
+        # serve; so o POST limpo nasce.
+        if metodo == "POST" and "assignees" not in json:
+            return httpx.Response(201, json={**_issue(self.numero), "title": json["title"]}, request=pedido)
+        return httpx.Response(
+            self.status_da_designacao,
+            json={"message": "Validation Failed", "errors": [{"field": "assignees"}]},
+            request=pedido,
+        )
+
+
+class TestADesignacaoNaoDerrubaACriacao:
+    """O assignee e conveniencia: login que o GitHub recusa nao pode virar
+    "GitHub indisponivel" no botao (must-fix da revisao do PR #1050)."""
+
+    URL = "https://api.github.com/repos/pedrorezendefig/hospital-reunioes"
+
+    def test_com_login_a_issue_nasce_e_e_designada_pelo_patch(self, monkeypatch):
+        transporte = _TransporteGithub()
+        monkeypatch.setattr(github_client.httpx, "request", transporte)
+
+        github_client.criar_issue(titulo="T", corpo="C", labels=["needs-triage"], assignees=["lucas-sampaio"])
+
+        assert transporte.chamadas == [
+            ("POST", f"{self.URL}/issues", {"title": "T", "body": "C", "labels": ["needs-triage"]}),
+            ("PATCH", f"{self.URL}/issues/900", {"assignees": ["lucas-sampaio"]}),
+        ]
+
+    def test_sem_login_so_o_post_sai(self, monkeypatch):
+        transporte = _TransporteGithub()
+        monkeypatch.setattr(github_client.httpx, "request", transporte)
+
+        github_client.criar_issue(titulo="T", corpo="C", labels=["needs-triage"], assignees=[])
+
+        assert transporte.chamadas == [
+            ("POST", f"{self.URL}/issues", {"title": "T", "body": "C", "labels": ["needs-triage"]}),
+        ]
+
+    def test_assignee_recusado_devolve_a_issue_criada(self, monkeypatch):
+        transporte = _TransporteGithub(status_da_designacao=422, numero=901)
+        monkeypatch.setattr(github_client.httpx, "request", transporte)
+
+        dados = github_client.criar_issue(titulo="T", corpo="C", labels=[], assignees=["login-errado"])
+
+        assert dados["number"] == 901
+        assert [metodo for metodo, _, _ in transporte.chamadas] == ["POST", "PATCH"]
+
+    def test_pela_rota_o_assignee_recusado_ainda_vincula(self, monkeypatch):
+        """O caminho inteiro, com o `criar_issue` de verdade: o botao responde
+        200 e a Demanda fica vinculada, sem 502."""
+        lucas = _pessoa("P3", "Lucas Sampaio", github_login="lucas-sampaio")
+        client, sb, _ = _montar(
+            participantes=[PEDRO, DIRETOR, lucas],
+            demandas=[_demanda("d-1", responsavel_id="P3")],
+            monkeypatch=monkeypatch,
+        )
+        monkeypatch.setattr(github_client, "criar_issue", _CRIAR_ISSUE_DE_VERDADE)
+        transporte = _TransporteGithub(status_da_designacao=422, numero=902)
+        monkeypatch.setattr(github_client.httpx, "request", transporte)
+
+        resposta = client.post(TestLevarParaDesenvolvimento.ROTA)
+
+        assert resposta.status_code == 200, resposta.text
+        assert sb.tabelas["tecnologia_demandas"][0]["github_issue_numero"] == 902
+        assert transporte.chamadas[1][2] == {"assignees": ["lucas-sampaio"]}
 
 
 # ─── 9. A rodada de fix do PR #688 (issue #677) ──────────────────────────────
