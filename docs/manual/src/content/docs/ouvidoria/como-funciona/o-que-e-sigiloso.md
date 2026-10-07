@@ -30,8 +30,8 @@ sigiloso por natureza.
 - **Caso sigiloso:** só ouvidor e Diretoria. O caso nem aparece na lista de quem
   está fora da Ouvidoria, e o setor recebe só a nota da Ouvidoria.
 - **Caso anônimo:** como o comum, mas sem os dados de quem falou. O setor recebe
-  a mesma proteção do sigiloso, porque o anonimato se desfaria dentro do próprio
-  texto do relato.
+  o resumo, o relato inteiro e a nota da Ouvidoria, sem o nome, e um aviso de
+  que a autoria não se procura.
 - **Quem administra a plataforma:** fica de fora por regra. Cuidar do sistema
   não é o mesmo que poder ler denúncia.
 

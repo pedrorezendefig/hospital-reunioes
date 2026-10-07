@@ -38,9 +38,9 @@ trabalhar: nada aciona uma área sozinho.
 
 ## Se der errado
 
-- **O acionamento não sai:** falta o **Extrato para o setor**. É a única coisa
-  que a área recebe explicando o que apurar, porque o relato de quem falou não
-  sai daqui.
+- **O acionamento não sai:** falta o **Extrato para o setor**. É o pedido da
+  Ouvidoria ao setor, com as suas palavras: no caso comum ele vai junto do
+  resumo, do relato inteiro e do nome de quem falou, e no sigiloso vai sozinho.
 - **Nada veio preenchido pela Ana nem pelo que a pessoa marcou:** o palpite
   dos dois fica à parte e nunca vira classificação.
 - **A caixa de sigilo reforçado não desmarca:** o tipo escolhido é sigiloso por
