@@ -46,7 +46,12 @@ curl -s https://api.hospitalsaomatheus.cloud/api/health
 
 Para cada PRD aberto, pegue as sub-issues (`gh api "repos/$REPO/issues/<PRD>/sub_issues"`) e o **último comentário inteiro** (ele diz se o PRD só espera trabalho humano).
 
-Leia o corpo de toda issue candidata. É dele que saem as dependências (passo 4) e as decisões (passo 2).
+Leia o corpo de toda issue candidata. É dele que saem as dependências (passo 4), as decisões (passo 2) e as **intervenções humanas no meio das ondas**: enquanto lê, anote tudo que é migration, "passo humano", segredo ou env var (Coolify, secrets do repositório, `tokens/.env`), bucket ou qualquer coisa que se cria numa tela. A agenda dessas intervenções é item próprio do relatório (passo 6). Regras para marcar a hora de cada uma:
+
+- Migration: antes do merge da fatia que a traz; a subida fica parada esperando o número no `/api/health`.
+- Env var ou segredo criado no Coolify só entra no container no próximo deploy: criar **logo depois do deploy da onda que traz a fatia**, e o deploy da onda seguinte sobe com ela. Se não há onda seguinte, pede restart do backend no Coolify. Até lá a rota responde 503 e isso não é must-fix.
+- Bucket que nasce por SQL (`INSERT INTO storage.buckets`, molde das migrations 049 e 066) não é parada extra: entra na migration.
+- Segredo nunca passa por `! comando` nem pelo agente: o humano gera e cola nas telas.
 
 Classifique **cada** issue aberta em exatamente um balde. Conte: `N abertas = agente + decisão + PRD + só humano`. Esse somatório aparece no relatório.
 
@@ -178,6 +183,7 @@ Pare no draft e me mostre os frames antes do render final. Depois da página pub
 ```
 
 5. No passo a passo (6), a divulgação entra como item próprio: em qual momento colar cada prompt e a quem mandar o link depois (diretor, usuários do módulo). O envio do link é "precisa de você".
+6. **Mensagem de WhatsApp** junto do vídeo: para o mesmo PRD, o plano traz também a linha `/mensagem-prd #<PRD>`, a colar no mesmo terminal de divulgação depois do deploy da última tela (a skill confere o que está em produção). O texto sai pronto para o Pedro copiar e mandar ao diretor e aos usuários do módulo, com o link da página quando ela já existir.
 
 ### 6. Relatório e ordem de comando
 
@@ -186,14 +192,15 @@ A resposta final tem esta forma, nesta ordem. É o que o Pedro lê do celular.
 1. **Uma linha de contas:** "Das N abertas, X estão `ready-for-agent` e entram nos prompts. As outras Y não são trabalho de agente." Cite a pasta dos prompts (`$TMPDIR/onda-enxuta/` ou `%TEMP%\onda-enxuta\`).
 2. **O que eu fiz:** issues triadas, decisões que o humano tomou e onde ficaram registradas, issue criada, PRD destravado, o que mudou no mundo durante o plano (sessão paralela, versão de prod, migration nova).
 3. **As Y que ficam com você:** uma linha por issue, com a ação concreta e o que ela destrava. PRDs entram aqui como "fecham sozinhos quando as filhas fecharem".
+3b. **Agenda de intervenções:** as paradas do passo 1 numa tabela, na ordem em que chegam: quando (onda e se é antes do merge ou depois do deploy) · o quê (migration 0XX, nome da env var ou do segredo) · onde (Studio, tela do Coolify, secrets do repositório, `tokens/.env`) · se atrasar (o que fica parado ou degradado, e se pede restart). Sem parada: a linha "nenhuma intervenção no meio das ondas".
 4. **Tabela final** do passo 4.
 5. **Os prompts**, inteiros, cada um com o cabeçalho de leitura (issues, resumo por issue, valor, comando de lançamento) em cima do bloco. Por último, os prompts de divulgação (5b), um por PRD que fecha.
 6. **Passo a passo:**
    1. Num terminal na raiz do repositório, rodar o comando de lançamento de cada sessão (todos de uma vez, se quiser). Cada uma nasce em segundo plano, monta a fila e roda a onda 1 até produção. `claude agents` lista as sessões vivas; `claude logs <id>` mostra o andamento.
    2. Nada a aprovar: cada sessão mergeia e sobe a própria onda sozinha (ADR 0068), e o semáforo enfileira os deploys. A notificação chega em três casos: migration no lote (cole no Studio o arquivo que ela cita), fatia que foi para `ready-for-human` e rollback. Liste a sequência onda a onda, alternando sessões, e marque na linha certa "a onda N traz a migration 0XX". Lance a sessão com migration quando o Pedro estiver perto do Studio.
    3. Com os PRs verdes, a sessão lança sozinha a sessão da onda seguinte e, em paralelo com ela, sobe a onda (um merge pela API por PR, um build); depois comenta o resultado da subida no PRD, imprime a conta de tokens e encerra. Nada a fazer até a próxima notificação.
-   4. **Divulgação:** para cada PRD que fecha, a linha "cole o prompt de `/divulgar #X` num terminal próprio" no momento certo (agora, ou logo após o deploy da onda que sobe a última tela) e, depois do link publicado, "mande o link ao diretor e aos usuários do módulo".
-   5. "No tempo morto": as tarefas do item 3.
+   4. **Divulgação:** para cada PRD que fecha, a linha "cole o prompt de `/divulgar #X` num terminal próprio" no momento certo (agora, ou logo após o deploy da onda que sobe a última tela), depois "`/mensagem-prd #X` no mesmo terminal" e, com o link publicado, "mande a mensagem e o link ao diretor e aos usuários do módulo".
+   5. "No tempo morto": as tarefas do item 3. As intervenções do 3b entram na linha da onda certa, como a migration.
 
 ## O que esta skill não faz
 
