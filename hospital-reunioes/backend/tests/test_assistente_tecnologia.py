@@ -20,6 +20,7 @@ import logging
 import os
 import re
 import sys
+import textwrap
 import threading
 from dataclasses import dataclass
 from types import SimpleNamespace
@@ -1093,6 +1094,56 @@ class TestKit:
     def test_sem_travessao_nem_meia_risca(self, texto):
         assert "—" not in texto
         assert "–" not in texto
+
+
+class TestPerguntaSobreOPainel:
+    """A pergunta do diretor sobre o Painel e respondida do kit, citando a
+    fonte (issue #1066, PRD #1056).
+
+    O modelo e dublado, entao o que se prova e o que esta do lado do app: o
+    turno leva ao modelo a pergunta, a secao do kit que a responde (dentro da
+    cerca) e a ordem de dizer de onde tirou; e a resposta que cita a secao
+    volta inteira para a tela.
+    """
+
+    PERGUNTA = "onde vejo o que está com o hospital?"
+    RESPOSTA_CITANDO = (
+        "No Painel: o número Com o hospital conta as Demandas em Aguardando. "
+        "Está no material da aba Tecnologia, em 'O Painel'. Resolveu, ou quer registrar mesmo assim?"
+    )
+
+    def _turno(self, monkeypatch, reply: str = "Entendi.") -> tuple[dict, _FakeLLMClient]:
+        conteudo = json.dumps({"reply": reply, "rascunho": RASCUNHO_CHEIO}, ensure_ascii=False)
+        llm = _stub_llm(monkeypatch, content=conteudo)
+        cliente = _montar(logado=_pessoa("p1"))
+        resposta = cliente.post(ROTA, json=_corpo(mensagem=self.PERGUNTA))
+        assert resposta.status_code == 200
+        return resposta.json(), llm
+
+    @staticmethod
+    def _secao_do_kit_no_prompt(prompt: str, titulo: str) -> str:
+        """A secao `## titulo` do kit, lida DENTRO da cerca e sem o recuo que
+        o backend poe: a frase fora da cerca nao e material de consulta."""
+        dentro = prompt.split(assistente_tecnologia.MARCA_INICIO_KIT)[1].split(assistente_tecnologia.MARCA_FIM_KIT)[0]
+        corpo = textwrap.dedent(dentro.strip("\n").split("\n", 1)[1])
+        return corpo.split(f"\n## {titulo}\n")[1].split("\n## ")[0]
+
+    def test_o_turno_leva_a_secao_do_kit_que_responde(self, monkeypatch):
+        _, llm = self._turno(monkeypatch)
+        prompt = llm.prompt_de_usuario
+        assert self.PERGUNTA in prompt
+        painel = self._secao_do_kit_no_prompt(prompt, "O Painel")
+        assert "**Com o hospital**: as que estão em Aguardando" in painel
+
+    def test_o_modelo_recebe_a_ordem_de_citar_a_fonte(self, monkeypatch):
+        _, llm = self._turno(monkeypatch)
+        sistema = llm.calls[-1]["messages"][0]
+        assert sistema["role"] == "system"
+        assert "**diga de onde tirou** (o arquivo e a seção" in sistema["content"]
+
+    def test_a_resposta_que_cita_a_secao_chega_inteira(self, monkeypatch):
+        corpo, _ = self._turno(monkeypatch, reply=self.RESPOSTA_CITANDO)
+        assert corpo["reply"] == self.RESPOSTA_CITANDO
 
 
 # ═══════════════════════════════════════════════════════════════════════════
