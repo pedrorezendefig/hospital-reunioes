@@ -99,6 +99,15 @@ Reply to the reviewer summarizing what was done with their comment. The reply ca
      - **Rejected (enhancement)**: write to `.out-of-scope/`, link to it from a comment, then close ([OUT-OF-SCOPE.md](OUT-OF-SCOPE.md)).
    - `needs-triage` — apply the role. Optional comment if there's partial progress.
 
+## Issue born from a Demanda (aba Tecnologia)
+
+An issue whose body carries `<!-- demanda-vitta id="..." -->` was created by the app's **Levar para desenvolvimento** button (ADR 0054). Treat it differently in two places:
+
+- **Context.** The "Para o diretor" block is the director's own words, already PII-filtered (ADR 0060); the Origem line links to the Demanda in the app, where the full Conversa lives. Say upfront "veio da Demanda, responsável @login" so the maintainer knows who owns it on the app side. Reply to the director through the Demanda's Conversa, never by GitHub comment (comments don't flow back to the app).
+- **Assignee.** The issue is born assigned to the Demanda's responsável. In `needs-triage` that assignee is **responsibility, not claim** (same reading as the PRD owner, ADR 0068). When you move it to `ready-for-agent`, **remove the assignee** (`gh issue edit <N> --remove-assignee <login>`): the pool is `no:assignee`, and a kept assignee hides the issue from `/pegar-issue` and the `/onda`. `ready-for-human` keeps it.
+
+The port (A/B/C) is still the triage's call: the button only opens the door.
+
 ## Quick state override
 
 If the maintainer says "move #42 to ready-for-agent", trust them and apply the role directly. Confirm what you're about to do (role changes, comment, close), then act. Skip grilling. If moving to `ready-for-agent` without a grilling session, ask whether they want to write an agent brief.

@@ -149,6 +149,9 @@ def bloqueios_do_corpo(body: str) -> list[int]:
     return sorted(nums)
 
 
+MARCADOR_DEMANDA = "<!-- demanda-vitta id="
+
+
 def _gh_issues(root: Path) -> list[dict]:
     items = json.loads(_run(["gh", "issue", "list", "--state", "all", "--limit", GH_LIMIT,
                              "--json", ISSUE_FIELDS], root))
@@ -172,6 +175,8 @@ def _gh_issues(root: Path) -> list[dict]:
             "author": (it.get("author") or {}).get("login"),
             "url": it.get("url"),
             "body": body,
+            # nasceu do botão "Levar para desenvolvimento" da aba Tecnologia (ADR 0054)
+            "demanda": MARCADOR_DEMANDA in body,
             "blocked_by": sorted(set(blocked)),
             "parent": parent,
             "criteria": {"done": sum(1 for c in criteria if c.strip()), "total": len(criteria)},

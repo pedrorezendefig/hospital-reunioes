@@ -75,3 +75,16 @@ def test_coletor_nao_calcula_mais_o_claimed_at_do_plano():
     # test_coletor_fases.py::test_coleta_entrega_as_fases_no_payload.
     fonte = (DASH / "collect.py").read_text(encoding="utf-8")
     assert "claimed_at" not in fonte  # base do lead time do Plano, que saiu
+
+
+def test_coletor_marca_a_issue_que_nasceu_de_uma_demanda(monkeypatch):
+    """O marcador do Vinculo (ADR 0054) no corpo vira `demanda: True`; sem ele, False."""
+    base = {"number": 1, "title": "t", "state": "OPEN", "labels": [], "assignees": [], "author": None}
+    itens = [
+        {**base, "number": 1, "body": 'Para o diretor\n\n<!-- demanda-vitta id="abc-123" -->'},
+        {**base, "number": 2, "body": "issue comum"},
+    ]
+    monkeypatch.setattr(collect, "_run", lambda cmd, cwd, timeout=None: json.dumps(itens))
+    por_n = {i["number"]: i for i in collect._gh_issues(DASH)}
+    assert por_n[1]["demanda"] is True
+    assert por_n[2]["demanda"] is False
