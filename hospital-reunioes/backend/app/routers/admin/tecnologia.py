@@ -1834,7 +1834,13 @@ async def texto_da_demanda_para_ia(
     cada corte.
     """
     demanda = _com_nomes(supabase, [_buscar_demanda(supabase, demanda_id)], ator=ator)[0]
-    return {"texto": texto_para_ia(demanda=demanda, linhas=_fio_da_demanda(supabase, demanda_id, ator=ator))}
+    return {
+        "texto": texto_para_ia(
+            demanda=demanda,
+            linhas=_fio_da_demanda(supabase, demanda_id, ator=ator),
+            anexos=tecnologia_anexos.ler(supabase, demanda_id),
+        )
+    }
 
 
 @router.post(
