@@ -1659,7 +1659,7 @@ def _fio_da_demanda(supabase: Client, demanda_id: str, *, ator: dict) -> list[di
     numero (`TEXTO_VINCULO_CRIADO`); o que sobra e o de/para estruturado, que
     fica para quem e da Vitta rastrear.
 
-    A leitura de VARIAS Demandas de uma vez ("Minha vez" e a busca do Historico)
+    A leitura de VARIAS Demandas de uma vez ("Com voce" e a busca do Historico)
     mora no `_fios_por_demanda`, e nao aqui, porque tem outra forma: outro
     filtro, outras colunas e paginacao. Ela nunca DEVOLVE linha a quem chama (so
     filtra as Demandas), entao nao tem o que omitir. O que as duas nao podem
@@ -1940,15 +1940,15 @@ def _demandas_dos_estados(
     return ler_tudo(consulta, rotulo="as Demandas da aba Tecnologia")
 
 
-# O que cada aba precisa LER do fio.
+# O que cada bloco do Painel precisa LER do fio.
 #
 # `select("*")` traria o `texto` (ate 5000 caracteres por resposta) de toda
-# Demanda aberta em TODA abertura de "Minha vez", que nao le o texto de nada:
+# Demanda aberta em TODA abertura do Painel, e o "Com voce" nao le texto nenhum:
 # a regra da mencao olha `autor_id`, `linha` e `mencoes`. Menos dado tambem e
 # menos chance de bater no teto de linhas do PostgREST.
 #
 # `id` nao entra na lista: o PostgREST ordena por coluna que nao foi
-# selecionada, e nenhuma das duas abas le esse campo do fio.
+# selecionada, e nenhum dos dois blocos le esse campo do fio.
 #
 # `criado_em` e `editado_em` entram so na lista da mencao, e desde a issue #670:
 # a chamada acrescentada numa correcao vale a partir do `editado_em`, e para
@@ -1967,10 +1967,10 @@ COLUNAS_DO_FIO_PARA_BUSCA = "demanda_id, linha, texto"
 def _fios_por_demanda(supabase: Client, demanda_ids: list[str], *, colunas: str) -> dict[str, list[dict]]:
     """O fio de varias Demandas de uma vez, cada um em ordem cronologica.
 
-    Uma leitura so, e nao uma por Demanda: as duas abas precisam do fio de uma
-    LISTA inteira (as mencoes em "Minha vez", o texto das respostas na busca do
-    Historico), e um `for` chamando o PostgREST por card faria a aba custar
-    tantas idas quantas Demandas houvesse.
+    Uma leitura so, e nao uma por Demanda: dois blocos do Painel precisam do
+    fio de uma LISTA inteira (as mencoes no "Com voce", o texto das respostas
+    na busca do Historico), e um `for` chamando o PostgREST por card faria o
+    Painel custar tantas idas quantas Demandas houvesse.
 
     A leitura e PAGINADA pelo mesmo motivo da de Demandas, e aqui o corte seria
     ainda mais traicoeiro: a ordem e global e CRESCENTE, entao o teto come as

@@ -70,8 +70,8 @@ type Props = {
   /**
    * Quem está olhando, do ponto de vista do Vínculo (issue #674).
    *
-   * Vem de cima, e não de uma chamada por painel: as três abas mostram o mesmo
-   * modal, e três respostas do mesmo `GET /eu` só multiplicariam a ida à rede
+   * Vem de cima, e não de uma chamada por aba: as duas abas mostram o mesmo
+   * modal, e duas respostas do mesmo `GET /eu` só multiplicariam a ida à rede
    * e o risco de as abas discordarem entre si.
    */
   eu: EuNaAba;
